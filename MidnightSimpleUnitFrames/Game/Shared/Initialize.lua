@@ -11,19 +11,19 @@ local type = type
 local tonumber = tonumber
 local select = select
 
-MSUF = type(MSUF) == "table" and MSUF or _G.MSUF or _G.MSUF_NS or {}
+MSUF = type(MSUF) == "table" and MSUF or {}
 _G.MSUF = MSUF
 _G.MSUF_NS = MSUF
 
-local projectID = _G.WOW_PROJECT_ID
-local mainlineID = _G.WOW_PROJECT_MAINLINE
-local camelotID = _G.WOW_PROJECT_CAMELOT
-local vanillaID = _G.WOW_PROJECT_CLASSIC
-local mistsID = _G.WOW_PROJECT_MISTS_CLASSIC
-local tbcID = _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC
+local projectID = WOW_PROJECT_ID
+local mainlineID = WOW_PROJECT_MAINLINE
+local camelotID = WOW_PROJECT_CAMELOT
+local vanillaID = WOW_PROJECT_CLASSIC
+local mistsID = WOW_PROJECT_MISTS_CLASSIC
+local tbcID = WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 
 local function ReadTOCField(field)
-    local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
+    local getMetadata = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
     if type(getMetadata) ~= "function" then return nil end
     return getMetadata(addonName, field)
 end
@@ -54,7 +54,7 @@ local projectIsMainline = isRetail
 -- new name goes in front of this list and the old one stays, so both builds
 -- keep working; the audit's marker contract names the break.
 local FOREVER_MARKERS = { "RegisterCamelotEvents" }
-local gameEvent = _G.GameEvent
+local gameEvent = GameEvent
 local foreverMarker
 if type(gameEvent) == "table" then
     for i = 1, #FOREVER_MARKERS do
@@ -71,8 +71,8 @@ if isForever then
 end
 
 local interfaceNumber
-if type(_G.GetBuildInfo) == "function" then
-    interfaceNumber = tonumber((select(4, _G.GetBuildInfo())))
+if type(GetBuildInfo) == "function" then
+    interfaceNumber = tonumber((select(4, GetBuildInfo())))
 end
 
 local Client = MSUF.Client or {}
@@ -121,7 +121,7 @@ Client.DispellableDebuffFilter = isVanilla and "HARMFUL|RAID" or "HARMFUL|RAID_P
 -- WoW Forever (confirmed in game by the owner, 2026-09-19); no Classic client
 -- has it, so the Mainline family is the right answer here.
 Client.SupportsEllesmereEditMode = isRetail
-Client.SupportsBlizzardEditMode = type(_G.Enum) == "table" and type(_G.Enum.EditModeSystem) == "table"
+Client.SupportsBlizzardEditMode = type(Enum) == "table" and type(Enum.EditModeSystem) == "table"
 Client.IsSupported = isRetail or isVanilla or isMists or isTBC
 Client.TOCFlavor = tocFlavor
 -- Forever 1.60.1.70170 defines WOW_PROJECT_CAMELOT; the marker still owns placement.
@@ -130,7 +130,7 @@ Client.ProjectIDRecognized = projectIsMainline
     or (not isForever and (projectIsVanilla or projectIsMists or projectIsTBC))
 -- Capability fact only. Never define a global issecretvalue fallback here:
 -- other addons probe that global to detect the secret-value API.
-Client.HasSecretValueAPI = type(_G.issecretvalue) == "function"
+Client.HasSecretValueAPI = type(issecretvalue) == "function"
 -- The code family decides which build runs: Mainline loads the Retail tree plus
 -- Game/Shared, Classic adds Game/Classic and its flavor folder.
 Client.Family = Client.Flavor == "Mainline" and "Mainline" or Client.IsClassic and "Classic" or "Unknown"
@@ -148,24 +148,23 @@ Client.Family = Client.Flavor == "Mainline" and "Mainline" or Client.IsClassic a
 -- mid-session, so this is a fixed fact, resolved once here rather than probed on
 -- every anchor resolve.
 local function ShipsBlizzardAddOn(name)
-    local addOns = _G.C_AddOns
-    local doesAddOnExist = type(addOns) == "table" and addOns.DoesAddOnExist or nil
+    local doesAddOnExist = type(C_AddOns) == "table" and C_AddOns.DoesAddOnExist or nil
     if type(doesAddOnExist) ~= "function" then return nil end
     return doesAddOnExist(name) == true
 end
 Client.HostsCooldownManager = Client.Family == "Mainline"
     and ShipsBlizzardAddOn("Blizzard_CooldownViewer") ~= false
-    and type(_G.C_CooldownViewer) == "table"
+    and type(C_CooldownViewer) == "table"
 
 -- Game mode, one level below the family. C_GameRules.GetActiveGameMode exists on
 -- every current client and is final before addons load: Blizzard_SharedXML reads
 -- it at file scope. Enum.GameMode keys are not TOC game types: Classic clients
 -- run Standard, and Plunderstorm ships its own TOC suffix.
 local KNOWN_GAME_MODES = { Standard = true, Plunderstorm = true, WoWHack = true }
-local gameModeEnum = type(_G.Enum) == "table" and type(_G.Enum.GameMode) == "table" and _G.Enum.GameMode or nil
+local gameModeEnum = type(Enum) == "table" and type(Enum.GameMode) == "table" and Enum.GameMode or nil
 
 local function ReadActiveGameMode()
-    local gameRules = _G.C_GameRules
+    local gameRules = C_GameRules
     local getActiveGameMode = type(gameRules) == "table" and gameRules.GetActiveGameMode or nil
     if type(getActiveGameMode) ~= "function" then return nil end
     return getActiveGameMode()
@@ -284,7 +283,7 @@ function Client.SupportsEvent(event)
     end
     local valid = eventValidity[event]
     if valid ~= nil then return valid end
-    local eventUtils = _G.C_EventUtils
+    local eventUtils = C_EventUtils
     local isEventValid = type(eventUtils) == "table" and eventUtils.IsEventValid or nil
     if type(isEventValid) ~= "function" then return true end
     valid = isEventValid(event) == true
@@ -330,7 +329,7 @@ local arenaSlots = 0
 if unsupportedUnits.arena == true then
     arenaSlots = 0
 elseif Client.IsClassic then
-    local blizzardSlots = tonumber(_G.MAX_ARENA_ENEMIES)
+    local blizzardSlots = tonumber(MAX_ARENA_ENEMIES)
     arenaSlots = (blizzardSlots and blizzardSlots >= 1) and math.min(math.floor(blizzardSlots), 5) or 5
 elseif Client.IsRetail then
     arenaSlots = 3
@@ -356,10 +355,9 @@ end
 -- this client has no such rule or no C_GameRules API. Rule keys differ between
 -- clients, so a rule is looked up by key instead of being assumed.
 function Client.IsGameRuleActive(ruleKey)
-    local enum = _G.Enum
-    local rules = type(enum) == "table" and enum.GameRule or nil
+    local rules = type(Enum) == "table" and Enum.GameRule or nil
     local rule = type(rules) == "table" and type(ruleKey) == "string" and rules[ruleKey] or nil
-    local gameRules = _G.C_GameRules
+    local gameRules = C_GameRules
     local isGameRuleActive = type(gameRules) == "table" and gameRules.IsGameRuleActive or nil
     if rule == nil or type(isGameRuleActive) ~= "function" then return nil end
     return isGameRuleActive(rule) == true
@@ -370,8 +368,13 @@ end
 -- Only the no-argument mode predicates are called; every other C_GameRules Is*
 -- function is listed by name, so a new game mode shows up without guessing its
 -- API.
-local PROJECT_GLOBALS = { "WOW_PROJECT_MAINLINE", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_CLASSIC",
-    "WOW_PROJECT_BURNING_CRUSADE_CLASSIC", "WOW_PROJECT_MISTS_CLASSIC" }
+local PROJECT_IDS = {
+    { "WOW_PROJECT_MAINLINE", mainlineID },
+    { "WOW_PROJECT_CAMELOT", camelotID },
+    { "WOW_PROJECT_CLASSIC", vanillaID },
+    { "WOW_PROJECT_BURNING_CRUSADE_CLASSIC", tbcID },
+    { "WOW_PROJECT_MISTS_CLASSIC", mistsID },
+}
 local MODE_PREDICATES = { "IsStandard", "IsPlunderstorm", "IsWoWHack" }
 local REPORTED_GAME_RULES = { "EditModeDisabled", "PlayerFrameDisabled", "TargetFrameDisabled",
     "UnitFramePvPContextualDisabled" }
@@ -385,7 +388,7 @@ end
 -- DoesAddOnExist comes first: GetAddOnInfo is only asked about an addon this
 -- client actually ships.
 local function DescribeAddOn(name)
-    local addOns = _G.C_AddOns
+    local addOns = C_AddOns
     local doesAddOnExist = type(addOns) == "table" and addOns.DoesAddOnExist or nil
     if type(doesAddOnExist) ~= "function" then return "unknown" end
     if doesAddOnExist(name) ~= true then return "absent" end
@@ -400,16 +403,16 @@ end
 function Client.DescribeLines()
     local lines = {}
     local projectName = "unrecognized"
-    for i = 1, #PROJECT_GLOBALS do
-        local id = _G[PROJECT_GLOBALS[i]]
+    for i = 1, #PROJECT_IDS do
+        local id = PROJECT_IDS[i][2]
         if id ~= nil and id == projectID then
-            projectName = PROJECT_GLOBALS[i]
+            projectName = PROJECT_IDS[i][1]
             break
         end
     end
     local version, build
-    if type(_G.GetBuildInfo) == "function" then
-        version, build = _G.GetBuildInfo()
+    if type(GetBuildInfo) == "function" then
+        version, build = GetBuildInfo()
     end
     lines[#lines + 1] = "Project " .. tostring(projectID) .. " (" .. projectName .. "), build "
         .. tostring(version) .. " (" .. tostring(build) .. "), interface " .. tostring(interfaceNumber)
@@ -418,8 +421,8 @@ function Client.DescribeLines()
         .. (Client.IsForever and ", WoW Forever" or "")
         .. (Client.IsSupported and "" or " (not supported)")
         .. "; MSUF " .. tostring(Client.AddonVersion)
-    local liveEvent = _G.GameEvent
-    local classOrder = _G.CLASS_SORT_ORDER
+    local liveEvent = GameEvent
+    local classOrder = CLASS_SORT_ORDER
     local markerNow = false
     if type(liveEvent) == "table" then
         for i = 1, #FOREVER_MARKERS do
@@ -430,7 +433,7 @@ function Client.DescribeLines()
         .. " at load " .. tostring(hasCamelotMarker) .. ", now " .. tostring(markerNow)
         .. "; CLASS_SORT_ORDER " .. (type(classOrder) == "table" and (#classOrder .. " classes") or "missing")
 
-    local gameRules = _G.C_GameRules
+    local gameRules = C_GameRules
     local liveMode
     if type(gameRules) == "table" and type(gameRules.GetActiveGameMode) == "function" then
         liveMode = gameRules.GetActiveGameMode()
@@ -476,17 +479,17 @@ function Client.DescribeLines()
 
     -- WoW Forever has its own pet happiness API and character surnames. The report
     -- names what exists and never prints a name. Both functions take no arguments.
-    local petInfo, playerInfo, constants = _G.C_PetInfo, _G.C_PlayerInfo, _G.Constants
+    local petInfo, playerInfo, constants = C_PetInfo, C_PlayerInfo, Constants
     local function Presence(value) return type(value) == "function" and "present" or "missing" end
     local function Flag(fn) return type(fn) == "function" and tostring(fn() == true) or "missing" end
     local function Quoted(value) return value ~= nil and ('"' .. tostring(value) .. '"') or "missing" end
     lines[#lines + 1] = "Pet happiness " .. (Client.SupportsPetHappiness and "supported" or "not supported")
         .. "; C_PetInfo.GetPetHappiness " .. Presence(type(petInfo) == "table" and petInfo.GetPetHappiness)
-        .. ", GetPetHappiness " .. Presence(_G.GetPetHappiness)
+        .. ", GetPetHappiness " .. Presence(GetPetHappiness)
     local secondName = "unavailable"
-    if type(_G.UnitName) == "function" then
-        local _, second = _G.UnitName("player")
-        local isSecret = _G.issecretvalue
+    if type(UnitName) == "function" then
+        local _, second = UnitName("player")
+        local isSecret = issecretvalue
         if type(isSecret) == "function" and isSecret(second) then
             secondName = "secret"
         elseif second == nil then
@@ -497,7 +500,7 @@ function Client.DescribeLines()
     end
     local separators = type(constants) == "table" and constants.CharacterNameSeparatorConsts
     if type(separators) ~= "table" then separators = nil end
-    lines[#lines + 1] = "Names: RegionalUniqueNamesEnabled " .. Flag(_G.RegionalUniqueNamesEnabled)
+    lines[#lines + 1] = "Names: RegionalUniqueNamesEnabled " .. Flag(RegionalUniqueNamesEnabled)
         .. ", C_PlayerInfo.ShouldDisplaySurname "
         .. Flag(type(playerInfo) == "table" and playerInfo.ShouldDisplaySurname)
         .. ", surname separator " .. Quoted(separators and separators.CHARACTERNAME_SURNAME_SEPARATOR)
@@ -556,13 +559,13 @@ do
     end
     Client.Diagnostic = diagnostic
 
-    if diagnostic and type(_G.CreateFrame) == "function" then
-        local diagnosticFrame = _G.CreateFrame("Frame")
+    if diagnostic and type(CreateFrame) == "function" then
+        local diagnosticFrame = CreateFrame("Frame")
         diagnosticFrame:RegisterEvent("PLAYER_LOGIN")
         diagnosticFrame:SetScript("OnEvent", function(self)
             self:UnregisterEvent("PLAYER_LOGIN")
             self:SetScript("OnEvent", nil)
-            _G.print(diagnostic)
+            print(diagnostic)
         end)
     end
 end

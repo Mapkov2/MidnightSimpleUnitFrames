@@ -123,12 +123,16 @@ MSUF_Auras3={CreateClassPowerAuraSensor=function(host,key,spells,initialize)
     sensor.button=CreateFrame("Frame",nil,host);initialize(sensor.button);sensors[#sensors+1]=sensor;return sensor
 end}
 assert(loadfile(root.."/tools/tests/classpower_collaborators.lua"))().Install(root,ns)
+-- ExtraAuras binds the font flags reader when it loads: a controllable reader goes in before the
+-- files load, and the test sets its answer afterwards (the client default until then).
+local configuredFlags
+MSUF_GetFontFlags=function() return configuredFlags end
 for _,name in ipairs({"ExtraAuras","ManaExtras","ResourceMarks","ResourceExtras"}) do
     assert(loadfile(root.."/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_"..name..".lua"))("MSUF",ns)
 end
 local controller=ns.CPBuilders.ResourceExtras(E);controller.Refresh()
 assert(#sensors==0,"default must not create aura sensors")
-MSUF_GetFontFlags=function() return "THICKOUTLINE" end
+configuredFlags="THICKOUTLINE"
 bars.showArcaneWindow=true;bars.arcaneWindowWarnSeconds=4;controller.Refresh()
 if flavor=="Mainline" then
     -- One slot per phase at one place: Arcane Surge, and Arcane Soul above it.

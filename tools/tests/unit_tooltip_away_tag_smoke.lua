@@ -63,7 +63,8 @@ local function Run(flavor)
     env.MSUF_EnsureDB()
     local function NameLine(afk, dnd, isPlayer)
         state.afk, state.dnd, state.player = afk, dnd, isPlayer ~= false
-        env.MSUF_ShowUnitInfoTooltip("target", "Target")
+        -- Namespace-only export (the world's namespace PublicGlobals), not a global.
+        world.core.PublicGlobals.MSUF_ShowUnitInfoTooltip("target", "Target")
         Check(infoFrame ~= nil, flavor .. ": the info tooltip frame was never built")
         return infoFrame.name:GetText()
     end

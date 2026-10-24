@@ -1,7 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Visuals_Common.lua")
 
 local UF = MSUF.UF
 local CreateFrame = CreateFrame

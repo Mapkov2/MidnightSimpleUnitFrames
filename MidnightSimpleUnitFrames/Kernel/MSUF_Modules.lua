@@ -131,8 +131,8 @@ function MSUF.MSUF_ApplyModules()
     --- Notify the rounded unit-frame module (replaces former hooksecurefunc).
     --- UnitFrames/Effects/MSUF_UF_RoundedFrames.lua exports the callback while
     --- rounded frames are active; it re-applies masks after a profile apply.
-    if _G.MSUF_RoundedUF_Active == true then
-        local fnR = _G.MSUF_RoundedUF_OnModulesApplied; if fnR then fnR() end
+    if MSUF.PublicGlobals.MSUF_RoundedUF_Active == true then
+        local fnR = MSUF.PublicGlobals.MSUF_RoundedUF_OnModulesApplied; if fnR then fnR() end
     end
 end
 

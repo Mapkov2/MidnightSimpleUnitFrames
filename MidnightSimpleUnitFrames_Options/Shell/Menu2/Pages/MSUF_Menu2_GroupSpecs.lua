@@ -19,63 +19,40 @@ local function StatusIconSpecs(rows)
     end
     return specs
 end
+-- Dropdown rows { value, text, tooltip } whose tooltip title repeats the visible text.
+local function TitledValues(rows)
+    local values = {}
+    for i = 1, #rows do
+        local row = rows[i]
+        values[i] = { value = row[1], text = row[2], tooltipTitle = row[2], tooltip = row[3] }
+    end
+    return values
+end
 local Specs = {
     SCOPE_VALUES = (M.FilterSupportedUnitValues or function(values) return values end)(VTP "party=Party|raid=Raid|mythicraid=Mythic Raid"),
     GROWTH_VALUES = VTP "DOWN=Down|UP=Up|RIGHT=Right|LEFT=Left",
     BLIZZARD_FALLBACK_VALUES = VTP "AUTO=Blizzard default|SHOW=Force Blizzard frames|NONE=Hide all frames",
-    GROUP_FRAME_PROVIDER_VALUES = {
-        {
-            value = "MSUF",
-            text = "MSUF frames",
-            tooltipTitle = "MSUF frames",
-            tooltip = "Uses MSUF's custom group frames for the selected Party, Raid, or Mythic Raid scope. The other scopes remain independent.",
-        },
-        {
-            value = "AUTO",
-            text = "Blizzard frames (WoW settings)",
-            tooltipTitle = "Blizzard frames (WoW settings)",
-            tooltip = "Turns off MSUF frames for this scope and returns control to WoW. Blizzard's own Party or Raid Frame settings decide when its frames appear.",
-        },
-        {
-            value = "SHOW",
-            text = "Force Blizzard frames",
-            tooltipTitle = "Force Blizzard frames",
-            tooltip = "Turns off MSUF frames for this scope and forces Blizzard group frames visible. Use this only when Blizzard's frames do not appear with the normal WoW settings option.",
-        },
-        {
-            value = "NONE",
-            text = "Hide all group frames",
-            tooltipTitle = "Hide all group frames",
-            tooltip = "Hides both MSUF and Blizzard group frames for this scope. Your saved MSUF layout remains unchanged.",
-        },
+    GROUP_FRAME_PROVIDER_VALUES = TitledValues {
+        { "MSUF", "MSUF frames",
+            "Uses MSUF's custom group frames for the selected Party, Raid, or Mythic Raid scope. The other scopes remain independent." },
+        { "AUTO", "Blizzard frames (WoW settings)",
+            "Turns off MSUF frames for this scope and returns control to WoW. Blizzard's own Party or Raid Frame settings decide when its frames appear." },
+        { "SHOW", "Force Blizzard frames",
+            "Turns off MSUF frames for this scope and forces Blizzard group frames visible. Use this only when Blizzard's frames do not appear with the normal WoW settings option." },
+        { "NONE", "Hide all group frames",
+            "Hides both MSUF and Blizzard group frames for this scope. Your saved MSUF layout remains unchanged." },
     },
     --- Blizzard's Raid Manager is a single shared frame, so this value is not per scope
     --- even though it is stored in all three gf_* rows. Menu2 writes them together.
-    GROUP_RAID_MANAGER_VALUES = {
-        {
-            value = "AUTO",
-            text = "Automatic",
-            tooltipTitle = "Automatic",
-            tooltip = "Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved.",
-        },
-        {
-            value = "SHOW",
-            text = "Always visible",
-            tooltipTitle = "Always visible",
-            tooltip = "Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters.",
-        },
-        {
-            value = "MOUSEOVER",
-            text = "Show on mouseover",
-            tooltipTitle = "Show on mouseover",
-            tooltip = "Fades the Raid Manager out until the mouse touches it. Ready check, raid markers, and role filters stay reachable, and an expanded panel stays visible until you collapse it again.",
-        },
-        {
-            value = "HIDDEN",
-            text = "Always hidden",
-            tooltipTitle = "Always hidden",
-            tooltip = "Keeps the Raid Manager invisible and click-through at all times. Switch back to reach its buttons again.",
-        },
+    GROUP_RAID_MANAGER_VALUES = TitledValues {
+        { "AUTO", "Automatic",
+            "Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved." },
+        { "SHOW", "Always visible",
+            "Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters." },
+        { "MOUSEOVER", "Show on mouseover",
+            "Fades the Raid Manager out until the mouse touches it. Ready check, raid markers, and role filters stay reachable, and an expanded panel stays visible until you collapse it again." },
+        { "HIDDEN", "Always hidden",
+            "Keeps the Raid Manager invisible and click-through at all times. Switch back to reach its buttons again." },
     },
     HEALTH_MODES = VTP "CLASS=Class|GRADIENT=Gradient|CUSTOM=Custom",
     TEXT_MODES = VTP "NONE=None|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max",

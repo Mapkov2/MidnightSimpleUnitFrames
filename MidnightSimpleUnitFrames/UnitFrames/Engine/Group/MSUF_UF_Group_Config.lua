@@ -6,7 +6,6 @@
 --- from cached spec data during roster and unit events.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local UF = MSUF.UF
 local Shared = UF.Shared
@@ -18,9 +17,9 @@ local tostring = tostring
 local type = type
 local pairs = pairs
 local floor = math.floor
-local GetNumGroupMembers = _G.GetNumGroupMembers
-local GetTime = _G.GetTime
-local wipe = _G.wipe or table.wipe
+local GetNumGroupMembers = GetNumGroupMembers
+local GetTime = GetTime
+local wipe = wipe or table.wipe
 local Clamp01 = UF.Clamp01
 local Num = UF.NumberWithFallback
 local NormalizeDispelDetectTrigger = UF.NormalizeDispelDetectTrigger
@@ -33,7 +32,7 @@ local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope
 local ScopedValue = UF.ConfigScopedValue
 local CompileBorderPriority = UF.CompileBorderPriority
 -- The UF metadata owner precedes both compilers in the real TOC.
-local ResolveBarGradient = UF.ResolveBarGradient
+local CompileBarMaterials = UF.CompileBarMaterials
 local FillPredictionColors = UF.FillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -109,14 +108,20 @@ end
 
 local ResolveStatusbarTextureKey = Shared.ResolveStatusbarTextureKey
 
+-- The active profile's shared sections; MSUF_DB is rebound on profile switches.
+local function ProfileSection(key)
+  local db = MSUF_DB
+  return db and db[key]
+end
+
 local function ResolveHighlightRGB()
-  local general = _G.MSUF_DB and _G.MSUF_DB.general
+  local general = ProfileSection("general")
   local color = general and general.highlightColor
   if type(color) == "table" then
     return Num(color[1], 1), Num(color[2], 1), Num(color[3], 1)
   end
   local key = type(color) == "string" and color:lower() or "white"
-  local colors = _G.MSUF_FONT_COLORS
+  local colors = MSUF.Optional("MSUF_FONT_COLORS")
   local c = type(colors) == "table" and (colors[key] or colors.white)
   if type(c) == "table" then
     return Num(c[1], 1), Num(c[2], 1), Num(c[3], 1)
@@ -148,7 +153,9 @@ local function SettingsCache()
   return nil
 end
 
-local GeneralDB = _G.MSUF_GetGeneralDB
+-- Kernel/MSUF_Util.lua and Auras3/MSUF_Auras3_Core.lua load before the group files.
+local GeneralDB = MSUF.Require("MSUF_GetGeneralDB", CONFIG_FILE)
+local NormalizeLegacyDispelBorderMode = MSUF.Require("MSUF_NormalizeLegacyDispelBorderMode", CONFIG_FILE)
 
 local HEALTH_MODE_ALIASES = {
   GRADIENT = "gradient", gradient = "gradient",
@@ -302,21 +309,10 @@ local function CompilePowerColorOverrides(dst)
   wipe(dst)
   local general = GeneralDB()
   if not general then return dst end
-  local function Absorb(src, onlyMissing)
-    if type(src) ~= "table" then return end
-    for token, color in pairs(src) do
-      if (not onlyMissing or dst[token] == nil) and type(color) == "table" then
-        local r = tonumber(color.r or color[1])
-        local g = tonumber(color.g or color[2])
-        local b = tonumber(color.b or color[3])
-        if r and g and b then
-          dst[token] = { r = r, g = g, b = b }
-        end
-      end
-    end
-  end
-  Absorb(general.powerColorOverrides)
-  Absorb(general.classPowerColorOverrides, true)
+  -- UnitFrames/Engine/MSUF_UF_Config.lua owns the copy rule for both frame types.
+  local copyOverrides = UF.Config.CopyPowerColorOverrides
+  copyOverrides(dst, general.powerColorOverrides)
+  copyOverrides(dst, general.classPowerColorOverrides, true)
   return dst
 end
 
@@ -567,7 +563,7 @@ local function CompileStatus(kind, conf)
   local level = StatusRegionDef(conf, levelEnabled, "level", resize)
   level.difficultyColor = levelColored
   level.difficultyColors = levelColored
-    and Shared.ResolveLevelDifficultyColors(_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    and Shared.ResolveLevelDifficultyColors(ProfileSection("general")) or nil
   -- Threat % text: each member's threat on the player's target. Its runtime lives in
   -- Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua; only the clients offering it
   -- compile an entry, so Midnight and Mists specs stay as they were.
@@ -639,7 +635,7 @@ local function CompileStatus(kind, conf)
 end
 
 local function CompilePrediction(kind, conf, texture)
-  local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
+  local general = ProfileSection("general") or {}
   local absorbEnabled = ScopedValue(conf, general, "enableAbsorbBar", nil)
   if absorbEnabled == nil and conf and conf.hlOverride == true and conf.absorbEnabled ~= nil then
     absorbEnabled = conf.absorbEnabled
@@ -696,7 +692,7 @@ end
 local ResolveTextSlotFontSize = Shared.ResolveTextSlotFontSize
 
 local function CompileTempMaxHealth(kind, conf, texture)
-  local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
+  local general = ProfileSection("general") or {}
   local textureKey = ScopedValue(conf, general, "tempMaxHealthTexture", "")
   local resolvedTexture = texture
   if type(textureKey) == "string" and textureKey ~= "" then
@@ -769,7 +765,7 @@ local function NameBarHeight(kind, conf)
 end
 
 local function CompileGroupVisuals(kind, conf)
-  local general = _G.MSUF_DB and _G.MSUF_DB.general
+  local general = ProfileSection("general")
   local hoverR, hoverG, hoverB = ResolveHighlightRGB()
   local hoverSize = general and general.highlightThickness
   if hoverSize == nil then
@@ -1053,7 +1049,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
 end
 
 local function SpellIndicatorModule()
-  return GF.SpellIndicators or _G.MSUF_GF_SpellIndicators
+  return GF.SpellIndicators or MSUF.Require("MSUF_GF_SpellIndicators", CONFIG_FILE)
 end
 
 --- Spell indicator aura IDs come from the indicator compiler (Group_Config_Indicators,
@@ -1096,7 +1092,7 @@ end
 local function BuildSpellIndicatorAuraHashes(conf)
   local si = SpellIndicatorModule()
   local siCfg = type(conf and conf.spellIndicators) == "table" and conf.spellIndicators or nil
-  if not (si and siCfg) then return nil, 0, nil end
+  if not siCfg then return nil, 0, nil end
   siCfg.specs = siCfg.specs or {}
   local specs = CollectSpellIndicatorSpecs(siCfg, si)
   local hash, count, autoBlacklistHash, autoBlacklistCount = {}, 0, nil, 0
@@ -1174,8 +1170,7 @@ local function CompileCoreAuras(kind, conf)
   local trackedBuffIncludeHash, trackedBuffCount, spellIndicatorAutoBlacklistHash = BuildSpellIndicatorAuraHashes(conf)
   local trackedBuffMax = Num(buff.trackedMax, Num(conf.trackedBuffMax, trackedBuffCount > 0 and trackedBuffCount or 8))
   local trackedBuffsEnabled = false
-  local NormalizeDispelBorderMode = _G.MSUF_NormalizeLegacyDispelBorderMode
-  local debuffDispelBorderMode = NormalizeDispelBorderMode(debuff.dispelBorderMode, debuff.showDispelBorder == true)
+  local debuffDispelBorderMode = NormalizeLegacyDispelBorderMode(debuff.dispelBorderMode, debuff.showDispelBorder == true)
   local buffGrowthX, buffGrowthY = SplitAuraGrowth(buff.growth, "LEFTUP")
   local trackedBuffGrowthX, trackedBuffGrowthY = SplitAuraGrowth(buff.trackedGrowth or buff.growth, "RIGHTDOWN")
   local debuffGrowthX, debuffGrowthY = SplitAuraGrowth(debuff.growth, "RIGHTDOWN")
@@ -1402,7 +1397,7 @@ local function FillPowerVisualDomain(power, conf, general, texture, bgTexture)
   -- The Bars page owns shared power art. Resolve it once in the cached group
   -- spec; an empty/invalid key preserves the scope's effective Health texture.
   -- Runtime power events therefore only consume a finished path.
-  local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+  local bars = ProfileSection("bars")
   power.texture = ResolveStatusbarTextureKey(bars and bars.powerBarTexture, texture)
   power.backgroundTexture = ResolveStatusbarTextureKey(bars and bars.powerBarBgTexture, bgTexture)
   power.background = CompileBarBackground(conf)
@@ -1411,7 +1406,7 @@ local function FillPowerVisualDomain(power, conf, general, texture, bgTexture)
   power.r, power.g, power.b = visual.r, visual.g, visual.b
   power.lossR, power.lossG, power.lossB = visual.lossR, visual.lossG, visual.lossB
   power.colors = CompilePowerColorOverrides(power.colors)
-  power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
+  CompileBarMaterials(power, conf, general, "power")
   -- Mirrors CompileUnitPower: the power bar follows the health fill direction.
   power.reverse = conf.reverseFill == true
   CompilePowerBorder(power, conf, general)
@@ -1562,7 +1557,7 @@ local function CompileBorderSpec(kind, conf, general)
   local dispelShowOn = ScopedValue(conf, general, "dispelBorderShowOn", "BOTH")
   local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
-  local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
+  local bars = ProfileSection("bars") or nil
   local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata
       or (bars and bars.barOutlineStrata))
   local borderLayer = Layer(conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or (bars and bars.barOutlineLayer), 0)
@@ -1570,9 +1565,8 @@ local function CompileBorderSpec(kind, conf, general)
   -- borders use edgeFile geometry; textures use the historic stretched edges.
   local borderTextureMode, borderTextureKeyResolved, borderTexture
   local borderTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or (bars and bars.barOutlineTexture)
-  local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
-  if type(borderTextureKey) == "string" and borderTextureKey ~= ""
-    and styles and type(styles.ResolveFrame) == "function" then
+  local styles = MSUF.BorderStyles or MSUF.Require("MSUF_BorderStyles", CONFIG_FILE)
+  if type(borderTextureKey) == "string" and borderTextureKey ~= "" then
     borderTextureMode, borderTextureKeyResolved, borderTexture = styles.ResolveFrame(borderTextureKey)
   end
   return {
@@ -1715,7 +1709,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     showName = conf.showName ~= false,
     showHealthText = conf.showHPText ~= false,
     showPowerText = IsPowerTextEnabled(kind, conf),
-    health = {
+    health = CompileBarMaterials({
       topInset = group.nameBarEnabled and group.nameBarHeight or 0,
       mode = healthVisual.mode,
       r = healthVisual.r,
@@ -1741,11 +1735,10 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       backgroundMatchHealth = healthVisual.backgroundMatchHealth == true,
       backgroundClassColor = healthVisual.backgroundClassColor == true,
       npcClassColorBar = healthVisual.npcClassColorBar == true,
-      barGradient = ResolveBarGradient(conf, general, "enableGradient"),
       reverse = conf.reverseFill == true,
       chunked = conf.chunkedFill == true,
       smooth = conf.smoothFill == true and conf.chunkedFill ~= true,
-    },
+    }, conf, general, "health"),
     power = FillPowerGeometry(FillPowerVisualDomain({
       enabled = powerHeight > 0,
       height = powerHeight,
@@ -1850,7 +1843,7 @@ local function RefreshColorDomain(kind, base, conf)
   health.backgroundMatchHealth = healthVisual.backgroundMatchHealth == true
   health.backgroundClassColor = healthVisual.backgroundClassColor == true
   health.npcClassColorBar = healthVisual.npcClassColorBar == true
-  health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
+  CompileBarMaterials(health, conf, general, "health")
 
   local power = base.power or {}
   base.power = power

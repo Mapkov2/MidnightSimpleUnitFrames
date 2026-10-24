@@ -23,9 +23,9 @@ local UnitPowerType = Text.UnitPowerType
 local ResolveDisplayedPowerIdentity = Text.ResolveDisplayedPowerIdentity
 local UnitHealthPercent = Text.UnitHealthPercent
 local UnitPowerPercent = Text.UnitPowerPercent
-local AbbreviateShortNumber = Text.AbbreviateNumbers or _G.AbbreviateNumbers
-local BreakUpLargeNumbers = Text.BreakUpLargeNumbers or _G.BreakUpLargeNumbers
-local AbbreviateLargeNumber = Text.AbbreviateLargeNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
+local AbbreviateShortNumber = Text.AbbreviateNumbers or AbbreviateNumbers
+local BreakUpLargeNumbers = Text.BreakUpLargeNumbers or BreakUpLargeNumbers
+local AbbreviateLargeNumber = Text.AbbreviateLargeNumbers or AbbreviateLargeNumbers or ShortenNumber
 local AbbreviateSecretNumber = AbbreviateShortNumber or AbbreviateLargeNumber
 --- Global abbreviation style: nil lets the client decide (locale-dependent),
 --- a table switches the C abbreviator to MSUF's locale-independent breakpoints.
@@ -49,9 +49,9 @@ local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
 local DISPATCH_KEY = { NONE = 0, CURRENT = 1, MAX = 2, CURRENT_MAX = 3, PERCENT = 4, PERCENT_MAX = 5 }
 Text.DISPATCH_KEY = DISPATCH_KEY
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
-local nativeSecrets = _G.issecretvalue ~= nil
-local issecretvalue = _G.issecretvalue
-local StringUtil = _G.C_StringUtil
+local nativeSecrets = issecretvalue ~= nil
+local issecretvalue = issecretvalue
+local StringUtil = C_StringUtil
 local TruncateWhenZero = StringUtil and StringUtil.TruncateWhenZero
 local WrapString = StringUtil and StringUtil.WrapString
 local ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
@@ -1173,7 +1173,7 @@ function Text.FormatValue(value, short, canSecret, compatibility)
 end
 
 local RoundToNearestString = StringUtil and StringUtil.RoundToNearestString
-local UnitHealthMissing = _G.UnitHealthMissing
+local UnitHealthMissing = UnitHealthMissing
 local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
 function Text.FormatPercentValue(value, hideSymbol, canSecret, decimals, compatibility)
     if compatibility ~= "GROUP" then return FormatPercentValue(value, hideSymbol, canSecret, decimals) end

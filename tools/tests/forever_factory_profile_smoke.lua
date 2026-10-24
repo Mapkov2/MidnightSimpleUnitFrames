@@ -98,11 +98,6 @@ local ns = {
         Family = "Mainline", Flavor = "Mainline", IsSupported = true,
     },
 }
-ns.ExportPublic = function(name, value)
-    _G[name] = value
-    ns[name] = value
-    return value
-end
 _G.MSUF_NS = ns
 _G.MSUF = ns
 
@@ -113,13 +108,16 @@ end
 local function loadModule(path)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
 end
--- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+-- The real Kernel API as in every core TOC: Bootstrap's export policy and registry, then Require.
+loadModule("Kernel/MSUF_Bootstrap.lua")
 loadModule("Kernel/MSUF_Require.lua")
 loadModule("State/MSUF_StateHelpers.lua")
 loadModule("Kernel/MSUF_Boundary.lua")
 loadModule("State/MSUF_ProfileCodec.lua")
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(repo, "Mainline", ns, {
+    -- Util.IsSecret, which the profile normalizer's persistence pass reads (Util binds the geometry owner).
+    "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
     "State/Defaults/MSUF_Defaults_Shell.lua",
     "State/Defaults/MSUF_Defaults_ForeverFactory.lua",
@@ -128,7 +126,7 @@ manifest.LoadSelected(repo, "Mainline", ns, {
     "State/MSUF_Defaults.lua",
 })
 
-local compact = _G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
+local compact = ns.PublicGlobals.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
 Check(type(compact) == "string" and compact:match("^MSUF3:"), "factory compact string is missing")
 local b64 = compact:match("^MSUF3:%s*(.-)%s*$")
 local raw = DecodeBase64(b64)

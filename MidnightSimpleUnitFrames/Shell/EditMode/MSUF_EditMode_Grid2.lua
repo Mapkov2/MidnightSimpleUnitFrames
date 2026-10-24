@@ -1,9 +1,7 @@
 --- Grid2 adapter for MSUF Edit Mode. Grid2 keeps ownership of all frames/data.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local API = _G.MSUF_EditModeAPI
-if not (API and API.RegisterElement) then return end
+local API = MSUF.Require("MSUF_EditModeAPI", "Shell/EditMode/MSUF_EditMode_Grid2.lua")
 
 local OWNER, SETTING = "MSUF.Grid2", "grid2EditModeIntegration"
 local registered = {}
@@ -13,7 +11,7 @@ local eventFrame
 
 local Export = MSUF.ExportPublic
 
-local General = _G.MSUF_GetGeneralDB
+local General = MSUF.Require("MSUF_GetGeneralDB", "Shell/EditMode/MSUF_EditMode_Grid2.lua")
 
 local function Enabled()
     local general = General()
@@ -21,7 +19,7 @@ local function Enabled()
 end
 
 local function Layout()
-    local layout = _G.Grid2Layout
+    local layout = Grid2Layout
     if type(layout) ~= "table" or type(layout.SavePosition) ~= "function"
         or type(layout.RestorePosition) ~= "function" or type(layout.RestorePositions) ~= "function"
         or type(layout.RestoreHeaderPosition) ~= "function" or type(layout.GetFramePosition) ~= "function"
@@ -37,7 +35,7 @@ local function Profile(layout)
 end
 
 local function InCombat()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return type(InCombatLockdown) == "function" and InCombatLockdown() == true
 end
 
 local function FindHeader(positionKey)
@@ -117,12 +115,12 @@ local function Move(layout, resolve, request)
     local anchor, x, y = layout:GetFramePosition(frame)
     x, y = tonumber(x), tonumber(y)
     if type(anchor) ~= "string" or not x or not y then return false end
-    local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
+    local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
     local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or uiScale
     if uiScale <= 0 then uiScale = 1 end
     if not frameScale or frameScale <= 0 then frameScale = uiScale end
     frame:ClearAllPoints()
-    frame:SetPoint(anchor, _G.UIParent, anchor,
+    frame:SetPoint(anchor, UIParent, anchor,
         x + (tonumber(request.deltaX) or 0) * uiScale / frameScale,
         y + (tonumber(request.deltaY) or 0) * uiScale / frameScale)
     layout:SavePosition(frame)
@@ -146,7 +144,7 @@ local function Element(layout, id, label, order, resolve, reset, controls)
         movePosition = function(request) return Move(layout, resolve, request) end,
         resetPosition = reset,
         openSettings = function()
-            local grid = _G.Grid2
+            local grid = Grid2
             if type(grid) == "table" and type(grid.OpenGrid2Options) == "function" then
                 grid:OpenGrid2Options()
                 return true
@@ -167,7 +165,7 @@ local function StableId(key)
     return ("detached_%s_%d"):format(stem ~= "" and stem or "detached", hash)
 end
 
-local Add = _G.MSUF_EM2.ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
+local Add = MSUF.Require("MSUF_EM2", "Shell/EditMode/MSUF_EditMode_Grid2.lua").ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
 
 local function SyncHeaders()
     local layout = active and Enabled() and Layout()
@@ -189,7 +187,7 @@ local function SyncHeaders()
                 end))
         end
     end
-    if API.RefreshOwner then API.RefreshOwner(OWNER) end
+    API.RefreshOwner(OWNER)
 end
 
 local function SessionChanged(enabled)
@@ -221,7 +219,7 @@ local function RestoreAfterScale()
     local layout = Layout()
     if layout then
         layout:RestorePositions()
-        if API.RefreshOwner then API.RefreshOwner(OWNER) end
+        API.RefreshOwner(OWNER)
     end
 end
 
@@ -230,7 +228,7 @@ local function QueueScaleRestore()
     scalePending = true
     if scaleQueued then return end
     scaleQueued = true
-    if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, RestoreAfterScale)
+    if C_Timer and C_Timer.After then C_Timer.After(0, RestoreAfterScale)
     else RestoreAfterScale() end
 end
 
@@ -239,13 +237,13 @@ local function Activate()
     local layout = Layout()
     if not layout then return false end
     active = true
-    if hookedLayout ~= layout and type(_G.hooksecurefunc) == "function" then
+    if hookedLayout ~= layout and type(hooksecurefunc) == "function" then
         hookedLayout = layout
-        _G.hooksecurefunc(layout, "ReloadLayout", SyncHeaders)
+        hooksecurefunc(layout, "ReloadLayout", SyncHeaders)
     end
-    if not scaleHooked and type(_G.hooksecurefunc) == "function" and _G.UIParent and _G.UIParent.SetScale then
+    if not scaleHooked and type(hooksecurefunc) == "function" and UIParent and UIParent.SetScale then
         scaleHooked = true
-        _G.hooksecurefunc(_G.UIParent, "SetScale", QueueScaleRestore)
+        hooksecurefunc(UIParent, "SetScale", QueueScaleRestore)
     end
     local function Main() return Layout() == layout and layout.frame end
     if not Add(Element(layout, "layout", "Grid2", 800, Main, function()
@@ -268,13 +266,13 @@ local function Deactivate()
     return true
 end
 
-local External = _G.MSUF_EM2.ExternalProviders
+local External = MSUF.Require("MSUF_EM2", "Shell/EditMode/MSUF_EditMode_Grid2.lua").ExternalProviders
 local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_Grid2EditMode_IsAvailable", function() return Layout() ~= nil end)
 Export("MSUF_Grid2EditMode_SetEnabled", SetEnabled)
 
-eventFrame = _G.CreateFrame and _G.CreateFrame("Frame")
+eventFrame = CreateFrame and CreateFrame("Frame")
 if eventFrame then
     eventFrame:RegisterEvent("ADDON_LOADED")
     eventFrame:SetScript("OnEvent", function(_, event, addon)

@@ -52,6 +52,7 @@ local function Record(name)
 end
 
 local now = 0
+local samplerOverride
 local h = Harness.New(root, flavor, { beforeBoot = function(world)
     local env = world.env
     env.MAX_BOSS_FRAMES = 5
@@ -106,11 +107,22 @@ local h = Harness.New(root, flavor, { beforeBoot = function(world)
         if Watched(key) then Record("lookup:" .. key) end
         return fallback(table_, key)
     end
+end, afterFile = function(world, path)
+    -- The group preview binds the animation sampler when it loads, so the sampler the smoke swaps later is a
+    -- stand-in installed right after its owner and before the preview: it answers like the real one until a
+    -- section sets `samplerOverride`.
+    if path:find("UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua", 1, true) then
+        local real = world.env.MSUF_GetPreviewAnimationFrameState
+        world.env.MSUF_GetPreviewAnimationFrameState = function(...)
+            if samplerOverride then return samplerOverride(...) end
+            return real(...)
+        end
+    end
 end })
 local GF, env = h.GF, h.env
 env.GetTime = function() return now end
 GF.EnsureDB()
-env.MSUF2_GFPagePreviewActive = true
+h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 
 local party, raid = GF.GetConf("party"), GF.GetConf("raid")
 party.enabled, raid.enabled = true, true
@@ -280,9 +292,9 @@ for index, frame in ipairs(groupA:Frames()) do Check(HpOf(frame) == StaticHp(ind
 Check(Queued() == 0, "an active root keeps a timer")
 do
     local PA = assert(MSUF.PreviewAnimation, "no shared preview animation")
-    local isEnabled, sampler, asked = PA.IsEnabled, env.MSUF_GetPreviewAnimationFrameState, 0
+    local isEnabled, asked = PA.IsEnabled, 0
     PA.IsEnabled = function() return true end
-    env.MSUF_GetPreviewAnimationFrameState = function(_, _, _, state)
+    samplerOverride = function(_, _, _, state)
         asked = asked + 1
         state.hpPct, state.powerPct = 0.5, 0.5
         return state
@@ -298,7 +310,7 @@ do
     GF.HidePreview("party")
     armed = true
     Check(asked > 0, "the on-screen dummy never asked the shared animation; the control is blind")
-    PA.IsEnabled, env.MSUF_GetPreviewAnimationFrameState = isEnabled, sampler
+    PA.IsEnabled, samplerOverride = isEnabled, nil
 end
 rootA:Deactivate()
 h:RunTimers()

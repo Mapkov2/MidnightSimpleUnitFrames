@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 one-time MSUF 6.0 dashboard scene.
 --
 -- This module owns presentation and navigation only. Install classification and
@@ -10,7 +9,8 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
-local CreateFrame = _G.CreateFrame
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_FirstLoad.lua")
+local CreateFrame = CreateFrame
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -19,7 +19,7 @@ local format = string.format
 local Tr = M.Tr
 
 local function Lifecycle()
-    local firstLoad = MSUF and MSUF.FirstLoad6
+    local firstLoad = MSUF.FirstLoad6
     return type(firstLoad) == "table" and firstLoad or nil
 end
 
@@ -62,7 +62,7 @@ local function FirstLoadActionAvailability(firstLoad)
     -- Existing-profile upgrades are owned by the release highlight scene. Do
     -- not let a stale search or chrome action bypass its explicit skip
     -- warning and close onboarding behind the user's back.
-    local highlights = MSUF and MSUF.UpgradeHighlights
+    local highlights = MSUF.UpgradeHighlights
     if type(highlights) == "table" and type(highlights.ShouldShow) == "function" then
         local shown = highlights.ShouldShow(highlights)
         if shown == true then
@@ -94,7 +94,7 @@ local function BlockedByCombat()
 end
 
 local function ActiveProfileName()
-    local name = tostring(_G.MSUF_ActiveProfile or "Default")
+    local name = tostring(MSUF_ActiveProfile or "Default")
     return name ~= "" and name or "Default"
 end
 
@@ -132,8 +132,20 @@ end
 
 local SetTextLayout = M.Widgets.SetTextLayout
 
+--- Font string anchored at (x, y) from `point` of its parent; `width` wraps it, `justify` aligns it.
+local function Text(parent, T, template, text, color, point, x, y, width, justify)
+    local fs = T.Font(parent, template, text, color)
+    fs:SetPoint(point, parent, point, x, y)
+    if width then
+        SetTextLayout(fs, width, justify)
+    elseif justify then
+        fs:SetJustifyH(justify)
+    end
+    return fs
+end
+
 local function CreateBackdropButton(parent, T, width, height, border, onClick)
-    local template = _G.BackdropTemplateMixin and "BackdropTemplate" or nil
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local button = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
     button:SetSize(width, height)
     button:RegisterForClicks("LeftButtonUp")
@@ -224,20 +236,11 @@ local function CreateProtectionPanel(parent, T, contentWidth, top, compact, inst
     panel:SetSize(contentWidth, panelHeight)
     panel:SetPoint("TOP", parent, "TOP", 0, top)
     if type(T.ApplySurface) == "function" then T.ApplySurface(panel, "card") end
-    local specs
-    if installKind == "upgrade" then
-        specs = {
-            { "STATUS", "Profile unchanged", true, true },
-            { "PROFILE", profileName, false, false },
-            { "APPLIED SO FAR", "No changes", false, true },
-        }
-    else
-        specs = {
-            { "STATUS", "Frames ready", true, true },
-            { "PROFILE", profileName, false, false },
-            { "APPLIED SO FAR", "No changes", false, true },
-        }
-    end
+    local specs = {
+        { "STATUS", installKind == "upgrade" and "Profile unchanged" or "Frames ready", true, true },
+        { "PROFILE", profileName, false, false },
+        { "APPLIED SO FAR", "No changes", false, true },
+    }
     local itemWidth = compact and contentWidth or floor(contentWidth / 3)
     for i = 1, #specs do
         local spec = specs[i]
@@ -294,32 +297,18 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
 
     if compact then
         CreateIconWell(card, T, data.icon, 30, 14, -34)
-        local meta = T.Font(card, "GameFontDisableSmall", data.meta, T.colors.coreHot or T.colors.accent)
-        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -12)
-        meta:SetPoint("RIGHT", card, "RIGHT", -16, 0)
-        meta:SetJustifyH("LEFT")
-        local title = T.Font(card, "GameFontNormal", data.title, T.colors.text)
-        title:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -36)
-        title:SetPoint("RIGHT", card, "RIGHT", -16, 0)
-        title:SetJustifyH("LEFT")
-        local body = T.Font(card, "GameFontHighlightSmall", data.body, T.colors.muted)
-        body:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -56)
-        SetTextLayout(body, width - 68, "LEFT")
+        Text(card, T, "GameFontDisableSmall", data.meta, T.colors.coreHot or T.colors.accent, "TOPLEFT", 56, -12, nil, "LEFT")
+            :SetPoint("RIGHT", card, "RIGHT", -16, 0)
+        Text(card, T, "GameFontNormal", data.title, T.colors.text, "TOPLEFT", 56, -36, nil, "LEFT")
+            :SetPoint("RIGHT", card, "RIGHT", -16, 0)
+        Text(card, T, "GameFontHighlightSmall", data.body, T.colors.muted, "TOPLEFT", 56, -56, width - 68, "LEFT")
     else
-        local timing = T.Font(card, "GameFontDisableSmall", data.timing, T.colors.muted)
-        timing:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -16)
-        timing:SetJustifyH("RIGHT")
-        local meta = T.Font(card, "GameFontDisableSmall", data.meta, T.colors.coreHot or T.colors.accent)
-        meta:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
-        meta:SetPoint("RIGHT", timing, "LEFT", -8, 0)
-        meta:SetJustifyH("LEFT")
+        local timing = Text(card, T, "GameFontDisableSmall", data.timing, T.colors.muted, "TOPRIGHT", -16, -16, nil, "RIGHT")
+        Text(card, T, "GameFontDisableSmall", data.meta, T.colors.coreHot or T.colors.accent, "TOPLEFT", 16, -16, nil, "LEFT")
+            :SetPoint("RIGHT", timing, "LEFT", -8, 0)
         CreateIconWell(card, T, data.icon, 34, 16, -42)
-        local title = T.Font(card, "GameFontNormal", data.title, T.colors.text)
-        title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -88)
-        SetTextLayout(title, width - 32, "LEFT")
-        local body = T.Font(card, "GameFontHighlightSmall", data.body, T.colors.muted)
-        body:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -112)
-        SetTextLayout(body, width - 32, "LEFT")
+        Text(card, T, "GameFontNormal", data.title, T.colors.text, "TOPLEFT", 16, -88, width - 32, "LEFT")
+        Text(card, T, "GameFontHighlightSmall", data.body, T.colors.muted, "TOPLEFT", 16, -112, width - 32, "LEFT")
     end
 
     RegisterControl(card, data.id, data.title, "action", data.body)
@@ -425,6 +414,10 @@ function M.ExecuteFirstLoadDashboardAction(action)
     return false, Tr("Unknown first-load action.")
 end
 
+local function ActionRunner(action)
+    return function() M.ExecuteFirstLoadDashboardAction(action) end
+end
+
 local FIRST_LOAD_VIRTUAL_ACTIONS = {
     { suffix = "personalize", label = "Personalize with guided setup" },
     { suffix = "import_profile", label = "Import a profile" },
@@ -473,9 +466,9 @@ RegisterFirstLoadVirtualControls()
 
 local function CreateFooterButtons(scene, T, contentWidth, sceneWidth, footerTop, compact)
     local footerButtons = {
-        { "What is new in 6.0", 132, function() M.ExecuteFirstLoadDashboardAction("whats_new") end, "whats_new" },
-        { "Not now", 74, function() M.ExecuteFirstLoadDashboardAction("not_now") end, "not_now" },
-        { "Open full settings", 126, function() M.ExecuteFirstLoadDashboardAction("full_settings") end, "full_settings" },
+        { "What is new in 6.0", 132, ActionRunner("whats_new"), "whats_new" },
+        { "Not now", 74, ActionRunner("not_now"), "not_now" },
+        { "Open full settings", 126, ActionRunner("full_settings"), "full_settings" },
     }
     local footerHeight
     if compact then
@@ -542,20 +535,15 @@ function M.BuildFirstLoadDashboardScene(ctx)
     local titleText = installKind == "upgrade"
         and format(Tr("Welcome back, %s"), PlayerDisplayName())
         or format(Tr("Welcome, %s"), PlayerDisplayName())
-    local title = T.Font(scene, "GameFontNormalHuge", titleText, T.colors.title or T.colors.text)
-    title:SetPoint("TOP", scene, "TOP", 0, titleTop)
-    SetTextLayout(title, contentWidth, "CENTER")
+    local title = Text(scene, T, "GameFontNormalHuge", titleText, T.colors.title or T.colors.text, "TOP", 0, titleTop, contentWidth, "CENTER")
     if type(T.PlayMotion) == "function" then
         T.PlayMotion(title, "controlFocusIn", { fromAlpha = 0.24, toAlpha = 1, duration = 0.22 })
     end
 
     local copyTop = compact and -174 or -208
-    local copyText
-    if installKind == "upgrade" then
-        copyText = "Your current frames stay active. Follow the complete guided setup, import a profile safely, or keep playing with your existing setup."
-    else
-        copyText = "Your frames are ready now. Follow the complete guided setup, import a profile, or start playing with the defaults."
-    end
+    local copyText = installKind == "upgrade"
+        and "Your current frames stay active. Follow the complete guided setup, import a profile safely, or keep playing with your existing setup."
+        or "Your frames are ready now. Follow the complete guided setup, import a profile, or start playing with the defaults."
     local copy = type(W.LabelAt) == "function"
         and W.LabelAt(scene, copyText, 0, copyTop, min(700, contentWidth), "GameFontHighlight", T.colors.muted)
         or T.Font(scene, "GameFontHighlight", copyText, T.colors.muted)
@@ -580,14 +568,14 @@ function M.BuildFirstLoadDashboardScene(ctx)
             title = "Start Quick Setup",
             body = "Set the essentials first: placement, frame basics, text, auras, and shared style.",
             hint = "You can choose the Complete Tour on the next screen. A restore point is saved first.",
-            onClick = function() M.ExecuteFirstLoadDashboardAction("personalize") end,
+            onClick = ActionRunner("personalize"),
         },
         {
             id = "import_profile", meta = "EXISTING SETUP", timing = "~2 min", icon = "profiles",
             title = "Import a profile",
             body = "Review an import in a new profile before switching to it.",
             hint = "Your current profile stays untouched until you switch.",
-            onClick = function() M.ExecuteFirstLoadDashboardAction("import_profile") end,
+            onClick = ActionRunner("import_profile"),
         },
         {
             id = "use_defaults",
@@ -599,7 +587,7 @@ function M.BuildFirstLoadDashboardScene(ctx)
                 and "Close onboarding and keep your current profile exactly as it is."
                 or "Close onboarding without applying or resetting anything.",
             hint = "You can change everything later in the full settings.",
-            onClick = function() M.ExecuteFirstLoadDashboardAction("use_defaults") end,
+            onClick = ActionRunner("use_defaults"),
         },
     }
     for i = 1, #routes do
@@ -617,16 +605,13 @@ function M.BuildFirstLoadDashboardScene(ctx)
     local footnoteText = installKind == "upgrade"
         and format(Tr("Profile: %s - Current setup stays active. Guided Setup saves a restore point."), profileName)
         or format(Tr("Profile: %s - No changes yet. Guided Setup saves a restore point."), profileName)
-    local footnote = T.Font(scene, "GameFontDisableSmall", footnoteText, T.colors.dim)
-    footnote:SetPoint("TOP", scene, "TOP", 0, footnoteTop)
-    SetTextLayout(footnote, contentWidth, "CENTER")
+    Text(scene, T, "GameFontDisableSmall", footnoteText, T.colors.dim, "TOP", 0, footnoteTop, contentWidth, "CENTER")
 
     -- Closing the window without a choice keeps the scene armed; say so instead
     -- of surprising the player when it comes back after the next open.
     local hintTop = footnoteTop - 18
-    local hint = T.Font(scene, "GameFontDisableSmall", "Pick any option to continue - this page will not show again.", T.colors.dim)
-    hint:SetPoint("TOP", scene, "TOP", 0, hintTop)
-    SetTextLayout(hint, contentWidth, "CENTER")
+    Text(scene, T, "GameFontDisableSmall", "Pick any option to continue - this page will not show again.", T.colors.dim,
+        "TOP", 0, hintTop, contentWidth, "CENTER")
 
     local sceneHeight = math.abs(hintTop) + 36
     scene:SetHeight(sceneHeight)

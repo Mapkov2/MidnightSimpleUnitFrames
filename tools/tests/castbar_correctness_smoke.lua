@@ -58,6 +58,7 @@ local STRICT_MT = {
     end,
 }
 
+local NewWidget
 local REGION = {}
 function REGION.SetScaleAnimationMode(self, mode) self.scaleAnimationMode = mode end
 function REGION.ClearAllPoints(self) self.points = {} end
@@ -99,7 +100,12 @@ local TEXTURE = setmetatable({}, { __index = REGION })
 function TEXTURE.SetTexCoord(self, ...) self.texCoord = { ... } end
 function TEXTURE.SetDrawLayer(self, layer, sub) self.layer, self.subLayer = layer, sub end
 function TEXTURE.SetTexture(self, texture) self.textureFile = texture end
-function TEXTURE.SetVertexColor() end
+function TEXTURE.SetVertexColor(self, r, g, b, a) self.vertexColor = { r, g, b, a } end
+function TEXTURE.SetDesaturated(self, desaturated) self.desaturated = desaturated end
+function TEXTURE.AddMaskTexture(self, mask) self.mask = mask end
+function TEXTURE.RemoveMaskTexture(self, mask) if self.mask == mask then self.mask = nil end end
+function FRAME.CreateTexture(self) return NewWidget("Texture", TEXTURE, { parent = self }) end
+function FRAME.CreateMaskTexture(self) return NewWidget("MaskTexture", TEXTURE, { parent = self }) end
 
 local FONTSTRING = setmetatable({}, { __index = REGION })
 function FONTSTRING.SetText(self, text) self.text = text end
@@ -115,7 +121,7 @@ function FONTSTRING.SetNonSpaceWrap() end
 function FONTSTRING.SetJustifyH(self, justify) self.justify = justify end
 function FONTSTRING.GetStringWidth(self) return self.stringWidth or 30 end
 
-local function NewWidget(kind, methods, fields)
+function NewWidget(kind, methods, fields)
     local widget = fields or {}
     widget._kind = kind
     widget._methods = methods
@@ -265,6 +271,37 @@ do
     Equal(target.icon.shown, false, "target: castbarTargetShowIcon ignored")
     Equal(target.castText.alpha, 0, "target: castbarTargetShowSpellName ignored")
     Equal(target.timeText.alpha, 0, "target: showTargetCastTime ignored")
+
+    -- Castbar icons take the aura icon shapes (Auras3/MSUF_Auras3_IconShape.lua).
+    -- A circle masks the icon and draws the shared shape ring in the border
+    -- style's colour and thickness instead of the square border; Follow
+    -- Portrait (a castbar has no portrait) and Rectangle bring the square back.
+    namespace.MSUF_Auras3 = {}
+    LoadAddonFile("Auras3/MSUF_Auras3_IconShape.lua", namespace)
+    local shapes = namespace.MSUF_Auras3.IconShape
+    local shaped = NewCastbarFrame("MSUF_TargetCastBar", "target")
+    local look = General({ castbarTargetIconBorderStyle = "CASTBAR", castbarTargetIconBorderThickness = 2,
+        castbarBorderR = 0.1, castbarBorderG = 0.2, castbarBorderB = 0.3, castbarBorderA = 1 })
+    apply(shaped, "target", look)
+    local host = shaped._msufDetailIconHost
+    Check(host ~= nil and host._msufA3AuraShapeMask == nil, "target: a rectangular icon got a shape mask")
+    local square = shaped._msufDetailIconBorder
+    Equal(square and square.shown, true, "target: the square icon border is missing")
+    look.castbarTargetIconShape = "CIRCLE"
+    apply(shaped, "target", look)
+    local mask = host._msufA3AuraShapeMask
+    Check(mask ~= nil and shaped.icon.mask == mask, "target: a circle did not mask the castbar icon")
+    Equal(square.shown, false, "target: a circular icon kept the square border")
+    local rings = host._msufA3ShapedStyleBorders or {}
+    Equal(#rings, 2, "target: the ring is not as thick as the border")
+    Equal(rings[1].textureFile, shapes.MEDIA.CIRCLE.border, "target: the ring is not the circle ring")
+    Equal(rings[1].shown and rings[2].shown, true, "target: the ring is hidden")
+    Equal(rings[2].vertexColor and rings[2].vertexColor[3], 0.3, "target: the ring is not in the castbar border colour")
+    look.castbarTargetIconShape = "FOLLOW_PORTRAIT"
+    apply(shaped, "target", look)
+    Check(shaped.icon.mask == nil, "target: Follow Portrait kept the circle mask")
+    Equal(rings[1].shown or rings[2].shown, false, "target: Follow Portrait kept the ring")
+    Equal(square.shown, true, "target: Follow Portrait did not bring the square border back")
 end
 
 ---------------------------------------------------------------------------
@@ -531,13 +568,13 @@ do
     LoadAddonFile("Castbars/MSUF_FocusKickIcon.lua", ns)
 
     -- Turning the preview on while the tracker is off.
-    _G.MSUF_FocusKick_SetPreviewEnabled(true)
+    ns.PublicGlobals.MSUF_FocusKick_SetPreviewEnabled(true)
     Equal(messages[#messages], "Erst den Tracker aktivieren.", "focus-kick disabled preview message")
 
     -- Dragging the preview in combat.
     _G.MSUF_DB.general.enableFocusKickIcon = true
     if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
-    _G.MSUF_FocusKick_SetPreviewEnabled(true)
+    ns.PublicGlobals.MSUF_FocusKick_SetPreviewEnabled(true)
     local preview = assert(_G.MSUF_FocusKickPreviewFrame, "focus-kick preview frame missing")
     combat = true
     preview.scripts.OnDragStart(preview)

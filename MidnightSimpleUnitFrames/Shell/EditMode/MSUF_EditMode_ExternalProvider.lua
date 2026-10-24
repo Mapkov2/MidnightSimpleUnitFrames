@@ -1,7 +1,6 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local External = EM2.ExternalProviders or {}
@@ -15,11 +14,11 @@ External.providers = providers
 local CASTBAR_FIELDS = MSUF.Castbars.UNIT_CASTBAR
 
 
-local General = _G.MSUF_GetGeneralDB
+local General = MSUF.Require("MSUF_GetGeneralDB", "Shell/EditMode/MSUF_EditMode_ExternalProvider.lua")
 
 local function InCombat()
-    return _G.MSUF_InCombat == true
-        or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) == true
+    return MSUF.PublicGlobals.MSUF_InCombat == true
+        or (type(InCombatLockdown) == "function" and InCombatLockdown()) == true
 end
 
 local FrameRectToUI = MSUF.Geometry.ExternalRect
@@ -33,13 +32,13 @@ end
 local function CenterOffset(frame)
     local left, right, top, bottom = FrameRectToUI(frame)
     if not left then return nil end
-    local uiLeft, uiRight, uiTop, uiBottom = FrameRectToUI(_G.UIParent)
+    local uiLeft, uiRight, uiTop, uiBottom = FrameRectToUI(UIParent)
     local uiCenterX, uiCenterY
     if uiLeft then
         uiCenterX, uiCenterY = (uiLeft + uiRight) * 0.5, (uiBottom + uiTop) * 0.5
     else
-        uiCenterX = ((_G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth()) or 0) * 0.5
-        uiCenterY = ((_G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight()) or 0) * 0.5
+        uiCenterX = ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0) * 0.5
+        uiCenterY = ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0) * 0.5
     end
     return ((left + right) * 0.5) - uiCenterX, ((bottom + top) * 0.5) - uiCenterY
 end
@@ -100,9 +99,7 @@ function Controller:IsCastbarConfigEnabled(unit)
     local fields = CASTBAR_FIELDS[unit]
     local general = General()
     if not fields or type(general) ~= "table" or general.castbarPlayerPreviewEnabled == false then return false end
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
-    if type(shouldUse) == "function" then return shouldUse(unit, general) == true end
-    return general[fields.enable] ~= false
+    return MSUF.Require("MSUF_ShouldUseMSUFCastbar", "Shell/EditMode/MSUF_EditMode_ExternalProvider.lua")(unit, general) == true
 end
 
 function Controller:IsSessionReady()
@@ -374,13 +371,17 @@ function Controller:OnMSUFEditChange(category, key)
         end
         self:HookMovers()
     end
-    local timer = _G.C_Timer
+    local timer = C_Timer
     if timer and type(timer.After) == "function" then timer.After(0, reconcile) else reconcile() end
 end
 
+--- Post-hooks the undo entry through ExportPublic, so callers that read
+--- MSUF.PublicGlobals or MSUF.Public see the hook as well as global readers.
 function Controller:InstallDirtyHooks()
-    if self.dirtyHooked or type(_G.hooksecurefunc) ~= "function" then return self.dirtyHooked end
-    _G.hooksecurefunc("MSUF_EM_UndoBeforeChange", function(category, key)
+    if self.dirtyHooked then return self.dirtyHooked end
+    local beforeChange = MSUF.Require("MSUF_EM_UndoBeforeChange", "Shell/EditMode/MSUF_EditMode_ExternalProvider.lua")
+    MSUF.ExportPublic("MSUF_EM_UndoBeforeChange", function(category, key, ...)
+        beforeChange(category, key, ...)
         self:OnMSUFEditChange(category, key)
     end)
     self.dirtyHooked = true
@@ -402,7 +403,7 @@ function Controller:ScheduleMenuPreviewReconcile()
         if serial ~= self.menuPreviewReconcileSerial then return end
         local api = self:GetAPI()
         if api and self.spec.IsModeActive(api) then return end
-        local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+        local menu = MSUF.MSUF2
         local activeKey = menu and menu.activeKey
         if menu and type(menu.RequestOrRefresh) == "function" then
             menu.RequestOrRefresh(nil, self.spec.menuRefreshReason or "external-edit-close")
@@ -420,7 +421,7 @@ function Controller:ScheduleMenuPreviewReconcile()
             menu.RefreshGFNativePreviews(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
         end
     end
-    local timer = _G.C_Timer
+    local timer = C_Timer
     if timer and type(timer.After) == "function" then timer.After(0, reconcile) else reconcile() end
 end
 

@@ -22,7 +22,6 @@ MSUF_DB = { general = general }
 -- the normalized profile through its EnsureDB at that early point.
 MSUF_EnsureDB = function() return MSUF_DB end
 local ns = { Translate = function(s) return s end }
-ns.ExportPublic = function(name, value) _G[name] = value end
 local function load(path)
     assert(loadfile(root .. "/" .. path))("MidnightSimpleUnitFrames", ns)
 end
@@ -31,18 +30,30 @@ local forever = flavor == "Forever"
 assert(ns.Client.IsForever == false, "shipped client detection reported WoW Forever")
 if forever then ns.Client.IsForever = true end
 assert(not tinted or forever, "the tinted run exercises the Forever skin; pass Forever")
-load("MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua")
+-- The real Kernel namespace API, in core TOC order.
+load("MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua")
 load("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua")
+load("MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua")
 load("MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua")
+-- The menu files require the core's pixel layout provider (Kernel/MSUF_Util.lua).
+load("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua")
+load("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")
 local prefix = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
-load(prefix .. "MSUF_Menu2_Support.lua")
-load(prefix .. "MSUF_Menu2_Theme_Forever.lua")
-load(prefix .. "MSUF_Menu2_Theme_Tokens.lua")
+-- Options files run after the whole core; core providers this smoke does not
+-- load are deferred and raise if a painter uses one (require_fixture.lua).
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+local function loadOptions(path) return RequireFixture.LoadShipped(root, path, ns) end
+-- The shared UI primitives the Menu2 theme binds to (core TOC: Style, then Widgets).
+loadOptions("MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua")
+loadOptions("MidnightSimpleUnitFrames/Shell/UI/MSUF_Widgets.lua")
+loadOptions(prefix .. "MSUF_Menu2_Support.lua")
+loadOptions(prefix .. "MSUF_Menu2_Theme_Forever.lua")
+loadOptions(prefix .. "MSUF_Menu2_Theme_Tokens.lua")
 ns.MSUF2.GetGeneralDB = function() return general end
 local T = ns.MSUF2.Theme
 local originalText, originalAccent = T.colors.text, T.colors.accent
 local danger = { unpack(T.colors.danger) }
-load(prefix .. "MSUF_Menu2_Theme.lua")
+loadOptions(prefix .. "MSUF_Menu2_Theme.lua")
 local classic = arg[3] == "classicGlass" or (forever and arg[3] ~= "midnight" and arg[3] ~= "midnightDark")
 local dark = arg[3] == "midnightDark"
 assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "classicGlass" }) == "classicGlass")

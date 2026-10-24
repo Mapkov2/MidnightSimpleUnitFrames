@@ -33,6 +33,12 @@
 -- now recompiles only for a changed context (uf_engine_client_gates_smoke pins
 -- the rule): enter_world 1169k -> 824k instructions, 2061 -> 1981 calls (one
 -- player alone; group frames repaint on top of that).
+-- 2026-10-17 (on 2a1e3ff5e): aura icon skins and icon shapes load with the core: the
+-- 51-skin catalog registers its definitions as data, the painters and the shape
+-- helpers define functions, none creates a frame, event, hook or timer at load.
+-- Mainline load 156k -> 163k instructions, widget calls 237 -> 237; login 1812k -> 1815k,
+-- enter_world 824k -> 826k, settle 2302k -> 2305k, all within their limits. The load
+-- limit rises to the measurement plus 2%: 160k -> 167k.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required (Mainline)")
@@ -42,7 +48,7 @@ assert(rawget(_G, "MSUF_Auras3TestLoader") == nil,
 -- [flavor] = { [phase] = { k instructions, widget API calls } }
 local BUDGETS = {
     Mainline = {
-        load = { 160, 242 }, login = { 1849, 19365 }, enter_world = { 841, 2021 }, settle = { 2349, 8790 },
+        load = { 167, 242 }, login = { 1849, 19365 }, enter_world = { 841, 2021 }, settle = { 2349, 8790 },
     },
 }
 local SV_FIXTURE = "tools/fixtures/profiles/sv/sv_retail_rev16_17.lua"

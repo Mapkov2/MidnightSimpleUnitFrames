@@ -2,12 +2,12 @@
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2])
 local harness = (arg[3] or root):gsub("\\", "/")
-loadfile = dofile(harness .. "/tools/tests/responsibility_route_loader.lua")
+loadfile, dofile = dofile(harness .. "/tools/tests/responsibility_route_loader.lua")
 local World = dofile(harness .. "/tools/tests/health_tick_world.lua")
 local Routes = dofile(harness .. "/tools/tests/responsibility_route_paths.lua")
 local _, options = Routes.New(World, root, flavor, harness)
 for _, selected in ipairs(options) do
-    local w, cases = Routes.New(World, root, flavor, harness)
+    local w, cases = Routes.New(World, root, flavor, harness, selected.name)
     local case
     for _, candidate in ipairs(cases) do if candidate.name == selected.name then case = candidate end end
     local capture, rows, identities = false, {}, {}

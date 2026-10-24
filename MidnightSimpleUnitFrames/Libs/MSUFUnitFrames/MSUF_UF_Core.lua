@@ -1,8 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Instance-local runtime kernel for the embedded MSUFUnitFrames framework.
 local addonName, MSUF = ...
+local FILE = "Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.UF = MSUF.UF or {}
 MSUF.UF.Elements = MSUF.UF.Elements or {}
 
@@ -25,8 +25,10 @@ local UnitIsConnected = UnitIsConnected
 local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitGUID = UnitGUID
-local GetTime = _G.GetTime
-local issecretvalue = _G.issecretvalue
+local GetTime = GetTime
+local issecretvalue = issecretvalue
+-- Preview and diagnostic flags: their providers publish through ExportPublic.
+local PublicGlobals = MSUF.PublicGlobals
 
 UF.version = "8.4-demand-runtime-plans"
 UF.frames = UF.frames or {}
@@ -43,9 +45,9 @@ UF.visualRefreshCallbacks = UF.visualRefreshCallbacks or {}
 UF.elementTraits = UF.elementTraits or {}
 UF.initialized = UF.initialized or false
 
--- Host flags (test modes, suspend state, ScheduleOnce) are plain globals the
--- menu, preview and kernel modules write.
-local HOST_VALUES = _G
+-- Host flags (test modes, suspend state) are published through ExportPublic by
+-- the menu, preview and kernel modules; the scheduler loads well ahead of this file.
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", FILE)
 
 local BASIC_ELEMENTS, EVENT_ELEMENTS = {}, {}
 local FORCE_UPDATE_ELEMENTS, IDENTITY_ELEMENTS, RESHOW_ELEMENTS = {}, {}, {}
@@ -412,11 +414,11 @@ local function FrameVisibleForEvent(frame)
 
   local visible = frame._msufCoreVisible
   if visible == true then return true end
-  if HOST_VALUES.MSUF_PreviewTestMode == true
-    or HOST_VALUES.MSUF_BossTestMode == true
-    or HOST_VALUES.MSUF2_BossUnitframePreviewActive == true
-    or HOST_VALUES.MSUF_ArenaTestMode == true
-    or HOST_VALUES.MSUF2_ArenaUnitframePreviewActive == true then
+  if PublicGlobals.MSUF_PreviewTestMode == true
+    or PublicGlobals.MSUF_BossTestMode == true
+    or PublicGlobals.MSUF2_BossUnitframePreviewActive == true
+    or PublicGlobals.MSUF_ArenaTestMode == true
+    or PublicGlobals.MSUF2_ArenaUnitframePreviewActive == true then
     return true
   end
   if visible == false then return false end
@@ -429,12 +431,12 @@ UF.FrameVisibleForEvent = FrameVisibleForEvent
 
 local function IdentityUnitExists(frame, unit)
   if not IsUnitToken(unit) then return false end
-  if HOST_VALUES.MSUF_PreviewTestMode == true
-    or HOST_VALUES.MSUF_BossTestMode == true
-    or HOST_VALUES.MSUF2_BossUnitframePreviewActive == true
-    or HOST_VALUES.MSUF_ArenaTestMode == true
-    or HOST_VALUES.MSUF2_ArenaUnitframePreviewActive == true
-    or HOST_VALUES.MSUF_UnitEditModeActive == true then
+  if PublicGlobals.MSUF_PreviewTestMode == true
+    or PublicGlobals.MSUF_BossTestMode == true
+    or PublicGlobals.MSUF2_BossUnitframePreviewActive == true
+    or PublicGlobals.MSUF_ArenaTestMode == true
+    or PublicGlobals.MSUF2_ArenaUnitframePreviewActive == true
+    or MSUF_UnitEditModeActive == true then
     return true
   end
   local exists = ReadUnitExistsCached(frame, unit)
@@ -686,7 +688,7 @@ end
 -- The diagnostic flag still forces the old behaviour:
 --   MSUF_GF_SuspendHidden == false -> force OFF (A/B baseline via /msufgp)
 local function SuspendHiddenFrameEvents(frame)
-  if HOST_VALUES.MSUF_GF_SuspendHidden == false
+  if PublicGlobals.MSUF_GF_SuspendHidden == false
     or frame._msufCoreEventsSuspended == true
     or not frame._msufEventNames
     or not frame.UnregisterEvent then
@@ -1181,14 +1183,7 @@ local function QueueDependentIdentity(frame, event)
     frame._msufDependentIdentityCallback = callback
   end
 
-  local scheduleOnce = HOST_VALUES.MSUF_ScheduleOnce
-  if type(scheduleOnce) == "function" then
-    scheduleOnce(callback, callback)
-  elseif _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(0, callback)
-  else
-    callback()
-  end
+  ScheduleOnce(callback, callback)
 end
 
 local function FlushBossIdentity(frame)
@@ -1221,14 +1216,7 @@ local function QueueBossIdentity(frame, event)
     frame._msufBossIdentityCallback = callback
   end
 
-  local scheduleOnce = HOST_VALUES.MSUF_ScheduleOnce
-  if type(scheduleOnce) == "function" then
-    scheduleOnce(callback, callback)
-  elseif _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(0, callback)
-  else
-    callback()
-  end
+  ScheduleOnce(callback, callback)
 end
 
 local function FrameNeedsIdentityLifecycle(frame)
@@ -1262,7 +1250,7 @@ local function ArenaOpponentIdentityUpdate(frame, event, unit)
   -- openers flap seen/unseen many times per second at gate-open; without the
   -- slot filter and the coalescer every flap paid a full identity reseed on
   -- all three arena frames, which pegged the CPU when matches started.
-  local issecret = _G.issecretvalue
+  local issecret = issecretvalue
   if type(unit) == "string" and (not issecret or issecret(unit) ~= true)
     and IsArenaUnit(unit) and unit ~= frame.MSUFUnitKey then
     return

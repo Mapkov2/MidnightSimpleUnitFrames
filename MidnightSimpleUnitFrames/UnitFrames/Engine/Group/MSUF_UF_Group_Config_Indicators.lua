@@ -5,7 +5,7 @@
 --- receive simple booleans, slots, colors, layers, and event needs.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local INDICATORS_FILE = "UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua"
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -58,9 +58,10 @@ local function Scaled(value, scale, fallback)
   return floor((value * scale) + 0.5)
 end
 
-local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
+-- Kernel/MSUF_Util.lua and the spell registry load ahead of this file.
+local NormalizeFrameStrata = MSUF.Require("MSUF_NormalizeFrameStrata", INDICATORS_FILE)
 
-local GeneralDB = _G.MSUF_GetGeneralDB
+local GeneralDB = MSUF.Require("MSUF_GetGeneralDB", INDICATORS_FILE)
 
 local CI_SLOT_FIELDS = {
   { "TL", "TOPLEFT", 2, -2 },
@@ -220,10 +221,10 @@ function GF.CompileCornerIndicators(conf, kind)
   }
 end
 
-local CopyTable = _G.MSUF_GF_CopySpellConfig
+local CopyTable = MSUF.Require("MSUF_GF_CopySpellConfig", INDICATORS_FILE)
 
 local function SpellIndicatorModule()
-  return GF.SpellIndicators or _G.MSUF_GF_SpellIndicators
+  return GF.SpellIndicators or MSUF.Require("MSUF_GF_SpellIndicators", INDICATORS_FILE)
 end
 
 local AddSpellID = AddCustomSpellID
@@ -512,7 +513,7 @@ end
 function GF.CompileSpellIndicators(conf, kind)
   local si = SpellIndicatorModule()
   local siCfg = type(conf and conf.spellIndicators) == "table" and conf.spellIndicators or nil
-  if not (si and siCfg and siCfg.enabled == true) then
+  if not (siCfg and siCfg.enabled == true) then
     return {
       enabled = false,
       layer = 9,

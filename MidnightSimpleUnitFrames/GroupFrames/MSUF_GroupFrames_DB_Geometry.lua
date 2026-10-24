@@ -5,7 +5,6 @@
 --- after it (UFCore_Group.xml and the Classic GroupFrames.xml manifests) and
 --- shares the one MSUF.GF table; see that file for the module's API surface.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
@@ -20,8 +19,8 @@ local math_floor = math.floor
 local tonumber = tonumber
 local tostring = tostring
 local type = type
-local _GF_UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
-local _GF_issecretvalue = _G.issecretvalue
+local _GF_UnitGroupRolesAssigned = UnitGroupRolesAssigned
+local _GF_issecretvalue = issecretvalue
 
 local PARTY_DEFAULTS = GF.PARTY_DEFAULTS
 local RAID_DEFAULTS = GF.RAID_DEFAULTS
@@ -286,13 +285,13 @@ local layoutCountCache = {}
 function GF.InvalidateLayoutRoster() wipe(layoutCountCache) end
 function GF.GetLayoutGroupCount(kind)
     local conf = GF.GetConf(kind)
-    local count = _G.GetNumGroupMembers() or 0
-    if kind == "party" or conf.excludeHiddenGroups ~= true or not _G.IsInRaid() then return count end
+    local count = GetNumGroupMembers() or 0
+    if kind == "party" or conf.excludeHiddenGroups ~= true or not IsInRaid() then return count end
     local cached = layoutCountCache[kind]
     if cached then return cached end
     local visible = 0
     for i = 1, count do
-        local _, _, group = _G.GetRaidRosterInfo(i)
+        local _, _, group = GetRaidRosterInfo(i)
         if (not _GF_issecretvalue or _GF_issecretvalue(group) ~= true) and type(group) == "number" then
             local allowed = not (kind == "mythicraid" and conf.hideMythicGroupsFiveToEight == true and group > 4)
                 and GF.GroupFilterAllowsSubgroup(conf.groupFilter, group)
@@ -394,7 +393,7 @@ end
 function GF.ResolveGroupPositionKeys(kind, conf, count)
     conf = conf or GF.GetConf(kind)
     if kind == "party" and conf.centerSolo == true and GF._groupEditActive ~= true
-        and not (_G.IsInGroup and _G.IsInGroup()) then
+        and not (IsInGroup and IsInGroup()) then
         return nil, nil, true
     end
     local tier = GF.GetLayoutTier(kind, count)
@@ -666,8 +665,8 @@ end
 
 local function GetMigrationCount(kind, conf)
     if IsRaidLikeKind(kind) then
-        local isInRaid = _G.IsInRaid
-        local getNum = _G.GetNumGroupMembers
+        local isInRaid = IsInRaid
+        local getNum = GetNumGroupMembers
         local n = (type(getNum) == "function") and (getNum() or 0) or 0
         if (type(isInRaid) == "function" and isInRaid()) and n > 0 then
             return n
@@ -675,7 +674,7 @@ local function GetMigrationCount(kind, conf)
         return 10
     end
 
-    local getSub = _G.GetNumSubgroupMembers
+    local getSub = GetNumSubgroupMembers
     local n = (type(getSub) == "function") and (getSub() or 0) or 0
     if n > 0 then
         if conf.showPlayer ~= false then n = n + 1 end

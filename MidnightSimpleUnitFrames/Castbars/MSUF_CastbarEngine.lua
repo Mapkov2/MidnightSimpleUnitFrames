@@ -26,15 +26,15 @@ ns.Castbars = ns.Castbars or {}
 ns.Castbars.Engine = Engine
 local buildStateCacheTime = {}
 local INACTIVE_STATE = { active = false }
-local GetTime = _G.GetTime
-local UnitCastingInfo = _G.UnitCastingInfo
-local UnitChannelInfo = _G.UnitChannelInfo
-local UnitCastingDuration = _G.UnitCastingDuration
-local UnitChannelDuration = _G.UnitChannelDuration
-local GetUnitEmpowerStageCount = _G.GetUnitEmpowerStageCount
-local UnitShouldDisplaySpellTargetName = _G.UnitShouldDisplaySpellTargetName
-local UnitSpellTargetName = _G.UnitSpellTargetName
-local UnitSpellTargetClass = _G.UnitSpellTargetClass
+local GetTime = GetTime
+local UnitCastingInfo = UnitCastingInfo
+local UnitChannelInfo = UnitChannelInfo
+local UnitCastingDuration = UnitCastingDuration
+local UnitChannelDuration = UnitChannelDuration
+local GetUnitEmpowerStageCount = GetUnitEmpowerStageCount
+local UnitShouldDisplaySpellTargetName = UnitShouldDisplaySpellTargetName
+local UnitSpellTargetName = UnitSpellTargetName
+local UnitSpellTargetClass = UnitSpellTargetClass
 
 Engine.VERSION = 4
 Engine._subs = Engine._subs or {}

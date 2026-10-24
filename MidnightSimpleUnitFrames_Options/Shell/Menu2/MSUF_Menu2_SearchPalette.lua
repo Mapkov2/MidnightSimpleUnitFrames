@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Lazy in-place search suggestions for the Menu2 navigation rail.
 ---
 --- The palette is presentation-only. Query/index ownership stays in Search_IndexQuery,
@@ -7,6 +6,7 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_SearchPalette.lua")
 
 local T = M.Theme
 local MAX_VISIBLE_RESULTS = 6
@@ -58,7 +58,7 @@ end
 local function MouseOver(frame)
     if not (frame and frame.IsShown and frame:IsShown()) then return false end
     if type(frame.IsMouseOver) == "function" then return frame:IsMouseOver() end
-    return type(_G.MouseIsOver) == "function" and _G.MouseIsOver(frame) or false
+    return type(MouseIsOver) == "function" and MouseIsOver(frame) or false
 end
 
 local function SetRowBackground(row, selected, hovered)

@@ -229,6 +229,11 @@ end
 -- Edit Mode resolves the functions other modules publish through MSUF.Require.
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 RequireFixture.Install(root, namespace)
+-- MSUF's tooltip module (Runtime/MSUF_UnitTooltips.lua, loaded after Edit Mode) exports the
+-- control mode the Blizzard tooltip element requires. The module itself is not part of
+-- this world: its answer is a switch the cases below set (Blizzard-owned until they say so).
+local tooltipBlizzardControlled = true
+MSUF_Tooltip_IsBlizzardControlled = function() return tooltipBlizzardControlled end
 ClearExports()
 LoadModule(namespace)
 
@@ -267,12 +272,12 @@ assert(MSUF_DB.general.blizzardEditModeSnapshot.damagemeter.x == meterState.x + 
 assert(MSUF_DB.general.blizzardEditModeSnapshot.damagemeter.forever == nil,
     "a non-Forever snapshot entry carried the WoW Forever stamp")
 
-MSUF_Tooltip_IsBlizzardControlled = function() return false end
+tooltipBlizzardControlled = false
 listener(true)
 assert(GameTooltipDefaultContainer.showCount == nil,
     "Blizzard tooltip mover appeared while the MSUF tooltip owned Edit Mode")
 listener(false)
-MSUF_Tooltip_IsBlizzardControlled = function() return true end
+tooltipBlizzardControlled = true
 listener(true)
 assert(GameTooltipDefaultContainer.showCount == 1,
     "Blizzard tooltip mover did not appear for the Blizzard-owned tooltip")

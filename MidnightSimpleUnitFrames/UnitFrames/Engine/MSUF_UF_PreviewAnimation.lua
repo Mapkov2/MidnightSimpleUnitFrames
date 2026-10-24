@@ -1,9 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua
 --- On-demand combat-state animation for edit-mode and menu preview frames.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
 local Preview = MSUF.Require("MSUF", "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua").UF.Preview
 local previewKind = type(Preview)
 assert(previewKind == "table",
@@ -19,6 +18,7 @@ local SetUnitPage = Preview.SetUnitPage
 local previewState = Preview.State
 
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
 
 local PA = MSUF.PreviewAnimation or {}
 MSUF.PreviewAnimation = PA
@@ -43,7 +43,7 @@ local NO_TARGET_GRACE = 0.35
 local PREVIEW_UNITS = { "target", "focus", "targettarget", "focustarget", "pet", "pettarget" }
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local ARENA_UNITS = { "arena1", "arena2", "arena3" }
-for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+for i = 4, tonumber(MSUF.Client.MaxArenaOpponents) or 3 do
   ARENA_UNITS[#ARENA_UNITS + 1] = "arena" .. i
 end
 local Translate = MSUF.Translate
@@ -58,11 +58,18 @@ local PREVIEW_NAME_LABELS = {
 }
 
 local CoreFrame = MSUF.UF.GetFrame
+-- Castbar previews register in the castbar frame registry (Castbars/MSUF_CastbarPreviews.lua
+-- and MSUF_CastbarPoolPreviews.lua) under the same frames their global names alias.
+local CastbarFrames = MSUF.Castbars.Frames
 local CASTBAR_PREVIEWS = {
-  { name = "MSUF_PlayerCastbarPreview", unit = "player", label = Translate("Test Cast") },
-  { name = "MSUF_TargetCastbarPreview", unit = "target", label = Translate("Test Cast") },
-  { name = "MSUF_FocusCastbarPreview", unit = "focus", label = Translate("Test Cast") },
+  { kind = "playerPreview", unit = "player", label = Translate("Test Cast") },
+  { kind = "targetPreview", unit = "target", label = Translate("Test Cast") },
+  { kind = "focusPreview", unit = "focus", label = Translate("Test Cast") },
 }
+-- Shell/EditMode/MSUF_EditMode.xml loads before this file and owns the controller table.
+local EditModeController = MSUF.Optional("MSUF_EM2")
+-- Castbars/MSUF_CastbarUtils.lua loads after this file; the ticker keeps the first hit.
+local castbarApplyTexts
 
 local driver
 local noTargetElapsed = 0
@@ -83,7 +90,7 @@ end
 local function InCombat()
   return (InCombatLockdown and InCombatLockdown())
     or (UnitAffectingCombat and UnitAffectingCombat("player"))
-    or _G.MSUF_InCombat == true
+    or PublicGlobals.MSUF_InCombat == true
 end
 
 local function IsVisible(frame)
@@ -253,7 +260,7 @@ end
 
 local function EditModePreviewActive()
   if previewState.editMode == true then return true end
-  local em2 = _G.MSUF_EM2
+  local em2 = EditModeController
   return em2 and em2.State and type(em2.State.IsActive) == "function" and em2.State.IsActive() == true
 end
 
@@ -509,7 +516,7 @@ local COMBAT_ICON_ATLAS = "UI-HUD-UnitFrame-Player-CombatIcon"
 
 local function EnsureCombatTexture(tex)
   if not tex or tex._msufPreviewAnimCombatTexture then return end
-  local textureAPI = _G.C_Texture
+  local textureAPI = C_Texture
   if tex.SetAtlas and textureAPI and type(textureAPI.GetAtlasInfo) == "function"
     and textureAPI.GetAtlasInfo(COMBAT_ICON_ATLAS) ~= nil then
     tex:SetAtlas(COMBAT_ICON_ATLAS)
@@ -657,7 +664,7 @@ local function RestoreUnitAnimationFrames(refreshRuntime)
 end
 
 local function CastbarTimeEnabled(unit)
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local g = db and db.general
   if not g then return true end
   if unit == "player" then return g.showPlayerCastTime ~= false end
@@ -761,15 +768,12 @@ end
 
 local function ApplyCastbarPreviewLabel(frame, label)
   label = label or Translate("Test Cast")
-  local revision = _G.MSUF_CastbarStyleRevision or 1
-  local applyTexts = _G.MSUF_CB_ApplyTexts
-  if type(applyTexts) ~= "function" then
-    -- The shared formatter is loaded before this module in production. Keep
-    -- the fallback uncached so an unusual late load repairs itself next tick.
-    frame._msufPreviewAnimCastLabel = nil
-    frame._msufPreviewAnimCastLabelRevision = nil
-    SetTextIfChanged(frame.castText, label)
-    return
+  local revision = PublicGlobals.MSUF_CastbarStyleRevision or 1
+  -- The shared formatter is resolved on the first label and kept for the ticker.
+  local applyTexts = castbarApplyTexts
+  if not applyTexts then
+    applyTexts = Dep("MSUF_CB_ApplyTexts")
+    castbarApplyTexts = applyTexts
   end
   if frame._msufPreviewAnimCastLabel == label
     and frame._msufPreviewAnimCastLabelRevision == revision then
@@ -883,9 +887,20 @@ local function RefreshArenaPreviewFrames()
   return any
 end
 
+-- The animation ticker reads the registry tables behind CastbarFrames.Get
+-- directly (plain kinds live on CastbarFrames, indexed kinds in its pools), so
+-- a tick makes no lookup call. Boss preview slot 1 is registered there too
+-- (named MSUF_BossCastbarPreview, unsuffixed).
+local CastbarPreviewPools = CastbarFrames.indexed
+
 local function BossCastbarPreview(index)
-  if index == 1 then return MSUF.Castbars.Frames.Get("bossPreview") or _G.MSUF_BossCastbarPreview1 end
-  return _G["MSUF_BossCastbarPreview" .. index]
+  return CastbarPreviewPools.bossPreview[index]
+end
+
+local function BossCastbarPreviewCount()
+  local bossMax = tonumber(MAX_BOSS_FRAMES) or #BOSS_UNITS
+  if bossMax < 1 then bossMax = #BOSS_UNITS elseif bossMax > 12 then bossMax = 12 end
+  return bossMax
 end
 
 local function RefreshCastbarPreviewFrames()
@@ -893,31 +908,30 @@ local function RefreshCastbarPreviewFrames()
   local any = false
   for i = 1, #CASTBAR_PREVIEWS do
     local spec = CASTBAR_PREVIEWS[i]
-    any = ApplyCastbarPreviewFrame(_G[spec.name], i + 20, spec.unit, spec.label) or any
+    any = ApplyCastbarPreviewFrame(CastbarFrames[spec.kind], i + 20, spec.unit, spec.label) or any
   end
 
-  local bossMax = tonumber(_G.MAX_BOSS_FRAMES) or #BOSS_UNITS
+  local bossMax = tonumber(MAX_BOSS_FRAMES) or #BOSS_UNITS
   if bossMax < 1 then bossMax = #BOSS_UNITS elseif bossMax > 12 then bossMax = 12 end
   for i = 1, bossMax do
     any = ApplyCastbarPreviewFrame(BossCastbarPreview(i), i + 30, "boss", "Celestial Ruin") or any
   end
+  local arenaPreviews = CastbarPreviewPools.arenaPreview
   for i = 1, #ARENA_UNITS do
-    any = ApplyCastbarPreviewFrame(_G["MSUF_ArenaCastbarPreview" .. i], i + 40, "arena", "Greater Pyroblast") or any
+    any = ApplyCastbarPreviewFrame(arenaPreviews[i], i + 40, "arena", "Greater Pyroblast") or any
   end
   return any
 end
 
 local function RestoreCastbarPreviewFrames()
   for i = 1, #CASTBAR_PREVIEWS do
-    RestoreCastbarFrame(_G[CASTBAR_PREVIEWS[i].name])
+    RestoreCastbarFrame(CastbarFrames.Get(CASTBAR_PREVIEWS[i].kind))
   end
-  local bossMax = tonumber(_G.MAX_BOSS_FRAMES) or #BOSS_UNITS
-  if bossMax < 1 then bossMax = #BOSS_UNITS elseif bossMax > 12 then bossMax = 12 end
-  for i = 1, bossMax do
+  for i = 1, BossCastbarPreviewCount() do
     RestoreCastbarFrame(BossCastbarPreview(i))
   end
   for i = 1, #ARENA_UNITS do
-    RestoreCastbarFrame(_G["MSUF_ArenaCastbarPreview" .. i])
+    RestoreCastbarFrame(CastbarFrames.Get("arenaPreview", i))
   end
 end
 
@@ -934,12 +948,15 @@ local function RefreshStaticCastbarPreviews()
   end
 end
 
+local groupPreviewAnimationRefresh
 local function RefreshGroupPreviews()
-  local fn = _G.MSUF_GF_RefreshPreviewAnimation
-  if type(fn) == "function" then
-    return fn() == true
+  -- Group/MSUF_UF_Group_Preview.lua loads after this file; keep the first hit for the ticker.
+  local fn = groupPreviewAnimationRefresh
+  if not fn then
+    fn = Dep("MSUF_GF_RefreshPreviewAnimation")
+    groupPreviewAnimationRefresh = fn
   end
-  return false
+  return fn() == true
 end
 
 local function RefreshGroupRuntimeFrames()
@@ -960,15 +977,7 @@ local function RefreshGroupRuntimeFrames()
 end
 
 local function RefreshStaticGroupRuntimeFrames()
-  local refresh = _G.MSUF_GF_RefreshVisuals
-  if type(refresh) == "function" then
-    refresh(nil, MSUF and MSUF.GF and MSUF.GF.DIRTY_VISUAL)
-    return
-  end
-  local gf = MSUF and MSUF.GF
-  if gf and type(gf.RefreshVisuals) == "function" then
-    gf.RefreshVisuals(nil, gf.DIRTY_VISUAL)
-  end
+  Dep("MSUF_GF_RefreshVisuals")(nil, MSUF and MSUF.GF and MSUF.GF.DIRTY_VISUAL)
 end
 
 local function RefreshEditAuraPreviews()
@@ -1013,23 +1022,19 @@ local function RefreshAfterDriverStop(stoppedSource)
     RefreshStaticGroupRuntimeFrames()
   end
   RefreshEditAuraPreviews()
-  if _G.MSUF_EM2_ReforcePreviewFrames then
-    _G.MSUF_EM2_ReforcePreviewFrames()
+  Dep("MSUF_EM2_ReforcePreviewFrames")()
+  if BossPreviewActive() then
+    Dep("MSUF_SyncBossUnitframePreviewWithUnitEdit")()
   end
-  if BossPreviewActive() and _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
-    _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
-  end
-  if ArenaPreviewActive() and _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
-    _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
+  if ArenaPreviewActive() then
+    Dep("MSUF_SyncArenaUnitframePreviewWithUnitEdit")()
   end
 end
 
 RegisterEditModeStopListener = function()
   if editModeStopListenerRegistered then return end
-  local register = _G.MSUF_RegisterAnyEditModeListener
-  if type(register) ~= "function" then return end
   editModeStopListenerRegistered = true
-  register(function(active)
+  Dep("MSUF_RegisterAnyEditModeListener")(function(active)
     if active == true then return end
     if PA.enabled == true and PA.source == "edit_mode" then
       StopDriver(true)

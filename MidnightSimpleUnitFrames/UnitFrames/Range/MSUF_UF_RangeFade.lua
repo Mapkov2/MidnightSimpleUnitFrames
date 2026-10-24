@@ -8,7 +8,6 @@
 
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
 
 local UF = MSUF.UF
@@ -21,21 +20,23 @@ UF.Range = Range
 -- (Kernel/MSUF_Scheduler.lua): a re-arm reschedules that key. It used to create
 -- a new C_Timer.NewTimer object on every re-arm.
 local Scheduler = MSUF.Scheduler
-local After = _G.C_Timer.After
-local UnitCanAssist = _G.UnitCanAssist
-local UnitCanAttack = _G.UnitCanAttack
-local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
-local UnitInRange = _G.UnitInRange
-local UnitClass = _G.UnitClass
-local InCombatLockdown = _G.InCombatLockdown
-local CheckInteractDistance = _G.CheckInteractDistance
-local GetUnitSpeed = _G.GetUnitSpeed
-local GetTime = _G.GetTime
-local wipe = _G.wipe or table.wipe
+local UnitCanAssist = UnitCanAssist
+local UnitCanAttack = UnitCanAttack
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local UnitInRange = UnitInRange
+local UnitClass = UnitClass
+local InCombatLockdown = InCombatLockdown
+local CheckInteractDistance = CheckInteractDistance
+local GetUnitSpeed = GetUnitSpeed
+local GetTime = GetTime
+local wipe = wipe or table.wipe
 local tonumber = tonumber
+-- The shared scheduler and the alpha element's public export load before this file.
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", "UnitFrames/Range/MSUF_UF_RangeFade.lua")
+local ApplyRangeModifierExport = MSUF.Require("MSUF_UF_ApplyRangeModifier", "UnitFrames/Range/MSUF_UF_RangeFade.lua")
 
-local C_Spell = _G.C_Spell
-local C_SpellBook = _G.C_SpellBook
+local C_Spell = C_Spell
+local C_SpellBook = C_SpellBook
 -- Classic clients (Vanilla, TBC, Mists): no Classic-loaded Blizzard code arms
 -- C_Spell.EnableSpellRangeCheck or listens for SPELL_RANGE_CHECK_UPDATE, and no
 -- in-game check has shown that event firing there. Classic therefore never arms
@@ -49,13 +50,13 @@ local CLASSIC_TARGET_SAMPLING = MSUF.Client and MSUF.Client.IsClassic == true or
 -- as book slots and return wrong answers instead of failing visibly.
 local IsSpellInRange = C_Spell and C_Spell.IsSpellInRange
 local EnableSpellRangeCheck = not CLASSIC_TARGET_SAMPLING and C_Spell and C_Spell.EnableSpellRangeCheck or nil
-local GetSpellIDForSpellIdentifier = C_Spell and C_Spell.GetSpellIDForSpellIdentifier or _G.GetSpellIDForSpellIdentifier
+local GetSpellIDForSpellIdentifier = C_Spell and C_Spell.GetSpellIDForSpellIdentifier or GetSpellIDForSpellIdentifier
 local GetOverrideSpell = C_Spell and C_Spell.GetOverrideSpell
-local IsPlayerSpell = _G.IsPlayerSpell
-local Enum = _G.Enum
+local IsPlayerSpell = IsPlayerSpell
+local Enum = Enum
 local SPELL_BANK_PLAYER = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local UnitExistsPlain = UF.UnitExistsSafe
 
 local Driver = Range.Driver
@@ -268,7 +269,7 @@ local function FrameRangeActive(frame)
   return frame
     and frame._msufRangeActiveCfg == true
     and frame._msufRangeUnitSupported == true
-    and _G.MSUF_UnitEditModeActive ~= true
+    and MSUF_UnitEditModeActive ~= true
 end
 
 local function ApplyMul(frame, inRange, force, checkedRange, fallbackInRange)
@@ -288,11 +289,8 @@ local function ApplyMul(frame, inRange, force, checkedRange, fallbackInRange)
   end
   frame._msufRangeInRange = inRange
   frame._msufRangeMulApplied = mul
-  local apply = UF.ApplyRangeModifier or _G.MSUF_UF_ApplyRangeModifier
-  if apply then
-    return apply(frame, mul, force)
-  end
-  return false
+  local apply = UF.ApplyRangeModifier or ApplyRangeModifierExport
+  return apply(frame, mul, force)
 end
 
 local function ClearUnit(unit, force)
@@ -852,14 +850,7 @@ end
 local function QueueVisibilityRuntime()
   if visibilitySyncQueued then return end
   visibilitySyncQueued = true
-  local scheduleOnce = _G.MSUF_ScheduleOnce
-  if type(scheduleOnce) == "function" then
-    scheduleOnce("MSUF_RANGE_VISIBILITY_SYNC", FlushVisibilityRuntime)
-  elseif type(After) == "function" then
-    After(0, FlushVisibilityRuntime)
-  else
-    FlushVisibilityRuntime()
-  end
+  ScheduleOnce("MSUF_RANGE_VISIBILITY_SYNC", FlushVisibilityRuntime)
 end
 
 local function SetFrameDriverActive(frame, active)
@@ -982,14 +973,7 @@ end
 local function QueueBossLifecycleRange()
   if bossLifecycleRangeQueued then return end
   bossLifecycleRangeQueued = true
-  local scheduleOnce = _G.MSUF_ScheduleOnce
-  if type(scheduleOnce) == "function" then
-    scheduleOnce("MSUF_RANGE_BOSS_LIFECYCLE", FlushBossLifecycleRange)
-  elseif type(After) == "function" then
-    After(0, FlushBossLifecycleRange)
-  else
-    FlushBossLifecycleRange()
-  end
+  ScheduleOnce("MSUF_RANGE_BOSS_LIFECYCLE", FlushBossLifecycleRange)
 end
 
 PollNow = function(now)

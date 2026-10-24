@@ -22,6 +22,7 @@
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
 local CORE_FIRST_LOAD = root .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"
 local MENU = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/"
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 
 local function Check(condition, message)
     if not condition then error(message, 2) end
@@ -220,6 +221,8 @@ local function LoadMenuFirstLoad(lifecycle)
     -- virtual actions at load.
     local M = { Tr = function(text) return text end, Widgets = {}, RegisterVirtualRuntimeControl = function() return true end }
     local namespace = { MSUF2 = M, FirstLoad6 = lifecycle }
+    RequireFixture.InstallKernel(root, namespace)
+    RequireFixture.Install(root, namespace, M)
     assert(loadfile(MENU .. "MSUF_Menu2_FirstLoad.lua"))("MidnightSimpleUnitFrames_Options", namespace)
     return M
 end
@@ -327,6 +330,10 @@ M.RegisterPage = function(key, spec) M.pages[key] = spec end
 _G.CreateFrame = function(kind) return Fake(kind) end
 -- The core's Suite link (Kernel/MSUF_SuiteLink.lua), which the Suite card asks.
 local dashboardNamespace = { MSUF2 = M }
+RequireFixture.InstallKernel(root, dashboardNamespace)
+RequireFixture.Install(root, dashboardNamespace, M)
+-- The Dashboard's changelog card requires the Options addon's bundled history.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua"))("MidnightSimpleUnitFrames_Options", dashboardNamespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", dashboardNamespace)
 assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", dashboardNamespace)
 local buildHome = Check(M.pages.home and M.pages.home.build, "the Dashboard must register the home page")

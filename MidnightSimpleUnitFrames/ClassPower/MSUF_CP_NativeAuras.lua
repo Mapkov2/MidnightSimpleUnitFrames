@@ -3,11 +3,13 @@
 -- Contract: upstream/live Blizzard_CustomAuraButton.lua (12.1): bound regions
 -- must belong to the slot button. Never inspect their values or visibility.
 local _, MSUF = ...
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_NativeAuras.lua")
+local FILE = "ClassPower/MSUF_CP_NativeAuras.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
+local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
 function MSUF.CPBuilders.NativeAuras(E)
-local _G = E.globals or _G
 local C_Secrets, C_Spell, C_StringUtil = E.C_Secrets or C_Secrets, E.C_Spell or C_Spell, E.C_StringUtil or C_StringUtil
 -- Bound by MSUF.CPBuilders.NativeAuras: the controller's environment (its
 -- state, profile, texture resolver and text level) and the slot states and
@@ -50,8 +52,8 @@ local function Style(state, maximum)
     end
     local b, v = db.bars or {}, CP.visual or {}
     local texture = E.Texture(b.classPowerTexture)
-    local font = (_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-    local flags = _G.MSUF_GetFontFlags and _G.MSUF_GetFontFlags() or "OUTLINE"
+    local font = GetFontPath() or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local flags = GetFontFlags() or "OUTLINE"
     local size = tonumber(b.classPowerFontSize) or 14
     local r, g, blue = v.baseR or 1, v.baseG or 1, v.baseB or 1
     local textMode = db.textMode
@@ -101,8 +103,10 @@ local function Ensure(key, maximum)
         pending = true
         return nil
     end
-    local A3 = _G.MSUF_Auras3
-    if not (A3 and A3.CreateClassPowerAuraSensor) then
+    --- E.globals carries the sample scene's stand-in Auras3 sensor.
+    local globals = E.globals
+    local A3 = globals and globals.MSUF_Auras3 or MSUF.Require("MSUF_Auras3", FILE)
+    if not A3.CreateClassPowerAuraSensor then
         pending = true
         return nil
     end

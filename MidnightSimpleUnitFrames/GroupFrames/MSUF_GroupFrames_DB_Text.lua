@@ -5,7 +5,8 @@
 --- after it (UFCore_Group.xml and the Classic GroupFrames.xml manifests) and
 --- shares the one MSUF.GF table; see that file for the module's API surface.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
+local TEXT_CONTEXT = "GroupFrames/MSUF_GroupFrames_DB_Text.lua"
+local Require = MSUF.Require
 
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
@@ -14,7 +15,10 @@ local tonumber = tonumber
 local tostring = tostring
 local type = type
 
-local ComposeFontFlags = _G.MSUF_ComposeFontFlags
+-- The engine loads before Group DB text; its validation sits next to the formatters below.
+local Text = Require("MSUF_NS", TEXT_CONTEXT).UFText
+local ComposeFontFlags = Require("MSUF_ComposeFontFlags", TEXT_CONTEXT)
+local GetFontPath = Require("MSUF_GetFontPath", TEXT_CONTEXT)
 
 local function ClampTextAlpha(value)
     value = tonumber(value) or 1
@@ -30,7 +34,7 @@ local function ClampBaselineOffset(value)
     return value
 end
 
-local ShadowMetrics = _G.MSUF_ResolveFontShadowMetrics
+local ShadowMetrics = Require("MSUF_ResolveFontShadowMetrics", TEXT_CONTEXT)
 
 ---
 --- Health text modes (matches EQoL healthTextModeOptions)
@@ -76,14 +80,13 @@ GF.DELIMITER_OPTIONS = {
 
 --- Resolve font path (global MSUF font family)
 function GF.ResolveFontPath(kind)
-    return _G.MSUF_GetFontPath()
+    return GetFontPath()
 end
 
 --- Resolve font outline flags
 function GF.ResolveFontFlags(kind)
     local conf = GF.GetConf(kind)
-    local db = _G.MSUF_DB
-    local gen = db and db.general
+    local gen = MSUF_DB and MSUF_DB.general
     local monochrome = gen and gen.fontMonochrome == true
     local slug = gen and gen.fontSlug == true
     --- When override active: use GF-local fontOutline
@@ -114,8 +117,7 @@ function GF.ResolveFontTextAlpha(kind)
     if conf.fontOverride and conf.fontTextAlpha ~= nil then
         return ClampTextAlpha(conf.fontTextAlpha)
     end
-    local db = _G.MSUF_DB
-    local gen = db and db.general
+    local gen = MSUF_DB and MSUF_DB.general
     return ClampTextAlpha(gen and gen.fontTextAlpha)
 end
 
@@ -124,15 +126,13 @@ function GF.ResolveFontBaselineOffset(kind)
     if conf.fontOverride and conf.fontBaselineOffset ~= nil then
         return ClampBaselineOffset(conf.fontBaselineOffset)
     end
-    local db = _G.MSUF_DB
-    local gen = db and db.general
+    local gen = MSUF_DB and MSUF_DB.general
     return ClampBaselineOffset(gen and gen.fontBaselineOffset)
 end
 
 function GF.ResolveFontShadow(kind)
     local conf = GF.GetConf(kind)
-    local db = _G.MSUF_DB
-    local gen = db and db.general
+    local gen = MSUF_DB and MSUF_DB.general
     local enabled = not (gen and gen.textBackdrop == false)
     local alpha, x, y = ShadowMetrics(gen and gen.fontShadowOpacity, gen and gen.fontShadowDistance,
         gen and gen.fontShadowStrength)
@@ -168,10 +168,10 @@ local GetClassBarColorFast
 
 local function ClassNameColor(classToken)
     GetClassBarColorFast = GetClassBarColorFast
-        or MSUF.Require("MSUF_UFCore_GetClassBarColorFast", "GroupFrames/MSUF_GroupFrames_DB_Text.lua")
+        or Require("MSUF_UFCore_GetClassBarColorFast", TEXT_CONTEXT)
     local r, g, b = GetClassBarColorFast(classToken)
     if r then return r, g, b end
-    local cc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+    local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
     if cc then return cc.r, cc.g, cc.b end
     return nil
 end
@@ -194,8 +194,7 @@ function GF.ResolveNameColor(kind, classToken)
     end
 
     --- No override: use global nameClassColor boolean (shared with UF)
-    local db = _G.MSUF_DB
-    local gen = db and db.general
+    local gen = MSUF_DB and MSUF_DB.general
     if gen and gen.nameClassColor and classToken then
         local r, g, b = ClassNameColor(classToken)
         if r then return r, g, b end
@@ -223,7 +222,7 @@ function GF.ResolveNameTruncation(kind)
         return localMax, conf.nameNoEllipsis or false, side
     end
 
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local gen = db and db.general
     if db and db.shortenNames == true then
         local maxChars = tonumber(gen and gen.shortenNameMaxChars) or 6
@@ -248,30 +247,9 @@ end
 --- The optional "unit" parameter enables the secret-safe path.
 --- Preview mode (fake numeric values) omits unit - non-secret path runs.
 ---
---- Mode-swap table for reverse
-local REVERSE_HP_MAP = {
-    CURPERCENT     = "PERCENTCUR",
-    PERCENTCUR     = "CURPERCENT",
-    CURMAX         = "MAXCUR",
-    MAXCUR         = "CURMAX",
-    CURMAXPERCENT  = "PERCENTMAXCUR",
-    PERCENTMAXCUR  = "CURMAXPERCENT",
-    MAXPERCENT     = "PERCENTMAX",
-    PERCENTMAX     = "MAXPERCENT",
-    PERCENTCURMAX  = "CURMAXPERCENT",
-    CURPERCENTABSORB = "PERCENTCURABSORB",
-    PERCENTCURABSORB = "CURPERCENTABSORB",
-    CURMAXABSORB = "MAXCURABSORB",
-    MAXCURABSORB = "CURMAXABSORB",
-    CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB",
-    PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
-    MAXPERCENTABSORB = "PERCENTMAXABSORB",
-    PERCENTMAXABSORB = "MAXPERCENTABSORB",
-    PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
-}
-
+--- Mode-swap table for reverse: the unit-frame text owns it (UFText.REVERSE_HEALTH_MODE).
 function GF.ReverseHealthTextMode(mode)
-    return REVERSE_HP_MAP[mode] or mode
+    return Text.REVERSE_HEALTH_MODE[mode] or mode
 end
 
 function GF.ResolveHealthTextSlots(conf)
@@ -292,7 +270,7 @@ end
 --- Global text-formatting inheritance
 ---
 local function _GF_GetGlobalTextOpt(key, fallback)
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local gen = MSUF_DB and MSUF_DB.general
     if gen and gen[key] ~= nil then return gen[key] end
     return fallback
 end
@@ -320,8 +298,6 @@ end
 
 -- The engine loads before Group DB text. Keep inherited options on the existing
 -- invalidation boundary; return-value formatting is explicitly the GROUP contract.
-local TEXT_CONTEXT = "GroupFrames/MSUF_GroupFrames_DB_Text.lua"
-local Text = MSUF.Require("MSUF_NS", TEXT_CONTEXT).UFText
 if type(Text) ~= "table" then
     error("MSUF: missing required dependency 'UFText' required by " .. TEXT_CONTEXT, 2)
 end

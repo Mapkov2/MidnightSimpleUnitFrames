@@ -11,11 +11,11 @@ MSUF.MSUF2 = M
 -- (M.PageHasReset, M.BuildPageResetWarning, M.ResetPageToDefaults,
 -- M.ShowPageResetConfirm), so pages and the toolbar keep calling them.
 -- M.Format comes from MSUF_Menu2_Theme.lua, which the manifest loads first.
+local FILE = "Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua"
 local Fmt = M.Format
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
-local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+local ApplyService = M.ApplyService or MSUF.Require("MSUF_Menu2_ApplyService", FILE)
 if type(ApplyService) ~= "table" then error("MSUF Menu2 ApplyService missing") end
-
 
 local DeepCopy = M.DeepCopy
 local QueueMenuRefresh = M.QueueMenuRefresh
@@ -26,7 +26,7 @@ local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf
     uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" },
     uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_arena = { unit = "arena", label = "Arena Frames" },
     uf_pet = { unit = "pet", label = "Pet" }, uf_pettarget = { unit = "pettarget", label = "Pet Target" } }
-local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB"
+local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconShape IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB"
 local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL "TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB"
 local function BuildUnitCastbarResetKeys(spec)
     local keys = { spec.enable, spec.backend .. "Backend", spec.backend .. "BackendBeforeHide", spec.time, spec.icon, spec.name }
@@ -87,18 +87,16 @@ for pageKey, info in pairs(UNIT_PAGE_RESETS) do
         summaryFormat = "%s unit-frame settings, including layout, text, portrait, power, status icons, transparency, load conditions and this unit's castbar toggles",
     }
 end
+-- General-root bars keys beyond BARS_SCOPE_KEYS: the Bars page resets the general
+-- root through the union of both sets.
 local BARS_GENERAL_KEYS = KSW [[
-    barTexture barBackgroundTexture enableGradient enablePowerGradient gradientStrength gradientDirection
-    gradientDirRight gradientDirLeft gradientDirUp gradientDirDown showSelfHealPrediction healPredEnabled healPredAllHealers healPredAnchorMode
-    healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
-    enableAbsorbBar absorbTextMode absorbAnchorMode absorbBarHeight absorbBarOffsetY absorbBarOpacity
-    healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity
-    overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger dispelBorderShowOn bossTargetOutlineMode
-    bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
-    roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover barOutlineColorR barOutlineColorG
-    barOutlineColorB barOutlineColorA healthLossColorR healthLossColorG healthLossColorB powerLossColorR powerLossColorG powerLossColorB
+    showSelfHealPrediction absorbBarTexture healAbsorbBarTexture bossTargetOutlineMode bossTargetHighlightEnabled
+    highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames roundedGroupFrames
+    roundedPowerBars roundedCastbars roundedClassResources roundedMouseover
+    healthLossColorR healthLossColorG healthLossColorB powerLossColorR powerLossColorG powerLossColorB
 ]]
 local BARS_SCOPE_KEYS = KSW [[
+    healthGlossEnabled healthGlossStrength powerGlossEnabled powerGlossStrength
     hlOverride hpPowerTextOverride barTextureOverride barTexture barBackgroundTexture barBgTexture enableAbsorbBar absorbTextMode absorbAnchorMode
     absorbBarHeight absorbBarOffsetY healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY
     healPredEnabled healPredAllHealers healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
@@ -145,7 +143,7 @@ local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
 -- Frame Highlights: the Group Target Highlight switches of each group scope.
 local MISC_GROUP_KEYS = KS("targetIndicator")
 local CASTBAR_GENERAL_KEYS = KSW [[
-    empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickTextSize
+    empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickIconShape focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss kickReadyShowArena
     kickReadyShowNameplates
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY kickReadyTimeMarker kickReadyTimeSegment
@@ -220,44 +218,35 @@ local function RetireLegacyUnitAliases(db)
     db.focus_target = nil
     db.focustargettarget = nil
 end
+-- Whether the lowercase key holds any of the plain substrings.
+local function HasKeyPart(lower, parts)
+    for i = 1, #parts do
+        if lower:find(parts[i], 1, true) then return true end
+    end
+    return false
+end
+-- Lowercase names a colour setting carries without "color" in them.
+local COLOR_KEY_NAMES = KSW [[
+    barmode darkmode darkbartone darkbgbrightness useclasscolors enablehealthgradient gradientstrength
+    fontcolor highlightcolor usecustomfontcolor nameclasscolor npcnamered
+]]
+-- Stems that make a capital R/G/B/A last letter a colour channel.
+local COLOR_CHANNEL_STEMS = WL "font bg border outline gradient castbar"
 local function IsColorKey(key)
     if type(key) ~= "string" then return false end
     if COLOR_GENERAL_KEYS[key] == true then return true end
     local lower = string.lower(key)
-    if lower:find("color", 1, true) then return true end
-    if lower == "barmode" or lower == "darkmode" or lower == "darkbartone" or lower == "darkbgbrightness" then return true end
-    if lower == "useclasscolors" or lower == "enablehealthgradient" or lower == "gradientstrength" then return true end
-    if lower == "fontcolor" or lower == "highlightcolor" or lower == "usecustomfontcolor" then return true end
-    if lower == "nameclasscolor" or lower == "npcnamered" then return true end
+    if lower:find("color", 1, true) or COLOR_KEY_NAMES[lower] then return true end
     -- A channel is a capital R/G/B/A closing a colour stem (classBarBgR,
     -- castbarBorderA); a lowercase last letter ends a word (fontSlug, useBarBorder).
     local last = key:sub(-1)
-    if last == "R" or last == "G" or last == "B" or last == "A" then
-        if lower:find("color", 1, true)
-            or lower:find("font", 1, true)
-            or lower:find("bg", 1, true)
-            or lower:find("border", 1, true)
-            or lower:find("outline", 1, true)
-            or lower:find("gradient", 1, true)
-            or lower:find("castbar", 1, true)
-        then
-            return true
-        end
-        if lower == "fontcolorcustomr" or lower == "fontcolorcustomg" or lower == "fontcolorcustomb" then return true end
-    end
-    return false
+    return (last == "R" or last == "G" or last == "B" or last == "A") and HasKeyPart(lower, COLOR_CHANNEL_STEMS)
 end
+local CASTBAR_KEY_PARTS = WL "castbar bosscast arenacast empower spellnamefontsize timefontsize"
 local function IsCastbarKey(key)
     if type(key) ~= "string" then return false end
     if CASTBAR_GENERAL_KEYS[key] == true then return true end
-    local lower = string.lower(key)
-    if lower:find("castbar", 1, true) then return true end
-    if lower:find("bosscast", 1, true) then return true end
-    if lower:find("arenacast", 1, true) then return true end
-    if lower:find("empower", 1, true) then return true end
-    if lower == "enableplayercastbar" or lower == "enabletargetcastbar" or lower == "enablefocuscastbar" then return true end
-    if lower:find("spellnamefontsize", 1, true) or lower:find("timefontsize", 1, true) then return true end
-    return false
+    return HasKeyPart(string.lower(key), CASTBAR_KEY_PARTS)
 end
 -- Further bars settings the Class Resources page writes: the Ironfur hash lines,
 -- the resource marks and the client-only Additional resources. Their colours
@@ -266,33 +255,26 @@ local CLASSPOWER_EXTRA_BARS_KEYS = KSW [[
     guardianIronfurShowHashLines resourceMarks showIgnorePain ignorePainTimeMarker showArcaneWindow
     arcaneWindowText arcaneWindowTextFrom arcaneWindowWarnSeconds arcaneWindowWarnLastGCD manaRegenPause manaGainPulse
 ]]
+local CLASSPOWER_BARS_PREFIXES = WL "classPower playerPower detachedPowerBar altMana playerHPBar resourceExtra"
+local CLASSPOWER_BARS_NAMES = KSW [[
+    showClassPower showChargedComboPoints runeShowTime showEleMaelstrom showEbonMight showShadowMana
+    showGuardianIronfur showSweepingStrikes manaUpcomingCost showAltMana classPowerComboPointColorMode
+]]
 local function IsClassPowerBarsKey(key)
     if type(key) ~= "string" then return false end
-    return StartsWith(key, "classPower")
-        or StartsWith(key, "playerPower")
-        or StartsWith(key, "detachedPowerBar")
-        or StartsWith(key, "altMana")
-        or StartsWith(key, "playerHPBar")
-        or StartsWith(key, "resourceExtra")
-        or CLASSPOWER_EXTRA_BARS_KEYS[key] == true
-        or key == "showClassPower"
-        or key == "showChargedComboPoints"
-        or key == "runeShowTime"
-        or key == "showEleMaelstrom"
-        or key == "showEbonMight"
-        or key == "showShadowMana"
-        or key == "showGuardianIronfur"
-        or key == "showSweepingStrikes"
-        or key == "manaUpcomingCost"
-        or key == "showAltMana"
-        or key == "classPowerComboPointColorMode"
+    for i = 1, #CLASSPOWER_BARS_PREFIXES do
+        if StartsWith(key, CLASSPOWER_BARS_PREFIXES[i]) then return true end
+    end
+    return CLASSPOWER_EXTRA_BARS_KEYS[key] == true or CLASSPOWER_BARS_NAMES[key] == true
 end
 local function FactoryDefaults()
-    local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
-    if type(create) ~= "function" then return nil end
-    local defaults = create()
-    if type(defaults) == "table" then return defaults end
-    return nil
+    local create = MSUF.MSUF_CreateFactoryDefaultProfile
+    local defaults = type(create) == "function" and create() or nil
+    return type(defaults) == "table" and defaults or nil
+end
+-- The saved-variable name of the active profile; the namespace has no mirror of it.
+local function ActiveProfileName()
+    return MSUF_ActiveProfile or "Default"
 end
 local function ResetUnitPage(db, defaults, unit)
     ReplaceRootTable(db, defaults, unit)
@@ -336,9 +318,7 @@ local function ResetFontsPage(db, defaults)
     end
     RetireLegacyUnitAliases(db)
 end
-local AURA_APPEARANCE_KINDS = {
-    buff = true, debuff = true, playerDefensives = true, targetDots = true,
-}
+local AURA_APPEARANCE_KINDS = KS("buff", "debuff", "playerDefensives", "targetDots")
 local function ActiveAuraAppearanceKind(info)
     local kind = info and info.appearanceKind or M.auraAppearanceContainer
     kind = tostring(kind or "buff")
@@ -505,20 +485,20 @@ local function ApplyAurasPageResetRuntime(reason, visuals)
     return false
 end
 
+local DOMAIN_REQUESTS = { bars = "RequestBars", fonts = "RequestFonts" }
 local function ApplyDomainPageResetRuntime(info, reason)
     if not info then return false end
     local kind = info.kind
     if kind == "group" then
         return ApplyGroupPageResetRuntime(reason)
     end
-    if kind == "bars" then
-        if ApplyService.RequestBars then return ApplyService.RequestBars(reason) ~= false end
-        if M.RequestGeneralDomains then return M.RequestGeneralDomains(reason, { preview = true, applyAll = false, bars = true }) ~= false end
-        return false
-    end
-    if kind == "fonts" then
-        if ApplyService.RequestFonts then return ApplyService.RequestFonts(reason) ~= false end
-        if M.RequestGeneralDomains then return M.RequestGeneralDomains(reason, { preview = true, applyAll = false, fonts = true }) ~= false end
+    local requestName = DOMAIN_REQUESTS[kind]
+    if requestName then
+        local request = ApplyService[requestName]
+        if request then return request(reason) ~= false end
+        if M.RequestGeneralDomains then
+            return M.RequestGeneralDomains(reason, { preview = true, applyAll = false, [kind] = true }) ~= false
+        end
         return false
     end
     if kind == "colors" then
@@ -534,8 +514,8 @@ local function ApplyDomainPageResetRuntime(info, reason)
             ApplyService.RequestClassPowerDomains(reason or "MSUF2_RESET_COLORS", COLOR_CLASSPOWER_RUNTIME)
             did = true
         else
-            _G.MSUF_ClassPower_InvalidateColors()
-did = true
+            MSUF.Require("MSUF_ClassPower_InvalidateColors", FILE)()
+            did = true
         end
         return did
     end
@@ -545,9 +525,43 @@ did = true
     return false
 end
 
+-- Group frames follow a bars, fonts, colors or misc page reset through the
+-- dirty mask of that kind, else the coarse request, else the direct GF refreshes.
+local GROUP_RESET_MODES = { fonts = "fonts", colors = "colors" }
+local function ApplyGroupScopedResetRuntime(kind, reason)
+    local mode = GROUP_RESET_MODES[kind] or "visual"
+    if ApplyService.RequestGroupDirtyMask then
+        local gf = MSUF.GF
+        local dirty = gf and ((kind == "fonts" and gf.DIRTY_FONT) or (kind == "colors" and gf.DIRTY_COLOR) or gf.DIRTY_VISUAL)
+        if dirty then
+            ApplyService.RequestGroupDirtyMask("group", dirty, reason)
+        elseif ApplyService.RequestGroup then
+            ApplyService.RequestGroup("group", mode, reason)
+        end
+    elseif ApplyService.RequestGroup then
+        ApplyService.RequestGroup("group", mode, reason)
+    else
+        local gf = MSUF.GF
+        if gf then
+            if type(gf.InvalidateConfCache) == "function" then gf.InvalidateConfCache() end
+            if kind == "fonts" and type(gf.RefreshFonts) == "function" then
+                gf.RefreshFonts()
+            elseif kind == "colors" and type(gf.RefreshColors) == "function" then
+                gf.RefreshColors()
+            elseif type(gf.RefreshVisuals) == "function" then
+                gf.RefreshVisuals(nil, gf.DIRTY_VISUAL or 2)
+            elseif type(gf.RebuildAll) == "function" then
+                gf.RebuildAll()
+            end
+            if type(gf.RequestAuraRefresh) == "function" then gf.RequestAuraRefresh() end
+        end
+    end
+end
+
 local function ApplyAfterPageReset(pageKey, info)
     local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
-    if info and info.kind == "unit" and info.unit then
+    local kind = info and info.kind
+    if kind == "unit" and info.unit then
         if info.unit == "player" then
             ApplyScopedFeatureRuntime("classpower", reason)
         end
@@ -560,7 +574,7 @@ local function ApplyAfterPageReset(pageKey, info)
         FinishPageResetApply(pageKey, info)
         return
     end
-    if info and ApplyScopedFeatureRuntime(info.kind, reason) then
+    if info and ApplyScopedFeatureRuntime(kind, reason) then
         FinishPageResetApply(pageKey, info)
         return
     end
@@ -569,57 +583,26 @@ local function ApplyAfterPageReset(pageKey, info)
         return
     end
     if M.RequestGeneralDomains then M.RequestGeneralDomains(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
-    if info and info.kind == "gameplay" then M.ApplyGameplay() end
+    if kind == "gameplay" then M.ApplyGameplay() end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.
-    if info and (info.kind == "auras" or info.kind == "colors") then
-        ApplyAurasPageResetRuntime(reason, info.kind == "colors")
+    if kind == "auras" or kind == "colors" then
+        ApplyAurasPageResetRuntime(reason, kind == "colors")
     end
-    if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors"
-        or info.kind == "misc") then
-        if info.kind == "group" then
-            ApplyGroupPageResetRuntime(reason)
-        elseif ApplyService.RequestGroupDirtyMask then
-            local gf = MSUF and MSUF.GF
-            local dirty = gf and ((info.kind == "fonts" and gf.DIRTY_FONT)
-                or (info.kind == "colors" and gf.DIRTY_COLOR)
-                or gf.DIRTY_VISUAL)
-            if dirty then
-                ApplyService.RequestGroupDirtyMask("group", dirty, reason)
-            elseif ApplyService.RequestGroup then
-                local mode = (info.kind == "fonts" and "fonts") or (info.kind == "colors" and "colors") or "visual"
-                ApplyService.RequestGroup("group", mode, reason)
-            end
-        elseif ApplyService.RequestGroup then
-            local mode = (info.kind == "fonts" and "fonts") or (info.kind == "colors" and "colors") or "visual"
-            ApplyService.RequestGroup("group", mode, reason)
-        else
-            local gf = MSUF and MSUF.GF
-            if gf then
-                if type(gf.InvalidateConfCache) == "function" then gf.InvalidateConfCache() end
-                if info.kind == "fonts" and type(gf.RefreshFonts) == "function" then
-                    gf.RefreshFonts()
-                elseif info.kind == "colors" and type(gf.RefreshColors) == "function" then
-                    gf.RefreshColors()
-                elseif type(gf.RefreshVisuals) == "function" then
-                    gf.RefreshVisuals(nil, gf.DIRTY_VISUAL or 2)
-                elseif type(gf.RebuildAll) == "function" then
-                    gf.RebuildAll()
-                end
-                if type(gf.RequestAuraRefresh) == "function" then gf.RequestAuraRefresh() end
-            end
-        end
+    if kind == "group" then
+        ApplyGroupPageResetRuntime(reason)
+    elseif kind == "bars" or kind == "fonts" or kind == "colors" or kind == "misc" then
+        ApplyGroupScopedResetRuntime(kind, reason)
     end
-    if info and info.kind == "modules" then _G.MSUF_ApplyModules() end
+    if kind == "modules" then MSUF.Require("MSUF_ApplyModules", FILE)() end
     FlushApplyServiceNow()
     FinishPageResetApply(pageKey, info)
 end
 local function ResetProfilePage()
-    local name = _G.MSUF_ActiveProfile or "Default"
-    _G.MSUF_ResetProfile(name)
+    MSUF.Require("MSUF_ResetProfile", FILE)(ActiveProfileName())
     M.ClearHistory()
     ApplyAfterPageReset("profiles", PAGE_RESET_INFO.profiles)
-    _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
+    MSUF.Require("MSUF_ShowReloadRecommendedPopup", FILE)("Profile reset")
     return true
 end
 -- A deliberate "Reset to defaults" must leave no stale runtime cache behind, or
@@ -656,14 +639,14 @@ local function PurgeRuntimeCachesForReset(info)
     -- castbar style cache (texture, fill direction, reverse fill). Without
     -- dropping both, a reset frame keeps its old texture/style even though the
     -- saved values are already back to factory.
-    _G.MSUF_ClearResolvedStatusbarTextureCache()
-    _G.MSUF_BumpCastbarStyleRevision()
+    MSUF.Require("MSUF_ClearResolvedStatusbarTextureCache", FILE)()
+    MSUF.Require("MSUF_BumpCastbarStyleRevision", FILE)()
     -- Unit-frame screen positions sit in a per-frame anchor cache the hot apply
     -- path short-circuits against, so a reset frame would otherwise stay put.
     -- Only unit resets move a unit frame; drop the cache and force a re-anchor
     -- from the fresh defaults. (Group headers reposition through the GF reset.)
     if info and info.kind == "unit" then
-        _G.MSUF_ForceReanchorAllUnitFrames_Once()
+        MSUF.Require("MSUF_ForceReanchorAllUnitFrames_Once", FILE)()
     end
 end
 local function ResetPageImpl(pageKey)
@@ -716,11 +699,10 @@ function M.BuildPageResetWarning(pageKey)
     local title = info.label or ((M.pages and M.pages[pageKey] and M.pages[pageKey].title) or pageKey or "this menu")
     title = M.Tr and M.Tr(title) or title
     if info.kind == "profile" then
-        local profileName = _G.MSUF_ActiveProfile or "Default"
         return string.format(
             M.Tr("Reset %s to defaults?\n\nThis resets the entire active profile '%s' to the current MSUF factory defaults. Every menu in that profile will be affected."),
             tostring(title),
-            tostring(profileName)
+            tostring(ActiveProfileName())
         )
     end
     return string.format(

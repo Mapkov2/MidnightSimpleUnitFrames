@@ -1,9 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MSUF_EditMode_PopupScale.lua - shared bottom-right scale grip for EM2 popups
 -- Handles popup resize UI only; persisted geometry writes stay in EditMode popup owners.
 
 local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_PopupScale.lua")
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local abs = math.abs
@@ -24,7 +24,7 @@ local function ClampScale(value)
 end
 
 local function General(create)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then return nil end
     if create then db.general = db.general or {} end
     return db.general
@@ -156,22 +156,23 @@ local function EnsureScaleProxy(frame)
     fill:SetColorTexture(0.02, 0.06, 0.09, 0.18)
     proxy.fill = fill
 
-    local function Edge(pointA, pointB, width, height)
+    --- A two-pixel accent edge from one proxy corner to another.
+    local function Edge(fromCorner, toCorner, width, height)
         local tex = PixelLayoutRegion(proxy:CreateTexture(nil, "BORDER"))
         tex:SetColorTexture(0.00, 0.72, 1.00, 0.72)
-        tex:SetPoint(unpack(pointA))
-        tex:SetPoint(unpack(pointB))
+        tex:SetPoint(fromCorner, proxy, fromCorner, 0, 0)
+        tex:SetPoint(toCorner, proxy, toCorner, 0, 0)
         if width then tex:SetWidth(width) end
         if height then tex:SetHeight(height) end
         return tex
     end
-    Edge({ "TOPLEFT", proxy, "TOPLEFT", 0, 0 }, { "TOPRIGHT", proxy, "TOPRIGHT", 0, 0 }, nil, 2)
-    Edge({ "BOTTOMLEFT", proxy, "BOTTOMLEFT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, nil, 2)
-    Edge({ "TOPLEFT", proxy, "TOPLEFT", 0, 0 }, { "BOTTOMLEFT", proxy, "BOTTOMLEFT", 0, 0 }, 2, nil)
-    Edge({ "TOPRIGHT", proxy, "TOPRIGHT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, 2, nil)
+    Edge("TOPLEFT", "TOPRIGHT", nil, 2)
+    Edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 2)
+    Edge("TOPLEFT", "BOTTOMLEFT", 2, nil)
+    Edge("TOPRIGHT", "BOTTOMRIGHT", 2, nil)
 
     local label = PixelLayoutRegion(proxy:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     if ui and ui.ApplyFontSize then ui.ApplyFontSize(label, "caption") end
     label:SetPoint("BOTTOMRIGHT", proxy, "TOPRIGHT", 0, 4)
     label:SetJustifyH("RIGHT")

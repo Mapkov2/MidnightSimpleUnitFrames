@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Game/Classic/Auras/MSUF_Auras3_Buttons.lua
 --- Aura buttons of the Classic scan backend: the per-lane button pool, button
 --- layout, tooltips, the cooldown swipe and its countdown colour buckets,
@@ -13,8 +12,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- This first file claims the backend for the client.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
@@ -40,12 +39,12 @@ A3._ClassicBackend = { Buttons = Buttons }
 
 local type, select = type, select
 local math_floor, math_max = math.floor, math.max
-local CreateFrame = _G.CreateFrame
-local GameTooltip = _G.GameTooltip
-local GetTime = _G.GetTime
-local InCombatLockdown = _G.InCombatLockdown
-local IsSecret = _G.issecretvalue or function() return false end
-local C_UnitAuras = _G.C_UnitAuras
+local CreateFrame = CreateFrame
+local GameTooltip = GameTooltip
+local GetTime = GetTime
+local InCombatLockdown = InCombatLockdown
+local IsSecret = issecretvalue or function() return false end
+local C_UnitAuras = C_UnitAuras
 local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local GetAuraApplicationDisplayCount = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
 
@@ -110,7 +109,7 @@ local function ApplyFont(fs, size)
     -- Castbars_Core.lua owns the global font settings; it loads after this
     -- file, before any aura button exists.
     local fontPath, fontFlags, r, g, b, _, useShadow = MSUF.MSUF_GetGlobalFontSettings()
-    fontPath = fontPath or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    fontPath = fontPath or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
     if fs.SetFont then fs:SetFont(fontPath, size or 14, fontFlags) end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
@@ -356,7 +355,7 @@ local function AuraDispelColor(cfg, unit, data)
     local colors = cfg and cfg.dispelTypeColors
     local color = colors and colors[name]
     if color then return true, color[1], color[2], color[3], 1, false end
-    color = _G.DebuffTypeColor and (_G.DebuffTypeColor[name] or (name == "None" and _G.DebuffTypeColor.none))
+    color = DebuffTypeColor and (DebuffTypeColor[name] or (name == "None" and DebuffTypeColor.none))
     if color then
         local r, g, b, a = ColorObjectRGBA(color)
         if r then return true, r, g, b, a or 1, HasSecretColor(r, g, b, a) end

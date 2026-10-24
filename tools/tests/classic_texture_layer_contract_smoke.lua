@@ -5,6 +5,8 @@ assert(io.open(menu .. "Pages/MSUF_Menu2_UnitTextureLayer_Classic.lua", "rb") ==
     "retired Classic Texture Layer page is back")
 do
     local ns = { MSUF2 = {}, ExportPublic = function(name, value) _G[name] = value end }
+    -- The page files require the core's providers (MSUF.Require): the shipped Kernel API.
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().Install(root, ns)
     assert(loadfile(menu .. "MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local M = ns.MSUF2
     ns.CPBuilders = { ExtraAuraDefaults = {} }

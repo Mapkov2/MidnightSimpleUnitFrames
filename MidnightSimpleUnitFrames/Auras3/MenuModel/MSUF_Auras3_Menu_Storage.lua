@@ -4,7 +4,7 @@
 -- Layout inheritance and its migration are local to this owner, with no late
 -- binding to renderer functions. Other modules receive only the scope helpers.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local IS_CLASSIC = MSUF.Client.IsClassic == true
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}
@@ -102,7 +102,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         return next(tbl) ~= nil
     end
 
-    local TableHasAnyKey = _G.MSUF_AuraTableHasAnyKey
+    local TableHasAnyKey = MSUF.Require("MSUF_AuraTableHasAnyKey", "Auras3/MenuModel/MSUF_Auras3_Menu_Storage.lua")
 
     local function ClearKeys(tbl, keys)
         if type(tbl) ~= "table" or type(keys) ~= "table" then return end
@@ -174,7 +174,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         if A3.EnsureDB then
             auras, shared = A3.EnsureDB()
         else
-            local db = _G.MSUF_DB
+            local db = MSUF_DB
             if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
             if type(db.auras3) ~= "table" then db.auras3 = {} end
             auras = db.auras3
@@ -205,6 +205,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         shared.styleScopeDisabled = nil
         shared.iconShapeFollowSharedScopes = nil
         local canonicalAuraModel = tonumber(auras.profileModelRevision) == 2
+            or (IS_CLASSIC and tonumber(auras.profileModelRevision) == 1)
         if canonicalAuraModel then
             -- The Defaults-owned factory is deliberately sparse and authoritative.
             -- Runtime/Menu readers already provide fallbacks, so do not densify a
@@ -217,7 +218,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         end
         -- The canonical profile model is already normalized.  Never seed legacy
         -- migration markers back into a freshly hard-reset Aura tree.
-        if tonumber(auras.profileModelRevision) ~= 2
+        if not canonicalAuraModel
             and shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
             shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
             shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
@@ -229,7 +230,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
     end
 
     local function EnsureGeneralDB()
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
         if type(db.general) ~= "table" then db.general = {} end
         DefaultsIntoOnce(db.general, DEFAULT_GENERAL)

@@ -1,6 +1,7 @@
 -- Search navigation for profile editors is independent of mutation eligibility.
 local _, MSUF = ...
 local M = MSUF.MSUF2
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_ProfileSearch.lua"
 local H = {}
 M.ProfileSearch = H
 local serial, targets, tokens = 0, {}, setmetatable({}, { __mode = "k" })
@@ -39,10 +40,10 @@ local fixed = {
     profileExportVariants = true, profileImportVariants = true,
 }
 local function Context()
-    local db = _G.MSUF_DB
-    local global = _G.MSUF_GlobalDB and _G.MSUF_GlobalDB.global
+    local db = MSUF_DB
+    local global = MSUF_GlobalDB and MSUF_GlobalDB.global
     return db, db and db.profileVariants, global and global.profileSyncGroups,
-        _G.MSUF_ActiveProfile or "Default", MSUF.ProfileVariants and MSUF.ProfileVariants.RecordingName()
+        MSUF_ActiveProfile or "Default", MSUF.ProfileVariants and MSUF.ProfileVariants.RecordingName()
 end
 local function Entries(scope)
     local db, schema, groups = Context()
@@ -50,7 +51,7 @@ local function Entries(scope)
 end
 local function Current(target)
     local entries, db = Entries(target.scope)
-    if db ~= target.db or (_G.MSUF_ActiveProfile or "Default") ~= target.profile then return false end
+    if db ~= target.db or (MSUF_ActiveProfile or "Default") ~= target.profile then return false end
     for _, entry in ipairs(entries) do
         if entry == target.entry and entry.name == target.name then return true end
     end
@@ -65,7 +66,7 @@ local function Token(scope, entry)
         tokens[entry] = { id = id, name = entry.name }
     end
     targets[id] = { scope = scope, entry = entry, name = entry.name,
-        db = _G.MSUF_DB, profile = _G.MSUF_ActiveProfile or "Default" }
+        db = MSUF_DB, profile = MSUF_ActiveProfile or "Default" }
     return id
 end
 local function ID(path, token)
@@ -145,7 +146,7 @@ function H.Collect()
             label=M.Tr(spec[3]),kind=spec[4],keywords="profile variants profilvariante profile sync profilsynchronisierung"}
     end
     local editing = MSUF.ProfileVariants.IsRecording()
-    local specRows, profileNames = M.GetProfileSpecializations(), _G.MSUF_GetAllProfiles()
+    local specRows, profileNames = M.GetProfileSpecializations(), MSUF.Require("MSUF_GetAllProfiles", FILE)()
     -- literal: the label is a profile name, shown as typed and never looked up.
     local function Add(scope, entry, token, path, label, kind, literal)
         local section = scope == "variant" and "profiles_variants" or "profiles_sync"

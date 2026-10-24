@@ -64,7 +64,11 @@ local function Replay(prior, expected)
         if prior or candidatePath then
             local load = world.LoadFile
             world.LoadFile = function(self, path, ...)
-                if path:sub(-#pagePath) == pagePath then path = prior and scratch or candidatePath end
+                if path:sub(-#pagePath) == pagePath then
+                    path = prior and scratch or candidatePath
+                    -- The pinned parent predates namespace-only exports.
+                    if prior then return World.LoadHistorical(self, path, ...) end
+                end
                 return load(self, path, ...)
             end
         end

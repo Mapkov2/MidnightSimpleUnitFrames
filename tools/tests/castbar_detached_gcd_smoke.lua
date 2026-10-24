@@ -90,7 +90,9 @@ local function Load(client, spellAPI)
         -- The real ClearTimer keeps the native binding.
         ClearTimer = function() return false end }
     local mover
-    MSUF_EditModeAPI = { RegisterElement = function(_, spec) mover = spec; return true end }
+    MSUF_EditModeAPI = { RegisterElement = function(_, spec) mover = spec; return true end,
+        -- The mover's geometry follows the bar (the real API re-reads its spec).
+        RefreshElement = function() return true end }
     MSUF_PlayerCastbar = Frame("Frame")
     MSUF_PlayerCastbar.shown = false
     MSUF_PlayerCastbar.MSUF_castActive = true
@@ -131,7 +133,7 @@ do
     timers[1].fn()
     assert(not bar.shown and bar.statusBar.bound ~= duration, "the finished GCD still drives the separate bar")
     assert(layoutWrites == 0, "an instant cast relaid the separate GCD bar out (" .. layoutWrites .. " writes)")
-    MSUF_DB.general.gcdBarIdle = true; MSUF_GCDBar_RefreshLayout()
+    MSUF_DB.general.gcdBarIdle = true; _G.MSUF.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     assert(bar.shown and bar.statusBar.value == 0, "idle background missing")
     assert(bar.statusBar:Displayed() == 0, "the idle background still shows the finished GCD as a full bar")
@@ -145,7 +147,7 @@ do
     mover.onSessionChanged(true); assert(bar.castText.text == "GCD" and bar.statusBar.value == .65)
     assert(bar.statusBar:Displayed() == .65, "the Edit Mode sample is hidden by a stale timer binding")
     mover.onSessionChanged(false); assert(bar.castText.text == "")
-    MSUF_DB.general.gcdBarCombatOnly = true; MSUF_GCDBar_RefreshLayout()
+    MSUF_DB.general.gcdBarCombatOnly = true; _G.MSUF.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
     assert(not bar.shown and driver.events.PLAYER_REGEN_DISABLED)
     Event("PLAYER_REGEN_DISABLED")
@@ -154,7 +156,7 @@ do
     assert(not bar.shown, "the combat-only idle bar stayed after combat")
     Event("PLAYER_REGEN_DISABLED")
     assert(bar.shown)
-    MSUF_SetGCDBarEnabled(false)
+    _G.MSUF.PublicGlobals.MSUF_SetGCDBarEnabled(false)
     assert(not bar.shown and not driver.events.UNIT_SPELLCAST_SUCCEEDED and not driver.events.PLAYER_REGEN_DISABLED)
     assert(not driver.scripts.OnUpdate, "GCD introduced a per-frame update")
 end
@@ -174,7 +176,7 @@ do
     local driver = CheckUnsupported("Forever without the GCD spell", { IsForever = true },
         LiveSpellAPI({ DoesSpellExist = function(id) assert(id == 61304); return false end }))
     assert(not driver.events.UNIT_SPELLCAST_SUCCEEDED, "Forever without the GCD spell listens for casts")
-    assert(MSUF_GCDBar_IsSupported() == false, "Forever without the GCD spell claims support")
+    assert(_G.MSUF.PublicGlobals.MSUF_GCDBar_IsSupported() == false, "Forever without the GCD spell claims support")
 end
 CheckUnsupported("client without the Duration API", { IsForever = false, IsClassic = true },
     { GetSpellInfo = function(id) return { name = "Spell", iconID = id, castTime = 0 } end,
@@ -188,7 +190,7 @@ do
         driver.scripts.OnEvent(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", nil, 123)
         if timers[#timers] then timers[#timers].fn() end
     end
-    assert(MSUF_GCDBar_IsSupported() == true, "Forever with the GCD spell must arm the bar")
+    assert(_G.MSUF.PublicGlobals.MSUF_GCDBar_IsSupported() == true, "Forever with the GCD spell must arm the bar")
     assert(_G.MSUF.Castbars.Frames.gcd and casts == 5, "Forever with the GCD spell did not run the separate bar")
     assert(lookups == 1, "the Forever spell data was asked " .. lookups .. " times instead of once")
 end

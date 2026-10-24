@@ -1,10 +1,12 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_UnitTooltips.lua
 --- Unit info tooltips: the MSUF player-info frame, GameTooltip anchoring and
 --- ownership tracking, tooltip visibility modes (hover-inert combat fast path),
 --- and the Edit Mode tooltip position preview/drag handle.
 local addonName, MSUF = ...
-MSUF = MSUF or {}
+local FILE = "Runtime/MSUF_UnitTooltips.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local SetFontChecked = Require("MSUF_SetFontChecked", FILE)
 local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
@@ -18,11 +20,18 @@ local InCombat = MSUF.Util.InCombat
 --- exports MSUF_EnsureDB at its top level, far ahead of this file. The tooltip
 --- runtime reads MSUF_DB on every show, so a missing guard is a wiring bug and
 --- has to say so.
-local EnsureDB = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_UnitTooltips.lua")
+local EnsureDB = Require("MSUF_EnsureDB", FILE)
 
 local function MSUF_Chat_RunEnsureDB()
     EnsureDB()
     return true
+end
+
+-- The active profile's general table once the database is ensured, or nil.
+local function MSUF_EnsuredGeneral()
+    EnsureDB()
+    local db = MSUF_DB
+    return db and db.general
 end
 
 local MSUF_PlayerInfoFrame
@@ -120,17 +129,16 @@ local function MSUF_TooltipModeAllowed(mode, modifier)
     end
     if mode == TOOLTIP_MODE_MODIFIER then
         modifier = MSUF_NormalizeTooltipModifierValue(modifier)
-        if modifier == TOOLTIP_MOD_CTRL then return _G.IsControlKeyDown and _G.IsControlKeyDown() end
-        if modifier == TOOLTIP_MOD_SHIFT then return _G.IsShiftKeyDown and _G.IsShiftKeyDown() end
-        return _G.IsAltKeyDown and _G.IsAltKeyDown()
+        if modifier == TOOLTIP_MOD_CTRL then return IsControlKeyDown and IsControlKeyDown() end
+        if modifier == TOOLTIP_MOD_SHIFT then return IsShiftKeyDown and IsShiftKeyDown() end
+        return IsAltKeyDown and IsAltKeyDown()
     end
     return true
 end
 
 local function MSUF_GetTooltipGeneral()
     MSUF_Chat_RunEnsureDB()
-    local db = (type(MSUF_DB) == "table") and MSUF_DB or nil
-    db = db or {}
+    local db = MSUF_DB or {}
     db.general = db.general or {}
     return db.general
 end
@@ -253,7 +261,7 @@ local function MSUF_ApplyTooltipFixedPoint(frame, g, defaultOffsetY)
 end
 
 local function MSUF_AnchorGameTooltip(owner, g, anchor)
-    local gt = _G.GameTooltip
+    local gt = GameTooltip
     if not gt or gt:IsForbidden() then return nil end
 
     if anchor == TOOLTIP_ANCHOR_CURSOR then
@@ -262,8 +270,8 @@ local function MSUF_AnchorGameTooltip(owner, g, anchor)
         gt:SetOwner(UIParent, "ANCHOR_NONE")
         MSUF_ApplyTooltipFixedPoint(gt, g, 16)
     else
-        if type(_G.GameTooltip_SetDefaultAnchor) == "function" then
-            _G.GameTooltip_SetDefaultAnchor(gt, owner or UIParent)
+        if type(GameTooltip_SetDefaultAnchor) == "function" then
+            GameTooltip_SetDefaultAnchor(gt, owner or UIParent)
         elseif owner then
             gt:SetOwner(owner, "ANCHOR_RIGHT")
         else
@@ -275,7 +283,7 @@ local function MSUF_AnchorGameTooltip(owner, g, anchor)
 end
 
 local function MSUF_ClearTrackedGameTooltip(owner, force)
-    local gt = _G.GameTooltip
+    local gt = GameTooltip
     if not gt or gt:IsForbidden() then return end
     if gt._msufUnitTooltipOwner == nil then return end
     if (not force) and gt._msufUnitTooltipOwner ~= owner then return end
@@ -295,8 +303,8 @@ end
 
 -- Hooked once at file load (the file runs once per UI load), so no marker is
 -- written onto the Blizzard frame.
-if _G.GameTooltip then
-    _G.GameTooltip:HookScript("OnHide", function(tip)
+if GameTooltip then
+    GameTooltip:HookScript("OnHide", function(tip)
         tip._msufUnitTooltipOwner = nil
         tip._msufUnitTooltipUnit = nil
     end)
@@ -317,7 +325,7 @@ local function MSUF_PositionPlayerInfoFrame(frame)
     end
  end
 --- Tooltip helpers (unified; keeps behavior, reduces copy/paste)
-local MSUF_IsSecretValueAPI = _G.issecretvalue
+local MSUF_IsSecretValueAPI = issecretvalue
 local function MSUF_UnitInfo_IsSecret(value)
     return MSUF_IsSecretValueAPI and MSUF_IsSecretValueAPI(value) == true
 end
@@ -525,9 +533,7 @@ local function HidePlayerInfoTooltip()
         --- instead of hiding the frame (OnLeave from unit frames must not
         --- kill the persistent drag-preview).
         if MSUF_PlayerInfoFrame._msufEditPreviewActive then
-            if _G.MSUF_Tooltip_ShowEditPreview then
-                _G.MSUF_Tooltip_ShowEditPreview()
-            end
+            Require("MSUF_Tooltip_ShowEditPreview", FILE)()
             return
         end
         if MSUF_PlayerInfoFrame.IsShown and not MSUF_PlayerInfoFrame:IsShown() then
@@ -594,7 +600,7 @@ Tooltips.ShowUnit = function(owner, unit, opts)
     -- resolves it through UnitTokenFromGUID, which is secret for an
     -- identity-restricted unit (an enemy player in an arena or battleground),
     -- and comparing that secret raises.
-    local gt = _G.GameTooltip
+    local gt = GameTooltip
     local tooltipOwner = owner or UIParent
     if anchor == TOOLTIP_ANCHOR_CURSOR or anchor == TOOLTIP_ANCHOR_FIXED then tooltipOwner = UIParent end
     if gt
@@ -641,7 +647,7 @@ local function MSUF_HandleTooltipModifier()
     elseif cache.provider == TOOLTIP_PROVIDER_MSUF then
         HidePlayerInfoTooltip()
     else
-        local gt = _G.GameTooltip
+        local gt = GameTooltip
         if gt and not gt:IsForbidden() and gt._msufUnitTooltipOwner == owner then
             MSUF_ClearTrackedGameTooltip(owner)
         end
@@ -667,7 +673,7 @@ MSUF_RecomputeHoverInert = function(event)
     if inert == Tooltips.hoverInert then return end
     Tooltips.hoverInert = inert
     if inert then
-        local gt = _G.GameTooltip
+        local gt = GameTooltip
         if gt and not gt:IsForbidden() and gt._msufUnitTooltipOwner ~= nil then
             MSUF_ClearTrackedGameTooltip(gt._msufUnitTooltipOwner)
         end
@@ -676,7 +682,7 @@ MSUF_RecomputeHoverInert = function(event)
 end
 
 do
-    local watcher = _G.CreateFrame and _G.CreateFrame("Frame")
+    local watcher = CreateFrame and CreateFrame("Frame")
     if watcher and type(watcher.RegisterEvent) == "function" and type(watcher.SetScript) == "function" then
         tooltipModifierWatcher = watcher
         watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -709,25 +715,22 @@ do
     local tooltipEditPreviewActive = false
     local W8 = "Interface/Buttons/WHITE8X8"
 
-    --- The load-on-demand options entry points (Kernel/MSUF_OptionsLoader.lua
-    --- forwards them until the menu loads) are optional: open whichever exists.
-    local function OpenOptionsEntry(page)
-        local open = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow") or MSUF.Optional("MSUF_OpenPage")
-        if open then open(page) end
+    --- Kernel/MSUF_OptionsLoader.lua forwards MSUF2_Open until the
+    --- load-on-demand menu loads.
+    local function MSUF_Tooltip_OpenMiscSettings()
+        local menu = Optional("MSUF2")
+        if menu and type(menu.Open) == "function" then
+            menu.Open("opt_misc")
+        else
+            Require("MSUF2_Open", FILE)("opt_misc")
+        end
     end
 
     local function MSUF_Tooltip_OpenTooltipSettings()
-        local menu = _G.MSUF2
-        if menu and type(menu.Open) == "function" then
-            menu.Open("opt_misc")
-        elseif type(_G.MSUF2_Open) == "function" then
-            _G.MSUF2_Open("opt_misc")
-        else
-            OpenOptionsEntry("opt_misc")
-        end
+        MSUF_Tooltip_OpenMiscSettings()
 
         local function OpenSection()
-            menu = _G.MSUF2
+            local menu = Optional("MSUF2")
             local search = menu and menu.Search
             if search and type(search.OpenTarget) == "function" then
                 search.OpenTarget("opt_misc", "Unitframe tooltips", "Unitframe tooltips", "Unitframe tooltips")
@@ -740,22 +743,10 @@ do
         C_Timer.After(0, OpenSection)
     end
 
-    local function MSUF_Tooltip_OpenMiscSettings()
-        local menu = _G.MSUF2
-        if menu and type(menu.Open) == "function" then
-            menu.Open("opt_misc")
-        elseif type(_G.MSUF2_Open) == "function" then
-            _G.MSUF2_Open("opt_misc")
-        else
-            OpenOptionsEntry("opt_misc")
-        end
-    end
-
     --- --- persistence ---
     local function MSUF_Tooltip_SavePosition(frame)
         if not frame then return end
-        MSUF_Chat_RunEnsureDB()
-        local g = MSUF_DB and MSUF_DB.general
+        local g = MSUF_EnsuredGeneral()
         if not g then return end
         local left   = frame.GetLeft   and frame:GetLeft()
         local bottom = frame.GetBottom and frame:GetBottom()
@@ -766,8 +757,8 @@ do
     end
 
     local function MSUF_Tooltip_SetNudgeTarget(handle)
-        if not handle or not _G.MSUF_EM2_SetPreviewNudgeTarget then return end
-        _G.MSUF_EM2_SetPreviewNudgeTarget({
+        if not handle then return end
+        Require("MSUF_EM2_SetPreviewNudgeTarget", FILE)({
             frame = handle,
             IsActive = function()
                 local p = handle:GetParent()
@@ -776,8 +767,7 @@ do
             Nudge = function(_, dx, dy)
                 local p = handle:GetParent()
                 if not p then return end
-                MSUF_Chat_RunEnsureDB()
-                local g = MSUF_DB and MSUF_DB.general
+                local g = MSUF_EnsuredGeneral()
                 if not g then return end
                 local left = tonumber(g.tooltipPosX)
                 local bottom = tonumber(g.tooltipPosY)
@@ -793,8 +783,7 @@ do
 
     --- --- reset helper (called from Options / slash) ---
     local function MSUF_Tooltip_ResetPosition()
-        MSUF_Chat_RunEnsureDB()
-        local g = MSUF_DB and MSUF_DB.general
+        local g = MSUF_EnsuredGeneral()
         if not g then return end
         g.tooltipPosX = nil
         g.tooltipPosY = nil
@@ -806,7 +795,7 @@ do
     end
 
     local function MSUF_Tooltip_Menu2Style()
-        return _G.MSUF_EM2_Menu2Style, (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+        return Optional("MSUF_EM2_Menu2Style"), MSUF.UI or Require("MSUF_UI", FILE)
     end
 
     local function MSUF_Tooltip_KeepMenu2Skin(widget)
@@ -897,7 +886,7 @@ do
         size = tonumber(size) or 12
         if size <= 0 then size = 12 end
         if size < 6 then size = 6 elseif size > 128 then size = 128 end
-        _G.MSUF_SetFontChecked(fs, STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", size, "")
+        SetFontChecked(fs, STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", size, "")
         fs:SetShadowOffset(1, -1)
         fs:SetShadowColor(0, 0, 0, 0.9)
         fs:SetText(Tr(text))
@@ -942,9 +931,10 @@ do
         MSUF_Tooltip_Button(p, "Miscellaneous", 224, -72, 190, MSUF_Tooltip_OpenMiscSettings)
         MSUF_Tooltip_Button(p, "Reset position", 20, -120, 394, function()
             MSUF_Tooltip_ResetPosition()
-            if _G.MSUF_Tooltip_ShowEditPreview then _G.MSUF_Tooltip_ShowEditPreview() end
+            Require("MSUF_Tooltip_ShowEditPreview", FILE)()
         end)
-        if _G.MSUF_EM2 and _G.MSUF_EM2.AttachPopupScaleGrip then _G.MSUF_EM2.AttachPopupScaleGrip(p) end
+        local em2 = Optional("MSUF_EM2")
+        if em2 and em2.AttachPopupScaleGrip then em2.AttachPopupScaleGrip(p) end
 
         p:Hide()
         tooltipMiniPopup = p
@@ -1124,13 +1114,11 @@ do
     PublishCompat("MSUF_Tooltip_ShowEditPreview", MSUF_Tooltip_ShowEditPreview)
 
     --- Register as AnyEditMode listener (fires on MSUF and/or Blizzard Edit Mode transitions).
-    if _G.MSUF_RegisterAnyEditModeListener then
-        _G.MSUF_RegisterAnyEditModeListener(function(active)
-            if active then
-                MSUF_Tooltip_ShowEditPreview()
-            else
-                MSUF_Tooltip_HideEditPreview()
-            end
-        end)
-    end
+    Require("MSUF_RegisterAnyEditModeListener", FILE)(function(active)
+        if active then
+            MSUF_Tooltip_ShowEditPreview()
+        else
+            MSUF_Tooltip_HideEditPreview()
+        end
+    end)
 end

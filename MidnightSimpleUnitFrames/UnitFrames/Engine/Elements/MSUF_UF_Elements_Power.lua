@@ -1,7 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Power.lua")
 
 local C = MSUF.UFBarTextCommon
 local UF = C and C.UF or MSUF.UF
@@ -26,14 +24,15 @@ local ApplyBackgrounds = C and C.ApplyBackgrounds
 local ApplyBarGradient = C and C.ApplyBarGradient
 local HideBarGradient = C and C.HideBarGradient
 local ExternalFrameWidth = C and C.ExternalFrameWidth
-local InCombatLockdown = C and C.InCombatLockdown or _G.InCombatLockdown
+local InCombatLockdown = C and C.InCombatLockdown or InCombatLockdown
 local tonumber = tonumber
 local tostring = tostring
 local type = type
 local math_floor = math.floor
 local math_max = math.max
 local math_min = math.min
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
+local GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")
 
 local Power = {}
 local roundedBorderCallback
@@ -143,8 +142,7 @@ function ownership:NotifyChanged()
 end
 
 local function OnPowerOwnershipChanged()
-  local refresh = _G.MSUF_RefreshPlayerPowerBar
-  if refresh then refresh() end
+  MSUF.Require("MSUF_RefreshPlayerPowerBar", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")()
 end
 
 ownership:Subscribe(OnPowerOwnershipChanged)
@@ -237,6 +235,31 @@ local function CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken)
   return bar._msufPowerDisplayMana == (displayMana == true)
 end
 
+-- Runs fn(snapshot, arg) on a loss trail: every snapshot of a pooled trail, else the trail itself.
+local function ForEachTrailSnapshot(trail, fn, arg)
+  local pool = trail._msufLossTrailPool
+  if pool then
+    for i = 1, #pool do fn(pool[i], arg) end
+  else
+    fn(trail, arg)
+  end
+end
+
+local function SetSnapshotShown(snapshot, shown)
+  snapshot:SetShown(shown and snapshot._msufLossAnimating == true)
+end
+
+local function SetSnapshotFrameLevel(snapshot, level)
+  snapshot:SetFrameLevel(level)
+end
+
+local function SetSnapshotTexture(snapshot, texture)
+  if snapshot._msufTexture ~= texture then
+    snapshot:SetStatusBarTexture(texture)
+    snapshot._msufTexture = texture
+  end
+end
+
 local function SetShown(frame, shown)
   local bar = frame and frame.targetPowerBar
   if not bar then return end
@@ -248,15 +271,7 @@ local function SetShown(frame, shown)
   if bg then if shown then bg:Show() else bg:Hide() end end
   local trail = frame.powerLossTrail
   if trail then
-    local pool = trail._msufLossTrailPool
-    if pool then
-      for i = 1, #pool do
-        local snapshot = pool[i]
-        snapshot:SetShown(shown and snapshot._msufLossAnimating == true)
-      end
-    else
-      trail:SetShown(shown and trail._msufLossAnimating == true)
-    end
+    ForEachTrailSnapshot(trail, SetSnapshotShown, shown)
   end
 end
 
@@ -309,6 +324,7 @@ function Power.SetClassResourceOocHidden(frame, hidden)
   SetClassResourceOocAlpha(bar and bar.MSUFPowerBorderHost, hidden)
   local trail = frame.powerLossTrail
   if trail then
+    -- Combat-transition path: iterate inline rather than through ForEachTrailSnapshot.
     local pool = trail._msufLossTrailPool
     if pool then
       for i = 1, #pool do SetClassResourceOocTrail(pool[i], hidden) end
@@ -434,7 +450,7 @@ local function ApplyPowerBorder(bar, power)
   for i = 1, 4 do SetRegionShown(edges[i], true) end
 end
 
-local ShapeOutlineAlpha = _G.MSUF_UF_ShapeOutlineAlpha
+local ShapeOutlineAlpha = MSUF.Require("MSUF_UF_ShapeOutlineAlpha", "MSUF_UF_Elements_Power.lua")
 
 local function NormalizeShape(shape)
   shape = tostring(shape or "BAR"):upper()
@@ -461,14 +477,13 @@ local function RoundNonNegative(value, fallback)
 end
 
 local function FrameWidth(frame)
-  local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-  local width = type(getSize) == "function" and getSize(frame) or nil
+  local width = MSUF.Require("MSUF_GetUsableCooldownAnchorSize", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")(frame)
   if width and width > 1 then return width end
   return nil
 end
 
 local function ClassPowerAnchorWidth()
-  local anchor = _G.MSUF_ClassPowerContainer
+  local anchor = MSUF.Optional("MSUF_ClassPowerContainer")
   if not (anchor and anchor.GetWidth) then return nil end
   if anchor._msufAnchorOnly == true then
     local width = Number(anchor:GetWidth(), nil)
@@ -479,9 +494,7 @@ end
 
 local function ResolveCooldownWidthFrame(name)
   if type(name) ~= "string" or name == "" then return nil end
-  local resolver = _G.MSUF_GetEffectiveCooldownFrame
-  local frame = type(resolver) == "function" and resolver(name) or nil
-  return frame or _G[name]
+  return GetEffectiveCooldownFrame(name) or _G[name]
 end
 
 -- External cooldown frames may not be safe to re-measure while protected
@@ -549,7 +562,7 @@ end
 Power.ResolveDetachedWidth = ResolveDetachedWidth
 
 local function ResolveDetachedAnchor(power)
-  local anchor = _G.MSUF_ClassPowerContainer
+  local anchor = MSUF.Optional("MSUF_ClassPowerContainer")
   if power.detachedAnchorClass == true and ClassPowerAnchorWidth() then
     return anchor, "TOP", "BOTTOM"
   end
@@ -566,6 +579,7 @@ local function ApplyShapeMedia(frame, power, texture)
   local media = DETACHED_SHAPE_TEXTURES[shape]
   if media then
     bar._msufPowerShapeActive = true
+    bar._msufGlossMaskPath = media.fill
     if bar.SetOrientation then
       local orientation = media.vertical and "VERTICAL" or "HORIZONTAL"
       if bar._msufPowerOrientation ~= orientation then
@@ -602,6 +616,7 @@ local function ApplyShapeMedia(frame, power, texture)
   end
 
   bar._msufPowerShapeActive = nil
+  bar._msufGlossMaskPath = nil
   if bar.SetOrientation and bar._msufPowerOrientation ~= "HORIZONTAL" then
     bar:SetOrientation("HORIZONTAL")
     bar._msufPowerOrientation = "HORIZONTAL"
@@ -668,13 +683,7 @@ local function SetPowerFrameLevel(bar, level)
   if not (bar and bar.SetFrameLevel) or bar._msufPowerFrameLevel == level then return end
   local trail = bar._msufPowerLossTrail
   if trail and trail.SetFrameLevel then
-    local trailLevel = math_max(0, level - 1)
-    local pool = trail._msufLossTrailPool
-    if pool then
-      for i = 1, #pool do pool[i]:SetFrameLevel(trailLevel) end
-    else
-      trail:SetFrameLevel(trailLevel)
-    end
+    ForEachTrailSnapshot(trail, SetSnapshotFrameLevel, math_max(0, level - 1))
   end
   bar:SetFrameLevel(level)
   bar._msufPowerFrameLevel = level
@@ -816,6 +825,7 @@ function Power.Disable(frame)
   SetShown(frame, false)
   HidePowerBorder(frame and frame.targetPowerBar)
   if HideBarGradient and frame then HideBarGradient(frame.powerGradients) end
+  if frame and frame.powerGloss then C.HideBarGloss(frame.powerGloss) end
   if frame then
     frame._msufPowerEbonMight = nil
     frame._msufPowerBarDetached = nil
@@ -880,19 +890,7 @@ local function ApplyPowerMedia(frame, bar, power, spec, detached)
   end
   local trail = frame.powerLossTrail
   if trail then
-    local pool = trail._msufLossTrailPool
-    if pool then
-      for i = 1, #pool do
-        local snapshot = pool[i]
-        if snapshot._msufTexture ~= texture then
-          snapshot:SetStatusBarTexture(texture)
-          snapshot._msufTexture = texture
-        end
-      end
-    elseif trail._msufTexture ~= texture then
-      trail:SetStatusBarTexture(texture)
-      trail._msufTexture = texture
-    end
+    ForEachTrailSnapshot(trail, SetSnapshotTexture, texture)
   end
   if bar._msufPowerShapeActive == true then
     ApplyBackgroundMedia(frame, power)
@@ -907,6 +905,8 @@ local function ApplyPowerMedia(frame, bar, power, spec, detached)
     end
     if ApplyBarGradient then ApplyBarGradient(frame, bar, power.barGradient, "powerGradients") end
   end
+  local gloss = power.barGloss
+  if frame.powerGloss or (gloss and gloss.enabled) then C.ApplyBarGloss(frame, bar, gloss, "powerGloss", power.alpha) end
   return trail
 end
 
@@ -1026,6 +1026,7 @@ function Power.Apply(frame, spec)
   else
     HidePowerBorder(bar)
     if HideBarGradient then HideBarGradient(frame.powerGradients) end
+    if frame.powerGloss then C.HideBarGloss(frame.powerGloss) end
   end
   if ebonMight then
     -- Park the carrier's own fill: Power.Update no longer runs for this bar, so
@@ -1045,12 +1046,11 @@ function Power.Apply(frame, spec)
         trail:Hide()
       end
     end
-    local mount = _G.MSUF_ClassPower_MountEbonMight
-    if type(mount) == "function" then mount(bar) end
+    MSUF.Require("MSUF_ClassPower_MountEbonMight", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")(bar)
   end
   -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
   -- after the elements; a spec applies only once the core has loaded.
-  MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")(frame)
+  MSUF.Require("ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua", MSUF.UF.Factory)(frame)
   NotifyRoundedPowerBorder(frame, enabled)
   if MSUF.ResourceVisibility then MSUF.ResourceVisibility.ConfigurePower(frame) end
   if spec and spec.key == "player" then
@@ -1186,6 +1186,11 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
   return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
 end
 
+local POWER_PLAN_PERCENT = 1
+local POWER_PLAN_CURRENT = 2
+local POWER_PLAN_ABSOLUTE = 3
+local POWER_PLAN_CURRENT_PERCENT = 4
+
 local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
   unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime
@@ -1312,11 +1317,6 @@ local function UpdateGroupPercentPathLean(frame, event, unit, eventPowerToken)
   if not animate then SetColor(frame, false, powerType, token, true) end
   return nil, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
-
-local POWER_PLAN_PERCENT = 1
-local POWER_PLAN_CURRENT = 2
-local POWER_PLAN_ABSOLUTE = 3
-local POWER_PLAN_CURRENT_PERCENT = 4
 
 local function PowerValuePlan(frame)
   local rt = frame and frame._msufTextRuntime

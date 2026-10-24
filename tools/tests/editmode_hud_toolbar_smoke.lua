@@ -31,7 +31,8 @@ local function Boot(flavor)
     assert(not failure, flavor .. ": boot failed: " .. tostring(failure and failure.file) .. ": "
         .. tostring(failure and failure.message))
     local env, core = world.env, world.core
-    for _, name in ipairs(FANOUT) do env[name] = function() end end
+    -- The apply reads these through the namespace registry (and a global for the kept names).
+    for _, name in ipairs(FANOUT) do core.ExportPublic(name, function() end) end
     for _, name in ipairs(SETTERS) do
         if world.widgets.Methods[name] == nil then world.widgets.Methods[name] = function() end end
     end
@@ -88,7 +89,7 @@ local function Run(flavor)
     menu.OpenGuidedTourAtStage = function(stage) Count("tour:" .. tostring(stage)); return true end
     menu.Open = function() Count("menuOpen"); return true end
     local picker = { Show = function() Count("anchorPicker") end }
-    env.MSUF_EnsureAnchorPicker = function() return picker end
+    world.core.ExportPublic("MSUF_EnsureAnchorPicker", function() return picker end)
 
     Check(EM2.State.Enter("player") == true, context .. ": Edit Mode did not open")
     world.widgets:RunTimers()
@@ -101,15 +102,15 @@ local function Run(flavor)
     -- Preview, Motion, Auras.
     local preview = Button(world, hud, "Preview")
     if Check(preview ~= nil, context .. ": Preview missing") then
-        local before = env.MSUF_UnitPreviewActive == true
+        local before = world.core.PublicGlobals.MSUF_UnitPreviewActive == true
         Click(preview)
-        Check((env.MSUF_UnitPreviewActive == true) ~= before, context .. ": Preview did not toggle the preview")
+        Check((world.core.PublicGlobals.MSUF_UnitPreviewActive == true) ~= before, context .. ": Preview did not toggle the preview")
         Click(preview)
-        Check((env.MSUF_UnitPreviewActive == true) == before, context .. ": Preview did not toggle back")
+        Check((world.core.PublicGlobals.MSUF_UnitPreviewActive == true) == before, context .. ": Preview did not toggle back")
     end
     local motion = Button(world, hud, "Motion")
     if Check(motion ~= nil, context .. ": Motion missing in the advanced toolbar") then
-        env.MSUF_TogglePreviewAnimation = function(source) Count("motion:" .. tostring(source)); return true end
+        world.core.ExportPublic("MSUF_TogglePreviewAnimation", function(source) Count("motion:" .. tostring(source)); return true end)
         Click(motion)
         Check(counts["motion:edit_mode"] == 1, context .. ": Motion did not toggle the preview animation")
     end
@@ -142,7 +143,7 @@ local function Run(flavor)
         Click(snap)
         Check(EM2.Snap.IsEnabled() ~= before, context .. ": Snap did not toggle snapping")
     end
-    local tools = env.MSUF_EditModeGridTools
+    local tools = world.core.PublicGlobals.MSUF_EditModeGridTools
     if Check(type(tools) == "table" and tools._gridWidget and tools._bgWidget, context .. ": grid tools missing") then
         local enabled = EM2.Grid.GetEnabled()
         tools._gridWidget.scripts.OnMouseUp(tools._gridWidget, "LeftButton")
@@ -159,7 +160,7 @@ local function Run(flavor)
     -- Reset the selected unit frame.
     local reset = Button(world, hud, "Reset")
     if Check(reset ~= nil, context .. ": Reset missing") then
-        local defaultX, defaultY = env.MSUF_GetDefaultUnitOffsets("player")
+        local defaultX, defaultY = world.core.PublicGlobals.MSUF_GetDefaultUnitOffsets("player")
         db.player.offsetX, db.player.offsetY = (tonumber(defaultX) or 0) + 31, (tonumber(defaultY) or 0) - 17
         EM2.State.SetUnitKey("player")
         Click(reset)
@@ -264,7 +265,7 @@ local function Run(flavor)
     local undo, redo = EM2.Undo.DoUndo, EM2.Undo.DoRedo
     EM2.Undo.DoUndo = function() undoCount = undoCount + 1 end
     EM2.Undo.DoRedo = function() redoCount = redoCount + 1 end
-    local undoBtn, redoBtn = env.MSUF_EditModeUndoBtn, env.MSUF_EditModeRedoBtn
+    local undoBtn, redoBtn = world.core.PublicGlobals.MSUF_EditModeUndoBtn, world.core.PublicGlobals.MSUF_EditModeRedoBtn
     if Check(undoBtn and redoBtn, context .. ": history buttons missing") then
         Click(undoBtn); Click(redoBtn)
         Check(undoCount == 1 and redoCount == 1, context .. ": Undo/Redo did not reach the history")

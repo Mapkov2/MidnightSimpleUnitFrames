@@ -8,7 +8,6 @@
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then return end
 
@@ -23,10 +22,10 @@ local math_floor, math_max, math_min = math.floor, math.max, math.min
 -- Debuffs this player can dispel, in the filter this client honours
 -- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
 local DISPELLABLE_DEBUFF_FILTER = MSUF.Client.DispellableDebuffFilter or "HARMFUL|RAID_PLAYER_DISPELLABLE"
-local UnitClass = _G.UnitClass
-local C_Spell = _G.C_Spell
-local GetSpellInfo = _G.GetSpellInfo
-local IsSecret = _G.issecretvalue or function() return false end
+local UnitClass = UnitClass
+local C_Spell = C_Spell
+local GetSpellInfo = GetSpellInfo
+local IsSecret = issecretvalue or function() return false end
 
 local function Number(value, fallback, minValue, maxValue)
     value = tonumber(value)

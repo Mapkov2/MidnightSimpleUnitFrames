@@ -41,6 +41,10 @@ UIParent = Widget(0, 0, 1920, 1080)
 GetCursorPosition = function() return 150, 108 end
 InCombatLockdown = function() return false end
 MSUF_GetGeneralDB = function() return nil end
+-- The castbar utilities (not loaded here) own the anchor frame: with no anchor settings it is UIParent.
+MSUF_GetAnchorFrame = function() return UIParent end
+-- The third-party anchor integration (not loaded here) owns this answer: no cooldown anchor is armed.
+MSUF_IsCooldownAnchorEnabled = function() return false end
 local player = Widget(100, 100, 250, 40, UIParent)
 player._msufOwnedAnchorRoot = true
 local combo = Widget(100, 140, 250, 8, player)
@@ -86,9 +90,15 @@ local namespace = {
     UF = { GetFrame = function(key) if key == "player" then return player end end },
 }
 -- Edit Mode resolves the functions other modules publish through MSUF.Require.
-assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().Install(root, namespace)
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.Install(root, namespace)
+-- The real Kernel API replaces the export stub; Util owns the shared coordinate conversion
+-- (MSUF_UF_FrameRectToUI) the Edit Mode files require at load.
+RequireFixture.InstallKernel(root, namespace, nil, nil, true)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua", namespace, nil, loadfile)
 for _, file in ipairs({ "Movers", "Elements", "Compat" }) do
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_" .. file .. ".lua"))("MSUF", namespace)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_" .. file .. ".lua",
+        namespace, nil, loadfile)
 end
 local classCfg, powerCfg = assert(registry.classpower), assert(registry.power_player)
 assert(classCfg.getFrame() == combo and powerCfg.getFrame() == energy,
@@ -225,7 +235,14 @@ MSUF_EM2.QuickPopup = {
 -- history entry point they call; record it instead of loading the history.
 local historyCalls = {}
 MSUF_EM_UndoBeforeChange = function(category, key) historyCalls[#historyCalls + 1] = { category, key } end
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Popups.lua"))("MSUF", namespace)
+-- State/MSUF_Defaults.lua (a long load chain) owns the legal size range the popups clamp to: the
+-- shipped constant stands in.
+namespace.ExportPublic("MSUF_UnitFrameSizeBounds", assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))()
+    .SourceTable(root, "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua", "MSUF_UNIT_FRAME_SIZE_BOUNDS"))
+-- The group frame popups (not loaded here) own these two answers: no group popup exists or is open.
+namespace.ExportPublic("MSUF_EM2_HideGFPopup", function() end)
+namespace.ExportPublic("MSUF_EM2_GFPopupIsOpen", function() return false end)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Popups.lua", namespace, nil, loadfile)
 local popups = MSUF_EM2.Popups
 assert(popups.Open("classpower") == true, "Class Resource quick popup did not open")
 local popup = assert(MSUF_EM2_ResourcePopup)
@@ -290,7 +307,8 @@ CreateFrame = function(_, name)
 end
 SetOverrideBindingClick = function() end
 ClearOverrideBindings = function() end
-MSUF_EnableArrowKeyNudge(true)
+-- Namespace-only export (namespace.PublicGlobals), not a global.
+namespace.PublicGlobals.MSUF_EnableArrowKeyNudge(true)
 CreateFrame = previousCreateFrame
 local function Press(key, direction)
     selectedKey = key
@@ -564,7 +582,7 @@ do
             assert(not handle:GetScript("OnDragStart") and not handle:GetScript("OnMouseDown")
                 and not handle:GetScript("OnKeyDown"), "preview handle can still move saved offsets")
             handle:GetScript("OnClick")(handle, "LeftButton")
-            assert(route == "classpower" and env.MSUF_EM2_MenuFocusRequest.sectionId,
+            assert(route == "classpower" and env.MSUF_NS.PublicGlobals.MSUF_EM2_MenuFocusRequest.sectionId,
                 "click no longer opens the exact resource settings")
             box:Refresh()
         end

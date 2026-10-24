@@ -86,7 +86,7 @@ local function Run(sourceRoot)
   Load("Kernel/MSUF_Bootstrap.lua")
   Load("Kernel/MSUF_Require.lua")
   -- The Factory owns the boss bar geometry each health apply calls; no boss frames here.
-  _G.MSUF_ApplyBossPhysicalBarGeometry=Noop
+  ns.UF.Factory = { ApplyBossPhysicalBarGeometry = Noop }
   Load("Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")
   Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
   Load("Kernel/MSUF_Util.lua") -- BarBackgroundRuntime aliases MSUF.Util.EnsureDBSafe

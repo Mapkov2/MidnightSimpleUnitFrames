@@ -3,7 +3,6 @@ local _, MSUF = ...
 local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarConfig.lua").Castbars
 local Config, Backend = Castbars.Config, Castbars.Backend
 local PublicAPI = Castbars.PublicAPI
-local Optional = MSUF.Optional
 local KINDS = { "player", "target", "focus", "boss", "arena" }
 local TIME_KEYS = {
     player = "showPlayerCastTime", target = "showTargetCastTime", focus = "showFocusCastTime",
@@ -31,11 +30,13 @@ for index = 1, 5 do
 end
 
 -- Never called at file load: SavedVariables are available only after loading.
+-- The SavedVariables root is read by its global name: the profile code
+-- reassigns it directly, so no namespace mirror can stand in for it.
 function Config.Source(create)
-    local db = Optional("MSUF_DB")
+    local db = MSUF_DB
     if not db and create then
         MSUF.Require("MSUF_EnsureDB", "Castbars/MSUF_CastbarConfig.lua")()
-        db = MSUF.Require("MSUF_DB", "Castbars/MSUF_CastbarConfig.lua")
+        db = MSUF_DB
     end
     if db and create then db.general = db.general or {} end
     return db
@@ -43,7 +44,7 @@ end
 
 -- Cold geometry observes public/drag edits without compiling unrelated settings.
 function Config.Geometry()
-    return Optional("MSUF_DB") or Config.DB
+    return MSUF_DB or Config.DB
 end
 
 local function Copy(source, target)

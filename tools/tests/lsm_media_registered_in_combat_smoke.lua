@@ -90,6 +90,7 @@ local function NewWorld(startInCombat)
 
     local ns = {
         Client = { Family = "Mainline" },
+        Castbars = { Core = { UpdateCastbarTextures = MSUF_UpdateCastbarTextures } },
         GF = { RefreshVisuals = function() counts.group = counts.group + 1 end },
     }
     ns.ExportPublic = function(name, value)
@@ -296,6 +297,29 @@ do
     LSM:Register("statusbar", "After Start Bar", BAR)
     world:Settle()
     Check(Delta(world, before, "bars") == 1, "the callback was never registered after a start in combat")
+end
+
+-- A media callback can precede the Castbars provider. Once loaded, resolve
+-- its current namespace slot and prefer the immediate owner over the wrapper.
+do
+    local world = NewWorld(false)
+    world:Settle()
+    local owner = world.ns.Castbars.Core
+    world.ns.Castbars.Core = nil
+    local before = world:Snapshot()
+    world.LSM:Register("statusbar", "Before Castbars", BAR)
+    world:Settle()
+    Check(Delta(world, before, "castbars") == 0, "pre-provider media used a stale public castbar alias")
+    world.ns.Castbars.Core = owner
+    local immediate = 0
+    owner.UpdateCastbarTextures_Immediate = function() immediate = immediate + 1 end
+    world.LSM:Register("statusbar", "After Castbars", BAR)
+    world:Settle()
+    Check(immediate == 1 and Delta(world, before, "castbars") == 0, "late immediate castbar owner did not take precedence")
+    owner.UpdateCastbarTextures_Immediate = nil
+    world.LSM:Register("statusbar", "Deferred Castbars", BAR)
+    world:Settle()
+    Check(Delta(world, before, "castbars") == 1, "late deferred castbar fallback did not apply")
 end
 
 print("lsm_media_registered_in_combat_smoke: OK")

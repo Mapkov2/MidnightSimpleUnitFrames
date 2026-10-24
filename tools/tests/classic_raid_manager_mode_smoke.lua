@@ -213,7 +213,7 @@ manager.IsShown = nil
 -- Preserve raid groups must be an effective header mode, not just a saved
 -- checkbox that leaves an already-valid INDEX sort untouched.
 local function NewHeaderFrame(parent)
-    local frame = { parent = parent, attributes = {}, shown = false, width = 0, height = 0 }
+    local frame = { parent = parent, attributes = {}, shown = false, width = 0, height = 0, scripts = {}, events = {} }
     function frame:EnableMouse() end
     function frame:SetClampedToScreen() end
     function frame:SetSize(width, height) self.width, self.height = width, height end
@@ -223,9 +223,18 @@ local function NewHeaderFrame(parent)
     function frame:GetHeight() return self.height end
     function frame:ClearAllPoints() end
     function frame:SetPoint() end
-    function frame:Show() self.shown = true end
+    function frame:Show()
+        if self.shown then return end
+        self.shown = true
+        if self.scripts.OnShow then self.scripts.OnShow(self) end
+    end
     function frame:Hide() self.shown = false end
     function frame:IsShown() return self.shown end
+    function frame:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
+    function frame:GetScript(script) return self.scripts[script] end
+    function frame:SetScript(script, callback) self.scripts[script] = callback end
+    function frame:RegisterEvent(event) self.events[event] = true end
+    function frame:UnregisterEvent(event) self.events[event] = nil end
     function frame:SetParent(value) self.parent = value end
     function frame:GetParent() return self.parent end
     function frame:SetAttribute(key, value) self.attributes[key] = value end
@@ -249,12 +258,34 @@ local playerRaidIndex
 
 _G.UIParent = headerUIParent
 _G.PetBattleFrameHider = nil
-_G.CreateFrame = function(_, _, parent) return NewHeaderFrame(parent) end
+_G.CreateFrame = function(_, _, parent, template)
+    local frame = NewHeaderFrame(parent)
+    if template == "SecureGroupHeaderTemplate" then
+        -- This attribute-only fixture observes native script forwarding;
+        -- group_raid_header_blizzard_smoke executes the real native layout.
+        frame:SetScript("OnShow", function(self) self.nativeShows = (self.nativeShows or 0) + 1 end)
+    end
+    return frame
+end
+_G.SecureHandlerWrapScript = function(frame, script, owner, prebody, postbody)
+    assert(script == "OnShow" and owner == frame and postbody == nil, "unexpected header wrapper")
+    assert(not InCombatLockdown(), "header wrapper installed in combat")
+    local original = assert(frame:GetScript(script), "native OnShow absent")
+    local pre = assert(loadstring(prebody, "=SecureHandlerWrapScript.OnShow"))
+    setfenv(pre, { self = frame })
+    local wrapper = function(self, ...)
+        if pre() == false then return end
+        return original(self, ...)
+    end
+    frame:SetScript(script, wrapper)
+    frame.fixtureWrapper = { original = original, wrapper = wrapper }
+end
 _G.GetNumGroupMembers = function() return #groups end
 _G.GetNumSubgroupMembers = function() return 0 end
 _G.GetRaidRosterInfo = function(index) return raidNames[index], nil, groups[index] end
 _G.IsInGroup = function() return true end
 _G.IsInRaid = function() return true end
+_G.issecretvalue = function() return false end
 _G.UnitName = function(unit)
     local index = tonumber(tostring(unit):match("raid(%d+)$"))
     return index and raidNames[index] or "Player"
@@ -271,6 +302,9 @@ end
 
 _G.MSUF_NS.Client = { IsClassic = true }
 GF.GetConf = function() return headerConf end
+-- HeaderController loads after the live-scope provider in a real core boot.
+GF.GetLiveGroupKind = function() return "raid" end
+GF.GetAnchorPoint = function(conf) return conf and (conf.anchorPoint or conf.point) or "CENTER" end
 GF.GetScaledFrameMetrics = function() return 80, 32, 1 end
 local headersPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua"
 local controllerChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))
@@ -292,6 +326,15 @@ local function Shown(target)
 end
 
 local header = assert(GF.SetupHeader("raid", "raid"), "Classic raid header did not build")
+if header.fixtureWrapper then
+    local nativeShows = header.nativeShows or 0
+    header:SetAttribute("_ignore", true)
+    header:GetScript("OnShow")(header)
+    assert((header.nativeShows or 0) == nativeShows, "wrapped native show ignored _ignore")
+    header:SetAttribute("_ignore", nil)
+    header:GetScript("OnShow")(header)
+    assert(header.nativeShows == nativeShows + 1, "wrapper lost the native OnShow")
+end
 assert(header:GetAttribute("auraContainerTemplate") == nil,
     "Classic headers must not request CustomAuraContainerTemplate")
 assert(header:GetAttribute("_msufSortMode") == "INDEX",

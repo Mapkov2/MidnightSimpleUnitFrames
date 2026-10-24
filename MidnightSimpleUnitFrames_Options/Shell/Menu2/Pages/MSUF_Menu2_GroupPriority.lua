@@ -7,9 +7,10 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GroupPriority.lua"
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupPriority.lua", {
+-- load, resolved through MSUF.Require when called so a hook installed on one later still applies.
+M.RequireGlobals(FILE, {
     "MSUF_SetManagedBinding",
     "MSUF_ClearManagedBinding",
     "MSUF_EM2_SetFocusSelection",
@@ -57,7 +58,7 @@ local Tr = M.Tr
 local function PriorityConf()
     local gf = GF()
     if gf and type(gf.GetPriorityConf) == "function" then return gf.GetPriorityConf() end
-    local db = type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
+    local db = type(M.EnsureDB) == "function" and M.EnsureDB() or MSUF_DB
     if type(db) ~= "table" then return {} end
     if type(db.gf_priority) ~= "table" then db.gf_priority = {} end
     return db.gf_priority
@@ -122,6 +123,41 @@ local function SetPriorityOption(ctx, key, value, label)
     return changed
 end
 
+local function Feedback(text, kind, seconds)
+    if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback(text, kind, seconds) end
+end
+
+local function CenterLabels(...)
+    if not T.CenterButtonLabel then return end
+    for i = 1, select("#", ...) do T.CenterButtonLabel((select(i, ...))) end
+end
+
+-- Profile-scoped text row; returns its widget (word-wrapped when `wrap`).
+local function TextRow(ctx, parent, id, text, x, y, width, color, wrap)
+    local widget = Schema.Build(ctx, parent, { { "text", id, nil, { text, x, y, width, color }, scope = "profile" } })[id]
+    if wrap and widget.SetWordWrap then widget:SetWordWrap(true) end
+    return widget
+end
+
+-- Collapsible profile-scoped section; returns it with its usable width.
+local function OpenSection(b, id, title, height, expanded)
+    local section = b:CollapsibleSection(id, title, height, expanded)
+    if section._msuf2CollapsibleEntry then Schema.Section(section, "profile") end
+    return section, section._msuf2Width or b.width or 720
+end
+
+-- Number slider bound to one Priority option; `rounded` rows store floor(value + 0.5).
+local function SliderRow(ctx, key, fallback, label, low, high, path, historyLabel, place, rounded)
+    return { "slider", key, fallback, { label, low, high, 1, 300 }, place,
+        get = function() return tonumber(PriorityConf()[key]) or fallback end,
+        set = function(value)
+            if rounded then value = floor((tonumber(value) or fallback) + 0.5) end
+            SetPriorityOption(ctx, key, value, historyLabel or label)
+        end,
+        meta = M.Assign(PriorityMeta(ctx, path, "gf_priority." .. key), { step = 1, roundStep = true }),
+        domain = "priority", scope = "profile" }
+end
+
 local function FormatBindingKey(key)
     if type(key) ~= "string" or key == "" then return Tr("Not bound") end
     local parts = {}
@@ -161,6 +197,12 @@ end
 local MODIFIER_KEYS = {
     LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true,
 }
+-- Keyboard and wheel capture are on only while the hotkey button listens for a key.
+local function SetKeyCapture(button, on)
+    if button.EnableKeyboard then button:EnableKeyboard(on) end
+    if button.EnableMouseWheel then button:EnableMouseWheel(on) end
+    if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(not on) end
+end
 local function BuildBindingCapture(ctx, parent, x, y, width)
     local heading = W.LabelAt(parent, "Hover hotkey", x, y, width, "GameFontNormalSmall", T.colors.accent)
     Schema.Custom(heading, {
@@ -168,23 +210,20 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     local button = T.Button(parent, "Not bound", min(250, width), 26)
     button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24)
     if button.RegisterForClicks then button:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
-    if button.EnableKeyboard then button:EnableKeyboard(false) end
-    if button.EnableMouseWheel then button:EnableMouseWheel(false) end
-    if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(true) end
-    if T.CenterButtonLabel then T.CenterButtonLabel(button) end
+    SetKeyCapture(button, false)
+    CenterLabels(button)
     RegisterAction(button, ctx, "binding.capture", "Priority Frames hotkey", nil, "keyBinding")
 
-    local hint = Schema.Build(ctx, parent, {
-        { "text", "menu2.gf_priority.bindingcapture.hint", nil,
-            { "Hover an MSUF Party, Raid, or Priority frame and press this key to pin or unpin that player.", x + min(250, width) + 14,
-            y - 22, max(180, width - min(250, width) - 14), T.colors.muted }, scope = "profile" },
-    })["menu2.gf_priority.bindingcapture.hint"]
-    if hint.SetWordWrap then hint:SetWordWrap(true) end
+    TextRow(ctx, parent, "menu2.gf_priority.bindingcapture.hint",
+        "Hover an MSUF Party, Raid, or Priority frame and press this key to pin or unpin that player.",
+        x + min(250, width) + 14, y - 22, max(180, width - min(250, width) - 14), T.colors.muted, true)
 
     local listening = false
+    -- CurrentKey runs on every page refresh (RefreshLabel): resolve the provider exactly once.
+    local getKeys
     local function CurrentKey()
-        local get = _G.MSUF_GetManagedBindingKeys
-        local keys = type(get) == "function" and get(PRIORITY_BINDING) or nil
+        getKeys = getKeys or MSUF.Require("MSUF_GetManagedBindingKeys", FILE)
+        local keys = getKeys(PRIORITY_BINDING)
         return type(keys) == "table" and keys[1] or nil
     end
     local function RefreshLabel()
@@ -193,30 +232,25 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     end
     local function StopListening(refresh)
         listening = false
-        if button.EnableKeyboard then button:EnableKeyboard(false) end
-        if button.EnableMouseWheel then button:EnableMouseWheel(false) end
-        if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(true) end
+        SetKeyCapture(button, false)
         if refresh ~= false then RefreshLabel() end
     end
     local function BeginListening()
         if listening then return end
         listening = true
         button:SetText("Press a key...")
-        if button.EnableKeyboard then button:EnableKeyboard(true) end
-        if button.EnableMouseWheel then button:EnableMouseWheel(true) end
-        if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(false) end
+        SetKeyCapture(button, true)
     end
     local function Changed(reason)
         StopListening()
         RequestPageRefresh(ctx, reason or "priority-binding")
-        if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("Priority hotkey updated", "ok", 1.3) end
+        Feedback("Priority hotkey updated", "ok", 1.3)
     end
     local function BindingFailed(code)
-        if type(M.ShowStatusFeedback) ~= "function" then return end
         if code == "COMBAT" then
-            M.ShowStatusFeedback("Keybindings cannot be changed during combat.", "danger", 1.8)
+            Feedback("Keybindings cannot be changed during combat.", "danger", 1.8)
         else
-            M.ShowStatusFeedback("Could not update that keybinding.", "danger", 1.8)
+            Feedback("Could not update that keybinding.", "danger", 1.8)
         end
     end
     local function ClearBinding()
@@ -224,7 +258,7 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
             StopListening()
             return true
         end
-        local ok, code = _G.MSUF_ClearManagedBinding(PRIORITY_BINDING)
+        local ok, code = MSUF.Require("MSUF_ClearManagedBinding", FILE)(PRIORITY_BINDING)
         if ok then Changed("priority-binding-cleared") end
         if not ok then BindingFailed(code) end
         return ok
@@ -234,9 +268,7 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
             StopListening()
             return true
         end
-        local set = _G.MSUF_SetManagedBinding
-        if type(set) ~= "function" then return false, "UNAVAILABLE" end
-        local ok, code, action = set(PRIORITY_BINDING, key, replaceConflict == true)
+        local ok, code, action = MSUF.Require("MSUF_SetManagedBinding", FILE)(PRIORITY_BINDING, key, replaceConflict == true)
         if ok then Changed(replaceConflict and "priority-binding-replaced" or "priority-binding-set") end
         if not ok and code ~= "CONFLICT" then BindingFailed(code) end
         return ok, code, action
@@ -254,9 +286,9 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
             return
         end
         local prefix = ""
-        if _G.IsShiftKeyDown and _G.IsShiftKeyDown() then prefix = prefix .. "SHIFT-" end
-        if _G.IsControlKeyDown and _G.IsControlKeyDown() then prefix = prefix .. "CTRL-" end
-        if _G.IsAltKeyDown and _G.IsAltKeyDown() then prefix = prefix .. "ALT-" end
+        if IsShiftKeyDown and IsShiftKeyDown() then prefix = prefix .. "SHIFT-" end
+        if IsControlKeyDown and IsControlKeyDown() then prefix = prefix .. "CTRL-" end
+        if IsAltKeyDown and IsAltKeyDown() then prefix = prefix .. "ALT-" end
         local fullKey = prefix .. key
         local ok, code, action = ApplyKey(fullKey, false)
         if ok then return end
@@ -275,12 +307,8 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
         end
     end)
     button:SetScript("OnKeyDown", function(_, key)
-        if not listening then
-            if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(true) end
-            return
-        end
-        if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(false) end
-        CommitKey(key)
+        if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(not listening) end
+        if listening then CommitKey(key) end
     end)
     button:HookScript("OnMouseDown", function(_, mouseButton)
         if not listening or mouseButton == "LeftButton" or mouseButton == "RightButton" then return end
@@ -301,33 +329,37 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     return button, RefreshLabel, StopListening
 end
 
-local function OpenPriorityEditMode()
+local function OpenPriorityEditModeWithFeedback()
+    local enabled = PriorityConf().enabled == true
     if type(M.SetMSUFEditModeActive) ~= "function" then return false end
     local ok = M.SetMSUFEditModeActive(true, "gf_priority", { source = "priority-page" })
     if ok then
-        _G.MSUF_EM2_SetFocusSelection("gf_priority", "placement", nil, {
+        MSUF.Require("MSUF_EM2_SetFocusSelection", FILE)("gf_priority", "placement", nil, {
             source = "priority-page",
             menu = false,
         })
-    end
-    return ok
-end
-
-local function OpenPriorityEditModeWithFeedback()
-    local enabled = PriorityConf().enabled == true
-    local ok = OpenPriorityEditMode()
-    if ok and type(M.ShowStatusFeedback) == "function" then
-        M.ShowStatusFeedback(enabled and "Priority Frames selected in Edit Mode"
+        Feedback(enabled and "Priority Frames selected in Edit Mode"
             or "Priority Frames remain disabled; Edit Mode is showing the placement preview.",
             enabled and "ok" or "info", 1.8)
     end
     return ok
 end
 
+-- A button that opens Edit Mode on the Priority Frames placement.
+local function EditModeButton(ctx, parent, text, width, point, x, y, path, label)
+    local button = T.Button(parent, text, width, 26)
+    button:SetPoint(point, parent, point, x, y)
+    CenterLabels(button)
+    button:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
+    return RegisterAction(button, ctx, path, label, {
+        actionKey = "menu.action.editMode.enter",
+        actionFixedArgs = { unit = "gf_priority" },
+    })
+end
+
 local function BuildPriorityPlacement(ctx, b)
-    local placement = b:CollapsibleSection("placement", "Placement", 525, false)
-    if placement._msuf2CollapsibleEntry then Schema.Section(placement, "profile") end
-    local placementW = placement._msuf2Width or b.width or 720
+    local placement, placementW = OpenSection(b, "placement", "Placement", 525, false)
+    local rightX = max(360, placementW - 342)
     local placementControls = Schema.Build(ctx, placement, {
         { "text", "menu2.gf_priority.placement.help", nil,
             { "Attach the strip to the active Party, Raid, or Mythic Raid container, or choose Free position and place it with Edit Mode.",
@@ -336,55 +368,33 @@ local function BuildPriorityPlacement(ctx, b)
             "RAID_RIGHT" end,
             set = function(value) SetPriorityOption(ctx, "anchorMode", value or "RAID_RIGHT", "Priority Frames placement") end,
             meta = PriorityMeta(ctx, "placement.mode", "gf_priority.anchorMode"), domain = "priority", scope = "profile" },
-        { "segment", "growth", nil, { "Growth", GROWTH_VALUES, 318 }, { max(360, placementW - 342), -80, 318, "LEFT" }, get = function() return
+        { "segment", "growth", nil, { "Growth", GROWTH_VALUES, 318 }, { rightX, -80, 318, "LEFT" }, get = function() return
             PriorityConf().growth or "DOWN" end,
             set = function(value) SetPriorityOption(ctx, "growth", value or "DOWN", "Priority Frames growth") end,
             meta = PriorityMeta(ctx, "placement.growth", "gf_priority.growth"), domain = "priority", scope = "profile" },
-        { "slider", "spacing", 2, { "Frame spacing", 0, 40, 1, 300 }, { 24, -156, 300, "LEFT" }, get = function() return tonumber(PriorityConf().spacing)
-            or 2 end,
-            set = function(value) SetPriorityOption(ctx, "spacing", floor((tonumber(value) or 2) + 0.5), "Priority Frames spacing") end,
-            meta = M.Assign(PriorityMeta(ctx, "placement.spacing", "gf_priority.spacing"), { step = 1, roundStep = true }), domain = "priority", scope =
-                "profile" },
-        { "slider", "attachGap", 8, { "Attachment gap", 0, 100, 1, 300 }, { max(360, placementW - 342), -156, 300, "LEFT" }, get = function() return
-            tonumber(PriorityConf().attachGap) or 8 end,
-            set = function(value) SetPriorityOption(ctx, "attachGap", floor((tonumber(value) or 8) + 0.5), "Priority Frames attachment gap") end,
-            meta = M.Assign(PriorityMeta(ctx, "placement.attach_gap", "gf_priority.attachGap"), { step = 1, roundStep = true }), domain = "priority",
-                scope = "profile" },
-        { "slider", "attachOffset", 0, { "Alignment offset", -200, 200, 1, 300 }, { 24, -230, 300, "LEFT" }, get = function() return
-            tonumber(PriorityConf().attachOffset) or 0 end,
-            set = function(value) SetPriorityOption(ctx, "attachOffset", floor((tonumber(value) or 0) + 0.5), "Priority Frames alignment offset") end,
-            meta = M.Assign(PriorityMeta(ctx, "placement.attach_offset", "gf_priority.attachOffset"), { step = 1, roundStep = true }), domain = "priority",
-                scope = "profile" },
+        SliderRow(ctx, "spacing", 2, "Frame spacing", 0, 40, "placement.spacing", "Priority Frames spacing",
+            { 24, -156, 300, "LEFT" }, true),
+        SliderRow(ctx, "attachGap", 8, "Attachment gap", 0, 100, "placement.attach_gap", "Priority Frames attachment gap",
+            { rightX, -156, 300, "LEFT" }, true),
+        SliderRow(ctx, "attachOffset", 0, "Alignment offset", -200, 200, "placement.attach_offset",
+            "Priority Frames alignment offset", { 24, -230, 300, "LEFT" }, true),
     }, CUSTOM_OPTIONS)
     local attachGap = placementControls.attachGap
     local attachOffset = placementControls.attachOffset
-    local move = T.Button(placement, "Position in Edit Mode", 172, 26)
-    move:SetPoint("TOPLEFT", placement, "TOPLEFT", max(360, placementW - 342), -252)
-    if T.CenterButtonLabel then T.CenterButtonLabel(move) end
-    move:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
-    RegisterAction(move, ctx, "placement.open_edit_mode", "Position Priority Frames in Edit Mode", {
-        actionKey = "menu.action.editMode.enter",
-        actionFixedArgs = { unit = "gf_priority" },
-    })
-    for index, entry in ipairs({
-        { "width", "Priority frame width (0 inherits)", 0, 500, 0 },
-        { "height", "Priority frame height (0 inherits)", 0, 200, 0 },
-        { "unitsPerColumn", "Frames per row or column", 1, 5, 5 },
+    local move = EditModeButton(ctx, placement, "Position in Edit Mode", 172, "TOPLEFT", rightX, -252,
+        "placement.open_edit_mode", "Position Priority Frames in Edit Mode")
+    for _, entry in ipairs({
+        { "width", "Priority frame width (0 inherits)", 0, 500, 0, 24, -342 },
+        { "height", "Priority frame height (0 inherits)", 0, 200, 0, rightX, -342 },
+        { "unitsPerColumn", "Frames per row or column", 1, 5, 5, 24, -422 },
     }) do
-        local key, label, low, high, fallback = unpack(entry)
-        Schema.Build(ctx, placement, {
-            { "slider", key, fallback, { label, low, high, 1, 300 }, get = function() return tonumber(PriorityConf()[key]) or fallback end,
-                set = function(value) SetPriorityOption(ctx, key, value, label) end,
-                meta = M.Assign(PriorityMeta(ctx, "placement." .. key, "gf_priority." .. key), { step = 1, roundStep = true }),
-                domain = "priority",
-                beforeBind = function(widget)
-                    W.MoveWidget(widget, placement, index == 2 and max(360, placementW - 342) or 24,
-                        index == 3 and -422 or -342, 300, "LEFT")
-                end, scope = "profile" },
-        }, CUSTOM_OPTIONS)
+        local key, label, low, high, fallback, x, y = unpack(entry)
+        local row = SliderRow(ctx, key, fallback, label, low, high, "placement." .. key)
+        row.beforeBind = function(widget) W.MoveWidget(widget, placement, x, y, 300, "LEFT") end
+        Schema.Build(ctx, placement, { row }, CUSTOM_OPTIONS)
     end
-    local placementHint = Schema.Build(ctx, placement, { { "text", "menu2.gf_priority.prioritypage.placementHint", nil, { "", 24, -490,
-        placementW - 48, T.colors.muted }, scope = "profile" }, })["menu2.gf_priority.prioritypage.placementHint"]
+    local placementHint = TextRow(ctx, placement, "menu2.gf_priority.prioritypage.placementHint", "", 24, -490,
+        placementW - 48, T.colors.muted)
     local function RefreshPlacement()
         local conf = PriorityConf()
         local attached = conf.anchorMode ~= "FREE"
@@ -402,36 +412,33 @@ local function BuildPriorityPlacement(ctx, b)
     TrackSectionRefresh(ctx, placement, RefreshPlacement)
 end
 
-local function BuildPriorityPage(ctx)
-    local b = W.PageBuilder(ctx)
-    ScopeSection(ctx, b, { priorityMode = true })
-
-    -- Snapshot first in the page refresher list. Overview and the pooled pin
-    -- rows then consume the same roster resolution instead of each scanning
-    -- the active Party or Raid roster independently.
-    local stateScratch, pinViewScratch = {}, {}
-    local function RefreshSnapshot()
+-- Snapshot first in the page refresher list. Overview and the pooled pin
+-- rows then consume the same roster resolution instead of each scanning
+-- the active Party or Raid roster independently. snap.state / snap.pins are
+-- scratch tables the group module refills in place. The refresher is built once per
+-- page, so each refresh is still exactly one call.
+local function SnapshotRefresher(snap)
+    return function()
         local gf = GF()
         if gf and type(gf.GetPriorityMenuSnapshot) == "function" then
-            local state, pins = gf.GetPriorityMenuSnapshot(stateScratch, pinViewScratch)
-            if type(state) == "table" then stateScratch = state end
-            if type(pins) == "table" then pinViewScratch = pins end
+            local state, pins = gf.GetPriorityMenuSnapshot(snap.state, snap.pins)
+            if type(state) == "table" then snap.state = state end
+            if type(pins) == "table" then snap.pins = pins end
             return
         end
         if gf and type(gf.GetPriorityState) == "function" then
-            stateScratch = gf.GetPriorityState(stateScratch) or stateScratch
+            snap.state = gf.GetPriorityState(snap.state) or snap.state
         end
         if gf and type(gf.GetPriorityPinView) == "function" then
-            pinViewScratch = gf.GetPriorityPinView(pinViewScratch) or pinViewScratch
+            snap.pins = gf.GetPriorityPinView(snap.pins) or snap.pins
         elseif gf and type(gf.GetPriorityPins) == "function" then
-            pinViewScratch = gf.GetPriorityPins() or pinViewScratch
+            snap.pins = gf.GetPriorityPins() or snap.pins
         end
     end
-    M.TrackRefresh(ctx, RefreshSnapshot)
+end
 
-    local overview = b:CollapsibleSection("overview", "Priority Frames", 220, true)
-    if overview._msuf2CollapsibleEntry then Schema.Section(overview, "profile") end
-    local overviewW = overview._msuf2Width or b.width or 720
+local function BuildPriorityOverview(ctx, b, snap)
+    local overview, overviewW = OpenSection(b, "overview", "Priority Frames", 220, true)
     Schema.Build(ctx, overview, {
         { "text", "menu2.gf_priority.overview.help", nil,
             { "Keep tanks and manually pinned group members in one stable strip without removing them from the normal Party or Raid frames.",
@@ -440,14 +447,8 @@ local function BuildPriorityPage(ctx)
             set = function(value) SetPriorityOption(ctx, "enabled", value == true, "Enable Priority Frames") end,
             meta = PriorityMeta(ctx, "overview.enabled", "gf_priority.enabled"), domain = "priority", scope = "profile" },
     }, CUSTOM_OPTIONS)
-    local editMode = T.Button(overview, "Open Edit Mode", 146, 26)
-    editMode:SetPoint("TOPRIGHT", overview, "TOPRIGHT", -22, -40)
-    if T.CenterButtonLabel then T.CenterButtonLabel(editMode) end
-    editMode:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
-    RegisterAction(editMode, ctx, "overview.open_edit_mode", "Open Priority Frames in Edit Mode", {
-        actionKey = "menu.action.editMode.enter",
-        actionFixedArgs = { unit = "gf_priority" },
-    })
+    local editMode = EditModeButton(ctx, overview, "Open Edit Mode", 146, "TOPRIGHT", -22, -40,
+        "overview.open_edit_mode", "Open Priority Frames in Edit Mode")
     local statusLabels = Schema.Build(ctx, overview, {
         { "text", "menu2.gf_priority.prioritypage.liveStatus", nil, { "", 24, -132, overviewW - 48, T.colors.accent }, scope = "profile" },
         { "text", "menu2.gf_priority.prioritypage.behavior", nil,
@@ -459,7 +460,7 @@ local function BuildPriorityPage(ctx)
     local behavior = statusLabels["menu2.gf_priority.prioritypage.behavior"]
     if behavior.SetWordWrap then behavior:SetWordWrap(true) end
     local function RefreshOverview()
-        local state = stateScratch
+        local state = snap.state
         local enabled = state.enabled == true
         local active = tonumber(state.activeCount) or 0
         local pins = tonumber(state.pinCount) or 0
@@ -489,28 +490,51 @@ local function BuildPriorityPage(ctx)
         })
     end
     TrackSectionRefresh(ctx, overview, RefreshOverview)
+end
 
-    local who = b:CollapsibleSection("who_appears", "Who Appears", 548, true)
-    if who._msuf2CollapsibleEntry then Schema.Section(who, "profile") end
-    local whoW = who._msuf2Width or b.width or 720
-    local selectionControls = Schema.Build(ctx, who, {
-        { "switch", "autoTanks", nil, { "Include tanks automatically", 24, -52, 330 }, get = function() return PriorityConf().autoTanks == true end,
-            set = function(value) SetPriorityOption(ctx, "autoTanks", value == true, "Priority Frames automatic tanks") end,
-            meta = PriorityMeta(ctx, "selection.auto_tanks", "gf_priority.autoTanks"), domain = "priority", scope = "profile" },
-        { "segment", "slots", nil, { "Visible slots", SLOT_VALUES, 300 }, { max(380, whoW - 320), -30, 292, "LEFT" }, get = function() return
-            floor((tonumber(PriorityConf().maxFrames) or 5) + 0.5) end,
-            set = function(value) SetPriorityOption(ctx, "maxFrames", tonumber(value) or 5, "Priority Frames visible slots") end,
-            meta = PriorityMeta(ctx, "selection.max_frames", "gf_priority.maxFrames"), domain = "priority", scope = "profile" },
-        { "card", "menu2.gf_priority.prioritypage.bindingCard", nil, { "Fast pinning", nil, 20, -106, whoW - 40, 112 }, domain = "layout", scope = "profile" },
-    }, CUSTOM_OPTIONS)
-    local bindingCard = selectionControls["menu2.gf_priority.prioritypage.bindingCard"]
-    BuildBindingCapture(ctx, bindingCard, 16, -42, whoW - 72)
+-- One pooled row of the manual pin list: the labels, the Up / Down / Remove buttons and their declarations.
+local function BuildPinRow(ctx, pinsCard, pinsCardW, i)
+    local row = T.Panel(pinsCard, nil, { 0.018, 0.032, 0.064, 0.78 }, T.colors.borderSoft)
+    row:SetPoint("TOPLEFT", pinsCard, "TOPLEFT", 16, -66 - ((i - 1) * 30))
+    row:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -66 - ((i - 1) * 30))
+    row:SetHeight(26)
+    local labels = Schema.Build(ctx, row, {
+        { "font", "menu2.gf_priority.pins.number." .. i, nil, { "GameFontNormalSmall", tostring(i), T.colors.dim }, scope = "profile" },
+        { "font", "menu2.gf_priority.pins.name." .. i, nil, { "GameFontHighlightSmall", "", T.colors.text }, scope = "profile" },
+        { "font", "menu2.gf_priority.pins.status." .. i, nil, { "GameFontDisableSmall", "", T.colors.muted }, scope = "profile" },
+    })
+    local number, name, status = labels["menu2.gf_priority.pins.number." .. i],
+        labels["menu2.gf_priority.pins.name." .. i], labels["menu2.gf_priority.pins.status." .. i]
+    number:SetPoint("LEFT", row, "LEFT", 8, 0)
+    number:SetWidth(22)
+    name:SetPoint("LEFT", number, "RIGHT", 4, 0)
+    name:SetWidth(max(150, pinsCardW - 330))
+    name:SetJustifyH("LEFT")
+    status:SetPoint("RIGHT", row, "RIGHT", -176, 0)
+    status:SetWidth(130)
+    status:SetJustifyH("RIGHT")
+    local up = T.Button(row, "Up", 42, 20)
+    local down = T.Button(row, "Down", 48, 20)
+    local remove = T.Button(row, "Remove", 68, 20)
+    remove:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    down:SetPoint("RIGHT", remove, "LEFT", -4, 0)
+    up:SetPoint("RIGHT", down, "LEFT", -4, 0)
+    CenterLabels(up, down, remove)
+    RegisterAction(up, ctx, "pins.row." .. i .. ".up", "Move pinned player up")
+    RegisterAction(down, ctx, "pins.row." .. i .. ".down", "Move pinned player down")
+    RegisterAction(remove, ctx, "pins.row." .. i .. ".remove", "Remove pinned player")
+    Schema.Custom(row, { id = "menu2.gf_priority.pins.row." .. i, kind = "pinRow",
+        scope = "character", applyDomain = "priority", owner = row })
+    return { frame = row, number = number, name = name, status = status, up = up, down = down, remove = remove }
+end
 
+-- The "Manual pins" card: header, paging, empty note, the pooled rows and the clear-all button.
+local function BuildPinsCard(ctx, who, whoW)
     local pinsCard = Schema.Build(ctx, who, { { "card", "menu2.gf_priority.prioritypage.pinsCard", nil, { "Manual pins", nil, 20, -232,
         whoW - 40, 246 }, domain = "layout", scope = "profile" }, })["menu2.gf_priority.prioritypage.pinsCard"]
     local pinsCardW = whoW - 40
-    local pinsStatus = Schema.Build(ctx, pinsCard, { { "text", "menu2.gf_priority.prioritypage.pinsStatus", nil, { "", 16, -42,
-        pinsCardW - 260, T.colors.muted }, scope = "profile" }, })["menu2.gf_priority.prioritypage.pinsStatus"]
+    local pinsStatus = TextRow(ctx, pinsCard, "menu2.gf_priority.prioritypage.pinsStatus", "", 16, -42,
+        pinsCardW - 260, T.colors.muted)
     local prevPage = T.Button(pinsCard, "Previous", 72, 22)
     local nextPage = T.Button(pinsCard, "Next", 58, 22)
     local pageText = Schema.Build(ctx, pinsCard, { { "font", "menu2.gf_priority.prioritypage.pageText", nil, { "GameFontDisableSmall", "",
@@ -518,108 +542,83 @@ local function BuildPriorityPage(ctx)
     nextPage:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -36)
     pageText:SetPoint("RIGHT", nextPage, "LEFT", -8, 0)
     prevPage:SetPoint("RIGHT", pageText, "LEFT", -8, 0)
-    if T.CenterButtonLabel then T.CenterButtonLabel(prevPage) T.CenterButtonLabel(nextPage) end
+    CenterLabels(prevPage, nextPage)
     RegisterAction(prevPage, ctx, "pins.page.previous", "Previous pinned players")
     RegisterAction(nextPage, ctx, "pins.page.next", "Next pinned players")
-    local emptyPins = Schema.Build(ctx, pinsCard, {
-        { "text", "menu2.gf_priority.prioritypage.emptyPins", nil,
-            { "No manual pins yet. While grouped, hover an MSUF Party, Raid, or Priority frame, then press your hotkey.", 18, -104,
-            pinsCardW - 36, T.colors.muted }, scope = "profile" },
-    })["menu2.gf_priority.prioritypage.emptyPins"]
-    if emptyPins.SetWordWrap then emptyPins:SetWordWrap(true) end
-
+    local emptyPins = TextRow(ctx, pinsCard, "menu2.gf_priority.prioritypage.emptyPins",
+        "No manual pins yet. While grouped, hover an MSUF Party, Raid, or Priority frame, then press your hotkey.", 18, -104,
+        pinsCardW - 36, T.colors.muted, true)
     local pinRows = {}
-    for i = 1, PIN_ROWS_PER_PAGE do
-        local row = T.Panel(pinsCard, nil, { 0.018, 0.032, 0.064, 0.78 }, T.colors.borderSoft)
-        row:SetPoint("TOPLEFT", pinsCard, "TOPLEFT", 16, -66 - ((i - 1) * 30))
-        row:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -66 - ((i - 1) * 30))
-        row:SetHeight(26)
-        local labels = Schema.Build(ctx, row, {
-            { "font", "menu2.gf_priority.pins.number." .. i, nil, { "GameFontNormalSmall", tostring(i), T.colors.dim }, scope = "profile" },
-            { "font", "menu2.gf_priority.pins.name." .. i, nil, { "GameFontHighlightSmall", "", T.colors.text }, scope = "profile" },
-            { "font", "menu2.gf_priority.pins.status." .. i, nil, { "GameFontDisableSmall", "", T.colors.muted }, scope = "profile" },
-        })
-        local number, name, status = labels["menu2.gf_priority.pins.number." .. i],
-            labels["menu2.gf_priority.pins.name." .. i], labels["menu2.gf_priority.pins.status." .. i]
-        number:SetPoint("LEFT", row, "LEFT", 8, 0)
-        number:SetWidth(22)
-        name:SetPoint("LEFT", number, "RIGHT", 4, 0)
-        name:SetWidth(max(150, pinsCardW - 330))
-        name:SetJustifyH("LEFT")
-        status:SetPoint("RIGHT", row, "RIGHT", -176, 0)
-        status:SetWidth(130)
-        status:SetJustifyH("RIGHT")
-        local up = T.Button(row, "Up", 42, 20)
-        local down = T.Button(row, "Down", 48, 20)
-        local remove = T.Button(row, "Remove", 68, 20)
-        remove:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-        down:SetPoint("RIGHT", remove, "LEFT", -4, 0)
-        up:SetPoint("RIGHT", down, "LEFT", -4, 0)
-        if T.CenterButtonLabel then T.CenterButtonLabel(up) T.CenterButtonLabel(down) T.CenterButtonLabel(remove) end
-        RegisterAction(up, ctx, "pins.row." .. i .. ".up", "Move pinned player up")
-        RegisterAction(down, ctx, "pins.row." .. i .. ".down", "Move pinned player down")
-        RegisterAction(remove, ctx, "pins.row." .. i .. ".remove", "Remove pinned player")
-        Schema.Custom(row, { id = "menu2.gf_priority.pins.row." .. i, kind = "pinRow",
-            scope = "character", applyDomain = "priority", owner = row })
-        pinRows[i] = { frame = row, number = number, name = name, status = status, up = up, down = down, remove = remove }
-    end
+    for i = 1, PIN_ROWS_PER_PAGE do pinRows[i] = BuildPinRow(ctx, pinsCard, pinsCardW, i) end
 
     local clearPins = W.RoleButton(who, "Clear all", "danger", 92, 24)
     clearPins:SetPoint("TOPLEFT", who, "TOPLEFT", 24, -500)
-    if T.CenterButtonLabel then T.CenterButtonLabel(clearPins) end
+    CenterLabels(clearPins)
     RegisterAction(clearPins, ctx, "pins.clear_all", "Clear all Priority Frame pins")
-    local hotkeyHint = Schema.Build(ctx, who, { { "text", "menu2.gf_priority.prioritypage.hotkeyHint", nil,
-        { "Use the hover hotkey above to add or remove players.", 124, -503, whoW - 164, T.colors.muted }, scope = "profile" },
-            })["menu2.gf_priority.prioritypage.hotkeyHint"]
-    if hotkeyHint.SetWordWrap then hotkeyHint:SetWordWrap(true) end
+    TextRow(ctx, who, "menu2.gf_priority.prioritypage.hotkeyHint", "Use the hover hotkey above to add or remove players.",
+        124, -503, whoW - 164, T.colors.muted, true)
+    return { status = pinsStatus, prevPage = prevPage, nextPage = nextPage, pageText = pageText, emptyPins = emptyPins,
+        rows = pinRows, clearPins = clearPins }
+end
 
+local PIN_WAIT_STATUS = {
+    CAPACITY = "Saved · slots full",
+    NOT_IN_GROUP = "Saved · not grouped",
+    NOT_PRESENT = "Saved · not in current group",
+    DISABLED = "Saved · Priority Frames disabled",
+}
+
+-- Up / Down click handler: moves the row's pin by `delta`, then refreshes the page.
+local function PinMoveClick(ctx, delta, reason)
+    return function(self)
+        local gf = GF()
+        if self._pinIndex and gf and type(gf.MovePriorityPin) == "function" and gf.MovePriorityPin(self._pinIndex, delta) then
+            RequestPageRefresh(ctx, reason)
+        end
+    end
+end
+
+-- Paging, the pooled row refresh and the button handlers of the manual pin list.
+local function BindPriorityPins(ctx, who, snap, ui)
     local pinPage = tonumber(M.gfPriorityPinPage) or 1
     local function SetPinPage(value)
         pinPage = max(1, floor((tonumber(value) or 1) + 0.5))
         M.gfPriorityPinPage = pinPage
         RequestPageRefresh(ctx, "priority-pin-page")
     end
-    prevPage:SetScript("OnClick", function() SetPinPage(pinPage - 1) end)
-    nextPage:SetScript("OnClick", function() SetPinPage(pinPage + 1) end)
+    ui.prevPage:SetScript("OnClick", function() SetPinPage(pinPage - 1) end)
+    ui.nextPage:SetScript("OnClick", function() SetPinPage(pinPage + 1) end)
     local function RefreshPins()
-        local entries = pinViewScratch
+        local entries, state = snap.pins, snap.state
         local count = #entries
         local pages = max(1, math.ceil(count / PIN_ROWS_PER_PAGE))
         if pinPage > pages then pinPage = pages; M.gfPriorityPinPage = pinPage end
         local first = (pinPage - 1) * PIN_ROWS_PER_PAGE + 1
-        T.SetTranslatedText(pinsStatus, count == 1 and Tr("1 saved player") or M.Format("%d saved players", count))
-        pageText:SetText(tostring(pinPage) .. " / " .. tostring(pages))
-        prevPage:SetShown(pages > 1)
-        nextPage:SetShown(pages > 1)
-        pageText:SetShown(pages > 1)
-        W.SetControlEnabled(prevPage, pinPage > 1)
-        W.SetControlEnabled(nextPage, pinPage < pages)
-        emptyPins:SetShown(count == 0)
-        W.SetControlEnabled(clearPins, count > 0)
+        T.SetTranslatedText(ui.status, count == 1 and Tr("1 saved player") or M.Format("%d saved players", count))
+        ui.pageText:SetText(tostring(pinPage) .. " / " .. tostring(pages))
+        ui.prevPage:SetShown(pages > 1)
+        ui.nextPage:SetShown(pages > 1)
+        ui.pageText:SetShown(pages > 1)
+        W.SetControlEnabled(ui.prevPage, pinPage > 1)
+        W.SetControlEnabled(ui.nextPage, pinPage < pages)
+        ui.emptyPins:SetShown(count == 0)
+        W.SetControlEnabled(ui.clearPins, count > 0)
         for slot = 1, PIN_ROWS_PER_PAGE do
-            local row = pinRows[slot]
+            local row = ui.rows[slot]
             local index = first + slot - 1
             local entry = entries[index]
             if entry then
                 local active = entry.active == true
                 local statusText
-                if active and entry.isTank == true and stateScratch.autoTanks == true then
+                if active and entry.isTank == true and state.autoTanks == true then
                     statusText = "Visible · auto tank"
                 elseif active then
                     statusText = "Visible"
-                elseif entry.waitingReason == "CAPACITY" then
-                    statusText = "Saved · slots full"
-                elseif entry.waitingReason == "NOT_IN_GROUP" then
-                    statusText = "Saved · not grouped"
-                elseif entry.waitingReason == "NOT_PRESENT" then
-                    statusText = "Saved · not in current group"
                 elseif entry.waitingReason == "GROUP_FRAMES_DISABLED" then
-                    statusText = stateScratch.inParty == true and "Saved · Party frames disabled"
+                    statusText = state.inParty == true and "Saved · Party frames disabled"
                         or "Saved · Raid frames disabled"
-                elseif entry.waitingReason == "DISABLED" then
-                    statusText = "Saved · Priority Frames disabled"
                 else
-                    statusText = "Saved"
+                    statusText = PIN_WAIT_STATUS[entry.waitingReason] or "Saved"
                 end
                 row.number:SetText(tostring(index))
                 T.SetTranslatedText(row.name, entry.name or Tr("Unknown player"))
@@ -638,48 +637,54 @@ local function BuildPriorityPage(ctx)
             end
         end
         SetSectionBadgesAndStatus(who, {
-            OnOffBadge(stateScratch.autoTanks == true, "Auto tanks", "Manual only"),
-            { text = M.Format("%s slots", BadgeNumber(stateScratch.maxFrames or 5)), kind = "info" },
+            OnOffBadge(state.autoTanks == true, "Auto tanks", "Manual only"),
+            { text = M.Format("%s slots", BadgeNumber(state.maxFrames or 5)), kind = "info" },
             { text = M.Format("%s saved", BadgeNumber(count)), kind = count > 0 and "accent" or "muted" },
         })
     end
     for i = 1, PIN_ROWS_PER_PAGE do
-        local row = pinRows[i]
-        row.up:SetScript("OnClick", function(self)
-            local gf = GF()
-            if self._pinIndex and gf and type(gf.MovePriorityPin) == "function" and gf.MovePriorityPin(self._pinIndex, -1) then
-                RequestPageRefresh(ctx, "priority-pin-up")
-            end
-        end)
-        row.down:SetScript("OnClick", function(self)
-            local gf = GF()
-            if self._pinIndex and gf and type(gf.MovePriorityPin) == "function" and gf.MovePriorityPin(self._pinIndex, 1) then
-                RequestPageRefresh(ctx, "priority-pin-down")
-            end
-        end)
+        local row = ui.rows[i]
+        row.up:SetScript("OnClick", PinMoveClick(ctx, -1, "priority-pin-up"))
+        row.down:SetScript("OnClick", PinMoveClick(ctx, 1, "priority-pin-down"))
         row.remove:SetScript("OnClick", function(self)
             local gf = GF()
             if self._pinIndex and gf and type(gf.RemovePriorityPin) == "function" and gf.RemovePriorityPin(self._pinIndex) then
-                if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("Priority pin removed", "ok", 1.2) end
+                Feedback("Priority pin removed", "ok", 1.2)
                 RequestPageRefresh(ctx, "priority-pin-removed")
             end
         end)
     end
-    clearPins:SetScript("OnClick", function()
+    ui.clearPins:SetScript("OnClick", function()
         local gf = GF()
         if not (gf and type(gf.ClearPriorityPins) == "function") then return end
-        local function Clear()
+        ShowClearPinsPrompt(function()
             if gf.ClearPriorityPins() then
                 SetPinPage(1)
-                if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("All Priority pins cleared", "ok", 1.3) end
+                Feedback("All Priority pins cleared", "ok", 1.3)
             end
-        end
-        ShowClearPinsPrompt(Clear)
+        end)
     end)
     TrackSectionRefresh(ctx, who, RefreshPins)
+end
 
-    BuildPriorityPlacement(ctx, b)
+local function BuildPriorityWho(ctx, b, snap)
+    local who, whoW = OpenSection(b, "who_appears", "Who Appears", 548, true)
+    local selectionControls = Schema.Build(ctx, who, {
+        { "switch", "autoTanks", nil, { "Include tanks automatically", 24, -52, 330 }, get = function() return PriorityConf().autoTanks == true end,
+            set = function(value) SetPriorityOption(ctx, "autoTanks", value == true, "Priority Frames automatic tanks") end,
+            meta = PriorityMeta(ctx, "selection.auto_tanks", "gf_priority.autoTanks"), domain = "priority", scope = "profile" },
+        { "segment", "slots", nil, { "Visible slots", SLOT_VALUES, 300 }, { max(380, whoW - 320), -30, 292, "LEFT" }, get = function() return
+            floor((tonumber(PriorityConf().maxFrames) or 5) + 0.5) end,
+            set = function(value) SetPriorityOption(ctx, "maxFrames", tonumber(value) or 5, "Priority Frames visible slots") end,
+            meta = PriorityMeta(ctx, "selection.max_frames", "gf_priority.maxFrames"), domain = "priority", scope = "profile" },
+        { "card", "menu2.gf_priority.prioritypage.bindingCard", nil, { "Fast pinning", nil, 20, -106, whoW - 40, 112 }, domain = "layout", scope = "profile" },
+    }, CUSTOM_OPTIONS)
+    local bindingCard = selectionControls["menu2.gf_priority.prioritypage.bindingCard"]
+    BuildBindingCapture(ctx, bindingCard, 16, -42, whoW - 72)
+    BindPriorityPins(ctx, who, snap, BuildPinsCard(ctx, who, whoW))
+end
 
+local function RegisterPriorityListener(ctx)
     M._priorityMenuListenerSerial = (M._priorityMenuListenerSerial or 0) + 1
     local listenerOwner = "Menu2Priority:" .. tostring(M._priorityMenuListenerSerial)
     local listenerActive = false
@@ -712,6 +717,17 @@ local function BuildPriorityPage(ctx)
         ctx.wrapper:HookScript("OnHide", UnregisterListener)
         if ctx.wrapper.IsShown and ctx.wrapper:IsShown() then RegisterListener() end
     end
+end
+
+local function BuildPriorityPage(ctx)
+    local b = W.PageBuilder(ctx)
+    ScopeSection(ctx, b, { priorityMode = true })
+    local snap = { state = {}, pins = {} }
+    M.TrackRefresh(ctx, SnapshotRefresher(snap))
+    BuildPriorityOverview(ctx, b, snap)
+    BuildPriorityWho(ctx, b, snap)
+    BuildPriorityPlacement(ctx, b)
+    RegisterPriorityListener(ctx)
 
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(math.abs(b.y) + 42) end
 end

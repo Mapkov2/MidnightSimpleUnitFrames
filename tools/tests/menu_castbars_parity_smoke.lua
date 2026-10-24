@@ -65,8 +65,39 @@ end
 local LOCAL_NAMES = { ctx = true, b = true, s = true, page = true, unit = true, scope = true,
     parent = true, section = true, rows = true, row = true, widget = true, builder = true }
 local leaks = {}
+-- Name parts that mark an apply global: calls to those are part of a page's recorded trace.
+local APPLY_VERBS = { "Refresh", "Update", "Apply", "Ensure", "Reset", "Set", "Clear", "Request", "Show" }
 local function Run(prior, expected)
     local calls, output, targets, owned = {}, {}, {}, {}
+    -- Apply globals log one "global:" entry per call. The pages bind some of them
+    -- when they load, so a global is wrapped as it is defined (the world's
+    -- environment hook below), and once more after the options graph loads for the
+    -- globals that already existed.
+    local wrappedGlobals = {}
+    local function Logger(name, fn)
+        if type(name) ~= "string" or name:sub(1, 5) ~= "MSUF_" or type(fn) ~= "function" or wrappedGlobals[fn] then
+            return fn
+        end
+        for _, verb in ipairs(APPLY_VERBS) do
+            if name:find(verb, 6, true) then
+                local logger = function(...)
+                    local args = {}
+                    for i = 1, select("#", ...) do args[i] = Encode((select(i, ...))) end
+                    calls[#calls + 1] = "global:" .. name .. "(" .. table.concat(args, ",") .. ")"
+                    return fn(...)
+                end
+                wrappedGlobals[logger] = true
+                return logger
+            end
+        end
+        return fn
+    end
+    local function Instrument(env)
+        for name, fn in pairs(env) do
+            local logger = Logger(name, fn)
+            if logger ~= fn then env[name] = logger end
+        end
+    end
     local mw = World.Open(root, flavor, { clientScriptBindings = true, nativeButtonLifecycle = true,
         beforeCore = function(world)
             local meta = getmetatable(world.env)
@@ -78,12 +109,19 @@ local function Run(prior, expected)
                 end
                 return index(t, key)
             end
+            -- Globals are logged as they are defined, before any page can bind them.
+            meta.__newindex = function(t, key, value) rawset(t, key, Logger(key, value)) end
             local load = world.LoadFile
-            world.LoadFile = function(self, path, ...)
+            world.LoadFile = function(self, path, addon, namespace)
                 local name = path:match("([^/\\]+)$")
-                if prior then path = sources[name] or path
-                elseif candidate and sources[name] then path = candidate .. "/" .. name end
-                return load(self, path, ...)
+                if prior and sources[name] then
+                    -- The pinned parents predate namespace-only exports: they run
+                    -- against the legacy global view (world globals, then the
+                    -- namespace's published exports).
+                    return World.LoadHistorical(self, sources[name], addon, namespace)
+                end
+                if not prior and candidate and sources[name] then path = candidate .. "/" .. name end
+                return load(self, path, addon, namespace)
             end
             world.widgets.Methods.GetCenter = function(f)
                 return (tonumber(f.left) or 0) + (tonumber(f.width) or 0) / 2,
@@ -156,21 +194,7 @@ local function Run(prior, expected)
         end
     end
     -- The pages also call apply globals directly (GCD layout, kick icon, textures), not only M.
-    for name, fn in pairs(env) do
-        if type(name) == "string" and name:sub(1, 5) == "MSUF_" and type(fn) == "function" then
-            for _, verb in ipairs({ "Refresh", "Update", "Apply", "Ensure", "Reset", "Set", "Clear", "Request", "Show" }) do
-                if name:find(verb, 6, true) then
-                    env[name] = function(...)
-                        local args = {}
-                        for i = 1, select("#", ...) do args[i] = Encode((select(i, ...))) end
-                        calls[#calls + 1] = "global:" .. name .. "(" .. table.concat(args, ",") .. ")"
-                        return fn(...)
-                    end
-                    break
-                end
-            end
-        end
-    end
+    Instrument(env)
     local function Add(key, ...)
         local row = {}
         for i = 1, select("#", ...) do row[i] = Encode((select(i, ...))) end

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua
 --- Buff coverage icons on party and raid frames, WoW Forever only.
 ---
@@ -26,15 +25,16 @@ local Client = MSUF.Client
 if not (Client and Client.IsForever == true) then return end
 local GF = MSUF.GF
 local Blessings = assert(GF.BlessingPriorities, "BuffCoverage requires the Forever BlessingPriorities provider")
-local UnitAuraAPI = _G.C_UnitAuras
+local UnitAuraAPI = C_UnitAuras
 local GetUnitAuras = UnitAuraAPI and UnitAuraAPI.GetUnitAuras
 if not (GF and type(GetUnitAuras) == "function") then return end
 
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua")
 local CreateFrame, C_Timer = CreateFrame, C_Timer
 local UnitClass, UnitGUID = UnitClass, UnitGUID
 local UnitIsConnected, UnitIsVisible = UnitIsConnected, UnitIsVisible
 local GetNumGroupMembers, GetNumSubgroupMembers, IsInRaid = GetNumGroupMembers, GetNumSubgroupMembers, IsInRaid
-local issecretvalue = _G.issecretvalue or function() return false end
+local issecretvalue = issecretvalue
 local floor, max, min, tonumber, pairs, wipe = math.floor, math.max, math.min, tonumber, pairs, wipe
 
 -- Buffs by the class that casts them. "ids" lists, in ascending order, every
@@ -114,16 +114,16 @@ local pendingUnits, restrictedDirty = {}, {}
 local seen, order = {}, {}
 local RESTRICTED_READ_DELAY = 0.5
 
-local function IsSecret(value) return issecretvalue(value) == true end
+local function IsSecret(value) return issecretvalue ~= nil and issecretvalue(value) == true end
 
 -- A buff whose every ID Blizzard flags never secret stays decidable while
 -- auras are restricted; one with some such IDs can still be seen arriving.
 local function CheckSecrecy()
     if secrecyChecked then return end
     secrecyChecked = true
-    local secrets = _G.C_Secrets
+    local secrets = C_Secrets
     local getSecrecy = secrets and secrets.GetSpellAuraSecrecy
-    local levels = _G.Enum and _G.Enum.SecrecyLevel
+    local levels = Enum and Enum.SecrecyLevel
     local never = levels and levels.NeverSecret
     for index = 1, BUFF_COUNT do
         local buff = BUFFS[index]
@@ -274,7 +274,7 @@ local FALLBACK_TEXTURE = "Interface\\Icons\\INV_Misc_QuestionMark"
 local function Texture(buff)
     local texture = buff.texture
     if texture == nil then
-        local spellAPI = _G.C_Spell
+        local spellAPI = C_Spell
         local resolve = spellAPI and spellAPI.GetSpellTexture
         texture = type(resolve) == "function" and resolve(buff.ids[1]) or false
         if IsSecret(texture) then texture = false end
@@ -300,7 +300,8 @@ local function Icon(holder, slot)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     icon.edge = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
     icon.edge:SetColorTexture(0, 0, 0, 0.85)
-    icon:Hide(); icon.edge:Hide()
+    icon:Hide()
+    icon.edge:Hide()
     holder.icons[slot] = icon
     return icon
 end
@@ -341,7 +342,10 @@ end
 -- Shows or hides one icon's ring; geometry is written only when the icon was
 -- placed again or the ring was hidden.
 local function SetGlow(holder, icon, on, size, placed)
-    if not on then HideGlow(icon); return end
+    if not on then
+        HideGlow(icon)
+        return
+    end
     local glow = Glow(holder, icon)
     local shown = glow:IsShown()
     if placed or not shown then
@@ -370,7 +374,10 @@ GF.HideBuffCoveragePreview = HideIcons
 -- Places `n` icons (BUFFS indices in `list`) as one row at the configured
 -- point. Geometry and textures are written only when they change.
 local function ShowRow(frame, conf, list, n, scale, blessing)
-    if n == 0 then HideIcons(frame); return end
+    if n == 0 then
+        HideIcons(frame)
+        return
+    end
     local holder = Holder(frame)
     -- 8-48 px, the missing-buff section's icon size range.
     local size = floor(max(8, min(48, tonumber(conf.buffCoverageSize) or 14)) * scale + 0.5)
@@ -379,7 +386,10 @@ local function ShowRow(frame, conf, list, n, scale, blessing)
     local x, y = (tonumber(conf.buffCoverageX) or 0) * scale, (tonumber(conf.buffCoverageY) or 2) * scale
     local layers = MSUF.UF and MSUF.UF.Layers
     local level = layers and layers.StatusLevel and layers.StatusLevel(frame, tonumber(conf.buffCoverageLayer) or 6, 7)
-    if level and holder._msufLevel ~= level then holder:SetFrameLevel(level); holder._msufLevel = level end
+    if level and holder._msufLevel ~= level then
+        holder:SetFrameLevel(level)
+        holder._msufLevel = level
+    end
     if holder._msufPoint ~= point or holder._msufX ~= x or holder._msufY ~= y then
         holder:ClearAllPoints()
         holder:SetPoint(point, frame, point, x, y)
@@ -408,13 +418,17 @@ local function ShowRow(frame, conf, list, n, scale, blessing)
             icon.edge:ClearAllPoints()
             icon.edge:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
             icon.edge:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
-            icon:Show(); icon.edge:Show()
+            icon:Show()
+            icon.edge:Show()
         end
         if glow or icon.glow then SetGlow(holder, icon, glow, size, placed) end
     end
     for slot = n + 1, #icons do
         local icon = icons[slot]
-        if icon:IsShown() then icon:Hide(); icon.edge:Hide() end
+        if icon:IsShown() then
+            icon:Hide()
+            icon.edge:Hide()
+        end
         HideGlow(icon)
     end
     holder._msufSize = size
@@ -423,10 +437,16 @@ end
 
 -- Menu and Edit Mode samples: every enabled buff, no unit or aura involved.
 function GF.RenderBuffCoveragePreview(frame, conf, scale)
-    if not (frame and conf and conf.buffCoverageEnabled == true) then HideIcons(frame); return end
+    if not (frame and conf and conf.buffCoverageEnabled == true) then
+        HideIcons(frame)
+        return
+    end
     local n = 0
     for index = 1, BUFF_COUNT do
-        if conf[BUFFS[index].setting] == true then n = n + 1; order[n] = index end
+        if conf[BUFFS[index].setting] == true then
+            n = n + 1
+            order[n] = index
+        end
     end
     local desired = conf.buffCoverageBlessingPriorities and Blessings and Blessings.Desired(conf, "TANK")
     ShowRow(frame, conf, order, n, tonumber(scale) or 1, desired)
@@ -581,11 +601,17 @@ local function ReadRoster()
     wipe(watchedSet)
     local n = 0
     if IsInRaid() then
-        for i = 1, min(40, GetNumGroupMembers() or 0) do n = n + 1; watched[n] = RAID_UNITS[i] end
+        for i = 1, min(40, GetNumGroupMembers() or 0) do
+            n = n + 1
+            watched[n] = RAID_UNITS[i]
+        end
     else
         n = 1
         watched[1] = "player"
-        for i = 1, min(4, GetNumSubgroupMembers() or 0) do n = n + 1; watched[n] = PARTY_UNITS[i] end
+        for i = 1, min(4, GetNumSubgroupMembers() or 0) do
+            n = n + 1
+            watched[n] = PARTY_UNITS[i]
+        end
     end
     for i = n + 1, #watched do watched[i] = nil end
     for i = 1, n do
@@ -609,7 +635,10 @@ function dispatcher.Flush()
     local wasActive = active
     active = AnyScopeEnabled()
     if not active then
-        if wasActive then SyncShards(); PaintAll() end
+        if wasActive then
+            SyncShards()
+            PaintAll()
+        end
         dispatcher:UnregisterEvent("SPELLS_CHANGED")
         if Blessings then Blessings.enabled = false end
         fullPending = false
@@ -670,7 +699,7 @@ end
 
 -- ADDON_RESTRICTION_STATE_CHANGED fires before a restriction is enforced and
 -- after it ends. Only the four kinds that make aura data secret matter.
-local ENUM = _G.Enum
+local ENUM = Enum
 local RESTRICTION = ENUM and ENUM.AddOnRestrictionType
 local RESTRICTION_STATE = ENUM and ENUM.AddOnRestrictionState
 local AURA_RESTRICTIONS = {}
@@ -685,7 +714,7 @@ local activeRestrictions = {}
 
 local function RestrictedNow()
     wipe(activeRestrictions)
-    local actions = _G.C_RestrictedActions
+    local actions = C_RestrictedActions
     local isActive = actions and actions.IsAddOnRestrictionActive
     if restrictionEvents and type(isActive) == "function" then
         for kind in pairs(AURA_RESTRICTIONS) do
@@ -693,7 +722,7 @@ local function RestrictedNow()
         end
         return next(activeRestrictions) ~= nil
     end
-    local secrets = _G.C_Secrets
+    local secrets = C_Secrets
     if secrets and type(secrets.ShouldAurasBeSecret) == "function" then
         return secrets.ShouldAurasBeSecret() == true
     end
@@ -735,7 +764,10 @@ end
 -- runtime; each one is folded into the next coalesced pass.
 GF.RegisterRuntimeObserver("buff-coverage", RequestFull)
 GF.RegisterFrameRegistryObserver("buff-coverage", function(operation, frame, _, newUnit)
-    if operation ~= "track" or not newUnit or not active then HideIcons(frame); return end
+    if operation ~= "track" or not newUnit or not active then
+        HideIcons(frame)
+        return
+    end
     local state = states[newUnit]
     if state and state.known then
         PaintFrame(frame, newUnit)

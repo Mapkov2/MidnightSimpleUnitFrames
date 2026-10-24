@@ -15,9 +15,7 @@
 --- polls, nothing survives login, and no protected or layout write is involved.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 
-local _G = _G
 local type, rawget, format, floor = type, rawget, string.format, math.floor
 
 local ExportPublic = MSUF.ExportPublic
@@ -158,7 +156,7 @@ local function WelcomeLines(warningOnly)
 end
 
 local function WelcomeEnabled()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general
     if type(general) ~= "table" then return true end
     return general.showWelcomeMessage ~= false
@@ -168,28 +166,28 @@ local function ShowWelcomeMessage(force)
     local welcomeEnabled = force == true or WelcomeEnabled()
     if not welcomeEnabled and not PreviewWarningRequired() then return false end
 
-    local chat = _G.DEFAULT_CHAT_FRAME
+    local chat = DEFAULT_CHAT_FRAME
     local lines = WelcomeLines(not welcomeEnabled)
     for i = 1, #lines do
         if chat and type(chat.AddMessage) == "function" then
             chat:AddMessage(lines[i])
-        elseif type(_G.print) == "function" then
-            _G.print(lines[i])
+        elseif type(print) == "function" then
+            print(lines[i])
         end
     end
     return true
 end
 
-if type(_G.CreateFrame) == "function" then
-    local welcomeFrame = _G.CreateFrame("Frame")
+if type(CreateFrame) == "function" then
+    local welcomeFrame = CreateFrame("Frame")
     welcomeFrame:RegisterEvent("PLAYER_LOGIN")
     welcomeFrame:SetScript("OnEvent", function(self)
         self:UnregisterEvent("PLAYER_LOGIN")
         self:SetScript("OnEvent", nil)
         --- Delayed so the greeting lands after Blizzard's own login spam, and
         --- late enough for SavedVariables to have seeded the toggle.
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(2, ShowWelcomeMessage)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(2, ShowWelcomeMessage)
         else
             ShowWelcomeMessage()
         end

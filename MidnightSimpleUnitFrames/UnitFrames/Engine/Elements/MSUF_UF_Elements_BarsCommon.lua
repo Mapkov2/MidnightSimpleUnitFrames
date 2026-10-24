@@ -1,9 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- UF bars common element helpers: shared statusbar setup, textures, and geometry utilities.
 -- Keep live unit-event code allocation-light; cold spec/application work belongs in callers.
 local _, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_BarsCommon.lua")
 local ExportPublic = MSUF.ExportPublic
 
 local UF = MSUF.UF
@@ -20,7 +18,7 @@ local UnitHealthMax = UnitHealthMax
 local UnitPower = UnitPower
 local UnitPowerMax = UnitPowerMax
 local UnitPowerType = UnitPowerType
-local UnitHealthPercent = _G.UnitHealthPercent
+local UnitHealthPercent = UnitHealthPercent
 local UnitName = UnitName
 local UnitIsPlayer = UnitIsPlayer
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
@@ -52,15 +50,20 @@ local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
 local ReadUnitClassCached = UF.ReadUnitClassCached
 local ReadConnectedCached = UF.ReadConnectedCached
 local ReadDeadCached = UF.ReadDeadCached
-local GetTime = _G.GetTime
-local Enum = _G.Enum
+local GetTime = GetTime
+local Enum = Enum
 local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
 local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
-local C_CurveUtil = _G.C_CurveUtil
-local CreateColor = _G.CreateColor
-local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+local C_CurveUtil = C_CurveUtil
+local CreateColor = CreateColor
+local C_ClassColor_GetClassColor = C_ClassColor and C_ClassColor.GetClassColor
 local Secrets = MSUF.Secrets or {}
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
+-- Per-event color paths read these providers (loaded before the elements) through upvalues.
+local GetClassBarColorFast = MSUF.Require("MSUF_UFCore_GetClassBarColorFast", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
+local GetNPCReactionColorFast = MSUF.Require("MSUF_UFCore_GetNPCReactionColorFast", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
+local GetResolvedPowerColor = MSUF.Require("MSUF_GetResolvedPowerColor", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
+local RefreshHealthBarBackgroundColor = MSUF.Require("MSUF_RefreshHealthBarBackgroundColor", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
 local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
 local SECRET_NATIVE_CLASS_COLOR = 2
@@ -190,10 +193,32 @@ local function ApplyStatusColor(bar, r, g, b, a)
   end
 end
 
+local function SetBarMinMaxKnown(bar, maxValue, maxSecret)
+  if maxSecret == nil then
+    maxSecret = issecretvalue(maxValue) == true
+  end
+  if not maxSecret and bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue == maxValue then
+    return false
+  end
+  bar:SetMinMaxValues(0, maxValue)
+  if maxSecret then
+    bar._msufDirectMaxValue = nil
+    bar._msufDirectMaxValuePlain = nil
+  else
+    bar._msufDirectMaxValue = maxValue
+    bar._msufDirectMaxValuePlain = true
+  end
+  bar._msufMaxValue = nil
+  bar._msufMaxValuePlain = nil
+  return true
+end
+local SetBarMinMaxPlain = SetBarMinMaxKnown
+
 local function SetBarMinMax(bar, maxValue, directValue)
   if directValue then
     -- Direct mode passes Blizzard values straight to StatusBar APIs. When a value is secret,
     -- clear Lua comparison caches and let the C-side widget own the payload.
+    -- Kept inline (not delegated to SetBarMinMaxKnown): this runs per UNIT_HEALTH/UNIT_POWER.
     local maxSecret = issecretvalue(maxValue) == true
     if not maxSecret and bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue == maxValue then
       return false
@@ -222,29 +247,36 @@ local function SetBarMinMax(bar, maxValue, directValue)
   return false
 end
 
-local function SetBarMinMaxKnown(bar, maxValue, maxSecret)
-  if maxSecret == nil then
-    maxSecret = issecretvalue(maxValue) == true
+local function SetBarValueKnown(bar, value, valueSecret, animate)
+  if valueSecret == nil then
+    valueSecret = issecretvalue(value) == true
   end
-  if not maxSecret and bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue == maxValue then
+  local interp = animate and bar._msufSmoothInterp or nil
+  if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
     return false
   end
-  bar:SetMinMaxValues(0, maxValue)
-  if maxSecret then
-    bar._msufDirectMaxValue = nil
-    bar._msufDirectMaxValuePlain = nil
+  if interp then
+    bar:SetValue(value, interp)
+    bar._msufInterpolating = true
   else
-    bar._msufDirectMaxValue = maxValue
-    bar._msufDirectMaxValuePlain = true
+    bar:SetValue(value)
+    bar._msufInterpolating = nil
   end
-  bar._msufMaxValue = nil
-  bar._msufMaxValuePlain = nil
+  if valueSecret then
+    bar._msufDirectValue = nil
+    bar._msufDirectValuePlain = nil
+  else
+    bar._msufDirectValue = value
+    bar._msufDirectValuePlain = true
+  end
+  bar._msufValue = nil
+  bar._msufValuePlain = nil
   return true
 end
-local SetBarMinMaxPlain = SetBarMinMaxKnown
 
 local function SetBarValue(bar, value, directValue, animate)
   if directValue then
+    -- Kept inline (not delegated to SetBarValueKnown): this runs per bar value write.
     local valueSecret = issecretvalue(value) == true
     local interp = animate and bar._msufSmoothInterp or nil
     if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
@@ -287,34 +319,8 @@ local function SetBarValue(bar, value, directValue, animate)
   return false
 end
 
-local function SetBarValueKnown(bar, value, valueSecret, animate)
-  if valueSecret == nil then
-    valueSecret = issecretvalue(value) == true
-  end
-  local interp = animate and bar._msufSmoothInterp or nil
-  if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
-    return false
-  end
-  if interp then
-    bar:SetValue(value, interp)
-    bar._msufInterpolating = true
-  else
-    bar:SetValue(value)
-    bar._msufInterpolating = nil
-  end
-  if valueSecret then
-    bar._msufDirectValue = nil
-    bar._msufDirectValuePlain = nil
-  else
-    bar._msufDirectValue = value
-    bar._msufDirectValuePlain = true
-  end
-  bar._msufValue = nil
-  bar._msufValuePlain = nil
-  return true
-end
-
 local function SetBarValuePlain(bar, value, animate)
+  -- Kept inline (not delegated to SetBarValueKnown): this runs per bar value write.
   local valueSecret = issecretvalue(value) == true
   if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
     return false
@@ -830,7 +836,7 @@ local function UpdateAllBarGradients(unit, skipUnitFrames)
   return refreshed
 end
 
-ExportPublic("MSUF_UpdateAllBarGradients", _G.MSUF_UpdateAllBarGradients or UpdateAllBarGradients)
+ExportPublic("MSUF_UpdateAllBarGradients", MSUF.Optional("MSUF_UpdateAllBarGradients") or UpdateAllBarGradients)
 MSUF.MSUF_UpdateAllBarGradients = MSUF.MSUF_UpdateAllBarGradients or UpdateAllBarGradients
 
 local function SetFrameLevelCached(frame, level)
@@ -840,16 +846,25 @@ local function SetFrameLevelCached(frame, level)
   end
 end
 
+-- Runtime/MSUF_BarBackgroundRuntime.lua resolves the cooldown frame a layout
+-- addon may stand in for and loads before this file. The ClassPower controller
+-- loads after it, so its width helper is resolved on first use.
+local GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
+local CDMScaledWidth
+
 local function ExternalFrameWidth(frameName, relativeTo)
   if not frameName then
     return nil
   end
-  -- Runtime/MSUF_BarBackgroundRuntime.lua resolves the cooldown frame a layout
-  -- addon may stand in for; the Blizzard frame is the fallback it returns nil for.
-  local frame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")(frameName)
+  -- The Blizzard frame is the fallback the resolver returns nil for.
+  local frame = GetEffectiveCooldownFrame(frameName)
     or _G[frameName]
-  local widthFn = _G.MSUF_CDM_GetScaledWidth
-  local width = type(widthFn) == "function" and widthFn(frame, relativeTo) or nil
+  local scaledWidth = CDMScaledWidth
+  if not scaledWidth then
+    scaledWidth = MSUF.Require("MSUF_CDM_GetScaledWidth", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
+    CDMScaledWidth = scaledWidth
+  end
+  local width = scaledWidth(frame, relativeTo)
   if issecretvalue(width) == true then return nil end
   width = tonumber(width)
   if width and width >= 20 then
@@ -866,12 +881,9 @@ local function ClassColorForToken(class, classIsKnownPlain)
   if not c then
     return nil
   end
-  local fast = _G.MSUF_UFCore_GetClassBarColorFast
-  if type(fast) == "function" then
-    local r, g, b = fast(class)
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-      return r, g, b
-    end
+  local r, g, b = GetClassBarColorFast(class)
+  if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+    return r, g, b
   end
   return c.r, c.g, c.b
 end
@@ -1312,12 +1324,9 @@ local function RefreshUnitState(frame, unit, spec, event, hp)
 end
 
 local function NPCColor(kind)
-  local fast = _G.MSUF_UFCore_GetNPCReactionColorFast
-  if type(fast) == "function" then
-    local r, g, b = fast(kind)
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-      return r, g, b
-    end
+  local r, g, b = GetNPCReactionColorFast(kind)
+  if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+    return r, g, b
   end
   if kind == "friendly" then return 0, 1, 0 end
   if kind == "neutral" then return 1, 1, 0 end
@@ -1750,14 +1759,11 @@ local function ApplyBackgrounds(frame, health, power, force)
     ApplyTextureColor(frame.bg, spec.health.backgroundTexture, r, g, b, hb.a or spec.backgroundAlpha or 0.9, force)
     frame._msufHPBgTex = spec.health.backgroundTexture
     if frame._msufHealthBgDynamic == true then
-      local refreshBackground = _G.MSUF_RefreshHealthBarBackgroundColor
-      if type(refreshBackground) == "function" then
-        -- ApplyTextureColor owns the cold texture/fallback pass and has its own
-        -- cache. Force the dynamic runtime owner afterwards so a matching old
-        -- runtime cache cannot leave that fallback tint visible.
-        refreshBackground(
-          frame, "MSUF_BACKGROUND_APPLY", frame.MSUFUnitKey or frame.unit, nil, nil, nil, true)
-      end
+      -- ApplyTextureColor owns the cold texture/fallback pass and has its own
+      -- cache. Force the dynamic runtime owner afterwards so a matching old
+      -- runtime cache cannot leave that fallback tint visible.
+      RefreshHealthBarBackgroundColor(
+        frame, "MSUF_BACKGROUND_APPLY", frame.MSUFUnitKey or frame.unit, nil, nil, nil, true)
     end
   end
   local pb = spec.power and spec.power.background
@@ -1798,12 +1804,9 @@ local function PowerColor(frame, unit, powerType, token, metaKnown)
     tokenKey = issecretvalue(token) ~= true and token or nil
     powerTypeKey = issecretvalue(powerType) ~= true and powerType or nil
   end
-  local resolved = _G.MSUF_GetResolvedPowerColor
-  if type(resolved) == "function" then
-    local r, g, b = resolved(powerTypeKey, tokenKey)
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-      return r, g, b
-    end
+  local r, g, b = GetResolvedPowerColor(powerTypeKey, tokenKey)
+  if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+    return r, g, b
   end
   local override = powerSpec.colors and tokenKey ~= nil and powerSpec.colors[tokenKey] or nil
   if override then
@@ -1825,17 +1828,17 @@ Common.UnitClass = UnitClass
 Common.UnitExists = UnitExists
 Common.UnitHealth = UnitHealth
 Common.UnitHealthMax = UnitHealthMax
-Common.UnitGetTotalAbsorbs = _G.UnitGetTotalAbsorbs
+Common.UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 Common.UnitPower = UnitPower
 Common.UnitPowerMax = UnitPowerMax
 Common.UnitPowerType = UnitPowerType
 Common.ResolveDisplayedPowerIdentity = ResolveDisplayedPowerIdentity
 Common.UnitHealthPercent = UnitHealthPercent
-Common.UnitPowerPercent = _G.UnitPowerPercent
-Common.AbbreviateNumbers = _G.AbbreviateNumbers
-Common.BreakUpLargeNumbers = _G.BreakUpLargeNumbers
-Common.AbbreviateLargeNumbers = _G.AbbreviateLargeNumbers or _G.ShortenNumber
-Common.InCombatLockdown = _G.InCombatLockdown
+Common.UnitPowerPercent = UnitPowerPercent
+Common.AbbreviateNumbers = AbbreviateNumbers
+Common.BreakUpLargeNumbers = BreakUpLargeNumbers
+Common.AbbreviateLargeNumbers = AbbreviateLargeNumbers or ShortenNumber
+Common.InCombatLockdown = InCombatLockdown
 Common.UnitName = UnitName
 Common.UnitIsPlayer = UnitIsPlayer
 Common.UnitIsDeadOrGhost = UnitIsDeadOrGhost
@@ -1853,11 +1856,11 @@ Common.abs = math.abs
 Common.floor = floor
 Common.max = math.max
 Common.GetTime = GetTime
-Common.C_Timer = _G.C_Timer
+Common.C_Timer = C_Timer
 Common.StatusBarInterpolation = StatusBarInterpolation
 Common.SMOOTH_INTERP = SMOOTH_INTERP
 Common.WHITE = WHITE
-Common.SCALE_100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
+Common.SCALE_100 = CurveConstants and CurveConstants.ScaleTo100
 Common.EMPTY_EVENTS = EMPTY_EVENTS
 Common.ClampFrameLayer = ClampFrameLayer
 Common.DrawSubLayer = DrawSubLayer

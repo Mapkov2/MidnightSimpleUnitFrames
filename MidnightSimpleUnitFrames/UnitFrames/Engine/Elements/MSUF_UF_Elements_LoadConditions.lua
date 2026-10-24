@@ -2,8 +2,8 @@
 -- Protected visibility or secure state changes must stay behind combat-safe helpers.
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
 
 local UF = MSUF.UF
 if not UF then return end
@@ -20,13 +20,15 @@ local previewState, forcedUnits = Preview.State, Preview.ForcedUnits
 -- Unitframe load-condition element.
 -- Owns secure state-driver visibility rules for mounted/combat/group/instance/resting style
 -- conditions. Protected state changes are deferred or expressed through secure snippets.
-local RegisterStateDriver = _G.RegisterStateDriver
-local UnregisterStateDriver = _G.UnregisterStateDriver
-local SecureCmdOptionParse = _G.SecureCmdOptionParse
-local InCombatLockdown = _G.InCombatLockdown
-local UnitAffectingCombat = _G.UnitAffectingCombat
-local IsInInstance = _G.IsInInstance
-local C_Housing = _G.C_Housing
+local RegisterStateDriver = RegisterStateDriver
+local UnregisterStateDriver = UnregisterStateDriver
+local SecureCmdOptionParse = SecureCmdOptionParse
+local InCombatLockdown = InCombatLockdown
+local UnitAffectingCombat = UnitAffectingCombat
+local IsInInstance = IsInInstance
+local C_Housing = C_Housing
+local EventBusRegister = MSUF.Require("MSUF_EventBus_Register", "MSUF_UF_Elements_LoadConditions.lua")
+local EventBusUnregister = MSUF.Require("MSUF_EventBus_Unregister", "MSUF_UF_Elements_LoadConditions.lua")
 local Secrets = MSUF.Secrets or {}
 local UnitExistsPlain = Secrets.UnitExistsPlain
 local type = type
@@ -35,9 +37,9 @@ local next = next
 
 local EMPTY_EVENTS = {}
 local HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
-local UnitHealthPercent = _G.UnitHealthPercent
-local CurveAPI = _G.C_CurveUtil
-local LuaCurveType = _G.Enum and _G.Enum.LuaCurveType
+local UnitHealthPercent = UnitHealthPercent
+local CurveAPI = C_CurveUtil
+local LuaCurveType = Enum and Enum.LuaCurveType
 local FALLBACK_EVENTS = {
   "PLAYER_ENTERING_WORLD",
   "PLAYER_REGEN_DISABLED",
@@ -130,9 +132,9 @@ local function InHousing()
 end
 
 local function ArenaPrepForcesUnit(unit)
-  if _G.MSUF_ArenaPrepVisibilityActive ~= true then return false end
+  if PublicGlobals.MSUF_ArenaPrepVisibilityActive ~= true then return false end
   local index = type(unit) == "string" and tonumber(unit:match("^arena(%d+)$")) or nil
-  local count = tonumber(_G.MSUF_ArenaPrepVisibilityCount) or 0
+  local count = tonumber(PublicGlobals.MSUF_ArenaPrepVisibilityCount) or 0
   return index ~= nil and index >= 1 and index <= count
 end
 
@@ -148,6 +150,7 @@ local function ShouldForcePreview(frame)
   return forced or false
 end
 
+-- Zone events rebuild this expression, so the rule appends stay inline.
 local function BuildRuntimeVisibility(frame, spec)
   local load = spec.load
   if load and load.hideInInstance == true and InInstance() then
@@ -169,21 +172,50 @@ local function BuildRuntimeVisibility(frame, spec)
   end
   local n = 0
   if load then
-    if load.hideMounted == true then n = n + 1; rules[n] = "[mounted] hide" end
+    if load.hideMounted == true then
+      n = n + 1
+      rules[n] = "[mounted] hide"
+    end
     if load.hideInVehicle == true then
-      n = n + 1; rules[n] = "[@player,unithasvehicleui] hide"
-      n = n + 1; rules[n] = "[vehicleui] hide"
+      n = n + 1
+      rules[n] = "[@player,unithasvehicleui] hide"
+      n = n + 1
+      rules[n] = "[vehicleui] hide"
     end
-    if load.hideResting == true then n = n + 1; rules[n] = "[resting] hide" end
-    if load.hideInCombat == true then n = n + 1; rules[n] = "[combat] hide" end
+    if load.hideResting == true then
+      n = n + 1
+      rules[n] = "[resting] hide"
+    end
+    if load.hideInCombat == true then
+      n = n + 1
+      rules[n] = "[combat] hide"
+    end
     if not HealthVisibilityEnabled(frame, spec) then
-      if load.hideOutOfCombat == true then n = n + 1; rules[n] = "[nocombat] hide" end
-      if load.hideNoTarget == true then n = n + 1; rules[n] = "[@target,noexists] hide" end
-      if load.hideOutOfCombatNoTarget == true then n = n + 1; rules[n] = "[nocombat,@target,noexists] hide" end
+      if load.hideOutOfCombat == true then
+        n = n + 1
+        rules[n] = "[nocombat] hide"
+      end
+      if load.hideNoTarget == true then
+        n = n + 1
+        rules[n] = "[@target,noexists] hide"
+      end
+      if load.hideOutOfCombatNoTarget == true then
+        n = n + 1
+        rules[n] = "[nocombat,@target,noexists] hide"
+      end
     end
-    if load.hideStealthed == true then n = n + 1; rules[n] = "[stealth] hide" end
-    if load.hideSolo == true then n = n + 1; rules[n] = "[nogroup] hide" end
-    if load.hideInGroup == true then n = n + 1; rules[n] = "[group] hide" end
+    if load.hideStealthed == true then
+      n = n + 1
+      rules[n] = "[stealth] hide"
+    end
+    if load.hideSolo == true then
+      n = n + 1
+      rules[n] = "[nogroup] hide"
+    end
+    if load.hideInGroup == true then
+      n = n + 1
+      rules[n] = "[group] hide"
+    end
   end
   n = n + 1
   rules[n] = "[@" .. unit .. ",exists] show"
@@ -209,9 +241,9 @@ local function BuildVisibility(frame, spec)
   return visibility
 end
 
-local RegisterUnitWatch = _G.RegisterUnitWatch
-local UnregisterUnitWatch = _G.UnregisterUnitWatch
-local UnitWatchRegistered = _G.UnitWatchRegistered
+local RegisterUnitWatch = RegisterUnitWatch
+local UnregisterUnitWatch = UnregisterUnitWatch
+local UnitWatchRegistered = UnitWatchRegistered
 
 -- A frame with no load conditions resolves to "[@unit,exists] show; hide",
 -- which is exactly what RegisterUnitWatch does natively -- and far cheaper.
@@ -351,10 +383,9 @@ local function SyncZoneFrame(frame, spec)
   end
   local wanted = next(zoneFrames) ~= nil
   if wanted == zoneEventsRegistered then return end
-  local register, unregister = _G.MSUF_EventBus_Register, _G.MSUF_EventBus_Unregister
-  SetZoneEvents(ZONE_EVENTS, wanted, register, unregister)
+  SetZoneEvents(ZONE_EVENTS, wanted, EventBusRegister, EventBusUnregister)
   if type(C_Housing and C_Housing.IsInsideHouseOrPlot) == "function" then
-    SetZoneEvents(HOUSING_PLOT_EVENTS, wanted, register, unregister)
+    SetZoneEvents(HOUSING_PLOT_EVENTS, wanted, EventBusRegister, EventBusUnregister)
   end
   zoneEventsRegistered = wanted
 end

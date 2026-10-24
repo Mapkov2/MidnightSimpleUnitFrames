@@ -154,20 +154,30 @@ do
             local text = file:read("*a"):gsub("\r\n", "\n")
             file:close()
             checked = checked + 1
-            for open in text:gmatch("()ShowStatusFeedback%(") do
-                local head = text:sub(math.max(1, open - 12), open - 1)
-                if not head:find("function M%.$") then
-                    local args = CallArguments(text, open + #"ShowStatusFeedback" )
-                    if args and args[1] then
-                        calls = calls + 1
-                        for _, start in ipairs(TRANSLATED_START) do
-                            if args[1]:sub(1, #start) == start then
-                                if args[4] ~= "true" then
-                                    local line = select(2, text:sub(1, open):gsub("\n", "")) + 1
-                                    Check(false, path:match("[^/]+$") .. ":" .. line
-                                        .. " passes translated text without the translated flag: " .. args[1])
+            -- ShowStatusFeedback itself, and the local status line helpers a page wraps around it
+            -- (GroupPriority's Feedback, the Dashboard's FeedbackUnless). A helper takes the message
+            -- at `message` and has no translated flag (flag index = false), so a translated message
+            -- passed to one is looked up a second time as well.
+            for _, site in ipairs({
+                { "()ShowStatusFeedback%(", "ShowStatusFeedback", 1, 4 },
+                { "()%f[%w_]Feedback%(", "Feedback", 1, 4 },
+                { "()%f[%w_]FeedbackUnless%(", "FeedbackUnless", 2, 5 },
+            }) do
+                for open in text:gmatch(site[1]) do
+                    local head = text:sub(math.max(1, open - 12), open - 1)
+                    if not head:find("function M%.$") and not head:find("function%s+$") then
+                        local args = CallArguments(text, open + #site[2])
+                        if args and args[site[3]] then
+                            calls = calls + 1
+                            for _, start in ipairs(TRANSLATED_START) do
+                                if args[site[3]]:sub(1, #start) == start then
+                                    if args[site[4]] ~= "true" then
+                                        local line = select(2, text:sub(1, open):gsub("\n", "")) + 1
+                                        Check(false, path:match("[^/]+$") .. ":" .. line
+                                            .. " passes translated text without the translated flag: " .. args[site[3]])
+                                    end
+                                    break
                                 end
-                                break
                             end
                         end
                     end

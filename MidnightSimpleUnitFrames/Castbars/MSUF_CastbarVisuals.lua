@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Profile-driven icon/text layout and per-unit font overrides; event ownership stays in Driver.
 
 local _, MSUF = ...
@@ -19,9 +18,9 @@ MSUF.Castbars = MSUF.Castbars or {}
 local Visuals = MSUF.Castbars.Visuals or {}
 MSUF.Castbars.Visuals = Visuals
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
-local IsSecretValue = _G.issecretvalue
+local IsSecretValue = issecretvalue
 
 --- Providers that load before this file in every client TOC (State defaults,
 --- Kernel, the Runtime colours and font registry, the castbar Core, Style and
@@ -30,9 +29,12 @@ local FILE = "Castbars/MSUF_CastbarVisuals.lua"
 local Require = MSUF.Require
 local EnsureDB = Require("MSUF_EnsureDB", FILE)
 local SetTextIfChangedFn = Require("MSUF_SetTextIfChanged", FILE)
-local MarkFontApplyFailed = Require("MSUF_MarkFontApplyFailed", FILE)
 local GetCastbarTextColor = Require("MSUF_GetCastbarTextColor", FILE)
 local GetCastbarBackgroundColor = Require("MSUF_GetCastbarBackgroundColor", FILE)
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local ResolveFontShadowMetrics = Require("MSUF_ResolveFontShadowMetrics", FILE)
+local ApplyResolvedFont = Require("MSUF_ApplyResolvedFont", FILE)
+local ResolveFontKeyPath = Require("MSUF_ResolveFontKeyPath", FILE)
 local GetFontPath = Core.GetFontPath
 local GetFontFlags = Core.GetFontFlags
 local RefreshCastbarStyleCache = Core.RefreshCastbarStyleCache
@@ -66,7 +68,8 @@ local function UnitFromFrame(frame)
     unit = NormalizeUnit(frame.unit or frame.MSUF_unit or frame._msufUnit)
     if unit then return unit end
     if frame == Frames.Get("bossPreview", 1) then return "boss" end
-    if frame == Frames.Get("arenaPreview", 1) or frame == _G.MSUF_ArenaCastbarPreview1 then return "arena" end
+    -- MSUF_ArenaCastbarPreview1 is registered there; its name also answers "arena" below.
+    if frame == Frames.Get("arenaPreview", 1) then return "arena" end
     local name = frame.GetName and frame:GetName() or nil
     if type(name) == "string" then
         if name:find("Boss", 1, true) or name:find("boss", 1, true) then return "boss" end
@@ -268,11 +271,8 @@ local function FontPathForSelection(value, globalPath)
     value = tostring(value or "GLOBAL")
     if value == "" or value == "GLOBAL" then return globalPath, nil end
     if value:find("\\", 1, true) or value:find("/", 1, true) then return value, value end
-    local resolver = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey
-    if type(resolver) == "function" then
-        local path = resolver(value)
-        if type(path) == "string" and path ~= "" then return path, value end
-    end
+    local path = ResolveFontKeyPath(value)
+    if type(path) == "string" and path ~= "" then return path, value end
     return value, value
 end
 
@@ -284,13 +284,13 @@ end
 --- matches ResolveFontShadow in UnitFrames/Engine/MSUF_UF_Config.lua.
 local function ResolveFontShadow(g, unit)
     local enabled = g.textBackdrop ~= false
-    local alpha, x, y = _G.MSUF_ResolveFontShadowMetrics(
+    local alpha, x, y = ResolveFontShadowMetrics(
         g.fontShadowOpacity, g.fontShadowDistance, g.fontShadowStrength)
     local conf = unit and Config.Read()[unit]
     if type(conf) == "table" and conf.fontOverride == true then
         if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
         if conf.fontShadowOpacity ~= nil or conf.fontShadowDistance ~= nil or conf.fontShadowStrength ~= nil then
-            alpha, x, y = _G.MSUF_ResolveFontShadowMetrics(conf.fontShadowOpacity,
+            alpha, x, y = ResolveFontShadowMetrics(conf.fontShadowOpacity,
                 conf.fontShadowDistance, conf.fontShadowStrength, alpha, x)
         end
     end
@@ -326,7 +326,7 @@ local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
         .. KeyPart(b) .. "|"
         .. KeyPart(alpha) .. "|"
         .. shadow
-    local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    local fontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
     if fontString._msufCastbarFontKey == fontCacheKey
         and fontString._msufCastbarFontEpoch == fontEpoch
     then
@@ -335,20 +335,8 @@ local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
 
     local requestedReady = false
     if fontString.SetFont then
-        local applyResolved = _G.MSUF_ApplyResolvedFont
-        if type(applyResolved) == "function" then
-            local ok, _, source = applyResolved(fontString, fontPath, size, flags, fontKey)
-            requestedReady = ok == true and source ~= "fallback"
-        else
-            requestedReady = _G.MSUF_SetFontChecked(fontString, fontPath, size, flags)
-            local matches = _G.MSUF_FontApplicationMatches
-            if requestedReady and type(matches) == "function" then
-                requestedReady = matches(fontString, fontPath, size) == true
-            end
-            if not requestedReady then
-                MarkFontApplyFailed()
-            end
-        end
+        local ok, _, source = ApplyResolvedFont(fontString, fontPath, size, flags, fontKey)
+        requestedReady = ok == true and source ~= "fallback"
     end
     -- Cache the bounded attempt, including readable fallback, for this epoch.
     -- The coordinator owns retries by advancing the epoch.
@@ -376,7 +364,9 @@ local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
 end
 
 local function IconTexture(frame)
-    return frame and (frame.icon or frame.Icon or (frame.IconFrame and (frame.IconFrame.Icon or frame.IconFrame.icon)) or frame.iconTexture or frame.IconTexture)
+    return frame and (frame.icon or frame.Icon
+        or (frame.IconFrame and (frame.IconFrame.Icon or frame.IconFrame.icon))
+        or frame.iconTexture or frame.IconTexture)
 end
 
 local function EnsureIconHost(frame)
@@ -392,8 +382,8 @@ local ICON_BORDER_BACKDROPS = {}
 local function IconBorderEdge(host, thickness)
     local scale = host and host.GetEffectiveScale and host:GetEffectiveScale() or 1
     if scale <= 0 then scale = 1 end
-    if _G.PixelUtil and type(_G.PixelUtil.GetNearestPixelSize) == "function" then
-        local edge = _G.PixelUtil.GetNearestPixelSize(thickness, scale, 1)
+    if PixelUtil and type(PixelUtil.GetNearestPixelSize) == "function" then
+        local edge = PixelUtil.GetNearestPixelSize(thickness, scale, 1)
         if edge and edge > 0 then return edge end
     end
     return thickness
@@ -469,10 +459,53 @@ local function PaintIconBorder(border, host, style, thickness, g, edge, keepShow
 end
 Visuals.PaintIconBorder = PaintIconBorder
 
-local function ApplyIconBorder(frame, host, g, prefix)
+-- Castbar icons take the aura icon shapes (Auras3/MSUF_Auras3_IconShape.lua).
+local function IconShapes()
+    local auras = MSUF.MSUF_Auras3
+    return auras and auras.IconShape
+end
+
+--- The castbar icon shape a stored value draws (unset: rectangular). A castbar
+--- has no portrait of its own to follow, so Shape.Resolve reads Follow Portrait
+--- as rectangular.
+function Visuals.ResolveIconShape(value)
+    local shapes = IconShapes()
+    if not shapes then return "RECTANGLE" end
+    return (shapes.Resolve(value))
+end
+
+--- The icon shape of the castbar whose details use `prefix`.
+function Visuals.IconShape(g, prefix)
+    return Visuals.ResolveIconShape(DetailString(g, prefix, "IconShape", nil, "RECTANGLE"))
+end
+
+--- Masks `texture` (on `owner`) with the castbar icon shape and draws the shared
+--- shaped ring in the border style's colour and thickness; a rectangular icon
+--- keeps the square border its caller paints. The runtime and both menu
+--- previews call this, so they agree. A never-shaped owner is left untouched.
+function Visuals.ApplyIconShape(owner, texture, shape, style, thickness, g, size)
+    local shapes = IconShapes()
+    if not (shapes and owner) then return end
+    shapes.ApplyIconShape(owner, shape, nil, true, texture)
+    local shaped = shape ~= shapes.RECTANGLE
+    if not (shaped or owner._msufA3ShapedStyleBorders) then return end
+    style = tostring(style or "NONE"):upper()
+    local ring
+    if shaped and style ~= "NONE" and style ~= "" and (tonumber(thickness) or 0) > 0 then
+        local r, green, b, a = 0, 0, 0, 0.95
+        if style == "CASTBAR" then
+            r, green, b, a = Num(g.castbarBorderR, 0), Num(g.castbarBorderG, 0), Num(g.castbarBorderB, 0), Num(g.castbarBorderA, 1)
+        end
+        ring = { borderEnabled = true, borderThickness = thickness, borderR = r, borderG = green, borderB = b, borderA = a }
+    end
+    shapes.ApplyIconBorder(owner, ring, size, shape)
+end
+
+local function ApplyIconBorder(frame, host, g, prefix, shape, size, icon)
     local style = DetailString(g, prefix, "IconBorderStyle", nil, "NONE"):upper()
     local thickness = Clamp(DetailNum(g, prefix, "IconBorderThickness", nil, 0), 0, 8)
-    if style == "NONE" or style == "" or thickness <= 0 then
+    Visuals.ApplyIconShape(host, icon, shape, style, thickness, g, size)
+    if shape ~= "RECTANGLE" or style == "NONE" or style == "" or thickness <= 0 then
         HideIconBorder(frame)
         return
     end
@@ -503,7 +536,8 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     local y = DetailNum(g, prefix, "IconOffsetY", "castbarIconOffsetY", 0)
     local position = NormalizeIconPosition(DetailString(g, prefix, "IconPosition", "castbarIconPosition", "LEFT"))
     local frameInset = CastbarFrameInset(frame, g)
-    local layoutKey = KeyPart(unit) .. "|"
+    local shape = Visuals.IconShape(g, prefix)
+    local layoutKey = KeyPart(unit) .. "|" .. shape .. "|"
         .. BoolKey(icon ~= nil) .. "|"
         .. BoolKey(showIcon) .. "|"
         .. KeyPart(barW) .. "|"
@@ -550,7 +584,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
             ApplyIconZoom(icon, zoom)
             if icon.SetDrawLayer then icon:SetDrawLayer("OVERLAY", 7) end
             if icon.SetShown then icon:SetShown(true) else icon:Show() end
-            ApplyIconBorder(frame, host, g, prefix)
+            ApplyIconBorder(frame, host, g, prefix, shape, size, icon)
         else
             if icon.SetShown then icon:SetShown(false) else icon:Hide() end
             if frame._msufDetailIconHost then frame._msufDetailIconHost:Hide() end
@@ -820,7 +854,7 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     local spellFontReady = ApplySpellTextLayout(frame, g, unit, prefix)
     local targetFontReady = ApplyCastTargetTextLayout(frame, g, unit, prefix)
     frame._msufCastbarDetailLayoutUnit = unit
-    frame._msufCastbarDetailLayoutFontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    frame._msufCastbarDetailLayoutFontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
     frame._msufCastbarDetailLayoutVisualRev = tonumber(Config.styleRevision) or 1
     frame._msufCastbarDetailFontsReady = timeFontReady ~= false
         and spellFontReady ~= false

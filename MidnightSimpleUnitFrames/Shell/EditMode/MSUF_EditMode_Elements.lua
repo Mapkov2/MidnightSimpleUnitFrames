@@ -1,20 +1,19 @@
 --- EditMode/MSUF_EditMode_Elements.lua - registers the MSUF elements with the Edit Mode registry
 --- Deferred to PLAYER_LOGIN so unit frames exist.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Elements.lua"
 local ExportPublic = MSUF.ExportPublic
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 if not EM2.Registry then return end
 
 local max, min = math.max, math.min
 local U = EM2.Util or {}
 local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
-local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
+local FrameRectToUI = MSUF.Require("MSUF_UF_FrameRectToUI", CALLER)
 local UnitVisualBounds = EM2.Movers.GetUnitVisualBounds
 
 local Reg = EM2.Registry
@@ -28,7 +27,7 @@ local function GetUF(key)
     end
     local uf = UF and UF.frames
     if uf and uf[key] then return uf[key] end
-    return _G["MSUF_" .. key]
+    return MSUF.Optional("MSUF_" .. key)
 end
 
 local function GetBossUF(i)
@@ -37,9 +36,9 @@ end
 
 local function GetBossCastbarFrame(index)
     if index == 1 then
-        return MSUF.Castbars.Frames.Get("bossPreview") or _G.MSUF_BossCastbarPreview1 or _G.MSUF_BossCastbar1
+        return MSUF.Castbars.Frames.Get("bossPreview") or MSUF.Optional("MSUF_BossCastbar1")
     end
-    return _G["MSUF_BossCastbarPreview" .. index] or _G["MSUF_BossCastbar" .. index]
+    return MSUF.Optional("MSUF_BossCastbarPreview" .. index) or MSUF.Optional("MSUF_BossCastbar" .. index)
 end
 
 local function GetBossSupplementalMoverBounds()
@@ -58,12 +57,12 @@ local function GetArenaUF(i)
 end
 
 local function GetArenaCastbarFrame(index)
-    return _G["MSUF_ArenaCastbarPreview" .. index] or _G["MSUF_ArenaCastbar" .. index]
+    return MSUF.Optional("MSUF_ArenaCastbarPreview" .. index) or MSUF.Optional("MSUF_ArenaCastbar" .. index)
 end
 
 local function GetArenaSupplementalMoverBounds()
     local bounds = {}
-    for i = 2, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    for i = 2, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
         local l, r, t, b = UnitVisualBounds(GetArenaUF(i))
         if l then
             bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
@@ -74,7 +73,7 @@ end
 
 local function GetArenaCastbarSupplementalMoverBounds()
     local bounds = {}
-    for i = 2, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    for i = 2, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
         local l, r, t, b = FrameRectToUI(GetArenaCastbarFrame(i))
         if l then
             bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
@@ -84,42 +83,27 @@ local function GetArenaCastbarSupplementalMoverBounds()
 end
 
 local function GetConf(key)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     return db and db[key]
 end
 
---- isEnabled: true when the unit frame exists and unit tracking is on
+--- isEnabled: true when the frame exists and its unit section is not disabled
+local function SectionEnabled(frame, section)
+    if not frame then return false end
+    local conf = GetConf(section)
+    return not (conf and conf.enabled == false)
+end
+
 local function UnitEnabled(key)
-    return function()
-        local f = GetUF(key)
-        if not f then return false end
-        local db = _G.MSUF_DB
-        if not db or not db[key] then return true end
-        if db[key].enabled == false then return false end
-        return true
-    end
+    return function() return SectionEnabled(GetUF(key), key) end
 end
 
 local function BossEnabled(i)
-    return function()
-        local f = GetBossUF(i)
-        if not f then return false end
-        local db = _G.MSUF_DB
-        if not db or not db.boss then return true end
-        if db.boss.enabled == false then return false end
-        return true
-    end
+    return function() return SectionEnabled(GetBossUF(i), "boss") end
 end
 
 local function ArenaEnabled(i)
-    return function()
-        local f = GetArenaUF(i)
-        if not f then return false end
-        local db = _G.MSUF_DB
-        if not db or not db.arena then return true end
-        if db.arena.enabled == false then return false end
-        return true
-    end
+    return function() return SectionEnabled(GetArenaUF(i), "arena") end
 end
 
 local function GetCastbarFrame(unit)
@@ -153,10 +137,9 @@ end
 
 local function GetCastbarConf()
     MSUF.Require("MSUF_EnsureDB", CALLER)()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then
-        ExportPublic("MSUF_DB", {})
-        db = _G.MSUF_DB
+        db = ExportPublic("MSUF_DB", {})
     end
     db.general = db.general or {}
     return db.general
@@ -164,34 +147,24 @@ end
 
 local function CastbarEnabled(unit)
     return function()
-        local db = _G.MSUF_DB
-        local g = db and db.general or nil
+        local g = GetConf("general")
         if not g or g.castbarPlayerPreviewEnabled == false then return false end
-        local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
-        if type(shouldUse) == "function" and not shouldUse(unit, g) then return false end
-        if type(shouldUse) ~= "function" then
-            if unit == "player" and g.enablePlayerCastbar == false then return false end
-            if unit == "target" and g.enableTargetCastbar == false then return false end
-            if unit == "focus" and g.enableFocusCastbar == false then return false end
-            if unit == "boss" and g.enableBossCastbar == false then return false end
-            if unit == "arena" and g.enableArenaCastbar == false then return false end
-        end
+        if not MSUF.Require("MSUF_ShouldUseMSUFCastbar", CALLER)(unit, g) then return false end
         return GetCastbarFrame(unit) ~= nil
     end
 end
 
 local function GetClassResourceFrame()
-    local frame = _G.MSUF_ClassPowerContainer
-    if _G.MSUF_UnitEditModeActive == true
+    local frame = MSUF.Optional("MSUF_ClassPowerContainer")
+    if MSUF_UnitEditModeActive == true
         and (not frame or (frame.IsShown and not frame:IsShown()
             and frame._msufAnchorOnly ~= true)) then
-        local ensure = _G.MSUF_ClassPower_EnsureEditModeAnchor
-        if type(ensure) == "function" then ensure() end
-        frame = _G.MSUF_ClassPowerContainer
+        MSUF.Require("MSUF_ClassPower_EnsureEditModeAnchor", CALLER)()
+        frame = MSUF.Optional("MSUF_ClassPowerContainer")
     end
     if frame and frame.GetCenter and frame:GetCenter()
         and ((frame.IsShown and frame:IsShown())
-            or (_G.MSUF_UnitEditModeActive == true and frame._msufAnchorOnly == true))
+            or (MSUF_UnitEditModeActive == true and frame._msufAnchorOnly == true))
     then return frame end
 end
 
@@ -201,7 +174,7 @@ local function GetDetachedPowerFrame(unit)
     local owner = GetUF(unit)
     local bar = owner and (owner.targetPowerBar or owner.powerBar or owner.Power)
     if bar and bar._msufDetached == true and bar.GetCenter and bar:GetCenter()
-        and ((bar.IsShown and bar:IsShown()) or _G.MSUF_UnitEditModeActive == true)
+        and ((bar.IsShown and bar:IsShown()) or MSUF_UnitEditModeActive == true)
     then return bar end
 end
 
@@ -216,12 +189,11 @@ end
 
 local function CommitDetachedPowerPosition(unit)
     if ApplySettingsForKeySafe(unit) then return true end
-    local refresh = _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey
-    return type(refresh) == "function" and refresh(unit, true) or false
+    return MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)(unit, true) or false
 end
 
 local function CommitClassResourcePosition()
-    local refresh = _G.MSUF_ClassPower_RefreshLayout
+    local refresh = MSUF.Optional("MSUF_ClassPower_RefreshLayout")
     return type(refresh) == "function" and refresh() or false
 end
 
@@ -233,7 +205,7 @@ local function RegisterResourceMovers()
         subframeOffsetXKey = "classPowerOffsetX", subframeOffsetYKey = "classPowerOffsetY",
         getFrame = GetClassResourceFrame,
         getMoverBounds = function() return ResourceMoverBounds(GetClassResourceFrame(), true) end,
-        getConf = function() local db = _G.MSUF_DB; return db and db.bars end,
+        getConf = function() return GetConf("bars") end,
         commitSubframePosition = CommitClassResourcePosition,
     })
     local units = { "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget" }

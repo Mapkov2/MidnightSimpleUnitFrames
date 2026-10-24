@@ -2,8 +2,10 @@
 --- Shared visual helpers and live event routing for the ClassPower controller.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Core.lua")
+local FILE = "ClassPower/MSUF_CP_Core.lua"
+local Require = MSUF.Require
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local CPConstants = Require("MSUF_CP_CONST", FILE)
 local ExportPublic = MSUF.ExportPublic
 
 --- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
@@ -14,7 +16,7 @@ local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
 --- InCombatLockdown stays a global read on purpose: the layout gate is cold
 --- and the combat harnesses swap that function at runtime.
 local type, tostring, tonumber = type, tostring, tonumber
-local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
+local OverrideRGB = CPConstants.OverrideRGB
 local math_floor, math_max, math_abs = math.floor, math.max, math.abs
 
 --- Single owner of the player-frame resolver for the whole ClassPower module.
@@ -26,8 +28,6 @@ ExportPublic("MSUF_CP_CoreUnitFrame", CoreUnitFrame)
 --- Cross-file collaborators. Every provider loads before ClassPower in each
 --- client TOC (Kernel, Runtime, the unit-frame runtime, Castbars), so a missing
 --- one is a load-order break and fails loudly here.
-local FILE = "ClassPower/MSUF_CP_Core.lua"
-local Require = MSUF.Require
 local GetProfileScopedCache = Require("MSUF_GetProfileScopedCache", FILE)
 local GetEffectiveCooldownFrame = Require("MSUF_GetEffectiveCooldownFrame", FILE)
 local ApplyCachedScreenPosition = Require("MSUF_ApplyCachedUnitFrameScreenPosition", FILE)
@@ -37,9 +37,14 @@ local FontPathEquals = Require("MSUF_FontPathEquals", FILE)
 local MarkFontApplyFailed = Require("MSUF_MarkFontApplyFailed", FILE)
 local GetGlobalFontSettings = Require("MSUF_GetGlobalFontSettings", FILE)
 
+--- The Cooldown Manager size probe (width, height of a usable anchor frame).
+--- The provider can be swapped at runtime, so it is resolved on every call.
+local function CooldownAnchorSize(frame)
+    return Require("MSUF_GetUsableCooldownAnchorSize", FILE)(frame, true)
+end
+
 local function CP_IsUsableCooldownAnchorFrame(frame)
-    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-    return type(getSize) == "function" and getSize(frame, true) ~= nil
+    return CooldownAnchorSize(frame) ~= nil
 end
 
 -- Retail anchors the complete resource stack to Essential's top edge. Older
@@ -48,7 +53,7 @@ end
 local function CP_AboveCooldownGap(frame, container, bars, classHeight)
     local gap = 4
     classHeight = tonumber(classHeight) or 4
-    local player = _G.MSUF_DB and _G.MSUF_DB.player
+    local player = MSUF_DB and MSUF_DB.player
     if type(player) == "table" and player.showPowerBar ~= false
         and player.powerBarDetached == true and player.detachedPowerBarAnchorToClassPower == true then
         local powerHeight = tostring(player.detachedPowerBarShape or ""):upper() == "ORB"
@@ -63,12 +68,10 @@ local function CP_AboveCooldownGap(frame, container, bars, classHeight)
     local offsetY = tonumber(bars.classPowerOffsetY) or 0
     if bars.classPowerCooldownTopAnchor == true then return gap + offsetY end
 
-    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-    local viewerHeight
-    if type(getSize) == "function" then viewerHeight = select(2, getSize(frame, true)) end
+    local viewerHeight = select(2, CooldownAnchorSize(frame))
     local viewerScale = frame.GetEffectiveScale and frame:GetEffectiveScale()
     local classScale = container.GetEffectiveScale and container:GetEffectiveScale()
-    local isSecret = _G.issecretvalue
+    local isSecret = issecretvalue
     if isSecret and (isSecret(viewerScale) or isSecret(classScale)) then return gap end
     if type(viewerHeight) ~= "number" or type(viewerScale) ~= "number"
         or type(classScale) ~= "number" or viewerScale <= 0 or classScale <= 0 then return gap end
@@ -83,19 +86,16 @@ end
 --- it. Only when the frame being anchored to is the Suite's own; every other
 --- provider keeps the bar under the anchor. Cold layout path only.
 local function CP_CooldownAnchorStacksAbove(anchorFrame)
-    local getProvider = _G.MSUF_GetActiveCooldownAnchorProvider
-    if type(getProvider) ~= "function" then return false end
-    local provider, source = getProvider()
+    local provider, source = Require("MSUF_GetActiveCooldownAnchorProvider", FILE)()
     return provider == "MSUF_Suite_CooldownManager" and source == anchorFrame
 end
 
-local coreBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local coreBuilders = CPConstants.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 --- Layout can be blocked while unit frames are protected. Queue the shared
 --- unit-frame reanchor instead of attempting to move ClassPower immediately.
 local function RequestUFReanchorAfterCombat()
-    local MSUF = _G.MSUF_NS
-    local UF = MSUF and MSUF.UF
+    local UF = MSUF.UF
     if UF and UF.RequestReanchorAfterCombat then
         UF.RequestReanchorAfterCombat()
     end
@@ -120,9 +120,8 @@ local CP_SHAPE_TEXTURES = {
     },
 }
 
-local CP_NormalizeShape = _G.MSUF_UF_NormalizeClassPowerShape
-
-local CP_NormalizeShapeAlign = _G.MSUF_UF_NormalizeShapeAlign
+local CP_NormalizeShape = Require("MSUF_UF_NormalizeClassPowerShape", FILE)
+local CP_NormalizeShapeAlign = Require("MSUF_UF_NormalizeShapeAlign", FILE)
 
 local function CP_ShapeTextures(shape)
     return CP_SHAPE_TEXTURES[CP_NormalizeShape(shape)]
@@ -140,6 +139,25 @@ local function ClearShapeEdge(bar)
     end
 end
 
+--- The foreground and background media paths of the pip bars. Bar creation
+--- and the texture refresh both resolve them here; the background key goes
+--- through the media registry and falls back to the foreground path.
+local ResolveStatusbarTextureKey = MSUF.Optional("MSUF_ResolveStatusbarTextureKey")
+local function CP_ResolveBarPaths(bars, ResolveTexture)
+    local fgPath = ResolveTexture(bars.classPowerTexture)
+    local bgKey = bars.classPowerBgTexture
+    if bgKey and bgKey ~= "" then
+        return fgPath, (type(ResolveStatusbarTextureKey) == "function" and ResolveStatusbarTextureKey(bgKey)) or fgPath
+    end
+    return fgPath, fgPath
+end
+
+--- The Controller exports the rounded-surface applier after the layout and
+--- texture stages load, so it is resolved when a stage runs.
+local function CP_ApplyRoundedSurface()
+    Require("MSUF_ClassPower_ApplyRoundedSurface", FILE)()
+end
+
 --- Layout paints the pip backgrounds and the pip/separator visibility
 --- directly. The mode painters (MSUF_CP_Modes.lua) skip the same writes when
 --- the widget's _msufCP* stamp already holds the value, so every direct write
@@ -155,10 +173,15 @@ local function CP_LayoutShown(region, shown)
     region._msufCPShown = shown
 end
 
+--- A configured frame-level offset: clamped to 0-30 and rounded, fallback when unset.
+local function CP_LevelOffset(value, fallback)
+    value = tonumber(value) or fallback
+    if value < 0 then value = 0 elseif value > 30 then value = 30 end
+    return math_floor(value + 0.5)
+end
+
 local function CP_ResolveTextLayerLevel(frame, bars)
-    local textLayer = tonumber(bars and bars.classPowerTextLayer) or 5
-    if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
-    textLayer = math_floor(textLayer + 0.5)
+    local textLayer = CP_LevelOffset(bars and bars.classPowerTextLayer, 5)
     local layers = MSUF.UF and MSUF.UF.Layers
     if layers and type(layers.TextLevel) == "function" then
         return layers.TextLevel(frame, textLayer, 5)
@@ -173,7 +196,7 @@ end
 --- RUNTIME exposes hot-path event handlers back to the controller. These
 --- handlers should update values or request a throttled structural refresh; they
 --- should not allocate frames or perform full option normalization.
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
+local builders = CPConstants.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 
 do
     --- Bound once by RUNTIME at controller load: the controller's state, its
@@ -566,6 +589,9 @@ MSUF.CPFactoryShared.Core = {
     CP_LayoutShown = CP_LayoutShown,
     CP_NormalizeShape = CP_NormalizeShape,
     CP_NormalizeShapeAlign = CP_NormalizeShapeAlign,
+    CP_ApplyRoundedSurface = CP_ApplyRoundedSurface,
+    CP_LevelOffset = CP_LevelOffset,
+    CP_ResolveBarPaths = CP_ResolveBarPaths,
     CP_ResolveTextLayerLevel = CP_ResolveTextLayerLevel,
     CP_ShapeTextures = CP_ShapeTextures,
     CP_UseNativeShapeFill = CP_UseNativeShapeFill,

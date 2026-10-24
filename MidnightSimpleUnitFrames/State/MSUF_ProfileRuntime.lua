@@ -28,6 +28,9 @@ local function MSUF_ProfileIO_BeforeActiveProfileMutation()
     if menu and menu.CloseColorPickerForProfileChange then menu.CloseColorPickerForProfileChange() end
     profileGeneration = profileGeneration + 1
     local auras = MSUF.MSUF_Auras3
+    -- In combat auras apply the new profile at combat end; lanes compiled
+    -- meanwhile keep the current icon look (Auras3/MSUF_Auras3_IconSkins.lua).
+    if auras and auras.IconSkins then auras.IconSkins.FreezeProfile() end
     if auras and auras.BumpRuntimeConfig then auras.BumpRuntimeConfig() end
     local em2 = _G.MSUF_EM2
     local state = type(em2) == "table" and em2.State or nil
@@ -59,8 +62,8 @@ local function MSUF_ProfileIO_RunFrameScaleApply()
     _G.MSUF_ApplyMsufScale(MSUF_ProfileIO_SafeMSUFScale())
 end
 local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
-    _G.MSUF_Castbars_OnSettingsChanged(reason, true)
-    _G.MSUF_ApplyAllCastbarsAndSync(true)
+    MSUF.PublicGlobals.MSUF_Castbars_OnSettingsChanged(reason, true)
+    MSUF.PublicGlobals.MSUF_ApplyAllCastbarsAndSync(true)
 end
 
 --- The coordinated UF apply already owns unit-frame text, while the explicit
@@ -68,7 +71,7 @@ end
 --- for external consumers and Auras3. Imports refresh their aura payload before
 --- this hook, so they skip the otherwise required profile-switch aura refresh.
 local function MSUF_ProfileIO_ApplyExternalFontFollowers(skipAuras)
-    _G.MSUF_UpdateAllFonts_Immediate(nil, true, true, true, skipAuras == true)
+    MSUF.PublicGlobals.MSUF_UpdateAllFonts_Immediate(nil, true, true, true, skipAuras == true)
 end
 
 local MSUF_ProfileIO_PostProfileRuntimeApply
@@ -135,7 +138,7 @@ end
 ---      upvalues, unit-frame compiled configs. These must precede any rebuild
 ---      or the rebuild reads the previous profile's cached tables.
 ---   4. The coordinated unit-frame apply, then modules, group frames, class power,
----      embedded power bar layout, castbars, font followers.
+---      embedded power bar layout, castbars, font followers, external icon skins.
 ---   5. Locale reload check last, because it may prompt a UI reload.
 --- Do not reorder or rename the string-named globals here without checking
 --- every consumer: providers load later in the core TOC and are required.
@@ -151,25 +154,25 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     MSUF.UF.DisableBlizzardFrames()
     MSUF.Require("MSUF_ApplyCurrentProfileGlobalUiScale", "State/MSUF_ProfileRuntime.lua")()
     MSUF_ProfileIO_RunFrameScaleApply()
-    _G.MSUF_TargetSoundDriver_ApplySetting()
+    MSUF.PublicGlobals.MSUF_TargetSoundDriver_ApplySetting()
     _G.MSUF_NSRTNicknames_ApplySetting()
     local activeGeneral = _G.MSUF_DB and _G.MSUF_DB.general
     if MSUF.Client.SupportsEllesmereEditMode then
         _G.MSUF_EllesmereEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.ellesmereEditModeIntegration == false))
     end
-    _G.MSUF_Grid2EditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.grid2EditModeIntegration == false))
-    _G.MSUF_DetailsEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.detailsEditModeIntegration == false))
-    _G.MSUF_DominosEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.dominosEditModeIntegration == false))
-    _G.MSUF_DandersEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.dandersEditModeIntegration == false))
+    MSUF.PublicGlobals.MSUF_Grid2EditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.grid2EditModeIntegration == false))
+    MSUF.PublicGlobals.MSUF_DetailsEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.detailsEditModeIntegration == false))
+    MSUF.PublicGlobals.MSUF_DominosEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.dominosEditModeIntegration == false))
+    MSUF.PublicGlobals.MSUF_DandersEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.dandersEditModeIntegration == false))
     if MSUF.Client.SupportsBlizzardEditMode then
-        _G.MSUF_BlizzardEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.blizzardEditModeIntegration == false))
+        MSUF.PublicGlobals.MSUF_BlizzardEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.blizzardEditModeIntegration == false))
         --- The stored Blizzard Edit Mode snapshot is not pushed here: it can be
         --- older than the live Blizzard layout. Only an import that carries it
         --- with the profiles-page opt-in on applies it (MSUF_Profiles.lua).
     end
     --- Group-frame config tables are cached by identity. Drop those references
     --- before the runtime rebuild reads the newly active profile root.
-    _G.MSUF_GF_InvalidateConfCache()
+    MSUF.PublicGlobals.MSUF_GF_InvalidateConfCache()
 
     --- The number-abbreviation style is held as an upvalue in every text
     --- consumer, so it must be re-resolved from the new profile before the
@@ -189,14 +192,18 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     local metadata = UF and UF.Metadata
     local coordinatedApplyMask = metadata and metadata.coordinatedApplyMask
     _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, reason, coordinatedApplyMask)
-    _G.MSUF_ApplyModules()
+    MSUF.PublicGlobals.MSUF_ApplyModules()
     if MSUF.SwingTimer then MSUF.SwingTimer.Apply() end
     _G.MSUF_GF_RebuildAll()
     _G.MSUF_ClassPower_Apply({ full = true, cdm = true })
-    _G.MSUF_ApplyPowerBarEmbedLayout_All()
+    MSUF.PublicGlobals.MSUF_ApplyPowerBarEmbedLayout_All()
     MSUF_ProfileIO_ApplyCastbarRuntime(reason)
     MSUF_ProfileIO_ApplyExternalFontFollowers(applyAll == true)
     if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason) end
+    -- Icon skins painted outside the aura runtime (MSUF_HostAPI.GetIconSkins)
+    -- follow the new profile's default skin.
+    local auras = MSUF.MSUF_Auras3
+    if auras and auras.IconSkins then auras.IconSkins.NotifyChanged("profile") end
     MSUF_ProfileIO_CheckLocaleReload()
 end
 

@@ -3,8 +3,8 @@
 ---
 --- Resolves castbar DB fields and the configured size for the Menu2 previews, which paint the engine's
 --- castbar scene. It does not subscribe to UNIT_SPELLCAST events or mutate live castbar frames.
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
+local MSUF = _G.MSUF
+local FILE = "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua"
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
@@ -12,25 +12,32 @@ local Castbar = MSUF.UFPreviewCastbar or {}
 MSUF.UFPreviewCastbar = Castbar
 local CoreFrame = MSUF.UF.GetFrame
 local EMPTY_DETAILS = {}
+-- The castbar module API is published once by the core castbar files, which load before this addon. It is
+-- resolved here because these lookups run on every preview refresh and drag step.
+local GetCastbarDefaultOffsets = MSUF.Require("MSUF_GetCastbarDefaultOffsets", FILE)
+local GetCastbarPrefix = MSUF.Require("MSUF_GetCastbarPrefix", FILE)
+local NormalizeWidthSource = MSUF.Require("MSUF_NormalizeCastbarWidthSource", FILE)
+local GetCastbarWidthSourceKey = MSUF.Require("MSUF_GetCastbarWidthSourceKey", FILE)
+local GetCastbarDesiredSize = MSUF.Require("MSUF_GetCastbarDesiredSize", FILE)
+local ShouldUseMSUFCastbar = MSUF.Require("MSUF_ShouldUseMSUFCastbar", FILE)
+local GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", FILE)
+local CDMGetScaledWidth = MSUF.Require("MSUF_CDM_GetScaledWidth", FILE)
+local PREVIEW_CASTBAR_KEYS = { player = "playerPreview", target = "targetPreview", focus = "focusPreview" }
+local RUNTIME_UNITS = { boss = "boss1", arena = "arena1" }
 function Castbar.OffsetFields(unitKey)
     -- Runtime and preview need the same DB keys for offsets, but only runtime owns live frame
     -- anchoring. Keep the key translation here and the actual SetPoint calls in render code.
     unitKey = CanonKey(unitKey)
-    local dx, dy = 0, 0
-    if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then dx, dy = _G.MSUF_GetCastbarDefaultOffsets(unitKey) end
-    if unitKey == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY", dx or 0, dy or 0 end
-    if unitKey == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY", dx or 0, dy or 0 end
-    local prefix = type(_G.MSUF_GetCastbarPrefix) == "function" and _G.MSUF_GetCastbarPrefix(unitKey) or nil
-    if not prefix or prefix == "" then return nil, nil, dx or 0, dy or 0 end
-    return prefix .. "OffsetX", prefix .. "OffsetY", dx or 0, dy or 0
+    local dx, dy = GetCastbarDefaultOffsets(unitKey)
+    dx, dy = dx or 0, dy or 0
+    if unitKey == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY", dx, dy end
+    if unitKey == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY", dx, dy end
+    local prefix = GetCastbarPrefix(unitKey)
+    if not prefix or prefix == "" then return nil, nil, dx, dy end
+    return prefix .. "OffsetX", prefix .. "OffsetY", dx, dy
 end
 function Castbar.Prefix(unitKey)
-    unitKey = CanonKey(unitKey)
-    if type(_G.MSUF_GetCastbarPrefix) == "function" then return _G.MSUF_GetCastbarPrefix(unitKey) end
-    if unitKey == "player" then return "castbarPlayer" end
-    if unitKey == "target" then return "castbarTarget" end
-    if unitKey == "focus" then return "castbarFocus" end
-    return nil
+    return GetCastbarPrefix(CanonKey(unitKey))
 end
 function Castbar.Detached(key, g)
     key = CanonKey(key)
@@ -40,20 +47,10 @@ function Castbar.Detached(key, g)
     local prefix = Castbar.Prefix(key)
     return prefix and g[prefix .. "Detached"] == true or false
 end
-local function NormalizeWidthSource(v)
-    local fn = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
-    if type(fn) == "function" then return fn(v) end
-    if v == true then return "unitframe" end
-    if v == "unitframe" or v == "essential" or v == "utility" then return v end
-    return nil
-end
 local function WidthSourceKey(key)
     key = CanonKey(key)
-    local fn = _G.MSUF_GetCastbarWidthSourceKey
-    if type(fn) == "function" then
-        local dbKey = fn(key)
-        if dbKey then return dbKey end
-    end
+    local dbKey = GetCastbarWidthSourceKey(key)
+    if dbKey then return dbKey end
     if key == "player" then return "castbarPlayerMatchWidth", "castbarPlayerMatchUnitWidth" end
     if key == "target" then return "castbarTargetMatchWidth", "castbarTargetMatchUnitWidth" end
     if key == "focus" then return "castbarFocusMatchWidth", "castbarFocusMatchUnitWidth" end
@@ -70,43 +67,41 @@ local function WidthSource(g, key)
     if legacy and g[legacy] == true then return "unitframe" end
     return nil
 end
+-- Blizzard's cooldown viewers appear when their load-on-demand addon loads, so they are read at use time.
 local function ExternalWidthSourceFrame(source)
     if source == "essential" then
-        return (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
-            or _G.EssentialCooldownViewer
+        return GetEffectiveCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer
     elseif source == "utility" then
-        return _G.UtilityCooldownViewer
+        return UtilityCooldownViewer
     end
 end
 --- The live castbar frame a unit's preview projects from (boss and arena: the
 --- first frame of their pool). Runtime.lua reads the same lookup for scale and
---- detached offset.
+--- detached offset. The pool tables are the castbar pools' published tables (the
+--- MSUF_BossCastbars / MSUF_ArenaCastbars globals); the frames are named globals.
 local function RuntimeCastbarFrame(key)
     key = CanonKey(key)
     if key == "boss" then
-        local bars = _G.MSUF_BossCastbars
+        local bars = MSUF.Castbars.Pools.BossCastbars
         return (bars and bars[1])
-            or _G.MSUF_BossCastbar1
+            or MSUF_BossCastbar1
             or MSUF.Castbars.Frames.Get("bossPreview")
-            or _G.MSUF_BossCastbarPreview1
     elseif key == "arena" then
-        local bars = _G.MSUF_ArenaCastbars
+        local bars = MSUF.Castbars.Pools.ArenaCastbars
         return (bars and bars[1])
-            or _G.MSUF_ArenaCastbar1
+            or MSUF_ArenaCastbar1
             or MSUF.Castbars.Frames.Get("arenaPreview")
-            or _G.MSUF_ArenaCastbarPreview1
-    elseif key == "player" then
-        return MSUF.Castbars.Frames.Get("player") or MSUF.Castbars.Frames.Get("playerPreview")
-    elseif key == "target" then
-        return MSUF.Castbars.Frames.Get("target") or MSUF.Castbars.Frames.Get("targetPreview")
-    elseif key == "focus" then
-        return MSUF.Castbars.Frames.Get("focus") or MSUF.Castbars.Frames.Get("focusPreview")
+            or MSUF_ArenaCastbarPreview1
+    end
+    local previewKey = PREVIEW_CASTBAR_KEYS[key]
+    if previewKey then
+        return MSUF.Castbars.Frames.Get(key) or MSUF.Castbars.Frames.Get(previewKey)
     end
 end
 Castbar.RuntimeFrame = RuntimeCastbarFrame
 local function RuntimeUnitFrame(key)
     key = CanonKey(key)
-    local unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
+    local unit = RUNTIME_UNITS[key] or key
     return CoreFrame(unit) or (unit and _G["MSUF_" .. unit])
 end
 local function EffectiveScaleProxy(frame)
@@ -122,11 +117,8 @@ end
 local function ReadExternalWidth(source, targetFrame)
     local frame = ExternalWidthSourceFrame(source)
     if not (frame and frame.GetWidth and frame.IsShown and frame:IsShown()) then return nil end
-    local scaleWidth = _G.MSUF_CDM_GetScaledWidth
-    if type(scaleWidth) == "function" then
-        local w = scaleWidth(frame, targetFrame)
-        if w and w > 0 then return w end
-    end
+    local scaled = CDMGetScaledWidth(frame, targetFrame)
+    if scaled and scaled > 0 then return scaled end
     local w = frame:GetWidth()
     if w and w > 0 then return w end
 end
@@ -140,12 +132,9 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     if widthSource == "essential" or widthSource == "utility" then
         w = ReadExternalWidth(widthSource, targetFrame) or nil
     end
-    if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        local desiredUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
-        local desiredW, desiredH = _G.MSUF_GetCastbarDesiredSize(desiredUnit, g or {}, targetFrame, fallbackW, fallbackH)
-        if not w or w <= 0 then w = desiredW end
-        h = desiredH
-    end
+    local desiredW, desiredH = GetCastbarDesiredSize(RUNTIME_UNITS[key] or key, g or {}, targetFrame, fallbackW, fallbackH)
+    if not w or w <= 0 then w = desiredW end
+    h = desiredH
     if not w or w <= 0 then
         if key == "boss" then
             w = g and tonumber(g.bossCastbarWidth)
@@ -188,14 +177,7 @@ function Castbar.ReadNumber(g, key, suffix, bossKey, fallback)
         or MSUF.Castbars.Visuals.DetailNum(g, nil, nil, globalKey, fallback)
 end
 function Castbar.Enabled(key, g)
-    local fn = _G.MSUF_ShouldUseMSUFCastbar
-    if type(fn) == "function" then return fn(key, g) == true end
-    if key == "player" then return g.enablePlayerCastbar ~= false end
-    if key == "target" then return g.enableTargetCastbar ~= false end
-    if key == "focus" then return g.enableFocusCastbar ~= false end
-    if key == "boss" then return g.enableBossCastbar ~= false end
-    if key == "arena" then return g.enableArenaCastbar ~= false end
-    return false
+    return ShouldUseMSUFCastbar(key, g) == true
 end
 function Castbar.ShowIcon(key, g)
     return MSUF.Castbars.Visuals.ShowIconForUnit(g, key, MSUF.Castbars.Visuals.PrefixForUnit(key))

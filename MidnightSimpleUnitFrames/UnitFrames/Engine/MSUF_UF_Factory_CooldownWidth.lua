@@ -81,7 +81,7 @@ local function ClassPowerAnchorOwnsWidthRefresh(bars, sourceName)
 end
 
 local function ConfiguredCooldownWidthMask()
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
   if type(db) ~= "table" then return 0, 0, 0, 0 end
 

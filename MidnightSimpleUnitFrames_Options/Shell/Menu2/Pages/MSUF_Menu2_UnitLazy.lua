@@ -2,7 +2,7 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local Schema = M.ControlSchema
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
@@ -14,10 +14,13 @@ UnitPage._sectionRegistry = UnitPage._sectionRegistry or {}
 UnitPage._sectionIds = UnitPage._sectionIds or {}
 local UNIT_SECTION_REGISTRY = UnitPage._sectionRegistry
 local UNIT_SECTION_IDS = UnitPage._sectionIds
-for i = 1, #UNIT_SECTION_REGISTRY do
-    local item = UNIT_SECTION_REGISTRY[i]
-    if item and item.id then UNIT_SECTION_IDS[item.id] = i end
+local function IndexSections()
+    for i = 1, #UNIT_SECTION_REGISTRY do
+        local item = UNIT_SECTION_REGISTRY[i]
+        if item and item.id then UNIT_SECTION_IDS[item.id] = i end
+    end
 end
+IndexSections()
 local function UnitSectionSupportsUnit(spec, unit)
     if type(spec) ~= "table" then return false end
     local units = spec.units
@@ -42,10 +45,7 @@ function UnitPage.RegisterSection(spec)
         if ao == bo then return tostring(a and a.id or "") < tostring(b and b.id or "") end
         return ao < bo
     end)
-    for i = 1, #UNIT_SECTION_REGISTRY do
-        local item = UNIT_SECTION_REGISTRY[i]
-        if item and item.id then UNIT_SECTION_IDS[item.id] = i end
-    end
+    IndexSections()
     return true
 end
 local function ResolveLazyValue(value, ctx, builder, unit, spec)
@@ -81,7 +81,7 @@ local hiddenQueueCombatFrame
 local PumpHiddenSectionQueue
 local function EnsureCombatResume()
     if hiddenQueueCombatFrame then return end
-    local frame = _G.CreateFrame and _G.CreateFrame("Frame")
+    local frame = CreateFrame and CreateFrame("Frame")
     if not frame then return end
     hiddenQueueCombatFrame = frame
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -102,7 +102,7 @@ PumpHiddenSectionQueue = function()
         end
         return
     end
-    local inCombat = _G.InCombatLockdown
+    local inCombat = InCombatLockdown
     if type(inCombat) == "function" and inCombat() then
         EnsureCombatResume()
         return
@@ -110,7 +110,7 @@ PumpHiddenSectionQueue = function()
     hiddenSectionPumpScheduled = true
     C_Timer.After(HIDDEN_SECTION_STEP_SEC, function()
         hiddenSectionPumpScheduled = false
-        local combatCheck = _G.InCombatLockdown
+        local combatCheck = InCombatLockdown
         if type(combatCheck) == "function" and combatCheck() then
             EnsureCombatResume()
             return

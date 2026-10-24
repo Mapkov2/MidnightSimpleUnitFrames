@@ -28,13 +28,16 @@ local FRAME_STRATA_VALUES = {
     { value = "TOOLTIP", text = "TOOLTIP" },
 }
 local FRAME_STRATA_COUNT = #FRAME_STRATA_VALUES
-local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
+local FRAME_STRATA_INDEX = {}
+for i = 1, FRAME_STRATA_COUNT do FRAME_STRATA_INDEX[FRAME_STRATA_VALUES[i].value] = i - 1 end
+-- The core normalizer is resolved on first use by each strata entry point below
+-- (`X = X or MSUF.Require(...)` short-circuits afterwards, so a getter, formatter or
+-- drag step makes no extra call). A file-top Require would raise in fixtures that load this model alone.
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_Group_SpellModel.lua"
+local NormalizeFrameStrata
 local function FrameStrataIndex(value)
-    value = NormalizeFrameStrata(value, "AUTO")
-    for i = 1, FRAME_STRATA_COUNT do
-        if FRAME_STRATA_VALUES[i].value == value then return i - 1 end
-    end
-    return 0
+    NormalizeFrameStrata = NormalizeFrameStrata or MSUF.Require("MSUF_NormalizeFrameStrata", FILE)
+    return FRAME_STRATA_INDEX[NormalizeFrameStrata(value, "AUTO")] or 0
 end
 local function FrameStrataValue(index)
     index = floor((tonumber(index) or 0) + 0.5) + 1
@@ -42,12 +45,11 @@ local function FrameStrataValue(index)
     return FRAME_STRATA_VALUES[index].value
 end
 local function FrameStrataLabel(valueOrIndex)
+    NormalizeFrameStrata = NormalizeFrameStrata or MSUF.Require("MSUF_NormalizeFrameStrata", FILE)
     local value = type(valueOrIndex) == "number" and FrameStrataValue(valueOrIndex) or NormalizeFrameStrata(valueOrIndex, "AUTO")
     if value == "AUTO" then return "AUTO" end
-    for i = 1, FRAME_STRATA_COUNT do
-        local row = FRAME_STRATA_VALUES[i]
-        if row.value == value then return M.Tr(row.text) end
-    end
+    local index = FRAME_STRATA_INDEX[value]
+    if index then return M.Tr(FRAME_STRATA_VALUES[index + 1].text) end
     return "AUTO"
 end
 local function FrameStrataParse(text)
@@ -140,7 +142,7 @@ local function SpellSpecIcon(info)
     if not specID then return nil end
     local cached = spellSpecIconCache[specID]
     if cached then return cached end
-    local getInfo = _G.GetSpecializationInfoForSpecID or _G.GetSpecializationInfoByID
+    local getInfo = GetSpecializationInfoForSpecID or GetSpecializationInfoByID
     if type(getInfo) ~= "function" then return nil end
     local icon = select(4, getInfo(specID))
     if icon then spellSpecIconCache[specID] = icon end
@@ -404,6 +406,7 @@ local function BindNestedSlider(ctx, widget, getTable, key, default, mode, seman
     return widget
 end
 local function BindNestedStrataSlider(ctx, widget, getTable, key, default, mode, semanticPath)
+    NormalizeFrameStrata = NormalizeFrameStrata or MSUF.Require("MSUF_NormalizeFrameStrata", FILE)
     default = NormalizeFrameStrata(default, "AUTO")
     if widget and widget.SetValueFormatter then widget:SetValueFormatter(function(value) return FrameStrataLabel(value) end) end
     if widget and widget.SetValueParser then widget:SetValueParser(FrameStrataParse) end

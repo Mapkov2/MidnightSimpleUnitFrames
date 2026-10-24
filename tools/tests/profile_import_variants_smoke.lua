@@ -30,12 +30,12 @@ env.MSUF_GlobalDB = { profiles = {}, char = {} }
 env.MSUF_InitProfiles()
 local db = env.MSUF_DB
 local exported
-env.MSUF_EncodeCompactTableMSUF3 = function(value) exported = value; return "MSUF3:captured" end
-env.MSUF_EncodeCompactTable = env.MSUF_EncodeCompactTableMSUF3
-assert(env.MSUF_ExportSelectionToString("all"), "full export failed")
+ns.ExportPublic("MSUF_EncodeCompactTableMSUF3", function(value) exported = value; return "MSUF3:captured" end)
+ns.ExportPublic("MSUF_EncodeCompactTable", ns.PublicGlobals.MSUF_EncodeCompactTableMSUF3)
+assert(ns.PublicGlobals.MSUF_ExportSelectionToString("all"), "full export failed")
 local base = Copy(exported)
 local source
-env.MSUF_TryDecodeCompactString = function(str) if str == "MSUF3:captured" then return Copy(source) end end
+ns.ExportPublic("MSUF_TryDecodeCompactString", function(str) if str == "MSUF3:captured" then return Copy(source) end end)
 local function Payload(value) return value.msuf6 and value.msuf6.payload or value.payload end
 local function Printed(pattern)
     for i = #w.prints, 1, -1 do if w.prints[i]:find(pattern, 1, true) then return true end end
@@ -45,11 +45,11 @@ end
 -- F22a: invalid variants in a string are ignored while variant import is off.
 source = Copy(base)
 Payload(source).profileVariants = { version = 2, entries = {} }
-env.MSUF_Profiles_SetImportVariants(true)
-local ok, why = env.MSUF_ImportFromString("MSUF3:captured")
+ns.PublicGlobals.MSUF_Profiles_SetImportVariants(true)
+local ok, why = ns.PublicGlobals.MSUF_ImportFromString("MSUF3:captured")
 assert(not ok and why == "invalid profile variants", "variant import on must still validate the variants: " .. tostring(why))
-env.MSUF_Profiles_SetImportVariants(false)
-ok, why = env.MSUF_ImportFromString("MSUF3:captured")
+ns.PublicGlobals.MSUF_Profiles_SetImportVariants(false)
+ok, why = ns.PublicGlobals.MSUF_ImportFromString("MSUF3:captured")
 assert(ok, "variant import off rejected a string for variants it does not import: " .. tostring(why))
 
 -- F22b: kept local variants that no longer fit the imported settings are
@@ -58,7 +58,7 @@ assert(V.Replace(db, { version = 1, entries = { { name = "Local", patch = { { pa
 local before = #w.prints
 source = Copy(base)
 Payload(source).player.width = "wide"
-ok, why = env.MSUF_ImportFromString("MSUF3:captured")
+ok, why = ns.PublicGlobals.MSUF_ImportFromString("MSUF3:captured")
 assert(ok, "import with kept variants failed: " .. tostring(why))
 assert(Printed("do not match the imported settings"), "a kept variant that no longer fits was not reported")
 local kept = V.Find(env.MSUF_DB, "Local")
@@ -66,7 +66,7 @@ assert(kept and kept.patch[1].value == 250, "kept local variants were changed or
 -- A kept variant that still fits stays quiet.
 local quiet = #w.prints
 source = Copy(base)
-ok, why = env.MSUF_ImportFromString("MSUF3:captured")
+ok, why = ns.PublicGlobals.MSUF_ImportFromString("MSUF3:captured")
 assert(ok, "second import failed: " .. tostring(why))
 for i = quiet + 1, #w.prints do
     assert(not w.prints[i]:find("do not match the imported settings", 1, true), "a fitting kept variant was reported")
@@ -85,7 +85,7 @@ env.MSUF_SwitchProfile = function(name)
     return realSwitch(name)
 end
 source = Copy(base)
-local created, reason, stage = env.MSUF_ImportIntoNewProfile("Rollback", "MSUF3:captured")
+local created, reason, stage = ns.PublicGlobals.MSUF_ImportIntoNewProfile("Rollback", "MSUF3:captured")
 env.MSUF_SwitchProfile = realSwitch
 assert(not created and stage == "switch", "the refused switch was not reported: " .. tostring(reason) .. "/" .. tostring(stage))
 assert(env.MSUF_GlobalDB.profiles.Rollback == nil, "the rolled-back profile is still stored")

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_BorderStyles.lua
 --- Shared border-style catalog and the 8-piece edge renderer that draws them.
 ---
@@ -27,7 +26,9 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 ---   MSUF.BorderStyles.Create(owner, layer, subLayer, texture)
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Runtime/MSUF_BorderStyles.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
 MSUF.BorderStyles = MSUF.BorderStyles or {}
 local B = MSUF.BorderStyles
 
@@ -85,12 +86,13 @@ local LSM_SKIP = {
 
 local DEFAULT_EDGE_SCALE, DEFAULT_MIN_EDGE = 4, 8
 
-local GetLSM = _G.MSUF_GetSharedMedia
+local GetLSM = Require("MSUF_GetSharedMedia", FILE)
+-- Loads before this file; read once.
+local IsKnownFileAsset = Require("MSUF_IsKnownFileAsset", FILE)
 
 local function AssetAllowed(path)
     if type(path) ~= "string" or path == "" then return nil end
-    local isKnown = _G.MSUF_IsKnownFileAsset
-    if type(isKnown) == "function" and isKnown(path) == false then return nil end
+    if IsKnownFileAsset(path) == false then return nil end
     return path
 end
 
@@ -121,9 +123,7 @@ end
 
 
 local function StatusbarItems()
-    local provider = _G.MSUF_StatusBarTextureItems
-        or (MSUF and MSUF.UI and MSUF.UI.StatusBarTextureItems)
-    local items = type(provider) == "function" and provider() or nil
+    local items = Require("MSUF_StatusBarTextureItems", FILE)()
     return type(items) == "table" and items or nil
 end
 
@@ -174,7 +174,7 @@ function B.ResolveFrame(key)
         local texture = B.Resolve(borderKey)
         return texture and B.FRAME_BORDER or nil, borderKey, texture
     end
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    local resolve = Optional("MSUF_ResolveStatusbarTextureKey")
     local texture = type(resolve) == "function" and AssetAllowed(resolve(normalized)) or nil
     return texture and B.FRAME_TEXTURE or nil, normalized, texture
 end
@@ -482,8 +482,4 @@ function B.Hide(pieces)
     end
 end
 
-if type(MSUF.ExportPublic) == "function" then
-    MSUF.ExportPublic("MSUF_BorderStyles", B)
-else
-    _G.MSUF_BorderStyles = B
-end
+MSUF.ExportPublic("MSUF_BorderStyles", B)

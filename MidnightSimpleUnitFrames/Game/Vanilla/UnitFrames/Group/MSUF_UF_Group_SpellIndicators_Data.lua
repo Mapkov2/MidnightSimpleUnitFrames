@@ -1,7 +1,6 @@
 --- Classic Era group spell indicators.
 --- Era has no specialization API, so each supported class uses one combined set.
 local _, ns = ...
-ns = ns or (_G.MSUF_NS) or {}
 local SI = ns.GF and ns.GF.SpellIndicators
 if not SI then return end
 

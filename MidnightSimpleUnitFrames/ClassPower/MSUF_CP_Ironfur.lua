@@ -3,10 +3,10 @@
 --- moving display is active-only and never reads restricted aura durations.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Ironfur.lua")
+local FILE = "ClassPower/MSUF_CP_Ironfur.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 
-local modeBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
+local modeBuilders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_MODE_BUILDERS")
 
 local IRONFUR_SPELL = 192081
 local URSOCS_ENDURANCE = 393611

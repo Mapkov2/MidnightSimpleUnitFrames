@@ -6,7 +6,6 @@
 --- GroupFrames/MSUF_GroupFrames_DB_SpellIndicators.lua.
 
 local _, ns = ...
-ns = ns or (_G.MSUF_NS) or {}
 local ExportPublic = ns.ExportPublic
 
 local GF = ns.GF

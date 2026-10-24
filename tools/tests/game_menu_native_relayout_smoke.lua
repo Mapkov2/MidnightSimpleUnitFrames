@@ -16,9 +16,11 @@
 
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local world = World.New(root, "Mainline")
 local env, ns, widgets = world.env, world.core, world.widgets
-ns.ExportPublic = function(name, value) env[name] = value end
+-- The real Kernel namespace API and pixel layout provider the shell file requires at load.
+MenuWorld.InstallPartialCore(world)
 
 env.MSUF_DB = { general = {} }
 env.EllesmereUI = false
@@ -79,7 +81,7 @@ end
 local ok, err = world:LoadFile(root .. "/MidnightSimpleUnitFrames/Shell/MSUF_GameMenu.lua", "MidnightSimpleUnitFrames", ns)
 assert(ok, tostring(err))
 widgets:FireEvent("PLAYER_LOGIN")
-env.MSUF_PositionGameMenuButton()
+ns.PublicGlobals.MSUF_PositionGameMenuButton() -- namespace-only export
 local button = assert(env.MSUF_GameMenuButton, "the MSUF Game Menu button was not created")
 
 local function AssertPlaced(context)
@@ -127,14 +129,14 @@ widgets:EnterCombat()
 menu:InitButtons()
 menu:Layout()
 widgets:RunTimers()
-env.MSUF_PositionGameMenuButton()
+ns.PublicGlobals.MSUF_PositionGameMenuButton() -- namespace-only export
 assert(#combatWrites == 0, "MSUF wrote the Blizzard Game Menu during combat: " .. table.concat(combatWrites, ", "))
 assert(menu:GetHeight() == 400 and not button:IsShown(), "the MSUF row stayed on the native combat layout")
 widgets:LeaveCombat()
 AssertPlaced("after combat")
 
 -- Turned off: the next native relayout stays native.
-env.MSUF_SetGameMenuButtonEnabled(false)
+ns.PublicGlobals.MSUF_SetGameMenuButtonEnabled(false) -- namespace-only export
 menu:InitButtons()
 menu:Layout()
 widgets:RunTimers()

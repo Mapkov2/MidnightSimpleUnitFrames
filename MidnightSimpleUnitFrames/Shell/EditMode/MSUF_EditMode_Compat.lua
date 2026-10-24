@@ -3,7 +3,6 @@
 --- preview syncs and the castbar anchor toggle. (MSUF_EditState is published
 --- by Core, which loads first.)
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local Preview = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_Compat.lua").UF.Preview
 local previewKind = type(Preview)
 assert(previewKind == "table",
@@ -25,16 +24,19 @@ local SetAllOn = Preview.Bind("all", true)
 local SetBossOn = Preview.Bind("boss", true)
 local SetArenaOn = Preview.Bind("arena", true)
 local ExportPublic = MSUF.ExportPublic
-local EM2 = _G.MSUF_EM2
+local PublicGlobals = MSUF.PublicGlobals
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 --- Loads with Elements: without a registry neither runs.
 if not EM2.Registry then return end
 
 local U = EM2.Util or {}
 local IsConfigCombatLocked = U.IsConfigCombatLocked
-local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
+local FrameRectToUI = MSUF.Require("MSUF_UF_FrameRectToUI", CALLER)
 local RefreshUFPreview = EM2.Movers.RefreshUFPreview
 
+--- Calls a collaborator that loads later or may be absent, resolved per call
+--- so a wrapper installed on its global still applies.
 --- --- MSUF_IsInEditMode ---
 local function MSUF_IsInEditMode()
     if EM2.State then return EM2.State.IsActive() end
@@ -101,7 +103,7 @@ local function MSUF_SyncAuras3PositionPopup(unit)
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
     local menu = MSUF and MSUF.MSUF2
     if menu and type(menu.SyncAuras3PositionSettings) == "function" then
-        menu.SyncAuras3PositionSettings(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+        menu.SyncAuras3PositionSettings(unit, PublicGlobals.MSUF_EM2_ActiveAuraGroup)
     end
     MSUF.EventBus:Publish("CONFIG_APPLIED", "MSUF_SyncAuras3PositionPopup")
 end
@@ -169,7 +171,7 @@ local function GetPreviewFrame(unitKey)
     end
     local frames = UF and UF.frames
     return (frames and frames[unitKey])
-        or _G["MSUF_" .. unitKey]
+        or MSUF.Optional("MSUF_" .. unitKey)
 end
 
 local function ReforcePreviewFrame(frame, _, want)
@@ -227,19 +229,16 @@ end
 --- Castbar previews follow the unit edit: the boss castbars in one batch,
 --- then every castbar test function.
 local function SyncCastbarPreviewTests()
-    local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
-    local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
-    local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
-    if batchingBossPreview then beginBossBatch() end
+    MSUF.Require("MSUF_BeginBossCastbarPreviewBatch", CALLER)()
     SyncCastbarEditModeWithUnitEdit()
     --- Animated castbar motion is owned by the on-demand preview animation driver.
     for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-        local f = _G[fn]
+        local f = MSUF.Optional(fn)
         if type(f) == "function" then
             f(false, true)
         end
     end
-    if batchingBossPreview then endBossBatch() end
+    MSUF.Require("MSUF_EndBossCastbarPreviewBatch", CALLER)()
 end
 
 local function MSUF_SyncAllUnitPreviews()
@@ -257,21 +256,15 @@ local function MSUF_SyncAllUnitPreviews()
 
     --- 1) Boss: existing system
     if want then SetBossOn() else SetBossOff() end
-    if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
-        _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
-    end
+    MSUF.Require("MSUF_SyncBossUnitframePreviewWithUnitEdit", CALLER)()
 
     --- 1b) Arena: mirrors the boss preview system
     if want then SetArenaOn() else SetArenaOff() end
-    if _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
-        _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
-    end
+    MSUF.Require("MSUF_SyncArenaUnitframePreviewWithUnitEdit", CALLER)()
 
     --- 2) Non-player: refresh visibility drivers (reads MSUF_PreviewTestMode),
     --- then update each frame (the engine paints preview data for unitless frames)
-    if _G.MSUF_RefreshAllUnitVisibilityDrivers then
-        _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
-    end
+    MSUF.Require("MSUF_RefreshAllUnitVisibilityDrivers", CALLER)(want)
 
     ForPreviewFrames(ReforcePreviewFrame, want)
     --- 3) Castbars
@@ -323,18 +316,23 @@ do
     local function ScheduleReforce(delay)
         if not previewState.all then return end
         if IsConfigCombatLocked() then return end
-        -- Closures made per sync read the output mirror: a captured state table would add an upvalue to each.
+        -- Closures made per sync read the namespace output mirror, the same table the wrappers below read.
         C_Timer.After(delay or 0, function()
-            if not _G.MSUF_PreviewTestMode then return end
+            if not PublicGlobals.MSUF_PreviewTestMode then return end
             if IsConfigCombatLocked() then return end
             MSUF_EM2_ReforcePreviewFrames()
         end)
     end
 
+    --- Wrappers go in and out through ExportPublic, so MSUF.Public,
+    --- MSUF.PublicGlobals and the published global all see the same function.
+    --- A re-export since install keeps its newer value, and a published global
+    --- hooked since install keeps its hook.
     local function UninstallPipelineWrappers()
         for name, original in pairs(wrapped) do
-            if _G[name] == wrappers[name] then
-                _G[name] = original
+            local wrapper = wrappers[name]
+            if PublicGlobals[name] == wrapper then
+                ExportPublic(name, original, _G[name] == wrapper)
             end
             wrapped[name] = nil
             wrappers[name] = nil
@@ -344,10 +342,10 @@ do
     local function InstallPipelineWrappers()
         if not previewState.all then return end
         for _, name in ipairs(PIPELINE_REFORCE_NAMES) do
-            if not wrapped[name] and type(_G[name]) == "function" then
-                local original = _G[name]
+            local original = not wrapped[name] and MSUF.Optional(name)
+            if type(original) == "function" then
                 local function wrapper(...)
-                    if not _G.MSUF_PreviewTestMode then
+                    if not PublicGlobals.MSUF_PreviewTestMode then
                         UninstallPipelineWrappers()
                         return original(...)
                     end
@@ -359,7 +357,7 @@ do
                 end
                 wrapped[name] = original
                 wrappers[name] = wrapper
-                _G[name] = wrapper
+                ExportPublic(name, wrapper)
             end
         end
     end
@@ -419,7 +417,7 @@ do
         local function Alive()
             if serial ~= asyncPreviewSerial then return false end
             if IsConfigCombatLocked() then return false end
-            if want and not (_G.MSUF_UnitPreviewActive and EM2.State and EM2.State.IsActive()) then return false end
+            if want and not (PublicGlobals.MSUF_UnitPreviewActive and EM2.State and EM2.State.IsActive()) then return false end
             return true
         end
 
@@ -431,18 +429,12 @@ do
         end
 
         Phase(0, function()
-            if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
-                _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
-            end
-            if _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
-                _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
-            end
+            MSUF.Require("MSUF_SyncBossUnitframePreviewWithUnitEdit", CALLER)()
+            MSUF.Require("MSUF_SyncArenaUnitframePreviewWithUnitEdit", CALLER)()
         end)
 
         Phase(0.02, function()
-            if _G.MSUF_RefreshAllUnitVisibilityDrivers then
-                _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
-            end
+            MSUF.Require("MSUF_RefreshAllUnitVisibilityDrivers", CALLER)(want)
         end)
 
         Phase(0.04, function()
@@ -477,7 +469,7 @@ end
 
 --- --- Castbar preview sync ---
 function SyncCastbarEditModeWithUnitEdit()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then return end
     db.general = db.general or {}
     local g = db.general
@@ -502,15 +494,15 @@ local function CastbarToggleFrameCenter(unit)
         preview = MSUF.Castbars.Frames.Get("focusPreview")
         runtime = MSUF.Castbars.Frames.Get("focus")
     elseif unit == "boss" then
-        preview = MSUF.Castbars.Frames.Get("bossPreview") or _G.MSUF_BossCastbarPreview1
-        local bossCastbars = _G.MSUF_BossCastbars
+        preview = MSUF.Castbars.Frames.Get("bossPreview")
+        local bossCastbars = MSUF.Optional("MSUF_BossCastbars")
         runtime = (bossCastbars and bossCastbars[1])
-            or _G.MSUF_BossCastbar1
+            or MSUF.Optional("MSUF_BossCastbar1")
     elseif unit == "arena" then
-        preview = MSUF.Castbars.Frames.Get("arenaPreview") or _G.MSUF_ArenaCastbarPreview1
-        local arenaCastbars = _G.MSUF_ArenaCastbars
+        preview = MSUF.Castbars.Frames.Get("arenaPreview") or MSUF.Optional("MSUF_ArenaCastbarPreview1")
+        local arenaCastbars = MSUF.Optional("MSUF_ArenaCastbars")
         runtime = (arenaCastbars and arenaCastbars[1])
-            or _G.MSUF_ArenaCastbar1
+            or MSUF.Optional("MSUF_ArenaCastbar1")
     end
 
     local function Center(frame)
@@ -528,11 +520,11 @@ local function ApplyCastbarAnchorState(unit)
     MSUF.Require("MSUF_PositionCastbarPreviewUnit", CALLER)(unit)
 end
 
-local RoundCastbarOffset = _G.MSUF_RoundOffset
+local RoundCastbarOffset = MSUF.Require("MSUF_RoundOffset", CALLER)
 
 local MSUF_EM_SetCastbarAnchoredToUnit = function(unit, anchored)
     if not unit then return end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then
         return
     end

@@ -1,8 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/MSUF_Auras3_SpellIndicators.lua
 --- Group-frame spell indicators on WoW 12.1 CustomAuraContainer aura slots.
 local addonName, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_SpellIndicators.lua")
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
@@ -15,7 +14,7 @@ A3.SpellIndicators = Runtime
 
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 -- Config, effects and reminders are initialized once. The native owner below
 -- keeps direct local calls; module boundaries add no per-aura dispatch layer.

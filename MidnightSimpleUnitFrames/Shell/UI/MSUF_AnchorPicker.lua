@@ -1,35 +1,34 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/UI/MSUF_AnchorPicker.lua - shared anchor picker singleton.
 --- Used by Edit Mode and Menu2 anchor controls. Callers set
 --- _G.MSUF_AnchorPicker._onPick = function(frameName) ... end before showing.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/UI/MSUF_AnchorPicker.lua")
 local ExportPublic = MSUF.ExportPublic
 
-if _G.MSUF_EnsureAnchorPicker then return end
+if MSUF.Optional("MSUF_EnsureAnchorPicker") then return end
 
 local Tr = MSUF.Translate
 
 local function ThemeColor(key, fallback)
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     if ui and ui.Color then return ui.Color(key, fallback) end
     return fallback
 end
 
 local function FontSize(role)
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     return ui and ui.FontSize and ui.FontSize(role) or 13
 end
 
 local function ApplyFontRole(fs, role, fallback, flags)
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     if ui and ui.ApplyFontRole then return ui.ApplyFontRole(fs, role, fallback, flags) end
     fs:SetFont(fallback, FontSize(role), flags or "")
     return fs
 end
 
-local isSecretValue = type(_G.issecretvalue) == "function" and _G.issecretvalue or nil
+local isSecretValue = type(issecretvalue) == "function" and issecretvalue or nil
 local function PlainBool(v)
     if isSecretValue and isSecretValue(v) then return nil end
     if v == true or v == 1 then return true end
@@ -50,6 +49,9 @@ local FrameGetRect = scriptRegion and scriptRegion.GetRect
 -- Hover-loop hot path: the shared probe stays bound as a file-level upvalue.
 
 
+-- The picker overlay singleton, published as MSUF_AnchorPicker once built.
+local anchorPicker
+
 local function IsForbiddenFrame(frame)
     if not frame then return true end
     if type(FrameIsForbidden) ~= "function" then return false end
@@ -66,7 +68,7 @@ local function IsBlocked(frame)
     if IsForbiddenFrame(frame) then return true end
     local unitToken = type(frame) == "table" and rawget(frame, "unitToken") or nil
     if (isSecretValue and isSecretValue(unitToken)) or unitToken then return true end
-    local ov = _G.MSUF_AnchorPicker
+    local ov = anchorPicker
     if ov and (frame == ov or frame == ov._highlight) then return true end
     return false
 end
@@ -149,6 +151,7 @@ end
 
 local function CreateAnchorPicker()
     local ov = PixelLayoutRegion(CreateFrame("Frame", "MSUF_AnchorPickerOverlay", UIParent, "BackdropTemplate"))
+    anchorPicker = ov
     ExportPublic("MSUF_AnchorPicker", ov)
     ov:SetAllPoints(UIParent)
     ov:SetFrameStrata("FULLSCREEN_DIALOG"); ov:SetFrameLevel(100)
@@ -221,7 +224,7 @@ local function CreateAnchorPicker()
 end
 
 local function EnsureAnchorPicker()
-    if _G.MSUF_AnchorPicker then return _G.MSUF_AnchorPicker end
+    if anchorPicker then return anchorPicker end
 
     local ov, accent, ok, danger = CreateAnchorPicker()
 
@@ -266,7 +269,7 @@ local function EnsureAnchorPicker()
     end
 
     ov:SetScript("OnShow", function(self)
-        if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
+        if MSUF.Require("MSUF_BlockConfigCombatLocked", "Shell/UI/MSUF_AnchorPicker.lua")() then
             self:Hide()
             return
         end
@@ -301,7 +304,7 @@ local function EnsureAnchorPicker()
 
     ov:SetScript("OnEvent", function(self, event, button)
         if event == "PLAYER_REGEN_DISABLED" then
-            if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+            MSUF.Require("MSUF_ShowConfigCombatLockMessage", "Shell/UI/MSUF_AnchorPicker.lua")()
             self:Hide()
             return
         end

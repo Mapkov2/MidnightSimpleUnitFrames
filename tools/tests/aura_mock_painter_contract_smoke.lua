@@ -79,7 +79,7 @@ local A3 = {
     GetDurationBarColor = function() return 0.1, 0.2, 0.3 end,
     IconShape = { IconTexCoords = function() return 0, 1, 0, 1 end },
     ApplyAuraIconShape = function(_, shape) return shape end,
-    ApplyIconStylePreview = function() end,
+    ApplyIconStyleSkinned = function() end,
     ApplyAuraDispelPreview = function() return false end,
     PreviewDispelTypeForIndex = function() return "Magic" end,
     NativeAuraDispelBorderPadding = function(size) return size / 8 end,
@@ -183,7 +183,7 @@ assert(border.atlas == "ui-debuff-border-magic-icon" and border.points[1][4] == 
 -- Art routes zoom, shape, visibility and style through the live owners.
 local art = { texture = Region("art"), background = Region("bg"), edge = Region("edge") }
 local styleCalls = {}
-A3.ApplyIconStylePreview = function(_, style, size, shape) styleCalls[#styleCalls + 1] = { style, size, shape } end
+A3.ApplyIconStyleSkinned = function(_, style, size, shape) styleCalls[#styleCalls + 1] = { style, size, shape } end
 art.texture.SetShown = function(self, shown) self.visible = shown end
 art.background.SetShown = function(self, shown) self.visible = shown end
 local shape = Painter.Art(icon, art.texture, art.background, swipeRegion, 12345, 150, 24, 18, "CIRCLE", true, "STYLE", 24, art.edge)

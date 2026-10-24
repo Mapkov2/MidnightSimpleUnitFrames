@@ -87,6 +87,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         enablePlayerCastbar = "castbars", empowerStageBlink = "castbars", gcdBarWidth = "castbars",
         showGCDBar = "castbars", kickReadySize = "castbars", enableFocusKickIcon = "castbars",
         focusKickTextSize = "castbars", showPlayerCastTime = "castbars", showFocusCastTime = "castbars",
+        focusKickIconShape = "castbars", castbarTargetIconShape = "castbars", bossCastIconShape = "castbars",
         -- plain unit frame keys
         fontKey = "unitframes", portraitShape = "unitframes", unitDispelSymbolMode = "unitframes",
         -- undeclared keys a menu may write: the fallback rule

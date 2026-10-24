@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Player frame/backend setup, shared castbar manager and timer text updates.
 
 local _, MSUF = ...
@@ -19,24 +18,30 @@ local Style = Castbars.Style
 local Utils = Castbars.Utils
 local Publish = PublicAPI.Publish
 
--- File-level aliases for the manager tick/update paths; MSUF_* lookups stay
--- late-bound on purpose.
+-- File-level aliases for the manager tick/update paths. The Kernel Util and
+-- Colors helpers load before every castbar file and resolve once here; the
+-- guarded call sites keep their plain fallbacks.
 local type = type
 local tonumber = tonumber
 local tostring = tostring
 local next = next
 local math_floor = math.floor
 local math_abs = math.abs
-local GetTime = _G.GetTime
-local GetTimePreciseSec = _G.GetTimePreciseSec
-local C_Timer = _G.C_Timer
-local GetCVar = _G.GetCVar
-local UnitExists = _G.UnitExists
-local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
-local UnitHasVehicleUI = _G.UnitHasVehicleUI
-local UnitChannelInfo = _G.UnitChannelInfo
+local GetTime = GetTime
+local GetTimePreciseSec = GetTimePreciseSec
+local C_Timer = C_Timer
+local GetCVar = GetCVar
+local UnitExists = UnitExists
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local UnitHasVehicleUI = UnitHasVehicleUI
+local UnitChannelInfo = UnitChannelInfo
 
 local FILE = "Castbars/MSUF_Castbars.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
+local SetCastTimeTextShared = MSUF.Require("MSUF_SetCastTimeText", FILE)
+local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", FILE)
+local GetCastbarBackgroundColor = MSUF.Require("MSUF_GetCastbarBackgroundColor", FILE)
 local PlayerCastbarCast = Player.PlayerCastbar_Cast
 local PlayerCastbarOnEvent = Player.PlayerCastbar_OnEvent
 local UpdateLatencyZone = Player.PlayerCastbar_UpdateLatencyZone
@@ -83,7 +88,7 @@ end
 
 local EnsureGeneralDB = Utils.EnsureCastbarGeneralDB
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper. The
 -- former inline copy here only differed when a ToPlain or MSUF_ToPlainNumber
@@ -93,11 +98,7 @@ local ToPlainNumber = Utils.Castbar_PlainNumber
 
 local function SetText(fontString, text)
     if not fontString then return end
-    if type(_G.MSUF_SetTextIfChanged) == "function" then
-        _G.MSUF_SetTextIfChanged(fontString, text or "")
-    elseif fontString.SetText then
-        fontString:SetText(text or "")
-    end
+    SetTextIfChanged(fontString, text or "")
 end
 
 local function SyncTimeTextFollower(frame)
@@ -115,11 +116,7 @@ end
 Manager.Castbar_SyncTimeTextFollower = SyncTimeTextFollower
 
 local function SetCastTimeText(frame, remaining, total)
-    if type(_G.MSUF_SetCastTimeText) == "function" then
-        _G.MSUF_SetCastTimeText(frame, remaining, total)
-    elseif frame and frame.timeText and frame.timeText.SetFormattedText then
-        frame.timeText:SetFormattedText("%.1f", tonumber(remaining) or 0)
-    end
+    SetCastTimeTextShared(frame, remaining, total)
     if frame and frame._msufTimeTextFollower then SyncTimeTextFollower(frame) end
 end
 
@@ -213,8 +210,7 @@ end
 local function BuildPlayerCastbarElements(frame)
     -- Native pixel rounding for the castbar rect (12.1.5). Root only: the
     -- rounded-corner art below deliberately runs with pixel snapping off.
-    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-    if type(roundLayout) == "function" then roundLayout(frame, true) end
+    SetRoundLayoutToNearestPixel(frame, true)
     frame:SetClampedToScreen(true)
     frame.unit = "player"
     frame:SetSize(200, 18)
@@ -230,8 +226,7 @@ local function BuildPlayerCastbarElements(frame)
     frame.icon = icon
 
     local statusBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
-    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-    if type(roundLayout) == "function" then roundLayout(statusBar, true) end
+    SetRoundLayoutToNearestPixel(statusBar, true)
     statusBar:SetPoint("LEFT", icon, "RIGHT", 0, 0)
     statusBar:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
     statusBar:SetPoint("TOP", frame, "TOP", 0, 0)
@@ -256,11 +251,7 @@ local function BuildPlayerCastbarElements(frame)
     end
     backgroundBar:SetTexture(backgroundTexture)
 
-    local red, green, blue, alpha = 0.176, 0.176, 0.176, 1
-    if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
-        red, green, blue, alpha = _G.MSUF_GetCastbarBackgroundColor()
-    end
-    backgroundBar:SetVertexColor(red, green, blue, alpha)
+    backgroundBar:SetVertexColor(GetCastbarBackgroundColor())
     frame.backgroundBar = backgroundBar
 
     local fontPath, fontSize, fontFlags = GameFontHighlight:GetFont()

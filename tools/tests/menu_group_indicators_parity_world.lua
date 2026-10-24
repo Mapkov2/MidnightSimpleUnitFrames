@@ -65,6 +65,19 @@ local mw = World.Open(root, flavor, { clientScriptBindings = true, nativeButtonL
         end
     end })
 local M, env, core = mw.M, mw.env, mw.core
+if proofRoot then
+    -- The immutable parent page predates the namespace-only exports and reads them as globals
+    -- (_G.MSUF_StatusIconPackSupports, _G.MSUF_GetStatusIconTexture, _G.MSUF_InCombat, ...). Its sandbox
+    -- answers those reads from the live namespace registry, so both pages observe the same client.
+    local meta = assert(getmetatable(env), "the client sandbox lost its global fallback")
+    local fallback, registry = meta.__index, core.PublicGlobals
+    meta.__index = function(table_, key)
+        local published = registry[key]
+        if published ~= nil then return published end
+        if type(fallback) == "function" then return fallback(table_, key) end
+        if fallback then return fallback[key] end
+    end
+end
 local F = core.ProfileFields
 local factory = F.CopySnapshot(env.MSUF_DB)
 core.MSUF_CreateFactoryDefaultProfile = function() return F.CopySnapshot(factory) end

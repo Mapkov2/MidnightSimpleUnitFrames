@@ -19,16 +19,23 @@ local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 local function Scenario(route)
     local world = World.New(root, "Mists")
     local env, ns = world.env, world.core
-    ns.ExportPublic = function(name, value) env[name] = value end
-    ns.Optional = function(name) return rawget(env, name) end
-    ns.Require = function(name) return assert(rawget(env, name), "missing " .. name) end
+    -- The shipped Kernel API in this client's globals (export policy, registry, Require).
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
     ns.Util = { InCombat = function() return world.widgets:IsInCombat() end }
+    RequireFixture.InstallKernel(root, ns, env)
     local function Load(path)
+        -- A provider these partial loads do not run (the colour runtimes) is deferred: it raises naming
+        -- the provider if the smoke ever reaches it.
+        local source = assert(io.open(root .. "/MidnightSimpleUnitFrames/" .. path, "rb"))
+        RequireFixture.DeferRequired(ns, source:read("*a"), path, env)
+        source:close()
         local ok, err = world:LoadFile(root .. "/MidnightSimpleUnitFrames/" .. path, "MidnightSimpleUnitFrames", ns)
         assert(ok, route .. ": " .. tostring(err))
     end
 
     env.MSUF_MAX_ARENA_FRAMES = 1
+    -- Kernel/MSUF_Util.lua's pixel layout provider, bound by the files below when they load; no pixels here.
+    env.MSUF_PixelLayoutRegion = function(region) return region end
     -- Kernel's event bus: the module wires its arena events there; the smoke drives
     -- the prep sync directly.
     env.MSUF_EventBus_Register = function() end
@@ -49,7 +56,8 @@ local function Scenario(route)
     frame.hpBar = env.CreateFrame("StatusBar", nil, frame)
     frame.MSUFUnitKey = "arena1"
     frame._msufHealthRuntimeColorUpdateEnabled = false
-    ns.UF = { GetFrame = function() return frame end }
+    -- The arena match reads the factory's frame registry (UF.frames) directly.
+    ns.UF = { GetFrame = function() return frame end, frames = { arena1 = frame } }
     Load("Libs/MSUFUnitFrames/MSUF_UF_Apply.lua")
     local health
     ns.UF.RegisterElement = function(_, element) health = element end

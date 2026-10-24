@@ -46,16 +46,21 @@ ns.MSUF2 = {
     WordList = function(s) local t = {} for v in s:gmatch("%S+") do t[#t + 1] = v end return t end,
     Lines = function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end,
 }
+-- The core providers the theme files require at load (Kernel API, pixel layout, UI primitives).
+local REPO = ROOT:gsub("/$", "")
+local RequireFixture = assert(loadfile(ROOT .. "tools/tests/menu_core_world.lua"))().LoadThemeProviders(REPO, ns)
+-- Options files: providers this probe does not load are deferred and raise if used.
+local function loadOptions(path) return RequireFixture.LoadShipped(REPO, path, ns) end
 -- core addon file (TOC Shell\UI\MSUF_MapkoSkin.lua)
 load("MidnightSimpleUnitFrames/Shell/UI/MSUF_MapkoSkin.lua", ns)
 -- The skin connects once the SavedVariables exist (PLAYER_LOGIN).
 lastFrame.OnEvent(lastFrame, "PLAYER_LOGIN")
 -- Options TOC: Theme_Forever, then Menu2.xml: ... Theme_Tokens (7), Theme (8), ... Bindings (22)
-load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua", ns)
-load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua", ns)
+loadOptions("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua")
+loadOptions("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua")
 local M, T = ns.MSUF2, ns.MSUF2.Theme
 local stock = { unpack(T.colors.accent) }
-load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua", ns)
+loadOptions("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua")
 print("after Theme.lua load: _menuAccentApplied =", tostring(T._menuAccentApplied),
     " (M.GetGeneralDB defined:", type(M.GetGeneralDB) == "function", ")")
 

@@ -126,7 +126,7 @@ local ns = { Client = client, ExportPublic = function(name, value) _G[name] = va
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF", ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF", ns)
 local eventFrame = Check(named.MSUF_InterruptReady_EventFrame, "interrupt-ready event frame is missing")
-Check(_G.MSUF_KickReady_GetSpellID() == PUMMEL, "Warriors must interrupt with Pummel")
+Check(ns.PublicGlobals.MSUF_KickReady_GetSpellID() == PUMMEL, "Warriors must interrupt with Pummel")
 
 local target = { unit = "target", statusBar = CreateFrame("StatusBar"), MSUF_castActive = true,
     isNotInterruptible = false, MSUF_kickInterruptibleConfirmed = true }
@@ -135,7 +135,7 @@ ns.Castbars.Frames.Register("target", nil, target)
 
 local function Paint()
     now = now + 0.016
-    _G.MSUF_KickReady_RefreshFrame(target)
+    ns.PublicGlobals.MSUF_KickReady_RefreshFrame(target)
     local box = Check(target.kickReadyBox and target.kickReadyBox.fill.color, "no indicator box was painted")
     local color = target.kickReadyBox.fill.color
     return color[1] == 0 and color[2] == 1, box
@@ -147,7 +147,7 @@ end
 
 -- 1. Nothing on cooldown.
 Check(Paint() == true, "an interrupt off cooldown is painted as not ready")
-Check(_G.MSUF_KickReady_IsReady() == true, "an interrupt off cooldown reports not ready")
+Check(ns.PublicGlobals.MSUF_KickReady_IsReady() == true, "an interrupt off cooldown reports not ready")
 
 -- 2. Only the global cooldown runs after another ability.
 cooldowns[PUMMEL] = { start = now, duration = 1.5 }
@@ -159,7 +159,7 @@ cooldowns[PUMMEL] = { start = now - 2, duration = 10 }
 timers = {}
 Event()
 Check(Paint() == false, "an interrupt on cooldown is painted as ready")
-Check(_G.MSUF_KickReady_IsReady() == false, "an interrupt on cooldown reports ready")
+Check(ns.PublicGlobals.MSUF_KickReady_IsReady() == false, "an interrupt on cooldown reports ready")
 if not withDurationAPI then
     local timer = timers[#timers]
     Check(timer and math.abs(timer.delay - 8.05) < 0.1,
@@ -169,7 +169,7 @@ if not withDurationAPI then
     timer.callback()
     Check(target.kickReadyBox.fill.color[1] == 0 and target.kickReadyBox.fill.color[2] == 1,
         "the indicator did not turn ready when the cooldown ended")
-    Check(_G.MSUF_KickReady_IsReady() == true, "the interrupt still reports not ready after its cooldown")
+    Check(ns.PublicGlobals.MSUF_KickReady_IsReady() == true, "the interrupt still reports not ready after its cooldown")
 
     -- 5. A held cooldown never reads as ready and schedules no wake.
     cooldowns[PUMMEL] = { start = now, duration = 10, enabled = false }

@@ -5,7 +5,6 @@
 --- after it (UFCore_Group.xml and the Classic GroupFrames.xml manifests) and
 --- shares the one MSUF.GF table; see that file for the module's API surface.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 MSUF.GF = MSUF.GF or {}
@@ -38,7 +37,8 @@ end
 function GF.GetHighlightVal(kind, key)
     local conf = GF.GetConf(kind)
     local modeKey = _HL_OUTLINE_MODE_KEYS[key]
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local db = MSUF_DB
+    local gen = db and db.general
     if conf.hlOverride then
         if modeKey then
             local enabled = OutlineModeToEnabled(conf[modeKey])
@@ -74,7 +74,8 @@ ExportPublic("MSUF_GF_GetHighlightVal", GF.GetHighlightVal)
 --- GF-local (gf_party/gf_raid) can override bars.barOutlineThickness via hlOverride=true.
 function GF.GetBarOutlineThickness(kind)
     local conf = GF.GetConf(kind)
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local db = MSUF_DB
+    local bars = db and db.bars
     local raw = nil
     if conf and conf.hlOverride and conf.barOutlineThickness ~= nil then
         raw = conf.barOutlineThickness
@@ -371,7 +372,7 @@ local function NormalizeStatusIconFileKey(file)
     return file ~= "" and file or nil
 end
 
-local LSM = _G.MSUF_GetSharedMedia
+local LSM = MSUF.Require("MSUF_GetSharedMedia", "GroupFrames/MSUF_GroupFrames_DB_Textures.lua")
 
 local function ParseLSMStatusIconName(name)
     if type(name) ~= "string" or name == "" then return nil end
@@ -415,30 +416,30 @@ local function AddSharedMediaIconPacks()
 end
 
 local function GetAddonInfoName(index)
-    local c = _G.C_AddOns
+    local c = C_AddOns
     if c and type(c.GetAddOnInfo) == "function" then
         local name, title = c.GetAddOnInfo(index)
         return name, title
     end
-    if type(_G.GetAddOnInfo) == "function" then
-        local name, title = _G.GetAddOnInfo(index)
+    if type(GetAddOnInfo) == "function" then
+        local name, title = GetAddOnInfo(index)
         return name, title
     end
 end
 
 local function GetAddonCount()
-    local c = _G.C_AddOns
+    local c = C_AddOns
     if c and type(c.GetNumAddOns) == "function" then return tonumber(c.GetNumAddOns()) or 0 end
-    if type(_G.GetNumAddOns) == "function" then return tonumber(_G.GetNumAddOns()) or 0 end
+    if type(GetNumAddOns) == "function" then return tonumber(GetNumAddOns()) or 0 end
     return 0
 end
 
 local function GetAddonMetadata(addonName, field)
-    local c = _G.C_AddOns
+    local c = C_AddOns
     if c and type(c.GetAddOnMetadata) == "function" then
         return c.GetAddOnMetadata(addonName, field)
     end
-    if type(_G.GetAddOnMetadata) == "function" then return _G.GetAddOnMetadata(addonName, field) end
+    if type(GetAddOnMetadata) == "function" then return GetAddOnMetadata(addonName, field) end
 end
 
 local function IsTruthyMetadata(value)

@@ -37,6 +37,7 @@ local BASE_FILES = {
     ["MSUF_Require.lua"] = true,
     ["MSUF_EventBus.lua"] = true,
     ["MSUF_Scheduler.lua"] = true,
+    ["MSUF_Colors.lua"] = true,
     ["MSUF_Castbars_PublicAPI.lua"] = true,
     ["MSUF_Castbars_Backend.lua"] = true,
     ["MSUF_CastbarConfig.lua"] = true,
@@ -197,6 +198,15 @@ function World.New(root, backend, options)
     _G.secureexecuterange = nil
     _G.issecretvalue = function() return false end
     _G.wipe = function(t) for key in pairs(t) do t[key] = nil end return t end
+    -- Blizzard's CreateColor (a ColorMixin object); Runtime/MSUF_Colors.lua builds its
+    -- palette colour objects through it.
+    _G.CreateColor = function(r, g, b, a)
+        return {
+            r = r, g = g, b = b, a = a,
+            GetRGB = function(self) return self.r, self.g, self.b end,
+            GetRGBA = function(self) return self.r, self.g, self.b, self.a end,
+        }
+    end
     _G.UnitExists = function(unit) return world.exists[unit] == true end
     _G.UnitIsDeadOrGhost = function(unit) return world.dead[unit] == true end
     _G.UnitIsUnconscious = function() return false end
@@ -228,10 +238,6 @@ function World.New(root, backend, options)
     if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
     local ns = {
-        ExportPublic = function(name, value)
-            _G[name] = value
-            return value
-        end,
         Client = {
             IsClassic = true,
             IsMists = true,
@@ -239,15 +245,15 @@ function World.New(root, backend, options)
             SupportsEvent = function() return true end,
         },
     }
-    -- Load the real shared predicates without replacing this fixture's visual providers.
-    local utilityNS = { ExportPublic = function(_, value) return value end }
-    local previousMSUF = _G.MSUF
-    assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, utilityNS)
+    -- The real Kernel Bootstrap and Require first, as in every TOC: ExportPublic
+    -- keeps the shipped global policy, so namespace-only exports live in
+    -- world.ns.PublicGlobals. Real Util and the cooldown-anchor defaults follow
+    -- (Providers), Runtime/MSUF_Colors.lua in the TOC walk below.
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.InstallKernel(root, ns)
     assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, ns)
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", utilityNS)
-    _G.MSUF = previousMSUF
-    ns.Util = utilityNS.Util
-    ns.Public = { GetCastbarTimeFormat = _G.MSUF_GetCastbarTimeFormat }
+    local Fixture = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))()
+    Fixture.Providers(root, ns, _G, loadfile, { colors = false })
     world.ns = ns
     -- Castbars/MSUF_CastbarFrames.lua is not loaded: World:Driver and
     -- World:PoolCastbar supply the regions its builder makes.
@@ -258,19 +264,28 @@ function World.New(root, backend, options)
     _G.MSUF_MAX_ARENA_FRAMES = options.arenaSlots or 3
     local extra = {}
     for index = 1, #(options.extra or {}) do extra[options.extra[index]] = true end
-    local Fixture = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))()
     local loadfile = assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Loader(loadfile, root)
     local loaded = {}
     for _, path in ipairs(manifest.Paths(root, options.flavor or World.FLAVOR)) do
         local name = path:match("([^/]+)$")
         local inCastbars = path:find("/Castbars/", 1, true) or path:find("/Kernel/", 1, true)
+            or path:find("/Runtime/MSUF_Colors.lua", 1, true)
         if inCastbars and (BASE_FILES[name] or extra[name] or (options.pools and IsPoolFile(name))) then
+            Fixture.PrepareFile(root, ns, _G, loadfile, path)
             if name == "MSUF_Castbars_Core.lua" then
                 local mediaFixture = assert(loadfile(root .. "/tools/tests/runtime_media_fixture.lua"))()
                 mediaFixture.LoadFonts(root, ns)
                 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_MediaRuntime.lua"))("MidnightSimpleUnitFrames", ns)
             end
-            assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
+            if name == "MSUF_Colors.lua" then
+                -- A colour provider a smoke stands in for (options.setup) keeps
+                -- its stand-in, as a global defined before the consumer loads does.
+                Fixture.KeepHarnessGlobals(_G, ns, function()
+                    assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
+                end)
+            else
+                assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
+            end
             if name == "MSUF_EventBus.lua" then
                 local register = _G.MSUF_EventBus_Register
                 _G.MSUF_EventBus_Register = function(...)

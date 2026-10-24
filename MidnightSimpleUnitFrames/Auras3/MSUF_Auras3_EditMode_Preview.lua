@@ -1,8 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/EditMode_Preview: fake aura groups and their refresh signatures; live aura payloads remain native.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_EditMode_Preview.lua")
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -10,13 +9,16 @@ if type(A3) ~= "table" then
 end
 A3.EditModeModules = A3.EditModeModules or {}
 local AuraPainter = assert(MSUF.Require("MSUF_Auras3", "Auras3/EditMode_Preview").MockAuraPainter, "MSUF: missing core mock aura painter")
+local GetGlobalFontSettings = MSUF.Require("MSUF_GetGlobalFontSettings", "Auras3/MSUF_Auras3_EditMode_Preview.lua")
+local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", "Auras3/MSUF_Auras3_EditMode_Preview.lua")
+local MAX_ARENA_FRAMES = tonumber(MSUF.Client.MaxArenaOpponents) or 3
 
 A3.EditModeModules.Preview = function(config, layout, drag, IsBossScope, ForEachBossUnit, EditPreviewActive, UnitPreviewActive, SyncPreviewGroupStrata)
 local PaintSwipe, AuraState, PlaceText = AuraPainter.Swipe, AuraPainter.AuraState, AuraPainter.PlaceText
 local DispelBorder, LayoutDurationBar = AuraPainter.DispelBorder, AuraPainter.LayoutDurationBar
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor, math_min, math_max = math.floor, math.min, math.max
-local CreateFrame, UIParent = _G.CreateFrame, _G.UIParent
+local CreateFrame, UIParent = CreateFrame, UIParent
 local EM = A3.EditMode
 local function IsArenaScope(unit)
     return tostring(unit or ""):lower() == "arena"
@@ -24,7 +26,7 @@ end
 
 local function ForEachArenaUnit(fn)
     if type(fn) ~= "function" then return end
-    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do fn("arena" .. i) end
+    for i = 1, MAX_ARENA_FRAMES do fn("arena" .. i) end
 end
 
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
@@ -61,18 +63,14 @@ local HEADER_H = 18
 local PREVIEW_ICONS = 4
 local function ApplyGlobalFont(fs, size)
     if not fs then return end
-    local fontPath, fontFlags, r, g, b, _, useShadow
-    local gfs = _G.MSUF_GetGlobalFontSettings
-    if type(gfs) == "function" then
-        fontPath, fontFlags, r, g, b, _, useShadow = gfs()
-    end
-    fontPath = fontPath or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local fontPath, fontFlags, r, g, b, _, useShadow = GetGlobalFontSettings()
+    fontPath = fontPath or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
     if fs.SetFont then
         size = tonumber(size) or 14
         if size <= 0 then size = 14 end
         if size < 6 then size = 6 elseif size > 40 then size = 40 end
-        _G.MSUF_SetFontChecked(fs, fontPath, size, fontFlags)
+        SetFontChecked(fs, fontPath, size, fontFlags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then
@@ -586,9 +584,8 @@ function EM.RefreshUnit(unit)
                     if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
                     if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
                     ApplyPreviewIconText(icon, unit, textCfg, i)
-                    if type(A3.ApplyIconStylePreview) == "function" then
-                        A3.ApplyIconStylePreview(icon, iconStyle, size, iconShape)
-                    end
+                    local skinned = A3.ApplyIconStyleSkinned(icon, iconStyle, size, iconShape, iconH)
+                    A3.MockAuraPainter.SkinLayers(icon.Swipe, skinned)
                     icon:Show()
                 end
 

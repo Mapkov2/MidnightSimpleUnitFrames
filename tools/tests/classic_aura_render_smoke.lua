@@ -530,18 +530,20 @@ assert(frame._msufA3ClassicDispelSymbolsActive == true
 assert(frame._msufA3ClassicDispelOverlayActive == true
     and frame._msufA3ClassicDispelOverlayHost and frame._msufA3ClassicDispelOverlayHost._shown == true,
     "Classic live dispel overlay did not render")
-assert(_G.MSUF_SetDispelOverlayPreview(true, "target") == true,
+-- The preview setters are namespace-only exports (Kernel/MSUF_Bootstrap.lua keep policy).
+local published = namespace.PublicGlobals
+assert(published.MSUF_SetDispelOverlayPreview(true, "target") == true,
     "Classic dispel-overlay preview setter missing")
-assert(_G.MSUF_ApplyDispelOverlayPreviewToFrame(frame) == true
+assert(published.MSUF_ApplyDispelOverlayPreviewToFrame(frame) == true
     and frame._msufA3ClassicDispelOverlayPreviewHost._shown == true,
     "Classic dispel-overlay preview did not render")
-assert(_G.MSUF_SetDispelSymbolPreview(true, "target") == true,
+assert(published.MSUF_SetDispelSymbolPreview(true, "target") == true,
     "Classic dispel-symbol preview setter missing")
-assert(_G.MSUF_ApplyDispelSymbolPreviewToFrame(frame) == true
+assert(published.MSUF_ApplyDispelSymbolPreviewToFrame(frame) == true
     and frame._msufA3ClassicDispelSymbolPreviewHost._shown == true,
     "Classic dispel-symbol preview did not render")
-_G.MSUF_SetDispelOverlayPreview(false)
-_G.MSUF_SetDispelSymbolPreview(false)
+published.MSUF_SetDispelOverlayPreview(false)
+published.MSUF_SetDispelSymbolPreview(false)
 
 -- The live dispel-symbol path reuses per-frame scratch tables: the backend's
 -- present set and the renderer's selected list. Shrinking the dispel-type set
@@ -1442,18 +1444,19 @@ do
     -- that only the stale latch blocks must still flush the queue once the
     -- latch is gone, not wait for the next combat end.
     QueueInCombat("target")
-    _G.MSUF_InCombat = true
+    -- MSUF_InCombat is a namespace-only export (Kernel/MSUF_Bootstrap.lua keep policy).
+    namespace.ExportPublic("MSUF_InCombat", true)
     local pending = {}
     _G.C_Timer.After = function(_, callback) pending[#pending + 1] = callback end
     driver._scripts.OnEvent(driver, "PLAYER_REGEN_ENABLED")
     assert(A3._deferredAuraRuntimeScopes.target == true and Armed(),
         "Classic combat-end flush ran while the combat latch was still set")
-    _G.MSUF_InCombat = false
+    namespace.ExportPublic("MSUF_InCombat", false)
     for i = 1, #pending do pending[i]() end
     _G.C_Timer.After = nil
     assert(A3._deferredAuraRuntime == nil and A3._deferredAuraRuntimeScopes == nil and not Armed(),
         "Classic combat-end flush waited for the next combat because the combat latch cleared after it ran")
-    _G.MSUF_InCombat = nil
+    namespace.ExportPublic("MSUF_InCombat", nil)
 end
 
 print("classic aura render smoke passed: " .. backendPath)

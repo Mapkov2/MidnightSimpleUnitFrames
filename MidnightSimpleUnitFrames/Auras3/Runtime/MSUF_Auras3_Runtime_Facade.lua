@@ -2,7 +2,6 @@
 -- Stable public Auras3 API and UF element integration. This is the sole runtime entry surface; Blizzard retains UNIT_AURA ownership.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 local function TakeDeferredRuntime(A3)
     local all = A3._deferredAuraRuntimeAll == true
@@ -91,7 +90,6 @@ local type = type
 local ApplyAuraTooltipStyle = dependencies.Platform.ApplyAuraTooltipStyle
 local ApplyConfig = dependencies.NativeApply.ApplyConfig
 local AuraRuntimeCombatBlocked = dependencies.Platform.AuraRuntimeCombatBlocked
-local C_Timer = dependencies.Platform.C_Timer
 local CreateClassPowerAuraSensor = dependencies.NativeApply.CreateClassPowerAuraSensor
 local CreateFrame = dependencies.Platform.CreateFrame
 local DrainDirectIdentityEventTopologyBatch = dependencies.IdentityTopology.DrainDirectIdentityEventTopologyBatch
@@ -226,8 +224,10 @@ function Facade.NotifyAuraColdpathPreview(reason, scope)
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_PREVIEW") end
     local did = false
     reason = reason or "AURAS3_PREVIEW"
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh(reason)
+    -- Both preview owners load after Auras3 (Options on demand), so resolve them here.
+    local refreshUnitPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+    if refreshUnitPreview then
+        refreshUnitPreview(reason)
         did = true
     end
     local gf = Facade.GroupAPI and Facade.GroupAPI() or nil
@@ -235,8 +235,8 @@ function Facade.NotifyAuraColdpathPreview(reason, scope)
     if touchesGroup and gf and type(gf.RefreshPreviewLayout) == "function" then
         gf.RefreshPreviewLayout(kind)
         did = true
-    elseif touchesGroup and type(_G.MSUF_GF_RefreshPreviewLayout) == "function" then
-        _G.MSUF_GF_RefreshPreviewLayout()
+    elseif touchesGroup then
+        MSUF.Require("MSUF_GF_RefreshPreviewLayout", "Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua")()
         did = true
     end
     return did
@@ -262,8 +262,7 @@ Facade.ApplyRuntimeUnit = function(runtimeUnit)
 end
 
 function Facade.GroupAPI()
-    local ns = MSUF or _G.MSUF_NS or _G.MSUF
-    return ns and ns.GF or nil
+    return MSUF.GF
 end
 
 function Facade.ApplyGroupAuraFrame(frame, unit, kind)
@@ -411,17 +410,10 @@ function A3.RefreshAll()
     -- aborts that pass with "script ran too long", the next-frame callback can
     -- still clear the latch (and service a merged retry) instead of leaving all
     -- later Aura refreshes permanently stuck as pending.
-    if RunNextFrame then
-        RunNextFrame(Facade.FlushCoalescedRefreshAll)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Facade.FlushCoalescedRefreshAll)
-    end
+    RunNextFrame(Facade.FlushCoalescedRefreshAll)
     A3._refreshAllIncomplete = true
     Facade.DoRefreshAll()
     A3._refreshAllIncomplete = nil
-    if not RunNextFrame and not (C_Timer and C_Timer.After) then
-        A3._refreshAllCoalescing = nil
-    end
     return true
 end
 

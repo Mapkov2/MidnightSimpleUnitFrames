@@ -179,6 +179,7 @@ function TrinketPreview.Paint(mock, key, wanted, scale)
     icon:SetPoint(point, mock, relativePoint, scale(x), scale(y))
     icon:SetFrameLevel(MSUF.UF.Layers.ElementLevel(layer, runtime.DEFAULTS.layer, 0))
     icon.dim:SetWidth(math.max(1, floor(side * SAMPLE_SWIPE_SHARE + 0.5)))
+    runtime.ApplyShape(icon, nil, icon.art, icon.dim)
     icon:Show()
     return true, icon
 end

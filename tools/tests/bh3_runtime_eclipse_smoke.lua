@@ -80,6 +80,7 @@ print("route:", power, mode, "(PT.Balance=" .. tostring(K.PT.Balance) .. ", SIGN
 local pf = CreateFrame("Frame", "MSUF_player", UIParent)
 pf:SetSize(275, 40)
 _G.MSUF_player = pf
+ns.UF.frames.player = pf -- the unit-frame registry the class power controller resolves the player through
 module.Enable()
 local v = CP.visual
 print("visible:", CP.visible, "powerToken:", CP.powerToken)
@@ -104,6 +105,10 @@ assert(eventFrame,"Mists signed mode did not register UNIT_AURA")
 local function AuraEvent(payload)
  auraReads=0
  eventFrame.scripts.OnEvent(eventFrame,"UNIT_AURA","player",payload)
+ -- The controller defers its aura update to the next frame through the real keyed scheduler: that
+ -- frame is the scheduler's own OnUpdate (the client runs it once per rendered frame).
+ local scheduler=_G.MSUF_SchedulerFrame
+ if scheduler and scheduler.scripts.OnUpdate then scheduler.scripts.OnUpdate(scheduler,0) end
  env:RunTimers()
  return auraReads
 end

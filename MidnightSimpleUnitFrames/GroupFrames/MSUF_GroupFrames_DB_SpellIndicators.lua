@@ -1,10 +1,9 @@
 --- Group Frames DB: first-load Spell Indicator default seeding.
 -- Seeds cold profile data only; runtime indicator rendering lives in UF group modules.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local GF = MSUF.GF or {}
 MSUF.GF = GF
-local ExportPublic = MSUF.ExportPublic
+local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
 
 local function IsDefaultsConf(kind, conf)
     if kind == "party" then return conf == GF.PARTY_DEFAULTS end
@@ -79,12 +78,12 @@ local function NormalizeSpellIndicatorConfig(conf)
 end
 
 local function GetSpellIndicatorModule()
-    return GF.SpellIndicators or _G.MSUF_GF_SpellIndicators
+    return GF.SpellIndicators or Require("MSUF_GF_SpellIndicators", "GroupFrames/MSUF_GroupFrames_DB_SpellIndicators.lua")
 end
 
 local function GetCurrentSpellIndicatorSpecKey()
     local SI = GetSpellIndicatorModule()
-    if SI and type(SI.GetPlayerSpec) == "function" then
+    if type(SI.GetPlayerSpec) == "function" then
         local specKey = SI.GetPlayerSpec()
         if specKey then return specKey end
     end
@@ -92,7 +91,7 @@ local function GetCurrentSpellIndicatorSpecKey()
     local _, classToken
     if UnitClass then _, classToken = UnitClass("player") end
     local specIdx = GetSpecialization and GetSpecialization() or nil
-    if not (SI and SI.SpecMap and classToken and specIdx) then return nil end
+    if not (SI.SpecMap and classToken and specIdx) then return nil end
     return SI.SpecMap[classToken .. "_" .. specIdx]
 end
 
@@ -102,7 +101,7 @@ end
 --- written so callers only mark the profile dirty on a real change.
 local function FillMissingSpecDefaults(siCfg, specKey)
     local SI = GetSpellIndicatorModule()
-    local defaults = SI and SI.SpecDefaults and SI.SpecDefaults[specKey]
+    local defaults = SI.SpecDefaults and SI.SpecDefaults[specKey]
     if not (siCfg and specKey and defaults) then return false end
 
     siCfg.specs = siCfg.specs or {}
@@ -140,7 +139,7 @@ end
 
 function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
     local SI = GetSpellIndicatorModule()
-    if not (SI and SI.SpecDefaults and SI.SpecDefaults[specKey]) then return false end
+    if not (SI.SpecDefaults and SI.SpecDefaults[specKey]) then return false end
 
     local changed = false
     for i = 1, #GF_SI_KINDS do
@@ -177,7 +176,7 @@ function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
 
     if changed then
         local siModule = GetSpellIndicatorModule()
-        if siModule and type(siModule.InvalidateRuntimeCaches) == "function" then
+        if type(siModule.InvalidateRuntimeCaches) == "function" then
             siModule.InvalidateRuntimeCaches()
         end
         local dirty = GF.DIRTY_AURAS or GF.DIRTY_ALL or 0x3F

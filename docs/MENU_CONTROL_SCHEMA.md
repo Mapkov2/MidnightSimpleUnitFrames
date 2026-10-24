@@ -279,6 +279,8 @@ to the original shortcut/reference controller, without a second binding owner.
 
 Static and styled-button rows declare their stable row key (or row.meta.controlId),
 row.scope (otherwise ctx.key/shared) and row.domain (otherwise presentation).
+Schema.ScopeOwner(widget, scope, domain) declares an already-built native scope
+selector through that same owner, without creating or binding another control.
 A scopebar retains its native catalog identity and live GetValue/SetValue/values;
 row.domain defaults to menuState. Build a scopebar before the rows it scopes:
 `Schema.Build` constructs and binds rows in array order, without a later scope pass.
@@ -291,8 +293,10 @@ Font labels are native argument 2; other text labels are argument 1.
 `Schema.UnitOptions()` returns `{ bind = Schema.UnitBinding }`, supplying the
 former UnitSections typed binding policy. `Schema.UnitBinding(ctx, widget, row, kind)`
 requires `row.meta` for ordinary rows, using its controlId and settingKey for identity.
-Rows carry meta, scope/domain, get/set or unit, reason, commitOnBlur and roundStep;
+Rows carry meta, scope/domain, get/set or unit, reason, commitOnBlur, textAdapter and roundStep;
 slider ranges come from native arguments 2/3/4. Fallback row[3] retains false and 0.
+Text rows may set textAdapter=true to reuse BindTextInputWidget normalization:
+nil and false read as an empty string; numeric 0 remains 0.
 Ordinary unit rows default scope to ctx.key and domain to unit. Custom get/set
 pairs keep their accessors; otherwise unit rows use UnitPage's typed accessors.
 The existing UnitPage readers/setters resolve profile data at input time. A unit
@@ -336,3 +340,68 @@ it does not repeat the unchanged full matrix. The train's full/nightly run retai
 all existing cases and digests; no parity assertion or feature coverage is removed.
 See tools/fixtures/menu-group-indicators/README.md for the full replay's cost.
 Offline checks do not establish live WoW rendering, taint, engine timing or CPU cost.
+
+## Core group aura repair contracts
+
+The following explanations accompany the concise source contracts in
+`GroupFrames/MSUF_GroupFrames_DB_Migrations.lua`.
+
+Module responsibility and invalidation:
+
+```lua
+--- GroupFrames/MSUF_GroupFrames_DB_Migrations.lua - cold Group Frame profile repair
+--- One-time migrations, the legacy (pre-Auras3) aura model fillers, the Menu2
+--- dropdown-domain repair and the ordered EnsureDB repair pipeline.
+--- Loads directly after MSUF_GroupFrames_DB.lua. Nothing here runs per frame
+--- or per event: GF.EnsureDB (DB.lua) keeps the stable-cache fast path and
+--- calls GF.RepairGroupDB once per DB invalidation.
+```
+
+Defaults capture and load order:
+
+```lua
+--- The defaults tables are built once by MSUF_GroupFrames_DB.lua and never
+--- replaced, so capturing them at load time is equivalent to reading GF.*.
+--- That equivalence only holds while this file loads after DB.lua, so state
+--- the load-order contract loudly here. A manifest reorder in
+--- UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Group.xml would otherwise alias
+--- nil and silently disable every migration below.
+```
+
+Legacy aura migration entry points:
+
+```lua
+--- MSUF <= 5.57 stored early Group Frame aura settings as flat fields. The
+--- 5.57 runtime migrated them through GF.MigrateAuraConfig, but that owner no
+--- longer exists in 6.0. Keep the migration in the DB layer so it runs for
+--- SavedVariables startup, profile switches, full imports, and group-only
+--- snapshot imports before the compiled Group Frame spec consumes the data.
+```
+Unit and NPC Colors use the replacing row builder for both reaction and type sections.
+Their scoped row policy preserves keyed NPC and unkeyed Pet API argument shapes,
+existing API-absence fallbacks, metadata, native toggle/switch constructors and the
+canonical Colors swatch completion. Pet and tagged-unit exceptional readers and
+setters retain their input-time profile ownership. Type-child gates keep catalog
+order; reset buttons keep their native action owner through Owned. This does not
+convert the other Unit-category, castbar, Aura or resource sections.
+### Shared color-style rows
+
+The complete Class Bar, Bar Gradient, Highlight, Texture Layer and Combat Feedback
+sections construct their input rows through the page-private SchemaRows policy.
+It creates the existing color and flowToggle primitives, binds once through
+Schema.Bind and completes colors with the canonical FinishColorRow painter.
+Getter/setter pairs retain the class API, current bar scope and texture fan-out
+owners. Ordinary table colors retain their original source and apply callback;
+Combat Feedback resolves its gameplay table at input time, including sync and
+explicit false/0 behavior. No saved profile is seeded during construction.
+
+Reset actions remain with their native command owners. The gradient scope bar
+keeps its native getter, setter and value list in its owned declaration, including
+selection and refresh behavior; its child buttons are parts of that one control.
+The shared color completion helper, other color sections and exported providers
+are unchanged by this migration.
+
+menu_color_styles_schema_parity_smoke.lua compares all 29 inputs, three reset
+actions and the real scope bar against the reachable parent page, at normal and
+400px widths. Its push tier is representative; full five-client coverage belongs
+to nightly. Offline parity is not live rendering, clipping, taint or timing proof.

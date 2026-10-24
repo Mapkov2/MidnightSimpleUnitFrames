@@ -13,6 +13,7 @@ if not (MSUF.Client and MSUF.Client.IsForever) then return end
 local PadNav = MSUF.PadNavigation
 if not PadNav then return end
 local Kit = PadNav.Kit
+local Optional = MSUF.Optional
 
 local GROUP_CONTAINERS = { "party", "raid", "mythicraid", "priority" }
 local EDIT_POPUPS = {
@@ -28,7 +29,7 @@ local EDIT_HINTS = {
 }
 
 local function EditModeRoots(list)
-    local hud = _G.MSUF_EM2_HUD
+    local hud = Optional("MSUF_EM2_HUD")
     if type(hud) == "table" then list[#list + 1] = hud end
     for index = 1, #GROUP_CONTAINERS do
         local container = _G["MSUF_GF_Container_" .. GROUP_CONTAINERS[index]]
@@ -47,7 +48,7 @@ local function EditModeRoots(list)
 end
 
 local function EditMode()
-    local editMode = _G.MSUF_EM2
+    local editMode = Optional("MSUF_EM2")
     return type(editMode) == "table" and editMode or nil
 end
 
@@ -91,7 +92,7 @@ local function NudgeEditElement(_, control, dx, dy)
     local state = editMode and editMode.State
     if not (key and state) then return end
     if state.GetUnitKey() ~= key then
-        if type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
+        MSUF.Require("MSUF_EM2_SetPreviewNudgeTarget", "Game/Forever/PadEditMode.lua")(nil)
         state.SetUnitKey(key)
         if editMode.HUD and type(editMode.HUD.RefreshUnitSelector) == "function" then editMode.HUD.RefreshUnitSelector() end
         if editMode.Focus and type(editMode.Focus.SetSelection) == "function" then
@@ -127,7 +128,7 @@ local function SelectedMover()
 end
 
 local function Toolbar()
-    local hud = _G.MSUF_EM2_HUD
+    local hud = Optional("MSUF_EM2_HUD")
     return type(hud) == "table" and hud:IsVisible() and hud or nil
 end
 
@@ -136,7 +137,7 @@ local function ToolbarAnchors(list)
     local hud = Toolbar()
     if not hud then return end
     list[#list + 1] = hud
-    local row = _G.MSUF_EM2_HUD_Row2
+    local row = Optional("MSUF_EM2_HUD_Row2")
     if type(row) == "table" and row:IsVisible() then list[#list + 1] = row end
 end
 
@@ -275,7 +276,7 @@ local picker = { list = {}, current = nil }
 
 local function PlainName(frame)
     local name = frame:GetName()
-    local isSecret = _G.issecretvalue
+    local isSecret = issecretvalue
     if type(name) ~= "string" or name == "" or (isSecret and isSecret(name)) then return nil end
     return name
 end

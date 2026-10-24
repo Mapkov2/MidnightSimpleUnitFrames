@@ -1,8 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy,
-  ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Status.lua")
 
 local UF = MSUF.UF
 
@@ -55,9 +52,14 @@ local floor = math.floor
 local find = string.find
 local setmetatable = setmetatable
 
-local GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
+local GetBossIndexFromToken = MSUF.Require("GetBossIndexFromToken", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua", MSUF.Public)
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
+local ClearFontStringApplyCaches = MSUF.Require("MSUF_ClearFontStringApplyCaches", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua")
+local MarkFontApplyFailed = MSUF.Require("MSUF_MarkFontApplyFailed", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua")
+-- The icon-pack resolvers (GroupFrames DB textures, loaded after the elements) are
+-- published only through ExportPublic: the Public mirror read is live and call-free.
+local PublicAPI = MSUF.Public
 local function BoolTrue(value)
   -- Secret values from restricted APIs must not leak into boolean UI decisions. Treat them as
   -- unknown rather than truthy so protected/hidden state cannot accidentally show an icon.
@@ -200,7 +202,7 @@ local function SetFont(region, spec, size, role)
   if role and type(resolveRoleFont) == "function" then
     font = resolveRoleFont(font, role, size)
   end
-  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+  local fontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
   local fontReady = region._msufStatusFontPending ~= true
   if font and (region._msufStatusFontAttemptEpoch ~= fontEpoch
       or region._msufStatusFont ~= font
@@ -214,14 +216,12 @@ local function SetFont(region, spec, size, role)
       region._msufStatusFontPending = nil
       fontReady = true
     else
-      local clear = _G.MSUF_ClearFontStringApplyCaches
-      if type(clear) == "function" then clear(region) end
+      ClearFontStringApplyCaches(region)
       region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
       region._msufStatusFontEpoch = nil
       region._msufStatusFontAttemptEpoch = fontEpoch
       region._msufStatusFontPending = true
-      local markFailed = _G.MSUF_MarkFontApplyFailed
-      if type(markFailed) == "function" then markFailed() end
+      MarkFontApplyFailed()
       fontReady = false
     end
   end
@@ -249,7 +249,7 @@ local function AtlasAvailable(region, atlas)
   end
   local known = atlasKnown[atlas]
   if known == nil then
-    local textureAPI = _G.C_Texture
+    local textureAPI = C_Texture
     known = textureAPI ~= nil and type(textureAPI.GetAtlasInfo) == "function"
       and textureAPI.GetAtlasInfo(atlas) ~= nil
     atlasKnown[atlas] = known
@@ -275,7 +275,7 @@ function Runtime.ApplyForeverLevelBadge(frame, spec, cfg)
     return nil
   end
   local atlas = "UI-HUD-UnitFrame-SmallCircle"
-  local getAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+  local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
   local useNativeAtlas = MSUF.Client and MSUF.Client.IsForever == true
     or (getAtlasInfo and getAtlasInfo(atlas)) ~= nil
   local holder = AdoptRegion(frame, badge, cfg.layer)
@@ -386,7 +386,7 @@ local function StatusApplyRoleTexture(tex, cfg, status, role)
       return true
     end
   end
-  local resolver = _G.MSUF_GetRoleStatusIconTexture
+  local resolver = PublicAPI.GetRoleStatusIconTexture
   if type(resolver) == "function" then
     local path, l, r, t, b = resolver(cfg and cfg.style, role, status and status.useMidnight == true)
     if type(path) == "string" and path ~= "" then
@@ -418,7 +418,7 @@ local function StatusApplyStatusIconPackTexture(tex, cfg, status, iconType, vari
   end
   local style = StatusEffectiveStatusIconStyle(cfg, status)
   if not style then return false end
-  local resolver = _G.MSUF_GetStatusIconTexture
+  local resolver = PublicAPI.GetStatusIconTexture
   if type(resolver) ~= "function" then
     local gf = MSUF and MSUF.GF
     resolver = gf and gf.GetStatusIconTexture
@@ -452,7 +452,8 @@ local function ApplyLeaderTexture(tex, cfg, status, assist)
   end
   local style = cfg and cfg.style
   if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
-    local resolver = assist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
+    local resolver = assist and PublicAPI.GetAssistStatusIconTexture
+      or PublicAPI.GetLeaderStatusIconTexture
     if type(resolver) == "function" then
       local path, l, r, t, b = resolver(style, status and status.useMidnight == true)
       if type(path) == "string" and path ~= "" then
@@ -1103,11 +1104,11 @@ local STATUS_REFRESH_ALIASES = {
   "MSUF_RefreshEliteIconFrames",
 }
 for i = 1, #STATUS_REFRESH_ALIASES do
-  _G[STATUS_REFRESH_ALIASES[i]] = function(unit, reason)
+  MSUF.ExportPublic(STATUS_REFRESH_ALIASES[i], function(unit, reason)
     local result = RefreshStatus(unit, reason or "MSUF_STATUS")
     MSUF.EventBus:Publish("CONFIG_APPLIED", STATUS_REFRESH_ALIASES[i])
     return result
-  end
+  end)
 end
 
 BindStatusLevelBadge({

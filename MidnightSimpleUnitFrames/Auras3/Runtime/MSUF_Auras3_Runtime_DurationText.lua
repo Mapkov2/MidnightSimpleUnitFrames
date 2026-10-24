@@ -2,7 +2,6 @@
 -- Native duration formatter/binding cache and text placement. Locale changes invalidate the same cache used by icons and reminder placeholders.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.DurationText = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local table_concat = table.concat
@@ -15,23 +14,25 @@ local DEFAULT_SHARED = dependencies.Schema.DEFAULT_SHARED
 local FrameLayers = dependencies.Platform.FrameLayers
 local Round = dependencies.Platform.Round
 local STANDARD_TEXT_FONT = dependencies.Platform.STANDARD_TEXT_FONT
+local FILE = "Auras3/Runtime/MSUF_Auras3_Runtime_DurationText.lua"
+-- Font and color services load in the Kernel and Runtime files before Auras3.
+local GetGlobalFontSettings = MSUF.Require("MSUF_GetGlobalFontSettings", FILE)
+local GetConfiguredFontColor = MSUF.Optional("MSUF_GetConfiguredFontColor")
+local ApplyResolvedFont = MSUF.Require("MSUF_ApplyResolvedFont", FILE)
 
 local function GeneralSettings(lane)
     if lane and lane._msufA3NativeVisualInputs then return lane._msufA3NativeVisualInputs.general end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     return db and db.general
 end
 
 local function ResolveAuraFontSettings(A3)
-    local readFont = _G.MSUF_GetGlobalFontSettings
+    local readFont = GetGlobalFontSettings
     local gen = A3._nativeVisualInputRev or 0
     if A3._auraFontCacheGen ~= gen or A3._auraFontCacheReader ~= readFont then
         A3._auraFontCacheGen, A3._auraFontCacheReader = gen, readFont
-        A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow = nil, nil, nil, nil, nil, nil
-        if type(readFont) == "function" then
-            local unusedSize
-            A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, unusedSize, A3._auraFontShadow = readFont()
-        end
+        local unusedSize
+        A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, unusedSize, A3._auraFontShadow = readFont()
     end
 end
 
@@ -54,8 +55,7 @@ local function AppendVisualColor(parts, color)
 end
 
 local function ConfiguredFontColor()
-    local readColor = _G.MSUF_GetConfiguredFontColor
-    if type(readColor) == "function" then return readColor() end
+    if GetConfiguredFontColor then return GetConfiguredFontColor() end
 end
 
 -- Every immutable global input contributes to one interned content token.
@@ -151,24 +151,7 @@ local function ApplyFont(fs, size, lane)
     fontPath = fontPath or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
     size = ClampNumber(size, 12, 6, 40)
-    local applyResolved = _G.MSUF_ApplyResolvedFont
-    if type(applyResolved) == "function" then
-        applyResolved(fs, fontPath, size, fontFlags, fontKey)
-    else
-        -- Current clients require a valid FontAsset and may raise before a
-        -- boolean result is returned. Keep the load-order fallback just as
-        -- defensive as the central font service so stale SharedMedia paths can
-        -- never escape through profile/runtime apply.
-        local ready = _G.MSUF_SetFontChecked(fs, fontPath, size, fontFlags)
-        local matches = _G.MSUF_FontApplicationMatches
-        if ready and type(matches) == "function" then ready = matches(fs, fontPath, size) == true end
-        if not ready then
-            if fontPath ~= STANDARD_TEXT_FONT and STANDARD_TEXT_FONT then
-                _G.MSUF_SetFontChecked(fs, STANDARD_TEXT_FONT, size, fontFlags)
-            end
-            if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
-        end
-    end
+    ApplyResolvedFont(fs, fontPath, size, fontFlags, fontKey)
     fs:SetTextColor(r or 1, g or 1, b or 1, 1)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 end
@@ -180,9 +163,9 @@ end
 local _durationFormatterCache, _durationFormatterVisualToken
 
 local function NumericRuleFormatRounding(name, fallback)
-    local enum = _G.Enum and _G.Enum.NumericRuleFormatRounding
+    local enum = Enum and Enum.NumericRuleFormatRounding
     if enum and enum[name] ~= nil then return enum[name] end
-    local numericRuleFormatter = _G.NumericRuleFormatter and _G.NumericRuleFormatter.Rounding
+    local numericRuleFormatter = NumericRuleFormatter and NumericRuleFormatter.Rounding
     if numericRuleFormatter and numericRuleFormatter[name] ~= nil then return numericRuleFormatter[name] end
     return fallback
 end
@@ -213,7 +196,7 @@ end
 -- permanent auras (flasks, food, raid buffs, poisons). The update interval
 -- caps C-side text work at the finest rendered granularity.
 local function BuildAuraDurationBinding(formatter, updateInterval)
-    local durationUtil = _G.C_DurationUtil
+    local durationUtil = C_DurationUtil
     local createBinding = durationUtil and durationUtil.CreateDurationTextBinding
     if type(createBinding) ~= "function" then return nil end
     local binding = createBinding()
@@ -253,7 +236,7 @@ local function BuildAuraDurationStyle(lane)
     local buckets = general.aurasCooldownTextUseBuckets == true
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
 
-    local stringUtil = _G.C_StringUtil
+    local stringUtil = C_StringUtil
     local createFormatter = stringUtil and stringUtil.CreateNumericRuleFormatter
     if type(createFormatter) ~= "function" then
         if type(lane) == "table" then lane._msufA3DurationStyle = false end
@@ -458,7 +441,7 @@ local function ConfigureStandaloneAuraDurationText(owner, fs, lane, duration, en
 
     local style = BuildAuraDurationStyle(lane)
     local template = style and style.binding
-    local durationUtil = _G.C_DurationUtil
+    local durationUtil = C_DurationUtil
     local createBinding = durationUtil and durationUtil.CreateDurationTextBinding
     if not (template and type(createBinding) == "function") then return false end
 

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Threat percentage text on the target, focus and boss frames, and on the party
 --- and raid frames.
 ---
@@ -20,25 +19,27 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- is registered.
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 -- Only an explicit "no" stops the file, so a harness without the client model
 -- still gets the element.
 if MSUF.Client and MSUF.Client.SupportsThreatText == false then return end
 local UF = MSUF.UF
 if not (UF and type(UF.RegisterElement) == "function") then return end
 
-local CreateFrame = _G.CreateFrame
-local GetTime = _G.GetTime
-local C_Timer = _G.C_Timer
-local UnitDetailedThreatSituation = _G.UnitDetailedThreatSituation
-local UnitThreatSituation = _G.UnitThreatSituation
-local UnitExists = _G.UnitExists
-local UnitCanAttack = _G.UnitCanAttack
-local IsSecret = _G.issecretvalue
+local FILE = "Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local GeneralDB = MSUF.Require("MSUF_GetGeneralDB", FILE)
+local CreateFrame = CreateFrame
+local GetTime = GetTime
+local C_Timer = C_Timer
+local UnitDetailedThreatSituation = UnitDetailedThreatSituation
+local UnitThreatSituation = UnitThreatSituation
+local UnitExists = UnitExists
+local UnitCanAttack = UnitCanAttack
+local IsSecret = issecretvalue
 -- Both accept secret numbers from addon code (SecretArguments AllowedWhenTainted):
 -- TruncateWhenZero floors to an integer and returns "" at zero, WrapString adds
 -- the suffix only around a non-empty string, so a zero threat stays blank.
-local stringUtil = _G.C_StringUtil
+local stringUtil = C_StringUtil
 local TruncateWhenZero = type(stringUtil) == "table" and stringUtil.TruncateWhenZero or nil
 local WrapString = type(stringUtil) == "table" and stringUtil.WrapString or nil
 local type = type
@@ -118,11 +119,6 @@ local curvePalette = {}
 local curveVersion = 0
 
 local Threat = { UpdateOnApply = true }
-
-local function GeneralDB()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
 
 -- A stop color counts only as a complete R/G/B triple, like the indicator colors.
 local function StopRGB(general, i)
@@ -299,17 +295,15 @@ local function ApplyFont(fs, spec, size)
     size = shared and shared.ClampFontSize and shared.ClampFontSize(size, 11) or tonumber(size) or 11
     local font = spec and spec.font
     local flags = spec and spec.fontFlags or "OUTLINE"
-    local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    local epoch = tonumber(MSUF_FontApplyEpoch) or 0
     if font and shared and shared.ApplyFontChecked
         and (fs._msufThreatFontAttempt ~= epoch or fs._msufThreatFont ~= font
             or fs._msufThreatFontSize ~= size or fs._msufThreatFontFlags ~= flags) then
         fs._msufThreatFont, fs._msufThreatFontSize, fs._msufThreatFontFlags = font, size, flags
         fs._msufThreatFontAttempt = epoch
         if not shared.ApplyFontChecked(fs, font, size, flags, 11) then
-            local clear = _G.MSUF_ClearFontStringApplyCaches
-            if type(clear) == "function" then clear(fs) end
-            local markFailed = _G.MSUF_MarkFontApplyFailed
-            if type(markFailed) == "function" then markFailed() end
+            MSUF.Require("MSUF_ClearFontStringApplyCaches", FILE)(fs)
+            MSUF.Require("MSUF_MarkFontApplyFailed", FILE)()
         end
     end
     if fs.SetShadowOffset then
@@ -716,12 +710,12 @@ UF.RegisterElement("ThreatIndicator", Threat, {
     identity = true,
 })
 
-_G.MSUF_RequestThreatIndicatorRefresh = function(unit, reason)
+MSUF.ExportPublic("MSUF_RequestThreatIndicatorRefresh", function(unit, reason)
     if type(UF.RefreshElements) == "function" then
         return UF.RefreshElements(unit, { "ThreatIndicator" }, reason or "MSUF_THREAT_INDICATOR")
     end
     return false
-end
+end)
 
 -- Group frames apply elements by name: the base mask of MSUF_UF_Group_Adapter.lua
 -- on every structural apply, the masks of MSUF_UF_Group_Metadata.lua on refreshes.

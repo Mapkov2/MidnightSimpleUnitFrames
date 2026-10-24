@@ -12,7 +12,6 @@
 --- Debug: /msuf versiontest - simulates an update notification.
 
 local addonName, MSUF = ...
-MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 local Tr = MSUF.Translate
 
@@ -172,7 +171,7 @@ end
 
 --- DB helper
 IsEnabled = function()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db or not db.general then return true end --- default: enabled
     return db.general.versionCheckEnabled ~= false
 end

@@ -1,10 +1,10 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
-
 local UF = MSUF.UF
 local type = type
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Bridges.lua")
 
 -- UnitFrame element bridge helpers.
 -- Queues cross-module refreshes from unitframe events into castbar/classpower/aura runtimes
@@ -48,14 +48,7 @@ local function Queue(fn, tokenName)
     UF[tokenName] = nil
     fn()
   end
-  local scheduleOnce = _G.MSUF_ScheduleOnce
-  if type(scheduleOnce) == "function" then
-    scheduleOnce(tokenName, flush)
-  elseif _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(0, flush)
-  else
-    flush()
-  end
+  ScheduleOnce(tokenName, flush)
 end
 
 local function QueueCastbarRefresh(unit)
@@ -167,7 +160,7 @@ function ClassPower.Disable(frame)
   if frame and frame.MSUFUnitKey ~= "player" then
     return
   end
-  HideFrame(_G.MSUF_ClassPowerContainer)
+  HideFrame(MSUF.Optional("MSUF_ClassPowerContainer"))
   if not Dep("MSUF_ClassPower_IsRuntimeActive")() then
     return
   end
@@ -213,7 +206,6 @@ end
 if UF.RouteCompiler then
   local Compiler = UF.RouteCompiler
   local RouteCache, Intern = Compiler.Cache, Compiler.Intern
-  local Host = _G
   local NIL_ROUTE_KEY = Compiler.NilKey
   local IsRegisteredElementFunction = Compiler.IsRegisteredFunction
   local GetUpdateKey = Compiler.GetUpdateKey
@@ -531,10 +523,10 @@ if UF.RouteCompiler then
     -- (UF.ApplyElementsToFrame, which is how unit-frame aura settings apply) pass
     -- through. A single boolean read whenever no preview is active.
     -- Both preview painters belong to the aura preview, which loads after the core.
-    if Host.MSUF_DispelOverlayPreviewMode == true then
+    if PublicGlobals.MSUF_DispelOverlayPreviewMode == true then
       MSUF.Require("MSUF_ApplyDispelOverlayPreviewToFrame", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Bridges.lua")(frame)
     end
-    if Host.MSUF_DispelSymbolPreviewMode == true then
+    if PublicGlobals.MSUF_DispelSymbolPreviewMode == true then
       MSUF.Require("MSUF_ApplyDispelSymbolPreviewToFrame", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Bridges.lua")(frame)
     end
   end

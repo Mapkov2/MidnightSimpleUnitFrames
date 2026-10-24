@@ -29,10 +29,12 @@ local type = type
 local tostring = tostring
 local pairs = pairs
 local math_abs = math.abs
-local C_DurationUtil = _G.C_DurationUtil
+local C_DurationUtil = C_DurationUtil
+-- The unit-frame alpha element loads before every castbar file.
+local ApplyCastbarRangeAlpha = ns.Require("MSUF_UF_ApplyCastbarRangeAlpha", "Castbars/MSUF_CastbarRuntime.lua")
 
-local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
-local StatusBarTimerDirection = _G.Enum and _G.Enum.StatusBarTimerDirection
+local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
+local StatusBarTimerDirection = Enum and Enum.StatusBarTimerDirection
 
 local INTERPOLATION_IMMEDIATE = (
     type(StatusBarInterpolation) == "table"
@@ -190,9 +192,9 @@ local function BuildNativeTextFormats(allowRetry)
     if nativeTextFormatsUnavailable then return nil end
 
     local durationUtil = C_DurationUtil
-    local stringUtil = _G.C_StringUtil
-    local durationProperties = _G.Enum and _G.Enum.DurationTextBindingProperty
-    local rounding = _G.Enum and _G.Enum.NumericRuleFormatRounding
+    local stringUtil = C_StringUtil
+    local durationProperties = Enum and Enum.DurationTextBindingProperty
+    local rounding = Enum and Enum.NumericRuleFormatRounding
     local createFormatter = stringUtil and stringUtil.CreateNumericRuleFormatter
     if type(durationUtil) ~= "table"
         or type(durationUtil.CreateDurationTextBinding) ~= "function"
@@ -993,9 +995,7 @@ function Runtime:ApplyActive(frame, state, options)
         UpdateCastTimeText(frame)
     end
 
-    if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
-        _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
-    end
+    ApplyCastbarRangeAlpha(frame, nil, true)
 
     return true
 end
@@ -1043,7 +1043,7 @@ local function ApplyInterruptValues(self, frame, barValue, reverseFill, label, c
 
     SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
 
-    SetText(frame, "castText", label or _G.INTERRUPTED)
+    SetText(frame, "castText", label or INTERRUPTED)
     SetText(frame, "timeText", "")
 
     if frame.Show then
@@ -1054,9 +1054,7 @@ local function ApplyInterruptValues(self, frame, barValue, reverseFill, label, c
         frame:SetAlpha(1)
     end
 
-    if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
-        _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
-    end
+    ApplyCastbarRangeAlpha(frame, nil, true)
 
     if skipShake ~= true then
         PlayCastbarShake(frame)

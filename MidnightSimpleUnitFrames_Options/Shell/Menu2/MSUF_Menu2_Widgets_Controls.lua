@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets_Controls.lua
 --- Input controls: toggles and switches, the section switch, the scope
 --- override bar, sliders with their layer-overview shortcut, segments, segment
@@ -7,13 +6,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Split from MSUF_Menu2_Widgets.lua; loads after the context colors.
 
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Widgets_Controls.lua")
 local M = MSUF.MSUF2
 local T = M.Theme
 local W = M.Widgets
 local Shared = W._Shared
-local floor = math.floor
-local max = math.max
-local min = math.min
+local floor, max, min = math.floor, math.max, math.min
 local Tr = M.TranslateText
 local ThemeColor = Shared.ThemeColor
 local SetSearchText = Shared.SetSearchText
@@ -23,8 +21,20 @@ local NextRow = W.NextRow
 local LAYER_SHORTCUT_DOTS = Shared.LAYER_SHORTCUT_DOTS
 local AddThreeDotShortcutTextures = Shared.AddThreeDotShortcutTextures
 
+-- A visual part of a control is no catalog record of its own.
+local function MarkControlPart(part, owner)
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(part, owner)
+    else part._msuf2ControlPartOf = owner end
+end
+
 local SLIDER_TEMPLATE_KEEP_KEYS, SLIDER_TEMPLATE_SUFFIXES = M.WordList "_msufTrack _msufTrackTop _msufTrackBottom _msufFill _msufFillGlow _msuf2Thumb _msufPeelTrack _msufPeelTrackFill", M.WordList "Left Middle Right Text Low High"
 local IsTextureRegion = T.IsTextureRegion
+-- A Blizzard template names its parts after the frame ("<name>Left"), so the
+-- global is looked up by that computed name.
+local function NamedChild(frame, suffix)
+    local name = frame.GetName and frame:GetName()
+    return name and _G[name .. suffix]
+end
 local function HideSliderTemplateParts(slider)
     if not slider then return end
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
@@ -42,9 +52,8 @@ local function HideSliderTemplateParts(slider)
             if region.Hide then region:Hide() end
         end
     end
-    local name = slider.GetName and slider:GetName()
     for _, suffix in ipairs(SLIDER_TEMPLATE_SUFFIXES) do
-        local region = (name and _G[name .. suffix]) or slider[suffix]
+        local region = NamedChild(slider, suffix) or slider[suffix]
         if region then
             if region.SetText then region:SetText("") end
             if region.SetAlpha then region:SetAlpha(0) end
@@ -78,7 +87,7 @@ local function ClickCheckButton(button, mouseButton)
 end
 local function GetCheckTexture(button, getter, suffix)
     local check = button and button[getter] and button[getter](button)
-    if (not check) and button and suffix and button.GetName and button:GetName() then check = _G[button:GetName() .. suffix] end
+    if (not check) and button and suffix then check = NamedChild(button, suffix) end
     return check
 end
 local function SyncCheckedTexture(button, checked, enabled, alpha)
@@ -181,6 +190,9 @@ local function LabelOwner(self, key, requireEnabled)
     local btn = self and self[key]
     return (btn and not (requireEnabled and btn.IsEnabled and not btn:IsEnabled())) and btn or nil
 end
+-- The scripts of a label hit area act on the owning button and do nothing without
+-- one (or, for clicks and presses, while the owner is disabled). Each script is
+-- written out: a shared wrapper would add a call to every hover and press.
 local TOGGLE_LABEL_HOOKS = {
     OnClick = function(self)
         local btn = LabelOwner(self, "_msuf2ToggleOwner", true)
@@ -308,7 +320,7 @@ local SWITCH_CONTROL_HOOKS = {
     OnLeave = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
     OnMouseDown = function(self) T.CommitFocusedInput(); self._msuf2SwitchPressed = true; RefreshSwitchVisual(self) end,
     OnMouseUp = function(self) self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
-    OnClick = RefreshSwitchVisual,
+    OnClick = function(self) RefreshSwitchVisual(self) end,
     OnEnable = RefreshSwitchVisual,
     OnDisable = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
 }
@@ -353,8 +365,7 @@ local function CreateControlLabelHit(section, btn, ownerKey, hooks)
     labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
     labelHit[ownerKey] = btn
     for script, handler in pairs(hooks) do labelHit:SetScript(script, handler) end
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(labelHit, btn)
-    else labelHit._msuf2ControlPartOf = btn end
+    MarkControlPart(labelHit, btn)
     btn._msuf2LabelHit = labelHit
     btn._msuf2UseProxyMouse = true
     if btn.EnableMouse then btn:EnableMouse(false) end
@@ -405,6 +416,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
         local target = show and (down and 0.160 or 0.110) or 0
         local rowTarget = show and (down and 0.075 or 0.050) or 0
         local c = T.colors.checkActiveEdge or T.colors.accent
+        -- Both hover textures are painted inline: this runs on every hover and press.
         if tex then
             if tex.SetTexture then tex:SetTexture(checkFillTexture) end
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
@@ -675,8 +687,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
         -- The logical ScopeOverrideBar owns search/catalog identity and values.
         -- Child buttons are implementation details; registering both creates
         -- duplicate/unknown controls for one selection.
-        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, bar)
-        else btn._msuf2ControlPartOf = bar end
+        MarkControlPart(btn, bar)
         btn:SetPoint("LEFT", section, "TOPLEFT", x, y)
         btn._msuf2Value = item.value
         btn._msuf2BaseWidth = width
@@ -766,19 +777,18 @@ local function AttachLayerOverviewButton(section, slider, title, label, minValue
     shortcut._msuf2LayerOverviewButton = true
     AddThreeDotShortcutTextures(shortcut, LAYER_SHORTCUT_DOTS)
     if shortcut.SetFrameLevel and slider.GetFrameLevel then shortcut:SetFrameLevel(slider:GetFrameLevel() + 4) end
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(shortcut, slider)
-    else shortcut._msuf2ControlPartOf = slider end
+    MarkControlPart(shortcut, slider)
     if shortcut.HookScript then
         shortcut:HookScript("OnEnter", function(self) self:SetAlpha(0.96) end)
         shortcut:HookScript("OnLeave", function(self) self:SetAlpha(0.58) end)
     end
     shortcut:SetScript("OnClick", function(self)
-        local show = M.ShowLayerOverview or _G.MSUF_ShowLayerOverview
+        local show = M.ShowLayerOverview
         if type(show) == "function" then show(self) end
     end)
     if shortcut.HookScript then
         shortcut:HookScript("OnHide", function(self)
-            local hide = M.HideLayerOverviewForAnchor or _G.MSUF_HideLayerOverviewForAnchor
+            local hide = M.HideLayerOverviewForAnchor
             if type(hide) == "function" then hide(self) end
         end)
     end
@@ -799,35 +809,21 @@ local function ParseSliderInput(slider, text)
     local normalized = text:match("^%s*([+-]?%d+,%d+)%s*$")
     return tonumber(normalized and normalized:gsub(",", ".") or text)
 end
-function W.Slider(section, label, minVal, maxVal, step, width)
-    local x, y = NextRow(section, 48)
-    local valueGap = 8
-    local buttonGap = 4
-    local stepButtonW = 20
-    local editW = 52
-    local minTrackW = 96
-    local compactMinTrackW = 48
-    local sliderH = 24
-    local valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
-    local compactValueClusterW = valueGap + editW
-    width = width or 280
-    if section and section._msuf2Width then
-        local available = section._msuf2Width - x - 14
-        if available > 0 and width > available then width = max(72, available) end
-    end
+--- Title and bare slider frame of one W.Slider row. The slider is unnamed: a
+--- template-free Slider has no named parts, and a name per slider would leave
+--- one permanent global behind for every slider ever built.
+local function CreateSliderFrames(section, label, x, y, width, trackW, minVal, maxVal, step)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(width)
     title:SetJustifyH("LEFT")
-    -- Unnamed: a template-free Slider has no named parts, and a name per slider
-    -- would leave one permanent global behind for every slider ever built.
     local slider = PixelLayoutRegion(CreateFrame("Slider", nil, section))
     slider._msuf2Title = title
     slider._msuf2ControlKind = "slider"
     RegisterSearchObject(slider, label, "slider", { anchor = title })
     slider:SetPoint("TOPLEFT", x, y - 24)
-    slider:SetSize(max(compactMinTrackW, width - valueClusterW), sliderH)
+    slider:SetSize(trackW, 24)
     if slider.EnableMouse then slider:EnableMouse(true) end
     slider:SetMinMaxValues(minVal or 0, maxVal or 1)
     slider:SetValueStep(step or 1)
@@ -838,14 +834,15 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider._msuf2CursorDrag = true
     slider._msuf2Step = step or 1
     slider._msuf2RequestedWidth = width
-    slider._msuf2MinRowWidth = compactMinTrackW
-    HideSliderTemplateParts(slider)
-    if T.StyleSlider then T.StyleSlider(slider) end
+    return title, slider
+end
+--- The "-" and "+" step buttons and the value edit box beside a slider; each
+--- part belongs to the slider control.
+local function CreateSliderValueCluster(section, slider, editW)
     local function StepButton(text)
         local btn = T.Button(section, text, 20, 24, { noSearch = true, history = false })
         SetSearchText(btn, text)
-        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, slider)
-        else btn._msuf2ControlPartOf = slider end
+        MarkControlPart(btn, slider)
         return T.CenterButtonLabel(btn)
     end
     local minus = StepButton("-")
@@ -855,105 +852,17 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     edit:SetJustifyH("CENTER")
     edit:SetNumeric(false)
     T.SkinEditBox(edit)
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(edit, slider)
-    else edit._msuf2ControlPartOf = slider end
+    MarkControlPart(edit, slider)
     slider.editBox = edit
     edit._msuf2CommitOnPointer = true
     local plus = StepButton("+")
     slider.minusButton = minus
     slider.plusButton = plus
     slider._msuf2StepButtons = { minus, plus }
-    local function UpdateFill()
-        local fill = slider._msufFill
-        if not fill then return end
-        local minV, maxV = slider:GetMinMaxValues()
-        local span = maxV - minV
-        local pct = span > 0 and ((slider:GetValue() - minV) / span) or 0
-        if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-        fill:SetWidth(max(1, max(1, slider:GetWidth() - 2) * pct))
-        if slider._msuf2UpdateThumb then slider:_msuf2UpdateThumb() end
-    end
-    slider._msuf2UpdateFill = UpdateFill
-    function slider:_msuf2SetLayoutWidth(totalWidth)
-        totalWidth = tonumber(totalWidth) or width or 280
-        self._msuf2RowWidth = totalWidth
-        local tiny = totalWidth < (compactMinTrackW + compactValueClusterW)
-        local compact = tiny or totalWidth < (minTrackW + valueClusterW)
-        local clusterW = tiny and 0 or (compact and compactValueClusterW or valueClusterW)
-        local trackMin = compact and compactMinTrackW or minTrackW
-        local trackW = max(trackMin, floor(totalWidth - clusterW + 0.5))
-        if title then
-            title:SetWidth(max(trackW, floor(totalWidth + 0.5)))
-            if title.SetJustifyH then title:SetJustifyH(self._msuf2TitleJustify or "LEFT") end
-        end
-        self:SetSize(trackW, sliderH)
-        minus:ClearAllPoints()
-        if compact then
-            minus:Hide()
-        else
-            minus:Show()
-            minus:SetPoint("LEFT", self, "RIGHT", valueGap, 0)
-        end
-        edit:ClearAllPoints()
-        if tiny then
-            edit:Hide()
-        else
-            edit:Show()
-            edit:SetPoint("LEFT", compact and self or minus, "RIGHT", compact and valueGap or buttonGap, 0)
-        end
-        plus:ClearAllPoints()
-        if compact then
-            plus:Hide()
-        else
-            plus:Show()
-            plus:SetPoint("LEFT", edit, "RIGHT", buttonGap, 0)
-        end
-        UpdateFill()
-    end
-    slider:_msuf2SetLayoutWidth(width)
-    local function FormatValue(value)
-        if type(slider._msuf2ValueFormatter) == "function" then
-            local text = slider._msuf2ValueFormatter(value, slider)
-            if text ~= nil then return tostring(text) end
-        end
-        local st = step or 1
-        if st < 1 then return string.format("%.2f", value) end
-        return tostring(floor(value + 0.5))
-    end
-    slider._msuf2FormatValue = FormatValue
-    function slider:SetValueFormatter(fn)
-        self._msuf2ValueFormatter = (type(fn) == "function") and fn or nil
-        if not self._msuf2Editing then edit:SetText(FormatValue(self:GetValue())) end
-    end
-    function slider:SetValueParser(fn)
-        self._msuf2ValueParser = (type(fn) == "function") and fn or nil
-    end
-    function slider:SetValueBoxWidth(boxWidth)
-        boxWidth = max(40, floor((tonumber(boxWidth) or editW) + 0.5))
-        if editW == boxWidth then return end
-        editW = boxWidth
-        valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
-        compactValueClusterW = valueGap + editW
-        edit:SetWidth(editW)
-        self:_msuf2SetLayoutWidth(self._msuf2RowWidth or width)
-    end
-    function slider:SetInteractionCallbacks(onStart, onStop)
-        self._msuf2InteractionStart = type(onStart) == "function" and onStart or nil
-        self._msuf2InteractionStop = type(onStop) == "function" and onStop or nil
-    end
-    slider:HookScript("OnValueChanged", function(self, value)
-        UpdateFill()
-        if not self._msuf2Editing then edit:SetText(FormatValue(value)) end
-    end)
-    slider:HookScript("OnShow", function(self)
-        HideSliderTemplateParts(self)
-        if T.StyleSlider then T.StyleSlider(self) end
-        if self._msuf2SetLayoutWidth then
-            self:_msuf2SetLayoutWidth(self._msuf2RowWidth or width)
-        else
-            UpdateFill()
-        end
-    end)
+    return minus, edit, plus
+end
+--- Value edit box of a slider: Enter and focus loss commit, Escape restores.
+local function WireSliderEditBox(slider, edit, FormatValue)
     local function CommitEdit(self)
         local text = self:GetText()
         if text == self._msuf2EditStartText or (slider.IsEnabled and not slider:IsEnabled()) then return end
@@ -986,6 +895,9 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         self:SetText(FormatValue(slider:GetValue()))
         if self.HighlightText then self:HighlightText(0, 0) end
     end)
+end
+--- Cursor drag, mouse wheel and step buttons of a slider.
+local function WireSliderPointerInput(slider, minus, plus)
     local function ClampToSlider(value)
         local minV, maxV = slider:GetMinMaxValues()
         if value < minV then value = minV elseif value > maxV then value = maxV end
@@ -1085,6 +997,122 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     end)
     minus:SetScript("OnClick", function() StepBy(-1) end)
     plus:SetScript("OnClick", function() StepBy(1) end)
+end
+function W.Slider(section, label, minVal, maxVal, step, width)
+    local x, y = NextRow(section, 48)
+    local valueGap = 8
+    local buttonGap = 4
+    local stepButtonW = 20
+    local editW = 52
+    local minTrackW = 96
+    local compactMinTrackW = 48
+    local sliderH = 24
+    local valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
+    local compactValueClusterW = valueGap + editW
+    width = width or 280
+    if section and section._msuf2Width then
+        local available = section._msuf2Width - x - 14
+        if available > 0 and width > available then width = max(72, available) end
+    end
+    local title, slider = CreateSliderFrames(section, label, x, y, width,
+        max(compactMinTrackW, width - valueClusterW), minVal, maxVal, step)
+    slider._msuf2MinRowWidth = compactMinTrackW
+    HideSliderTemplateParts(slider)
+    if T.StyleSlider then T.StyleSlider(slider) end
+    local minus, edit, plus = CreateSliderValueCluster(section, slider, editW)
+    local function UpdateFill()
+        local fill = slider._msufFill
+        if not fill then return end
+        local minV, maxV = slider:GetMinMaxValues()
+        local span = maxV - minV
+        local pct = span > 0 and ((slider:GetValue() - minV) / span) or 0
+        if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+        fill:SetWidth(max(1, max(1, slider:GetWidth() - 2) * pct))
+        if slider._msuf2UpdateThumb then slider:_msuf2UpdateThumb() end
+    end
+    slider._msuf2UpdateFill = UpdateFill
+    function slider:_msuf2SetLayoutWidth(totalWidth)
+        totalWidth = tonumber(totalWidth) or width or 280
+        self._msuf2RowWidth = totalWidth
+        local tiny = totalWidth < (compactMinTrackW + compactValueClusterW)
+        local compact = tiny or totalWidth < (minTrackW + valueClusterW)
+        local clusterW = tiny and 0 or (compact and compactValueClusterW or valueClusterW)
+        local trackMin = compact and compactMinTrackW or minTrackW
+        local trackW = max(trackMin, floor(totalWidth - clusterW + 0.5))
+        if title then
+            title:SetWidth(max(trackW, floor(totalWidth + 0.5)))
+            if title.SetJustifyH then title:SetJustifyH(self._msuf2TitleJustify or "LEFT") end
+        end
+        self:SetSize(trackW, sliderH)
+        minus:ClearAllPoints()
+        if compact then
+            minus:Hide()
+        else
+            minus:Show()
+            minus:SetPoint("LEFT", self, "RIGHT", valueGap, 0)
+        end
+        edit:ClearAllPoints()
+        if tiny then
+            edit:Hide()
+        else
+            edit:Show()
+            edit:SetPoint("LEFT", compact and self or minus, "RIGHT", compact and valueGap or buttonGap, 0)
+        end
+        plus:ClearAllPoints()
+        if compact then
+            plus:Hide()
+        else
+            plus:Show()
+            plus:SetPoint("LEFT", edit, "RIGHT", buttonGap, 0)
+        end
+        UpdateFill()
+    end
+    slider:_msuf2SetLayoutWidth(width)
+    local function FormatValue(value)
+        if type(slider._msuf2ValueFormatter) == "function" then
+            local text = slider._msuf2ValueFormatter(value, slider)
+            if text ~= nil then return tostring(text) end
+        end
+        local st = step or 1
+        if st < 1 then return string.format("%.2f", value) end
+        return tostring(floor(value + 0.5))
+    end
+    slider._msuf2FormatValue = FormatValue
+    function slider:SetValueFormatter(fn)
+        self._msuf2ValueFormatter = (type(fn) == "function") and fn or nil
+        if not self._msuf2Editing then edit:SetText(FormatValue(self:GetValue())) end
+    end
+    function slider:SetValueParser(fn)
+        self._msuf2ValueParser = (type(fn) == "function") and fn or nil
+    end
+    function slider:SetValueBoxWidth(boxWidth)
+        boxWidth = max(40, floor((tonumber(boxWidth) or editW) + 0.5))
+        if editW == boxWidth then return end
+        editW = boxWidth
+        valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
+        compactValueClusterW = valueGap + editW
+        edit:SetWidth(editW)
+        self:_msuf2SetLayoutWidth(self._msuf2RowWidth or width)
+    end
+    function slider:SetInteractionCallbacks(onStart, onStop)
+        self._msuf2InteractionStart = type(onStart) == "function" and onStart or nil
+        self._msuf2InteractionStop = type(onStop) == "function" and onStop or nil
+    end
+    slider:HookScript("OnValueChanged", function(self, value)
+        UpdateFill()
+        if not self._msuf2Editing then edit:SetText(FormatValue(value)) end
+    end)
+    slider:HookScript("OnShow", function(self)
+        HideSliderTemplateParts(self)
+        if T.StyleSlider then T.StyleSlider(self) end
+        if self._msuf2SetLayoutWidth then
+            self:_msuf2SetLayoutWidth(self._msuf2RowWidth or width)
+        else
+            UpdateFill()
+        end
+    end)
+    WireSliderEditBox(slider, edit, FormatValue)
+    WireSliderPointerInput(slider, minus, plus)
     AttachLayerOverviewButton(section, slider, title, label, minVal, maxVal)
     return slider
 end
@@ -1109,8 +1137,7 @@ function W.Segment(section, label, values, width, opts)
         local btn = T.Button(holder, item.text or tostring(item.value), bw, 24, { history = false })
         -- A Segment is one logical control. Its option buttons are visual
         -- parts and must not become duplicate catalog records.
-        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, holder)
-        else btn._msuf2ControlPartOf = holder end
+        MarkControlPart(btn, holder)
         btn:SetPoint("LEFT", holder, "LEFT", (i - 1) * (bw + gap), 0)
         btn._msuf2Value = item.value
         holder.buttons[i] = btn

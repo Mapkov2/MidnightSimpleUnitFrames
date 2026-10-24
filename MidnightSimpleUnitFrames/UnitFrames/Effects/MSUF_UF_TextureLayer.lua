@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Unitframe decorative texture layers (3 slots per frame).
 -- Spawns up to three optional textures per unit frame (Blizzard name-bar style
 -- decoration): a SharedMedia texture, a bundled MSUF texture or a custom file.
@@ -14,22 +13,27 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 -- and the follow toggle maps to SetIgnoreParentAlpha.
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
+local TEXTURE_LAYER_FILE = "UnitFrames/Effects/MSUF_UF_TextureLayer.lua"
 local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", TEXTURE_LAYER_FILE)
 local UF = MSUF.UF
 local Surface = UF.Surface
+-- Every media and colour provider below loads before this file in every core TOC.
+local ResolveStatusbarTextureKey = MSUF.Optional("MSUF_ResolveStatusbarTextureKey")
+local GetBarTexture = MSUF.Require("MSUF_GetBarTexture", TEXTURE_LAYER_FILE)
+local GetClassBarColorFast = MSUF.Require("MSUF_UFCore_GetClassBarColorFast", TEXTURE_LAYER_FILE)
 
 local CreateFrame = CreateFrame
-local CreateColor = _G.CreateColor
-local InCombatLockdown = _G.InCombatLockdown
+local CreateColor = CreateColor
+local InCombatLockdown = InCombatLockdown
 -- COMBAT/OOC layers ask the one combat-state source (Kernel/MSUF_Util.lua).
 local InCombat = MSUF.Util.InCombat
-local UnitIsUnit = _G.UnitIsUnit
-local UnitHealth = _G.UnitHealth
-local UnitHealthMax = _G.UnitHealthMax
-local UnitHealthPercent = _G.UnitHealthPercent
-local CurveAPI = _G.C_CurveUtil
-local LuaCurveType = _G.Enum and _G.Enum.LuaCurveType
+local UnitIsUnit = UnitIsUnit
+local UnitHealth = UnitHealth
+local UnitHealthMax = UnitHealthMax
+local UnitHealthPercent = UnitHealthPercent
+local CurveAPI = C_CurveUtil
+local LuaCurveType = Enum and Enum.LuaCurveType
 local GradientColor = MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.GradientColor
 local HealthGradientColorFromValues = MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.HealthGradientColorFromValues
 local PreviewHealthGradientColor = MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.PreviewHealthGradientColor
@@ -40,7 +44,7 @@ local pairs = pairs
 local ipairs = ipairs
 local floor = math.floor
 local max = math.max
-local issecretvalue = _G.issecretvalue or function() return false end
+local issecretvalue = issecretvalue or function() return false end
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local EDGE_SOFTNESS_MASK_ROOT = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\texture_layer_edge_softness_"
@@ -135,7 +139,7 @@ local function Clamp01(value, fallback)
 end
 
 local function ConfForUnitKey(unitKey)
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   if not db or type(unitKey) ~= "string" then return nil end
   if unitKey:match("^boss%d+$") then unitKey = "boss" end
   if unitKey:match("^arena%d+$") then unitKey = "arena" end
@@ -154,18 +158,15 @@ local function ResolveLayerTexture(conf, prefix, keys)
   if sourceMode == "PACK" or sourceMode == "CUSTOM" then return WHITE8 end
   local key = conf[keys and keys.Texture or (prefix .. "Texture")]
   if type(key) == "string" and key ~= "" then
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    local resolve = ResolveStatusbarTextureKey
     local texture = type(resolve) == "function" and resolve(key) or nil
     if type(texture) == "string" and texture ~= "" then
       return texture
     end
   end
-  local barTexture = _G.MSUF_GetBarTexture
-  if type(barTexture) == "function" then
-    local texture = barTexture()
-    if type(texture) == "string" and texture ~= "" then
-      return texture
-    end
+  local texture = GetBarTexture()
+  if type(texture) == "string" and texture ~= "" then
+    return texture
   end
   return WHITE8
 end
@@ -179,7 +180,7 @@ local function ResolveLayerAtlas(conf, prefix, keys)
   if conf[keys and keys.SourceMode or (prefix .. "SourceMode")] ~= "ATLAS" then return nil end
   local atlas = conf[keys and keys.Atlas or (prefix .. "Atlas")]
   if type(atlas) ~= "string" or atlas == "" then return nil end
-  local textureAPI = _G.C_Texture
+  local textureAPI = C_Texture
   local getAtlasInfo = textureAPI and textureAPI.GetAtlasInfo
   if type(getAtlasInfo) == "function" and getAtlasInfo(atlas) == nil then return nil end
   return atlas
@@ -278,26 +279,23 @@ TextureLayer.ResolveLayerOffsets = ResolveLayerOffsets
 --- Class color for the unit a frame currently shows. 12.x can hand back
 --- secret class tokens for hostile units; those fall back to the custom color.
 local function ResolveClassRGB(unitKey)
-  local UnitClass = _G.UnitClass
+  local UnitClass = UnitClass
   if type(UnitClass) ~= "function" then return nil end
   local unit = unitKey == "boss" and "boss1" or unitKey
   if unit == "arena" then unit = "arena1" end
-  local exists = _G.UnitExists
+  local exists = UnitExists
   if type(exists) == "function" and exists(unit) ~= true then return nil end
   local _, token = UnitClass(unit)
   if issecretvalue(token) == true or type(token) ~= "string" or token == "" then return nil end
   -- Keep texture accents on the same effective class palette as health bars,
   -- including MSUF's user-configured class colors. Resolve at apply time so a
   -- settings-cache refresh is reflected without any recurring work.
-  local fastClassColor = _G.MSUF_UFCore_GetClassBarColorFast
-  if type(fastClassColor) == "function" then
-    local r, g, b = fastClassColor(token)
-    if issecretvalue(r) ~= true and issecretvalue(g) ~= true and issecretvalue(b) ~= true
-      and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-      return r, g, b
-    end
+  local r, g, b = GetClassBarColorFast(token)
+  if issecretvalue(r) ~= true and issecretvalue(g) ~= true and issecretvalue(b) ~= true
+    and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+    return r, g, b
   end
-  local colors = _G.CUSTOM_CLASS_COLORS or _G.RAID_CLASS_COLORS
+  local colors = CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS
   local color = colors and colors[token]
   if not color then return nil end
   return color.r or 1, color.g or 1, color.b or 1
@@ -676,7 +674,7 @@ end
 
 -- `event` is the PLAYER_REGEN_* edge being dispatched, nil everywhere else.
 local function LayerVisible(conf, prefix, frame, unitKey, keys, event)
-  if _G.MSUF_UnitEditModeActive == true then return true end
+  if MSUF_UnitEditModeActive == true then return true end
   local visibility = conf[keys and keys.Visibility or (prefix .. "Visibility")]
   local targetOnly = conf[keys and keys.TargetOnly or (prefix .. "TargetOnly")] == true
     or visibility == "TARGET"
@@ -850,7 +848,7 @@ local function ApplyHealthVisibility(holder, conf, keys, unit, hp, maxHP)
   local baseAlpha = Clamp01(conf[keys.Alpha], 1)
   local lowAlphaEnabled = conf[keys.HealthLowAlphaEnabled] == true
   local belowOnly = conf[keys.HealthCondition] == "BELOW"
-  if _G.MSUF_UnitEditModeActive == true or (not lowAlphaEnabled and not belowOnly) then
+  if MSUF_UnitEditModeActive == true or (not lowAlphaEnabled and not belowOnly) then
     SetHolderAlpha(holder, baseAlpha)
     return
   end

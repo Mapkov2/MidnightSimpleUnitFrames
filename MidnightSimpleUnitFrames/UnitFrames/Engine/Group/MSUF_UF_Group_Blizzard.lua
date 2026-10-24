@@ -6,7 +6,6 @@
 --- reload-only transition; protected hide/reparent work is deferred out of combat.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
 
@@ -81,7 +80,7 @@ local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
 if IS_CLASSIC_FAMILY then
   local IsAnyHiddenFrameParent = IsHiddenFrameParent
   IsHiddenFrameParent = function(parent)
-    return parent ~= nil and parent ~= _G.CompactRaidFrameManager and IsAnyHiddenFrameParent(parent)
+    return parent ~= nil and parent ~= CompactRaidFrameManager and IsAnyHiddenFrameParent(parent)
   end
 end
 
@@ -143,7 +142,7 @@ local function SmallRaidProxy()
   smallRaidProxy:SetAllPoints()
   -- Registered while the proxy is still empty: the driver resolves once inside
   -- this call, which must not show or hide anything of Blizzard's.
-  local registerStateDriver = _G.RegisterStateDriver
+  local registerStateDriver = RegisterStateDriver
   if registerStateDriver then
     registerStateDriver(smallRaidProxy, "visibility", SMALL_RAID_PROXY_VISIBILITY)
   end
@@ -256,7 +255,7 @@ local function HidePartyFrames()
   -- CompactPartyFrame and the classic PartyMemberFrame pool are descendants of
   -- PartyFrame on 12.1. Hide only that owner; touching individual unit buttons
   -- would taint their secret-aware health/event execution.
-  HideFrame(_G.PartyFrame)
+  HideFrame(PartyFrame)
 end
 
 --- CompactRaidFrameManager is deliberately absent here. The tab is a tool panel
@@ -271,7 +270,7 @@ local function HideRaidFrames()
   -- unit-button scripts, events, colors and secret values completely untouched.
   -- (Blizzard_CompactRaidFrameReservationManager.lua is a file of reservation
   -- helpers, CompactRaidFrameReservation_NewManager; it creates no frame.)
-  HideFrame(_G.CompactRaidFrameContainer)
+  HideFrame(CompactRaidFrameContainer)
 end
 
 --- Blizzard Raid Manager visibility.
@@ -320,7 +319,7 @@ local function ResolveRaidManagerMode()
 end
 
 local function MouseIsOverRaidManager(manager)
-  local getFoci = _G.GetMouseFoci
+  local getFoci = GetMouseFoci
   if type(getFoci) ~= "function" then return false end
   local foci = getFoci()
   if type(foci) ~= "table" then return false end
@@ -440,7 +439,7 @@ end
 --- A collapse click fades a MOUSEOVER panel and hands a HIDDEN panel's toggles
 --- back to click-through.
 local function RaidManagerOnToggleClick()
-  local manager = _G.CompactRaidFrameManager
+  local manager = CompactRaidFrameManager
   if not manager then return end
   if raidManagerMode == "MOUSEOVER" and manager.collapsed and manager.SetAlpha then
     manager:SetAlpha(0)
@@ -471,20 +470,20 @@ end
 --- expanded. A panel the gamepad opened holds gamepad focus, so it is lit while open,
 --- as in the stock UI, and closing it hands the alpha back to the mode.
 local function RaidManagerGamepadUIActive()
-  local inputUtil = _G.InputUtil
+  local inputUtil = InputUtil
   return type(inputUtil) == "table" and type(inputUtil.IsGamepadUIEnabled) == "function"
     and inputUtil.IsGamepadUIEnabled() == true
 end
 
 local function RaidManagerDisplayOnShow()
-  local manager = _G.CompactRaidFrameManager
+  local manager = CompactRaidFrameManager
   if not manager or raidManagerEffectiveMode == "SHOW" or not RaidManagerGamepadUIActive() then return end
   raidManagerGamepadLit = true
   manager:SetAlpha(1)
 end
 
 local function RaidManagerDisplayOnHide()
-  local manager = _G.CompactRaidFrameManager
+  local manager = CompactRaidFrameManager
   if not (manager and raidManagerGamepadLit) then return end
   raidManagerGamepadLit = false
   if raidManagerEffectiveMode == "SHOW" then return end
@@ -494,7 +493,7 @@ end
 
 local raidManagerGamepadHooked = false
 local function EnsureRaidManagerGamepadHooks(manager)
-  if raidManagerGamepadHooked or type(_G.CompactRaidFrameManager_InitializeGamepad) ~= "function" then return end
+  if raidManagerGamepadHooked or type(CompactRaidFrameManager_InitializeGamepad) ~= "function" then return end
   local display = manager.displayFrame
   if not (display and type(display.HookScript) == "function") or IsForbidden(display) then return end
   raidManagerGamepadHooked = true
@@ -509,7 +508,7 @@ end
 --- gets Blizzard's default back otherwise. Not protected, so it lands in combat too.
 local raidContainerIgnoresManagerAlpha = false
 local function KeepRaidContainerOpaque(lowered)
-  local container = _G.CompactRaidFrameContainer
+  local container = CompactRaidFrameContainer
   if not (container and type(container.SetIgnoreParentAlpha) == "function") or IsForbidden(container) then
     return
   end
@@ -526,7 +525,7 @@ end
 ---   MOUSEOVER invisible until hovered
 ---   HIDDEN    invisible and click-through
 local function ApplyRaidManagerMode()
-  local manager = _G.CompactRaidFrameManager
+  local manager = CompactRaidFrameManager
   if not manager or IsForbidden(manager) or type(manager.SetAlpha) ~= "function" then
     return
   end
@@ -738,9 +737,9 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   elseif raidMode == "NONE" then
     ApplyDisabledRaidFallback(raidMode)
   elseif smallRaidPark then
-    HideFrame(_G.CompactRaidFrameContainer, true)
+    HideFrame(CompactRaidFrameContainer, true)
   else
-    ReleaseSoftHiddenFrame(_G.CompactRaidFrameContainer)
+    ReleaseSoftHiddenFrame(CompactRaidFrameContainer)
     ApplyDisabledRaidFallback(raidMode)
   end
 
@@ -778,7 +777,7 @@ local function FlushPending()
   if raidManagerPendingMouse ~= nil then
     local wanted = raidManagerPendingMouse
     raidManagerPendingMouse = nil
-    ApplyRaidManagerMouse(_G.CompactRaidFrameManager, wanted)
+    ApplyRaidManagerMouse(CompactRaidFrameManager, wanted)
   end
 end
 

@@ -172,7 +172,8 @@ end
 ---------------------------------------------------------------------------
 -- World
 ---------------------------------------------------------------------------
--- options: deadBgOffline (bool) for the raid dead background.
+-- options: deadBgOffline (bool) for the raid dead background; beforeFile(path, env), called
+-- before each core file loads.
 function World.New(root, flavor, options)
     options = options or {}
     local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
@@ -270,9 +271,22 @@ function World.New(root, flavor, options)
             LuaCurveType = { Linear = 0, Step = 1 },
             UnitDamageAbsorbClampMode = { MissingHealth = 0, MissingHealthWithoutIncomingHeals = 1, MaximumHealth = 2 },
         }, { __index = function() return unknown end })
+        -- options.beforeFile(path, env) runs before each core file loads, so a smoke can put its own
+        -- (counting) provider in place after the real owner exported and before a consumer that
+        -- binds it at load runs.
+        if options.beforeFile then
+            local world = harness.world
+            local loadFile = world.LoadFile
+            world.LoadFile = function(self, path, addonName, namespace)
+                options.beforeFile(path, env)
+                return loadFile(self, path, addonName, namespace)
+            end
+        end
     end })
     local env, UF, GF = h.env, h.UF, h.GF
     w.h, w.env, w.UF, w.GF = h, env, UF, GF
+    -- The namespace: namespace-only exports are read from w.core.PublicGlobals, not from env.
+    w.core = h.world.core
 
     -- Widget surface.
     local M = h.widgets.Methods
@@ -299,7 +313,7 @@ function World.New(root, flavor, options)
     general.barMode = "unified"
     general.barBgFillMode = "missing"
     general.barBgColorMode = "health_gradient"
-    env.MSUF_RoundedUF_Active = true
+    h.world.core.ExportPublic("MSUF_RoundedUF_Active", true)
     h.world.core.UF.RegisterDecorator("BudgetRoundedSurface", { OwnsMask = function() return true end })
     local raid = GF.GetConf("raid")
     raid.enabled = true
@@ -332,12 +346,13 @@ end
 -- Absorb, heal and max-health payloads arrive before the health ticks; the
 -- prediction queue drains synchronously (its test toggle).
 function Methods:Prime(frame, unit)
-    self.env.MSUF_GF_PredictionSync = true
+    -- The prediction owner reads the toggle from the namespace registry.
+    self.core.ExportPublic("MSUF_GF_PredictionSync", true)
     self:Fire(frame, unit, "UNIT_MAXHEALTH")
     self:Fire(frame, unit, "UNIT_ABSORB_AMOUNT_CHANGED")
     self:Fire(frame, unit, "UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
     self:Fire(frame, unit, "UNIT_HEAL_PREDICTION")
-    self.env.MSUF_GF_PredictionSync = nil
+    self.core.ExportPublic("MSUF_GF_PredictionSync", nil)
 end
 
 function Methods:StartCounting()

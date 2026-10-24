@@ -12,7 +12,7 @@ local PM = MSUF.PortraitMedia
 
 local base = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Portraits\\Rondo\\"
 local BLIZZARD_CLASS_TEXTURE = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
-local CLASS_ICON_TCOORDS = _G.CLASS_ICON_TCOORDS
+local CLASS_ICON_TCOORDS = CLASS_ICON_TCOORDS
 
 local CLASS_FILE = {
     DEATHKNIGHT = "Death Knight",

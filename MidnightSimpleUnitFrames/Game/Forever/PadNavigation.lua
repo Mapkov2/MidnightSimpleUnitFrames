@@ -27,14 +27,11 @@
 -- right stick press shows or hides tooltips.
 local _, MSUF = ...
 if not (MSUF.Client and MSUF.Client.IsForever) then return end
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Forever/PadNavigation.lua")
 
 local PadNav = {}
 MSUF.PadNavigation = PadNav
-_G.MSUF_PadNavigation = PadNav
+MSUF.ExportPublic("MSUF_PadNavigation", PadNav)
 
 local abs, floor, max, min = math.abs, math.floor, math.max, math.min
 local REPEAT_DELAY, REPEAT_RATE, MOVE_REPEAT_RATE, POLL_INTERVAL = 0.35, 0.09, 0.05, 0.25
@@ -79,21 +76,21 @@ local heldTrigger, triggerUsed = nil, false
 local stickX, stickY, nudgeX, nudgeY, nudgeWait, stickHeld, settleWait = 0, 0, 0, 0, 0, 0, 0
 
 local function PadUIEnabled()
-    local util = _G.InputUtil
+    local util = InputUtil
     return util ~= nil and type(util.IsGamepadUIEnabled) == "function" and util.IsGamepadUIEnabled() == true
 end
 
 -- A Blizzard panel focused by the frame controls manager shows SmartNavigation;
 -- its own bindings then own the pad until that panel closes.
 local function BlizzardNavigationActive()
-    local navigation = _G.SmartNavigation
+    local navigation = SmartNavigation
     return navigation ~= nil and type(navigation.IsShown) == "function" and navigation:IsShown() == true
 end
 
 -- Geometry can be secret on Midnight-era clients; such a value is never used.
 local function Plain(value)
     if type(value) ~= "number" then return nil end
-    local isSecret = _G.issecretvalue
+    local isSecret = issecretvalue
     if isSecret and isSecret(value) then return nil end
     return value
 end
@@ -190,7 +187,7 @@ end
 
 local function RunScript(frame, script, ...)
     if not (frame and frame:HasScript(script)) then return end
-    local execute = _G.ExecuteFrameScript
+    local execute = ExecuteFrameScript
     if type(execute) == "function" then
         execute(frame, script, ...)
         return
@@ -234,7 +231,7 @@ local function EnsureRing()
     local hand = PixelLayoutRegion(pointer:CreateTexture(nil, "OVERLAY"))
     hand:SetAtlas("gamepad-largecursor-white")
     hand:SetAllPoints()
-    local color = _G.GAMEPAD_SMARTNAV_CURSOR_COLOR
+    local color = GAMEPAD_SMARTNAV_CURSOR_COLOR
     if type(color) == "table" and type(color.GetRGBA) == "function" then hand:SetVertexColor(color:GetRGBA()) end
     local bob = pointer:CreateAnimationGroup()
     bob:SetLooping("REPEAT")
@@ -406,7 +403,7 @@ end
 local UpdateMotor, Select, RefreshPrompts
 
 local function MuteTooltip(control)
-    local tooltip = _G.GameTooltip
+    local tooltip = GameTooltip
     if tooltipsHidden and tooltip and tooltip:IsOwned(control) then tooltip:Hide() end
 end
 
@@ -542,12 +539,12 @@ local HAPTICS = {
 local rumbleEnds = 0
 
 local function StopRumble()
-    local pad = _G.C_GamePad
+    local pad = C_GamePad
     if pad and type(pad.StopVibration) == "function" and GetTime() + 0.005 >= rumbleEnds then pad.StopVibration() end
 end
 
 local function Haptic(kind)
-    local pad, spec = _G.C_GamePad, HAPTICS[kind]
+    local pad, spec = C_GamePad, HAPTICS[kind]
     if not (spec and pad and type(pad.SetVibration) == "function") then return end
     pad.SetVibration(spec[1], spec[2])
     rumbleEnds = GetTime() + spec[3]
@@ -561,7 +558,7 @@ end
 -- A click anywhere else ends text editing; emulated presses do not do that
 -- natively. MSUF previews refuse arrow nudges while a text field has focus.
 local function ReleaseTextFocus(except)
-    local focus = type(_G.GetCurrentKeyBoardFocus) == "function" and _G.GetCurrentKeyBoardFocus() or nil
+    local focus = type(GetCurrentKeyBoardFocus) == "function" and GetCurrentKeyBoardFocus() or nil
     local keyboard = PadNav.Keyboard
     -- The keyboard types into its field; its own keys never end the editing.
     if focus and focus ~= except and focus ~= (keyboard and keyboard.target)
@@ -722,7 +719,7 @@ local function CloseWindow(frame)
 end
 
 local function TextFocus(scope)
-    local focus = type(_G.GetCurrentKeyBoardFocus) == "function" and _G.GetCurrentKeyBoardFocus() or nil
+    local focus = type(GetCurrentKeyBoardFocus) == "function" and GetCurrentKeyBoardFocus() or nil
     if focus and focus.IsObjectType and focus:IsObjectType("EditBox") and InScope(focus, scope) then return focus end
     return nil
 end
@@ -750,7 +747,7 @@ end
 -- reading order. True when the selection went to an element.
 local function CycleElement(scope, direction)
     local box = PreviewBox(current) or PreviewOwner(current)
-    local menu = _G.MSUF2
+    local menu = MSUF.Optional("MSUF2")
     local bar = box and type(menu) == "table" and menu.PreviewSelectionBar
     if bar and type(bar.CycleHandle) == "function" then
         bar.CycleHandle(box, direction < 0)

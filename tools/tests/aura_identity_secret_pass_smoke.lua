@@ -22,6 +22,7 @@
 local root = assert(arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
 local rawtype = type
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 
 local RUNTIME = root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/"
 local FILES = { "MSUF_Auras3_Runtime_Identity.lua", "MSUF_Auras3_Runtime_Presence.lua",
@@ -81,12 +82,19 @@ local function Run(watchedFile)
         _NativeContainerVisible = function() return true end,
         _SyncManagedAuraContainerGeometry = function() return false end,
     }
-    for _, file in ipairs(FILES) do assert(loadfile(RUNTIME .. file))("MidnightSimpleUnitFrames", MSUF) end
+    -- Files run through the shipped loader: the real Kernel API, and a provider this smoke does
+    -- not load is a forwarder that raises when used.
+    for _, file in ipairs(FILES) do
+        RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/Runtime/" .. file, MSUF)
+    end
     local timers = {}
     local Platform = {
         C_Timer = { After = function(_, fn) timers[#timers + 1] = fn end },
         CreateFrame = function() return NewRegion() end,
         InCombat = function() return inCombat end,
+        -- The scheduler's next-frame owner (Kernel/MSUF_Scheduler.lua), which the identity owners
+        -- take through Platform: the queued work runs when the scenario drains its frames.
+        RunNextFrame = function(fn) timers[#timers + 1] = fn end,
         issecretvalue = _G.issecretvalue,
     }
     local function IsGroupFrame(frame) return rawtype(frame) == "table" and frame._msufIsGroupFrame == true end

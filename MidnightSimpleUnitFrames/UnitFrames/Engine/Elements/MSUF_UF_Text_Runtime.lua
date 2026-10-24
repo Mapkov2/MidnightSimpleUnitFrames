@@ -18,7 +18,7 @@ end
 
 local UnitHealth = Text.UnitHealth
 local UnitHealthMax = Text.UnitHealthMax
-local UnitHealthMissing = _G.UnitHealthMissing
+local UnitHealthMissing = UnitHealthMissing
 local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
 local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
 local DISPATCH_KEY = Text.DISPATCH_KEY
@@ -29,7 +29,7 @@ local ResolveDisplayedPowerIdentity = Text.ResolveDisplayedPowerIdentity
 
 local UnitName = Text.UnitName
 
-local C_Timer = _G.C_Timer
+local C_Timer = C_Timer
 local PowerColor = Text.PowerColor
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
@@ -50,8 +50,8 @@ local tonumber = tonumber
 local string_byte = string.byte
 local string_sub = string.sub
 local Secrets = MSUF.Secrets or {}
-local nativeSecrets = _G.issecretvalue ~= nil
-local issecretvalue = _G.issecretvalue
+local nativeSecrets = issecretvalue ~= nil
+local issecretvalue = issecretvalue
 local UnitMissing = Secrets.UnitMissing
 
 local ReadConnectedCached = UF.ReadConnectedCached
@@ -2153,9 +2153,8 @@ local function ConfigureInlineToTDriver(frame, spec)
     return false
   end
   if not inlineToTDriver then
-    local createFrame = _G.CreateFrame
-    if type(createFrame) ~= "function" then return false end
-    inlineToTDriver = createFrame("Frame")
+    if type(CreateFrame) ~= "function" then return false end
+    inlineToTDriver = CreateFrame("Frame")
     inlineToTDriver:SetScript("OnEvent", function(_, event)
       local owner = inlineToTOwner
       local active = owner and owner._msufActiveElements

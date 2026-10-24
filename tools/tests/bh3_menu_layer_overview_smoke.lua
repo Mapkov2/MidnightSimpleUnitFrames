@@ -2,7 +2,11 @@ local ROOT = assert(arg[1]):gsub("\\", "/"):gsub("/$", "") .. "/"
 -- Probe: LayerOverview rows vs runtime compile for group Spell Indicators.
 -- Run from repo root: lua C:\tmp\bh3\probes\C25-p1\layer_overview_probe.lua
 local NS = { MSUF2 = {}, GF = {} }
-NS.ExportPublic = function(name, value) _G[name] = value end
+-- The real Kernel namespace API (Bootstrap, Require); each file loads through LoadShipped, which defers the
+-- providers this probe does not load (a deferred one raises if the probe uses it).
+local REPO = ROOT:gsub("/$", "")
+local RequireFixture = assert(loadfile(ROOT .. "tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(REPO, NS)
 NS.MSUF2.Tr = function(s) return s end
 NS.MSUF2.Format = string.format
 _G.MSUF_NormalizeFrameStrata = function(v, fallback) return v or fallback end
@@ -24,13 +28,13 @@ _G.MSUF_DB = {
         { id = "c1", name = "My Custom", enabled = true } } } } } },
 }
 NS.GF.SpellIndicators = { SpecInfo = { test = {} }, SpecDefaults = {}, TrackableAuras = {} }
-assert(loadfile(ROOT .. "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua"))("test", NS)
+RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua", NS)
 -- The arena PvP trinket row reads the trinket runtime (core, loaded before Options);
 -- a client answer without arena units keeps its event wiring out of this probe.
 NS.Client = { SupportsUnit = function() return false end }
-assert(loadfile(ROOT .. "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"))("test", NS)
+RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua", NS)
 NS.Client = nil
-assert(loadfile(ROOT .. "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua"))("test", NS)
+RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua", NS)
 local compiled = NS.GF.CompileSpellIndicators(_G.MSUF_DB.gf_party, "party")
 local item = compiled.items[1]
 print("runtime item layer", item and item.layer, "runtime frame effect", item and tostring(item.frame))

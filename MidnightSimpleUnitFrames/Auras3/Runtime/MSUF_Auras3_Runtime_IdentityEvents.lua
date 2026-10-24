@@ -2,7 +2,6 @@
 -- Native identity event dispatch. Topology, coalescing and world repair have separate owners.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.IdentityEvents = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local Runtime = A3.Runtime
@@ -178,7 +177,7 @@ local function OnEvent(frame, event, unit, arg2)
         -- secret data three times per flap. Honor the event's own
         -- unit token and drain through the deduped next-frame
         -- coalescer instead.
-        local issecret = _G.issecretvalue
+        local issecret = issecretvalue
         if type(unit) == "string" and (not issecret or issecret(unit) ~= true)
             and A3._directIdentityRefreshUnits[unit] == true then
             IdentityRefresh.ScheduleDirectIdentityEventRefresh(unit)

@@ -1,12 +1,16 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Classic-only visual parity for the scan-based Auras3 backend.
 --- Loaded exclusively by Classic-family manifests; Mainline keeps the native
 --- AuraContainer visual implementation and pays no load/runtime cost here.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Game/Classic/Auras/MSUF_Auras3_Visuals.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local GetGeneralDB = MSUF.Require("MSUF_GetGeneralDB", FILE)
 local A3 = MSUF.MSUF_Auras3
+-- Auras3/MSUF_Auras3_IconSkins.lua loads with the shared icon definitions, before
+-- this backend (nil only in partial test loads).
+local Skins = A3 and A3.IconSkins
 if type(A3) ~= "table" then return end
 
 local V = A3.ClassicVisuals or {}
@@ -14,7 +18,7 @@ A3.ClassicVisuals = V
 
 local type, tostring, tonumber, select, next = type, tostring, tonumber, select, next
 local math_floor, math_max, math_min = math.floor, math.max, math.min
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 local STEALABLE_TEXTURE = "Interface\\TargetingFrame\\UI-TargetingFrame-Stealable"
 
 local function Clamp(value, fallback, minValue, maxValue)
@@ -33,7 +37,7 @@ end
 --- readers return a plain value of the asked kind, or nil for a secret or any
 --- other kind, so the result can be compared and cached. The compiler and the
 --- button code import them from here (Compile.lua loads after this file).
-local IsSecret = _G.issecretvalue or function() return false end
+local IsSecret = issecretvalue or function() return false end
 function V.PlainNumber(value)
     if IsSecret(value) then return nil end
     return type(value) == "number" and value or nil
@@ -87,7 +91,9 @@ local ICON_STYLE_OFF = {
     shadowSize = 0,
 }
 
-function V.SharedIconStyle(shared, scope, appearanceKind)
+--- lane (optional) is the lane being compiled: its skin draws only while the
+--- lane shows its icon (Skins.Paint reads the lane's final settings).
+function V.SharedIconStyle(shared, scope, appearanceKind, lane)
     shared = type(shared) == "table" and shared or {}
     local normalized = tostring(scope or ""):lower()
     if normalized:match("^boss%d+$") then normalized = "boss" end
@@ -96,12 +102,19 @@ function V.SharedIconStyle(shared, scope, appearanceKind)
     local stylesByKind = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
     local style = stylesByKind and type(stylesByKind[appearanceKind]) == "table"
         and stylesByKind[appearanceKind] or shared
+    -- Skins and the combat snapshot: Auras3/MSUF_Auras3_IconSkins.lua. Every lane
+    -- compiles here, so both calls are skipped while nothing is frozen or no skin is set.
+    local defaults = shared.iconSkinDefault
+    if Skins and Skins.frozen then
+        style = Skins.CommittedSource(appearanceKind, style ~= shared and style or nil) or shared
+        defaults = Skins.CommittedDefault(shared)
+    end
     local borderR, borderG, borderB, borderA = Color(style.styleBorderColor, 0, 0, 0, 1)
     local shadowR, shadowG, shadowB, shadowA = Color(style.styleShadowColor, 0, 0, 0, 0.8)
     local styles = MSUF.BorderStyles
     local key = styles and styles.Normalize(style.styleBorderStyle) or "SOLID"
     local texture = styles and styles.Resolve(key) or nil
-    return {
+    local compiled = {
         borderEnabled = style.styleBorderEnabled == true,
         borderStyle = key,
         borderTexture = texture,
@@ -113,6 +126,18 @@ function V.SharedIconStyle(shared, scope, appearanceKind)
         shadowSize = Clamp(style.styleShadowSize, 4, 1, 16),
         shadowR = shadowR, shadowG = shadowG, shadowB = shadowB, shadowA = shadowA,
     }
+    -- nil or DEFAULT follows the profile's default skin (shared.iconSkinDefault,
+    -- absent until the player picks one on the Icon Skins page).
+    local skin = style.styleSkin
+    if skin == nil or skin == "DEFAULT" then
+        if not defaults then return compiled end
+        skin = defaults.styleSkin
+    end
+    if skin == nil or skin == "CUSTOM" or not Skins then return compiled end
+    compiled = Skins.Attach(compiled, style, defaults)
+    -- A group Spell Icon style changes the lane after this compile.
+    if compiled.skin then compiled.skin.lane = lane end
+    return compiled
 end
 
 --- prefix names the lane's own layout keys; appearanceKind (default prefix)
@@ -122,8 +147,9 @@ local function Enrich(lane, layout, shared, prefix, portraitShape, scope, appear
     appearanceKind = appearanceKind or prefix
     local shapes = type(shared) == "table" and type(shared.appearanceIconShapes) == "table"
         and shared.appearanceIconShapes or nil
-    local shapeValue = shapes and shapes[appearanceKind]
-        or Read(shared, nil, prefix .. "IconShape", Read(shared, nil, "iconShape", "RECTANGLE"))
+    local own = shapes and shapes[appearanceKind]
+    if Skins and Skins.frozen then own = Skins.CommittedShape(appearanceKind, own) end
+    local shapeValue = own or Read(shared, nil, prefix .. "IconShape", Read(shared, nil, "iconShape", "RECTANGLE"))
     lane.iconShape = Shape.Resolve(shapeValue, portraitShape)
     lane.iconZoom = Clamp(Read(layout, nil, prefix .. "IconZoom", 100), 100, 100, 200)
     lane.cooldownSwipeReverse = Read(layout, nil, prefix .. "CooldownSwipeReverse", false) == true
@@ -133,7 +159,7 @@ local function Enrich(lane, layout, shared, prefix, portraitShape, scope, appear
     lane.durationBarHeight = Clamp(Read(layout, nil, prefix .. "DurationBarHeight", 2), 2, 1, 16)
     lane.durationBarPosition = tostring(Read(layout, nil, prefix .. "DurationBarPosition", "BOTTOM")):upper()
     lane.durationBarDirection = tostring(Read(layout, nil, prefix .. "DurationBarDirection", "REMAINING")):upper()
-    lane.iconStyle = V.SharedIconStyle(shared, scope or lane.unit, appearanceKind)
+    lane.iconStyle = V.SharedIconStyle(shared, scope or lane.unit, appearanceKind, lane)
     lane.classicVisualStyle = true
     lane.buttonWidth = lane.buttonWidth or lane.size
     lane.buttonHeight = lane.buttonHeight or lane.size
@@ -157,24 +183,28 @@ end
 
 --- Tracked buffs and externals wear the Buff appearance, as on Retail
 --- (Runtime_LaneConfig sharedLane); only their layout keys are their own.
+local function SharedAuraSettings()
+    local db = MSUF_DB
+    local root = db and db.auras3
+    return root and root.shared or {}
+end
+
 function V.EnrichGroupLane(lane, source, kind, frameSpec, scope)
     local prefix = kind
-    local db = _G.MSUF_DB
-    local root = db and db.auras3
-    local shared = root and root.shared or {}
+    local shared = SharedAuraSettings()
     return Enrich(lane, source, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, scope,
         kind == "debuff" and "debuff" or "buff")
 end
 
 function V.EnrichCustomLane(lane, entry, frameSpec)
     local placed = type(entry) == "table" and type(entry.placed) == "table" and entry.placed or {}
-    local db = _G.MSUF_DB
-    local root = db and db.auras3
-    local shared = root and root.shared or {}
+    local shared = SharedAuraSettings()
     local appearanceKind = lane.appearanceKind
         or (lane.harmful == true and "debuff" or "buff")
     local shapes = type(shared.appearanceIconShapes) == "table" and shared.appearanceIconShapes or nil
-    lane.iconShape = Shape.Resolve(shapes and shapes[appearanceKind] or placed.iconShape,
+    local own = shapes and shapes[appearanceKind]
+    if Skins and Skins.frozen then own = Skins.CommittedShape(appearanceKind, own) end
+    lane.iconShape = Shape.Resolve(own or placed.iconShape,
         frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
     lane.iconZoom = Clamp(placed.iconZoom, 100, 100, 200)
     lane.cooldownSwipeReverse = placed.cooldownSwipeReverse == true
@@ -183,7 +213,7 @@ function V.EnrichCustomLane(lane, entry, frameSpec)
     lane.durationBarHeight = Clamp(placed.durationBarHeight, 2, 1, 16)
     lane.durationBarPosition = tostring(placed.durationBarPosition or "BOTTOM"):upper()
     lane.durationBarDirection = tostring(placed.durationBarDirection or "REMAINING"):upper()
-    lane.iconStyle = V.SharedIconStyle(shared, lane.unit, appearanceKind)
+    lane.iconStyle = V.SharedIconStyle(shared, lane.unit, appearanceKind, lane)
     lane.classicVisualStyle = true
     return lane
 end
@@ -229,6 +259,8 @@ function V.ApplyButtonLayout(lane, button)
     end
     local shape = cfg.iconShape or Shape.RECTANGLE
     ApplyIconShape(button, shape, button.Cooldown, false, button.Icon)
+    -- Buttons.ApplyButtonLayout sized the button already: a skin reads its width
+    -- and height from it (flat icons), so this call stays as cheap as before skins.
     A3.ApplyIconStylePreview(button, cfg.iconStyle, math_min(cfg.buttonWidth or cfg.size, cfg.buttonHeight or cfg.size), shape)
     if button.Cooldown and button.Cooldown.SetReverse then button.Cooldown:SetReverse(cfg.cooldownSwipeReverse == true) end
     local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
@@ -294,7 +326,7 @@ local function TickDriverOnUpdate(_, elapsed)
     local now
     if barElapsed >= BAR_TICK then
         barElapsed = 0
-        now = _G.GetTime()
+        now = GetTime()
         for bar in next, tickBars do DurationBarPaint(bar, now) end
         for bar in next, tickSmoothBars do DurationBarPaintSmooth(bar, now) end
     end
@@ -302,7 +334,7 @@ local function TickDriverOnUpdate(_, elapsed)
         bucketElapsed = 0
         local repaint = V.RepaintCooldownBucket
         if repaint then
-            now = now or _G.GetTime()
+            now = now or GetTime()
             for cooldown in next, tickBuckets do repaint(cooldown, now) end
         end
     end
@@ -342,7 +374,7 @@ end
 local function CooldownBucketOnShow(cooldown)
     if cooldown._msufA3BucketWanted ~= true then return end
     local repaint = V.RepaintCooldownBucket
-    if repaint then repaint(cooldown, _G.GetTime()) end
+    if repaint then repaint(cooldown, GetTime()) end
     if cooldown._msufA3BucketWanted == true and tickBuckets[cooldown] ~= true then
         tickBuckets[cooldown] = true
         TickDriverSync()
@@ -381,7 +413,7 @@ end
 --- skips it); it catches up here, once, when it becomes visible.
 local function DurationBarOnShow(bar)
     if bar._msufA3ClassicBarExpiration then
-        DurationBarPaint(bar, _G.GetTime())
+        DurationBarPaint(bar, GetTime())
         V.TrackDurationBar(bar, true)
     end
 end
@@ -443,7 +475,7 @@ local function DurationBar(button, cfg)
         bar:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", inset, inset)
         bar:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
     end
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local general = GetGeneralDB()
     local color = general and general.aurasCooldownTextSafeColor
     local r, g, b = Color(color, 1, 1, 1, 0.95)
     bar:SetStatusBarColor(r, g, b, 0.95)
@@ -513,14 +545,23 @@ local function ApplyFrameEffectEdges(root, target, effect, kind, r, g, b, a)
     end
     local thickness = Clamp(effect.thickness, kind == "glow" and 3 or 2, 1, 32)
     if kind == "glow" or kind == "pulse" then thickness = thickness + 2 end
-    edges[1]:ClearAllPoints(); edges[1]:SetPoint("TOPLEFT", target, "TOPLEFT", -thickness, thickness)
-    edges[1]:SetPoint("TOPRIGHT", target, "TOPRIGHT", thickness, thickness); edges[1]:SetHeight(thickness)
-    edges[2]:ClearAllPoints(); edges[2]:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness)
-    edges[2]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness); edges[2]:SetHeight(thickness)
-    edges[3]:ClearAllPoints(); edges[3]:SetPoint("TOPLEFT", edges[1], "BOTTOMLEFT", 0, 0)
-    edges[3]:SetPoint("BOTTOMLEFT", edges[2], "TOPLEFT", 0, 0); edges[3]:SetWidth(thickness)
-    edges[4]:ClearAllPoints(); edges[4]:SetPoint("TOPRIGHT", edges[1], "BOTTOMRIGHT", 0, 0)
-    edges[4]:SetPoint("BOTTOMRIGHT", edges[2], "TOPRIGHT", 0, 0); edges[4]:SetWidth(thickness)
+    -- Edges 1 and 2 run along the top and bottom; 3 and 4 fill the sides between.
+    edges[1]:ClearAllPoints()
+    edges[1]:SetPoint("TOPLEFT", target, "TOPLEFT", -thickness, thickness)
+    edges[1]:SetPoint("TOPRIGHT", target, "TOPRIGHT", thickness, thickness)
+    edges[1]:SetHeight(thickness)
+    edges[2]:ClearAllPoints()
+    edges[2]:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness)
+    edges[2]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness)
+    edges[2]:SetHeight(thickness)
+    edges[3]:ClearAllPoints()
+    edges[3]:SetPoint("TOPLEFT", edges[1], "BOTTOMLEFT", 0, 0)
+    edges[3]:SetPoint("BOTTOMLEFT", edges[2], "TOPLEFT", 0, 0)
+    edges[3]:SetWidth(thickness)
+    edges[4]:ClearAllPoints()
+    edges[4]:SetPoint("TOPRIGHT", edges[1], "BOTTOMRIGHT", 0, 0)
+    edges[4]:SetPoint("BOTTOMRIGHT", edges[2], "TOPRIGHT", 0, 0)
+    edges[4]:SetWidth(thickness)
     for i = 1, 4 do
         if edges[i].SetBlendMode then edges[i]:SetBlendMode(kind == "glow" and "ADD" or "BLEND") end
         edges[i]:SetVertexColor(r, g, b, kind == "glow" and math_min(1, a + 0.16) or a)
@@ -531,7 +572,9 @@ local function ApplyFrameEffectEdges(root, target, effect, kind, r, g, b, a)
         if not pulse then
             pulse = root:CreateAnimationGroup()
             local alpha = pulse:CreateAnimation("Alpha")
-            alpha:SetFromAlpha(0.45); alpha:SetToAlpha(1); alpha:SetDuration(0.7)
+            alpha:SetFromAlpha(0.45)
+            alpha:SetToAlpha(1)
+            alpha:SetDuration(0.7)
             if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
             pulse:SetLooping("BOUNCE")
             root._msufA3ClassicPulse = pulse
@@ -554,7 +597,7 @@ local function ApplyFrameEffect(lane, button, data)
         local expiration = tonumber(data and data.expirationTime)
         local duration = tonumber(data and data.duration)
         local threshold = Clamp(effect.expireThreshold, 5, 1, 30)
-        local now = _G.GetTime and _G.GetTime() or 0
+        local now = GetTime and GetTime() or 0
         local remaining = expiration and expiration - now or 0
         if not (duration and duration > 0 and remaining > 0) then
             HideFrameEffect(button)
@@ -572,7 +615,7 @@ local function ApplyFrameEffect(lane, button, data)
             end
             HideFrameEffect(button)
             local delay = remaining - threshold
-            local timerAPI = _G.C_Timer
+            local timerAPI = C_Timer
             if timerAPI and timerAPI.NewTimer then
                 local auraInstanceID = button.auraInstanceID
                 button._msufA3ClassicFrameEffectTimerAt = expiration
@@ -609,7 +652,10 @@ local function ApplyFrameEffect(lane, button, data)
         return true
     end
     local root, target = EnsureFrameEffectRoot(button, frame)
-    if not root then HideFrameEffect(button); return false end
+    if not root then
+        HideFrameEffect(button)
+        return false
+    end
     HideFrameEffect(button)
     root, target = EnsureFrameEffectRoot(button, frame)
     local color = type(effect.color) == "table" and effect.color or {}
@@ -624,7 +670,8 @@ local function ApplyFrameEffect(lane, button, data)
         local tint = root._tint or PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
         root._tint = tint
         tint:SetTexture("Interface\\Buttons\\WHITE8X8")
-        tint:ClearAllPoints(); tint:SetAllPoints(fill)
+        tint:ClearAllPoints()
+        tint:SetAllPoints(fill)
         tint:SetVertexColor(r, g, b, Clamp(effect.tintAlpha or effect.alpha or a, 0.20, 0, 1))
         tint:Show()
     elseif kind == "namecolor" then
@@ -640,8 +687,10 @@ local function ApplyFrameEffect(lane, button, data)
             overlay._msufA3Text = source:GetText()
             overlay:SetText(overlay._msufA3Text)
         end
-        overlay:ClearAllPoints(); overlay:SetAllPoints(source)
-        overlay:SetTextColor(r, g, b, a); overlay:Show()
+        overlay:ClearAllPoints()
+        overlay:SetAllPoints(source)
+        overlay:SetTextColor(r, g, b, a)
+        overlay:Show()
     else
         ApplyFrameEffectEdges(root, target, effect, kind, r, g, b, a)
     end
@@ -684,8 +733,10 @@ local function ApplyIndicatorVisual(button, cfg)
             swatch:SetTexture("Interface\\Buttons\\WHITE8X8")
             button._msufA3ClassicIndicatorSwatch = swatch
         end
-        swatch:ClearAllPoints(); swatch:SetAllPoints(button)
-        swatch:SetVertexColor(r, g, b, a); swatch:Show()
+        swatch:ClearAllPoints()
+        swatch:SetAllPoints(button)
+        swatch:SetVertexColor(r, g, b, a)
+        swatch:Show()
     elseif swatch then
         swatch:Hide()
     end
@@ -702,7 +753,9 @@ local function ApplyIndicatorVisual(button, cfg)
         glow:ClearAllPoints()
         glow:SetPoint("TOPLEFT", button, "TOPLEFT", -2, 2)
         glow:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
-        glow:SetBlendMode("ADD"); glow:SetVertexColor(r, g, b, math_min(a, 0.55)); glow:Show()
+        glow:SetBlendMode("ADD")
+        glow:SetVertexColor(r, g, b, math_min(a, 0.55))
+        glow:Show()
     elseif glow then
         glow:Hide()
     end
@@ -817,7 +870,7 @@ function V.UpdateButtonVisual(lane, button, unit, data)
                 -- Smooth fill eases a shown running bar to its refreshed
                 -- timer, as Blizzard's aura Update does; a bar that appears
                 -- starts at its value.
-                local now = _G.GetTime()
+                local now = GetTime()
                 if running and bar._msufA3ClassicBarSmooth and bar:IsShown() then
                     DurationBarPaintSmooth(bar, now)
                 else
@@ -931,7 +984,7 @@ function V.SetDispelSymbolArt(texture, style, dispelType, tinted)
         local atlas = V.DispelAtlases[style] or V.DispelAtlases.BLIZZARD
         atlas = atlas and atlas[dispelType]
         if atlas and texture.SetAtlas and AtlasKnown(atlas) then
-            texture:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
+            texture:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
             return true
         end
     end
@@ -941,19 +994,28 @@ function V.SetDispelSymbolArt(texture, style, dispelType, tinted)
     return SetDispelSymbolFile(texture, DISPEL_ART_FALLBACK_FOLDER, dispelType, tinted)
 end
 
-function V.HideDispelSymbols(frame, preview)
-    local hostKey = preview == true and "_msufA3ClassicDispelSymbolPreviewHost" or "_msufA3ClassicDispelSymbolHost"
-    local activeKey = preview == true and "_msufA3ClassicDispelSymbolPreviewActive" or "_msufA3ClassicDispelSymbolsActive"
-    local signatureKey = preview == true and "_msufA3ClassicDispelSymbolPreviewSignature" or "_msufA3ClassicDispelSymbolSignature"
-    local host = frame and frame[hostKey]
-    local changed = frame and frame[activeKey] == true or false
-    if host then host:Hide() end
-    if frame then
-        frame[activeKey] = nil
-        frame[signatureKey] = nil
+--- One hider per dispel host family (symbols, overlay): it hides the live or
+--- the preview host and clears that host's active and signature stamps, and
+--- reports whether the host was active. Built once at load, so a hide on the
+--- UNIT_AURA path stays a single call.
+local function DispelHostHider(hostKey, previewHostKey, activeKey, previewActiveKey, signatureKey, previewSignatureKey)
+    return function(frame, preview)
+        local isPreview = preview == true
+        local active = isPreview and previewActiveKey or activeKey
+        local host = frame and frame[isPreview and previewHostKey or hostKey]
+        local changed = frame and frame[active] == true or false
+        if host then host:Hide() end
+        if frame then
+            frame[active] = nil
+            frame[isPreview and previewSignatureKey or signatureKey] = nil
+        end
+        return changed
     end
-    return changed
 end
+
+V.HideDispelSymbols = DispelHostHider("_msufA3ClassicDispelSymbolHost", "_msufA3ClassicDispelSymbolPreviewHost",
+    "_msufA3ClassicDispelSymbolsActive", "_msufA3ClassicDispelSymbolPreviewActive",
+    "_msufA3ClassicDispelSymbolSignature", "_msufA3ClassicDispelSymbolPreviewSignature")
 
 --- The preview host's drag as saved offsets (A3.HostAnchorOffset in
 --- Auras3/MSUF_Auras3_Core.lua), rounded half away from zero.
@@ -966,7 +1028,7 @@ function V.DispelPreviewAnchorOffset(host, parent, anchor)
 end
 
 function V.OnDispelPreviewDragStart(host)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+    if InCombatLockdown and InCombatLockdown() then return end
     host:StartMoving()
 end
 
@@ -979,7 +1041,7 @@ function V.OnDispelPreviewDragStop(host)
     local x, y = V.DispelPreviewAnchorOffset(host, frame, visual.symbol.anchor)
     if x == nil then return end
     if type(handler) == "function" then
-        handler(_G.MSUF_DispelSymbolPreviewScope, x, y, frame)
+        handler(MSUF.PublicGlobals.MSUF_DispelSymbolPreviewScope, x, y, frame)
     end
     -- Only the preview host is draggable, and Preview.lua renders it.
     A3.RefreshDispelSymbolPreview()
@@ -1056,7 +1118,8 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
     local horizontal = growth == "RIGHT" or growth == "LEFT"
     local xSign = growth == "LEFT" and -1 or 1
     local ySign = growth == "DOWN" and -1 or 1
-    host:ClearAllPoints(); host:SetPoint(cfg.anchor or "TOPRIGHT", frame, cfg.anchor or "TOPRIGHT", cfg.x or 0, cfg.y or 0)
+    host:ClearAllPoints()
+    host:SetPoint(cfg.anchor or "TOPRIGHT", frame, cfg.anchor or "TOPRIGHT", cfg.x or 0, cfg.y or 0)
     host:SetSize(horizontal and (#selected * size + math_max(0, #selected - 1) * spacing) or size,
         horizontal and size or (#selected * size + math_max(0, #selected - 1) * spacing))
     if host.SetAlpha then host:SetAlpha(Clamp01(cfg.alpha, 1)) end
@@ -1068,7 +1131,8 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
             tile = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
             host.tiles[i] = tile
         end
-        tile:ClearAllPoints(); tile:SetSize(size, size)
+        tile:ClearAllPoints()
+        tile:SetSize(size, size)
         local offset = (i - 1) * (size + spacing)
         if horizontal then
             tile:SetPoint(xSign > 0 and "LEFT" or "RIGHT", host, xSign > 0 and "LEFT" or "RIGHT", offset * xSign, 0)
@@ -1105,19 +1169,9 @@ function V.UpdateDispelSymbolPreview(frame, visual, active)
     return V.UpdateDispelSymbols(frame, visual, present, true)
 end
 
-function V.HideDispelOverlay(frame, preview)
-    local hostKey = preview == true and "_msufA3ClassicDispelOverlayPreviewHost" or "_msufA3ClassicDispelOverlayHost"
-    local activeKey = preview == true and "_msufA3ClassicDispelOverlayPreviewActive" or "_msufA3ClassicDispelOverlayActive"
-    local signatureKey = preview == true and "_msufA3ClassicDispelOverlayPreviewSignature" or "_msufA3ClassicDispelOverlaySignature"
-    local host = frame and frame[hostKey]
-    local changed = frame and frame[activeKey] == true or false
-    if host then host:Hide() end
-    if frame then
-        frame[activeKey] = nil
-        frame[signatureKey] = nil
-    end
-    return changed
-end
+V.HideDispelOverlay = DispelHostHider("_msufA3ClassicDispelOverlayHost", "_msufA3ClassicDispelOverlayPreviewHost",
+    "_msufA3ClassicDispelOverlayActive", "_msufA3ClassicDispelOverlayPreviewActive",
+    "_msufA3ClassicDispelOverlaySignature", "_msufA3ClassicDispelOverlayPreviewSignature")
 
 --- A menu preview's dispel overlay: this backend's strip layout in the
 --- spec's dispel colour (the scan backend has no preview dispel type).

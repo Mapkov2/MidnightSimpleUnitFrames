@@ -26,11 +26,7 @@
 --- instead; the bridge adopts it here. Consumers register listeners and re-read
 --- the theme whenever MSUF_NotifyUIThemeChanged fires.
 local _, MSUF = ...
-MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local provider
 local serial = 0
@@ -85,7 +81,7 @@ ExportPublic("MSUF_NotifyUIThemeChanged", Notify)
 ExportPublic("MSUF_UIThemeSerial", UIThemeSerial)
 
 -- A skin addon that loaded before MSUF parks its provider here.
-local candidate = rawget(_G, "MSUF_UIThemeProviderCandidate")
+local candidate = MSUF.Optional("MSUF_UIThemeProviderCandidate")
 if ValidProvider(candidate) then
     provider = candidate
 end

@@ -1,16 +1,18 @@
 --- EditMode/MSUF_EditMode_Core.lua - Edit Mode namespace and shared utilities
 --- Registry, State and Undo, the next files in MSUF_EditMode.xml, build on Util.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Core.lua"
+-- Kernel/MSUF_Util.lua loads first; drag resolves unit keys at 20 Hz.
+local GetBossIndexFromToken = MSUF.Require("GetBossIndexFromToken", CALLER, MSUF.Public)
+local GetArenaIndexFromToken = MSUF.Require("GetArenaIndexFromToken", CALLER, MSUF.Public)
 local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
 end
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if type(EM2) ~= "table" then EM2 = {} end
 PublishCompat("MSUF_EM2", EM2)
 MSUF.EditModeController = EM2
@@ -41,7 +43,7 @@ local function EditScreenCenter()
         ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0) * 0.5
 end
 
-local EditRound = _G.MSUF_RoundOffset
+local EditRound = MSUF.Require("MSUF_RoundOffset", CALLER)
 
 local function EditHorizontalPosition(left, right, centerX)
     if right <= centerX then return right - centerX end
@@ -132,7 +134,7 @@ local function EditCastbarUnitForKey(key)
     if key:match("^arena%d+$") then return "arena" end
 end
 
-local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
+local RequestGroupGeometryApply = MSUF.Require("MSUF_RequestGroupGeometryApply", CALLER)
 
 --- Re-applies one group kind's geometry after an Edit Mode change: through the
 --- menu's apply service while the Options addon is loaded, else on GF directly
@@ -169,7 +171,7 @@ local function ApplyGroupSettingsForKeySafe(kind)
     else
         dirty = gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL
     end
-    if _G.InCombatLockdown and _G.InCombatLockdown() and type(gf.DeferGroupRuntime) == "function" then
+    if InCombatLockdown and InCombatLockdown() and type(gf.DeferGroupRuntime) == "function" then
         gf.DeferGroupRuntime("layout", kind, dirty)
         did = true
     else
@@ -228,7 +230,7 @@ end
 Util.Tr = MSUF.Translate
 
 function Util.SharedUI()
-    return (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    return MSUF.UI
 end
 
 function Util.ThemeColor(key, fallback)
@@ -253,8 +255,12 @@ function Util.BlockConfigCombatLocked()
     return MSUF.Require("MSUF_BlockConfigCombatLocked", CALLER)() and true or false
 end
 
+--- The castbar drag reaches this at 20 Hz. The unit preview (Options, load on
+--- demand) publishes and clears its refresh through ExportPublic, so the Public
+--- mirror is read directly: no lookup call per tick, live across the LOD load.
+local PublicAPI = MSUF.Public
 function Util.RefreshUFPreview(reason)
-    local fn = _G.MSUF_UFPreview_RequestRefresh
+    local fn = PublicAPI.UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2") end
 end
 
@@ -286,7 +292,7 @@ function Util.SetMenuFocusRequest(opts)
         changedAt = GetTime and GetTime() or 0,
     }
     PublishCompat("MSUF_EM2_MenuFocusRequest", request)
-    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    local M = MSUF.MSUF2
     if M then M.editModeSelection = request end
     return request
 end
@@ -370,8 +376,8 @@ function Util.NormalizeUnitKey(unit)
     if not unit then return nil end
     if unit == "targettarget" or unit == "tot" then return "targettarget" end
     if unit == "focustarget" or unit == "focus_target" or unit == "focustargettarget" then return "focustarget" end
-    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then return "boss" end
-    if _G.MSUF_GetArenaIndexFromToken and _G.MSUF_GetArenaIndexFromToken(unit) then return "arena" end
+    if GetBossIndexFromToken(unit) then return "boss" end
+    if GetArenaIndexFromToken(unit) then return "arena" end
     return unit
 end
 function Util.NormalizeSimpleUnit(unit, allowBossIndex)

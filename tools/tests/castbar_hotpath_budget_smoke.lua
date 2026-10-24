@@ -66,7 +66,14 @@ local function Measure(label, setup, operation)
     }
 end
 
-local world = World.New(root, "timer", { pools = true })
+-- The budgets pin the castbar code's own cost: the colour palette
+-- (Runtime/MSUF_Colors.lua) is not under test, so a colour key resolves to
+-- nothing and the cast colour defaults answer, as in the world these budgets
+-- were frozen on (the palette lookup is a real-client cost on top).
+local world = World.New(root, "timer", { pools = true, setup = function()
+    _G.MSUF_GetColorRGBFromKey = function() return nil end
+    _G.MSUF_GetColorFromKey = function() return nil end
+end })
 -- The pool lifecycle handler is measured through its private frame (the path
 -- the pools take when the EventBus declines a subscription).
 world.busRefuses = true

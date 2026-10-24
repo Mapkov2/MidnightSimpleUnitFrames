@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu-native MSUF 6.0 guided setup.
 ---
 --- The guide walks native pages control by control. Every normal tour step owns
@@ -8,283 +7,161 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local MSUF = select(2, ...)
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/MSUF_Menu2_GuidedTour.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
-local _G = _G
-local CreateFrame = _G.CreateFrame
-local C_Timer = M.MenuTimer or _G.C_Timer
+local CreateFrame = CreateFrame
+local C_Timer = M.MenuTimer or C_Timer
 local ceil, floor, max, min = math.ceil, math.floor, math.max, math.min
 local format = string.format
-local pairs, type, tostring = pairs, type, tostring
 local sort = table.sort
 
 local function Tr(text)
     return M.Tr(tostring(text or "")) or tostring(text or "")
 end
 
+-- Every stage names its page, icon and setup area. The constructors fill those
+-- shared fields (a normal stage uses its page key as its icon) so a row lists
+-- only what is specific to it. Special stages are the chapter and info pages
+-- hosted by the guided_setup page.
+local Row = {}
+function Row.Stage(area, pageKey, id, title, impact, fields)
+    fields = fields or {}
+    fields.id, fields.pageKey, fields.icon, fields.area = id, pageKey, pageKey, area
+    fields.title, fields.impact = title, impact
+    return fields
+end
+function Row.Unit(...) return Row.Stage("unitframes", "uf_player", ...) end
+function Row.Group(pageKey, ...) return Row.Stage("groupframes", pageKey, ...) end
+function Row.Special(id, icon, area, title, impact)
+    return { id = id, special = true, pageKey = "guided_setup", icon = icon, area = area, title = title, impact = impact }
+end
+
 local STAGES = {
-    {
-        id = "menu_basics", special = true, pageKey = "guided_setup", icon = "home",
-        title = "What do you want to set up?",
-        impact = "Choose Unitframes, Group Frames, Class Resources, or the complete three-part tour.",
-    },
-    {
-        id = "unit_intro", special = true, pageKey = "guided_setup", icon = "uf_player", area = "unitframes",
-        title = "Part 1 - Unitframes",
-        impact = "Skipping starts at the next selected setup area.",
-    },
-    {
-        id = "edit_mode", special = true, pageKey = "guided_setup", icon = "uf_player",
-        area = "unitframes",
-        title = "Place your frames",
-        impact = "Skipping leaves the current frame positions and anchoring unchanged.",
-    },
-    {
-        id = "uf_player", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Build your Player frame",
-        includeSections = { frame_basics = true }, controlLimit = 4,
-        impact = "Skipping keeps the current Player-frame basics.",
-    },
-    {
-        id = "uf_player_auras", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Choose your Player auras",
+    Row.Special("menu_basics", "home", nil, "What do you want to set up?",
+        "Choose Unitframes, Group Frames, Class Resources, or the complete three-part tour."),
+    Row.Special("unit_intro", "uf_player", "unitframes", "Part 1 - Unitframes",
+        "Skipping starts at the next selected setup area."),
+    Row.Special("edit_mode", "uf_player", "unitframes", "Place your frames",
+        "Skipping leaves the current frame positions and anchoring unchanged."),
+    Row.Unit("uf_player", "Build your Player frame", "Skipping keeps the current Player-frame basics.",
+        { includeSections = { frame_basics = true }, controlLimit = 4 }),
+    Row.Unit("uf_player_auras", "Choose your Player auras", "Skipping keeps the current Player aura container and tool.", {
         includeSections = { auras = true, ["region:unit_aura_tools"] = true }, includeEphemeralControls = true, controlLimit = 2,
-        controlPaths = {
-            "auras/unit-workspace/container-selector",
-            "auras/unit-workspace/tool-selector",
-        },
-        impact = "Skipping keeps the current Player aura container and tool.",
-    },
-    {
-        id = "uf_player_name", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up the Player name",
+        controlPaths = { "auras/unit-workspace/container-selector", "auras/unit-workspace/tool-selector" } }),
+    Row.Unit("uf_player_name", "Set up the Player name", "Skipping keeps the current Player name text.", {
         includeSections = { text = true }, prepareSection = "text", prepareTab = "name", prepareState = "unitTextTabSelection", controlLimit = 3,
-        controlPaths = { "unit/text/name/show", "unit/text/name/anchor", "unit/text/name/size" },
-        impact = "Skipping keeps the current Player name text.",
-    },
-    {
-        id = "uf_player_hp_text", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up Player health text",
+        controlPaths = { "unit/text/name/show", "unit/text/name/anchor", "unit/text/name/size" } }),
+    Row.Unit("uf_player_hp_text", "Set up Player health text", "Skipping keeps the current Player health text.", {
         includeSections = { text = true }, prepareSection = "text", prepareTab = "hp", prepareState = "unitTextTabSelection", prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
-        controlPaths = { "unit/text/hp/show", "unit/text/hp/slot/mode", "unit/text/hp/size" },
-        impact = "Skipping keeps the current Player health text.",
-    },
-    {
-        id = "uf_player_power_text", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up Player power text",
+        controlPaths = { "unit/text/hp/show", "unit/text/hp/slot/mode", "unit/text/hp/size" } }),
+    Row.Unit("uf_player_power_text", "Set up Player power text", "Skipping keeps the current Player power text.", {
         includeSections = { text = true }, prepareSection = "text", prepareTab = "power", prepareState = "unitTextTabSelection", prepareSlot = "right", prepareSlotState = "unitTextSlotSelection", controlLimit = 3,
-        controlPaths = { "unit/text/power/show", "unit/text/power/slot/mode", "unit/text/power/size" },
-        impact = "Skipping keeps the current Player power text.",
-    },
-    {
-        id = "uf_player_portrait", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up the Player portrait",
+        controlPaths = { "unit/text/power/show", "unit/text/power/slot/mode", "unit/text/power/size" } }),
+    Row.Unit("uf_player_portrait", "Set up the Player portrait", "Skipping keeps the current Player portrait.", {
         includeSections = { portrait = true }, prepareSection = "portrait", prepareTab = "general", prepareState = "unitPortraitTabSelection", controlLimit = 3,
-        controlPaths = { "unit/portrait/enabled", "unit/portrait/position", "unit/portrait/portraitrender" },
-        impact = "Skipping keeps the current Player portrait.",
-    },
-    {
-        id = "uf_player_power", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Build the Player power bar",
+        controlPaths = { "unit/portrait/enabled", "unit/portrait/position", "unit/portrait/portraitrender" } }),
+    Row.Unit("uf_player_power", "Build the Player power bar", "Skipping keeps the current Player power bar.", {
         includeSections = { power_bar = true }, controlLimit = 4,
-        controlPaths = { "unit/power/show", "unit/power/powerbarheight", "unit/power/embedpowerbarintohealth", "unit/power/detached" },
-        impact = "Skipping keeps the current Player power bar.",
-    },
-    {
-        id = "uf_player_castbar", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Build the Player castbar",
+        controlPaths = { "unit/power/show", "unit/power/powerbarheight", "unit/power/embedpowerbarintohealth", "unit/power/detached" } }),
+    Row.Unit("uf_player_castbar", "Build the Player castbar", "Skipping keeps the current Player castbar.", {
         includeSections = { castbar = true }, prepareSection = "castbar", prepareTab = "general", prepareState = "unitCastbarTabSelection", controlLimit = 5,
-        controlPaths = { "unit/castbar/enabled", "unit/castbar/provider", "unit/castbar/show_interrupt", "unit/castbar/width_mode", "unit/castbar/height" },
-        impact = "Skipping keeps the current Player castbar.",
-    },
-    {
-        id = "uf_player_status", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Choose Player indicators",
+        controlPaths = { "unit/castbar/enabled", "unit/castbar/provider", "unit/castbar/show_interrupt", "unit/castbar/width_mode", "unit/castbar/height" } }),
+    Row.Unit("uf_player_status", "Choose Player indicators", "Skipping keeps the current Player status indicators.", {
         includeSections = { status_icons = true }, includeEphemeralControls = true,
         prepareSection = "status_icons", prepareTab = "basic", prepareState = "unitStatusTabSelection", controlLimit = 4,
-        controlPaths = { "unit/status/selector", "unit/status/selected/enabled", "unit/status/selected/size", "unit/status/midnight_style" },
-        impact = "Skipping keeps the current Player status indicators.",
-    },
-    {
-        id = "unit_copy_open", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Copy your Player setup",
+        controlPaths = { "unit/status/selector", "unit/status/selected/enabled", "unit/status/selected/size", "unit/status/midnight_style" } }),
+    Row.Unit("unit_copy_open", "Copy your Player setup", "Skipping leaves the other Unitframes unchanged.", {
         includeSections = { ["region:unit_scope"] = true }, includeEphemeralControls = true, controlLimit = 1,
-        controlPaths = { "unit/copy/open" },
-        impact = "Skipping leaves the other Unitframes unchanged.",
-    },
-    {
-        id = "unit_copy_all", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Choose what to copy",
+        controlPaths = { "unit/copy/open" } }),
+    Row.Unit("unit_copy_all", "Choose what to copy", "Skipping keeps the currently selected copy categories.", {
         ensureCopyPopup = "unit", includeSections = { ["region:unit_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
-        controlPaths = { "unit/copy/categories/all" },
-        impact = "Skipping keeps the currently selected copy categories.",
-    },
-    {
-        id = "unit_copy_apply", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Copy Player to another Unitframe",
+        controlPaths = { "unit/copy/categories/all" } }),
+    Row.Unit("unit_copy_apply", "Copy Player to another Unitframe", "Skipping does not copy the Player setup.", {
         ensureCopyPopup = "unit", includeSections = { ["region:unit_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
-        controlPaths = { "unit/copy/run" },
-        impact = "Skipping does not copy the Player setup.",
-    },
-    {
-        id = "group_intro", special = true, pageKey = "guided_setup", icon = "gf_layout", area = "groupframes",
-        title = "Part 2 - Group Frames",
-        impact = "Skipping starts at the next selected setup area.",
-    },
-    {
-        id = "group_edit_mode", special = true, pageKey = "guided_setup", icon = "gf_layout", area = "groupframes",
-        title = "Place your Party frames",
-        impact = "Skipping leaves the current Party-frame position unchanged.",
-    },
-    {
-        id = "gf_layout", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Build your Party frame",
+        controlPaths = { "unit/copy/run" } }),
+    Row.Special("group_intro", "gf_layout", "groupframes", "Part 2 - Group Frames",
+        "Skipping starts at the next selected setup area."),
+    Row.Special("group_edit_mode", "gf_layout", "groupframes", "Place your Party frames",
+        "Skipping leaves the current Party-frame position unchanged."),
+    Row.Group("gf_layout", "gf_layout", "Build your Party frame", "Skipping keeps the current Group Frame basics.", {
         includeSections = { general = true }, controlLimit = 5,
-        controlPaths = {
-            "group/layout/scope/enable_now",
-            "group/layout/field/showplayer",
-            "group/layout/field/showsolo",
-            "group/layout/field/smoothfill",
-            "group/layout/field/clickcastenabled",
-        },
-        impact = "Skipping keeps the current Group Frame basics.",
-    },
-    {
-        id = "gf_party_name", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party names",
+        controlPaths = { "group/layout/scope/enable_now", "group/layout/field/showplayer", "group/layout/field/showsolo",
+            "group/layout/field/smoothfill", "group/layout/field/clickcastenabled" } }),
+    Row.Group("gf_layout", "gf_party_name", "Set up Party names", "Skipping keeps the current Party name text.", {
         includeSections = { text = true }, includeLockedControls = true,
         prepareSection = "text", prepareTab = "name", prepareState = "gfTextTabSelection", prepareStateIndex = "party", controlLimit = 3,
-        controlPaths = { "group/layout/field/showname", "group/layout/field/nameanchor", "group/layout/field/namefontsize" },
-        impact = "Skipping keeps the current Party name text.",
-    },
-    {
-        id = "gf_party_hp_text", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party health text",
+        controlPaths = { "group/layout/field/showname", "group/layout/field/nameanchor", "group/layout/field/namefontsize" } }),
+    Row.Group("gf_layout", "gf_party_hp_text", "Set up Party health text", "Skipping keeps the current Party health text.", {
         includeSections = { text = true }, includeLockedControls = true,
         prepareSection = "text", prepareTab = "hp", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center", prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
-        controlPaths = { "group/layout/field/showhptext", "group/layout/text/hp/slot/mode", "group/layout/field/hpfontsize" },
-        impact = "Skipping keeps the current Party health text.",
-    },
-    {
-        id = "gf_party_power_text", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Set up Party power text",
+        controlPaths = { "group/layout/field/showhptext", "group/layout/text/hp/slot/mode", "group/layout/field/hpfontsize" } }),
+    Row.Group("gf_layout", "gf_party_power_text", "Set up Party power text", "Skipping keeps the current Party power text.", {
         includeSections = { text = true }, includeLockedControls = true,
         prepareSection = "text", prepareTab = "power", prepareState = "gfTextTabSelection", prepareStateIndex = "party", prepareSlot = "center", prepareSlotState = "gfTextSlotSelection", controlLimit = 3,
-        controlPaths = { "group/layout/text/power/show", "group/layout/text/power/slot/mode", "group/layout/field/powerfontsize" },
-        impact = "Skipping keeps the current Party power text.",
-    },
-    {
-        id = "gf_party_resource", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Build the Party resource bar",
+        controlPaths = { "group/layout/text/power/show", "group/layout/text/power/slot/mode", "group/layout/field/powerfontsize" } }),
+    Row.Group("gf_layout", "gf_party_resource", "Build the Party resource bar", "Skipping keeps the current Party resource bar.", {
         includeSections = { power = true }, includeLockedControls = true, controlLimit = 4,
         controlPaths = { "group/layout/field/powerbarenabled", "group/layout/field/powerheight", "group/layout/field/powersmoothfill",
-            "group/layout/field/powershowhealer" },
-        impact = "Skipping keeps the current Party resource bar.",
-    },
-    {
-        id = "gf_party_range", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Tune Party range fade",
+            "group/layout/field/powershowhealer" } }),
+    Row.Group("gf_layout", "gf_party_range", "Tune Party range fade", "Skipping keeps the current Party range and offline opacity.", {
         includeSections = { range = true }, includeLockedControls = true, controlLimit = 4,
         controlPaths = { "group/layout/field/rangefadeenabled", "group/layout/field/rangefadelayermode", "group/layout/field/rangefadealpha",
-            "group/layout/field/offlinealpha" },
-        impact = "Skipping keeps the current Party range and offline opacity.",
-    },
-    {
-        id = "gf_party_dispel", pageKey = "gf_bars", icon = "gf_bars", area = "groupframes", title = "Build the Party dispel overlay",
+            "group/layout/field/offlinealpha" } }),
+    Row.Group("gf_bars", "gf_party_dispel", "Build the Party dispel overlay", "Skipping keeps the current Party dispel overlay.", {
         includeSections = { dispel = true }, includeLockedControls = true, controlLimit = 4,
         controlPaths = { "group/bars/field/dispeloverlayenabled", "group/bars/field/dispeloverlaytrigger", "group/bars/field/dispeloverlaystyle",
-            "group/bars/field/dispeloverlayalpha" },
-        impact = "Skipping keeps the current Party dispel overlay.",
-    },
-    {
-        id = "gf_party_stripe", pageKey = "gf_bars", icon = "gf_bars", area = "groupframes", title = "Build the Party debuff stripe",
+            "group/bars/field/dispeloverlayalpha" } }),
+    Row.Group("gf_bars", "gf_party_stripe", "Build the Party debuff stripe", "Skipping keeps the current Party debuff stripe.", {
         includeSections = { dstripe = true }, includeLockedControls = true, controlLimit = 3,
-        controlPaths = { "group/bars/field/debuffstripeenabled", "group/bars/field/debuffstripeedge", "group/bars/field/debuffstripeheight" },
-        impact = "Skipping keeps the current Party debuff stripe.",
-    },
-    {
-        id = "gf_party_indicators", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Choose Party frame indicators",
+        controlPaths = { "group/bars/field/debuffstripeenabled", "group/bars/field/debuffstripeedge", "group/bars/field/debuffstripeheight" } }),
+    Row.Group("gf_indicators", "gf_party_indicators", "Choose Party frame indicators", "Skipping keeps the current Party frame indicators.", {
         includeSections = { indicators = true }, controlLimit = 4,
         controlPaths = { "group/indicators/field/targetindicator", "group/indicators/field/showgroupnumber", "group/indicators/field/hlfocusenabled",
-            "group/indicators/field/groupborderenabled" },
-        impact = "Skipping keeps the current Party frame indicators.",
-    },
-    {
-        id = "gf_party_status", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Choose Party status icons",
+            "group/indicators/field/groupborderenabled" } }),
+    Row.Group("gf_indicators", "gf_party_status", "Choose Party status icons", "Skipping keeps the current Party status icons.", {
         includeSections = { sicons = true }, includeEphemeralControls = true, includeLockedControls = true,
         prepareSection = "sicons", prepareTab = "basic", prepareState = "gfStatusIconTabSelection", prepareStateIndex = "party", controlLimit = 4,
         controlPaths = { "group/indicators/status/selector", "group/indicators/status/selected/enabled", "group/indicators/status/selected/size",
-            "group/indicators/field/usemidnighticons" },
-        impact = "Skipping keeps the current Party status icons.",
-    },
-    {
-        id = "gf_party_corner_icons", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Build Party corner indicators",
+            "group/indicators/field/usemidnighticons" } }),
+    Row.Group("gf_indicators", "gf_party_corner_icons", "Build Party corner indicators",
+        "Skipping keeps Party corner assignments and custom spells unchanged.", {
         includeSections = { ci = true }, includeEphemeralControls = true, includeLockedControls = true, controlLimit = 5,
         controlPaths = { "group/indicators/field/cienabled", "group/indicators/field/cisize", "group/indicators/corner/editor/slot",
-            "group/indicators/corner/editor/category", "group/indicators/corner/editor/spell_ids" },
-        impact = "Skipping keeps Party corner assignments and custom spells unchanged.",
-    },
-    {
-        id = "gf_party_auras", pageKey = "gf_auras", icon = "gf_auras", area = "groupframes", title = "Choose your Party auras",
+            "group/indicators/corner/editor/category", "group/indicators/corner/editor/spell_ids" } }),
+    Row.Group("gf_auras", "gf_party_auras", "Choose your Party auras", "Skipping keeps the current Party aura lane and tool.", {
         includeSections = { auras = true, ["region:group_aura_tools"] = true }, includeEphemeralControls = true, controlLimit = 2,
-        controlPaths = { "auras/group-workspace/container-selector", "auras/group-workspace/lane/buff/tool-selector" },
-        impact = "Skipping keeps the current Party aura lane and tool.",
-    },
-    {
-        id = "gf_spell_icons", pageKey = "gf_auras", icon = "gf_auras", area = "groupframes", title = "Spell Icons by spec",
+        controlPaths = { "auras/group-workspace/container-selector", "auras/group-workspace/lane/buff/tool-selector" } }),
+    Row.Group("gf_auras", "gf_spell_icons", "Spell Icons by spec",
+        "Skipping leaves Spell Icons unchanged; you can find them later with Menu Search.", {
         includeSections = { si = true }, includeEphemeralControls = true, includeLockedControls = true, controlLimit = 16,
-        controlPaths = {
-            "group/auras/spell/enabled",
-            "group/auras/spell/spec",
-            "group/auras/spell/selected_aura",
-            "group/auras/spell/selected/enabled",
-            "group/auras/spell/selected/spell_ids",
-            "group/auras/spell/selected/only_mine",
-            "group/auras/spell/selected/auto_blacklist",
-            "group/auras/spell/selected/placed/type",
-            "group/auras/spell/placed/anchor",
-            "group/auras/spell/placed/size",
-            "group/auras/spell/placed/x",
-            "group/auras/spell/placed/y",
-            "group/auras/spell/placed/growth",
-            "group/auras/spell/placed/iconeffect",
-            "group/auras/spell/selected/frame/type",
-            "group/auras/spell/frame/alpha",
-        },
-        impact = "Skipping leaves Spell Icons unchanged; you can find them later with Menu Search.",
-    },
-    {
-        id = "group_copy_open", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Copy your Party setup",
+        controlPaths = { "group/auras/spell/enabled", "group/auras/spell/spec", "group/auras/spell/selected_aura",
+            "group/auras/spell/selected/enabled", "group/auras/spell/selected/spell_ids", "group/auras/spell/selected/only_mine",
+            "group/auras/spell/selected/auto_blacklist", "group/auras/spell/selected/placed/type", "group/auras/spell/placed/anchor",
+            "group/auras/spell/placed/size", "group/auras/spell/placed/x", "group/auras/spell/placed/y", "group/auras/spell/placed/growth",
+            "group/auras/spell/placed/iconeffect", "group/auras/spell/selected/frame/type", "group/auras/spell/frame/alpha" } }),
+    Row.Group("gf_layout", "group_copy_open", "Copy your Party setup", "Skipping leaves Raid and Mythic Raid unchanged.", {
         includeSections = { ["region:group_scope"] = true }, includeEphemeralControls = true, controlLimit = 1,
-        controlPaths = { "group/layout/copy/open" },
-        impact = "Skipping leaves Raid and Mythic Raid unchanged.",
-    },
-    {
-        id = "group_copy_all", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Choose what to copy",
+        controlPaths = { "group/layout/copy/open" } }),
+    Row.Group("gf_layout", "group_copy_all", "Choose what to copy", "Skipping keeps the currently selected copy categories.", {
         ensureCopyPopup = "group", includeSections = { ["region:group_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
-        controlPaths = { "group/copy/categories/all" },
-        impact = "Skipping keeps the currently selected copy categories.",
-    },
-    {
-        id = "group_copy_apply", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Copy Party to Raid",
+        controlPaths = { "group/copy/categories/all" } }),
+    Row.Group("gf_layout", "group_copy_apply", "Copy Party to Raid", "Skipping does not copy the Party setup.", {
         ensureCopyPopup = "group", includeSections = { ["region:group_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
-        controlPaths = { "group/copy/target/raid", "group/copy/target/mythicraid", "group/copy/target/party" },
-        impact = "Skipping does not copy the Party setup.",
-    },
-    {
-        id = "class_intro", special = true, pageKey = "guided_setup", icon = "classpower", area = "classresources",
-        title = "Part 3 - Class Resources",
-        impact = "Skipping leaves Class Resources unchanged.",
-    },
-    {
-        id = "classpower", pageKey = "classpower", icon = "classpower", area = "classresources", title = "Build your Class Resources",
-        includeSections = { classpower_display = true }, controlLimit = 4,
-        impact = "Skipping keeps the current Class Resource layout.",
-    },
-    {
-        id = "opt_bars", pageKey = "opt_bars", icon = "opt_bars", area = "shared_style", title = "Quick style: bars",
-        includeSections = { bars_textures = true }, controlLimit = 2,
-        impact = "Skipping keeps the current global bar textures and gradients.",
-    },
-    {
-        id = "opt_fonts", pageKey = "opt_fonts", icon = "opt_fonts", area = "shared_style", title = "Quick style: fonts",
-        includeSections = { fonts_global_font = true }, controlLimit = 2,
-        impact = "Skipping keeps the current global font settings.",
-    },
-    {
-        id = "power_moves", special = true, pageKey = "guided_setup", icon = "home",
-        title = "What makes MSUF different",
-        impact = "Skipping only hides the feature overview.",
-    },
-    {
-        id = "final_review", special = true, pageKey = "guided_setup", icon = "home",
-        title = "Your setup is ready",
-        impact = "Finish the tour and use Menu Search to find other settings.",
-    },
+        controlPaths = { "group/copy/target/raid", "group/copy/target/mythicraid", "group/copy/target/party" } }),
+    Row.Special("class_intro", "classpower", "classresources", "Part 3 - Class Resources",
+        "Skipping leaves Class Resources unchanged."),
+    Row.Stage("classresources", "classpower", "classpower", "Build your Class Resources", "Skipping keeps the current Class Resource layout.",
+        { includeSections = { classpower_display = true }, controlLimit = 4 }),
+    Row.Stage("shared_style", "opt_bars", "opt_bars", "Quick style: bars", "Skipping keeps the current global bar textures and gradients.",
+        { includeSections = { bars_textures = true }, controlLimit = 2 }),
+    Row.Stage("shared_style", "opt_fonts", "opt_fonts", "Quick style: fonts", "Skipping keeps the current global font settings.",
+        { includeSections = { fonts_global_font = true }, controlLimit = 2 }),
+    Row.Special("power_moves", "home", nil, "What makes MSUF different", "Skipping only hides the feature overview."),
+    Row.Special("final_review", "home", nil, "Your setup is ready", "Finish the tour and use Menu Search to find other settings."),
 }
 
 local LEGACY_STAGE_TARGET = {
@@ -307,15 +184,12 @@ local STAGE_BY_ID = IndexStagesById(STAGES)
 M.guidedTourStageCount = #STAGES
 
 local Tour, Invoke, CurrentStage
-local VALID_SETUP_AREA = {
-    unitframes = true,
-    groupframes = true,
-    classresources = true,
-    all = true,
-}
-local VALID_SETUP_MODE = {
-    quick = true,
-    complete = true,
+-- Tour preference keys, and the values the guide accepts for the choices it stores.
+local PREF = { cooldownAnchor = "unitframeCooldownAnchor", editModeMoved = "editModeMoved", editModeMovedKey = "editModeMovedKey" }
+local VALID = {
+    setupArea = { unitframes = true, groupframes = true, classresources = true, all = true },
+    setupMode = { quick = true, complete = true },
+    cooldownDecision = { cooldown = true, independent = true },
 }
 -- Quick Setup is the default beginner route. It reuses the real Menu2 pages,
 -- but only visits the decisions that produce an immediately useful layout.
@@ -339,7 +213,7 @@ local QUICK_STAGE_CONTROL_LIMITS = {
 local function SelectedSetupArea()
     local ok, value = Invoke(Tour(), "GetPreference", "setupArea")
     value = ok and tostring(value or "") or ""
-    return VALID_SETUP_AREA[value] and value or nil
+    return VALID.setupArea[value] and value or nil
 end
 
 local function SelectedSetupMode()
@@ -347,7 +221,7 @@ local function SelectedSetupMode()
     value = ok and tostring(value or "") or ""
     -- Existing in-progress tours predate setupMode and must keep their full
     -- route. Every newly started tour writes an explicit mode below.
-    return VALID_SETUP_MODE[value] and value or "complete"
+    return VALID.setupMode[value] and value or "complete"
 end
 
 local function EffectiveStageControlLimit(stage)
@@ -443,7 +317,7 @@ CurrentStage = function()
 end
 
 local function ActiveProfileName()
-    local profile = tostring(_G.MSUF_ActiveProfile or "Default")
+    local profile = tostring(MSUF_ActiveProfile or "Default")
     return profile ~= "" and profile or "Default"
 end
 
@@ -466,42 +340,29 @@ local function SetupAreaDecisionComplete()
     return SelectedSetupArea() ~= nil
 end
 
-local COOLDOWN_ANCHOR_PREFERENCE = "unitframeCooldownAnchor"
-local EDIT_MODE_MOVED_PREFERENCE = "editModeMoved"
-local EDIT_MODE_MOVED_KEY_PREFERENCE = "editModeMovedKey"
-local VALID_COOLDOWN_ANCHOR_DECISION = { cooldown = true, independent = true }
 local function AutomaticCooldownProvider()
-    local getter = _G.MSUF_GetAutomaticCooldownAnchorProvider
-    if type(getter) ~= "function" then return nil, nil end
-    return getter()
+    return MSUF.Require("MSUF_GetAutomaticCooldownAnchorProvider", FILE)()
 end
 local function CooldownAnchorEnabled()
     local general = M.GetGeneralDB() or nil
     if type(general) ~= "table" then
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         general = type(db) == "table" and db.general or nil
     end
-    local getter = _G.MSUF_IsCooldownAnchorEnabled
-    if type(getter) == "function" then return getter(general) == true end
-    -- The C_CooldownViewer namespace is never the signal: the shared engine
-    -- exposes it on every client, while only the Mainline family ships
-    -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
-    return MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
-        and type(general) == "table" and general.anchorToCooldown == true or false
+    return MSUF.Require("MSUF_IsCooldownAnchorEnabled", FILE)(general) == true
 end
 local function CooldownConsentDecision()
     local providerId = AutomaticCooldownProvider()
-    local getter = _G.MSUF_GetCooldownAnchorConsentDecision
-    if not providerId or type(getter) ~= "function" then return nil end
-    return getter(providerId)
+    if not providerId then return nil end
+    return MSUF.Require("MSUF_GetCooldownAnchorConsentDecision", FILE)(providerId)
 end
-local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
+local CooldownAnchorSupported = MSUF.Require("MSUF_CooldownAnchorSupported", FILE)
 local function CooldownAnchorDecision()
     -- Nothing to decide where no cooldown anchor can exist: the guide must not
     -- gate placement behind a choice the client cannot honour.
     if not CooldownAnchorSupported() then return "independent" end
-    local value = Preference(COOLDOWN_ANCHOR_PREFERENCE)
-    if VALID_COOLDOWN_ANCHOR_DECISION[value] then return value end
+    local value = Preference(PREF.cooldownAnchor)
+    if VALID.cooldownDecision[value] then return value end
     if CooldownConsentDecision() ~= nil then
         return CooldownAnchorEnabled() and "cooldown" or "independent"
     end
@@ -510,17 +371,20 @@ end
 local function CooldownAnchorDecisionComplete()
     return CooldownAnchorDecision() ~= nil
 end
-local function EditModePlacementComplete()
-    return Preference(EDIT_MODE_MOVED_PREFERENCE) == true
+-- Progress of the two Edit Mode stages: the mover was dragged (movement) and
+-- its size popup was opened afterwards (placement).
+local EditDone = {}
+function EditDone.placement()
+    return Preference(PREF.editModeMoved) == true
         and Preference("editModePopupOpened") == true
 end
-local function EditModeMovementComplete()
-    return Preference(EDIT_MODE_MOVED_PREFERENCE) == true
+function EditDone.movement()
+    return Preference(PREF.editModeMoved) == true
 end
-local function GroupEditModePlacementComplete()
+function EditDone.groupPlacement()
     return Preference("groupEditModeMoved") == true and Preference("groupEditModePopupOpened") == true
 end
-local function GroupEditModeMovementComplete()
+function EditDone.groupMovement()
     return Preference("groupEditModeMoved") == true
 end
 
@@ -652,24 +516,21 @@ local function StageCue(stage, position, touched)
     if stage.id == "unit_intro" then return Tr("PART 1 - Build Player once, then copy the finished setup to the other Unitframes.") end
     if stage.id == "edit_mode" then
         local decision = CooldownAnchorDecision()
-        if decision and EditModePlacementComplete() then
+        if decision and EditDone.placement() then
             return Tr("CHECKPOINT CLEAR - Exit Edit Mode when happy, then claim the checkpoint.")
         end
-        if decision and EditModeMovementComplete() then
+        if decision and EditDone.movement() then
             return Tr("YOUR MOVE - Click the highlighted Player mover to open its Width and Height popup.")
         end
-        if decision == "cooldown" then
-            return Tr("YOUR MOVE - Press Open MSUF Edit Mode, then drag the double-arrow frame once.")
-        end
-        if decision == "independent" then
+        if decision == "cooldown" or decision == "independent" then
             return Tr("YOUR MOVE - Press Open MSUF Edit Mode, then drag the double-arrow frame once.")
         end
         return Tr("YOUR MOVE - Choose Follow Blizzard's Essential Cooldowns or Independent placement below.")
     end
     if stage.id == "group_intro" then return Tr("PART 2 - Build Party once, then copy it to Raid or Mythic Raid.") end
     if stage.id == "group_edit_mode" then
-        if GroupEditModePlacementComplete() then return Tr("CHECKPOINT CLEAR - Party Frames moved. Click the mover for its size and spacing popup whenever you need it.") end
-        if GroupEditModeMovementComplete() then return Tr("YOUR MOVE - Click the highlighted Party Frames mover to open Width, Height, and Spacing.") end
+        if EditDone.groupPlacement() then return Tr("CHECKPOINT CLEAR - Party Frames moved. Click the mover for its size and spacing popup whenever you need it.") end
+        if EditDone.groupMovement() then return Tr("YOUR MOVE - Click the highlighted Party Frames mover to open Width, Height, and Spacing.") end
         return Tr("YOUR MOVE - Open Edit Mode, drag Party Frames once, then click the mover to see its Width, Height, and Spacing popup.")
     end
     if stage.id == "class_intro" then
@@ -705,50 +566,92 @@ local function BlockedByCombat()
 end
 
 local function SetGuidedCooldownAnchorDecision(value)
-    if not VALID_COOLDOWN_ANCHOR_DECISION[value] or BlockedByCombat() then return false end
+    if not VALID.cooldownDecision[value] or BlockedByCombat() then return false end
     local previousDecision = CooldownAnchorDecision()
     local enabled = value == "cooldown"
-    local general = M.GetGeneralDB() or nil
-    if type(general) ~= "table" then
-        local db = _G.MSUF_DB
+    if type(M.GetGeneralDB()) ~= "table" then
+        local db = MSUF_DB
         if type(db) ~= "table" then return false end
         db.general = type(db.general) == "table" and db.general or {}
-        general = db.general
     end
-    local setter = _G.MSUF_SetCooldownAnchorEnabled
-    if type(setter) == "function" then
-        if setter(enabled, true) == false then return false end
-    elseif general.anchorToCooldown ~= enabled then
-        if M.SetGeneralValue("anchorToCooldown", enabled, "MSUF2_GUIDED_COOLDOWN_ANCHOR") == false then return false end
-    end
-    local stored = Invoke(Tour(), "SetPreference", COOLDOWN_ANCHOR_PREFERENCE, value)
+    if MSUF.Require("MSUF_SetCooldownAnchorEnabled", FILE)(enabled, true) == false then return false end
+    local stored = Invoke(Tour(), "SetPreference", PREF.cooldownAnchor, value)
     if not stored then return false end
     if previousDecision ~= value then
-        Invoke(Tour(), "SetPreference", EDIT_MODE_MOVED_PREFERENCE, nil)
-        Invoke(Tour(), "SetPreference", EDIT_MODE_MOVED_KEY_PREFERENCE, nil)
+        Invoke(Tour(), "SetPreference", PREF.editModeMoved, nil)
+        Invoke(Tour(), "SetPreference", PREF.editModeMovedKey, nil)
         Invoke(Tour(), "SetPreference", "editModePopupOpened", nil)
         Invoke(Tour(), "SetPreference", "editModePopupOpenedKey", nil)
     end
-    local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    local apply = M.ApplyService
     if type(apply) == "table" and type(apply.Flush) == "function" then apply.Flush() end
     return true
 end
 M.SetGuidedCooldownAnchorDecision = SetGuidedCooldownAnchorDecision
 
 local function RefreshEditModePlacementCue()
-    local editMode = _G.MSUF_EM2
+    local editMode = MSUF.EditModeController
     local movers = editMode and editMode.Movers
     if movers and type(movers.RefreshGuidedPlacementCue) == "function" then
         movers.RefreshGuidedPlacementCue()
     end
 end
 
+-- The Edit Mode lifecycle status, or an empty table while the lifecycle is not registered.
+local function EditModeStatus()
+    return type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+end
+
 local function ShouldShowEditModeOpenCue()
     if not TourIsActive() or CurrentStage().id ~= "edit_mode" then return false end
-    if not CooldownAnchorDecisionComplete() or EditModePlacementComplete() then return false end
-    local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+    if not CooldownAnchorDecisionComplete() or EditDone.placement() then return false end
+    local status = EditModeStatus()
     return status.active ~= true and status.combatLocked ~= true
 end
+
+-- Texture helpers shared by the cues, the emphasis markers and the chrome.
+local Gfx = {}
+
+--- A right-pointing arrow texture: the NPE atlas where the client has it,
+--- otherwise the theme's collapse arrow.
+function Gfx.Arrow(T, parent, subLevel, size)
+    local texture = PixelLayoutRegion(parent:CreateTexture(nil, "OVERLAY", nil, subLevel))
+    if texture.SetAtlas then
+        texture:SetAtlas("NPE_ArrowRight", false)
+    elseif T.media then
+        texture:SetTexture(T.media.collapseArrow)
+    end
+    texture:SetSize(size, size)
+    return texture
+end
+
+--- Paints a navigation-atlas icon (or the logo when the atlas is missing) in the icon's own color.
+function Gfx.NavIcon(icon, T, iconKey)
+    local grid = T.navIconGrid and T.navIconGrid[iconKey]
+    if grid and T.media and T.media.navIcons then
+        icon:SetTexture(T.media.navIcons)
+        icon:SetTexCoord(grid[1] / 8, (grid[1] + 1) / 8, grid[2] / 8, (grid[2] + 1) / 8)
+    elseif T.media and T.media.logo then
+        icon:SetTexture(T.media.logo)
+        icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
+    end
+    local color = T.navIconColors and T.navIconColors[iconKey] or T.colors.accent
+    if color then icon:SetVertexColor(color[1], color[2], color[3], 1) end
+end
+
+function Gfx.StopAndHide(marker)
+    if not marker then return end
+    if M.Theme and type(M.Theme.StopMotion) == "function" then M.Theme.StopMotion(marker) end
+    marker:Hide()
+end
+
+-- Corner pair and sized axis of the four outline edges: top, right, bottom, left.
+Gfx.OUTLINE_EDGES = {
+    { "TOPLEFT", "TOPRIGHT", "SetHeight" },
+    { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth" },
+    { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight" },
+    { "TOPLEFT", "BOTTOMLEFT", "SetWidth" },
+}
 
 local function RefreshEditModeOpenCue(show)
     local T = M.Theme
@@ -768,14 +671,7 @@ local function RefreshEditModeOpenCue(show)
         cue:SetFrameLevel((button:GetFrameLevel() or 1) + 12)
         local color = T.colors.ok or { 0.24, 0.82, 0.46, 1 }
         local function Arrow(point, rotation)
-            local texture = PixelLayoutRegion(cue:CreateTexture(nil, "OVERLAY", nil, 7))
-            local usedAtlas = false
-            if texture.SetAtlas then
-                texture:SetAtlas("NPE_ArrowRight", false)
-                usedAtlas = true
-            end
-            if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
-            texture:SetSize(20, 20)
+            local texture = Gfx.Arrow(T, cue, 7, 20)
             texture:SetPoint(point, cue, point, point == "LEFT" and 3 or -3, 0)
             if rotation and texture.SetRotation then texture:SetRotation(rotation) end
             texture:SetVertexColor(color[1], color[2], color[3], 1)
@@ -797,34 +693,30 @@ local function RefreshEditModeOpenCue(show)
     end
 end
 
-function M.NotifyGuidedEditModeMoved(moverKey)
-    local ok, marked = Invoke(Tour(), "MarkEditModePlacementComplete", moverKey)
+-- Records an Edit Mode milestone with the tour, then repaints the cue, the page and the chrome.
+local function NotifyEditModeMilestone(method, moverKey, refreshReason, chromeReason)
+    local ok, marked = Invoke(Tour(), method, moverKey)
     if not ok or marked ~= true then return false end
     RefreshEditModePlacementCue()
     if M.activeKey == "guided_setup" then
-        M.RequestRefresh(nil, "GUIDED_EDIT_MODE_MOVED")
+        M.RequestRefresh(nil, refreshReason)
     end
     if type(M.RefreshGuidedTourChrome) == "function" then
-        M.RefreshGuidedTourChrome("EDIT_MODE_MOVED")
+        M.RefreshGuidedTourChrome(chromeReason)
     end
     return true
+end
+
+function M.NotifyGuidedEditModeMoved(moverKey)
+    return NotifyEditModeMilestone("MarkEditModePlacementComplete", moverKey, "GUIDED_EDIT_MODE_MOVED", "EDIT_MODE_MOVED")
 end
 
 function M.NotifyGuidedEditModePopupOpened(moverKey)
-    local ok, marked = Invoke(Tour(), "MarkEditModePopupOpened", moverKey)
-    if not ok or marked ~= true then return false end
-    RefreshEditModePlacementCue()
-    if M.activeKey == "guided_setup" then
-        M.RequestRefresh(nil, "GUIDED_EDIT_MODE_POPUP_OPENED")
-    end
-    if type(M.RefreshGuidedTourChrome) == "function" then
-        M.RefreshGuidedTourChrome("EDIT_MODE_POPUP_OPENED")
-    end
-    return true
+    return NotifyEditModeMilestone("MarkEditModePopupOpened", moverKey, "GUIDED_EDIT_MODE_POPUP_OPENED", "EDIT_MODE_POPUP_OPENED")
 end
 
 local function LiveEditModePopupKey()
-    local editMode = _G.MSUF_EM2
+    local editMode = MSUF.EditModeController
     local popups = editMode and editMode.Popups
     if not (popups and type(popups.IsAnyOpen) == "function" and popups.IsAnyOpen()) then return nil end
     local focus = editMode.Focus
@@ -854,7 +746,7 @@ end
 M.ReconcileGuidedEditModePopup = ReconcileGuidedEditModePopup
 
 local function OpenGuidedEditModePopup(key, stage)
-    local editMode = _G.MSUF_EM2
+    local editMode = MSUF.EditModeController
     local popups = editMode and editMode.Popups
     if not (popups and type(popups.Open) == "function") then return false end
     local mover = editMode.Movers and type(editMode.Movers.Get) == "function" and editMode.Movers.Get(key) or nil
@@ -877,14 +769,10 @@ local function SafeText(fontString)
     return value:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 end
 
-local function FrameTop(frame)
-    if not (frame and type(frame.GetTop) == "function") then return nil end
-    return tonumber(frame:GetTop()) or nil
-end
-
-local function FrameLeft(frame)
-    if not (frame and type(frame.GetLeft) == "function") then return nil end
-    return tonumber(frame:GetLeft()) or nil
+-- A frame's GetTop or GetLeft as a number, or nil while it has no rect yet.
+local function FrameEdge(frame, getter)
+    if not (frame and type(frame[getter]) == "function") then return nil end
+    return tonumber(frame[getter](frame)) or nil
 end
 
 local IsWidgetInside
@@ -912,6 +800,15 @@ local function RefreshCachedSectionDescriptors(cached)
     return true
 end
 
+-- Appends a section record and reports whether its guidedOrder is set and unique.
+local function AppendSection(sections, orders, section)
+    sections[#sections + 1] = section
+    local order = section.guidedOrder
+    if order == nil or orders[order] then return false end
+    orders[order] = true
+    return true
+end
+
 local function SortedSections(pageKey)
     local entry = M.cache and M.cache[pageKey]
     local source = entry and entry.sections
@@ -932,21 +829,15 @@ local function SortedSections(pageKey)
             if collapsible then
                 local label = SafeText(collapsible.label)
                 if label == "" then label = tostring(sectionId or "Section") end
-                local guidedOrder = tonumber(collapsible.guidedOrder)
-                if guidedOrder == nil or orders[guidedOrder] then
-                    stableOrder = false
-                else
-                    orders[guidedOrder] = true
-                end
-                sections[#sections + 1] = {
+                stableOrder = AppendSection(sections, orders, {
                     id = tostring(sectionId or ""),
                     body = body,
                     outer = collapsible.outer,
                     entry = collapsible,
                     label = label,
-                    guidedOrder = guidedOrder,
+                    guidedOrder = tonumber(collapsible.guidedOrder),
                     collapsible = true,
-                }
+                }) and stableOrder
             end
         end
     end
@@ -958,26 +849,20 @@ local function SortedSections(pageKey)
                 local label = SafeText(region.label)
                 if label == "" then label = SafeText(body.title) end
                 if label == "" then label = "Scope and overrides" end
-                local guidedOrder = tonumber(region.guidedOrder)
-                if guidedOrder == nil or orders[guidedOrder] then
-                    stableOrder = false
-                else
-                    orders[guidedOrder] = true
-                end
-                sections[#sections + 1] = {
+                stableOrder = AppendSection(sections, orders, {
                     id = "region:" .. tostring(region.id or regionId or ""),
                     body = body,
                     outer = outer,
                     entry = region,
                     label = label,
-                    guidedOrder = guidedOrder,
+                    guidedOrder = tonumber(region.guidedOrder),
                     region = true,
-                }
+                }) and stableOrder
             end
         end
     end
     if not stableOrder then
-        for i = 1, #sections do sections[i].top = FrameTop(sections[i].outer) end
+        for i = 1, #sections do sections[i].top = FrameEdge(sections[i].outer, "GetTop") end
     end
     sort(sections, function(a, b)
         if a.guidedOrder ~= b.guidedOrder then
@@ -1007,30 +892,25 @@ function M.RegisterGuidedCopyPopup(kind, pageKey, ensureVisible)
     return true
 end
 
+-- The cached page section a stage prepares (tab and slot selection live on it).
+local function PreparedSection(stage)
+    local pageEntry = M.cache and M.cache[stage.pageKey]
+    return pageEntry and pageEntry.sections and pageEntry.sections[stage.prepareSection]
+end
+
 local function EnsureStageSurface(stage)
     if type(stage) == "table" and stage.area == "groupframes" and stage.special ~= true and M.gfScope ~= "party" then
         local pageEntry = M.cache and M.cache[stage.pageKey]
         local scopeRegion = pageEntry and pageEntry.guidedRegions and pageEntry.guidedRegions.group_scope
         local selectScope = scopeRegion and scopeRegion.body and scopeRegion.body._msuf2GuidedSelectScope
-        local prepared
-        if type(selectScope) == "function" then
-            local value = selectScope("party")
-            prepared = value ~= false
-        end
-        if not prepared then
+        if not (type(selectScope) == "function" and selectScope("party") ~= false) then
             if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("gfScope", "party") else M.gfScope = "party" end
         end
     end
     if type(stage) == "table" and stage.prepareSection and stage.prepareTab and stage.prepareState then
-        local pageEntry = M.cache and M.cache[stage.pageKey]
-        local section = pageEntry and pageEntry.sections and pageEntry.sections[stage.prepareSection]
+        local section = PreparedSection(stage)
         local selectTab = section and section._msuf2GuidedSelectTab
-        local prepared
-        if type(selectTab) == "function" then
-            local value = selectTab(stage.prepareTab)
-            prepared = value ~= false
-        end
-        if not prepared then
+        if not (type(selectTab) == "function" and selectTab(stage.prepareTab) ~= false) then
             local state = M[stage.prepareState]
             if type(state) ~= "table" then
                 state = {}
@@ -1040,15 +920,9 @@ local function EnsureStageSurface(stage)
         end
     end
     if type(stage) == "table" and stage.prepareSection and stage.prepareTab and stage.prepareSlot and stage.prepareSlotState then
-        local pageEntry = M.cache and M.cache[stage.pageKey]
-        local section = pageEntry and pageEntry.sections and pageEntry.sections[stage.prepareSection]
+        local section = PreparedSection(stage)
         local selectSlot = section and section._msuf2GuidedSelectSlot
-        local prepared
-        if type(selectSlot) == "function" then
-            local value = selectSlot(stage.prepareTab, stage.prepareSlot)
-            prepared = value ~= false
-        end
-        if not prepared then
+        if not (type(selectSlot) == "function" and selectSlot(stage.prepareTab, stage.prepareSlot) ~= false) then
             local state = M[stage.prepareSlotState]
             if type(state) ~= "table" then
                 state = {}
@@ -1141,16 +1015,8 @@ local function ClearSectionEmphasis(pageKey)
                     if flash.SetAlpha then flash:SetAlpha(0) end
                     if flash.Hide then flash:Hide() end
                 end
-                local marker = section.entry and section.entry._msuf2GuidedArrow
-                if marker then
-                    if M.Theme and type(M.Theme.StopMotion) == "function" then M.Theme.StopMotion(marker) end
-                    marker:Hide()
-                end
-                local controlMarker = section.entry and section.entry._msuf2GuidedControlArrow
-                if controlMarker then
-                    if M.Theme and type(M.Theme.StopMotion) == "function" then M.Theme.StopMotion(controlMarker) end
-                    controlMarker:Hide()
-                end
+                Gfx.StopAndHide(section.entry and section.entry._msuf2GuidedArrow)
+                Gfx.StopAndHide(section.entry and section.entry._msuf2GuidedControlArrow)
             end
         end
     end
@@ -1175,14 +1041,7 @@ local function EmphasizeSection(pageKey, current, currentControl)
         end
         local marker = entry._msuf2GuidedArrow
         if selected and not marker and outer and outer.CreateTexture and T and T.media then
-            marker = PixelLayoutRegion(outer:CreateTexture(nil, "OVERLAY", nil, 7))
-            local usedAtlas = false
-            if marker.SetAtlas then
-                marker:SetAtlas("NPE_ArrowRight", false)
-                usedAtlas = true
-            end
-            if not usedAtlas then marker:SetTexture(T.media.collapseArrow) end
-            marker:SetSize(20, 20)
+            marker = Gfx.Arrow(T, outer, 7, 20)
             marker:SetPoint("RIGHT", outer, "LEFT", -4, 0)
             local color = T.colors.accent
             marker:SetVertexColor(color[1], color[2], color[3], 1)
@@ -1326,8 +1185,8 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
                     settingKey = tostring(record.settingKey or ""),
                     widget = widget,
                     actionable = actionable,
-                    top = FrameTop(widget),
-                    left = FrameLeft(widget),
+                    top = FrameEdge(widget, "GetTop"),
+                    left = FrameEdge(widget, "GetLeft"),
                 }
             end
         end
@@ -1377,13 +1236,18 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
     return controls
 end
 
+-- SectionControls with the control filters the stage declares.
+local function StageSectionControls(stage, section, sections, records)
+    return SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls, stage.includeLockedControls,
+        EffectiveStageControlLimit(stage), stage.controlPaths)
+end
+
 local function AllStageControls(stage)
     local sections = StageSections(stage)
     local records = RuntimeControlRecords()
     local controls, seen = {}, {}
     for i = 1, #sections do
-        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls, stage.includeLockedControls,
-            EffectiveStageControlLimit(stage), stage.controlPaths)
+        local list = StageSectionControls(stage, sections[i], sections, records)
         for j = 1, #list do
             local control = list[j]
             if not seen[control.id] then
@@ -1425,14 +1289,7 @@ local function EmphasizeControl(stage, section, controls, current)
             marker._msuf2DualPointer = true
             if type(marker.EnableMouse) == "function" then marker:EnableMouse(false) end
             local function Arrow(rotation)
-                local texture = PixelLayoutRegion(marker:CreateTexture(nil, "OVERLAY", nil, 7))
-                local usedAtlas = false
-                if type(texture.SetAtlas) == "function" then
-                    texture:SetAtlas("NPE_ArrowRight", false)
-                    usedAtlas = true
-                end
-                if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
-                texture:SetSize(20, 20)
+                local texture = Gfx.Arrow(T, marker, 7, 20)
                 if rotation and type(texture.SetRotation) == "function" then texture:SetRotation(rotation) end
                 return texture
             end
@@ -1458,24 +1315,14 @@ local function EmphasizeControl(stage, section, controls, current)
         rightArrow:SetPoint("LEFT", marker, "RIGHT", 4, 0)
         leftArrow:SetVertexColor(color[1], color[2], color[3], 1)
         rightArrow:SetVertexColor(color[1], color[2], color[3], 1)
-        local top, right, bottom, left = marker._msuf2Edges[1], marker._msuf2Edges[2], marker._msuf2Edges[3], marker._msuf2Edges[4]
-        top:ClearAllPoints()
-        top:SetPoint("TOPLEFT")
-        top:SetPoint("TOPRIGHT")
-        top:SetHeight(2)
-        right:ClearAllPoints()
-        right:SetPoint("TOPRIGHT")
-        right:SetPoint("BOTTOMRIGHT")
-        right:SetWidth(2)
-        bottom:ClearAllPoints()
-        bottom:SetPoint("BOTTOMLEFT")
-        bottom:SetPoint("BOTTOMRIGHT")
-        bottom:SetHeight(2)
-        left:ClearAllPoints()
-        left:SetPoint("TOPLEFT")
-        left:SetPoint("BOTTOMLEFT")
-        left:SetWidth(2)
-        for i = 1, 4 do marker._msuf2Edges[i]:SetColorTexture(color[1], color[2], color[3], 0.92) end
+        for i = 1, 4 do
+            local edge, spec = marker._msuf2Edges[i], Gfx.OUTLINE_EDGES[i]
+            edge:ClearAllPoints()
+            edge:SetPoint(spec[1])
+            edge:SetPoint(spec[2])
+            edge[spec[3]](edge, 2)
+            edge:SetColorTexture(color[1], color[2], color[3], 0.92)
+        end
         marker:Show()
         Runtime.controlEmphasis[#Runtime.controlEmphasis + 1] = { marker = marker }
         if type(T.PlayMotion) == "function" then
@@ -1536,20 +1383,18 @@ end
 
 local function RecordSectionAndControls(stage, section, result, sections, records)
     records = type(records) == "table" and records or RuntimeControlRecords()
-    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls, stage.includeLockedControls,
-        EffectiveStageControlLimit(stage), stage.controlPaths)
+    local controls = StageSectionControls(stage, section, sections, records)
     RecordControls(stage, section, controls, result)
     RecordSectionOnly(stage, section, result)
     return #controls
 end
 
-local function DerivedSectionResult(stage, controls, fallback)
-    local state = TourState()
-    local byStage = type(state.controlResults) == "table" and state.controlResults[stage.id] or nil
-    byStage = type(byStage) == "table" and byStage or {}
+-- Folds the recorded result codes ("k" kept, "s" skipped) of items into one result.
+-- codes is keyed by prefix .. item.id.
+local function DerivedResult(codes, items, prefix, fallback)
     local found, allKept, allSkipped = 0, true, true
-    for i = 1, #controls do
-        local code = byStage[controls[i].id]
+    for i = 1, #items do
+        local code = codes[prefix .. items[i].id]
         if code then
             found = found + 1
             if code ~= "k" then allKept = false end
@@ -1559,31 +1404,22 @@ local function DerivedSectionResult(stage, controls, fallback)
             allSkipped = false
         end
     end
-    if #controls > 0 and found == #controls and allSkipped then return "skipped" end
-    if #controls > 0 and found == #controls and allKept then return "kept" end
+    if found > 0 and found == #items and allSkipped then return "skipped" end
+    if found > 0 and found == #items and allKept then return "kept" end
     if found > 0 then return "reviewed" end
     return ResultName(fallback)
+end
+
+local function DerivedSectionResult(stage, controls, fallback)
+    local state = TourState()
+    local byStage = type(state.controlResults) == "table" and state.controlResults[stage.id] or nil
+    return DerivedResult(type(byStage) == "table" and byStage or {}, controls, "", fallback)
 end
 
 local function DerivedStageResult(stage, sections, fallback)
     local state = TourState()
     local results = type(state.sectionResults) == "table" and state.sectionResults or {}
-    local found, allKept, allSkipped = 0, true, true
-    for i = 1, #sections do
-        local code = results[stage.id .. "\031" .. sections[i].id]
-        if code then
-            found = found + 1
-            if code ~= "k" then allKept = false end
-            if code ~= "s" then allSkipped = false end
-        else
-            allKept = false
-            allSkipped = false
-        end
-    end
-    if found > 0 and found == #sections and allSkipped then return "skipped" end
-    if found > 0 and found == #sections and allKept then return "kept" end
-    if found > 0 then return "reviewed" end
-    return ResultName(fallback)
+    return DerivedResult(results, sections, stage.id .. "\031", fallback)
 end
 
 local function RecordWholeStage(stage, sections, result)
@@ -1598,6 +1434,18 @@ local function InitialCursor(stage)
         return { overview = false, sectionIndex = 1, controlIndex = 1, controlTotal = 0 }
     end
     return { overview = true, sectionIndex = 0, controlIndex = 0, controlTotal = 0 }
+end
+
+-- A cursor resting on one control of a section.
+local function ControlCursor(section, sectionIndex, control, controlIndex, total)
+    return {
+        overview = false,
+        sectionId = section.id,
+        sectionIndex = sectionIndex,
+        controlId = control and control.id or nil,
+        controlIndex = controlIndex,
+        controlTotal = total,
+    }
 end
 
 local function ReadCursor(stage)
@@ -1714,8 +1562,7 @@ local function FocusCurrentSection(stage)
         WriteCursor(stage, InitialCursor(stage))
         return
     end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
-        EffectiveStageControlLimit(stage), stage.controlPaths)
+    local controls = StageSectionControls(stage, section, sections)
     local control, controlIndex = FindCursorControl(cursor, controls)
     if cursor.sectionId ~= section.id
         or cursor.sectionIndex ~= index
@@ -1723,14 +1570,7 @@ local function FocusCurrentSection(stage)
         or cursor.controlIndex ~= controlIndex
         or cursor.controlTotal ~= #controls
     then
-        WriteCursor(stage, {
-            overview = false,
-            sectionId = section.id,
-            sectionIndex = index,
-            controlId = control and control.id or nil,
-            controlIndex = controlIndex,
-            controlTotal = #controls,
-        })
+        WriteCursor(stage, ControlCursor(section, index, control, controlIndex, #controls))
     end
     local W = M.Widgets
     M.CloseAutoFocusedSections(stage.pageKey)
@@ -1827,8 +1667,7 @@ local function FindAvailableControl(stage, sections, startIndex, direction)
     local index = min(max(tonumber(startIndex) or (direction == 1 and 1 or #sections), 1), max(1, #sections))
     while sections[index] do
         local section = sections[index]
-        local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
-            EffectiveStageControlLimit(stage), stage.controlPaths)
+        local controls = StageSectionControls(stage, section, sections)
         if #controls > 0 then
             local controlIndex = direction == 1 and 1 or #controls
             return section, index, controls, controls[controlIndex], controlIndex
@@ -1843,8 +1682,7 @@ local function CurrentPosition(stage)
     local sections = StageSections(stage)
     local cursor = ReadCursor(stage)
     local section, index = FindCursorSection(cursor, sections)
-    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
-        EffectiveStageControlLimit(stage), stage.controlPaths) or {}
+    local controls = section and StageSectionControls(stage, section, sections) or {}
     local control, controlIndex = FindCursorControl(cursor, controls)
     local normalized = false
     if cursor.overview ~= false or not section or not control then
@@ -1854,14 +1692,7 @@ local function CurrentPosition(stage)
             section, index, controls, control, controlIndex = FindAvailableControl(stage, sections, 1, 1)
         end
         if control then
-            cursor = {
-                overview = false,
-                sectionId = section.id,
-                sectionIndex = index,
-                controlId = control.id,
-                controlIndex = controlIndex,
-                controlTotal = #controls,
-            }
+            cursor = ControlCursor(section, index, control, controlIndex, #controls)
             WriteCursor(stage, cursor)
             normalized = true
         else
@@ -1932,19 +1763,11 @@ end
 local function SetSectionCursor(stage, sections, sectionIndex, controlIndex, reason)
     local section = sections[sectionIndex]
     if not section then return false end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
-        EffectiveStageControlLimit(stage), stage.controlPaths)
+    local controls = StageSectionControls(stage, section, sections)
     if #controls == 0 then return false end
     controlIndex = min(max(tonumber(controlIndex) or 1, 1), #controls)
     local control = controls[controlIndex]
-    WriteCursor(stage, {
-        overview = false,
-        sectionId = section.id,
-        sectionIndex = sectionIndex,
-        controlId = control.id,
-        controlIndex = controlIndex,
-        controlTotal = #controls,
-    })
+    WriteCursor(stage, ControlCursor(section, sectionIndex, control, controlIndex, #controls))
     FocusCurrentSection(stage)
     M.RefreshGuidedTourChrome(reason or "GUIDED_POSITION")
     return true
@@ -2016,14 +1839,6 @@ local function BackCurrent()
     return ReturnToPreviousStage(stage)
 end
 
-local function SkipSignature(stage, position)
-    return table.concat({
-        stage.id,
-        position.section and position.section.id or "overview",
-        position.control and position.control.id or "section",
-    }, "\031")
-end
-
 local function SkipWarning(stage, position)
     if position.control then
         return format(Tr("SKIP CHECKPOINT? %s stays unchanged. Press Confirm skip."), Tr(position.control.label)), 1
@@ -2049,7 +1864,11 @@ local function SkipCurrent()
     local stage = CurrentStage()
     if stage.id == "final_review" then return false end
     local position = CurrentPosition(stage)
-    local signature = SkipSignature(stage, position)
+    local signature = table.concat({
+        stage.id,
+        position.section and position.section.id or "overview",
+        position.control and position.control.id or "section",
+    }, "\031")
     if Runtime.warning then
         local warning = Runtime.warning
         local sectionId = position.section and position.section.id or nil
@@ -2101,16 +1920,7 @@ local function SetStageIcon(chrome, stage)
     local T = M.Theme
     local icon = chrome and chrome.icon
     if not (T and icon) then return end
-    local grid = T.navIconGrid and T.navIconGrid[stage.icon]
-    if grid and T.media and T.media.navIcons then
-        icon:SetTexture(T.media.navIcons)
-        icon:SetTexCoord(grid[1] / 8, (grid[1] + 1) / 8, grid[2] / 8, (grid[2] + 1) / 8)
-    elseif T.media and T.media.logo then
-        icon:SetTexture(T.media.logo)
-        icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
-    end
-    local color = T.navIconColors and T.navIconColors[stage.icon] or T.colors.accent
-    if color then icon:SetVertexColor(color[1], color[2], color[3], 1) end
+    Gfx.NavIcon(icon, T, stage.icon)
 end
 
 local function AnchorTourScroll(chrome, active)
@@ -2246,8 +2056,7 @@ local function ProgressFraction(stage, position)
         local total, completed = 0, 0
         local records = RuntimeControlRecords()
         for i = 1, #position.sections do
-            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls,
-                stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
+            local controls = StageSectionControls(stage, position.sections[i], position.sections, records)
             total = total + #controls
             if i < position.index then
                 completed = completed + #controls
@@ -2295,9 +2104,7 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
     local T = M.Theme
     if not (T and type(T.PlayNeonFlash) == "function") then return end
     context = context or {}
-    local editStatus = (stage.id == "edit_mode" or stage.id == "group_edit_mode")
-        and (type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {})
-        or {}
+    local editStatus = (stage.id == "edit_mode" or stage.id == "group_edit_mode") and EditModeStatus() or {}
     local signature = table.concat({
         stage.id,
         position.section and position.section.id or "overview",
@@ -2308,8 +2115,8 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
         tostring(SelectedSetupArea() or ""),
         tostring(SelectedSetupMode()),
         tostring(CooldownAnchorDecision() or ""),
-        EditModePlacementComplete() and "placed" or "unplaced",
-        GroupEditModePlacementComplete() and "group-placed" or "group-unplaced",
+        EditDone.placement() and "placed" or "unplaced",
+        EditDone.groupPlacement() and "group-placed" or "group-unplaced",
         editStatus.active and "edit-on" or "edit-off",
     }, "\031")
     if Runtime.lastClickCueSignature == signature then return end
@@ -2343,14 +2150,14 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
     elseif stage.id == "edit_mode" then
         if not CooldownAnchorDecisionComplete() then
             AddGroup("anchor")
-        elseif EditModePlacementComplete() then
+        elseif EditDone.placement() then
             Add(chrome.next)
         elseif editStatus.active ~= true then
             AddGroup("edit_mode_toggle")
             Add(M.dashboardToolbarEditModeButton)
         end
     elseif stage.id == "group_edit_mode" then
-        if GroupEditModePlacementComplete() then
+        if EditDone.groupPlacement() then
             Add(chrome.next)
         elseif editStatus.active ~= true then
             AddGroup("group_edit_mode_toggle")
@@ -2395,13 +2202,10 @@ local function PaintChromeHeadings(chrome, stage, position, profileMismatch, man
             local controls = AllStageControls(stage, position.sections)
             M.Theme.SetTranslatedText(chrome.section, format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
         elseif position.control then
-            if ControlIsAction(position.control) then
-                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections,
-                    position.controlIndex, #position.controls, Tr(position.control.label)))
-            else
-                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections,
-                    position.controlIndex, #position.controls, Tr(position.control.label)))
-            end
+            local template = ControlIsAction(position.control) and Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s")
+                or Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s")
+            M.Theme.SetTranslatedText(chrome.section, format(template, position.index, #position.sections,
+                position.controlIndex, #position.controls, Tr(position.control.label)))
         elseif position.section then
             M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections,
                 Tr(position.section.label), #position.controls))
@@ -2489,21 +2293,21 @@ function M.RefreshGuidedTourChrome(reason)
     local fraction = ProgressFraction(stage, position)
     chrome.progressFill:SetWidth(max(1, floor(((chrome.progress:GetWidth() or 1) - 2) * fraction)))
 
-    local firstPosition = stagePosition == 1 and stage.special
+    -- Button texts and states. What the Edit Mode stages still wait for before
+    -- Keep and Next unlock (the cooldown anchor choice, the Player move and the
+    -- Party move) is read once here and serves both.
     local final = stage.id == "final_review"
     local waitingForAnchorDecision = stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
-    local waitingForEditModeMove = stage.id == "edit_mode" and not waitingForAnchorDecision and not EditModePlacementComplete()
-    local waitingForGroupMove = stage.id == "group_edit_mode" and not GroupEditModePlacementComplete()
-    local editPopupActionReady = waitingForEditModeMove and EditModeMovementComplete()
-    local groupPopupActionReady = waitingForGroupMove and GroupEditModeMovementComplete()
+    local waitingForEditModeMove = stage.id == "edit_mode" and not waitingForAnchorDecision and not EditDone.placement()
+    local waitingForGroupMove = stage.id == "group_edit_mode" and not EditDone.groupPlacement()
     SetButtonText(chrome.back, profileMismatch and "Restart tour" or (warning and "Cancel" or "Back"))
     SetButtonText(chrome.keep, KeepLabel(stage, position))
     SetButtonText(chrome.skip, warning and "Confirm skip" or "Skip")
     local nextLabel = "Next setting"
     if manualAway then nextLabel = "Return"
     elseif final then nextLabel = "Finish setup"
-    elseif waitingForEditModeMove then nextLabel = EditModeMovementComplete() and "Open size popup" or "Move Player first"
-    elseif waitingForGroupMove then nextLabel = GroupEditModeMovementComplete() and "Open size popup" or "Move Party first"
+    elseif waitingForEditModeMove then nextLabel = EditDone.movement() and "Open size popup" or "Move Player first"
+    elseif waitingForGroupMove then nextLabel = EditDone.groupMovement() and "Open size popup" or "Move Party first"
     elseif touched then nextLabel = "Claim +10 XP"
     elseif stage.id == "menu_basics" then nextLabel = SelectedSetupMode() == "quick" and "Start Quick Setup" or "Start Complete Tour"
     elseif stage.id == "edit_mode" then nextLabel = "Claim checkpoint"
@@ -2513,33 +2317,30 @@ function M.RefreshGuidedTourChrome(reason)
     SetButtonText(chrome.next, nextLabel)
     SetButtonText(chrome.pause, "Pause")
     LayoutChrome(chrome, alert ~= nil and alert ~= false, displayHelp)
-
+    local backOn, keepOn, skipOn, nextOn
     if profileMismatch then
-        SetButtonEnabled(chrome.back, true)
-        SetButtonEnabled(chrome.keep, false)
-        SetButtonEnabled(chrome.skip, false)
-        SetButtonEnabled(chrome.next, false)
+        backOn, keepOn, skipOn, nextOn = true, false, false, false
     elseif manualAway then
-        SetButtonEnabled(chrome.back, false)
-        SetButtonEnabled(chrome.keep, false)
-        SetButtonEnabled(chrome.skip, false)
-        SetButtonEnabled(chrome.next, true)
+        backOn, keepOn, skipOn, nextOn = false, false, false, true
     elseif warning then
-        SetButtonEnabled(chrome.back, true)
-        SetButtonEnabled(chrome.keep, false)
-        SetButtonEnabled(chrome.skip, true)
-        SetButtonEnabled(chrome.next, false)
+        backOn, keepOn, skipOn, nextOn = true, false, true, false
     else
+        local editPopupActionReady = waitingForEditModeMove and EditDone.movement()
+        local groupPopupActionReady = waitingForGroupMove and EditDone.groupMovement()
         local changeReady = stage.special or not position.control or touched
-        SetButtonEnabled(chrome.back, not firstPosition)
-        SetButtonEnabled(chrome.keep, not final and stage.id ~= "menu_basics" and not waitingForAnchorDecision and not waitingForEditModeMove and not waitingForGroupMove)
-        SetButtonEnabled(chrome.skip, not final)
-        SetButtonEnabled(chrome.next, changeReady
+        backOn = not (stagePosition == 1 and stage.special)
+        keepOn = not final and stage.id ~= "menu_basics" and not waitingForAnchorDecision and not waitingForEditModeMove and not waitingForGroupMove
+        skipOn = not final
+        nextOn = changeReady
             and (stage.id ~= "menu_basics" or SetupAreaDecisionComplete())
             and not waitingForAnchorDecision
             and (not waitingForEditModeMove or editPopupActionReady)
-            and (not waitingForGroupMove or groupPopupActionReady))
+            and (not waitingForGroupMove or groupPopupActionReady)
     end
+    SetButtonEnabled(chrome.back, backOn)
+    SetButtonEnabled(chrome.keep, keepOn)
+    SetButtonEnabled(chrome.skip, skipOn)
+    SetButtonEnabled(chrome.next, nextOn)
     SetButtonEnabled(chrome.pause, true)
     chrome:Show()
     if (reason == "HOST_SIZE" or reason == "WINDOW_RESIZE")
@@ -2590,17 +2391,17 @@ function M.RunGuidedTourStep(step)
     end
     if (step == "keep" or step == "next") and stage.id == "edit_mode" then
         if not CooldownAnchorDecisionComplete() then return false, "guided_edit_mode_anchor_required" end
-        if not EditModePlacementComplete() then
-            if step == "next" and EditModeMovementComplete() and OpenGuidedEditModePopup("player", stage) then
+        if not EditDone.placement() then
+            if step == "next" and EditDone.movement() and OpenGuidedEditModePopup("player", stage) then
                 return true, "guided_edit_mode_popup_opened"
             end
             return false, "guided_edit_mode_move_required"
         end
     end
     if (step == "keep" or step == "next") and stage.id == "group_edit_mode"
-        and not GroupEditModePlacementComplete()
+        and not EditDone.groupPlacement()
     then
-        if step == "next" and GroupEditModeMovementComplete() and OpenGuidedEditModePopup("gf_party", stage) then
+        if step == "next" and EditDone.groupMovement() and OpenGuidedEditModePopup("gf_party", stage) then
             return true, "guided_group_edit_mode_popup_opened"
         end
         return false, "guided_group_edit_mode_move_required"
@@ -2785,11 +2586,11 @@ function M.StartGuidedTour(opts)
     local ok = Invoke(Tour(), "Start", ActiveProfileName(), stage.id, restorePoint)
     if not ok then return false end
     local requestedMode = tostring(opts.mode or "")
-    if not VALID_SETUP_MODE[requestedMode] then
+    if not VALID.setupMode[requestedMode] then
         requestedMode = opts.stageId and "complete" or "quick"
     end
     Invoke(Tour(), "SetPreference", "setupMode", requestedMode)
-    if VALID_SETUP_AREA[tostring(opts.setupArea or "")] then
+    if VALID.setupArea[tostring(opts.setupArea or "")] then
         Invoke(Tour(), "SetPreference", "setupArea", tostring(opts.setupArea))
     end
     Invoke(FirstLoad(), "Start", "guided_tour")
@@ -2839,20 +2640,15 @@ function M.GetGuidedTourSummary()
     local activeStageIds = {}
     for i = 1, #activeStages do activeStageIds[activeStages[i].id] = true end
     local summary = {
-        reviewedStages = tonumber(source.reviewedStages) or 0,
-        keptStages = tonumber(source.keptStages) or 0,
-        skippedStages = tonumber(source.skippedStages) or 0,
-        reviewedSections = tonumber(source.reviewedSections) or 0,
-        keptSections = tonumber(source.keptSections) or 0,
-        skippedSections = tonumber(source.skippedSections) or 0,
-        reviewedControls = tonumber(source.reviewedControls) or 0,
-        keptControls = tonumber(source.keptControls) or 0,
-        skippedControls = tonumber(source.skippedControls) or 0,
         totalStages = #activeStages,
         skippedItems = {},
         skippedAreas = {},
         skippedSectionItems = {},
     }
+    for _, counter in ipairs({ "reviewedStages", "keptStages", "skippedStages", "reviewedSections", "keptSections",
+        "skippedSections", "reviewedControls", "keptControls", "skippedControls" }) do
+        summary[counter] = tonumber(source[counter]) or 0
+    end
     local state = TourState()
     local stageResults = type(state.stageResults) == "table" and state.stageResults or {}
     for i = 1, #activeStages do
@@ -2925,16 +2721,7 @@ local function AddCardIcon(card, T, iconKey)
     local icon = PixelLayoutRegion(well:CreateTexture(nil, "ARTWORK"))
     icon:SetSize(16, 16)
     icon:SetPoint("CENTER")
-    local grid = T.navIconGrid and T.navIconGrid[iconKey]
-    if grid and T.media and T.media.navIcons then
-        icon:SetTexture(T.media.navIcons)
-        icon:SetTexCoord(grid[1] / 8, (grid[1] + 1) / 8, grid[2] / 8, (grid[2] + 1) / 8)
-    elseif T.media and T.media.logo then
-        icon:SetTexture(T.media.logo)
-        icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
-    end
-    local color = T.navIconColors and T.navIconColors[iconKey] or T.colors.accent
-    icon:SetVertexColor(color[1], color[2], color[3], 1)
+    Gfx.NavIcon(icon, T, iconKey)
     return well
 end
 
@@ -2958,9 +2745,6 @@ end
 -- InfoCard with a screenshot below the copy. Rounded corners are the one thing
 -- on the overview page that a sentence cannot demonstrate, so that card shows a
 -- real frame instead. The art is 2:1, so the card height follows the width.
-local TOUR_PREVIEW_MAX_WIDTH = 320
-local TOUR_PREVIEW_COPY_HEIGHT = 76
-
 local function TourPreview(key)
     local helpers = M.PreviewHelpers
     local previews = type(helpers) == "table" and helpers.TourPreviews or nil
@@ -2973,10 +2757,11 @@ local function PreviewCard(builder, T, W, title, body, iconKey, spec)
     if not (type(spec) == "table" and type(W.PreviewImage) == "function") then
         return InfoCard(builder, T, title, body, iconKey, 92)
     end
-    local imageWidth = min(TOUR_PREVIEW_MAX_WIDTH, max(180, builder.width - 72))
+    local maxWidth, copyHeight = 320, 76
+    local imageWidth = min(maxWidth, max(180, builder.width - 72))
     local imageHeight = floor(imageWidth / (tonumber(spec.aspect) or 2) + 0.5)
-    local card = InfoCard(builder, T, title, body, iconKey, TOUR_PREVIEW_COPY_HEIGHT + imageHeight + 16)
-    W.PreviewImage(card, spec, 56, -TOUR_PREVIEW_COPY_HEIGHT, imageWidth)
+    local card = InfoCard(builder, T, title, body, iconKey, copyHeight + imageHeight + 16)
+    W.PreviewImage(card, spec, 56, -copyHeight, imageWidth)
     return card
 end
 
@@ -3088,7 +2873,7 @@ end
 local function CreateEditModeClick(Refresh)
     return function()
         if BlockedByCombat() then return end
-        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+        local status = EditModeStatus()
         if type(M.SetMSUFEditModeActive) == "function" then
             M.SetMSUFEditModeActive(not status.active, nil, { source = "guided_tour" })
         end
@@ -3143,51 +2928,52 @@ local function BuildEditModePage(ctx, T, W)
     local stateLabel, stateCopy, button = CreateEditModeAction(b, T, 84, -20)
 
     local function Refresh()
-        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+        local status = EditModeStatus()
         local active = status.active == true
         local _, automaticProviderLabel = AutomaticCooldownProvider()
         local anchorDecision = CooldownAnchorDecision()
-        local placementComplete = EditModePlacementComplete()
-        local movementComplete = EditModeMovementComplete()
+        local placementComplete = EditDone.placement()
+        local movementComplete = EditDone.movement()
         if decision then
             decision:SetValue(anchorDecision)
             for i = 1, #(decision.buttons or {}) do
                 SetButtonEnabled(decision.buttons[i], true)
             end
             if decision._msuf2Title and decision._msuf2Title.SetText then
-                M.Theme.SetTranslatedText(decision._msuf2Title, automaticProviderLabel
+                T.SetTranslatedText(decision._msuf2Title, automaticProviderLabel
                     and M.Format("Cooldown Manager anchoring (%s)", automaticProviderLabel)
                     or Tr("Should all Unitframes follow the Cooldown Manager?"))
             end
         end
+        local anchorCopy
         if not decision then
-            M.Theme.SetTranslatedText(decisionCopy, Tr("This client has no Cooldown Manager. Unit Frames use their own anchor."))
+            anchorCopy = Tr("This client has no Cooldown Manager. Unit Frames use their own anchor.")
         elseif anchorDecision == "cooldown" then
-            M.Theme.SetTranslatedText(decisionCopy, Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows."))
+            anchorCopy = Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows.")
         elseif anchorDecision == "independent" then
-            M.Theme.SetTranslatedText(decisionCopy,
-                Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them."))
+            anchorCopy = Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them.")
         else
-            M.Theme.SetTranslatedText(decisionCopy,
-                Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
+            anchorCopy = Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor.")
         end
+        T.SetTranslatedText(decisionCopy, anchorCopy)
+        local label, copy
         if placementComplete then
-            M.Theme.SetTranslatedText(stateLabel, Tr("Frame moved - placement complete"))
-            M.Theme.SetTranslatedText(stateCopy, active and Tr("Exit keeps the result. You can now continue the guide.")
-                or Tr("The required Edit Mode movement is complete."))
+            label = Tr("Frame moved - placement complete")
+            copy = active and Tr("Exit keeps the result. You can now continue the guide.")
+                or Tr("The required Edit Mode movement is complete.")
         elseif movementComplete then
-            M.Theme.SetTranslatedText(stateLabel, Tr("Player moved - now open its size popup"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("Click the highlighted Player mover. Width and Height live in that popup."))
+            label, copy = Tr("Player moved - now open its size popup"), Tr("Click the highlighted Player mover. Width and Height live in that popup.")
         elseif active then
-            M.Theme.SetTranslatedText(stateLabel, Tr("Move one highlighted frame to continue"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("Two arrows point to a movable frame. Drag it once; Next unlocks after a real position change."))
+            label, copy = Tr("Move one highlighted frame to continue"),
+                Tr("Two arrows point to a movable frame. Drag it once; Next unlocks after a real position change.")
         elseif anchorDecision then
-            M.Theme.SetTranslatedText(stateLabel, Tr("Anchor chosen - open Edit Mode and move a frame"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("The placement step completes after you drag the highlighted frame once."))
+            label, copy = Tr("Anchor chosen - open Edit Mode and move a frame"),
+                Tr("The placement step completes after you drag the highlighted frame once.")
         else
-            M.Theme.SetTranslatedText(stateLabel, Tr("Choose anchoring before placement"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("Edit Mode unlocks after the anchor choice above."))
+            label, copy = Tr("Choose anchoring before placement"), Tr("Edit Mode unlocks after the anchor choice above.")
         end
+        T.SetTranslatedText(stateLabel, label)
+        T.SetTranslatedText(stateCopy, copy)
         SetFontColor(stateLabel, placementComplete and (T.colors.ok or T.colors.accent) or (active and (T.colors.warning or T.colors.accent) or T.colors.text))
         SetButtonText(button, active and "Exit and keep changes" or "Open MSUF Edit Mode")
         SetButtonEnabled(button, not status.combatLocked and (active or anchorDecision ~= nil))
@@ -3231,22 +3017,24 @@ local function BuildGroupEditModePage(ctx, T, W)
     local stateLabel, stateCopy, button = CreateEditModeAction(b, T, 92, -22)
 
     local function Refresh()
-        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
-        local complete = GroupEditModePlacementComplete()
-        local moved = GroupEditModeMovementComplete()
+        local status = EditModeStatus()
+        local complete = EditDone.groupPlacement()
+        local moved = EditDone.groupMovement()
+        local label, copy
         if complete then
-            M.Theme.SetTranslatedText(stateLabel, Tr("Party Frames moved - checkpoint complete"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("Click its mover whenever you want the Width, Height, and Spacing popup."))
+            label, copy = Tr("Party Frames moved - checkpoint complete"),
+                Tr("Click its mover whenever you want the Width, Height, and Spacing popup.")
         elseif moved then
-            M.Theme.SetTranslatedText(stateLabel, Tr("Party moved - now open its geometry popup"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("Click the highlighted Party Frames mover for Width, Height, and Spacing."))
+            label, copy = Tr("Party moved - now open its geometry popup"),
+                Tr("Click the highlighted Party Frames mover for Width, Height, and Spacing.")
         elseif status.active then
-            M.Theme.SetTranslatedText(stateLabel, Tr("Drag the highlighted Party Frames mover"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("After the drag, click that mover once to see the geometry popup."))
+            label, copy = Tr("Drag the highlighted Party Frames mover"), Tr("After the drag, click that mover once to see the geometry popup.")
         else
-            M.Theme.SetTranslatedText(stateLabel, Tr("Open Edit Mode and move Party Frames"))
-            M.Theme.SetTranslatedText(stateCopy, Tr("The next checkpoint unlocks after a real Party-frame position change."))
+            label, copy = Tr("Open Edit Mode and move Party Frames"),
+                Tr("The next checkpoint unlocks after a real Party-frame position change.")
         end
+        T.SetTranslatedText(stateLabel, label)
+        T.SetTranslatedText(stateCopy, copy)
         SetFontColor(stateLabel, complete and (T.colors.ok or T.colors.accent) or T.colors.text)
         SetButtonText(button, status.active and "Exit and keep changes" or "Open MSUF Edit Mode")
         SetButtonEnabled(button, not status.combatLocked)

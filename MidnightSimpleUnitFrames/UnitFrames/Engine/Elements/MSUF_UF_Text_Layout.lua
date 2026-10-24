@@ -1,5 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Text_Layout.lua")
 local Text = MSUF and MSUF.UFText
 if not Text then return end
 
@@ -30,7 +30,7 @@ local CompileTextRuntime = Text.CompileTextRuntime
 local SetHealthTextColor = Text.SetHealthTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local RefreshNameRelativeStatusAnchors = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.RefreshNameRelativeAnchors
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local function LayoutText(fs, point, relPoint, x, y, justify, relativeTo)
   if not fs then
     return
@@ -160,6 +160,16 @@ local function ResolveUnitNameAnchor(anchor, x)
   return "TOPLEFT", "TOPLEFT", x, "LEFT", "TOPLEFT"
 end
 
+local function SetTextLayer(fs, layer)
+  if fs and fs.SetDrawLayer then
+    local sub = DrawSubLayer(layer, 5)
+    if fs._msufDrawLayer ~= sub then
+      fs:SetDrawLayer("OVERLAY", sub)
+      fs._msufDrawLayer = sub
+    end
+  end
+end
+
 local function LayoutName(fs, spec, text)
   if not fs then
     return
@@ -168,14 +178,7 @@ local function LayoutName(fs, spec, text)
   local y = tonumber(text and text.nameY) or -4
   local point, relPoint, resolvedX, justify = ResolveUnitNameAnchor(text and text.nameAnchor, x)
   LayoutText(fs, point, relPoint, resolvedX, y, justify)
-  if fs.SetDrawLayer then
-    local layer = tonumber(text and text.nameLayer) or 5
-    local sub = DrawSubLayer(layer, 5)
-    if fs._msufDrawLayer ~= sub then
-      fs:SetDrawLayer("OVERLAY", sub)
-      fs._msufDrawLayer = sub
-    end
-  end
+  SetTextLayer(fs, tonumber(text and text.nameLayer) or 5)
 end
 
 local function BarTextHealthAnchor(frame)
@@ -204,24 +207,7 @@ local function LayoutBarAnchoredName(frame, text)
   local rightX = justify == "LEFT" and -3 or (-3 + x)
   local verticalPoint = (anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT") and "TOP" or "CENTER"
   LayoutTextSpan(fs, health, 3 + x, rightX, y, justify, verticalPoint)
-  if fs.SetDrawLayer then
-    local layer = tonumber(text and text.nameLayer) or 5
-    local sub = DrawSubLayer(layer, 5)
-    if fs._msufDrawLayer ~= sub then
-      fs:SetDrawLayer("OVERLAY", sub)
-      fs._msufDrawLayer = sub
-    end
-  end
-end
-
-local function SetTextLayer(fs, layer)
-  if fs and fs.SetDrawLayer then
-    local sub = DrawSubLayer(layer, 5)
-    if fs._msufDrawLayer ~= sub then
-      fs:SetDrawLayer("OVERLAY", sub)
-      fs._msufDrawLayer = sub
-    end
-  end
+  SetTextLayer(fs, tonumber(text and text.nameLayer) or 5)
 end
 
 local function SetTextSlotShown(fs, show, mode)
@@ -404,8 +390,8 @@ local function NameRightReservation(frame, spec)
   return reserved
 end
 
-local function ClearNameClip(frame)
-  if not frame then return end
+-- Hides the clip host and drops every stamp derived from it; `anchor` is the name text itself.
+local function ResetNameClipState(frame, anchor)
   RestoreNameParent(frame)
   if frame._msufNameClipFrame then
     frame._msufNameClipFrame:Hide()
@@ -417,11 +403,16 @@ local function ClearNameClip(frame)
   frame._msufNameClipAnchorStamp = nil
   frame._msufNameTextClipStamp = nil
   frame._msufNameDotsStamp = nil
-  frame._msufNameInlineAnchor = frame.nameText
+  frame._msufNameInlineAnchor = anchor
   frame._msufNameInlineClip = nil
   frame._msufNameInlineClipSide = nil
   frame._msufNameInlineClipWidth = nil
   frame._msufNameCenterClip = nil
+end
+
+local function ClearNameClip(frame)
+  if not frame then return end
+  ResetNameClipState(frame, frame.nameText)
   frame._msufNameCenterClipOverflow = nil
   if frame.nameText then
     frame.nameText._msufShown = nil
@@ -533,22 +524,7 @@ local function ApplyNameClip(frame, spec, text)
   local fs = frame and frame.nameText
   if not fs then return end
 
-  RestoreNameParent(frame)
-  if frame._msufNameClipFrame then
-    frame._msufNameClipFrame:Hide()
-  end
-  if frame._msufNameDotsFS then
-    frame._msufNameDotsFS:Hide()
-  end
-  frame._msufNameClipStamp = nil
-  frame._msufNameClipAnchorStamp = nil
-  frame._msufNameTextClipStamp = nil
-  frame._msufNameDotsStamp = nil
-  frame._msufNameInlineAnchor = fs
-  frame._msufNameInlineClip = nil
-  frame._msufNameInlineClipSide = nil
-  frame._msufNameInlineClipWidth = nil
-  frame._msufNameCenterClip = nil
+  ResetNameClipState(frame, fs)
 
   fs:SetWordWrap(false)
   if fs.SetNonSpaceWrap then
@@ -999,9 +975,12 @@ local function TextApplySignature(spec, text)
   local power = spec and spec.power or EMPTY_EVENTS
   local inline = text and text.inlineToT or EMPTY_EVENTS
   n = SigAddKeys(parts, n, spec, SIG_SPEC_KEYS)
-  n = n + 1; parts[n] = tostring(spec and spec.showName ~= false)
-  n = n + 1; parts[n] = tostring(spec and spec.showHealthText ~= false)
-  n = n + 1; parts[n] = tostring(spec and spec.showPowerText ~= false)
+  n = n + 1
+  parts[n] = tostring(spec and spec.showName ~= false)
+  n = n + 1
+  parts[n] = tostring(spec and spec.showHealthText ~= false)
+  n = n + 1
+  parts[n] = tostring(spec and spec.showPowerText ~= false)
   n = n + 1
   parts[n] = tostring(NameRightReservation(nil, spec))
   n = SigAddKeys(parts, n, power, SIG_POWER_KEYS)
@@ -1040,6 +1019,20 @@ local function HealthSlotDirectColors(text)
   return leftColor, rightColor
 end
 
+local function ApplyDirectTextColors(frame, text)
+  if text.healthColorByHealth ~= true and text.healthColorByClass ~= true then
+    local hpLeftDirectColor, hpRightDirectColor = HealthSlotDirectColors(text)
+    ApplyTextColor(frame.hpTextLeft, hpLeftDirectColor)
+    ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
+    ApplyTextColor(frame.hpTextRight, hpRightDirectColor)
+  end
+  if text.powerColorByType ~= true then
+    ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)
+    ApplyTextColor(frame.powerTextCenter, text.directPowerCenterColor)
+    ApplyTextColor(frame.powerTextRight, text.directPowerRightColor)
+  end
+end
+
 local function RefreshAppliedTextColors(frame, spec, text)
   local rt = frame._msufTextRuntime
   local base = spec and spec.textColor
@@ -1052,17 +1045,7 @@ local function RefreshAppliedTextColors(frame, spec, text)
     rt._textGradientPct = nil
   end
   if text and text.directLayout == true then
-    if text.healthColorByHealth ~= true and text.healthColorByClass ~= true then
-      local hpLeftDirectColor, hpRightDirectColor = HealthSlotDirectColors(text)
-      ApplyTextColor(frame.hpTextLeft, hpLeftDirectColor)
-      ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
-      ApplyTextColor(frame.hpTextRight, hpRightDirectColor)
-    end
-    if text.powerColorByType ~= true then
-      ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)
-      ApplyTextColor(frame.powerTextCenter, text.directPowerCenterColor)
-      ApplyTextColor(frame.powerTextRight, text.directPowerRightColor)
-    end
+    ApplyDirectTextColors(frame, text)
   end
   frame._msufPowerTextColorInitialized = nil
   if text and text.healthColorByHealth ~= true and text.healthColorByClass ~= true
@@ -1356,17 +1339,7 @@ local function PositionConfiguredText(frame, spec, text, inlineEnabled,
   SetTextLayer(frame.powerTextCenter, text.powerLayer)
   SetTextLayer(frame.powerTextRight, text.powerLayer)
   if directText then
-    if text.healthColorByHealth ~= true and text.healthColorByClass ~= true then
-      local hpLeftDirectColor, hpRightDirectColor = HealthSlotDirectColors(text)
-      ApplyTextColor(frame.hpTextLeft, hpLeftDirectColor)
-      ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
-      ApplyTextColor(frame.hpTextRight, hpRightDirectColor)
-    end
-    if text.powerColorByType ~= true then
-      ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)
-      ApplyTextColor(frame.powerTextCenter, text.directPowerCenterColor)
-      ApplyTextColor(frame.powerTextRight, text.directPowerRightColor)
-    end
+    ApplyDirectTextColors(frame, text)
   end
 
 end
@@ -1374,7 +1347,7 @@ end
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
   local powerEbonMight = frame._msufPowerEbonMight == true
-  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+  local fontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
   if frame._msufTextFontAttemptEpoch ~= fontEpoch then
     InvalidateTextForFontEpoch(frame)
   end

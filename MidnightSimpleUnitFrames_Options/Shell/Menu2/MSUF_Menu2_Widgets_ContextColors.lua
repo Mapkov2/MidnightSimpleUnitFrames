@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets_ContextColors.lua
 --- Card-local color shortcuts: the three-dot entry point on a card or an
 --- accordion header that opens the colors used in that area, and the binding of
@@ -10,6 +9,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
     or "MidnightSimpleUnitFrames"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Widgets_ContextColors.lua")
 local M = MSUF.MSUF2
 local T = M.Theme
 local W = M.Widgets

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2/MSUF_Menu2_Window.lua
 --- Options window geometry, chrome, visibility and sizing/minimize state.
 ---
@@ -8,15 +7,14 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- persisted UI state, search bridge, page preview sync, and frame priority
 --- helpers live in adjacent Menu2 modules.
 --- Must not own runtime unitframe/groupframe gameplay logic.
-local addonName, MSUF = ...
-MSUF = MSUF or {}
-addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
-    or "MidnightSimpleUnitFrames"
+local _, MSUF = ...
 local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2
+local FILE = "Shell/Menu2/MSUF_Menu2_Window.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local C_Timer = M.MenuTimer
 local MenuRuntime = M.MenuRuntime
-local IS_FOREVER = MSUF.Client and MSUF.Client.IsForever == true
+local IS_FOREVER = MSUF.Client.IsForever == true
 
 -- Forever's Gamepad style drives this window with MSUF's own pad navigation
 -- (Game/Forever/PadNavigation.lua). Blizzard's frame controls manager is never
@@ -24,28 +22,28 @@ local IS_FOREVER = MSUF.Client and MSUF.Client.IsForever == true
 -- tainted, and SmartNavigation rescans the window on every child CreateFrame.
 local function ForeverPadUI()
     if not IS_FOREVER then return false end
-    local input = _G.InputUtil
+    local input = InputUtil
     return input and type(input.IsGamepadUIEnabled) == "function" and input.IsGamepadUIEnabled() == true
 end
 
 local function RaiseForeverPadCursor()
     if not IS_FOREVER or ForeverPadUI() then return end
-    if type(_G.CanAutoSetGamePadCursorControl) == "function"
-        and type(_G.SetGamePadCursorControl) == "function"
-        and _G.CanAutoSetGamePadCursorControl(true)
+    if type(CanAutoSetGamePadCursorControl) == "function"
+        and type(SetGamePadCursorControl) == "function"
+        and CanAutoSetGamePadCursorControl(true)
     then
-        _G.SetGamePadCursorControl(true)
+        SetGamePadCursorControl(true)
     end
 end
-local L_EDIT_ON, L_EDIT_OFF, L_EDIT_MODE_ON, L_EDIT_MODE_OFF, L_EDIT_MODE_OFF_COMBAT, L_IN_COMBAT, L_OUT_OF_COMBAT
+local L = {}
 local function RefreshLocaleCache()
-    L_EDIT_ON = M.Tr("Edit: On")
-    L_EDIT_OFF = M.Tr("Edit: Off")
-    L_EDIT_MODE_ON = M.Tr("Edit Mode: On")
-    L_EDIT_MODE_OFF = M.Tr("Edit Mode: Off")
-    L_EDIT_MODE_OFF_COMBAT = M.Tr("Edit Mode: Off (Combat)")
-    L_IN_COMBAT = M.Tr("In Combat")
-    L_OUT_OF_COMBAT = M.Tr("Out of Combat")
+    L.editOn = M.Tr("Edit: On")
+    L.editOff = M.Tr("Edit: Off")
+    L.editModeOn = M.Tr("Edit Mode: On")
+    L.editModeOff = M.Tr("Edit Mode: Off")
+    L.editModeOffCombat = M.Tr("Edit Mode: Off (Combat)")
+    L.inCombat = M.Tr("In Combat")
+    L.outOfCombat = M.Tr("Out of Combat")
 end
 RefreshLocaleCache()
 if type(MSUF.RegisterLocaleCallback) == "function" then MSUF.RegisterLocaleCallback("MSUF_Menu2_Window", RefreshLocaleCache) end
@@ -91,13 +89,11 @@ local RefreshSearchResultsPage = SearchBridge.RefreshSearchResultsPage
 local BuildNav = M.BuildNavRail
 local CreateWindowControlButton = M.CreateWindowControlButton
 local RefreshWindowControls = M.RefreshWindowControls
-local ALIASES = M.ALIASES
 -- Menu2 is a visual editor, not a compact settings popup. The wider default
 -- keeps navigation, scope tabs, previews, and paired controls readable at the
 -- same time while retaining resize support for smaller displays.
 local ApplyScrollMetrics = M.ApplyScrollMetrics
 local QueueVisiblePageLayoutSettle = M.QueueVisiblePageLayoutSettle
-local BuildPageEntry = M.BuildPageEntry
 local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1360, 860
 -- The minimum remains useful through the compact preview. Full previews keep
 -- their exact preferred geometry; an explicit resize-grip shrink may switch
@@ -140,7 +136,7 @@ local function EffectiveMenuScale(value)
 end
 local function WindowMaxBounds()
     local maxW, maxH = MAX_WINDOW_W, MAX_WINDOW_H
-    local parent = _G.UIParent
+    local parent = UIParent
     if parent and parent.GetWidth and parent.GetHeight then
         local scale = 1
         local g = M.GetGeneralDB and M.GetGeneralDB()
@@ -149,6 +145,12 @@ local function WindowMaxBounds()
         maxH = min(maxH, floor(((parent:GetHeight() or maxH) / scale) - 32))
     end
     return max(MIN_WINDOW_W, maxW), max(MIN_WINDOW_H, maxH)
+end
+-- A width/height pair clamped to the screen-safe window bounds.
+local function ClampWindowDims(width, height)
+    local maxW, maxH = WindowMaxBounds()
+    return ClampNumber(width, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W),
+        ClampNumber(height, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
 end
 local function ApplyWindowResizeBounds(frame)
     if not frame then return end
@@ -161,9 +163,7 @@ local function ApplyWindowResizeBounds(frame)
     end
 end
 local function SetWindowMetrics(width, height)
-    local maxW, maxH = WindowMaxBounds()
-    WINDOW_W = ClampNumber(width, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
-    WINDOW_H = ClampNumber(height, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
+    WINDOW_W, WINDOW_H = ClampWindowDims(width, height)
     CONTENT_W = math.max(420, WINDOW_W - NAV_W - 32)
     CONTENT_H = math.max(320, WINDOW_H - 74)
 end
@@ -185,7 +185,6 @@ end
 local function ReadSavedWindowSize()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return DEFAULT_WINDOW_W, DEFAULT_WINDOW_H end
-    local maxW, maxH = WindowMaxBounds()
     local savedW = tonumber(g.msuf2WindowW)
     local savedH = tonumber(g.msuf2WindowH)
     -- Upgrade only the former exact default. Deliberately customized window
@@ -193,8 +192,7 @@ local function ReadSavedWindowSize()
     if (savedW == nil and savedH == nil) or (savedW == 1180 and savedH == 720) then
         savedW, savedH = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
     end
-    return ClampNumber(savedW, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W),
-        ClampNumber(savedH, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
+    return ClampWindowDims(savedW, savedH)
 end
 local function SaveWindowSize(frame)
     RefreshWindowMetrics(frame)
@@ -203,7 +201,6 @@ local function SaveWindowSize(frame)
     g.msuf2WindowW = WINDOW_W
     g.msuf2WindowH = WINDOW_H
 end
-local RebuildActivePageForResize
 local ApplyMenuFrameScale
 local SNAP_EDGE_PX = 24
 local SNAP_FRAME_EDGE_PX = 4
@@ -222,14 +219,14 @@ local function IsSlashMenuSnapEnabled()
     return g.slashMenuSnapEnabled ~= false
 end
 local function WindowVisualScale(frame)
-    local parent = _G.UIParent
+    local parent = UIParent
     if not (frame and frame.GetEffectiveScale and parent and parent.GetEffectiveScale) then return 1 end
     local uiScale = parent:GetEffectiveScale() or 1
     if uiScale == 0 then uiScale = 1 end
     return (frame:GetEffectiveScale() or uiScale) / uiScale
 end
 local function FrameRectToUIParent(frame)
-    local parent = _G.UIParent
+    local parent = UIParent
     if not (frame and parent and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
     local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
     if not (l and r and t and b) then return nil end
@@ -238,27 +235,27 @@ local function FrameRectToUIParent(frame)
     return l * scale, r * scale, t * scale, b * scale
 end
 local function CursorPositionInUIParent()
-    local parent = _G.UIParent
-    if not (parent and parent.GetEffectiveScale and _G.GetCursorPosition) then return nil, nil end
+    local parent = UIParent
+    if not (parent and parent.GetEffectiveScale and GetCursorPosition) then return nil, nil end
     local scale = parent:GetEffectiveScale() or 1
     if scale == 0 then scale = 1 end
-    local x, y = _G.GetCursorPosition()
+    local x, y = GetCursorPosition()
     return (x or 0) / scale, (y or 0) / scale
 end
 local function CaptureFrameLayout(frame, fallbackW, fallbackH)
     if not (frame and frame.GetLeft and frame.GetTop and frame.GetWidth and frame.GetHeight) then return nil end
     return {
         x = frame:GetLeft() or SNAP_SCREEN_MARGIN,
-        yTop = frame:GetTop() or (((_G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight()) or DEFAULT_WINDOW_H) - SNAP_SCREEN_MARGIN),
+        yTop = frame:GetTop() or (((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or DEFAULT_WINDOW_H) - SNAP_SCREEN_MARGIN),
         w = frame:GetWidth() or fallbackW or WINDOW_W,
         h = frame:GetHeight() or fallbackH or WINDOW_H,
     }
 end
 local function ApplyRawFrameLayout(frame, layout)
-    if not (frame and layout and _G.UIParent) then return false end
+    if not (frame and layout and UIParent) then return false end
     frame:ClearAllPoints()
     frame:SetSize(max(1, layout.w or WINDOW_W), max(1, layout.h or WINDOW_H))
-    frame:SetPoint("TOPLEFT", _G.UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
+    frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
     return true
 end
 local function WindowMotionReduced()
@@ -301,15 +298,20 @@ local function StopWindowLayoutAnimation(frame)
     if state.driver and state.driver.Hide then state.driver:Hide() end
 end
 M.StopWindowLayoutAnimation = StopWindowLayoutAnimation
+-- Commits a settled (or skipped) layout morph: final geometry and alpha, the
+-- caller's hook, then any page-keyed Full Preview intent.
+local function CommitWindowLayout(frame, target, toAlpha, onFinished)
+    if target then ApplyRawFrameLayout(frame, target) end
+    if toAlpha and frame.SetAlpha then frame:SetAlpha(toAlpha) end
+    if type(onFinished) == "function" then onFinished(frame) end
+    M.ResolvePendingFixedPreviewExpansion(frame)
+end
 local function SettleWindowLayoutAnimation(frame)
     local state = frame and frame._msuf2WindowLayoutAnim
     if not state then return false end
     local target, toAlpha, onFinished = state.target, state.toAlpha, state.onFinished
     StopWindowLayoutAnimation(frame)
-    if target then ApplyRawFrameLayout(frame, target) end
-    if toAlpha and frame.SetAlpha then frame:SetAlpha(toAlpha) end
-    if type(onFinished) == "function" then onFinished(frame) end
-    M.ResolvePendingFixedPreviewExpansion(frame)
+    CommitWindowLayout(frame, target, toAlpha, onFinished)
     return true
 end
 local function AnimateWindowLayout(frame, target, opts)
@@ -321,15 +323,12 @@ local function AnimateWindowLayout(frame, target, opts)
     if opts.applyStart then ApplyRawFrameLayout(frame, start) end
     local duration = tonumber(opts.duration) or WINDOW_RESTORE_ANIM_SECONDS
     if WindowMotionReduced() or duration <= 0.001 then
-        ApplyRawFrameLayout(frame, target)
-        if opts.toAlpha and frame.SetAlpha then frame:SetAlpha(opts.toAlpha) end
-        if type(opts.onFinished) == "function" then opts.onFinished(frame) end
-        M.ResolvePendingFixedPreviewExpansion(frame)
+        CommitWindowLayout(frame, target, opts.toAlpha, opts.onFinished)
         return true
     end
     local driver = frame._msuf2WindowLayoutDriver
     if not driver then
-        driver = PixelLayoutRegion(CreateFrame("Frame", nil, _G.UIParent or frame))
+        driver = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent or frame))
         frame._msuf2WindowLayoutDriver = driver
     end
     local state = {
@@ -407,13 +406,13 @@ local function MinimizedBarTargetLayout(frame, bar)
     return layout
 end
 local function ApplyWindowLayout(frame, layout, rebuild, rebuildOptions)
-    if not (frame and layout and _G.UIParent) then return false end
+    if not (frame and layout and UIParent) then return false end
     local maxW, maxH = WindowMaxBounds()
     local w = ClampNumber(layout.w, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
     local h = ClampNumber(layout.h, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
     frame:ClearAllPoints()
     frame:SetSize(w, h)
-    frame:SetPoint("TOPLEFT", _G.UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
+    frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
     ApplyWindowResizeBounds(frame)
     if rebuild and RebuildActivePageForResize then
         RebuildActivePageForResize(frame, rebuildOptions)
@@ -422,11 +421,20 @@ local function ApplyWindowLayout(frame, layout, rebuild, rebuildOptions)
     end
     return true
 end
+-- Back to the plain "normal" state with no saved restore geometry; `closing`
+-- also forgets the minimize bookkeeping.
+local function ResetWindowState(frame, closing)
+    frame._msuf2WindowState = "normal"
+    frame._msuf2RestoreLayout = nil
+    if closing then
+        frame._msuf2PreMinimizeLayout = nil
+        frame._msuf2Minimized = nil
+    end
+end
 local function RestoreSlashMenuWindow(frame)
     if not frame then return false end
     local layout = frame._msuf2RestoreLayout
-    frame._msuf2WindowState = "normal"
-    frame._msuf2RestoreLayout = nil
+    ResetWindowState(frame)
     local restored = false
     if layout then
         RefreshWindowControls(frame)
@@ -451,7 +459,7 @@ local function MaximizeSlashMenuWindow(frame)
     if frame._msuf2WindowState == "maximized" then return RestoreSlashMenuWindow(frame) end
     frame._msuf2RestoreLayout = CaptureFrameLayout(frame)
     frame._msuf2WindowState = "maximized"
-    local parent = _G.UIParent
+    local parent = UIParent
     if not (parent and parent.GetWidth and parent.GetHeight) then return false end
     local screenW, screenH = parent:GetWidth() or 0, parent:GetHeight() or 0
     if screenW <= 0 or screenH <= 0 then return false end
@@ -517,10 +525,7 @@ local function HideSlashMenuAndMinibar(frame)
     frame = frame or M.frame
     if frame then
         frame._msuf2Closing = true
-        frame._msuf2WindowState = "normal"
-        frame._msuf2RestoreLayout = nil
-        frame._msuf2PreMinimizeLayout = nil
-        frame._msuf2Minimized = nil
+        ResetWindowState(frame, true)
     end
     StopWindowLayoutAnimation(frame)
     if frame and frame._msuf2CancelWindowInteractions then frame:_msuf2CancelWindowInteractions() end
@@ -563,7 +568,7 @@ local function MinimizeSlashMenuWindow(frame)
 end
 local function GetSlashMenuSnapLayout(frame)
     if not (frame and IsSlashMenuSnapEnabled()) then return false end
-    local parent = _G.UIParent
+    local parent = UIParent
     if not (parent and parent.GetWidth and parent.GetHeight) then return false end
     local cursorX, cursorY = CursorPositionInUIParent()
     if not cursorX then return false end
@@ -635,10 +640,7 @@ local function ApplySlashMenuSnap(frame)
     if not layout then layout = GetSlashMenuSnapLayout(frame) end
     if not layout then return false end
     local start = CaptureFrameLayout(frame)
-    if frame._msuf2WindowState == "maximized" then
-        frame._msuf2WindowState = "normal"
-        frame._msuf2RestoreLayout = nil
-    end
+    if frame._msuf2WindowState == "maximized" then ResetWindowState(frame) end
     RefreshWindowControls(frame)
     if start and AnimateWindowLayout(frame, layout, {
         start = start,
@@ -687,11 +689,11 @@ local function RefreshDashboardEditModeButton()
         local btn = buttons[i]
         if btn then
             if active then
-                btn:SetText(L_EDIT_MODE_ON, true)
+                btn:SetText(L.editModeOn, true)
             elseif combatLocked then
-                btn:SetText(L_EDIT_MODE_OFF_COMBAT, true)
+                btn:SetText(L.editModeOffCombat, true)
             else
-                btn:SetText(L_EDIT_MODE_OFF, true)
+                btn:SetText(L.editModeOff, true)
             end
             if btn.SetEnabled then btn:SetEnabled(active or not combatLocked) end
             if btn.SetActive then btn:SetActive(active) end
@@ -702,8 +704,7 @@ end
 local editModeUIHooked = false
 local function EnsureEditModeUIHook()
     if editModeUIHooked then return end
-    local register = rawget(_G, "MSUF_RegisterAnyEditModeListener")
-    if type(register) ~= "function" then return end
+    local register = MSUF.Require("MSUF_RegisterAnyEditModeListener", FILE)
     register(function()
         RefreshMenuFramePriority()
         local frame = M.frame
@@ -741,23 +742,21 @@ local function CreateMinimizedBar(frame)
     local restore = CreateWindowControlButton(bar, "maximize", "Restore", "Restore the minimized MSUF menu.")
     restore:SetPoint("RIGHT", bar, "RIGHT", -32, 0)
     restore:SetScript("OnClick", function() RestoreMinimizedSlashMenu(frame) end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(restore, "window.restore", "Restore MSUF menu", "action", {
-            actionKey = "menu_window_restore",
+    M.RegisterMenuChromeControl(restore, "window.restore", "Restore MSUF menu", "action", {
+        actionKey = "menu_window_restore",
+        historyMode = "none",
+        help = "Restores the minimized or maximized MSUF menu window.",
+        command = {
+            kind = "button",
             historyMode = "none",
-            help = "Restores the minimized or maximized MSUF menu window.",
-            command = {
-                kind = "button",
-                historyMode = "none",
-                set = function()
-                    if frame and frame._msuf2WindowState == "maximized" then
-                        return RestoreSlashMenuWindow(frame)
-                    end
-                    return RestoreMinimizedSlashMenu(frame)
-                end,
-            },
-        })
-    end
+            set = function()
+                if frame and frame._msuf2WindowState == "maximized" then
+                    return RestoreSlashMenuWindow(frame)
+                end
+                return RestoreMinimizedSlashMenu(frame)
+            end,
+        },
+    })
     bar.restoreButton = restore
     local close = CreateWindowControlButton(bar, "close", "Close", "Close the minimized MSUF menu.")
     close:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
@@ -778,12 +777,12 @@ local WINDOW_DRAG_TITLE_H = 40
 local WINDOW_DRAG_EDGE_X = 16
 local WINDOW_DRAG_EDGE_BOTTOM = 30
 local function WindowDragStartAllowed(frame)
-    if not (frame and frame.GetLeft and _G.GetCursorPosition) then return true end
+    if not (frame and frame.GetLeft and GetCursorPosition) then return true end
     local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
     if not (left and right and top and bottom) then return true end
     local scale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
     if not scale or scale == 0 then scale = 1 end
-    local x, y = _G.GetCursorPosition()
+    local x, y = GetCursorPosition()
     x, y = (x or 0) / scale, (y or 0) / scale
     if y >= top - WINDOW_DRAG_TITLE_H then return true end
     if y <= bottom + WINDOW_DRAG_EDGE_BOTTOM then return true end
@@ -842,27 +841,26 @@ local function BuildWindowShell()
     -- like the visible top edge, observes the rail's 8px outer spacing.
     windowControls:SetPoint("TOPRIGHT", f, "TOPRIGHT", -11, -7)
     f.windowControls = windowControls
-    local close = M.CreateWindowControlButton(windowControls, "close", "Close", "Close the MSUF menu window.", 3)
-    close:SetPoint("TOPRIGHT", windowControls, "TOPRIGHT", 0, 0)
-    close:SetScript("OnClick", function() M.HideSlashMenuAndMinibar(f) end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(close, "window.close", "Close MSUF menu", "action", {
+    local function AddControl(anchor, anchorPoint, kind, tooltipTitle, tooltipText, segment, onClick, path, label, meta)
+        local btn = M.CreateWindowControlButton(windowControls, kind, tooltipTitle, tooltipText, segment)
+        btn:SetPoint("TOPRIGHT", anchor, anchorPoint, 0, 0)
+        btn:SetScript("OnClick", onClick)
+        meta.historyMode = "none"
+        M.RegisterMenuChromeControl(btn, path, label, "action", meta)
+        return btn
+    end
+    local close = AddControl(windowControls, "TOPRIGHT", "close", "Close", "Close the MSUF menu window.", 3,
+        function() M.HideSlashMenuAndMinibar(f) end, "window.close", "Close MSUF menu", {
             actionKey = "menu_window_close",
-            historyMode = "none",
             help = "Closes the MSUF menu window, including its minimized bar.",
         })
-    end
     if M.minimizedBar and M.minimizedBar.closeButton and M.MarkRuntimeControlComponent then
         M.MarkRuntimeControlComponent(M.minimizedBar.closeButton, close)
     end
     f.closeButton = close
-    local maximize = M.CreateWindowControlButton(windowControls, "maximize", "Maximize", "Maximize or restore the MSUF menu window.", 2)
-    maximize:SetPoint("TOPRIGHT", close, "TOPLEFT", 0, 0)
-    maximize:SetScript("OnClick", function() MaximizeSlashMenuWindow(f) end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(maximize, "window.maximize", "Maximize MSUF menu", "action", {
+    local maximize = AddControl(close, "TOPLEFT", "maximize", "Maximize", "Maximize or restore the MSUF menu window.", 2,
+        function() MaximizeSlashMenuWindow(f) end, "window.maximize", "Maximize MSUF menu", {
             actionKey = "menu_window_maximize",
-            historyMode = "none",
             help = "Maximizes the MSUF menu window; the same title-bar button restores it when maximized.",
             command = {
                 kind = "button",
@@ -873,19 +871,12 @@ local function BuildWindowShell()
                 end,
             },
         })
-    end
     f.maximizeButton = maximize
-    local minimize = M.CreateWindowControlButton(windowControls, "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.", 1)
-    minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", 0, 0)
-    minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(minimize, "window.minimize", "Minimize MSUF menu", "action", {
+    f.minimizeButton = AddControl(maximize, "TOPLEFT", "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.", 1,
+        function() MinimizeSlashMenuWindow(f) end, "window.minimize", "Minimize MSUF menu", {
             actionKey = "menu_window_minimize",
-            historyMode = "none",
             help = "Minimizes the MSUF menu to its compact draggable bar.",
         })
-    end
-    f.minimizeButton = minimize
     return { frame = f }
 end
 
@@ -966,10 +957,10 @@ local function InstallMenuScaleControl(f)
         return true
     end
     local function SetValueFromCursor()
-        if not (_G.GetCursorPosition and slider.GetLeft and slider.GetWidth) then return end
+        if not (GetCursorPosition and slider.GetLeft and slider.GetWidth) then return end
         local left, width = slider:GetLeft(), slider:GetWidth()
         if not left or not width or width <= 0 then return end
-        local cursorX = _G.GetCursorPosition()
+        local cursorX = GetCursorPosition()
         local effectiveScale = slider.GetEffectiveScale and slider:GetEffectiveScale() or 1
         if not effectiveScale or effectiveScale == 0 then effectiveScale = 1 end
         local fraction = ((cursorX / effectiveScale) - left) / width
@@ -984,7 +975,7 @@ local function InstallMenuScaleControl(f)
             self:SetScript("OnUpdate", nil)
             return
         end
-        if _G.IsMouseButtonDown and not _G.IsMouseButtonDown("LeftButton") then
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
             self._msuf2MenuScaleDragging = nil
             self:SetScript("OnUpdate", nil)
             Commit(self:GetValue())
@@ -1020,10 +1011,8 @@ local function InstallMenuScaleControl(f)
     end)
 
     local tooltip = "Scales only the MSUF menu. Drag the bar or use the mouse wheel; changes apply immediately."
-    if type(M.AddTooltip) == "function" then
-        M.AddTooltip(control, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
-        M.AddTooltip(slider, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
-    end
+    M.AddTooltip(control, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
+    M.AddTooltip(slider, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
     M.RegisterMenuChromeControl(slider, "window.menu-scale", "MSUF Menu Scale", "setting", {
         kind = "slider",
         settingKey = "general.slashMenuScale",
@@ -1098,19 +1087,16 @@ local function InstallSupportLinkStrip(f)
         btn:SetScript("OnEnter", function() icon:SetAlpha(1) end)
         btn:SetScript("OnLeave", function() icon:SetAlpha(idleAlpha) end)
         btn:SetScript("OnClick", function()
-            _G.MSUF_ShowCopyLink(data.title, data.url)
+            MSUF.Require("MSUF_ShowCopyLink", "Shell/Menu2/MSUF_Menu2_Window.lua")(data.title, data.url)
         end)
-        if type(M.AddTooltip) == "function" then
-            M.AddTooltip(btn, data.title, data.tooltip, { hook = true, owner = "ANCHOR_TOP" })
-        end
+        M.AddTooltip(btn, data.title, data.tooltip, { hook = true, owner = "ANCHOR_TOP" })
         previous = btn
     end
     f.supportLinkStrip = strip
 end
 
 -- Drag, snap and resize share transient proxy state but no page/chrome state.
-local function InstallWindowInteractions(state)
-    local f = state.frame
+local function InstallWindowDragInteractions(f)
     local function EnsureResizeProxy()
         if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
         local proxy = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent), true)
@@ -1164,7 +1150,7 @@ local function InstallWindowInteractions(state)
     local FinishWindowDrag
     local function UpdateSnapPreview()
         if not f._msuf2DraggingWindow then return end
-        if _G.IsMouseButtonDown and not _G.IsMouseButtonDown("LeftButton") then
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
             if FinishWindowDrag then FinishWindowDrag(true) end
             return
         end
@@ -1189,8 +1175,7 @@ local function InstallWindowInteractions(state)
         -- the snap animation or retain an in-between window size.
         SettleWindowLayoutAnimation(f)
         if f._msuf2WindowState == "maximized" then
-            f._msuf2WindowState = "normal"
-            f._msuf2RestoreLayout = nil
+            ResetWindowState(f)
             M.RefreshWindowControls(f)
         end
         f._msuf2DraggingWindow = true
@@ -1216,11 +1201,16 @@ local function InstallWindowInteractions(state)
     end
     f._msuf2BeginWindowDrag = BeginWindowDrag
     f._msuf2FinishWindowDrag = FinishWindowDrag
+    return EnsureResizeProxy, ShowWindowLayoutProxy, HideWindowLayoutProxy
+end
+local function InstallWindowInteractions(state)
+    local f = state.frame
+    local EnsureResizeProxy, ShowWindowLayoutProxy, HideWindowLayoutProxy = InstallWindowDragInteractions(f)
     local FinishResizeProxy
     local function UpdateResizeProxy()
         local state = f._msuf2ResizeState
         if not state then return end
-        if not f._msuf2FinishingResize and _G.IsMouseButtonDown and not _G.IsMouseButtonDown("LeftButton") then
+        if not f._msuf2FinishingResize and IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
             if FinishResizeProxy then FinishResizeProxy(true) end
             return
         end
@@ -1228,6 +1218,7 @@ local function InstallWindowInteractions(state)
         if not cursorX then return end
         local scale = state.scale or 1
         if scale <= 0 then scale = 1 end
+        -- Inline ClampWindowDims: this runs on every resize-drag frame.
         local maxW, maxH = WindowMaxBounds()
         local w = ClampNumber(state.startW + ((cursorX - state.cursorX) / scale), MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
         local h = ClampNumber(state.startH + ((state.cursorY - cursorY) / scale), MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
@@ -1243,8 +1234,7 @@ local function InstallWindowInteractions(state)
         if not (cursorX and layout) then return false end
         f._msuf2LiveResizing = true
         f._msuf2ResizeMetricsDirty = nil
-        f._msuf2WindowState = "normal"
-        f._msuf2RestoreLayout = nil
+        ResetWindowState(f)
         M.RefreshWindowControls(f)
         f._msuf2ResizeState = {
             cursorX = cursorX,
@@ -1344,6 +1334,73 @@ local function InstallWindowInteractions(state)
     M.RefreshWindowControls(f)
 end
 
+local function HistoryNavButton(status, rotation, hitLeft, hitRight, onClick)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, status))
+    btn:SetSize(22, 22)
+    if btn.SetHitRectInsets then btn:SetHitRectInsets(hitLeft, hitRight, -5, -11) end
+    local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2HistNav", 1, "BACKGROUND", "BORDER")
+    local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
+    icon:SetTexture(T.media.dropdownChevron)
+    icon:SetSize(18, 18)
+    icon:SetPoint("CENTER", 0, 0)
+    if icon.SetRotation then icon:SetRotation(rotation) end
+    btn._msuf2HistNavIcon = icon
+    local CLEAR = { 0, 0, 0 }
+    local function Paint(self, hover, down)
+        local c = T.colors
+        local disabled = self.IsEnabled and not self:IsEnabled()
+        -- fill color/alpha, edge color/alpha, icon color/alpha for the resting state.
+        local fillC, fillA, edgeC, edgeA, iconC, iconA = CLEAR, 0, CLEAR, 0, c.muted, 0.96
+        if self._msuf2TourCue then
+            fillC, fillA, edgeC, edgeA, iconC, iconA = c.pillActive, 0.90, c.pillEdgeActive, 0.92, c.pillTextActive, 1
+        elseif disabled then
+            iconC, iconA = c.disabled, 0.55
+        elseif down then
+            fillC, fillA, edgeC, edgeA, iconC, iconA = c.pillActive, 0.90, c.pillEdgeActive, 0.85, c.pillTextActive, 1
+        elseif hover then
+            fillC, fillA, edgeC, edgeA, iconC, iconA = c.pillHover, 0.92, c.pillEdgeHover, 0.80, c.text, 1
+        end
+        if fill then fill:SetVertexColor(fillC[1], fillC[2], fillC[3], fillA) end
+        if edge then edge:SetVertexColor(edgeC[1], edgeC[2], edgeC[3], edgeA) end
+        icon:SetVertexColor(iconC[1], iconC[2], iconC[3], iconA)
+    end
+    btn:SetScript("OnEnter", function(self) self._msuf2Hover = true; Paint(self, true, self._msuf2Down) end)
+    btn:SetScript("OnLeave", function(self) self._msuf2Hover = nil; self._msuf2Down = nil; Paint(self, false, false) end)
+    btn:SetScript("OnMouseDown", function(self) self._msuf2Down = true; Paint(self, self._msuf2Hover, true) end)
+    btn:SetScript("OnMouseUp", function(self) self._msuf2Down = nil; Paint(self, self._msuf2Hover, false) end)
+    btn:SetScript("OnEnable", function(self) Paint(self, self._msuf2Hover, self._msuf2Down) end)
+    btn:SetScript("OnDisable", function(self) Paint(self, false, false) end)
+    btn:SetScript("OnClick", onClick)
+    -- The first upgrade-tour stop deliberately makes this impossible to
+    -- miss. A native animation group flashes the complete button quickly;
+    -- there is no Lua OnUpdate, and MenuRuntime quiescence tracks/stops it
+    -- with every other menu animation.
+    local tourBlink
+    if btn.CreateAnimationGroup then
+        tourBlink = btn:CreateAnimationGroup()
+        if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(tourBlink) end
+        if tourBlink.SetLooping then tourBlink:SetLooping("BOUNCE") end
+        local fade = tourBlink:CreateAnimation("Alpha")
+        fade:SetFromAlpha(1)
+        fade:SetToAlpha(0.08)
+        fade:SetDuration(0.16)
+        btn._msuf2TourBlink = tourBlink
+    end
+    btn._msuf2SetTourCue = function(enabled)
+        btn._msuf2TourCue = enabled == true or nil
+        Paint(btn, btn._msuf2Hover, btn._msuf2Down)
+        if btn._msuf2TourCue then
+            if tourBlink and (not tourBlink.IsPlaying or not tourBlink:IsPlaying()) then tourBlink:Play() end
+        else
+            if tourBlink and tourBlink.Stop then tourBlink:Stop() end
+            btn:SetAlpha(1)
+        end
+    end
+    -- Disabled arrows keep their tooltip so the affordance stays learnable.
+    if btn.SetMotionScriptsWhileDisabled then btn:SetMotionScriptsWhileDisabled(true) end
+    Paint(btn, false, false)
+    return btn
+end
 local function BuildWindowChrome(state)
     local f = state.frame
     local content = PixelLayoutRegion(CreateFrame("Frame", nil, f))
@@ -1398,84 +1455,11 @@ local function BuildWindowChrome(state)
     -- the hit rect grows well past the glyph: down to just above the bottom
     -- divider, up to the text row, and outward to the side. The 2px gap between
     -- the pair is split 1/1 so neither arrow ever steals the other's clicks.
-    local function HistoryNavButton(rotation, hitLeft, hitRight, onClick)
-        local btn = PixelLayoutRegion(CreateFrame("Button", nil, status))
-        btn:SetSize(22, 22)
-        if btn.SetHitRectInsets then btn:SetHitRectInsets(hitLeft, hitRight, -5, -11) end
-        local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2HistNav", 1, "BACKGROUND", "BORDER")
-        local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
-        icon:SetTexture(T.media.dropdownChevron)
-        icon:SetSize(18, 18)
-        icon:SetPoint("CENTER", 0, 0)
-        if icon.SetRotation then icon:SetRotation(rotation) end
-        btn._msuf2HistNavIcon = icon
-        local function Paint(self, hover, down)
-            local c = T.colors
-            local disabled = self.IsEnabled and not self:IsEnabled()
-            if self._msuf2TourCue then
-                if fill then fill:SetVertexColor(c.pillActive[1], c.pillActive[2], c.pillActive[3], 0.90) end
-                if edge then edge:SetVertexColor(c.pillEdgeActive[1], c.pillEdgeActive[2], c.pillEdgeActive[3], 0.92) end
-                icon:SetVertexColor(c.pillTextActive[1], c.pillTextActive[2], c.pillTextActive[3], 1)
-            elseif disabled then
-                if fill then fill:SetVertexColor(0, 0, 0, 0) end
-                if edge then edge:SetVertexColor(0, 0, 0, 0) end
-                icon:SetVertexColor(c.disabled[1], c.disabled[2], c.disabled[3], 0.55)
-            elseif down then
-                if fill then fill:SetVertexColor(c.pillActive[1], c.pillActive[2], c.pillActive[3], 0.90) end
-                if edge then edge:SetVertexColor(c.pillEdgeActive[1], c.pillEdgeActive[2], c.pillEdgeActive[3], 0.85) end
-                icon:SetVertexColor(c.pillTextActive[1], c.pillTextActive[2], c.pillTextActive[3], 1)
-            elseif hover then
-                if fill then fill:SetVertexColor(c.pillHover[1], c.pillHover[2], c.pillHover[3], 0.92) end
-                if edge then edge:SetVertexColor(c.pillEdgeHover[1], c.pillEdgeHover[2], c.pillEdgeHover[3], 0.80) end
-                icon:SetVertexColor(c.text[1], c.text[2], c.text[3], 1)
-            else
-                if fill then fill:SetVertexColor(0, 0, 0, 0) end
-                if edge then edge:SetVertexColor(0, 0, 0, 0) end
-                icon:SetVertexColor(c.muted[1], c.muted[2], c.muted[3], 0.96)
-            end
-        end
-        btn:SetScript("OnEnter", function(self) self._msuf2Hover = true; Paint(self, true, self._msuf2Down) end)
-        btn:SetScript("OnLeave", function(self) self._msuf2Hover = nil; self._msuf2Down = nil; Paint(self, false, false) end)
-        btn:SetScript("OnMouseDown", function(self) self._msuf2Down = true; Paint(self, self._msuf2Hover, true) end)
-        btn:SetScript("OnMouseUp", function(self) self._msuf2Down = nil; Paint(self, self._msuf2Hover, false) end)
-        btn:SetScript("OnEnable", function(self) Paint(self, self._msuf2Hover, self._msuf2Down) end)
-        btn:SetScript("OnDisable", function(self) Paint(self, false, false) end)
-        btn:SetScript("OnClick", onClick)
-        -- The first upgrade-tour stop deliberately makes this impossible to
-        -- miss. A native animation group flashes the complete button quickly;
-        -- there is no Lua OnUpdate, and MenuRuntime quiescence tracks/stops it
-        -- with every other menu animation.
-        local tourBlink
-        if btn.CreateAnimationGroup then
-            tourBlink = btn:CreateAnimationGroup()
-            if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(tourBlink) end
-            if tourBlink.SetLooping then tourBlink:SetLooping("BOUNCE") end
-            local fade = tourBlink:CreateAnimation("Alpha")
-            fade:SetFromAlpha(1)
-            fade:SetToAlpha(0.08)
-            fade:SetDuration(0.16)
-            btn._msuf2TourBlink = tourBlink
-        end
-        btn._msuf2SetTourCue = function(enabled)
-            btn._msuf2TourCue = enabled == true or nil
-            Paint(btn, btn._msuf2Hover, btn._msuf2Down)
-            if btn._msuf2TourCue then
-                if tourBlink and (not tourBlink.IsPlaying or not tourBlink:IsPlaying()) then tourBlink:Play() end
-            else
-                if tourBlink and tourBlink.Stop then tourBlink:Stop() end
-                btn:SetAlpha(1)
-            end
-        end
-        -- Disabled arrows keep their tooltip so the affordance stays learnable.
-        if btn.SetMotionScriptsWhileDisabled then btn:SetMotionScriptsWhileDisabled(true) end
-        Paint(btn, false, false)
-        return btn
-    end
     -- Bottom-left of the strip, in line with the toolbar button row on the
     -- right; the Profile/Edit/Combat text row above keeps its full width.
-    local histBack = HistoryNavButton(-math.pi * 0.5, -12, -1, function() M.GoBackPage() end)
+    local histBack = HistoryNavButton(status, -math.pi * 0.5, -12, -1, function() M.GoBackPage() end)
     histBack:SetPoint("BOTTOMLEFT", status, "BOTTOMLEFT", 18, 13)
-    local histForward = HistoryNavButton(math.pi * 0.5, -1, -14, function() M.GoForwardPage() end)
+    local histForward = HistoryNavButton(status, math.pi * 0.5, -1, -14, function() M.GoForwardPage() end)
     histForward:SetPoint("LEFT", histBack, "RIGHT", 2, 0)
     M.pageHistoryBackButton = histBack
     M.pageHistoryForwardButton = histForward
@@ -1484,22 +1468,18 @@ local function BuildWindowChrome(state)
         local spec = history and history[field] and M.pages and M.pages[history[field]]
         return spec and spec.title and M.Tr(spec.title) or ""
     end
-    if M.AddTooltip then
-        M.AddTooltip(histBack, function() return M.Tr("Previous page") end,
-            function() return HistoryTargetTitle("previousPage") end, { hook = true })
-        M.AddTooltip(histForward, function() return M.Tr("Next page") end,
-            function() return HistoryTargetTitle("nextPage") end, { hook = true })
-    end
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(histBack, "toolbar.page-back", "Previous Page", "action", {
-            actionKey = "dashboard_page_back",
-            historyMode = "none", help = "Opens the previous page from the menu page history.",
-        })
-        M.RegisterMenuChromeControl(histForward, "toolbar.page-forward", "Next Page", "action", {
-            actionKey = "dashboard_page_forward",
-            historyMode = "none", help = "Opens the next page from the menu page history.",
-        })
-    end
+    M.AddTooltip(histBack, function() return M.Tr("Previous page") end,
+        function() return HistoryTargetTitle("previousPage") end, { hook = true })
+    M.AddTooltip(histForward, function() return M.Tr("Next page") end,
+        function() return HistoryTargetTitle("nextPage") end, { hook = true })
+    M.RegisterMenuChromeControl(histBack, "toolbar.page-back", "Previous Page", "action", {
+        actionKey = "dashboard_page_back",
+        historyMode = "none", help = "Opens the previous page from the menu page history.",
+    })
+    M.RegisterMenuChromeControl(histForward, "toolbar.page-forward", "Next Page", "action", {
+        actionKey = "dashboard_page_forward",
+        historyMode = "none", help = "Opens the next page from the menu page history.",
+    })
     M.RefreshPageHistoryNav()
     local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
     local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
@@ -1516,121 +1496,7 @@ local function BuildWindowChrome(state)
     f.status = status
 end
 
-local function BuildWindowToolbar(state)
-    local f, status = state.frame, state.frame.status
-    local function RunToolbarSeeNewFeatures()
-        if type(M.OpenSeeNewFeatures) == "function" then return M.OpenSeeNewFeatures() end
-        if type(M.SelectPage) == "function" then return M.SelectPage("changelog") end
-        return false
-    end
-    local function RunToolbarEditMode()
-        if type(M.ToggleDashboardEditMode) == "function" then return M.ToggleDashboardEditMode() end
-        if IsEditModeCombatLocked and IsEditModeCombatLocked() then
-            M.BlockCombatAction()
-            RefreshDashboardEditModeButton()
-            return
-        end
-        local active = IsEditModeActive and IsEditModeActive()
-        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then _G.MSUF_SetMSUFEditModeDirect(not active) end
-        RefreshDashboardEditModeButton()
-        if f.RefreshStatus then f:RefreshStatus() end
-    end
-    local toolbarEdit = T.Button(status, "Edit Mode: Off", 152, 24)
-    toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -24, 12)
-    T.CenterButtonLabel(toolbarEdit)
-    toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(toolbarEdit, "toolbar.edit-mode", "Edit Mode", "action", {
-            actionKey = "menu.action.editMode.toggle",
-            historyMode = "none", help = "Toggles MSUF Edit Mode.",
-        })
-    end
-    M.dashboardToolbarEditModeButton = toolbarEdit
-    local toolbarFeatures = T.Button(status, "See New Features", 132, 24)
-    toolbarFeatures:SetPoint("RIGHT", toolbarEdit, "LEFT", -12, 0)
-    T.CenterButtonLabel(toolbarFeatures)
-    toolbarFeatures:SetScript("OnClick", RunToolbarSeeNewFeatures)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(toolbarFeatures, "toolbar.see-new-features", "See New Features", "ephemeral", {
-            historyMode = "none", help = "Opens the full changelog with direct links to highlighted features.",
-        })
-    end
-    -- Blizzard calls out unseen options with NewFeatureLabelTemplate
-    -- (Blizzard_SharedXML/NewFeatureLabel.xml) and anchors it left of the game
-    -- menu's Options label. The template owns the localized NEW_CAPS text, the
-    -- collections-newglow atlas and the pulse, so reusing it - including
-    -- Blizzard's scale and offsets - makes the toolbar badge identical to the
-    -- one players already know instead of an MSUF lookalike.
-    local FEATURES_BADGE_ROOM = 38
-    local function RefreshSeeNewFeaturesBadge()
-        local unseen = type(M.HasUnseenChangelog) == "function" and M.HasUnseenChangelog() == true
-        local badge = toolbarFeatures._msuf2NewBadge
-        if unseen and not badge and type(_G.NewFeatureLabelMixin) == "table" then
-            badge = PixelLayoutRegion(CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelTemplate"))
-            badge:SetScale(0.8)
-            badge:SetFrameLevel(toolbarFeatures:GetFrameLevel() + 5)
-            toolbarFeatures._msuf2NewBadge = badge
-        end
-        local label = toolbarFeatures._msuf2Label
-        local shown = (unseen and badge and label) and true or false
-        -- The badge needs room left of the label, which localized labels have
-        -- already eaten at the authored 132: measure first, then reserve.
-        local measured = label and label.GetStringWidth and label:GetStringWidth() or 0
-        local width = max(132, (type(measured) == "number" and measured > 0) and (measured + 24) or 0)
-        toolbarFeatures:SetWidth(shown and (width + FEATURES_BADGE_ROOM) or width)
-        if label then
-            label:ClearAllPoints()
-            label:SetPoint("CENTER", toolbarFeatures, "CENTER", shown and (FEATURES_BADGE_ROOM * 0.5) or 0, 0)
-        end
-        if badge then
-            badge:SetShown(shown)
-            if shown then
-                badge:ClearAllPoints()
-                badge:SetPoint("BOTTOMRIGHT", label, "LEFT", 16, -10)
-            end
-        end
-    end
-    M.RefreshSeeNewFeaturesBadge = RefreshSeeNewFeaturesBadge
-    RefreshSeeNewFeaturesBadge()
-    local toolbarReset = T.Button(status, "Reset page", 88, 24)
-    toolbarReset:SetPoint("RIGHT", toolbarFeatures, "LEFT", -12, 0)
-    T.CenterButtonLabel(toolbarReset)
-    if M.AddTooltip then
-        M.AddTooltip(toolbarReset, "Reset page", function()
-            local key = M.activeKey
-            local route = key and M.GetMenuBreadcrumb(key) or ""
-            if route == "" then return nil end
-            return M.Format("Resets all settings on %s to their defaults. Asks for confirmation first.", route)
-        end, { hook = true })
-    end
-    toolbarReset:SetScript("OnClick", function()
-        local key = M.activeKey
-        if key and M.ShowPageResetConfirm and M.PageHasReset and M.PageHasReset(key) then
-            M.ShowPageResetConfirm(key)
-        end
-    end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(toolbarReset, "toolbar.reset-page", "Reset current page", "action", {
-            actionKey = "menu_reset_current_page_prompt",
-            confirmRequired = true, historyMode = "none",
-            command = { kind = "button", historyMode = "none", confirmRequired = true, set = function()
-                local key = M.activeKey
-                return key and M.PageHasReset and M.PageHasReset(key) and M.ResetPageToDefaults
-                    and M.ResetPageToDefaults(key) or false
-            end },
-        })
-    end
-    local function RefreshToolbarPageReset()
-        local key = M.activeKey
-        local shown = key and M.PageHasReset and M.PageHasReset(key)
-        toolbarReset:SetShown(shown and true or false)
-        if toolbarReset.SetEnabled then toolbarReset:SetEnabled(shown and true or false) end
-    end
-    M.RefreshToolbarPageReset = RefreshToolbarPageReset
-    RefreshToolbarPageReset()
-    status.seeNewFeaturesButton = toolbarFeatures
-    status.resetPageButton = toolbarReset
-    status.editModeButton = toolbarEdit
+local function InstallWindowFeedback(f)
     -- The fade-out runs on a MenuTimer task; when the menu quiesces (or the
     -- task is refused in combat) the message is cleared at once instead.
     local function ClearStatusFeedback()
@@ -1677,6 +1543,116 @@ local function BuildWindowToolbar(state)
     M.ShowInlineFeedback = M.ShowStatusFeedback
 end
 
+local function BuildWindowToolbar(state)
+    local f, status = state.frame, state.frame.status
+    local function RunToolbarSeeNewFeatures()
+        if type(M.OpenSeeNewFeatures) == "function" then return M.OpenSeeNewFeatures() end
+        if type(M.SelectPage) == "function" then return M.SelectPage("changelog") end
+        return false
+    end
+    local function RunToolbarEditMode()
+        if type(M.ToggleDashboardEditMode) == "function" then return M.ToggleDashboardEditMode() end
+        if IsEditModeCombatLocked and IsEditModeCombatLocked() then
+            M.BlockCombatAction()
+            RefreshDashboardEditModeButton()
+            return
+        end
+        local active = IsEditModeActive and IsEditModeActive()
+        MSUF.Require("MSUF_SetMSUFEditModeDirect", FILE)(not active)
+        RefreshDashboardEditModeButton()
+        if f.RefreshStatus then f:RefreshStatus() end
+    end
+    local toolbarEdit = T.Button(status, "Edit Mode: Off", 152, 24)
+    toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -24, 12)
+    T.CenterButtonLabel(toolbarEdit)
+    toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
+    M.RegisterMenuChromeControl(toolbarEdit, "toolbar.edit-mode", "Edit Mode", "action", {
+        actionKey = "menu.action.editMode.toggle",
+        historyMode = "none", help = "Toggles MSUF Edit Mode.",
+    })
+    M.dashboardToolbarEditModeButton = toolbarEdit
+    local toolbarFeatures = T.Button(status, "See New Features", 132, 24)
+    toolbarFeatures:SetPoint("RIGHT", toolbarEdit, "LEFT", -12, 0)
+    T.CenterButtonLabel(toolbarFeatures)
+    toolbarFeatures:SetScript("OnClick", RunToolbarSeeNewFeatures)
+    M.RegisterMenuChromeControl(toolbarFeatures, "toolbar.see-new-features", "See New Features", "ephemeral", {
+        historyMode = "none", help = "Opens the full changelog with direct links to highlighted features.",
+    })
+    -- Blizzard calls out unseen options with NewFeatureLabelTemplate
+    -- (Blizzard_SharedXML/NewFeatureLabel.xml) and anchors it left of the game
+    -- menu's Options label. The template owns the localized NEW_CAPS text, the
+    -- collections-newglow atlas and the pulse, so reusing it - including
+    -- Blizzard's scale and offsets - makes the toolbar badge identical to the
+    -- one players already know instead of an MSUF lookalike.
+    local FEATURES_BADGE_ROOM = 38
+    local function RefreshSeeNewFeaturesBadge()
+        local unseen = type(M.HasUnseenChangelog) == "function" and M.HasUnseenChangelog() == true
+        local badge = toolbarFeatures._msuf2NewBadge
+        if unseen and not badge and type(NewFeatureLabelMixin) == "table" then
+            badge = PixelLayoutRegion(CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelTemplate"))
+            badge:SetScale(0.8)
+            badge:SetFrameLevel(toolbarFeatures:GetFrameLevel() + 5)
+            toolbarFeatures._msuf2NewBadge = badge
+        end
+        local label = toolbarFeatures._msuf2Label
+        local shown = (unseen and badge and label) and true or false
+        -- The badge needs room left of the label, which localized labels have
+        -- already eaten at the authored 132: measure first, then reserve.
+        local measured = label and label.GetStringWidth and label:GetStringWidth() or 0
+        local width = max(132, (type(measured) == "number" and measured > 0) and (measured + 24) or 0)
+        toolbarFeatures:SetWidth(shown and (width + FEATURES_BADGE_ROOM) or width)
+        if label then
+            label:ClearAllPoints()
+            label:SetPoint("CENTER", toolbarFeatures, "CENTER", shown and (FEATURES_BADGE_ROOM * 0.5) or 0, 0)
+        end
+        if badge then
+            badge:SetShown(shown)
+            if shown then
+                badge:ClearAllPoints()
+                badge:SetPoint("BOTTOMRIGHT", label, "LEFT", 16, -10)
+            end
+        end
+    end
+    M.RefreshSeeNewFeaturesBadge = RefreshSeeNewFeaturesBadge
+    RefreshSeeNewFeaturesBadge()
+    local toolbarReset = T.Button(status, "Reset page", 88, 24)
+    toolbarReset:SetPoint("RIGHT", toolbarFeatures, "LEFT", -12, 0)
+    T.CenterButtonLabel(toolbarReset)
+    M.AddTooltip(toolbarReset, "Reset page", function()
+        local key = M.activeKey
+        local route = key and M.GetMenuBreadcrumb(key) or ""
+        if route == "" then return nil end
+        return M.Format("Resets all settings on %s to their defaults. Asks for confirmation first.", route)
+    end, { hook = true })
+    toolbarReset:SetScript("OnClick", function()
+        local key = M.activeKey
+        if key and M.ShowPageResetConfirm and M.PageHasReset and M.PageHasReset(key) then
+            M.ShowPageResetConfirm(key)
+        end
+    end)
+    M.RegisterMenuChromeControl(toolbarReset, "toolbar.reset-page", "Reset current page", "action", {
+        actionKey = "menu_reset_current_page_prompt",
+        confirmRequired = true, historyMode = "none",
+        command = { kind = "button", historyMode = "none", confirmRequired = true, set = function()
+            local key = M.activeKey
+            return key and M.PageHasReset and M.PageHasReset(key) and M.ResetPageToDefaults
+                and M.ResetPageToDefaults(key) or false
+        end },
+    })
+    local function RefreshToolbarPageReset()
+        local key = M.activeKey
+        local shown = key and M.PageHasReset and M.PageHasReset(key)
+        toolbarReset:SetShown(shown and true or false)
+        if toolbarReset.SetEnabled then toolbarReset:SetEnabled(shown and true or false) end
+    end
+    M.RefreshToolbarPageReset = RefreshToolbarPageReset
+    RefreshToolbarPageReset()
+    status.seeNewFeaturesButton = toolbarFeatures
+    status.resetPageButton = toolbarReset
+    status.editModeButton = toolbarEdit
+    InstallWindowFeedback(f)
+end
+
 local function InstallWindowStatusRuntime(state)
     local f, status = state.frame, state.frame.status
     local sbProfile, sbEdit = status.profileText, status.editText
@@ -1684,15 +1660,13 @@ local function InstallWindowStatusRuntime(state)
     local RefreshToolbarPageReset = M.RefreshToolbarPageReset
     local RefreshSeeNewFeaturesBadge = M.RefreshSeeNewFeaturesBadge
     function f:RefreshStatus()
-        local profile = tostring(_G.MSUF_ActiveProfile or "Default")
+        local profile = tostring(MSUF_ActiveProfile or "Default")
         local profileText = M.Format("Profile: %s", profile)
         SetCachedText(status, "_msuf2ProfileText", sbProfile, profileText)
         -- The Edit Mode button already owns its current state. Reserve status
         -- emphasis for a condition that actually limits the user's next action.
         SetCachedText(status, "_msuf2EditText", sbEdit, "")
-        local inCombat = _G.InCombatLockdown and _G.InCombatLockdown()
-        local combatText = inCombat and ("|cffef4444" .. L_IN_COMBAT .. "|r")
-            or ""
+        local combatText = InCombatLockdown() and ("|cffef4444" .. L.inCombat .. "|r") or ""
         SetCachedText(status, "_msuf2CombatText", sbCombat, combatText)
         local version = GetAddonVersion()
         local versionText = type(version) == "string" and version ~= ""
@@ -1785,12 +1759,7 @@ local function InstallWindowLifecycle(state)
         if f._msuf2CancelWindowInteractions then
             f:_msuf2CancelWindowInteractions()
         end
-        if f._msuf2Closing then
-            f._msuf2WindowState = "normal"
-            f._msuf2RestoreLayout = nil
-            f._msuf2PreMinimizeLayout = nil
-            f._msuf2Minimized = nil
-        end
+        if f._msuf2Closing then ResetWindowState(f, true) end
         SetStatusEventsRegistered(false)
         -- The dropdown and its focus veil are UIParent-owned modal surfaces.
         -- They must be torn down synchronously when their menu owner disappears;
@@ -1877,96 +1846,7 @@ local function AnchorPageHeaderHost(pageHeaderHost, scroll, topOwner, layoutHost
     scroll:SetPoint("BOTTOMRIGHT", layoutHost, "BOTTOMRIGHT", -24, 0)
 end
 
-local function BuildWindowScrollHost(state)
-    local f = state.frame
-    local host, status = f.host, f.status
-    local pageHeaderHost = PixelLayoutRegion(CreateFrame("Frame", nil, host))
-    pageHeaderHost:SetHeight(0)
-    pageHeaderHost:Hide()
-    -- Structural only: the page panel already owns its rounded glass surface,
-    -- so the host paints no background of its own. Clipping is normally off
-    -- (it cuts the panels' overscanned nine-slice corners) and turns on only
-    -- while the stack overflows a too-short window - see LayoutPageHeaderHost.
-    f.pageHeaderHost = pageHeaderHost
-    M.pageHeaderHost = pageHeaderHost
-    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, host))
-    f.scrollFrame = scroll
-    M.scrollFrame = scroll
-    local activeTopOwner, activeLayoutHost = status, host
-    local function RefreshPinnedHeaderGeometry()
-        if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
-        M.RefreshPinnedPreviews(scroll)
-    end
-    --- Compact fixed chrome keeps a useful settings viewport. An explicitly
-    --- expanded preview behaves like an accordion and may consume nearly all
-    --- of it: the ScrollFrame still begins below the complete preview instead
-    --- of letting the preview overlay or clip against the settings body.
-    local STICKY_HEADER_MIN_BODY_REVEAL = 120
-    local STICKY_HEADER_EXPANDED_BODY_REVEAL = 16
-    local function ReadFrameCoordinate(frame, getter)
-        if not (frame and type(frame[getter]) == "function") then return nil end
-        local value = frame[getter](frame)
-        local canaccessvalue = _G.canaccessvalue
-        if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return nil end
-        local issecretvalue = _G.issecretvalue
-        if type(issecretvalue) == "function" and issecretvalue(value) == true then return nil end
-        return tonumber(value)
-    end
-    local function HeaderAvailableHeight(topOwner, layoutHost)
-        topOwner = topOwner or activeTopOwner or status
-        layoutHost = layoutHost or activeLayoutHost or host
-        local ownerBottom = ReadFrameCoordinate(topOwner, "GetBottom")
-        local hostBottom = ReadFrameCoordinate(layoutHost, "GetBottom")
-        if ownerBottom and hostBottom and ownerBottom > hostBottom then return ownerBottom - hostBottom end
-        -- Construction-test and first-layout fallback. Guided chrome is
-        -- anchored below status, while the normal top owner is status itself.
-        local available = (tonumber(layoutHost and layoutHost.GetHeight and layoutHost:GetHeight()) or 0)
-            - (tonumber(topOwner and topOwner.GetHeight and topOwner:GetHeight()) or 0)
-        if topOwner ~= status then
-            available = available - (tonumber(status and status.GetHeight and status:GetHeight()) or 0)
-        end
-        return max(0, available)
-    end
-    function M.GetPageHeaderAvailableHeight()
-        return HeaderAvailableHeight(activeTopOwner, activeLayoutHost)
-    end
-    local function StickyHeaderStackHeight(topOwner, layoutHost)
-        local list = scroll._msuf2StickyPageHeaders
-        if type(list) ~= "table" or #list == 0 then return 0 end
-        local total = 0
-        for i = 1, #list do
-            local record = list[i]
-            if record and record.active then total = total + max(0, tonumber(record.hostHeight) or 0) end
-        end
-        if total <= 0 then return 0 end
-        local available = HeaderAvailableHeight(topOwner, layoutHost)
-        local minimumReveal = STICKY_HEADER_MIN_BODY_REVEAL
-        for i = 1, #list do
-            local record = list[i]
-            if record and record.active and record.previewExpander
-                and record.previewExpander.expanded == true
-            then
-                minimumReveal = STICKY_HEADER_EXPANDED_BODY_REVEAL
-                break
-            end
-        end
-        local limit = available - minimumReveal
-        if limit > 0 and total > limit then return limit, true end
-        return total, false
-    end
-    local function LayoutPageHeaderHost(topOwner, layoutHost)
-        if topOwner then activeTopOwner = topOwner end
-        if layoutHost then activeLayoutHost = layoutHost end
-        topOwner = activeTopOwner or status
-        layoutHost = activeLayoutHost or host
-        local stackHeight, clipped = StickyHeaderStackHeight(topOwner, layoutHost)
-        AnchorPageHeaderHost(pageHeaderHost, scroll, topOwner, layoutHost, stackHeight, clipped)
-        scroll._msuf2TourAnchorOwner = topOwner
-        scroll._msuf2TourAnchorHost = layoutHost
-        scroll._msuf2MaxScroll = nil
-        scroll._msuf2SmoothScrollTarget = nil
-    end
-    M.LayoutPageHeaderHost = LayoutPageHeaderHost
+local function InstallStickyHeaderActivation(scroll, pageHeaderHost, LayoutPageHeaderHost, RefreshPinnedHeaderGeometry)
     --- Geometry only. Content wake-up runs separately (RunStickyHeaderActivation)
     --- once the page wrapper is shown, because a docked panel's page-visibility
     --- gates would reject any work started while the wrapper is still hidden.
@@ -2040,6 +1920,98 @@ local function BuildWindowScrollHost(state)
         RefreshPinnedHeaderGeometry()
         return true
     end
+
+end
+
+local function BuildWindowScrollHost(state)
+    local f = state.frame
+    local host, status = f.host, f.status
+    local pageHeaderHost = PixelLayoutRegion(CreateFrame("Frame", nil, host))
+    pageHeaderHost:SetHeight(0)
+    pageHeaderHost:Hide()
+    -- Structural only: the page panel already owns its rounded glass surface,
+    -- so the host paints no background of its own. Clipping is normally off
+    -- (it cuts the panels' overscanned nine-slice corners) and turns on only
+    -- while the stack overflows a too-short window - see LayoutPageHeaderHost.
+    f.pageHeaderHost = pageHeaderHost
+    M.pageHeaderHost = pageHeaderHost
+    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, host))
+    f.scrollFrame = scroll
+    M.scrollFrame = scroll
+    local activeTopOwner, activeLayoutHost = status, host
+    local function RefreshPinnedHeaderGeometry()
+        if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+        M.RefreshPinnedPreviews(scroll)
+    end
+    --- Compact fixed chrome keeps a useful settings viewport. An explicitly
+    --- expanded preview behaves like an accordion and may consume nearly all
+    --- of it: the ScrollFrame still begins below the complete preview instead
+    --- of letting the preview overlay or clip against the settings body.
+    local STICKY_HEADER_MIN_BODY_REVEAL = 120
+    local STICKY_HEADER_EXPANDED_BODY_REVEAL = 16
+    local function ReadFrameCoordinate(frame, getter)
+        if not (frame and type(frame[getter]) == "function") then return nil end
+        local value = frame[getter](frame)
+        if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return nil end
+        if type(issecretvalue) == "function" and issecretvalue(value) == true then return nil end
+        return tonumber(value)
+    end
+    local function HeaderAvailableHeight(topOwner, layoutHost)
+        topOwner = topOwner or activeTopOwner or status
+        layoutHost = layoutHost or activeLayoutHost or host
+        local ownerBottom = ReadFrameCoordinate(topOwner, "GetBottom")
+        local hostBottom = ReadFrameCoordinate(layoutHost, "GetBottom")
+        if ownerBottom and hostBottom and ownerBottom > hostBottom then return ownerBottom - hostBottom end
+        -- Construction-test and first-layout fallback. Guided chrome is
+        -- anchored below status, while the normal top owner is status itself.
+        local available = (tonumber(layoutHost and layoutHost.GetHeight and layoutHost:GetHeight()) or 0)
+            - (tonumber(topOwner and topOwner.GetHeight and topOwner:GetHeight()) or 0)
+        if topOwner ~= status then
+            available = available - (tonumber(status and status.GetHeight and status:GetHeight()) or 0)
+        end
+        return max(0, available)
+    end
+    function M.GetPageHeaderAvailableHeight()
+        return HeaderAvailableHeight(activeTopOwner, activeLayoutHost)
+    end
+    local function StickyHeaderStackHeight(topOwner, layoutHost)
+        local list = scroll._msuf2StickyPageHeaders
+        if type(list) ~= "table" or #list == 0 then return 0 end
+        local total = 0
+        for i = 1, #list do
+            local record = list[i]
+            if record and record.active then total = total + max(0, tonumber(record.hostHeight) or 0) end
+        end
+        if total <= 0 then return 0 end
+        local available = HeaderAvailableHeight(topOwner, layoutHost)
+        local minimumReveal = STICKY_HEADER_MIN_BODY_REVEAL
+        for i = 1, #list do
+            local record = list[i]
+            if record and record.active and record.previewExpander
+                and record.previewExpander.expanded == true
+            then
+                minimumReveal = STICKY_HEADER_EXPANDED_BODY_REVEAL
+                break
+            end
+        end
+        local limit = available - minimumReveal
+        if limit > 0 and total > limit then return limit, true end
+        return total, false
+    end
+    local function LayoutPageHeaderHost(topOwner, layoutHost)
+        if topOwner then activeTopOwner = topOwner end
+        if layoutHost then activeLayoutHost = layoutHost end
+        topOwner = activeTopOwner or status
+        layoutHost = activeLayoutHost or host
+        local stackHeight, clipped = StickyHeaderStackHeight(topOwner, layoutHost)
+        AnchorPageHeaderHost(pageHeaderHost, scroll, topOwner, layoutHost, stackHeight, clipped)
+        scroll._msuf2TourAnchorOwner = topOwner
+        scroll._msuf2TourAnchorHost = layoutHost
+        scroll._msuf2MaxScroll = nil
+        scroll._msuf2SmoothScrollTarget = nil
+    end
+    M.LayoutPageHeaderHost = LayoutPageHeaderHost
+    InstallStickyHeaderActivation(scroll, pageHeaderHost, LayoutPageHeaderHost, RefreshPinnedHeaderGeometry)
 
     LayoutPageHeaderHost(status, host)
     local child = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
@@ -2124,21 +2096,15 @@ ApplyMenuFrameScale = function(frame)
     if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end
 M.Assign(M, {
-    RefreshDashboardEditModeButton = RefreshDashboardEditModeButton, BuildPageEntry = BuildPageEntry,
+    RefreshDashboardEditModeButton = RefreshDashboardEditModeButton,
     GetEffectiveMenuScale = EffectiveMenuScale, ApplyMenuFrameScale = ApplyMenuFrameScale,
-    HideSlashMenuAndMinibar = HideSlashMenuAndMinibar, ALIASES = ALIASES,
+    HideSlashMenuAndMinibar = HideSlashMenuAndMinibar,
 })
-function M.MinimizeSlashMenuWindow(frame)
-    return MinimizeSlashMenuWindow(frame or M.frame)
-end
-function M.MaximizeSlashMenuWindow(frame)
-    return MaximizeSlashMenuWindow(frame or M.frame)
-end
-function M.RestoreSlashMenuWindow(frame)
-    return RestoreSlashMenuWindow(frame or M.frame)
-end
-function M.RestoreMinimizedSlashMenu(frame)
-    return RestoreMinimizedSlashMenu(frame or M.frame)
+for name, windowAction in pairs({
+    MinimizeSlashMenuWindow = MinimizeSlashMenuWindow, MaximizeSlashMenuWindow = MaximizeSlashMenuWindow,
+    RestoreSlashMenuWindow = RestoreSlashMenuWindow, RestoreMinimizedSlashMenu = RestoreMinimizedSlashMenu,
+}) do
+    M[name] = function(frame) return windowAction(frame or M.frame) end
 end
 function M.Open(pageKey)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end

@@ -1,8 +1,7 @@
 --- Provider-neutral popup for frames registered through MSUF_EditModeAPI.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local Quick = EM2.QuickPopup or {}

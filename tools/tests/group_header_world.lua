@@ -193,6 +193,29 @@ function Harness.New(root, flavor, options)
         return handle
     end
 
+    -- SecureHandlers.lua CreateSimpleWrapper: restricted prebody false skips
+    -- the saved native handler. This models script behavior/identity only;
+    -- it deliberately makes no claim to emulate the client's taint tracking.
+    h.scriptWraps = {}
+    env.SecureHandlerWrapScript = function(frame, script, owner, prebody, postbody)
+        assert(script == "OnShow" and postbody == nil, "unsupported secure wrapper in header fixture")
+        assert(not env.InCombatLockdown(), "secure wrapper installed in combat")
+        local original = frame:GetScript(script)
+        local pre = assert(loadstring(prebody, "=SecureHandlerWrapScript.OnShow"))
+        setfenv(pre, { self = HandleFor(frame) })
+        local wrapper = function(self, ...)
+            -- This exact restricted prebody only reads _ignore. Its restricted
+            -- environment supplies no insecure frame handle or native writes.
+            if pre() == false then return end
+            -- UpdateHeader owns its secure scope already. The saved native
+            -- callback adds no second emulated boundary/result-table allocation.
+            if original then return original(self, ...) end
+        end
+        frame.scripts[script] = wrapper
+        h.scriptWraps[frame] = { script = script, owner = owner, prebody = prebody,
+            original = original, wrapper = wrapper }
+    end
+
     -- XML virtual templates MSUF ships for header children. The client applies a
     -- template's registerForClicks when it creates the button, so a child born in
     -- lockdown carries it without a (protected) RegisterForClicks call.
@@ -391,6 +414,17 @@ function Harness.New(root, flavor, options)
     env.C_UnitAuras = setmetatable({ GetAuraDataByIndex = function() return nil end }, { __index = env.C_UnitAuras })
 
     if options.beforeBoot then options.beforeBoot(h) end
+    -- options.afterFile(harness, path): runs right after one file of the load graph ran. The core binds
+    -- the providers it requires when each file loads, so a controllable stand-in for a provider has to
+    -- replace the real export after its owner ran and before its consumers load.
+    if options.afterFile then
+        local loadFile = world.LoadFile
+        function world:LoadFile(path, addon, namespace)
+            local ok, message = loadFile(self, path, addon, namespace)
+            if ok then options.afterFile(h, (path:gsub("\\", "/"))) end
+            return ok, message
+        end
+    end
     world:Boot()
     local failure = world:FirstFailure()
     if failure then

@@ -3,8 +3,9 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Global.lua", {
+-- load, resolved through MSUF.Require on first use (see Core below).
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_Global.lua"
+M.RequireGlobals(FILE, {
     "MSUF_SetDispelBorderTestMode",
     "MSUF_SetAggroBorderTestMode",
     "MSUF_SetPurgeBorderTestMode",
@@ -15,6 +16,13 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Global.lua", {
     "MSUF_RefreshPredictionBars",
     "MSUF_UFPreview_RequestRefresh",
 })
+-- Core functions resolve through MSUF.Require on their first use and are read from
+-- this table afterwards, so a value path (slider drag, refresh) never calls Require.
+local Core = setmetatable({}, { __index = function(core, name)
+    local fn = MSUF.Require(name, FILE)
+    core[name] = fn
+    return fn
+end })
 
 -- GlobalPage helper module.
 -- Provides DB readers/writers, scope override helpers, and apply fanout used by the global
@@ -381,11 +389,7 @@ local function FontShadowMetricsFor(scope)
     local opacity = FontScopeGetFor(scope, "fontShadowOpacity", nil)
     local distance = FontScopeGetFor(scope, "fontShadowDistance", nil)
     local strength = FontScopeGetFor(scope, "fontShadowStrength", nil)
-    local resolve = _G.MSUF_ResolveFontShadowMetrics
-    if type(resolve) == "function" then return resolve(opacity, distance, strength) end
-    local alpha = tonumber(opacity) or 1
-    local pixels = tonumber(distance) or 1
-    return alpha, pixels, -pixels
+    return Core.MSUF_ResolveFontShadowMetrics(opacity, distance, strength)
 end
 local function NormalizeFontTextColorKind(scope, kind)
     kind = tostring(kind or "name"):lower():gsub("[%s%-]+", "_")
@@ -486,26 +490,26 @@ local function BarScopeSetBars(key, value, reason, suppressApply)
         M.RequestGeneralDomains(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
     end
 end
+-- The font catalog the font dropdown reads on every refresh, resolved once on first use.
+local fontCatalog
+local fontCatalogResolved
+local function ResolveFontCatalog()
+    fontCatalog = MSUF.Optional("MSUF_FONT_LIST") or FONT_LIST
+    fontCatalogResolved = true
+end
 local function NormalizeFontKey(key)
-    local fn = _G.MSUF_NormalizeFontKey or (MSUF and MSUF.MSUF_NormalizeFontKey)
-    if type(fn) == "function" then return fn(key) end
-    return key
+    return Core.MSUF_NormalizeFontKey(key)
 end
 local function FontSelectionValue(key, path)
     key = NormalizeFontKey(key)
-    local normalizePath = _G.MSUF_NormalizeFontPath
-    if type(normalizePath) == "function" then
-        path = normalizePath(path)
-        local direct = normalizePath(key)
-        if type(direct) == "string" and direct ~= "" and direct:find("\\", 1, true) then return direct end
-    end
+    local normalizePath = Core.MSUF_NormalizeFontPath
+    path = normalizePath(path)
+    local direct = normalizePath(key)
+    if type(direct) == "string" and direct ~= "" and direct:find("\\", 1, true) then return direct end
     if type(path) == "string" and path ~= "" then return path end
     if type(key) == "string" and key ~= "" then
-        local resolveKeyPath = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
-        if type(resolveKeyPath) == "function" then
-            local resolved = resolveKeyPath(key, 14, "")
-            if type(resolved) == "string" and resolved ~= "" then return resolved end
-        end
+        local resolved = Core.MSUF_ResolveFontKeyPath(key, 14, "")
+        if type(resolved) == "string" and resolved ~= "" then return resolved end
     end
     return key
 end
@@ -516,7 +520,8 @@ local function FontValues(includeGlobalDefault)
         used[""] = true
     end
     local usedKeys = {}
-    for _, info in ipairs(_G.MSUF_FONT_LIST or _G.FONT_LIST or {}) do
+    if not fontCatalogResolved then ResolveFontCatalog() end
+    for _, info in ipairs(fontCatalog or {}) do
         local key = NormalizeFontKey(info.key)
         local value = FontSelectionValue(key, info.path)
         if value and not used[value] then
@@ -525,8 +530,8 @@ local function FontValues(includeGlobalDefault)
             if key then usedKeys[key] = true end
         end
     end
-    local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
-    if LSM and type(LSM.List) == "function" then
+    local LSM = MSUF.LSM or MSUF.Require("MSUF_LSM", FILE)
+    if type(LSM.List) == "function" then
         local names = LSM:List("font")
         local hash = type(LSM.HashTable) == "function" and LSM:HashTable("font") or nil
         if type(names) == "table" then
@@ -679,64 +684,49 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
         hintY = hintY,
     }
 end
-local function SmoothPowerGet()
-    local key = CurrentPowerBarScopeUnit()
-    if key then
-        local u = Unit(key)
-        if u.powerSmoothFill ~= nil then return u.powerSmoothFill == true end
-        if key == "player" then return ReadB("smoothPowerBar", false) == true end
-        return false
+-- Smooth and Chunked power fill exclude each other: a unit scope keeps its own
+-- pair (unit.<field>), every other scope the shared Player fallback (bars.<barsKey>).
+-- The getter and setter of each are built once, so a call is still the single function it was.
+local SMOOTH_FILL = { field = "powerSmoothFill", barsKey = "smoothPowerBar" }
+local CHUNKED_FILL = { field = "powerChunkedFill", barsKey = "chunkedPowerBar" }
+local function MakePowerFillGet(fill)
+    return function()
+        local key = CurrentPowerBarScopeUnit()
+        if key then
+            local u = Unit(key)
+            if u[fill.field] ~= nil then return u[fill.field] == true end
+            if key == "player" then return ReadB(fill.barsKey, false) == true end
+            return false
+        end
+        return ReadB(fill.barsKey, false) == true
     end
-    return ReadB("smoothPowerBar", false) == true
 end
-local function SmoothPowerSet(enabled, reason)
-    enabled = enabled and true or false
-    reason = reason or "MSUF2_BARS_SMOOTH_POWER"
-    local key = CurrentPowerBarScopeUnit()
-    if key then
-        local conf = Unit(key)
-        if conf.powerSmoothFill == enabled and (not enabled or conf.powerChunkedFill == false) then return end
-        conf.powerSmoothFill = enabled
-        if enabled then conf.powerChunkedFill = false end
-        M.RequestUnitDomains(key, reason, { preview = true, power = true })
-        return
+local function MakePowerFillSet(fill, other, defaultReason)
+    return function(enabled, reason)
+        enabled = enabled and true or false
+        reason = reason or defaultReason
+        local key = CurrentPowerBarScopeUnit()
+        if key then
+            local conf = Unit(key)
+            if conf[fill.field] == enabled and (not enabled or conf[other.field] == false) then return end
+            conf[fill.field] = enabled
+            if enabled then conf[other.field] = false end
+            M.RequestUnitDomains(key, reason, { preview = true, power = true })
+            return
+        end
+        local bars = Bars()
+        if bars[fill.barsKey] == enabled and (not enabled or bars[other.barsKey] == false) then return end
+        bars[fill.barsKey] = enabled
+        if enabled then bars[other.barsKey] = false end
+        -- Shared smooth power is a Player fallback. A targeted Player apply is
+        -- required to recompile the spec and update StatusBar interpolation live.
+        M.RequestUnitDomains("player", reason, { preview = true, power = true })
     end
-    local bars = Bars()
-    if bars.smoothPowerBar == enabled and (not enabled or bars.chunkedPowerBar == false) then return end
-    bars.smoothPowerBar = enabled
-    if enabled then bars.chunkedPowerBar = false end
-    -- Shared smooth power is a Player fallback. A targeted Player apply is
-    -- required to recompile the spec and update StatusBar interpolation live.
-    M.RequestUnitDomains("player", reason, { preview = true, power = true })
 end
-local function ChunkedPowerGet()
-    local key = CurrentPowerBarScopeUnit()
-    if key then
-        local u = Unit(key)
-        if u.powerChunkedFill ~= nil then return u.powerChunkedFill == true end
-        if key == "player" then return ReadB("chunkedPowerBar", false) == true end
-        return false
-    end
-    return ReadB("chunkedPowerBar", false) == true
-end
-local function ChunkedPowerSet(enabled, reason)
-    enabled = enabled and true or false
-    reason = reason or "MSUF2_BARS_CHUNKED_POWER"
-    local key = CurrentPowerBarScopeUnit()
-    if key then
-        local conf = Unit(key)
-        if conf.powerChunkedFill == enabled and (not enabled or conf.powerSmoothFill == false) then return end
-        conf.powerChunkedFill = enabled
-        if enabled then conf.powerSmoothFill = false end
-        M.RequestUnitDomains(key, reason, { preview = true, power = true })
-        return
-    end
-    local bars = Bars()
-    if bars.chunkedPowerBar == enabled and (not enabled or bars.smoothPowerBar == false) then return end
-    bars.chunkedPowerBar = enabled
-    if enabled then bars.smoothPowerBar = false end
-    M.RequestUnitDomains("player", reason, { preview = true, power = true })
-end
+local SmoothPowerGet = MakePowerFillGet(SMOOTH_FILL)
+local SmoothPowerSet = MakePowerFillSet(SMOOTH_FILL, CHUNKED_FILL, "MSUF2_BARS_SMOOTH_POWER")
+local ChunkedPowerGet = MakePowerFillGet(CHUNKED_FILL)
+local ChunkedPowerSet = MakePowerFillSet(CHUNKED_FILL, SMOOTH_FILL, "MSUF2_BARS_CHUNKED_POWER")
 local NormalizeHpMode = M.NormalizeHpMode
 local NormalizePowerMode = M.NormalizePowerMode
 local ApplyBars
@@ -748,45 +738,24 @@ local GRADIENT_DIR_KEYS = {
 }
 local PRIORITY_SINGLE = { "dispel", "aggro", "purge", "bossTarget" }
 local DISPEL_TYPE_PRIORITY_ALLOWED = M.KeySetFromWords "magic curse disease poison bleed"
-local PRIORITY_LABELS = {
-    dispel = "Dispel",
-    aggro = "Aggro",
-    purge = "Purge",
-    bossTarget = "Boss Target",
-    magic = "Magic",
-    curse = "Curse",
-    disease = "Disease",
-    poison = "Poison",
-    bleed = "Bleed",
-}
-local PRIORITY_COLORS = {
-    dispel = { 0.25, 0.75, 1.00 },
-    aggro = { 1.00, 0.50, 0.00 },
-    purge = { 1.00, 0.85, 0.00 },
-    bossTarget = { 1.00, 0.82, 0.00 },
-    magic = { 0.20, 0.60, 1.00 },
-    curse = { 0.60, 0.00, 1.00 },
-    disease = { 0.60, 0.40, 0.00 },
-    poison = { 0.00, 0.60, 0.00 },
-    bleed = { 0.80, 0.10, 0.10 },
-}
+local PRIORITY_LABELS, PRIORITY_COLORS = {}, {}
+for _, row in ipairs({
+    { "dispel", "Dispel", 0.25, 0.75, 1.00 },
+    { "aggro", "Aggro", 1.00, 0.50, 0.00 },
+    { "purge", "Purge", 1.00, 0.85, 0.00 },
+    { "bossTarget", "Boss Target", 1.00, 0.82, 0.00 },
+    { "magic", "Magic", 0.20, 0.60, 1.00 },
+    { "curse", "Curse", 0.60, 0.00, 1.00 },
+    { "disease", "Disease", 0.60, 0.40, 0.00 },
+    { "poison", "Poison", 0.00, 0.60, 0.00 },
+    { "bleed", "Bleed", 0.80, 0.10, 0.10 },
+}) do
+    PRIORITY_LABELS[row[1]] = row[2]
+    PRIORITY_COLORS[row[1]] = { row[3], row[4], row[5] }
+end
+local PRIORITY_ALLOWED = M.KeySetFromWords "dispel aggro purge bossTarget"
+-- Capitalised and upper-case spellings of every single-word key, plus the Boss Target spellings.
 local PRIORITY_KEY_ALIAS = {
-    Dispel = "dispel",
-    DISPEL = "dispel",
-    Magic = "magic",
-    MAGIC = "magic",
-    Curse = "curse",
-    CURSE = "curse",
-    Disease = "disease",
-    DISEASE = "disease",
-    Poison = "poison",
-    POISON = "poison",
-    Bleed = "bleed",
-    BLEED = "bleed",
-    Aggro = "aggro",
-    AGGRO = "aggro",
-    Purge = "purge",
-    PURGE = "purge",
     BossTarget = "bossTarget",
     Boss_Target = "bossTarget",
     ["Boss Target"] = "bossTarget",
@@ -795,21 +764,16 @@ local PRIORITY_KEY_ALIAS = {
     bosstarget = "bossTarget",
     BOSS_TARGET = "bossTarget",
 }
+for _, word in ipairs(M.WordList "dispel magic curse disease poison bleed aggro purge") do
+    PRIORITY_KEY_ALIAS[word:sub(1, 1):upper() .. word:sub(2)] = word
+    PRIORITY_KEY_ALIAS[word:upper()] = word
+end
 local function NormalizePriorityKey(key)
     if type(key) ~= "string" then return nil end
     return PRIORITY_KEY_ALIAS[key] or key
 end
-local function PriorityDefaults()
-    return PRIORITY_SINGLE
-end
-local function PriorityAllowed(defaults)
-    local allowed = {}
-    for i = 1, #defaults do allowed[defaults[i]] = true end
-    return allowed
-end
 local function PriorityOrder()
-    local defaults = PriorityDefaults()
-    local allowed = PriorityAllowed(defaults)
+    local defaults = PRIORITY_SINGLE
     local raw = BarScopeGet("hlPrioOrder", nil)
     if type(raw) ~= "table" then raw = BarScopeGet("highlightPrioOrder", nil) end
     if type(raw) ~= "table" and CurrentBarsScope() == "shared" then raw = G().highlightPrioOrder end
@@ -819,7 +783,7 @@ local function PriorityOrder()
         for i = 1, #raw do
             local value = NormalizePriorityKey(raw[i])
             if DISPEL_TYPE_PRIORITY_ALLOWED[value] then value = "dispel" end
-            if allowed[value] and not rawUsed[value] then
+            if PRIORITY_ALLOWED[value] and not rawUsed[value] then
                 order[#order + 1] = value
                 rawUsed[value] = true
             end
@@ -856,12 +820,12 @@ local function SetPriorityOrder(order)
     end
 end
 local function RefreshBorderTestModes()
-    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then return end
+    if MSUF.PublicGlobals.MSUF_InCombat or (InCombatLockdown and InCombatLockdown()) then return end
     local scope = CurrentBarsScope()
     if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" or scope == "gf_mythicraid" then scope = "raid" end
-    if _G.MSUF_DispelBorderTestMode then _G.MSUF_SetDispelBorderTestMode(true, scope) end
-    if _G.MSUF_AggroBorderTestMode then _G.MSUF_SetAggroBorderTestMode(true, scope) end
-    if _G.MSUF_PurgeBorderTestMode then _G.MSUF_SetPurgeBorderTestMode(true, scope) end
+    if MSUF_DispelBorderTestMode then Core.MSUF_SetDispelBorderTestMode(true, scope) end
+    if MSUF_AggroBorderTestMode then Core.MSUF_SetAggroBorderTestMode(true, scope) end
+    if MSUF_PurgeBorderTestMode then Core.MSUF_SetPurgeBorderTestMode(true, scope) end
 end
 local function CurrentAbsorbTestScope()
     local scope = CurrentBarsScope()
@@ -871,29 +835,29 @@ local function CurrentAbsorbTestScope()
 end
 local function IsAbsorbTextureTestEnabled(category)
     local scope = CurrentAbsorbTestScope()
-    return _G.MSUF_ShouldShowAbsorbTextureTest(nil, scope, category) == true
+    return Core.MSUF_ShouldShowAbsorbTextureTest(nil, scope, category) == true
 end
 local function SetAbsorbTextureTest(enabled, category)
-    if enabled and (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then enabled = false end
+    if enabled and (MSUF.PublicGlobals.MSUF_InCombat or (InCombatLockdown and InCombatLockdown())) then enabled = false end
     local scope = CurrentAbsorbTestScope()
-    _G.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope, category)
+    Core.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope, category)
     if category == "tempMaxHealth" then
-        _G.MSUF_RefreshTempMaxHealth(scope, "MSUF2_TEMP_MAX_HEALTH_TEST")
-        _G.MSUF_UFPreview_RequestRefresh("MSUF2_TEMP_MAX_HEALTH_TEST")
+        Core.MSUF_RefreshTempMaxHealth(scope, "MSUF2_TEMP_MAX_HEALTH_TEST")
+        Core.MSUF_UFPreview_RequestRefresh("MSUF2_TEMP_MAX_HEALTH_TEST")
         if type(M.RefreshGFNativePreviews) == "function" then
             M.RefreshGFNativePreviews("MSUF2_TEMP_MAX_HEALTH_TEST")
         end
         return
     end
-    _G.MSUF_RefreshPredictionBars(scope, "MSUF2_PREDICTION_TEST")
+    Core.MSUF_RefreshPredictionBars(scope, "MSUF2_PREDICTION_TEST")
     ApplyBars("MSUF2_PREDICTION_TEST")
 end
 local function ClearAbsorbTextureTest()
-    local wasEnabled = _G.MSUF_AbsorbTextureTestMode and true or false
-    _G.MSUF_ClearAbsorbTextureTestMode()
+    local wasEnabled = MSUF.PublicGlobals.MSUF_AbsorbTextureTestMode and true or false
+    Core.MSUF_ClearAbsorbTextureTestMode()
     if wasEnabled then
-        _G.MSUF_RefreshPredictionBars(nil, "MSUF2_ABSORB_TEST_CLEAR")
-        _G.MSUF_RefreshTempMaxHealth(nil, "MSUF2_TEMP_MAX_HEALTH_TEST")
+        Core.MSUF_RefreshPredictionBars(nil, "MSUF2_ABSORB_TEST_CLEAR")
+        Core.MSUF_RefreshTempMaxHealth(nil, "MSUF2_TEMP_MAX_HEALTH_TEST")
         ApplyBars("MSUF2_ABSORB_TEST_CLEAR")
     end
 end

@@ -20,6 +20,8 @@ for _, flavor in ipairs({ "Mainline", "Forever", "TBC" }) do
     local castbar = world.widgets:CreateFrame("Frame", nil, world.widgets.UIParent)
     castbar.unit = "player"
     ns.UF.GetFrame = function() return anchor end
+    -- The totem feature resolves the player's frame through the unit-frame registry.
+    ns.UF.frames.player = anchor
     local setters = 0
     for _, frame in ipairs({ totem, castbar }) do
         frame.SetFrameStrata = function(self, value)

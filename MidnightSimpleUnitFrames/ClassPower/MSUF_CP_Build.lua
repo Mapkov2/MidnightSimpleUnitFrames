@@ -6,7 +6,9 @@ local CP_ResolveTextLayerLevel = shared.CP_ResolveTextLayerLevel
 local type = shared.type
 local math_max = shared.math_max
 local tonumber = shared.tonumber
-local math_floor = shared.math_floor
+local CP_LevelOffset = shared.CP_LevelOffset
+local CP_ResolveBarPaths = shared.CP_ResolveBarPaths
+local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", "ClassPower/MSUF_CP_Build.lua")
 
 builders.BUILD = function(E)
     --- Bound once by BUILD at controller load.
@@ -74,15 +76,7 @@ builders.BUILD = function(E)
         --- by PRESENTATION so this path only pays setup cost for newly needed
         --- resource slots.
         local b = _cpDB.bars or {}
-        local fgPath = CP_ResolveTexture(b.classPowerTexture)
-        local bgKey  = b.classPowerBgTexture
-        local bgPath
-        if bgKey and bgKey ~= "" then
-            local resolve = _G.MSUF_ResolveStatusbarTextureKey
-            bgPath = (type(resolve) == "function" and resolve(bgKey)) or fgPath
-        else
-            bgPath = fgPath
-        end
+        local fgPath, bgPath = CP_ResolveBarPaths(b, CP_ResolveTexture)
 
         for i = CP.maxBars + 1, count do
             local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, CP.container))
@@ -127,13 +121,10 @@ builders.BUILD = function(E)
         --- secure visibility rules from the owning unit frame.
         local c = PixelLayoutRegion(CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame._msufHealthVisualRoot or playerFrame))
         -- Native pixel rounding (12.1.5); the pips anchor against this rect.
-        local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-        if type(roundLayout) == "function" then roundLayout(c, true) end
+        SetRoundLayoutToNearestPixel(c, true)
         c._msufOwnedAnchorRoot = true
         local b = _cpDB.bars or {}
-        local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
-        if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
-        levelOffset = math_floor(levelOffset + 0.5)
+        local levelOffset = CP_LevelOffset(b.classPowerFrameLevelOffset, 5)
         local layers = MSUF.UF and MSUF.UF.Layers
         c:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(levelOffset, 5, 0)
             or (playerFrame:GetFrameLevel() + levelOffset))

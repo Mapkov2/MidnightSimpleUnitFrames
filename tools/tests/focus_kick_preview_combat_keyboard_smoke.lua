@@ -110,7 +110,7 @@ local general
 -- 1. Out of combat: arrow keys nudge the selected preview.
 Load()
 general = _G.MSUF_DB.general
-_G.MSUF_FocusKick_SetPreviewEnabled(true)
+_G.MSUF.PublicGlobals.MSUF_FocusKick_SetPreviewEnabled(true)
 local preview = assert(_G.MSUF_FocusKickPreviewFrame, "preview frame missing")
 Check(preview.shown and preview.keyboard and preview.propagate, "1: the preview must take the keyboard out of combat")
 preview.scripts.OnMouseDown(preview, "LeftButton")
@@ -140,7 +140,7 @@ Check(PressKey(preview, "1") == true, "3: a non-arrow key must reach the binding
 -- 4. Hiding the preview in combat.
 Fire(preview, "PLAYER_REGEN_DISABLED")
 lockdown = true
-_G.MSUF_FocusKick_SetPreviewEnabled(false)
+_G.MSUF.PublicGlobals.MSUF_FocusKick_SetPreviewEnabled(false)
 Check(not preview.shown, "4: the preview did not hide")
 Check(#blocked == 0, "4: hiding the preview in combat called a restricted API: " .. table.concat(blocked, ", "))
 lockdown = false
@@ -149,7 +149,7 @@ Fire(preview, "PLAYER_REGEN_ENABLED")
 -- 5. A preview built in combat waits for the end of combat.
 Load()
 lockdown = true
-_G.MSUF_FocusKick_SetPreviewEnabled(true)
+_G.MSUF.PublicGlobals.MSUF_FocusKick_SetPreviewEnabled(true)
 preview = assert(_G.MSUF_FocusKickPreviewFrame, "5: preview frame missing")
 Check(#blocked == 0, "5: building the preview in combat called a restricted API: " .. table.concat(blocked, ", "))
 Check(not preview.keyboard and PressKey(preview, "1") == true, "5: a preview built in combat took the keyboard")
@@ -161,7 +161,7 @@ Check(preview.keyboard and preview.propagate, "5: the preview built in combat ne
 -- existed, the lockdown has not started, the edge is remembered this frame.
 local ns = Load()
 ns.Util.InCombat("PLAYER_REGEN_DISABLED")
-_G.MSUF_FocusKick_SetPreviewEnabled(true)
+_G.MSUF.PublicGlobals.MSUF_FocusKick_SetPreviewEnabled(true)
 preview = assert(_G.MSUF_FocusKickPreviewFrame, "6: preview frame missing")
 general = _G.MSUF_DB.general
 preview.scripts.OnMouseDown(preview, "LeftButton")

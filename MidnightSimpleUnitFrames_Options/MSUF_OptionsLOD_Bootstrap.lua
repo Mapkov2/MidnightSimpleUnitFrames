@@ -4,7 +4,7 @@
 --- physical LoadOnDemand split.
 
 local addonName, private = ...
-local main = _G.MSUF_NS
+local main = _G.MSUF
 if type(main) ~= "table" or type(private) ~= "table" then return end
 
 main.OptionsAddonName = addonName
@@ -18,9 +18,9 @@ if private ~= main then
     })
 end
 
-local menu = main.MSUF2 or _G.MSUF2 or {}
+local menu = main.MSUF2 or main.Optional("MSUF2") or {}
 main.MSUF2 = menu
-_G.MSUF2 = menu
+main.ExportPublic("MSUF2", menu)
 
 function menu.SupportsFrameScope(scope)
     local client = main.Client

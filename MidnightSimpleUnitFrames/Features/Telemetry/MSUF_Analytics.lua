@@ -5,13 +5,12 @@
 --- may read coarse configuration state only; it should not observe unit events, frame
 --- state, profile import payloads, or user text input.
 local addonName, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
-local ExportPublic = MSUF.ExportPublic
+local ExportPublic, Optional = MSUF.ExportPublic, MSUF.Optional
 
-local LibStub = _G.LibStub
-local CreateFrame = _G.CreateFrame
-local C_Timer = _G.C_Timer
-local GetAddOnMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
+local LibStub = LibStub
+local CreateFrame = CreateFrame
+local C_Timer = C_Timer
+local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
 
 local type = type
 local tostring = tostring
@@ -38,15 +37,15 @@ local CMD_ON, CMD_OFF = "|cffc0caf5/msuf analytics on|r", "|cffc0caf5/msuf analy
 local CMD_STATUS = "|cffc0caf5/msuf analytics status|r"
 local function Print(text, ...)
     local line = "|cff7aa2f7MSUF|r: " .. string.format(MSUF.Translate(text), ...)
-    if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
-        _G.DEFAULT_CHAT_FRAME:AddMessage(line)
-    elseif _G.print then
-        _G.print(line)
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+        DEFAULT_CHAT_FRAME:AddMessage(line)
+    elseif print then
+        print(line)
     end
 end
 
 local function EnsureGlobalAnalytics(create)
-    local gdb = _G.MSUF_GlobalDB
+    local gdb = MSUF_GlobalDB
     if type(gdb) ~= "table" then
         if not create then return nil end
         gdb = {}
@@ -191,7 +190,8 @@ local function Bool(value)
 end
 
 local function CountProfiles()
-    local profiles = _G.MSUF_GlobalDB and _G.MSUF_GlobalDB.profiles
+    local gdb = MSUF_GlobalDB
+    local profiles = gdb and gdb.profiles
     if type(profiles) ~= "table" then return 0 end
 
     local count = 0
@@ -210,12 +210,12 @@ local function SanitizeMetricPart(value)
 end
 
 local function EnsureMSUFDB()
-    local ensureDB = _G.MSUF_EnsureDB
+    local ensureDB = Optional("MSUF_EnsureDB")
     if type(ensureDB) == "function" then
         ensureDB()
     end
 
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) == "table" then return db end
     return nil
 end

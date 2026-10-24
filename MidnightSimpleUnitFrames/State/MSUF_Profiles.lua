@@ -248,7 +248,7 @@ function MSUF_InitProfiles(startup)
     MSUF_ActiveProfile = active
     MSUF_DB = profiles[active]
     if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
-    _G.MSUF_GF_InvalidateConfCache()
+    MSUF.PublicGlobals.MSUF_GF_InvalidateConfCache()
     --- After DB swap: seed missing defaults so per-unit conf tables exist.
     --- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
     --- when the profile was saved from an older version missing those keys,
@@ -284,7 +284,7 @@ function MSUF_CreateProfile(name)
         return false, "profile already exists"
     end
     local createFactoryProfile = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
-        or _G.MSUF_CreateFactoryDefaultProfile
+        or MSUF.PublicGlobals.MSUF_CreateFactoryDefaultProfile
     local profile = createFactoryProfile()
     if type(profile) ~= "table" then
         ProfileChat("error", "Factory defaults are not available; profile was not created.")
@@ -352,7 +352,7 @@ function MSUF_SwitchProfile(name)
     MSUF_ActiveProfile = name
     MSUF_DB = profiles[name]
     if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
-    _G.MSUF_GF_InvalidateConfCache()
+    MSUF.PublicGlobals.MSUF_GF_InvalidateConfCache()
     --- Compiled unit-frame configs are rebuilt by the runtime apply below
     --- (MSUF_UFCore_NotifyConfigChanged in State/MSUF_ProfileRuntime.lua).
     --- Stored profiles carry the Defaults completion revision. Imports and
@@ -364,7 +364,7 @@ function MSUF_SwitchProfile(name)
     ProfileChat("ok", "Switched to profile '%s'.", name)
     return true
  end
-function MSUF_ResetProfile(name)
+local function MSUF_ResetProfile(name)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     name = name or MSUF_ActiveProfile
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
@@ -375,7 +375,7 @@ function MSUF_ResetProfile(name)
         --- archived as pre-6.0 at the next login), so it is seeded the way
         --- MSUF_CreateProfile seeds one; the active one is seeded by EnsureDB.
         local createFactoryProfile = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
-            or _G.MSUF_CreateFactoryDefaultProfile
+            or MSUF.PublicGlobals.MSUF_CreateFactoryDefaultProfile
         local profile = type(createFactoryProfile) == "function" and createFactoryProfile() or nil
         if type(profile) ~= "table" then
             ProfileChat("error", "Factory defaults are not available; profile was not reset.")
@@ -390,7 +390,7 @@ function MSUF_ResetProfile(name)
     if name == MSUF_ActiveProfile then
         MSUF_DB = profiles[name]
         if MSUF.Castbars then MSUF.Castbars.Config.Invalidate() end
-        _G.MSUF_GF_InvalidateConfCache()
+        MSUF.PublicGlobals.MSUF_GF_InvalidateConfCache()
         MSUF_ProfileIO_RunEnsureDB(true)
         --- The reset belongs to this profile only: sync members keep their
         --- settings and receive just the edits made after it.
@@ -469,7 +469,7 @@ end
 --- takes the MSUF_DeleteProfile path above (character bindings, spec maps, the
 --- new-character default, sync groups, the Suite); one chat line reports the
 --- count. Returns how many profiles were deleted.
-function MSUF_DeleteProfiles(names)
+local function MSUF_DeleteProfiles(names)
     local deleted = 0
     for i = 1, type(names) == "table" and #names or 0 do
         -- A profile/spec switch may have changed the active profile while the
@@ -482,7 +482,7 @@ function MSUF_DeleteProfiles(names)
     if deleted > 0 then ProfileChat("note", "Profiles deleted: %d", deleted) end
     return deleted
 end
-function MSUF_CopyProfile(sourceName, destName)
+local function MSUF_CopyProfile(sourceName, destName)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
         ProfileChat("error", "No source profile specified.")
@@ -522,7 +522,7 @@ function MSUF_CopyProfile(sourceName, destName)
     ProfileChat("ok", "Copied '%s' -> '%s'.", sourceName, destName)
     return true
 end
-function MSUF_RenameProfile(sourceName, destName)
+local function MSUF_RenameProfile(sourceName, destName)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
         ProfileChat("error", "No source profile specified.")
@@ -618,7 +618,7 @@ function MSUF_RenameProfile(sourceName, destName)
     ProfileChat("ok", "Renamed '%s' -> '%s'.", sourceName, destName)
     return true
 end
-function MSUF_GetAllProfiles()
+local function MSUF_GetAllProfiles()
     local list = {}
     if MSUF_GlobalDB and type(MSUF_GlobalDB.profiles) == "table" then
         for name, tbl in pairs(MSUF_GlobalDB.profiles) do
@@ -732,13 +732,13 @@ local function MSUF_RunAfterCombat_SpecProfile(fn)
     if type(fn) ~= "function" then  return end
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         ExportPublic("MSUF_PendingSpecProfileSwitch", fn)
-        local f = _G.MSUF_SpecProfileDeferFrame
+        local f = MSUF.PublicGlobals.MSUF_SpecProfileDeferFrame
         if not f and type(_G.CreateFrame) == "function" then
             f = _G.CreateFrame("Frame")
             ExportPublic("MSUF_SpecProfileDeferFrame", f)
             f:RegisterEvent("PLAYER_REGEN_ENABLED")
             f:SetScript("OnEvent", function()
-                local pending = _G.MSUF_PendingSpecProfileSwitch
+                local pending = MSUF.PublicGlobals.MSUF_PendingSpecProfileSwitch
                 if pending then
                     ExportPublic("MSUF_PendingSpecProfileSwitch", nil)
                     pending()
@@ -914,7 +914,7 @@ local function MSUF_ProfileIO_ReportImportWarnings()
 end
 
 local function MSUF_ProfileIO_GetLSM()
-    return (MSUF and MSUF.LSM) or _G.MSUF_LSM or (_G.LibStub and _G.LibStub("LibSharedMedia-3.0", true))
+    return (MSUF and MSUF.LSM) or MSUF.PublicGlobals.MSUF_LSM or (_G.LibStub and _G.LibStub("LibSharedMedia-3.0", true))
 end
 
 local function MSUF_ProfileIO_LooksLikeMediaPath(value)
@@ -934,13 +934,8 @@ local function MSUF_ProfileIO_FontPathAvailable(path)
     --- Runtime/MSUF_FontRegistry.lua answers availability from registry
     --- metadata (MSUF_IsAvailableFontPath); the SetFont probe it replaced,
     --- MSUF_FontPathIsLoadable, no longer exists.
-    local isAvailable = MSUF.Optional("MSUF_IsAvailableFontPath")
-    if isAvailable then
-        return isAvailable(path) == true
-    end
-    local isKnown = _G.MSUF_IsKnownFileAsset
-    if type(isKnown) == "function" and isKnown(path) == false then return false end
-    return true
+    local isAvailable = MSUF.Require("MSUF_IsAvailableFontPath", "State/MSUF_Profiles.lua")
+    return isAvailable(path) == true
 end
 
 local function MSUF_ProfileIO_FontKeyAvailable(key)
@@ -999,7 +994,7 @@ local function MSUF_ProfileIO_TexturePathLoadable(path)
     if not path then return false end
     local cached = MSUF_ProfileIO_TexturePathCache[path]
     if cached ~= nil then return cached end
-    local isKnown = _G.MSUF_IsKnownFileAsset
+    local isKnown = MSUF.PublicGlobals.MSUF_IsKnownFileAsset
     if type(isKnown) == "function" and isKnown(path) == false then
         MSUF_ProfileIO_TexturePathCache[path] = false
         return false
@@ -1021,7 +1016,7 @@ end
 
 local function MSUF_ProfileIO_StatusbarTextureAvailable(key)
     if type(key) ~= "string" or key == "" then return true end
-    local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
+    local builtins = MSUF.PublicGlobals.MSUF_BUILTIN_BAR_TEXTURES
     if type(builtins) == "table" and MSUF_ProfileIO_TexturePathLoadable(builtins[key]) then
         return true
     end
@@ -1231,7 +1226,7 @@ local function MSUF_ProfileIO_EnsureUnitframeAlphaDB(profile)
     end
  end
 local function MSUF_ProfileIO_EnsureGroupFramesDB()
-    local ensureGF = _G.MSUF_GF_EnsureDB
+    local ensureGF = MSUF.PublicGlobals.MSUF_GF_EnsureDB
     if type(ensureGF) == "function" then
         ensureGF()
         return
@@ -2088,7 +2083,7 @@ local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
     end
     if not full and #touchedUnits == 0 then  return end
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
-    local refresh = _G.MSUF_RefreshAllUnitAlphas or _G.MSUF_RequestAlphaRefresh
+    local refresh = MSUF.PublicGlobals.MSUF_RefreshAllUnitAlphas or MSUF.PublicGlobals.MSUF_RequestAlphaRefresh
     if type(refresh) == "function" then
         if full then
             refresh()
@@ -2417,7 +2412,7 @@ function ImportTx.Stage(plan, base)
         candidate = MSUF_DeepCopy(base)
         UnitSelection.Commit(payload, plan.selectedUnits, candidate)
         candidate._msufStateSchema = nil
-        _G.MSUF_NormalizeProfileDefaults(candidate, true)
+        MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
         MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
         plan.selection = UnitSelection.Copy(candidate, plan.selectedUnits)
         return candidate
@@ -2433,7 +2428,7 @@ function ImportTx.Stage(plan, base)
     end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(candidate) end
     candidate._msufStateSchema = nil
-    _G.MSUF_NormalizeProfileDefaults(candidate, true)
+    MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
     --- The group-frame and aura modules load after this file; the import
     --- refreshes below treat them as optional the same way.
@@ -2464,7 +2459,7 @@ end
 --- builds, repaired the way the following profile switch repairs it.
 function ImportTx.FactoryBase()
     local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
-        or _G.MSUF_CreateFactoryDefaultProfile
+        or MSUF.PublicGlobals.MSUF_CreateFactoryDefaultProfile
     local profile = type(create) == "function" and create() or nil
     if type(profile) ~= "table" then return nil end
     MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
@@ -2472,7 +2467,7 @@ function ImportTx.FactoryBase()
         trustNormalizationMarker = true,
     })
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
-    _G.MSUF_NormalizeProfileDefaults(profile, false, true)
+    MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(profile, false, true)
     return profile
 end
 function ImportTx.ReportKeptVariants(plan)
@@ -2521,7 +2516,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", payload)
         if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
             and type(payload.general.blizzardEditModeSnapshot) == "table" then
-            _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+            MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
         end
         ApplyProfileRuntime("PROFILE_IMPORT", true)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
@@ -2533,7 +2528,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
     if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
         and type(payload.general.blizzardEditModeSnapshot) == "table" then
-        _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+        MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
     end
     ApplyProfileRuntime("PROFILE_IMPORT", true)
     MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
@@ -2552,19 +2547,19 @@ function ImportTx.Finish(plan)
     MSUF_ProfileIO_ReportImportWarnings()
     return true
 end
-function MSUF_ExportSelectionToString(kind, selectedUnits)
+local function MSUF_ExportSelectionToString(kind, selectedUnits)
     local snap = MSUF_SnapshotForKind(kind, selectedUnits)
     if not snap then return nil end
     local exportSnap, wagoExport = MSUF_ProfileIO_MakeWagoSnapshot(snap)
     if wagoExport then
-        return _G.MSUF_EncodeCompactTableMSUF3(exportSnap)
+        return MSUF.PublicGlobals.MSUF_EncodeCompactTableMSUF3(exportSnap)
     end
     return _G.MSUF_EncodeCompactTable(snap)
 end
 
 --- Imports schema-600 MSUF2/MSUF3/MSUF4 strings or safe text snapshots into
 --- the active profile. Returns true, or false plus the rejection reason.
-function MSUF_ImportFromString(str)
+local function MSUF_ImportFromString(str)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     MSUF_ProfileIO_ResetImportWarnings()
     local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active")
@@ -2588,7 +2583,7 @@ end
 --- switch switches back and removes the created profile, from Suite too.
 --- Returns true, or false plus reason plus stage ("name", "exists", "decode",
 --- "create" or "switch").
-function MSUF_ImportIntoNewProfile(name, str)
+local function MSUF_ImportIntoNewProfile(name, str)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     MSUF_ProfileIO_ResetImportWarnings()
     name = type(name) == "string" and name:match("^%s*(.-)%s*$") or ""
@@ -2668,8 +2663,8 @@ local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKe
     MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
         source = "external_export", markProfile = true, trustNormalizationMarker = true,
     })
-    _G.MSUF_NormalizePortraitRenderDB(profile)
-    _G.MSUF_NormalizeProfileDefaults(profile, false, true)
+    MSUF.PublicGlobals.MSUF_NormalizePortraitRenderDB(profile)
+    MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(profile, false, true)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB(profile)
     MSUF.GF.RepairGroupDB(profile)
     MSUF.MSUF_Auras3.NormalizeProfileDB(profile)
@@ -2786,7 +2781,7 @@ function MSUF_ExportExternal(profileKey)
         MSUF_ProfileIO_StampScreenReference(snap.payload)
     end
     local exportSnap = MSUF_ProfileIO_MakeWagoSnapshot(snap)
-    return true, _G.MSUF_EncodeCompactTableMSUF3(exportSnap)
+    return true, MSUF.PublicGlobals.MSUF_EncodeCompactTableMSUF3(exportSnap)
 end
 function MSUF_ImportExternal(profileString, profileKey)
     MSUF_ProfileIO_ResetImportWarnings()

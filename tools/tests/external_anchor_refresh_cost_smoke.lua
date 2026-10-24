@@ -5,15 +5,25 @@ local harness = arg[3] or root
 local World = dofile(harness .. "/tools/tests/health_tick_world.lua")
 local errors = {}
 for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer", "CustomAnchor" }) do
-    local w = World.New(root, flavor)
+    -- The unit-frame files bind these two providers when they load: the counting stand-ins go in
+    -- after the real owner exported and before the first consumer loads.
+    local anchor
+    local lookups, sizes = 0, 0
+    local function Standins(env)
+        env.MSUF_GetEffectiveCooldownFrame = function() lookups = lookups + 1; return anchor end
+        env.MSUF_GetUsableCooldownAnchorSize = function() sizes = sizes + 1; return anchor:GetWidth(), anchor:GetHeight() end
+    end
+    local w = World.New(root, flavor, { beforeFile = function(path, env)
+        if path:find("Elements/MSUF_UF_Elements_Power.lua", 1, true) or path:find("Engine/MSUF_UF_Factory.lua", 1, true) then
+            Standins(env)
+        end
+    end })
     local env, uf = w.env, w.UF
     env.UnitName = function() return "Player" end
-    local anchor = env.CreateFrame("Frame", nil, env.UIParent)
+    anchor = env.CreateFrame("Frame", nil, env.UIParent)
     anchor:SetPoint("CENTER", env.UIParent, "CENTER", 0, 0)
     env.CustomAnchor = anchor
-    local lookups, sizes = 0, 0
-    env.MSUF_GetEffectiveCooldownFrame = function() lookups = lookups + 1; return anchor end
-    env.MSUF_GetUsableCooldownAnchorSize = function() sizes = sizes + 1; return anchor:GetWidth(), anchor:GetHeight() end
+    Standins(env)
     w.single.MSUFSpec.anchorFrameName = name
     uf.spawned, uf.unitOrder, uf.frames = true, { "target" }, { target = w.single }
     local function Run()

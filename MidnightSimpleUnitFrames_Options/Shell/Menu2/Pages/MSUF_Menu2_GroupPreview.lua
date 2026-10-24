@@ -128,6 +128,33 @@ local function RebindNativeGFPreview(box, parent, ctx)
     if box.RegisterRuntimeControlsForPage then box:RegisterRuntimeControlsForPage(ctx and ctx.key) end
     return box
 end
+-- Built once per preview box (cold): the expander and its Search registration. The refresh and
+-- state callbacks stay one call deep, exactly as when they were inline in AddGFPreview.
+local function CreatePreviewExpander(ctx, body, toolbar, box)
+    local expander = W.AttachFixedPreviewExpander(body, toolbar, box, {
+        pageKey = ctx and ctx.key,
+        wrapper = ctx and ctx.wrapper,
+        compactHeight = GF_PREVIEW_BOX_HEIGHT,
+        compactTop = GF_PREVIEW_BOX_Y,
+        expandedHeight = GF_PREVIEW_EXPANDED_HEIGHT,
+        refreshPreview = function(target, reason)
+            RequestPreviewRefresh(target, reason or "GROUP_PREVIEW_SIZE")
+        end,
+        onStateChanged = function(expanded, target)
+            if target.ReleaseRuntimePreview then target:ReleaseRuntimePreview() end
+            RequestPreviewRefresh(target, expanded and "GROUP_PREVIEW_EXPAND" or "GROUP_PREVIEW_COMPACT")
+        end,
+    })
+    local groupPage = M.GroupPage
+    if expander and expander.button and not expander.button._msuf2GroupExpandRegistered
+        and groupPage and type(groupPage.RegisterControl) == "function"
+    then
+        expander.button._msuf2GroupExpandRegistered = true
+        groupPage.RegisterControl(expander.button, { key = ctx and ctx.key },
+            "preview.height.toggle", "Expand Group Preview", "button", "ephemeral")
+    end
+    return expander
+end
 local function AddGFPreview(ctx, builder)
     if not (builder and W and W.FixedPreviewSection and T) then return end
     local body, toolbar, fixedRecord = W.FixedPreviewSection(ctx, builder, {
@@ -241,28 +268,7 @@ local function AddGFPreview(ctx, builder)
             box._msuf2FixedPreviewExpanderRecord = expander
             return expander
         end
-        expander = W.AttachFixedPreviewExpander(body, toolbar, box, {
-            pageKey = ctx and ctx.key,
-            wrapper = ctx and ctx.wrapper,
-            compactHeight = GF_PREVIEW_BOX_HEIGHT,
-            compactTop = GF_PREVIEW_BOX_Y,
-            expandedHeight = GF_PREVIEW_EXPANDED_HEIGHT,
-            refreshPreview = function(target, reason)
-                RequestPreviewRefresh(target, reason or "GROUP_PREVIEW_SIZE")
-            end,
-            onStateChanged = function(expanded, target)
-                if target.ReleaseRuntimePreview then target:ReleaseRuntimePreview() end
-                RequestPreviewRefresh(target, expanded and "GROUP_PREVIEW_EXPAND" or "GROUP_PREVIEW_COMPACT")
-            end,
-        })
-        local groupPage = M.GroupPage
-        if expander and expander.button and not expander.button._msuf2GroupExpandRegistered
-            and groupPage and type(groupPage.RegisterControl) == "function"
-        then
-            expander.button._msuf2GroupExpandRegistered = true
-            groupPage.RegisterControl(expander.button, { key = ctx and ctx.key },
-                "preview.height.toggle", "Expand Group Preview", "button", "ephemeral")
-        end
+        expander = CreatePreviewExpander(ctx, body, toolbar, box)
         box._msuf2CompactExpandButton = expander and expander.button or nil
         box._msuf2FixedPreviewExpanderRecord = expander
         return expander

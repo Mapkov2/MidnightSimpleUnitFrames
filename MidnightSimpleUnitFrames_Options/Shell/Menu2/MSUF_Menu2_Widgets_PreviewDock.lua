@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets_PreviewDock.lua
 --- Previews docked to a page: the sticky page header slot, the fixed preview
 --- section with its expander, and pinned previews that follow their body.
@@ -7,12 +6,202 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local _, MSUF = ...
 local M = MSUF.MSUF2
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Widgets_PreviewDock.lua")
 local T = M.Theme
 local W = M.Widgets
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local max = math.max
 local min = math.min
 local RegisterSearchObject = W.RegisterSearchObject
+
+-- Whether a docked panel's page is the visible one: its key is the active page and
+-- the menu, the page wrapper and the panel's own frame are all shown.
+local function PageOwnsFrame(pageKey, pageWrapper, frame)
+    if pageKey and M.activeKey and M.activeKey ~= pageKey then return false end
+    if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
+    if pageWrapper and pageWrapper.IsShown and not pageWrapper:IsShown() then return false end
+    if frame.IsShown and not frame:IsShown() then return false end
+    return true
+end
+
+-- Sticky page header record methods. The record carries the geometry the panel was
+-- built with, so these are shared functions rather than per-record closures.
+local function StickyResolveHeight(self)
+    local section = self.section
+    local resolved
+    if type(self.heightResolver) == "function" then resolved = tonumber(self.heightResolver(self)) end
+    if not resolved or resolved <= 0 then
+        resolved = tonumber(section.GetHeight and section:GetHeight()) or self.originalHeight
+    end
+    if not resolved or resolved <= 0 then resolved = self.originalHeight end
+    return max(0, tonumber(resolved) or 0)
+end
+
+local function StickyRegistered(self)
+    local list = self.entry and self.entry.pageHeaders
+    if type(list) ~= "table" then return false end
+    for i = 1, #list do
+        if list[i] == self then return true end
+    end
+    return false
+end
+
+--- `stackOffset` is the height already consumed by the panels registered
+--- above this one, so a page's panels tile downwards from the host's top.
+---
+--- Activate is pure geometry: parent, anchor, size, level. Waking the
+--- content inside the panel is NOT done here - a docked panel no longer
+--- lives under the page wrapper, so page selection runs the registered
+--- `onActivate` callback through M.RunStickyHeaderActivation strictly
+--- AFTER the wrapper is shown, when the page's visibility gates pass.
+local function StickyActivate(self, headerHost, stackOffset)
+    if self.disposed or not headerHost or not self:Registered() then return false end
+    local section = self.section
+    stackOffset = tonumber(stackOffset) or 0
+    local activeHeight = self:ResolveHeight()
+    self.hostHeight = max(0, self.headerTopInset + activeHeight + self.stickyGap)
+    self.stackOffset = stackOffset
+    self._activating = true
+    -- Re-anchoring a panel that already lives in the slot (a height change
+    -- underneath it) must not flicker it through a hide/show cycle.
+    local alreadyHosted = section.GetParent and section:GetParent() == headerHost
+    if not alreadyHosted then
+        if section.Hide then section:Hide() end
+        section:SetParent(headerHost)
+    end
+    section:ClearAllPoints()
+    -- Preserve the PageBuilder geometry exactly.  Deriving a new width
+    -- from the host's right edge made the right margin differ from the
+    -- original page and let child rows protrude past rounded corners.
+    section:SetPoint(self.originalPoint, headerHost, self.originalRelativePoint, self.headerX, self.headerY - stackOffset)
+    if section.SetSize and self.originalWidth > 0 and activeHeight > 0 then
+        section:SetSize(self.originalWidth, activeHeight)
+    end
+    if section.SetFrameLevel then
+        local baseLevel = (headerHost.GetFrameLevel and headerHost:GetFrameLevel()) or self.originalFrameLevel
+        section:SetFrameLevel(baseLevel + (self.frameLevelOffset or 2))
+    end
+    if section.Show and not (section.IsShown and section:IsShown()) then section:Show() end
+    self.active = true
+    self._activating = nil
+    return true
+end
+
+local function StickyDeactivate(self)
+    if self.disposed then return end
+    local section, originalParent = self.section, self.originalParent
+    -- Clear ownership before restoring the page-local geometry. SetSize can
+    -- synchronously fire OnSizeChanged; that callback must never re-host a
+    -- panel while it is being deactivated.
+    self._deactivating = true
+    self.active = nil
+    if section.Hide then section:Hide() end
+    if originalParent and section.SetParent then section:SetParent(originalParent) end
+    section:ClearAllPoints()
+    section:SetPoint(self.originalPoint, self.originalRelativeTo, self.originalRelativePoint, self.originalX, self.originalY)
+    if self.originalWidth > 0 and self.originalHeight > 0 and section.SetSize then
+        section:SetSize(self.originalWidth, self.originalHeight)
+    end
+    if section.SetFrameLevel then section:SetFrameLevel(self.originalFrameLevel) end
+    self._deactivating = nil
+end
+
+local function StickyDispose(self)
+    if self.disposed then return end
+    local section, entry = self.section, self.entry
+    local expander = self.previewExpander
+    if expander and type(expander.Dispose) == "function" then
+        expander:Dispose("FIXED_HEADER_DISPOSE")
+    end
+    self.previewExpander = nil
+    self:Deactivate()
+    self.disposed = true
+    if section._msuf2StickyPageHeaderRecord == self then
+        section._msuf2StickyPageHeaderRecord = nil
+    end
+    section._msuf2PageOwnerWrapper = self.originalPageOwnerWrapper
+    section._msuf2GuidedNoScroll = self.originalGuidedNoScroll
+    local list = entry.pageHeaders
+    if type(list) == "table" then
+        for i = #list, 1, -1 do
+            if list[i] == self then table.remove(list, i) end
+        end
+    end
+    if entry.pageHeader == self then entry.pageHeader = list and list[1] or nil end
+end
+
+-- Captures the page-local geometry of `section`, hands its flow space to the fixed
+-- header and returns the record that can dock it and restore it.
+local function NewStickyRecord(section, opts, ctx, entry)
+    local originalParent = (section.GetParent and section:GetParent()) or opts.wrapper
+    local point, relativeTo, relativePoint, originalX, originalY
+    if section.GetPoint then
+        point, relativeTo, relativePoint, originalX, originalY = section:GetPoint(1)
+    end
+    point = point or "TOPLEFT"
+    relativeTo = relativeTo or originalParent
+    relativePoint = relativePoint or point
+    originalX, originalY = tonumber(originalX) or 0, tonumber(originalY) or 0
+    local originalWidth = tonumber(section.GetWidth and section:GetWidth()) or 0
+    local originalHeight = tonumber(section.GetHeight and section:GetHeight()) or 0
+    local originalPageOwnerWrapper = section._msuf2PageOwnerWrapper
+    local originalGuidedNoScroll = section._msuf2GuidedNoScroll
+    local headerY = tonumber(opts.top)
+    if headerY == nil then headerY = originalY end
+    local headerTopInset = max(0, -headerY)
+    local stickyGap = max(0, tonumber(opts.gap) or 0)
+
+    if section.EnableMouse then section:EnableMouse(true) end
+    -- Fixed panels are physically reparented to the shared host but remain
+    -- logical children of their page for exact search routing.
+    section._msuf2PageOwnerWrapper = opts.wrapper or (ctx and ctx.wrapper) or originalParent
+    section._msuf2GuidedNoScroll = true
+    local builder = opts.builder
+    if builder and not section._msuf2PageHeaderFlowReleased then
+        local flowGap = max(0, tonumber(opts.flowGap) or 12)
+        -- The original first panel starts at PageBuilder's -12 inset.  That
+        -- inset now belongs to the fixed header, so release it from the new
+        -- ScrollFrame flow as well; otherwise top padding is counted twice.
+        builder.y = (tonumber(builder.y) or 0) + originalHeight + flowGap + headerTopInset
+        section._msuf2PageHeaderFlowReleased = true
+        if ctx and ctx.SetContentHeight then
+            ctx:SetContentHeight(math.abs(builder.y) + 28)
+        end
+    end
+
+    return {
+        entry = entry,
+        section = section,
+        pageKey = opts.pageKey or entry.key,
+        originalParent = originalParent,
+        originalPoint = point,
+        originalRelativeTo = relativeTo,
+        originalRelativePoint = relativePoint,
+        originalX = originalX,
+        originalY = originalY,
+        originalWidth = originalWidth,
+        originalHeight = originalHeight,
+        originalFrameLevel = (section.GetFrameLevel and section:GetFrameLevel()) or 1,
+        originalPageOwnerWrapper = originalPageOwnerWrapper,
+        originalGuidedNoScroll = originalGuidedNoScroll,
+        frameLevelOffset = opts.frameLevelOffset,
+        headerX = tonumber(opts.left) or originalX,
+        headerY = headerY,
+        headerTopInset = headerTopInset,
+        stickyGap = stickyGap,
+        hostHeight = max(0, headerTopInset + originalHeight + stickyGap),
+        -- The page's own "make my docked content real and visible" entry point.
+        -- Run by M.RunStickyHeaderActivation after the page wrapper is shown -
+        -- never during Activate, whose geometry pass can precede wrapper:Show().
+        onActivate = opts.onActivate,
+        heightResolver = opts.heightResolver,
+        ResolveHeight = StickyResolveHeight,
+        Registered = StickyRegistered,
+        Activate = StickyActivate,
+        Deactivate = StickyDeactivate,
+        Dispose = StickyDispose,
+    }
+end
 
 --- Register a page-owned editing/navigation panel for the fixed header slot.
 ---
@@ -33,171 +222,7 @@ function W.AttachStickyPageHeader(section, opts)
     local existing = section._msuf2StickyPageHeaderRecord
     if existing and not existing.disposed and existing.entry == entry then return existing end
     entry.pageHeaders = entry.pageHeaders or {}
-
-    local originalParent = (section.GetParent and section:GetParent()) or opts.wrapper
-    local point, relativeTo, relativePoint, originalX, originalY
-    if section.GetPoint then
-        point, relativeTo, relativePoint, originalX, originalY = section:GetPoint(1)
-    end
-    point = point or "TOPLEFT"
-    relativeTo = relativeTo or originalParent
-    relativePoint = relativePoint or point
-    originalX, originalY = tonumber(originalX) or 0, tonumber(originalY) or 0
-    local originalWidth = tonumber(section.GetWidth and section:GetWidth()) or 0
-    local originalHeight = tonumber(section.GetHeight and section:GetHeight()) or 0
-    local originalFrameLevel = (section.GetFrameLevel and section:GetFrameLevel()) or 1
-    local originalPageOwnerWrapper = section._msuf2PageOwnerWrapper
-    local originalGuidedNoScroll = section._msuf2GuidedNoScroll
-    local headerX = tonumber(opts.left) or originalX
-    local headerY = tonumber(opts.top)
-    if headerY == nil then headerY = originalY end
-    local headerTopInset = max(0, -headerY)
-    local stickyGap = max(0, tonumber(opts.gap) or 0)
-
-    if section.EnableMouse then section:EnableMouse(true) end
-    -- Fixed panels are physically reparented to the shared host but remain
-    -- logical children of their page for exact search routing.
-    section._msuf2PageOwnerWrapper = opts.wrapper or (ctx and ctx.wrapper) or originalParent
-    section._msuf2GuidedNoScroll = true
-    local builder = opts.builder
-    if builder and not section._msuf2PageHeaderFlowReleased then
-        local flowGap = max(0, tonumber(opts.flowGap) or 12)
-        local sectionHeight = originalHeight
-        -- The original first panel starts at PageBuilder's -12 inset.  That
-        -- inset now belongs to the fixed header, so release it from the new
-        -- ScrollFrame flow as well; otherwise top padding is counted twice.
-        builder.y = (tonumber(builder.y) or 0) + sectionHeight + flowGap + headerTopInset
-        section._msuf2PageHeaderFlowReleased = true
-        if ctx and ctx.SetContentHeight then
-            ctx:SetContentHeight(math.abs(builder.y) + 28)
-        end
-    end
-
-    local record = {
-        entry = entry,
-        section = section,
-        pageKey = opts.pageKey or entry.key,
-        originalParent = originalParent,
-        originalPoint = point,
-        originalRelativeTo = relativeTo,
-        originalRelativePoint = relativePoint,
-        originalX = originalX,
-        originalY = originalY,
-        originalWidth = originalWidth,
-        originalHeight = originalHeight,
-        originalFrameLevel = originalFrameLevel,
-        headerX = headerX,
-        headerY = headerY,
-        headerTopInset = headerTopInset,
-        stickyGap = stickyGap,
-        hostHeight = max(0, headerTopInset + originalHeight + stickyGap),
-        -- The page's own "make my docked content real and visible" entry point.
-        -- Run by M.RunStickyHeaderActivation after the page wrapper is shown -
-        -- never during Activate, whose geometry pass can precede wrapper:Show().
-        onActivate = opts.onActivate,
-        heightResolver = opts.heightResolver,
-    }
-
-    function record:ResolveHeight()
-        local resolved
-        if type(self.heightResolver) == "function" then resolved = tonumber(self.heightResolver(self)) end
-        if not resolved or resolved <= 0 then
-            resolved = tonumber(section.GetHeight and section:GetHeight()) or self.originalHeight
-        end
-        if not resolved or resolved <= 0 then resolved = self.originalHeight end
-        return max(0, tonumber(resolved) or 0)
-    end
-
-    function record:Registered()
-        local list = self.entry and self.entry.pageHeaders
-        if type(list) ~= "table" then return false end
-        for i = 1, #list do
-            if list[i] == self then return true end
-        end
-        return false
-    end
-
-    --- `stackOffset` is the height already consumed by the panels registered
-    --- above this one, so a page's panels tile downwards from the host's top.
-    ---
-    --- Activate is pure geometry: parent, anchor, size, level. Waking the
-    --- content inside the panel is NOT done here - a docked panel no longer
-    --- lives under the page wrapper, so page selection runs the registered
-    --- `onActivate` callback through M.RunStickyHeaderActivation strictly
-    --- AFTER the wrapper is shown, when the page's visibility gates pass.
-    function record:Activate(headerHost, stackOffset)
-        if self.disposed or not headerHost or not self:Registered() then return false end
-        stackOffset = tonumber(stackOffset) or 0
-        local activeHeight = self:ResolveHeight()
-        self.hostHeight = max(0, headerTopInset + activeHeight + stickyGap)
-        self.stackOffset = stackOffset
-        self._activating = true
-        -- Re-anchoring a panel that already lives in the slot (a height change
-        -- underneath it) must not flicker it through a hide/show cycle.
-        local alreadyHosted = section.GetParent and section:GetParent() == headerHost
-        if not alreadyHosted then
-            if section.Hide then section:Hide() end
-            section:SetParent(headerHost)
-        end
-        section:ClearAllPoints()
-        -- Preserve the PageBuilder geometry exactly.  Deriving a new width
-        -- from the host's right edge made the right margin differ from the
-        -- original page and let child rows protrude past rounded corners.
-        section:SetPoint(point, headerHost, relativePoint, headerX, headerY - stackOffset)
-        if section.SetSize and self.originalWidth > 0 and activeHeight > 0 then
-            section:SetSize(self.originalWidth, activeHeight)
-        end
-        if section.SetFrameLevel then
-            local baseLevel = (headerHost.GetFrameLevel and headerHost:GetFrameLevel()) or originalFrameLevel
-            section:SetFrameLevel(baseLevel + (opts.frameLevelOffset or 2))
-        end
-        if section.Show and not (section.IsShown and section:IsShown()) then section:Show() end
-        self.active = true
-        self._activating = nil
-        return true
-    end
-
-    function record:Deactivate()
-        if self.disposed then return end
-        -- Clear ownership before restoring the page-local geometry. SetSize can
-        -- synchronously fire OnSizeChanged; that callback must never re-host a
-        -- panel while it is being deactivated.
-        self._deactivating = true
-        self.active = nil
-        if section.Hide then section:Hide() end
-        if originalParent and section.SetParent then section:SetParent(originalParent) end
-        section:ClearAllPoints()
-        section:SetPoint(point, relativeTo, relativePoint, originalX, originalY)
-        if section.SetSize and originalWidth > 0 and originalHeight > 0 then
-            section:SetSize(originalWidth, originalHeight)
-        end
-        if section.SetFrameLevel then section:SetFrameLevel(originalFrameLevel) end
-        self._deactivating = nil
-    end
-
-    function record:Dispose()
-        if self.disposed then return end
-        local expander = self.previewExpander
-        if expander and type(expander.Dispose) == "function" then
-            expander:Dispose("FIXED_HEADER_DISPOSE")
-        end
-        self.previewExpander = nil
-        self:Deactivate()
-        self.disposed = true
-        if section._msuf2StickyPageHeaderRecord == self then
-            section._msuf2StickyPageHeaderRecord = nil
-        end
-        section._msuf2PageOwnerWrapper = originalPageOwnerWrapper
-        section._msuf2GuidedNoScroll = originalGuidedNoScroll
-        local list = entry.pageHeaders
-        if type(list) == "table" then
-            for i = #list, 1, -1 do
-                if list[i] == self then table.remove(list, i) end
-            end
-        end
-        if entry.pageHeader == self then entry.pageHeader = list and list[1] or nil end
-    end
-
+    local record = NewStickyRecord(section, opts, ctx, entry)
     entry.pageHeaders[#entry.pageHeaders + 1] = record
     entry.pageHeader = entry.pageHeaders[1]
     section._msuf2StickyPageHeaderRecord = record
@@ -288,6 +313,226 @@ function W.FixedPreviewSection(ctx, builder, spec)
     return section, toolbar, record
 end
 
+-- Fixed preview expander record methods. The record carries the section, toolbar,
+-- preview box, button, options and the compact/expanded geometry, so these are
+-- shared functions rather than per-record closures.
+local function ExpanderOwnsBox(self)
+    return self.box._msuf2FixedPreviewExpanderRecord == self
+end
+
+local function ExpanderRefreshButton(self)
+    local button = self.button
+    if self.expanded then
+        button:SetSize(130, 20)
+        button:SetText("Compact Preview")
+    else
+        button:SetSize(88, 20)
+        button:SetText("Expand")
+    end
+end
+
+local function ExpanderRefreshPreview(self, reason)
+    local box, refresh = self.box, self.opts.refreshPreview
+    if type(refresh) == "function" then
+        refresh(box, reason)
+    elseif box.RequestRefresh then
+        box:RequestRefresh(reason)
+    elseif box.Refresh then
+        box:Refresh(reason)
+    end
+end
+
+local function ExpanderSetCompactToolbarVisible(self, visible)
+    local layersButton = self.box._msuf2LayersButton
+    if not visible and layersButton and layersButton.Hide then
+        self.compactLayersWasShown = layersButton.IsShown and layersButton:IsShown() or false
+        layersButton:Hide()
+    elseif visible and self.compactLayersWasShown and layersButton and layersButton.Show then
+        self.compactLayersWasShown = nil
+        layersButton:Show()
+    elseif visible then
+        self.compactLayersWasShown = nil
+    end
+end
+
+local function ExpanderRelayoutHeader(self)
+    local header = self.fixedHeaderRecord
+    if header and header.active and not header.disposed
+        and not header._activating and not header._deactivating
+        and type(M.RelayoutPageHeaderHost) == "function"
+    then
+        M.RelayoutPageHeaderHost()
+    end
+end
+
+-- Height the expanded preview needs against the room the header host has left;
+-- nil, nil while the geometry is still settling.
+local function ExpanderBudget(self)
+    local fixedHeaderRecord = self.fixedHeaderRecord
+    local host = M.frame and M.frame.host
+    local status = M.frame and M.frame.status
+    local list = M.scrollFrame and M.scrollFrame._msuf2StickyPageHeaders
+    local hostHeight = tonumber(host and host.GetHeight and host:GetHeight()) or 0
+    local statusHeight = tonumber(status and status.GetHeight and status:GetHeight()) or 0
+    -- Missing/settling geometry must never speculatively collapse an
+    -- explicitly expanded preview. The resize commit can ask again once
+    -- the final frame size has been applied.
+    if not (fixedHeaderRecord and fixedHeaderRecord.active and hostHeight > statusHeight
+        and type(list) == "table")
+    then
+        return nil, nil
+    end
+    local otherHeight = 0
+    for i = 1, #list do
+        local candidate = list[i]
+        if candidate and candidate ~= fixedHeaderRecord and candidate.active and not candidate.disposed then
+            otherHeight = otherHeight + max(0, tonumber(candidate.hostHeight) or 0)
+        end
+    end
+    local chromeHeight = max(0, tonumber(fixedHeaderRecord.headerTopInset) or 0)
+        + max(0, tonumber(fixedHeaderRecord.stickyGap) or 0)
+    local requiredHeight = otherHeight + chromeHeight + self.preferredExpandedSectionHeight
+    local availableSpan
+    if type(M.GetPageHeaderAvailableHeight) == "function" then
+        availableSpan = tonumber(M.GetPageHeaderAvailableHeight())
+    end
+    if not availableSpan then availableSpan = hostHeight - statusHeight end
+    return requiredHeight, availableSpan - 16
+end
+
+local function ExpanderCanFit(self)
+    if self.disposed then return false end
+    local requiredHeight, availableHeight = ExpanderBudget(self)
+    if not requiredHeight then return true end
+    return requiredHeight <= availableHeight + 0.5
+end
+
+local function ExpanderShortfall(self)
+    if self.disposed then return 0 end
+    local requiredHeight, availableHeight = ExpanderBudget(self)
+    if not requiredHeight then return 0 end
+    return max(0, requiredHeight - availableHeight)
+end
+
+local function ExpanderRelayout(self, reason)
+    if self.disposed or not self.expanded or not ExpanderOwnsBox(self) then return false end
+    local section, box, inset = self.section, self.box, self.horizontalInset
+    local activeBoxHeight, activeSectionHeight = self.preferredExpandedHeight, self.preferredExpandedSectionHeight
+    box._msuf2PinnedFloating = true
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", section, "TOPLEFT", inset, self.expandedTop)
+    box:SetPoint("TOPRIGHT", section, "TOPRIGHT", -inset, self.expandedTop)
+    box:SetHeight(activeBoxHeight)
+    if box.SetFrameLevel and section.GetFrameLevel then
+        box:SetFrameLevel((section:GetFrameLevel() or 1) + 2)
+    end
+    if box.ApplyCompactPreviewPresentation then box:ApplyCompactPreviewPresentation(false) end
+    box:Show()
+    self.sectionWidth = tonumber(section.GetWidth and section:GetWidth()) or self.sectionWidth
+    section._msuf2FixedPreviewActiveHeight = activeSectionHeight
+    if section.SetHeight then section:SetHeight(activeSectionHeight) end
+    ExpanderRelayoutHeader(self)
+    local activeWidth = tonumber(box.GetWidth and box:GetWidth()) or 0
+    if self.activeHeight ~= activeBoxHeight or self.activeSectionHeight ~= activeSectionHeight
+        or self.activeWidth ~= activeWidth
+    then
+        self.activeHeight = activeBoxHeight
+        self.activeSectionHeight = activeSectionHeight
+        self.activeWidth = activeWidth
+        ExpanderRefreshPreview(self, reason or "FIXED_PREVIEW_EXPAND_LAYOUT")
+    end
+    return true
+end
+
+local function ExpanderOpen(self, reason, openOptions)
+    if self.disposed or self.expanded or not ExpanderOwnsBox(self)
+        or not PageOwnsFrame(self.pageKey, self.pageWrapper, self.section) then return false end
+    local box, opts = self.box, self.opts
+    openOptions = type(openOptions) == "table" and openOptions or nil
+    local active = M._msuf2ActiveFixedPreviewExpander
+    if active and active ~= self and type(active.Close) == "function" then
+        active:Close("OTHER_FIXED_PREVIEW")
+    end
+    self.expanded = true
+    M._msuf2ActiveFixedPreviewExpander = self
+    ExpanderSetCompactToolbarVisible(self, false)
+    ExpanderRefreshButton(self)
+    if openOptions and openOptions.preserveExpandedZoom == true then
+        box._msuf2PreserveExpandedZoomOnNextExpand = true
+    end
+    local laidOut = self:Relayout(reason or "FIXED_PREVIEW_EXPAND")
+    box._msuf2PreserveExpandedZoomOnNextExpand = nil
+    if not laidOut then
+        self:Close("FIXED_PREVIEW_EXPAND_FAILED")
+        return false
+    end
+    if reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND" then
+        M.SetFixedPreviewExpandedPreference(true)
+    end
+    if type(opts.onStateChanged) == "function" then opts.onStateChanged(true, box) end
+    if type(M.EnsureFixedPreviewExpansionRoom) == "function" then
+        M.EnsureFixedPreviewExpansionRoom(self)
+    end
+    return true
+end
+
+local function ExpanderClose(self, reason)
+    local wasExpanded = self.expanded == true
+    local ownsPreviewBox = ExpanderOwnsBox(self)
+    local section, box, inset = self.section, self.box, self.horizontalInset
+    if reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND" then
+        if type(M.ClearPendingFixedPreviewExpansion) == "function" then
+            M.ClearPendingFixedPreviewExpansion(self.pageKey)
+        end
+        M.SetFixedPreviewExpandedPreference(false)
+    end
+    self.expanded = nil
+    self.activeHeight = nil
+    self.activeSectionHeight = nil
+    self.activeWidth = nil
+    if M._msuf2ActiveFixedPreviewExpander == self then M._msuf2ActiveFixedPreviewExpander = nil end
+    -- Unit and Group previews reuse one renderer across cached pages. Once
+    -- another page owns that renderer, this stale controller may only drop
+    -- its own state; touching Section geometry here can compact the new
+    -- owner's already-expanded fixed header during cache disposal.
+    if not ownsPreviewBox then return wasExpanded end
+    if wasExpanded and type(self.opts.onStateChanged) == "function" then
+        self.opts.onStateChanged(false, box)
+    end
+    box._msuf2PinnedFloating = nil
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", section, "TOPLEFT", inset, self.compactTop)
+    box:SetPoint("TOPRIGHT", section, "TOPRIGHT", -inset, self.compactTop)
+    if box.SetHeight then box:SetHeight(self.compactHeight) end
+    if box.ApplyCompactPreviewPresentation then box:ApplyCompactPreviewPresentation(true) end
+    section._msuf2FixedPreviewActiveHeight = nil
+    if section.SetHeight then section:SetHeight(self.compactSectionHeight) end
+    if box.Show and PageOwnsFrame(self.pageKey, self.pageWrapper, section) then box:Show() end
+    ExpanderSetCompactToolbarVisible(self, true)
+    ExpanderRefreshButton(self)
+    ExpanderRelayoutHeader(self)
+    if wasExpanded then ExpanderRefreshPreview(self, reason or "FIXED_PREVIEW_COMPACT") end
+    return wasExpanded
+end
+
+local function ExpanderToggle(self)
+    if self.expanded then return self:Close("FIXED_PREVIEW_BUTTON") end
+    return self:Open("FIXED_PREVIEW_BUTTON")
+end
+
+local function ExpanderDispose(self, reason)
+    if self.disposed then return end
+    local section, box, header = self.section, self.box, self.fixedHeaderRecord
+    self:Close(reason or "FIXED_PREVIEW_EXPANDER_DISPOSE")
+    self.disposed = true
+    self.button:Hide()
+    if header and header.previewExpander == self then header.previewExpander = nil end
+    if section._msuf2FixedPreviewExpanderRecord == self then section._msuf2FixedPreviewExpanderRecord = nil end
+    if box._msuf2FixedPreviewExpanderRecord == self then
+        box._msuf2FixedPreviewExpanderRecord = nil
+    end
+end
+
 --- Add compact/full behavior to a fixed preview slot. The same renderer grows
 --- inside the Section, then RelayoutPageHeaderHost moves the settings viewport
 --- below it. Nothing overlays the ScrollFrame or duplicates preview controls.
@@ -334,220 +579,25 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         toolbar = toolbar,
         box = previewBox,
         button = button,
+        opts = opts,
         pageKey = pageKey,
         pageWrapper = pageWrapper,
         fixedHeaderRecord = fixedHeaderRecord,
+        horizontalInset = horizontalInset,
+        compactTop = compactTop,
+        expandedTop = expandedTop,
         compactHeight = compactHeight,
         compactSectionHeight = compactSectionHeight,
         preferredExpandedHeight = expandedHeight,
         preferredExpandedSectionHeight = expandedSectionHeight,
+        CanFitPreferredExpansion = ExpanderCanFit,
+        GetPreferredExpansionShortfall = ExpanderShortfall,
+        Relayout = ExpanderRelayout,
+        Open = ExpanderOpen,
+        Close = ExpanderClose,
+        Toggle = ExpanderToggle,
+        Dispose = ExpanderDispose,
     }
-    local function OwnsPreviewBox()
-        return previewBox._msuf2FixedPreviewExpanderRecord == record
-    end
-
-    local function PageOwned()
-        if pageKey and M.activeKey and M.activeKey ~= pageKey then return false end
-        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
-        if pageWrapper and pageWrapper.IsShown and not pageWrapper:IsShown() then return false end
-        if section.IsShown and not section:IsShown() then return false end
-        return true
-    end
-    local function RefreshButton()
-        if record.expanded then
-            button:SetSize(130, 20)
-            button:SetText("Compact Preview")
-        else
-            button:SetSize(88, 20)
-            button:SetText("Expand")
-        end
-    end
-    local function RefreshPreview(reason)
-        if type(opts.refreshPreview) == "function" then
-            opts.refreshPreview(previewBox, reason)
-        elseif previewBox.RequestRefresh then
-            previewBox:RequestRefresh(reason)
-        elseif previewBox.Refresh then
-            previewBox:Refresh(reason)
-        end
-    end
-    local function SetCompactToolbarVisible(visible)
-        local layersButton = previewBox._msuf2LayersButton
-        if not visible and layersButton and layersButton.Hide then
-            record.compactLayersWasShown = layersButton.IsShown and layersButton:IsShown() or false
-            layersButton:Hide()
-        elseif visible and record.compactLayersWasShown and layersButton and layersButton.Show then
-            record.compactLayersWasShown = nil
-            layersButton:Show()
-        elseif visible then
-            record.compactLayersWasShown = nil
-        end
-    end
-    local function RelayoutHeader()
-        local header = fixedHeaderRecord
-        if header and header.active and not header.disposed
-            and not header._activating and not header._deactivating
-            and type(M.RelayoutPageHeaderHost) == "function"
-        then
-            M.RelayoutPageHeaderHost()
-        end
-    end
-    local function PreferredExpansionBudget()
-        local host = M.frame and M.frame.host
-        local status = M.frame and M.frame.status
-        local list = M.scrollFrame and M.scrollFrame._msuf2StickyPageHeaders
-        local hostHeight = tonumber(host and host.GetHeight and host:GetHeight()) or 0
-        local statusHeight = tonumber(status and status.GetHeight and status:GetHeight()) or 0
-        -- Missing/settling geometry must never speculatively collapse an
-        -- explicitly expanded preview. The resize commit can ask again once
-        -- the final frame size has been applied.
-        if not (fixedHeaderRecord and fixedHeaderRecord.active and hostHeight > statusHeight
-            and type(list) == "table")
-        then
-            return nil, nil
-        end
-        local otherHeight = 0
-        for i = 1, #list do
-            local candidate = list[i]
-            if candidate and candidate ~= fixedHeaderRecord and candidate.active and not candidate.disposed then
-                otherHeight = otherHeight + max(0, tonumber(candidate.hostHeight) or 0)
-            end
-        end
-        local chromeHeight = max(0, tonumber(fixedHeaderRecord.headerTopInset) or 0)
-            + max(0, tonumber(fixedHeaderRecord.stickyGap) or 0)
-        local requiredHeight = otherHeight + chromeHeight + expandedSectionHeight
-        local availableSpan
-        if type(M.GetPageHeaderAvailableHeight) == "function" then
-            availableSpan = tonumber(M.GetPageHeaderAvailableHeight())
-        end
-        if not availableSpan then availableSpan = hostHeight - statusHeight end
-        return requiredHeight, availableSpan - 16
-    end
-    function record:CanFitPreferredExpansion()
-        if self.disposed then return false end
-        local requiredHeight, availableHeight = PreferredExpansionBudget()
-        if not requiredHeight then return true end
-        return requiredHeight <= availableHeight + 0.5
-    end
-    function record:GetPreferredExpansionShortfall()
-        if self.disposed then return 0 end
-        local requiredHeight, availableHeight = PreferredExpansionBudget()
-        if not requiredHeight then return 0 end
-        return max(0, requiredHeight - availableHeight)
-    end
-    function record:Relayout(reason)
-        if self.disposed or not self.expanded or not OwnsPreviewBox() then return false end
-        local activeBoxHeight, activeSectionHeight = expandedHeight, expandedSectionHeight
-        previewBox._msuf2PinnedFloating = true
-        previewBox:ClearAllPoints()
-        previewBox:SetPoint("TOPLEFT", section, "TOPLEFT", horizontalInset, expandedTop)
-        previewBox:SetPoint("TOPRIGHT", section, "TOPRIGHT", -horizontalInset, expandedTop)
-        previewBox:SetHeight(activeBoxHeight)
-        if previewBox.SetFrameLevel and section.GetFrameLevel then
-            previewBox:SetFrameLevel((section:GetFrameLevel() or 1) + 2)
-        end
-        if previewBox.ApplyCompactPreviewPresentation then previewBox:ApplyCompactPreviewPresentation(false) end
-        previewBox:Show()
-        self.sectionWidth = tonumber(section.GetWidth and section:GetWidth()) or self.sectionWidth
-        section._msuf2FixedPreviewActiveHeight = activeSectionHeight
-        if section.SetHeight then section:SetHeight(activeSectionHeight) end
-        RelayoutHeader()
-        local activeWidth = tonumber(previewBox.GetWidth and previewBox:GetWidth()) or 0
-        if self.activeHeight ~= activeBoxHeight or self.activeSectionHeight ~= activeSectionHeight
-            or self.activeWidth ~= activeWidth
-        then
-            self.activeHeight = activeBoxHeight
-            self.activeSectionHeight = activeSectionHeight
-            self.activeWidth = activeWidth
-            RefreshPreview(reason or "FIXED_PREVIEW_EXPAND_LAYOUT")
-        end
-        return true
-    end
-    function record:Open(reason, openOptions)
-        if self.disposed or self.expanded or not OwnsPreviewBox() or not PageOwned() then return false end
-        openOptions = type(openOptions) == "table" and openOptions or nil
-        local active = M._msuf2ActiveFixedPreviewExpander
-        if active and active ~= self and type(active.Close) == "function" then
-            active:Close("OTHER_FIXED_PREVIEW")
-        end
-        self.expanded = true
-        M._msuf2ActiveFixedPreviewExpander = self
-        SetCompactToolbarVisible(false)
-        RefreshButton()
-        if openOptions and openOptions.preserveExpandedZoom == true then
-            previewBox._msuf2PreserveExpandedZoomOnNextExpand = true
-        end
-        local laidOut = self:Relayout(reason or "FIXED_PREVIEW_EXPAND")
-        previewBox._msuf2PreserveExpandedZoomOnNextExpand = nil
-        if not laidOut then
-            self:Close("FIXED_PREVIEW_EXPAND_FAILED")
-            return false
-        end
-        if reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND" then
-            M.SetFixedPreviewExpandedPreference(true)
-        end
-        if type(opts.onStateChanged) == "function" then opts.onStateChanged(true, previewBox) end
-        if type(M.EnsureFixedPreviewExpansionRoom) == "function" then
-            M.EnsureFixedPreviewExpansionRoom(self)
-        end
-        return true
-    end
-    function record:Close(reason)
-        local wasExpanded = self.expanded == true
-        local ownsPreviewBox = OwnsPreviewBox()
-        if reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND" then
-            if type(M.ClearPendingFixedPreviewExpansion) == "function" then
-                M.ClearPendingFixedPreviewExpansion(pageKey)
-            end
-            M.SetFixedPreviewExpandedPreference(false)
-        end
-        self.expanded = nil
-        self.activeHeight = nil
-        self.activeSectionHeight = nil
-        self.activeWidth = nil
-        if M._msuf2ActiveFixedPreviewExpander == self then M._msuf2ActiveFixedPreviewExpander = nil end
-        -- Unit and Group previews reuse one renderer across cached pages. Once
-        -- another page owns that renderer, this stale controller may only drop
-        -- its own state; touching Section geometry here can compact the new
-        -- owner's already-expanded fixed header during cache disposal.
-        if not ownsPreviewBox then return wasExpanded end
-        if wasExpanded and ownsPreviewBox and type(opts.onStateChanged) == "function" then
-            opts.onStateChanged(false, previewBox)
-        end
-        if ownsPreviewBox then
-            previewBox._msuf2PinnedFloating = nil
-            previewBox:ClearAllPoints()
-            previewBox:SetPoint("TOPLEFT", section, "TOPLEFT", horizontalInset, compactTop)
-            previewBox:SetPoint("TOPRIGHT", section, "TOPRIGHT", -horizontalInset, compactTop)
-            if previewBox.SetHeight then previewBox:SetHeight(compactHeight) end
-            if previewBox.ApplyCompactPreviewPresentation then previewBox:ApplyCompactPreviewPresentation(true) end
-        end
-        section._msuf2FixedPreviewActiveHeight = nil
-        if section.SetHeight then section:SetHeight(compactSectionHeight) end
-        if ownsPreviewBox then
-            if previewBox.Show and PageOwned() then previewBox:Show() end
-            SetCompactToolbarVisible(true)
-        end
-        RefreshButton()
-        RelayoutHeader()
-        if wasExpanded and ownsPreviewBox then RefreshPreview(reason or "FIXED_PREVIEW_COMPACT") end
-        return wasExpanded
-    end
-    function record:Toggle()
-        if self.expanded then return self:Close("FIXED_PREVIEW_BUTTON") end
-        return self:Open("FIXED_PREVIEW_BUTTON")
-    end
-    function record:Dispose(reason)
-        if self.disposed then return end
-        self:Close(reason or "FIXED_PREVIEW_EXPANDER_DISPOSE")
-        self.disposed = true
-        button:Hide()
-        if fixedHeaderRecord and fixedHeaderRecord.previewExpander == self then fixedHeaderRecord.previewExpander = nil end
-        if section._msuf2FixedPreviewExpanderRecord == self then section._msuf2FixedPreviewExpanderRecord = nil end
-        if previewBox._msuf2FixedPreviewExpanderRecord == self then
-            previewBox._msuf2FixedPreviewExpanderRecord = nil
-        end
-    end
 
     button:SetScript("OnClick", function() record:Toggle() end)
     button._msuf2CommandAction = {
@@ -591,7 +641,7 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
             end
         end)
     end
-    RefreshButton()
+    ExpanderRefreshButton(record)
     return record
 end
 
@@ -641,21 +691,20 @@ function M.ResumePinnedPreviews(reason)
         C_Timer.After(0.05, RefreshAfterShow)
     end
 end
+-- Whether the page `pageKey` is released: only `releaseKey` when given, else
+-- everything except `keepKey`, else everything.
+local function ReleasesPage(pageKey, keepKey, releaseKey)
+    if releaseKey ~= nil then return pageKey == releaseKey end
+    if keepKey ~= nil then return pageKey ~= keepKey end
+    return true
+end
 function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
     local activeExpander = M._msuf2ActiveFixedPreviewExpander
-    if activeExpander then
-        local activePageKey = activeExpander.pageKey
-        local releaseExpander
-        if releaseKey ~= nil then
-            releaseExpander = activePageKey == releaseKey
-        elseif keepKey ~= nil then
-            releaseExpander = activePageKey ~= keepKey
-        else
-            releaseExpander = true
-        end
-        if releaseExpander and type(activeExpander.Close) == "function" then
-            activeExpander:Close(reason or "RELEASE_PINNED_PREVIEWS")
-        end
+    if activeExpander
+        and ReleasesPage(activeExpander.pageKey, keepKey, releaseKey)
+        and type(activeExpander.Close) == "function"
+    then
+        activeExpander:Close(reason or "RELEASE_PINNED_PREVIEWS")
     end
     local list = M._dockedPreviews
     if type(list) ~= "table" then return end
@@ -663,15 +712,7 @@ function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
     for readIndex = 1, #list do
         local record = list[readIndex]
         local pageKey = record and record.pageKey
-        local release
-        if releaseKey ~= nil then
-            release = pageKey == releaseKey
-        elseif keepKey ~= nil then
-            release = pageKey ~= keepKey
-        else
-            release = true
-        end
-        if release then
+        if ReleasesPage(pageKey, keepKey, releaseKey) then
             local box = record and record.box
             if record and type(record.restore) == "function" then record.restore("DETACH") end
             if box then
@@ -780,16 +821,9 @@ function W.AttachPinnedPreview(body, box, opts)
         hint:SetJustifyH("LEFT")
     end
 
-    local function Owned()
-        if pageKey and M.activeKey and M.activeKey ~= pageKey then return false end
-        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
-        if pageWrapper and pageWrapper.IsShown and not pageWrapper:IsShown() then return false end
-        if body.IsShown and not body:IsShown() then return false end
-        return true
-    end
     local function Sync()
         if box._msuf2PinnedPreviewRecord ~= record then return end
-        if not Owned() then
+        if not PageOwnsFrame(pageKey, pageWrapper, body) then
             if pageKey and box.Hide then box:Hide() end
             return
         end

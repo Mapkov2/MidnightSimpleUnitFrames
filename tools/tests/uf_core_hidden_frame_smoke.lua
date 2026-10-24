@@ -282,14 +282,22 @@ local function Boot(options)
     end }
     local ns = { Client = options.clientFacts or { SupportsEvent = function() return true end } }
     ns.ExportPublic = function(name, value) env[name] = value; return value end
+    -- The real Kernel API (Bootstrap's exports, Require/Optional) replaces the export stub and every
+    -- file loads through it: providers a file requires that this client model does not run are
+    -- deferred and raise when used. Geometry and Util own the pixel regions the core requires.
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.InstallKernel(root, ns, env, loadfile, true)
     local function Load(relative)
-        local chunk = assert(loadfile(root .. "/" .. relative))
-        setfenv(chunk, env)
-        chunk("MidnightSimpleUnitFrames", ns)
+        RequireFixture.LoadShipped(root, relative, ns, env, loadfile)
     end
+    Load("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua")
+    Load("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")
     Load("MidnightSimpleUnitFrames/Kernel/MSUF_EventBus.lua")
     for i = 1, #CORE_FILES do Load("MidnightSimpleUnitFrames/" .. CORE_FILES[i]) end
     if options.loadConditions then
+        -- The Health element owns this colour refresh, which the preview families require at load; the
+        -- scenarios register stand-in elements instead of the real Health element.
+        ns.ExportPublic("MSUF_UFCore_RefreshHealthBarColor", function() end)
         Load("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")
     end
     return client, ns.UF, env, ns
@@ -455,13 +463,13 @@ end
 local function PlayerWithLoad(options, load, frameRoute)
     options = options or {}
     options.loadConditions = true
-    local client, UF, env = Boot(options)
+    local client, UF, env, ns = Boot(options)
     client.units.player = "Player-1"
     local frame = client.CreateFrame(nil, nil, client.UIParent)
     frame.MSUFUnitKey = "player"
     local spec = LoadSpec(load, frameRoute)
     UF.ApplySpec(frame, spec, nil, { LoadConditions = true })
-    return client, UF, frame, spec, env
+    return client, UF, frame, spec, env, ns
 end
 
 for _, frameRoute in ipairs({ false, true }) do
@@ -526,8 +534,9 @@ Scenario("F1 a boundary in combat defers to the post-combat apply", function()
 end)
 
 Scenario("F1 the zone subscription follows the configured frames", function()
-    local client, UF, frame, spec, env = PlayerWithLoad(nil, { hideInInstance = true }, false)
-    local bus = env.MSUF_EventBus
+    local client, UF, frame, spec, _, ns = PlayerWithLoad(nil, { hideInInstance = true }, false)
+    -- The event bus is a namespace-only export (ns.PublicGlobals), not a global.
+    local bus = ns.PublicGlobals.MSUF_EventBus
     Check(bus.driver:IsEventRegistered("PLAYER_ENTERING_WORLD"), "F1 a configured frame must subscribe the zone events")
     spec.load = { active = false, hideInInstance = false, unitlessEvents = {} }
     UF.ApplySpec(frame, spec, nil, { LoadConditions = true })

@@ -1,9 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: Appearance.
 -- Icon shapes, dispel assets and color maps shared by live initialization and addon-owned previews. Native regions are styled before handoff.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/Runtime/MSUF_Auras3_Runtime_Appearance.lua")
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Appearance = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
@@ -16,6 +15,7 @@ local Clamp01 = dependencies.Platform.Clamp01
 local ClampNumber = dependencies.Platform.ClampNumber
 local CreateFrame = dependencies.Platform.CreateFrame
 
+-- Profile general settings; color getters run on cold and preview paths only.
 -- Icon shape ownership is shared by native initialization and previews.
 -- Keep one shape/asset table so both surfaces resolve identical geometry.
 local Shape = A3.IconShape
@@ -169,7 +169,7 @@ function A3.GetStealableTextureOptions(style)
         showWithoutDispelType = true,
     }
     A3._stealableTextureOptions = options
-    local enums = _G.Enum
+    local enums = Enum
     local styles = enums and enums.CustomAuraButtonDispelTypeTextureStyle
     local filters = enums and enums.CustomAuraButtonDispelTypeStealableFilter
     style = A3.NormalizeStealableStyle(style)
@@ -181,12 +181,12 @@ end
 
 function A3.GetPurgeSensorTextureOptions(sensor)
     if sensor and sensor._textureOptions then return sensor._textureOptions end
-    local enums = _G.Enum
+    local enums = Enum
     local styles = enums and enums.CustomAuraButtonDispelTypeTextureStyle
     local r = Clamp01(sensor and sensor.r, 1)
     local g = Clamp01(sensor and sensor.g, 0.85)
     local b = Clamp01(sensor and sensor.b, 0)
-    local color = _G.CreateColor and _G.CreateColor(r, g, b, 1) or nil
+    local color = CreateColor and CreateColor(r, g, b, 1) or nil
     local map = color and {
         None = color, Magic = color, Curse = color,
         Disease = color, Poison = color, Bleed = color,
@@ -314,7 +314,7 @@ A3.DispelSymbol = DS
 function A3.GetDispelTypeColor(dispelType, useOverride)
     dispelType = DS.defaultColors[dispelType] and dispelType or "Magic"
     if useOverride ~= false then
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local general = MSUF_DB and MSUF_DB.general
         local overrides = general and general.dispelTypeColorOverrides
         local color = type(overrides) == "table" and overrides[dispelType]
         if type(color) == "table" then
@@ -324,7 +324,7 @@ function A3.GetDispelTypeColor(dispelType, useOverride)
             if r and g and b then return Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0) end
         end
     end
-    local auraUtil = _G.AuraUtil
+    local auraUtil = AuraUtil
     local color = auraUtil and type(auraUtil.GetAuraBorderColor) == "function"
         and auraUtil.GetAuraBorderColor(dispelType) or nil
     if color and type(color.GetRGB) == "function" then
@@ -352,7 +352,7 @@ function A3.GetDispelColorPreviewType()
 end
 
 function A3.HasDispelTypeColorOverride(dispelType, inputs)
-    local general = inputs and inputs.general or (_G.MSUF_DB and _G.MSUF_DB.general)
+    local general = inputs and inputs.general or (MSUF_DB and MSUF_DB.general)
     local overrides = general and general.dispelTypeColorOverrides
     local color = type(overrides) == "table" and overrides[dispelType]
     return type(color) == "table"
@@ -391,14 +391,14 @@ end
 --- a map containing only actual overrides; nil means the default path is
 --- structurally identical to the pre-feature configuration.
 function A3.GetCustomDispelColorMap(inputs)
-    local general = inputs and inputs.general or (_G.MSUF_DB and _G.MSUF_DB.general)
+    local general = inputs and inputs.general or (MSUF_DB and MSUF_DB.general)
     local overrides = general and general.dispelTypeColorOverrides
     local token = inputs and inputs.token or A3.GetNativeVisualSignature()
     if A3._customDispelColorMapGeneration == token then
         return A3._customDispelColorMap
     end
     A3._customDispelColorMapGeneration = token
-    if type(overrides) ~= "table" or type(_G.CreateColor) ~= "function" then
+    if type(overrides) ~= "table" or type(CreateColor) ~= "function" then
         A3._customDispelColorMap = nil
         return nil
     end
@@ -411,7 +411,7 @@ function A3.GetCustomDispelColorMap(inputs)
         local b = type(color) == "table" and tonumber(color[3] or color.b) or nil
         if r and g and b then
             map = map or {}
-            map[dispelType] = _G.CreateColor(Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0), 1)
+            map[dispelType] = CreateColor(Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0), 1)
         end
     end
     A3._customDispelColorMap = map

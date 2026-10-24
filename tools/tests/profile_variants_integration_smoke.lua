@@ -34,28 +34,28 @@ assert(env.MSUF_SwitchProfile(name)); assert(env.MSUF_DB==db and db.player.width
 assert(V.BeginRecording("Solo")); assert(not env.MSUF_SwitchProfile("Other"))
 assert(V.CancelRecording()); assert(db.player.width==250)
 local exported
-env.MSUF_EncodeCompactTableMSUF3=function(value) exported=value; return "MSUF3:captured" end
-env.MSUF_EncodeCompactTable=env.MSUF_EncodeCompactTableMSUF3
-env.MSUF_TryDecodeCompactString=function() return F.Copy(exported,0,nil,{count=0,limit=131072,maxDepth=32}) end
+ns.ExportPublic("MSUF_EncodeCompactTableMSUF3",function(value) exported=value; return "MSUF3:captured" end)
+ns.ExportPublic("MSUF_EncodeCompactTable",ns.PublicGlobals.MSUF_EncodeCompactTableMSUF3)
+ns.ExportPublic("MSUF_TryDecodeCompactString",function() return F.Copy(exported,0,nil,{count=0,limit=131072,maxDepth=32}) end)
 local function Payload(value)
     if value.msuf6 then return value.msuf6.payload end
     return value.payload
 end
-assert(env.MSUF_ExportSelectionToString("all"))
+assert(ns.PublicGlobals.MSUF_ExportSelectionToString("all"))
 assert(Payload(exported).player.width==150 and Payload(exported).profileVariants,"export base with variants")
 local inclusive=F.Copy(exported,0,nil,{count=0,limit=131072,maxDepth=32})
-env.MSUF_Profiles_SetExportVariants(false)
-assert(env.MSUF_ExportSelectionToString("all"))
+ns.PublicGlobals.MSUF_Profiles_SetExportVariants(false)
+assert(ns.PublicGlobals.MSUF_ExportSelectionToString("all"))
 assert(Payload(exported).player.width==150 and not Payload(exported).profileVariants,"exclude never bakes effective values")
 assert(env.MSUF_ExportExternal(name)); assert(not Payload(exported).profileVariants)
 exported=inclusive
-env.MSUF_Profiles_SetImportVariants(false)
-assert(env.MSUF_ImportFromString("MSUF3:captured")); assert(env.MSUF_DB==db and V.Find(db,"Solo"),"exclude keeps existing local variants")
-env.MSUF_Profiles_SetImportVariants(true)
-assert(env.MSUF_ImportFromString("MSUF3:captured")); assert(db.player.width==250 and V.BaseSnapshot(db,true).player.width==150)
+ns.PublicGlobals.MSUF_Profiles_SetImportVariants(false)
+assert(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:captured")); assert(env.MSUF_DB==db and V.Find(db,"Solo"),"exclude keeps existing local variants")
+ns.PublicGlobals.MSUF_Profiles_SetImportVariants(true)
+assert(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:captured")); assert(db.player.width==250 and V.BaseSnapshot(db,true).player.width==150)
 local baselineSnapshot=V.BaseSnapshot
 V.BaseSnapshot=function() return nil,"bounded rejection" end
-assert(env.MSUF_ExportSelectionToString("all")==nil,"snapshot failure must not export effective DB")
+assert(ns.PublicGlobals.MSUF_ExportSelectionToString("all")==nil,"snapshot failure must not export effective DB")
 assert(env.MSUF_ExportExternal(name)==false,"external snapshot failure must not export effective DB")
 V.BaseSnapshot=baselineSnapshot
 assert(S.Replace({{name="Frames",members={[name]=true,Other=true},modules={unitframes=true}}}))

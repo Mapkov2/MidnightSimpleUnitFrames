@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_FontRuntime.lua
 --- Runtime font refresh and deferred castbar/font apply wrappers.
 --- Shared font application runtime helpers with stable exported globals.
@@ -8,19 +7,26 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- when font metrics become available after login.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Runtime/MSUF_FontRuntime.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
 MSUF.Fonts = MSUF.Fonts or {}
 
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
-local _G = _G
 
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
+-- Fonts.lua and the scheduler load well ahead of this file.
+local GetFontFlags = Require("MSUF_GetFontFlags", FILE)
+local GetFontPath = Require("MSUF_GetFontPath", FILE)
+local ResolveFontPath = Require("MSUF_ResolveFontPath", FILE)
+local ScheduleOnce = Require("MSUF_ScheduleOnce", FILE)
 
 local EnsureDBSafe = MSUF.Util.EnsureDBSafe
 
 --- REQUIRED: Kernel/MSUF_Util.lua is listed unconditionally in the TOC well
 --- ahead of this file and is the only writer of the boss-token helper.
-local GetBossIndexFromToken = MSUF.Require("MSUF_GetBossIndexFromToken", "Runtime/MSUF_FontRuntime.lua")
+local GetBossIndexFromToken = Require("GetBossIndexFromToken", FILE, MSUF.Public)
 -- The forced font recovery, exported as MSUF_RequestFontRecovery below.
 local RequestFontRecovery
 
@@ -31,7 +37,7 @@ local function NormalizeFontScopeKey(key)
     if key == "tot" or key == "targetoftarget" then return "targettarget" end
     if key == "focus_target" or key == "focustargettarget" then return "focustarget" end
     if GetBossIndexFromToken(key) then return "boss" end
-    if _G.MSUF_GetArenaIndexFromToken and _G.MSUF_GetArenaIndexFromToken(key) then return "arena" end
+    if Require("GetArenaIndexFromToken", FILE, MSUF.Public)(key) then return "arena" end
     return key
 end
 
@@ -54,7 +60,7 @@ local function ApplyScopedFontFollowers(scope, skipCastbars, skipClassPower, ski
     if scope then
         local castbarUnit = CastbarUnitForFontScope(scope)
         if skipCastbars ~= true and castbarUnit then
-            _G.MSUF_ApplyCastbarVisualsForUnit(castbarUnit)
+            Require("MSUF_ApplyCastbarVisualsForUnit", FILE)(castbarUnit)
         end
         local a3 = MSUF and MSUF.MSUF_Auras3
         if skipAuras ~= true and a3 and type(a3.ApplyFontsFromGlobal) == "function" then
@@ -62,20 +68,20 @@ local function ApplyScopedFontFollowers(scope, skipCastbars, skipClassPower, ski
         end
         -- Required by Kernel/MSUF_RuntimeContracts.lua like the castbar calls above.
         if skipClassPower ~= true and scope == "player" then
-            _G.MSUF_ClassPower_Apply({ fonts = true, playerHP = true })
+            Require("MSUF_ClassPower_Apply", FILE)({ fonts = true, playerHP = true })
         end
         return
     end
 
-    if skipCastbars ~= true then _G.MSUF_UpdateCastbarVisuals_Immediate() end
+    if skipCastbars ~= true then Require("MSUF_UpdateCastbarVisuals_Immediate", FILE)() end
     local a3 = MSUF and MSUF.MSUF_Auras3
     if skipAuras ~= true and a3 and type(a3.ApplyFontsFromGlobal) == "function" then a3.ApplyFontsFromGlobal() end
-    if skipClassPower ~= true and _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
+    if skipClassPower ~= true then Require("MSUF_ClassPower_ApplyFonts", FILE)() end
     if MSUF.SwingTimer then MSUF.SwingTimer.ApplyFonts() end
 end
 
-local _MSUF_MatchesApplication = MSUF.Require("MSUF_FontApplicationMatches", "Runtime/MSUF_FontRuntime.lua")
-local _MSUF_SetFontCheckedFn = MSUF.Require("MSUF_SetFontChecked", "Runtime/MSUF_FontRuntime.lua")
+local _MSUF_MatchesApplication = Require("MSUF_FontApplicationMatches", FILE)
+local _MSUF_SetFontCheckedFn = Require("MSUF_SetFontChecked", FILE)
 
 --- Cold-start font coordinator. Path/size readback may become exact before the
 --- selected face's glyph metrics are active, so the first fanout is always
@@ -98,9 +104,9 @@ local _MSUF_RunFontProbe
 local _fontRecoveryCombatFrame
 local _fontFailureRecoveryPending = false
 
-_G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+ExportPublic("MSUF_FontApplyEpoch", tonumber(MSUF_FontApplyEpoch) or 0)
 local function _MSUF_FontCombatLocked()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return type(InCombatLockdown) == "function" and InCombatLockdown() == true
 end
 
 local function _MSUF_ScheduleLateFontRecovery()
@@ -119,7 +125,7 @@ local function _MSUF_ScheduleLateFontRecovery()
             RequestFontRecovery("LATE_FONTSTRING_FAILURE")
         end
     end
-    _G.MSUF_ScheduleOnce("FONT_APPLY_FAILURE_RECOVERY", RecoverLateFontString)
+    ScheduleOnce("FONT_APPLY_FAILURE_RECOVERY", RecoverLateFontString)
 end
 
 ExportPublic("MSUF_OnFontApplyFailed", function()
@@ -128,7 +134,7 @@ ExportPublic("MSUF_OnFontApplyFailed", function()
 end)
 
 local function _MSUF_BumpFontApplyEpoch()
-    local epoch = (tonumber(_G.MSUF_FontApplyEpoch) or 0) + 1
+    local epoch = (tonumber(MSUF_FontApplyEpoch) or 0) + 1
     ExportPublic("MSUF_FontApplyEpoch", epoch)
     return epoch
 end
@@ -160,8 +166,8 @@ local function _MSUF_DeferFontRecoveryAfterCombat(requested)
     elseif not _fontSettle.deferredRequest then
         _fontSettle.deferredProbe = true
     end
-    if not _fontRecoveryCombatFrame and type(_G.CreateFrame) == "function" then
-        local frame = _G.CreateFrame("Frame")
+    if not _fontRecoveryCombatFrame and type(CreateFrame) == "function" then
+        local frame = CreateFrame("Frame")
         frame:SetScript("OnEvent", function(self, event)
             if event ~= "PLAYER_REGEN_ENABLED" then return end
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
@@ -182,8 +188,8 @@ local function _ConfiguredFontReady(path)
     path = path or _fontSettle.path
     if type(path) ~= "string" or path == "" then return false end
     if not _measureFS then
-        if not _G.UIParent then return true end
-        _measureFS = PixelLayoutRegion(_G.UIParent:CreateFontString(nil, "BACKGROUND"), true)
+        if not UIParent then return true end
+        _measureFS = PixelLayoutRegion(UIParent:CreateFontString(nil, "BACKGROUND"), true)
         _measureFS:Hide()
     end
     if not _MSUF_SetFontCheckedFn(_measureFS, path, 14, "") then return false end
@@ -197,9 +203,9 @@ end
 
 UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower, skipAuras)
     EnsureDBSafe()
-    local g = _G.MSUF_DB.general
-    local flags = _G.MSUF_GetFontFlags()
-    local path = _G.MSUF_ResolveFontPath(_G.MSUF_GetFontPath(), 14, flags, g.fontKey)
+    local g = MSUF_DB.general
+    local flags = GetFontFlags()
+    local path = ResolveFontPath(GetFontPath(), 14, flags, g.fontKey)
     local forceGeneration = _fontSettle.forceNext == true
     _fontSettle.forceNext = false
     local newFontGeneration = _MSUF_BeginFontGeneration(path, flags, g.fontKey, forceGeneration)
@@ -207,7 +213,7 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
         -- Prewarm only; the delayed generation probe must confirm readiness.
         _ConfiguredFontReady(path)
     end
-    local getColor = (MSUF and MSUF.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
+    local getColor = MSUF.MSUF_GetConfiguredFontColor or Optional("MSUF_GetConfiguredFontColor")
     local fr, fg, fb = 1, 1, 1
     if type(getColor) == "function" then
         fr, fg, fb = getColor()
@@ -217,9 +223,9 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
     onlyKey = NormalizeFontScopeKey(onlyKey)
 
     local pathKey = tostring(path) .. "|" .. tostring(flags) .. "|" .. tostring(fr) .. "|" .. tostring(fg) .. "|" .. tostring(fb)
-    if _G.MSUF_FontPathKey ~= pathKey then
+    if PublicGlobals.MSUF_FontPathKey ~= pathKey then
         ExportPublic("MSUF_FontPathKey", pathKey)
-        ExportPublic("MSUF_FontPathSerial", (_G.MSUF_FontPathSerial or 0) + 1)
+        ExportPublic("MSUF_FontPathSerial", (PublicGlobals.MSUF_FontPathSerial or 0) + 1)
     end
 
     if skipUnitFrames ~= true then
@@ -240,7 +246,7 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
     --- Castbars/MSUF_FocusKickIcon.lua, which loads after this file.
     if not onlyKey then
         if MSUF and MSUF.MSUF_ApplyGameplayFontFromGlobal then MSUF.MSUF_ApplyGameplayFontFromGlobal() end
-        if type(_G.MSCB_ApplyFontsFromMSUF) == "function" then _G.MSCB_ApplyFontsFromMSUF() end
+        if type(MSCB_ApplyFontsFromMSUF) == "function" then MSCB_ApplyFontsFromMSUF() end
         -- The optional Suite follows full font applies and cold-start recovery.
         MSUF.SuiteLink.ApplyFonts()
     end
@@ -254,7 +260,7 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
         _MSUF_ScheduleFontProbe()
     end
 
-    if _G.MSUF_BossTestMode and _G.MSUF_UnitEditModeActive and not _G.MSUF_InCombat then
+    if PublicGlobals.MSUF_BossTestMode and MSUF_UnitEditModeActive and not PublicGlobals.MSUF_InCombat then
         local frames = (MSUF and MSUF.UF and MSUF.UF.frames) or {}
         local max = 5
         for i = 1, max do
@@ -315,7 +321,7 @@ _MSUF_ScheduleFontProbe = function()
         if generation ~= _fontSettle.generation then return end
         _MSUF_RunFontProbe(generation)
     end
-    _G.C_Timer.After(delay, RunCapturedFontProbe)
+    C_Timer.After(delay, RunCapturedFontProbe)
     _fontSettle.pending = true
 end
 
@@ -332,8 +338,8 @@ ExportPublic("MSUF_RequestFontRecovery", RequestFontRecovery)
 MSUF.MSUF_UpdateAllFonts = UpdateAllFonts
 ExportPublic("MSUF_UpdateAllFonts", UpdateAllFonts)
 
-if not _G.MSUF_UpdateAllFonts_Immediate then
-    ExportPublic("MSUF_UpdateAllFonts_Immediate", _G.MSUF_UpdateAllFonts)
+if not Optional("MSUF_UpdateAllFonts_Immediate") then
+    ExportPublic("MSUF_UpdateAllFonts_Immediate", UpdateAllFonts)
     --- In combat the request becomes one forced recovery after combat;
     --- otherwise it applies at once.
     ExportPublic("MSUF_UpdateAllFonts", function(onlyKey)
@@ -349,7 +355,7 @@ end
 MSUF.Fonts.UpdateAllFonts = UpdateAllFonts
 --- Namespaced mirror of the _G export above; new internal callers should use
 --- this instead of the global.
-MSUF.Fonts.RequestRecovery = _G.MSUF_RequestFontRecovery
+MSUF.Fonts.RequestRecovery = RequestFontRecovery
 
 -- The per-frame init layout uses a font snapshot that can pre-date the font being
 -- loadable, so kick one font apply + readiness-gated text relayout at login
@@ -360,6 +366,6 @@ do
     kick:RegisterEvent("PLAYER_ENTERING_WORLD")
     kick:SetScript("OnEvent", function(self)
         self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        _G.MSUF_RequestFontRecovery("PLAYER_ENTERING_WORLD")
+        RequestFontRecovery("PLAYER_ENTERING_WORLD")
     end)
 end

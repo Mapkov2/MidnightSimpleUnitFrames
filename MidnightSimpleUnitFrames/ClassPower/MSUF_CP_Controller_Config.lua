@@ -9,9 +9,12 @@
 --- upvalue for its hot paths and reads the rest through the returned table.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local FILE = "ClassPower/MSUF_CP_Controller_Config.lua"
 
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local CPConstants = MSUF.Require("MSUF_CP_CONST", FILE)
+local builders = CPConstants.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local ResolveStatusbarTextureKey = MSUF.Optional("MSUF_ResolveStatusbarTextureKey")
+local GetBarTexture = MSUF.Require("MSUF_GetBarTexture", FILE)
 
 --- Perf locals (same load-time captures the controller used before the split)
 local type, tonumber, tostring = type, tonumber, tostring
@@ -20,7 +23,7 @@ local UnitHasVehicleUI = UnitHasVehicleUI
 local PlayerVehicleHasComboPoints = PlayerVehicleHasComboPoints
 local GetShapeshiftFormID = GetShapeshiftFormID
 local C_SpellBook = C_SpellBook
-local CP_MODE_EVENT_PROFILE = _G.MSUF_CP_CONST.ModeDescriptors
+local CP_MODE_EVENT_PROFILE = CPConstants.ModeDescriptors
 local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
     or MSUF.Client.SupportsClassResource("CHARGED")
 
@@ -108,22 +111,22 @@ local function CP_ConfigPlayerManaOverrideEnabled(inVehicle)
     -- Keep the owner and UNIT_EXITED_VEHICLE lifecycle alive while vehicle
     -- power masks the player's own pools. The visible override still stays off.
     if inVehicle == nil then
-        inVehicle = (_G.UnitHasVehicleUI and _G.UnitHasVehicleUI("player")) or false
+        inVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
     end
     if inVehicle then return true end
     -- Profiles can be shared across characters. Keep the ClassPower owner cold
     -- when the current class has no Mana pool, while retaining the preference
     -- for the next character that does. The API is absent on older clients.
-    local manaType = (_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0
-    if not _G.UnitHasPowerType then
+    local manaType = (Enum and Enum.PowerType and Enum.PowerType.Mana) or 0
+    if not UnitHasPowerType then
         -- No Classic branch of Blizzard's UI calls UnitHasPowerType, so ask
         -- the pool instead of assuming one: a class without Mana reports a
         -- maximum of 0. Those clients have no secret power values.
-        local maxMana = _G.UnitPowerMax and _G.UnitPowerMax("player", manaType)
+        local maxMana = UnitPowerMax and UnitPowerMax("player", manaType)
         if maxMana == nil or not NotSecret(maxMana) then return true end
         return maxMana > 0
     end
-    local hasMana = _G.UnitHasPowerType("player", manaType)
+    local hasMana = UnitHasPowerType("player", manaType)
     return NotSecret(hasMana) and hasMana == true or false
 end
 
@@ -137,116 +140,119 @@ local function CP_ConfigAnyFeatureEnabled(playerManaEnabled)
         or (playerManaEnabled == nil and CP_ConfigPlayerManaOverrideEnabled())
 end
 
+--- Class Resource defaults: a key is written only while it is still nil. The
+--- rows are alternating key and default value, grouped like the menu pages.
+local BAR_DEFAULTS = {
+    --- ClassPower defaults
+    "showClassPower", true,
+    "classPowerHeight", 4,
+    "classPowerShape", "BAR",
+    "classPowerShapeAlign", "CENTER",
+    "classPowerColorByType", true,
+    "classPowerBgAlpha", 0.3,
+    "classPowerTickWidth", 1,
+    "classPowerOutline", 1,
+    "classPowerWidth", 0,
+    "classPowerWidthMode", "player",
+    "classPowerOffsetX", 0,
+    "classPowerOffsetY", 0,
+    "classPowerFrameLevelOffset", 5,
+    "classPowerTextLayer", 5,
+    "smoothPowerBar", false,
+    "showChargedComboPoints", true,
+    "classPowerComboPointColorMode", "default",
+    "classPowerShowText", false,
+    "classPowerFontSize", 16,
+    "classPowerShowPrediction", true,
+    "classPowerTextOffsetX", 0,
+    "classPowerTextOffsetY", 0,
+    "detachedPowerBarOutline", 1,
+    --- AltMana defaults
+    "showAltMana", false,
+    "altManaHeight", 4,
+    "altManaWidth", 0,
+    "altManaOffsetX", 0,
+    "altManaOffsetY", -2,
+    "altManaColorR", 0.0,
+    "altManaColorG", 0.0,
+    "altManaColorB", 0.8,
+    --- Class Resources-owned second Player HP bar (off by default)
+    "playerHPBarEnabled", false,
+    "playerHPBarAnchor", "CLASS_TOP",
+    "playerHPBarWidthMode", "class",
+    "playerHPBarWidth", 0,
+    "playerHPBarHeight", 6,
+    "playerHPBarGap", 2,
+    "playerHPBarOffsetX", 0,
+    "playerHPBarOffsetY", 0,
+    "playerHPBarFrameLevelOffset", 7,
+    "playerHPBarShape", "BAR",
+    "playerHPBarOrbSize", 54,
+    "playerHPBarTexture", "",
+    "playerHPBarBgTexture", "",
+    "playerHPBarBgAlpha", 0.35,
+    "playerHPBarOutline", 1,
+    "playerHPBarColorMode", "GLOBAL",
+    "playerHPBarSmoothFill", false,
+    "playerHPBarTextEnabled", true,
+    "playerHPBarUsePlayerText", true,
+    "playerHPBarTextLeft", "NONE",
+    "playerHPBarTextCenter", "NONE",
+    "playerHPBarTextRight", "CURPERCENT",
+    "playerHPBarTextSeparator", "",
+    "playerHPBarTextReverse", false,
+    "playerHPBarTextSize", 14,
+    "playerHPBarTextOffsetX", 0,
+    "playerHPBarTextOffsetY", 0,
+    --- Stagger bar defaults (Brewmaster Monk)
+    "showStagger", true,
+    "staggerHeight", 4,
+    "staggerOffsetY", -2,
+    --- DK Rune display order (static rune-id order, see CP_ApplyRuneSortOrder):
+    --- "asc" = rune 1 first (natural), "desc" = rune 6 first, nil = natural
+    "runeSortOrder", "asc",
+    --- Ele Shaman: Maelstrom Power continuous bar (off by default - niche preference)
+    "showEleMaelstrom", false,
+    --- Evoker Aug: native Ebon Might duration bar and text (on by default)
+    "showEbonMight", true,
+    --- Shadow Priest: show Mana as main bar, Insanity as class resource (off by default)
+    "showShadowMana", false,
+    --- Guardian Druid: estimated per-cast Ironfur lifetime bar (opt-in).
+    "showGuardianIronfur", false,
+    "guardianIronfurShowHashLines", true,
+    --- Auto-hide: visibility conditions
+    "classPowerHideOOC", false,
+    "classPowerSyncPlayerPowerOOC", false,
+    "classPowerHideWhenFull", false,
+    "classPowerHideWhenEmpty", false,
+    --- Pip alpha (0.0-1.0)
+    "classPowerFilledAlpha", 1.0,
+    "classPowerEmptyAlpha", 0.3,
+    --- Gap between pips (pixels, 0 = no gap - only tick separators)
+    "classPowerGap", 0,
+    --- Fill direction: false = left->right (default), true = right->left
+    "classPowerFillReverse", false,
+}
+
 --- DB Defaults (self-contained; runs on every login, no-ops if keys exist)
 local function EnsureDefaults()
     if not MSUF_DB then return end
     if not MSUF_DB.bars then MSUF_DB.bars = {} end
     local b = MSUF_DB.bars
+    for i = 1, #BAR_DEFAULTS, 2 do
+        local key = BAR_DEFAULTS[i]
+        if b[key] == nil then b[key] = BAR_DEFAULTS[i + 1] end
+    end
 
-    --- ClassPower defaults
-    if b.showClassPower       == nil then b.showClassPower       = true  end
-    if b.classPowerHeight     == nil then b.classPowerHeight     = 4     end
-    if b.classPowerShape      == nil then b.classPowerShape      = "BAR" end
-    if b.classPowerShapeAlign == nil then b.classPowerShapeAlign = "CENTER" end
-    if b.classPowerColorByType == nil then b.classPowerColorByType = true end
-    if b.classPowerBgAlpha    == nil then b.classPowerBgAlpha    = 0.3   end
-    if b.classPowerTickWidth  == nil then b.classPowerTickWidth  = 1     end
-    if b.classPowerOutline    == nil then b.classPowerOutline    = 1     end
-    if b.classPowerWidth      == nil then b.classPowerWidth      = 0     end
-    if b.classPowerWidthMode  == nil then b.classPowerWidthMode  = "player" end
-    if b.classPowerOffsetX    == nil then b.classPowerOffsetX    = 0     end
-    if b.classPowerOffsetY    == nil then b.classPowerOffsetY    = 0     end
-    if b.classPowerFrameLevelOffset == nil then b.classPowerFrameLevelOffset = 5 end
-    if b.classPowerTextLayer  == nil then b.classPowerTextLayer  = 5     end
-    if b.smoothPowerBar       == nil then b.smoothPowerBar       = false end
+    --- Fill smoothing follows the older shared smooth-power-bar setting
     if b.classPowerSmoothFill == nil then b.classPowerSmoothFill = (b.smoothPowerBar == true) end
-    if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
-    if b.classPowerComboPointColorMode == nil then b.classPowerComboPointColorMode = "default" end
-    if b.classPowerShowText    == nil then b.classPowerShowText    = false end
-    if b.classPowerFontSize    == nil then b.classPowerFontSize    = 16    end
-    if b.classPowerShowPrediction == nil then b.classPowerShowPrediction = true end
-    if b.classPowerTextOffsetX    == nil then b.classPowerTextOffsetX    = 0    end
-    if b.classPowerTextOffsetY    == nil then b.classPowerTextOffsetY    = 0    end
-    if b.detachedPowerBarOutline  == nil then b.detachedPowerBarOutline  = 1    end
-
-    --- AltMana defaults
-    if b.showAltMana          == nil then b.showAltMana          = false end
-    if b.altManaHeight        == nil then b.altManaHeight        = 4     end
-    if b.altManaWidthMode ~= "custom" then b.altManaWidthMode   = "player" end
-    if b.altManaWidth         == nil then b.altManaWidth         = 0     end
-    if b.altManaOffsetX       == nil then b.altManaOffsetX       = 0     end
-    if b.altManaOffsetY       == nil then b.altManaOffsetY       = -2    end
-    if b.altManaColorR        == nil then b.altManaColorR        = 0.0   end
-    if b.altManaColorG        == nil then b.altManaColorG        = 0.0   end
-    if b.altManaColorB        == nil then b.altManaColorB        = 0.8   end
-    if b.altManaSmoothFill    == nil then b.altManaSmoothFill    = (b.smoothPowerBar == true) end
-
-    --- Class Resources-owned second Player HP bar (off by default)
-    if b.playerHPBarEnabled     == nil then b.playerHPBarEnabled     = false end
-    if b.playerHPBarAnchor      == nil then b.playerHPBarAnchor      = "CLASS_TOP" end
-    if b.playerHPBarWidthMode   == nil then b.playerHPBarWidthMode   = "class" end
-    if b.playerHPBarWidth       == nil then b.playerHPBarWidth       = 0 end
-    if b.playerHPBarHeight      == nil then b.playerHPBarHeight      = 6 end
-    if b.playerHPBarGap         == nil then b.playerHPBarGap         = 2 end
-    if b.playerHPBarOffsetX     == nil then b.playerHPBarOffsetX     = 0 end
-    if b.playerHPBarOffsetY     == nil then b.playerHPBarOffsetY     = 0 end
-    if b.playerHPBarFrameLevelOffset == nil then b.playerHPBarFrameLevelOffset = 7 end
-    if b.playerHPBarShape       == nil then b.playerHPBarShape       = "BAR" end
-    if b.playerHPBarOrbSize     == nil then b.playerHPBarOrbSize     = 54 end
-    if b.playerHPBarTexture     == nil then b.playerHPBarTexture     = "" end
-    if b.playerHPBarBgTexture   == nil then b.playerHPBarBgTexture   = "" end
-    if b.playerHPBarBgAlpha     == nil then b.playerHPBarBgAlpha     = 0.35 end
-    if b.playerHPBarOutline     == nil then b.playerHPBarOutline     = 1 end
-    if b.playerHPBarColorMode   == nil then b.playerHPBarColorMode   = "GLOBAL" end
-    if b.playerHPBarSmoothFill  == nil then b.playerHPBarSmoothFill  = false end
-    if b.playerHPBarTextEnabled == nil then b.playerHPBarTextEnabled = true end
-    if b.playerHPBarUsePlayerText == nil then b.playerHPBarUsePlayerText = true end
-    if b.playerHPBarTextLeft    == nil then b.playerHPBarTextLeft    = "NONE" end
-    if b.playerHPBarTextCenter  == nil then b.playerHPBarTextCenter  = "NONE" end
-    if b.playerHPBarTextRight   == nil then b.playerHPBarTextRight   = "CURPERCENT" end
-    if b.playerHPBarTextSeparator == nil then b.playerHPBarTextSeparator = "" end
-    if b.playerHPBarTextReverse == nil then b.playerHPBarTextReverse = false end
-    if b.playerHPBarTextSize    == nil then b.playerHPBarTextSize    = 14 end
-    if b.playerHPBarTextOffsetX == nil then b.playerHPBarTextOffsetX = 0 end
-    if b.playerHPBarTextOffsetY == nil then b.playerHPBarTextOffsetY = 0 end
-
-    --- Stagger bar defaults (Brewmaster Monk)
-    if b.showStagger          == nil then b.showStagger          = true  end
-    if b.staggerHeight        == nil then b.staggerHeight        = 4     end
-    if b.staggerOffsetY       == nil then b.staggerOffsetY       = -2    end
-
-    --- DK Rune display order (static rune-id order, see CP_ApplyRuneSortOrder):
-    --- "asc" = rune 1 first (natural), "desc" = rune 6 first, nil = natural
-    if b.runeSortOrder        == nil then b.runeSortOrder        = "asc" end
-    --- DK Runes: show per-rune cooldown time text on the runes (Sensei-style)
+    if b.altManaSmoothFill   == nil then b.altManaSmoothFill   = (b.smoothPowerBar == true) end
+    --- Alt Mana is always player-width unless a custom width is chosen
+    if b.altManaWidthMode ~= "custom" then b.altManaWidthMode = "player" end
+    --- DK Runes: show per-rune cooldown time text on the runes (Sensei-style); the
+    --- older runeShowTimeText key seeds the current one
     if b.runeShowTime == nil and b.runeShowTimeText ~= nil then b.runeShowTime = b.runeShowTimeText and true or false end
-    if b.runeShowTime        == nil then b.runeShowTime        = true end
-
-    --- Ele Shaman: Maelstrom Power continuous bar (off by default - niche preference)
-    if b.showEleMaelstrom     == nil then b.showEleMaelstrom     = false end
-    --- Evoker Aug: native Ebon Might duration bar and text (on by default)
-    if b.showEbonMight        == nil then b.showEbonMight        = true  end
-    --- Shadow Priest: show Mana as main bar, Insanity as class resource (off by default)
-    if b.showShadowMana       == nil then b.showShadowMana       = false end
-    --- Guardian Druid: estimated per-cast Ironfur lifetime bar (opt-in).
-    if b.showGuardianIronfur   == nil then b.showGuardianIronfur   = false end
-    if b.guardianIronfurShowHashLines == nil then b.guardianIronfurShowHashLines = true end
-
-    --- Auto-hide: visibility conditions
-    if b.classPowerHideOOC       == nil then b.classPowerHideOOC       = false end
-    if b.classPowerSyncPlayerPowerOOC == nil then b.classPowerSyncPlayerPowerOOC = false end
-    if b.classPowerHideWhenFull  == nil then b.classPowerHideWhenFull  = false end
-    if b.classPowerHideWhenEmpty == nil then b.classPowerHideWhenEmpty = false end
-
-    --- Pip alpha (0.0-1.0)
-    if b.classPowerFilledAlpha   == nil then b.classPowerFilledAlpha   = 1.0   end
-    if b.classPowerEmptyAlpha    == nil then b.classPowerEmptyAlpha    = 0.3   end
-
-    --- Gap between pips (pixels, 0 = no gap - only tick separators)
-    if b.classPowerGap           == nil then b.classPowerGap           = 0     end
-
-    --- Fill direction: false = left->right (default), true = right->left
-    if b.classPowerFillReverse   == nil then b.classPowerFillReverse   = false end
+    if b.runeShowTime == nil then b.runeShowTime = true end
 end
 
 --- Power-type detection (resolved per spec/form change, cached)
@@ -430,7 +436,7 @@ local function CP_ComputeStructuralSignature()
         and GetSpec and GetSpec() == CPK.SPEC.EVOKER_AUG
         and b.showEbonMight ~= false
     local wantCPVisible = cpEnabled and newPowerType and newRenderMode ~= CPK.MODE.NONE
-    local wantAMVisible = (b.showAltMana == true) and NeedsAltManaBar() and (_G.MSUF_UnitEditModeActive ~= true)
+    local wantAMVisible = (b.showAltMana == true) and NeedsAltManaBar() and (MSUF_UnitEditModeActive ~= true)
     local flags = (wantCPVisible and 1 or 0)
         + (wantAMVisible and 2 or 0)
         + (newAuraPower and 4 or 0)
@@ -442,15 +448,13 @@ end
 --- Configured texture key -> media path (shared by build/presentation/HP).
 local function CP_ResolveTexture(key)
     if key and key ~= "" then
-        local resolve = _G.MSUF_ResolveStatusbarTextureKey
-        if type(resolve) == "function" then
-            local p = resolve(key)
+        if type(ResolveStatusbarTextureKey) == "function" then
+            local p = ResolveStatusbarTextureKey(key)
             if p then return p end
         end
     end
     --- Fallback: global bar texture -> flat white
-    local getBar = _G.MSUF_GetBarTexture
-    return (getBar and getBar()) or "Interface\\Buttons\\WHITE8x8"
+    return GetBarTexture() or "Interface\\Buttons\\WHITE8x8"
 end
 
 --- Configured Class Resource bar height, clamped to the menu range. Shared by

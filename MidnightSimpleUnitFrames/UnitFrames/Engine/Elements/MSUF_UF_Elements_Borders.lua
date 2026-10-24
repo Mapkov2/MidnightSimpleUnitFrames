@@ -1,10 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- UF border element: applies border, outline, and dispel visuals from compiled specs.
 -- Live updates must avoid secret payload comparisons and keep expensive scans outside hotpaths.
 local _, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Borders.lua")
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
 local IS_CLASSIC = MSUF.Client and MSUF.Client.IsClassic == true
 
 local Visuals = MSUF.UFVisuals or {}
@@ -22,7 +21,7 @@ local tostring = Visuals.tostring or tostring
 local type = Visuals.type or type
 local IsNil = Visuals.IsNil
 local NotSecretValue = Visuals.NotSecretValue
-local IsSecretValue = _G.issecretvalue
+local IsSecretValue = issecretvalue
 local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = Visuals.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 local GROUP_THREAT_EVENT = {
@@ -32,14 +31,15 @@ local GROUP_THREAT_EVENT = {
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = Visuals.SetShown
 local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
-local BorderStyles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+local BorderStyles = MSUF.BorderStyles or MSUF.Require("MSUF_BorderStyles", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua")
+local SetRegionPhysicalScreenRect = MSUF.Require("MSUF_SetRegionPhysicalScreenRect", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua")
 
 local Borders = {}
 local BossIndicator = MSUF.BossTargetIndicator
 local IsAggroBorderUnit
 local IsBossUnit
 local roundedVisualCallback
-local UnitExists = _G.UnitExists
+local UnitExists = UnitExists
 local bossPresenceFrames = {}
 local bossPresenceDriver
 local multipleBossesPresent = false
@@ -211,19 +211,17 @@ local function EnsureEdge(parent, key)
 end
 
 local function SetPhysicalEdgeRect(region, owner, left, bottom, right, top)
-  local setRect = _G.MSUF_SetRegionPhysicalScreenRect
-  if type(setRect) ~= "function" then return false end
-  return setRect(region, left, bottom, right, top, owner)
+  return SetRegionPhysicalScreenRect(region, left, bottom, right, top, owner)
 end
 
 local function EnsureTexturedBorderPieces(frame, texture)
-  if not (frame and BorderStyles and type(BorderStyles.Create) == "function") then return nil end
+  if not frame then return nil end
   local pieces = frame.MSUFBorderTexturePieces
   if not pieces then
     pieces = BorderStyles.Create(EnsureBorderOverlay(frame), "OVERLAY", 0, texture)
     frame.MSUFBorderTexturePieces = pieces
-    if pieces and type(BorderStyles.Hide) == "function" then BorderStyles.Hide(pieces) end
-  elseif texture and frame._msufBorderPiecesTexture ~= texture and type(BorderStyles.SetTexture) == "function" then
+    if pieces then BorderStyles.Hide(pieces) end
+  elseif texture and frame._msufBorderPiecesTexture ~= texture then
     BorderStyles.SetTexture(pieces, texture)
   end
   if pieces and texture then frame._msufBorderPiecesTexture = texture end
@@ -410,15 +408,15 @@ local function RefreshBorderTestFrames()
 end
 
 local function RefreshBorderTestModesActive()
-  ExportPublic("MSUF_BorderTestModesActive", _G.MSUF_AggroBorderTestMode == true
-    or _G.MSUF_DispelBorderTestMode == true
-    or _G.MSUF_PurgeBorderTestMode == true
-    or _G.MSUF_BossTargetBorderTestMode == true)
+  ExportPublic("MSUF_BorderTestModesActive", MSUF_AggroBorderTestMode == true
+    or MSUF_DispelBorderTestMode == true
+    or MSUF_PurgeBorderTestMode == true
+    or MSUF_BossTargetBorderTestMode == true)
 end
 
 local function SetBorderTestMode(flag, scopeFlag, active, scope)
-  _G[flag] = active == true
-  if scopeFlag then _G[scopeFlag] = scope or "shared" end
+  ExportPublic(flag, active == true)
+  if scopeFlag then ExportPublic(scopeFlag, scope or "shared") end
   RefreshBorderTestModesActive()
   RefreshBorderTestFrames()
   return true
@@ -445,28 +443,28 @@ end
 ExportPublic("MSUF_SetBossTargetBorderTestMode", SetBossTargetBorderTestMode)
 
 local function AggroTestApplies(frame)
-  return _G.MSUF_BorderTestModesActive == true
-    and _G.MSUF_AggroBorderTestMode == true
+  return PublicGlobals.MSUF_BorderTestModesActive == true
+    and MSUF_AggroBorderTestMode == true
     and IsAggroBorderUnit(frame)
-    and TestScopeApplies(frame, _G.MSUF_AggroBorderTestScope)
+    and TestScopeApplies(frame, MSUF_AggroBorderTestScope)
 end
 
 local function DispelTestApplies(frame)
-  return _G.MSUF_BorderTestModesActive == true
-    and _G.MSUF_DispelBorderTestMode == true
-    and TestScopeApplies(frame, _G.MSUF_DispelBorderTestScope)
+  return PublicGlobals.MSUF_BorderTestModesActive == true
+    and MSUF_DispelBorderTestMode == true
+    and TestScopeApplies(frame, MSUF_DispelBorderTestScope)
 end
 
 local function PurgeTestApplies(frame)
-  return _G.MSUF_BorderTestModesActive == true
-    and _G.MSUF_PurgeBorderTestMode == true
+  return PublicGlobals.MSUF_BorderTestModesActive == true
+    and MSUF_PurgeBorderTestMode == true
     and IsPurgeBorderUnit(frame)
-    and TestScopeApplies(frame, _G.MSUF_PurgeBorderTestScope)
+    and TestScopeApplies(frame, MSUF_PurgeBorderTestScope)
 end
 
 local function BossTargetTestApplies(frame)
-  return _G.MSUF_BorderTestModesActive == true
-    and _G.MSUF_BossTargetBorderTestMode == true
+  return PublicGlobals.MSUF_BorderTestModesActive == true
+    and MSUF_BossTargetBorderTestMode == true
     and IsBossUnit(frame and frame.MSUFUnitKey)
 end
 
@@ -497,7 +495,7 @@ local function BorderHighlightEnabled(frame, cfg)
   if cfg and cfg.bossTarget == true and bossUnit then
     return true
   end
-  if _G.MSUF_BorderTestModesActive ~= true then
+  if PublicGlobals.MSUF_BorderTestModesActive ~= true then
     return false
   end
   return AggroTestApplies(frame)
@@ -544,8 +542,8 @@ local function SetBorder(frame, show, r, g, b, a)
   local textureKey = frame._msufBorderRuntimeTextureKey
   local textureKeyChanged = frame._msufBorderTextureKey ~= textureKey
   local textureThickness = frame._msufBorderVisualThickness or frame._msufBorderRuntimeNormalThickness or 1
-  local trueOutline = texture and textureMode == (BorderStyles and BorderStyles.FRAME_BORDER or "border")
-  local stretchedTexture = textureMode == (BorderStyles and BorderStyles.FRAME_TEXTURE or "texture")
+  local trueOutline = texture and textureMode == BorderStyles.FRAME_BORDER
+  local stretchedTexture = textureMode == BorderStyles.FRAME_TEXTURE
   local outlineWidth, outlineHeight
   if trueOutline then
     outlineWidth = frame.GetWidth and frame:GetWidth() or 0
@@ -593,18 +591,17 @@ local function SetBorder(frame, show, r, g, b, a)
   end
   local visible = show and frame._msufRUFModernBorderSuppressed ~= true
   local pieces
-  if trueOutline and visible and BorderStyles and type(BorderStyles.Apply) == "function" then
+  if trueOutline and visible then
     pieces = EnsureTexturedBorderPieces(frame, texture)
     if pieces then
-      local edgeSize = type(BorderStyles.EdgeSize) == "function"
-        and BorderStyles.EdgeSize(textureKey, textureThickness) or textureThickness
+      local edgeSize = BorderStyles.EdgeSize(textureKey, textureThickness) or textureThickness
       BorderStyles.Apply(pieces, frame, edgeSize, outlineWidth, outlineHeight, r, g, b, a)
       frame._msufBorderTextureThickness = textureThickness
       frame._msufBorderTrueOutlineWidth = outlineWidth
       frame._msufBorderTrueOutlineHeight = outlineHeight
     end
   else
-    if frame.MSUFBorderTexturePieces and BorderStyles and type(BorderStyles.Hide) == "function" then
+    if frame.MSUFBorderTexturePieces then
       BorderStyles.Hide(frame.MSUFBorderTexturePieces)
     end
     frame._msufBorderTextureThickness = nil
@@ -702,7 +699,7 @@ local function ThreatState(frame)
 end
 
 local function GeneralDB()
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   return db and db.general or nil
 end
 
@@ -915,7 +912,7 @@ end
 function Borders.Apply(frame, spec)
   -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
   -- after the elements; a spec applies only once the core has loaded.
-  MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua")(frame)
+  MSUF.Require("ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua", MSUF.UF.Factory)(frame)
   local cfg = spec and spec.border
   if frame then
     local customPriority = cfg and cfg.prioEnabled == true and type(cfg.prioOrder) == "table"
@@ -974,7 +971,7 @@ function Borders.GetActiveVisual(frame)
   if cfg == nil and frame.MSUFSpec then cfg = frame.MSUFSpec.border end
   local source = "normal"
   if cfg then
-    local testActive = _G.MSUF_BorderTestModesActive == true
+    local testActive = PublicGlobals.MSUF_BorderTestModesActive == true
     local priority = HighlightPriorityOrder(cfg)
     for i = 1, #priority do
       local key = priority[i]
@@ -1047,14 +1044,14 @@ local function UpdateResolved(frame, threatKnown, threat)
   end
   local normalEnabled = frame and frame._msufBorderRuntimeNormal == true
   local highlightEnabled = frame and frame._msufBorderRuntimeHighlight == true
-  if _G.MSUF_BorderTestModesActive == true then
+  if PublicGlobals.MSUF_BorderTestModesActive == true then
     highlightEnabled = BorderHighlightEnabled(frame, cfg)
   end
   if not cfg or not (normalEnabled or highlightEnabled) then
     HideResolvedBorder(frame)
     return
   end
-  local testActive = _G.MSUF_BorderTestModesActive == true
+  local testActive = PublicGlobals.MSUF_BorderTestModesActive == true
   if testActive or frame._msufBorderRuntimeCustomPriority == true then
     local priority = frame._msufBorderRuntimePriority or HighlightPriorityOrder(cfg)
     for i = 1, #priority do
@@ -1107,7 +1104,7 @@ function Borders.UpdateGroupThreat(frame, event, unit, threat)
   end
   local cfg = frame and frame._msufBorderRuntimeCfg
   if not cfg
-    or _G.MSUF_BorderTestModesActive == true
+    or PublicGlobals.MSUF_BorderTestModesActive == true
     or frame._msufBorderRuntimeCustomPriority == true
     or frame._msufA3DispelActive == true
     or cfg.bossTarget == true then

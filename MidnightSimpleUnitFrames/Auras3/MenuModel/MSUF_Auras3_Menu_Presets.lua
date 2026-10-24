@@ -3,7 +3,6 @@
 -- historical fallback available for standalone consumers and legacy profiles.
 -- This owner builds menu choices; it never scans live aura containers.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}

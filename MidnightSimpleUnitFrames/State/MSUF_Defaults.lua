@@ -459,7 +459,7 @@ local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
             changed = true
         end
     end
-    local sharedTranslator = _G.MSUF_ProfileIO_TranslateProfileToCurrent
+    local sharedTranslator = MSUF.PublicGlobals.MSUF_ProfileIO_TranslateProfileToCurrent
     if type(sharedTranslator) ~= "function" and type(MSUF) == "table" then
         sharedTranslator = MSUF.MSUF_ProfileIO_TranslateProfileToCurrent
     end
@@ -3321,6 +3321,7 @@ end
 --- MSUF_NormalizeProfileDefaults, which never touches that session cache.
 local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
     assert(type(profile) == "table", "MSUF profile must be a table")
+    MSUF.DefaultsSchema.RestorePersistence(profile)
     MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall(profile)
     MSUF.ProfileMigrations.Apply(profile)
     MSUF_Defaults_PruneRetiredClassPowerTextFields(profile)

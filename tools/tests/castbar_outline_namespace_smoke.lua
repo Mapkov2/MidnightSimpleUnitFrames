@@ -1,12 +1,16 @@
 -- Namespace compatibility wrappers must retain the style methods they call.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
-local ns = { ExportPublic = function(name, value) _G[name] = value end }
+-- The real Kernel Bootstrap and Require; providers a file requires that this
+-- namespace-only check never uses (the pixel layout) are deferred.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+local ns = {}
 _G.MSUF, _G.MSUF_NS = ns, ns
 _G.MSUF_DB = { general = {} }
 _G.MSUF_EnsureDB = function() end
 _G.UIParent = nil
+RequireFixture.InstallKernel(root, ns, nil, nil, true)
 local function Load(name)
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. name))("MSUF", ns)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. name, ns)
 end
 Load("Kernel/MSUF_Require.lua")
 Load("Castbars/MSUF_Castbars_PublicAPI.lua")

@@ -31,7 +31,7 @@ local function Run(flavor, lite, backend)
     Check(filters[t.eventFrame] and filters[t.eventFrame].PLAYER_SPECIALIZATION_CHANGED == "player",
         label .. ": specialization event is not registered for player only")
     MSUF_DB.general.perfLiteClassPowerEvents = lite
-    MSUF_ClassPower_Refresh()
+    t.ns.PublicGlobals.MSUF_ClassPower_Refresh() -- a namespace-only export, not a global
     t.env:RunTimers()
     local fullRefresh = World.Upvalue(t.module.Enable, "FullRefresh")
     local rareEvent = World.Upvalue(t.onEvent, "ClassPowerOnRareEvent")

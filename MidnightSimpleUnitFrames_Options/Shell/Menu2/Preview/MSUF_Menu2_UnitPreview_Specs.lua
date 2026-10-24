@@ -1,10 +1,9 @@
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua
 --- Cold-path data specs for the MSUF2 unit frame preview.
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
+local MSUF = _G.MSUF
 local specs = MSUF.UFPreviewSpecs or {}
 MSUF.UFPreviewSpecs = specs
-local PipeRows = (MSUF.MSUF2 or _G.MSUF2).PipeRows
+local PipeRows = MSUF.MSUF2.PipeRows
 local function Color(text)
     local r, g, b = tostring(text or ""):match("^([^,]+),([^,]+),([^,]+)$")
     return { tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1 }
@@ -35,42 +34,71 @@ local function LayerRows(rows)
     end
     return out
 end
-specs.StatusPreview = StatusRows [[
-raidmarker|showRaidMarker|raidMarkerSize|raidMarkerAnchor|raidMarkerOffsetX|raidMarkerOffsetY|raidMarkerLayer|7|18|TOPLEFT|16|3|8|1,0.82,0.05|Raid marker|MSUF_RefreshRaidMarkerFrames|||raidMarkerCustomIcon
-leader|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|7|14|TOPLEFT|0|3|L|0.95,0.82,0.20|Leader icon|MSUF_RefreshLeaderIconFrames||player target|leaderIconCustomIcon
-assist|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|7|14|TOPLEFT|0|3|A|0.58,0.82,1.00|Assist icon|MSUF_RefreshLeaderIconFrames||player target|assistIconCustomIcon
-level|showLevelIndicator|levelIndicatorSize|levelIndicatorAnchor|levelIndicatorOffsetX|levelIndicatorOffsetY|levelIndicatorLayer|7|14|NAMERIGHT|0|0|80|0.45,0.70,1.0|Level text|MSUF_RefreshIdentityTextFrames||
-bossNumber|showBossNumberIndicator|bossNumberIndicatorSize|bossNumberIndicatorAnchor|bossNumberIndicatorOffsetX|bossNumberIndicatorOffsetY|bossNumberIndicatorLayer|7|14|TOPLEFT|4|-4|1|0.45,0.70,1.0|Boss number|MSUF_RefreshStatusIndicators|false|boss|
-raceText|showRaceIndicator|raceIndicatorSize|raceIndicatorAnchor|raceIndicatorOffsetX|raceIndicatorOffsetY|raceIndicatorLayer|7|14|NAMERIGHT|0|0|Tauren|0.45,0.70,1.0|Race text|MSUF_RefreshIdentityTextFrames|false|
-classText|showClassTextIndicator|classTextIndicatorSize|classTextIndicatorAnchor|classTextIndicatorOffsetX|classTextIndicatorOffsetY|classTextIndicatorLayer|7|14|NAMERIGHT|0|0|Warrior|0.45,0.70,1.0|Class text|MSUF_RefreshIdentityTextFrames|false|
-elite|showEliteIcon|eliteIconSize|eliteIconAnchor|eliteIconOffsetX|eliteIconOffsetY|eliteIconLayer|7|20|TOPRIGHT|2|2|*|1.0,0.58,0.16|Elite icon|MSUF_RefreshEliteIconFrames||target focus targettarget focustarget pettarget boss|eliteIconCustomIcon
-statusText|statusDeadTextEnabled|statusTextSize|statusTextAnchor|statusTextOffsetX|statusTextOffsetY|statusTextLayer|7|16|CENTER|0|0|DEAD|0.68,0.70,0.74|Dead / Offline text|MSUF_RequestStatusTextRefresh||
-statusGhostText|statusGhostTextEnabled|statusGhostTextSize|statusGhostTextAnchor|statusGhostTextOffsetX|statusGhostTextOffsetY|statusGhostTextLayer|7|16|CENTER|0|0|GHOST|0.68,0.70,0.74|Ghost text|MSUF_RequestStatusTextRefresh||
-statusAFKText|statusAFKTextEnabled|statusAFKTextSize|statusAFKTextAnchor|statusAFKTextOffsetX|statusAFKTextOffsetY|statusAFKTextLayer|7|16|CENTER|0|0|AFK|0.68,0.70,0.74|AFK text|MSUF_RequestStatusTextRefresh|false|
-statusAFKTimer|statusAFKTimerEnabled|statusAFKTimerSize|statusAFKTimerAnchor|statusAFKTimerOffsetX|statusAFKTimerOffsetY|statusAFKTimerLayer|7|12|CENTER|0|-14|5m|0.55,0.75,0.62|AFK timer|MSUF_RequestStatusTextRefresh|false|
-statusDNDText|statusDNDTextEnabled|statusDNDTextSize|statusDNDTextAnchor|statusDNDTextOffsetX|statusDNDTextOffsetY|statusDNDTextLayer|7|16|CENTER|0|0|DND|0.68,0.70,0.74|DND text|MSUF_RequestStatusTextRefresh|false|
-statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndicatorAnchor|combatStateIndicatorOffsetX|combatStateIndicatorOffsetY|combatStateIndicatorLayer|7|18|TOPLEFT|0|0|C|1.0,0.22,0.16|Combat icon|MSUF_RequestStatusCombatIndicatorRefresh||player target|combatStateIndicatorCustomIcon
-statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|25|39|TOPLEFT|-40|50|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh||player|restedStateIndicatorCustomIcon
-statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target|incomingResIndicatorCustomIcon
-statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget pettarget|pvpIndicatorCustomIcon
-stance|showStanceIndicator|stanceIndicatorSize|stanceIndicatorAnchor|stanceIndicatorOffsetX|stanceIndicatorOffsetY|stanceIndicatorLayer|7|12|TOP|0|-2|Stance|0.45,0.70,1.0|Stance text|MSUF_RequestStatusIconsRefreshForCurrent|false|player|
-]]
+specs.StatusPreview = StatusRows(table.concat({
+    "raidmarker|showRaidMarker|raidMarkerSize|raidMarkerAnchor|raidMarkerOffsetX|raidMarkerOffsetY|raidMarkerLayer|"
+        .. "7|18|TOPLEFT|16|3|8|1,0.82,0.05|Raid marker|MSUF_RefreshRaidMarkerFrames|||raidMarkerCustomIcon",
+    "leader|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|"
+        .. "7|14|TOPLEFT|0|3|L|0.95,0.82,0.20|Leader icon|MSUF_RefreshLeaderIconFrames||player target|leaderIconCustomIcon",
+    "assist|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|"
+        .. "7|14|TOPLEFT|0|3|A|0.58,0.82,1.00|Assist icon|MSUF_RefreshLeaderIconFrames||player target|assistIconCustomIcon",
+    "level|showLevelIndicator|levelIndicatorSize|levelIndicatorAnchor|levelIndicatorOffsetX|levelIndicatorOffsetY|levelIndicatorLayer|"
+        .. "7|14|NAMERIGHT|0|0|80|0.45,0.70,1.0|Level text|MSUF_RefreshIdentityTextFrames||",
+    "bossNumber|showBossNumberIndicator|bossNumberIndicatorSize|bossNumberIndicatorAnchor|bossNumberIndicatorOffsetX|bossNumberIndicatorOffsetY|"
+        .. "bossNumberIndicatorLayer|7|14|TOPLEFT|4|-4|1|0.45,0.70,1.0|Boss number|MSUF_RefreshStatusIndicators|false|boss|",
+    "raceText|showRaceIndicator|raceIndicatorSize|raceIndicatorAnchor|raceIndicatorOffsetX|raceIndicatorOffsetY|raceIndicatorLayer|"
+        .. "7|14|NAMERIGHT|0|0|Tauren|0.45,0.70,1.0|Race text|MSUF_RefreshIdentityTextFrames|false|",
+    "classText|showClassTextIndicator|classTextIndicatorSize|classTextIndicatorAnchor|classTextIndicatorOffsetX|classTextIndicatorOffsetY|"
+        .. "classTextIndicatorLayer|7|14|NAMERIGHT|0|0|Warrior|0.45,0.70,1.0|Class text|MSUF_RefreshIdentityTextFrames|false|",
+    "elite|showEliteIcon|eliteIconSize|eliteIconAnchor|eliteIconOffsetX|eliteIconOffsetY|eliteIconLayer|"
+        .. "7|20|TOPRIGHT|2|2|*|1.0,0.58,0.16|Elite icon|MSUF_RefreshEliteIconFrames||target focus targettarget focustarget pettarget boss|eliteIconCustomIcon",
+    "statusText|statusDeadTextEnabled|statusTextSize|statusTextAnchor|statusTextOffsetX|statusTextOffsetY|statusTextLayer|"
+        .. "7|16|CENTER|0|0|DEAD|0.68,0.70,0.74|Dead / Offline text|MSUF_RequestStatusTextRefresh||",
+    "statusGhostText|statusGhostTextEnabled|statusGhostTextSize|statusGhostTextAnchor|statusGhostTextOffsetX|statusGhostTextOffsetY|"
+        .. "statusGhostTextLayer|7|16|CENTER|0|0|GHOST|0.68,0.70,0.74|Ghost text|MSUF_RequestStatusTextRefresh||",
+    "statusAFKText|statusAFKTextEnabled|statusAFKTextSize|statusAFKTextAnchor|statusAFKTextOffsetX|statusAFKTextOffsetY|statusAFKTextLayer|"
+        .. "7|16|CENTER|0|0|AFK|0.68,0.70,0.74|AFK text|MSUF_RequestStatusTextRefresh|false|",
+    "statusAFKTimer|statusAFKTimerEnabled|statusAFKTimerSize|statusAFKTimerAnchor|statusAFKTimerOffsetX|statusAFKTimerOffsetY|statusAFKTimerLayer|"
+        .. "7|12|CENTER|0|-14|5m|0.55,0.75,0.62|AFK timer|MSUF_RequestStatusTextRefresh|false|",
+    "statusDNDText|statusDNDTextEnabled|statusDNDTextSize|statusDNDTextAnchor|statusDNDTextOffsetX|statusDNDTextOffsetY|statusDNDTextLayer|"
+        .. "7|16|CENTER|0|0|DND|0.68,0.70,0.74|DND text|MSUF_RequestStatusTextRefresh|false|",
+    "statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndicatorAnchor|combatStateIndicatorOffsetX|combatStateIndicatorOffsetY|"
+        .. "combatStateIndicatorLayer|7|18|TOPLEFT|0|0|C|1.0,0.22,0.16|Combat icon|MSUF_RequestStatusCombatIndicatorRefresh||player target|"
+        .. "combatStateIndicatorCustomIcon",
+    "statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|"
+        .. "restedStateIndicatorLayer|25|39|TOPLEFT|-40|50|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh||player|"
+        .. "restedStateIndicatorCustomIcon",
+    "statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|"
+        .. "incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|"
+        .. "MSUF_RequestStatusIncomingResIndicatorRefresh||player target|incomingResIndicatorCustomIcon",
+    "statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|"
+        .. "0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget pettarget|"
+        .. "pvpIndicatorCustomIcon",
+    "stance|showStanceIndicator|stanceIndicatorSize|stanceIndicatorAnchor|stanceIndicatorOffsetX|stanceIndicatorOffsetY|stanceIndicatorLayer|"
+        .. "7|12|TOP|0|-2|Stance|0.45,0.70,1.0|Stance text|MSUF_RequestStatusIconsRefreshForCurrent|false|player|",
+}, "\n"))
 -- The threat percentage text exists on Classic Era, TBC and WoW Forever only,
 -- before the stance text row. Its sample glyph comes from the status text table
 -- in the preview status module. Inserted before the Pet Happiness row below, so
 -- that row keeps its place directly in front of the stance row.
-if MSUF.Client ~= nil and MSUF.Client.SupportsThreatText == true then
-    local threat = StatusRows("statusThreat|showThreatIndicator|threatIndicatorSize|threatIndicatorAnchor|threatIndicatorOffsetX|threatIndicatorOffsetY|threatIndicatorLayer|7|11|BOTTOMLEFT|6|2|85%|1.0,0.60,0.20|Threat %|MSUF_RequestThreatIndicatorRefresh||target focus boss|")
+if MSUF.Client.SupportsThreatText == true then
+    local threat = StatusRows(
+        "statusThreat|showThreatIndicator|threatIndicatorSize|threatIndicatorAnchor|threatIndicatorOffsetX|threatIndicatorOffsetY|threatIndicatorLayer|"
+            .. "7|11|BOTTOMLEFT|6|2|85%|1.0,0.60,0.20|Threat %|MSUF_RequestThreatIndicatorRefresh||target focus boss|")
     table.insert(specs.StatusPreview, #specs.StatusPreview, threat[1])
 end
 -- Hunter pet happiness exists again on WoW Forever; Midnight has none. Same
 -- position as on the Classic clients: before the stance text row.
-if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
-    local happiness = StatusRows("statusPetHappiness|showPetHappinessIndicator|petHappinessIndicatorSize|petHappinessIndicatorAnchor|petHappinessIndicatorOffsetX|petHappinessIndicatorOffsetY|petHappinessIndicatorLayer|7|24|RIGHT|-7|-4|:)|0.38,0.82,0.24|Pet Happiness|MSUF_RequestPetHappinessIndicatorRefresh||pet|")
+if MSUF.Client.SupportsPetHappiness == true then
+    local happiness = StatusRows(
+        "statusPetHappiness|showPetHappinessIndicator|petHappinessIndicatorSize|petHappinessIndicatorAnchor|petHappinessIndicatorOffsetX|"
+            .. "petHappinessIndicatorOffsetY|petHappinessIndicatorLayer|7|24|RIGHT|-7|-4|:)|0.38,0.82,0.24|Pet Happiness|"
+            .. "MSUF_RequestPetHappinessIndicatorRefresh||pet|")
     table.insert(specs.StatusPreview, #specs.StatusPreview, happiness[1])
 end
-if MSUF.Client ~= nil and MSUF.Client.IsClassic == true then
-    local petXP = StatusRows("statusPetXP|showPetXPBar|petXPBarSize|petXPBarAnchor|petXPBarOffsetX|petXPBarOffsetY|petXPBarLayer|7|8|BOTTOM|0|-5||0.68,0.42,0.95|Pet XP Bar|MSUF_RequestPetXPBarRefresh||pet|")
+if MSUF.Client.IsClassic == true then
+    local petXP = StatusRows(
+        "statusPetXP|showPetXPBar|petXPBarSize|petXPBarAnchor|petXPBarOffsetX|petXPBarOffsetY|petXPBarLayer|"
+            .. "7|8|BOTTOM|0|-5||0.68,0.42,0.95|Pet XP Bar|MSUF_RequestPetXPBarRefresh||pet|")
     petXP[1].width, petXP[1].defaultWidth = "petXPBarWidth", 80
     local insertAt = MSUF.Client.SupportsThreatText == true
         and #specs.StatusPreview - 2 or #specs.StatusPreview

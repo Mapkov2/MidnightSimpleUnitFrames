@@ -1,9 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy,
-  ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Engine/MSUF_UF_Factory.lua")
 
 local UF = MSUF.UF
 if not UF then return end
@@ -27,6 +25,14 @@ local function RequireFactory(key)
 end
 -- Kernel/MSUF_Util.lua loads ahead of this file in every core TOC.
 local Snap = MSUF.Require("MSUF_Snap", "UnitFrames/Engine/MSUF_UF_Factory.lua")
+local GetPhysicalScreenRect = MSUF.Require("MSUF_GetPhysicalScreenRect", "UnitFrames/Engine/MSUF_UF_Factory.lua")
+local SetRegionPhysicalScreenRect = MSUF.Require("MSUF_SetRegionPhysicalScreenRect", "UnitFrames/Engine/MSUF_UF_Factory.lua")
+local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", "UnitFrames/Engine/MSUF_UF_Factory.lua")
+-- The embedded UF runtime, the bar background runtime and the third-party
+-- anchor integration also load ahead of this file in every core TOC.
+local ApplyCachedUnitFrameScreenPosition = MSUF.Require("MSUF_ApplyCachedUnitFrameScreenPosition", "UnitFrames/Engine/MSUF_UF_Factory.lua")
+local GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", "UnitFrames/Engine/MSUF_UF_Factory.lua")
+local GetUsableCooldownAnchorSize = MSUF.Require("MSUF_GetUsableCooldownAnchorSize", "UnitFrames/Engine/MSUF_UF_Factory.lua")
 --- Every other MSUF provider resolves at use: frames apply once the core has
 --- loaded (PLAYER_LOGIN at the earliest), and the castbar and class power
 --- owners load after this file.
@@ -35,6 +41,7 @@ local function Dep(name)
 end
 local HasGroupLateAnchorConfig
 local GroupUsesExternalAnchor
+
 
 -- A frame that was fully detached for its disabled state must not be rebuilt
 -- live in the same session. Keep the detached zero-overhead state intact and
@@ -62,7 +69,7 @@ local UnregisterUnitWatch = UnregisterUnitWatch
 local UnitWatchRegistered = UnitWatchRegistered
 local RegisterStateDriver = RegisterStateDriver
 local UIParent = UIParent
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local UnitGUID = UnitGUID
 
 local COOLDOWN_ANCHORS = {
@@ -111,18 +118,19 @@ local function RequireReloadForReenable(frame, spec)
   if not reenableReloadPromptShown then
     reenableReloadPromptShown = true
     if variantSwitch then variantReloadPrompted[key] = true end
-    local showReload = _G.MSUF_ShowReloadRecommendedPopup
+    -- The reload popup belongs to the load-on-demand options addon.
+    local showReload = MSUF.Optional("MSUF_ShowReloadRecommendedPopup")
     if type(showReload) == "function" then
       showReload("Unit frame enable - reload required")
-    elseif _G.print then
-      _G.print("|cffffd700MSUF:|r " .. MSUF.Translate("A unit frame was enabled. Reload the UI with /reload to apply it."))
+    elseif print then
+      print("|cffffd700MSUF:|r " .. MSUF.Translate("A unit frame was enabled. Reload the UI with /reload to apply it."))
     end
   end
   return true
 end
 
 local function EnsurePetBattleFrameHider()
-  local hider = MSUF._petBattleFrameHider or _G.MSUF_PetBattleFrameHider
+  local hider = MSUF._petBattleFrameHider or MSUF.Optional("MSUF_PetBattleFrameHider")
   if hider then
     MSUF._petBattleFrameHider = hider
     return hider
@@ -156,14 +164,11 @@ end
 
 local function ResolveCooldownViewerAnchor(name)
   if not IsCooldownViewerAnchor(name) then return nil end
-  local resolver = _G.MSUF_GetEffectiveCooldownFrame
-  local frame = (type(resolver) == "function" and resolver(name)) or _G[name]
-  return frame
+  return GetEffectiveCooldownFrame(name) or _G[name]
 end
 
 local function IsCooldownViewerAnchorFrameUsable(frame)
-  local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-  return type(getSize) == "function" and getSize(frame) ~= nil
+  return GetUsableCooldownAnchorSize(frame) ~= nil
 end
 
 local MAX_ANCHOR_DEPTH = 16
@@ -335,8 +340,7 @@ local function ApplyPosition(frame, spec)
     if not missingCooldownAnchor then
       ScheduleLateAnchorReanchor()
     end
-    local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
-    if type(applyCached) == "function" and applyCached(frame, key, frame.MSUFUnitKey) then
+    if ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey) then
       SetFrameUnitExternalAnchorProxy(frame, nil)
       frame._msufStableExternalAnchor = nil
       return true
@@ -369,8 +373,7 @@ local function ApplyPosition(frame, spec)
       -- otherwise use the safe UIParent fallback and retry on the normal
       -- bounded late-anchor lifecycle.
       externalAnchor = false
-      local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
-      if type(applyCached) == "function" and applyCached(frame, key, frame.MSUFUnitKey) then
+      if ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey) then
         SetFrameUnitExternalAnchorProxy(frame, nil)
         frame._msufStableExternalAnchor = nil
         return true
@@ -441,13 +444,8 @@ ApplyBossPhysicalBarGeometry = function(frame)
     return false
   end
 
-  local getRect = _G.MSUF_GetPhysicalScreenRect
-  local setRect = _G.MSUF_SetRegionPhysicalScreenRect
-  if type(getRect) ~= "function" or type(setRect) ~= "function" then
-    return false
-  end
-
-  local left, bottom, right, top, pixel = getRect(frame)
+  local setRect = SetRegionPhysicalScreenRect
+  local left, bottom, right, top, pixel = GetPhysicalScreenRect(frame)
   if not (left and bottom and right and top and pixel and pixel > 0)
     or right <= left or top <= bottom
   then
@@ -465,7 +463,7 @@ ApplyBossPhysicalBarGeometry = function(frame)
   if powerEnabled and not powerDetached then
     local configuredHeight = tonumber(powerSpec.height)
       or (power.GetHeight and power:GetHeight()) or 0
-    local snap = _G.MSUF_Snap
+    local snap = Snap
     if type(snap) == "function" then
       configuredHeight = snap(power, configuredHeight)
     end
@@ -521,7 +519,7 @@ end
 
 local function RefreshBossPhysicalGeometry()
   local changed = false
-  local count = tonumber(_G.MAX_BOSS_FRAMES) or 5
+  local count = tonumber(MAX_BOSS_FRAMES) or 5
   for index = 1, count do
     local unit = "boss" .. index
     local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
@@ -529,7 +527,7 @@ local function RefreshBossPhysicalGeometry()
       changed = true
     end
   end
-  for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+  for index = 1, tonumber(MSUF.Client.MaxArenaOpponents) or 3 do
     local unit = "arena" .. index
     local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
     if frame and ApplyBossPhysicalBarGeometry(frame) then
@@ -541,7 +539,7 @@ end
 
 Factory.ApplyBossPhysicalBarGeometry = ApplyBossPhysicalBarGeometry
 Factory.RefreshBossPhysicalGeometry = RefreshBossPhysicalGeometry
-ExportPublic("MSUF_ApplyBossPhysicalBarGeometry", ApplyBossPhysicalBarGeometry)
+ExportPublic("MSUF_ApplyBossPhysicalBarGeometry", ApplyBossPhysicalBarGeometry, false)
 ExportPublic("MSUF_RefreshBossPhysicalGeometry", RefreshBossPhysicalGeometry)
 
 local function DisableFrame(frame)
@@ -582,8 +580,7 @@ function UF.CreateSecureUnitButton(name, parent)
   -- scale. The secure template makes this button protected and
   -- SetRoundLayoutToNearestPixel is a protected function, so it is set here at
   -- creation and never from a refresh path.
-  local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-  if type(roundLayout) == "function" then roundLayout(button, true) end
+  SetRoundLayoutToNearestPixel(button, true)
   return button
 end
 
@@ -734,8 +731,7 @@ local function FreezeExternalAnchorConsumer(frame, cacheKey, cacheUnit, preserve
   -- A provider that lost its rect right at the combat edge cannot be
   -- snapshotted; the last known screen position is still better than carrying
   -- a live foreign link into lockdown.
-  local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
-  if cacheKey and type(applyCached) == "function" and applyCached(frame, cacheKey, cacheUnit) then
+  if cacheKey and ApplyCachedUnitFrameScreenPosition(frame, cacheKey, cacheUnit) then
     frame._msufExternalAnchorFrozen = true
     InvalidateFramePositionCache(frame)
     return true
@@ -777,7 +773,7 @@ local function FreezeExternalAnchorsForCombat()
       end
     end
   end
-  if FreezeExternalAnchorConsumer(_G.MSUF_ClassPowerContainer, "classpower", "classpower") then
+  if FreezeExternalAnchorConsumer(MSUF_ClassPowerContainer, "classpower", "classpower") then
     frozenClassPower = true
     froze = true
   end
@@ -826,7 +822,7 @@ local function ThawFrozenExternalAnchors()
     if anchors then
       for _, anchor in pairs(anchors) do anchor._msufExternalAnchorFrozen = nil end
     end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local replayCoversGroup = false
     if type(db) == "table" and type(GroupUsesExternalAnchor) == "function" then
       for name in pairs(externalAnchorRefreshAfterCombat) do
@@ -843,7 +839,7 @@ local function ThawFrozenExternalAnchors()
   end
   if frozenClassPower then
     frozenClassPower = false
-    local cp = _G.MSUF_ClassPowerContainer
+    local cp = MSUF_ClassPowerContainer
     if cp then cp._msufExternalAnchorFrozen = nil end
     if not externalAnchorRefreshAfterCombat.EssentialCooldownViewer then
       Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false })
@@ -870,8 +866,8 @@ function Factory.ScheduleExternalAnchorRefresh(frameName, replayOnly)
   end
   if externalAnchorRefreshScheduled then return true end
   externalAnchorRefreshScheduled = true
-  if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-    _G.C_Timer.After(0, FlushScheduledExternalAnchorRefresh)
+  if C_Timer and type(C_Timer.After) == "function" then
+    C_Timer.After(0, FlushScheduledExternalAnchorRefresh)
   else
     FlushScheduledExternalAnchorRefresh()
   end
@@ -997,7 +993,7 @@ local function FlushCooldownWidthRefresh()
   local visualRefreshMask = MaskIntersect(requestedVisualMask, visualMask)
   local castbarRefreshMask = MaskIntersect(refreshMask, castbarMask)
 
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local bars = db and db.bars or nil
   local classBit = bars and COOLDOWN_WIDTH_MODE_BITS[bars.classPowerWidthMode or ""] or nil
   if bars and bars.showClassPower ~= false and MaskHas(visualRefreshMask, classBit) then
@@ -1030,11 +1026,9 @@ local function FlushCooldownWidthRefresh()
     end
   end
 
-  local refreshCastbar = _G.MSUF_RefreshCastbarCooldownWidthSource
-  if type(refreshCastbar) == "function" then
-    if MaskHas(castbarRefreshMask, 1) then refreshCastbar("EssentialCooldownViewer") end
-    if MaskHas(castbarRefreshMask, 2) then refreshCastbar("UtilityCooldownViewer") end
-  end
+  local refreshCastbar = Dep("MSUF_RefreshCastbarCooldownWidthSource")
+  if MaskHas(castbarRefreshMask, 1) then refreshCastbar("EssentialCooldownViewer") end
+  if MaskHas(castbarRefreshMask, 2) then refreshCastbar("UtilityCooldownViewer") end
   -- The unit preview belongs to the load-on-demand options addon.
   local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
   if refreshPreview then refreshPreview("MSUF_COOLDOWN_WIDTH_SOURCE") end
@@ -1055,7 +1049,7 @@ ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig, skip
   if castbarOnly == true then configuredMask = castbarMask end
   requestedMask = MaskIntersect(requestedMask, configuredMask)
   if requestedMask == 0 then return false end
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
   if skipAnchorSchedule ~= true
     and castbarOnly ~= true
@@ -1088,8 +1082,8 @@ ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig, skip
   end
   if cooldownWidthRefreshPending then return true end
   cooldownWidthRefreshPending = true
-  if _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(0, FlushCooldownWidthRefresh)
+  if C_Timer and C_Timer.After then
+    C_Timer.After(0, FlushCooldownWidthRefresh)
   else
     FlushCooldownWidthRefresh()
   end
@@ -1199,7 +1193,7 @@ function Factory.RefreshExternalAnchor(frameName)
   end
 
   if frameName == "EssentialCooldownViewer" then
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
     if bars and bars.classPowerAnchorToCooldown == true then
       Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false })
@@ -1207,7 +1201,7 @@ function Factory.RefreshExternalAnchor(frameName)
     end
   end
 
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local GF = MSUF.GF
   if type(db) == "table" and type(GroupUsesExternalAnchor) == "function" and GroupUsesExternalAnchor(db, frameName)
     and GF and type(GF.RefreshHeaderLayout) == "function" then
@@ -1270,7 +1264,7 @@ local function MissingLateAnchorResolved()
 end
 
 local function HasLateAnchorConfig()
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   if type(db) ~= "table" then return false end
   local general = type(db.general) == "table" and db.general or nil
   if IsGlobalCooldownAnchorEnabled(general) then
@@ -1316,17 +1310,22 @@ local function HasLateAnchorConfig()
   return HasGroupLateAnchorConfig(db)
 end
 
-local function FlushLateAnchorReanchor(forcePosition)
-  if InCombat() then
-    if forcePosition then InvalidatePositionCache(nil) end
-    if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
-    local GF = MSUF.GF
-    if type(_G.MSUF_DB) == "table" and HasGroupLateAnchorConfig(_G.MSUF_DB)
-      and GF and type(GF.DeferGroupRuntime) == "function" then
-      GF.DeferGroupRuntime("layout")
-    end
-    return false
+-- In combat a late reanchor only records its follow-up: the unit replay after
+-- combat and, when a group header follows a late anchor, its deferred layout.
+local function DeferLateAnchorReanchorForCombat(forcePosition)
+  if forcePosition then InvalidatePositionCache(nil) end
+  if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
+  local GF = MSUF.GF
+  local db = MSUF_DB
+  if type(db) == "table" and HasGroupLateAnchorConfig(db)
+    and GF and type(GF.DeferGroupRuntime) == "function" then
+    GF.DeferGroupRuntime("layout")
   end
+  return false
+end
+
+local function FlushLateAnchorReanchor(forcePosition)
+  if InCombat() then return DeferLateAnchorReanchorForCombat(forcePosition) end
   if forcePosition then
     Factory.ForceReanchor()
     local applyElements = UF.ApplyElementsToFrame
@@ -1344,7 +1343,7 @@ local function FlushLateAnchorReanchor(forcePosition)
     Factory.Apply()
   end
   Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false })
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local GF = MSUF.GF
   if type(db) == "table" and HasGroupLateAnchorConfig(db)
     and GF and type(GF.RefreshHeaderLayout) == "function" then
@@ -1358,8 +1357,8 @@ local FlushScheduledLateAnchorReanchor
 
 local function QueueLateAnchorReanchor(state, delay)
   state.pending = true
-  if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-    _G.C_Timer.After(delay or 0, function()
+  if C_Timer and type(C_Timer.After) == "function" then
+    C_Timer.After(delay or 0, function()
       FlushScheduledLateAnchorReanchor(state)
     end)
     return true
@@ -1389,17 +1388,8 @@ FlushScheduledLateAnchorReanchor = function(state)
 end
 
 ScheduleLateAnchorReanchor = function(forcePosition)
-  if InCombat() then
-    if forcePosition then InvalidatePositionCache(nil) end
-    if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
-    local GF = MSUF.GF
-    if type(_G.MSUF_DB) == "table" and HasGroupLateAnchorConfig(_G.MSUF_DB)
-      and GF and type(GF.DeferGroupRuntime) == "function" then
-      GF.DeferGroupRuntime("layout")
-    end
-    return false
-  end
-  local state = _G.MSUF_LateAnchorReanchorState
+  if InCombat() then return DeferLateAnchorReanchorForCombat(forcePosition) end
+  local state = MSUF.Optional("MSUF_LateAnchorReanchorState")
   if type(state) ~= "table" then
     state = { pending = false, forcePosition = false, flushing = false, retryRequested = false, attempt = 0 }
     ExportPublic("MSUF_LateAnchorReanchorState", state)

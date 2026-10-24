@@ -93,7 +93,7 @@ local function Load(pool, flavor, general)
     Check(ok, flavor .. ": Castbars/MSUF_Castbars_Backend.lua failed: " .. tostring(message))
 
     local rec = { writes = {}, bus = {}, created = 0 }
-    local setBackend = assert(env.MSUF_SetCastbarBackend, flavor .. ": the backend adapter exported no setter")
+    local setBackend = assert(ns.PublicGlobals.MSUF_SetCastbarBackend, flavor .. ": the backend adapter exported no setter")
     env.MSUF_SetCastbarBackend = function(unit, value, target)
         rec.writes[#rec.writes + 1] = tostring(unit) .. "=" .. tostring(value)
         return setBackend(unit, value, target)
@@ -119,8 +119,12 @@ local function Load(pool, flavor, general)
     ns.Castbars.Driver.CreateCastBar = env.MSUF_CreateCastBar
     ns.Castbars.Backend.SetCastbarBackend = env.MSUF_SetCastbarBackend
     ns.Castbars.Config.Compile()
+    -- Providers these castbar files require that this check never uses are deferred
+    -- (the real font owners load for the ones it does reach).
+    fixture.PrepareFile(root, ns, env, loadfile, CORE .. "Castbars/MSUF_CastbarPools.lua")
     ok, message = world:LoadFile(CORE .. "Castbars/MSUF_CastbarPools.lua", ADDON, ns)
     Check(ok, flavor .. ": Castbars/MSUF_CastbarPools.lua failed: " .. tostring(message))
+    fixture.PrepareFile(root, ns, env, loadfile, CORE .. pool.file)
     ok, message = world:LoadFile(CORE .. pool.file, ADDON, ns)
     fixture.Bind(ns, env)
     Check(ok, flavor .. ": " .. pool.file .. " failed: " .. tostring(message))

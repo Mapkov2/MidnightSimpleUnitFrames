@@ -158,9 +158,10 @@ local function Load(client)
         Upvalue(refresh, "CP_RefreshEventBindings"), "CP_ShouldUseFrequentPowerEvents")
     return {
         K = assert(_G.MSUF_CP_CONST, "constants missing"),
-        profiles = assert(_G.MSUF_CP_MODE_EVENT_PROFILE, "mode event profiles missing"),
-        modeBuilders = assert(_G.MSUF_CP_MODE_BUILDERS, "mode builders missing"),
-        featureBuilders = assert(_G.MSUF_CP_FEATURE_BUILDERS, "feature builders missing"),
+        -- Namespace-only exports (ns.PublicGlobals), not globals.
+        profiles = assert(ns.PublicGlobals.MSUF_CP_MODE_EVENT_PROFILE, "mode event profiles missing"),
+        modeBuilders = assert(ns.PublicGlobals.MSUF_CP_MODE_BUILDERS, "mode builders missing"),
+        featureBuilders = assert(ns.PublicGlobals.MSUF_CP_FEATURE_BUILDERS, "feature builders missing"),
         AM = Upvalue(shouldUseFrequentPower, "AM"),
         ShouldUseFrequentPower = shouldUseFrequentPower,
         CP = CP,

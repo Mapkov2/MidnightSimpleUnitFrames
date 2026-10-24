@@ -92,7 +92,13 @@ function previewGF.UpdateGroupVisibility()
   return true
 end
 
-local previewMSUF = { MSUF2 = M, GF = previewGF }
+-- UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua owns the active preview kind, which
+-- only matters while Edit Mode is active (never here): the page requires the setter at load.
+local requestedPreviewKind
+_G.MSUF_GF_EM2_SetActivePreviewKind = function(kind) requestedPreviewKind = kind end
+-- Client is the fact table Game/Shared/Initialize.lua publishes first in every TOC
+-- (Retail: three arena slots); the page reads the slot count at load.
+local previewMSUF = { MSUF2 = M, GF = previewGF, Client = { MaxArenaOpponents = 3 } }
 assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PagePreviews.lua"))(
   "MidnightSimpleUnitFrames_Options", previewMSUF)
 

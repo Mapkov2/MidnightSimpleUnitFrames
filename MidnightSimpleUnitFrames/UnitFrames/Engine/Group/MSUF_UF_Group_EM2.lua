@@ -6,12 +6,13 @@
 --- runtime header changes. It should not implement live group-frame rendering.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local EM2_FILE = "UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local ExportPublic = MSUF.ExportPublic
 
-local EM2 = _G.MSUF_EM2
+-- Shell/EditMode/MSUF_EditMode.xml loads before the group files.
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 or not EM2.Registry then return end
 
 local Reg = EM2.Registry
@@ -26,9 +27,9 @@ local UIParent = UIParent
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
 
-local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+local SharedUI = MSUF.UI or MSUF.Require("MSUF_UI", EM2_FILE)
 local function FontSize(role)
-  return SharedUI and SharedUI.FontSize and SharedUI.FontSize(role) or (role == "caption" and 11 or 13)
+  return SharedUI.FontSize and SharedUI.FontSize(role) or (role == "caption" and 11 or 13)
 end
 
 local KIND_TO_KEY = {
@@ -306,7 +307,7 @@ local function ResolveAnchorPoint(kind, conf, parent)
   return GF().ResolveAnchorPoint(kind, conf, parent)
 end
 
-local ClampAnchorOffsetOnScreen = _G.MSUF_UF_ClampAnchorOffsetOnScreen
+local ClampAnchorOffsetOnScreen = MSUF.Require("MSUF_UF_ClampAnchorOffsetOnScreen", EM2_FILE)
 
 local function IsPreviewActive(kind)
   if not (_em2Active and _previewShownByEM2 and ShouldShowPreviewKind(kind)) then
@@ -372,7 +373,7 @@ end
 
 local GetPositionCount = GetRequestedPreviewCount
 
-local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
+local FrameRectToUI = MSUF.Require("MSUF_UF_FrameRectToUI", EM2_FILE)
 
 local function ExpandBounds(bounds, frame)
   local l, r, t, b = FrameRectToUI(frame)
@@ -906,6 +907,23 @@ local function ShowPreviewOnly()
   SyncMoversSoon(0.05)
 end
 
+-- Detach and hide every group preview, then the mover containers and preview
+-- anchors (and the quick popups when Edit Mode exits).
+local function HideGroupPreviewsAndMovers(gf, hidePopups)
+  if gf then
+    for _, kind in ipairs(GROUP_KINDS) do
+      gf.SetPreviewAnchor(kind, nil)
+      gf.HidePreview(kind)
+    end
+  end
+
+  for _, kind in ipairs(MOVER_KINDS) do
+    if _containers[kind] then _containers[kind]:Hide() end
+    if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
+    if hidePopups and _popups[kind] then _popups[kind]:Hide() end
+  end
+end
+
 local function HidePreviewOnly()
   local gf = GF()
   _previewShownByEM2 = false
@@ -917,17 +935,7 @@ local function HidePreviewOnly()
     return
   end
 
-  if gf then
-    for _, kind in ipairs(GROUP_KINDS) do
-      gf.SetPreviewAnchor(kind, nil)
-      gf.HidePreview(kind)
-    end
-  end
-
-  for _, kind in ipairs(MOVER_KINDS) do
-    if _containers[kind] then _containers[kind]:Hide() end
-    if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
-  end
+  HideGroupPreviewsAndMovers(gf, false)
   if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 end
 
@@ -1035,18 +1043,7 @@ local function ExitEditMode()
 
   local gf = GF()
   if gf then gf._groupEditActive = nil end
-  if gf then
-    for _, kind in ipairs(GROUP_KINDS) do
-      gf.SetPreviewAnchor(kind, nil)
-      gf.HidePreview(kind)
-    end
-  end
-
-  for _, kind in ipairs(MOVER_KINDS) do
-    if _containers[kind] then _containers[kind]:Hide() end
-    if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
-    if _popups[kind] then _popups[kind]:Hide() end
-  end
+  HideGroupPreviewsAndMovers(gf, true)
 
   if gf then
     RefreshGroupGeometry(gf)
@@ -1061,9 +1058,9 @@ local ADDITIONAL_BLOCK_NAMES = {
   friendlyBoss = "Allied boss frames", healerMana = "Healer mana bars",
 }
 local function RegisterAdditionalMovers()
-  local api = MSUF.EditModeAPI or _G.MSUF_EditModeAPI
+  local api = MSUF.EditModeAPI or MSUF.Require("MSUF_EditModeAPI", EM2_FILE)
   local gf = GF()
-  if not (api and gf) or not (api.RegisterElements or api.RegisterElement) then return end
+  if not gf or not (api.RegisterElements or api.RegisterElement) then return end
   local blocks = gf.ADDITIONAL_BLOCKS or { "pets", "targets", "friendlyBoss", "healerMana" }
   local defaultX, defaultY = gf.ADDITIONAL_DEFAULT_X or {}, gf.ADDITIONAL_DEFAULT_Y or {}
   local elements = {}
@@ -1201,11 +1198,11 @@ local function InstallHUDToggle()
   HUD.Show = function(...)
     origShow(...)
     if not _gfButton then
-      local hf = _G.MSUF_EM2_HUD
+      local hf = MSUF.Optional("MSUF_EM2_HUD")
       if not hf then return end
-      local slot = _G.MSUF_EM2_HUD_PreviewAddonSlot
+      local slot = MSUF.Optional("MSUF_EM2_HUD_PreviewAddonSlot")
       local parent = slot or hf
-      if SharedUI and type(SharedUI.Button) == "function" then
+      if type(SharedUI.Button) == "function" then
         _gfButton = SharedUI.Button(parent, "Groups", 72, 36, {
           align = "CENTER",
           skipHistory = true,
@@ -1339,8 +1336,18 @@ local GROUP_PAGE_BUTTONS = {
 
 local GroupPopup = {}
 
+-- The edit popup style table (Shell/UI/MSUF_EditPopupUI.lua), read where it is used.
+local function Menu2Style()
+  return MSUF.Optional("MSUF_EM2_Menu2Style")
+end
+
+local function Menu2QuickPopup()
+  local style = Menu2Style()
+  return EM2.QuickPopup or (style and style.QuickPopup)
+end
+
 function GroupPopup.QuickPopup()
-  return EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup) or {}
+  return Menu2QuickPopup() or {}
 end
 
 function GroupPopup.Tr(text)
@@ -1524,7 +1531,7 @@ end
 function GroupPopup.OpenMenu2Page(popup, pageKey)
   local mode = popup._msufGFMode
   GroupPopup.Apply(popup)
-  local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+  local M = MSUF.Optional("MSUF2") or MSUF.MSUF2
   local key = KIND_TO_KEY[mode]
   pageKey = pageKey or "gf_layout"
   local component = GroupPopup.GroupComponentForPage(pageKey)
@@ -1681,7 +1688,7 @@ function GroupPopup.BuildControls(popup)
     if entry.key ~= mode then GroupPopup.CopySizeTo(popup, entry.key) end
   end, { palette = Q.RefreshPalette() })
 
-  local Quick = EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup)
+  local Quick = Menu2QuickPopup()
   if Quick and Quick.AddFooterControls then
     Quick.AddFooterControls(popup, { anchor = "BOTTOM", bottomGap = 12,
       onResetPosition = function() GroupPopup.ResetPosition(popup) end })
@@ -1725,7 +1732,7 @@ local function ShowGFPopup(mode)
   GF_EM2_SetPreviewNudgeTarget(mode)
   popup.Sync()
   popup:Show()
-  local S = _G.MSUF_EM2_Menu2Style
+  local S = Menu2Style()
   if S and S.FadeIn then S.FadeIn(popup, 0.12, 0.86, 1) end
   if EM2.State and EM2.State.SetPopupOpen then EM2.State.SetPopupOpen(true) end
   if EM2.Focus and EM2.Focus.SetPopupFocus then EM2.Focus.SetPopupFocus(KIND_TO_KEY[mode], popup) end

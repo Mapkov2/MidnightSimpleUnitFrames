@@ -145,16 +145,18 @@ local function LoadElement(client, namespace)
         NotSecret = function() return true end,
     }
     _G.MSUF_NS = MSUF
-    local commonChunk, commonError = loadfile(commonPath)
-    assert(commonChunk, commonError)
-    commonChunk("MidnightSimpleUnitFrames", MSUF)
-    assert(loadfile(ResolvePath(
-        "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua",
-        "UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"
-    )))("MidnightSimpleUnitFrames", MSUF)
-    local portraitChunk, portraitError = loadfile(portraitPath)
-    assert(portraitChunk, portraitError)
-    portraitChunk("MidnightSimpleUnitFrames", MSUF)
+    -- The element files require the core's pixel regions at load: the real Kernel, Geometry and
+    -- Util own them, in the client's TOC order. The event bus is required but never driven here.
+    local fixtureRoot = (assert(arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", ""))
+    local RequireFixture = assert(loadfile(fixtureRoot .. "/tools/tests/require_fixture.lua"))()
+    for _, relative in ipairs({
+        "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
+        "UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua",
+        "UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua",
+        "UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
+    }) do
+        RequireFixture.LoadShipped(fixtureRoot, "MidnightSimpleUnitFrames/" .. relative, MSUF)
+    end
     UF.elements = { Portrait = registered }
     return assert(registered, "Portrait element was not registered")
 end

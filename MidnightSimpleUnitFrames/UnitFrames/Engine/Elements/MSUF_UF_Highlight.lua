@@ -1,7 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Highlight.lua")
 local ExportPublic = MSUF.ExportPublic
 
 
@@ -9,11 +7,11 @@ local ExportPublic = MSUF.ExportPublic
 -- Owns the optional mouseover/target-style highlight frame layered above unitframes. Global
 -- DB changes update cached config, while per-frame calls only show/hide/recolor the overlay.
 local CreateFrame = CreateFrame
-local CreateColor = _G.CreateColor
+local CreateColor = CreateColor
 local floor = math.floor
 local tonumber = tonumber
 local type = type
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 local Highlight = {}
 MSUF.Highlight = Highlight
@@ -55,8 +53,7 @@ local function ForEachHighlightFrame(fn)
     end
   end
 
-  local ns = _G.MSUF_NS or _G.MSUF or MSUF
-  local gf = ns and ns.GF
+  local gf = MSUF.GF
   if gf and type(gf.ForEachFrame) == "function" then
     gf.ForEachFrame(fn, true)
   elseif gf and type(gf.frameList) == "table" then
@@ -76,7 +73,7 @@ local function ResolveHighlightRGB(general)
     return hc[1] or 1, hc[2] or 1, hc[3] or 1
   end
   local key = (type(hc) == "string" and hc:lower()) or "white"
-  local colors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
+  local colors = MSUF.MSUF_FONT_COLORS or MSUF.Optional("MSUF_FONT_COLORS")
   local col = colors and (colors[key] or colors.white)
   if col then
     return col[1] or 1, col[2] or 1, col[3] or 1
@@ -90,7 +87,7 @@ local roundedUnitMouseover
 local roundedGroupMouseover
 
 function Highlight.Refresh()
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local general = db and db.general or nil
   if general then sawDB = true end
 
@@ -245,7 +242,7 @@ end
 ShowImpl = function(frame)
   if not frame then return end
   if not cfgEnabled then return end
-  if not sawDB and _G.MSUF_DB and _G.MSUF_DB.general then
+  if not sawDB and MSUF_DB and MSUF_DB.general then
     Highlight.Refresh()
     if not cfgEnabled then return end
   end
@@ -332,7 +329,10 @@ local function HighlightDebug()
       if list[i] and list[i].MSUFUnitKey == "target" then f = list[i] break end
     end
   end
-  if not f then p("MSUF Highlight: no target frame found (target something first)"); return end
+  if not f then
+    p("MSUF Highlight: no target frame found (target something first)")
+    return
+  end
   p("MSUF Highlight: target frame = " .. tostring(f:GetName()) .. " size=" .. tostring(f:GetWidth()) .. "x" .. tostring(f:GetHeight()))
   Highlight.Show(f)
   p("MSUF Highlight: forced Show. Border shown = " .. tostring(f._msufHL and f._msufHL:IsShown()))

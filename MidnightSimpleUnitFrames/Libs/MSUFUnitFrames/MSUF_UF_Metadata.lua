@@ -1,8 +1,6 @@
 -- Instance-local runtime metadata for the embedded MSUFUnitFrames framework.
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
-
 MSUF.UF = MSUF.UF or {}
 
 local UF = MSUF.UF
@@ -17,6 +15,7 @@ UF.Metadata = Metadata
 -- compiled event routes and the frame runtime.
 local type = type
 local string_gmatch = string.gmatch
+local PublicGlobals = MSUF.PublicGlobals
 
 local function BuildNameList(names)
   if type(names) == "table" then return names end
@@ -92,8 +91,7 @@ Metadata.refreshElementGroups = {
 -- so they live here, ahead of it in the embed load order.
 local tostring = tostring
 local tonumber = tonumber
--- Host flags (test modes, texture previews) are plain globals the menu writes.
-local HOST_VALUES = _G
+-- Host flags (test modes, texture previews) are published through ExportPublic.
 
 UF.unitOrder = UF.unitOrder or {
   "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget",
@@ -102,7 +100,7 @@ UF.unitOrder = UF.unitOrder or {
 }
 -- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on
 -- Mainline and in sliced harnesses). Idempotent: present tokens are skipped.
-for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+for arenaIndex = 4, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
   local token = "arena" .. arenaIndex
   local present = false
   for i = 1, #UF.unitOrder do
@@ -113,7 +111,7 @@ end
 
 -- Prune unsupported client tokens before factories, events and edit-mode owners
 -- consume the managed-unit list. Imported profiles cannot re-enable these units.
-local client = (_G.MSUF_NS or MSUF).Client
+local client = MSUF.Client
 if client and client.SupportsUnit then
   for i = #UF.unitOrder, 1, -1 do
     if not client.SupportsUnit(UF.unitOrder[i]) then
@@ -149,7 +147,7 @@ local ARENA_UNITS = {
   arena1 = true, arena2 = true, arena3 = true,
 }
 -- Arena slots 4..N join the arena config key and ConfigKeyForUnit (idempotent).
-for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+for arenaIndex = 4, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
   local token = "arena" .. arenaIndex
   local arenaKeyUnits = UF.configKeyUnits.arena
   local present = false
@@ -302,15 +300,15 @@ local function PredictionTestBucketEnabled(bucket, category)
 end
 
 local function AbsorbTextureTestEnabledForScope(scope, category)
-  local modes = HOST_VALUES.MSUF_PredictionTestModes
+  local modes = PublicGlobals.MSUF_PredictionTestModes
   if type(modes) == "table" then
     local normalized = NormalizeAbsorbTestScope(scope)
     if PredictionTestBucketEnabled(modes.shared, category) then return true end
     if normalized ~= "shared" and PredictionTestBucketEnabled(modes[normalized], category) then return true end
     return normalized == "shared" and PredictionTestBucketEnabled(modes.shared, category) or false
   end
-  if HOST_VALUES.MSUF_AbsorbTextureTestMode ~= true then return false end
-  local wanted = NormalizeAbsorbTestScope(HOST_VALUES.MSUF_AbsorbTextureTestScope)
+  if PublicGlobals.MSUF_AbsorbTextureTestMode ~= true then return false end
+  local wanted = NormalizeAbsorbTestScope(PublicGlobals.MSUF_AbsorbTextureTestScope)
   return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
 end
 UF.AbsorbTextureTestEnabledForScope = AbsorbTextureTestEnabledForScope
@@ -374,27 +372,27 @@ end
 UF.CompileBorderPriority = CompileBorderPriority
 
 local function GradientKeyActive(conf, key)
-  if not (conf and conf.hlOverride == true and conf.gradientOverride == true) then return false end
   if conf.gradientOverrideVersion ~= 2 then return conf[key] ~= nil end
   return type(conf.gradientOverrideKeys) == "table" and conf.gradientOverrideKeys[key] == true
 end
 
 local function GradientScopedValue(conf, general, key, fallback, legacyKey)
-  if GradientKeyActive(conf, key) and conf[key] ~= nil then return conf[key] end
-  if legacyKey and GradientKeyActive(conf, legacyKey) and conf[legacyKey] ~= nil then return conf[legacyKey] end
+  if conf and GradientKeyActive(conf, key) and conf[key] ~= nil then return conf[key] end
+  if conf and legacyKey and GradientKeyActive(conf, legacyKey) and conf[legacyKey] ~= nil then return conf[legacyKey] end
   if general and general[key] ~= nil then return general[key] end
   if legacyKey and general and general[legacyKey] ~= nil then return general[legacyKey] end
   return fallback
 end
 
 local function ResolveBarGradient(conf, general, enabledKey)
+  if not (conf and conf.hlOverride == true and conf.gradientOverride == true) then conf = nil end
   local power = enabledKey == "enablePowerGradient"
   local useLegacyDirections = false
   if power then
-    local scopedPower = GradientKeyActive(conf, "powerGradientDirLeft") or GradientKeyActive(conf, "powerGradientDirRight")
-      or GradientKeyActive(conf, "powerGradientDirUp") or GradientKeyActive(conf, "powerGradientDirDown")
-    local scopedLegacy = GradientKeyActive(conf, "gradientDirLeft") or GradientKeyActive(conf, "gradientDirRight")
-      or GradientKeyActive(conf, "gradientDirUp") or GradientKeyActive(conf, "gradientDirDown")
+    local scopedPower = conf and (GradientKeyActive(conf, "powerGradientDirLeft") or GradientKeyActive(conf, "powerGradientDirRight")
+      or GradientKeyActive(conf, "powerGradientDirUp") or GradientKeyActive(conf, "powerGradientDirDown"))
+    local scopedLegacy = conf and (GradientKeyActive(conf, "gradientDirLeft") or GradientKeyActive(conf, "gradientDirRight")
+      or GradientKeyActive(conf, "gradientDirUp") or GradientKeyActive(conf, "gradientDirDown"))
     local generalPower = general and (general.powerGradientDirLeft ~= nil or general.powerGradientDirRight ~= nil
       or general.powerGradientDirUp ~= nil or general.powerGradientDirDown ~= nil)
     useLegacyDirections = not scopedPower and (scopedLegacy or not generalPower)
@@ -425,6 +423,21 @@ local function ResolveBarGradient(conf, general, enabledKey)
   }
 end
 UF.ResolveBarGradient = ResolveBarGradient
+
+function UF.ResolveBarGloss(conf, general, kind, out)
+  local prefix = kind == "power" and "powerGloss" or "healthGloss"
+  local enabled = ConfigScopedValue(conf, general, prefix .. "Enabled", false) == true
+  local strength = Clamp01(ConfigScopedValue(conf, general, prefix .. "Strength", 0.5), 0.5)
+  if not out then return { enabled = enabled, strength = strength } end
+  out.enabled, out.strength = enabled, strength
+  return out
+end
+
+function UF.CompileBarMaterials(dst, conf, general, kind, gloss)
+  dst.barGradient = ResolveBarGradient(conf, general, kind == "power" and "enablePowerGradient" or "enableGradient")
+  dst.barGloss = UF.ResolveBarGloss(conf, general, kind, gloss)
+  return dst
+end
 
 function UF.FillPredictionColors(dst, general, conf, scopedValue, numberFn)
   scopedValue = scopedValue or ConfigScopedValue

@@ -426,6 +426,16 @@ local function BuildEffectTool(withPandemic)
     }
     local function Bind(_, _, label) labels[#labels + 1] = label; return Control() end
     M.BindSwitchAt, M.BindSliderAt, M.BindDropdownAt, M.BindTextInputAt = Bind, Bind, Bind, Bind
+    -- The workspace builds its ordinary controls through the aura page's positional row
+    -- constructors (MSUF_Menu2_Auras.lua AurasPage), which keep the former native binder
+    -- signatures: each records its label here, and sections are the builder's own.
+    M.AurasPage = {
+        Switch = Bind, Slider = Bind, Dropdown = Bind, TextInput = Bind,
+        Bound = function(native) return function(...) if native then return native(...) end end end,
+        Section = function(builder, ...) return builder:CollapsibleSection(...) end,
+        BindColor = function() end,
+        AttachTextColorShortcut = function() end,
+    }
     M.Widgets = {
         Color = function() local color = Control(); color._msuf2Title = Control(); return color end,
         SetCollapsibleBadges = function(section, list)

@@ -271,7 +271,7 @@ local function MaxFrameStrata(a, b)
     if IsSecretValue(b) then b = nil end
     if not a or a == "" then return b end
     if not b or b == "" then return a end
-    local rank = _G.MSUF_FRAME_STRATA_RANK
+    local rank = MSUF.PublicGlobals.MSUF_FRAME_STRATA_RANK
     return ((rank[a] or 0) >= (rank[b] or 0)) and a or b
 end
 ExportPublic("MSUF_MaxFrameStrata", MaxFrameStrata)
@@ -283,7 +283,7 @@ local function SyncFrameLayerAbove(child, parent, offset, strata)
     if parent.GetFrameStrata then parentStrata = parent:GetFrameStrata() end
     if IsSecretValue(parentStrata) then parentStrata = nil end
     if IsSecretValue(strata) then strata = nil end
-    if strata == nil or strata == "" then strata = _G.MSUF_EFFECT_FRAME_STRATA end
+    if strata == nil or strata == "" then strata = MSUF.PublicGlobals.MSUF_EFFECT_FRAME_STRATA end
     local wantStrata = MaxFrameStrata(parentStrata, strata)
     if wantStrata and child.SetFrameStrata then
         local currentStrata
@@ -708,7 +708,7 @@ ExportPublic("MSUF_SetTextIfChanged", MSUF_SetTextIfChanged)
 ExportPublic("MSUF_NormalizeCastbarTimeFormat", MSUF_NormalizeCastbarTimeFormat)
 ExportPublic("MSUF_GetCastbarTimeFormatDBKey", MSUF_GetCastbarTimeFormatDBKey)
 ExportPublic("MSUF_GetCastbarTimeFormat", MSUF_GetCastbarTimeFormat)
-ExportPublic("MSUF_FormatCastbarTimeText", MSUF_FormatCastbarTimeText)
+ExportPublic("MSUF_FormatCastbarTimeText", MSUF_FormatCastbarTimeText, false)
 ExportPublic("MSUF_SetCastTimeText", MSUF_SetCastTimeText)
 ExportPublic("MSUF_SetAlphaIfChanged", MSUF_SetAlphaIfChanged)
 ExportPublic("MSUF_SetWidthIfChanged", MSUF_SetWidthIfChanged)

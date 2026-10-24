@@ -1,7 +1,6 @@
 --- Mists Classic group spell indicators.
 --- Spell baseline: WeakAuras Mists templates, 2026-08-02.
 local _, ns = ...
-ns = ns or (_G.MSUF_NS) or {}
 local SI = ns.GF and ns.GF.SpellIndicators
 if not SI then return end
 

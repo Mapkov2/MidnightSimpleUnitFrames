@@ -8,15 +8,13 @@
 
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
-
 local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
 
 local Range = UF.Range or {}
 UF.Range = Range
 
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 local unpack = unpack or table.unpack
 local tonumber = tonumber
 
@@ -50,7 +48,7 @@ local SUPPORTED_UNITS, RANGE_UNITS, RANGE_UNIT_BITS, BOSS_UNITS, BOSS_UNIT_SET, 
     end
   end
   return supported, order, bits, boss, bossSet, arena
-end)(math.max(3, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3))))
+end)(math.max(3, math.min(5, math.floor(tonumber(MSUF.Client.MaxArenaOpponents) or 3))))
 local TARGET_EVENT_TARGET_BIT = 1
 local TARGET_EVENT_FOCUS_BIT = 2
 local TARGET_EVENT_PET_BIT = 4

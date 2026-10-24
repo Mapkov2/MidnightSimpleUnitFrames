@@ -1,5 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_BossTargetIndicator.lua")
 local Indicator = {}
 MSUF.BossTargetIndicator = Indicator
 
@@ -59,7 +59,10 @@ end
 local function Draw(marker, shape, size, direction, cfg)
   for i = 1, #shape / 4 do
     local line = marker.lines[i]
-    if not line then line = PixelLayoutRegion(marker:CreateLine(nil, "OVERLAY")); marker.lines[i] = line end
+    if not line then
+      line = PixelLayoutRegion(marker:CreateLine(nil, "OVERLAY"))
+      marker.lines[i] = line
+    end
     local at = (i - 1) * 4
     local x1, y1 = Rotate(shape[at + 1], shape[at + 2], direction)
     local x2, y2 = Rotate(shape[at + 3], shape[at + 4], direction)
@@ -83,10 +86,16 @@ local function StopDrag(marker)
   if menu and menu.RefreshVisibleSliders then menu.RefreshVisibleSliders("BOSS_TARGET_MOVE") end
 end
 local function DragUpdate(marker)
-  if InCombatLockdown() then StopDrag(marker); return end
+  if InCombatLockdown() then
+    StopDrag(marker)
+    return
+  end
   local x, y = GetCursorPosition()
-  local conf = _G.MSUF_DB and _G.MSUF_DB.boss
-  if not conf then StopDrag(marker); return end
+  local conf = MSUF_DB and MSUF_DB.boss
+  if not conf then
+    StopDrag(marker)
+    return
+  end
   x = math.floor(marker._startX + (x - marker._cursorX) / marker:GetEffectiveScale() + .5)
   y = math.floor(marker._startY + (y - marker._cursorY) / marker:GetEffectiveScale() + .5)
   if x == conf.bossTargetIndicatorOffsetX and y == conf.bossTargetIndicatorOffsetY then return end

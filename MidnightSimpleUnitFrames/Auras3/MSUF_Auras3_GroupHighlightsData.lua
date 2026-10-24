@@ -12,7 +12,6 @@
 --- exact Shroud membership auras. MSUF has no runtime dependency on MiniAuras
 --- and owns this versioned catalog.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then

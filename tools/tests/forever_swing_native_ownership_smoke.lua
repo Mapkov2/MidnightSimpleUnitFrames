@@ -189,6 +189,12 @@ _G.C_StringUtil = { CreateNumericRuleFormatter = function() return { SetBreakpoi
 _G.C_SwingTimer = { EnableRangeCheck = noop, IsTargetWithinSwingRange = function() return nil end }
 _G.C_Spell = { GetSpellName = function() return nil end, IsCurrentSpell = function() return false end }
 
+-- Kernel/MSUF_Util.lua's pixel layout, which SwingTimer requires: fixtures lay out
+-- no pixels (a policy string calls that method, anything else hands the region back).
+_G.MSUF_PixelLayoutRegion = function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 local ns = { Client = { IsForever = true } }
 ns.ExportPublic = function(key, value) _G[key] = value end
 ns.LSM = { Fetch = function() return nil end, List = function() return {} end, HashTable = function() return {} end,

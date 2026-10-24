@@ -1,25 +1,23 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua
 --- Cold-path shared helpers for the MSUF2 unit frame preview.
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
-local ExportPublic = MSUF.ExportPublic
+local MSUF = _G.MSUF
+local FILE = "Menu2/UnitPreview_Core"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local floor = math.floor
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
-local Preview = MSUF.UFPreview or {}
-MSUF.UFPreview = Preview
-ExportPublic("MSUF_UFPreview", Preview)
+-- UnitPreview_Model.lua, loaded first, creates and exports the shared preview table.
+local Preview = MSUF.Require("MSUF_UFPreview", FILE)
 local PreviewHelpers = (MSUF.MSUF2 and MSUF.MSUF2.PreviewHelpers) or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local Core = MSUF.UFPreviewCore or {}
 MSUF.UFPreviewCore = Core
 function Core.MenuTheme()
-    local m = MSUF and MSUF.MSUF2
+    local m = MSUF.MSUF2
     return m and m.Theme
 end
 function Core.ApplyBackdrop(frame, bg, border, fallback)
     local T = Core.MenuTheme()
-    if T and type(T.ApplyBackdrop) == "function" then
+    if T and T.ApplyBackdrop then
         T.ApplyBackdrop(frame, bg, border)
         return
     end
@@ -125,9 +123,8 @@ function Core.InCombat()
     -- MSUF_InCombat is runtime-owned and can briefly remain latched after combat;
     -- consulting it first would strand the preview waiting for an event that has
     -- already fired. Keep it only as a fallback for non-client/test environments.
-    local inCombatLockdown = _G.InCombatLockdown
-    if type(inCombatLockdown) == "function" then
-        return inCombatLockdown() == true
+    if InCombatLockdown then
+        return InCombatLockdown() == true
     end
-    return _G.MSUF_InCombat == true
+    return MSUF.PublicGlobals.MSUF_InCombat == true
 end

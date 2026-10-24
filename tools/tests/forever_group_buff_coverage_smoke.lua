@@ -166,6 +166,10 @@ local function Load(client)
     setfenv(chunk, env)
     local namespace = { Client = client, GF = GF, UF = { Layers = { StatusLevel = function(_, layer, fallback)
         return 100 + (layer or fallback) * 32 + 8 end } } }
+    -- The shipped Kernel API in this client's globals, and the pixel layout provider the module binds
+    -- when it loads (this smoke lays out no pixels).
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, namespace, env)
+    namespace.ExportPublic("MSUF_PixelLayoutRegion", function(region) return region end)
     local policy = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua"))
     setfenv(policy, env)
     policy("MidnightSimpleUnitFrames", namespace)

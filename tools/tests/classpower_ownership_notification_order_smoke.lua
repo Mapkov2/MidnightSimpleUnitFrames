@@ -55,8 +55,12 @@ local function Run(name, class, spec, primary, bars, script, opts)
             InCombatLockdown = function() return S.inCombat == true end
             local ns, power = MSUF_NS
             ns.UF.Layers = {}
-            assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua"))(
-                "MidnightSimpleUnitFrames", ns)
+            -- The real Kernel API replaces the world's export stub; providers BarsCommon requires that
+            -- load later (the collaborators and the real Power element) are resolved live, and a
+            -- provider this world never loads raises when used.
+            local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+            RequireFixture.InstallKernel(repo, ns, nil, nil, true)
+            RequireFixture.LoadShipped(repo, "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua", ns)
             _G.MSUF_RefreshPlayerPowerBar = function()
                 -- The frozen line supplies expected ownership independently of
                 -- the current object, so a stale-owner notification fails here.
@@ -100,7 +104,7 @@ end
 
 local function Refresh(t, label)
     Step(t)
-    local refresh = _G.MSUF_ClassPower_Refresh
+    local refresh = t.ns.PublicGlobals.MSUF_ClassPower_Refresh -- a namespace-only export, not a global
     if refresh then refresh() else t.module.RefreshSettings() end
     t.env:RunTimers()
     Snapshot(t, label)

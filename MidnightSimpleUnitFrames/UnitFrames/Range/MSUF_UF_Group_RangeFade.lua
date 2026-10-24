@@ -8,7 +8,6 @@
 --- Keep scan expansion budgeted; raid-sized groups multiply every range probe.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
@@ -16,7 +15,7 @@ MSUF.GF = GF
 
 if not (UF and UF.RegisterElement) then return end
 
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 local tonumber = tonumber
 local type = type
 local UnitGUID = UnitGUID
@@ -32,7 +31,7 @@ local GetTime = GetTime
 local Scheduler = MSUF.Scheduler
 
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 -- Lazily resolved from the shared Alpha element (load-order safe); only
 -- consulted for members whose compiled spec carries oocFade.
 local OocFadeMul

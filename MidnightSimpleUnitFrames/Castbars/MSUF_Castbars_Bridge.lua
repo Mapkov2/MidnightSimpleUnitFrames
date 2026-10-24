@@ -19,9 +19,13 @@ local Publish = PublicAPI.Publish
 
 ns.UF = ns.UF or {}
 
+-- State/MSUF_Defaults.lua and Kernel/MSUF_Modules.lua load before this file.
+local EnsureDB = ns.Optional("MSUF_EnsureDB")
+local RegisterModule = ns.Require("MSUF_RegisterModule", "Castbars/MSUF_Castbars_Bridge.lua")
+
 local function GeneralDB()
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
+    if type(EnsureDB) == "function" then
+        EnsureDB()
     end
 
     return (Config.Read().general) or {}
@@ -82,9 +86,9 @@ local NATIVE_CAST_EVENTS = {
 --- PlayerCastingBarFrame then ignores them). It is owned like the main bar; no
 --- other client defines it, so the lookup is a no-op there.
 local function ForEachBlizzardPlayerCastbar(callback)
-    local player = rawget(_G, "PlayerCastingBarFrame")
-    local legacyPlayer = rawget(_G, "CastingBarFrame")
-    local gamepadPlayer = rawget(_G, "GamepadPlayerCastingBarFrame")
+    local player = PlayerCastingBarFrame
+    local legacyPlayer = CastingBarFrame
+    local gamepadPlayer = GamepadPlayerCastingBarFrame
     if player then callback(player) end
     if legacyPlayer and legacyPlayer ~= player then callback(legacyPlayer) end
     if gamepadPlayer and gamepadPlayer ~= player and gamepadPlayer ~= legacyPlayer then
@@ -209,7 +213,7 @@ function NativeOwner:Apply()
     local suppress = not ShouldUseBlizzard("player")
     SetBlizzardPlayerCastbarAllowed(not suppress)
 
-    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+    if type(InCombatLockdown) == "function" and InCombatLockdown() then
         nativeOwnershipPending = true
         ForEachBlizzardPlayerCastbar(function(frame)
             if suppress then ConcealNativeFrame(frame) end
@@ -384,25 +388,22 @@ Bridge.Castbars_RunNextFrame = CastbarsRunNextFrame
 
 --- Module registration lets the kernel disable/shutdown castbars without
 --- knowing about individual player/target/focus/boss implementation files.
-local registerModule = _G.MSUF_RegisterModule
-if type(registerModule) == "function" then
-    registerModule("Castbars", {
-        order = 40,
-        IsEnabled = function()
-            return AreAnyCastbarsEnabled()
-        end,
-        Enable = function() end,
-        Disable = function()
-            CastbarsOnSettingsChanged("module_disable")
-            CastbarsForceHideAll()
-        end,
-        Shutdown = function()
-            CastbarsOnSettingsChanged("module_shutdown")
-            CastbarsForceHideAll()
-        end,
-        RefreshSettings = function(_, reason)
-            CastbarsOnSettingsChanged(reason or "module_refresh")
-            ChannelTicks.ApplyPlayerChannelTickMarkers()
-        end,
-    })
-end
+RegisterModule("Castbars", {
+    order = 40,
+    IsEnabled = function()
+        return AreAnyCastbarsEnabled()
+    end,
+    Enable = function() end,
+    Disable = function()
+        CastbarsOnSettingsChanged("module_disable")
+        CastbarsForceHideAll()
+    end,
+    Shutdown = function()
+        CastbarsOnSettingsChanged("module_shutdown")
+        CastbarsForceHideAll()
+    end,
+    RefreshSettings = function(_, reason)
+        CastbarsOnSettingsChanged(reason or "module_refresh")
+        ChannelTicks.ApplyPlayerChannelTickMarkers()
+    end,
+})

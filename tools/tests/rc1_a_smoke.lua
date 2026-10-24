@@ -183,13 +183,13 @@ local function RunCastbarHandBack(label, withGamepad, releaseInCombat)
     backend = "BLIZZARD"
     if releaseInCombat then
         inCombat = true
-        Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == false, label .. ": a combat release did not defer")
+        Check(_G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars() == false, label .. ": a combat release did not defer")
         Check(next(playerState.events) == nil, label .. ": a combat release touched the bar before combat ended")
         inCombat = false
         Check(eventFrame.events.PLAYER_REGEN_ENABLED == true, label .. ": the deferred release waits for no combat end")
         eventFrame.onEvent(eventFrame, "PLAYER_REGEN_ENABLED")
     else
-        _G.MSUF_SuppressBlizzardPlayerCastbars()
+        _G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars()
     end
 
     local states = { playerState, padState }
@@ -581,8 +581,11 @@ local function RunForeverBuffFrame(label, isForever)
     end
 
     _G.MSUF_DB = { general = {}, auras3 = { shared = { hideBlizzardBuffFrame = true } } }
-    _G.MSUF_GetGeneralDB = function() return _G.MSUF_DB.general end
     local ns = { Client = { IsForever = isForever } }
+    -- The real Kernel API; the file reads the general-profile accessor from the
+    -- namespace registry (Kernel/MSUF_Util.lua owns it in the client).
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, ns, nil, nil, true)
+    ns.ExportPublic("MSUF_GetGeneralDB", function() return _G.MSUF_DB.general end)
     Load("MidnightSimpleUnitFrames/Kernel/MSUF_BlizzardFrames.lua", ns)
     local apply = ns.UF.ApplyBlizzardAuraVisibility
 

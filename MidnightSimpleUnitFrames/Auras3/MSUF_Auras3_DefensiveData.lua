@@ -10,7 +10,6 @@
 --- stores aura IDs (not always the matching action/spellbook ID), including
 --- passive defensive procs and defensive maintenance buffs.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then

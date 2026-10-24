@@ -245,15 +245,12 @@ end
 -- The real pages: opening and closing the accordion section of a page switches its preview layer.
 ---------------------------------------------------------------------------
 local function Section(pageKey, sectionId)
-    local found, seen = nil, {}
-    local function Walk(node, depth)
-        if found or type(node) ~= "table" or depth > 4 or seen[node] then return end
-        seen[node] = true
-        if node.sectionId == sectionId and node.stateKey then found = node return end
-        for _, child in pairs(node) do Walk(child, depth + 1) end
-    end
-    Walk(M.cache[pageKey], 0)
-    return Check(found, pageKey .. " has no " .. sectionId .. " section") or found
+    local page = M.cache[pageKey]
+    local body = page and page.sections and page.sections[sectionId]
+    local section = body and body._msuf2CollapsibleEntry
+    Check(section and section.header and section.pageKey == pageKey and section.sectionId == sectionId
+        and section.stateKey == pageKey .. ":" .. sectionId, pageKey .. " has no " .. sectionId .. " section")
+    return section
 end
 local function Toggle(section)
     World.FireScript(section.header, "OnClick", "LeftButton")

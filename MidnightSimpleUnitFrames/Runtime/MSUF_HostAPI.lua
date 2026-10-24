@@ -21,16 +21,24 @@
 --       (MSUF.KickReady, documented in Castbars/MSUF_InterruptReady.lua);
 --       added 2026-10-07 without a version change, so callers test for the
 --       function. nil only on a build without that engine.
+--   MSUF_HostAPI.GetIconSkins()               -> table | nil
+--       The icon skins for painters outside MSUF's auras (the Suite's cooldown
+--       manager and action bars): the interface table documented in
+--       Auras3/MSUF_Auras3_IconSkins_Host.lua, with its own version (1).
+--       Added 2026-10-17 without a version change, so callers test for the
+--       function. nil on Classic clients and on a build without icon skins.
 --
 -- The same table is MSUF.HostAPI, and its functions are on the addon
 -- namespace too. Every owner below loads before this file; they are resolved
 -- once, at the first call (after the whole core has loaded), and kept here.
--- The interrupt-ready engine loads after this file and is read at each call.
+-- The interrupt-ready engine loads after this file and the icon skin interface
+-- only on Mainline clients; both are read at each call.
 local _, MSUF = ...
 local type = type
 local UtilInCombat = MSUF.Util.InCombat
 local UnitAffectingCombat = UnitAffectingCombat
 local pairs, tonumber = pairs, tonumber
+local Optional = MSUF.Optional
 -- Kernel/MSUF_Boundary.lua: a raising step is reported and returns false.
 local RunHostAPIStep = MSUF.RunHostAPIStep
 
@@ -48,7 +56,7 @@ local resourcesResolved, ensureCooldownObservers, applyPowerLayout, applyClassPo
 -- The scale owner is optional to the caller: without it the setter answers
 -- "unavailable", as the Suite's own code did with an older host.
 local function ScaleExport(name)
-    local value = _G[name]
+    local value = Optional(name)
     if type(value) == "function" then return value end
     return nil
 end
@@ -140,7 +148,7 @@ end
 local function ApplyUIScaleProfile(spec)
     if PlayerInCombat() then return false, "combat" end
     if not scaleResolved then ResolveScale() end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general
     if not (applyMsufScale and resetGlobalScale) or type(general) ~= "table" then return false, "unavailable" end
     if type(spec) ~= "table" then return false, "invalid" end
@@ -190,7 +198,7 @@ local function CooldownStackComplete(bars, player)
 end
 
 local function GetResourceStack()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" or type(db.bars) ~= "table" or type(db.player) ~= "table" then return nil end
     if db.bars.classPowerAnchorToCooldown == true and PlayerOnCooldownStack(db.player) then
         return RESOURCE_STACK_COOLDOWN
@@ -203,7 +211,7 @@ end
 -- unless forced (the Suite's installer re-applies its stack), runs no applier.
 local function SetResourceStack(mode, force)
     if mode ~= RESOURCE_STACK_COOLDOWN then return false, false end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" or type(db.bars) ~= "table" or type(db.player) ~= "table" then return false, false end
     local bars, player = db.bars, db.player
     local changed = not CooldownStackComplete(bars, player)
@@ -233,12 +241,19 @@ local function GetKickReady()
     return MSUF.KickReady
 end
 
+local function GetIconSkins()
+    local auras = MSUF.MSUF_Auras3
+    local skins = auras and auras.IconSkins
+    return skins and skins.Host or nil
+end
+
 local API = {
     version = 1,
     ApplyUIScaleProfile = ApplyUIScaleProfile,
     SetResourceStack = SetResourceStack,
     GetResourceStack = GetResourceStack,
     GetKickReady = GetKickReady,
+    GetIconSkins = GetIconSkins,
 }
 MSUF.HostAPI = API
 MSUF.HostAPIPlayerInCombat = PlayerInCombat

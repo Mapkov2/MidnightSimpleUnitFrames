@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_BarBackgroundRuntime.lua
 --- Runtime bar background tint/texture handling.
 --- Shared bar-background runtime helpers with stable exported globals.
@@ -9,18 +8,23 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- directly.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Runtime/MSUF_BarBackgroundRuntime.lua"
+local Require = MSUF.Require
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
 MSUF.Bars = MSUF.Bars or {}
 local ExportPublic = MSUF.ExportPublic
 
 local type, tonumber = type, tonumber
-local UnitClass = _G.UnitClass
-local issecretvalue = _G.issecretvalue
-local hasanysecretvalues = _G.hasanysecretvalues
+local UnitClass = UnitClass
+local issecretvalue = issecretvalue
+local hasanysecretvalues = hasanysecretvalues
 local UF = MSUF.UF or {}
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
 local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
 local ReadUnitClassCached = UF.ReadUnitClassCached
+-- Both load before this file; read once, they serve the per-frame lookups.
+local GetClassBarColorFast = Require("MSUF_UFCore_GetClassBarColorFast", FILE)
+local GetSettingsCache = Require("MSUF_UFCore_GetSettingsCache", FILE)
 
 do
     --- Legacy compatibility anchor for profiles that referenced an older
@@ -28,13 +32,10 @@ do
     local LEGACY_CDM_ANCHOR = "EssentialCooldownViewer_MSA_Container"
 
     local function _CompatCharKey()
-        local fn = _G.MSUF_GetCharKey
-        if type(fn) == "function" then
-            local key = fn()
-            if type(key) == "string" and key ~= "" then return key end
-        end
-        local name = _G.UnitName and _G.UnitName("player")
-        local realm = _G.GetRealmName and _G.GetRealmName()
+        local key = Require("MSUF_GetCharKey", FILE)()
+        if type(key) == "string" and key ~= "" then return key end
+        local name = UnitName and UnitName("player")
+        local realm = GetRealmName and GetRealmName()
         if type(name) == "string" and name ~= "" and type(realm) == "string" and realm ~= "" then
             return name .. "-" .. realm
         end
@@ -42,9 +43,9 @@ do
     end
 
     local function _CompatProfileKey()
-        local active = _G.MSUF_ActiveProfile
+        local active = MSUF_ActiveProfile
         if type(active) == "string" and active ~= "" then return active end
-        local gdb = _G.MSUF_GlobalDB
+        local gdb = MSUF_GlobalDB
         local charKey = _CompatCharKey()
         local char = gdb and type(gdb.char) == "table" and gdb.char[charKey]
         active = char and char.activeProfile
@@ -53,7 +54,7 @@ do
     end
 
     local function _CompatCache(rootKey)
-        local gdb = _G.MSUF_GlobalDB
+        local gdb = MSUF_GlobalDB
         local root = gdb and gdb[rootKey]
         if type(root) ~= "table" then return nil end
         local byChar = root[_CompatCharKey()] or root.global
@@ -62,7 +63,7 @@ do
     end
 
     local function _ApplyCompatAnchorCache(anchor)
-        if not (anchor and _G.UIParent) then return false end
+        if not (anchor and UIParent) then return false end
         local bucket = _CompatCache("externalAnchorCache")
         local cached = type(bucket) == "table"
             and (bucket[LEGACY_CDM_ANCHOR] or bucket.EssentialCooldownViewer)
@@ -76,14 +77,14 @@ do
         if h < 1 then h = 1 end
         anchor:ClearAllPoints()
         anchor:SetSize(w, h)
-        anchor:SetPoint("CENTER", _G.UIParent, "CENTER", math.floor(x + 0.5), math.floor(y + 0.5))
+        anchor:SetPoint("CENTER", UIParent, "CENTER", math.floor(x + 0.5), math.floor(y + 0.5))
         return true
     end
 
     local function EnsureLegacyCooldownViewerAnchor()
         local anchor = _G[LEGACY_CDM_ANCHOR]
         if not anchor then
-            anchor = PixelLayoutRegion(_G.CreateFrame("Frame", LEGACY_CDM_ANCHOR, _G.UIParent))
+            anchor = PixelLayoutRegion(CreateFrame("Frame", LEGACY_CDM_ANCHOR, UIParent))
             _G[LEGACY_CDM_ANCHOR] = anchor
         end
         anchor._msufLegacyCooldownAnchor = true
@@ -92,7 +93,7 @@ do
         if not _ApplyCompatAnchorCache(anchor) then
             anchor:ClearAllPoints()
             anchor:SetSize(1, 1)
-            anchor:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+            anchor:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
         if anchor.Show then anchor:Show() end
         return anchor
@@ -118,7 +119,7 @@ local function MSUF_Clamp01(v)
     return v
 end
 
-local MSUF_IsSecretValue = _G.issecretvalue
+local MSUF_IsSecretValue = issecretvalue
 
 local function MSUF_HasAnySecretColor(r, g, b)
     if type(hasanysecretvalues) == "function" then
@@ -142,7 +143,7 @@ end
 
 local function MSUF_GetBarBackgroundTintRGBA()
     EnsureDBSafe()
-    local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local g = (MSUF_DB and MSUF_DB.general) or {}
     local r, gg, b = MSUF.Bars._DarkTint(g, MSUF_Clamp01(g.classBarBgR), MSUF_Clamp01(g.classBarBgG), MSUF_Clamp01(g.classBarBgB))
     return r, gg, b, MSUF_Clamp01(type(g.classBarBgA) == "number" and g.classBarBgA or 1)
 end
@@ -150,7 +151,7 @@ ExportPublic("MSUF_GetBarBackgroundTintRGBA", MSUF_GetBarBackgroundTintRGBA)
 
 local function MSUF_GetPowerBarBackgroundTintRGBA()
     EnsureDBSafe()
-    local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local g = (MSUF_DB and MSUF_DB.general) or {}
     local ar, ag, ab = g.powerBarBgColorR, g.powerBarBgColorG, g.powerBarBgColorB
     if type(ar) ~= "number" or type(ag) ~= "number" or type(ab) ~= "number" then
         return MSUF_GetBarBackgroundTintRGBA()
@@ -172,34 +173,33 @@ end
 ExportPublic("MSUF_IsBlizzardCooldownViewerFrameName", MSUF_IsBlizzardCooldownViewerFrameName)
 
 local function MSUF_GetEffectiveCooldownFrame(frameName)
+    if not MSUF_IsBlizzardCooldownViewerFrameName(frameName) then
+        return frameName and _G[frameName] or nil
+    end
+    -- First-party: the MSUF Suite's bar of that name wins over every provider.
+    -- Utility and Tracked Buffs have no other provider: without the Suite's
+    -- bar, callers fall back to Blizzard's viewer. The providers are read by
+    -- global name on each call: the Suite and the anchor integrations publish
+    -- them after this file loads, and a bare read costs no function call.
+    local getSuiteAnchor = MSUF_GetSuiteCooldownAnchor
+    local suiteAnchor = type(getSuiteAnchor) == "function" and getSuiteAnchor(frameName) or nil
+    if suiteAnchor then return suiteAnchor end
     if frameName == "EssentialCooldownViewer" then
-        -- First-party: the MSUF Suite's Essential bar wins over every provider.
-        local getSuiteAnchor = _G.MSUF_GetSuiteCooldownAnchor
-        local suiteAnchor = type(getSuiteAnchor) == "function" and getSuiteAnchor() or nil
-        if suiteAnchor then return suiteAnchor end
-        local getArcUIAnchor = _G.MSUF_GetArcUICooldownAnchor
-        local arcUIAnchor = type(getArcUIAnchor) == "function" and getArcUIAnchor() or nil
-        if arcUIAnchor then return arcUIAnchor end
-        local getSkironProxy = _G.MSUF_GetSkironCooldownAnchorProxy
-        local skironProxy = type(getSkironProxy) == "function" and getSkironProxy() or nil
-        if skironProxy then
-            return skironProxy
-        end
-        local getCoolinatorAnchor = _G.MSUF_GetCoolinatorCooldownAnchor
-        local coolinatorAnchor = type(getCoolinatorAnchor) == "function" and getCoolinatorAnchor() or nil
-        if coolinatorAnchor then
-            return coolinatorAnchor
-        end
-        local getEllesmereAnchor = _G.MSUF_GetEllesmereCooldownAnchor
-        local ellesmereAnchor = type(getEllesmereAnchor) == "function" and getEllesmereAnchor() or nil
-        if ellesmereAnchor then
-            return ellesmereAnchor
-        end
+        -- Tried in order; the Suite bar above wins over all of them.
+        local getAnchor = MSUF_GetArcUICooldownAnchor
+        local anchor = type(getAnchor) == "function" and getAnchor() or nil
+        if anchor then return anchor end
+        getAnchor = MSUF_GetSkironCooldownAnchorProxy
+        anchor = type(getAnchor) == "function" and getAnchor() or nil
+        if anchor then return anchor end
+        getAnchor = MSUF_GetCoolinatorCooldownAnchor
+        anchor = type(getAnchor) == "function" and getAnchor() or nil
+        if anchor then return anchor end
+        getAnchor = MSUF_GetEllesmereCooldownAnchor
+        anchor = type(getAnchor) == "function" and getAnchor() or nil
+        if anchor then return anchor end
     end
-    if MSUF_IsBlizzardCooldownViewerFrameName(frameName) then
-        return nil
-    end
-    return frameName and _G[frameName] or nil
+    return nil
 end
 ExportPublic("MSUF_GetEffectiveCooldownFrame", MSUF_GetEffectiveCooldownFrame)
 
@@ -316,30 +316,16 @@ MSUF.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
     frame._msufBarBgClassToken = classToken
     if not classToken then return defR, defG, defB end
 
-    local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
-    if type(fastClass) == "function" then
-        local r, g, b = fastClass(classToken)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return MSUF_Clamp01(r), MSUF_Clamp01(g), MSUF_Clamp01(b)
-        end
+    local r, g, b = GetClassBarColorFast(classToken)
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+        return MSUF_Clamp01(r), MSUF_Clamp01(g), MSUF_Clamp01(b)
     end
 
-    local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+    local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
     if color then
         return MSUF_Clamp01(color.r), MSUF_Clamp01(color.g), MSUF_Clamp01(color.b)
     end
     return defR, defG, defB
-end
-
-local _CachedGetCache
-local function _MSUF_ResolveGetCache()
-    if _CachedGetCache then return _CachedGetCache end
-    local fn = _G.MSUF_UFCore_GetSettingsCache
-    if type(fn) == "function" then
-        _CachedGetCache = fn
-        return fn
-    end
-    return nil
 end
 
 local function _MSUF_ResolveGlobalBackgroundAlpha(cache, bars)
@@ -397,10 +383,9 @@ end
 
 local function MSUF_GetEffectiveHealthBarBackgroundTintRGBA(frame)
     EnsureDBSafe()
-    local getCache = _MSUF_ResolveGetCache()
-    local cache = getCache and getCache() or nil
-    local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
-    local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
+    local cache = GetSettingsCache()
+    local gen = (cache and cache.generalRef) or (MSUF_DB and MSUF_DB.general)
+    local bars = (cache and cache.barsRef) or (MSUF_DB and MSUF_DB.bars)
     return _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
 end
 ExportPublic("MSUF_GetEffectiveHealthBarBackgroundTintRGBA", MSUF_GetEffectiveHealthBarBackgroundTintRGBA)
@@ -580,10 +565,9 @@ MSUF_RefreshHealthBarBackgroundColor = function(frame, event, unit, hp, maxHP, c
     local background = frame.hpBarBG or frame.healthBg or frame.bg
     if not background or not (frame.hpBar and frame.hpBar.GetStatusBarColor) then return false end
 
-    local getCache = _MSUF_ResolveGetCache()
-    local cache = getCache and getCache() or nil
-    local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
-    local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
+    local cache = GetSettingsCache()
+    local gen = (cache and cache.generalRef) or (MSUF_DB and MSUF_DB.general)
+    local bars = (cache and cache.barsRef) or (MSUF_DB and MSUF_DB.bars)
     local r, gg, b, a, colorSecret = _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
     local keys = frame.hpBarBG and HP_BG_KEYS or FRAME_BG_KEYS
     if colorSecret == true then
@@ -605,19 +589,17 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     local hpTex = (spec and spec.health and spec.health.backgroundTexture) or (spec and spec.backgroundTexture)
     local powerTex = (spec and spec.power and spec.power.backgroundTexture) or (spec and spec.backgroundTexture) or hpTex
     if not hpTex or not powerTex then
-        local getBgTexture = _G.MSUF_GetBarBackgroundTexture
-        local tex = type(getBgTexture) == "function" and getBgTexture() or nil
+        local tex = Require("MSUF_GetBarBackgroundTexture", FILE)()
         hpTex = hpTex or tex
         powerTex = powerTex or tex
     end
     if not hpTex then return end
     powerTex = powerTex or hpTex
 
-    local getCache = _MSUF_ResolveGetCache()
-    local cache = getCache and getCache() or nil
+    local cache = GetSettingsCache()
 
-    local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
-    local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
+    local gen = (cache and cache.generalRef) or (MSUF_DB and MSUF_DB.general)
+    local bars = (cache and cache.barsRef) or (MSUF_DB and MSUF_DB.bars)
 
     local r, gg, b, a, healthColorSecret = _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
 

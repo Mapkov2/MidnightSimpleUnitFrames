@@ -6,14 +6,19 @@ local Frames = Castbars.Frames
 local Runtime = Castbars.Runtime
 local Style = Castbars.Style
 local Utils = Castbars.Utils
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Builds real/preview regions; Runtime paints casts, Visuals details, Anchors geometry.
 
-local G = _G
+-- Kernel/MSUF_Util.lua and Runtime/MSUF_Colors.lua load before this file.
+local FILE = "Castbars/MSUF_CastbarFrames.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", FILE)
+local GetCastbarBackgroundColor = MSUF.Require("MSUF_GetCastbarBackgroundColor", FILE)
+-- Locales/MSUF_Localization.lua publishes the locale table before this file.
+local GlobalLocale = MSUF.Require("MSUF_L", FILE)
 
 local function Translate(text)
     local ns = MSUF
-    local locale = (type(ns) == "table" and ns.L) or G.MSUF_L
+    local locale = (type(ns) == "table" and ns.L) or GlobalLocale
 
     if type(ns) == "table" and type(ns.Translate) == "function" then
         return ns.Translate(text)
@@ -39,14 +44,6 @@ local function CastbarBackgroundTexture()
     end
 
     return texture
-end
-
-local function CastbarBackgroundColor()
-    if type(G.MSUF_GetCastbarBackgroundColor) == "function" then
-        return G.MSUF_GetCastbarBackgroundColor()
-    end
-
-    return 0.176, 0.176, 0.176, 1
 end
 
 local function CreateSpark(statusBar, height)
@@ -88,8 +85,7 @@ end
 function Frames.BuildCastbarFrameElements(frame)
     local barHeight = 18
 
-    local roundLayout = G.MSUF_SetRoundLayoutToNearestPixel
-    if type(roundLayout) == "function" then roundLayout(frame, true) end
+    SetRoundLayoutToNearestPixel(frame, true)
 
     frame:SetHeight(barHeight)
     if (not frame:GetWidth()) or frame:GetWidth() == 0 then
@@ -101,7 +97,7 @@ function Frames.BuildCastbarFrameElements(frame)
     frame.background:SetColorTexture(0, 0, 0, 0)
 
     local statusBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
-    if type(roundLayout) == "function" then roundLayout(statusBar, true) end
+    SetRoundLayoutToNearestPixel(statusBar, true)
     statusBar:SetPoint("LEFT", frame, "LEFT", barHeight + 1, 0)
     statusBar:SetSize(frame:GetWidth() - barHeight - 1, frame:GetHeight())
     statusBar:SetStatusBarTexture(CastbarTexture())
@@ -132,7 +128,7 @@ function Frames.BuildCastbarFrameElements(frame)
     frame.backgroundBar = PixelLayoutRegion(statusBar:CreateTexture(nil, "BACKGROUND"))
     frame.backgroundBar:SetAllPoints(statusBar)
     frame.backgroundBar:SetTexture(CastbarBackgroundTexture())
-    frame.backgroundBar:SetVertexColor(CastbarBackgroundColor())
+    frame.backgroundBar:SetVertexColor(GetCastbarBackgroundColor())
 
     frame.castText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
     frame.castText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
@@ -205,7 +201,7 @@ function Frames.CreateCastbarPreviewFrame(unit, name, options)
     frame.backgroundBar = PixelLayoutRegion(statusBar:CreateTexture(nil, "BACKGROUND"))
     frame.backgroundBar:SetAllPoints(statusBar)
     frame.backgroundBar:SetTexture("Interface\\Buttons\\WHITE8X8")
-    frame.backgroundBar:SetVertexColor(CastbarBackgroundColor())
+    frame.backgroundBar:SetVertexColor(GetCastbarBackgroundColor())
     frame.backgroundBar:SetAlpha(0.25)
 
     if options.hideFillTexture and statusBar:GetStatusBarTexture() then

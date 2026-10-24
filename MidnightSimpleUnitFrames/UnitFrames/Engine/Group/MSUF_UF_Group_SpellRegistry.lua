@@ -6,7 +6,6 @@
 --- icons, and invalidates runtime caches after profile changes.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}

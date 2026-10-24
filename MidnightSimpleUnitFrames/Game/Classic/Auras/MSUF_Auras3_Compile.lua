@@ -8,8 +8,9 @@
 --- this file publishes.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
+local GetGeneralDB = MSUF.Require("MSUF_GetGeneralDB", "Game/Classic/Auras/MSUF_Auras3_Compile.lua")
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
@@ -28,8 +29,8 @@ assert(type(Visuals) == "table" and type(Features) == "table",
 local type, tostring, tonumber, pairs, select = type, tostring, tonumber, pairs, select
 local math_floor, math_ceil, math_min, math_max = math.floor, math.ceil, math.min, math.max
 local wipe = table.wipe or wipe
-local IsSecret = _G.issecretvalue or function() return false end
-local InCombatLockdown = _G.InCombatLockdown
+local IsSecret = issecretvalue or function() return false end
+local InCombatLockdown = InCombatLockdown
 local AuraUtil = AuraUtil
 -- Debuffs this player can dispel, in the filter this client honours
 -- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
@@ -350,7 +351,7 @@ local BASE_LANE_ORDER = { "buff", "trackedBuff", "debuff", "external" }
 --- MSUF's own combat flag is set. The apply service (Requests.lua), the unit
 --- change follower (UnitFrames.lua) and the dispel previews (Preview.lua) ask it.
 local function AuraRuntimeCombatBlocked()
-    return (InCombatLockdown and InCombatLockdown()) or _G.MSUF_InCombat == true
+    return (InCombatLockdown and InCombatLockdown()) or PublicGlobals.MSUF_InCombat == true
 end
 
 local function WipeTable(tbl)
@@ -413,7 +414,7 @@ end
 local PlainNumber, PlainString, PlainBool = Visuals.PlainNumber, Visuals.PlainString, Visuals.PlainBool
 
 local function ReadGeneralColor(key, defaultR, defaultG, defaultB)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local general = GetGeneralDB()
     local value = general and general[key]
     if type(value) == "table" then
         return Clamp01(value[1], defaultR), Clamp01(value[2], defaultG), Clamp01(value[3], defaultB)
@@ -538,7 +539,7 @@ local function IsGroupFrame(frame)
 end
 
 local function EnsureRootDB()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then
         db = {}
         ExportPublic("MSUF_DB", db)
@@ -695,23 +696,6 @@ local function ReadBlacklistHidePermanent(scope, kind)
     return ResolveHidePermanent(blacklist, filters, kind)
 end
 
-local function CompileBlacklist(blacklist)
-    local spells = type(blacklist) == "table" and blacklist.spells
-    if type(spells) ~= "table" then return nil end
-    local out, n = nil, 0
-    for key, enabled in pairs(spells) do
-        if enabled == true then
-            local id = tonumber(key)
-            if id then
-                if not out then out = {} end
-                out[math_floor(id + 0.5)] = true
-                n = n + 1
-            end
-        end
-    end
-    return n > 0 and out or nil
-end
-
 local function CompileBlacklistHash(hash)
     if type(hash) ~= "table" then return nil end
     local out, n = nil, 0
@@ -726,6 +710,10 @@ local function CompileBlacklistHash(hash)
         end
     end
     return n > 0 and out or nil
+end
+
+local function CompileBlacklist(blacklist)
+    return CompileBlacklistHash(type(blacklist) == "table" and blacklist.spells)
 end
 
 local function FilterTable(filtersRoot, dbKey)
@@ -945,7 +933,7 @@ end
 --- (BuildAuraDurationStyle, Auras3/Runtime/MSUF_Auras3_Runtime_DurationText.lua),
 --- and the stack count colour.
 function LaneSchema.GlobalTextColors(lane)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local general = GetGeneralDB()
     local buckets = general and general.aurasCooldownTextUseBuckets == true
     lane.cooldownTextBuckets = buckets
     lane.cooldownSafeR, lane.cooldownSafeG, lane.cooldownSafeB = 1, 1, 1
@@ -994,6 +982,55 @@ function LaneSchema.DispelTypeBorder(lane, mode, visual)
     lane.showDispelTypeBorder = show == true
     lane.showDispelTypeSymbol = show == true and mode == "SYMBOL"
     lane.dispelTypeColors = dispelVisual and dispelVisual.dispelTypeColors or nil
+end
+
+--- Retail switches a dispel type's symbol art to the Tintable variant when
+--- the user overrode that type's colour, so the native colour map can
+--- repaint it. Classic has no native colouring, so the renderer repaints it
+--- directly. Collect the overridden types here, where the dispel block is
+--- already read, and stamp a signature: the renderer must never rebuild one
+--- per update.
+local function CompileSymbolTints(dispelSpec)
+    if type(dispelSpec) ~= "table" then return nil, nil end
+    local symbolTints, symbolTintKey
+    for i = 1, #DISPEL_POINTS do
+        local point = DISPEL_POINTS[i]
+        local base = "type" .. point[2]
+        if dispelSpec[base .. "R"] ~= nil or dispelSpec[base .. "G"] ~= nil
+            or dispelSpec[base .. "B"] ~= nil then
+            local tr = DispelColorValue(dispelSpec, base .. "R", point[3])
+            local tg = DispelColorValue(dispelSpec, base .. "G", point[4])
+            local tb = DispelColorValue(dispelSpec, base .. "B", point[5])
+            symbolTints = symbolTints or {}
+            symbolTints[point[2]] = { tr, tg, tb }
+            symbolTintKey = (symbolTintKey and (symbolTintKey .. "|") or "")
+                .. point[2] .. tostring(tr) .. "," .. tostring(tg) .. "," .. tostring(tb)
+        end
+    end
+    return symbolTints, symbolTintKey
+end
+
+--- The compiled dispel symbol row of a frame visual.
+local function CompileDispelSymbol(symbol, trigger, tints, tintKey)
+    local compiled = {
+        enabled = true,
+        style = tostring(symbol.style or "BLIZZARD"):upper(),
+        mode = tostring(symbol.mode or "ALL"):upper() == "ALL" and "ALL" or "SINGLE",
+        trigger = trigger,
+        size = ClampNumber(symbol.size, 14, 4, 64),
+        spacing = ClampNumber(symbol.spacing, 2, 0, 32),
+        growth = tostring(symbol.growth or "RIGHT"):upper(),
+        anchor = tostring(symbol.anchor or "TOPRIGHT"):upper(),
+        x = Round(ClampNumber(symbol.x, 0, -4096, 4096)),
+        y = Round(ClampNumber(symbol.y, 0, -4096, 4096)),
+        alpha = Clamp01(symbol.alpha, 1),
+        layer = Round(ClampNumber(symbol.layer, 8, 0, 30)),
+        strata = tostring(symbol.strata or "AUTO"):upper(),
+        tint = tints,
+        tintKey = tintKey,
+    }
+    compiled.appearanceKey = Visuals.DispelSymbolAppearanceKey(compiled)
+    return compiled
 end
 
 --- Config compilation turns DB/model choices into lane specs that the runtime
@@ -1072,30 +1109,8 @@ local function CompileFrameAuraVisual(spec)
         and (borderEnabled ~= true or TriggerCanUseDirectVisual(borderTrigger))
         and (overlayEnabled ~= true or TriggerCanUseDirectVisual(overlayActualTrigger))
     local dispel = (borderEnabled == true or overlayEnabled == true) and CompileDispelVisual(spec.dispel) or nil
-    --- Retail switches a dispel type's symbol art to the Tintable variant when
-    --- the user overrode that type's colour, so the native colour map can
-    --- repaint it. Classic has no native colouring, so the renderer repaints it
-    --- directly. Collect the overridden types here, where the dispel block is
-    --- already read, and stamp a signature: the renderer must never rebuild one
-    --- per update.
     local symbolTints, symbolTintKey
-    local dispelSpec = symbolEnabled and type(spec.dispel) == "table" and spec.dispel or nil
-    if dispelSpec then
-        for i = 1, #DISPEL_POINTS do
-            local point = DISPEL_POINTS[i]
-            local base = "type" .. point[2]
-            if dispelSpec[base .. "R"] ~= nil or dispelSpec[base .. "G"] ~= nil
-                or dispelSpec[base .. "B"] ~= nil then
-                local tr = DispelColorValue(dispelSpec, base .. "R", point[3])
-                local tg = DispelColorValue(dispelSpec, base .. "G", point[4])
-                local tb = DispelColorValue(dispelSpec, base .. "B", point[5])
-                symbolTints = symbolTints or {}
-                symbolTints[point[2]] = { tr, tg, tb }
-                symbolTintKey = (symbolTintKey and (symbolTintKey .. "|") or "")
-                    .. point[2] .. tostring(tr) .. "," .. tostring(tg) .. "," .. tostring(tb)
-            end
-        end
-    end
+    if symbolEnabled then symbolTints, symbolTintKey = CompileSymbolTints(spec.dispel) end
 
     local visual = {
         enabled = true,
@@ -1125,27 +1140,8 @@ local function CompileFrameAuraVisual(spec)
         stripeR = stripeR,
         stripeG = stripeG,
         stripeB = stripeB,
-        symbol = symbolEnabled and {
-            enabled = true,
-            style = tostring(symbol.style or "BLIZZARD"):upper(),
-            mode = tostring(symbol.mode or "ALL"):upper() == "ALL" and "ALL" or "SINGLE",
-            trigger = symbolTrigger,
-            size = ClampNumber(symbol.size, 14, 4, 64),
-            spacing = ClampNumber(symbol.spacing, 2, 0, 32),
-            growth = tostring(symbol.growth or "RIGHT"):upper(),
-            anchor = tostring(symbol.anchor or "TOPRIGHT"):upper(),
-            x = Round(ClampNumber(symbol.x, 0, -4096, 4096)),
-            y = Round(ClampNumber(symbol.y, 0, -4096, 4096)),
-            alpha = Clamp01(symbol.alpha, 1),
-            layer = Round(ClampNumber(symbol.layer, 8, 0, 30)),
-            strata = tostring(symbol.strata or "AUTO"):upper(),
-            tint = symbolTints,
-            tintKey = symbolTintKey,
-        } or nil,
+        symbol = symbolEnabled and CompileDispelSymbol(symbol, symbolTrigger, symbolTints, symbolTintKey) or nil,
     }
-    if visual.symbol then
-        visual.symbol.appearanceKey = Visuals.DispelSymbolAppearanceKey(visual.symbol)
-    end
     return visual
 end
 
@@ -1169,6 +1165,35 @@ local function UnitLaneText(lane, spec, layout, sharedLayout, kind)
     lane.stackSize = ReadNumber(layout, nil, spec.stackSizeKey, DEFAULT_SHARED.stackTextSize, 6, 40)
     lane.stackX = ReadNumber(layout, nil, spec.stackXKey, DEFAULT_SHARED.stackTextOffsetX, -2000, 2000)
     lane.stackY = ReadNumber(layout, nil, spec.stackYKey, DEFAULT_SHARED.stackTextOffsetY, -2000, 2000)
+end
+
+--- Where a compiled lane sits: anchor, layer and growth direction.
+local function PlaceLane(lane, x, y, anchor, layer, growthX, growthY, xSign, ySign, verticalGrowth)
+    lane.x = Round(x)
+    lane.y = Round(y)
+    lane.anchor = anchor
+    lane.layer = Round(layer)
+    lane.growthX = growthX
+    lane.growthY = growthY
+    lane.xSign = xSign
+    lane.ySign = ySign
+    lane.verticalGrowth = verticalGrowth == true
+    lane.initialAnchor = ButtonAnchor(xSign, ySign)
+end
+
+--- The steps every compiled lane ends with: the icon grid, ordering, the global
+--- text colours, the Retail-only filters (off) and the scan cap. Arrival order
+--- is the aura instance order alone, as Retail's AuraInstanceIDOnly sort: the
+--- ownership work a lane does never reorders it, and the unsorted render may
+--- stop scanning once the lane is full.
+function LaneSchema.Finish(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding,
+        sortOrder, sortReverse, renderEnabled, visual, visualDirect)
+    LaneSchema.IconGrid(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding)
+    LaneSchema.Ordering(lane, sortOrder, sortReverse)
+    LaneSchema.GlobalTextColors(lane)
+    LaneSchema.RetailOnlyFiltersOff(lane)
+    lane.visibleOnlyScan = renderEnabled == true and lane.naturalOrder == true
+        and not (lane.kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
 end
 
 local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist, filtersRoot, kind, forceScan, visual, renderAllowed)
@@ -1253,16 +1278,6 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         max = renderEnabled and Round(maxCount) or 0,
         weaponEnchants = kind == "buff" and runtimeUnit == "player"
             and ReadBool(shared, layout, "showWeaponEnchants", false),
-        x = Round(x),
-        y = Round(y),
-        anchor = anchor,
-        layer = Round(layer),
-        growthX = growthX,
-        growthY = growthY,
-        xSign = xSign,
-        ySign = ySign,
-        verticalGrowth = verticalGrowth == true,
-        initialAnchor = ButtonAnchor(xSign, ySign),
         cappedFilterScan = cappedFilterScan == true,
         ownHighlight = ownHighlight == true,
         ownR = 1, ownG = 1, ownB = 1,
@@ -1292,20 +1307,13 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         stealableStyle = kind == "buff" and A3.NormalizeClassicStealableStyle(
             ReadRaw(sharedLayout, nil, "buffStealableStyle")) or nil,
     }
+    PlaceLane(lane, x, y, anchor, layer, growthX, growthY, xSign, ySign, verticalGrowth)
     if ownHighlight == true then lane.ownR, lane.ownG, lane.ownB = OwnHighlightColor(kind) end
     UnitLaneText(lane, spec, layout, sharedLayout, kind)
     LaneSchema.DispelTypeBorder(lane, debuffTypeBorderMode, visual)
     LaneSchema.FilterTokens(lane, baseFilter, nativePlayerFilter, spec.filter .. "|BOSS")
-    LaneSchema.IconGrid(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding)
-    LaneSchema.Ordering(lane, sortOrder, sortReverse)
-    LaneSchema.GlobalTextColors(lane)
-    LaneSchema.RetailOnlyFiltersOff(lane)
-    -- Arrival order is the aura instance order alone, as Retail's
-    -- AuraInstanceIDOnly sort: the ownership work that Only mine, the own-aura
-    -- highlight or a cast-by-me dispel visual turns on never reorders it, and
-    -- the unsorted render may stop scanning once the lane is full.
-    lane.visibleOnlyScan = renderEnabled == true and lane.naturalOrder == true
-        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
+    LaneSchema.Finish(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding,
+        sortOrder, sortReverse, renderEnabled, visual, visualDirect)
     return lane
 end
 
@@ -1415,17 +1423,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         renderEnabled = renderEnabled == true,
         harmful = spec.harmful == true,
         max = renderEnabled and Round(maxCount) or 0,
-        x = Round(x),
-        y = Round(y),
-        anchor = anchor,
-        layer = Round(layer),
         alpha = alpha,
-        growthX = growthX,
-        growthY = growthY,
-        xSign = xSign,
-        ySign = ySign,
-        verticalGrowth = verticalGrowth == true,
-        initialAnchor = ButtonAnchor(xSign, ySign),
         cappedFilterScan = cappedFilterScan == true,
         showTooltip = ReadBool(source, nil, kind .. "ShowTooltip", source.showTooltip ~= false),
         showCooldownSwipe = renderEnabled == true and showCooldownSwipe == true,
@@ -1462,15 +1460,11 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         needsCombatRefresh = filterPlan and filterPlan.needsCombatRefresh == true or false,
         visual = kind == "debuff" and visual or nil,
     }
+    PlaceLane(lane, x, y, anchor, layer, growthX, growthY, xSign, ySign, verticalGrowth)
     LaneSchema.DispelTypeBorder(lane, debuffTypeBorderMode, visual)
     LaneSchema.FilterTokens(lane, filter, nativePlayerFilter, "HARMFUL|BOSS")
-    LaneSchema.IconGrid(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding)
-    LaneSchema.Ordering(lane, sortOrder, sortReverse)
-    LaneSchema.GlobalTextColors(lane)
-    LaneSchema.RetailOnlyFiltersOff(lane)
-    -- Arrival order renders unsorted, whatever ownership work the lane does.
-    lane.visibleOnlyScan = renderEnabled == true and lane.naturalOrder == true
-        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
+    LaneSchema.Finish(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding,
+        sortOrder, sortReverse, renderEnabled, visual, visualDirect)
     return lane
 end
 
@@ -1494,6 +1488,24 @@ function A3.InvalidateGroupRuntimeConfig(scope)
     if mythic then groupConfigRevisions.mythicraid = groupConfigRevisions.mythicraid + 1 end
     groupConfigRevisions[false] = groupConfigRevisions[false] + 1
     return true
+end
+
+--- Registers a compiled lane on a frame config under its kind, in config order;
+--- a lane that did not compile is skipped.
+local function AddLane(cfg, kind, lane)
+    cfg.lanes[kind] = lane
+    if lane then cfg.laneOrder[#cfg.laneOrder + 1] = kind end
+end
+
+--- Adds the feature compiler's lanes (spell indicators, custom containers) in
+--- the order it returns them.
+local function AddExtraLanes(cfg, extraLanes, extraOrder)
+    for i = 1, type(extraOrder) == "table" and #extraOrder or 0 do
+        local kind = extraOrder[i]
+        cfg.lanes[kind] = extraLanes[kind]
+        cfg.laneOrder[#cfg.laneOrder + 1] = kind
+        cfg.enabled = cfg.enabled == true or (extraLanes[kind] and extraLanes[kind].enabled == true)
+    end
 end
 
 local function ResolveGroupFrameConfig(frame, unit)
@@ -1531,26 +1543,17 @@ local function ResolveGroupFrameConfig(frame, unit)
         if debuff then Visuals.EnrichGroupLane(debuff, source, "debuff", spec, scope) end
         if external then Visuals.EnrichGroupLane(external, source, "external", spec, scope) end
         cfg.showTooltip = source.showTooltip ~= false
-        cfg.lanes.buff = buff
-        cfg.lanes.trackedBuff = trackedBuff
-        cfg.lanes.debuff = debuff
-        cfg.lanes.external = external
-        if buff then cfg.laneOrder[#cfg.laneOrder + 1] = "buff" end
-        if trackedBuff then cfg.laneOrder[#cfg.laneOrder + 1] = "trackedBuff" end
-        if debuff then cfg.laneOrder[#cfg.laneOrder + 1] = "debuff" end
-        if external then cfg.laneOrder[#cfg.laneOrder + 1] = "external" end
+        AddLane(cfg, "buff", buff)
+        AddLane(cfg, "trackedBuff", trackedBuff)
+        AddLane(cfg, "debuff", debuff)
+        AddLane(cfg, "external", external)
         cfg.visualDirect = debuff and debuff.visualDirect == true or nil
         cfg.enabled = (buff and buff.enabled == true) or (trackedBuff and trackedBuff.enabled == true)
             or (debuff and debuff.enabled == true) or (external and external.enabled == true)
             or cfg.visualDirect == true
     end
     local extraLanes, extraOrder = Features.CompileGroupIndicatorLanes(frame, unit)
-    for i = 1, type(extraOrder) == "table" and #extraOrder or 0 do
-        local kind = extraOrder[i]
-        cfg.lanes[kind] = extraLanes[kind]
-        cfg.laneOrder[#cfg.laneOrder + 1] = kind
-        cfg.enabled = cfg.enabled == true or (extraLanes[kind] and extraLanes[kind].enabled == true)
-    end
+    AddExtraLanes(cfg, extraLanes, extraOrder)
 
     frame._msufA3GroupSource = source
     frame._msufA3GroupUnit = unit
@@ -1588,10 +1591,8 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         if buff then Visuals.EnrichUnitLane(buff, layout, sharedLayout, shared, "buff", frameSpec) end
         if debuff then Visuals.EnrichUnitLane(debuff, layout, sharedLayout, shared, "debuff", frameSpec) end
         cfg.showTooltip = ReadBool(nil, shared, "showTooltip", true)
-        cfg.lanes.buff = buff
-        cfg.lanes.debuff = debuff
-        if buff then cfg.laneOrder[#cfg.laneOrder + 1] = "buff" end
-        if debuff then cfg.laneOrder[#cfg.laneOrder + 1] = "debuff" end
+        AddLane(cfg, "buff", buff)
+        AddLane(cfg, "debuff", debuff)
         cfg.visualDirect = debuff and debuff.visualDirect == true or nil
         cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true) or cfg.visualDirect == true
     end
@@ -1600,20 +1601,17 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local extraLanes, extraOrder, extraSource = Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
     if type(extraLanes) == "table" then
         Features.ApplyAutoExclusions(cfg.lanes.buff, cfg.lanes.debuff, extraLanes, extraSource, unit)
-        for i = 1, type(extraOrder) == "table" and #extraOrder or 0 do
-            local kind = extraOrder[i]
-            cfg.lanes[kind] = extraLanes[kind]
-            cfg.laneOrder[#cfg.laneOrder + 1] = kind
-            cfg.enabled = cfg.enabled == true or (extraLanes[kind] and extraLanes[kind].enabled == true)
-        end
+        AddExtraLanes(cfg, extraLanes, extraOrder)
     end
 
     cfg.enabled = cfg.enabled == true or cfg.purgeEnabled == true
     return cfg
 end
 
+-- Runs on every aura update. MSUF_DB is the SavedVariables root and a reset
+-- assigns it directly, so read the global itself, not a registry mirror.
 local function ConfigRoot()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     return type(db) == "table" and db.auras3 or nil
 end
 
@@ -1698,7 +1696,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
 end
 
 function A3.ResolveAuraPreviewConfig(frame, unit, frameSpec)
-    if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then return nil end
+    if AuraRuntimeCombatBlocked() then return nil end
     if frameSpec ~= nil and frame and IsGroupFrame(frame) and frameSpec ~= frame.MSUFSpec then
         local proxy = frame._msufA3AuraPreviewConfigProxy or {}
         frame._msufA3AuraPreviewConfigProxy = proxy

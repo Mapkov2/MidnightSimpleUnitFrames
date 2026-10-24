@@ -61,7 +61,7 @@ local function Run(style)
     _G.MSUF_FocusCastbar = focusBar
     ns.Castbars.Frames.Register("focus", nil, focusBar)
     _G.MSUF_KickReady_RefreshAll()                 -- unit-frame spawn
-    _G.MSUF_KickReady_RefreshFrame(focusBar, nil)  -- cast start (driver ApplyColor path)
+    ns.PublicGlobals.MSUF_KickReady_RefreshFrame(focusBar, nil)  -- cast start (driver ApplyColor path)
     local registered = events.SPELL_UPDATE_COOLDOWN == true
     local wakes = wakeSets
     -- Kick comes off cooldown mid-cast.

@@ -5,9 +5,11 @@ local root = assert(arg[1], "repository root required")
 local flavor = arg[2] or "Mainline"
 local sourceRoot = arg[3] or root
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local world = World.New(root, flavor)
 local env, host = world.env, world.core
-host.ExportPublic = function(name, value) env[name], host[name] = value, value end
+-- The real Kernel namespace API and pixel layout provider the shell file requires at load.
+MenuWorld.InstallPartialCore(world, sourceRoot)
 env.MSUF_DB = { general = { showGameMenuButton = true } }
 env.GameMenuFrame = env.CreateFrame("Frame", "GameMenuFrame", env.UIParent)
 local create = env.CreateFrame
@@ -19,24 +21,26 @@ end
 local combat, loaded, loadOK = false, false, true
 local loads, opens, locks, lastPage = 0, 0, 0, nil
 env.InCombatLockdown = function() return combat end
-env.MSUF_ShowConfigCombatLockMessage = function() locks = locks + 1 end
-env.MSUF_IsOptionsLoaded = function() return loaded end
+-- The launcher reads these four from the namespace registry at call time, so they are published there.
+host.ExportPublic("MSUF_ShowConfigCombatLockMessage", function() locks = locks + 1 end)
+host.ExportPublic("MSUF_IsOptionsLoaded", function() return loaded end)
 local function PaintWindow(pageKey)
     assert(not combat, "launcher painted during combat")
     opens, lastPage = opens + 1, pageKey
     return true
 end
-env.MSUF_EnsureOptionsLoaded = function()
+local function EnsureOptionsLoaded()
     loads = loads + 1
     if combat or not loadOK then return false end
     loaded = true
-    env.MSUF_OpenStandaloneOptionsWindow = PaintWindow
+    host.ExportPublic("MSUF_OpenStandaloneOptionsWindow", PaintWindow)
     return true
 end
-env.MSUF_OpenStandaloneOptionsWindow = function(pageKey)
-    if not env.MSUF_EnsureOptionsLoaded() then return false end
+host.ExportPublic("MSUF_EnsureOptionsLoaded", EnsureOptionsLoaded)
+host.ExportPublic("MSUF_OpenStandaloneOptionsWindow", function(pageKey)
+    if not EnsureOptionsLoaded() then return false end
     return PaintWindow(pageKey)
-end
+end)
 local function Load(path)
     local chunk = assert(loadfile(sourceRoot .. "/" .. path))
     setfenv(chunk, env)
@@ -44,7 +48,7 @@ local function Load(path)
 end
 Load("MidnightSimpleUnitFrames/Kernel/MSUF_Keybinds.lua")
 Load("MidnightSimpleUnitFrames/Shell/MSUF_GameMenu.lua")
-env.MSUF_SetGameMenuButtonEnabled(true)
+host.PublicGlobals.MSUF_SetGameMenuButtonEnabled(true) -- namespace-only export
 local button = assert(env.MSUF_GameMenuButton, "real Game Menu button missing")
 local click = assert(button:GetScript("OnClick"))
 world.widgets:ClearTimers()

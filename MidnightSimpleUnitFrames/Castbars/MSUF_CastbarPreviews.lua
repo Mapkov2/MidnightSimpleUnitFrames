@@ -65,21 +65,22 @@ local PREVIEW_UNITS = {
     },
 }
 
+-- Locales/MSUF_Localization.lua publishes the locale table before this file.
+local GlobalLocale = MSUF.Require("MSUF_L", "Castbars/MSUF_CastbarPreviews.lua")
+
 local function Translate(value)
     if type(value) ~= "string" then return value end
 
-    local namespace = _G.MSUF_NS
+    local namespace = MSUF
     if type(namespace) == "table" and type(namespace.Translate) == "function" then
         return namespace.Translate(value)
     end
 
-    local locale = (type(namespace) == "table" and namespace.L) or _G.MSUF_L
+    local locale = (type(namespace) == "table" and namespace.L) or GlobalLocale
     return (type(locale) == "table" and rawget(locale, value)) or value
 end
 
 local EnsureGeneralDB = Utils.EnsureCastbarGeneralDB
-
-local IsInCombat = _G.MSUF_IsPlayerInCombat
 
 --- Providers that load before this file in every client TOC (Kernel/MSUF_Util,
 --- the castbar Utils, Core, Frames, Anchors, PreviewEdit and the player
@@ -87,6 +88,7 @@ local IsInCombat = _G.MSUF_IsPlayerInCombat
 --- instead of silently skipping a per-call guard.
 local FILE = "Castbars/MSUF_CastbarPreviews.lua"
 local Require = MSUF.Require
+local IsInCombat = Require("MSUF_IsPlayerInCombat", FILE)
 local SetTextIfChangedFn = Require("MSUF_SetTextIfChanged", FILE)
 local GetCastbarTimeFormat = Require("MSUF_GetCastbarTimeFormat", FILE)
 local FormatCastbarTimeText = Require("MSUF_FormatCastbarTimeText", FILE)
@@ -102,13 +104,6 @@ local ResetCastbarGlowFade = Utils.ResetCastbarGlowFade
 local UpdateCastbarTextures = Core.UpdateCastbarTextures
 local SetupCastbarPreviewEditHandlers = PreviewEdit.SetupCastbarPreviewEditHandlers
 local UpdateLatencyZone = Player.PlayerCastbar_UpdateLatencyZone
-
---- Providers that load after this file (Driver, Visuals, Castbars.lua); the
---- Classic visual compat also wraps MSUF_RefreshCastbarFrame. Resolved when a
---- preview is used, which is always after the core finished loading.
-local function Later(name)
-    return Require(name, FILE)
-end
 
 local function GetPreviewScale()
     local general = EnsureGeneralDB()
@@ -221,15 +216,21 @@ local function ApplyPreviewCastText(frame, label)
     ApplyCastbarTexts(frame, nil, label, nil)
 end
 
-local function ClearPreviewTest(frame, unit)
-    if not frame then return end
-
+--- Drops a preview bar's test-cast state and its timer script (cold: test
+--- toggles and preview hides only).
+local function StopPreviewTestCast(frame)
     frame.MSUF_testMode = nil
     frame._msufTestActive = nil
     frame.MSUF_testStart = nil
     frame.MSUF_testDur = nil
 
     if frame.SetScript then frame:SetScript("OnUpdate", nil) end
+end
+
+local function ClearPreviewTest(frame, unit)
+    if not frame then return end
+
+    StopPreviewTestCast(frame)
 
     if frame.statusBar and frame.statusBar.SetMinMaxValues then
         frame.statusBar:SetMinMaxValues(0, 1)
@@ -357,7 +358,7 @@ local function SetUnitTestMode(unit, enabled, transient)
     end
 
     local requested = transient and enabled == true or general[config.test] == true
-    local active = _G.MSUF_UnitEditModeActive == true and requested
+    local active = MSUF_UnitEditModeActive == true and requested
     local frame
     if unit == "player" and not (general.castbarPlayerPreviewEnabled and Frames.playerPreview) then
         Manager.InitSafePlayerCastbar()
@@ -421,7 +422,7 @@ local function SetPoolPreviewTestMode(preview, enabled, transient)
         general[preview.testModeKey] = enabled and true or false
     end
 
-    local active = _G.MSUF_UnitEditModeActive == true
+    local active = MSUF_UnitEditModeActive == true
         and (transient and enabled == true or general[preview.testModeKey] == true)
     if active then
         for index = 1, preview.maxFrames do preview:Create(index) end
@@ -450,7 +451,7 @@ Previews.SetArenaCastbarTestMode = SetArenaCastbarTestMode
 Publish("MSUF_SetArenaCastbarTestMode", Previews.SetArenaCastbarTestMode)
 
 local function EditModeCastbarPreviewActive()
-    return _G.MSUF_UnitEditModeActive == true
+    return MSUF_UnitEditModeActive == true
 end
 
 local poolPreviewsPending = false
@@ -522,7 +523,7 @@ local function HideBlizzardPlayerCastbar()
 
     if allowShown then return end
 
-    local frames = { _G.PlayerCastingBarFrame, _G.CastingBarFrame }
+    local frames = { PlayerCastingBarFrame, CastingBarFrame }
     for index = 1, #frames do
         local frame = frames[index]
         if frame then
@@ -584,7 +585,7 @@ local function PositionPreviewFrame(frame, index)
 end
 
 local function PositionCastbarPreviewUnit(unit)
-    if _G.MSUF_UnitEditModeActive ~= true or not EnsureGeneralDB().castbarPlayerPreviewEnabled then
+    if MSUF_UnitEditModeActive ~= true or not EnsureGeneralDB().castbarPlayerPreviewEnabled then
         return false
     end
 
@@ -632,12 +633,7 @@ InstallPoolPreviewEventDriver()
 local function HideCastbarPreviewFrame(frame)
     if not frame then return end
 
-    frame.MSUF_testMode = nil
-    frame._msufTestActive = nil
-    frame.MSUF_testStart = nil
-    frame.MSUF_testDur = nil
-
-    if frame.SetScript then frame:SetScript("OnUpdate", nil) end
+    StopPreviewTestCast(frame)
 
     if frame.statusBar then
         if frame.statusBar.SetMinMaxValues then frame.statusBar:SetMinMaxValues(0, 1) end
@@ -693,7 +689,7 @@ local ApplyCastbarPagePreviewState
 
 local function EnsurePagePreviewCombatWatcher()
     if pagePreviewCombatWatcher then return pagePreviewCombatWatcher end
-    local CreateFrame = _G.CreateFrame
+    local CreateFrame = CreateFrame
     if type(CreateFrame) ~= "function" then return nil end
     pagePreviewCombatWatcher = CreateFrame("Frame")
     pagePreviewCombatWatcher:Hide()
@@ -763,13 +759,13 @@ ApplyCastbarPagePreviewState = function(unit)
     -- Published before restore/activation: the indexed preview owners consult it
     -- so texture/layout re-applies keep (or drop) the page preview correctly.
     pagePreviewUnit = unit
-    _G.MSUF2_CastbarPagePreviewUnit = unit
+    MSUF.ExportPublic("MSUF2_CastbarPagePreviewUnit", unit)
     if previous and previous ~= unit then
         PagePreviewRestoreDefaults(previous)
     end
     if unit and not PagePreviewActivate(unit) then
         pagePreviewUnit = nil
-        _G.MSUF2_CastbarPagePreviewUnit = nil
+        MSUF.ExportPublic("MSUF2_CastbarPagePreviewUnit", nil)
         unit = nil
     end
     if unit then

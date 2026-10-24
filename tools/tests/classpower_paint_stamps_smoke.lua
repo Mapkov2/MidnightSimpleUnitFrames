@@ -76,7 +76,7 @@ do
     Check(SameColor(yellow, { 1.00, 0.98, 0.72 }), "40 % Stagger is not the yellow tier")
 
     MSUF_DB.general.classPowerColorOverrides = { STAGGER_YELLOW = { 0.1, 0.2, 0.3 } }
-    _G.MSUF_ClassPower_InvalidateColors()
+    t.ns.PublicGlobals.MSUF_ClassPower_InvalidateColors() -- a namespace-only export, not a global
     t.env:RunTimers()
     Check(SameColor(bar.color, { 0.1, 0.2, 0.3 }), "a Stagger colour edit did not repaint the current tier")
 
@@ -175,7 +175,7 @@ do
     Check(dimBg and plainBg and not SameColor(dimBg, plainBg), "the unfilled charged pip has no dimmed background")
     local dim = dimBg and { dimBg[1], dimBg[2], dimBg[3], dimBg[4] }
 
-    _G.MSUF_ClassPower_RefreshLayout()
+    t.ns.PublicGlobals.MSUF_ClassPower_RefreshLayout()
     t.S.combo = 2
     World.Dispatcher(t, "UNIT_POWER_UPDATE", "player", "COMBO_POINTS")()
     t.env:RunTimers()
@@ -208,7 +208,7 @@ do
         end
     end
     Backgrounds("on the first paint")
-    _G.MSUF_ClassPower_RefreshLayout()
+    t.ns.PublicGlobals.MSUF_ClassPower_RefreshLayout()
     Backgrounds("after a relayout")
     Check(CP._runeColorVersion == nil, "a relayout repainted the rune backgrounds but left the rune colour pass closed")
     for rune = 1, 6 do t.onEvent(t.eventFrame, "RUNE_POWER_UPDATE", rune, false) end
@@ -216,7 +216,7 @@ do
     Backgrounds("on the rune events after a relayout")
     Check(CP._runeColorVersion == CP.visual.version, "the rune colour pass did not run again after a relayout")
     MSUF_DB.general.classPowerBgColorOverrides = nil
-    _G.MSUF_ClassPower_InvalidateColors()
+    t.ns.PublicGlobals.MSUF_ClassPower_InvalidateColors()
     t.env:RunTimers()
     Check(SameColor(CP.bars[1]._bg.vertexColor, { 0, 0, 0 }), "clearing the rune background override kept the colour")
 end
@@ -232,7 +232,7 @@ do
     t.S.vehicle = true
     t.onEvent(t.eventFrame, "RUNE_POWER_UPDATE", 1, false)
     Check(CP.bars[1].shown == false, "a rune update under a vehicle UI did not hide the pips")
-    _G.MSUF_ClassPower_RefreshLayout()
+    t.ns.PublicGlobals.MSUF_ClassPower_RefreshLayout()
     Check(CP.bars[1].shown == true, "the relayout did not show the pips")
     t.onEvent(t.eventFrame, "RUNE_POWER_UPDATE", 1, false)
     Check(CP.bars[1].shown == false and CP.bars[6].shown == false,

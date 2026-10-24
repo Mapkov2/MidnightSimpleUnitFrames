@@ -11,48 +11,131 @@
 # deliberately not fixed here; vestigial marks a read of a global this tree
 # stopped defining, kept because every read of it is guarded.
 ACCEPT	constant	Blizzard UI constant, enum or shared string
+AbbreviateLargeNumbers	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
+AbbreviateNumbers	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
+AnchorUtil	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_SharedXMLBase/AnchorUtil.lua:110 defines or uses this global
+ArcUI_Public	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_ThirdPartyAnchors.lua; preserved _G.ArcUI_Public behavior, availability checked before use
+ArenaEnemyFrames	frame	Blizzard UI frame or font object; upstream/classic:Blizzard_ArenaUI/Blizzard_ArenaUI.xml:424 defines or uses this global
+ArenaPrepFrames	frame	Blizzard UI frame or font object; upstream/classic:Blizzard_ArenaUI/Blizzard_ArenaUI.xml:350 defines or uses this global
+AuraContainerInbound	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerInbound.lua:3 defines or uses this global
+AuraContainerItemEnchantmentSlot	constant	Blizzard constant/shared value; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerShared.lua:9 defines or uses this global
+AuraContainerSortDirection	constant	Blizzard constant/shared value; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerShared.lua:53 defines or uses this global
+AuraContainerSortMethod	constant	Blizzard constant/shared value; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerShared.lua:40 defines or uses this global
 AuraUtil	namespace	Blizzard aura helper table; the Classic sort reads AuraUtil.IsPriorityDebuff, defined on every Classic branch in Blizzard_FrameXMLUtil/Classic/AuraUtil.lua, and probes it before use
 BackdropTemplateMixin	constant	Blizzard UI constant, enum or shared string
+BreakUpLargeNumbers	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
 CANCEL	constant	Blizzard UI constant, enum or shared string
+CLASS_ICON_TCOORDS	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+CLASS_SORT_ORDER	constant	Blizzard constant/shared value; upstream/live:Blizzard_FrameXMLBase/Constants.lua:37 defines or uses this global
 CLOSE	constant	Blizzard UI constant, enum or shared string
+CUSTOM_CLASS_COLORS	thirdparty	Existing optional addon integration probe in UnitFrames/Effects/MSUF_UF_TextureLayer.lua; preserved _G.CUSTOM_CLASS_COLORS behavior, availability checked before use
+CVarCallbackRegistry	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_SharedXMLBase/CvarUtil.lua:114 defines or uses this global
+C_AddOnProfiler	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_AddOnList/AddonList.lua:705 defines or uses this global
 C_AddOns	namespace	Blizzard C_* namespace
+C_CVar	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_CUFProfiles/Blizzard_CompactUnitFrameProfiles.lua:66 defines or uses this global
+C_ChallengeMode	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_ChallengesUI/Mainline/Blizzard_ChallengesUI.lua:115 defines or uses this global
 C_ChatInfo	namespace	Blizzard C_* namespace
+C_ClassColor	namespace	Blizzard C_* namespace the harness does not model; already reviewed in client-boot-globals.tsv (*)
 C_ClientScene	namespace	Blizzard client scene namespace; upstream/live:Blizzard_ClientSceneVisManager/Blizzard_ClientSceneVisManager.lua:21 calls IsSceneTypeActive; group runtime probes namespace, method and enum before use
+C_CooldownViewer	namespace	Blizzard C_* namespace the harness does not model; already reviewed in client-boot-globals.tsv (Mainline,Forever)
 C_CurveUtil	namespace	Blizzard native curve namespace; upstream/live:Blizzard_APIDocumentationGenerated/CurveUtilDocumentation.lua:5,11 (CreateColorCurve); ResourceMarks probes namespace/method and falls back to public values
 C_DurationUtil	namespace	Blizzard native duration namespace; upstream/live and upstream/forever:Blizzard_APIDocumentationGenerated/DurationUtilDocumentation.lua:5,11 (CreateDuration); ManaExtras probes namespace/method before use
+C_EditMode	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_CooldownViewer/CooldownViewerSettingsLayoutManager.lua:876 defines or uses this global
+C_EventUtils	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_Console/Blizzard_Console.lua:24 defines or uses this global
+C_GamePad	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_RestrictedAddOnEnvironment/RestrictedEnvironment.lua:177 defines or uses this global
+C_GameRules	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_AccountStore/Blizzard_AccountStoreUtil.lua:53 defines or uses this global
 C_Housing	namespace	Blizzard housing namespace; upstream/live and upstream/forever:Blizzard_Game/Mainline/EventImplementation.lua reads C_Housing.IsInsideHouseOrPlot; the group runtime probes namespace/method before use (absent on clients without housing)
 C_IncomingSummon	namespace	Blizzard C_* namespace
+C_Item	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_ArtifactUI/Blizzard_ArtifactPerks.lua:355 defines or uses this global
+C_NamePlate	namespace	Blizzard C_* namespace the harness does not model; already reviewed in client-boot-globals.tsv (*)
+C_PaperDollInfo	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_AuraContainer/Blizzard_AuraButton.lua:101 defines or uses this global
+C_PartyInfo	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_Calendar/Mainline/Blizzard_Calendar.lua:932 defines or uses this global
+C_PetInfo	namespace	Blizzard C_* namespace the harness does not model; already reviewed in client-boot-globals.tsv (Vanilla,TBC,Forever)
+C_PlayerInfo	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_BoostTutorial/Blizzard_Tutorial.lua:15 defines or uses this global
+C_PlayerInteractionManager	namespace	Blizzard C_* namespace the harness does not model; already reviewed in client-boot-globals.tsv (*)
+C_PvP	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_ActionBar/Mainline/StatusTrackingManagerOverrides.lua:27 defines or uses this global
+C_RestrictedActions	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:11 defines or uses this global
 C_Secrets	namespace	Blizzard C_* namespace
 C_SpecializationInfo	namespace	Blizzard C_* namespace
 C_Spell	namespace	Blizzard C_* namespace
 C_SpellBook	namespace	Blizzard C_* namespace
 C_StringUtil	namespace	Blizzard C_* namespace
+C_SwingTimer	namespace	Blizzard helper table/native namespace; upstream/forever:Blizzard_SwingTimer/Blizzard_SwingTimer.lua:386 defines or uses this global
 C_Texture	namespace	Blizzard C_* namespace
 C_Timer	namespace	Blizzard C_* namespace
 C_UnitAuras	namespace	Blizzard C_* namespace
+C_XMLUtil	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_DelvesCompanionConfiguration/Blizzard_DelvesCompanionAbilityList.lua:140 defines or uses this global
+CameraZoomIn	api	Blizzard UI/client API; upstream/forever:Blizzard_GamepadTargeting/TargetLogic.lua:82 defines or uses this global
+CameraZoomOut	api	Blizzard UI/client API; upstream/forever:Blizzard_GamepadTargeting/TargetLogic.lua:80 defines or uses this global
+CanAutoSetGamePadCursorControl	api	Blizzard UI/client API; upstream/live:Blizzard_Game/Shared/Game.lua:16 defines or uses this global
+ChatFontNormal	frame	Blizzard UI frame or font object; upstream/live:Blizzard_Fonts_Shared/Shared/Fonts.xml:1373 defines or uses this global
+CheckInteractDistance	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
 ClearOverrideBindings	api	Blizzard client API
+ClickCastFrames	write	Existing Clique-compatible frame registry; UF_Group_Adapter.RegisterClickCastFrame and UF_Factory_Spawn.RegisterClickCastFrame preserve prior _G.ClickCastFrames initialization and frame registrations
 ColorPickerFrame	frame	Blizzard UI frame or object MSUF reads
+CombatLogGetCurrentEventInfo	api	Blizzard UI/client API; upstream/live:Blizzard_DeprecatedCombatLog/Deprecated_CombatLog.lua:18 defines or uses this global
+ComboFrame_Update	api	Blizzard UI/client API; upstream/live:Blizzard_UnitFrame/Mainline/ComboFrame.lua:27 defines or uses this global
+ComboFrame_UpdateMax	api	Blizzard UI/client API; upstream/live:Blizzard_UnitFrame/Mainline/ComboFrame.lua:22 defines or uses this global
+CompactArenaFrame	frame	Blizzard UI frame or font object; upstream/live:Blizzard_CompactRaidFrames/Blizzard_CompactRaidFrameContainer.lua:164 defines or uses this global
+CompactRaidFrameContainer	frame	Blizzard UI frame or font object; upstream/live:Blizzard_CompactRaidFrames/Blizzard_CompactRaidFrameContainer.xml:3 defines or uses this global
+CompactRaidFrameManager	frame	Blizzard UI frame or font object; upstream/live:Blizzard_CompactRaidFrames/Classic/Blizzard_CompactRaidFrameManager.xml:61 defines or uses this global
+CompactRaidFrameManager_InitializeGamepad	api	Blizzard UI/client API; upstream/forever:Blizzard_CompactRaidFrames/Mainline/Blizzard_CompactRaidFrameManager.lua:503 defines or uses this global
 Constants	constant	Blizzard UI constant, enum or shared string
+CoolinatorPrimaryGroupAnchor	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_ThirdPartyAnchors.lua; preserved _G.CoolinatorPrimaryGroupAnchor behavior, availability checked before use
 CopyTable	api	Blizzard client API
 CreateColor	api	Blizzard SharedXML color constructor; upstream/live:Blizzard_SharedXMLBase/Color.lua:3, used for native curve color points
+CreateFont	api	Blizzard UI/client API; upstream/live:Blizzard_SharedXML/FontableFrameMixin.lua:120 defines or uses this global
 CreateFrame	api	Blizzard client API
+CreateUnitHealPredictionCalculator	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
+CurveConstants	table	Blizzard CurveConstants table; already reviewed in client-boot-globals.tsv (*)
+CustomAuraContainerItemEnchantmentPlacement	constant	Blizzard constant/shared value; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerShared.lua:214 defines or uses this global
+DAMAGE_TEXT_FONT	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
 DEFAULT_CHAT_FRAME	frame	Blizzard UI frame or object MSUF reads
 DELETE	constant	Blizzard UI constant, enum or shared string
+DUAL_SPEC_PRIMARY	constant	Blizzard constant/shared value; upstream/forever:Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentsFrame.lua:156 defines or uses this global
+DUAL_SPEC_SECONDARY	constant	Blizzard constant/shared value; upstream/forever:Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentsFrame.lua:157 defines or uses this global
+DandersFrames	thirdparty	Existing optional addon integration probe in Shell/EditMode/MSUF_EditMode_Danders.lua; preserved _G.DandersFrames behavior, availability checked before use
+Details	thirdparty	Existing optional addon integration probe in Shell/EditMode/MSUF_EditMode_Details.lua; preserved _G.Details behavior, availability checked before use
+DisableAddOn	api	Blizzard Classic addon-toggle global; already reviewed in client-boot-globals.tsv (Vanilla,Mists,TBC)
+Dominos	thirdparty	Existing optional addon integration probe in Shell/EditMode/MSUF_EditMode_Dominos.lua; preserved _G.Dominos behavior, availability checked before use
+EXIT_GAME	constant	Blizzard constant/shared value; upstream/live:Blizzard_GameMenu/Shared/GameMenuFrame.lua:216 defines or uses this global
 EditModeManagerFrame	frame	Blizzard UI frame or object MSUF reads
+EditModePresetLayoutManager	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_EditMode/Shared/EditModePresetLayoutsManager.lua:1 defines or uses this global
+EllesmereUI	thirdparty	third-party addon global MSUF probes to detect that addon; already reviewed in client-boot-globals.tsv (*)
+EllesmereUnlockMode	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_EllesmereUnlock.lua; preserved _G.EllesmereUnlockMode behavior, availability checked before use
+EnableAddOn	api	Blizzard Classic addon-toggle global; already reviewed in client-boot-globals.tsv (Vanilla,Mists,TBC)
 Enum	constant	Blizzard UI constant, enum or shared string
 EnumerateFrames	api	Blizzard client API
+EssentialCooldownViewer	frame	Blizzard UI frame or font object; upstream/live:Blizzard_CooldownViewer/CooldownViewer.xml:298 defines or uses this global
 EventRegistry	table	Blizzard EventRegistry callback registry
+ExecuteFrameScript	api	Blizzard UI/client API; upstream/live:Blizzard_AuctionHouseUI/Shared/Blizzard_AuctionHouseTableBuilder.lua:80 defines or uses this global
+GAMEPAD_SMARTNAV_CURSOR_COLOR	constant	Blizzard constant/shared value; upstream/forever:Blizzard_GamepadSmartNavigation/SmartNavigation.lua:355 defines or uses this global
+GameEvent	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_Game/Shared/GameEvent.lua:1 defines or uses this global
 GameFontHighlight	constant	Blizzard UI constant, enum or shared string
+GameFontHighlightSmall	frame	Blizzard UI frame or font object; upstream/live:Blizzard_Fonts_Shared/Shared/FontStyles.xml:92 defines or uses this global
+GameFontNormal	frame	Blizzard UI frame or font object; upstream/live:Blizzard_Fonts_Shared/Shared/FontStyles.xml:50 defines or uses this global
+GameMenuFrame	frame	Blizzard UI frame or font object; upstream/live:Blizzard_GameMenu/Shared/GameMenuFrame.xml:4 defines or uses this global
 GameTooltip	frame	Blizzard UI frame or object MSUF reads
+GameTooltip_SetDefaultAnchor	api	Blizzard UI/client API; upstream/live:Blizzard_ActionBar/Mainline/ArtifactBar.lua:123 defines or uses this global
+GamepadMode	namespace	Blizzard helper table/native namespace; upstream/forever:Blizzard_GamepadSharedUtility/GamepadSharedUtility.lua:2 defines or uses this global
+GamepadRadial	frame	Blizzard UI frame or font object; upstream/forever:Blizzard_Gamepad/UI/Radials/GamepadRadial.xml:119 defines or uses this global
+GamepadSharedUtility	namespace	Blizzard helper table/native namespace; upstream/forever:Blizzard_GamepadSharedUtility/GamepadSharedUtility.lua:1 defines or uses this global
 GetAddOnMetadata	api	Blizzard client API
+GetArenaOpponentSpec	api	Blizzard UI/client API; upstream/live:Blizzard_Deprecated_ArenaUI/Deprecated_ArenaUI.lua:217 defines or uses this global
 GetBindingAction	api	Blizzard client API
+GetBindingKey	api	Blizzard UI/client API; upstream/live:Blizzard_ActionBar/Shared/ActionButton.lua:489 defines or uses this global
+GetBuildInfo	api	Blizzard UI/client API; upstream/live:Blizzard_GlueMenuFrame/Classic/GlueMenuFrame.lua:10 defines or uses this global
 GetCVar	api	Blizzard client API
 GetCVarBool	api	Blizzard client API
 GetCameraZoom	api	Blizzard client API the harness does not model
 GetCollapsingStarCost	api	Blizzard client API the harness does not model; the shared ClassPower AURA mode builder binds it on every client, and only the Devourer path calls it after a type check
+GetComboPoints	api	Blizzard client API the harness does not model; Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua binds it at load on every client and calls it only where the provider routes target-owned combo points; already reviewed in client-boot-globals.tsv (*)
 GetCurrentKeyBoardFocus	api	Blizzard client API the harness does not model
 GetCursorPosition	api	Blizzard client API the harness does not model
+GetFramerate	api	Blizzard UI/client API; upstream/live:Blizzard_FramerateFrame/Classic/FramerateFrame.lua:22 defines or uses this global
 GetInstanceInfo	api	Blizzard client API the harness does not model
+GetInventoryItemTexture	api	Blizzard UI/client API; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerUtil.lua:276 defines or uses this global
+GetItemIcon	api	Blizzard UI/client API; upstream/classic:Blizzard_DeprecatedItemScript/Deprecated_ItemScript.lua:16 defines or uses this global
 GetLocale	api	Blizzard client API
 GetMaxLevelForExpansionLevel	api	Blizzard client API the harness does not model
 GetMaxLevelForPlayerExpansion	api	Blizzard client API the harness does not model
@@ -60,19 +143,25 @@ GetMaxPlayerLevel	api	Blizzard client API the harness does not model
 GetMaximumExpansionLevel	api	Blizzard client API the harness does not model
 GetMouseFoci	api	Blizzard client API
 GetMouseFocus	api	Blizzard client API
+GetNetStats	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
 GetNormalizedRealmName	api	Blizzard client API
 GetNumArenaOpponentSpecs	api	Blizzard client API the harness does not model
 GetNumGroupMembers	api	Blizzard client API
 GetNumSubgroupMembers	api	Blizzard client API the harness does not model
 GetNumTalentTabs	api	Blizzard client API
+GetPetExperience	api	Blizzard pet experience API used by the Classic Pet XP bar; already reviewed in client-boot-globals.tsv (Vanilla,TBC,Mists)
+GetPetHappiness	api	Blizzard UI/client API; upstream/classic:Blizzard_UnitFrame/Classic/PetFrame.lua:169 defines or uses this global
 GetPhysicalScreenSize	api	Blizzard client API the harness does not model
+GetPlayerBottomManagedFrameContainer	api	Blizzard UI/client API; upstream/live:Blizzard_ManagedFrameSystem/Shared/ManagedFrameSystem.lua:9 defines or uses this global
 GetPowerRegenForPowerType	api	Blizzard client API the harness does not model
+GetQuestGreenRange	api	Blizzard UI/client API; upstream/classic:Blizzard_UIParent/Cata/UIParent.lua:1621 defines or uses this global
 GetRaidDifficultyID	api	Blizzard client API
 GetRaidRosterInfo	api	Blizzard client API the harness does not model
 GetRaidTargetIndex	api	Blizzard client API the harness does not model
 GetReadyCheckStatus	api	Blizzard client API the harness does not model
 GetRealmName	api	Blizzard client API
 GetRuneCooldown	api	Blizzard client API the harness does not model
+GetRuneType	api	Blizzard UI/client API; upstream/classic:Blizzard_CombatText/Classic/CombatTextUtilOverrides.lua:25 defines or uses this global
 GetScreenHeight	api	Blizzard client API
 GetScreenWidth	api	Blizzard client API
 GetShapeshiftForm	api	Blizzard client API the harness does not model
@@ -80,6 +169,8 @@ GetShapeshiftFormID	api	Blizzard client API the harness does not model
 GetShapeshiftFormInfo	api	Blizzard client API the harness does not model
 GetSpecialization	api	Blizzard client API the harness does not model
 GetSpecializationInfo	api	Blizzard client API the harness does not model
+GetSpecializationInfoByID	api	Blizzard UI/client API; upstream/live:Blizzard_Communities/ClubFinder.lua:599 defines or uses this global
+GetSpecializationInfoForSpecID	api	Blizzard UI/client API; upstream/live:Blizzard_ClassMenu/Blizzard_ClassMenu.lua:48 defines or uses this global
 GetSpellInfo	api	Blizzard client API the harness does not model
 GetSpellPowerCost	api	Guarded legacy Blizzard spell-cost API; upstream/live:Blizzard_Deprecated/11_0_0_SpellBookAPITransitionGuide.lua:67 maps it to C_Spell.GetSpellPowerCost; ManaExtras prefers the modern API and probes this optional fallback
 GetSpellTexture	api	Blizzard client API
@@ -89,70 +180,154 @@ GetTime	api	Blizzard client API
 GetTimePreciseSec	api	Blizzard client API the harness does not model
 GetUnitChargedPowerPoints	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 GetUnitClassification	api	Blizzard client API
+GetUnitEmpowerHoldAtMaxTime	api	Blizzard UI/client API; upstream/live:Blizzard_UIPanels_Game/Shared/CastingBarFrame.lua:380 defines or uses this global
+GetUnitEmpowerStageCount	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+GetUnitEmpowerStageDuration	api	Blizzard UI/client API; upstream/live:Blizzard_UIPanels_Game/Shared/CastingBarFrame.lua:1143 defines or uses this global
+GetUnitSpeed	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+GetUnitTotalModifiedMaxHealthPercent	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+GetWeaponEnchantInfo	api	Blizzard UI/client API; upstream/live:Blizzard_Deprecated/Shared/Deprecated_12_1_0.lua:44 defines or uses this global
 GetZoneText	api	Blizzard client API
 Global	Kind	Reason
+Grid2	thirdparty	Existing optional addon integration probe in Shell/EditMode/MSUF_EditMode_Grid2.lua; preserved _G.Grid2 behavior, availability checked before use
+Grid2Layout	thirdparty	Existing optional addon integration probe in Shell/EditMode/MSUF_EditMode_Grid2.lua; preserved _G.Grid2Layout behavior, availability checked before use
+HEALER	constant	Blizzard constant/shared value; upstream/live:Blizzard_GroupFinder/Shared/LFGFrame.lua:219 defines or uses this global
+HUD_EDIT_MODE_MENU	constant	Blizzard constant/shared value; upstream/live:Blizzard_ChatFrameBase/Mainline/FloatingChatFrame.lua:395 defines or uses this global
+HasPetUI	api	Blizzard pet API behind the pet happiness indicator; already reviewed in client-boot-globals.tsv (Vanilla,TBC,Forever)
 HideUIPanel	api	Blizzard client API
+INTERRUPTED	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+INVSLOT_MAINHAND	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (Mainline,Forever)
+INVSLOT_OFFHAND	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (Mainline,Forever)
 InCombatLockdown	api	Blizzard client API
+InputIconTextureSetUtility	namespace	Blizzard helper table/native namespace; upstream/forever:Blizzard_SharedXML/Shared/InputIcons/InputIconTexture.lua:556 defines or uses this global
+InputUtil	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_SharedXML/InputUtil.lua:2 defines or uses this global
+IsActiveBattlefieldArena	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
 IsAltKeyDown	api	Blizzard client API the harness does not model
 IsControlKeyDown	api	Blizzard client API the harness does not model
+IsEncounterInProgress	api	Blizzard UI/client API; upstream/live:Blizzard_DeprecatedInstanceEncounter/Deprecated_InstanceEncounter.lua:8 defines or uses this global
 IsInGroup	api	Blizzard client API
 IsInGuild	api	Blizzard client API the harness does not model
 IsInInstance	api	Blizzard client API
 IsInRaid	api	Blizzard client API
+IsLoggedIn	api	Blizzard UI/client API; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerUtil.lua:413 defines or uses this global
 IsMouseButtonDown	api	Blizzard client API the harness does not model
+IsPVPTimerRunning	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (Vanilla,Mists,TBC)
+IsPlayerSpell	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
 IsResting	api	Blizzard client API the harness does not model
 IsShiftKeyDown	api	Blizzard client API the harness does not model
+IsSpellKnown	api	Blizzard UI/client API; upstream/live:Blizzard_DeprecatedSpellBook/Deprecated_SpellBook.lua:16 defines or uses this global
+IsTargetLoose	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
 LE_PARTY_CATEGORY_HOME	constant	Blizzard UI constant, enum or shared string
 LE_PARTY_CATEGORY_INSTANCE	constant	Blizzard UI constant, enum or shared string
 LOCALIZED_CLASS_NAMES_MALE	constant	Blizzard FrameXMLBase/Constants.lua defines native LocalizedClassList(false); used for localized class-priority labels
+LOGOUT	constant	Blizzard Classic logout label; upstream/classic_era Blizzard_GameMenu/Classic/GameMenuFrameOverrides.lua:4 reads LOGOUT, loaded by Blizzard_GameMenu_Classic.toc:8
+LOG_OUT	constant	Blizzard constant/shared value; upstream/live:Blizzard_GameMenu/Shared/GameMenuFrame.lua:231 defines or uses this global
 LibStub	thirdparty	LibStub, the embedded library registry every Ace-style library asks for
+MACROS	constant	Blizzard constant/shared value; upstream/live:Blizzard_ClickBindingUI/Blizzard_ClickBindingUI.lua:313 defines or uses this global
+MAX_ARENA_ENEMIES	constant	Blizzard constant/shared value; upstream/live:Blizzard_Deprecated_ArenaUI/Deprecated_ArenaUI.lua:6 defines or uses this global
+MAX_BOSS_FRAMES	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+MOONKIN_FORM	constant	Blizzard constant/shared value; upstream/classic:Blizzard_FrameXMLBase/Classic/Constants.lua:390 defines or uses this global
+MSCB_ApplyFontsFromMSUF	thirdparty	Existing optional addon integration probe in Runtime/MSUF_FontRuntime.lua; preserved _G.MSCB_ApplyFontsFromMSUF behavior, availability checked before use
 MSUF_EditModeSizing	vestigial	no file defines this global any more; both reads are truth tests, so the castbar preview drag never enters its SIZE mode
+MapkoSkin	thirdparty	Existing optional addon integration probe in Shell/UI/MSUF_MapkoSkin.lua; preserved _G.MapkoSkin behavior, availability checked before use
+MicroMenu	frame	Blizzard UI frame or font object; upstream/live:Blizzard_MicroMenu/Classic/MicroMenuContainer.xml:22 defines or uses this global
+MiniAurasApi	thirdparty	third-party addon global MSUF probes to detect that addon; already reviewed in client-boot-globals.tsv (Mainline,Forever)
+MiniCCApi	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_MiniAuras.lua; preserved _G.MiniCCApi behavior, availability checked before use
+Minimap	frame	Blizzard UI frame or font object; upstream/live:Blizzard_Minimap/Mainline/Minimap.xml:178 defines or uses this global
+MinimapCluster	frame	Blizzard UI frame or font object; upstream/live:Blizzard_Minimap/Mainline/Minimap.xml:3 defines or uses this global
+MouseIsOver	api	Blizzard UI/client API; upstream/classic:Blizzard_UIParent/Shared/UIParent.lua:530 defines or uses this global
 NO	constant	Blizzard UI constant, enum or shared string
+NSAPI	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_NSRTNicknames.lua; preserved _G.NSAPI behavior, availability checked before use
+NSRT	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_NSRTNicknames.lua; preserved _G.NSRT behavior, availability checked before use
+NewFeatureLabelMixin	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_SharedXML/NewFeatureLabel.lua:1 defines or uses this global
 OKAY	constant	Blizzard UI constant, enum or shared string
+PET	constant	Blizzard constant/shared value; upstream/live:Blizzard_PlayerSpells/SpellBook/Blizzard_SpellBookCategory.lua:309 defines or uses this global
+PartyFrame	frame	Blizzard UI frame or font object; upstream/live:Blizzard_UnitFrame/Shared/PartyFrame.xml:4 defines or uses this global
 PetBattleFrameHider	frame	Blizzard UI frame or object MSUF reads
+PixelUtil	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_SharedXML/PixelUtil.lua:1 defines or uses this global
+PlaySound	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
+PlayerBottomManagedFrameContainer	frame	Blizzard UI frame or font object; upstream/live:Blizzard_UnitFrame/Mainline/PlayerFrame.xml:467 defines or uses this global
+PlayerCastingBarFrame	frame	Blizzard UI frame or font object; upstream/live:Blizzard_UIPanels_Game/Mainline/CastingBarFrame.xml:468 defines or uses this global
+PlayerFrameBottomManagedFramesContainer	frame	Blizzard UI frame or font object; upstream/classic:Blizzard_UnitFrame/Classic/PlayerFrame.xml:381 defines or uses this global
 PlayerVehicleHasComboPoints	api	Blizzard client API the harness does not model
 PowerBarColor	constant	Blizzard UI constant, enum or shared string
 RAID_CLASS_COLORS	constant	Blizzard UI constant, enum or shared string
 RELOAD	constant	Blizzard UI constant, enum or shared string
 RELOADUI	constant	Blizzard UI constant, enum or shared string
+RETURN_TO_GAME	constant	Blizzard constant/shared value; upstream/live:Blizzard_GameMenu/Shared/GameMenuFrame.lua:218 defines or uses this global
+RegionalUniqueNamesEnabled	api	Blizzard UI/client API; upstream/forever:Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:85 defines or uses this global
 RegisterAttributeDriver	api	Blizzard client API
 RegisterStateDriver	api	Blizzard client API
 RegisterUnitWatch	api	Blizzard client API
 ReloadUI	api	Blizzard client API
+SCM_GroupAnchorProxy_1	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_ThirdPartyAnchors.lua; preserved _G.SCM_GroupAnchorProxy_1 behavior, availability checked before use
+SCM_GroupAnchor_1	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_ThirdPartyAnchors.lua; preserved _G.SCM_GroupAnchor_1 behavior, availability checked before use
+SOUNDKIT	constant	Blizzard constant/shared value; upstream/live:Blizzard_SharedXML/Mainline/SoundKitConstants.lua:2 defines or uses this global
+SPEC_DEMONHUNTER_DEVOURER	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SPEC_DEMONHUNTER_VENGEANCE	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SPEC_MAGE_ARCANE	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SPEC_MONK_BREWMASTER	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SPEC_MONK_WINDWALKER	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SPEC_WARLOCK_DEMONOLOGY	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SPEC_WARLOCK_DESTRUCTION	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SPELL_INTERRUPTED_BY	constant	Blizzard constant/shared value; upstream/live:Blizzard_UIPanels_Game/Shared/CastingBarFrame.lua:630 defines or uses this global
+STAGGER_RED_TRANSITION	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
+STAGGER_YELLOW_TRANSITION	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
 STANDARD_TEXT_FONT	constant	Blizzard UI constant, enum or shared string
+SecureCmdOptionParse	api	Blizzard client API the harness does not model; already reviewed in client-boot-globals.tsv (*)
+SecureHandlerWrapScript	api	Blizzard secure wrapper API; SecureHandlers.lua loaded before SecureGroupHeaders.xml on live, forever, classic, classic_anniversary and classic_era; only OnShow wrapped out of combat to preserve native handler provenance
+SetCVar	api	Blizzard UI/client API; upstream/live:Blizzard_AccessibilityTemplates/TextSizeManager.lua:107 defines or uses this global
+SetGamePadCursorControl	api	Blizzard UI/client API; upstream/live:Blizzard_Game/Shared/Game.lua:21 defines or uses this global
 SetOverrideBindingClick	api	Blizzard client API
 SetPortraitTexture	api	Blizzard client API the harness does not model
 SetRaidTargetIconTexture	api	Blizzard client API the harness does not model
 ShowUIPanel	api	Blizzard client API
+SmartNavigation	frame	Blizzard UI frame or font object; upstream/forever:Blizzard_GamepadSmartNavigation/SmartNavigation.xml:59 defines or uses this global
+StaticPopupDialogs	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_StaticPopup/StaticPopup.lua:21 defines or uses this global
 StaticPopup_FindVisible	api	Blizzard client API
 StaticPopup_Hide	api	Blizzard client API
 StaticPopup_ShowCustomGenericConfirmation	api	Blizzard client API
 StaticPopup_ShowCustomGenericInputBox	api	Blizzard client API
+TARGET	constant	Blizzard constant/shared value; upstream/live:Blizzard_UnitPopupShared/UnitPopupSharedButtonMixins.lua:299 defines or uses this global
 TextureKitConstants	constant	Blizzard UI constant, enum or shared string
+TotemFrame	frame	Blizzard UI frame or font object; upstream/live:Blizzard_UnitFrame/Mainline/TotemFrame.xml:57 defines or uses this global
 UIErrorsFrame	frame	Blizzard UI frame or object MSUF reads
+UIPanelWindows	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:82 defines or uses this global
 UIParent	frame	Blizzard UI frame or object MSUF reads
 UISpecialFrames	constant	Blizzard UI constant, enum or shared string
+UNIT_NAME_FONT	constant	Blizzard UI constant the harness does not model; already reviewed in client-boot-globals.tsv (*)
 UnitAffectingCombat	api	Blizzard client API
+UnitAttackSpeed	api	Blizzard UI/client API; upstream/live:Blizzard_UIPanels_Game/Mainline/PaperDollFrame.lua:813 defines or uses this global
 UnitCanAssist	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitCanAttack	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitCastingDuration	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
 UnitCastingInfo	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitChannelDuration	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
 UnitChannelInfo	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitClass	api	Blizzard client API
+UnitClassFromGUID	api	Blizzard UI/client API; upstream/live:Blizzard_AuraContainer/Blizzard_CustomAuraButton.lua:659 defines or uses this global
 UnitClassification	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitCreatureType	api	Blizzard client API
+UnitDetailedThreatSituation	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (Vanilla,TBC,Forever)
 UnitEffectiveLevel	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitEmpoweredChannelDuration	api	Blizzard empowered-channel duration API, Mainline only; upstream/live:Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1111-1121 (includeHoldAtMaxTime); the castbar driver tests it before the call
 UnitExists	api	Blizzard client API
 UnitFactionGroup	api	Blizzard client API
+UnitFrameUtil	namespace	Blizzard helper table/native namespace; upstream/live:Blizzard_UnitFrame/Shared/UnitFrameUtil.lua:4 defines or uses this global
 UnitFullName	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitGUID	api	Blizzard client API
+UnitGetDetailedHealPrediction	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+UnitGetIncomingHeals	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+UnitGetTotalAbsorbs	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+UnitGetTotalHealAbsorbs	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
 UnitGroupRolesAssigned	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitHasIncomingResurrection	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitHasPowerType	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitHasVehicleUI	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitHealth	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitHealthMax	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealthMissing	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
 UnitHealthPercent	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitInOtherParty	api	Blizzard UI/client API; upstream/live:Blizzard_UnitFrame/Mainline/PartyMemberFrame.lua:417 defines or uses this global
 UnitInRaid	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitInRange	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitIsAFK	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
@@ -161,6 +336,8 @@ UnitIsConnected	unit	Blizzard unit-state API; the harness answers it with a stub
 UnitIsDND	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitIsDead	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitIsDeadOrGhost	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsEnemy	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+UnitIsFriend	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
 UnitIsGhost	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitIsGroupAssistant	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitIsGroupLeader	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
@@ -169,14 +346,21 @@ UnitIsMercenary	unit	Blizzard unit-state API; the harness answers it with a stub
 UnitIsPVP	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitIsPVPFreeForAll	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitIsPlayer	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsPlayerControlledOrGroupMember	api	Blizzard UI/client API; upstream/live:Blizzard_AuraContainer/Blizzard_AuraContainerUtil.lua:70 defines or uses this global
 UnitIsTapDenied	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsUnconscious	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
 UnitIsUnit	api	Blizzard client API
 UnitIsVisible	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitLevel	api	Blizzard client API
 UnitName	api	Blizzard client API
+UnitNameFromGUID	api	Blizzard UI/client API; upstream/live:Blizzard_AuraContainer/Blizzard_CustomAuraButton.lua:650 defines or uses this global
+UnitOnTaxi	api	Blizzard UI/client API; upstream/live:Blizzard_ActionBar/Shared/PossessActionBar.lua:76 defines or uses this global
 UnitPartialPower	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitPhaseReason	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitPlayerControlled	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPlayerOrPetInParty	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (Vanilla,Mists,TBC)
+UnitPlayerOrPetInRaid	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (Vanilla,Mists,TBC)
+UnitPosition	api	Blizzard UI/client API; upstream/live:Blizzard_BoostTutorial/Blizzard_TutorialLogic.lua:853 defines or uses this global
 UnitPower	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitPowerDisplayMod	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitPowerMax	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
@@ -187,22 +371,37 @@ UnitReaction	unit	Blizzard unit-state API; the harness answers it with a stub in
 UnitSelectionColor	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitSelectionType	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitSex	api	Blizzard client API
+UnitShouldDisplaySpellTargetName	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+UnitSpellHaste	api	Blizzard UI/client API; upstream/forever:Blizzard_UIPanels_Game/Camelot/PaperDollFrameStats.lua:189 defines or uses this global
+UnitSpellTargetClass	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
+UnitSpellTargetName	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit; already reviewed in client-boot-globals.tsv (*)
 UnitStagger	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitThreatSituation	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitWatchRegistered	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnregisterStateDriver	api	Blizzard client API
 UnregisterUnitWatch	api	Blizzard client API
+UtilityCooldownViewer	frame	Blizzard UI frame or font object; upstream/live:Blizzard_CooldownViewer/CooldownViewer.xml:309 defines or uses this global
+WOW_PROJECT_BURNING_CRUSADE_CLASSIC	constant	Blizzard constant/shared value; upstream/live:Blizzard_FrameXMLBase/Cata/Constants.lua:124 defines or uses this global
+WOW_PROJECT_CAMELOT	constant	Optional Forever 1.60.1.70170 project constant from Blizzard_ProjectConstants; Initialize compares it only when present and the camelot marker places Forever; already reviewed in client-boot-globals.tsv (*)
+WOW_PROJECT_CLASSIC	constant	Blizzard constant/shared value; upstream/live:Blizzard_FrameXMLBase/Cata/Constants.lua:123 defines or uses this global
+WOW_PROJECT_ID	constant	Blizzard constant/shared value; upstream/live:Blizzard_BNet/Mainline/BNet.lua:10 defines or uses this global
+WOW_PROJECT_MAINLINE	constant	Blizzard constant/shared value; upstream/live:Blizzard_FrameXMLBase/Cata/Constants.lua:122 defines or uses this global
+WOW_PROJECT_MISTS_CLASSIC	constant	Blizzard constant/shared value; upstream/live:Blizzard_FrameXMLBase/Cata/Constants.lua:127 defines or uses this global
 WagoAnalytics	thirdparty	Wago's analytics global, probed by the shipped shim
 WorldFrame	frame	Blizzard UI frame or object MSUF reads
 YES	constant	Blizzard UI constant, enum or shared string
+_ECME_GetBarFrame	thirdparty	Existing optional addon integration probe in Integrations/MSUF_Integration_ThirdPartyAnchors.lua; preserved _G._ECME_GetBarFrame behavior, availability checked before use
 canaccesstable	luaenv	Blizzard secret-table access predicate; upstream/live:Blizzard_APIDocumentationGenerated/FrameScriptDocumentation.lua:48; ManaExtras probes availability and checks the cost table and entries before indexing
+canaccessvalue	luaenv	Optional access check cached by Theme; guarded by type before use, with issecretvalue fallback; already reviewed in client-boot-globals.tsv (*)
+date	luaenv	Blizzard Lua environment function; upstream/live:Blizzard_FrameXMLUtil/GameTimeUtil.lua:78 defines or uses this global
 debugprofilestop	api	Blizzard millisecond profiling clock (FrameScriptDocumentation on live, classic, classic_era and forever); the sliced Menu2 search index build probes it and runs unsliced without it
 floor	luaenv	math.floor, which WoW also publishes as a global
 geterrorhandler	luaenv	WoW's error-handler accessor, read by an embedded library
+hasanysecretvalues	luaenv	12.x secret-value API the harness does not model; already reviewed in client-boot-globals.tsv (*)
+hash_SlashCmdList	table	Blizzard slash-token hash; MSUF probes it before claiming /rl; already reviewed in client-boot-globals.tsv (*)
 hooksecurefunc	luaenv	WoW's secure post-hook global
 issecretvalue	luaenv	12.x global that reports a secret value
-max	luaenv	math.max, which WoW also publishes as a global
-min	luaenv	math.min, which WoW also publishes as a global
+issecure	luaenv	12.x secret-value API the harness does not model; already reviewed in client-boot-globals.tsv (*)
 secureexecuterange	api	Blizzard client API (Blizzard_SharedXMLBase CallbackRegistry dispatches with it on every client)
 strmatch	luaenv	string.match, which WoW also publishes as a global
 time	luaenv	WoW's time() global (there is no os table in the client)

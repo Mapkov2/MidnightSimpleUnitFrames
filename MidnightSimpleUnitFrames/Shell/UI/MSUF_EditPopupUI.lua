@@ -1,20 +1,15 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/UI/MSUF_EditPopupUI.lua - shared Edit Mode popup UI helpers.
 --- Defines popup styling and the quick popup controls used by Edit Mode.
 --- Loads before the Edit Mode manifest: it needs only the EM2 table, which
 --- it creates when Core has not yet (Core reuses an existing one), and calls
 --- every other Edit Mode module lazily.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/UI/MSUF_EditPopupUI.lua")
 local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
-    if type(ExportPublic) == "function" then
-        return ExportPublic(name, value)
-    end
-    _G[name] = value
-    return value
+    return ExportPublic(name, value)
 end
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if type(EM2) ~= "table" then EM2 = PublishCompat("MSUF_EM2", {}) end
 local Factory = {}
 EM2.PopupFactory = Factory
@@ -54,18 +49,18 @@ local STEP_W   = 20
 local Tr = MSUF.Translate or tostring
 
 local function FontSize(role)
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     if ui and type(role) == "number" and ui.NormalizeFontSize then return ui.NormalizeFontSize(role) end
     return ui and ui.FontSize and ui.FontSize(role) or 13
 end
 local function Space(role, fallback)
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     return ui and ui.Space and ui.Space(role, fallback) or fallback
 end
 
 local function FS(parent, role, color)
     local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY"))
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     if ui and ui.ApplyFontRole then
         ui.ApplyFontRole(fs, role or "body", FONT, "")
     else
@@ -89,8 +84,8 @@ local function SetButtonReadableSize(button, size)
     return SetReadableSize(button and (button._msuf2Label or button._label), size)
 end
 
-local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
-local Menu2Style = _G.MSUF_EM2_Menu2Style
+local SharedUI = MSUF.UI
+local Menu2Style = MSUF.Optional("MSUF_EM2_Menu2Style")
 if type(Menu2Style) ~= "table" or Menu2Style == SharedUI then Menu2Style = {} end
 PublishCompat("MSUF_EM2_Menu2Style", Menu2Style)
 
@@ -201,27 +196,13 @@ local function GetStep()
 end
 
 local function RefreshUFPreview(reason)
-    local fn = _G.MSUF_UFPreview_RequestRefresh
+    local fn = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
     if type(fn) == "function" then fn(reason or "EM2_POPUP") end
 end
 
+--- Kernel/MSUF_Util.lua owns the configuration combat refusal and its message.
 local function BlockConfigCombatLocked()
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-        return _G.MSUF_BlockConfigCombatLocked() and true or false
-    end
-    if InCombatLockdown and InCombatLockdown() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-            _G.MSUF_ShowConfigCombatLockMessage()
-        end
-        return true
-    end
-    if UnitAffectingCombat and UnitAffectingCombat("player") then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-            _G.MSUF_ShowConfigCombatLockMessage()
-        end
-        return true
-    end
-    return false
+    return MSUF.Require("MSUF_BlockConfigCombatLocked", "Shell/UI/MSUF_EditPopupUI.lua")() and true or false
 end
 
 --- QuickPopup helpers keep the lightweight cast/aura/unit shortcut popups on
@@ -277,14 +258,7 @@ function Quick.San(value, fallback)
 end
 
 function Quick.BlockConfigCombatLocked()
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-        return _G.MSUF_BlockConfigCombatLocked()
-    end
-    if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-        return true
-    end
-    return false
+    return MSUF.Require("MSUF_BlockConfigCombatLocked", "Shell/UI/MSUF_EditPopupUI.lua")()
 end
 
 function Quick.KillOverlayPiece(piece)
@@ -426,7 +400,7 @@ function Quick.Box(parent, width, opts)
     b:SetNumeric(false)
     b:SetJustifyH("CENTER")
     b:SetMaxLetters(7)
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     if ui and ui.ApplyFontRole then
         ui.ApplyFontRole(b, "body", FONT, "")
     else
@@ -659,14 +633,31 @@ function Quick.SetBoxText(box, value)
     box._msufShownText = text
 end
 
+--- Lock-ratio size boxes: once the width (or height) box changed, rewrite the
+--- other box from the stored ratio, clamped to the popup's size bounds.
+function Quick.EnforceSizeRatio(pf, changed, minW, maxW, minH, maxH)
+    if not (pf and pf._lockRatio) then return end
+    local ratio = tonumber(pf._sizeRatio)
+    if not (ratio and ratio > 0) then return end
+    if changed == "width" then
+        local w = pf.wBox and tonumber(pf.wBox:GetText())
+        if w then Quick.SetBoxText(pf.hBox, floor(math.max(minH, math.min(maxH, w / ratio)) + 0.5)) end
+    elseif changed == "height" then
+        local h = pf.hBox and tonumber(pf.hBox:GetText())
+        if h then Quick.SetBoxText(pf.wBox, floor(math.max(minW, math.min(maxW, h * ratio)) + 0.5)) end
+    end
+end
+
 function Quick.OpenPage(pageKey, owner)
-    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    local M = MSUF.MSUF2
     if pageKey and M and type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
     if owner then owner:Hide() end
-    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        _G.MSUF_OpenStandaloneOptionsWindow(pageKey)
-    elseif type(_G.MSUF_OpenPage) == "function" then
-        _G.MSUF_OpenPage(pageKey)
+    local openWindow = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
+    local openPage = MSUF.Optional("MSUF_OpenPage")
+    if type(openWindow) == "function" then
+        openWindow(pageKey)
+    elseif type(openPage) == "function" then
+        openPage(pageKey)
     elseif M and type(M.Open) == "function" then
         M.Open(pageKey)
     elseif M and type(M.SelectPage) == "function" then
@@ -716,7 +707,7 @@ function Quick.CreateShell(name, opts)
     if opts.title then pf._titleFS:SetText(Tr(opts.title)) end
     if opts.liveStatus then Quick.AddLiveStatus(pf, opts.liveStatus == true and "Changes apply live" or opts.liveStatus) end
 
-    local menu = _G.MSUF2 or (type(MSUF) == "table" and MSUF.MSUF2)
+    local menu = MSUF.MSUF2
     local close = menu and menu.CreateWindowControlButton and menu.CreateWindowControlButton(pf, "close")
     if close then
         close:SetScript("OnClick", function() pf:Hide() end)
@@ -975,12 +966,12 @@ function Quick.AddFooterControls(pf, opts)
     local function AddTooltip(button, label)
         if not (button and button.HookScript) then return end
         button:HookScript("OnEnter", function(self)
-            if not _G.GameTooltip then return end
+            if not GameTooltip then return end
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(Tr(label), 0.86, 0.92, 1.00)
             GameTooltip:Show()
         end)
-        button:HookScript("OnLeave", function() if _G.GameTooltip then GameTooltip:Hide() end end)
+        button:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     end
     AddTooltip(undoBtn, "Undo")
     AddTooltip(redoBtn, "Redo")

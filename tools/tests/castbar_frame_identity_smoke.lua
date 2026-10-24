@@ -41,5 +41,5 @@ for _, kind in ipairs({ "boss", "arena", "bossPreview", "arenaPreview" }) do
     for i = 1, 5 do Check(castbars.Frames.Get(kind, i)) end
 end
 assert(checked >= 8, "the real client must build individual and pooled castbars")
-assert(world.core.KickReady and type(env.MSUF_KickReady_IsReady) == "function", "Suite consumers must keep their API")
+assert(world.core.KickReady and type(world.core.PublicGlobals.MSUF_KickReady_IsReady) == "function", "Suite consumers must keep their API")
 print("castbar_frame_identity_smoke: ok (" .. checked .. " frames, one global each)")

@@ -8,12 +8,15 @@
 --- the Auras3 DB through the same shape that Menu_Model uses, then asks runtime
 --- frames to refresh. Keep live aura payload handling inside the native runtime.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
+local Optional = MSUF.Optional
+local EditState = Optional("MSUF_EditState")
+local MAX_ARENA_FRAMES = tonumber(MSUF.Client.MaxArenaOpponents) or 3
 
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
-local InCombatLockdown = _G.InCombatLockdown
-local C_Timer = _G.C_Timer
+local InCombatLockdown = InCombatLockdown
+local C_Timer = C_Timer
 
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- driver disabled and silently kills the drag OnUpdate.
@@ -52,27 +55,26 @@ end
 
 local function ForEachArenaUnit(fn)
     if type(fn) ~= "function" then return end
-    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do fn("arena" .. i) end
+    for i = 1, MAX_ARENA_FRAMES do fn("arena" .. i) end
 end
 
 local function IsEditModeActive()
-    local st = rawget(_G, "MSUF_EditState")
-    return (st and st.active == true) or rawget(_G, "MSUF_UnitEditModeActive") == true
+    return (EditState and EditState.active == true) or MSUF_UnitEditModeActive == true
 end
 
 local function EditPreviewActive()
-    return IsEditModeActive() and rawget(_G, "MSUF_UnitPreviewActive") == true
+    return IsEditModeActive() and PublicGlobals.MSUF_UnitPreviewActive == true
 end
 
 --- Menu2's boss page keeps the out-of-menu boss frame preview alive; boss aura
 --- lanes follow that flag so the page shows auras 1:1 without edit mode.
 local function BossPageAuraPreviewActive()
-    return rawget(_G, "MSUF2_BossPageAuraPreviewActive") == true
+    return PublicGlobals.MSUF2_BossPageAuraPreviewActive == true
 end
 
 --- Menu2's arena page mirrors the boss-page flag for its own preview lane.
 local function ArenaPageAuraPreviewActive()
-    return rawget(_G, "MSUF2_ArenaPageAuraPreviewActive") == true
+    return PublicGlobals.MSUF2_ArenaPageAuraPreviewActive == true
 end
 
 local function UnitPreviewActive(unit)
@@ -99,12 +101,15 @@ end
 
 local function IsConfigBlocked()
     if InCombatLockdown and InCombatLockdown() then return true end
-    if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then return true end
+    if UnitAffectingCombat and UnitAffectingCombat("player") then return true end
     return false
 end
 
+-- The unit preview (Options, load on demand) publishes and clears this refresh
+-- through ExportPublic; the Public mirror read keeps the drag flush call-free.
+local PublicAPI = MSUF.Public
 local function RequestUnitFrameMenuPreview(reason)
-    local fn = _G.MSUF_UFPreview_RequestRefresh
+    local fn = PublicAPI.UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "AURAS3_EDITMODE") end
 end
 
@@ -127,6 +132,9 @@ MSUF.EditModeKinds.aura.openPopup = function(_, key, group)
     return MSUF.EditModeController.Popups.Open(key, group)
 end
 local PromoteRuntimeLayout = drag.PromoteRuntimeLayout
+local function PromoteActiveLayout(unit)
+    PromoteRuntimeLayout(unit, PublicGlobals.MSUF_EM2_ActiveAuraGroup)
+end
 local preview = modules.Preview(config, layout, drag, IsBossScope, ForEachBossUnit,
     EditPreviewActive, UnitPreviewActive, SyncPreviewGroupStrata)
 local ApplyPreviewAuraAnimation = preview.ApplyPreviewAuraAnimation
@@ -185,16 +193,13 @@ function A3.RefreshUnit(unit)
     end
     if not unit then return end
     if IsEditModeActive() then
+        -- Inline scope dispatch: the aura drag flush refreshes units through here.
         if IsBossScope(unit) then
-            ForEachBossUnit(function(bossUnit)
-                PromoteRuntimeLayout(bossUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
-            end)
+            ForEachBossUnit(PromoteActiveLayout)
         elseif IsArenaScope(unit) then
-            ForEachArenaUnit(function(arenaUnit)
-                PromoteRuntimeLayout(arenaUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
-            end)
+            ForEachArenaUnit(PromoteActiveLayout)
         else
-            PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+            PromoteRuntimeLayout(unit, PublicGlobals.MSUF_EM2_ActiveAuraGroup)
         end
     end
     local frame = GetFrame(unit)
@@ -213,25 +218,17 @@ function A3.UpdateUnitAnchor(unit)
         return false
     end
     if IsBossScope(unit) then
-        if IsEditModeActive() then
-            ForEachBossUnit(function(bossUnit)
-                PromoteRuntimeLayout(bossUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
-            end)
-        end
+        if IsEditModeActive() then ForEachBossUnit(PromoteActiveLayout) end
         EM.RefreshUnit("boss")
         return
     end
     if IsArenaScope(unit) then
-        if IsEditModeActive() then
-            ForEachArenaUnit(function(arenaUnit)
-                PromoteRuntimeLayout(arenaUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
-            end)
-        end
+        if IsEditModeActive() then ForEachArenaUnit(PromoteActiveLayout) end
         EM.RefreshUnit("arena")
         return
     end
     if IsEditModeActive() then
-        PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+        PromoteRuntimeLayout(unit, PublicGlobals.MSUF_EM2_ActiveAuraGroup)
     end
     EM.RefreshUnit(unit)
 end
@@ -289,7 +286,7 @@ local function OpenAuras3PositionPopup(unit, parent)
         ExportPublic("MSUF_EM2_ActiveAuraGroup", parent._msufA3MoverKind)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", unit)
     end
-    local EM2 = _G.MSUF_EM2
+    local EM2 = MSUF.EditModeController
     if EM2 and EM2.Popups then
         return EM2.Popups.Open("aura_" .. tostring(unit or ""), parent)
     elseif EM2 and EM2.AuraPopup then
@@ -311,17 +308,6 @@ local function OnEditModeChanged(active)
     end
 end
 
-local function RegisterEditListener()
-    if EM._registered then return end
-    local reg = _G.MSUF_RegisterAnyEditModeListener
-    if type(reg) == "function" then
-        reg(OnEditModeChanged)
-        EM._registered = true
-        if IsEditModeActive() then OnEditModeChanged(true) end
-    end
-end
-
-RegisterEditListener()
-if not EM._registered then
-    C_Timer.After(0, RegisterEditListener)
-end
+-- Edit Mode State loads before Auras3 on every client.
+MSUF.Require("MSUF_RegisterAnyEditModeListener", "Auras3/MSUF_Auras3_EditMode.lua")(OnEditModeChanged)
+if IsEditModeActive() then OnEditModeChanged(true) end

@@ -7,13 +7,14 @@ MSUF.MSUF2 = M
 -- Builds party/raid aura lane controls. Auras3 refreshes native 12.1 container layout
 -- after these settings change; Blizzard owns live filtering, assignment, and icon updates.
 local W = M.Widgets
+local Schema, ROW_OPTIONS = M.ControlSchema, M.ControlSchema.UnitOptions()
 local T = M.Theme or {}
 local GP = M.GroupPage or {}
 local floor = math.floor
 local max = math.max
 
 local VT = M.ValueTextList
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local RefreshGFPreview, AURA_ANCHORS, STATUS_ICON_ANCHORS = GP.RefreshGFPreview, GP.AURA_ANCHORS, GP.STATUS_ICON_ANCHORS
 local SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup = GP.SPELL_GROWTH_VALUES, GP.ScopeSection, GP.CurrentScope, GP.AuraGroup
 local AurasRoot, QueueGroupApply, RefreshContext = GP.AurasRoot, GP.QueueGF, GP.RefreshContext
@@ -45,31 +46,10 @@ local function ThemeColor(key, fallback)
     return colors and colors[key] or fallback
 end
 local AuraCatalogToken = M.AuraCatalogToken
-local function AuraCatalogPageKey(value, fallback)
-    local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
-    return token ~= "" and token or (fallback or "gf_auras")
-end
+-- The shared Aura metadata owner (AuraControls loads after this page and is read
+-- at build time) with this page's fallback page key.
 local function AuraControlMeta(ctx, path, classification, routeContract)
-    path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
-    path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
-    local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "gf_auras")
-    local identity = "auras." .. path
-    local meta = {
-        controlId = "menu2." .. pageKey .. "." .. identity,
-        pageKey = pageKey,
-        identityKey = identity,
-        controlPath = "auras/" .. path:gsub("%.", "/"),
-        classification = classification or "setting",
-        ephemeral = classification == "ephemeral" or nil,
-    }
-    if type(routeContract) == "string" and routeContract ~= "" then
-        meta.settingKey = routeContract
-    elseif type(routeContract) == "table" then
-        meta.settingKey = routeContract.settingKey
-        meta.searchSettingKeys = routeContract.searchSettingKeys
-        meta.searchSettingKeyPatterns = routeContract.searchSettingKeyPatterns
-    end
-    return M.AuraControls.AttachSearchView(ctx, meta)
+    return M.AuraControls.AuraControlMeta(ctx, path, classification, routeContract, "gf_auras")
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
     if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
@@ -78,6 +58,9 @@ local function RegisterAuraControl(ctx, widget, label, kind, path, classificatio
     meta.kind = kind
     if classification == "navigation" then meta.navigationKey = navigationKey end
     M.RegisterSearchWidget(widget, meta)
+    -- A selector bar keeps its native GetValue/SetValue/values in the declaration.
+    if kind == "segment" then return Schema.ScopeOwner(widget, "groups", "menuState") end
+    Schema.Owned(widget, "groups", classification == "navigation" and "navigation" or "menuState")
     return widget
 end
 local MUTED = ThemeColor("muted", { 0.55, 0.66, 0.82, 0.92 })
@@ -111,13 +94,18 @@ local function AuraWorkspaceToolAllowed(lane, tool)
     local allowed = lane == "externals" and GF_AURA_EXTERNAL_TOOL_OK or GF_AURA_WORKSPACE_TOOL_OK
     return allowed[tool] == true
 end
-local function CurrentAuraWorkspaceTool(scope, lane)
+-- The per-scope tool selection record, created on first use.
+local function AuraToolScopeState(scope)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
     if type(scopeState) ~= "table" then
         scopeState = {}
         M.gfAuraToolSelection[scope] = scopeState
     end
+    return scopeState
+end
+local function CurrentAuraWorkspaceTool(scope, lane)
+    local scopeState = AuraToolScopeState(scope)
     local tool = scopeState[lane]
     if not AuraWorkspaceToolAllowed(lane, tool) then
         tool = tool == "blacklist" and "filters" or "layout"
@@ -127,13 +115,7 @@ local function CurrentAuraWorkspaceTool(scope, lane)
     return tool
 end
 local function SetAuraWorkspaceTool(scope, lane, tool)
-    M.gfAuraToolSelection = M.gfAuraToolSelection or {}
-    local scopeState = M.gfAuraToolSelection[scope]
-    if type(scopeState) ~= "table" then
-        scopeState = {}
-        M.gfAuraToolSelection[scope] = scopeState
-    end
-    scopeState[lane] = AuraWorkspaceToolAllowed(lane, tool) and tool or "layout"
+    AuraToolScopeState(scope)[lane] = AuraWorkspaceToolAllowed(lane, tool) and tool or "layout"
 end
 local function CurrentAuraWorkspaceLane(scope)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
@@ -173,20 +155,35 @@ local function GroupAuraWorkspaceView()
     end
     return view
 end
+local function MeasureWorkspaceBar(values, width, centerY)
+    return W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(values, {
+        width = width,
+        labelWidth = 72,
+        centerY = centerY,
+    })
+end
+-- A workspace selector bar; a new choice stores the view state and rebuilds.
+local function WorkspaceSelectorBar(ctx, section, values, width, label, centerY, current, select)
+    return W.ScopeOverrideBar(ctx, section, {
+        values = values,
+        width = width,
+        label = label,
+        labelWidth = 72,
+        centerY = centerY,
+        getValue = current,
+        setValue = function(value)
+            if current() == value then return end
+            select(value)
+            RebuildGroupAuraPage(ctx)
+        end,
+    })
+end
 local function AuraWorkspaceLayout(lane, width)
     local sectionW = tonumber(width) or 720
     local containerCenterY = -28
-    local containerMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(GF_AURA_WORKSPACE_LANES, {
-        width = sectionW,
-        labelWidth = 72,
-        centerY = containerCenterY,
-    })
+    local containerMetrics = MeasureWorkspaceBar(GF_AURA_WORKSPACE_LANES, sectionW, containerCenterY)
     local toolCenterY = math.min(-62, ((containerMetrics and containerMetrics.bottomY) or -40) - 22)
-    local toolMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(AuraWorkspaceTools(lane), {
-        width = sectionW,
-        labelWidth = 72,
-        centerY = toolCenterY,
-    })
+    local toolMetrics = MeasureWorkspaceBar(AuraWorkspaceTools(lane), sectionW, toolCenterY)
     local footerY = ((toolMetrics and toolMetrics.bottomY) or (toolCenterY - 12)) - 2
     return {
         containerCenterY = containerCenterY,
@@ -198,33 +195,13 @@ end
 local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
     local sectionW = tonumber(width) or 720
     layout = layout or AuraWorkspaceLayout(lane, sectionW)
-    local laneBar = W.ScopeOverrideBar(ctx, section, {
-        values = GF_AURA_WORKSPACE_LANES,
-        width = sectionW,
-        label = "Container:",
-        labelWidth = 72,
-        centerY = layout.containerCenterY,
-        getValue = function() return CurrentAuraWorkspaceLane(scope) end,
-        setValue = function(value)
-            if CurrentAuraWorkspaceLane(scope) == value then return end
-            SetAuraWorkspaceLane(scope, value)
-            RebuildGroupAuraPage(ctx)
-        end,
-    })
+    local laneBar = WorkspaceSelectorBar(ctx, section, GF_AURA_WORKSPACE_LANES, sectionW, "Container:", layout.containerCenterY,
+        function() return CurrentAuraWorkspaceLane(scope) end,
+        function(value) SetAuraWorkspaceLane(scope, value) end)
     RegisterAuraControl(ctx, laneBar, "Container", "segment", "group-workspace.container-selector", "ephemeral")
-    local toolBar = W.ScopeOverrideBar(ctx, section, {
-        values = AuraWorkspaceTools(lane),
-        width = sectionW,
-        label = "Edit:",
-        labelWidth = 72,
-        centerY = layout.toolCenterY,
-        getValue = function() return CurrentAuraWorkspaceTool(scope, lane) end,
-        setValue = function(value)
-            if CurrentAuraWorkspaceTool(scope, lane) == value then return end
-            SetAuraWorkspaceTool(scope, lane, value)
-            RebuildGroupAuraPage(ctx)
-        end,
-    })
+    local toolBar = WorkspaceSelectorBar(ctx, section, AuraWorkspaceTools(lane), sectionW, "Edit:", layout.toolCenterY,
+        function() return CurrentAuraWorkspaceTool(scope, lane) end,
+        function(value) SetAuraWorkspaceTool(scope, lane, value) end)
     local exactKind = "groupAuraWorkspace"
     local exactViews = lane == "buff" and {
         party_buff_filters = {
@@ -295,9 +272,22 @@ local function LaneBackendEnabled(scope, groupKey)
     if not root then return group.enabled ~= false end
     return root.enabled ~= false and group.enabled ~= false
 end
+-- These controls keep their live preview/release setters. The shared binder
+-- owns their typed declarations, native input, history and combat refusal.
+local function BindAuraWidget(ctx, widget, kind, get, set, fallback, meta)
+    local low, high
+    if kind == "slider" then low, high = widget:GetMinMaxValues() end
+    Schema.Bind(ctx, widget, {
+        id = meta.controlId, kind = kind, scope = "groups", applyDomain = "auras",
+        get = get, set = set, meta = meta, range = low and { low, high, 1 },
+        defaultSource = function() return fallback end,
+    })
+    widget._msuf2ControlSchema.labelKey = widget._msuf2RuntimeControlRecord.label
+    return widget
+end
 local function BindAuraRootEnabled(ctx, widget)
     local scope = CurrentScope()
-    M.BindBoolWidget(ctx, widget,
+    BindAuraWidget(ctx, widget, "toggle",
         function()
             local root = AurasRoot and AurasRoot(CurrentScope())
             return not root or root.enabled ~= false
@@ -310,14 +300,14 @@ local function BindAuraRootEnabled(ctx, widget)
             if QueueGF then QueueGF(activeScope, "auras") end
             RefreshContext(ctx)
         end,
-        AuraControlMeta(ctx, "group-workspace.root.enabled", nil, {
+        nil, AuraControlMeta(ctx, "group-workspace.root.enabled", nil, {
             searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.enabled"),
         }))
     return widget
 end
 local function BindAuraLaneEnabled(ctx, widget, groupKey)
     local scope = CurrentScope()
-    M.BindBoolWidget(ctx, widget,
+    BindAuraWidget(ctx, widget, "toggle",
         function()
             return LaneBackendEnabled(CurrentScope(), groupKey)
         end,
@@ -335,7 +325,7 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
             if QueueGF then QueueGF(scope, "auras") end
             RefreshContext(ctx)
         end,
-        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled", nil, {
+        nil, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled", nil, {
             searchSettingKeys = GroupAuraSettingKeys(scope,
                 ".auras." .. groupKey .. ".enabled"),
         }))
@@ -350,113 +340,206 @@ local function PrepareWorkspaceSearch(ctx)
     M.AuraControls.ConfigureSearchView(ctx, "groupAuraWorkspace", scope .. "_" .. lane .. "_" .. tool)
     return scope, lane, tool
 end
+-- Fixed, read-only UI layout fallbacks; saved aura values keep their own owner.
+local AURA_LAYOUT_DEFAULTS = {
+    buff = { anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5 },
+    externals = { anchor = "CENTER", growth = "RIGHTDOWN", size = 28, perRow = 3, max = 2, spacing = 1, layer = 7 },
+    debuff = { anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6 },
+}
+local function CombatLocked()
+    if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
+    return InCombatLockdown and InCombatLockdown() or false
+end
+local function RefreshAuraPreviews(scope)
+    if CombatLocked() then return false end
+    RefreshGFPreview(scope, { auraOnly = true })
+    return true
+end
+local function LaneLayoutMeta(ctx, lane, path, routeContract)
+    return AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. path, nil, routeContract)
+end
+local function BindLiveAuraSlider(ctx, widget, scope, lane, key, fallback, meta)
+    local pendingApply, pendingScope, pendingAuras, releaseScheduled
+    local function RefreshPreviewOnly()
+        RefreshAuraPreviews(pendingScope or scope)
+    end
+    local function FlushRuntime()
+        if not pendingApply then return end
+        if CombatLocked() then
+            releaseScheduled = nil
+            return false
+        end
+        local applyScope = pendingScope or scope
+        local current = pendingAuras == AurasRoot(applyScope)
+        pendingApply, pendingScope, pendingAuras, releaseScheduled = nil, nil, nil, nil
+        if current then QueueGF(applyScope, "auras") end
+        return true
+    end
+    local function ScheduleRelease()
+        if not pendingApply or releaseScheduled then return end
+        if CombatLocked() then return end
+        releaseScheduled = true
+        -- Tracked Menu2 timer only (file-local proxy above). A raw global
+        -- timer callback outlives the combat teardown that hides this page,
+        -- so the runtime apply would still fire after the menu quiesced on
+        -- PLAYER_REGEN_DISABLED.
+        if C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(0, FlushRuntime)
+        else
+            FlushRuntime()
+        end
+    end
+    meta = meta or LaneLayoutMeta(ctx, lane, AuraCatalogToken(key))
+    meta.step, meta.roundStep = 1, true
+    BindAuraWidget(ctx, widget, "slider",
+        function() return tonumber(AuraGroup(CurrentScope(), lane)[key]) or fallback end,
+        function(value)
+            local activeScope = CurrentScope()
+            value = floor((tonumber(value) or fallback or 0) + 0.5)
+            local group = AuraGroup(activeScope, lane)
+            if group[key] == value then return end
+            group[key] = value
+            pendingAuras = AurasRoot(activeScope, true)
+            pendingApply = true
+            pendingScope = activeScope
+            -- Preview each edit immediately; apply live frames once on release.
+            RefreshPreviewOnly()
+            if widget._msuf2SliderActive == true or releaseScheduled then
+                return
+            else
+                FlushRuntime()
+            end
+        end,
+        fallback, meta)
+    widget:HookScript("OnMouseUp", ScheduleRelease)
+    widget:HookScript("OnHide", FlushRuntime)
+    -- If combat interrupts a drag, MenuRuntime cancels the release timer
+    -- and hides the page. Retain the pending OOC apply locally and flush it
+    -- only when the user next opens this control after combat.
+    widget:HookScript("OnShow", FlushRuntime)
+    return widget
+end
+local function BindLiveAuraDropdown(ctx, widget, scope, lane, key, fallback, meta)
+    BindAuraWidget(ctx, widget, "dropdown",
+        function() return AuraGroup(CurrentScope(), lane)[key] or fallback end,
+        function(value)
+            if CombatLocked() then return end
+            local activeScope = CurrentScope()
+            local group = AuraGroup(activeScope, lane)
+            value = value or fallback
+            if group[key] == value then return end
+            group[key] = value
+            AurasRoot(activeScope, true)
+            RefreshAuraPreviews(activeScope)
+            QueueGF(activeScope, "auras")
+            if key == "growth" then RefreshContext(ctx) end
+        end,
+        nil, meta or LaneLayoutMeta(ctx, lane, AuraCatalogToken(key)))
+    return widget
+end
+local function BuildExternalFilterSection(ctx, auraBuilder)
+    local filterSection = auraBuilder:Section("External Defensive Filtering", 88)
+    local filterWidth = filterSection._msuf2Width or auraBuilder.width or 720
+    local autoMeta = AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {
+        -- One stable catalog identity covers every scope captured by search.
+        searchSettingKeys = AllGroupAuraSettingKeys(".auras.externals.autoBlacklistBuffs"),
+    })
+    local autoBlacklist = Schema.Build(ctx, filterSection, {{ "switch", "autoBlacklist", true,
+        { "Auto-blacklist from Buffs", 24, -50, filterWidth - 48 },
+        meta = autoMeta, scope = "groups", domain = "auras", get = function()
+            return AuraGroup(CurrentScope(), "externals").autoBlacklistBuffs ~= false
+        end, set = function(value)
+            local activeScope = CurrentScope()
+            AuraGroup(activeScope, "externals").autoBlacklistBuffs = value == true
+            if QueueGF then QueueGF(activeScope, "auras") end
+            RefreshContext(ctx)
+        end,
+    }}, ROW_OPTIONS).autoBlacklist
+    if type(M.AddTooltip) == "function" then
+        M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",
+            "While External Defensives is visible and Max is above 0, hides every aura Blizzard classifies as EXTERNAL_DEFENSIVE from the normal Buffs container. If External Defensives is disabled, those auras remain visible in Buffs.",
+            { hook = true, titleAsLine = true })
+    end
+end
+-- One live lane-layout row: the schema creates and places it, and the live
+-- slider/dropdown binder (preview per edit, runtime apply on release) owns input.
+local function BuildLaneLayoutRow(L, kind, key, fallback, args, place, path, routeContract)
+    local bindLive = kind == "slider" and BindLiveAuraSlider or BindLiveAuraDropdown
+    local widget = Schema.Build(L.ctx, L.section, {{ kind, key, fallback, args, place, bind = function(control)
+        bindLive(L.ctx, control, L.scope, L.lane, key, fallback,
+            LaneLayoutMeta(L.ctx, L.lane, path or AuraCatalogToken(key), routeContract))
+    end }}, ROW_OPTIONS)[key]
+    L.controls[#L.controls + 1] = widget
+    return widget
+end
+local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
+    local anchors = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
+    local growthValues = VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down",
+        "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up",
+        "UP", "Up (Single Column)", "DOWN", "Down (Single Column)")
+    local defaults = AURA_LAYOUT_DEFAULTS[lane] or AURA_LAYOUT_DEFAULTS.debuff
+    local title = lane == "debuff" and "Debuff Layout"
+        or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
+    local section = auraBuilder:Section(title, 202)
+    local w = section._msuf2Width or auraBuilder.width or 720
+    local inner, gap = w - 48, 10
+    local controls = {}
+    local L = { ctx = ctx, section = section, scope = scope, lane = lane, controls = controls }
+    local enable = Schema.Build(ctx, section, {{ "switch", "laneEnabled", nil,
+        { "Visible", 24, -62, 104 }, bind = function(widget) BindAuraLaneEnabled(ctx, widget, lane) end }}, ROW_OPTIONS).laneEnabled
+    enable._msuf2GroupFrameGateAlwaysEnabled = true
+    local dropdownW = max(180, floor((inner - 126 - gap * 2) / 2))
+    local anchorX = 24 + 126 + gap
+    local growthX = anchorX + dropdownW + gap
+    local function Dropdown(label, x, values, key, fallback, y, width)
+        width = width or dropdownW
+        local routeContract
+        if lane == "externals" and key == "growth" then
+            routeContract = {
+                searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.growth"),
+            }
+        end
+        return BuildLaneLayoutRow(L, "dropdown", key, fallback, { label, values, width },
+            { x, y or -34, width, "LEFT" }, nil, routeContract)
+    end
+    Dropdown("Anchor", anchorX, anchors, "anchor", defaults.anchor)
+    Dropdown("Growth", growthX, growthValues, "growth", defaults.growth)
+    local col4 = floor((inner - gap * 3) / 4)
+    local function Slider(label, col, y, minValue, maxValue, key, fallback)
+        local routeContract
+        if lane == "externals" and (key == "layer" or key == "max") then
+            routeContract = {
+                searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals." .. key),
+            }
+        end
+        return BuildLaneLayoutRow(L, "slider", key, fallback, { label, minValue, maxValue, 1, col4 },
+            { 24 + (col - 1) * (col4 + gap), y, col4 }, nil, routeContract)
+    end
+    Slider("Max", 1, -92, 0, 20, "max", defaults.max)
+    Slider("Size", 2, -92, 8, 80, "size", defaults.size)
+    Slider("Layer (0-30)", 3, -92, 0, 30, "layer", defaults.layer)
+    local perRowControl = Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
+    Slider("Gap", 2, -146, 0, 12, "spacing", defaults.spacing)
+    BuildLaneLayoutRow(L, "slider", "iconScale", 100, { "Icon Scale (%)", 20, 300, 1, col4 },
+        { 24 + 2 * (col4 + gap), -146, col4 }, "icon-scale", {
+            searchSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
+        })
+    M.TrackRefresh(ctx, function()
+        local shown = LaneBackendEnabled(CurrentScope(), lane)
+        SetOptionEnabled(enable, true)
+        SetOptionsEnabled(controls, shown)
+        local growth = tostring(AuraGroup(CurrentScope(), lane).growth or defaults.growth):upper()
+        SetOptionEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
+    end)
+end
 local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
     local function RefreshPage() M.SelectPage(ctx.key) end
-    local function CombatLocked()
-        if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
-        return _G.InCombatLockdown and _G.InCombatLockdown() or false
-    end
-    local function RefreshAuraPreviews(scope)
-        if CombatLocked() then return false end
-        RefreshGFPreview(scope, { auraOnly = true })
-        return true
-    end
-    local function BindLiveAuraSlider(widget, scope, lane, key, fallback, meta)
-        local pendingApply, pendingScope, pendingAuras, releaseScheduled
-        local function RefreshPreviewOnly()
-            RefreshAuraPreviews(pendingScope or scope)
-        end
-        local function FlushRuntime()
-            if not pendingApply then return end
-            if CombatLocked() then
-                releaseScheduled = nil
-                return false
-            end
-            local applyScope = pendingScope or scope
-            local current = pendingAuras == AurasRoot(applyScope)
-            pendingApply, pendingScope, pendingAuras, releaseScheduled = nil, nil, nil, nil
-            if current then QueueGF(applyScope, "auras") end
-            return true
-        end
-        local function ScheduleRelease()
-            if not pendingApply or releaseScheduled then return end
-            if CombatLocked() then return end
-            releaseScheduled = true
-            -- Tracked Menu2 timer only (file-local proxy above). A raw global
-            -- timer callback outlives the combat teardown that hides this page,
-            -- so the runtime apply would still fire after the menu quiesced on
-            -- PLAYER_REGEN_DISABLED.
-            if C_Timer and type(C_Timer.After) == "function" then
-                C_Timer.After(0, FlushRuntime)
-            else
-                FlushRuntime()
-            end
-        end
-        meta = meta or AuraControlMeta(ctx,
-            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key))
-        meta.step, meta.roundStep = 1, true
-        M.BindNumberWidget(ctx, widget,
-            function() return tonumber(AuraGroup(CurrentScope(), lane)[key]) or fallback end,
-            function(value)
-                local activeScope = CurrentScope()
-                value = floor((tonumber(value) or fallback or 0) + 0.5)
-                local group = AuraGroup(activeScope, lane)
-                if group[key] == value then return end
-                group[key] = value
-                pendingAuras = AurasRoot(activeScope, true)
-                pendingApply = true
-                pendingScope = activeScope
-                -- Preview each edit immediately; apply live frames once on release.
-                RefreshPreviewOnly()
-                if widget._msuf2SliderActive == true or releaseScheduled then
-                    return
-                else
-                    FlushRuntime()
-                end
-            end,
-            fallback, meta)
-        widget:HookScript("OnMouseUp", ScheduleRelease)
-        widget:HookScript("OnHide", FlushRuntime)
-        -- If combat interrupts a drag, MenuRuntime cancels the release timer
-        -- and hides the page. Retain the pending OOC apply locally and flush it
-        -- only when the user next opens this control after combat.
-        widget:HookScript("OnShow", FlushRuntime)
-        return widget
-    end
-    local function BindLiveAuraDropdown(widget, scope, lane, key, fallback, meta)
-        M.BindDropdownWidget(ctx, widget,
-            function() return AuraGroup(CurrentScope(), lane)[key] or fallback end,
-            function(value)
-                if CombatLocked() then return end
-                local activeScope = CurrentScope()
-                local group = AuraGroup(activeScope, lane)
-                value = value or fallback
-                if group[key] == value then return end
-                group[key] = value
-                AurasRoot(activeScope, true)
-                RefreshAuraPreviews(activeScope)
-                QueueGF(activeScope, "auras")
-                if key == "growth" then RefreshContext(ctx) end
-            end,
-            meta or AuraControlMeta(ctx,
-                "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
-        return widget
-    end
     local scope, lane, tool = PrepareWorkspaceSearch(ctx)
-    local anchors = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
-    local growthValues = VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down",
-        "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up",
-        "UP", "Up (Single Column)", "DOWN", "Down (Single Column)")
-    local defaults = lane == "buff"
-        and { anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5 }
-        or lane == "externals"
-        and { anchor = "CENTER", growth = "RIGHTDOWN", size = 28, perRow = 3, max = 2, spacing = 1, layer = 7 }
-        or { anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6 }
 
-    local outer = b:CollapsibleSection("auras", "Auras", 120, false)
+    local outer = Schema.Section(b:CollapsibleSection("auras", "Auras", 120, false), "groups")
     local auraBuilder = CreateNestedGroupAuraBuilder(ctx, b, outer)
     local workspaceLayout = AuraWorkspaceLayout(lane, auraBuilder.width or 720)
     local top = auraBuilder:Section("", workspaceLayout.height)
@@ -469,101 +552,13 @@ local function BuildGFAuras(ctx)
         M.AttachAuraFontsAndColors(top, M.Format("Auras"), scope)
     end
 
-    BindAuraRootEnabled(ctx, W.SectionSwitch(outer, "Enable group auras"))
+    Schema.Build(ctx, outer, {{ "sectionSwitch", "rootEnabled", nil, { "Enable group auras" },
+        bind = function(widget) BindAuraRootEnabled(ctx, widget) end }}, ROW_OPTIONS)
 
-    if tool == "layout" and lane == "externals" then
-        local filterSection = auraBuilder:Section("External Defensive Filtering", 88)
-        local filterWidth = filterSection._msuf2Width or auraBuilder.width or 720
-        local autoBlacklist = W.SwitchAt(filterSection, "Auto-blacklist from Buffs", 24, -50, filterWidth - 48)
-        M.BindBoolWidget(ctx, autoBlacklist,
-            function()
-                return AuraGroup(CurrentScope(), "externals").autoBlacklistBuffs ~= false
-            end,
-            function(value)
-                local activeScope = CurrentScope()
-                AuraGroup(activeScope, "externals").autoBlacklistBuffs = value == true
-                if QueueGF then QueueGF(activeScope, "auras") end
-                RefreshContext(ctx)
-            end,
-            AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {
-                -- This workspace control is rebuilt for Party and Raid states
-                -- under one stable catalog identity. Keep its finite route set
-                -- complete regardless of which state was captured last.
-                searchSettingKeys = AllGroupAuraSettingKeys(".auras.externals.autoBlacklistBuffs"),
-            }))
-        if type(M.AddTooltip) == "function" then
-            M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",
-                "While External Defensives is visible and Max is above 0, hides every aura Blizzard classifies as EXTERNAL_DEFENSIVE from the normal Buffs container. If External Defensives is disabled, those auras remain visible in Buffs.",
-                { hook = true, titleAsLine = true })
-        end
-    end
+    if tool == "layout" and lane == "externals" then BuildExternalFilterSection(ctx, auraBuilder) end
 
     if tool == "layout" then
-        local title = lane == "debuff" and "Debuff Layout"
-            or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
-        local section = auraBuilder:Section(title, 202)
-        local w = section._msuf2Width or auraBuilder.width or 720
-        local inner, gap = w - 48, 10
-        local controls = {}
-        local enable = BindAuraLaneEnabled(ctx, W.SwitchAt(section, "Visible", 24, -62, 104), lane)
-        enable._msuf2GroupFrameGateAlwaysEnabled = true
-        local dropdownW = max(180, floor((inner - 126 - gap * 2) / 2))
-        local anchorX = 24 + 126 + gap
-        local growthX = anchorX + dropdownW + gap
-        local function Dropdown(label, x, values, key, fallback, y, width)
-            width = width or dropdownW
-            local routeContract
-            if lane == "externals" and key == "growth" then
-                routeContract = {
-                    searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.growth"),
-                }
-            end
-            local widget = BindLiveAuraDropdown(W.Dropdown(section, label, values, width),
-                scope, lane, key, fallback,
-                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key), nil,
-                    routeContract))
-            W.MoveWidget(widget, section, x, y or -34, width, "LEFT")
-            controls[#controls + 1] = widget
-            return widget
-        end
-        Dropdown("Anchor", anchorX, anchors, "anchor", defaults.anchor)
-        Dropdown("Growth", growthX, growthValues, "growth", defaults.growth)
-        local col4 = floor((inner - gap * 3) / 4)
-        local function Slider(label, col, y, minValue, maxValue, key, fallback)
-            local routeContract
-            if lane == "externals" and (key == "layer" or key == "max") then
-                routeContract = {
-                    searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals." .. key),
-                }
-            end
-            local widget = BindLiveAuraSlider(W.Slider(section, label, minValue, maxValue, 1, col4),
-                scope, lane, key, fallback,
-                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key), nil,
-                    routeContract))
-            W.MoveWidget(widget, section, 24 + (col - 1) * (col4 + gap), y, col4)
-            controls[#controls + 1] = widget
-            return widget
-        end
-        Slider("Max", 1, -92, 0, 20, "max", defaults.max)
-        Slider("Size", 2, -92, 8, 80, "size", defaults.size)
-        Slider("Layer (0-30)", 3, -92, 0, 30, "layer", defaults.layer)
-        local perRowControl = Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
-        Slider("Gap", 2, -146, 0, 12, "spacing", defaults.spacing)
-        local iconScale = BindLiveAuraSlider(W.Slider(section, "Icon Scale (%)", 20, 300, 1, col4),
-            scope, lane, "iconScale", 100,
-            AuraControlMeta(ctx,
-                "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.icon-scale", nil, {
-                    searchSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
-                }))
-        W.MoveWidget(iconScale, section, 24 + 2 * (col4 + gap), -146, col4)
-        controls[#controls + 1] = iconScale
-        M.TrackRefresh(ctx, function()
-            local shown = LaneBackendEnabled(CurrentScope(), lane)
-            SetOptionEnabled(enable, true)
-            SetOptionsEnabled(controls, shown)
-            local growth = tostring(AuraGroup(CurrentScope(), lane).growth or defaults.growth):upper()
-            SetOptionEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
-        end)
+        BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
     elseif type(M.BuildAuras3GroupLaneWorkspace) == "function" then
         M.BuildAuras3GroupLaneWorkspace(ctx, auraBuilder, scope, lane, { tool = tool, compact = true })
     end

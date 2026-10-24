@@ -1,9 +1,10 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_ColorPainter.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local C_Timer = M.MenuTimer or C_Timer
 
 -- The Color Painter deliberately owns no renderer. It embeds the same unit and
 -- group preview objects used by their normal pages, then adds menu-only click
@@ -143,9 +144,30 @@ local function DisableUnitPreviewEditing(box)
     end
 end
 
+-- Both preview kinds are compact, bound to the Colors page host and drop the guides/bounds layers.
+local function HostShownFn(parent, ctx)
+    return function()
+        return (not M.activeKey or not ctx or not ctx.key or M.activeKey == ctx.key)
+            and parent:IsShown()
+    end
+end
+local function CompactColorPreview(box, title, hint, text, width)
+    if type(box.ApplyCompactPreviewPresentation) == "function" then box:ApplyCompactPreviewPresentation(true) end
+    box:SetHeight(132)
+    if title then title:Hide() end
+    if hint then hint:Hide() end
+    box._msuf2ColorPainterTitle = Label(box, text, 12, -8, width - 24, T.colors.title or T.colors.text, "GameFontNormal")
+    if type(box.layerVisibility) == "table" then
+        box.layerVisibility.guides = false
+        box.layerVisibility.bounds = false
+    end
+end
+local function UnitPreviewBoxCreator()
+    return MSUF.MSUF_Menu2_CreateUnitPreviewBox or MSUF.Require("MSUF_Menu2_CreateUnitPreviewBox", FILE)
+end
+
 local function MakeUnitPreview(parent, ctx, width, unitKey, displayName)
-    local create = MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox
-    if type(create) ~= "function" then return nil end
+    local create = UnitPreviewBoxCreator()
     unitKey = unitKey or "player"
     displayName = displayName or unitKey
     local panel = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
@@ -169,19 +191,8 @@ local function MakeUnitPreview(parent, ctx, width, unitKey, displayName)
     box._msuf2ColorPainterUnitLabel = displayName
     box._msuf2PinnedPreviewPageKey = ctx and ctx.key
     box._msuf2PinnedPreviewWrapper = ctx and ctx.wrapper
-    box._msuf2UnitPageHostShown = function()
-        return (not M.activeKey or not ctx or not ctx.key or M.activeKey == ctx.key)
-            and parent:IsShown()
-    end
-    if type(box.ApplyCompactPreviewPresentation) == "function" then box:ApplyCompactPreviewPresentation(true) end
-    box:SetHeight(132)
-    if box.title then box.title:Hide() end
-    if box.hint then box.hint:Hide() end
-    box._msuf2ColorPainterTitle = Label(box, displayName, 12, -8, width - 24, T.colors.title or T.colors.text, "GameFontNormal")
-    if type(box.layerVisibility) == "table" then
-        box.layerVisibility.guides = false
-        box.layerVisibility.bounds = false
-    end
+    box._msuf2UnitPageHostShown = HostShownFn(parent, ctx)
+    CompactColorPreview(box, box.title, box.hint, displayName, width)
     HidePreviewEditorChrome(box, box.canvas, box.sidebar, box.zoomBar, box.animateCombatButton)
     DisableUnitPreviewEditing(box)
     return box
@@ -197,19 +208,8 @@ local function MakeGroupPreview(parent, ctx, width)
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     box._msufGFNativePreviewPageKey = ctx and ctx.key
     box._msufGFNativePreviewWrapper = ctx and ctx.wrapper
-    box._msufGFPreviewHostShown = function()
-        return (not M.activeKey or not ctx or not ctx.key or M.activeKey == ctx.key)
-            and parent:IsShown()
-    end
-    if type(box.ApplyCompactPreviewPresentation) == "function" then box:ApplyCompactPreviewPresentation(true) end
-    box:SetHeight(132)
-    if box._title then box._title:Hide() end
-    if box._hint then box._hint:Hide() end
-    box._msuf2ColorPainterTitle = Label(box, "Group", 12, -8, width - 24, T.colors.title or T.colors.text, "GameFontNormal")
-    if type(box.layerVisibility) == "table" then
-        box.layerVisibility.guides = false
-        box.layerVisibility.bounds = false
-    end
+    box._msufGFPreviewHostShown = HostShownFn(parent, ctx)
+    CompactColorPreview(box, box._title, box._hint, "Group", width)
     HidePreviewEditorChrome(box, box._stage, box._layers, box._zoomBar, box._previewAnimationButton)
     local baseRefresh = box.Refresh
     if type(baseRefresh) == "function" then
@@ -302,18 +302,21 @@ local function FocusUnitPreview(box, category, noRender)
 end
 
 local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
-    local function Target(anchor, sectionId, label, priority, ownerLabel)
-        if not anchor then return nil end
-        return { anchor = anchor, sectionId = sectionId, label = label, priority = priority or 0, ownerLabel = ownerLabel }
-    end
     local function FillAnchor(bar)
         if bar and bar.GetStatusBarTexture then return bar:GetStatusBarTexture() or bar end
         return bar
     end
     local result = {}
     local function Add(anchor, sectionId, label, priority, ownerLabel)
-        local value = Target(anchor, sectionId, label, priority, ownerLabel)
-        if value then result[#result + 1] = value end
+        if anchor then
+            result[#result + 1] = { anchor = anchor, sectionId = sectionId, label = label, priority = priority or 0, ownerLabel = ownerLabel }
+        end
+    end
+    -- One text target per named element of a preview mock, in order.
+    local function AddTexts(mock, label, priority, ...)
+        for i = 1, select("#", ...) do
+            Add(mock and mock[(select(i, ...))], "colors_font", label, priority, "Global font color")
+        end
     end
     if categoryKey == "group" then
         local groupMock = groupBox and (groupBox._mock or groupBox.mock)
@@ -322,13 +325,9 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
         Add(groupMock and FillAnchor(groupMock._healPred), "colors_bar_colors", "Positive Heal Prediction", 40, "Positive Heal Prediction")
         Add(groupMock and FillAnchor(groupMock._absorb), "colors_bar_colors", "Absorb Overlay", 50, "Absorb Bar Color")
         Add(groupMock and FillAnchor(groupMock._healAbsorb), "colors_bar_colors", "Heal-Absorb (Negative)", 60, "Heal-Absorb / Negative Heal")
-        Add(groupMock and groupMock._nameFS, "colors_font", "Name Text Color", 80, "Global font color")
-        Add(groupMock and groupMock._hpLeftFS, "colors_font", "Health Text Color", 90, "Global font color")
-        Add(groupMock and groupMock._hpCenterFS, "colors_font", "Health Text Color", 90, "Global font color")
-        Add(groupMock and groupMock._hpRightFS, "colors_font", "Health Text Color", 90, "Global font color")
-        Add(groupMock and groupMock._powerLeftFS, "colors_font", "Power Text Color", 90, "Global font color")
-        Add(groupMock and groupMock._powerCenterFS, "colors_font", "Power Text Color", 90, "Global font color")
-        Add(groupMock and groupMock._powerRightFS, "colors_font", "Power Text Color", 90, "Global font color")
+        AddTexts(groupMock, "Name Text Color", 80, "_nameFS")
+        AddTexts(groupMock, "Health Text Color", 90, "_hpLeftFS", "_hpCenterFS", "_hpRightFS")
+        AddTexts(groupMock, "Power Text Color", 90, "_powerLeftFS", "_powerCenterFS", "_powerRightFS")
         return result
     end
     for i = 1, #(unitBoxes or {}) do
@@ -347,17 +346,9 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
                 Add(mock.healPred, "colors_bar_colors", LabelFor("Positive Heal Prediction"), 40, "Positive Heal Prediction")
                 Add(mock.absorb, "colors_bar_colors", LabelFor("Absorb Overlay"), 50, "Absorb Bar Color")
                 Add(mock.healAbsorb, "colors_bar_colors", LabelFor("Heal-Absorb (Negative)"), 60, "Heal-Absorb / Negative Heal")
-                Add(mock.nameText, "colors_font", LabelFor("Name Text Color"), 80, "Global font color")
-                Add(mock.raidGroupNameText, "colors_font", LabelFor("Name Text Color"), 80, "Global font color")
-                Add(mock.totInlineText, "colors_font", LabelFor("Name Text Color"), 80, "Global font color")
-                Add(mock.hpTextLeft, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
-                Add(mock.hpTextCenter, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
-                Add(mock.hpText, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
-                Add(mock.hpTextPct, "colors_font", LabelFor("Health Text Color"), 90, "Global font color")
-                Add(mock.powerTextLeft, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
-                Add(mock.powerTextCenter, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
-                Add(mock.powerText, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
-                Add(mock.powerTextPct, "colors_font", LabelFor("Power Text Color"), 90, "Global font color")
+                AddTexts(mock, LabelFor("Name Text Color"), 80, "nameText", "raidGroupNameText", "totInlineText")
+                AddTexts(mock, LabelFor("Health Text Color"), 90, "hpTextLeft", "hpTextCenter", "hpText", "hpTextPct")
+                AddTexts(mock, LabelFor("Power Text Color"), 90, "powerTextLeft", "powerTextCenter", "powerText", "powerTextPct")
             elseif categoryKey == "cast" then
                 Add(mock.cast, "colors_castbar", LabelFor("Castbar Colors"), 30, "Interruptible cast color")
             elseif categoryKey == "auras" then
@@ -608,9 +599,6 @@ function PainterBuild.PreviewShell(state)
     -- panel it is built lazily on first activation of its tab; the default
     -- unit tab must not pay for the native group frame preview. The box lands
     -- in state.groupBox once EnsureGroupBox runs.
-    local groupPreviewAvailable = type((M.GroupPreview or {}).CreateNative) == "function"
-    local unitPreviewAvailable = type(MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox) == "function"
-    if not unitPreviewAvailable and not groupPreviewAvailable then Label(host, "Preview renderer is unavailable.", 12, -12, previewW - 24, T.colors.muted) end
     SetZoomChromeShown(false)
     state.section, state.fixedPreview, state.paletteSection, state.innerW = section, fixedPreview, paletteSection, innerW
     state.previewW, state.host, state.shield = previewW, host, shield
@@ -640,6 +628,12 @@ function PainterBuild.PreviewBoxes(state)
             helpers.ShowPreviewControlsHelp(self, { M = M, T = T, W = W, Tr = Tr, lines = lines })
         end)
     end
+    -- Zoom chrome stays collected for the reveal-on-hover fade and its help re-wired.
+    local function WireZoomChrome(zoomBar, helpButton)
+        CollectZoomBar(zoomBar)
+        if zoomBar and zoomBar.SetAlpha then zoomBar:SetAlpha(0) end
+        RewirePreviewHelp(helpButton)
+    end
     -- The castbar tab shows one full-width panel instead of two half panels;
     -- built lazily on first activation of the tab.
     local function EnsureCastBox()
@@ -649,9 +643,7 @@ function PainterBuild.PreviewBoxes(state)
             if castBox then
                 castBox:ClearAllPoints()
                 castBox:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-                CollectZoomBar(castBox.zoomBar)
-                if castBox.zoomBar and castBox.zoomBar.SetAlpha then castBox.zoomBar:SetAlpha(0) end
-                RewirePreviewHelp(castBox.zoomHelpButton)
+                WireZoomChrome(castBox.zoomBar, castBox.zoomHelpButton)
                 castBox:Hide()
             end
         end
@@ -663,20 +655,14 @@ function PainterBuild.PreviewBoxes(state)
             local groupBox = MakeGroupPreview(host, ctx, previewW) or false
             state.groupBox = groupBox
             if groupBox then
-                CollectZoomBar(groupBox._zoomBar)
-                if groupBox._zoomBar and groupBox._zoomBar.SetAlpha then groupBox._zoomBar:SetAlpha(0) end
-                RewirePreviewHelp(groupBox._zoomHelpButton)
+                WireZoomChrome(groupBox._zoomBar, groupBox._zoomHelpButton)
                 groupBox:Hide()
             end
         end
         return state.groupBox or nil
     end
 
-    local function WireUnitBox(box)
-        CollectZoomBar(box.zoomBar)
-        if box.zoomBar and box.zoomBar.SetAlpha then box.zoomBar:SetAlpha(0) end
-        RewirePreviewHelp(box.zoomHelpButton)
-    end
+    local function WireUnitBox(box) WireZoomChrome(box.zoomBar, box.zoomHelpButton) end
     -- Each preview box costs a comparable slice of the entry frame, so the
     -- Target box builds one short tick after Player instead of in the same
     -- frame. The late box re-runs the category pass to pick up its
@@ -813,7 +799,7 @@ function PainterBuild.Palette(state)
     -- Palette row: saved + recent colors from the shared picker store. A click
     -- arms the swatch as a brush; the next preview click paints with it.
     local function PaletteStore()
-        local db = type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
+        local db = type(M.EnsureDB) == "function" and M.EnsureDB() or MSUF_DB
         local store = type(db) == "table" and db.menu2ColorPicker or nil
         return type(store) == "table" and store or nil
     end
@@ -1068,14 +1054,20 @@ function PainterBuild.ResourcesStrip(state)
             return button
         end
 
+        -- A bar background with its inset fill texture.
+        local function StripBar(row, y)
+            local bg = PixelLayoutRegion(row:CreateTexture(nil, "BORDER"))
+            bg:SetPoint("TOPLEFT", row, "TOPLEFT", 12, y)
+            bg:SetSize(barW, 18)
+            local fill = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
+            fill:SetPoint("TOPLEFT", bg, "TOPLEFT", 1, -1)
+            fill:SetSize(floor(barW * 0.62), 16)
+            return bg, fill
+        end
+
         local powerRow = StripButton(-2, 50, "Power Bar Colors", "colors_power", "Color")
         local powerLabel = Label(powerRow, "", 12, -4, barW, T.colors.text)
-        local powerBg = PixelLayoutRegion(powerRow:CreateTexture(nil, "BORDER"))
-        powerBg:SetPoint("TOPLEFT", powerRow, "TOPLEFT", 12, -24)
-        powerBg:SetSize(barW, 18)
-        local powerFill = PixelLayoutRegion(powerRow:CreateTexture(nil, "ARTWORK"))
-        powerFill:SetPoint("TOPLEFT", powerBg, "TOPLEFT", 1, -1)
-        powerFill:SetSize(floor(barW * 0.62), 16)
+        local powerBg, powerFill = StripBar(powerRow, -24)
 
         local resourceRow = StripButton(-66, 56, "Class Power Colors", "colors_class_power", "Color")
         local resourceLabel = Label(resourceRow, "", 12, -4, barW, T.colors.text)
@@ -1087,12 +1079,7 @@ function PainterBuild.ResourcesStrip(state)
             pill:Hide()
             slots[i] = pill
         end
-        local resourceBarBg = PixelLayoutRegion(resourceRow:CreateTexture(nil, "BORDER"))
-        resourceBarBg:SetPoint("TOPLEFT", resourceRow, "TOPLEFT", 12, -26)
-        resourceBarBg:SetSize(barW, 18)
-        local resourceBarFill = PixelLayoutRegion(resourceRow:CreateTexture(nil, "ARTWORK"))
-        resourceBarFill:SetPoint("TOPLEFT", resourceBarBg, "TOPLEFT", 1, -1)
-        resourceBarFill:SetSize(floor(barW * 0.62), 16)
+        local resourceBarBg, resourceBarFill = StripBar(resourceRow, -26)
 
         function strip.Update()
             local pr, pg, pb = preview.power()
@@ -1201,13 +1188,10 @@ function PainterBuild.Category(state)
         if categoryBar and categoryBar.Refresh then categoryBar:Refresh() end
         if category then
             tabDescription:SetText(category.subtitle or "")
-            if strip then
+            if strip or key == "suite" then
                 ReleaseClickTargets(state.clickTargets)
                 state.clickTargets = {}
-                strip.Update()
-            elseif key == "suite" then
-                ReleaseClickTargets(state.clickTargets)
-                state.clickTargets = {}
+                if strip then strip.Update() end
             else
                 RebuildClickTargets(category, castPanel)
             end

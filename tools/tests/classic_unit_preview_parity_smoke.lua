@@ -393,7 +393,10 @@ end
 local sectionFile = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua", "rb"))
 local sectionSource = sectionFile:read("*a"):gsub("\r\n", "\n")
 sectionFile:close()
-Check(sectionSource:find('SetBool(unit, "levelIndicatorDifficultyColor", value, "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR"', 1, true),
+-- The toggle is declared as a status option (its key and reason), which the shared option row
+-- writes with SetBool(unit, option.key, value, option.reason).
+Check(sectionSource:find('key = "levelIndicatorDifficultyColor", reason = "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR"', 1, true)
+    and sectionSource:find("SetBool(unit, option.key, value, option.reason", 1, true),
     "the Status > Level toggle no longer writes levelIndicatorDifficultyColor")
 local readerBody = sectionSource:match("\n    (local function LevelDifficultyColorEnabled%(%)\n.-\n    end)\n")
 Check(readerBody, "the Status > Level toggle lost its reader")

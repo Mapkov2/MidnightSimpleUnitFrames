@@ -1,11 +1,13 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local Optional = MSUF.Optional
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
     or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local Fallbacks = M.Fallbacks or {}
 local H = M.PreviewHelpers or {}
 M.PreviewHelpers = H
@@ -17,7 +19,66 @@ M.ClassPowerPreview = CP
 -- preview modules. Keep preview-only fallbacks here instead of coupling pages to live runtime.
 local floor = math.floor
 local min = math.min
-local IsSecretValue = _G.issecretvalue
+local IsSecretValue = issecretvalue
+local WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
+-- The MSUF profile tables arrive with the saved variables and are replaced on a
+-- profile switch, so every use reads MSUF_DB again, inline (preview ticks and
+-- drag steps read them per segment and per step).
+-- One-pixel flat backdrop on a BackdropTemplate frame; the colors are optional.
+local function FlatBackdrop(frame, bg, border, texture)
+    texture = texture or WHITE8X8
+    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = texture, edgeFile = texture, edgeSize = 1 })
+    if bg then frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4]) end
+    if border then frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4]) end
+end
+-- A themed font string when the theme builds them, else a plain overlay one. The color is
+-- the theme's colorKey entry (when given) or the fallback.
+local function ThemedFont(parent, T, template, colorKey, fallbackColor)
+    local font
+    if T and T.Font then
+        font = T.Font(parent, template, "", (colorKey and T.colors and T.colors[colorKey]) or fallbackColor)
+    end
+    return font or PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template))
+end
+-- A popup panel from the theme (or a flat backdrop frame) in the dialog strata.
+local function CreatePreviewPopup(M2, name, width, height)
+    local popup
+    if M2 and type(M2.CreateMenuPopupPanel) == "function" then
+        popup = M2.CreateMenuPopupPanel(UIParent, { name = name, glass = "popup" })
+    else
+        popup = PixelLayoutRegion(CreateFrame("Frame", name, UIParent, "BackdropTemplate"))
+        FlatBackdrop(popup, { 0.014, 0.024, 0.050, 0.985 }, { 0.10, 0.22, 0.44, 0.80 })
+    end
+    popup:SetSize(width, height)
+    popup:SetFrameStrata("FULLSCREEN_DIALOG")
+    popup:EnableMouse(true)
+    return popup
+end
+-- A 24 px popup button: the widget kit's top button, else the theme's, else a bare backdrop button.
+local function PopupButton(W, T, popup, tr, label, width)
+    local btn = W and W.TopButton and W.TopButton(popup, label, width, 24) or (T and T.Button and T.Button(popup, label, width, 24))
+        or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+    if not btn.GetText then btn:SetText(tr(label)) end
+    return btn
+end
+-- A popup button that only closes the popup it belongs to, registered with the menu chrome.
+local function RegisterPopupDismiss(M2, button, popup, controlId, label, help)
+    if not (M2 and type(M2.RegisterMenuChromeControl) == "function") then return end
+    M2.RegisterMenuChromeControl(button, controlId, label, "action", {
+        historyMode = "none",
+        help = help,
+        command = {
+            kind = "button",
+            historyMode = "none",
+            canExecute = function() return popup.IsShown and popup:IsShown() end,
+            set = function()
+                if not (popup.IsShown and popup:IsShown()) then return false end
+                popup:Hide()
+                return true
+            end,
+        },
+    })
+end
 -- Text translated already, or composed from translated parts, goes through the
 -- theme's raw setter so a theme font does not look it up a second time.
 local function SetShownText(fs, text)
@@ -35,8 +96,8 @@ for i = 1, 5 do
     ROUNDED_MASK_PATHS[i] = ROUNDED_MEDIA_ROOT .. "rounded_clean_mask_s" .. i .. ".png"
     ROUNDED_EDGE_PATHS[i] = ROUNDED_MEDIA_ROOT .. "rounded_clean_edge_s" .. i .. ".png"
 end
-local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
-    and _G.Enum.UITextureSliceMode.Stretched
+local STRETCHED_SLICE_MODE = Enum and Enum.UITextureSliceMode
+    and Enum.UITextureSliceMode.Stretched
 local PREVIEW_BACKGROUND_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames_Options\\Media\\PreviewBackgrounds\\"
 -- Onboarding tour screenshots. They live beside the preview backgrounds in the
 -- Options companion and deliberately stay out of `T.media`: theme media must
@@ -51,7 +112,8 @@ H.TourPreviews = {
 -- live rounded runtime. Resolving this only while a preview is repainted keeps
 -- slider feedback accurate without putting any work on gameplay paths.
 function H.ResolveRoundedMedia()
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local db = MSUF_DB
+    local bars = db and db.bars
     local strength = floor((tonumber(bars and bars.roundedCornerStrength) or 3) + 0.5)
     if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
     return ROUNDED_MASK_PATHS[strength], ROUNDED_EDGE_PATHS[strength], strength
@@ -70,11 +132,11 @@ function H.PlayerManaSourceActive(player)
     local ownership = MSUF.ClassPowerOwnership
     local published = ownership and ownership.playerManaOverride
     if type(published) == "boolean" then return published end
-    local vehicle = _G.UnitHasVehicleUI and _G.UnitHasVehicleUI("player")
+    local vehicle = UnitHasVehicleUI and UnitHasVehicleUI("player")
     if IsSecretValue(vehicle) or vehicle == true then return false end
-    local hasPowerType = _G.UnitHasPowerType
+    local hasPowerType = UnitHasPowerType
     if type(hasPowerType) ~= "function" then return true end
-    local manaType = (_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0
+    local manaType = (Enum and Enum.PowerType and Enum.PowerType.Mana) or 0
     local hasMana = hasPowerType("player", manaType)
     return not IsSecretValue(hasMana) and hasMana == true
 end
@@ -92,7 +154,7 @@ function H.ApplyRoundedMediaSlice(region, strength)
         region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
     end
 end
-local PREVIEW_BACKGROUND_DEFAULT = (MSUF.Client and MSUF.Client.IsRetail == true) and "silvermoon" or "studio"
+local PREVIEW_BACKGROUND_DEFAULT = MSUF.Client.IsRetail == true and "silvermoon" or "studio"
 local PREVIEW_BACKGROUND_ASPECT = 2
 local PREVIEW_BACKGROUND_CLEAR = { 0, 0, 0, 0 }
 local PREVIEW_BACKGROUND_CUSTOM_DEFAULT = { 0.08, 0.12, 0.18, 1 }
@@ -144,7 +206,7 @@ end
 -- files. Every other client keeps the PNG and swaps to the BLP only when
 -- SetTexture reports that the PNG could not be loaded; that is checked once,
 -- on the first use, so the dropdown thumbnails follow the same choice.
-local PREVIEW_BACKGROUND_NATIVE_FIRST = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+local PREVIEW_BACKGROUND_NATIVE_FIRST = MSUF.Client.IsForever == true
 for i = 1, #PREVIEW_BACKGROUND_SPECS do
     local spec = PREVIEW_BACKGROUND_SPECS[i]
     if spec.texture then
@@ -395,14 +457,12 @@ function H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
     button:SetSize(46, 20)
     zoomBar._msuf2PreviewBackgroundButton = button
     button._msuf2DropdownPreferredWidth = 260
-    button._msuf2DropdownClampFrame = M.frame or _G.UIParent
+    button._msuf2DropdownClampFrame = M.frame or UIParent
     -- Keep the selector on its own row: Unit, Group, and Class Resources all
     -- place animation/role controls immediately to the left of the zoom bar.
     button:SetPoint("TOPRIGHT", zoomBar, "BOTTOMRIGHT", 0, -4)
     if button.SetBackdrop then
-        PixelLayoutRegion(button, "SetBackdrop", { bgFile = CP.WHITE8, edgeFile = CP.WHITE8, edgeSize = 1 })
-        button:SetBackdropColor(0.010, 0.018, 0.030, 0.96)
-        button:SetBackdropBorderColor(0.18, 0.28, 0.42, 0.92)
+        FlatBackdrop(button, { 0.010, 0.018, 0.030, 0.96 }, { 0.18, 0.28, 0.42, 0.92 }, CP.WHITE8)
     end
     local preview = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK"))
     preview:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
@@ -416,19 +476,18 @@ function H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
     button._msuf2PreviewBackgroundArrow = arrow
     button:SetScript("OnEnter", function(self)
         if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.32, 0.66, 0.96, 1) end
-        local tooltip = _G.GameTooltip
-        if tooltip then
+        if GameTooltip then
             local spec = self._msuf2PreviewBackgroundSpec or PreviewBackgroundSpec()
-            tooltip:SetOwner(self, "ANCHOR_RIGHT")
-            tooltip:SetText(PreviewBackgroundText("Preview background"), 1, 1, 1)
-            tooltip:AddLine(PreviewBackgroundText(spec.label), 0.62, 0.84, 1.00)
-            tooltip:AddLine(PreviewBackgroundText("Choose a background to check frame readability on bright and dark game surfaces."), 0.80, 0.86, 1.00, true)
-            tooltip:Show()
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(PreviewBackgroundText("Preview background"), 1, 1, 1)
+            GameTooltip:AddLine(PreviewBackgroundText(spec.label), 0.62, 0.84, 1.00)
+            GameTooltip:AddLine(PreviewBackgroundText("Choose a background to check frame readability on bright and dark game surfaces."), 0.80, 0.86, 1.00, true)
+            GameTooltip:Show()
         end
     end)
     button:SetScript("OnLeave", function(self)
         if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.18, 0.28, 0.42, 0.92) end
-        if _G.GameTooltip then _G.GameTooltip:Hide() end
+        if GameTooltip then GameTooltip:Hide() end
     end)
     button:SetScript("OnClick", function(self)
         local widgets = M.Widgets
@@ -485,6 +544,8 @@ local DETACHED_POWER_WIDTH_FRAMES = {
     utility = "UtilityCooldownViewer",
     tracked_buffs = "BuffIconCooldownViewer",
 }
+-- The class power constants table, a core load-time export the options load after.
+local CPConst = Optional("MSUF_CP_CONST")
 local function PreviewFrameWidth(frame)
     if not (frame and frame.GetWidth) then return nil end
     if frame._msufLegacyCooldownAnchor == true then return nil end
@@ -497,8 +558,7 @@ local function PreviewExternalFrameWidth(frameName, relativeTo)
     local common = MSUF and MSUF.UFBarTextCommon
     local resolve = common and common.ExternalFrameWidth
     if type(resolve) == "function" then return resolve(frameName, relativeTo) end
-    local resolver = _G.MSUF_GetEffectiveCooldownFrame
-    local source = type(resolver) == "function" and resolver(frameName) or nil
+    local source = MSUF.Require("MSUF_GetEffectiveCooldownFrame", FILE)(frameName)
     return PreviewFrameWidth(source or _G[frameName])
 end
 local function ClampDetachedPowerWidth(value, fallback, minValue, maxValue)
@@ -525,7 +585,7 @@ function CP.ResolveDetachedPowerWidth(opts)
     -- frame, then the shared Class Resource width mode as the sync fallback.
     local frameName = opts.widthFrameName
     if type(frameName) ~= "string" or frameName == "" then
-        local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES or DETACHED_POWER_WIDTH_FRAMES
+        local cdmFrames = CPConst and CPConst.CDM_FRAMES or DETACHED_POWER_WIDTH_FRAMES
         frameName = cdmFrames and cdmFrames[opts.widthMode]
     end
     if type(frameName) == "string" and frameName ~= "" then
@@ -568,25 +628,29 @@ CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
     WHIRLWIND = { 0.20, 0.80, 0.20 },
 }
 function CP.ColorOverride(tableName, token)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = db and db.general
     local overrides = general and general[tableName]
     return MSUF.ClassPowerColors.OverrideRGB(overrides, token)
 end
+-- The runtime power-color helpers, resolved once: the class power preview asks for every
+-- segment color on each animation tick.
+local GetPowerBarColor = MSUF.Require("MSUF_GetPowerBarColor", FILE)
+local GetDefaultPowerColor = MSUF.Require("MSUF_GetDefaultPowerColor", FILE)
 function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
     -- User overrides should show in preview, then fall back to runtime power-color helpers,
     -- and finally to fixed preview colors when the real runtime is unavailable.
     local r, g, b = CP.ColorOverride("classPowerColorOverrides", token)
     if r then return r, g, b end
-    if type(_G.MSUF_GetPowerBarColor) == "function" and token then
-        r, g, b = _G.MSUF_GetPowerBarColor(0, token)
+    if token then
+        r, g, b = GetPowerBarColor(0, token)
         if type(r) == "number" then return r, g, b end
     end
-    if type(_G.MSUF_GetDefaultPowerColor) == "function" and token then
-        r, g, b = _G.MSUF_GetDefaultPowerColor(token)
+    if token then
+        r, g, b = GetDefaultPowerColor(token)
         if type(r) == "number" then return r, g, b end
     end
-    local pbc = _G.PowerBarColor
+    local pbc = PowerBarColor
     local c = pbc and token and pbc[token]
     if c then
         r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
@@ -619,9 +683,8 @@ function H.DarkBarColor(cache)
         and type(cache.darkBarB) == "number" then
         return cache.darkBarR, cache.darkBarG, cache.darkBarB
     end
-    local db = _G.MSUF_DB
-    local g = db and db.general
-    MSUF.UF.Config.ResolveDarkColor(g, darkBarColor)
+    local db = MSUF_DB
+    MSUF.UF.Config.ResolveDarkColor(db and db.general, darkBarColor)
     return darkBarColor.r, darkBarColor.g, darkBarColor.b
 end
 function CP.SegmentCount(spec)
@@ -743,16 +806,46 @@ function CP.SceneValues(out, spec, value, elapsed, animated)
     end
     return out
 end
+local ResolveStatusbarTextureKey = Optional("MSUF_ResolveStatusbarTextureKey")
+local GetBarTexture = MSUF.Require("MSUF_GetBarTexture", FILE)
 function CP.ResolveTexture(key, fallback)
     if key and key ~= "" then
-        local resolve = _G.MSUF_ResolveStatusbarTextureKey
-        local path = type(resolve) == "function" and resolve(key) or nil
+        local path = type(ResolveStatusbarTextureKey) == "function" and ResolveStatusbarTextureKey(key) or nil
         if path and path ~= "" then return path end
     end
     if fallback and fallback ~= "" then return fallback end
-    local path = _G.MSUF_GetBarTexture()
+    local path = GetBarTexture()
     if path and path ~= "" then return path end
     return CP.WHITE8
+end
+-- The idle / hover / active fills and borders of the preview pill buttons, from the
+-- theme's core colors; the zoom bar buttons use the active pair for their pressed state.
+local function PillPalette(T)
+    local tc = T and T.colors
+    local shadow = tc and tc.coreShadow or { 0.006, 0.016, 0.032 }
+    local surface = tc and tc.coreSurface or { 0.014, 0.038, 0.072 }
+    local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
+    local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
+    local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
+    return { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 },
+        { raised[1], raised[2], raised[3], 0.98 },
+        { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
+end
+-- Paints a pill's superellipse layers: the fill (a gradient when the theme has one) and the
+-- edge, brightened on hover; alpha is the enabled-state multiplier and scratch is reused.
+local function PaintPillLayers(T, fill, edge, bg, br, alpha, hover, scratch)
+    if fill then
+        if T.SetFillGradient then
+            scratch[1], scratch[2], scratch[3], scratch[4] = bg[1], bg[2], bg[3], (bg[4] or 1) * alpha
+            T.SetFillGradient(fill, scratch, 0.12, -0.18)
+        else
+            fill:SetVertexColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
+        end
+    end
+    if edge then
+        local boost = hover and 1.08 or 1
+        edge:SetVertexColor(min(br[1] * boost, 1), min(br[2] * boost, 1), min(br[3] * boost, 1), (br[4] or 1) * alpha)
+    end
 end
 function H.StylePreviewPillButton(btn, T, opts)
     if not btn then return btn end
@@ -767,15 +860,8 @@ function H.StylePreviewPillButton(btn, T, opts)
         if btn.SetBackdropColor then btn:SetBackdropColor(0, 0, 0, 0) end
         if btn.SetBackdropBorderColor then btn:SetBackdropBorderColor(0, 0, 0, 0) end
     end
-    local tc = T and T.colors
-    local shadow = tc and tc.coreShadow or { 0.006, 0.016, 0.032 }
-    local surface = tc and tc.coreSurface or { 0.014, 0.038, 0.072 }
-    local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
-    local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
-    local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
-    local bgIdle, bgHover, bgActive, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2],
-        raised[3], 0.98 }, { raised[1], raised[2], raised[3], 1.00 }
-    local brIdle, brHover, brActive = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
+    local bgIdle, bgHover, bgActive, brIdle, brHover, brActive = PillPalette(T)
+    local bgDown = { bgActive[1], bgActive[2], bgActive[3], 1.00 }
     local bgScratch = { 0, 0, 0, 1 }
     function btn:MSUF2RefreshPreviewPill(active, hover, down)
         active = active == true
@@ -786,16 +872,7 @@ function H.StylePreviewPillButton(btn, T, opts)
         local bg = down and bgDown or (active and bgActive or (hover and bgHover or bgIdle))
         local br = active and brActive or (hover and brHover or brIdle)
         if useSuperellipse and self._msuf2PreviewPillFill then
-            if T.SetFillGradient then
-                bgScratch[1], bgScratch[2], bgScratch[3], bgScratch[4] = bg[1], bg[2], bg[3], (bg[4] or 1) * alpha
-                T.SetFillGradient(self._msuf2PreviewPillFill, bgScratch, 0.12, -0.18)
-            else
-                self._msuf2PreviewPillFill:SetVertexColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
-            end
-            if self._msuf2PreviewPillEdge then
-                self._msuf2PreviewPillEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1),
-                    min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
-            end
+            PaintPillLayers(T, self._msuf2PreviewPillFill, self._msuf2PreviewPillEdge, bg, br, alpha, hover, bgScratch)
         elseif self.SetBackdropColor then
             self:SetBackdropColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
             self:SetBackdropBorderColor(br[1], br[2], br[3], (br[4] or 1) * alpha)
@@ -838,28 +915,15 @@ function H.ShowPreviewHandleContext(handle, opts)
     if type(openSettings) ~= "function" then return end
     local popup = H._previewHandleContextPopup
     if not popup then
-        if M2 and type(M2.CreateMenuPopupPanel) == "function" then
-            popup = M2.CreateMenuPopupPanel(UIParent, { name = "MSUF2PreviewHandleContextMenu", glass = "popup" })
-        else
-            popup = PixelLayoutRegion(CreateFrame("Frame", "MSUF2PreviewHandleContextMenu", UIParent, "BackdropTemplate"))
-            PixelLayoutRegion(popup, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-            popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
-            popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
-        end
-        popup:SetSize(176, 76)
-        popup:SetFrameStrata("FULLSCREEN_DIALOG")
-        popup:EnableMouse(true)
-        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 })
-            or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+        popup = CreatePreviewPopup(M2, "MSUF2PreviewHandleContextMenu", 176, 76)
+        local title = ThemedFont(popup, T, "GameFontDisableSmall", "muted", { 0.72, 0.78, 0.90, 1 })
         title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -8)
         title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         title:SetJustifyH("LEFT")
         popup._title = title
         local function MakeButton(label, y)
-            local btn = W and W.TopButton and W.TopButton(popup, label, 152, 24) or (T and T.Button and T.Button(popup, label, 152, 24))
-                or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+            local btn = PopupButton(W, T, popup, tr, label, 152)
             btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, y)
-            if not btn.GetText then btn:SetText(tr(label)) end
             return btn
         end
         popup._open = MakeButton("Open Settings", -28)
@@ -889,21 +953,9 @@ function H.ShowPreviewHandleContext(handle, opts)
                         end,
                     },
                 })
-            M2.RegisterMenuChromeControl(popup._keep, "preview-context.keep-selected", "Keep preview element selected", "action", {
-                historyMode = "none",
-                help = "Closes the preview quick-actions popup without changing the current selection.",
-                command = {
-                    kind = "button",
-                    historyMode = "none",
-                    canExecute = function() return popup.IsShown and popup:IsShown() end,
-                    set = function()
-                        if not (popup.IsShown and popup:IsShown()) then return false end
-                        popup:Hide()
-                        return true
-                    end,
-                },
-            })
         end
+        RegisterPopupDismiss(M2, popup._keep, popup, "preview-context.keep-selected", "Keep preview element selected",
+            "Closes the preview quick-actions popup without changing the current selection.")
         H._previewHandleContextPopup = popup
     end
     popup._handle = handle
@@ -927,16 +979,20 @@ local SETTINGS_ICON_RECTS = {
     { 10, 1, "CENTER", 0, 4, 0.70 }, { 10, 1, "CENTER", 0, 0, 0.70 }, { 10, 1, "CENTER", 0, -4, 0.70 },
     { 3, 3, "CENTER", -3, 4, 1.00 }, { 3, 3, "CENTER", 3, 0, 1.00 }, { 3, 3, "CENTER", -1, -4, 1.00 },
 }
+-- One flat white rectangle of a glyph drawn from rects, placed at (x, y) from the point.
+local function AddFlatRect(button, width, height, point, x, y)
+    local tex = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK", nil, 6))
+    tex:SetTexture(WHITE8X8)
+    tex:SetSize(width, height)
+    tex:SetPoint(point, button, point, x, y)
+    return tex
+end
 local function CreatePreviewSettingsIcon(button)
     if not (button and button.CreateTexture) or button._msuf2PreviewSettingsParts then return end
     local parts = {}
     for i = 1, #SETTINGS_ICON_RECTS do
         local r = SETTINGS_ICON_RECTS[i]
-        local tex = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK", nil, 6))
-        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
-        tex:SetSize(r[1], r[2])
-        tex:SetPoint(r[3], button, r[3], r[4], r[5])
-        parts[i] = tex
+        parts[i] = AddFlatRect(button, r[1], r[2], r[3], r[4], r[5])
     end
     button._msuf2PreviewSettingsParts = parts
 end
@@ -968,7 +1024,7 @@ function H.EnsurePreviewHandleGear(handle, opts)
             local fill, edge = T.CreateSuperellipseLayers(gear, "_msuf2PreviewGear", 2, "BACKGROUND", "BORDER")
             gear._fill, gear._edge = fill, edge
         elseif gear.SetBackdrop then
-            PixelLayoutRegion(gear, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            FlatBackdrop(gear)
         end
         CreatePreviewSettingsIcon(gear)
         local bg, br = { 0.010, 0.022, 0.040, 0.96 }, { 0.160, 0.560, 0.720, 0.92 }
@@ -1025,11 +1081,7 @@ local function CreateZoomLockIcon(button)
     if not (button and button.CreateTexture) or button._msuf2ZoomLockParts then return end
     local parts = {}
     for name, r in pairs(LOCK_ICON_RECTS) do
-        local tex = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK", nil, 6))
-        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
-        tex:SetSize(r[1], r[2])
-        tex:SetPoint("CENTER", button, "CENTER", r[3], r[4])
-        parts[name] = tex
+        parts[name] = AddFlatRect(button, r[1], r[2], "CENTER", r[3], r[4])
     end
     button._msuf2ZoomLockParts = parts
 end
@@ -1161,12 +1213,18 @@ end
 -- a persistent OnUpdate.
 local PREVIEW_DRAG_CUE_ATLAS = "newplayertutorial-drag-cursor"
 local function PreviewDragCueEnabled()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local db = MSUF_DB
+    local general = db and db.general
     return type(general) ~= "table" or general.previewDragHintAnimationEnabled ~= false
 end
 local function PreviewDragCueIsNewProfile()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local db = MSUF_DB
+    local general = db and db.general
     return type(general) == "table" and general._msufPreviewDragHintExperienced == false
+end
+-- A SavedVariables string without a namespace export: the active profile's name.
+local function ActiveProfileName()
+    return tostring(MSUF_ActiveProfile or "")
 end
 function H.HidePreviewMoveCue()
     local cue = H._previewMoveCue
@@ -1185,9 +1243,7 @@ local function CreatePreviewMoveCue()
     if cue.SetClampedToScreen then cue:SetClampedToScreen(true) end
     cue:EnableMouse(false)
     if cue.SetBackdrop then
-        PixelLayoutRegion(cue, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-        cue:SetBackdropColor(0.012, 0.020, 0.040, 0.96)
-        cue:SetBackdropBorderColor(0.18, 0.64, 0.88, 0.96)
+        FlatBackdrop(cue, { 0.012, 0.020, 0.040, 0.96 }, { 0.18, 0.64, 0.88, 0.96 })
     end
 
     local motion = PixelLayoutRegion(CreateFrame("Frame", nil, cue))
@@ -1197,9 +1253,7 @@ local function CreatePreviewMoveCue()
     mouse:SetSize(24, 34)
     mouse:SetPoint("LEFT", motion, "LEFT", 1, 0)
     if mouse.SetBackdrop then
-        PixelLayoutRegion(mouse, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-        mouse:SetBackdropColor(0.08, 0.12, 0.18, 0.98)
-        mouse:SetBackdropBorderColor(0.72, 0.86, 0.98, 1)
+        FlatBackdrop(mouse, { 0.08, 0.12, 0.18, 0.98 }, { 0.72, 0.86, 0.98, 1 })
     end
     local split = PixelLayoutRegion(mouse:CreateTexture(nil, "ARTWORK"))
     split:SetColorTexture(0.72, 0.86, 0.98, 0.82)
@@ -1234,9 +1288,7 @@ local function CreatePreviewMoveCue()
         key:SetSize(20, 20)
         key:SetPoint("BOTTOMLEFT", keys, "BOTTOMLEFT", x, y)
         if key.SetBackdrop then
-            PixelLayoutRegion(key, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-            key:SetBackdropColor(0.06, 0.10, 0.16, 0.98)
-            key:SetBackdropBorderColor(0.46, 0.66, 0.82, 0.95)
+            FlatBackdrop(key, { 0.06, 0.10, 0.16, 0.98 }, { 0.46, 0.66, 0.82, 0.95 })
         end
         local arrow = PixelLayoutRegion(key:CreateTexture(nil, "ARTWORK"))
         arrow:SetPoint("CENTER")
@@ -1255,12 +1307,11 @@ local function CreatePreviewMoveCue()
         local group = motion:CreateAnimationGroup()
         local theme = M and M.Theme
         if theme and theme.TrackMenuAnimationGroup then theme.TrackMenuAnimationGroup(group) end
-        local offsets = { 20, -20, 20, -20, 20, -20 }
-        for i = 1, #offsets do
+        for i = 1, 6 do
             local move = group:CreateAnimation("Translation")
             move:SetOrder(i)
             move:SetDuration(i == 1 and 0.32 or 0.26)
-            move:SetOffset(offsets[i], 0)
+            move:SetOffset(i % 2 == 1 and 20 or -20, 0)
             if move.SetSmoothing then move:SetSmoothing("IN_OUT") end
         end
         group:SetScript("OnFinished", function() cue:Hide() end)
@@ -1272,7 +1323,7 @@ local function CreatePreviewMoveCue()
 end
 local function PreparePreviewMoveCueOwner(owner)
     if not owner then return end
-    local profile = tostring(_G.MSUF_ActiveProfile or "")
+    local profile = ActiveProfileName()
     if owner._msuf2PreviewDragCueProfile ~= profile then
         owner._msuf2PreviewDragCueProfile = profile
         owner._msuf2PreviewDragCueShownForOpen = nil
@@ -1283,11 +1334,12 @@ local function PreparePreviewMoveCueOwner(owner)
     owner:HookScript("OnShow", function(self)
         self._msuf2PreviewDragCueShownForOpen = nil
         self._msuf2PreviewHandleTooltipShownForOpen = nil
-        self._msuf2PreviewDragCueProfile = tostring(_G.MSUF_ActiveProfile or "")
+        self._msuf2PreviewDragCueProfile = ActiveProfileName()
     end)
 end
 function H.NotePreviewElementMoved()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local db = MSUF_DB
+    local general = db and db.general
     if type(general) == "table" then general._msufPreviewDragHintExperienced = true end
     H._previewDragCueSessionShown = true
 end
@@ -1353,24 +1405,14 @@ function H.ShowPreviewControlsHelp(anchor, opts)
     local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or Fallbacks.Identity
     local popup = H._previewControlsHelpPopup
     if not popup then
-        if M2 and type(M2.CreateMenuPopupPanel) == "function" then
-            popup = M2.CreateMenuPopupPanel(UIParent, { name = "MSUF2PreviewControlsHelp", glass = "popup" })
-        else
-            popup = PixelLayoutRegion(CreateFrame("Frame", "MSUF2PreviewControlsHelp", UIParent, "BackdropTemplate"))
-            PixelLayoutRegion(popup, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-            popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
-            popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
-        end
-        popup:SetSize(328, 188)
-        popup:SetFrameStrata("FULLSCREEN_DIALOG")
-        popup:EnableMouse(true)
-        popup._title = T and T.Font and T.Font(popup, "GameFontNormalSmall", "", (T.colors and T.colors.accent) or { 0.78, 0.92, 1, 1 }) or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
+        popup = CreatePreviewPopup(M2, "MSUF2PreviewControlsHelp", 328, 188)
+        popup._title = ThemedFont(popup, T, "GameFontNormalSmall", "accent", { 0.78, 0.92, 1, 1 })
         popup._title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -12)
         popup._title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         popup._title:SetJustifyH("LEFT")
         popup._lines = {}
         for i = 1, 6 do
-            local fs = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+            local fs = ThemedFont(popup, T, "GameFontDisableSmall", "muted", { 0.72, 0.78, 0.90, 1 })
             fs:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -32 - ((i - 1) * 20))
             fs:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
             fs:SetJustifyH("LEFT")
@@ -1379,30 +1421,14 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             if fs.SetMaxLines then fs:SetMaxLines(1) end
             popup._lines[i] = fs
         end
-        local close = W and W.TopButton and W.TopButton(popup, "Got it", 84, 24) or (T and T.Button and T.Button(popup, "Got it", 84, 24))
-            or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+        local close = PopupButton(W, T, popup, tr, "Got it", 84)
         close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -12, 12)
-        if not close.GetText then close:SetText(tr("Got it")) end
         close:SetScript("OnClick", function(self)
             local p = self:GetParent()
             if p then p:Hide() end
         end)
-        if M2 and type(M2.RegisterMenuChromeControl) == "function" then
-            M2.RegisterMenuChromeControl(close, "preview-controls-help.dismiss", "Got it", "action", {
-                historyMode = "none",
-                help = "Closes the Preview Controls help popup.",
-                command = {
-                    kind = "button",
-                    historyMode = "none",
-                    canExecute = function() return popup.IsShown and popup:IsShown() end,
-                    set = function()
-                        if not (popup.IsShown and popup:IsShown()) then return false end
-                        popup:Hide()
-                        return true
-                    end,
-                },
-            })
-        end
+        RegisterPopupDismiss(M2, close, popup, "preview-controls-help.dismiss", "Got it",
+            "Closes the Preview Controls help popup.")
         popup._close = close
         H._previewControlsHelpPopup = popup
     end
@@ -1450,13 +1476,10 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
         hint:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 8, 8)
         if hint.SetFrameLevel and parent.GetFrameLevel then hint:SetFrameLevel((parent:GetFrameLevel() or 0) + 90) end
         if hint.SetBackdrop then
-            PixelLayoutRegion(hint, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-            hint:SetBackdropColor(0.012, 0.020, 0.040, 0.94)
-            hint:SetBackdropBorderColor(0.10, 0.32, 0.54, 0.92)
+            FlatBackdrop(hint, { 0.012, 0.020, 0.040, 0.94 }, { 0.10, 0.32, 0.54, 0.92 })
         end
         hint:EnableMouse(true)
-        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 })
-            or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+        local text = ThemedFont(hint, T, "GameFontDisableSmall", "text", { 0.86, 0.90, 0.98, 1 })
         text:SetPoint("TOPLEFT", hint, "TOPLEFT", 12, -8)
         text:SetPoint("RIGHT", hint, "RIGHT", -60, 0)
         text:SetJustifyH("LEFT")
@@ -1595,53 +1618,41 @@ function H.ShiftPreviewPanFollowers(box, dx, dy)
     return shifted
 end
 
-function H.InstallZoomPan(ZoomPan, opts)
-    if type(ZoomPan) ~= "table" then return end
-    opts = opts or {}
-    local floor = math.floor
-    local minZoom = tonumber(opts.minZoom) or 0.35
-    local maxZoom = tonumber(opts.maxZoom) or 4.0
-    local steps = opts.steps or { 0.35, 0.50, 0.75, 1.00, 1.25, 1.50, 2.00, 3.00, 4.00 }
-    local deps = {}
-    local white = "Interface\\Buttons\\WHITE8X8"
-    local function PathValue(object, path)
-        if not object or not path then return nil end
-        if type(path) ~= "table" then return object[path] end
-        local value = object
-        for i = 1, #path do
-            value = value and value[path[i]]
-        end
-        return value
+-- The zoom/pan API is installed by three small installers sharing one context:
+-- ctx.opts (the caller's options), ctx.deps (late-bound by ZoomPan.Configure),
+-- ctx.TR (translation through the current deps), the zoom limits and the step list.
+local function ZoomPanPathValue(object, path)
+    if not object or not path then return nil end
+    if type(path) ~= "table" then return object[path] end
+    local value = object
+    for i = 1, #path do
+        value = value and value[path[i]]
     end
-    local function TR(text)
-        local fn = deps.TR
-        return (type(fn) == "function" and fn(text)) or text
-    end
-    local function Round(value)
-        return floor((tonumber(value) or 0) + 0.5)
-    end
-    local function ExactPanNumber(value)
-        value = tonumber(value)
-        if value == nil or value ~= value or value == math.huge or value == -math.huge or math.abs(value) > 100000 then return nil end
-        return Round(value)
-    end
-    local function SameOffset(left, right)
-        return math.abs((tonumber(left) or 0) - (tonumber(right) or 0)) < 0.01
-    end
-    local function PanKey(name)
-        return tostring(opts.panPrefix or "_msufPreview") .. name
-    end
-    local PAN_PANNING, PAN_BOX = PanKey("Panning"), PanKey("PanBox")
-    local PAN_CURSOR_X, PAN_CURSOR_Y = PanKey("PanCursorX"), PanKey("PanCursorY")
-    local PAN_START_X, PAN_START_Y = PanKey("PanStartX"), PanKey("PanStartY")
-    local PAN_BUTTON = PanKey("PanButton")
+    return value
+end
+local function ZoomPanRound(value)
+    return floor((tonumber(value) or 0) + 0.5)
+end
+local function ExactPanNumber(value)
+    value = tonumber(value)
+    if value == nil or value ~= value or value == math.huge or value == -math.huge or math.abs(value) > 100000 then return nil end
+    return ZoomPanRound(value)
+end
+local function SameOffset(left, right)
+    return math.abs((tonumber(left) or 0) - (tonumber(right) or 0)) < 0.01
+end
+
+-- Limits, clamping, the readout of the zoom state and the canvas pan.
+local function InstallZoomState(ZoomPan, ctx)
+    local opts = ctx.opts
+    local minZoom, maxZoom = ctx.minZoom, ctx.maxZoom
     ZoomPan.MIN = minZoom
     ZoomPan.MAX = maxZoom
     function ZoomPan.Configure(nextDeps)
         if opts.configureTableOnly then
-            if type(nextDeps) == "table" then deps = nextDeps end
+            if type(nextDeps) == "table" then ctx.deps = nextDeps end
         else
-            deps = nextDeps or deps or {}
+            ctx.deps = nextDeps or ctx.deps or {}
         end
     end
     function ZoomPan.Clamp(value)
@@ -1670,13 +1681,14 @@ function H.InstallZoomPan(ZoomPan, opts)
         local readout = box[opts.readoutField or "zoomReadout"]
         if readout then
             local pct = floor(scale * 100 + 0.5)
-            deps.T.SetTranslatedText(readout, zoom and string.format("%d%%", pct) or string.format(TR("Fit %d%%"), pct))
+            ctx.deps.T.SetTranslatedText(readout, zoom and string.format("%d%%", pct) or string.format(ctx.TR("Fit %d%%"), pct))
         end
-        local fitText = PathValue(box, opts.fitButtonTextPath or { "zoomFitButton", "fs" })
+        local fitText = ZoomPanPathValue(box, opts.fitButtonTextPath or { "zoomFitButton", "fs" })
         if fitText then fitText:SetTextColor(zoom and 0.72 or 0.25, zoom and 0.78 or 0.95, zoom and 0.90 or 1.00, 1) end
         -- Previews that opted into the zoom lock mirror the same state on it.
         if type(box.RefreshZoomLock) == "function" then box.RefreshZoomLock() end
     end
+    -- Canvas pan: apply, read back, set and nudge with exact readback.
     function ZoomPan.ApplyPan(box, panX, panY)
         panX = panX or tonumber(box and box._zoomPanX) or 0
         panY = panY or tonumber(box and box._zoomPanY) or 0
@@ -1735,6 +1747,11 @@ function H.InstallZoomPan(ZoomPan, opts)
         if beforeX == nil or beforeY == nil then return false, "preview-unavailable" end
         return ZoomPan.SetPan(box, beforeX + dx, beforeY + dy)
     end
+end
+
+-- Explicit zoom changes (Fit / 1:1 / lock and the +/- steps) and the canvas drag gesture.
+local function InstallZoomActions(ZoomPan, ctx)
+    local opts, steps = ctx.opts, ctx.steps
     function ZoomPan.SetZoom(box, zoom, reason)
         if not box then return end
         -- Any explicit Fit/1:1/step/lock action supersedes the one-shot default.
@@ -1749,7 +1766,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         ZoomPan.UpdateControls(box)
         reason = reason or opts.defaultReason or "UNIT_PREVIEW_ZOOM"
         if type(opts.refresh) == "function" then
-            opts.refresh(box, reason, deps)
+            opts.refresh(box, reason, ctx.deps)
         elseif box.Refresh then
             box:Refresh(reason)
         end
@@ -1775,6 +1792,14 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         ZoomPan.SetZoom(box, nextZoom, opts.stepReason or "UNIT_PREVIEW_ZOOM_STEP")
     end
+    -- The canvas drag gesture: its slots live on the surface under the caller's pan prefix.
+    local function PanKey(name)
+        return tostring(opts.panPrefix or "_msufPreview") .. name
+    end
+    local PAN_PANNING, PAN_BOX = PanKey("Panning"), PanKey("PanBox")
+    local PAN_CURSOR_X, PAN_CURSOR_Y = PanKey("PanCursorX"), PanKey("PanCursorY")
+    local PAN_START_X, PAN_START_Y = PanKey("PanStartX"), PanKey("PanStartY")
+    local PAN_BUTTON = PanKey("PanButton")
     function ZoomPan.Stop(surface)
         if not surface then return end
         local box = surface[PAN_BOX]
@@ -1794,7 +1819,7 @@ function H.InstallZoomPan(ZoomPan, opts)
             if moved then box._msuf2ZoomLockIsDefault, box._msuf2ZoomLockDefaultDropped = nil, nil end
             if moved and type(box.OnPreviewCanvasMoved) == "function" then box.OnPreviewCanvasMoved(box, button) end
         end
-        local update = deps[opts.updateHintKey or "UpdateHandleHint"]
+        local update = ctx.deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
     end
     function ZoomPan.Start(surface, box, button, allowPlainLeft)
@@ -1816,7 +1841,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = (cx or 0) / uiScale, (cy or 0) / uiScale
         surface[PAN_START_X], surface[PAN_START_Y] = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         local hint = box[opts.hintField or "hint"]
-        if hint then SetShownText(hint, TR("moving preview canvas - release mouse to stop - Fit recenters")) end
+        if hint then SetShownText(hint, ctx.TR("moving preview canvas - release mouse to stop - Fit recenters")) end
         surface:SetScript("OnUpdate", function(self)
             if not self[PAN_PANNING] then return end
             if IsMouseButtonDown and self[PAN_BUTTON] and not IsMouseButtonDown(self[PAN_BUTTON]) then
@@ -1826,8 +1851,8 @@ function H.InstallZoomPan(ZoomPan, opts)
             local mx, my = GetCursorPosition()
             local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
             if scale <= 0 then scale = 1 end
-            local nextX = Round((self[PAN_START_X] or 0) + ((mx or 0) / scale - (self[PAN_CURSOR_X] or 0)))
-            local nextY = Round((self[PAN_START_Y] or 0) + ((my or 0) / scale - (self[PAN_CURSOR_Y] or 0)))
+            local nextX = ZoomPanRound((self[PAN_START_X] or 0) + ((mx or 0) / scale - (self[PAN_CURSOR_X] or 0)))
+            local nextY = ZoomPanRound((self[PAN_START_Y] or 0) + ((my or 0) / scale - (self[PAN_CURSOR_Y] or 0)))
             if box._zoomPanX ~= nextX or box._zoomPanY ~= nextY then
                 box._zoomPanX, box._zoomPanY = nextX, nextY
                 ZoomPan.ApplyPan(box)
@@ -1835,11 +1860,16 @@ function H.InstallZoomPan(ZoomPan, opts)
         end)
         return true
     end
+end
+
+-- The zoom bar's small buttons (+, -, Fit, 1:1, ?).
+local function InstallZoomButton(ZoomPan, ctx)
+    local opts = ctx.opts
     function ZoomPan.CreateButton(parent, text, width, tooltip, onClick)
-        local T = deps.T
+        local T = ctx.deps.T
         local template = (opts.themeButton and T and T.Template and T.Template()) or (opts.buttonTemplate or "BackdropTemplate")
         local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
-        local tex = deps[opts.buttonTextureKey or "TEX_W8"] or white
+        local tex = ctx.deps[opts.buttonTextureKey or "TEX_W8"] or WHITE8X8
         btn:SetSize(width or 24, opts.buttonHeight or 20)
         if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
         local useSuperellipse = opts.themeButton and T and T.CreateSuperellipseLayers
@@ -1848,9 +1878,7 @@ function H.InstallZoomPan(ZoomPan, opts)
             btn._msuf2PreviewZoomFill = fill
             btn._msuf2PreviewZoomEdge = edge
         elseif btn.SetBackdrop then
-            PixelLayoutRegion(btn, "SetBackdrop", { bgFile = tex, edgeFile = tex, edgeSize = 1 })
-            btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
-            btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
+            FlatBackdrop(btn, { 0.025, 0.030, 0.045, 0.88 }, { 0.12, 0.16, 0.24, 0.92 }, tex)
         end
         local fontField = opts.buttonFontField or "fs"
         if opts.themeButton and T and T.Font then
@@ -1863,31 +1891,14 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         if btn[fontField] then btn[fontField]:SetPoint("CENTER") end
         btn:SetScript("OnClick", onClick)
-        local tc = T and T.colors
-        local shadow = tc and tc.coreShadow or { 0.006, 0.016, 0.032 }
-        local surface = tc and tc.coreSurface or { 0.014, 0.038, 0.072 }
-        local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
-        local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
-        local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
-        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }
-        local brIdle, brHover, brDown = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
+        local bgIdle, bgHover, bgDown, brIdle, brHover, brDown = PillPalette(T)
         local bgScratch = { 0, 0, 0, 1 }
         local function ApplyButtonVisual(self, hover, down)
             if useSuperellipse then
                 local alpha = (self.IsEnabled and not self:IsEnabled()) and 0.42 or 1
                 local bg = down and bgDown or (hover and bgHover or bgIdle)
                 local br = down and brDown or (hover and brHover or brIdle)
-                if self._msuf2PreviewZoomFill then
-                    if T.SetFillGradient then
-                        bgScratch[1], bgScratch[2], bgScratch[3], bgScratch[4] = bg[1], bg[2], bg[3], (bg[4] or 1) * alpha
-                        T.SetFillGradient(self._msuf2PreviewZoomFill, bgScratch, 0.12, -0.18)
-                    else
-                        self._msuf2PreviewZoomFill:SetVertexColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
-                    end
-                end
-                if self._msuf2PreviewZoomEdge then
-                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
-                end
+                PaintPillLayers(T, self._msuf2PreviewZoomFill, self._msuf2PreviewZoomEdge, bg, br, alpha, hover, bgScratch)
                 if self[fontField] and self[fontField].SetTextColor then
                     self[fontField]:SetTextColor(hover and 0.88 or 0.78, hover and 0.94 or 0.84, 1.00, alpha)
                 end
@@ -1911,7 +1922,7 @@ function H.InstallZoomPan(ZoomPan, opts)
             ApplyButtonVisual(self, true, self._msuf2PreviewZoomDown)
             if GameTooltip and tooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(TR(tooltip), 1, 1, 1)
+                GameTooltip:SetText(ctx.TR(tooltip), 1, 1, 1)
                 GameTooltip:Show()
             end
         end)
@@ -1926,6 +1937,25 @@ function H.InstallZoomPan(ZoomPan, opts)
         ApplyButtonVisual(btn, false, false)
         return btn
     end
+end
+
+function H.InstallZoomPan(ZoomPan, opts)
+    if type(ZoomPan) ~= "table" then return end
+    opts = opts or {}
+    local ctx = {
+        opts = opts,
+        deps = {},
+        minZoom = tonumber(opts.minZoom) or 0.35,
+        maxZoom = tonumber(opts.maxZoom) or 4.0,
+        steps = opts.steps or { 0.35, 0.50, 0.75, 1.00, 1.25, 1.50, 2.00, 3.00, 4.00 },
+    }
+    function ctx.TR(text)
+        local fn = ctx.deps.TR
+        return (type(fn) == "function" and fn(text)) or text
+    end
+    InstallZoomState(ZoomPan, ctx)
+    InstallZoomActions(ZoomPan, ctx)
+    InstallZoomButton(ZoomPan, ctx)
 end
 
 -- Interactive preview children (handles, zoom buttons, drag catchers) sit
@@ -1959,13 +1989,10 @@ function H.BuildZoomBar(box, surface, opts)
     local zoomBar = PixelLayoutRegion(CreateFrame("Frame", nil, surface, template))
     zoomBar:SetSize(opts.width or (opts.lockButton and 226 or 200), opts.height or 24)
     zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -8)
-    PixelLayoutRegion(zoomBar, "SetBackdrop", { bgFile = tex, edgeFile = tex, edgeSize = 1 })
     if opts.flatChrome ~= false and (opts.T or opts.flatChrome == true) then
-        zoomBar:SetBackdropColor(0, 0, 0, 0)
-        zoomBar:SetBackdropBorderColor(0, 0, 0, 0)
+        FlatBackdrop(zoomBar, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, tex)
     else
-        zoomBar:SetBackdropColor(0.015, 0.018, 0.030, 0.86)
-        zoomBar:SetBackdropBorderColor(0.10, 0.14, 0.22, 0.92)
+        FlatBackdrop(zoomBar, { 0.015, 0.018, 0.030, 0.86 }, { 0.10, 0.14, 0.22, 0.92 }, tex)
     end
     if zoomBar.SetFrameLevel then zoomBar:SetFrameLevel((surface.GetFrameLevel and surface:GetFrameLevel() or 0) + 80) end
     zoomBar:EnableMouse(true)
@@ -2053,14 +2080,8 @@ function H.BuildZoomBar(box, surface, opts)
     end
     box._msuf2PreviewZoomWheel = ZoomWheel
     if opts.wheelField then box[opts.wheelField] = ZoomWheel end
-    H.BindPreviewWheel(surface, box, ZoomWheel)
-    H.BindPreviewWheel(zoomBar, box, ZoomWheel)
-    H.BindPreviewWheel(zoomOut, box, ZoomWheel)
-    H.BindPreviewWheel(fitButton, box, ZoomWheel)
-    H.BindPreviewWheel(oneButton, box, ZoomWheel)
-    H.BindPreviewWheel(zoomIn, box, ZoomWheel)
-    H.BindPreviewWheel(helpButton, box, ZoomWheel)
-    H.BindPreviewWheel(box[prefix .. "zoomLockButton"], box, ZoomWheel)
+    local wheelTargets = { surface, zoomBar, zoomOut, fitButton, oneButton, zoomIn, helpButton, box[prefix .. "zoomLockButton"] }
+    for i = 1, 8 do H.BindPreviewWheel(wheelTargets[i], box, ZoomWheel) end
     local backgroundButton = H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
     H.BindPreviewWheel(backgroundButton, box, ZoomWheel)
     if panEnabled then
@@ -2171,7 +2192,7 @@ local function SetKeyboardPropagate(frame, propagate)
     if frame and frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(propagate == true) end
 end
 local function InCombatLocked()
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+    return (InCombatLockdown and InCombatLockdown()) and true or false
 end
 local function ForEachPreviewKeyboardFrame(owner, callback)
     if not (owner and type(callback) == "function") then return end
@@ -2259,8 +2280,8 @@ function H.ArrowKeyDown(self, keyName, opts)
     return false
 end
 function H.RegisterEditModeNudgeTarget(owner, opts)
-    local fn = _G.MSUF_EM2_SetPreviewNudgeTarget
-    if type(fn) ~= "function" or not owner then return end
+    if not owner then return end
+    local fn = MSUF.Require("MSUF_EM2_SetPreviewNudgeTarget", FILE)
     opts = opts or {}
     local targetField = opts.targetField or "_msufPreviewNudgeTarget"
     local selectedField = opts.selectedField or "_selectedHandle"
@@ -2360,6 +2381,21 @@ local function LayerButtonOnFor(owner, key, opts)
     if opts and opts.IsOn then return opts.IsOn(owner, key) end
     return LayerButtonOn(owner, key)
 end
+local LAYER_CHIP_SELECTED_TEXT = { 0.96, 0.98, 1.00 }
+local LAYER_CHIP_DIM_FILL = { 0.010, 0.018, 0.030 }
+local layerChipOnFill = { 0, 0, 0 }
+-- The tinted fill of an "on" chip: its layer color at 12 percent, in a scratch triple.
+local function LayerChipOnFill(c)
+    layerChipOnFill[1], layerChipOnFill[2], layerChipOnFill[3] = c[1] * 0.12, c[2] * 0.12, c[3] * 0.12
+    return layerChipOnFill
+end
+-- Paints one chip state: the fill, the layer color bar, the label and (when given) the OFF tag.
+local function PaintLayerChip(widgets, btn, c, fill, fillAlpha, barAlpha, text, textAlpha, off, offAlpha)
+    widgets.SetLayerColor(btn, btn.bg, fill[1], fill[2], fill[3], fillAlpha)
+    widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], barAlpha)
+    btn.fs:SetTextColor(text[1], text[2], text[3], textAlpha)
+    if btn.off and off then btn.off:SetTextColor(off[1], off[2], off[3], offAlpha) end
+end
 function H.RefreshLayerButton(btn, owner, opts)
     if not btn then return end
     opts = opts or {}
@@ -2388,51 +2424,28 @@ function H.RefreshLayerButton(btn, owner, opts)
         textOn, textOff, textDisabled = colors.text, colors.muted, colors.dim
         selectedBg = colors.pillActive
     end
+    -- PaintLayerChip(fill, fill alpha, bar alpha, label color, label alpha, OFF tag color, OFF alpha)
     if hover and available and not on and not selected then
         local hoverColor = colors.coreRaised or opts.quietHover or PREVIEW_CHROME_FALLBACK.rowHover
-        widgets.SetLayerColor(btn, btn.bg, hoverColor[1], hoverColor[2], hoverColor[3], quiet and 0.42 or 0.58)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], quiet and 0.90 or 1)
-        btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 1)
+        PaintLayerChip(widgets, btn, c, hoverColor, quiet and 0.42 or 0.58, quiet and 0.90 or 1, textOn, textOn[4] or 1)
     elseif not available and quiet then
-        widgets.SetLayerColor(btn, btn.bg, quietBase[1], quietBase[2], quietBase[3], 0.10)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.20)
-        btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
-        if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.62) end
+        PaintLayerChip(widgets, btn, c, quietBase, 0.10, 0.20, textDisabled, textDisabled[4] or 0.62, textDisabled, 0.62)
     elseif selected and quiet then
-        widgets.SetLayerColor(btn, btn.bg, selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 0.88)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], on and 1.00 or 0.38)
-        btn.fs:SetTextColor(0.96, 0.98, 1.00, 1.00)
-        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], on and 0 or 0.78) end
+        PaintLayerChip(widgets, btn, c, selectedBg, selectedBg[4] or 0.88, on and 1.00 or 0.38, LAYER_CHIP_SELECTED_TEXT, 1.00,
+            textOff, on and 0 or 0.78)
     elseif on and quiet then
-        widgets.SetLayerColor(btn, btn.bg, c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.94)
-        btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 0.96)
-        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.0) end
+        PaintLayerChip(widgets, btn, c, LayerChipOnFill(c), 0.54, 0.94, textOn, textOn[4] or 0.96, textOff, 0.0)
     elseif quiet then
-        widgets.SetLayerColor(btn, btn.bg, quietBase[1], quietBase[2], quietBase[3], 0.08)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.26)
-        btn.fs:SetTextColor(textOff[1], textOff[2], textOff[3], textOff[4] or 0.74)
-        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.72) end
+        PaintLayerChip(widgets, btn, c, quietBase, 0.08, 0.26, textOff, textOff[4] or 0.74, textOff, 0.72)
     elseif not available then
-        widgets.SetLayerColor(btn, btn.bg, 0.010, 0.018, 0.030, 0.32)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.30)
-        btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
-        if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.72) end
+        PaintLayerChip(widgets, btn, c, LAYER_CHIP_DIM_FILL, 0.32, 0.30, textDisabled, textDisabled[4] or 0.62, textDisabled, 0.72)
     elseif selected then
-        widgets.SetLayerColor(btn, btn.bg, selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 0.88)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], on and 1.00 or 0.42)
-        btn.fs:SetTextColor(0.96, 0.98, 1.00, 1.00)
-        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], on and 0 or 0.78) end
+        PaintLayerChip(widgets, btn, c, selectedBg, selectedBg[4] or 0.88, on and 1.00 or 0.42, LAYER_CHIP_SELECTED_TEXT, 1.00,
+            textOff, on and 0 or 0.78)
     elseif on then
-        widgets.SetLayerColor(btn, btn.bg, c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.94)
-        btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 0.98)
-        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.0) end
+        PaintLayerChip(widgets, btn, c, LayerChipOnFill(c), 0.54, 0.94, textOn, textOn[4] or 0.98, textOff, 0.0)
     else
-        widgets.SetLayerColor(btn, btn.bg, 0.010, 0.018, 0.030, 0.26)
-        widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], 0.42)
-        btn.fs:SetTextColor(textOff[1], textOff[2], textOff[3], textOff[4] or 0.78)
-        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.78) end
+        PaintLayerChip(widgets, btn, c, LAYER_CHIP_DIM_FILL, 0.26, 0.42, textOff, textOff[4] or 0.78, textOff, 0.78)
     end
     widgets.FinishControlMotion(motion)
     btn._msuf2LayerPaintingMotion = nil
@@ -2724,13 +2737,9 @@ local function BuildSampleEffectHint(box, opts)
     hint:SetPoint("BOTTOMRIGHT", surface, "BOTTOMRIGHT", -8, 8)
     if hint.SetFrameLevel and surface.GetFrameLevel then hint:SetFrameLevel((surface:GetFrameLevel() or 0) + 120) end
     if hint.SetBackdrop then
-        PixelLayoutRegion(hint, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-        hint:SetBackdropColor(0.012, 0.020, 0.040, 0.92)
-        hint:SetBackdropBorderColor(0.80, 0.62, 0.20, 0.90)
+        FlatBackdrop(hint, { 0.012, 0.020, 0.040, 0.92 }, { 0.80, 0.62, 0.20, 0.90 })
     end
-    local color = { 0.96, 0.86, 0.58, 1 }
-    local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", color)
-        or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+    local text = ThemedFont(hint, T, "GameFontDisableSmall", nil, { 0.96, 0.86, 0.58, 1 })
     text:SetPoint("LEFT", hint, "LEFT", 8, 0)
     text:SetPoint("RIGHT", hint, "RIGHT", -8, 0)
     text:SetJustifyH("LEFT")
@@ -2971,14 +2980,17 @@ function H.PaintTextFocusFrame(frame, color, active)
     local thickness = active and 2 or 1
     if frame.fill then frame.fill:SetColorTexture(color[1], color[2], color[3], fillAlpha) end
     if frame.lines then
-        frame.lines.top:SetHeight(thickness)
-        frame.lines.bottom:SetHeight(thickness)
-        frame.lines.left:SetWidth(thickness)
-        frame.lines.right:SetWidth(thickness)
-        for _, line in pairs(frame.lines) do
-            if line then line:SetColorTexture(color[1], color[2], color[3], lineAlpha) end
+        for side, line in pairs(frame.lines) do
+            line[EDGE_ANCHORS[side][3]](line, thickness)
+            line:SetColorTexture(color[1], color[2], color[3], lineAlpha)
         end
     end
+end
+-- A region's effective scale relative to its parent's (1 when it reports none).
+local function RegionScaleRatio(region, parentScale)
+    local regionScale = region.GetEffectiveScale and tonumber(region:GetEffectiveScale()) or parentScale
+    if not regionScale or regionScale <= 0 then regionScale = parentScale end
+    return regionScale / parentScale
 end
 function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     if not (handle and parent and parent.GetLeft and regions) then return false end
@@ -3008,18 +3020,14 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
                     r = (scaledLeft + scaledWidth - parentScaledLeft) / parentScale
                     b = (scaledBottom - parentScaledBottom) / parentScale
                     t = (scaledBottom + scaledHeight - parentScaledBottom) / parentScale
-                    local regionScale = region.GetEffectiveScale and tonumber(region:GetEffectiveScale()) or parentScale
-                    if not regionScale or regionScale <= 0 then regionScale = parentScale end
-                    scaleRatio = regionScale / parentScale
+                    scaleRatio = RegionScaleRatio(region, parentScale)
                 end
             end
             if not (l and r and t and b) then
                 l, r, t, b = region:GetLeft(), region:GetRight(), region:GetTop(), region:GetBottom()
                 scaleRatio = tonumber(opts.coordinateScale)
                 if not scaleRatio or scaleRatio <= 0 then
-                    local regionScale = region.GetEffectiveScale and tonumber(region:GetEffectiveScale()) or parentScale
-                    if not regionScale or regionScale <= 0 then regionScale = parentScale end
-                    scaleRatio = regionScale / parentScale
+                    scaleRatio = RegionScaleRatio(region, parentScale)
                 end
                 if l and r and t and b then
                     l, r = l * scaleRatio - pLeft, r * scaleRatio - pLeft
@@ -3173,6 +3181,14 @@ function H.SetEdgeLinesShown(frame, shown, opts)
         end
     end
 end
+-- Stretches one border line along its side of the frame, `thickness` pixels thick.
+local function PlaceEdgeLine(line, frame, side, thickness)
+    local spec = EDGE_ANCHORS[side]
+    line:ClearAllPoints()
+    line:SetPoint(spec[1], frame, spec[1], 0, 0)
+    line:SetPoint(spec[2], frame, spec[2], 0, 0)
+    line[spec[3]](line, thickness)
+end
 function H.LayoutEdgeLines(frame, edge, opts)
     if not (frame and frame.CreateTexture) then return false end
     opts = opts or {}
@@ -3199,17 +3215,13 @@ function H.LayoutEdgeLines(frame, edge, opts)
     if type(opts.color) == "function" then r, g, b, a = opts.color(frame) end
     for i = 1, #keys do
         local key, line = keys[i], lines[keys[i]]
-        local spec = EDGE_ANCHORS[key]
         line:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
-        line:ClearAllPoints()
-        line:SetPoint(spec[1], frame, spec[1], 0, 0)
-        line:SetPoint(spec[2], frame, spec[2], 0, 0)
-        line[spec[3]](line, edge)
+        PlaceEdgeLine(line, frame, key, edge)
     end
     H.SetEdgeLinesShown(frame, true, opts)
     return true
 end
-H.ClampEdgeSize = _G.MSUF_ClampRoundedEdgeSize
+H.ClampEdgeSize = MSUF.Require("MSUF_ClampRoundedEdgeSize", FILE)
 function H.EnsureRoundedVisuals(mock, opts)
     if not (mock and mock.CreateTexture) then return false end
     opts = opts or {}
@@ -3353,13 +3365,12 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     H.SetRoundedEdgeStackShown(mock, true, opts)
     return true
 end
+local GetBarOutlineColor = MSUF.Require("MSUF_GetBarOutlineColor", FILE)
 function H.BaseEdgeColor()
-    local fn = _G.MSUF_GetBarOutlineColor
-    if type(fn) == "function" then
-        local r, g, b = fn()
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b, 1 end
-    end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local r, g, b = GetBarOutlineColor()
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b, 1 end
+    local db = MSUF_DB
+    local gen = db and db.general
     if gen then
         return tonumber(gen.barOutlineColorR) or 0,
                tonumber(gen.barOutlineColorG) or 0,
@@ -3405,7 +3416,8 @@ end
 H.ExactPreviewDelta = ExactPreviewDelta
 
 local function ReadPreviewBarsBool(key, default)
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local db = MSUF_DB
+    local bars = db and db.bars
     local value = bars and bars[key]
     if value == nil then return default and true or false end
     return value and true or false
@@ -3433,24 +3445,12 @@ end
 --- rounded power bar, all four otherwise; then shows the host.
 function H.LayoutPowerBorderEdges(host, edge, roundedPower)
     local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
-    top:ClearAllPoints()
-    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    top:SetHeight(edge)
+    PlaceEdgeLine(top, host, "top", edge)
     top:Show()
     if not roundedPower then
-        bottom:ClearAllPoints()
-        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        bottom:SetHeight(edge)
-        left:ClearAllPoints()
-        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        left:SetWidth(edge)
-        right:ClearAllPoints()
-        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        right:SetWidth(edge)
+        PlaceEdgeLine(bottom, host, "bottom", edge)
+        PlaceEdgeLine(left, host, "left", edge)
+        PlaceEdgeLine(right, host, "right", edge)
         bottom:Show()
         left:Show()
         right:Show()
@@ -3497,14 +3497,71 @@ function H.PaintPinnedHeader(shade, line, colors, pinned)
     end
 end
 
-function H.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
-    return function(box)
+-- Cold-bound policies retain each preview's cleanup, hint and refresh order.
+function H.CreateAnimationStarter(inCombat, refresh, refreshButton, clearState, combatHint, finishToggle, unregisterCombat)
+    local interval = 1 / 20
+    local function Stop(box)
+        if not (box and box.SetScript) then return end
+        box:SetScript("OnUpdate", nil)
+        if unregisterCombat and box.UnregisterEvent then box:UnregisterEvent("PLAYER_REGEN_DISABLED") end
+    end
+    local function Kill(box)
+        if not box then return end
+        Stop(box)
+        box._animationEnabled = nil
+        box._animationElapsed = 0
+        box._animationAccum = 0
+        clearState(box)
+        refreshButton(box)
+    end
+    local function Tick(box, elapsed)
+        if not (box and box._animationEnabled == true and box.IsShown and box:IsShown()) then
+            Stop(box)
+            return
+        end
+        if inCombat() then
+            Kill(box)
+            combatHint(box)
+            return
+        end
+        elapsed = tonumber(elapsed) or 0
+        box._animationElapsed = (tonumber(box._animationElapsed) or 0) + elapsed
+        box._animationAccum = (tonumber(box._animationAccum) or 0) + elapsed
+        if box._animationAccum < interval then return end
+        box._animationAccum = 0
+        refresh(box)
+    end
+    local function Start(box)
         if not (box and box._animationEnabled == true) then return end
-        if PreviewAnimationInCombat() then
-            StopPreviewAnimationDriver(box)
+        if inCombat() then
+            Stop(box)
             return
         end
         if box.RegisterEvent then box:RegisterEvent("PLAYER_REGEN_DISABLED") end
-        box:SetScript("OnUpdate", PreviewAnimationOnUpdate)
+        box:SetScript("OnUpdate", Tick)
     end
+    local function SetEnabled(box, enabled, reason)
+        if not box then return end
+        enabled = enabled == true
+        if enabled and inCombat() then
+            Kill(box)
+            combatHint(box)
+            refreshButton(box)
+            return
+        end
+        if enabled and box._animationEnabled ~= true then
+            box._animationElapsed = 0
+            box._animationAccum = 0
+        end
+        box._animationEnabled = enabled
+        if enabled then
+            Start(box)
+        else
+            Stop(box)
+            clearState(box, true)
+        end
+        refreshButton(box)
+        finishToggle(box, reason)
+    end
+    return Start, Stop, Kill, SetEnabled
 end

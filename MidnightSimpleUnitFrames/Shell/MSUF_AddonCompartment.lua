@@ -2,7 +2,6 @@
 --- Zero overhead: no events, no OnUpdate, only fires on user click/hover.
 
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local API = MSUF.MinimapButton or {}
 
 function MSUF_AddonCompartment_OnClick(_, btn)
@@ -14,7 +13,7 @@ function MSUF_AddonCompartment_OnClick(_, btn)
 end
 
 function MSUF_AddonCompartment_OnEnter(_, menuButtonFrame)
-    local tt = _G.GameTooltip
+    local tt = GameTooltip
     if not (tt and type(API.BuildTooltip) == "function") then return end
     API.BuildTooltip(tt, menuButtonFrame, {
         versionLabel = true,
@@ -26,5 +25,5 @@ function MSUF_AddonCompartment_OnEnter(_, menuButtonFrame)
 end
 
 function MSUF_AddonCompartment_OnLeave()
-    if _G.GameTooltip then _G.GameTooltip:Hide() end
+    if GameTooltip then GameTooltip:Hide() end
 end

@@ -3,13 +3,21 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua", {
+-- load, resolved through MSUF.Require on first use (see Core below).
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua"
+M.RequireGlobals(FILE, {
     "MSUF_GetClassBarColor",
     "MSUF_GetNPCReactionColor",
     "MSUF_NormalizeStoredFontKeys",
 })
-local C_Timer = M.MenuTimer or _G.C_Timer
+-- Core functions resolve through MSUF.Require on their first use and are read from
+-- this table afterwards, so a value path (slider drag, preview refresh) never calls Require.
+local Core = setmetatable({}, { __index = function(core, name)
+    local fn = MSUF.Require(name, FILE)
+    core[name] = fn
+    return fn
+end })
+local C_Timer = M.MenuTimer or C_Timer
 
 -- Menu2 global Fonts page.
 -- Binds shared/scoped font family, size, outline, shadow, alpha, and baseline controls.
@@ -106,11 +114,11 @@ local function ShadowMetrics()
     return FontShadowMetricsFor(CurrentFontScope())
 end
 local function NormalizeShadowOpacity(value)
-    local alpha = _G.MSUF_ResolveFontShadowMetrics(value, 1)
+    local alpha = Core.MSUF_ResolveFontShadowMetrics(value, 1)
     return floor(alpha * 20 + 0.5) / 20
 end
 local function NormalizeShadowDistance(value)
-    local _, distance = _G.MSUF_ResolveFontShadowMetrics(1, value)
+    local _, distance = Core.MSUF_ResolveFontShadowMetrics(1, value)
     return distance
 end
 local function ClearLegacyShadowStrength()
@@ -146,7 +154,15 @@ local function NormalizeBaselineOffset(value)
     if value > 4 then return 4 end
     return value
 end
-local ComposeFontFlags = _G.MSUF_ComposeFontFlags
+-- The optional collaborators of the preview, looked up once on first use (nil stays nil).
+local previewFns
+local function ResolvePreviewFns()
+    previewFns = {
+        configuredColor = MSUF.Optional("MSUF_GetConfiguredFontColor") or MSUF.MSUF_GetConfiguredFontColor,
+        fontColors = MSUF.MSUF_FONT_COLORS or MSUF.Optional("MSUF_FONT_COLORS"),
+    }
+    return previewFns
+end
 local function ConfiguredFontColorPreview(scope)
     scope = NormalizeScopeKey(scope or CurrentFontScope())
     local getFor = GP.FontScopeGetFor
@@ -156,7 +172,8 @@ local function ConfiguredFontColorPreview(scope)
     then
         return RGB(getFor(scope, "fontR", 1), getFor(scope, "fontG", 1), getFor(scope, "fontB", 1))
     end
-    local fn = _G.MSUF_GetConfiguredFontColor or (MSUF and MSUF.MSUF_GetConfiguredFontColor)
+    local fns = previewFns or ResolvePreviewFns()
+    local fn = fns.configuredColor
     if type(fn) == "function" then
         local r, g, b = fn()
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
@@ -167,33 +184,29 @@ local function ConfiguredFontColorPreview(scope)
         and type(general.fontColorCustomB) == "number" then
         return RGB(general.fontColorCustomR, general.fontColorCustomG, general.fontColorCustomB)
     end
-    local colors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
+    local colors = fns.fontColors
     local key = tostring(general.fontColor or "white"):lower()
     local color = colors and (colors[key] or colors.white)
     return RGB((color and color[1]) or 1, (color and color[2]) or 1, (color and color[3]) or 1)
 end
 local function PlayerClassColorPreview()
-    local classToken
-    if type(_G.UnitClass) == "function" then
-        local _, token = _G.UnitClass("player")
-        classToken = token
-    end
+    local classToken = type(UnitClass) == "function" and select(2, UnitClass("player"))
     classToken = classToken or "WARRIOR"
     do
-        local r, g, b = _G.MSUF_GetClassBarColor(classToken)
+        local r, g, b = Core.MSUF_GetClassBarColor(classToken)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
-    local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+    local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
     return RGB((color and color.r) or 0.78, (color and color.g) or 0.61, (color and color.b) or 0.43)
 end
 local function NPCReactionColorPreview()
     local kind = "enemy"
-    if type(_G.UnitExists) == "function" and _G.UnitExists("target")
-        and not (type(_G.UnitIsPlayer) == "function" and _G.UnitIsPlayer("target")) then
-        if type(_G.UnitIsDeadOrGhost) == "function" and _G.UnitIsDeadOrGhost("target") then
+    if type(UnitExists) == "function" and UnitExists("target")
+        and not (type(UnitIsPlayer) == "function" and UnitIsPlayer("target")) then
+        if type(UnitIsDeadOrGhost) == "function" and UnitIsDeadOrGhost("target") then
             kind = "dead"
-        elseif type(_G.UnitReaction) == "function" then
-            local reaction = _G.UnitReaction("player", "target")
+        elseif type(UnitReaction) == "function" then
+            local reaction = UnitReaction("player", "target")
             if reaction and reaction >= 5 then
                 kind = "friendly"
             elseif reaction == 4 then
@@ -202,25 +215,22 @@ local function NPCReactionColorPreview()
         end
     end
     do
-        local r, g, b = _G.MSUF_GetNPCReactionColor(kind)
+        local r, g, b = Core.MSUF_GetNPCReactionColor(kind)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
     return RGB(0.85, 0.10, 0.10)
 end
 local function CurrentPowerColorPreview()
     local powerType, powerToken
-    if type(_G.UnitPowerType) == "function" then powerType, powerToken = _G.UnitPowerType("player") end
+    if type(UnitPowerType) == "function" then powerType, powerToken = UnitPowerType("player") end
     local ownership = MSUF.ClassPowerOwnership
     if ownership and ownership.displayMana then
         powerType, powerToken = 0, "MANA"
     end
     if powerType == nil and (powerToken == nil or powerToken == "") then powerType, powerToken = 0, "MANA" end
-    local fn = _G.MSUF_GetResolvedPowerColor or (MSUF and MSUF.MSUF_GetResolvedPowerColor)
-    if type(fn) == "function" then
-        local r, g, b = fn(powerType, powerToken)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
-    end
-    local pbc = _G.PowerBarColor
+    local r, g, b = Core.MSUF_GetResolvedPowerColor(powerType, powerToken)
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
+    local pbc = PowerBarColor
     local color = pbc and ((powerToken and pbc[powerToken]) or (powerType and pbc[powerType]) or pbc.MANA or pbc[0])
     return RGB((color and (color.r or color[1])) or 0.00, (color and (color.g or color[2])) or 0.44, (color and (color.b or color[3])) or 0.87)
 end
@@ -292,29 +302,21 @@ local function PreviewFontFlags()
     local monochrome = FontScopeGet("fontMonochrome", false) == true
     local slug = FontScopeGet("fontSlug", false) == true
     if slug then monochrome = false end
-    return ComposeFontFlags(FontOutlineGetFor(CurrentFontScope()), monochrome, slug)
+    return Core.MSUF_ComposeFontFlags(FontOutlineGetFor(CurrentFontScope()), monochrome, slug)
 end
 local function ApplyPreviewFont(fs)
     if not (fs and fs.SetFont) then return end
     local key = PreviewFontKey()
     local size = max(10, min(22, tonumber(FontScopeGet("fontSize", 14)) or 14))
     local flags = PreviewFontFlags()
-    local path
-    local pathForKey = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
-    if type(pathForKey) == "function" then path = pathForKey(key, size, flags) end
-    if (not path or path == "") and key and key ~= "" then
-        local fetch = _G.MSUF_FetchFontPathFromLSM or (MSUF and MSUF.MSUF_FetchFontPathFromLSM)
-        if type(fetch) == "function" then path = fetch(key) end
-    end
+    local path = Core.MSUF_ResolveFontKeyPath(key, size, flags)
+    if (not path or path == "") and key and key ~= "" then path = Core.MSUF_FetchFontPathFromLSM(key) end
     path = path or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
-    local resolve = _G.MSUF_ResolveFontPath
-    if type(resolve) == "function" then path = resolve(path, size, flags, key) end
-    local resolveSafe = _G.MSUF_ResolveSafeFontPath
-    if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
-    local applyScaleMode = _G.MSUF_ApplyFontScaleAnimationMode
-    if type(applyScaleMode) == "function" then applyScaleMode(fs, flags) end
-    if not _G.MSUF_SetFontChecked(fs, path, size, flags) then
-        _G.MSUF_SetFontChecked(fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags)
+    path = Core.MSUF_ResolveFontPath(path, size, flags, key)
+    path = Core.MSUF_ResolveSafeFontPath(path, size, flags, key)
+    Core.MSUF_ApplyFontScaleAnimationMode(fs, flags)
+    if not Core.MSUF_SetFontChecked(fs, path, size, flags) then
+        Core.MSUF_SetFontChecked(fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags)
     end
     local c = ConfiguredFontColorPreview()
     c[4] = NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1))
@@ -672,7 +674,7 @@ local function BuildGlobalFont(ctx, b)
         get = function() return FontKeyGet() end,
         set = function(v)
             FontKeySet(v)
-            _G.MSUF_NormalizeStoredFontKeys()
+            Core.MSUF_NormalizeStoredFontKeys()
             ApplyFonts("MSUF2_FONT_KEY")
             RefreshFontPreview()
         end,
@@ -782,7 +784,7 @@ end
 
 local function BuildFontBaseline(ctx, text)
     W.NextRow(text, 8)
-    local baseline = Schema.Build(ctx, text, {
+    return Schema.Build(ctx, text, {
         { "slider", "text_style.baseline", 0, { "Baseline", -4, 4, 1, 300 },
         get = function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
         set = function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
@@ -795,7 +797,6 @@ local function BuildFontBaseline(ctx, text)
             end)
         end },
     }, ROW_OPTIONS)["text_style.baseline"]
-    return baseline
 end
 
 local function FontNameControls(ctx, parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide,
@@ -850,7 +851,7 @@ local function BuildFonts(ctx)
     local RefreshScopedFontControls = M.RefreshProxy()
     local text = Schema.Section(b:CollapsibleSection("fonts_text_style", "Text Style", 430, true), ctx.key)
     local function BindTextSegment(label, values, width, getValue, setValue, path, afterSet)
-        local control = Schema.Build(ctx, text, {
+        return Schema.Build(ctx, text, {
             { "segment", path, nil, { label, values, width },
             get = getValue,
             set = function(v)
@@ -860,7 +861,6 @@ local function BuildFonts(ctx)
             end,
             meta = Meta(path), domain = "global" },
         }, ROW_OPTIONS)[path]
-        return control
     end
     local outline = Schema.Build(ctx, text, {
         { "segment", "text_style.outline", nil, { "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420 },
@@ -899,21 +899,13 @@ local function BuildFonts(ctx)
         function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end,
         "text_style.opacity")
     local baseline = BuildFontBaseline(ctx, text)
-    local function BindFontDropdown(parent, label, values, getValue, setValue, width, path)
-        local control = Schema.Build(ctx, parent, {
-            { "dropdown", path, nil, { label, values, width or 280 },
-            get = getValue,
-            set = setValue,
+    local function BindFontColorModeDropdown(parent, label, values, kind, path)
+        return Schema.Build(ctx, parent, {
+            { "dropdown", path, nil, { label, values, 280 },
+            get = function() return FontTextColorModeGetFor(CurrentFontScope(), kind) end,
+            set = function(v) FontTextColorModeSetFor(CurrentFontScope(), kind, v) end,
             meta = Meta(path), domain = "global" },
         }, ROW_OPTIONS)[path]
-        return control
-    end
-    local function BindFontColorModeDropdown(parent, label, values, kind, path)
-        return BindFontDropdown(parent, label, values,
-            function() return FontTextColorModeGetFor(CurrentFontScope(), kind) end,
-            function(v) FontTextColorModeSetFor(CurrentFontScope(), kind, v) end,
-            nil,
-            path)
     end
     local function BuildNameShorteningControls(...)
         return FontNameControls(ctx, ...)

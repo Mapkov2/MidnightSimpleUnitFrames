@@ -55,7 +55,8 @@ KEEP = (
 KEEP_FIELDS = (
     "MSUF_NS.Client", "MSUF_NS.L", "MSUF_NS.MSUF_Auras3", "MSUF_NS.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT",
     "MSUF2.Undo", "MSUF2.Widgets", "MSUF_EM2.Undo", "MSUF_HostAPI.version", "MSUF_EditModeAPI.RegisterElement",
-    "MSUF_UnitFrames.player",
+    "MSUF_UnitFrames.player", "MSUF2.IconSkinsPage", "MSUF_HostAPI.GetIconSkins",
+    "MSUF2.ColorsSetPainterCategory", "MSUF2.RelayoutPageHeaderHost", "MSUF2.activeKey",
 )
 
 
@@ -445,6 +446,25 @@ def external_reads(tool):
             handle.write("## Title: Probe\nReader.lua\n")
         with open(os.path.join(addon, "Reader.lua"), "w", encoding="utf-8", newline="") as handle:
             handle.write(READER)
+        # Shared addon namespaces carry the proven host table to sibling files,
+        # whose readers need not contain any global host name themselves.
+        indirect = {
+            "Bridge.lua": 'local _, state = ...\nlocal host = assert(_G.MSUF2, "host, required")\n'
+                'state.other, state.menu = {}, host\n',
+            "Indirect.lua": 'local _, context = ...\nlocal other, menu = context.other, context.menu\n'
+                'menu.BindBoolWidget()\ncontext.menu.RegisterPage()\n'
+                'local mixed = menu or other.label\nmixed.NotAHostField()\n'
+                '-- context.menu.CommentOnly()\nlocal text = "menu.StringOnly()"\n',
+        }
+        for filename, text in indirect.items():
+            with open(os.path.join(addon, filename), "w", encoding="utf-8", newline="") as handle:
+                handle.write(text)
+        unrelated = os.path.join(base, "OtherAddon")
+        os.makedirs(unrelated)
+        with open(os.path.join(unrelated, "OtherAddon.toc"), "w", encoding="utf-8") as handle:
+            handle.write("## Title: Other\nReader.lua\n")
+        with open(os.path.join(unrelated, "Reader.lua"), "w", encoding="utf-8") as handle:
+            handle.write('local _, state = ...\nlocal menu = state.menu\nmenu.OtherAddonOnly()\n-- MSUF2\n')
         names = {"MSUF_Auras3", "MSUF2", "MSUF2_Open", "MSUF2_Window", "MSUF_GetFontPath", "MSUF_NS", "MSUF_UnitFrames"}
         tables = {"MSUF_NS", "MSUF", "MSUF2", "MSUF_UnitFrames"}
         scan = tool.scan_external(tool.repo_sources(base), names, tables, luac)
@@ -460,8 +480,104 @@ def external_reads(tool):
             expect(key not in fields, "the scan took %s.%s for a field read" % key)
         expect("MSUF_" in scan.prefixes, "the scan missed the quoted prefix of _G[\"MSUF_\" .. unit]")
         expect("MSUF_InAComment" not in scan.stray, "a name in a comment was read")
+        for field in ("BindBoolWidget", "RegisterPage"):
+            key = ("MSUF2", field)
+            expect(key in fields, "the scan missed an indirect shared-namespace reader: MSUF2." + field)
+            expect(("ProbeAddon", "Indirect.lua") in scan.fields[key],
+                   "the indirect consumer must name its real sibling source: " + field)
+        for field in ("NotAHostField", "CommentOnly", "StringOnly", "OtherAddonOnly"):
+            expect(("MSUF2", field) not in fields, "namespace inference invented a consumer: " + field)
     finally:
         shutil.rmtree(base, ignore_errors=True)
+
+
+def published_contracts(tool):
+    """A refresh cannot forget an indirect caller or accept a retired provider."""
+    source = '_G.MSUF2 = {}\nlocal menu = _G.MSUF2\nmenu.ContractField = function() end\n'
+    root = build_tree({"MidnightSimpleUnitFrames/A.lua": source}, [
+        row("MSUF2", kind="table"), row("MSUF2.ContractField", kind="nsfield")])
+    try:
+        previous, problems = tool.parse_ledger(os.path.join(root, "tools", "public-globals.tsv"))
+        expect(not problems, "published contract fixture is malformed")
+        fresh = dict(previous[0], note="fresh reader evidence")
+        merged, retained = tool.retain_published_rows([fresh], previous)
+        expect(retained == ["MSUF2.ContractField"], "refresh lost an indirect published contract")
+        expect(merged[0]["note"] == "fresh reader evidence", "retention replaced current reader evidence")
+        tool.write_ledger(merged, os.path.join(root, "tools", "public-globals.tsv"))
+        passed, output = run_check(tool, root)
+        expect(passed, "retained contract with its provider failed:\n" + output)
+        with open(os.path.join(root, "MidnightSimpleUnitFrames/A.lua"), "w", encoding="utf-8") as handle:
+            handle.write('_G.MSUF2 = {}\n-- menu.ContractField = function() end\n')
+        passed, output = run_check(tool, root)
+        expect(not passed and "MSUF2.ContractField" in output and "MSUF_Suite:Core/X.lua:3" in output,
+               "retaining a contract hid its removed provider or lost its consumer diagnostic:\n" + output)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def runtime_client_presence(tool):
+    """A declaration writing nil is not a value present after login; false is."""
+    entry = tool.Entry("MSUF_NilDeclared")
+    entry.runtime = {flavor: "nil" for flavor in tool.FLAVORS}
+    expect(tool.entry_clients(entry) == "static", "nil write attempts were promoted to post-login presence")
+    entry.runtime["Mainline"] = "boolean"
+    expect(tool.entry_clients(entry) == "Mainline", "a real false boolean must still count as present")
+    entry.runtime = {flavor: "boolean" for flavor in tool.FLAVORS}
+    expect(tool.entry_clients(entry) == "all", "false booleans on every client lost their presence contract")
+    entry.runtime = {"Mainline": None, "Vanilla": "nil", "TBC": "number", "Mists": "boolean"}
+    expect(tool.entry_clients(entry) == "TBC,Mists", "None/nil or missing clients counted as present; zero/false disappeared")
+    entry.runtime = {flavor: "number" for flavor in tool.FLAVORS}
+    expect(tool.entry_clients(entry) == "all", "numeric zero on every client lost its presence contract")
+    expect(tool.present_clients({"Mainline": False, "Vanilla": 0, "TBC": None, "Mists": "nil"}) == ["Mainline", "Vanilla"],
+           "presence used truthiness and discarded false/zero while filtering None/nil")
+    entry = tool.Entry("MSUF_NamespaceDeclared")
+    entry.add(tool.RANK["nsfield"], "MidnightSimpleUnitFrames/A.lua", 1, "nsfield")
+    entry.ns_runtime = {"Mainline": None, "Vanilla": "nil", "TBC": "number", "Mists": "boolean"}
+    expect(tool.entry_clients(entry) == "TBC,Mists", "namespace nil/None differs from global presence")
+    scan = tool.ExternalScan()
+    kinds = {"DeclaredNil": "nil", "DeclaredNone": None, "FalseValue": "boolean", "ZeroValue": "number", "Absent": "nil"}
+    for field in kinds:
+        scan.fields[("MSUF2", field)][("MSUF_Suite", "Core/Fixture.lua")] = tool.Reader("MSUF_Suite", "Core/Fixture.lua", 3, True)
+    writers = {("MSUF2", field): ("MidnightSimpleUnitFrames/A.lua", 1) for field in kinds if field != "Absent"}
+    probes = {("MSUF2", field): {flavor: kind for flavor in tool.FLAVORS} for field, kind in kinds.items()}
+    with mock.patch.object(tool, "field_writers", return_value=writers), mock.patch.object(tool, "probe_fields", return_value=probes):
+        rows, missing = tool.field_rows("unused", {}, scan, "unused", {"MSUF2"})
+    clients = {row["name"]: row["clients"] for row in rows}
+    expect(clients == {"MSUF2.DeclaredNil": "static", "MSUF2.DeclaredNone": "static",
+                       "MSUF2.FalseValue": "all", "MSUF2.ZeroValue": "all"}, "field collector presence drift: " + str(clients))
+    expect(missing == [("MSUF2", "Absent")], "nil-only probe fabricated an absent namespace provider")
+
+
+def refreshed_contract_metadata(tool):
+    """Both refresh routes preserve reviewed notes while facts and presence update."""
+    root_note = "Published compatibility contract; Suite nested fields (contract smoke): Root"
+    field_note = "Suite nested fields (contract smoke): One Two; optional fallback reads: Three"
+    root = build_tree({"MidnightSimpleUnitFrames/A.lua": '_G.MSUF2 = {}\n'}, [
+        row("MSUF2", kind="table", note=root_note), row("MSUF2.ContractField", kind="nsfield", note=field_note)])
+    try:
+        previous, problems = tool.parse_ledger(os.path.join(root, "tools", "public-globals.tsv"))
+        expect(not problems, "contract refresh fixture is malformed")
+        fresh = [dict(item, note="fresh reader evidence") for item in previous]
+        merged, retained = tool.retain_published_rows(fresh, previous)
+        expect(not retained and all(item["note"].startswith("fresh reader evidence; ") for item in merged),
+               "current reader evidence or retained annotations lost during rediscovery")
+        expect(root_note in merged[0]["note"] and field_note in merged[1]["note"], "rediscovery dropped reviewed contract notes")
+        expect(root_note in tool.preserve_contract_note("dynamic", merged[0]["note"]),
+               "a second refresh lost the published marker after fresh reader evidence")
+        export = tool.Entry("MSUF2")
+        export.add(tool.RANK["assign"], "MidnightSimpleUnitFrames/A.lua", 1, "assign", "table")
+        writers = {("MSUF2", "ContractField"): ("MidnightSimpleUnitFrames/A.lua", 2)}
+        probes = {("MSUF2", "ContractField"): {flavor: "nil" for flavor in tool.FLAVORS}}
+        with mock.patch.object(tool, "resolve_lua", return_value="unused"), \
+             mock.patch.object(tool, "static_inventory", return_value=({"MSUF2": export}, {})), \
+             mock.patch.object(tool, "runtime_inventory", return_value=({}, {}, set())), \
+             mock.patch.object(tool, "field_writers", return_value=writers), mock.patch.object(tool, "probe_fields", return_value=probes):
+            tool.refresh_exporters(root)
+        updated, problems = tool.parse_ledger(os.path.join(root, "tools", "public-globals.tsv"))
+        expect(not problems and [item["note"] for item in updated] == [root_note, field_note], "export refresh discarded contract notes")
+        expect(updated[1]["clients"] == "static", "export refresh promoted nil-only field probes to runtime presence")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def run_time_names(tool):
@@ -610,6 +726,9 @@ def main():
     check_on_fixtures(tool)
     malformed_ledgers(tool)
     external_reads(tool)
+    published_contracts(tool)
+    runtime_client_presence(tool)
+    refreshed_contract_metadata(tool)
     run_time_names(tool)
     runtime_smoke_can_fail(tool)
     print("public globals ledger smoke: ok (%d ledger rows, %d ExportPublic names and %d compiler-written globals in a "

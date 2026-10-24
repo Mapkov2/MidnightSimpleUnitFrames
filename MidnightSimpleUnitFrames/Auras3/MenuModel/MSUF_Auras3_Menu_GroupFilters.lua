@@ -3,7 +3,6 @@
 -- stay together so a saved edit cannot leave either compiled group owner stale.
 -- The public MSUF_GF_AuraFilter table retains its identity and legacy aliases.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}
@@ -51,7 +50,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
 
     local _gfBlacklistHashCache = setmetatable({}, { __mode = "k" })
 
-    local GroupBlacklistSpellID = _G.MSUF_AuraSpellIDFromKey
+    local GroupBlacklistSpellID = MSUF.Require("MSUF_AuraSpellIDFromKey", "Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua")
 
     local function DirectGroupBlacklistSpells(group)
         if type(group) ~= "table" then return nil end
@@ -162,7 +161,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         return hash
     end
 
-    local GF_AURA_FILTER = _G.MSUF_GF_AuraFilter
+    local GF_AURA_FILTER = MSUF.Optional("MSUF_GF_AuraFilter")
     if type(GF_AURA_FILTER) ~= "table" then
         GF_AURA_FILTER = {}
         ExportPublic("MSUF_GF_AuraFilter", GF_AURA_FILTER)
@@ -273,7 +272,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     end
 
     local function GroupConf(kind)
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
         local key = kind == "raid" and "gf_raid" or (kind == "mythicraid" and "gf_mythicraid" or "gf_party")
         if type(db[key]) ~= "table" then db[key] = {} end
@@ -575,7 +574,9 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         return { party = read(a) }
     end
 
-    function Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, value)
+    -- One category write across the scope's group kinds: a plain value, or a
+    -- per-kind state table ({ party = ..., raid = ..., mythicraid = ... }).
+    local function WriteBlacklistCategory(scope, groupKey, catKey, value, state)
         scope = NormalizeGroupScope(scope)
         groupKey = NormalizeKind(groupKey)
         catKey = Model.ResolveGroupBlacklistCategory(catKey) or catKey
@@ -585,7 +586,12 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         local function write(kind)
             local group = GroupAuraGroup(kind, groupKey)
             if type(group.blacklistCats) ~= "table" then group.blacklistCats = {} end
-            local nextValue = value and true or nil
+            local nextValue
+            if state then
+                nextValue = state[kind] == true and true or nil
+            else
+                nextValue = value and true or nil
+            end
             if group.blacklistCats[catKey] == nextValue then return end
             group.blacklistCats[catKey] = nextValue
             changed = true
@@ -596,26 +602,13 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         return changed
     end
 
+    function Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, value)
+        return WriteBlacklistCategory(scope, groupKey, catKey, value, nil)
+    end
+
     function Model.WriteGroupBlacklistCategoryState(scope, groupKey, catKey, state)
         if type(state) ~= "table" then return Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, state) end
-        scope = NormalizeGroupScope(scope)
-        groupKey = NormalizeKind(groupKey)
-        catKey = Model.ResolveGroupBlacklistCategory(catKey) or catKey
-        if type(catKey) ~= "string" or catKey == "" then return false end
-        local changed = false
-        local a, b = GroupScopeKinds(scope)
-        local function write(kind)
-            local group = GroupAuraGroup(kind, groupKey)
-            if type(group.blacklistCats) ~= "table" then group.blacklistCats = {} end
-            local nextValue = state[kind] == true and true or nil
-            if group.blacklistCats[catKey] == nextValue then return end
-            group.blacklistCats[catKey] = nextValue
-            changed = true
-        end
-        write(a)
-        if b then write(b) end
-        if changed then InvalidateGroupBlacklist(scope, groupKey) end
-        return changed
+        return WriteBlacklistCategory(scope, groupKey, catKey, nil, state)
     end
 
 end

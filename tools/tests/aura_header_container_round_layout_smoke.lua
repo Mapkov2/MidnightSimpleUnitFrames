@@ -86,8 +86,17 @@ local function LoadContainers(client)
         .. "\nreturn Util.EnablePixelPerfectLayout", "pixel-layout opt-in"))
     helper(MSUF, MSUF.Util, _G.MSUF_SetRoundLayoutToNearestPixel)
     local A3 = { SpellIndicators = AutoTable() }
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua"))(
-        "MidnightSimpleUnitFrames", MSUF)
+    -- The shipped Kernel API, then the one provider this file requires at load.
+    -- The harness lays out no pixels: the region wrapper hands the frame back,
+    -- the behavior this file used before its provider became a Require.
+    local RequireFixture = dofile(root .. "/tools/tests/require_fixture.lua")
+    RequireFixture.InstallKernel(root, MSUF)
+    MSUF.ExportPublic("MSUF_PixelLayoutRegion", function(region, policy, ...)
+        if type(policy) == "string" then return region[policy](region, ...) end
+        return region
+    end)
+    RequireFixture.LoadShipped(root,
+        "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua", MSUF)
     dofile(root .. "/tools/tests/auras3_runtime_fixture.lua").Prepare(root, MSUF)
     local factory = MSUF.Auras3RuntimeFactories and MSUF.Auras3RuntimeFactories.Containers
     Check(type(factory) == "function", "Containers factory was not registered")

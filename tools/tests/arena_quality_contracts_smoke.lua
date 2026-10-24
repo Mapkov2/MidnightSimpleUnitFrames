@@ -50,7 +50,7 @@ local CLIENT_GLOBALS = {
     "MSUF_GetCastbarUnitframeWidthSource", "MSUF_GetCastbarAutoAnchorOffsetX", "MSUF_GetCastbarUnitframeBottomInset",
     "MSUF__castbarStyleGlobalRev", "MSUF_FontApplyEpoch", "MSUF_ArenaCastbars", "MSUF_ArenaCastbars_SyncLifecycle",
     "MSUF_ApplyArenaCastbarPositionSetting", "MSUF_ApplyArenaCastbarsEnabled", "MSUF_ArenaCastbar_Stop",
-    "MSUF_ArenaMatch_SyncTrinketIcons",
+    "MSUF_ArenaMatch_SyncTrinketIcons", "MSUF_PixelLayoutRegion",
 }
 
 local function ResetClientGlobals()
@@ -211,7 +211,11 @@ local function LoadTrinkets(options)
         IsVanilla = options.flavor == "Vanilla",
         SupportsUnit = function() return options.supportsArena ~= false end,
     })
-    ns.UF = { GetFrame = function(unit) return arenaFrames[unit] end }
+    ns.UF = { GetFrame = function(unit) return arenaFrames[unit] end, frames = arenaFrames }
+    -- The shipped Kernel API (export policy, registry, Require) and the pixel layout provider the
+    -- trinket runtime binds when it loads; the plain loader keeps the kernel out of the castbar adapter.
+    assert(_G.loadfile(repo .. "/tools/tests/require_fixture.lua"))().InstallKernel(repo, ns, _G, _G.loadfile, true)
+    _G.MSUF_PixelLayoutRegion = function(region) return region end
     -- The shared 0-30 layer scale the holders place themselves on (Libs loads
     -- it before Features in every core TOC).
     assert(loadfile(CORE .. "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", ns)
@@ -371,6 +375,9 @@ local function LoadArenaCastbars(options)
         frame._msufCastbarDetailLayoutVisualRev = W.namespace.Castbars.Config.styleRevision
     end
     _G.MSUF_CB_ResetStateOnStop = function() W.stops = W.stops + 1 end
+    -- The pool binds the scheduler when it loads. This world has no frame boundary: a
+    -- queued lifecycle pass runs at once, as the pool did without a scheduler.
+    _G.MSUF_ScheduleOnce = function(_, callback) callback() end
     _G.MSUF_GetCastbarEngine = function()
         return {
             Invalidate = function() end,

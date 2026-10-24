@@ -60,7 +60,9 @@ function cases.tooltip()
 end
 function cases.castbar()
     local world, M, db = Boot()
-    world.env.MSUF_SetCastbarBackend("target", "MSUF", db.general)
+    -- A namespace-only export: not a global any more.
+    local SetCastbarBackend = world.core.PublicGlobals.MSUF_SetCastbarBackend
+    SetCastbarBackend("target", "MSUF", db.general)
     local backendRequests = 0
     M.ApplyService.RequestCastbarUnit = function(unit)
         assert(unit == "target")
@@ -69,7 +71,7 @@ function cases.castbar()
     end
     assert(M.StartHistorySession("menu"))
     assert(M.CaptureHistory("Castbar", "unit:target:castbar", function()
-        world.env.MSUF_SetCastbarBackend("target", "HIDE", db.general)
+        SetCastbarBackend("target", "HIDE", db.general)
         return true
     end))
     assert(M.Undo())

@@ -1,16 +1,15 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MSUF2 support features split out of the legacy standalone slash menu.
 --- Keep this file free of page/UI construction so the old SlashMenu file can be
 --- removed from the TOC without losing shared runtime helpers.
 
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
-addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
-    or "MidnightSimpleUnitFrames"
+local SELF = "Shell/Menu2/MSUF_Menu2_Support.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", SELF)
 local function EnsureMenu2Namespace()
-    local namespace = MSUF.MSUF2 or _G.MSUF2 or {}
+    local namespace = MSUF.MSUF2 or {}
     MSUF.MSUF2 = namespace
-    if _G.MSUF2 ~= namespace then _G.MSUF2 = namespace end
+    MSUF.ExportPublic("MSUF2", namespace)
     return namespace
 end
 MSUF.GetMenu2Namespace = MSUF.GetMenu2Namespace or EnsureMenu2Namespace
@@ -60,7 +59,7 @@ end
 -- otherwise still wake once after combat starts even if its body immediately
 -- returned. Retail's NewTimer handle lets the combat/menu-hide teardown remove
 -- the callback itself: zero delayed Menu2 execution during combat.
-local rawTimerAPI = _G.C_Timer
+local rawTimerAPI = C_Timer
 local menuRuntimeGeneration = 0
 local menuRuntimeTasks = {}
 local Runtime = M.MenuRuntime
@@ -157,11 +156,12 @@ function Runtime:Quiesce(reason, event)
     return true
 end
 local function EnsureGeneral()
-    local ensureDB = _G.MSUF_EnsureDB
+    local ensureDB = MSUF.Optional("MSUF_EnsureDB")
     if type(ensureDB) == "function" then ensureDB() end
-    ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
-    _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
-    return _G.MSUF_DB.general
+    local db = MSUF_DB or {}
+    ExportPublic("MSUF_DB", db)
+    db.general = type(db.general) == "table" and db.general or {}
+    return db.general
 end
 local function AddTooltip(widget, title, body, opts)
     if not (widget and (widget.SetScript or widget.HookScript)) then return widget end
@@ -179,36 +179,36 @@ local function AddTooltip(widget, title, body, opts)
         widget._msuf2TooltipWired = "manual"
     end
     local function ShowTooltip(self)
-        if not _G.GameTooltip then return end
+        if not GameTooltip then return end
         -- A disabled control explains why; the reason rides on this tooltip.
         local Widgets = M.Widgets
         local reason = Widgets and Widgets.DisabledReasonText and Widgets.DisabledReasonText(widget)
         if opts.enabled and not opts.enabled(self) then
             if not reason then return end
-            _G.GameTooltip:SetOwner(self, owner)
+            GameTooltip:SetOwner(self, owner)
             local resolved = ResolveText(title, self)
-            if resolved and resolved ~= "" then _G.GameTooltip:SetText(Tr(resolved), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1) end
-            _G.GameTooltip:AddLine(reason, 1, 0.82, 0.35, true)
-            _G.GameTooltip:Show()
+            if resolved and resolved ~= "" then GameTooltip:SetText(Tr(resolved), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1) end
+            GameTooltip:AddLine(reason, 1, 0.82, 0.35, true)
+            GameTooltip:Show()
             return
         end
         local resolvedTitle = ResolveText(title, self)
         local resolvedBody = ResolveText(body, self)
-        _G.GameTooltip:SetOwner(self, owner)
+        GameTooltip:SetOwner(self, owner)
         if resolvedTitle and resolvedTitle ~= "" then
             if opts.titleAsLine then
-                _G.GameTooltip:AddLine(Tr(resolvedTitle), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
+                GameTooltip:AddLine(Tr(resolvedTitle), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
             else
-                _G.GameTooltip:SetText(Tr(resolvedTitle), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
+                GameTooltip:SetText(Tr(resolvedTitle), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
             end
         end
-        if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86,
+        if resolvedBody and resolvedBody ~= "" then GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86,
             bodyColor[3] or 1.00, true) end
-        if reason then _G.GameTooltip:AddLine(reason, 1, 0.82, 0.35, true) end
-        _G.GameTooltip:Show()
+        if reason then GameTooltip:AddLine(reason, 1, 0.82, 0.35, true) end
+        GameTooltip:Show()
     end
     local function HideTooltip()
-        if _G.GameTooltip then _G.GameTooltip:Hide() end
+        if GameTooltip then GameTooltip:Hide() end
     end
     local function Wire(target)
         target._msuf2TooltipTarget = true
@@ -233,7 +233,7 @@ local function AddTooltip(widget, title, body, opts)
     end
     return widget
 end
-ExportPublic("MSUF_AddTooltip", _G.MSUF_AddTooltip or AddTooltip)
+ExportPublic("MSUF_AddTooltip", MSUF.Optional("MSUF_AddTooltip") or AddTooltip)
 M.AddTooltip = M.AddTooltip or AddTooltip
 --- AddTooltip for any control kind: a segment's option buttons sit on top of
 --- its holder and catch the mouse, so they carry the same tooltip.
@@ -264,6 +264,7 @@ end
 -- preview views read the same literal global (MSUF_UFPreview_ActiveNudgeBox)
 -- in their getActive fallback. Routing the slot through a table on M would
 -- leave those readers stale, so the names stay spec-driven and global.
+local function NamedGlobal(name) return _G[name] end
 local function PreviewBindingOwner_OnEvent(self, event)
     if event == "PLAYER_REGEN_DISABLED" then
         self.__msufPendingClear = true
@@ -283,17 +284,20 @@ local function PreviewBindingOwner_OnEvent(self, event)
     if self.Hide then self:Hide() end
 end
 
-local function EnsurePreviewBindingOwner(ownerName)
-    if not ownerName then return nil end
-    local owner = _G[ownerName]
-    if not owner then
-        owner = PixelLayoutRegion(CreateFrame("Frame", ownerName, UIParent))
-        _G[ownerName] = owner
-    end
+local function AdoptPreviewBindingOwner(owner)
     if owner.SetScript and owner.__msufPreviewBindingOwner ~= true then
         owner.__msufPreviewBindingOwner = true
         owner:SetScript("OnEvent", PreviewBindingOwner_OnEvent)
     end
+end
+local function EnsurePreviewBindingOwner(ownerName)
+    if not ownerName then return nil end
+    local owner = NamedGlobal(ownerName)
+    if not owner then
+        owner = PixelLayoutRegion(CreateFrame("Frame", ownerName, UIParent))
+        _G[ownerName] = owner
+    end
+    AdoptPreviewBindingOwner(owner)
     return owner
 end
 
@@ -303,18 +307,15 @@ function M.SetPreviewArrowBindings(box, enabled, spec)
     spec = spec or {}
     local ownerName = spec.ownerName
     local activeName = spec.activeName
-    local owner = ownerName and _G[ownerName]
+    local owner = ownerName and NamedGlobal(ownerName)
     if InCombatLockdown and InCombatLockdown() then
         ReleasePreviewKeyboardCapture(box)
-        if activeName and (enabled or _G[activeName] == box or box == nil) then _G[activeName] = nil end
+        if activeName and (enabled or NamedGlobal(activeName) == box or box == nil) then _G[activeName] = nil end
         if not enabled or not box then
             if spec.onDisable then spec.onDisable(box) end
         end
         if owner then
-            if owner.SetScript and owner.__msufPreviewBindingOwner ~= true then
-                owner.__msufPreviewBindingOwner = true
-                owner:SetScript("OnEvent", PreviewBindingOwner_OnEvent)
-            end
+            AdoptPreviewBindingOwner(owner)
             owner.__msufActiveBox = box
             owner.__msufActiveName = activeName
             owner.__msufPendingClear = true
@@ -326,7 +327,7 @@ function M.SetPreviewArrowBindings(box, enabled, spec)
     if owner and owner.Hide then owner:Hide() end
     if not enabled or not box then
         if spec.onDisable then spec.onDisable(box) end
-        if activeName and (_G[activeName] == box or box == nil) then _G[activeName] = nil end
+        if activeName and (NamedGlobal(activeName) == box or box == nil) then _G[activeName] = nil end
         if owner then
             owner.__msufPendingClear = nil
             owner.__msufActiveBox = nil
@@ -353,14 +354,14 @@ function M.SetPreviewArrowBindings(box, enabled, spec)
     for i = 1, #PREVIEW_NUDGE_DIRECTIONS do
         local dir = PREVIEW_NUDGE_DIRECTIONS[i]
         local btnName = prefix .. dir[1]
-        local btn = _G[btnName]
+        local btn = NamedGlobal(btnName)
         if not btn then
             btn = PixelLayoutRegion(CreateFrame("Button", btnName, owner, "SecureActionButtonTemplate"))
             btn:SetSize(1, 1)
             btn:Hide()
             btn:SetScript("OnClick", function(self)
                 local s = self._msufNudgeSpec or {}
-                local active = s.getActive and s.getActive() or (s.activeName and _G[s.activeName])
+                local active = s.getActive and s.getActive() or (s.activeName and NamedGlobal(s.activeName))
                 if s.onClick then s.onClick(active, self._msufDx or 0, self._msufDy or 0, self) end
             end)
         end
@@ -419,8 +420,8 @@ end
 --- without asking. Nothing in the Options addon calls it (menu_prompt_ownership
 --- smoke); the menu's own prompts use M.ShowPrompt.
 function M.InstallStaticPopup(key, spec, defaults)
-    if not (_G.StaticPopupDialogs and key and type(spec) == "table") then return nil end
-    local existing = _G.StaticPopupDialogs[key]
+    if not (StaticPopupDialogs and key and type(spec) == "table") then return nil end
+    local existing = StaticPopupDialogs[key]
     if existing then return existing end
     for field, value in pairs(defaults or STATIC_POPUP_DEFAULTS) do
         if spec[field] == nil then spec[field] = value end
@@ -430,7 +431,7 @@ function M.InstallStaticPopup(key, spec, defaults)
         RaisePopupOverMenuWindow(dialog)
         if onShow then return onShow(dialog, data) end
     end
-    _G.StaticPopupDialogs[key] = spec
+    StaticPopupDialogs[key] = spec
     return spec
 end
 local function LeftJustifyButtonText(btn, leftPad)
@@ -445,7 +446,7 @@ local function LeftJustifyButtonText(btn, leftPad)
         fontString:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     end
 end
-ExportPublic("MSUF_LeftJustifyButtonText", _G.MSUF_LeftJustifyButtonText or LeftJustifyButtonText)
+ExportPublic("MSUF_LeftJustifyButtonText", MSUF.Optional("MSUF_LeftJustifyButtonText") or LeftJustifyButtonText)
 function M.ValueTextList(...)
     local out = {}
     local n = select("#", ...)
@@ -594,6 +595,8 @@ function M.SetMenuStateValue(field, value)
     end
     return result
 end
+-- The slot key prefix is resolved inline in both lookups: text-handle drags and
+-- the font size slider ask for their keys on every move.
 function M.TextSlotOffsetKeys(kind, slot)
     if kind == "name" then return "nameOffsetX", "nameOffsetY" end
     if kind == "hp" and not slot then return "hpOffsetX", "hpOffsetY" end
@@ -646,10 +649,8 @@ local function NotePickMiss(name)
     if pickMissingSeen[name] then return end
     pickMissingSeen[name] = true
     pickMissing[#pickMissing + 1] = name
-    local report = (MSUF and MSUF.ReportError) or _G.MSUF_ReportError
-    if type(report) == "function" then
-        report("Menu2", "Pick could not resolve '" .. name .. "': the source module does not publish it")
-    end
+    local report = MSUF.ReportError or MSUF.Require("MSUF_ReportError", SELF)
+    report("Menu2", "Pick could not resolve '" .. name .. "': the source module does not publish it")
 end
 
 function M.Pick(source, names)
@@ -890,21 +891,17 @@ end
 function M.RequestOrRefresh(ctx, reason)
     return M.RequestRefresh(ctx, reason)
 end
+local HP_MODE_ALIASES = { FULL_ONLY = "CURRENT", PERCENT_ONLY = "PERCENT",
+    FULL_PLUS_PERCENT = "CURPERCENT", PERCENT_PLUS_FULL = "PERCENTCUR" }
+local POWER_MODE_ALIASES = { FULL_SLASH_MAX = "CURMAX", FULL_ONLY = "CURRENT", PERCENT_ONLY = "PERCENT",
+    FULL_PLUS_PERCENT = "CURPERCENT", PERCENT_PLUS_FULL = "CURPERCENT" }
 function M.NormalizeHpMode(mode)
     if mode == nil then return "CURPERCENT" end
-    if mode == "FULL_ONLY" then return "CURRENT" end
-    if mode == "PERCENT_ONLY" then return "PERCENT" end
-    if mode == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
-    if mode == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
-    return mode
+    return HP_MODE_ALIASES[mode] or mode
 end
 function M.NormalizePowerMode(mode)
     if mode == nil then return "CURPERCENT" end
-    if mode == "FULL_SLASH_MAX" then return "CURMAX" end
-    if mode == "FULL_ONLY" then return "CURRENT" end
-    if mode == "PERCENT_ONLY" then return "PERCENT" end
-    if mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
-    return mode
+    return POWER_MODE_ALIASES[mode] or mode
 end
 function M.ApplyGameplay()
     if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
@@ -921,8 +918,8 @@ local function GameplayDB()
     local db
     if type(M.EnsureDB) == "function" then db = M.EnsureDB() end
     if type(db) ~= "table" then
-        ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
-        db = _G.MSUF_DB
+        db = MSUF_DB or {}
+        ExportPublic("MSUF_DB", db)
     end
     db.gameplay = type(db.gameplay) == "table" and db.gameplay or {}
     return db.gameplay
@@ -931,7 +928,7 @@ function M.GetGameplayPlayerSpecID()
     if MSUF and type(MSUF.MSUF_GetPlayerSpecID) == "function" then
         return MSUF.MSUF_GetPlayerSpecID()
     end
-    return _G.MSUF_GetPlayerSpecID()
+    return MSUF.Require("MSUF_GetPlayerSpecID", SELF)()
 end
 function M.ResolveGameplaySpellInput(value)
     local text = tostring(value or ""):match("^%s*(.-)%s*$")
@@ -1235,35 +1232,25 @@ end
 function M.NormalizePortraitClassStyle(value)
     if value == "class_colored_border" or value == "colored" then return "RONDO_COLOR" end
     if value == "wow_icon_border" or value == "wow" then return "RONDO_WOW" end
-    local fn = _G.MSUF_NormalizePortraitClassStyleValue
-    if type(fn) == "function" then return fn(value) end
-    local PM = MSUF and MSUF.PortraitMedia
-    if PM and type(PM.NormalizeClassPack) == "function" then return PM.NormalizeClassPack(value) end
-    if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then return value end
-    return "BLIZZARD"
+    return MSUF.Require("MSUF_NormalizePortraitClassStyleValue", SELF)(value)
 end
 function M.IsMSUFEditModeActive(includeBlizzard)
-    local st = rawget(_G, "MSUF_EditState")
+    local st = MSUF.Optional("MSUF_EditState")
     if type(st) == "table" and st.active ~= nil then return st.active == true end
-    local em2 = rawget(_G, "MSUF_EM2")
+    local em2 = MSUF.Optional("MSUF_EM2")
     local state = em2 and em2.State
     if state and type(state.IsActive) == "function" then return state.IsActive() and true or false end
-    local fn = rawget(_G, "MSUF_IsInEditMode")
-        or (includeBlizzard and rawget(_G, "IsEditModeActive") or nil)
-    if type(fn) == "function" then
-        return fn() and true or false
-    end
-    return rawget(_G, "MSUF_UnitEditModeActive") == true
+    return MSUF.Require("MSUF_IsInEditMode", SELF)() and true or false
 end
 function M.IsEditModeCombatLocked(includeBlizzard)
-    local fn = includeBlizzard and rawget(_G, "IsEditModeCombatLocked") or nil
+    local fn = includeBlizzard and IsEditModeCombatLocked or nil
     if type(fn) == "function" then
         return fn() and true or false
     end
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+    return (InCombatLockdown and InCombatLockdown()) and true or false
 end
 local function EditModeState()
-    local em2 = rawget(_G, "MSUF_EM2")
+    local em2 = MSUF.Optional("MSUF_EM2")
     local state = type(em2) == "table" and em2.State or nil
     return type(state) == "table" and state or nil
 end
@@ -1274,14 +1261,13 @@ local function RefreshEditModeSurfaces()
 end
 function M.EditModeLifecycleStatus(includeBlizzard)
     local state = EditModeState()
-    local setFn = rawget(_G, "MSUF_SetMSUFEditModeDirect")
-    local unitKey = rawget(_G, "MSUF_CurrentEditUnitKey")
+    local unitKey = MSUF.PublicGlobals.MSUF_CurrentEditUnitKey
     if state and type(state.GetUnitKey) == "function" then unitKey = state.GetUnitKey() or unitKey end
     return {
         active = M.IsMSUFEditModeActive(includeBlizzard) and true or false,
         combatLocked = M.IsEditModeCombatLocked(includeBlizzard) and true or false,
         unitKey = unitKey,
-        hasDirectHelper = type(setFn) == "function",
+        hasDirectHelper = true,
         hasStateEnter = state and type(state.Enter) == "function" or false,
         hasStateExit = state and type(state.Exit) == "function" or false,
         hasStateCancel = state and type(state.CancelAll) == "function" or false,
@@ -1293,30 +1279,11 @@ function M.SetMSUFEditModeActive(active, unitKey, opts)
     local before = M.EditModeLifecycleStatus(opts.includeBlizzard)
     if before.active == active then return true, active and "already_enabled" or "already_disabled", before end
     if active and before.combatLocked then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-            _G.MSUF_ShowConfigCombatLockMessage()
-        elseif type(M.ShowConfigCombatLockMessage) == "function" then
-            M.ShowConfigCombatLockMessage()
-        end
+        MSUF.Require("MSUF_ShowConfigCombatLockMessage", SELF)()
         return false, "combat_locked", before
     end
-    local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect")
-    if type(fn) == "function" then
-        local result = fn(active, unitKey)
-        if result == false then return false, "helper_failed", before end
-        RefreshEditModeSurfaces()
-        local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
-        if after.active == active then return true, active and "enabled" or "disabled", after end
-        return false, "helper_failed", after
-    end
-    local state = EditModeState()
-    if active and state and type(state.Enter) == "function" then
-        state.Enter(unitKey)
-    elseif (not active) and state and type(state.Exit) == "function" then
-        state.Exit(opts.source or "msuf2_menu")
-    else
-        return false, active and "missing_enter_helper" or "missing_exit_helper", before
-    end
+    local result = MSUF.Require("MSUF_SetMSUFEditModeDirect", SELF)(active, unitKey)
+    if result == false then return false, "helper_failed", before end
     RefreshEditModeSurfaces()
     local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
     if after.active == active then return true, active and "enabled" or "disabled", after end
@@ -1419,8 +1386,8 @@ function M.HideMenuCopyLinkPopup()
 end
 local function EnsureCopyLinkPopup()
     if copyLinkPopup then return copyLinkPopup end
-    if not _G.CreateFrame then return nil end
-    local frame = PixelLayoutRegion(_G.CreateFrame("Frame", "MSUF_CopyLinkPopup", _G.UIParent, "BackdropTemplate"))
+    if not CreateFrame then return nil end
+    local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_CopyLinkPopup", UIParent, "BackdropTemplate"))
     frame:SetSize(420, 152)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
@@ -1452,7 +1419,7 @@ local function EnsureCopyLinkPopup()
     hint:SetText(Tr("Press Ctrl+C to copy:"))
     hint:SetTextColor(0.90, 0.90, 0.90, 1)
     if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(hint, M.Theme.colors and M.Theme.colors.text or { 0.90, 0.90, 0.90, 1 }, 0) end
-    local editBox = PixelLayoutRegion(_G.CreateFrame("EditBox", nil, frame, "InputBoxTemplate"))
+    local editBox = PixelLayoutRegion(CreateFrame("EditBox", nil, frame, "InputBoxTemplate"))
     editBox:EnableMouse(true)
     editBox:SetAutoFocus(false)
     editBox:SetSize(360, 32)
@@ -1462,16 +1429,16 @@ local function EnsureCopyLinkPopup()
     editBox:SetScript("OnEscapePressed", function() frame:Hide() end)
     editBox:SetScript("OnEnterPressed", function() frame:Hide() end)
     frame._msufEditBox = editBox
-    local ok = PixelLayoutRegion(_G.CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"))
+    local ok = PixelLayoutRegion(CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"))
     ok:EnableMouse(true)
     ok:Enable()
     ok:SetSize(120, 24)
     ok:SetPoint("BOTTOM", frame, "BOTTOM", 0, 12)
-    ok:SetText(_G.OKAY or Tr("Okay"))
+    ok:SetText(OKAY or Tr("Okay"))
     ok:RegisterForClicks("LeftButtonUp")
     ok:SetScript("OnClick", function() frame:Hide() end)
     frame._msufOkButton = ok
-    _G.MSUF_SkinButton(ok)
+    MSUF.Require("MSUF_SkinButton", SELF)(ok)
     frame:SetScript("OnShow", function(self)
         if self._msufTitleFS then self._msufTitleFS:SetText(Tr(self._msufTitle or "Link")) end
         if self._msufEditBox then
@@ -1502,7 +1469,7 @@ local function ShowCopyLink(title, url)
     frame._msufTitle = tostring(title or "Link")
     frame._msufUrl = tostring(url or "")
     frame:ClearAllPoints()
-    frame:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     frame:Show()
     if frame.Raise then frame:Raise() end
     if frame._msufEditBox and frame._msufEditBox.EnableMouse then frame._msufEditBox:EnableMouse(true) end
@@ -1534,10 +1501,10 @@ end
 
 local function PlayerDisplayName()
     local name
-    if type(_G.UnitName) == "function" then
-        name = _G.UnitName("player")
+    if type(UnitName) == "function" then
+        name = UnitName("player")
     end
-    if type(_G.issecretvalue) == "function" and _G.issecretvalue(name) then name = nil end
+    if type(issecretvalue) == "function" and issecretvalue(name) then name = nil end
     if type(name) == "string" then name = name:match("^[^-]+") else name = nil end
     if not name or name == "" or name == "Unknown" then name = M.Tr("Player") end
     return name

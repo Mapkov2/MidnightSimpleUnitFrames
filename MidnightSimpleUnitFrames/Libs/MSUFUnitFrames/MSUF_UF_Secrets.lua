@@ -1,14 +1,12 @@
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-
 local Secrets = MSUF.Secrets or {}
 MSUF.Secrets = Secrets
 
 -- Secret-value compatibility helpers.
 -- War Within restricted APIs can return secret values that must not be compared, serialized,
 -- or coerced casually. Centralize the safe predicates so element files handle them the same.
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local tonumber = tonumber
 
 local function IsSecret(value)
@@ -58,7 +56,7 @@ local function SafeNumber(value)
 end
 
 local function UnitMissing(unit)
-  local UnitExists = _G.UnitExists
+  local UnitExists = UnitExists
   if not UnitExists then
     return false
   end
@@ -66,7 +64,7 @@ local function UnitMissing(unit)
 end
 
 local function UnitExistsPlain(unit)
-  local UnitExists = _G.UnitExists
+  local UnitExists = UnitExists
   if not UnitExists then
     return true
   end
@@ -103,7 +101,7 @@ end
 Secrets.PlainBool = PlainBool
 
 function Secrets.CanAccessTable(value)
-    return not issecretvalue(value) and type(value) == "table" and _G.canaccesstable(value)
+    return not issecretvalue(value) and type(value) == "table" and canaccesstable(value)
 end
 function Secrets.CanAccessOptionalTable(value)
     if issecretvalue(value) then return false end

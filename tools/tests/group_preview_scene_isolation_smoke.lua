@@ -26,7 +26,7 @@ local h = Harness.New(root, flavor, { beforeBoot = function(world)
 end })
 local GF, UF, env = h.GF, h.core.UF, h.env
 GF.EnsureDB()
-env.MSUF2_GFPagePreviewActive = true
+h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 
 local party, raid = GF.GetConf("party"), GF.GetConf("raid")
 party.enabled, raid.enabled = true, true
@@ -479,7 +479,7 @@ end })
 loadfile = realLoadfile
 local GFp, envp = worldP.GF, worldP.env
 GFp.EnsureDB()
-envp.MSUF2_GFPagePreviewActive = true
+worldP.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 local partyP = GFp.GetConf("party")
 partyP.enabled, partyP.portraitMode, partyP.portraitRender = true, "LEFT", "CLASS"
 partyP.textLeft, partyP.textCenter, partyP.textRight, partyP.showPowerText = "PERCENT", "NONE", "NONE", true

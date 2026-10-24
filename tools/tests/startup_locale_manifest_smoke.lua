@@ -146,13 +146,16 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 106 LF bytes on every client: Mainline/ruRU 10,116,544 -> 10,116,650;
         -- TBC/ruRU 7,989,247 -> 7,989,353. Both ceilings add exactly that delta:
         -- Mainline 10,116,924 -> 10,117,030; Classic 7,992,588 -> 7,992,694.
-        -- 2026-10-20: the native aura freeze guard adds exactly 6,942 core LF bytes on Mainline and Forever;
-        -- Classic loads none of these native runtime files. Mainline ceiling 10,117,030 -> 10,123,972 (+6,942);
-        -- Classic unchanged.
-        -- 2026-10-20: production bd13c8bd5 port builds regions before registration and rechecks flow owners:
-        -- Mainline/Forever -4,131 LF bytes, TBC/Vanilla/Mists +486 (measured against 675022cf4). Ceilings move by
-        -- exactly those deltas: Mainline 10,123,972 -> 10,119,841; Classic 7,992,694 -> 7,993,180.
-        assert(bytes < (suffix == "Mainline" and 10119841 or 7993180),
+        -- 2026-10-21: compose the existing icon/shapes, Suite host and CDM width allowances.
+        -- Mainline +56,651 +18,339 +2,688; Classic +56,996 +3,837 (CDM fits its prior slack).
+        -- No additional allowance: 10,117,030 -> 10,194,708; 7,992,694 -> 8,053,527.
+        -- The current independent TOC source census is Mainline/ruRU 10,193,596 and TBC/ruRU
+        -- 8,051,143. Full icon-engine contracts live in docs; excluded 6.504 aura fixes stay out.
+        -- 2026-10-21: owner-requested independent Health/Power gloss adds the shared cold material,
+        -- native Ebon style forwarding and six locale keys. Exact LF source deltas: Mainline/Forever
+        -- +8,907 (ruRU 10,193,596 -> 10,202,503); Classic +8,474 (TBC/ruRU 8,051,143 -> 8,059,617).
+        -- Preserve prior headroom exactly: ceilings 10,194,708 -> 10,203,615; 8,053,527 -> 8,062,001.
+        assert(bytes < (suffix == "Mainline" and 10203615 or 8062001),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client] + (client == "Forever" and locale ~= "xxXX" and 1 or 0),

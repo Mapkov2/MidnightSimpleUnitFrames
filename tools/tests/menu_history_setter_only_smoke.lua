@@ -40,7 +40,11 @@ core.MSUF_CreateFactoryDefaultProfile = function() return (F.CopySnapshot(factor
 -- The setters, recorded: each published one must exist on this client first.
 local calls = {}
 local function Record(name)
-    Check(type(env[name]) == "function", name .. " is not published on this client")
+    -- Most setters are namespace-only exports now; the recorder is installed as a
+    -- global, which MSUF.Require resolves before the namespace registry.
+    local published = env[name]
+    if published == nil then published = core.PublicGlobals[name] end
+    Check(type(published) == "function", name .. " is not published on this client")
     env[name] = function(...) calls[#calls + 1] = { name = name, value = (...) } end
 end
 for _, name in ipairs({ "MSUF_ApplyMsufScale", "MSUF_SetMinimapIconEnabled", "MSUF_SetGameMenuButtonEnabled",

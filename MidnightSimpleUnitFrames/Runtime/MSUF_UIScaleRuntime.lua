@@ -3,14 +3,14 @@
 --- while the 5 MB options addon has never been loaded.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
-local M = MSUF.MSUF2 or _G.MSUF2 or {}
+local ExportPublic, Optional = MSUF.ExportPublic, MSUF.Optional
+local PublicGlobals = MSUF.PublicGlobals
+local M = MSUF.MSUF2 or Optional("MSUF2") or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
+ExportPublic("MSUF2", M)
 local Runtime = M.MenuRuntime or {}
 M.MenuRuntime = Runtime
 
-local ExportPublic = MSUF.ExportPublic
 local abs = math.abs
 local function Clamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
@@ -35,7 +35,7 @@ local function ForEachCoreFrame(fn)
     for unitKey, frame in pairs(frames) do fn(frame, unitKey) end
     return true
 end
-local IsConfigCombatLocked = _G.InCombatLockdown
+local IsConfigCombatLocked = InCombatLockdown
 --- REQUIRED: Kernel/MSUF_Util.lua owns the combat lock message and loads ahead
 --- of this file in every core TOC.
 local ShowConfigCombatLockMessage = MSUF.Require("MSUF_ShowConfigCombatLockMessage", "Runtime/MSUF_UIScaleRuntime.lua")
@@ -50,9 +50,10 @@ end
 local EnsureDB = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_UIScaleRuntime.lua")
 local function EnsureGeneral()
     EnsureDB()
-    ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
-    _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
-    return _G.MSUF_DB.general
+    local db = MSUF_DB
+    db = ExportPublic("MSUF_DB", type(db) == "table" and db or {})
+    db.general = type(db.general) == "table" and db.general or {}
+    return db.general
 end
 local pendingMsufScale
 local pendingGlobalScale
@@ -104,7 +105,7 @@ local function CollectMsufScaleFrames()
         add(castbarFrames.Get("boss", i))
         add(castbarFrames.Get("bossPreview", i))
     end
-    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
         add(castbarFrames.Get("arena", i))
         add(castbarFrames.Get("arenaPreview", i))
     end
@@ -123,8 +124,8 @@ end
 local function FlushUnitframeReanchorAfterScale()
     scaleReanchorTimer = nil
     ExportPublic("MSUF_ScaleReanchorPending", false)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        local UF = _G.MSUF_NS and _G.MSUF_NS.UF
+    if InCombatLockdown and InCombatLockdown() then
+        local UF = MSUF.UF
         if UF and UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
         RefreshGroupFrameGeometryAfterScale()
         return
@@ -132,19 +133,19 @@ local function FlushUnitframeReanchorAfterScale()
     -- UnitFrames/Engine/MSUF_UF_Factory.lua owns both and loads ahead of this file.
     MSUF.Require("MSUF_UpdateAllExternalAnchorProxies", "Runtime/MSUF_UIScaleRuntime.lua")()
     local forceReanchor = MSUF.Require("MSUF_ForceReanchorAllUnitFrames_Once", "Runtime/MSUF_UIScaleRuntime.lua")
-    local previous = _G.MSUF_ExternalAnchorForceReanchor
+    local previous = PublicGlobals.MSUF_ExternalAnchorForceReanchor
     ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
     forceReanchor(true)
     ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
     RefreshGroupFrameGeometryAfterScale()
 end
 local function ScheduleUnitframeReanchorAfterScale()
-    if _G.MSUF_ScaleReanchorPending then return end
+    if PublicGlobals.MSUF_ScaleReanchorPending then return end
     ExportPublic("MSUF_ScaleReanchorPending", true)
-    if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
-        scaleReanchorTimer = _G.C_Timer.NewTimer(0, FlushUnitframeReanchorAfterScale)
+    if C_Timer and type(C_Timer.NewTimer) == "function" then
+        scaleReanchorTimer = C_Timer.NewTimer(0, FlushUnitframeReanchorAfterScale)
     else
-        _G.C_Timer.After(0, FlushUnitframeReanchorAfterScale)
+        C_Timer.After(0, FlushUnitframeReanchorAfterScale)
     end
 end
 local EnsureScaleApplyAfterCombat
@@ -167,7 +168,7 @@ local function CancelBlizzardRestoreTimers()
     return restoreCount
 end
 local function CancelPendingScaleTimers()
-    local reanchorPending = _G.MSUF_ScaleReanchorPending == true
+    local reanchorPending = PublicGlobals.MSUF_ScaleReanchorPending == true
     local reanchorTimer = scaleReanchorTimer
     scaleReanchorTimer = nil
     CancelScaleTimer(reanchorTimer)
@@ -178,7 +179,7 @@ local function ApplyMsufScale(scale)
     scale = tonumber(scale)
     if not scale then return end
     scale = Clamp(scale, 0.25, 2.0)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
+    if InCombatLockdown and InCombatLockdown() then
         pendingMsufScale = scale
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
         return
@@ -192,12 +193,12 @@ local function ApplyMsufScale(scale)
     ScheduleUnitframeReanchorAfterScale()
 end
 local function GetCurrentGlobalUiScale()
-    if _G.UIParent and _G.UIParent.GetScale then return tonumber(_G.UIParent:GetScale()) end
+    if UIParent and UIParent.GetScale then return tonumber(UIParent:GetScale()) end
     return nil
 end
 local function GetPixelPerfectScale()
-    if type(_G.GetPhysicalScreenSize) == "function" then
-        local _, height = _G.GetPhysicalScreenSize()
+    if type(GetPhysicalScreenSize) == "function" then
+        local _, height = GetPhysicalScreenSize()
         height = tonumber(height)
         if height and height > 0 then return Clamp(768 / height, 0.3, 2.0) end
     end
@@ -251,25 +252,25 @@ local function CaptureBlizzardUiScale()
 end
 local function GetBlizzardCVarScale()
     local useUiScale
-    if type(_G.GetCVarBool) == "function" then
-        local value = _G.GetCVarBool("useUiScale")
+    if type(GetCVarBool) == "function" then
+        local value = GetCVarBool("useUiScale")
         do
 useUiScale = value
 end
     end
-    if useUiScale == nil and type(_G.GetCVar) == "function" then
-        local value = _G.GetCVar("useUiScale")
+    if useUiScale == nil and type(GetCVar) == "function" then
+        local value = GetCVar("useUiScale")
         do
 useUiScale = tostring(value) == "1"
 end
     end
-    if useUiScale and type(_G.GetCVar) == "function" then
-        local value = _G.GetCVar("uiScale")
+    if useUiScale and type(GetCVar) == "function" then
+        local value = GetCVar("uiScale")
         value = tonumber(value) or nil
         if value and value > 0 then return Clamp(value, 0.3, 2.0) end
     end
-    if type(_G.GetPhysicalScreenSize) == "function" then
-        local _, height = _G.GetPhysicalScreenSize()
+    if type(GetPhysicalScreenSize) == "function" then
+        local _, height = GetPhysicalScreenSize()
         height = tonumber(height)
         if height and height > 0 then return Clamp(768 / height, 0.3, 2.0) end
     end
@@ -277,15 +278,15 @@ end
     return nil
 end
 local function RestoreBlizzardUiScaleOnce()
-    if type(_G.UIParent_UpdateScale) == "function" then
-        _G.UIParent_UpdateScale()
+    if type(UIParent_UpdateScale) == "function" then
+        UIParent_UpdateScale()
         do
 return true
 end
     end
     local scale = GetBlizzardCVarScale()
-    if scale and _G.UIParent and _G.UIParent.SetScale then
-        _G.UIParent.SetScale(_G.UIParent, scale)
+    if scale and UIParent and UIParent.SetScale then
+        UIParent.SetScale(UIParent, scale)
         do
 return true
 end
@@ -305,10 +306,10 @@ local function RestoreBlizzardUiScale(silent)
             if IsConfigCombatLocked() then return end
             RestoreBlizzardUiScaleOnce()
         end
-        if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
-            record.timer = _G.C_Timer.NewTimer(delay, Run)
+        if C_Timer and type(C_Timer.NewTimer) == "function" then
+            record.timer = C_Timer.NewTimer(delay, Run)
         else
-            _G.C_Timer.After(delay, Run)
+            C_Timer.After(delay, Run)
         end
     end
     ScheduleRestore(0)
@@ -335,16 +336,16 @@ local function EnforceUIParentScale(scale)
     scale = tonumber(scale)
     if not scale or scale <= 0 then return end
     scale = Clamp(scale, 0.3, 1.5)
-    if not (_G.UIParent and _G.UIParent.SetScale) then return end
-    local current = _G.UIParent.GetScale and tonumber(_G.UIParent:GetScale()) or 0
-    if abs((current or 0) - scale) > 0.001 then _G.UIParent:SetScale(scale) end
+    if not (UIParent and UIParent.SetScale) then return end
+    local current = UIParent.GetScale and tonumber(UIParent:GetScale()) or 0
+    if abs((current or 0) - scale) > 0.001 then UIParent:SetScale(scale) end
     lastGlobalUiParentScale = scale
 end
 local function SetGlobalUiScale(scale, silent)
     scale = tonumber(scale)
     if not scale or scale <= 0 then return end
     scale = Clamp(scale, 0.3, 1.5)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
+    if InCombatLockdown and InCombatLockdown() then
         pendingGlobalScale = scale
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
         if not silent then ShowConfigCombatLockMessage() end
@@ -360,7 +361,7 @@ local function SetGlobalUiScale(scale, silent)
     if not silent then Print("Global UI scale set to %.4f", scale) end
 end
 ResetGlobalUiScale = function(silent)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
+    if InCombatLockdown and InCombatLockdown() then
         pendingDisableScaling = true
         pendingGlobalScale = nil
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
@@ -378,12 +379,12 @@ ResetGlobalUiScale = function(silent)
     return true
 end
 EnsureScaleApplyAfterCombat = function()
-    if scaleApplyWatcher or not _G.CreateFrame then return end
-    local frame = _G.CreateFrame("Frame")
+    if scaleApplyWatcher or not CreateFrame then return end
+    local frame = CreateFrame("Frame")
     scaleApplyWatcher = frame
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
     frame:SetScript("OnEvent", function()
-        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+        if InCombatLockdown and InCombatLockdown() then return end
         if pendingDisableScaling then
             pendingDisableScaling = nil
             pendingGlobalScale = nil
@@ -398,8 +399,8 @@ EnsureScaleApplyAfterCombat = function()
         end
         if pendingReloadOnScalingOff then
             pendingReloadOnScalingOff = nil
-            if type(_G.ReloadUI) == "function" then
-                _G.ReloadUI()
+            if type(ReloadUI) == "function" then
+                ReloadUI()
                 return
             end
         end
@@ -418,7 +419,7 @@ local function SetScalingDisabled(disable, silent)
         pendingDisableScaling = nil
         return
     end
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
+    if InCombatLockdown and InCombatLockdown() then
         pendingDisableScaling = true
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
         if not silent then ShowConfigCombatLockMessage() end
@@ -462,7 +463,7 @@ local function ApplyCurrentProfileGlobalUiScale()
         local baseline = blizzardUiParentScale
         local current = GetCurrentGlobalUiScale()
         if baseline and current and abs(current - baseline) > 0.0001 then
-            _G.UIParent:SetScale(baseline)
+            UIParent:SetScale(baseline)
             ScheduleUnitframeReanchorAfterScale()
         end
         lastGlobalUiParentScale = nil
@@ -479,7 +480,7 @@ local function ResetStandaloneWindowGeometry(frame, silent)
     g.flashFullRelPoint = "CENTER"
     g.flashFullX = -60
     g.flashFullY = 10
-    local uiScale = (_G.UIParent and _G.UIParent.GetScale and _G.UIParent:GetScale()) or 1
+    local uiScale = (UIParent and UIParent.GetScale and UIParent:GetScale()) or 1
     if not uiScale or uiScale == 0 then uiScale = 1 end
     g.flashFullXpx = -60 * uiScale
     g.flashFullYpx = 10 * uiScale
@@ -487,14 +488,15 @@ local function ResetStandaloneWindowGeometry(frame, silent)
     g.msuf2WindowH = 700
     -- Menu2's calibrated 100% reference preserves the historical 80% size.
     g.slashMenuScale = 0.8
-    local win = frame or _G.MSUF_StandaloneOptionsWindow or (_G.MSUF2 and _G.MSUF2.frame)
+    local menu = Optional("MSUF2")
+    local win = frame or Optional("MSUF_StandaloneOptionsWindow") or (menu and menu.frame)
     if win then
         local scale = 1.0
-        if _G.MSUF2 and type(_G.MSUF2.GetEffectiveMenuScale) == "function" then scale = _G.MSUF2.GetEffectiveMenuScale(0.8) end
+        if menu and type(menu.GetEffectiveMenuScale) == "function" then scale = menu.GetEffectiveMenuScale(0.8) end
         if win.SetScale then win:SetScale(scale) end
         if win.SetSize then win:SetSize(900, 700) end
         if win.ClearAllPoints then win:ClearAllPoints() end
-        if win.SetPoint then win:SetPoint("CENTER", _G.UIParent, "CENTER", -60, 12) end
+        if win.SetPoint then win:SetPoint("CENTER", UIParent, "CENTER", -60, 12) end
     end
     if not silent then Print("MSUF menu size reset to default.") end
 end
@@ -516,11 +518,11 @@ local function ApplySavedScaleState(applyGlobalCVar)
     end
 end
 UpdateGlobalScaleEvents = function()
-    if not _G.CreateFrame then return end
+    if not CreateFrame then return end
     local enabled = (tonumber(GetDesiredGlobalScaleFromDB()) or 0) > 0
     if enabled then
         if not scaleEvents then
-            scaleEvents = _G.CreateFrame("Frame")
+            scaleEvents = CreateFrame("Frame")
             scaleEvents:SetScript("OnEvent", function(_, event)
                 ApplySavedScaleState(event == "PLAYER_LOGIN")
             end)
@@ -548,9 +550,9 @@ local function QueueStartupScaleApply(applyGlobalCVar)
     startupScaleNeedsGlobalCVar = startupScaleNeedsGlobalCVar or applyGlobalCVar == true
     if startupScaleApplyQueued then return end
     startupScaleApplyQueued = true
-    _G.C_Timer.After(0, FlushStartupScaleApply)
+    C_Timer.After(0, FlushStartupScaleApply)
 end
-local startupScaleEvents = _G.CreateFrame("Frame")
+local startupScaleEvents = CreateFrame("Frame")
 startupScaleEvents:RegisterEvent("PLAYER_LOGIN")
 startupScaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
 startupScaleEvents:SetScript("OnEvent", function(self, event)

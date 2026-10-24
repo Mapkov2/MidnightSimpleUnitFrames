@@ -1,6 +1,7 @@
 --- Reads preview offsets and opens exact settings routes. Edit Mode owns movement.
 local _, MSUF = ...
 local M = MSUF.MSUF2
+local ExportPublic = MSUF.ExportPublic
 
 local floor = math.floor
 local function Round(value)
@@ -39,14 +40,14 @@ local function ClassPowerRouteForHandle(handle)
 end
 local function OpenClassPowerHandleSettings(handle)
     if not (M and type(M.SelectPage) == "function") then return false end
-    _G.MSUF_EM2_MenuFocusRequest = {
+    ExportPublic("MSUF_EM2_MenuFocusRequest", {
         pageKey = "classpower",
         sectionId = ClassPowerRouteForHandle(handle),
         component = handle and handle._key,
         source = "classpower-preview",
         explicit = true,
         changedAt = GetTime and GetTime() or 0,
-    }
+    })
     return M.SelectPage("classpower") ~= false
 end
 

@@ -345,20 +345,16 @@ local function BuildGFGeneralSection(ctx, b)
     TrackSectionRefresh(ctx, general, RefreshHideOfflineState)
 end
 
-local function BuildGFTextSection(ctx, b)
-    local layoutSections = M.GroupFrameLayoutSections
-    if layoutSections and layoutSections.BuildText then return layoutSections.BuildText(ctx, b) end
+-- Text, Resource Bar and Range Fade are built by M.GroupFrameLayoutSections (the Bars page file), resolved when the section builds.
+local function DelegatedSection(name)
+    return function(ctx, b)
+        local layoutSections = M.GroupFrameLayoutSections
+        if layoutSections and layoutSections[name] then return layoutSections[name](ctx, b) end
+    end
 end
-
-local function BuildGFResourceBarSection(ctx, b)
-    local layoutSections = M.GroupFrameLayoutSections
-    if layoutSections and layoutSections.BuildResourceBar then return layoutSections.BuildResourceBar(ctx, b) end
-end
-
-local function BuildGFRangeFadeSection(ctx, b)
-    local layoutSections = M.GroupFrameLayoutSections
-    if layoutSections and layoutSections.BuildRangeFade then return layoutSections.BuildRangeFade(ctx, b) end
-end
+local BuildGFTextSection = DelegatedSection("BuildText")
+local BuildGFResourceBarSection = DelegatedSection("BuildResourceBar")
+local BuildGFRangeFadeSection = DelegatedSection("BuildRangeFade")
 
 local function BuildGFTransparencySection(ctx, b)
     -- Keep Group Frame opacity controls visually aligned with the Unitframe
@@ -458,7 +454,7 @@ local function BuildGFTransparencySection(ctx, b)
             end,
         }
     end
-    local stateBar = Schema.Build(ctx, transparency, {
+    Schema.Build(ctx, transparency, {
         { "scopebar", "transparencyState", nil, { {
         values = {
             { value = "combat", text = "General" },
@@ -477,7 +473,7 @@ local function BuildGFTransparencySection(ctx, b)
     } }, domain = "menuState", beforeBind = function(widget)
                 if RegisterControl then RegisterControl(widget, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral") end
             end, scope = "group" },
-    })["transparencyState"]
+    })
     ApplyTransparencyTab()
     if b.FinishSection then b:FinishSection(transparency, 48) end
 end
@@ -547,7 +543,7 @@ local function BuildClassPriorityRows(ctx, parent, width, topY)
     -- Blizzard's CLASS_SORT_ORDER names exactly the classes this client has (9 on
     -- Classic Era, TBC and WoW Forever, 11 on Mists); RAID_CLASS_COLORS also
     -- carries Death Knight, Monk and Demon Hunter there. The rows keep MSUF's order.
-    local sortOrder, present = _G.CLASS_SORT_ORDER, nil
+    local sortOrder, present = CLASS_SORT_ORDER, nil
     if type(sortOrder) == "table" and #sortOrder > 0 then
         present = {}
         for i = 1, #sortOrder do present[sortOrder[i]] = true end
@@ -768,7 +764,6 @@ local function BuildScalingGeneral(ctx, general, col, inner, sizingOptions)
         { "slider", "frameScaleManual", 100, { "Manual scale (%)", 50, 150, 5, col - 64 }, { 16,
         -166, col - 64, "LEFT" }, domain = "rebuild", scope = "group" },
     }, sizingOptions)
-    local mode = scaleControls["frameScaleMode"]
     local manual = scaleControls["frameScaleManual"]
     local rules = Schema.Build(ctx, general, { { "card", "menu2.gf_layout.scaling.rules", nil, { "Raid size overrides", nil, 20,
         -270, inner, 158 }, domain = "layout", scope = "group" }, })["menu2.gf_layout.scaling.rules"]
@@ -845,7 +840,7 @@ local function BuildGFScalingSection(ctx, b)
     local function BeginAutoScalePreview(slider, previewCount)
         if not (slider and previewCount and type(M.SetGFScalingBreakpointPreview) == "function") then return end
         if Val(CurrentScope(), "frameScaleMode", "off") ~= "auto" then return end
-        if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then return end
+        if (InCombatLockdown and InCombatLockdown()) or MSUF.PublicGlobals.MSUF_InCombat == true then return end
         local kind = CurrentScope()
         slider._msuf2ScalingPreviewKind = kind
         slider._msuf2ScalingPreviewCount = previewCount
@@ -941,7 +936,7 @@ local function BuildGFAnchorSection(ctx, b)
     local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
     local anchorControlW = min(300, max(180, anchorColumnW - 16))
     local customAnchorW = min(260, max(180, anchorColumnW - 128))
-    local anchorControls = Schema.Build(ctx, anchor, {
+    Schema.Build(ctx, anchor, {
         { "dropdown", "anchorTo", nil, { "Anchor To", function()
         return M.AnchorTargetValues(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame)
     end, anchorControlW }, get = function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
@@ -960,8 +955,6 @@ local function BuildGFAnchorSection(ctx, b)
         anchorControlW }, { anchorRightX, -38,
         anchorControlW, "LEFT" }, domain = "rebuild", scope = "group" },
     }, MIXED_OPTIONS)
-    local anchorTo = anchorControls["anchorTo"]
-    local anchorPoint = anchorControls["anchorPoint"]
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
             or value == "targettarget" or value == "focustarget" or value == "focus"
@@ -1064,54 +1057,11 @@ local GROUP_LAYOUT_SECTION_SPECS = {
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
     { sectionId = "layout_advanced", title = "Group Layout", height = GEOMETRY_SECTION_HEIGHT, build = BuildGFGeometrySection },
     { sectionId = "sorting", title = "Sorting", autoHeight = true, build = BuildGFSortingSection },
-    -- clientCapability: the MSUF.Client fact that must be true for the section to
-    -- exist, the same capability names Search/MSUF_Menu2_Search_IndexQuery.lua
-    -- ties client-only static search rows to. frameScope: the unit or group scope
-    -- the section needs (M.SupportsFrameScope), e.g. boss units for allied bosses.
-    {
-        sectionId = "buff_coverage", title = "Buff coverage (Forever)", height = 656, clientCapability = "IsForever", build = AdditionalSections.BuffCoverage,
-        prepareShell = function(ctx, section)
-            AdditionalSections.PrepareSwitch(ctx, section, "buffCoverageEnabled", "Show buff coverage icons", "visual")
-        end,
-    },
-    {
-        sectionId = "blessing_priorities", title = "Blessing priorities (Forever)", height = 1330,
-        clientCapability = "IsForever", build = AdditionalSections.BlessingPriorities,
-        prepareShell = function(ctx, section)
-            AdditionalSections.PrepareSwitch(ctx, section, "buffCoverageBlessingPriorities", "Use blessing priorities", "visual")
-        end,
-    },
-    {
-        sectionId = "name_bar", title = "Name strip", height = 300, build = AdditionalSections.NameBar,
-        prepareShell = function(ctx, section)
-            AdditionalSections.PrepareSwitch(ctx, section, "nameBarEnabled", "Show names on a strip above the health bar", "rebuild")
-        end,
-    },
-    {
-        sectionId = "party_targets", title = "Member targets", height = 456, groupScope = "party", build = AdditionalSections.Targets,
-        prepareShell = function(ctx, section)
-            AdditionalSections.PrepareSwitch(ctx, section, "targetsEnabled", "Enable", "rebuild")
-        end,
-    },
-    {
-        sectionId = "group_pets", title = "Pet frames", height = 546, build = AdditionalSections.Pets,
-        prepareShell = function(ctx, section)
-            AdditionalSections.PrepareSwitch(ctx, section, "petsEnabled", "Enable", "rebuild")
-        end,
-    },
-    {
-        sectionId = "friendly_bosses", title = "Allied boss frames", height = 536, frameScope = "boss", build = AdditionalSections.FriendlyBosses,
-        prepareShell = function(ctx, section)
-            AdditionalSections.PrepareSwitch(ctx, section, "friendlyBossEnabled", "Enable", "rebuild")
-        end,
-    },
-    {
-        sectionId = "healer_mana", title = "Healer mana bars", height = 520, build = AdditionalSections.HealerMana,
-        prepareShell = function(ctx, section)
-            AdditionalSections.PrepareSwitch(ctx, section, "healerManaEnabled", "Enable", "rebuild")
-        end,
-    },
 }
+-- The master-switch sections (buff coverage to healer mana) declare themselves in the Additional file.
+for _, spec in ipairs(AdditionalSections.LayoutSpecs()) do
+    GROUP_LAYOUT_SECTION_SPECS[#GROUP_LAYOUT_SECTION_SPECS + 1] = spec
+end
 
 -- Declare the existing lazy header before its body is requested by navigation.
 for _, spec in ipairs(GROUP_LAYOUT_SECTION_SPECS) do

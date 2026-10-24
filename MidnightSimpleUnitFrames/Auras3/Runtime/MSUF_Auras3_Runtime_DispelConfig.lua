@@ -2,7 +2,6 @@
 -- Independent border, overlay, corner and symbol descriptors. Preserve each visual's trigger and identity policy, including border-only Show on.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.DispelConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local table_concat = table.concat

@@ -1,13 +1,13 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: EffectPreview.
 -- Mutable addon-owned Dispel overlay/symbol previews. Preview regions never share the sealed live-native region lifecycle.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/Runtime/MSUF_Auras3_Runtime_EffectPreview.lua")
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.EffectPreview = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local Runtime = A3.Runtime
 local EffectPreview = Runtime.EffectPreview
+local PublicGlobals = MSUF.PublicGlobals
 local pairs = pairs
 local tonumber = tonumber
 local tostring = tostring
@@ -52,7 +52,7 @@ end
 --- group kind paints that kind, anything else matches a unit token.
 EffectPreview.DispelOverlayPreviewApplies = function(frame)
     if not frame then return false end
-    local wanted = EffectPreview.NormalizeDispelOverlayPreviewScope(_G.MSUF_DispelOverlayPreviewScope)
+    local wanted = EffectPreview.NormalizeDispelOverlayPreviewScope(PublicGlobals.MSUF_DispelOverlayPreviewScope)
     if wanted == "shared" then return true end
     local groupKind = frame._msufGFKind
     if groupKind == nil then
@@ -75,7 +75,7 @@ end
 --- Cold path only: reached from the menu toggle, from the aura apply, and from
 --- the group preview build. Never from an event route.
 EffectPreview.ApplyDispelOverlayPreview = function(frame)
-    if _G.MSUF_DispelOverlayPreviewMode ~= true then return EffectPreview.HideDispelOverlayPreview(frame) end
+    if PublicGlobals.MSUF_DispelOverlayPreviewMode ~= true then return EffectPreview.HideDispelOverlayPreview(frame) end
     if not (frame and frame.MSUFSpec) then return EffectPreview.HideDispelOverlayPreview(frame) end
     if not EffectPreview.DispelOverlayPreviewApplies(frame) then return EffectPreview.HideDispelOverlayPreview(frame) end
     -- Compiling straight off the frame spec keeps this independent of the
@@ -88,7 +88,7 @@ EffectPreview.ApplyDispelOverlayPreview = function(frame)
         -- The preview can only be switched on out of combat, so first creation
         -- always lands there. A spec apply that arrives mid-combat re-stamps an
         -- existing host but never parents a fresh frame onto a secure header.
-        if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
+        if InCombatLockdown and InCombatLockdown() then return false end
         host = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
         host:SetMouseMotionEnabled(false)
         host.Region = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
@@ -137,7 +137,7 @@ end
 --- preview on.
 A3.SetDispelOverlayPreview = function(active, scope)
     active = active == true
-    if active and _G.InCombatLockdown and _G.InCombatLockdown() then active = false end
+    if active and InCombatLockdown and InCombatLockdown() then active = false end
     ExportPublic("MSUF_DispelOverlayPreviewMode", active)
     ExportPublic("MSUF_DispelOverlayPreviewScope",
         active and EffectPreview.NormalizeDispelOverlayPreviewScope(scope) or nil)
@@ -175,7 +175,7 @@ EffectPreview.DispelSymbolPreviewApplies = function(frame)
     if IsGroupFrame(frame) or frame._msufGFKind ~= nil then return false end
     local spec = frame.MSUFSpec
     if spec and (spec.scope == "group" or spec.groupKind ~= nil) then return false end
-    local wanted = EffectPreview.NormalizeDispelOverlayPreviewScope(_G.MSUF_DispelSymbolPreviewScope)
+    local wanted = EffectPreview.NormalizeDispelOverlayPreviewScope(PublicGlobals.MSUF_DispelSymbolPreviewScope)
     if wanted == "shared" then return true end
     return frame.MSUFUnitKey == wanted or frame.configKey == wanted
 end
@@ -205,7 +205,7 @@ function DS.PreviewArt(texture, style, dispelType)
         or style == "BLIZZARD_BORDER" and DS.borders
         or DS.icons)[dispelType]
     if atlas and texture.SetAtlas then
-        texture:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
+        texture:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
     else
         texture:SetTexture(nil)
     end
@@ -224,7 +224,7 @@ end
 A3.DispelSymbolPreviewMoveHandler = nil
 
 function DS.OnDragStart(host)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+    if InCombatLockdown and InCombatLockdown() then return end
     host:StartMoving()
 end
 
@@ -245,7 +245,7 @@ function DS.OnDragStop(host)
         y = y - (tonumber(slot.y) or 0)
     end
     if type(handler) == "function" then
-        handler(_G.MSUF_DispelSymbolPreviewScope, x, y, frame)
+        handler(PublicGlobals.MSUF_DispelSymbolPreviewScope, x, y, frame)
     end
     A3.RefreshDispelSymbolPreview()
 end
@@ -268,7 +268,7 @@ end
 
 --- Cold path only: menu toggle, spec apply, group preview build.
 EffectPreview.ApplyDispelSymbolPreview = function(frame)
-    if _G.MSUF_DispelSymbolPreviewMode ~= true then return EffectPreview.HideDispelSymbolPreview(frame) end
+    if PublicGlobals.MSUF_DispelSymbolPreviewMode ~= true then return EffectPreview.HideDispelSymbolPreview(frame) end
     if not (frame and frame.MSUFSpec) then return EffectPreview.HideDispelSymbolPreview(frame) end
     if not EffectPreview.DispelSymbolPreviewApplies(frame) then return EffectPreview.HideDispelSymbolPreview(frame) end
     local sensor = CompileDispelSensor(frame.MSUFUnitKey, frame.MSUFSpec, IsGroupFrame(frame), "symbol")
@@ -278,7 +278,7 @@ EffectPreview.ApplyDispelSymbolPreview = function(frame)
         -- Previews only switch on out of combat, so first creation always lands
         -- there. A spec apply arriving mid-combat re-stamps an existing host but
         -- never parents a fresh frame onto a secure header.
-        if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
+        if InCombatLockdown and InCombatLockdown() then return false end
         host = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
         host:SetClampedToScreen(false)
         host:SetMovable(true)
@@ -333,7 +333,7 @@ end
 --- scope, cleared by the menu when its page hides. Combat never turns it on.
 A3.SetDispelSymbolPreview = function(active, scope)
     active = active == true
-    if active and _G.InCombatLockdown and _G.InCombatLockdown() then active = false end
+    if active and InCombatLockdown and InCombatLockdown() then active = false end
     ExportPublic("MSUF_DispelSymbolPreviewMode", active)
     ExportPublic("MSUF_DispelSymbolPreviewScope",
         active and EffectPreview.NormalizeDispelOverlayPreviewScope(scope) or nil)

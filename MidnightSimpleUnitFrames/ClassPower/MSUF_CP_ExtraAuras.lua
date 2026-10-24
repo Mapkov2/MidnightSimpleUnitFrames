@@ -5,7 +5,10 @@
 -- Soul slot above, so the bar takes the Arcane Soul colour in that phase) run
 -- where the client has the aura container and the spell.
 local _, MSUF = ...
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_ExtraAuras.lua")
+local FILE = "ClassPower/MSUF_CP_ExtraAuras.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
+local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
 local IGNORE_PAIN, ARCANE_SURGE, ARCANE_SOUL = 190456, 365362, 451038
@@ -28,11 +31,16 @@ local E
 local states, pending, publicHaste, arcaneGCD
 local Refresh, previewHost, previewShown, registered, editActive, disabled
 local previewBars, known
+local function Translate(text)
+    local translate = MSUF.Translate
+    if translate then return translate(text) end
+    return text
+end
 -- The client's own spell data decides, read once per spell.
 local function Known(spellID)
     local answer = known[spellID]
     if answer == nil then
-        local spellAPI = _G.C_Spell
+        local spellAPI = C_Spell
         answer = type(spellAPI) == "table" and type(spellAPI.DoesSpellExist) == "function"
             and spellAPI.DoesSpellExist(spellID) == true
         known[spellID] = answer
@@ -40,8 +48,8 @@ local function Known(spellID)
     return answer
 end
 local function SensorAPI()
-    local A3 = _G.MSUF_Auras3
-    return A3 and A3.CreateClassPowerAuraSensor and A3 or nil
+    local A3 = MSUF.Require("MSUF_Auras3", FILE)
+    return A3.CreateClassPowerAuraSensor and A3 or nil
 end
 local function PainSupported() return E.PLAYER_CLASS == "WARRIOR" and SensorAPI() ~= nil and Known(IGNORE_PAIN) end
 local function ArcaneSupported() return E.PLAYER_CLASS == "MAGE" and SensorAPI() ~= nil and Known(ARCANE_SURGE) end
@@ -78,14 +86,14 @@ end
 -- haste, never below 0.75 seconds. Restricted haste keeps the last public
 -- value; 0.01 s steps keep haste procs from rebuilding identical rules.
 local function GlobalCooldown()
-    local haste = _G.UnitSpellHaste and _G.UnitSpellHaste("player")
+    local haste = UnitSpellHaste and UnitSpellHaste("player")
     if E.NotSecret(haste) and type(haste) == "number" and haste == haste and haste > -100 then publicHaste = haste end
     return math.floor(math.max(0.75, 1.5 / (1 + publicHaste / 100)) * 100 + 0.5) / 100
 end
 local function Font()
     local b = E.db.bars
-    return (_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or STANDARD_TEXT_FONT,
-        tonumber(b.classPowerFontSize) or 14, (_G.MSUF_GetFontFlags and _G.MSUF_GetFontFlags()) or "OUTLINE"
+    return GetFontPath() or STANDARD_TEXT_FONT,
+        tonumber(b.classPowerFontSize) or 14, GetFontFlags() or "OUTLINE"
 end
 -- Arcane window text rules: seconds (one decimal below ten seconds), the
 -- global cooldowns that can still start ("x3": the count rounds up, a
@@ -246,7 +254,7 @@ local function HidePreview()
 end
 -- Edit Mode sample: one bar, labelled with the client's own spell name.
 local function Preview(pain, arcane)
-    if disabled or not (editActive or _G.MSUF_UnitEditModeActive == true)
+    if disabled or not (editActive or MSUF_UnitEditModeActive == true)
         or not (pain or arcane) or (InCombatLockdown and InCombatLockdown()) then
         HidePreview()
         return
@@ -280,11 +288,10 @@ local function Preview(pain, arcane)
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(pain and .65 or .6)
     bar.text:SetFont(Font())
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     local name = spellAPI and spellAPI.GetSpellName and spellAPI.GetSpellName(pain and IGNORE_PAIN or ARCANE_SURGE)
     if type(name) ~= "string" then
-        local translate = MSUF.Translate or function(text) return text end
-        name = translate(pain and "Ignore Pain" or "Arcane Surge")
+        name = Translate(pain and "Ignore Pain" or "Arcane Surge")
     end
     bar.text:SetText(name)
     bar:Show()
@@ -307,10 +314,9 @@ end
 local function RegisterMover()
     local api = MSUF.EditModeAPI
     if registered or not api or not api.RegisterElement or not (PainSupported() or ArcaneSupported()) then return end
-    local translate = MSUF.Translate or function(text) return text end
     registered = true -- A registration may synchronously join an active session.
     registered = api.RegisterElement("MSUF", {
-        id = "resource-extras", label = translate("Additional resources"), order = 103,
+        id = "resource-extras", label = Translate("Additional resources"), order = 103,
         getFrame = function()
             local pain, arcane = Eligible()
             if disabled or not (pain or arcane) then return nil end
@@ -336,14 +342,14 @@ local function RegisterMover()
             end
         end,
         extraControls = {
-            { id = "width", label = translate("Resource bar width"), kind = "number", min = 40, max = 1000, step = 1,
+            { id = "width", label = Translate("Resource bar width"), kind = "number", min = 40, max = 1000, step = 1,
                 get = function() return tonumber(E.db.bars.resourceExtraWidth) or 220 end,
                 set = function(value)
                     local state = Capture()
                     state.width = value
                     return Restore(state)
                 end },
-            { id = "height", label = translate("Resource bar height"), kind = "number", min = 2, max = 30, step = 1,
+            { id = "height", label = Translate("Resource bar height"), kind = "number", min = 2, max = 30, step = 1,
                 get = function() return tonumber(E.db.bars.resourceExtraHeight) or 8 end,
                 set = function(value)
                     local state = Capture()

@@ -4,15 +4,27 @@ local Stubs = assert(loadfile(repo .. "/.github/scripts/msuf_test_stubs.lua"))()
 local env = Stubs.New({ timer = "queue", registerGlobalNames = true })
 env:InstallGlobals()
 local ns = { UF = {} }
-ns.ExportPublic = function(name, value) _G[name] = value end
-local function load(path)
+local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+local function loadKernel(path)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
 end
--- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
-load("Kernel/MSUF_Require.lua")
+-- The real namespace API (Kernel/MSUF_Bootstrap.lua: ExportPublic with the
+-- shipped global keep policy, then Kernel/MSUF_Require.lua), as in every core TOC.
+loadKernel("Kernel/MSUF_Bootstrap.lua")
+loadKernel("Kernel/MSUF_Require.lua")
+-- Later files run through the shipped loader: a provider this harness does not
+-- load (the font checks never call it) is a forwarder that raises when used.
+local function load(path)
+    RequireFixture.LoadShipped(repo, "MidnightSimpleUnitFrames/" .. path, ns)
+end
 load("Kernel/MSUF_Libs.lua")
 load("Runtime/MSUF_Fonts.lua")
 load("UnitFrames/Engine/MSUF_UF_Shared.lua")
+-- These font owners are namespace-only exports, never globals; each call
+-- resolves the live owner from the registry.
+local function MSUF_ApplyResolvedFont(...) return ns.PublicGlobals.MSUF_ApplyResolvedFont(...) end
+local function MSUF_ResolveFontPath(...) return ns.PublicGlobals.MSUF_ResolveFontPath(...) end
+local function MSUF_IsAvailableFontPath(...) return ns.PublicGlobals.MSUF_IsAvailableFontPath(...) end
 local path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Bold.ttf"
 local count = 0
 local fs = {
@@ -37,6 +49,15 @@ MSUF_FontApplyEpoch = MSUF_FontApplyEpoch + 1
 assert(MSUF_ApplyResolvedFont(fs, path, 14, "OUTLINE,SLUG"))
 assert(count == appliedCount + 1, "new epoch must reapply cold-start fonts")
 -- Exercise the actual widget and menu-theme entry points from the new reports.
+-- FontRegistry owns MSUF_ResolveSafeFontPath, which the widget files require, and the
+-- availability metadata the later checks read; the TOC loads it before any caller runs.
+-- IsRegisteredLSMFontPath is a namespace-only export that FontRegistry binds when it
+-- loads, so the registration-aware stand-in is published before that load.
+local registered = {}
+local isRegistered = ns.PublicGlobals.MSUF_IsRegisteredLSMFontPath
+ns.ExportPublic("MSUF_IsRegisteredLSMFontPath",
+    function(value) return registered[value] or isRegistered(value) end, false)
+load("Runtime/MSUF_FontRegistry.lua")
 load("Shell/UI/MSUF_Widgets.lua")
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", ns)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"))("MidnightSimpleUnitFrames_Options", ns)
@@ -52,6 +73,9 @@ assert(fs.path == regular and fs.size == 11 and fs._msuf2AppliedFontKey, "menu f
 -- leaves gameplay's separate outline/font owner intact.
 ;(function()
     local custom = "Interface\\AddOns\\CustomFont\\Readable.ttf"
+    -- The selected face is a media-addon font, registered with LibSharedMedia as in the
+    -- client; the loaded font registry would otherwise fall back from an unknown path.
+    registered[custom] = true
     local label = {
         path = custom, size = 12, flags = "OUTLINE,MONOCHROME",
         GetFont = fs.GetFont, SetFont = fs.SetFont,
@@ -116,10 +140,7 @@ assert(not ok and err == marker, "native error was swallowed or replaced")
 -- probing a native API or converting unrelated errors into a missing font.
 local missing = "Interface\\AddOns\\ChonkyCharacterSheet\\Media\\Fonts\\FiraSans-Medium.ttf"
 CreateFont = function() error("font resolution must not create native probes") end
-local registered = {}
-local isRegistered = MSUF_IsRegisteredLSMFontPath
-MSUF_IsRegisteredLSMFontPath = function(value) return registered[value] or isRegistered(value) end
-load("Runtime/MSUF_FontRegistry.lua")
+-- (FontRegistry and its registration stand-in load above, before the widget files use them.)
 MSUF_DB.general.fontKey = missing
 for i = 1, 51 do
     assert(MSUF_ResolveFontKeyPath(missing) == nil)

@@ -106,11 +106,9 @@ assert(policy.SelectSupportedDecodedProfile(decoded.badEmbedded) == nil,
 function MSUF_TryDecodeCompactString(value)
     return decoded[value]
 end
-function namespace.ExportPublic(name, value)
-    _G[name] = value
-    namespace.Public[name] = value
-    return value
-end
+-- The real Kernel bootstrap owns ExportPublic and its global keep policy.
+local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(repo, namespace, nil, nil, true)
 
 -- Load the actual split state providers; this test covers decoding policy,
 -- while runtime application is asserted in the separate profile apply suite.
@@ -121,8 +119,9 @@ for _, relative in ipairs({ "Kernel/MSUF_Require.lua", "Shell/EditMode/MSUF_Edit
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. relative))("MidnightSimpleUnitFrames", namespace)
 end
 function MSUF_TryDecodeCompactString(value) return decoded[value] end
-function MSUF_EnsureDB() end
-function MSUF_NormalizeProfileDefaults(profile) return profile end
+namespace.ExportPublic("MSUF_EnsureDB", function() end)
+namespace.ExportPublic("MSUF_NormalizeProfileDefaults", function(profile) return profile end)
+namespace.ExportPublic("MSUF_GF_InvalidateConfCache", function() end)
 namespace.ProfileRuntime = { Apply = function() end }
 
 MSUF_DB = currentProfile
@@ -136,7 +135,11 @@ local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
 local profilesChunk = assert(loadstring(MSUF_Auras3TestLoader.ReadSource(profilesPath), "@" .. profilesPath))
 profilesChunk("MidnightSimpleUnitFrames", namespace)
 
-assert(type(MSUF_ImportLegacyFromString) ~= "function",
+-- The import entry point is a namespace-only export (Kernel/MSUF_Bootstrap.lua
+-- keep policy): the smoke reads it from the namespace registry.
+local MSUF_ImportFromString = namespace.PublicGlobals.MSUF_ImportFromString
+assert(type(MSUF_ImportLegacyFromString) ~= "function"
+    and namespace.PublicGlobals.MSUF_ImportLegacyFromString == nil,
     "removed legacy import entry point was exported")
 assert(MSUF_ImportFromString("current") == true and MSUF_DB.general.marker == "direct",
     "schema-600 full profile import failed")

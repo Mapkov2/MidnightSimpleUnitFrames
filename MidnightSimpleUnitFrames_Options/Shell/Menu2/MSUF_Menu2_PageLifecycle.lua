@@ -1,8 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Owns page construction, cache disposal and deferred visibility/preview work.
 --- Window owns geometry; live metrics are read only when a page is built.
 local _, MSUF = ...
 local M = MSUF.MSUF2
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_PageLifecycle.lua")
 local T = M.Theme
 local C_Timer = M.MenuTimer
 local ALIASES = M.ALIASES
@@ -238,6 +238,30 @@ local function MenuShown()
 end
 local InvalidatePageEntries
 local BUILD_LAYOUT_ONLY_RELAYOUT = { skipStateRefresh = true }
+local function RelayoutBuiltPageBuilders(ctx)
+    local builders = ctx._msuf2PageBuilders
+    if type(builders) ~= "table" then return end
+    local nestedLayoutChanged = false
+    for i = 1, #builders do
+        local builder = builders[i]
+        if builder and builder._msuf2RelayoutPending and builder.RelayoutCollapsibles then
+            builder._msuf2RelayoutPending = nil
+            local changed = builder:RelayoutCollapsibles(BUILD_LAYOUT_ONLY_RELAYOUT)
+            if changed and builder.parent ~= ctx.wrapper then nestedLayoutChanged = true end
+        end
+    end
+    -- Nested builders can resize their owning collapsible while they
+    -- relayout. Reflow the page-level builder once more afterwards so
+    -- its final cursor, not an earlier nested height, owns the page.
+    if nestedLayoutChanged then
+        for i = 1, #builders do
+            local builder = builders[i]
+            if builder and builder.parent == ctx.wrapper and builder.RelayoutCollapsibles then
+                builder:RelayoutCollapsibles(BUILD_LAYOUT_ONLY_RELAYOUT)
+            end
+        end
+    end
+end
 local function BuildPageEntry(key, hidden)
     local CONTENT_W, CONTENT_H = M.GetContentMetrics()
     if not M.scrollChild then return nil end
@@ -314,50 +338,23 @@ local function BuildPageEntry(key, hidden)
     M.RememberPageLayoutVariant(key, entry)
     local ctx = M.CreateContext(key, wrapper, entry)
     M.BuildSecondaryPageNav(ctx, key)
+    entry._msuf2PendingContentHeight = nil
+    ctx._msuf2DeferContentHeight = true
+    local result
     if spec and type(spec.build) == "function" then
-        entry._msuf2PendingContentHeight = nil
         entry._msuf2Building = true
         ctx._msuf2Building = true
-        ctx._msuf2DeferContentHeight = true
-        local result = spec.build(ctx)
+        result = spec.build(ctx)
         ctx._msuf2Building = nil
         entry._msuf2Building = nil
-        local builders = ctx._msuf2PageBuilders
-        if type(builders) == "table" then
-            local nestedLayoutChanged = false
-            for i = 1, #builders do
-                local builder = builders[i]
-                if builder and builder._msuf2RelayoutPending and builder.RelayoutCollapsibles then
-                    builder._msuf2RelayoutPending = nil
-                    local changed = builder:RelayoutCollapsibles(BUILD_LAYOUT_ONLY_RELAYOUT)
-                    if changed and builder.parent ~= ctx.wrapper then nestedLayoutChanged = true end
-                end
-            end
-            -- Nested builders can resize their owning collapsible while they
-            -- relayout. Reflow the page-level builder once more afterwards so
-            -- its final cursor, not an earlier nested height, owns the page.
-            if nestedLayoutChanged then
-                for i = 1, #builders do
-                    local builder = builders[i]
-                    if builder and builder.parent == ctx.wrapper and builder.RelayoutCollapsibles then
-                        builder:RelayoutCollapsibles(BUILD_LAYOUT_ONLY_RELAYOUT)
-                    end
-                end
-            end
-        end
-        local finalHeight = tonumber(result) or entry._msuf2PendingContentHeight or entry.height or CONTENT_H
-        ctx._msuf2DeferContentHeight = nil
-        entry._msuf2PendingContentHeight = nil
-        ctx:SetContentHeight(finalHeight)
+        RelayoutBuiltPageBuilders(ctx)
     else
-        entry._msuf2PendingContentHeight = nil
-        ctx._msuf2DeferContentHeight = true
         M.BuildPlaceholderPage(ctx, key)
-        local finalHeight = entry._msuf2PendingContentHeight or entry.height or CONTENT_H
-        ctx._msuf2DeferContentHeight = nil
-        entry._msuf2PendingContentHeight = nil
-        ctx:SetContentHeight(finalHeight)
     end
+    local finalHeight = tonumber(result) or entry._msuf2PendingContentHeight or entry.height or CONTENT_H
+    ctx._msuf2DeferContentHeight = nil
+    entry._msuf2PendingContentHeight = nil
+    ctx:SetContentHeight(finalHeight)
     if hidden and wrapper.Hide then wrapper:Hide() end
     -- A builder may settle its own view state while it builds (the changelog
     -- picks its selected release on the first build). Key the entry by the
@@ -385,7 +382,7 @@ end
 -- the single executable source of truth.
 M.BuildPageEntry = BuildPageEntry
 function M.SelectPage(key)
-    local CONTENT_W, CONTENT_H = M.GetContentMetrics()
+    local _, CONTENT_H = M.GetContentMetrics()
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
@@ -395,15 +392,12 @@ function M.SelectPage(key)
     if not (M.pages and M.pages[key]) then key = "home" end
     local restoreExpandedFixedPreview = M.ConsumeFixedPreviewExpansionForSelection(key)
     if M.activeKey and key ~= M.activeKey then M.ClearPendingFixedPreviewExpansion() end
-    local hasPendingFocus = false
-    do
-        local req = _G.MSUF_EM2_MenuFocusRequest
-        hasPendingFocus = type(req) == "table"
-            and req.explicit == true
-            and req.consumed ~= true
-            and (not req.pageKey or tostring(req.pageKey) == tostring(key))
-        if not hasPendingFocus then M.CloseAutoFocusedSections(key) end
-    end
+    local req = MSUF.PublicGlobals.MSUF_EM2_MenuFocusRequest
+    local hasPendingFocus = type(req) == "table"
+        and req.explicit == true
+        and req.consumed ~= true
+        and (not req.pageKey or tostring(req.pageKey) == tostring(key))
+    if not hasPendingFocus then M.CloseAutoFocusedSections(key) end
     if key ~= "search" and M.activeKey == "search" then
         BumpSearchInputSerial()
         CancelSearchBackgroundIndex()

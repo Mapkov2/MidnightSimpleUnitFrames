@@ -1,7 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Optional spell-aware player channel markers; cast/channel state stays in Runtime.
 local _, MSUF = ...
 local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarChannelTicks.lua").Castbars
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Castbars/MSUF_CastbarChannelTicks.lua")
 local Config = Castbars.Config
 local ChannelTicks = Castbars.ChannelTicks
 local Frames = Castbars.Frames
@@ -111,8 +111,8 @@ if HAS_ERA_SPELL_DATA then
     end
 end
 
-local issecretvalue = _G.issecretvalue
-local IsPlayerSpell = _G.IsPlayerSpell
+local issecretvalue = issecretvalue
+local IsPlayerSpell = IsPlayerSpell
 
 local function PlainNumber(value)
     if issecretvalue(value) == true or type(value) ~= "number" then return nil end

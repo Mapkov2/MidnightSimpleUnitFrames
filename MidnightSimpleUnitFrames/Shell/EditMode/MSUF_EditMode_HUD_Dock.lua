@@ -2,8 +2,8 @@
 --- The per-character dock state, auto-hide, the entry slide, the guided tour
 --- bridge, the Position popup and dragging the toolbar to a screen edge.
 local _, MSUF = ...
-local ExportPublic = (MSUF or _G.MSUF_NS or {}).ExportPublic
-local EM2 = _G.MSUF_EM2
+local ExportPublic = MSUF.ExportPublic
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local DockUI, Kit, Selection = EM2.HUDDock, EM2.HUDKit, EM2.HUDSelection
@@ -23,7 +23,7 @@ local RefreshPositionPopup, SetDockExpanded, ScheduleDockAutoHide, StopDockDrag
 --- The toolbar is a cold, event-driven workspace preference.  It deliberately
 --- lives outside the active unit-frame profile so switching/importing profiles
 --- cannot move the user's Edit Mode chrome around the screen.
-local DockCharKey = _G.MSUF_GetCharKey
+local DockCharKey = MSUF.Require("MSUF_GetCharKey", "Shell/EditMode/MSUF_EditMode_HUD_Dock.lua")
 
 local function ClampDockNumber(value, low, high, fallback)
     value = tonumber(value)
@@ -35,9 +35,10 @@ end
 
 local function EnsureDockState()
     if DockUI.state then return DockUI.state end
-    ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
+    local global = MSUF_GlobalDB
+    if type(global) ~= "table" then global = {} end
+    ExportPublic("MSUF_GlobalDB", global)
 
-    local global = _G.MSUF_GlobalDB
     global.char = type(global.char) == "table" and global.char or {}
     local charKey = DockCharKey()
     local charDB = type(global.char[charKey]) == "table" and global.char[charKey] or {}
@@ -221,7 +222,7 @@ DockUI.PlayDockIntro = function()
     local group = DockUI.introGroup
     if not (group and hudFrame and hudFrame:IsShown()) then return false end
     if InCombatLockdown and InCombatLockdown() then return false end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general or nil
     if type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) then
         return false
@@ -264,8 +265,7 @@ end
 --- The full guided tour now lives inside the native MSUF menu.  Keep this
 --- bridge late-bound because Menu2 can be installed after the Edit Mode HUD.
 local function ResolveMenu2()
-    local menu = type(MSUF) == "table" and MSUF.MSUF2 or nil
-    if type(menu) ~= "table" then menu = _G.MSUF2 end
+    local menu = MSUF.MSUF2
     return type(menu) == "table" and menu or nil
 end
 
@@ -275,8 +275,8 @@ local function OpenMenuGuidedTourAtEditMode()
     if menu and type(menu.Open) == "function" then
         local result = menu.Open()
         menuOpened = result ~= false
-    elseif type(_G.MSUF2_Open) == "function" then
-        local result = _G.MSUF2_Open()
+    else
+        local result = MSUF.Require("MSUF2_Open", "Shell/EditMode/MSUF_EditMode_HUD_Dock.lua")()
         menuOpened = result ~= false
     end
 

@@ -4,13 +4,15 @@ local root = assert(arg[1], "repository root required")
 local flavor = arg[2] or "Mainline"
 local sourceRoot = arg[3] or root
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 
 local function Fixture(startLocked, savedEnabled)
     local world = World.New(root, flavor)
     local env, host, widgets = world.env, world.core, world.widgets
     local state = { writes = 0, scans = 0, creates = 0, registrations = 0, combatQueries = 0,
         menuQueries = 0, ownQueries = 0, ownWrites = 0, ownProtected = false }
-    host.ExportPublic = function(name, value) env[name], host[name] = value, value end
+    -- The real Kernel namespace API and pixel layout provider the shell file requires at load.
+    MenuWorld.InstallPartialCore(world, sourceRoot)
     env.MSUF_DB = { general = { showGameMenuButton = savedEnabled ~= false } }
     env.LOGOUT, env.EXIT_GAME, env.RETURN_TO_GAME, env.MACROS = "Logout", "Exit", "Return", "Macros"
     env.EllesmereUI = false
@@ -78,8 +80,9 @@ local function Fixture(startLocked, savedEnabled)
     setfenv(chunk, env)
     chunk("MidnightSimpleUnitFrames", host)
     widgets:FireEvent("PLAYER_LOGIN")
-    local function Position() env.MSUF_PositionGameMenuButton() end
-    local function Toggle(enabled) env.MSUF_SetGameMenuButtonEnabled(enabled) end
+    -- Both are namespace-only exports.
+    local function Position() host.PublicGlobals.MSUF_PositionGameMenuButton() end
+    local function Toggle(enabled) host.PublicGlobals.MSUF_SetGameMenuButtonEnabled(enabled) end
     local function OnShow() assert(menu:GetScript("OnShow"))(menu) end
     local function HasReplay()
         for _, frame in ipairs(widgets.frames) do

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Outline host, inset and color; Runtime/Driver own casts, Visuals owns icon/text layout.
 
 local _, ns = ...
@@ -16,9 +15,13 @@ local floor, ceil = math.floor, math.ceil
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local OUTLINE_BACKDROPS = {}
 
+-- Kernel/MSUF_Util.lua and State/MSUF_Defaults.lua load before this file.
+local PixelLayoutRegion = ns.Require("MSUF_PixelLayoutRegion", "Castbars/MSUF_CastbarStyle.lua")
+local EnsureDB = ns.Optional("MSUF_EnsureDB")
+
 local function GeneralDB()
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
+    if type(EnsureDB) == "function" then
+        EnsureDB()
     end
 
     return (Config.Read().general) or {}
@@ -40,14 +43,14 @@ local function PixelSize(region, value, minPixels)
     value = tonumber(value) or 0
     if value == 0 then return 0 end
     local scale = EffectiveScale(region)
-    if _G.PixelUtil and type(_G.PixelUtil.GetNearestPixelSize) == "function" then
-        local size = _G.PixelUtil.GetNearestPixelSize(value, scale, minPixels)
+    if PixelUtil and type(PixelUtil.GetNearestPixelSize) == "function" then
+        local size = PixelUtil.GetNearestPixelSize(value, scale, minPixels)
         if size and size ~= 0 then return size end
     end
 
     local factor = 1
-    if type(_G.GetPhysicalScreenSize) == "function" then
-        local _, physicalHeight = _G.GetPhysicalScreenSize()
+    if type(GetPhysicalScreenSize) == "function" then
+        local _, physicalHeight = GetPhysicalScreenSize()
         physicalHeight = tonumber(physicalHeight) or 0
         if physicalHeight > 0 then factor = 768 / physicalHeight end
     end

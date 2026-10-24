@@ -1,14 +1,16 @@
 -- Shared Aura controls and apply scheduling; no dependency on a page builder.
 local _, MSUF = ...
 MSUF = MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_AuraControls.lua")
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_AuraControls.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local W, T = M.Widgets, M.Theme
-local A3 = MSUF.MSUF_Auras3
-local Model = A3 and A3.MenuModel
 local VTP = M.ValueTextPairs
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
+local CreateFrame = CreateFrame
+-- Resolved once: slider writes request the aura runtime on every tick.
+local ApplyService = MSUF.Require("MSUF_Menu2_ApplyService", FILE)
 local floor, max, min = math.floor, math.max, math.min
 local tonumber, tostring, type, pairs = tonumber, tostring, type, pairs
 local AurasMenuCombatLocked = M.AuraSettings.AurasMenuCombatLocked
@@ -39,10 +41,11 @@ local function AttachSearchView(ctx, meta)
     end
     return meta
 end
-local function AuraControlMeta(ctx, path, classification, routeContract)
+-- pageFallback names the page key used when neither ctx nor the menu has one.
+local function AuraControlMeta(ctx, path, classification, routeContract, pageFallback)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
     path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
-    local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "auras")
+    local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, pageFallback or "auras")
     local identity = "auras." .. path
     local meta = {
         controlId = "menu2." .. pageKey .. "." .. identity,
@@ -168,12 +171,7 @@ local function Repaint(ctx)
 end
 
 local function RequestAuraRuntime(scope, reason)
-    local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if apply and type(apply.RequestAuras) == "function" then
-        return apply.RequestAuras(scope or "shared", reason or "AURAS3_MENU2_BATCH")
-    end
-    Model.Apply(scope or "shared", reason or "AURAS3_MENU2_BATCH")
-    return true
+    return ApplyService.RequestAuras(scope or "shared", reason or "AURAS3_MENU2_BATCH")
 end
 
 local function ConfigureAuraSpellPriorityDrag(row, handle, listChild, rowHeight, onDrop)
@@ -325,7 +323,8 @@ local function UnitAuraWorkspaceTabButton(parent, item, width)
     return W.TopButton(parent, item.text, width, 24, UNIT_AURA_WORKSPACE_TAB_STYLE)
 end
 
-local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory, catalogPath)
+-- schemaScope opts the tab buttons into a schema declaration (ephemeral menu state).
+local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory, catalogPath, schemaScope)
     gap = gap or 6
     local count = #values
     local bw = max(56, floor(((width or 720) - gap * (count - 1)) / count))
@@ -349,6 +348,7 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
         end)
         RegisterAuraControl(ctx, btn, item.text or item.label or item.value or "Option", "button",
             (catalogPath or "workspace.tabs") .. ".option." .. AuraCatalogToken(item.value, tostring(i)), "ephemeral")
+        if schemaScope then M.ControlSchema.Owned(btn, schemaScope, "menuState") end
         buttons[i] = btn
         if item.value ~= nil then buttons[item.value] = btn end
     end
@@ -415,6 +415,21 @@ local function SpellListRowLabels(row, iconAnchor, iconRelPoint, x)
     row.remove = ActionButton(row, "Remove", 80)
     row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 end
+--- Row i of a compact 24 px spell list: a 20 px button across the list child
+--- with a 17 px icon and the spell name; a click runs onClick(row).
+local function CompactSpellRow(listChild, i, onClick)
+    local row = PixelLayoutRegion(CreateFrame("Button", nil, listChild))
+    row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
+    row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
+    row:SetHeight(20)
+    row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
+    row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
+    row.icon:SetSize(17, 17)
+    row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+    row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+    row:SetScript("OnClick", onClick)
+    return row
+end
 local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
     local Tr, MatchSuffix = M.AuraSettings.Tr, M.AuraSettings.MatchSuffix
     local empty = W.Text(section, emptyText, 24, -284 + offsetY, inner, T.colors.muted)
@@ -452,6 +467,7 @@ local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
                 row.name:SetText(name)
                 row.id:SetText(entry.spellID and (M.Format("Spell ID %s", tostring(entry.spellID))) or tostring(entry.value or ""))
                 RegisterAuraControl(ctx, row.remove, M.Format("Remove %s", name), "button", opts.removePath(entry.value), "action")
+                if opts.schemaScope then M.ControlSchema.Owned(row.remove, opts.schemaScope, "auras") end
                 row:Show()
             elseif row then
                 row._spellID = nil
@@ -492,11 +508,11 @@ local function PaintPresetSummary(selectedSummary, addSet, addSpell, setSpells, 
     W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
 end
 
-local function BuildLaneTabs(ctx, parent, stateKey, x, y, width)
+local function BuildLaneTabs(ctx, parent, stateKey, x, y, width, schemaScope)
     BuildActionTabs(ctx, parent, LANE_VALUES, x, y, width, function() return CurrentLane(stateKey, "debuff") end, function(value)
         SetCurrentLane(stateKey, value)
         Rebuild(ctx)
-    end, nil, nil, "workspace.lane-selector." .. AuraCatalogToken(stateKey, "lane"))
+    end, nil, nil, "workspace.lane-selector." .. AuraCatalogToken(stateKey, "lane"), schemaScope)
 end
 
 M.AuraControls = {
@@ -514,6 +530,7 @@ M.AuraControls = {
     BlockedSpellList = BlockedSpellList,
     BuildLaneTabs = BuildLaneTabs,
     Card = Card,
+    CompactSpellRow = CompactSpellRow,
     SpellListRow = SpellListRow,
     SpellListRowLabels = SpellListRowLabels,
     SpellListScroll = SpellListScroll,

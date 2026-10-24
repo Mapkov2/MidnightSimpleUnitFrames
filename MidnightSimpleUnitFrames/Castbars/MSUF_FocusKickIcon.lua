@@ -9,15 +9,26 @@ local Frames = Castbars.Frames
 local KickReady = Castbars.KickReady
 local Manager = Castbars.Manager
 local PublicAPI = Castbars.PublicAPI
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 ---
 --- Visual widget for the focus-kick replacement cast display. The StateDriver
 --- owns enable checks, event registration, and cast-state selection; this file
 --- owns the draggable icon frame, copied time text, border coloring, and short
 --- interrupt feedback animation.
 
-local MSUF = select(2, ...) or _G.MSUF_NS or _G.MSUF or {}
 local Publish = PublicAPI.Publish
+
+--- Kernel (Util, Libs), State defaults and the Runtime fonts, colours and font
+--- registry load before this file in every client TOC.
+local FILE = "Castbars/MSUF_FocusKickIcon.lua"
+local Require = MSUF.Require
+local Optional = MSUF.Optional
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local GetCastbarTimeFormat = Require("MSUF_GetCastbarTimeFormat", FILE)
+local GetConfiguredFontColor = Require("MSUF_GetConfiguredFontColor", FILE)
+local SetIconTexture = Require("MSUF_SetIconTexture", FILE)
+local EnsureDB = Optional("MSUF_EnsureDB")
+local ResolveSafeFontPath = Require("MSUF_ResolveSafeFontPath", FILE)
+local ApplyResolvedFont = Require("MSUF_ApplyResolvedFont", FILE)
 
 local ParentFrame = UIParent
 local After = C_Timer and C_Timer.After
@@ -30,7 +41,7 @@ local refreshPreviewLayout
 local initialized = false
 
 local function EnsureOptions()
-    if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
+    if type(EnsureDB) == "function" then EnsureDB() end
 
     local db = Config.EnsureSource()
 
@@ -111,7 +122,7 @@ local function AttachTimeDriver(state)
 
     iconFrame.timeText:SetAlpha(1)
     -- Kernel/MSUF_Util.lua owns the castbar time format.
-    local format = _G.MSUF_GetCastbarTimeFormat("focus", general) or "CURRENT"
+    local format = GetCastbarTimeFormat("focus", general) or "CURRENT"
 
     local runtime = Castbars.Runtime
     local source = FocusSourceCastbar()
@@ -155,7 +166,7 @@ local function AttachTimeDriver(state)
     Manager.RegisterCastbar(source)
 
     local text = source.timeText:GetText()
-    if _G.issecretvalue and _G.issecretvalue(text) == true then
+    if issecretvalue and issecretvalue(text) == true then
         iconFrame.timeText:SetText(text)
     else
         iconFrame.timeText:SetText(text or "")
@@ -163,18 +174,9 @@ local function AttachTimeDriver(state)
 end
 
 --- One time-text font apply (file scope: a cast state must not build a closure).
-local function ApplyTimeTextFontTo(fs, applyResolved, fontPath, fontSize, fontFlags, fontKey)
+local function ApplyTimeTextFontTo(fs, fontPath, fontSize, fontFlags, fontKey)
     if not fs then return end
-    if type(applyResolved) == "function" then
-        applyResolved(fs, fontPath, fontSize, fontFlags, fontKey)
-        return
-    end
-    local ready = _G.MSUF_SetFontChecked(fs, fontPath, fontSize, fontFlags)
-    local matches = _G.MSUF_FontApplicationMatches
-    if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
-    if not ready then
-        _G.MSUF_MarkFontApplyFailed()
-    end
+    ApplyResolvedFont(fs, fontPath, fontSize, fontFlags, fontKey)
 end
 
 local function ApplyTimeTextFont()
@@ -182,32 +184,70 @@ local function ApplyTimeTextFont()
     local fontPath = Core.GetFontPath() or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     local fontFlags = Core.GetFontFlags() or "OUTLINE"
     local fontSize = ResolveTextSize(general)
-    local resolveSafe = _G.MSUF_ResolveSafeFontPath
-    if type(resolveSafe) == "function" then
-        local g = Config.Read().general
-        fontPath = resolveSafe(fontPath, fontSize, fontFlags, g and g.fontKey)
-    end
-
     local g = Config.Read().general
-    local applyResolved = _G.MSUF_ApplyResolvedFont
     local fontKey = g and g.fontKey
-    ApplyTimeTextFontTo(iconFrame and iconFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
-    ApplyTimeTextFontTo(previewFrame and previewFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
+    fontPath = ResolveSafeFontPath(fontPath, fontSize, fontFlags, fontKey)
+    ApplyTimeTextFontTo(iconFrame and iconFrame.timeText, fontPath, fontSize, fontFlags, fontKey)
+    ApplyTimeTextFontTo(previewFrame and previewFrame.timeText, fontPath, fontSize, fontFlags, fontKey)
 
-    local red, green, blue = _G.MSUF_GetConfiguredFontColor()
+    local red, green, blue = GetConfiguredFontColor()
     if red and green and blue then
         if iconFrame and iconFrame.timeText then iconFrame.timeText:SetTextColor(red, green, blue, 1) end
         if previewFrame and previewFrame.timeText then previewFrame.timeText:SetTextColor(red, green, blue, 1) end
     end
 end
 
-local function SetBorderColor(red, green, blue, alpha)
+-- Focus Kick takes the aura icon shapes (Auras3/MSUF_Auras3_IconShape.lua).
+local function IconShapes()
+    local auras = MSUF.MSUF_Auras3
+    return auras and auras.IconShape
+end
+
+--- The icon shape (unset: rectangular). The icon has no portrait to follow, so
+--- Shape.Resolve reads Follow Portrait as rectangular.
+local function FocusKickShape(general)
+    local shapes = IconShapes()
+    if not shapes then return "RECTANGLE" end
+    return (shapes.Resolve(general.focusKickIconShape))
+end
+
+-- A shaped icon's border: the shared shape ring where the square icon draws its
+-- four edges (2 px, inside the icon). The edges stay tinted while hidden, so the
+-- ring takes their colour when it is drawn.
+local ringStyle = { borderEnabled = true, borderThickness = 2, borderPlacement = "inner" }
+
+local function SetEdgeColor(red, green, blue, alpha)
     if not (iconFrame and iconFrame.edges) then return end
     alpha = alpha or 1
 
     for index = 1, #iconFrame.edges do
         iconFrame.edges[index]:SetVertexColor(red, green, blue, alpha)
     end
+end
+
+local function SetEdgeAndRingColor(red, green, blue, alpha)
+    SetEdgeColor(red, green, blue, alpha)
+    if iconFrame then IconShapes().TintBorderRings(iconFrame, red, green, blue, alpha or 1) end
+end
+
+-- The ready and interrupt colours (cast states, in combat too) go through
+-- this. The layout picks it: a square icon keeps the plain edge painter and
+-- pays nothing for shapes; a shaped one also tints its ring.
+local SetBorderColor = SetEdgeColor
+
+--- Masks the backdrop and the spell icon of `frame` with the icon shape. The
+--- live icon (`edges`) also swaps its square edges for the shape ring. A
+--- never-shaped rectangular icon is left untouched.
+local function ApplyFocusKickShape(frame, general, edges)
+    local shapes = IconShapes()
+    if not shapes then return end
+    local shape = shapes.ApplyIconShape(frame, FocusKickShape(general), nil, true, frame.bg, frame.icon)
+    if not (edges and frame._msufA3AuraShapeMask) then return end
+    local shaped = shape ~= shapes.RECTANGLE
+    for index = 1, #edges do edges[index]:SetShown(not shaped) end
+    ringStyle.borderR, ringStyle.borderG, ringStyle.borderB, ringStyle.borderA = edges[1]:GetVertexColor()
+    shapes.ApplyBorderRings(frame, shaped and ringStyle or nil, shape)
+    SetBorderColor = shaped and SetEdgeAndRingColor or SetEdgeColor
 end
 
 local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibleRaw)
@@ -264,9 +304,11 @@ local function ApplyIconLayout()
     iconFrame:SetSize(width, height)
 
     LayoutBorderEdges()
+    ApplyFocusKickShape(iconFrame, general, iconFrame.edges)
     ApplyTimeTextFont()
     -- The settings this geometry came from; a drag or the interrupt shake
     -- clears them while they move the icon themselves.
+    iconFrame._msufFocusKickLayoutShape = general.focusKickIconShape
     iconFrame._msufFocusKickLayoutW = general.focusKickIconWidth
     iconFrame._msufFocusKickLayoutH = general.focusKickIconHeight
     iconFrame._msufFocusKickLayoutX = general.focusKickIconOffsetX
@@ -281,6 +323,7 @@ end
 --- True while the icon still sits where the current settings put it.
 local function IconLayoutCurrent(general)
     return iconFrame._msufFocusKickLayoutValid == true
+        and iconFrame._msufFocusKickLayoutShape == general.focusKickIconShape
         and iconFrame._msufFocusKickLayoutW == general.focusKickIconWidth
         and iconFrame._msufFocusKickLayoutH == general.focusKickIconHeight
         and iconFrame._msufFocusKickLayoutX == general.focusKickIconOffsetX
@@ -534,7 +577,7 @@ local function EnsurePreviewFrame()
             return
         end
 
-        local focus = _G.GetCurrentKeyBoardFocus and _G.GetCurrentKeyBoardFocus()
+        local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
         if focus and focus.IsObjectType and focus:IsObjectType("EditBox") then return end
 
         if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(false) end
@@ -600,6 +643,7 @@ refreshPreviewLayout = function()
             or "Interface\\Icons\\INV_Misc_QuestionMark"
         frame.icon:SetTexture(texture)
     end
+    ApplyFocusKickShape(frame, general)
 
     ApplyTimeTextFont()
     frame:Show()
@@ -692,7 +736,7 @@ local function ApplyCastState(state)
     feedbackActive = false
 
     if iconFrame.icon and state.icon then
-        _G.MSUF_SetIconTexture(iconFrame.icon, state.icon, "")
+        SetIconTexture(iconFrame.icon, state.icon, "")
     end
 
     iconFrame.MSUF_sourceCastBar = Frames.focus

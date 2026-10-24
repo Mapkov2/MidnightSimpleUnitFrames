@@ -1,13 +1,14 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
-    or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
+    or "MidnightSimpleUnitFrames"
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua", {
+-- load; the sections that call them resolve them once when they build, never per update.
+M.RequireGlobals(FILE, {
     "MSUF_RefreshTempMaxHealth",
     "MSUF_UFPreview_RequestRefresh",
     "MSUF_ApplyRoundedUnitframes",
@@ -20,7 +21,7 @@ local W = M.Widgets
 local T = M.Theme
 local GP = M.GlobalPage or {}
 local VT = M.ValueTextList
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -28,24 +29,8 @@ local unpack = unpack or table.unpack
 local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need each UnitFrame's Aura sensor. Enable Buffs or Debuffs on the affected UnitFrame, or turn on its Dispel feature to enable the sensor automatically. Both icon caps may stay at 0."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
-local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local ROUNDED_PREVIEW_MASKS = {
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s1.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s2.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s3.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s4.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s5.png",
-}
-local ROUNDED_PREVIEW_EDGES = {
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s1.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s2.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s3.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s4.png",
-    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s5.png",
-}
-local ROUNDED_PREVIEW_SLICE_MARGIN = 9.5
-local ROUNDED_PREVIEW_STRETCHED = _G.Enum and _G.Enum.UITextureSliceMode
-    and _G.Enum.UITextureSliceMode.Stretched
+local ROUNDED_PREVIEW_DEFAULT_MASK = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
+    .. "\\Media\\Masks\\rounded_clean_mask_s3.png"
 local ROUNDED_STRENGTH_APPLY_DELAY = 0.12
 local ROUNDED_SECTION_HEIGHT = 310
 local SLANTED_PRESET_UNITS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget", "boss", "arena" }
@@ -102,75 +87,14 @@ local BAR_SETTING_BY_PATH = {
 local BAR_ACTION_BY_PATH = {
     ["scope.overrides.reset"] = "reset_all_scoped_global_bars_overrides",
 }
-local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
-    ["slanted.direction"] = { "bars.slantedBarDirection", "player.slantedBarDirection", "target.slantedBarDirection",
-        "targettarget.slantedBarDirection", "focus.slantedBarDirection", "focustarget.slantedBarDirection",
-        "pet.slantedBarDirection", "pettarget.slantedBarDirection", "boss.slantedBarDirection", "arena.slantedBarDirection",
-        "gf_party.slantedBarDirection", "gf_raid.slantedBarDirection", "gf_mythicraid.slantedBarDirection" },
-    ["textures.foreground"] = { "general.barTexture" },
-    ["textures.background"] = { "general.barBackgroundTexture" },
-    ["gradient.enableGradient"] = { "general.enableGradient" },
-    ["gradient.enablePowerGradient"] = { "general.enablePowerGradient" },
-    ["gradient.health.strength"] = { "general.gradientStrength" },
-    ["gradient.power.strength"] = { "general.powerGradientStrength" },
-    ["temp_max_health.enabled"] = { "general.tempMaxHealthEnabled" },
-    ["temp_max_health.texture"] = { "general.tempMaxHealthTexture" },
-    ["temp_max_health.color"] = {
-        "general.tempMaxHealthColor", "general.tempMaxHealthColorR",
-        "general.tempMaxHealthColorG", "general.tempMaxHealthColorB",
-    },
-    ["temp_max_health.opacity"] = { "general.tempMaxHealthOpacity" },
-    ["temp_max_health.background_opacity"] = { "general.tempMaxHealthBackgroundOpacity" },
-    ["absorb.display_mode"] = { "general.absorbTextMode" },
-    ["absorb.absorbAnchorMode"] = { "general.absorbAnchorMode" },
-    ["absorb.absorbBarOpacity"] = { "general.absorbBarOpacity" },
-    ["absorb.absorbBarTexture"] = { "general.absorbBarTexture" },
-    ["absorb.healAbsorbBarOpacity"] = { "general.healAbsorbBarOpacity" },
-    ["absorb.healAbsorbBarTexture"] = { "general.healAbsorbBarTexture" },
-    ["absorb.healPredAnchorMode"] = { "general.healPredAnchorMode" },
-    ["absorb.heal_prediction.enabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
-    ["absorb.heal_prediction.all_healers"] = { "general.healPredAllHealers" },
-    ["absorb.healPredEnabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
-    ["absorb.positive.enabled"] = { "general.enableAbsorbBar", "general.absorbTextMode" },
-    ["absorb.positive.anchor"] = { "general.absorbAnchorMode" },
-    ["absorb.positive.height"] = { "general.absorbBarHeight" },
-    ["absorb.positive.offset_y"] = { "general.absorbBarOffsetY" },
-    ["absorb.positive.texture"] = { "general.absorbBarTexture" },
-    ["absorb.positive.opacity"] = { "general.absorbBarOpacity" },
-    ["absorb.positive.over_absorb"] = { "general.overAbsorbOverlay" },
-    ["absorb.positive.full_health_stripe"] = { "general.fullHealthAbsorbStripe" },
-    ["absorb.negative.enabled"] = { "general.healAbsorbEnabled" },
-    ["absorb.negative.anchor"] = { "general.healAbsorbAnchorMode" },
-    ["absorb.negative.height"] = { "general.healAbsorbBarHeight" },
-    ["absorb.negative.offset_y"] = { "general.healAbsorbBarOffsetY" },
-    ["absorb.negative.texture"] = { "general.healAbsorbBarTexture" },
-    ["absorb.negative.opacity"] = { "general.healAbsorbBarOpacity" },
-    ["absorb.heal_prediction.anchor"] = { "general.healPredAnchorMode" },
-    ["absorb.heal_prediction.height"] = { "general.healPredictionBarHeight" },
-    ["absorb.heal_prediction.offset_y"] = { "general.healPredictionBarOffsetY" },
-    ["absorb.heal_prediction.texture"] = { "general.healPredictionBarTexture" },
-    ["absorb.heal_prediction.opacity"] = { "general.healPredictionBarOpacity" },
-    ["absorb.over_absorb_overlay"] = { "general.overAbsorbOverlay" },
-    ["absorb.full_health_stripe"] = { "general.fullHealthAbsorbStripe" },
-    ["outline.thickness"] = { "bars.barOutlineThickness" },
-    ["outline.layer"] = { "bars.barOutlineLayer" },
-    ["outline.texture"] = { "bars.barOutlineTexture" },
-    ["outline.color"] = { "general.barOutlineColor" },
-    ["highlight.border_thickness"] = { "general.highlightBorderThickness" },
-    ["highlight.border_mode.aggroOutlineMode"] = { "general.aggroOutlineMode" },
-    ["highlight.aggro.roles"] = { "general.aggroMode" },
-    ["highlight.border_mode.dispelOutlineMode"] = { "general.dispelOutlineMode" },
-    ["highlight.dispel.trigger"] = { "general.dispelBorderTrigger" },
-    ["highlight.dispel.show_on"] = { "general.dispelBorderShowOn" },
-    ["highlight.border_mode.purgeOutlineMode"] = { "general.purgeOutlineMode" },
-    ["highlight.priority.enabled"] = { "general.hlPrioEnabled" },
-    ["power.smooth_fill"] = { "bars.smoothPowerBar" },
-    ["power.chunked_fill"] = { "bars.chunkedPowerBar" },
-}
 local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["scope.override.enabled"] = "override",
     ["textures.foreground"] = "barTexture",
     ["textures.background"] = "barBackgroundTexture",
+    ["gloss.health.enabled"] = "healthGlossEnabled",
+    ["gloss.health.strength"] = "healthGlossStrength",
+    ["gloss.power.enabled"] = "powerGlossEnabled",
+    ["gloss.power.strength"] = "powerGlossStrength",
     ["gradient.enableGradient"] = "enableGradient",
     ["gradient.enablePowerGradient"] = "enablePowerGradient",
     ["gradient.health.strength"] = "gradientStrength",
@@ -224,6 +148,33 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["highlight.border_mode.purgeOutlineMode"] = "purgeOutlineMode",
     ["highlight.priority.enabled"] = "hlPrioEnabled",
 }
+-- Most scope routes share their general key and suffix. Keep only the
+-- multi-key and bars-table routes explicit, so both metadata views agree.
+local Rows = { Schema = M.ControlSchema, keys = (function()
+    local keys = {
+        ["slanted.direction"] = { "bars.slantedBarDirection", "player.slantedBarDirection", "target.slantedBarDirection",
+            "targettarget.slantedBarDirection", "focus.slantedBarDirection", "focustarget.slantedBarDirection",
+            "pet.slantedBarDirection", "pettarget.slantedBarDirection", "boss.slantedBarDirection", "arena.slantedBarDirection",
+            "gf_party.slantedBarDirection", "gf_raid.slantedBarDirection", "gf_mythicraid.slantedBarDirection" },
+        ["temp_max_health.color"] = {
+            "general.tempMaxHealthColor", "general.tempMaxHealthColorR", "general.tempMaxHealthColorG", "general.tempMaxHealthColorB",
+        },
+        ["absorb.heal_prediction.enabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
+        ["absorb.healPredEnabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
+        ["absorb.positive.enabled"] = { "general.enableAbsorbBar", "general.absorbTextMode" },
+        ["outline.thickness"] = { "bars.barOutlineThickness" },
+        ["outline.layer"] = { "bars.barOutlineLayer" },
+        ["outline.texture"] = { "bars.barOutlineTexture" },
+        ["power.smooth_fill"] = { "bars.smoothPowerBar" },
+        ["power.chunked_fill"] = { "bars.chunkedPowerBar" },
+    }
+    for path, suffix in pairs(BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH) do
+        if path ~= "scope.override.enabled" and not keys[path] then
+            keys[path] = { "general." .. suffix }
+        end
+    end
+    return keys
+end)() }
 local BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
     ["absorb.positive.enabled"] = {
         "^barScope%.[%w_]+%.enableAbsorbBar$",
@@ -241,6 +192,7 @@ local function IsDynamicBarPath(path)
         or path == "power.chunked_fill"
         or path:find("^textures%.") ~= nil
         or path:find("^gradient%.") ~= nil
+        or path:find("^gloss%.") ~= nil
         or path:find("^temp_max_health%.") ~= nil
         or path:find("^absorb%.") ~= nil
         or path:find("^outline%.") ~= nil
@@ -264,13 +216,13 @@ local function Meta(path, classification, exact)
         end
     end
     if path == "slanted.direction" then
-        resolved.searchSettingKeys = BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        resolved.searchSettingKeys = Rows.keys[path]
     end
     local kind = classification or "setting"
     if (kind == "setting" or kind == "action") and not resolved.settingKey and not resolved.actionKey
         and IsDynamicBarPath(path)
     then
-        resolved.searchSettingKeys = resolved.searchSettingKeys or BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        resolved.searchSettingKeys = resolved.searchSettingKeys or Rows.keys[path]
         resolved.searchSettingKeyPatterns = resolved.searchSettingKeyPatterns
             or BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]
         local suffix = BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH[path]
@@ -279,6 +231,85 @@ local function Meta(path, classification, exact)
         end
     end
     return ControlMeta("opt_bars", "global", path, classification, resolved)
+end
+-- Page field policies translate into the shared typed binders; input, history,
+-- refusal and refresh remain with those native bindings. A `direct` page passes
+-- its plain reader, setter and apply functions instead of wrappers: they are
+-- called as read(key, fallback, row.legacyKey), write(key, value, row.reason,
+-- true) and changed(row.reason, row.gradientKind), so a slider drag step makes
+-- no wrapper hop. A constant default is used as is, without a default call.
+function Rows.Options(read, write, changed, raw, direct)
+    return { bind = function(ctx, widget, row, kind)
+        local fallback = row[3]
+        local defaultIsFunction = type(fallback) == "function"
+        local readArg = row
+        if direct then readArg = row.legacyKey end
+        local function Default()
+            return defaultIsFunction and fallback() or fallback
+        end
+        local function Get()
+            local fallback = Default()
+            local value = read(row[2], fallback, readArg)
+            if row.readValue then return row.readValue(value, fallback) end
+            if kind == "toggle" then return row.defaultOn and fallback and value ~= false or value == true end
+            if kind == "slider" or row.numeric then return tonumber(value) or fallback end
+            return value
+        end
+        -- Scalar row policy is fixed when the control is built; profile and
+        -- scope values still resolve through the live reader on every refresh.
+        local get, key = row.get, row[2]
+        if not get and not defaultIsFunction then
+            if row.readValue then
+                local convert = row.readValue
+                get = function() return convert(read(key, fallback, readArg), fallback) end
+            elseif kind == "toggle" then
+                if row.defaultOn and fallback then get = function() return read(key, fallback, readArg) ~= false end
+                else get = function() return read(key, fallback, readArg) == true end end
+            elseif kind == "slider" or row.numeric then
+                get = function() return tonumber(read(key, fallback, readArg)) or fallback end
+            else get = function() return read(key, fallback, readArg) end end
+        elseif not get and not row.readValue and kind == "dropdown" and not row.numeric then
+            -- Texture defaults read the current general profile on every call.
+            get = function() return read(key, fallback() or fallback, readArg) end
+        end
+        local function Set(value)
+            local default = fallback
+            if defaultIsFunction then default = fallback() or fallback end
+            if row.writeValue then value = row.writeValue(value, default)
+            elseif kind == "toggle" then value = value and true or false
+            elseif kind == "slider" or row.numeric then value = tonumber(value) or default
+            else value = value or (row.writeDefault ~= nil and row.writeDefault or default) end
+            if row.skipEqual and raw(row[2]) == value then return end
+            if row.beforeWrite then row.beforeWrite(value) end
+            if direct then write(row[2], value, row.reason, true) else write(row[2], value, row) end
+            if row.afterWrite then row.afterWrite(value) end
+            if changed then
+                if direct then changed(row.reason, row.gradientKind) else changed(row, value) end
+            end
+        end
+        local meta = row.meta or Meta(row.path or row[2], row.classification, row.exact)
+        local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
+            scope = "bars", applyDomain = row.domain or "bars", meta = meta,
+            get = get or Get, set = row.set or Set }
+        if kind == "slider" then
+            spec.range, spec.defaultSource = { row[4][2], row[4][3], row[4][4] }, Default
+        end
+        Rows.Schema.Bind(ctx, widget, spec)
+    end }
+end
+Rows.Commands = Rows.Options()
+-- A string `tip` on a row is the standard tooltip: the row label as title, with the
+-- options named by `tipOpts` ("label" by default, or "plain" / "power").
+Rows.tipOpts = {
+    label = { hook = true, labelHit = true },
+    plain = { hook = true },
+    power = { hook = true, labelHit = true, labelHitWhenDisabled = true },
+}
+function Rows.Build(ctx, parent, rows, opts, refs)
+    for _, row in ipairs(rows) do
+        if type(row.tip) == "string" then row.tip = { row[4][1], row.tip, Rows.tipOpts[row.tipOpts or "label"] } end
+    end
+    return Rows.Schema.Build(ctx, parent, rows, opts, refs)
 end
 local function RegisterSegment(segment, path, values)
     RegisterControl(segment, Meta(path, "ephemeral"), nil, "segment", values)
@@ -289,7 +320,7 @@ local function RegisterSegment(segment, path, values)
                 item.text or item.label or item.value or "", "button")
         end
     end
-    return segment
+    return Rows.Schema.Owned(segment, "bars", "sectionNavigation")
 end
 local HIGHLIGHT_ORDER_KEYS = { "dispel", "aggro", "purge", "bossTarget" }
 local HIGHLIGHT_ORDER_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true }
@@ -349,6 +380,9 @@ local function RegisterDragRows(container, path)
             searchSettingKeyPatterns = { "^barScope%.[%w_]+%.hlPrioOrder$" },
             command = HIGHLIGHT_ORDER_COMMAND,
         }), "Highlight priority order", "dragrow")
+        local spec = Rows.Schema.Owned(owner, "bars", "bars")._msuf2ControlSchema
+        spec.get, spec.set = HIGHLIGHT_ORDER_COMMAND.get, HIGHLIGHT_ORDER_COMMAND.set
+        spec.dragStart, spec.dragStop = owner:GetScript("OnDragStart"), owner:GetScript("OnDragStop")
         -- The remaining visible rows are handles for the same atomic four-item
         -- order. They must resolve to one catalog owner, not four competing
         -- setting routes.
@@ -419,11 +453,11 @@ end
 -- prevents every widget callback from being routed through one giant closure.
 local function SharedScope() return CurrentBarsScope() == "shared" end
 local ReloadAfterCombatCheck = function()
-if _G.InCombatLockdown and _G.InCombatLockdown() then
-                if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
-            elseif type(_G.ReloadUI) == "function" then
-                _G.ReloadUI()
-            end
+    if InCombatLockdown and InCombatLockdown() then
+        if print then print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
+    elseif type(ReloadUI) == "function" then
+        ReloadUI()
+    end
 end
 
 local function GroupScope()
@@ -444,11 +478,9 @@ end
 
 -- ApplyService owns batching, combat deferral and compatibility fallbacks.
 -- The old page duplicated all of that logic in seven near-identical request functions.
+Rows.applyService = MSUF.Require("MSUF_Menu2_ApplyService", FILE)
 local function RequestApply(method, reason, scope)
-    local service = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    local request = service and service[method]
-    if type(request) == "function" then return request(reason, scope) end
-    return ApplyBars(reason)
+    return Rows.applyService[method](reason, scope)
 end
 local function RequestOutlineRuntime() return RequestApply("RequestBarOutline", "MSUF2_BAR_OUTLINE", CurrentBarsScope()) end
 local function RequestAggroBorderRuntime() return RequestApply("RequestAggroBorder", "MSUF2_AGGRO_BORDER_RUNTIME", CurrentBarsScope()) end
@@ -460,15 +492,45 @@ end
 local function RequestAllHighlightBorderRuntime()
     return RequestApply("RequestHighlightBorders", "MSUF2_ALL_HIGHLIGHT_BORDER_RUNTIME", CurrentBarsScope())
 end
+-- Border test modes. The owner assigns each runtime flag directly, so every mode reads its flag
+-- by the bare global name inside its own closures: `flag()` answers a boolean and `stop(keep)`
+-- turns a running test off unless `keep` (its border mode is still on). The setter is an
+-- optional provider that resolves once, the first time a running test needs it.
+Rows.testModes = {
+    aggro = { setter = "MSUF_SetAggroBorderTestMode",
+        flag = function() return MSUF_AggroBorderTestMode and true or false end,
+        stop = function(keep) if not keep and MSUF_AggroBorderTestMode then Rows.StopRunning("aggro") end end },
+    dispel = { setter = "MSUF_SetDispelBorderTestMode",
+        flag = function() return MSUF_DispelBorderTestMode and true or false end,
+        stop = function(keep) if not keep and MSUF_DispelBorderTestMode then Rows.StopRunning("dispel") end end },
+    purge = { setter = "MSUF_SetPurgeBorderTestMode",
+        flag = function() return MSUF_PurgeBorderTestMode and true or false end,
+        stop = function(keep) if not keep and MSUF_PurgeBorderTestMode then Rows.StopRunning("purge") end end },
+    bossTarget = { setter = "MSUF_SetBossTargetBorderTestMode",
+        flag = function() return MSUF_BossTargetBorderTestMode and true or false end,
+        stop = function(keep) if not keep and MSUF_BossTargetBorderTestMode then Rows.StopRunning("bossTarget") end end },
+}
+function Rows.TestSetter(kind)
+    local mode = Rows.testModes[kind]
+    local setter = mode.resolved
+    if setter == nil then
+        setter = MSUF.Optional(mode.setter) or false
+        mode.resolved = setter
+    end
+    return setter
+end
+function Rows.StopRunning(kind)
+    local setter = Rows.TestSetter(kind)
+    if type(setter) == "function" then setter(false) end
+end
+function Rows.RetargetTest(kind)
+    local setter = Rows.TestSetter(kind)
+    if type(setter) == "function" then setter(true, BorderTestScope()) end
+end
 local function RequestDispelPurgeBorderRuntime()
     local result = RequestApply("RequestDispelPurgeBorder", "MSUF2_DISPEL_PURGE_BORDER_RUNTIME", CurrentBarsScope())
-    for _, test in ipairs({
-        { "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode" },
-        { "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode" },
-    }) do
-        local setter = _G[test[2]]
-        if _G[test[1]] and type(setter) == "function" then setter(true, BorderTestScope()) end
-    end
+    if MSUF_DispelBorderTestMode then Rows.RetargetTest("dispel") end
+    if MSUF_PurgeBorderTestMode then Rows.RetargetTest("purge") end
     return result
 end
 local function ApplyRoundedRuntime()
@@ -563,24 +625,16 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
     }
     local helpers = M.PreviewHelpers or {}
     local roundedMedia = {}
-    local function ApplyPreviewStrength(entry)
-        local region = entry and entry.region
-        if not region then return end
-        local strength = floor((tonumber(Bars().roundedCornerStrength) or 3) + 0.5)
-        if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
-        local path = (entry.edge and ROUNDED_PREVIEW_EDGES or ROUNDED_PREVIEW_MASKS)[strength]
+    -- The clean media family for the stored corner strength is the preview helpers' own.
+    -- A refresh resolves it once and hands it to every masked region and edge.
+    local function ApplyPreviewStrength(entry, maskPath, edgePath, strength)
+        local region = entry.region
+        local path = entry.edge and edgePath or maskPath
         if region._msuf2RoundedPreviewStrength == strength and region._msuf2RoundedPreviewPath == path then return end
         region._msuf2RoundedPreviewStrength = strength
         region._msuf2RoundedPreviewPath = path
         region:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        if region.SetTextureSliceMargins then
-            region:SetTextureSliceMargins(
-                ROUNDED_PREVIEW_SLICE_MARGIN, ROUNDED_PREVIEW_SLICE_MARGIN,
-                ROUNDED_PREVIEW_SLICE_MARGIN, ROUNDED_PREVIEW_SLICE_MARGIN)
-        end
-        if ROUNDED_PREVIEW_STRETCHED ~= nil and region.SetTextureSliceMode then
-            region:SetTextureSliceMode(ROUNDED_PREVIEW_STRETCHED)
-        end
+        helpers.ApplyRoundedMediaSlice(region, strength)
     end
     for i = 1, #regions do
         local spec = regions[i]
@@ -589,13 +643,9 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
         tex:SetColorTexture(unpack(spec[4]))
         if helpers.SnapOff then helpers.SnapOff(tex) end
         local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(
-            sample, spec[1], sample, tex, "_msuf2RoundedPreviewMasks", ROUNDED_PREVIEW_MASKS[3])
+            sample, spec[1], sample, tex, "_msuf2RoundedPreviewMasks", ROUNDED_PREVIEW_DEFAULT_MASK)
         if helpers.SetMask then helpers.SetMask(sample, tex, mask, "_msuf2RoundedPreviewMasked") end
-        if mask then
-            local entry = { region = mask }
-            roundedMedia[#roundedMedia + 1] = entry
-            ApplyPreviewStrength(entry)
-        end
+        if mask then roundedMedia[#roundedMedia + 1] = { region = mask } end
     end
     for _, textSpec in ipairs({ { "Mapkotwo", "LEFT", 10, 0.42 }, { "404K - 100.0%", "RIGHT", -10, 0.50 } }) do
         local label = T.Font(sample, "GameFontHighlightSmall", textSpec[1], T.colors.text)
@@ -610,19 +660,21 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
         edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
         edge:SetVertexColor(0, 0, 0, 1)
         if helpers.SnapOff then helpers.SnapOff(edge) end
-        local entry = { region = edge, edge = true }
-        roundedMedia[#roundedMedia + 1] = entry
-        ApplyPreviewStrength(entry)
+        roundedMedia[#roundedMedia + 1] = { region = edge, edge = true }
     end
+    -- Every "Corner rounding" drag step lands here; the first call below paints
+    -- the media the regions were built without.
     function card:RefreshRoundedPreview()
         sample:SetAlpha(ReadB("roundedFramesEnabled", false) == true and 1 or 0.62)
-        for i = 1, #roundedMedia do ApplyPreviewStrength(roundedMedia[i]) end
+        if not helpers.ResolveRoundedMedia then return end
+        local maskPath, edgePath, strength = helpers.ResolveRoundedMedia()
+        for i = 1, #roundedMedia do ApplyPreviewStrength(roundedMedia[i], maskPath, edgePath, strength) end
     end
     card:RefreshRoundedPreview()
     return card
 end
 
-local NormalizeDispelTrigger = _G.MSUF_NormalizeDispelBorderTrigger
+local NormalizeDispelTrigger = MSUF.Require("MSUF_NormalizeDispelBorderTrigger", FILE)
 local function NormalizeAggroMode(value)
     value = tostring(value or "ALL"):upper()
     if value == "TANK_ONLY" then return "TANK" end
@@ -733,6 +785,7 @@ local function AttachBarsColorShortcut(section, title, note, label, getRGB, setR
             end,
         }
         RegisterControl(shortcut, registeredMeta, title or label or "Bar color", "color")
+        Rows.Schema.Owned(shortcut, "bars", "contextColors")
     end
     return shortcut
 end
@@ -855,14 +908,8 @@ end
 local function SetBarBackgroundTextureForScope(value)
     value = value or ""
     local scope, keys = CurrentBarsScope(), ScopeDBKeys(CurrentBarsScope())
-    if scope == "shared" then
-        local general = G()
-        if general.barBackgroundTexture == value then return false end
-        general.barBackgroundTexture = value
-        return true
-    end
-    if not GroupScope() then return false end
-    if not keys then
+    if scope ~= "shared" and not GroupScope() then return false end
+    if scope == "shared" or not keys then
         local general = G()
         if general.barBackgroundTexture == value then return false end
         general.barBackgroundTexture = value
@@ -961,12 +1008,20 @@ local function BuildScopeSection(ctx, b)
             end
         end,
     })
+    if scopeUI then
+        local scope = Rows.Schema.ScopeOwner(scopeUI.segment, "bars", "menuState")._msuf2ControlSchema
+        Rows.Schema.Owned(scopeUI.override, "bars", "bars")
+        Rows.Schema.Owned(scopeUI.reset, "bars", "bars")
+        Rows.Schema.Custom(scopeUI.section, { id = scope.id .. ".owner", kind = "scope", scope = "bars",
+            applyDomain = "menuState", owner = scopeUI.section, selector = scopeUI.segment })
+    end
     if M.AddTooltip and scopeUI then
         M.AddTooltip(scopeUI.override, "Use custom settings for this scope",
             "Gives this unit or group its own gradient, absorb, outline and highlight settings instead of following Shared. Turning it off keeps your custom values.",
             { hook = true, labelHit = true })
         M.AddTooltip(scopeUI.reset, "Reset",
-            "Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved.", { hook = true })
+            "Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved.",
+                { hook = true })
     end
 end
 
@@ -995,10 +1050,15 @@ function GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradient
             end)
             -- The arrow glyphs are no searchable names. The pad is found once, by its
             -- name on the first arrow; the other arrows keep their glyph.
-            RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"),
-                value == "UP" and "Gradient direction" or text, "button")
+            local meta = Meta("gradient." .. kind .. ".direction." .. tostring(value), "action")
+            local label = value == "UP" and "Gradient direction" or text
+            RegisterControl(btn, meta, label, "button")
+            Rows.Schema.Custom(btn, { id = meta.controlId, meta = meta,
+                kind = "button", labelKey = label, scope = "bars", applyDomain = "bars", owner = btn, action = Rows.Schema.ButtonAction(btn) })
             if M.AddTooltip then
-                M.AddTooltip(btn, nil, "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.", { hook = true })
+                M.AddTooltip(btn, nil,
+                    "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.",
+                    { hook = true })
             end
             directionButtons[kind][value] = btn
         end
@@ -1009,6 +1069,8 @@ function GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradient
         PadButton("<", "LEFT", centerX - sideOffset, -centerY)
         PadButton(">", "RIGHT", centerX + sideOffset, -centerY)
         PadButton("v", "DOWN", centerX, -(centerY + sideOffset))
+        Rows.Schema.Custom(pad, { id = Meta("gradient." .. kind .. ".direction", "ephemeral").controlId,
+            kind = "directionpad", scope = "bars", applyDomain = "bars", owner = pad, controls = directionButtons[kind] })
         pads[kind] = pad
     end
     BuildDirectionPad("health", hpY - 2)
@@ -1017,55 +1079,80 @@ function GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradient
 end
 
 function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
-    local function BindTextureDropdown(label, values, getValue, setValue, y, path)
-        local control = W.Dropdown(textures, label, values, leftW)
-        M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
-        W.MoveWidget(control, textures, leftX, y, leftW, "LEFT")
-        return control
-    end
-    local barTexture = BindTextureDropdown("Bar textures (SharedMedia)", function() return TextureValues(nil) end, BarTextureForScope,
-        function(v)
-            if SetBarTextureForScope(v) then
-                ApplyBars("MSUF2_BAR_TEXTURE")
-            end
-        end, topY, "textures.foreground")
-    local bgTexture = BindTextureDropdown("Background texture", function() return TextureValues("Use foreground texture") end, BarBackgroundTextureForScope,
-        function(v)
-            if SetBarBackgroundTextureForScope(v) then
-                ApplyBars("MSUF2_BAR_BG_TEXTURE")
-            end
-        end, topY - 54, "textures.background")
+    local options = Rows.Options(function(key, fallback) return Bars()[key] or fallback end,
+        function(key, value) Bars()[key] = value end, function(row) ApplyBars(row.reason) end,
+        function(key) return Bars()[key] end)
     -- Shared power-bar art for every unit power bar (detached or not). Stored in
     -- the shared bars table like powerBarHeight, and resolved in the UF compiler
     -- as: this value -> Class Resources detached art -> per-unit powerBarTexture.
-    local powerTexture = BindTextureDropdown("Power bar texture", function() return TextureValues("Use bar texture") end,
-        function() return Bars().powerBarTexture or "" end,
-        function(v)
-            local bars = Bars()
-            v = v or ""
-            if bars.powerBarTexture == v then return end
-            bars.powerBarTexture = v
-            ApplyBars("MSUF2_POWER_BAR_TEXTURE")
-        end, topY - 108, "textures.power_foreground")
-    local powerBgTexture = BindTextureDropdown("Power background texture", function() return TextureValues("Use bar background texture") end,
-        function() return Bars().powerBarBgTexture or "" end,
-        function(v)
-            local bars = Bars()
-            v = v or ""
-            if bars.powerBarBgTexture == v then return end
-            bars.powerBarBgTexture = v
-            ApplyBars("MSUF2_POWER_BAR_BG_TEXTURE")
-        end, topY - 162, "textures.power_background")
-    if M.AddTooltip then
-        M.AddTooltip(powerTexture, "Power Bar Texture", "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(powerBgTexture, "Power Background Texture", "Background art behind every unit's power bar. Overridable per unit on the unit page.", { hook = true, owner = "ANCHOR_RIGHT" })
+    local refs = Rows.Schema.Build(ctx, textures, {
+        { "dropdown", "foreground", "", { "Bar textures (SharedMedia)", function() return TextureValues(nil) end, leftW },
+            { leftX, topY, leftW, "LEFT" }, path = "textures.foreground", get = BarTextureForScope,
+            set = function(v) if SetBarTextureForScope(v) then ApplyBars("MSUF2_BAR_TEXTURE") end end },
+        { "dropdown", "background", "", { "Background texture", function() return TextureValues("Use foreground texture") end, leftW },
+            { leftX, topY - 54, leftW, "LEFT" }, path = "textures.background", get = BarBackgroundTextureForScope,
+            set = function(v) if SetBarBackgroundTextureForScope(v) then ApplyBars("MSUF2_BAR_BG_TEXTURE") end end },
+        { "dropdown", "powerBarTexture", "", { "Power bar texture", function() return TextureValues("Use bar texture") end, leftW },
+            { leftX, topY - 108, leftW, "LEFT" }, path = "textures.power_foreground", skipEqual = true, reason = "MSUF2_POWER_BAR_TEXTURE",
+            tip = { "Power Bar Texture",
+                "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar.",
+                { hook = true, owner = "ANCHOR_RIGHT" } } },
+        { "dropdown", "powerBarBgTexture", "", { "Power background texture", function() return TextureValues("Use bar background texture") end, leftW },
+            { leftX, topY - 162, leftW, "LEFT" }, path = "textures.power_background", skipEqual = true, reason = "MSUF2_POWER_BAR_BG_TEXTURE",
+            tip = { "Power Background Texture", "Background art behind every unit's power bar. Overridable per unit on the unit page.", { hook = true,
+                owner = "ANCHOR_RIGHT" } } },
+    }, options)
+    return refs.foreground, refs.background
+end
+
+function GP.BuildBarGlossControls(ctx, section, leftX, rightX, width, compact)
+    local topY = compact and -546 or -304
+    local Sync = M.RefreshProxy()
+    local options = Rows.Options(function(key, fallback, row)
+        local value = BarScopeGet(key, row.percent and 0.5 or fallback)
+        return row.percent and floor(max(0, min(1, tonumber(value) or 0.5)) * 100 + 0.5) or value
+    end, function(key, value, row)
+        if row.percent then value = max(0, min(100, value)) / 100 end
+        BarScopeSet(key, value, row.reason, true)
+    end, function(row)
+        RequestApply("RequestBarGradients", row.reason, CurrentBarsScope())
+        Sync()
+    end)
+    local refs = Rows.Build(ctx, section, {
+        { "toggle", "healthGlossEnabled", false, { "Health gloss", leftX, topY, width },
+            path = "gloss.health.enabled", reason = "MSUF2_HEALTH_GLOSS",
+            tip = "Adds a white reflection over the filled bar, including dark bars." },
+        { "slider", "healthGlossStrength", 50, { "Health gloss strength", 0, 100, 5, width },
+            { leftX, topY - 38, width, "LEFT" }, path = "gloss.health.strength", percent = true, reason = "MSUF2_HEALTH_GLOSS_STRENGTH",
+            tip = "Sets the reflection strength from 0 to 100." },
+        { "toggle", "powerGlossEnabled", false, { "Power gloss", rightX, compact and topY - 96 or topY, width },
+            path = "gloss.power.enabled", reason = "MSUF2_POWER_GLOSS",
+            tip = "Adds a white reflection over the filled bar, including dark bars." },
+        { "slider", "powerGlossStrength", 50, { "Power gloss strength", 0, 100, 5, width },
+            { rightX, (compact and topY - 96 or topY) - 38, width, "LEFT" }, path = "gloss.power.strength",
+            percent = true, reason = "MSUF2_POWER_GLOSS_STRENGTH",
+            tip = "Sets the reflection strength from 0 to 100." },
+    }, options)
+    local toggles = { refs.healthGlossEnabled, refs.powerGlossEnabled }
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        local scopeReason = W.TurnOnReason("Use custom settings for this scope", ScopedControls)
+        W.SetControlsDisabledReason(toggles, scopeReason)
+        local healthReason = W.TurnOnReason("Health gloss", function() return BarScopeGet("healthGlossEnabled", false) == true end)
+        local powerReason = W.TurnOnReason("Power gloss", function() return BarScopeGet("powerGlossEnabled", false) == true end)
+        W.SetControlDisabledReason(refs.healthGlossStrength, function(control) return scopeReason(control) or healthReason(control) end)
+        W.SetControlDisabledReason(refs.powerGlossStrength, function(control) return scopeReason(control) or powerReason(control) end)
     end
-    return barTexture, bgTexture
+    M.TrackRefresh(ctx, Sync(function()
+        local active = GradientControlsActive()
+        SetControlsEnabled(toggles, active)
+        SetControlEnabled(refs.healthGlossStrength, active and BarScopeGet("healthGlossEnabled", false) == true)
+        SetControlEnabled(refs.powerGlossStrength, active and BarScopeGet("powerGlossEnabled", false) == true)
+    end))
 end
 
 local function BuildTextureSection(ctx, b)
     local compactTextures = (ctx.width or 720) < 560
-    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 566 or 330, true)
+    local textures = Rows.Schema.Section(b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 766 or 448, true), "bars")
     local leftX, topY = 14, -42
     local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
     local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
@@ -1073,64 +1160,52 @@ local function BuildTextureSection(ctx, b)
     -- carries two extra power dropdowns.
     local gradientY = compactTextures and (topY - 234) or topY
     local barTexture, bgTexture = GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
-    local gradLabel = T.Font(textures, "GameFontHighlightSmall", "Gradient", T.colors.muted)
-    gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
+    GP.BuildBarGlossControls(ctx, textures, leftX, rightX, leftW, compactTextures)
+    Rows.Schema.Build(ctx, textures, {
+        { "font", "gradientLabel", nil, { "GameFontHighlightSmall", "Gradient", T.colors.muted }, scope = "bars",
+            anchor = { "TOPLEFT", textures, "TOPLEFT", rightX, gradientY } },
+    })
     local SyncGradientControls = M.RefreshProxy()
-    local function BindGradientToggle(label, y, width, key, reason, kind)
-        local control = W.ToggleAt(textures, label, rightX, y, width)
-        M.BindBoolWidget(ctx, control,
-            function() return GradientScopeGet(key, false) == true end,
-            function(v)
-                GradientScopeSet(key, v and true or false)
-                ApplyGradientRuntime(reason, kind)
-                SyncGradientControls()
-            end,
-            Meta("gradient." .. key))
-        return control
-    end
+    local gradientOptions = Rows.Options(function(key, fallback) return GradientScopeGet(key, fallback) end,
+        function(key, value) GradientScopeSet(key, value) end,
+        function(row)
+            ApplyGradientRuntime(row.reason, row.gradientKind)
+            SyncGradientControls()
+        end)
     local hpY = gradientY - 28
     local powerY = gradientY - 138
     local padX = compactTextures and math.min(rightX + 210, (ctx.width or 720) - 104) or math.min(rightX + 238, (ctx.width or 720) - 104)
     local compactStrengthW = math.max(150, padX - rightX - 14)
-    local hpGradient = BindGradientToggle("Health gradient", hpY, compactTextures and 150 or 180, "enableGradient", "MSUF2_HP_GRADIENT", "health")
-    local powerGradient = BindGradientToggle("Power gradient", powerY, compactTextures and 170 or 190, "enablePowerGradient", "MSUF2_POWER_GRADIENT", "power")
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(textures, { "gradient.health", "gradient.power" }, {
-            title = "Bar Gradient Colors",
-            note = "Health and Power gradient colors for the selected Bars scope.",
-            historySource = "menu:bars-gradient-colors",
-            offsetY = -8,
-        })
-    end
-    local function BindGradientStrength(kind, y, key, legacyKey, path, reason)
-        local label = kind == "power" and "Power strength" or "Health strength"
-        local control = W.Slider(textures, label, 0, 1, 0.05, 220)
-        M.BindNumberWidget(ctx, control,
-            function() return tonumber(GradientScopeGet(key, 0.45, legacyKey)) or 0.45 end,
-            function(v)
-                if kind == "health" then FreezePowerGradientScope() end
-                GradientScopeSet(key, tonumber(v) or 0.45)
-                ApplyGradientRuntime(reason, kind)
-            end,
-            0.45,
-            Meta(path))
-        W.MoveWidget(control, textures, rightX, y, compactTextures and compactStrengthW or 220, "LEFT")
-        return control
-    end
-    local hpStrength = BindGradientStrength("health", hpY - 36, "gradientStrength", nil,
-        "gradient.health.strength", "MSUF2_HP_GRADIENT_STRENGTH")
-    local powerStrength = BindGradientStrength("power", powerY - 36, "powerGradientStrength", "gradientStrength",
-        "gradient.power.strength", "MSUF2_POWER_GRADIENT_STRENGTH")
+    local gradients = Rows.Build(ctx, textures, {
+        { "toggle", "enableGradient", false, { "Health gradient", rightX, hpY, compactTextures and 150 or 180 },
+            path = "gradient.enableGradient", reason = "MSUF2_HP_GRADIENT", gradientKind = "health",
+            tip = "Adds a shade over the filled part of health bars that darkens toward the arrows you pick. The strength slider sets how dark it gets." },
+        { "toggle", "enablePowerGradient", false, { "Power gradient", rightX, powerY, compactTextures and 170 or 190 },
+            path = "gradient.enablePowerGradient", reason = "MSUF2_POWER_GRADIENT", gradientKind = "power",
+            tip = "Adds the same fading shade to power bars, with its own direction arrows and strength." },
+    }, gradientOptions)
+    local hpGradient, powerGradient = gradients.enableGradient, gradients.enablePowerGradient
+    Rows.Schema.Colors(textures, { "gradient.health", "gradient.power" }, {
+        title = "Bar Gradient Colors",
+        note = "Health and Power gradient colors for the selected Bars scope.",
+        historySource = "menu:bars-gradient-colors",
+        offsetY = -8,
+    })
+    local strengthOptions = Rows.Options(GradientScopeGet, GradientScopeSet, ApplyGradientRuntime, nil, true)
+    local strengths = Rows.Build(ctx, textures, {
+        { "slider", "gradientStrength", 0.45, { "Health strength", 0, 1, 0.05, 220 },
+            { rightX, hpY - 36, compactTextures and compactStrengthW or 220, "LEFT" }, path = "gradient.health.strength",
+            reason = "MSUF2_HP_GRADIENT_STRENGTH", gradientKind = "health", beforeWrite = FreezePowerGradientScope,
+            tip = "How dark the health bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color." },
+        { "slider", "powerGradientStrength", 0.45, { "Power strength", 0, 1, 0.05, 220 },
+            { rightX, powerY - 36, compactTextures and compactStrengthW or 220, "LEFT" }, path = "gradient.power.strength",
+            reason = "MSUF2_POWER_GRADIENT_STRENGTH", gradientKind = "power", legacyKey = "gradientStrength",
+            tip = "How dark the power bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color." },
+    }, strengthOptions)
+    local hpStrength, powerStrength = strengths.gradientStrength, strengths.powerGradientStrength
     local directionButtons, pads = GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradientControls)
     local textureControls = { barTexture, bgTexture }
     local gradientControls = { hpGradient, powerGradient }
-    if M.AddTooltip then
-        local tip = { hook = true, labelHit = true }
-        M.AddTooltip(hpGradient, "Health gradient", "Adds a shade over the filled part of health bars that darkens toward the arrows you pick. The strength slider sets how dark it gets.", tip)
-        M.AddTooltip(powerGradient, "Power gradient", "Adds the same fading shade to power bars, with its own direction arrows and strength.", tip)
-        M.AddTooltip(hpStrength, "Health strength", "How dark the health bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.", tip)
-        M.AddTooltip(powerStrength, "Power strength", "How dark the power bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.", tip)
-    end
     -- Hover reasons: a unit or group scope without its own settings locks this
     -- card, and each strength slider and arrow pad waits for its gradient.
     if W.SetControlsDisabledReason and W.TurnOnReason then
@@ -1177,7 +1252,7 @@ end
 local function BuildTempMaxHealthSection(ctx, b)
     local sectionW = ctx.width or 720
     local compact = sectionW < 700
-    local section = b:CollapsibleSection("bars_temp_max_health", "Maximum Health Loss", compact and 414 or 274, true)
+    local section = Rows.Schema.Section(b:CollapsibleSection("bars_temp_max_health", "Maximum Health Loss", compact and 414 or 274, true), "bars")
     sectionW = section._msuf2Width or sectionW
     local leftX = compact and 20 or 30
     local rightX = compact and 20 or max(390, min(540, floor(sectionW * 0.52)))
@@ -1185,38 +1260,31 @@ local function BuildTempMaxHealthSection(ctx, b)
     local rightW = compact and leftW or max(280, sectionW - rightX - 32)
     local SyncControls = M.RefreshProxy()
 
-    W.Text(section, "Shows the part of maximum health that is temporarily unavailable.",
-        20, -36, sectionW - 40, T.colors.muted)
-
+    local RefreshTempMaxHealth = MSUF.Require("MSUF_RefreshTempMaxHealth", FILE)
+    local RequestPreviewRefresh = MSUF.Require("MSUF_UFPreview_RequestRefresh", FILE)
     local function Refresh(reason)
         local scope = CurrentBarsScope()
-        _G.MSUF_RefreshTempMaxHealth(scope, reason or "MSUF2_TEMP_MAX_HEALTH")
-        _G.MSUF_UFPreview_RequestRefresh(reason or "MSUF2_TEMP_MAX_HEALTH")
+        RefreshTempMaxHealth(scope, reason or "MSUF2_TEMP_MAX_HEALTH")
+        RequestPreviewRefresh(reason or "MSUF2_TEMP_MAX_HEALTH")
         if type(M.RefreshGFNativePreviews) == "function" then
             M.RefreshGFNativePreviews(reason or "MSUF2_TEMP_MAX_HEALTH")
         end
         SyncControls()
     end
 
-    local enabled = W.ToggleAt(section, "Show maximum-health loss", leftX, -78, leftW)
-    M.BindBoolWidget(ctx, enabled,
-        function() return BarScopeGet("tempMaxHealthEnabled", ReadGBool("tempMaxHealthEnabled", false)) == true end,
-        function(value)
-            BarScopeSet("tempMaxHealthEnabled", value and true or false, "MSUF2_TEMP_MAX_HEALTH_ENABLED", true)
-            Refresh("MSUF2_TEMP_MAX_HEALTH_ENABLED")
-        end,
-        Meta("temp_max_health.enabled"))
-
-    local textureY = compact and -132 or -132
-    local texture = W.Dropdown(section, "Texture", function() return TextureValues("Use foreground texture") end, leftW)
-    M.BindDropdownWidget(ctx, texture,
-        function() return BarScopeGet("tempMaxHealthTexture", ReadG("tempMaxHealthTexture", "Solid")) end,
-        function(value)
-            BarScopeSet("tempMaxHealthTexture", value or "", "MSUF2_TEMP_MAX_HEALTH_TEXTURE", true)
-            Refresh("MSUF2_TEMP_MAX_HEALTH_TEXTURE")
-        end,
-        Meta("temp_max_health.texture"))
-    W.MoveWidget(texture, section, leftX, textureY, leftW, "LEFT")
+    local bindings = Rows.Options(function(key, fallback, row)
+        if row.booleanFallback then return BarScopeGet(key, ReadGBool(key, fallback)) end
+        return BarScopeGet(key, ReadG(key, fallback))
+    end, function(key, value, row) BarScopeSet(key, value, row.reason, true) end,
+        function(row) Refresh(row.reason) end)
+    local controls = Rows.Schema.Build(ctx, section, {
+        { "text", "tempHealthHint", nil, { "Shows the part of maximum health that is temporarily unavailable.",
+            20, -36, sectionW - 40, T.colors.muted }, scope = "bars" },
+        { "toggle", "tempMaxHealthEnabled", false, { "Show maximum-health loss", leftX, -78, leftW },
+            path = "temp_max_health.enabled", booleanFallback = true, reason = "MSUF2_TEMP_MAX_HEALTH_ENABLED" },
+        { "dropdown", "tempMaxHealthTexture", "Solid", { "Texture", function() return TextureValues("Use foreground texture") end, leftW },
+            { leftX, -132, leftW, "LEFT" }, path = "temp_max_health.texture", writeDefault = "", reason = "MSUF2_TEMP_MAX_HEALTH_TEXTURE" },
+    }, bindings)
 
     AttachBarsColorShortcut(section,
         "Maximum Health Loss Color",
@@ -1241,46 +1309,22 @@ local function BuildTempMaxHealthSection(ctx, b)
         end,
         Meta("temp_max_health.color"))
 
-    local opacityY = compact and -204 or -78
-    local opacity = W.Slider(section, "Overlay opacity", 0.05, 1, 0.05, rightW)
-    M.BindNumberWidget(ctx, opacity,
-        function() return tonumber(BarScopeGet("tempMaxHealthOpacity", ReadG("tempMaxHealthOpacity", 1))) or 1 end,
-        function(value)
-            BarScopeSet("tempMaxHealthOpacity", tonumber(value) or 1, "MSUF2_TEMP_MAX_HEALTH_OPACITY", true)
-            Refresh("MSUF2_TEMP_MAX_HEALTH_OPACITY")
-        end,
-        1, Meta("temp_max_health.opacity"))
-    W.MoveWidget(opacity, section, rightX, opacityY, rightW, "LEFT")
-
-    local backgroundY = compact and -268 or -142
-    local background = W.Slider(section, "Background opacity", 0, 1, 0.05, rightW)
-    M.BindNumberWidget(ctx, background,
-        function()
-            return tonumber(BarScopeGet("tempMaxHealthBackgroundOpacity",
-                ReadG("tempMaxHealthBackgroundOpacity", 0.65))) or 0.65
-        end,
-        function(value)
-            BarScopeSet("tempMaxHealthBackgroundOpacity", tonumber(value) or 0.65,
-                "MSUF2_TEMP_MAX_HEALTH_BACKGROUND", true)
-            Refresh("MSUF2_TEMP_MAX_HEALTH_BACKGROUND")
-        end,
-        0.65, Meta("temp_max_health.background_opacity"))
-    W.MoveWidget(background, section, rightX, backgroundY, rightW, "LEFT")
-
-    local previewY = compact and -340 or -214
-    local preview = W.ToggleAt(section, "Preview effect", rightX, previewY, rightW)
-    M.BindBoolWidget(ctx, preview,
-        function() return IsAbsorbTextureTestEnabled("tempMaxHealth") == true end,
-        function(value) SetAbsorbTextureTest(value and true or false, "tempMaxHealth") end,
-        Meta("temp_max_health.preview", "ephemeral"))
-
-    local options = { texture, opacity, background }
+    Rows.Schema.Build(ctx, section, {
+        { "slider", "tempMaxHealthOpacity", 1, { "Overlay opacity", 0.05, 1, 0.05, rightW },
+            { rightX, compact and -204 or -78, rightW, "LEFT" }, path = "temp_max_health.opacity", reason = "MSUF2_TEMP_MAX_HEALTH_OPACITY" },
+        { "slider", "tempMaxHealthBackgroundOpacity", 0.65, { "Background opacity", 0, 1, 0.05, rightW },
+            { rightX, compact and -268 or -142, rightW, "LEFT" }, path = "temp_max_health.background_opacity", reason = "MSUF2_TEMP_MAX_HEALTH_BACKGROUND" },
+        { "toggle", "preview", false, { "Preview effect", rightX, compact and -340 or -214, rightW },
+            path = "temp_max_health.preview", classification = "ephemeral", get = function() return IsAbsorbTextureTestEnabled("tempMaxHealth") == true end,
+            set = function(value) SetAbsorbTextureTest(value and true or false, "tempMaxHealth") end },
+    }, bindings, controls)
+    local options = { controls.tempMaxHealthTexture, controls.tempMaxHealthOpacity, controls.tempMaxHealthBackgroundOpacity }
     M.TrackRefresh(ctx, SyncControls(function()
         local scopedActive = ScopedControls()
         local on = BarScopeGet("tempMaxHealthEnabled", ReadGBool("tempMaxHealthEnabled", false)) == true
-        SetControlEnabled(enabled, scopedActive)
+        SetControlEnabled(controls.tempMaxHealthEnabled, scopedActive)
         SetControlsEnabled(options, scopedActive and on)
-        SetControlEnabled(preview, true)
+        SetControlEnabled(controls.preview, true)
     end))
 end
 
@@ -1304,7 +1348,7 @@ function GP.AbsorbControlMeta(parent, path, classification, frames, selectTab)
     return meta
 end
 function GP.BuildAbsorbTabs(ctx, b)
-    local section = b:CollapsibleSection("bars_absorb", "Absorb Display", 414, true)
+    local section = Rows.Schema.Section(b:CollapsibleSection("bars_absorb", "Absorb Display", 414, true), "bars")
     local sectionW = section._msuf2Width or ctx.width or 720
     local leftX = 30
     local rightX = max(430, min(560, floor(sectionW * 0.52)))
@@ -1323,20 +1367,21 @@ function GP.BuildAbsorbTabs(ctx, b)
     end
     local positive, negative, heal = M.UnitSectionsShared.MakeTabFrames(
         section, -64, sectionW, tabFrames, "positive", "negative", "heal")
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(positive, { "bar.absorb" }, {
-            title = "Absorb Color",
-            historySource = "menu:bars-absorb-color",
-        })
-        W.AttachContextColorReferences(negative, { "bar.heal_absorb" }, {
-            title = "Heal Absorb Color",
-            historySource = "menu:bars-heal-absorb-color",
-        })
-        W.AttachContextColorReferences(heal, { "bar.heal_prediction" }, {
-            title = "Heal Prediction Color",
-            historySource = "menu:bars-heal-prediction-color",
-        })
+    for name, frame in pairs(tabFrames) do
+        Rows.Schema.ContextColors(frame, Meta("absorb." .. name .. ".colors", "ephemeral").controlId, "bars")
     end
+    Rows.Schema.Colors(positive, { "bar.absorb" }, {
+        title = "Absorb Color",
+        historySource = "menu:bars-absorb-color",
+    })
+    Rows.Schema.Colors(negative, { "bar.heal_absorb" }, {
+        title = "Heal Absorb Color",
+        historySource = "menu:bars-heal-absorb-color",
+    })
+    Rows.Schema.Colors(heal, { "bar.heal_prediction" }, {
+        title = "Heal Prediction Color",
+        historySource = "menu:bars-heal-prediction-color",
+    })
     local tabs, _, _, SelectAbsorbTab = W.SegmentTabs(ctx, section, {
         label = "", values = tabValues, width = min(660, sectionW - 48),
         frames = tabFrames, defaultTab = "positive", get = CurrentTab,
@@ -1345,93 +1390,106 @@ function GP.BuildAbsorbTabs(ctx, b)
     })
     if tabs._msuf2Title then tabs._msuf2Title:Hide() end
     RegisterControl(tabs, Meta("absorb.workspace_tab", "ephemeral"), "Absorb area", "segment")
+    Rows.Schema.Owned(tabs, "bars", "sectionNavigation")
 
     return section, leftX, rightX, leftW, rightW, tabFrames, SelectAbsorbTab, positive, negative, heal
 end
 
 function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, leftW, rightW,
-    BindToggle, BindDropdown, BindSlider, BindTest, TextureDefault, anchorValues, negativeAnchorValues, healAnchorValues, SyncControls)
-    local positiveEnabled = BindToggle(positive, "Show positive absorbs", "enableAbsorbBar", true,
-        "MSUF2_ABSORB_ENABLED", leftX, -10, leftW, "absorb.positive.enabled", function(value)
+    options, TextureDefault, anchorValues, negativeAnchorValues, healAnchorValues, SyncControls)
+    local refs = {}
+    Rows.Build(ctx, positive, {
+        { "toggle", "enableAbsorbBar", true, { "Show positive absorbs", leftX, -10, leftW },
+            path = "absorb.positive.enabled", reason = "MSUF2_ABSORB_ENABLED", afterWrite = function(value)
             BarScopeSet("absorbTextMode", value and 2 or 1, "MSUF2_ABSORB_ENABLED", true)
-        end)
-    local positiveAnchor = BindDropdown(positive, "Anchor", anchorValues, "absorbAnchorMode", 2,
-        "MSUF2_ABSORB_ANCHOR", leftX, -64, leftW, true, "absorb.positive.anchor")
-    local positiveHeight = BindSlider(positive, "Bar height (0 = full)", 0, 100, 1, "absorbBarHeight", 0,
-        "MSUF2_ABSORB_HEIGHT", leftX, -118, leftW, "absorb.positive.height")
-    local positiveOffset = BindSlider(positive, "Vertical offset", -100, 100, 1, "absorbBarOffsetY", 0,
-        "MSUF2_ABSORB_OFFSET", leftX, -182, leftW, "absorb.positive.offset_y")
-    local positiveTexture = BindDropdown(positive, "Texture", function() return TextureValues("Use foreground texture") end,
-        "absorbBarTexture", TextureDefault("absorbBarTexture"), "MSUF2_ABSORB_TEXTURE",
-        rightX, -10, rightW, false, "absorb.positive.texture")
-    local positiveOpacity = BindSlider(positive, "Opacity", 0, 1, 0.05, "absorbBarOpacity", 0.75,
-        "MSUF2_ABSORB_OPACITY", rightX, -64, rightW, "absorb.positive.opacity")
-    local positiveTest = BindTest(positive, "absorb", rightX, -128, rightW, "absorb.positive.preview.test")
-    local overAbsorb = BindToggle(positive, "Over-absorb overlay", "overAbsorbOverlay", false,
-        "MSUF2_OVER_ABSORB_OVERLAY", rightX, -182, rightW, "absorb.positive.over_absorb")
-    local fullStripe = BindToggle(positive, "Full-health absorb stripe", "fullHealthAbsorbStripe", false,
-        "MSUF2_FULL_HEALTH_ABSORB_STRIPE", rightX, -236, rightW, "absorb.positive.full_health_stripe")
-
-    local negativeEnabled = BindToggle(negative, "Show negative heal absorbs", "healAbsorbEnabled", true,
-        "MSUF2_HEAL_ABSORB_ENABLED", leftX, -10, leftW, "absorb.negative.enabled")
-    local negativeAnchor = BindDropdown(negative, "Anchor", negativeAnchorValues, "healAbsorbAnchorMode", 3,
-        "MSUF2_HEAL_ABSORB_ANCHOR", leftX, -64, leftW, true, "absorb.negative.anchor")
-    local negativeHeight = BindSlider(negative, "Bar height (0 = full)", 0, 100, 1, "healAbsorbBarHeight", 0,
-        "MSUF2_HEAL_ABSORB_HEIGHT", leftX, -118, leftW, "absorb.negative.height")
-    local negativeOffset = BindSlider(negative, "Vertical offset", -100, 100, 1, "healAbsorbBarOffsetY", 0,
-        "MSUF2_HEAL_ABSORB_OFFSET", leftX, -182, leftW, "absorb.negative.offset_y")
-    local negativeTexture = BindDropdown(negative, "Texture", function() return TextureValues("Use foreground texture") end,
-        "healAbsorbBarTexture", TextureDefault("healAbsorbBarTexture"), "MSUF2_HEAL_ABSORB_TEXTURE",
-        rightX, -10, rightW, false, "absorb.negative.texture")
-    local negativeOpacity = BindSlider(negative, "Opacity", 0, 1, 0.05, "healAbsorbBarOpacity", 1,
-        "MSUF2_HEAL_ABSORB_OPACITY", rightX, -64, rightW, "absorb.negative.opacity")
-    local negativeTest = BindTest(negative, "healAbsorb", rightX, -128, rightW, "absorb.negative.preview.test")
-
-    local healEnabled = BindToggle(heal, "Show heal prediction", "healPredEnabled",
-        ReadGBool("showSelfHealPrediction", false), "MSUF2_HEAL_PRED_ENABLED", leftX, -10, leftW,
-        "absorb.heal_prediction.enabled", function(value)
+        end,
+            tip = "Draws absorb shields on the unit, such as Power Word: Shield, as an overlay on the health bar." },
+        { "dropdown", "absorbAnchorMode", 2, { "Anchor", anchorValues, leftW }, { leftX, -64, leftW, "LEFT" },
+            path = "absorb.positive.anchor", reason = "MSUF2_ABSORB_ANCHOR", numeric = true },
+        { "slider", "absorbBarHeight", 0, { "Bar height (0 = full)", 0, 100, 1, leftW }, { leftX, -118, leftW, "LEFT" },
+            path = "absorb.positive.height", reason = "MSUF2_ABSORB_HEIGHT" },
+        { "slider", "absorbBarOffsetY", 0, { "Vertical offset", -100, 100, 1, leftW }, { leftX, -182, leftW, "LEFT" },
+            path = "absorb.positive.offset_y", reason = "MSUF2_ABSORB_OFFSET" },
+        { "dropdown", "absorbBarTexture", TextureDefault("absorbBarTexture"), { "Texture", function() return TextureValues("Use foreground texture") end,
+            rightW }, { rightX, -10, rightW, "LEFT" },
+            path = "absorb.positive.texture", reason = "MSUF2_ABSORB_TEXTURE" },
+        { "slider", "absorbBarOpacity", 0.75, { "Opacity", 0, 1, 0.05, rightW }, { rightX, -64, rightW, "LEFT" },
+            path = "absorb.positive.opacity", reason = "MSUF2_ABSORB_OPACITY" },
+        { "toggle", "positiveTest", false, { "Test prediction bars", rightX, -128, rightW }, path = "absorb.positive.preview.test",
+            classification = "ephemeral",
+            get = function() return IsAbsorbTextureTestEnabled("absorb") == true end,
+            set = function(value) SetAbsorbTextureTest(value and true or false, "absorb") end,
+            tip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat." },
+        { "toggle", "overAbsorbOverlay", false, { "Over-absorb overlay", rightX, -182, rightW },
+            path = "absorb.positive.over_absorb", reason = "MSUF2_OVER_ABSORB_OVERLAY",
+            tip = "Adds a shield glow at the end of the health bar when absorbs plus incoming heals cover all of the missing health." },
+        { "toggle", "fullHealthAbsorbStripe", false, { "Full-health absorb stripe", rightX, -236, rightW },
+            path = "absorb.positive.full_health_stripe", reason = "MSUF2_FULL_HEALTH_ABSORB_STRIPE",
+            tip = "Shows a shield glow at the end of the health bar while the unit is at full health and still has an absorb shield." },
+    }, options, refs)
+    Rows.Build(ctx, negative, {
+        { "toggle", "healAbsorbEnabled", true, { "Show negative heal absorbs", leftX, -10, leftW },
+            path = "absorb.negative.enabled", reason = "MSUF2_HEAL_ABSORB_ENABLED",
+            tip = "Shows heal absorbs, effects that soak up incoming healing before health can rise, as a bar over current health." },
+        { "dropdown", "healAbsorbAnchorMode", 3, { "Anchor", negativeAnchorValues, leftW }, { leftX, -64, leftW, "LEFT" },
+            path = "absorb.negative.anchor", reason = "MSUF2_HEAL_ABSORB_ANCHOR", numeric = true },
+        { "slider", "healAbsorbBarHeight", 0, { "Bar height (0 = full)", 0, 100, 1, leftW }, { leftX, -118, leftW, "LEFT" },
+            path = "absorb.negative.height", reason = "MSUF2_HEAL_ABSORB_HEIGHT" },
+        { "slider", "healAbsorbBarOffsetY", 0, { "Vertical offset", -100, 100, 1, leftW }, { leftX, -182, leftW, "LEFT" },
+            path = "absorb.negative.offset_y", reason = "MSUF2_HEAL_ABSORB_OFFSET" },
+        { "dropdown", "healAbsorbBarTexture", TextureDefault("healAbsorbBarTexture"), { "Texture",
+            function() return TextureValues("Use foreground texture") end, rightW }, { rightX, -10, rightW, "LEFT" },
+            path = "absorb.negative.texture", reason = "MSUF2_HEAL_ABSORB_TEXTURE" },
+        { "slider", "healAbsorbBarOpacity", 1, { "Opacity", 0, 1, 0.05, rightW }, { rightX, -64, rightW, "LEFT" },
+            path = "absorb.negative.opacity", reason = "MSUF2_HEAL_ABSORB_OPACITY" },
+        { "toggle", "negativeTest", false, { "Test prediction bars", rightX, -128, rightW }, path = "absorb.negative.preview.test",
+            classification = "ephemeral",
+            get = function() return IsAbsorbTextureTestEnabled("healAbsorb") == true end,
+            set = function(value) SetAbsorbTextureTest(value and true or false, "healAbsorb") end,
+            tip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat." },
+    }, options, refs)
+    Rows.Build(ctx, heal, {
+        { "toggle", "healPredEnabled", ReadGBool("showSelfHealPrediction", false), { "Show heal prediction", leftX, -10, leftW },
+            path = "absorb.heal_prediction.enabled", reason = "MSUF2_HEAL_PRED_ENABLED", afterWrite = function(value)
             if SharedScope() then
                 G().showSelfHealPrediction = value
             end
-        end)
-    local healAnchor = BindDropdown(heal, "Anchor", healAnchorValues, "healPredAnchorMode", 3,
-        "MSUF2_HEALPRED_ANCHOR", leftX, -64, leftW, true, "absorb.heal_prediction.anchor")
-    local healHeight = BindSlider(heal, "Bar height (0 = full)", 0, 100, 1, "healPredictionBarHeight", 0,
-        "MSUF2_HEALPRED_HEIGHT", leftX, -118, leftW, "absorb.heal_prediction.height")
-    local healOffset = BindSlider(heal, "Vertical offset", -100, 100, 1, "healPredictionBarOffsetY", 0,
-        "MSUF2_HEALPRED_OFFSET", leftX, -182, leftW, "absorb.heal_prediction.offset_y")
-    local healTexture = BindDropdown(heal, "Texture", function() return TextureValues("Use foreground texture") end,
-        "healPredictionBarTexture", "", "MSUF2_HEALPRED_TEXTURE", rightX, -10, rightW, false,
-        "absorb.heal_prediction.texture")
-    local healOpacity = BindSlider(heal, "Opacity", 0, 1, 0.05, "healPredictionBarOpacity", 0.45,
-        "MSUF2_HEALPRED_OPACITY", rightX, -64, rightW, "absorb.heal_prediction.opacity")
-    local healTest = BindTest(heal, "heal", rightX, -128, rightW, "absorb.heal_prediction.preview.test")
-    local healAllHealers = BindToggle(heal, "Include healing from others", "healPredAllHealers", false,
-        "MSUF2_HEALPRED_ALL_HEALERS", rightX, -182, rightW, "absorb.heal_prediction.all_healers")
+        end,
+            tip = "Shows incoming heals as a bar on the health bar before they land. Only your own heals count unless Include healing from others is on." },
+        { "dropdown", "healPredAnchorMode", 3, { "Anchor", healAnchorValues, leftW }, { leftX, -64, leftW, "LEFT" },
+            path = "absorb.heal_prediction.anchor", reason = "MSUF2_HEALPRED_ANCHOR", numeric = true },
+        { "slider", "healPredictionBarHeight", 0, { "Bar height (0 = full)", 0, 100, 1, leftW }, { leftX, -118, leftW, "LEFT" },
+            path = "absorb.heal_prediction.height", reason = "MSUF2_HEALPRED_HEIGHT" },
+        { "slider", "healPredictionBarOffsetY", 0, { "Vertical offset", -100, 100, 1, leftW }, { leftX, -182, leftW, "LEFT" },
+            path = "absorb.heal_prediction.offset_y", reason = "MSUF2_HEALPRED_OFFSET" },
+        { "dropdown", "healPredictionBarTexture", "", { "Texture", function() return TextureValues("Use foreground texture") end, rightW }, { rightX, -10,
+            rightW, "LEFT" },
+            path = "absorb.heal_prediction.texture", reason = "MSUF2_HEALPRED_TEXTURE" },
+        { "slider", "healPredictionBarOpacity", 0.45, { "Opacity", 0, 1, 0.05, rightW }, { rightX, -64, rightW, "LEFT" },
+            path = "absorb.heal_prediction.opacity", reason = "MSUF2_HEALPRED_OPACITY" },
+        { "toggle", "healTest", false, { "Test prediction bars", rightX, -128, rightW }, path = "absorb.heal_prediction.preview.test",
+            classification = "ephemeral",
+            get = function() return IsAbsorbTextureTestEnabled("heal") == true end,
+            set = function(value) SetAbsorbTextureTest(value and true or false, "heal") end,
+            tip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat." },
+        { "toggle", "healPredAllHealers", false, { "Include healing from others", rightX, -182, rightW },
+            path = "absorb.heal_prediction.all_healers", reason = "MSUF2_HEALPRED_ALL_HEALERS",
+            tip = "Counts incoming heals from every healer, not only your own. Useful on group frames when several healers are active." },
+    }, options, refs)
 
-    local positiveOptions = { positiveAnchor, positiveHeight, positiveOffset, positiveTexture, positiveOpacity, overAbsorb, fullStripe }
-    local negativeOptions = { negativeAnchor, negativeHeight, negativeOffset, negativeTexture, negativeOpacity }
-    local healOptions = { healAnchor, healHeight, healOffset, healTexture, healOpacity, healAllHealers }
-    if M.AddTooltip then
-        local tip = { hook = true, labelHit = true }
-        local testTip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat."
-        M.AddTooltip(positiveEnabled, "Show positive absorbs", "Draws absorb shields on the unit, such as Power Word: Shield, as an overlay on the health bar.", tip)
-        M.AddTooltip(overAbsorb, "Over-absorb overlay", "Adds a shield glow at the end of the health bar when absorbs plus incoming heals cover all of the missing health.", tip)
-        M.AddTooltip(fullStripe, "Full-health absorb stripe", "Shows a shield glow at the end of the health bar while the unit is at full health and still has an absorb shield.", tip)
-        M.AddTooltip(negativeEnabled, "Show negative heal absorbs", "Shows heal absorbs, effects that soak up incoming healing before health can rise, as a bar over current health.", tip)
-        M.AddTooltip(healEnabled, "Show heal prediction", "Shows incoming heals as a bar on the health bar before they land. Only your own heals count unless Include healing from others is on.", tip)
-        M.AddTooltip(healAllHealers, "Include healing from others", "Counts incoming heals from every healer, not only your own. Useful on group frames when several healers are active.", tip)
-        M.AddTooltip(positiveTest, "Test prediction bars", testTip, tip)
-        M.AddTooltip(negativeTest, "Test prediction bars", testTip, tip)
-        M.AddTooltip(healTest, "Test prediction bars", testTip, tip)
-    end
+    local positiveOptions = { refs.absorbAnchorMode, refs.absorbBarHeight, refs.absorbBarOffsetY, refs.absorbBarTexture, refs.absorbBarOpacity,
+        refs.overAbsorbOverlay, refs.fullHealthAbsorbStripe }
+    local negativeOptions = { refs.healAbsorbAnchorMode, refs.healAbsorbBarHeight, refs.healAbsorbBarOffsetY, refs.healAbsorbBarTexture,
+        refs.healAbsorbBarOpacity }
+    local healOptions = { refs.healPredAnchorMode, refs.healPredictionBarHeight, refs.healPredictionBarOffsetY, refs.healPredictionBarTexture,
+        refs.healPredictionBarOpacity, refs.healPredAllHealers }
     if W.SetControlsDisabledReason and W.TurnOnReason then
         local scopeReason = W.TurnOnReason("Use custom settings for this scope", ScopedControls)
         local function Chain(label, isOn)
             local own = W.TurnOnReason(label, isOn)
             return function(control) return scopeReason(control) or own(control) end
         end
-        W.SetControlsDisabledReason({ positiveEnabled, negativeEnabled, healEnabled }, scopeReason)
+        W.SetControlsDisabledReason({ refs.enableAbsorbBar, refs.healAbsorbEnabled, refs.healPredEnabled }, scopeReason)
         W.SetControlsDisabledReason(positiveOptions, Chain("Show positive absorbs", function() return BarScopeGet("enableAbsorbBar", true) ~= false end))
         W.SetControlsDisabledReason(negativeOptions, Chain("Show negative heal absorbs", function() return BarScopeGet("healAbsorbEnabled", true) ~= false end))
         W.SetControlsDisabledReason(healOptions, Chain("Show heal prediction", function()
@@ -1440,76 +1498,27 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
     end
     M.TrackRefresh(ctx, SyncControls(function()
         local scopedActive = ScopedControls()
-        SetControlEnabled(positiveEnabled, scopedActive)
-        SetControlEnabled(negativeEnabled, scopedActive)
-        SetControlEnabled(healEnabled, scopedActive)
+        SetControlEnabled(refs.enableAbsorbBar, scopedActive)
+        SetControlEnabled(refs.healAbsorbEnabled, scopedActive)
+        SetControlEnabled(refs.healPredEnabled, scopedActive)
         SetControlsEnabled(positiveOptions, scopedActive and BarScopeGet("enableAbsorbBar", true) ~= false)
         SetControlsEnabled(negativeOptions, scopedActive and BarScopeGet("healAbsorbEnabled", true) ~= false)
         SetControlsEnabled(healOptions, scopedActive and BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true)
-        SetControlEnabled(positiveTest, true)
-        SetControlEnabled(negativeTest, true)
-        SetControlEnabled(healTest, true)
-        if positiveAnchor.RefreshPreview then positiveAnchor:RefreshPreview() end
-        if negativeAnchor.RefreshPreview then negativeAnchor:RefreshPreview() end
-        if healAnchor.RefreshPreview then healAnchor:RefreshPreview() end
+        SetControlEnabled(refs.positiveTest, true)
+        SetControlEnabled(refs.negativeTest, true)
+        SetControlEnabled(refs.healTest, true)
+        if refs.absorbAnchorMode.RefreshPreview then refs.absorbAnchorMode:RefreshPreview() end
+        if refs.healAbsorbAnchorMode.RefreshPreview then refs.healAbsorbAnchorMode:RefreshPreview() end
+        if refs.healPredAnchorMode.RefreshPreview then refs.healPredAnchorMode:RefreshPreview() end
     end))
 end
 
 function GP.BuildAbsorbBindings(ctx, tabFrames, SelectAbsorbTab, Apply)
-    local function ResolveDefault(value)
-        return type(value) == "function" and value() or value
+    local options = Rows.Options(BarScopeGet, BarScopeSet, Apply, nil, true)
+    options.beforeBind = function(widget, row)
+        row.meta = GP.AbsorbControlMeta(widget:GetParent(), row.path, row.classification, tabFrames, SelectAbsorbTab)
     end
-    local function BindDropdown(parent, label, values, key, defaultValue, reason, x, y, width, numeric, path)
-        local control = W.Dropdown(parent, label, values, width)
-        M.BindDropdownWidget(ctx, control,
-            function()
-                local fallback = ResolveDefault(defaultValue)
-                local value = BarScopeGet(key, fallback)
-                return numeric and (tonumber(value) or fallback) or value
-            end,
-            function(value)
-                local fallback = ResolveDefault(defaultValue)
-                BarScopeSet(key, numeric and (tonumber(value) or fallback) or (value or fallback), reason, true)
-                Apply(reason)
-            end,
-            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
-        W.MoveWidget(control, parent, x, y, width, "LEFT")
-        return control
-    end
-    local function BindSlider(parent, label, minValue, maxValue, step, key, defaultValue, reason, x, y, width, path)
-        local control = W.Slider(parent, label, minValue, maxValue, step, width)
-        M.BindNumberWidget(ctx, control,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(value)
-                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
-                Apply(reason)
-            end,
-            defaultValue, GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
-        W.MoveWidget(control, parent, x, y, width, "LEFT")
-        return control
-    end
-    local function BindToggle(parent, label, key, defaultValue, reason, x, y, width, path, onSet)
-        local control = W.ToggleAt(parent, label, x, y, width)
-        M.BindBoolWidget(ctx, control,
-            function() return BarScopeGet(key, defaultValue) == true end,
-            function(value)
-                value = value and true or false
-                BarScopeSet(key, value, reason, true)
-                if onSet then onSet(value) end
-                Apply(reason)
-            end,
-            GP.AbsorbControlMeta(parent, path or ("absorb." .. key), nil, tabFrames, SelectAbsorbTab))
-        return control
-    end
-    local function BindTest(parent, category, x, y, width, path)
-        local control = W.ToggleAt(parent, "Test prediction bars", x, y, width)
-        M.BindBoolWidget(ctx, control,
-            function() return IsAbsorbTextureTestEnabled(category) == true end,
-            function(value) SetAbsorbTextureTest(value and true or false, category) end,
-            GP.AbsorbControlMeta(parent, path, "ephemeral", tabFrames, SelectAbsorbTab))
-        return control
-    end
-    return BindDropdown, BindSlider, BindToggle, BindTest
+    return options
 end
 
 local function BuildAbsorbSection(ctx, b)
@@ -1523,10 +1532,10 @@ local function BuildAbsorbSection(ctx, b)
     local function TextureDefault(key)
         return function() return ReadG(key, "") end
     end
-    local BindDropdown, BindSlider, BindToggle, BindTest = GP.BuildAbsorbBindings(ctx, tabFrames, SelectAbsorbTab, Apply)
+    local options = GP.BuildAbsorbBindings(ctx, tabFrames, SelectAbsorbTab, Apply)
+    local resolve = MSUF.Optional("MSUF_ResolveStatusbarTextureKey")
     local function ResolveBarPreviewTexture(key, fallback)
         key = type(key) == "string" and key ~= "" and key or fallback
-        local resolve = _G.MSUF_ResolveStatusbarTextureKey
         if type(resolve) == "function" then
             local texture = resolve(key)
             if type(texture) == "string" and texture ~= "" then return texture end
@@ -1585,93 +1594,50 @@ local function BuildAbsorbSection(ctx, b)
             }
         end
     end
-    local positivePreview = AnchorPreview("positive")
-    local negativePreview = AnchorPreview("negative")
-    local healPreview = AnchorPreview("heal")
-    local anchorValues = {
-        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = positivePreview },
-        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = positivePreview },
-    }
-    local negativeAnchorValues = {
-        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = negativePreview },
-        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = negativePreview },
-        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = negativePreview },
-        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = negativePreview },
-    }
-    local healAnchorValues = {
-        { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = healPreview },
-        { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = healPreview },
-    }
+    -- Negative absorbs have no overflow anchor (choice 4).
+    local function AnchorValues(preview, skipOverflow)
+        local values = {}
+        for _, choice in ipairs({
+            { 1, "Anchor to left side" }, { 2, "Anchor to right side" }, { 3, "Follow HP bar" },
+            { 4, "Follow HP bar (overflow)" }, { 5, "Reverse from max" },
+        }) do
+            if not (skipOverflow and choice[1] == 4) then
+                values[#values + 1] = { value = choice[1], text = choice[2], previewKind = "barOverlay", barPreview = preview }
+            end
+        end
+        return values
+    end
+    local anchorValues = AnchorValues(AnchorPreview("positive"))
+    local negativeAnchorValues = AnchorValues(AnchorPreview("negative"), true)
+    local healAnchorValues = AnchorValues(AnchorPreview("heal"))
 
     GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, leftW, rightW,
-        BindToggle, BindDropdown, BindSlider, BindTest, TextureDefault, anchorValues, negativeAnchorValues, healAnchorValues, SyncControls)
+        options, TextureDefault, anchorValues, negativeAnchorValues, healAnchorValues, SyncControls)
 end
 
 local function BuildOutlineSection(ctx, b)
-    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 226, false)
-    local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
-    M.BindNumberWidget(ctx, outlineSlider,
-        function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
-        function(v)
-            BarScopeSetBars("barOutlineThickness", floor((tonumber(v) or 1) + 0.5), "MSUF2_BAR_OUTLINE", true)
-            RequestOutlineRuntime()
-        end,
-        1, Meta("outline.thickness", "setting", { step = 1, roundStep = true }))
-    local outlineLayer = W.Slider(outline, "Frame outline layer (0-30)", 0, 30, 1, 300)
-    M.BindNumberWidget(ctx, outlineLayer,
-        function() return tonumber(BarScopeGetBars("barOutlineLayer", 0)) or 0 end,
-        function(v)
-            BarScopeSetBars("barOutlineLayer", floor((tonumber(v) or 0) + 0.5), "MSUF2_BAR_OUTLINE_LAYER", true)
-            RequestOutlineRuntime()
-        end,
-        0, Meta("outline.layer", "setting", { step = 1, roundStep = true }))
+    local outline = Rows.Schema.Section(b:CollapsibleSection("bars_outline", "Frame Outline", 226, false), "bars")
+    local options = Rows.Options(BarScopeGetBars, BarScopeSetBars, RequestOutlineRuntime, nil, true)
+    local BorderStyles = MSUF.BorderStyles or MSUF.Require("MSUF_BorderStyles", FILE)
     local function OutlineTextureValues()
-        local styles = MSUF and MSUF.BorderStyles or _G.MSUF_BorderStyles
-        if styles and type(styles.FrameList) == "function" then
-            return styles.FrameList("None (solid color)")
-        end
-        -- Minimal fallback for isolated catalog tests; live menus use FrameList.
-        local items = {
-            { text = "True Outline", header = true, disabled = true, translate = false },
-            { value = "", text = "None (solid color)" },
-            { value = "BORDER:GLOW", text = "Soft Glow" },
-            { value = "BORDER:SHADOW", text = "Shadow" },
-            { value = "BORDER:BLIZZARD", text = "Blizzard Tooltip" },
-            { value = "BORDER:DIALOG", text = "Blizzard Dialog" },
-            { value = "BORDER:ACHIEVEMENT", text = "Blizzard Achievement" },
-            { text = "Texture", header = true, disabled = true, translate = false },
-        }
-        local textures = type(TextureValues) == "function" and TextureValues() or nil
-        for i = 1, #(textures or {}) do
-            local item = textures[i]
-            if type(item) == "table" and item.value ~= "" then items[#items + 1] = item end
-        end
-        return items
+        return BorderStyles.FrameList("None (solid color)")
     end
-    local outlineTexture = W.Dropdown(outline, "Outline style", OutlineTextureValues, 300)
-    M.BindDropdownWidget(ctx, outlineTexture,
-        function()
-            local value = BarScopeGetBars("barOutlineTexture", "")
-            local styles = MSUF and MSUF.BorderStyles or _G.MSUF_BorderStyles
-            if styles and type(styles.NormalizeFrame) == "function" then
-                return styles.NormalizeFrame(value)
-            elseif styles and type(styles.Normalize) == "function" then
-                value = styles.Normalize(value)
-                if value == styles.SOLID then return "" end
-            end
-            return value
-        end,
-        function(value)
+    local controls = Rows.Build(ctx, outline, {
+        { "slider", "barOutlineThickness", 1, { "Bar outline thickness", 0, 8, 1, 300 },
+            path = "outline.thickness", reason = "MSUF2_BAR_OUTLINE", exact = { step = 1, roundStep = true },
+            tip = "Width in pixels of the normal frame outline; 0 hides it. Aggro, dispel and other highlight borders use their own thickness.",
+            tipOpts = "plain" },
+        { "slider", "barOutlineLayer", 0, { "Frame outline layer (0-30)", 0, 30, 1, 300 },
+            path = "outline.layer", reason = "MSUF2_BAR_OUTLINE_LAYER", exact = { step = 1, roundStep = true },
+            tip = "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", tipOpts = "plain" },
+        { "dropdown", "texture", "", { "Outline style", OutlineTextureValues, 300 }, path = "outline.texture",
+            get = function() return BorderStyles.NormalizeFrame(BarScopeGetBars("barOutlineTexture", "")) end,
+        set = function(value)
             BarScopeSetBars("barOutlineTexture", value or "", "MSUF2_BAR_OUTLINE_TEXTURE", true)
             RequestOutlineRuntime()
-        end,
-        Meta("outline.texture"))
+        end },
+    }, options)
+    local outlineSlider, outlineLayer, outlineTexture = controls.barOutlineThickness, controls.barOutlineLayer, controls.texture
     AttachBarsColorShortcut(outline,
         "Frame Outline Color",
         "Outline color for the selected Bars scope.",
@@ -1693,12 +1659,6 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         Meta("outline.color"))
-    if M.AddTooltip then
-        M.AddTooltip(outlineSlider, "Bar outline thickness",
-            "Width in pixels of the normal frame outline; 0 hides it. Aggro, dispel and other highlight borders use their own thickness.", { hook = true })
-        M.AddTooltip(outlineLayer, "Frame outline layer (0-30)",
-            "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", { hook = true })
-    end
     local turnOn = W.TurnOnReason
     local scopeReason = turnOn and turnOn("Use custom settings for this scope", ScopedControls)
     -- Rounded and slanted frames draw the selected style along their shape.
@@ -1708,7 +1668,7 @@ local function BuildOutlineSection(ctx, b)
 end
 
 local function BuildRoundedSection(ctx, b)
-    local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", ROUNDED_SECTION_HEIGHT, true)
+    local rounded = Rows.Schema.Section(b:CollapsibleSection("bars_rounded", "Rounded Texture", ROUNDED_SECTION_HEIGHT, true), "bars")
     local roundLeftX = 30
     local roundRightX = 330
     local roundW = 250
@@ -1716,41 +1676,43 @@ local function BuildRoundedSection(ctx, b)
         "rounded section|rounded menu|rounded options|where rounded frames|wo rounded frames",
         "Open this section to enable or disable rounded frame textures and its per-surface toggles.", "section")
     local SyncRoundedControls = M.RefreshProxy()
-    local function BindRoundedToggle(label, x, y, key, defaultOn, requireReload, searchKeywords, help, useSwitch)
-        local control = (useSwitch and W.SwitchAt or W.ToggleAt)(rounded, label, x, y, roundW)
-        M.BindBoolWidget(ctx, control,
-            function()
-                local value = ReadB(key, defaultOn)
-                return defaultOn and value ~= false or value == true
-            end,
-            function(v)
-                SetRoundedBool(key, v, requireReload)
-                SyncRoundedControls()
-            end,
-            Meta("rounded." .. key))
-        RegisterRoundedSearch(control, label, searchKeywords, help, nil, Meta("rounded." .. key))
-        return control
+    local options = Rows.Options(ReadB,
+        function(key, value, row) SetRoundedBool(key, value, row.reload) end, SyncRoundedControls)
+    options.register = function(_, control, row)
+        RegisterRoundedSearch(control, row[4][1], row.search[1], row.search[2], nil, Meta(row.path))
     end
-    local roundedControls = M.BuildControlSpecs({
-        { "master", "Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true, "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames", "Master switch for the rounded frame texture style.", true },
-        { "units", "Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil, "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded", "Enable or disable rounded textures on unit frames." },
-        { "groups", "Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil,
-            "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet",
-            "Enable or disable rounded textures on group frames." },
-        { "classResources", "Class resources", roundLeftX, -166, "roundedClassResources", false, nil, "rounded class resources|rounded combo points|rounded soul shards|class resource bar corners|klassenressourcen abgerundet|combo punkte abrunden|seelensplitter abrunden", "Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged." },
-        { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil,
-            "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden",
-            "Enable or disable rounded textures on power bars." },
-        { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil,
-            "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet",
-            "Enable or disable rounded mouseover highlight edges." },
-        { "castbars", "Castbars", roundRightX, -128, "roundedCastbars", false, nil,
-            "rounded castbars|castbar corners|cast bars rounded|castbars abgerundet|zauberbalken abgerundet",
-            "Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed." },
-    }, { ["*"] = function(s) return BindRoundedToggle(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]), s[1] end })
+    local roundedControls = Rows.Schema.Build(ctx, rounded, {
+        { "switch", "roundedFramesEnabled", false, { "Rounded frame texture", roundLeftX, -52, roundW },
+            path = "rounded.roundedFramesEnabled", defaultOn = true, reload = true, register = true,
+            search = { "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames",
+                "Master switch for the rounded frame texture style." } },
+        { "toggle", "roundedUnitFrames", true, { "Unit frames", roundLeftX, -90, roundW },
+            path = "rounded.roundedUnitFrames", defaultOn = true, register = true,
+            search = { "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded",
+                "Enable or disable rounded textures on unit frames." } },
+        { "toggle", "roundedGroupFrames", true, { "Group frames", roundLeftX, -128, roundW },
+            path = "rounded.roundedGroupFrames", defaultOn = true, register = true,
+            search = { "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet",
+                "Enable or disable rounded textures on group frames." } },
+        { "toggle", "roundedClassResources", false, { "Class resources", roundLeftX, -166, roundW },
+            path = "rounded.roundedClassResources", defaultOn = true, register = true,
+            search = { "rounded class resources|rounded combo points|rounded soul shards|class resource bar corners|klassenressourcen abgerundet|combo punkte abrunden|seelensplitter abrunden",
+                "Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged." } },
+        { "toggle", "roundedPowerBars", true, { "Power bars", roundRightX, -52, roundW },
+            path = "rounded.roundedPowerBars", defaultOn = true, register = true,
+            search = { "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden",
+                "Enable or disable rounded textures on power bars." } },
+        { "toggle", "roundedMouseover", true, { "Mouseover highlights", roundRightX, -90, roundW },
+            path = "rounded.roundedMouseover", defaultOn = true, register = true,
+            search = { "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet",
+                "Enable or disable rounded mouseover highlight edges." } },
+        { "toggle", "roundedCastbars", false, { "Castbars", roundRightX, -128, roundW },
+            path = "rounded.roundedCastbars", defaultOn = true, register = true,
+            search = { "rounded castbars|castbar corners|cast bars rounded|castbars abgerundet|zauberbalken abgerundet",
+                "Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed." } },
+    }, options)
     local roundedPreview
-    local roundingSlider = W.Slider(rounded, "Corner rounding", 1, 5, 1, 300)
-    W.MoveWidget(roundingSlider, rounded, roundRightX, -166, 300, "LEFT")
+    local roundingSlider
     local roundingApplyPending, roundingApplyTimer, roundingReleaseScheduled
     local function CancelRoundingApplyTimer()
         if roundingApplyTimer and type(roundingApplyTimer.Cancel) == "function" then roundingApplyTimer:Cancel() end
@@ -1796,17 +1758,19 @@ local function BuildRoundedSection(ctx, b)
             FlushRoundingRuntime()
         end
     end
-    M.BindNumberWidget(ctx, roundingSlider,
-        function() return tonumber(Bars().roundedCornerStrength) or 3 end,
-        function(value)
+    roundingSlider = Rows.Schema.Build(ctx, rounded, {
+        { "slider", "rounding", 3, { "Corner rounding", 1, 5, 1, 300 },
+            { roundRightX, -166, 300, "LEFT" }, path = "rounded.roundedCornerStrength", exact = { step = 1, roundStep = true },
+            get = function() return tonumber(Bars().roundedCornerStrength) or 3 end,
+        set = function(value)
             value = floor((tonumber(value) or 3) + 0.5)
             if value < 1 then value = 1 elseif value > 5 then value = 5 end
             local bars = Bars()
             if bars.roundedCornerStrength == value then return end
             bars.roundedCornerStrength = value
             QueueRoundingRuntime()
-        end,
-        3, Meta("rounded.roundedCornerStrength", "setting", { step = 1, roundStep = true }))
+        end },
+    }, Rows.Commands).rounding
     roundingSlider:HookScript("OnMouseUp", ScheduleRoundingRelease)
     roundingSlider:HookScript("OnHide", FlushRoundingRuntime)
     roundingSlider:HookScript("OnShow", FlushRoundingRuntime)
@@ -1818,8 +1782,12 @@ local function BuildRoundedSection(ctx, b)
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
-    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.classResources, roundedControls.power,
-        roundedControls.mouseover, roundedControls.castbars, roundingSlider }
+    Rows.Schema.Custom(roundedPreview, { id = Meta("rounded.preview", "ephemeral").controlId, kind = "preview",
+        labelKey = "Rounded Texture Preview", meta = roundedPreview._msuf2SearchMeta,
+        scope = "bars", applyDomain = "preview", owner = roundedPreview, refresh = roundedPreview.RefreshRoundedPreview })
+    local roundedDependentControls = { roundedControls.roundedUnitFrames, roundedControls.roundedGroupFrames, roundedControls.roundedClassResources,
+        roundedControls.roundedPowerBars,
+        roundedControls.roundedMouseover, roundedControls.roundedCastbars, roundingSlider }
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
         { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end,
             reason = W.TurnOnReason and W.TurnOnReason("Rounded frame texture") },
@@ -1961,9 +1929,14 @@ local function SetSlantedDirectionForScope(value)
     return changed
 end
 local function BuildSlantedSection(ctx, b)
-    local section = b:CollapsibleSection("bars_slanted", "Slanted Bars", 480, true)
+    local section = Rows.Schema.Section(b:CollapsibleSection("bars_slanted", "Slanted Bars", 480, true), "bars")
     local width = (section and section._msuf2Width) or b.width or 720
     local SyncSlantedControls = M.RefreshProxy()
+    local function Search(control, label, kind, keywords, help)
+        if type(M.RegisterSearchWidget) == "function" then
+            M.RegisterSearchWidget(control, { label = label, kind = kind, keywords = keywords, help = help })
+        end
+    end
     local function ApplySlantedToScope(keys)
         local db, changed = DB(), false
         for _, key in ipairs(keys) do
@@ -1976,14 +1949,16 @@ local function BuildSlantedSection(ctx, b)
         local units = ApplySlantedToScope(SLANTED_PRESET_UNITS)
         return ApplySlantedToScope(SLANTED_PRESET_GROUPS) or units
     end
+    local ApplyRoundedUnitframes = MSUF.Require("MSUF_ApplyRoundedUnitframes", FILE)
     local function RefreshSlanted(reason)
-        _G.MSUF_ApplyRoundedUnitframes()
+        ApplyRoundedUnitframes()
         SyncSlantedControls()
         if M.RequestRefresh then M.RequestRefresh(ctx, reason) end
     end
-    W.Text(section,
-        "Choose where slanted edges appear. Turning this off keeps your frame choices.",
-        30, -40, width - 60, T.colors.muted)
+    Rows.Schema.Build(ctx, section, {
+        { "text", "slantedHint", nil, { "Choose where slanted edges appear. Turning this off keeps your frame choices.",
+            30, -40, width - 60, T.colors.muted }, scope = "bars" },
+    })
     local preview = CreateSlantedBarPreview(section, width)
     if preview and type(M.RegisterSearchWidget) == "function" then
         M.RegisterSearchWidget(preview, {
@@ -1991,10 +1966,15 @@ local function BuildSlantedSection(ctx, b)
             keywords = { "slanted", "angled", "preview", "vorschau", "schraege" },
             help = "Shows the selected cut on a Health and Power bar sample.",
         })
+        Rows.Schema.Custom(preview, { id = Meta("slanted.preview", "ephemeral").controlId, kind = "preview",
+            labelKey = "Slanted bar preview", meta = preview._msuf2SearchMeta,
+            scope = "bars", applyDomain = "preview", owner = preview, refresh = preview.RefreshSlantedPreview })
     end
-    local enabled = W.SwitchAt(section, "Enable slanted bars", 30, -78, min(340, width - 60))
-    M.BindBoolWidget(ctx, enabled, SlantedSwitchOn,
-        function(value)
+    local enabled = Rows.Schema.Build(ctx, section, {
+        -- Turning it on restyles every unit and group frame: whole-profile undo.
+        { "switch", "enabled", false, { "Enable slanted bars", 30, -78, min(340, width - 60) },
+            path = "slanted.enabled", exact = { historyScope = false }, get = SlantedSwitchOn,
+            set = function(value)
             value = value == true
             local bars = Bars()
             local switchStyle = value and bars.roundedFramesEnabled == true
@@ -2003,69 +1983,48 @@ local function BuildSlantedSection(ctx, b)
             if switchStyle then bars.roundedFramesEnabled = false end
             if value and not SlantedStylesSelected() then ApplySlantedToAll() end
             RefreshSlanted("slanted-bar-enabled")
-        end,
-        -- Turning it on restyles every unit and group frame: whole-profile undo.
-        Meta("slanted.enabled", nil, { historyScope = false }))
-    if type(M.RegisterSearchWidget) == "function" then
-        M.RegisterSearchWidget(enabled, {
-            label = "Enable slanted bars", kind = "toggle",
-            keywords = { "slanted", "enable", "disable", "on", "off", "schraege", "einschalten", "ausschalten" },
-            help = "Choose where slanted edges appear. Turning this off keeps your frame choices.",
-        })
+        end },
+    }, Rows.Commands).enabled
+    Search(enabled, "Enable slanted bars", "toggle",
+        { "slanted", "enable", "disable", "on", "off", "schraege", "einschalten", "ausschalten" },
+        "Choose where slanted edges appear. Turning this off keeps your frame choices.")
+    local options = Rows.Options(ReadB, function(key, value) Bars()[key] = value end,
+        function(row, value)
+            if value and row.presetKeys and not SlantedStylesSelected(row.presetKeys) then ApplySlantedToScope(row.presetKeys) end
+            RefreshSlanted("slanted-" .. row.id)
+        end, function(key) return Bars()[key] end)
+    options.register = function(_, control, row)
+        Search(control, row[4][1], "toggle", { "slanted", "angled", row.id, "schraege", "ein", "aus" })
     end
-    local scopeSpecs = {
-        { "units", "Unit frames", "slantedUnitFrames", true, 30, -116, SLANTED_PRESET_UNITS },
-        { "groups", "Group frames", "slantedGroupFrames", true, 30, -154, SLANTED_PRESET_GROUPS },
-        { "class_resources", "Class resources", "slantedClassResources", false, 30, -192 },
-        { "power", "Power bars", "slantedPowerBars", true, 330, -78 },
-        { "mouseover", "Mouseover highlights", "slantedMouseover", true, 330, -116 },
-        { "castbars", "Castbars", "slantedCastbars", false, 330, -154 },
-    }
-    local dependent = {}
-    for _, spec in ipairs(scopeSpecs) do
-        local id, label, key, defaultOn, x, y, keys = unpack(spec)
-        local control = W.ToggleAt(section, label, x, y, 250)
-        M.BindBoolWidget(ctx, control,
-            function()
-                local value = ReadB(key, defaultOn)
-                return defaultOn and value ~= false or value == true
-            end,
-            function(value)
-                value = value == true
-                if Bars()[key] == value then return end
-                Bars()[key] = value
-                if value and keys and not SlantedStylesSelected(keys) then ApplySlantedToScope(keys) end
-                RefreshSlanted("slanted-" .. id)
-            end,
-            Meta("slanted." .. id))
-        if type(M.RegisterSearchWidget) == "function" then
-            M.RegisterSearchWidget(control, {
-                label = label, kind = "toggle",
-                keywords = { "slanted", "angled", id, "schraege", "ein", "aus" },
-            })
-        end
-        dependent[#dependent + 1] = control
-    end
-    local direction = W.Dropdown(section, "Cut direction", function()
-        return CurrentBarsScope() == "shared" and SLANTED_DIRECTION_VALUES or SLANTED_SCOPED_DIRECTION_VALUES
-    end, min(340, width - 60))
-    M.BindDropdownWidget(ctx, direction,
-        SlantedDirectionForScope,
-        function(value)
+    local controls = Rows.Schema.Build(ctx, section, {
+        { "toggle", "slantedUnitFrames", true, { "Unit frames", 30, -116, 250 },
+            path = "slanted.units", id = "units", defaultOn = true, skipEqual = true, register = true, presetKeys = SLANTED_PRESET_UNITS },
+        { "toggle", "slantedGroupFrames", true, { "Group frames", 30, -154, 250 },
+            path = "slanted.groups", id = "groups", defaultOn = true, skipEqual = true, register = true, presetKeys = SLANTED_PRESET_GROUPS },
+        { "toggle", "slantedClassResources", false, { "Class resources", 30, -192, 250 },
+            path = "slanted.class_resources", id = "class_resources", defaultOn = true, skipEqual = true, register = true },
+        { "toggle", "slantedPowerBars", true, { "Power bars", 330, -78, 250 },
+            path = "slanted.power", id = "power", defaultOn = true, skipEqual = true, register = true },
+        { "toggle", "slantedMouseover", true, { "Mouseover highlights", 330, -116, 250 },
+            path = "slanted.mouseover", id = "mouseover", defaultOn = true, skipEqual = true, register = true },
+        { "toggle", "slantedCastbars", false, { "Castbars", 330, -154, 250 },
+            path = "slanted.castbars", id = "castbars", defaultOn = true, skipEqual = true, register = true },
+        { "dropdown", "direction", nil, { "Cut direction", function()
+            return CurrentBarsScope() == "shared" and SLANTED_DIRECTION_VALUES or SLANTED_SCOPED_DIRECTION_VALUES
+        end, min(340, width - 60) }, { 30, -248, min(340, width - 60), "LEFT" },
+            path = "slanted.direction", get = SlantedDirectionForScope,
+            set = function(value)
             if not SetSlantedDirectionForScope(value) then return end
             if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end
             ApplyRoundedRuntime()
             if M.RequestRefresh then M.RequestRefresh(ctx, "slanted-bar-direction") end
-        end,
-        Meta("slanted.direction"))
-    W.MoveWidget(direction, section, 30, -248, min(340, width - 60), "LEFT")
-    if type(M.RegisterSearchWidget) == "function" then
-        M.RegisterSearchWidget(direction, {
-            label = "Cut direction", kind = "dropdown",
-            keywords = { "slanted", "diagonal", "left", "right", "both", "schraege", "richtung" },
-            help = "Choose the cut direction for the selected scope. Use shared style follows the shared direction.",
-        })
-    end
+        end },
+    }, options)
+    local dependent = { controls.slantedUnitFrames, controls.slantedGroupFrames, controls.slantedClassResources,
+        controls.slantedPowerBars, controls.slantedMouseover, controls.slantedCastbars }
+    local direction = controls.direction
+    Search(direction, "Cut direction", "dropdown", { "slanted", "diagonal", "left", "right", "both", "schraege", "richtung" },
+        "Choose the cut direction for the selected scope. Use shared style follows the shared direction.")
     local preset = W.Button(section, "Apply slanted bars to all frames", 280)
     W.MoveWidget(preset, section, 30, -420)
     preset:SetScript("OnClick", function()
@@ -2086,13 +2045,10 @@ local function BuildSlantedSection(ctx, b)
         end
     end)
     RegisterControl(preset, Meta("slanted.apply_preset", "action"), "Apply slanted bars to all frames", "button")
-    if type(M.RegisterSearchWidget) == "function" then
-        M.RegisterSearchWidget(preset, {
-            label = "Apply slanted bars to all frames", kind = "button",
-            keywords = { "slanted bars", "slanted preset", "angled health bar", "schraege leiste", "schraege balken" },
-            help = "Cuts the Health and Power bar edges. Choose frames in Basics or apply this shape everywhere.",
-        })
-    end
+    Rows.Schema.Owned(preset, "bars", "bars")
+    Search(preset, "Apply slanted bars to all frames", "button",
+        { "slanted bars", "slanted preset", "angled health bar", "schraege leiste", "schraege balken" },
+        "Cuts the Health and Power bar edges. Choose frames in Basics or apply this shape everywhere.")
     dependent[#dependent + 1] = direction
     SyncSlantedControls(M.BindGateGroup(ctx, nil, {
         { controls = dependent, on = SlantedSwitchOn, reason = W.TurnOnReason and W.TurnOnReason("Enable slanted bars") },
@@ -2172,108 +2128,102 @@ if type(M.RegisterUpgradeTourControls) == "function" then
 end
 
 function GP.BuildHighlightModes(ctx, modesFrame, hlLeftX, hlLeftW)
-    local highlight = W.Slider(modesFrame, "Highlight border thickness", 1, 30, 1, hlLeftW)
-    M.BindNumberWidget(ctx, highlight,
-        function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
-        function(v)
+    local borderModes = VT(0, "Off", 1, "On")
+    local function BorderModeSet(key, fallback, reason, kind, apply, onEnabled, onChanged)
+        return function(v)
+            local value = tonumber(v) or fallback
+            local previous = tonumber(BarScopeGet(key, fallback)) or fallback
+            BarScopeSet(key, value, reason, true)
+            if value == 1 and onEnabled then onEnabled() end
+            Rows.testModes[kind].stop(value == 1)
+            apply()
+            if value ~= previous and onChanged then onChanged() end
+        end
+    end
+    local function DispelShowOn(value)
+        return (value == "FRIENDLY" or value == "ENEMY") and value or "BOTH"
+    end
+    local options = Rows.Options(BarScopeGet,
+        function(key, value, row) BarScopeSet(key, value, row.reason, true) end,
+        function(row) row.apply() end)
+    local aggroModeValues = VT("ALL", "All roles", "NON_TANK", "Non-tanks", "HEALER", "Healers only", "TANK", "Tanks only")
+    local controls = Rows.Build(ctx, modesFrame, {
+        { "slider", "highlightBorderThickness", 2, { "Highlight border thickness", 1, 30, 1, hlLeftW },
+            { hlLeftX, -70, hlLeftW, "LEFT" }, path = "highlight.border_thickness", exact = { step = 1, roundStep = true },
+            get = function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
+            set = function(v)
             local n = floor((tonumber(v) or 2) + 0.5)
             BarScopeSet("highlightBorderThickness", n, "MSUF2_HIGHLIGHT_BORDER", true)
             BarScopeSet("hlAggroSize", n, "MSUF2_HIGHLIGHT_BORDER", true)
             RequestAllHighlightBorderRuntime()
-        end,
-        2, Meta("highlight.border_thickness", "setting", { step = 1, roundStep = true }))
-    W.MoveWidget(highlight, modesFrame, hlLeftX, -70, hlLeftW, "LEFT")
-    local borderModes = VT(0, "Off", 1, "On")
-    local function StopBorderTest(flag, setter, value)
-        if value == 1 or not _G[flag] then return end
-        local fn = _G[setter]
-        if type(fn) == "function" then fn(false) end
-    end
-    local function BindHighlightDropdown(label, values, y, getValue, setValue, path)
-        local control = W.Dropdown(modesFrame, label, values, hlLeftW)
-        M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
-        W.MoveWidget(control, modesFrame, hlLeftX, y, hlLeftW, "LEFT")
-        return control
-    end
-    local function BindBorderModeDropdown(label, key, defaultValue, reason, y, flag, setter, apply, onEnabled, onChanged)
-        return BindHighlightDropdown(label, borderModes, y,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(v)
-                local value = tonumber(v) or defaultValue
-                local previous = tonumber(BarScopeGet(key, defaultValue)) or defaultValue
-                BarScopeSet(key, value, reason, true)
-                if value == 1 and onEnabled then onEnabled() end
-                StopBorderTest(flag, setter, value)
-                apply()
-                if value ~= previous and onChanged then onChanged() end
-            end,
-            "highlight.border_mode." .. key)
-    end
-    local aggroModeValues = VT("ALL", "All roles", "NON_TANK", "Non-tanks", "HEALER", "Healers only", "TANK", "Tanks only")
-    local aggro = BindBorderModeDropdown("Aggro border", "aggroOutlineMode", 1, "MSUF2_AGGRO_BORDER", -136,
-        "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", RequestAggroBorderRuntime)
-    local aggroMode = BindHighlightDropdown("Group threat visuals show for", aggroModeValues, -190,
-        function() return NormalizeAggroMode(BarScopeGet("aggroMode", "ALL")) end,
-        function(v)
-            BarScopeSet("aggroMode", NormalizeAggroMode(v), "MSUF2_AGGRO_MODE", true)
-            RequestGroupAggroRoleRuntime()
-        end,
-        "highlight.aggro.roles")
-    local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -244,
-        "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime,
-        EnsureUnitFrameAuraSensorsForScope, ShowDispelBorderReloadRequiredPopup)
-    local dispelTrigger = BindHighlightDropdown("Dispel border detects", DISPEL_TRIGGERS, -298,
-        function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE")) end,
-        function(v)
+        end },
+        { "dropdown", "aggroOutlineMode", 1, { "Aggro border", borderModes, hlLeftW }, { hlLeftX, -136, hlLeftW, "LEFT" },
+            path = "highlight.border_mode.aggroOutlineMode", numeric = true, set = BorderModeSet("aggroOutlineMode", 1,
+                "MSUF2_AGGRO_BORDER", "aggro", RequestAggroBorderRuntime),
+            tip = "Shows the aggro color on the border when the unit has threat: your frame while you hold aggro, enemies attacking you, and group members with high threat.", tipOpts = "plain" },
+        { "dropdown", "aggroMode", "ALL", { "Group threat visuals show for", aggroModeValues, hlLeftW }, { hlLeftX, -190, hlLeftW, "LEFT" },
+            path = "highlight.aggro.roles", readValue = NormalizeAggroMode, writeValue = NormalizeAggroMode,
+            reason = "MSUF2_AGGRO_MODE", apply = RequestGroupAggroRoleRuntime },
+        { "dropdown", "dispelOutlineMode", 1, { "Dispel border", borderModes, hlLeftW }, { hlLeftX, -244, hlLeftW, "LEFT" },
+            path = "highlight.border_mode.dispelOutlineMode", numeric = true, set = BorderModeSet("dispelOutlineMode", 1,
+                "MSUF2_DISPEL_BORDER", "dispel", RequestDispelPurgeBorderRuntime,
+                EnsureUnitFrameAuraSensorsForScope, ShowDispelBorderReloadRequiredPopup),
+            tip = "Colors the border by debuff type while the unit has a debuff that Dispel border detects. Changing it asks for a UI reload.",
+            tipOpts = "plain" },
+        { "dropdown", "dispelBorderTrigger", "DISPEL_TYPE", { "Dispel border detects", DISPEL_TRIGGERS, hlLeftW },
+            { hlLeftX, -298, hlLeftW, "LEFT" }, path = "highlight.dispel.trigger", readValue = NormalizeDispelTrigger,
+            set = function(v)
             local value = NormalizeDispelTrigger(v)
             local previous = NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE"))
             BarScopeSet("dispelBorderTrigger", value, "MSUF2_DISPEL_TRIGGER", true)
             RequestDispelPurgeBorderRuntime()
             if value ~= previous then ShowDispelBorderReloadRequiredPopup() end
-        end,
-        "highlight.dispel.trigger")
-    local dispelShowOn = BindHighlightDropdown("Show on", DISPEL_SHOW_ON, -352,
-        function()
-            local value = BarScopeGet("dispelBorderShowOn", "BOTH")
-            return (value == "FRIENDLY" or value == "ENEMY") and value or "BOTH"
-        end,
-        function(v)
-            local value = (v == "FRIENDLY" or v == "ENEMY") and v or "BOTH"
-            BarScopeSet("dispelBorderShowOn", value, "MSUF2_DISPEL_BORDER", true)
-            RequestDispelPurgeBorderRuntime()
-        end,
-        "highlight.dispel.show_on")
-    local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -406,
-        "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", RequestDispelPurgeBorderRuntime)
+        end },
+        { "dropdown", "dispelBorderShowOn", "BOTH", { "Show on", DISPEL_SHOW_ON, hlLeftW }, { hlLeftX, -352, hlLeftW, "LEFT" },
+            path = "highlight.dispel.show_on", readValue = DispelShowOn, writeValue = DispelShowOn,
+            reason = "MSUF2_DISPEL_BORDER", apply = RequestDispelPurgeBorderRuntime },
+        { "dropdown", "purgeOutlineMode", 0, { "Purge border", borderModes, hlLeftW }, { hlLeftX, -406, hlLeftW, "LEFT" },
+            path = "highlight.border_mode.purgeOutlineMode", numeric = true, set = BorderModeSet("purgeOutlineMode", 0,
+                "MSUF2_PURGE_BORDER", "purge", RequestDispelPurgeBorderRuntime),
+            tip = "Colors the border while the unit has a buff you can purge or spellsteal. Only Target and Focus frames support it.", tipOpts = "plain" },
+    }, options)
     local bossSupported = not M.SupportsUnitPage or M.SupportsUnitPage("uf_boss")
-    local bossTarget = bossSupported and BindHighlightDropdown("Boss target border", borderModes, -460,
-        function()
+    local bossTarget = bossSupported and Rows.Build(ctx, modesFrame, {
+        { "dropdown", "boss", 1, { "Boss target border", borderModes, hlLeftW }, { hlLeftX, -460, hlLeftW, "LEFT" },
+            path = "highlight.boss_target.mode", get = function()
             local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
             return tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback
         end,
-        function(v)
+        set = function(v)
             local value = tonumber(v) or 1
             local general = G()
             general.bossTargetOutlineMode = value
             general.bossTargetHighlightEnabled = value == 1
-            StopBorderTest("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", value)
+            Rows.testModes.bossTarget.stop(value == 1)
             RequestBossTargetBorderRuntime()
         end,
-        "highlight.boss_target.mode")
-    local bossSharedHint = bossSupported and W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -540, hlLeftW, T.colors.dim)
+            tip = "Highlights the Boss frame of the boss you are targeting. It is shared by all boss frames, so it changes only on the Shared scope.",
+            tipOpts = "plain" },
+    }, Rows.Commands).boss
+    local bossSharedHint = bossSupported and Rows.Schema.Build(ctx, modesFrame, {
+        { "text", "bossHint", nil, { "Boss target border is a shared boss-frame setting.", hlLeftX, -540, hlLeftW, T.colors.dim }, scope = "bars" },
+    }).bossHint
     if bossSharedHint and bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
-    local unitAuraDispelHint = W.Text(modesFrame, UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -570, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    local unitAuraDispelHint = Rows.Schema.Build(ctx, modesFrame, {
+        { "text", "auraHint", nil, { UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -570, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR }, scope = "bars" },
+    }).auraHint
     if unitAuraDispelHint.SetWordWrap then unitAuraDispelHint:SetWordWrap(true) end
-    return highlight, aggro, aggroMode, dispelBorder, dispelTrigger, dispelShowOn, purge, bossSupported,
+    return controls.highlightBorderThickness, controls.aggroOutlineMode, controls.aggroMode, controls.dispelOutlineMode,
+        controls.dispelBorderTrigger, controls.dispelBorderShowOn, controls.purgeOutlineMode, bossSupported,
         bossTarget, bossSharedHint, unitAuraDispelHint
 end
 
 function GP.BuildHighlightPriority(ctx, priorityCard, priorityCardW, HighlightPriorityEnabled)
     local RefreshPriorityRows
-    local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
-    M.BindBoolWidget(ctx, prio,
-        HighlightPriorityEnabled,
-        function(v)
+    local prio = Rows.Build(ctx, priorityCard, {
+        { "switch", "priority", false, { "Custom highlight priority", 16, -54, priorityCardW - 32 },
+            path = "highlight.priority.enabled", get = HighlightPriorityEnabled,
+            set = function(v)
             local on = v and true or false
             BarScopeSet("hlPrioEnabled", on, "MSUF2_HIGHLIGHT_PRIORITY", true)
             if CurrentBarsScope() == "shared" then
@@ -2283,10 +2233,9 @@ function GP.BuildHighlightPriority(ctx, priorityCard, priorityCardW, HighlightPr
             RequestHighlightPriorityRuntime()
             if RefreshPriorityRows then RefreshPriorityRows() end
         end,
-        Meta("highlight.priority.enabled"))
-    if M.AddTooltip then
-        M.AddTooltip(prio, "Custom highlight priority", "When several highlight borders show at once, the highest one in the list wins. Turn this on to reorder the list by dragging.", { hook = true })
-    end
+            tip = "When several highlight borders show at once, the highest one in the list wins. Turn this on to reorder the list by dragging.",
+            tipOpts = "plain" },
+    }, Rows.Commands).priority
     local rowMax = 4
     local prioContainer, prioRows, prioCount
     local function SavePriorityRows()
@@ -2339,7 +2288,7 @@ function GP.BuildHighlightPriority(ctx, priorityCard, priorityCardW, HighlightPr
 end
 
 local function BuildHighlightSection(ctx, b)
-    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 764, true)
+    local highlights = Rows.Schema.Section(b:CollapsibleSection("bars_highlight", "Highlight Borders", 764, true), "bars")
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
     local hlLeftX = 30
@@ -2356,10 +2305,15 @@ local function BuildHighlightSection(ctx, b)
         width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
         x = hlLeftX, y = -44,
     }), "highlight.workspace_tab", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"))
-    local modesCard = W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 596)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
-    local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
-    W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
+    local cards = Rows.Schema.Build(ctx, modesFrame, {
+        { "card", "modesCard", nil, { "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 596 }, scope = "bars" },
+        { "card", "priorityCard", nil, { "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296 }, scope = "bars",
+            parent = priorityFrame },
+        { "card", "previewCard", nil, { "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248 }, scope = "bars",
+            parent = previewFrame },
+    })
+    local modesCard, priorityCard = cards.modesCard, cards.priorityCard
     local function HighlightPriorityEnabled()
         local value = BarScopeGet("hlPrioEnabled", nil)
         if value == nil then value = BarScopeGet("highlightPrioEnabled", false) end
@@ -2372,64 +2326,58 @@ local function BuildHighlightSection(ctx, b)
         local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
         return (tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback) == 1
     end
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(modesCard, function()
-            local references = {}
-            for i = 1, #DISPEL_COLOR_REFERENCES do
-                references[i] = DISPEL_COLOR_REFERENCES[i]
-            end
-            references[#references + 1] = "bar.aggro_border"
-            if PurgeScopeSupported() then
-                references[#references + 1] = "bar.purge_border"
-            end
-            if SharedScope() then references[#references + 1] = "highlight.boss_target" end
-            return references
-        end, {
-            title = "Highlight Border Colors",
-            note = "Shared Dispel type colors plus the other colors available to this card's border modes.",
-            scopeTag = "Shared",
-            historySource = "menu:bars-highlight-colors",
-            maxTargets = 8,
-        })
-    end
-    local function BindBorderTestToggle(label, y, flagName, setterName, enabledFn, noScope, path)
-        local control = W.ToggleAt(previewFrame, label, hlPreviewX, y, hlPreviewW)
-        M.BindBoolWidget(ctx, control,
-            function() return _G[flagName] and true or false end,
-            function(v)
+    Rows.Schema.Colors(modesCard, function()
+        local references = {}
+        for i = 1, #DISPEL_COLOR_REFERENCES do
+            references[i] = DISPEL_COLOR_REFERENCES[i]
+        end
+        references[#references + 1] = "bar.aggro_border"
+        if PurgeScopeSupported() then
+            references[#references + 1] = "bar.purge_border"
+        end
+        if SharedScope() then references[#references + 1] = "highlight.boss_target" end
+        return references
+    end, {
+        title = "Highlight Border Colors",
+        note = "Shared Dispel type colors plus the other colors available to this card's border modes.",
+        scopeTag = "Shared",
+        historySource = "menu:bars-highlight-colors",
+        maxTargets = 8,
+    })
+    local function BindBorderTestToggle(label, y, kind, enabledFn, noScope, path)
+        local flag, fn = Rows.testModes[kind].flag, Rows.TestSetter(kind)
+        local control = Rows.Schema.Build(ctx, previewFrame, {
+            { "toggle", "test", false, { label, hlPreviewX, y, hlPreviewW }, path = path, classification = "ephemeral",
+                get = flag,
+            set = function(v)
                 if v and not enabledFn() then
                     if M.RequestRefresh then M.RequestRefresh(ctx, "bars-border-test-disabled") elseif M.Refresh then M.Refresh(ctx) end
                     return
                 end
-                local fn = _G[setterName]
                 if type(fn) == "function" then
                     if noScope then fn(v and true or false)
                     else fn(v and true or false, BorderTestScope()) end
                 end
-            end,
-            Meta(path, "ephemeral"))
+            end },
+        }, Rows.Commands).test
         control:HookScript("OnHide", function(self)
-            local fn = _G[setterName]
-            if _G[flagName] and type(fn) == "function" then
+            if flag() and type(fn) == "function" then
                 fn(false)
                 self:SetChecked(false)
             end
         end)
         return control
     end
-    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end, nil, "highlight.preview.aggro")
-    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end, nil, "highlight.preview.dispel")
-    local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end, nil, "highlight.preview.purge")
-    local bossTargetTest = bossSupported and BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
+    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "aggro",
+        function() return ScopeBorderModeOn("aggroOutlineMode", 1) end, nil, "highlight.preview.aggro")
+    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "dispel",
+        function() return ScopeBorderModeOn("dispelOutlineMode", 1) end, nil, "highlight.preview.dispel")
+    local purgeTest = BindBorderTestToggle("Test purge border", -214, "purge",
+        function() return ScopeBorderModeOn("purgeOutlineMode", 0) end, nil, "highlight.preview.purge")
+    local bossTargetTest = bossSupported and BindBorderTestToggle("Test boss target border", -246, "bossTarget",
+        BossTargetBorderOn, true, "highlight.preview.boss_target")
     local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
     local dispelBorderControls = { dispelTrigger, dispelShowOn, dispelTest }
-    if M.AddTooltip then
-        local tip = { hook = true }
-        M.AddTooltip(aggro, "Aggro border", "Shows the aggro color on the border when the unit has threat: your frame while you hold aggro, enemies attacking you, and group members with high threat.", tip)
-        M.AddTooltip(dispelBorder, "Dispel border", "Colors the border by debuff type while the unit has a debuff that Dispel border detects. Changing it asks for a UI reload.", tip)
-        M.AddTooltip(purge, "Purge border", "Colors the border while the unit has a buff you can purge or spellsteal. Only Target and Focus frames support it.", tip)
-        M.AddTooltip(bossTarget, "Boss target border", "Highlights the Boss frame of the boss you are targeting. It is shared by all boss frames, so it changes only on the Shared scope.", tip)
-    end
     if W.SetControlsDisabledReason and W.TurnOnReason then
         W.SetControlsDisabledReason(dispelBorderControls, W.TurnOnReason("Dispel border", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end))
         W.SetControlDisabledReason(aggroTest, W.TurnOnReason("Aggro border", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end))
@@ -2445,10 +2393,6 @@ local function BuildHighlightSection(ctx, b)
             W.SetControlDisabledReason(bossTargetTest, BossReason)
         end
     end
-    local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
-        local fn = _G[setterName]
-        if _G[flagName] and not enabled and type(fn) == "function" then fn(false) end
-    end
     M.TrackRefresh(ctx, function()
         local scopedActive = HighlightControls()
         local sharedActive = SharedScope()
@@ -2457,10 +2401,10 @@ local function BuildHighlightSection(ctx, b)
         local purgeOn = ScopeBorderModeOn("purgeOutlineMode", 0)
         local purgeSupported = PurgeScopeSupported()
         local bossTargetOn = BossTargetBorderOn()
-        ClearBorderTestIfDisabled("MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", aggroOn)
-        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn)
-        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn and purgeSupported)
-        ClearBorderTestIfDisabled("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", sharedActive and bossTargetOn)
+        Rows.testModes.aggro.stop(aggroOn)
+        Rows.testModes.dispel.stop(dispelOn)
+        Rows.testModes.purge.stop(purgeOn and purgeSupported)
+        Rows.testModes.bossTarget.stop(sharedActive and bossTargetOn)
         SetControlsEnabled(scopedBorderControls, scopedActive)
         SetControlEnabled(dispelBorder, scopedActive)
         SetControlEnabled(purge, scopedActive and purgeSupported)
@@ -2480,27 +2424,23 @@ local function BuildHighlightSection(ctx, b)
 end
 
 local function BuildPowerSection(ctx, b)
-    local power = b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 184, false)
-    local smoothPower = W.Toggle(power, "Smooth power bar")
-    M.BindBoolWidget(ctx, smoothPower,
-        function() return SmoothPowerGet() end,
-        function(v)
-            SmoothPowerSet(v, "MSUF2_BARS_SMOOTH_POWER")
+    local power = Rows.Schema.Section(b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 184, false), "bars")
+    local function FillSetter(setValue, reason)
+        return function(value)
+            setValue(value, reason)
             if M.RequestRefresh then M.RequestRefresh(ctx, "bars-power-fill-mode") end
-        end,
-        Meta("power.smooth_fill"))
-    local chunkedPower = W.Toggle(power, "Chunked power loss")
-    M.BindBoolWidget(ctx, chunkedPower,
-        function() return ChunkedPowerGet() end,
-        function(v)
-            ChunkedPowerSet(v, "MSUF2_BARS_CHUNKED_POWER")
-            if M.RequestRefresh then M.RequestRefresh(ctx, "bars-power-fill-mode") end
-        end,
-        Meta("power.chunked_fill"))
-    local realtimePower = W.Toggle(power, "Realtime power text")
-    M.BindBoolWidget(ctx, realtimePower,
-        function() return ReadB("realtimePowerText", true) ~= false end,
-        function(v)
+        end
+    end
+    local controls = Rows.Build(ctx, power, {
+        { "flowToggle", "smooth", false, { "Smooth power bar" }, path = "power.smooth_fill", get = SmoothPowerGet,
+            set = FillSetter(SmoothPowerSet, "MSUF2_BARS_SMOOTH_POWER"),
+            tip = "Power bars glide to new values instead of jumping; turns off Chunked power loss. Set per unit: pick a unit scope with a power bar, such as Player or Target.", tipOpts = "power" },
+        { "flowToggle", "chunked", false, { "Chunked power loss" }, path = "power.chunked_fill", get = ChunkedPowerGet,
+            set = FillSetter(ChunkedPowerSet, "MSUF2_BARS_CHUNKED_POWER"),
+            tip = "Spent power drops at once while the spent part briefly stays highlighted, then fades; turns off Smooth power bar. Set per unit, like Smooth power bar.", tipOpts = "power" },
+        { "flowToggle", "realtime", true, { "Realtime power text" }, path = "power.realtime_text",
+            get = function() return ReadB("realtimePowerText", true) ~= false end,
+            set = function(v)
             v = v and true or false
             local bars = Bars()
             if bars.realtimePowerText == v then return end
@@ -2511,15 +2451,9 @@ local function BuildPowerSection(ctx, b)
                 preview = true, power = true, text = true,
             })
         end,
-        Meta("power.realtime_text"))
-    if M.AddTooltip then
-        local tip = { hook = true, labelHit = true, labelHitWhenDisabled = true }
-        M.AddTooltip(smoothPower, "Smooth power bar", "Power bars glide to new values instead of jumping; turns off Chunked power loss. Set per unit: pick a unit scope with a power bar, such as Player or Target.", tip)
-        M.AddTooltip(chunkedPower, "Chunked power loss", "Spent power drops at once while the spent part briefly stays highlighted, then fades; turns off Smooth power bar. Set per unit, like Smooth power bar.", tip)
-        M.AddTooltip(realtimePower, "Realtime power text",
-            "Updates the Player power text on every power tick instead of the regular update rate. Only the Player frame uses it; set it on the Shared scope.",
-            tip)
-    end
+            tip = "Updates the Player power text on every power tick instead of the regular update rate. Only the Player frame uses it; set it on the Shared scope.", tipOpts = "power" },
+    }, Rows.Commands)
+    local smoothPower, chunkedPower, realtimePower = controls.smooth, controls.chunked, controls.realtime
     M.BindGateGroup(ctx, nil, {
         { controls = { smoothPower, chunkedPower }, on = function() return CurrentPowerBarScopeUnit() ~= nil end },
         { controls = realtimePower, on = SharedScope },
@@ -2532,27 +2466,34 @@ end
 -- sections build on first expand; hidden search-index builds stay synchronous
 -- inside BuildSectionLazy. Heights of open sections must mirror the compact
 -- thresholds their builders use internally.
+function Rows.PrepareSection(_, section) Rows.Schema.Section(section, "bars") end
 local GLOBAL_BARS_LAZY_SECTION_SPECS = {
     {
-        sectionId = "bars_textures",
+        sectionId = "bars_textures", prepareShell = Rows.PrepareSection,
         title = "Textures & Gradient",
         defaultOpen = true,
-        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 560) and 566 or 330 end,
+        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 560) and 766 or 448 end,
         build = BuildTextureSection,
     },
     {
-        sectionId = "bars_temp_max_health",
+        sectionId = "bars_temp_max_health", prepareShell = Rows.PrepareSection,
         title = "Maximum Health Loss",
         defaultOpen = true,
         height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 700) and 414 or 274 end,
         build = BuildTempMaxHealthSection,
     },
-    { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
-    { sectionId = "bars_outline", title = "Frame Outline", height = 226, build = BuildOutlineSection },
-    { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
-    { sectionId = "bars_slanted", title = "Slanted Bars", height = 480, defaultOpen = true, build = BuildSlantedSection },
-    { sectionId = "bars_highlight", title = "Highlight Borders", height = 764, defaultOpen = true, build = BuildHighlightSection },
-    { sectionId = "bars_power", title = "Bar Animation + Text Accuracy", height = 184, build = BuildPowerSection },
+    { sectionId = "bars_absorb", prepareShell = Rows.PrepareSection,
+        title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
+    { sectionId = "bars_outline", prepareShell = Rows.PrepareSection,
+        title = "Frame Outline", height = 226, build = BuildOutlineSection },
+    { sectionId = "bars_rounded", prepareShell = Rows.PrepareSection,
+        title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
+    { sectionId = "bars_slanted", prepareShell = Rows.PrepareSection,
+        title = "Slanted Bars", height = 480, defaultOpen = true, build = BuildSlantedSection },
+    { sectionId = "bars_highlight", prepareShell = Rows.PrepareSection,
+        title = "Highlight Borders", height = 764, defaultOpen = true, build = BuildHighlightSection },
+    { sectionId = "bars_power", prepareShell = Rows.PrepareSection,
+        title = "Bar Animation + Text Accuracy", height = 184, build = BuildPowerSection },
 }
 local function BuildGlobalBarsSectionLazy(ctx, b, spec)
     local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy

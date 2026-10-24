@@ -60,7 +60,7 @@ for _, entry in ipairs(units) do
         frame.backgroundBar, frame.latencyBar = frame:CreateTexture(), frame:CreateTexture()
         frame.empowerSegments = { frame:CreateTexture(), frame:CreateTexture() }
         assert(env.MSUF.Castbars.Rounded.RoundedCastbar_RefreshFrame(frame), entry.unit .. ": castbar runtime disabled")
-        assert(env.MSUF_RoundedCastbar_RenderPreview(frame, 2, 0, 0, 0, 1), "castbar preview failed")
+        assert(core.PublicGlobals.MSUF_RoundedCastbar_RenderPreview(frame, 2, 0, 0, 0, 1), "castbar preview failed")
         casts[#casts + 1] = { frame = frame, scope = entry.scope }
     end
 end
@@ -189,7 +189,7 @@ for _, entry in ipairs(casts) do
 end
 CheckCasts()
 for _, entry in ipairs(casts) do
-    assert(env.MSUF_RoundedCastbar_RenderPreview(entry.frame, 2, 0, 0, 0, 1))
+    assert(core.PublicGlobals.MSUF_RoundedCastbar_RenderPreview(entry.frame, 2, 0, 0, 0, 1))
 end
 CheckCasts()
 assert(core.RoundedSurface.ApplyClassPower(cp, true))

@@ -87,6 +87,12 @@ MSUF_SyncCastbarPositionPopup = function() end
 MSUF_GetCastbarPrefix = function(unit) return "castbar" .. unit:sub(1, 1):upper() .. unit:sub(2) end
 MSUF_GetGeneralDB = function() return general end
 MSUF_EnsureCastbarGeneralDB = MSUF_GetGeneralDB
+-- Castbars/MSUF_Castbars_Core.lua owns the default offsets (not loaded here); every
+-- drag below stores both offsets, so these are only the unit's default anchor.
+MSUF_GetCastbarDefaultOffsets = function(unit)
+    if unit == "target" or unit == "focus" then return 65, -15 end
+    return 0, 0
+end
 
 -- Shell/EditMode/MSUF_EditMode_Core.lua Util.Round and Kernel/MSUF_Util.lua RoundOffset.
 local function Round(n) return n + (2 ^ 52 + 2 ^ 51) - (2 ^ 52 + 2 ^ 51) end

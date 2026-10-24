@@ -5,19 +5,21 @@
 --- Runtime font application lives in MSUF_FontRuntime.lua.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Runtime/MSUF_FontRegistry.lua"
 
-local G = _G
+local ExportPublic = MSUF.ExportPublic
+local Require = MSUF.Require
 local type, tostring, ipairs = type, tostring, ipairs
 local table_insert = table.insert
-local IsRegisteredLSMFontPath = MSUF.Require("MSUF_IsRegisteredLSMFontPath", "Runtime/MSUF_FontRegistry.lua")
-local LSM = (MSUF and MSUF.LSM) or G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
+local IsRegisteredLSMFontPath = Require("MSUF_IsRegisteredLSMFontPath", FILE)
+local SetFontChecked = Require("MSUF_SetFontChecked", FILE)
+local LSM = MSUF.LSM or Require("MSUF_LSM", FILE)
 
 --- Called by the LSM bootstrap when LibSharedMedia becomes available after this
 --- file loaded. Keep the local LSM reference fresh for later lookups.
-G.MSUF_OnLSMReady = function(lsm)
+ExportPublic("MSUF_OnLSMReady", function(lsm)
     LSM = lsm
-end
+end)
 
 local FONT_LIST = MSUF.Fonts.Catalog
 
@@ -35,9 +37,9 @@ for i = 1, #FONT_LIST do RememberAvailableFont(FONT_LIST[i].path) end
 for _, path in ipairs({
     "Fonts\\FRIZQT__.TTF", "Fonts\\ARIALN.TTF", "Fonts\\MORPHEUS.TTF", "Fonts\\SKURRI.TTF",
 }) do RememberAvailableFont(path) end
-RememberAvailableFont(G.STANDARD_TEXT_FONT)
-RememberAvailableFont(G.UNIT_NAME_FONT)
-RememberAvailableFont(G.DAMAGE_TEXT_FONT)
+RememberAvailableFont(STANDARD_TEXT_FONT)
+RememberAvailableFont(UNIT_NAME_FONT)
+RememberAvailableFont(DAMAGE_TEXT_FONT)
 
 local function MSUF_IsAvailableFontPath(rawPath)
     if type(rawPath) ~= "string" or rawPath == "" then return false end
@@ -54,10 +56,10 @@ local function MSUF_IsAvailableFontPath(rawPath)
     return available
 end
 
-G.MSUF_IsAvailableFontPath = MSUF_IsAvailableFontPath
+ExportPublic("MSUF_IsAvailableFontPath", MSUF_IsAvailableFontPath)
 MSUF.MSUF_IsAvailableFontPath = MSUF_IsAvailableFontPath
 
-local MSUF_NormalizeFontKey = MSUF.Require("MSUF_NormalizeFontKey", "Runtime/MSUF_FontRegistry.lua")
+local MSUF_NormalizeFontKey = Require("MSUF_NormalizeFontKey", FILE)
 
 local function MSUF_NormalizeFontKeyField(tbl)
     if type(tbl) ~= "table" then return end
@@ -74,7 +76,7 @@ end
 --- Profile migration: old per-scope font keys now collapse to the global font
 --- setting. This keeps imports/older profiles from carrying stale overrides.
 local function MSUF_NormalizeStoredFontKeys()
-    local db = G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then return end
     MSUF_NormalizeFontKeyField(db.general)
     for _, key in ipairs({
@@ -86,7 +88,7 @@ local function MSUF_NormalizeStoredFontKeys()
         end
     end
 end
-G.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
+ExportPublic("MSUF_NormalizeStoredFontKeys", MSUF_NormalizeStoredFontKeys)
 MSUF.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
 -- Not run while this file loads: the SavedVariables arrive after every file
 -- ran, so it would only see a throwaway profile. The defaults pass
@@ -121,8 +123,7 @@ end
 local function MSUF_FetchFontPathFromLSM(key)
     if type(key) ~= "string" or key == "" then return nil end
     if MSUF_FontKeyIsInternal(key) then return nil end
-    local lsm = LSM or (MSUF and MSUF.LSM) or G.MSUF_LSM
-    if not lsm then return nil end
+    local lsm = LSM or MSUF.LSM or Require("MSUF_LSM", FILE)
 
     local lsmKey = MSUF_NormalizeFontKey(key)
     local p = MSUF_GetRawLSMFontPath(lsm, lsmKey)
@@ -152,31 +153,31 @@ local function MSUF_ResolveSafeFontPath(path, size, flags, fontKey)
     return MSUF.Fonts.ResolvePath(path, size, flags, fontKey)
 end
 
-G.MSUF_ResolveSafeFontPath = MSUF_ResolveSafeFontPath
+ExportPublic("MSUF_ResolveSafeFontPath", MSUF_ResolveSafeFontPath)
 MSUF.MSUF_ResolveSafeFontPath = MSUF_ResolveSafeFontPath
 
 local function MSUF_GetFontPreviewObject(key)
     if not key or key == "" then
-        return G.GameFontHighlightSmall
+        return GameFontHighlightSmall
     end
     local obj = MSUF_FontPreviewObjects[key]
     if not obj then
         MSUF_FontPreviewObjectCount = MSUF_FontPreviewObjectCount + 1
-        obj = G.CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
+        obj = CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
         MSUF_FontPreviewObjects[key] = obj
     end
     -- An unknown or not yet registered key previews the default face, like
     -- every other font consumer; the stored selection is left untouched.
     local path = MSUF_ResolveSafeFontPath(nil, 14, "", key)
-    G.MSUF_SetFontChecked(obj, path, 14, "")
+    SetFontChecked(obj, path, 14, "")
     return obj
 end
 MSUF.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
-G.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
+ExportPublic("MSUF_GetFontPreviewObject", MSUF_GetFontPreviewObject)
 
 --- Deprecated compatibility alias: the unprefixed name predates the MSUF_
 --- prefix; it is only claimed while no other addon owns it.
-G.GetInternalFontPathByKey = rawget(G, "GetInternalFontPathByKey") or G.MSUF_GetInternalFontPathByKey
+ExportPublic("GetInternalFontPathByKey", GetInternalFontPathByKey or Require("MSUF_GetInternalFontPathByKey", FILE))
 MSUF.Compat = MSUF.Compat or {}
 MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
 MSUF.Compat.DeprecatedAliases.GetInternalFontPathByKey = "MSUF_GetInternalFontPathByKey"
@@ -185,9 +186,9 @@ local function MSUF_IsInternalFontKey(key)
     return MSUF_FontKeyIsInternal(key)
 end
 
-G.MSUF_IsInternalFontKey = MSUF_IsInternalFontKey
+ExportPublic("MSUF_IsInternalFontKey", MSUF_IsInternalFontKey)
 MSUF.MSUF_IsInternalFontKey = MSUF_IsInternalFontKey
-G.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
+ExportPublic("MSUF_FetchFontPathFromLSM", MSUF_FetchFontPathFromLSM)
 MSUF.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
-G.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath
+ExportPublic("MSUF_GetRawLSMFontPath", MSUF_GetRawLSMFontPath)
 MSUF.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath

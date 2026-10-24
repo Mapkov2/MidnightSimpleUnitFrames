@@ -1,10 +1,11 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
+-- load; click handlers resolve the rest through MSUF.Require when they run.
 M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua", {
     "MSUF_GetAllProfiles",
     "MSUF_ShowReloadRecommendedPopup",
@@ -14,13 +15,18 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua", {
     "MSUF_ImportFromString",
     "MSUF_ImportIntoNewProfile",
 })
+-- The refresh closures and value getters below reach these on every page refresh: resolved once here.
+local GetAllProfiles = MSUF.Require("MSUF_GetAllProfiles", FILE)
+local IsSpecAutoSwitchEnabled = MSUF.Require("MSUF_IsSpecAutoSwitchEnabled", FILE)
+local GetSpecProfile = MSUF.Require("MSUF_GetSpecProfile", FILE)
+local GetDefaultProfileForNewCharacters = MSUF.Require("MSUF_GetDefaultProfileForNewCharacters", FILE)
 
 -- Advanced Profiles page.
 -- Builds profile copy/import/export/spec-switch controls and Wago import affordances.
 -- Actual profile mutation stays in State/MSUF_Profiles.lua and import helpers.
 local W = M.Widgets
-local T = M.Theme
 local AP = M.AdvancedPage or {}
+local T = M.Theme
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -57,10 +63,7 @@ local PROFILE_ACTION_INPUT_BY_PATH = {
     ["import.execute"] = "value",
 }
 local function ProfilesMeta(path, classification, exact)
-    local resolved = {}
-    if type(exact) == "table" then
-        for key, value in pairs(exact) do resolved[key] = value end
-    end
+    local resolved = M.Assign({}, exact)
     resolved.settingKey = resolved.settingKey or PROFILE_SETTING_BY_PATH[path]
     resolved.actionKey = resolved.actionKey or PROFILE_ACTION_BY_PATH[path]
     resolved.actionInputArg = resolved.actionInputArg or PROFILE_ACTION_INPUT_BY_PATH[path]
@@ -70,10 +73,7 @@ local function ProfilesMeta(path, classification, exact)
     return ControlMeta("profiles", "advanced", path, classification, resolved)
 end
 local function ModulesMeta(path, classification, exact)
-    local resolved = {}
-    if type(exact) == "table" then
-        for key, value in pairs(exact) do resolved[key] = value end
-    end
+    local resolved = M.Assign({}, exact)
     if path == "style.enabled" then resolved.settingKey = resolved.settingKey or "general.styleEnabled" end
     return ControlMeta("modules", "advanced", path, classification, resolved)
 end
@@ -81,9 +81,7 @@ local MoveWidget = W.MoveWidget or AP.MoveWidget
 local Tr = M.TranslateText or M.Tr
 local VT = M.ValueTextList
 local WAGO_PROFILES_URL = "https://wago.io/search/imports/wow/msuf"
-local function Trim(value)
-    return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-end
+local Trim = M.TrimText
 local function SuiteProfiles()
     return MSUF.SuiteLink.Profiles()
 end
@@ -126,7 +124,7 @@ local NO_PROFILE = ""
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = NO_PROFILE, text = "None" } end
-    local list = _G.MSUF_GetAllProfiles() or { "Default" }
+    local list = GetAllProfiles() or { "Default" }
     -- Names are typed by the user and shown as typed, never translated.
     for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i], translate = false } end
     return values
@@ -138,8 +136,8 @@ end
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 local function GetSpecMeta()
     if IS_FOREVER then
-        local primary, secondary = _G.DUAL_SPEC_PRIMARY, _G.DUAL_SPEC_SECONDARY
-        local specInfo = _G.C_SpecializationInfo
+        local primary, secondary = DUAL_SPEC_PRIMARY, DUAL_SPEC_SECONDARY
+        local specInfo = C_SpecializationInfo
         if type(primary) ~= "string" or primary == "" or type(secondary) ~= "string" or secondary == ""
             or type(specInfo) ~= "table" or type(specInfo.GetActiveSpecGroup) ~= "function" then
             return {}
@@ -162,7 +160,7 @@ local function RefreshAfterProfileChange(ctx)
     if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
     if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-change") elseif M.Refresh then M.Refresh(ctx) end
 end
-local function ActiveProfileName() return _G.MSUF_ActiveProfile or "Default" end
+local function ActiveProfileName() return MSUF_ActiveProfile or "Default" end
 
 local function ClearProfileHistory() if M.ClearHistory then M.ClearHistory() end end
 --- message is an English key, or a format key followed by its arguments; it is
@@ -187,11 +185,8 @@ local function StyleProfileInput(editBox, width, height, multiline)
     if editBox.SetMultiLine then editBox:SetMultiLine(multiline and true or false) end
     if editBox.SetJustifyV then editBox:SetJustifyV(multiline and "TOP" or "MIDDLE") end
     if editBox.SetTextInsets then
-        if multiline then
-            editBox:SetTextInsets(8, 8, 8, 8)
-        else
-            editBox:SetTextInsets(8, 8, 1, 1)
-        end
+        local inset = multiline and 8 or 1
+        editBox:SetTextInsets(8, 8, inset, inset)
     end
     if editBox._msuf2Title then
         editBox._msuf2Title:SetWidth(w)
@@ -224,16 +219,13 @@ local function WrapMultilineProfileInput(editBox, card, x, y, width, height)
         for i = 1, #editBox._msuf2EditEdges do editBox._msuf2EditEdges[i]:Hide() end
     end
     if editBox._msuf2Bg then editBox._msuf2Bg:Hide() end
-    editBox:HookScript("OnEditFocusGained", function()
+    local function PaintHostBorder(color, alpha)
         if host.SetBackdropBorderColor then
-            host:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
+            host:SetBackdropBorderColor(color[1], color[2], color[3], alpha or color[4] or 1)
         end
-    end)
-    editBox:HookScript("OnEditFocusLost", function()
-        if host.SetBackdropBorderColor then
-            host:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1)
-        end
-    end)
+    end
+    editBox:HookScript("OnEditFocusGained", function() PaintHostBorder(T.colors.accent, 0.95) end)
+    editBox:HookScript("OnEditFocusLost", function() PaintHostBorder(T.colors.borderSoft) end)
     if T.StyleScrollFrame then T.StyleScrollFrame(scroll, host) end
     scroll:EnableMouse(true)
     scroll:SetScript("OnMouseDown", function()
@@ -267,11 +259,11 @@ function ProfilePrompts.ConfirmReset(name, after)
         cancel = NO or M.Tr("No"),
         onAccept = function()
             if BlockCombatAction() then return end
-            _G.MSUF_ResetProfile(name)
+            MSUF.Require("MSUF_ResetProfile", FILE)(name)
             ClearProfileHistory()
             if M.RequestGeneralDomains then M.RequestGeneralDomains("MSUF2_PROFILE_RESET", { preview = true, applyAll = false, notify = false }) end
             after()
-            _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
+            MSUF.Require("MSUF_ShowReloadRecommendedPopup", FILE)("Profile reset")
         end,
     })
 end
@@ -282,7 +274,7 @@ function ProfilePrompts.ConfirmDelete(name, after)
         cancel = CANCEL or M.Tr("Cancel"),
         onAccept = function()
             if BlockCombatAction() then return end
-            _G.MSUF_DeleteProfile(name)
+            MSUF.Require("MSUF_DeleteProfile", FILE)(name)
             ClearProfileHistory()
             after()
         end,
@@ -292,15 +284,18 @@ end
 -- the Edit Mode adapter's reload merges and saves (MSUF_EditMode_Blizzard.lua).
 local function ReloadImportedUI()
     if MSUF.Client.SupportsBlizzardEditMode then
-        return MSUF.Require("MSUF_BlizzardEditMode_ReloadUI", "Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua")()
+        return MSUF.Require("MSUF_BlizzardEditMode_ReloadUI", FILE)()
     end
     ReloadUI()
 end
+-- A reload cannot run in combat: the message tells the player to /reload afterwards.
+local function ReloadBlockedInCombat(message, ...)
+    if not (InCombatLockdown and InCombatLockdown()) then return false end
+    PrintProfileMessage("|cffffd700", message, ...)
+    return true
+end
 local function ShowImportReloadPrompt()
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
-        return
-    end
+    if ReloadBlockedInCombat("Profile imported. Reload after combat with /reload.") then return end
     M.ShowPrompt("MSUF2_IMPORT_RELOAD_PROMPT", {
         text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
         accept = RELOAD or M.Tr("Reload"),
@@ -312,36 +307,27 @@ end
 -- at load time (group headers, module gating) only settles after a reload, so offer one.
 local function ShowProfileSwitchReloadPrompt(profileName)
     local name = tostring(profileName or ActiveProfileName())
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", "Switched to profile '%s'. Reload after combat with /reload.", name)
-        return
-    end
+    if ReloadBlockedInCombat("Switched to profile '%s'. Reload after combat with /reload.", name) then return end
     M.ShowPrompt("MSUF2_PROFILE_SWITCH_RELOAD", {
         text = string.format(M.Tr("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"), name),
         accept = YES or M.Tr("Yes"),
         cancel = NO or M.Tr("No"),
         onAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                PrintProfileMessage("|cffffd700", "Can't reload the UI in combat. Leave combat, then type /reload.")
-                return
-            end
+            if ReloadBlockedInCombat("Can't reload the UI in combat. Leave combat, then type /reload.") then return end
             ReloadUI()
         end,
     })
 end
 local function ReloadAfterNewProfileImport(profileName)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload after combat with /reload.", tostring(profileName))
-        return
-    end
-    if type(_G.ReloadUI) == "function" then
+    if ReloadBlockedInCombat("Imported profile '%s'. Reload after combat with /reload.", tostring(profileName)) then return end
+    if type(ReloadUI) == "function" then
         ReloadImportedUI()
     else
         PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload the UI with /reload.", tostring(profileName))
     end
 end
 local function ProfileExists(name)
-    local gdb = _G.MSUF_GlobalDB
+    local gdb = MSUF_GlobalDB
     local profiles = type(gdb) == "table" and gdb.profiles or nil
     return type(profiles) == "table" and profiles[name] ~= nil
 end
@@ -388,8 +374,8 @@ function ProfilesPage.Prepare(ctx)
 
     local state = {}
     local function ConfigLocked()
-        return (_G.InCombatLockdown and _G.InCombatLockdown())
-            or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+        return (InCombatLockdown and InCombatLockdown())
+            or (UnitAffectingCombat and UnitAffectingCombat("player"))
             or false
     end
     local function ExportProfileString(kind)
@@ -406,7 +392,7 @@ function ProfilesPage.Prepare(ctx)
         end
         local value, reason
         if suiteKind then value, reason = SuiteExport(kind)
-        else value = _G.MSUF_ExportSelectionToString(kind, selected) end
+        else value = MSUF.Require("MSUF_ExportSelectionToString", FILE)(kind, selected) end
         if type(value) ~= "string" then
             if reason then PrintProfileMessage("|cffff0000", "Export failed: %s", tostring(reason)) end
             if M.ShowStatusFeedback then M.ShowStatusFeedback("Export failed", "danger", 1.8) end
@@ -628,117 +614,112 @@ local function BuildNewCharacterDefaults(state)
     -- starts on. The engine validates the stored name on every login and falls
     -- back to "Default" if the profile was deleted, so "None" is always safe.
     local newCharW = max(180, newCharCardW - 40)
-    local newCharDrop = AP.Row(nil, newCharCard, { "dropdown", "advancedprofiles.newCharDrop.12", nil,
+    AP.Row(nil, newCharCard, { "dropdown", "advancedprofiles.newCharDrop.12", nil,
         { "Default profile", function() return ProfileValues(true) end, newCharW },
         bind = function(newCharDrop)
-        newCharDrop._msuf2StableSearchLabel = "Default profile"
-        MoveWidget(newCharDrop, newCharCard, 20, -78, newCharW)
-        M.BindDropdownWidget(ctx, newCharDrop,
-            function()
-                local fn = _G.MSUF_GetDefaultProfileForNewCharacters
-                return (type(fn) == "function" and fn()) or NO_PROFILE
-            end,
-            function(v)
-                _G.MSUF_SetDefaultProfileForNewCharacters((v ~= NO_PROFILE) and v or nil)
-                RefreshAfterProfileChange(ctx)
-            end,
-            ProfilesMeta("new_character.default_profile", "action"))
-    end })
+            newCharDrop._msuf2StableSearchLabel = "Default profile"
+            MoveWidget(newCharDrop, newCharCard, 20, -78, newCharW)
+            M.BindDropdownWidget(ctx, newCharDrop,
+                function() return GetDefaultProfileForNewCharacters() or NO_PROFILE end,
+                function(v)
+                    MSUF.Require("MSUF_SetDefaultProfileForNewCharacters", FILE)((v ~= NO_PROFILE) and v or nil)
+                    RefreshAfterProfileChange(ctx)
+                end,
+                ProfilesMeta("new_character.default_profile", "action"))
+        end })
     local newCharHelp = AP.Row(nil, newCharCard, { "text", "advancedprofiles.newCharHelp.13", nil, { "Existing characters are not changed.", 20, -146,
         max(180, newCharCardW - 40), T.colors.muted } })
     if newCharHelp and newCharHelp.SetWordWrap then newCharHelp:SetWordWrap(true) end
-
 end
-function ProfilesPage.ManagementControls(state)
-    local ctx, buttonGap, heroSwitch = state.ctx, state.buttonGap, state.heroSwitch
-    local current, managementWide, managementMedium = state.current, state.managementWide, state.managementMedium
-    local currentCard, createCard, newCharCard, dangerPanel = state.currentCard, state.createCard, state.newCharCard, state.dangerPanel
-    local currentCardW, createCardW, newCharCardW, dangerW = state.currentCardW, state.createCardW, state.newCharCardW, state.dangerW
-    local ProfileButton, PlaceActionRow = state.ProfileButton, state.PlaceActionRow
-    local ConfigLocked, SetStatusPill, activeName = state.ConfigLocked, state.SetStatusPill, state.activeName
-    local profileCountPill, specStatePill, safetyPill = state.profileCountPill, state.specStatePill, state.safetyPill
-
-    local fieldW = max(180, currentCardW - 40)
-    local profileDrop = AP.Row(nil, currentCard, { "dropdown", ProfilesMeta("active_profile.select").controlId, nil,
+-- The active-profile picker. Switching is blocked in combat: the picker then snaps back to
+-- the loaded profile before anything else runs.
+local function BuildProfilePicker(state)
+    local ctx = state.ctx
+    local fieldW = max(180, state.currentCardW - 40)
+    local profileDrop = AP.Row(nil, state.currentCard, { "dropdown", ProfilesMeta("active_profile.select").controlId, nil,
         { "Active profile", {}, fieldW },
         bind = AP.NativeInput })
     -- The selected value is a profile name; search keeps the control name.
     profileDrop._msuf2StableSearchLabel = "Active profile"
     RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(heroSwitch, profileDrop) end
-    local function RefreshProfileValues()
-        profileDrop:SetValues(ProfileValues(false))
-    end
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(state.heroSwitch, profileDrop) end
     profileDrop:SetOnValueChanged(function(value)
         if BlockCombatAction() then
             profileDrop:SetValue(ActiveProfileName())
             return
         end
-        local wanted = value and value ~= "" and value ~= _G.MSUF_ActiveProfile and value or nil
+        local wanted = value and value ~= "" and value ~= MSUF_ActiveProfile and value or nil
         if wanted then
-            _G.MSUF_SwitchProfile(wanted)
-            if _G.MSUF_ActiveProfile == wanted then ClearProfileHistory() end
+            MSUF.Require("MSUF_SwitchProfile", FILE)(wanted)
+            if MSUF_ActiveProfile == wanted then ClearProfileHistory() end
         end
         M.RequestGeneralDomains("MSUF2_PROFILE_SWITCH", { preview = true, applyAll = false, notify = false })
         RefreshAfterProfileChange(ctx)
         -- The active profile is the switch's completion receipt.
-        if wanted and _G.MSUF_ActiveProfile == wanted then ShowProfileSwitchReloadPrompt(wanted) end
+        if wanted and MSUF_ActiveProfile == wanted then ShowProfileSwitchReloadPrompt(wanted) end
     end)
     M.TrackRefresh(ctx, function()
-        RefreshProfileValues()
+        profileDrop:SetValues(ProfileValues(false))
         profileDrop:SetValue(ActiveProfileName())
     end)
-    local createFieldW = max(180, createCardW - 40)
-    local createButtonW = max(120, floor((createCardW - 40 - buttonGap) / 2))
+    return profileDrop, fieldW
+end
+-- Create and Copy share one name field; the new name must be free before either one runs.
+local function ProfileWasCreated(prepared)
+    return type(prepared) == "table" and prepared.name ~= "" and not prepared.existed and ProfileExists(prepared.name)
+end
+local function BuildCreateRow(state)
+    local ctx, createCard, ProfileButton = state.ctx, state.createCard, state.ProfileButton
+    local createFieldW = max(180, state.createCardW - 40)
+    local createButtonW = max(120, floor((state.createCardW - 40 - state.buttonGap) / 2))
     local nameInput = AP.Row(nil, createCard, { "textinput", "advancedprofiles.nameInput.11", nil,
         { "New profile name", createFieldW },
         bind = function(nameInput)
-        M.BindTextInput(ctx, nameInput,
-            function() return M.profileCreateCopyName or "" end,
-            function(value) M.profileCreateCopyName = Trim(value or "") end,
-            true,
-            ProfilesMeta("draft.create_copy_name", "ephemeral"))
-    end })
+            M.BindTextInput(ctx, nameInput,
+                function() return M.profileCreateCopyName or "" end,
+                function(value) M.profileCreateCopyName = Trim(value or "") end,
+                true,
+                ProfilesMeta("draft.create_copy_name", "ephemeral"))
+        end })
     local PrepareProfileName = function(value)
-local name = Trim(value)
+        local name = Trim(value)
         local prepared = { name = name, existed = name ~= "" and ProfileExists(name) or false }
         if name ~= "" then M.profileCreateCopyName = name; nameInput:SetText(name) end
         return prepared
-end
-
+    end
     local create = ProfileButton(createCard, "Create profile", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
         if name and name ~= "" then
-            local created = _G.MSUF_CreateProfile(name)
+            local created = MSUF.Require("MSUF_CreateProfile", FILE)(name)
             if created == true then
-                _G.MSUF_SwitchProfile(name)
+                MSUF.Require("MSUF_SwitchProfile", FILE)(name)
                 ClearProfileHistory()
             end
         end
         M.profileCreateCopyName = ""
         nameInput:SetText("")
         RefreshAfterProfileChange(ctx)
-    end, nil, "profile.create", false, PrepareProfileName, function(prepared)
-        return type(prepared) == "table" and prepared.name ~= "" and not prepared.existed and ProfileExists(prepared.name)
-    end, nil, createButtonW)
+    end, nil, "profile.create", false, PrepareProfileName, ProfileWasCreated, nil, createButtonW)
     local copy = ProfileButton(createCard, "Copy current profile", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
         if name and name ~= "" then
-            local copied = _G.MSUF_CopyProfile(ActiveProfileName(), name)
-            if copied then _G.MSUF_SwitchProfile(name) end
-            do
-ClearProfileHistory()
-end
+            local copied = MSUF.Require("MSUF_CopyProfile", FILE)(ActiveProfileName(), name)
+            if copied then MSUF.Require("MSUF_SwitchProfile", FILE)(name) end
+            ClearProfileHistory()
             M.profileCreateCopyName = ""
             nameInput:SetText("")
             RefreshAfterProfileChange(ctx)
         end
-    end, nil, "profile.copy_current", false, PrepareProfileName, function(prepared)
-        return type(prepared) == "table" and prepared.name ~= "" and not prepared.existed and ProfileExists(prepared.name)
-    end, nil, createButtonW)
-    local dangerButtonW = max(140, min(250, floor((dangerW - 54) / 2)))
+    end, nil, "profile.copy_current", false, PrepareProfileName, ProfileWasCreated, nil, createButtonW)
+    return nameInput, create, copy, createFieldW
+end
+-- Reset and Delete act on the active profile; Search reaches them through the command tables,
+-- the buttons go through the confirmation prompts.
+local function BuildDangerRow(state)
+    local ctx, dangerPanel, ProfileButton = state.ctx, state.dangerPanel, state.ProfileButton
+    local dangerButtonW = max(140, min(250, floor((state.dangerW - 54) / 2)))
     local reset = ProfileButton(dangerPanel, "Reset to defaults", function()
         if BlockCombatAction() then return end
         if M.ShowPageResetConfirm then
@@ -754,18 +735,11 @@ end
             -- confirmation. Execute the same reset/apply/reload path used by
             -- the menu popup instead of bypassing its post-reset work.
             if type(M.ResetPageToDefaults) == "function" then
-                local apply = M.ApplyService
-                local called, result
-                if apply and type(apply.Invoke) == "function" then
-                    called, result = true, M.ResetPageToDefaults("profiles")
-                else
-                    called, result = true, M.ResetPageToDefaults("profiles")
-                end
-                if not called or result ~= true then return false end
+                if M.ResetPageToDefaults("profiles") ~= true then return false end
                 RefreshAfterProfileChange(ctx)
                 return true
             end
-            local result = _G.MSUF_ResetProfile(ActiveProfileName())
+            local result = MSUF.Require("MSUF_ResetProfile", FILE)(ActiveProfileName())
             if result == false then return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
@@ -783,13 +757,24 @@ end
             if BlockCombatAction() then return false end
             local name = ActiveProfileName()
             if name == "Default" then return false end
-            local result = _G.MSUF_DeleteProfile(name)
+            local result = MSUF.Require("MSUF_DeleteProfile", FILE)(name)
             if result == false then return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             return true
         end,
     }, dangerButtonW)
+    return reset, delete, dangerButtonW
+end
+function ProfilesPage.ManagementControls(state)
+    local ctx, buttonGap, current = state.ctx, state.buttonGap, state.current
+    local managementWide, managementMedium = state.managementWide, state.managementMedium
+    local currentCard, createCard, dangerPanel = state.currentCard, state.createCard, state.dangerPanel
+    local currentCardW, dangerW = state.currentCardW, state.dangerW
+    local PlaceActionRow, ConfigLocked, SetStatusPill = state.PlaceActionRow, state.ConfigLocked, state.SetStatusPill
+    local profileDrop, fieldW = BuildProfilePicker(state)
+    local nameInput, create, copy, createFieldW = BuildCreateRow(state)
+    local reset, delete, dangerButtonW = BuildDangerRow(state)
     MoveWidget(profileDrop, currentCard, 20, -78, fieldW)
     local currentStatus = AP.LabelAt(currentCard, "", 20, -150, max(180, currentCardW - 40),
         "GameFontDisableSmall", T.colors.muted)
@@ -807,15 +792,15 @@ end
         local profiles = ProfileValues(false)
         local profileCount = #profiles
         local profileCountText = profileCount == 1 and M.Tr("1 profile") or M.Format("%d profiles", profileCount)
-        local specAuto = _G.MSUF_IsSpecAutoSwitchEnabled() or false
+        local specAuto = IsSpecAutoSwitchEnabled() or false
         local locked = ConfigLocked()
-        T.SetTranslatedText(activeName, active) -- a profile name, shown as typed
+        T.SetTranslatedText(state.activeName, active) -- a profile name, shown as typed
         if currentStatus then
             T.SetTranslatedText(currentStatus, M.Format("Currently loaded and applied: %s", active))
         end
-        SetStatusPill(profileCountPill, profileCountText, "info")
-        SetStatusPill(specStatePill, M.Tr(specAuto and "Spec switching: On" or "Spec switching: Off"), specAuto and "ok" or "warn")
-        SetStatusPill(safetyPill, M.Tr(locked and "Combat locked" or "Safe to manage now"), locked and "danger" or "ok")
+        SetStatusPill(state.profileCountPill, profileCountText, "info")
+        SetStatusPill(state.specStatePill, M.Tr(specAuto and "Spec switching: On" or "Spec switching: Off"), specAuto and "ok" or "warn")
+        SetStatusPill(state.safetyPill, M.Tr(locked and "Combat locked" or "Safe to manage now"), locked and "danger" or "ok")
         if delete.SetEnabled then delete:SetEnabled(active ~= "Default") end
         if W.SetCollapsibleBadges then
             W.SetCollapsibleBadges(current, {
@@ -851,16 +836,8 @@ end
 function ProfilesPage.Specializations(state)
     local ctx, b, contentW = state.ctx, state.b, state.contentW
     local specs = GetSpecMeta()
-    local specCols
-    if contentW >= 1380 then
-        specCols = min(4, max(1, #specs))
-    elseif contentW >= 980 then
-        specCols = min(3, max(1, #specs))
-    elseif contentW >= 640 then
-        specCols = min(2, max(1, #specs))
-    else
-        specCols = 1
-    end
+    local specCols = contentW >= 1380 and 4 or contentW >= 980 and 3 or contentW >= 640 and 2 or 1
+    specCols = min(specCols, max(1, #specs))
     local specRows = max(1, math.ceil(max(1, #specs) / specCols))
     local specAutoCardH = contentW >= 760 and 126 or 156
     local specCardH, specCardGap = 122, 16
@@ -879,10 +856,10 @@ function ProfilesPage.Specializations(state)
         min(380, max(220, specInnerW - 40)) }, bind = function(widget)
         M.BindBoolWidget(ctx, widget,
             function()
-                return _G.MSUF_IsSpecAutoSwitchEnabled() or false
+                return IsSpecAutoSwitchEnabled() or false
             end,
             function(v)
-                _G.MSUF_SetSpecAutoSwitchEnabled(v and true or false)
+                MSUF.Require("MSUF_SetSpecAutoSwitchEnabled", FILE)(v and true or false)
                 RefreshAfterProfileChange(ctx)
             end,
             ProfilesMeta("specialization.auto_switch.enabled"))
@@ -914,10 +891,10 @@ function ProfilesPage.Specializations(state)
                     MoveWidget(drop, assignmentCard, 18, -58, dropW)
                     M.BindDropdownWidget(ctx, drop,
                         function()
-                            return _G.MSUF_GetSpecProfile(s.id) or NO_PROFILE
+                            return GetSpecProfile(s.id) or NO_PROFILE
                         end,
                         function(v)
-                            _G.MSUF_SetSpecProfile(s.id, (v ~= NO_PROFILE) and v or nil)
+                            MSUF.Require("MSUF_SetSpecProfile", FILE)(s.id, (v ~= NO_PROFILE) and v or nil)
                             RefreshAfterProfileChange(ctx)
                         end,
                         ProfilesMeta("specialization.mapping.slot." .. tostring(i), "action", {
@@ -927,10 +904,10 @@ function ProfilesPage.Specializations(state)
         end
     end
     local function RefreshSpecState()
-        local enabled = _G.MSUF_IsSpecAutoSwitchEnabled() or false
+        local enabled = IsSpecAutoSwitchEnabled() or false
         local assigned = 0
         for i = 1, #specs do
-            local value = _G.MSUF_GetSpecProfile(specs[i].id)
+            local value = GetSpecProfile(specs[i].id)
             if value and (value ~= "None" or ProfileExists(value)) then assigned = assigned + 1 end
         end
         if W.SetCollapsibleBadges then
@@ -1076,13 +1053,10 @@ function ProfilesPage.ImportExport(state)
     state.export, state.import, state.importCreateNew = export, import, importCreateNew
     state.importProfileName, state.importNameW = importProfileName, importNameW
 end
-function ProfilesPage.ImportActions(state)
-    local ctx, io, ioWide, stringCard, actionsCard = state.ctx, state.io, state.ioWide, state.stringCard, state.actionsCard
-    local stringCardW, actionsCardW, ioButtonW = state.stringCardW, state.actionsCardW, state.ioButtonW
-    local exportKind, exportKindW, blob = state.exportKind, state.exportKindW, state.blob
-    local export, import, importCreateNew = state.export, state.import, state.importCreateNew
-    local importProfileName, importNameW = state.importProfileName, state.importNameW
-    local ProfileButton, PlaceActionRow, AddProfileTooltip = state.ProfileButton, state.PlaceActionRow, state.AddProfileTooltip
+-- Both import paths read the shared text box, refresh the page and clear the menu history
+-- once the profile data changed.
+local function BuildImportHandlers(state)
+    local ctx, blob, importProfileName = state.ctx, state.blob, state.importProfileName
     local function ImportTextOrFail()
         if BlockCombatAction() then return nil end
         local text = blob:GetText()
@@ -1113,7 +1087,7 @@ function ProfilesPage.ImportActions(state)
             return true
         end
         -- `text` is a string the user pasted
-        local imported = _G.MSUF_ImportFromString(text)
+        local imported = MSUF.Require("MSUF_ImportFromString", FILE)(text)
         if imported ~= true then return false end
         ClearProfileHistory()
         M.RequestGeneralDomains("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
@@ -1151,7 +1125,7 @@ function ProfilesPage.ImportActions(state)
 
         -- MSUF_ImportIntoNewProfile decodes, validates and stages the string before it creates
         -- or switches a profile; a rejected string leaves SavedVariables untouched.
-        local ok, _, stage = _G.MSUF_ImportIntoNewProfile(name, text)
+        local ok, _, stage = MSUF.Require("MSUF_ImportIntoNewProfile", FILE)(name, text)
         if ok ~= true then
             if stage == "create" then
                 PrintProfileMessage("|cffff0000", "Import failed: could not create profile '%s'.", name)
@@ -1174,30 +1148,13 @@ function ProfilesPage.ImportActions(state)
         ReloadAfterNewProfileImport(name)
         return true
     end
-    import:SetScript("OnClick", function()
-        if M.profileImportCreateNew == true then
-            return ImportIntoNewProfile()
-        else
-            return ImportIntoCurrent()
-        end
-    end)
-    importProfileName:SetOnValueCommitted(function(value)
-        M.profileImportNewName = Trim(value or "")
-        if M.profileImportCreateNew == true then ImportIntoNewProfile(value) end
-    end)
-    importCreateNew:SetScript("OnClick", function(self)
-        if BlockCombatAction() then
-            self:SetChecked(M.profileImportCreateNew == true)
-            return
-        end
-        M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
-        self:SetChecked(M.profileImportCreateNew == true)
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
-        if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
-    end)
-    --- Blizzard Edit Mode data is opt-in per session for BOTH directions
-    --- (never exported by default). The switch drives the two ProfileIO
-    --- flags directly; nothing is persisted across reloads.
+    return ImportIntoCurrent, ImportIntoNewProfile
+end
+--- Blizzard Edit Mode data is opt-in per session for BOTH directions
+--- (never exported by default). The switch drives the two ProfileIO
+--- flags directly; nothing is persisted across reloads.
+local function BuildEditModeToggle(state)
+    local actionsCard, actionsCardW, AddProfileTooltip = state.actionsCard, state.actionsCardW, state.AddProfileTooltip
     local includeBlizzEM = AP.Row(nil, actionsCard, { "switch", ProfilesMeta("import_export.blizzard_edit_mode").controlId, nil,
         { "Include Blizzard Edit Mode layout", 20, -292, max(220, actionsCardW - 40) }, bind = AP.NativeInput })
     RegisterControl(includeBlizzEM, ProfilesMeta("import_export.blizzard_edit_mode", "ephemeral"),
@@ -1207,8 +1164,8 @@ function ProfilesPage.ImportActions(state)
     local function SyncBlizzEMFlag()
         local on = M.profileIncludeBlizzardEM == true
         includeBlizzEM:SetChecked(on)
-        _G.MSUF_Profiles_SetExportBlizzardEditMode(on)
-        _G.MSUF_Profiles_SetImportBlizzardEditMode(on)
+        MSUF.Require("MSUF_Profiles_SetExportBlizzardEditMode", FILE)(on)
+        MSUF.Require("MSUF_Profiles_SetImportBlizzardEditMode", FILE)(on)
     end
     includeBlizzEM:SetScript("OnClick", function(self)
         if BlockCombatAction() then
@@ -1219,20 +1176,11 @@ function ProfilesPage.ImportActions(state)
         SyncBlizzEMFlag()
     end)
     SyncBlizzEMFlag()
-    local wago = ProfileButton(actionsCard, "Browse Wago Profiles", function()
-        _G.MSUF_ShowCopyLink("Wago MSUF Profiles", WAGO_PROFILES_URL)
-    end, nil, "profiles.browse_wago", false, nil, nil, nil, ioButtonW)
-    MoveWidget(exportKind, stringCard, 20, -76, exportKindW)
-    local blobW = max(220, stringCardW - 40)
-    MoveWidget(blob, stringCard, 20, -142, blobW)
-    WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, ioWide and 220 or 162)
-    PlaceActionRow(actionsCard, 20, export, import, -82)
-    MoveWidget(wago, actionsCard, 20, -126, ioButtonW)
-    MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)
-    StyleProfileInput(importProfileName, importNameW, 28, false)
-    local importModeHelp = AP.Row(nil, actionsCard, { "text", "advancedprofiles.importModeHelp.30", nil,
-        { "", 20, -336, max(220, actionsCardW - 40), T.colors.muted } })
-    if importModeHelp and importModeHelp.SetWordWrap then importModeHelp:SetWordWrap(true) end
+end
+-- The mode switch repaints the import button, the help line and the section badges.
+local function TrackImportMode(state, importModeHelp)
+    local ctx, io, import = state.ctx, state.io, state.import
+    local importCreateNew, importProfileName = state.importCreateNew, state.importProfileName
     local EXPORT_KIND_LABELS = {
         all = SuiteExportAvailable() and "MSUF only" or "Full profile",
         suite_all = "MSUF + Suite",
@@ -1272,6 +1220,52 @@ function ProfilesPage.ImportActions(state)
     else
         M.TrackRefresh(ctx, RefreshImportMode)
     end
+end
+function ProfilesPage.ImportActions(state)
+    local ctx, ioWide, stringCard, actionsCard = state.ctx, state.ioWide, state.stringCard, state.actionsCard
+    local stringCardW, actionsCardW, ioButtonW = state.stringCardW, state.actionsCardW, state.ioButtonW
+    local exportKind, exportKindW, blob = state.exportKind, state.exportKindW, state.blob
+    local export, import, importCreateNew = state.export, state.import, state.importCreateNew
+    local importProfileName, importNameW = state.importProfileName, state.importNameW
+    local ProfileButton, PlaceActionRow = state.ProfileButton, state.PlaceActionRow
+    local ImportIntoCurrent, ImportIntoNewProfile = BuildImportHandlers(state)
+    import:SetScript("OnClick", function()
+        if M.profileImportCreateNew == true then
+            return ImportIntoNewProfile()
+        else
+            return ImportIntoCurrent()
+        end
+    end)
+    importProfileName:SetOnValueCommitted(function(value)
+        M.profileImportNewName = Trim(value or "")
+        if M.profileImportCreateNew == true then ImportIntoNewProfile(value) end
+    end)
+    importCreateNew:SetScript("OnClick", function(self)
+        if BlockCombatAction() then
+            self:SetChecked(M.profileImportCreateNew == true)
+            return
+        end
+        M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
+        self:SetChecked(M.profileImportCreateNew == true)
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
+        if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
+    end)
+    BuildEditModeToggle(state)
+    local wago = ProfileButton(actionsCard, "Browse Wago Profiles", function()
+        MSUF.Require("MSUF_ShowCopyLink", FILE)("Wago MSUF Profiles", WAGO_PROFILES_URL)
+    end, nil, "profiles.browse_wago", false, nil, nil, nil, ioButtonW)
+    MoveWidget(exportKind, stringCard, 20, -76, exportKindW)
+    local blobW = max(220, stringCardW - 40)
+    MoveWidget(blob, stringCard, 20, -142, blobW)
+    WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, ioWide and 220 or 162)
+    PlaceActionRow(actionsCard, 20, export, import, -82)
+    MoveWidget(wago, actionsCard, 20, -126, ioButtonW)
+    MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)
+    StyleProfileInput(importProfileName, importNameW, 28, false)
+    local importModeHelp = AP.Row(nil, actionsCard, { "text", "advancedprofiles.importModeHelp.30", nil,
+        { "", 20, -336, max(220, actionsCardW - 40), T.colors.muted } })
+    if importModeHelp and importModeHelp.SetWordWrap then importModeHelp:SetWordWrap(true) end
+    TrackImportMode(state, importModeHelp)
 end
 function ProfilesPage.UnitSelection(state)
     local ctx, b = state.ctx, state.b
@@ -1322,21 +1316,23 @@ function ProfilesPage.Build(ctx)
     if M.ProfileVariantPage then M.ProfileVariantPage.Transport(state) end
     ctx:SetContentHeight(math.abs(state.b.y) + 42)
 end
+local StyleIsEnabled
 local function BuildModules(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Modules", "Optional MSUF style and visual modules.", 64)
+    b:Header("Modules", "Optional MSUF style and visual modules.", 64)
     local style = b:CollapsibleSection("modules_style", "Style", 96, true)
     M.ControlSchema.Section(style, "modules")
     local enable = AP.Row(nil, style, { "switch", "advancedprofiles.enable.34", nil, { "MSUF Style", 14, -38, 220 }, bind = function(enable)
         M.BindBoolWidget(ctx, enable,
             function()
-                local v = _G.MSUF_StyleIsEnabled()
+                StyleIsEnabled = StyleIsEnabled or MSUF.Require("MSUF_StyleIsEnabled", FILE)
+                local v = StyleIsEnabled()
                 return v and true or false
             end,
             function(v)
-                _G.MSUF_SetStyleEnabled(v and true or false)
+                MSUF.Require("MSUF_SetStyleEnabled", FILE)(v and true or false)
                 G().styleEnabled = v and true or false
-                _G.MSUF_ApplyModules()
+                MSUF.Require("MSUF_ApplyModules", FILE)()
             end,
             ModulesMeta("style.enabled"))
     end })

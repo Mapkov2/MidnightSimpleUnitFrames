@@ -3,6 +3,17 @@
 local ROOT = assert(arg[1]):gsub("\\", "/"):gsub("/$", "") .. "/"
 local function load(path, ns) return assert(loadfile(ROOT .. path))("MidnightSimpleUnitFrames", ns) end
 IsLoggedIn = function() return true end
+-- The core providers create their event frames at load; this probe has no widget surface of its own.
+local function NewFrame()
+    local f = { events = {} }
+    function f:RegisterEvent(e) self.events[e] = true end
+    function f:UnregisterEvent(e) self.events[e] = nil end
+    function f:UnregisterAllEvents() self.events = {} end
+    function f:SetScript(k, v) self[k] = v end
+    return f
+end
+CreateFrame = function() return NewFrame() end
+InCombatLockdown = function() return false end
 MSUF_DB = { general = {} }
 MSUF_EnsureDB = function() return MSUF_DB end
 local ns = { Translate = function(s) return s end, GetEffectiveLocale = function() return "enUS" end,
@@ -12,9 +23,14 @@ ns.MSUF2 = {
     WordList = function(s) local t = {} for v in s:gmatch("%S+") do t[#t + 1] = v end return t end,
     Lines = function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end,
 }
-load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua", ns)
-load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua", ns)
-load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua", ns)
+-- The core providers the theme files require at load (Kernel API, pixel layout, UI primitives).
+local REPO = ROOT:gsub("/$", "")
+local RequireFixture = assert(loadfile(ROOT .. "tools/tests/menu_core_world.lua"))().LoadThemeProviders(REPO, ns)
+-- Options files: providers this probe does not load are deferred and raise if used.
+local function loadOptions(path) return RequireFixture.LoadShipped(REPO, path, ns) end
+loadOptions("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua")
+loadOptions("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua")
+loadOptions("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua")
 local T = ns.MSUF2.Theme
 
 -- A frame whose animation groups persist for its lifetime (WoW never frees them).

@@ -7,15 +7,15 @@
 --- Split from MSUF_Menu2_UnitPreview_View.lua, which keeps drag, nudge,
 --- refresh and construction; it loads before the view and publishes through
 --- MSUF.UFPreviewViewHandles (public routes stay on MSUF.UFPreview).
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
+local MSUF = _G.MSUF
+local FILE = "Menu2/UnitPreview_View_Handles"
 local ExportPublic = MSUF.ExportPublic
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
 local PreviewCore = MSUF.UFPreviewCore or {}
 local PreviewCastbar = MSUF.UFPreviewCastbar or {}
 local PreviewZoomPan = MSUF.UFPreviewZoomPan or {}
-local M2 = MSUF.MSUF2 or _G.MSUF2 or {}
+local M2 = MSUF.MSUF2
 local EnsureDB = M2.EnsureDB
 local PreviewHelpers = M2.PreviewHelpers or {}
 
@@ -26,12 +26,40 @@ local ResolveNameOffsetDelta = PreviewModel.ResolveNameOffsetDelta
 local RoundOffset = PreviewCore.RoundOffset
 local Handles = MSUF.UFPreviewViewHandles or {}
 MSUF.UFPreviewViewHandles = Handles
+-- Core runtime providers that every drag and nudge step calls. They are plain
+-- core exports that load before this addon, so they are resolved once here.
+local ApplyCastbarUnitAndSync = MSUF.Require("MSUF_ApplyCastbarUnitAndSync", FILE)
+local ClassPowerApply = MSUF.Optional("MSUF_ClassPower_Apply")
+local ClassPowerRefresh = MSUF.Require("MSUF_ClassPower_Refresh", FILE)
+local ApplyPowerBarEmbedLayout = MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", FILE)
+--- A saved-state sub table (menu.unitX[unit] style bookkeeping) created on first use.
+local function SubTable(parent, field)
+    local child = parent[field]
+    if not child then
+        child = {}
+        parent[field] = child
+    end
+    return child
+end
 local function RegisterUnitPreviewControl(widget, semanticPath, label, kind, classification, extra, pageKey)
     local page = M2.UnitPage
-    if page and type(page.RegisterControl) == "function" then
+    if page and page.RegisterControl then
         page.RegisterControl(widget, { key = pageKey or M2.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification, extra)
     end
     return widget
+end
+-- The highlighted gear is both a Search action (it opens the element's
+-- settings) and, on other pages, plain navigation. The unit view registers the
+-- selected handle's gear the same way, with its own translator.
+local function GearOpenLabel(handle, translate)
+    return M2.Format("Open %s settings", translate(tostring(handle._label or handle._key or "preview element")))
+end
+local function GearActionExtra(gear)
+    return {
+        historyMode = "none",
+        help = "Click the highlighted preview button to jump directly to this element's settings below.",
+        command = gear and gear._msuf2UnitPreviewOpenCommand,
+    }
 end
 local UNIT_PREVIEW_ZOOM_CONTROLS = {
     { "zoomOutButton", "zoom.out", "Zoom out" },
@@ -63,7 +91,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
     if pageKey
         and box._msuf2RuntimeControlsPageKey == pageKey
         and registrationSentinel
-        and type(M2.IsRuntimeControlRegisteredForWidget) == "function"
+        and M2.IsRuntimeControlRegisteredForWidget
         and M2.IsRuntimeControlRegisteredForWidget(registrationSentinel, pageKey)
     then
         return 0
@@ -90,7 +118,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
     box._msuf2PanCommand = box._msuf2PanCommand or (PreviewHelpers.BuildPanCommand and PreviewHelpers.BuildPanCommand(
         box, PreviewZoomPan,
         function(dx, dy)
-            if type(Preview.Pan) ~= "function" then return false end
+            if not Preview.Pan then return false end
             local unit = (box._msuf2PanCommand and box._msuf2PanCommand.previewUnitKey) or box.key or previewUnitKey
             return Preview.Pan(unit, dx, dy)
         end,
@@ -124,21 +152,17 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         -- through the bound sliders; the adjacent gear is navigation.
         if exposeHandle then Register(handle, "handle." .. tostring(key), handle._label or key, "button", "ephemeral") end
         local gear = exposeHandle and handle._msuf2SettingsGear
-        -- An action only on the preview's own unit page: a preview shown inside
-        -- another page (each Colors category) keeps its gears as navigation,
-        -- so search does not list every element's gear once per category.
-        if gear and gear._msuf2UnitPreviewOpenCommand and tostring(pageKey or ""):match("^uf_") then
-            Register(gear, "handle." .. tostring(key) .. ".open_settings",
-                M2.Format("Open %s settings", M2.TranslateText(tostring((handle and handle._label) or key or "preview element"))),
-                "button", "action", {
-                    historyMode = "none",
-                    help = "Click the highlighted preview button to jump directly to this element's settings below.",
-                    command = gear._msuf2UnitPreviewOpenCommand,
-                })
-        else
-            Register(gear, "handle." .. tostring(key) .. ".open_settings",
-                M2.Format("Open %s settings", M2.TranslateText(tostring((handle and handle._label) or key or "preview element"))),
-                "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
+        if gear then
+            local path = "handle." .. tostring(key) .. ".open_settings"
+            local label = GearOpenLabel(handle, M2.TranslateText)
+            -- An action only on the preview's own unit page: a preview shown inside
+            -- another page (each Colors category) keeps its gears as navigation,
+            -- so search does not list every element's gear once per category.
+            if gear._msuf2UnitPreviewOpenCommand and tostring(pageKey or ""):match("^uf_") then
+                Register(gear, path, label, "button", "action", GearActionExtra(gear))
+            else
+                Register(gear, path, label, "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
+            end
         end
     end
     -- Selection chrome. Most X/Y edits remain ephemeral because they follow the
@@ -185,32 +209,17 @@ function Preview.RegisterRuntimeControlsForPage(box, pageKey)
     return RegisterUnitPreviewRuntimeControls(box, pageKey)
 end
 local function UnitPreviewTextMovesTogether(unitKey, kind)
-    local m = _G.MSUF2
-    local byUnit = m and m.unitTextMoveTogether and m.unitTextMoveTogether[unitKey or "player"]
+    local byUnit = M2.unitTextMoveTogether and M2.unitTextMoveTogether[unitKey or "player"]
     local value = byUnit and byUnit[kind]
     if value == nil then return true end
     return value == true
 end
 local function UnitPreviewSetTextMoveTogether(unitKey, kind, value)
-    local m = _G.MSUF2
-    if not m then return end
-    unitKey = unitKey or "player"
-    m.unitTextMoveTogether = m.unitTextMoveTogether or {}
-    m.unitTextMoveTogether[unitKey] = m.unitTextMoveTogether[unitKey] or {}
-    m.unitTextMoveTogether[unitKey][kind] = value ~= false
+    SubTable(SubTable(M2, "unitTextMoveTogether"), unitKey or "player")[kind] = value ~= false
 end
 local function ApplyCastbarRuntimeForKey(key)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(key)
-        return
-    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(key)
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals(key)
-    end
-    if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(key) end
+    ApplyCastbarUnitAndSync(key)
 end
-local OpenPreviewHandleSettings
 local function EnsureBarsDB()
     local db = EnsureDB()
     db.bars = db.bars or {}
@@ -227,8 +236,12 @@ local function ReadBarsHandleOffsets(handle)
     return x, y, xKey, yKey
 end
 local function RefreshClassPowerRuntime(box, reason)
-    if type(_G.MSUF_ClassPower_Apply) == "function" then _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, playerHP = true, syncNow = false }) elseif type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
+    if ClassPowerApply then
+        ClassPowerApply({ anchor = true, cdm = true, playerHP = true, syncNow = false })
+    else
+        ClassPowerRefresh()
+    end
+    ApplyPowerBarEmbedLayout("player", true)
     ApplyPanelUnit(box and box._msufPanel, "player", reason or "UNIT_PREVIEW_CLASS_POWER_MOVE")
 end
 local function WriteBarsHandleOffsets(handle, x, y, reason)
@@ -301,18 +314,15 @@ local function MenuHistorySource(handle, action)
     return "unitPreview:" .. tostring(box and box.key or "unit") .. ":" .. tostring(handle and handle._key or "handle") .. ":" .. tostring(action or "move")
 end
 local function BeginMenuHistory(handle, action)
-    local h = _G.MSUF2
-    if not (h and type(h.BeginHistoryTransaction) == "function") then return false end
-    return h.BeginHistoryTransaction(MenuHistoryLabel(handle, action), MenuHistorySource(handle, action))
+    if not M2.BeginHistoryTransaction then return false end
+    return M2.BeginHistoryTransaction(MenuHistoryLabel(handle, action), MenuHistorySource(handle, action))
 end
 local function CommitMenuHistory()
-    local h = _G.MSUF2
-    if h and type(h.CommitHistoryTransaction) == "function" then return h.CommitHistoryTransaction() end
+    if M2.CommitHistoryTransaction then return M2.CommitHistoryTransaction() end
     return false
 end
 local function CheckpointMenuHistory(handle, action)
-    local h = _G.MSUF2
-    if h and type(h.CheckpointHistory) == "function" then return h.CheckpointHistory(MenuHistoryLabel(handle, action), MenuHistorySource(handle, action)) end
+    if M2.CheckpointHistory then return M2.CheckpointHistory(MenuHistoryLabel(handle, action), MenuHistorySource(handle, action)) end
     return false
 end
 local UNIT_SECTION_IDS = {
@@ -340,133 +350,105 @@ function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
         tab = key == "castbarIcon" and "icon" or (key == "castbarTime" and "time" or ((key == "castbarText" or key == "castbarTarget")
             and "spell" or "general"))
     end
-    if state then
-        menu[state] = menu[state] or {}
-        menu[state][unit] = tab
-    end
+    if state then SubTable(menu, state)[unit] = tab end
     local textureSlot = section == "texture_layer" and (tonumber(key:match("^texLayer(%d)$")) or 1)
     local textureSlotChanged = false
     if textureSlot then
-        menu.unitTexLayerSlot = menu.unitTexLayerSlot or {}
-        menu.unitTexLayerTab = menu.unitTexLayerTab or {}
-        textureSlotChanged = (tonumber(menu.unitTexLayerSlot[unit]) or 1) ~= textureSlot
-        menu.unitTexLayerSlot[unit] = textureSlot
-        menu.unitTexLayerTab[unit] = "placement"
+        local slots, tabs = SubTable(menu, "unitTexLayerSlot"), SubTable(menu, "unitTexLayerTab")
+        textureSlotChanged = (tonumber(slots[unit]) or 1) ~= textureSlot
+        slots[unit] = textureSlot
+        tabs[unit] = "placement"
     end
     return textureSlotChanged
 end
-OpenPreviewHandleSettings = function(handle, source)
+local AURA_PREVIEW_LANES = { debuff = true, custom1 = true, custom2 = true, custom3 = true, custom4 = true }
+--- Every handle route posts the same EM2 focus request before it selects its page.
+local function PostMenuFocusRequest(request, source)
+    request.source = "unit-preview-" .. tostring(source or "settings")
+    request.explicit = true
+    request.changedAt = GetTime and GetTime() or 0
+    ExportPublic("MSUF_EM2_MenuFocusRequest", request)
+end
+local function OpenAuraHandleSettings(handle, box, unit, fields, source)
+    local lane = fields.auraPreviewKind
+    if not AURA_PREVIEW_LANES[lane] then lane = "buff" end
+    local laneSelection = SubTable(M2, "unitAuraTabSelection")
+    local previousAuraLane = laneSelection[unit] or "buff"
+    laneSelection[unit] = lane
+    local toolSelection = SubTable(M2, "unitAuraToolSelection")
+    local tools = toolSelection[unit]
+    if type(tools) ~= "table" then
+        tools = {}
+        toolSelection[unit] = tools
+    end
+    local previousAuraTool = tools[lane]
+    tools[lane] = "layout"
+    local pageKey = "uf_" .. tostring(unit)
+    if not M2.SelectPage then return false end
+    PostMenuFocusRequest({
+        key = unit,
+        component = handle._key,
+        lane = lane,
+        pageKey = pageKey,
+        sectionId = "auras",
+        -- A direct Preview click is navigation, not a temporary
+        -- search/edit-mode reveal. Keep Auras open when its first
+        -- control refresh rebuilds the Unit page.
+        persistSection = true,
+    }, source)
+    -- The Aura workspace captures its selected container while the
+    -- Unit page is built. Refreshers cannot replace that cached
+    -- container, so rebuild only when this preview opens another one.
+    if (lane ~= previousAuraLane or previousAuraTool ~= "layout") and M2.InvalidatePage then
+        Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = unit, handle._key, box
+        Preview._restoreSourceShowSerial = tonumber(box and box._msuf2PreviewShowSerial) or 0
+        M2.InvalidatePage(pageKey)
+    end
+    local selected = M2.SelectPage(pageKey) ~= false
+    if selected then Preview.RestoreQueuedHandle(Preview.active)
+    else
+        Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil, nil, nil
+    end
+    return selected
+end
+local function OpenClassPowerHandleSettings(handle, source)
+    if not M2.SelectPage then return false end
+    local sectionId = "classpower_display"
+    if handle._key == "classPowerText" then
+        sectionId = "classpower_visuals"
+        if M2.SetMenuStateValue then M2.SetMenuStateValue("classPowerStyleTab", "text") else M2.classPowerStyleTab = "text" end
+    elseif handle._key == "detachedPower" then
+        sectionId = "classpower_detached_power"
+        if M2.SetMenuStateValue then M2.SetMenuStateValue("classPowerDetachedPowerTab", "layout")
+        else M2.classPowerDetachedPowerTab = "layout" end
+    end
+    PostMenuFocusRequest({ pageKey = "classpower", sectionId = sectionId }, source)
+    return M2.SelectPage("classpower") ~= false
+end
+local function OpenPreviewHandleSettings(handle, source)
     if not handle then return false end
     local box = handle._preview or Preview.active
     local fields = handle._fields or {}
-    local menu = _G.MSUF2 or M2
     local unit = box and box.key or "player"
     local section = Preview.ResolveUnitHandleSection(handle, unit)
-    local textureSlotChanged = Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
+    local textureSlotChanged = Preview.PrepareUnitHandleSubmenu(M2, unit, handle)
     if fields.statusRefresh then
         local selected = NormalizeStatusPreviewId(handle._key)
         Preview.selectedStatusId = selected
-        if menu then
-            menu.unitStatusSelection = menu.unitStatusSelection or {}
-            menu.unitStatusSelection[unit] = selected
-            menu.unitStatusTabSelection = menu.unitStatusTabSelection or {}
-            menu.unitStatusTabSelection[unit] = "basic"
-        end
+        SubTable(M2, "unitStatusSelection")[unit] = selected
+        SubTable(M2, "unitStatusTabSelection")[unit] = "basic"
     end
-    if section == "auras3" then
-        local lane = fields.auraPreviewKind
-        if lane ~= "debuff" and lane ~= "custom1" and lane ~= "custom2" and lane ~= "custom3" and lane ~= "custom4" then lane = "buff" end
-        local previousAuraLane
-        local previousAuraTool
-        if menu then
-            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
-            previousAuraLane = menu.unitAuraTabSelection[unit] or "buff"
-            menu.unitAuraTabSelection[unit] = lane
-            menu.unitAuraToolSelection = menu.unitAuraToolSelection or {}
-            local tools = menu.unitAuraToolSelection[unit]
-            if type(tools) ~= "table" then
-                tools = {}
-                menu.unitAuraToolSelection[unit] = tools
-            end
-            previousAuraTool = tools[lane]
-            tools[lane] = "layout"
-        end
-        local pageKey = "uf_" .. tostring(unit)
-        if menu and type(menu.SelectPage) == "function" then
-            _G.MSUF_EM2_MenuFocusRequest = {
-                key = unit,
-                component = handle._key,
-                lane = lane,
-                pageKey = pageKey,
-                sectionId = "auras",
-                source = "unit-preview-" .. tostring(source or "settings"),
-                explicit = true,
-                -- A direct Preview click is navigation, not a temporary
-                -- search/edit-mode reveal. Keep Auras open when its first
-                -- control refresh rebuilds the Unit page.
-                persistSection = true,
-                changedAt = GetTime and GetTime() or 0,
-            }
-            -- The Aura workspace captures its selected container while the
-            -- Unit page is built. Refreshers cannot replace that cached
-            -- container, so rebuild only when this preview opens another one.
-            if (lane ~= previousAuraLane or previousAuraTool ~= "layout")
-                and type(menu.InvalidatePage) == "function"
-            then
-                Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = unit, handle._key, box
-                Preview._restoreSourceShowSerial = tonumber(box and box._msuf2PreviewShowSerial) or 0
-                menu.InvalidatePage(pageKey)
-            end
-            local selected = menu.SelectPage(pageKey) ~= false
-            if selected then Preview.RestoreQueuedHandle(Preview.active)
-            else
-                Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil, nil, nil
-            end
-            return selected
-        end
-        return false
-    end
-    if section == "classPower" then
-        if menu and type(menu.SelectPage) == "function" then
-            local sectionId = "classpower_display"
-            if handle._key == "classPowerText" then
-                sectionId = "classpower_visuals"
-                if menu.SetMenuStateValue then menu.SetMenuStateValue("classPowerStyleTab", "text") else menu.classPowerStyleTab = "text" end
-            elseif handle._key == "detachedPower" then
-                sectionId = "classpower_detached_power"
-                if menu.SetMenuStateValue then menu.SetMenuStateValue("classPowerDetachedPowerTab",
-                    "layout") else menu.classPowerDetachedPowerTab = "layout" end
-            end
-            ExportPublic("MSUF_EM2_MenuFocusRequest", {
-                pageKey = "classpower",
-                sectionId = sectionId,
-                source = "unit-preview-" .. tostring(source or "settings"),
-                explicit = true,
-                changedAt = GetTime and GetTime() or 0,
-            })
-            return menu.SelectPage("classpower") ~= false
-        end
-        return false
-    end
+    if section == "auras3" then return OpenAuraHandleSettings(handle, box, unit, fields, source) end
+    if section == "classPower" then return OpenClassPowerHandleSettings(handle, source) end
     local sectionId = UNIT_SECTION_IDS[section or ""] or UNIT_SECTION_IDS.text
     local pageKey = box and (box._msuf2PinnedPreviewPageKey or ("uf_" .. tostring(box.key or "player"))) or nil
-    if menu and type(menu.SelectPage) == "function" and pageKey then
+    if M2.SelectPage and pageKey then
         -- Texture controls are intentionally bound to one slot for their whole
         -- lifetime. Opening another texture handle must therefore rebuild the
         -- cached Unit page before it is focused.
-        if textureSlotChanged and type(menu.InvalidatePage) == "function" then
-            menu.InvalidatePage(pageKey)
-        end
-        ExportPublic("MSUF_EM2_MenuFocusRequest", {
-            key = box and box.key,
-            component = handle._key,
-            pageKey = pageKey,
-            sectionId = sectionId,
-            source = "unit-preview-" .. tostring(source or "settings"),
-            explicit = true,
-            changedAt = GetTime and GetTime() or 0,
-        })
-        return menu.SelectPage(pageKey) ~= false
+        if textureSlotChanged and M2.InvalidatePage then M2.InvalidatePage(pageKey) end
+        PostMenuFocusRequest({ key = box and box.key, component = handle._key, pageKey = pageKey, sectionId = sectionId }, source)
+        return M2.SelectPage(pageKey) ~= false
     end
     return false
 end
@@ -515,13 +497,8 @@ local function StorePreviewTextSelection(menu, unitKey, kind, slot)
     if not (menu and (kind == "hp" or kind == "power")) then return end
     unitKey = unitKey or "player"
     UnitPreviewSetTextMoveTogether(unitKey, kind, slot == nil)
-    menu.unitTextTabSelection = menu.unitTextTabSelection or {}
-    menu.unitTextTabSelection[unitKey] = kind
-    if slot then
-        menu.unitTextSlotSelection = menu.unitTextSlotSelection or {}
-        menu.unitTextSlotSelection[unitKey] = menu.unitTextSlotSelection[unitKey] or {}
-        menu.unitTextSlotSelection[unitKey][kind] = slot
-    end
+    SubTable(menu, "unitTextTabSelection")[unitKey] = kind
+    if slot then SubTable(SubTable(menu, "unitTextSlotSelection"), unitKey)[kind] = slot end
 end
 local HANDLE_BORDER_SPECS = {
     top = { "TOPLEFT", "TOPRIGHT", "SetHeight" },

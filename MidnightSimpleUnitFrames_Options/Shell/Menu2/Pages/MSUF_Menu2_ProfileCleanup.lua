@@ -5,6 +5,7 @@
 -- default, sync groups, the Suite) and prints one chat summary.
 local _, MSUF = ...
 local M = MSUF.MSUF2
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_ProfileCleanup.lua"
 M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_ProfileCleanup.lua", {
     "MSUF_GetAllProfiles",
     "MSUF_GetDefaultProfileForNewCharacters",
@@ -13,10 +14,7 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_ProfileCleanup.lua", {
 local T = M.Theme
 local AP = M.AdvancedPage
 local max = math.max
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 
 local Cleanup = {}
 M.ProfileCleanup = Cleanup
@@ -46,7 +44,7 @@ local function ProfileUsage()
         end
         return entry
     end
-    local gdb = _G.MSUF_GlobalDB
+    local gdb = MSUF_GlobalDB
     local chars = type(gdb) == "table" and type(gdb.char) == "table" and gdb.char or {}
     for _, char in pairs(chars) do
         if type(char) == "table" then
@@ -60,7 +58,7 @@ local function ProfileUsage()
             end
         end
     end
-    local newCharacters = _G.MSUF_GetDefaultProfileForNewCharacters()
+    local newCharacters = MSUF.Require("MSUF_GetDefaultProfileForNewCharacters", FILE)()
     if newCharacters then Entry(newCharacters).newCharacters = true end
     local meta = type(gdb) == "table" and type(gdb.global) == "table" and gdb.global or {}
     local groups = type(meta.profileSyncGroups) == "table" and meta.profileSyncGroups or {}
@@ -137,9 +135,9 @@ end
 -- Rebuilds the list from the stored profiles. Names are shown as typed, never
 -- translated; a selection survives only while its profile can still be deleted.
 local function RefreshRows()
-    local active = _G.MSUF_ActiveProfile or PROTECTED
+    local active = MSUF_ActiveProfile or PROTECTED
     local usage = ProfileUsage()
-    names = _G.MSUF_GetAllProfiles() or {}
+    names = MSUF.Require("MSUF_GetAllProfiles", FILE)() or {}
     local present = {}
     for i = 1, #names do
         local name = names[i]
@@ -163,7 +161,7 @@ local function RefreshRows()
 end
 
 local function SelectUnused()
-    local active = _G.MSUF_ActiveProfile or PROTECTED
+    local active = MSUF_ActiveProfile or PROTECTED
     local usage = ProfileUsage()
     for i = 1, #names do
         local name = names[i]
@@ -179,7 +177,7 @@ end
 
 local function DeleteSelected(list)
     if M.BlockCombatAction() then return end
-    local deleted = _G.MSUF_DeleteProfiles(list)
+    local deleted = MSUF.Require("MSUF_DeleteProfiles", FILE)(list)
     for name in pairs(selected) do selected[name] = nil end
     M.ClearHistory()
     if popup:IsShown() then RefreshRows() end

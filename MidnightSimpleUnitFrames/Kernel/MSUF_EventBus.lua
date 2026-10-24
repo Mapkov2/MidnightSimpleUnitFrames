@@ -102,7 +102,7 @@ local function RefreshDriverRegistration(event, ev)
     --- subscription missing, which stays invisible until the feature quietly
     --- stops updating, so surface it instead of discarding the result.
     if driver:RegisterUnitEvent(event, unpack(units)) == false then
-        local report = MSUF.ReportError or _G.MSUF_ReportError
+        local report = MSUF.ReportError or MSUF.PublicGlobals.MSUF_ReportError
         if type(report) == "function" then
             report("EventBus", "RegisterUnitEvent refused '" .. tostring(event)
                 .. "' for " .. #units .. " unit token(s)")

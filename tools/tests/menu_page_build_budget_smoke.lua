@@ -36,7 +36,10 @@ local BUDGETS = {
     -- 2026-10-19 stack: 99e build 3324.7 -> 3417.6k (+92.9); ceiling 3352 -> 3444.9, same headroom.
     opt_colors = { build = 3444.9, refresh = 87.8, relayout = 1.3, relayoutKB = 0.05, select = 128.9 },
     -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+1.4 refresh, +0.4 relayout, +1.7 select measured)
-    opt_bars = { build = 1540, refresh = 110.1, relayout = 0.9, relayoutKB = 0.05, select = 119.6 },
+    -- 2026-10-21: four owner-requested cold Gloss controls add measured +2.9k refresh/+3.0k select.
+    -- Build 1421.8 -> 1478.9k still fits; relayout unchanged. Preserve the prior 0.1k overages:
+    -- 110.2 -> 113.1k against 110.1 -> 113.0, and 119.7 -> 122.7k against 119.6 -> 122.6.
+    opt_bars = { build = 1540, refresh = 113.0, relayout = 0.9, relayoutKB = 0.05, select = 122.6 },
     -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+2.0 refresh, +0.4 relayout, +2.2 select measured)
     opt_misc = { build = 572, refresh = 25.1, relayout = 0.9, relayoutKB = 0.05, select = 34.3 },
     -- owner decision 2026-10-18: menu selection/fold/tab animations accepted (+0.6 relayout measured)

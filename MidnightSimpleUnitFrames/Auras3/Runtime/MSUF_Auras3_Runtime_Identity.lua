@@ -3,7 +3,6 @@
 -- alpha only.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Identity = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local Runtime = A3.Runtime
@@ -13,8 +12,7 @@ local next = next
 local pairs = pairs
 local tonumber = tonumber
 local type = type
-local C_Timer = dependencies.Platform.C_Timer
-local RunNextFrame = _G.MSUF_RunNextFrame
+local RunNextFrame = dependencies.Platform.RunNextFrame
 local GetGroupSlotsRootConfig = dependencies.OwnerConfig.GetGroupSlotsRootConfig
 local IsGroupFrame = dependencies.ConfigValues.IsGroupFrame
 local UnitCanAssistForAuraIdentity = dependencies.ConfigValues.UnitCanAssistForAuraIdentity
@@ -132,7 +130,7 @@ Identity.SeedGroupAuraAssistGate = function(frame, fallbackUnit)
     if type(Identity.UpdateGroupAuraAssistState) == "function" then
         return Identity.UpdateGroupAuraAssistState(unit, false, true)
     end
-    if type(_G.UnitCanAssist) ~= "function" then return ApplyGroupAuraAssistGate(frame, nil, false) end
+    if type(UnitCanAssist) ~= "function" then return ApplyGroupAuraAssistGate(frame, nil, false) end
     local canAssist = UnitCanAssistForAuraIdentity(unit)
     local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
     if not known then canAssist = nil end
@@ -176,7 +174,7 @@ Identity.HasDirectIdentityRefreshContainers = function()
     return false
 end
 
-Identity.IsGroupUnitToken = _G.MSUF_IsGroupUnitToken
+Identity.IsGroupUnitToken = MSUF.Require("MSUF_IsGroupUnitToken", "Auras3/Runtime/MSUF_Auras3_Runtime_Identity.lua")
 
 Identity.DirectIdentityRefreshUnitEligible = function(unit)
     if A3._directIdentityRefreshUnits[unit] == true then return true end
@@ -284,7 +282,7 @@ Identity.HideGroupAuraAssistOwners = function(unit, canAssist)
 end
 
 Identity.ReadGroupAuraAssistIdentity = function(unit, readGUID)
-    if type(_G.UnitCanAssist) ~= "function" then return nil, false, nil, false end
+    if type(UnitCanAssist) ~= "function" then return nil, false, nil, false end
     -- Blizzard_AuraContainerUtil deliberately ignores immune/uninteractable
     -- restrictions for identity candidate filters. Follower-dungeon partyN
     -- units can otherwise report false here and hide every HELPFUL owner.
@@ -293,7 +291,7 @@ Identity.ReadGroupAuraAssistIdentity = function(unit, readGUID)
     if not assistKnown then canAssist = nil end
 
     if readGUID ~= true then return canAssist, assistKnown, nil, false end
-    local unitGUID = _G.UnitGUID
+    local unitGUID = UnitGUID
     if type(unitGUID) ~= "function" then return canAssist, assistKnown, nil, false end
     local guid = unitGUID(unit)
     if issecretvalue(guid) == true or (guid ~= nil and type(guid) ~= "string") then
@@ -412,13 +410,7 @@ Identity.ScheduleUnitAuraIdentityReveal = function(unit, revision)
     units[unit] = revision
     if A3._unitAuraIdentityRevealPending == true then return true end
     A3._unitAuraIdentityRevealPending = true
-    if RunNextFrame then
-        RunNextFrame(Identity.FlushUnitAuraIdentityReveal)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Identity.FlushUnitAuraIdentityReveal)
-    else
-        Identity.FlushUnitAuraIdentityReveal()
-    end
+    RunNextFrame(Identity.FlushUnitAuraIdentityReveal)
     return true
 end
 
@@ -487,13 +479,7 @@ Identity.ScheduleGroupAuraAssistReveal = function(unit, revision)
     units[unit] = revision
     if A3._groupAuraAssistRevealPending == true then return true end
     A3._groupAuraAssistRevealPending = true
-    if RunNextFrame then
-        RunNextFrame(Identity.FlushGroupAuraAssistReveal)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Identity.FlushGroupAuraAssistReveal)
-    else
-        Identity.FlushGroupAuraAssistReveal()
-    end
+    RunNextFrame(Identity.FlushGroupAuraAssistReveal)
     return true
 end
 
@@ -533,13 +519,7 @@ Identity.ScheduleGroupAuraAssistRefresh = function(unit, revision)
     units[unit] = revision
     if A3._groupAuraAssistRefreshPending == true then return true end
     A3._groupAuraAssistRefreshPending = true
-    if RunNextFrame then
-        RunNextFrame(Identity.FlushScheduledGroupAuraAssistRefresh)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Identity.FlushScheduledGroupAuraAssistRefresh)
-    else
-        Identity.FlushScheduledGroupAuraAssistRefresh()
-    end
+    RunNextFrame(Identity.FlushScheduledGroupAuraAssistRefresh)
     return true
 end
 
@@ -648,13 +628,7 @@ Identity.ScheduleGroupAuraAssistRefreshAll = function(checkIdentity, forceRefres
     if forceRefresh == true then A3._groupAuraAssistRefreshAllForce = true end
     if A3._groupAuraAssistRefreshAllPending == true then return true end
     A3._groupAuraAssistRefreshAllPending = true
-    if RunNextFrame then
-        RunNextFrame(Identity.FlushScheduledGroupAuraAssistRefreshAll)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Identity.FlushScheduledGroupAuraAssistRefreshAll)
-    else
-        Identity.FlushScheduledGroupAuraAssistRefreshAll()
-    end
+    RunNextFrame(Identity.FlushScheduledGroupAuraAssistRefreshAll)
     return true
 end
 

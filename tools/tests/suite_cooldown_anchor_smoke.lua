@@ -1,14 +1,20 @@
 -- MSUF Suite cooldown anchor provider.
 --
 -- The MSUF Suite's LoadOnDemand cooldown manager (MSUF_Suite_CooldownManager,
--- Mainline family only) hands MSUF a plain frame over its Essential bar through
--- MSUFSuite.CooldownManager.GetAnchorFrame("EssentialCooldownViewer") and may
--- fire EventRegistry "MSUFSuite.CooldownManager.AnchorChanged". This smoke pins:
+-- Mainline family only) hands MSUF a plain frame over its Essential, Utility
+-- and Tracked Buffs bars through MSUFSuite.CooldownManager.GetAnchorFrame(
+-- viewerName) and may fire EventRegistry "MSUFSuite.CooldownManager.AnchorChanged".
+-- This smoke pins:
 --
 --   1. The provider itself (Integrations/MSUF_Integration_ThirdPartyAnchors.lua)
 --      on every client model: first in the automatic provider list, acquire,
 --      lost, recreated, retry ladder, ADDON_LOADED, combat deferral, the
 --      one-time observers, and complete inertness on Vanilla, TBC and Mists.
+--      Per bar: Utility and Tracked Buffs resolve to the Suite's own bars
+--      through the real MSUF_GetEffectiveCooldownFrame
+--      (Runtime/MSUF_BarBackgroundRuntime.lua), refuse forbidden, restricted
+--      and secret frames, notify only their own consumers, and never take a
+--      third-party provider.
 --   2. The two-step consent: accepting the Suite provider also anchors class
 --      power to the cooldown bar at cooldown width, only while those class
 --      power keys are still at their defaults; declining, another provider and
@@ -22,6 +28,9 @@
 --      TOP -> BOTTOM.
 --   4. The real TOC load graph per client: the resolver picks the Suite first
 --      on Midnight and WoW Forever, and the Classic clients never ask for it.
+--      On Midnight and Forever the Suite's Utility and Tracked Buffs bars reach
+--      the real Factory width observers, which re-sync class power and the
+--      castbar width out of combat and after combat ends.
 --
 -- Usage (Lua 5.1):
 --   lua tools/tests/suite_cooldown_anchor_smoke.lua <repoRoot>
@@ -31,6 +40,8 @@ local Stubs = assert(loadfile(root .. "/.github/scripts/msuf_test_stubs.lua"))()
 local PopupStub = assert(loadfile(root .. "/tools/tests/static_popup_stub.lua"))()
 
 local ANCHORS = root .. "/MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua"
+local RESOLVER = root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_BarBackgroundRuntime.lua"
+local UTILITY, BUFFS = "UtilityCooldownViewer", "BuffIconCooldownViewer"
 local SUITE_ID = "MSUF_Suite_CooldownManager"
 local SUITE_EVENT = "MSUFSuite.CooldownManager.AnchorChanged"
 local CONSENT_POPUP = "MSUF_COOLDOWN_ANCHOR_CONSENT"
@@ -80,15 +91,20 @@ local function NewRegistry()
 end
 
 -- Loads the real integration file into a fresh stub client.
---   model       MODELS key
---   suite       true: the Suite API exists at load
---   loaded      addon names C_AddOns reports as loaded
---   db          MSUF_DB (default: anchor off, class power defaults)
+--   model         MODELS key
+--   suite         true: the Suite API exists at load
+--   loaded        addon names C_AddOns reports as loaded
+--   db            MSUF_DB (default: anchor off, class power defaults)
+--   resolver      true: also load the real MSUF_GetEffectiveCooldownFrame
+--                 (Runtime/MSUF_BarBackgroundRuntime.lua)
+--   issecretvalue the client's secret predicate (default: none)
+-- The Suite hands out h.frame for Essential and h.bars[name] for its other
+-- bars (Utility, Tracked Buffs), nil while a bar is off.
 local function LoadProvider(options)
     options = options or {}
     local env = Stubs.New({ timer = "queue", shown = true, width = 400, height = 36 })
-    local h = { env = env, popups = {}, hidden = {}, ensure = 0, schedule = 0, external = {},
-        forceReanchor = 0, cpApply = {}, suiteCalls = 0, suiteViewers = {} }
+    local h = { env = env, popups = {}, hidden = {}, ensure = 0, schedule = 0, scheduled = {}, external = {},
+        forceReanchor = 0, cpApply = {}, suiteCalls = 0, suiteViewers = {}, bars = {} }
 
     _G.MSUF_NS = nil
     _G.MSUF_PixelLayoutRegion = nil
@@ -99,7 +115,7 @@ local function LoadProvider(options)
     _G.WorldFrame = env.WorldFrame
     _G.C_Timer = env:BuildTimerLibrary()
     _G.InCombatLockdown = function() return env:IsInCombat() end
-    _G.issecretvalue = nil
+    _G.issecretvalue = options.issecretvalue
     _G.ArcUI_Public, _G.SCM_GroupAnchorProxy_1, _G.SCM_GroupAnchor_1 = nil, nil, nil
     _G.CoolinatorPrimaryGroupAnchor, _G._ECME_GetBarFrame = nil, nil
     _G.C_CooldownViewer, _G.EssentialCooldownViewer, _G.CVarCallbackRegistry = nil, nil, nil
@@ -121,7 +137,7 @@ local function LoadProvider(options)
             GetAnchorFrame = function(viewerName)
                 h.suiteCalls = h.suiteCalls + 1
                 h.suiteViewers[#h.suiteViewers + 1] = viewerName
-                if viewerName ~= "EssentialCooldownViewer" then return nil end
+                if viewerName ~= "EssentialCooldownViewer" then return h.bars[viewerName] end
                 return h.frame
             end,
         },
@@ -139,7 +155,10 @@ local function LoadProvider(options)
     _G.MSUF_GlobalDB = options.globalDB or {}
 
     _G.MSUF_EnsureCooldownWidthObservers = function() h.ensure = h.ensure + 1 end
-    _G.MSUF_ScheduleCooldownWidthRefresh = function() h.schedule = h.schedule + 1 end
+    _G.MSUF_ScheduleCooldownWidthRefresh = function(source)
+        h.schedule = h.schedule + 1
+        h.scheduled[#h.scheduled + 1] = source
+    end
     _G.MSUF_ClassPower_Apply = function(opts) h.cpApply[#h.cpApply + 1] = opts end
 
     local ns = {
@@ -167,10 +186,14 @@ local function LoadProvider(options)
     -- The button skin (Shell/UI/MSUF_Style.lua) is cosmetic here.
     _G.MSUF_UI, _G.MSUF_SkinButton = nil, function() end
     ns.ExportPublic = function(name, value) _G[name] = value return value end
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
+    -- The real Kernel API (it replaces the export stub), the real font stack the prompt layer
+    -- requires (Libs, Fonts, FontRegistry) and the shared pixel-region stand-in: these prompts lay
+    -- out no pixels, and a real Util would also replace this smoke's ns.Util combat readers.
+    assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().InstallProviders(root, ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/UI/MSUF_Widgets.lua"))("MidnightSimpleUnitFrames", ns)
-    ns.ExportPublic = nil
+    -- The anchor integration binds MSUF.ExportPublic at load and publishes its entry points
+    -- through it, so the real export stays in place for it.
     local show, hide = ns.UI.ShowPrompt, ns.UI.HidePrompt
     ns.UI.ShowPrompt = function(key, spec, style)
         local frame = show(key, spec, style)
@@ -181,7 +204,19 @@ local function LoadProvider(options)
         h.hidden[#h.hidden + 1] = key
         return hide(key)
     end
+    -- The anchor integration's warnings translate through the core localization (MSUF.L).
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(ANCHORS))("MidnightSimpleUnitFrames", ns)
+    if options.resolver then
+        _G.EssentialCooldownViewer_MSA_Container = nil
+        ns.ExportPublic = function(name, value) _G[name] = value return value end
+        -- The unit-frame config (not loaded here) owns the two colour readers the resolver requires at
+        -- load; with no settings cache yet they answer nothing.
+        _G.MSUF_UFCore_GetClassBarColorFast = _G.MSUF_UFCore_GetClassBarColorFast or function() return nil end
+        _G.MSUF_UFCore_GetSettingsCache = _G.MSUF_UFCore_GetSettingsCache or function() return nil end
+        assert(loadfile(RESOLVER))("MidnightSimpleUnitFrames", ns)
+        ns.ExportPublic = nil
+    end
     for i = 1, #env.frames do
         local frame = env.frames[i]
         if frame.events.ADDON_LOADED and frame.events.PLAYER_LOGIN then h.watcher = frame end
@@ -198,6 +233,29 @@ end
 
 local function Active(h)
     return h.ns.GetActiveCooldownAnchorProvider()
+end
+
+local function Count(list, value)
+    local n = 0
+    for i = 1, #list do
+        if list[i] == value then n = n + 1 end
+    end
+    return n
+end
+
+-- The Suite's Utility and Tracked Buffs bars (h.bars), laid out and shown.
+local function ShowSuiteBars(h, utilityWidth, buffsWidth)
+    local utility = h.env:CreateFrame("Frame", "MSUFSuiteUtilityAnchor", h.env.UIParent)
+    local buffs = h.env:CreateFrame("Frame", "MSUFSuiteBuffsAnchor", h.env.UIParent)
+    utility.width, buffs.width = utilityWidth or 320, buffsWidth or 280
+    h.bars[UTILITY], h.bars[BUFFS] = utility, buffs
+    return utility, buffs
+end
+
+-- The frame every width mode measures for viewerName, and its width.
+local function Measured(viewerName)
+    local frame = _G.MSUF_GetEffectiveCooldownFrame(viewerName)
+    return frame, frame and _G.MSUF_GetCooldownAnchorScaledWidth(frame) or nil
 end
 
 local function PopupNamed(h, name)
@@ -388,6 +446,194 @@ for _, modelName in ipairs(MAINLINE_MODELS) do
         assert(Names(PopupNamed(h, CONSENT_POPUP), "MSUF Suite"), "the consent prompt did not name the Suite")
         h.env:RunTimers()
         assert(h.ns.GetSuiteCooldownAnchor() == h.frame, "the Suite anchor was not acquired after ADDON_LOADED")
+    end)
+
+    Case(modelName .. ": Utility and Tracked Buffs width modes measure the Suite's own bars", function()
+        local h = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID }, resolver = true })
+        local utility, buffs = ShowSuiteBars(h, 320, 280)
+        h.env:RunTimers()
+        assert(h.suiteViewers[1] == "EssentialCooldownViewer", "the Suite was not asked for Essential first")
+        assert(_G.MSUF_GetSuiteCooldownAnchor(UTILITY) == utility and _G.MSUF_GetSuiteCooldownAnchor(BUFFS) == buffs,
+            "the Suite's Utility / Tracked Buffs bars were not acquired")
+        assert(_G.MSUF_GetSuiteCooldownAnchor() == h.frame
+            and _G.MSUF_GetSuiteCooldownAnchor("EssentialCooldownViewer") == h.frame,
+            "Essential no longer answers with the Suite's Essential bar")
+        local frame, width = Measured(UTILITY)
+        assert(frame == utility and width == 320, "Utility measures " .. tostring(width))
+        frame, width = Measured(BUFFS)
+        assert(frame == buffs and width == 280, "Tracked Buffs measures " .. tostring(width))
+        assert(Measured("EssentialCooldownViewer") == h.frame, "Essential no longer resolves to the Suite")
+        local id, source = Active(h)
+        assert(id == SUITE_ID and source == h.frame, "the Essential provider changed to " .. tostring(id))
+        -- One re-arm of the width observers and one refresh of each bar's own
+        -- anchored frames and width modes per acquired bar.
+        assert(h.ensure == 3, "acquiring three bars re-armed the width observers " .. h.ensure .. " times")
+        for _, name in ipairs({ "EssentialCooldownViewer", UTILITY, BUFFS }) do
+            assert(Count(h.external, name) == 1 and Count(h.scheduled, name) == 1,
+                name .. " consumers were not refreshed exactly once")
+        end
+        for _, bar in ipairs({ utility, buffs }) do
+            assert(type(bar.scripts.OnSizeChanged) == "function" and type(bar.scripts.OnShow) == "function"
+                and type(bar.scripts.OnHide) == "function", "a Suite bar is not observed")
+        end
+        -- A resize asks the Suite about that bar only; the width observer on the
+        -- same frame refreshes its consumers, so nothing is notified twice.
+        local calls, ensure, external, schedule = h.suiteCalls, h.ensure, #h.external, h.schedule
+        utility.width = 360
+        utility.scripts.OnSizeChanged(utility)
+        assert(h.suiteCalls == calls + 1 and h.suiteViewers[#h.suiteViewers] == UTILITY,
+            "a Utility resize did not re-read exactly the Utility bar")
+        assert(h.ensure == ensure and #h.external == external and h.schedule == schedule,
+            "a plain resize notified consumers")
+        frame, width = Measured(UTILITY)
+        assert(width == 360, "the resized Utility bar measures " .. tostring(width))
+        -- Hidden: lost; only Utility's consumers hear it, and every width mode
+        -- falls back to Blizzard's viewer (the resolver answers nil).
+        utility:Hide()
+        utility.scripts.OnHide(utility)
+        assert(_G.MSUF_GetSuiteCooldownAnchor(UTILITY) == nil and Measured(UTILITY) == nil,
+            "a hidden Utility bar is still measured")
+        assert(h.ensure == ensure + 1 and h.external[#h.external] == UTILITY and h.scheduled[#h.scheduled] == UTILITY
+            and #h.external == external + 1 and h.schedule == schedule + 1, "losing Utility did not notify its consumers once")
+        assert(_G.MSUF_GetSuiteCooldownAnchor() == h.frame and Measured(BUFFS) == buffs, "losing Utility touched the other bars")
+        utility:Show()
+        utility.scripts.OnShow(utility)
+        assert(Measured(UTILITY) == utility and h.ensure == ensure + 2, "OnShow did not reacquire the Utility bar")
+        -- The Suite turns its Tracked Buffs bar off, then makes a new one.
+        h.bars[BUFFS] = nil
+        h.registry:TriggerEvent(SUITE_EVENT)
+        assert(Measured(BUFFS) == nil and Count(h.external, BUFFS) == 2, "turning Tracked Buffs off was not followed")
+        assert(Measured(UTILITY) == utility and Measured("EssentialCooldownViewer") == h.frame and h.ensure == ensure + 3,
+            "the Suite event re-notified unchanged bars")
+        local recreated = h.env:CreateFrame("Frame", "MSUFSuiteBuffsAnchor2", h.env.UIParent)
+        recreated.width = 300
+        h.bars[BUFFS] = recreated
+        h.registry:TriggerEvent(SUITE_EVENT)
+        frame, width = Measured(BUFFS)
+        assert(frame == recreated and width == 300 and type(recreated.scripts.OnHide) == "function",
+            "the recreated Tracked Buffs bar was not acquired and observed")
+        buffs.scripts.OnHide(buffs)
+        assert(Measured(BUFFS) == recreated, "the old Tracked Buffs frame's hook replaced the new bar")
+    end)
+
+    Case(modelName .. ": Utility and Tracked Buffs refuse unusable Suite frames", function()
+        local SECRET = setmetatable({}, { __tostring = function() return "<secret>" end })
+        local function IsSecret(value) return value == SECRET end
+        local REFUSALS = {
+            forbidden = function(f) f.IsForbidden = function() return true end end,
+            inaccessible = function(f) f.CanBeAccessedInContext = function() return false end end,
+            ["anchoring restricted"] = function(f) f.IsAnchoringRestricted = function() return true end end,
+            ["anchoring secret"] = function(f) f.IsAnchoringSecret = function() return true end end,
+            ["secret flag"] = function(f) f.IsAnchoringSecret = function() return SECRET end end,
+            ["secret width"] = function(f) f.GetWidth = function() return SECRET end end,
+            hidden = function(f) f.shown = false end,
+            ["zero width"] = function(f) f.width = 0 end,
+        }
+        for label, refuse in pairs(REFUSALS) do
+            local h = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID }, resolver = true,
+                issecretvalue = IsSecret })
+            local utility, buffs = ShowSuiteBars(h)
+            refuse(utility)
+            refuse(buffs)
+            h.env:RunTimers()
+            h.registry:TriggerEvent(SUITE_EVENT)
+            for _, name in ipairs({ UTILITY, BUFFS }) do
+                assert(_G.MSUF_GetSuiteCooldownAnchor(name) == nil and Measured(name) == nil,
+                    label .. ": " .. name .. " measured an unusable Suite frame")
+                assert(Count(h.external, name) == 0 and Count(h.scheduled, name) == 0,
+                    label .. ": " .. name .. " consumers were notified")
+            end
+            assert(Measured("EssentialCooldownViewer") == h.frame, label .. ": Essential lost its Suite bar")
+            -- A bar acquired while usable that turns unusable without any
+            -- callback is refused at the next read.
+            local late = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID }, resolver = true,
+                issecretvalue = IsSecret })
+            local lateUtility = ShowSuiteBars(late)
+            late.env:RunTimers()
+            assert(Measured(UTILITY) == lateUtility, label .. ": the clean Utility bar was not acquired")
+            refuse(lateUtility)
+            assert(_G.MSUF_GetSuiteCooldownAnchor(UTILITY) == nil and Measured(UTILITY) == nil,
+                label .. ": a Utility bar that turned unusable is still measured")
+        end
+    end)
+
+    Case(modelName .. ": the retry ladder polls until Utility and Tracked Buffs are usable", function()
+        local h = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID }, resolver = true })
+        local utility, buffs = ShowSuiteBars(h)
+        utility.width, buffs.width = 0, 0
+        h.env:RunTimers(1)
+        assert(Measured("EssentialCooldownViewer") == h.frame and Measured(UTILITY) == nil and Measured(BUFFS) == nil)
+        -- Laid out later, without a callback: the next ladder step acquires them.
+        utility.width, buffs.width = 310, 290
+        h.env:RunTimers()
+        assert(Measured(UTILITY) == utility and Measured(BUFFS) == buffs,
+            "the retry ladder stopped before the Utility and Tracked Buffs bars were usable")
+    end)
+
+    Case(modelName .. ": a Suite without its Essential bar is no Essential provider", function()
+        local h = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID }, resolver = true })
+        h.frame = nil
+        local utility, buffs = ShowSuiteBars(h)
+        h.env:RunTimers()
+        assert(Measured(UTILITY) == utility and Measured(BUFFS) == buffs, "the Utility / Tracked Buffs bars were not acquired")
+        assert(Active(h) == nil and _G.MSUF_GetSuiteCooldownAnchor() == nil and Measured("EssentialCooldownViewer") == nil,
+            "another Suite bar stood in for Essential")
+        assert(Count(h.external, "EssentialCooldownViewer") == 0, "Essential consumers were notified for another bar")
+    end)
+
+    Case(modelName .. ": Utility and Tracked Buffs transitions wait for combat to end", function()
+        local h = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID }, resolver = true })
+        local utility = ShowSuiteBars(h)
+        h.bars[BUFFS] = nil
+        h.env:RunTimers()
+        local ensure = h.ensure
+        assert(Count(h.external, UTILITY) == 1 and Count(h.scheduled, UTILITY) == 1)
+        h.env:SetCombat(true)
+        -- Utility turned off and a Tracked Buffs bar made, both in combat.
+        -- (The Suite event also refreshes Essential's unchanged bar; the real
+        -- Factory defers that work itself.)
+        h.bars[UTILITY] = nil
+        local buffs = h.env:CreateFrame("Frame", "MSUFSuiteBuffsAnchor", h.env.UIParent)
+        h.bars[BUFFS] = buffs
+        h.registry:TriggerEvent(SUITE_EVENT)
+        assert(Measured(UTILITY) == utility and Measured(BUFFS) == nil, "a transition was applied in combat")
+        assert(h.ensure == ensure and Count(h.external, UTILITY) == 1 and Count(h.external, BUFFS) == 0
+            and Count(h.scheduled, UTILITY) == 1 and Count(h.scheduled, BUFFS) == 0, "consumers were notified in combat")
+        assert(h.watcher.events.PLAYER_REGEN_ENABLED == true, "the regen replay was not armed")
+        h.env:SetCombat(false)
+        Fire(h, "PLAYER_REGEN_ENABLED")
+        assert(Measured(UTILITY) == nil and Measured(BUFFS) == buffs, "the deferred transitions were not replayed")
+        assert(h.ensure == ensure + 2 and Count(h.external, UTILITY) == 2 and Count(h.external, BUFFS) == 1
+            and Count(h.scheduled, UTILITY) == 2 and Count(h.scheduled, BUFFS) == 1,
+            "the replay did not notify each changed bar once")
+    end)
+
+    Case(modelName .. ": third-party providers never stand in for Utility or Tracked Buffs", function()
+        local h = LoadProvider({ model = modelName, suite = false, loaded = { "Coolinator" }, resolver = true })
+        local cool = h.env:CreateFrame("Frame", "CoolinatorPrimaryGroupAnchor", h.env.UIParent)
+        _G.CoolinatorPrimaryGroupAnchor = cool
+        h.ns.RegisterThirdPartyAnchors()
+        h.env:RunTimers()
+        assert(Measured("EssentialCooldownViewer") == cool, "Coolinator no longer stands in for Essential")
+        assert(Measured(UTILITY) == nil and Measured(BUFFS) == nil, "Coolinator stood in for Utility or Tracked Buffs")
+        -- ArcUI answers every group name it is asked for; MSUF asks for Essential only.
+        local arc = h.env:CreateFrame("Frame", "ArcAnchor", h.env.UIParent)
+        _G.ArcUI_Public = { GetGroupAnchor = function() return arc end }
+        h.ns.RegisterThirdPartyAnchors()
+        h.env:RunTimers()
+        assert(Measured("EssentialCooldownViewer") == arc, "ArcUI no longer stands in for Essential")
+        assert(Measured(UTILITY) == nil and Measured(BUFFS) == nil, "ArcUI stood in for Utility or Tracked Buffs")
+        assert(Count(h.external, UTILITY) == 0 and Count(h.external, BUFFS) == 0
+            and Count(h.scheduled, UTILITY) == 0 and Count(h.scheduled, BUFFS) == 0,
+            "a third-party anchor notified the Utility or Tracked Buffs consumers")
+        -- With the Suite next to it: the Suite owns all three, ArcUI none.
+        local s = LoadProvider({ model = modelName, suite = true, loaded = { SUITE_ID, "ArcUI" }, resolver = true })
+        local utility, buffs = ShowSuiteBars(s)
+        _G.ArcUI_Public = { GetGroupAnchor = function() return arc end }
+        s.ns.RegisterThirdPartyAnchors()
+        s.env:RunTimers()
+        assert(Measured("EssentialCooldownViewer") == s.frame and Measured(UTILITY) == utility and Measured(BUFFS) == buffs,
+            "the Suite does not own all three bars next to ArcUI")
     end)
 end
 
@@ -634,6 +880,7 @@ local function StartClassPower(provider, bars)
 
     env.Methods.RegisterUnitEvent = function(self, event) self.events[event] = true end
     local ns = {}
+    t.ns = ns
     local player = env:CreateFrame("Frame", "MSUF_player", UIParent)
     player.shown, player.width, player.height = true, 275, 40
     ns.UF = { GetFrame = function(unit) if unit == "player" then return player end end }
@@ -722,9 +969,11 @@ end
 
 -- The layout reads the live DB and cooldown globals, so the harness table is
 -- only passed for readability at the call sites.
-local function Relayout(_)
-    assert(type(_G.MSUF_ClassPower_RefreshLayout) == "function", "MSUF_ClassPower_RefreshLayout missing")
-    _G.MSUF_ClassPower_RefreshLayout()
+local function Relayout(t)
+    -- A namespace-only export (ns.PublicGlobals), not a global.
+    local refresh = t.ns.PublicGlobals.MSUF_ClassPower_RefreshLayout
+    assert(type(refresh) == "function", "MSUF_ClassPower_RefreshLayout missing")
+    refresh()
 end
 
 local function ExpectPoint(t, point, relativeTo, relativePoint, x, y, label)
@@ -838,9 +1087,12 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         local calls = 0
         local frame = world.widgets:CreateFrame("Frame", nil, env.UIParent)
         local arc = world.widgets:CreateFrame("Frame", nil, env.UIParent)
+        local others = { [UTILITY] = world.widgets:CreateFrame("Frame", nil, env.UIParent),
+            [BUFFS] = world.widgets:CreateFrame("Frame", nil, env.UIParent) }
         env.MSUFSuite = { CooldownManager = { GetAnchorFrame = function(viewerName)
             calls = calls + 1
-            return viewerName == "EssentialCooldownViewer" and frame or nil
+            if viewerName == "EssentialCooldownViewer" then return frame end
+            return others[viewerName]
         end } }
         local mainline = not world.client.isClassic
         if mainline then env.ArcUI_Public = { GetGroupAnchor = function() return arc end } end
@@ -866,6 +1118,9 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             assert(env.MSUF_GetActiveCooldownAnchorProvider() == SUITE_ID, flavor .. ": Suite is not the active provider")
             assert(env.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer") == frame,
                 flavor .. ": the effective cooldown frame is not the Suite's")
+            assert(env.MSUF_GetEffectiveCooldownFrame(UTILITY) == others[UTILITY]
+                and env.MSUF_GetEffectiveCooldownFrame(BUFFS) == others[BUFFS],
+                flavor .. ": Utility / Tracked Buffs do not resolve to the Suite's bars")
             -- The chosen position reaches the real compiler and the real
             -- Edit Mode drag builder on both supported clients.
             local config = ns.UF.Config
@@ -921,10 +1176,10 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
                 if ns.Client.SupportsUnit(family) then
                     db.general.cooldownAnchorPosition = "CENTER"
                     db[family].anchorFrameName, db[family].anchorToUnitframe = nil, "GLOBAL"
-                    local oldFrames, oldGeometry = ns.UF.frames, env.MSUF_ApplyBossPhysicalBarGeometry
+                    local oldFrames, oldGeometry = ns.UF.frames, ns.UF.Factory.ApplyBossPhysicalBarGeometry
                     ns.UF.frames = {}
                     -- Fixture frames have no health textures; only their geometry painter is cosmetic here.
-                    env.MSUF_ApplyBossPhysicalBarGeometry = function() end
+                    ns.UF.Factory.ApplyBossPhysicalBarGeometry = function() end
                     local stack, before = {}, {}
                     local count = family == "boss" and 5 or 3
                     for i = 1, count do
@@ -947,7 +1202,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
                             flavor .. ": CDM drag broke the " .. family .. " stack")
                     end
                     env.MSUF_EM2.Ticker.EndExternalDrag(drag, false)
-                    ns.UF.frames, env.MSUF_ApplyBossPhysicalBarGeometry = oldFrames, oldGeometry
+                    ns.UF.frames, ns.UF.Factory.ApplyBossPhysicalBarGeometry = oldFrames, oldGeometry
                 end
             end
             local savedHeight = db.player.height
@@ -970,6 +1225,13 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             assert(env.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer") == arc,
                 flavor .. ": no fallback to the next provider after the Suite anchor was lost")
             assert(env.MSUF_GetActiveCooldownAnchorProvider() == "ArcUI")
+            -- Without the Suite's Utility bar nothing stands in for it: callers
+            -- fall back to Blizzard's viewer.
+            others[UTILITY]:Hide()
+            others[UTILITY].scripts.OnHide(others[UTILITY])
+            assert(env.MSUF_GetEffectiveCooldownFrame(UTILITY) == nil
+                and env.MSUF_GetEffectiveCooldownFrame(BUFFS) == others[BUFFS],
+                flavor .. ": a lost Utility bar resolved to another frame")
         else
             ns.RegisterThirdPartyAnchors()
             registry:TriggerEvent(SUITE_EVENT)
@@ -978,7 +1240,93 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             assert(registry:Count(SUITE_EVENT) == 0, flavor .. " registered the Suite callback")
             assert(env.MSUF_GetSuiteCooldownAnchor() == nil)
             assert(env.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer") == nil)
+            assert(env.MSUF_GetEffectiveCooldownFrame(UTILITY) == nil and env.MSUF_GetEffectiveCooldownFrame(BUFFS) == nil,
+                flavor .. " resolved Utility / Tracked Buffs to the Suite")
         end
+    end)
+end
+
+-- The whole width chain on a real client: the Suite's bars reach the
+-- resolver, the Factory's width observers and the class power and castbar
+-- width refresh, which runs out of combat only.
+for _, flavor in ipairs({ "Mainline", "Forever" }) do
+    Case("boot " .. flavor .. ": Utility and Tracked Buffs width modes re-sync with the Suite's bars", function()
+        local world = World.New(root, flavor)
+        local env, widgets = world.env, world.widgets
+        local registry = NewRegistry()
+        setmetatable(registry, { __index = function() return function() end end })
+        env.EventRegistry = registry
+        local bars = { EssentialCooldownViewer = widgets:CreateFrame("Frame", nil, env.UIParent),
+            [UTILITY] = widgets:CreateFrame("Frame", nil, env.UIParent),
+            [BUFFS] = widgets:CreateFrame("Frame", nil, env.UIParent) }
+        local present = false
+        env.MSUFSuite = { CooldownManager = { GetAnchorFrame = function(viewerName)
+            return present and bars[viewerName] or nil
+        end } }
+        world:Boot()
+        local failure = world:FirstFailure()
+        assert(not failure, flavor .. ": boot failed in " .. tostring(failure and failure.file) .. ": "
+            .. tostring(failure and failure.message))
+        local function Deliver(fileName, event)
+            for _, frame in ipairs(widgets.frames) do
+                local handler = frame:GetScript("OnEvent")
+                if handler and (event == "PLAYER_LOGIN" or frame.events[event])
+                    and debug.getinfo(handler, "S").source:find(fileName, 1, true) then
+                    handler(frame, event)
+                end
+            end
+        end
+        Deliver("MSUF_Integration_ThirdPartyAnchors.lua", "PLAYER_LOGIN")
+        local db = world.core.UF.Config.GetDB()
+        env.MSUF_DB = db
+        db.bars = db.bars or {}
+        db.bars.showClassPower = true
+        db.bars.classPowerAnchorToCooldown = false
+        db.bars.classPowerWidthMode = "utility"
+        db.general.enablePlayerCastbar = true
+        db.general.castbarPlayerMatchWidth = "utility"
+        local classPower, castbar = {}, {}
+        env.MSUF_ClassPower_RefreshExternalWidth = function(name) classPower[#classPower + 1] = name return true end
+        env.MSUF_RefreshCastbarCooldownWidthSource = function(name) castbar[#castbar + 1] = name end
+        -- Before the Suite's bars exist (the login retry ladder runs dry) nothing
+        -- can be observed: this client world has no Blizzard viewer.
+        env.MSUF_EnsureCooldownWidthObservers(true)
+        widgets:RunTimers()
+        assert(#classPower == 0 and Count(castbar, UTILITY) == 0, flavor .. ": a width refresh ran without a source")
+        -- The Suite's bars appear: acquiring Utility re-syncs its width modes once.
+        present = true
+        registry:TriggerEvent(SUITE_EVENT)
+        widgets:RunTimers()
+        assert(env.MSUF_GetEffectiveCooldownFrame(UTILITY) == bars[UTILITY], flavor .. ": Utility is not the Suite's bar")
+        assert(Count(classPower, UTILITY) == 1 and Count(castbar, UTILITY) == 1 and #classPower == 1,
+            flavor .. ": acquiring the Suite's Utility bar did not re-sync its width modes once")
+        -- A resize (the Suite's anchor grows by an icon skin's frame) re-syncs out of combat ...
+        local utility = bars[UTILITY]
+        utility:SetWidth(utility:GetWidth() + 12)
+        utility.scripts.OnSizeChanged(utility)
+        widgets:RunTimers()
+        assert(Count(classPower, UTILITY) == 2 and Count(castbar, UTILITY) == 2,
+            flavor .. ": a Utility resize did not re-sync class power and the castbar")
+        -- ... and waits for the end of combat inside it.
+        widgets:SetCombat(true)
+        utility:SetWidth(utility:GetWidth() + 12)
+        utility.scripts.OnSizeChanged(utility)
+        widgets:RunTimers()
+        assert(Count(classPower, UTILITY) == 2 and Count(castbar, UTILITY) == 2, flavor .. ": re-synced in combat")
+        widgets:SetCombat(false)
+        Deliver("MSUF_UF_Factory.lua", "PLAYER_REGEN_ENABLED")
+        widgets:RunTimers()
+        assert(Count(classPower, UTILITY) == 3 and Count(castbar, UTILITY) == 3,
+            flavor .. ": the combat resize was not re-synced after combat")
+        -- Tracked Buffs the same way.
+        db.bars.classPowerWidthMode = "tracked_buffs"
+        env.MSUF_EnsureCooldownWidthObservers(true)
+        local buffs = bars[BUFFS]
+        buffs:SetWidth(buffs:GetWidth() + 12)
+        buffs.scripts.OnSizeChanged(buffs)
+        widgets:RunTimers()
+        assert(Count(classPower, BUFFS) == 1 and Count(castbar, UTILITY) == 3,
+            flavor .. ": a Tracked Buffs resize did not re-sync class power alone")
     end)
 end
 
@@ -998,4 +1346,5 @@ if #failures > 0 then
     io.stderr:write(string.format("suite_cooldown_anchor_smoke: %d of %d cases failed\n", #failures, #CASES))
     os.exit(1)
 end
-print(string.format("PASS MSUF Suite cooldown anchor: %d cases (provider, consent, class power edge, 5 client boots)", passed))
+print(string.format("PASS MSUF Suite cooldown anchor: %d cases (provider, Utility/Tracked Buffs bars, consent,"
+    .. " class power edge, 5 client boots, width re-sync)", passed))

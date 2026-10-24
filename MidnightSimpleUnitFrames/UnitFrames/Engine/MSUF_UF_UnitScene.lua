@@ -138,7 +138,7 @@ local function OpenWindow(frame, unit, sample)
   state.isPlayer, state.isPlayerKnown = isPlayer, true
   state.identityIsPlayerRead = true
   state.identityReady = true
-  local names = _G.LOCALIZED_CLASS_NAMES_MALE
+  local names = LOCALIZED_CLASS_NAMES_MALE
   local className = sample.className or (sample.class and type(names) == "table" and names[sample.class])
   state.className = type(className) == "string" and className or sample.class
   state.classToken = sample.class

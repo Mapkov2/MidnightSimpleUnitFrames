@@ -86,13 +86,30 @@ assert(util:find("    local function IsConfigCombatLocked(event)\n        return
     "the configuration lock must stay the edge-aware InCombat(event)")
 MSUF_IsConfigCombatLocked = function(event) return InCombat(event) == true end
 
-local ns = { ExportPublic = function(name, value) _G[name] = value; return value end }
+local ns = {}
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, ns)
 RequireFixture.Install(root, ns)
+-- State snapshots the profile through the Kernel's MSUF_DeepCopy (Kernel/MSUF_Util.lua), taken verbatim.
+local deepCopyBody = assert(util:match("(local function MSUF_DeepCopy%(value, seen%).-\nend)\n"),
+    "Kernel/MSUF_Util.lua no longer defines MSUF_DeepCopy")
+ns.ExportPublic("MSUF_DeepCopy", assert(loadstring(deepCopyBody .. "\nreturn MSUF_DeepCopy", "Kernel MSUF_DeepCopy"))())
+-- Edit Mode's Enter/Exit require the preview, intro and visibility providers that load after it in the TOC.
+-- This smoke exercises only the arrow-key routing, so those providers are present and do nothing.
+for _, name in ipairs({ "MSUF_HideAllCastbarPreviews", "MSUF_GF_EM2_HidePreview", "MSUF_PlayEditModeLogoIntro",
+    "MSUF_StopEditModeLogoIntro", "MSUF_SyncArenaUnitframePreviewWithUnitEdit", "MSUF_RefreshAllUnitVisibilityDrivers",
+    "MSUF_UpdateBossCastbarPreview", "MSUF_ArenaMatch_SyncPrepDisplay", "MSUF_SyncAllUnitPreviewsAsync",
+    "MSUF_EM2_ReforcePreviewFrames", "MSUF_ForceReanchorAllUnitFrames_Once", "MSUF_SyncAuras3PositionPopup" }) do
+    ns.ExportPublic(name, function() end)
+end
 
 MSUF_DB = { player = { offsetX = 0, offsetY = 0 }, general = {}, bars = {}, auras3 = { perUnit = {}, shared = {} } }
 MSUF_GetCastbarPrefix = function(unit) return "castbar" .. unit:sub(1, 1):upper() .. unit:sub(2) end
 MSUF_GetCastbarDefaultOffsets = function(unit) if unit == "player" then return 0, 5 end return 65, -15 end
+ns.Castbars.Core = {
+    GetCastbarPrefix = MSUF_GetCastbarPrefix,
+    GetCastbarDefaultOffsets = MSUF_GetCastbarDefaultOffsets,
+}
 local castbarSyncs = 0
 MSUF_SyncCastbarPositionPopup = function() castbarSyncs = castbarSyncs + 1 end
 MSUF_EM_UndoBeforeChange = function() end
@@ -241,7 +258,8 @@ local function BuffX()
 end
 -- Auras3/MSUF_Auras3_EditMode_Drag.lua OpenAuraGroupPopup: the aura globals, then the popup.
 local function OpenAuraPopup(unit, kind)
-    MSUF_EM2_ActiveAuraGroup, MSUF_EM2_ActiveAuraUnit = kind, unit
+    ns.ExportPublic("MSUF_EM2_ActiveAuraGroup", kind)
+    ns.ExportPublic("MSUF_EM2_ActiveAuraUnit", unit)
     auraPopupOpen = true
 end
 assert(EM2.State.Enter("player") == true, "Edit Mode did not open")
@@ -303,6 +321,8 @@ MSUF_EM_UndoCommitChange = function() return true end
 MSUF_BlockConfigCombatLocked = function() return MSUF_IsConfigCombatLocked() end
 MSUF_GetDefaultUnitOffsets = function(key) if key == "player" then return -260, -200 end return 260, -200 end
 MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = function() end
+-- The toolbar requires the Cooldown Manager integration (Kernel/MSUF_Util.lua), which this sandbox does not host.
+ns.ExportPublic("MSUF_CooldownAnchorSupported", function() return false end)
 EM2.Util.Tr = function(text) return text end
 EM2.Util.ThemeColor = function(_, fallback) return fallback end
 EM2.Ticker = { BeginDrag = function() return true end, EndDrag = function() return true end,

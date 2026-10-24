@@ -9,7 +9,7 @@ two addons (or a lookup by the client itself), and who that reader is.
 Modes (run from anywhere; the repository root is found from this file):
 
   python tools/public_globals_ledger.py            check (the default; needs nothing outside the repo)
-  python tools/public_globals_ledger.py --write    rebuild the ledger from the local external sources
+  python tools/public_globals_ledger.py --write    refresh local readers, preserving published contracts
   python tools/public_globals_ledger.py --refresh-exporters
                                                    keep readers and evidence, re-read exporter, kind
                                                    and clients from the source and a booted client
@@ -35,6 +35,10 @@ a name variable or naming function that resolves to MSUF literals yields exact n
 listed by --write and --inventory, and an outside reader of a name only such a site can build is ledgered
 against that site. Names found only by booting each client (public_globals_smoke.lua --inventory) are added
 too, which is also where the `clients` column comes from.
+
+Published ledger names remain compatibility contracts when a scan cannot rediscover a reader; missing
+exporters still fail the normal checks. Namespace handoffs through an addon's shared table are followed
+across its files, without inferring the same identity in other addons.
 
 What counts as a reader (--write only; everything is read-only): in the Suite, MapkoSkin and
 MidnightCooldownManager repositories and in every other addon installed under the WoW client folders, a
@@ -752,9 +756,14 @@ def entry_kind(entry):
     return "value"
 
 
+def present_clients(seen):
+    # Recorded nil is a write attempt, not a post-login value. False/zero exist.
+    return [flavor for flavor in FLAVORS if seen.get(flavor) not in (None, "nil")]
+
+
 def entry_clients(entry):
     seen = entry.ns_runtime if entry.namespace_only() else entry.runtime
-    flavors = [flavor for flavor in FLAVORS if flavor in seen]
+    flavors = present_clients(seen)
     if not flavors:
         return "static"
     return "all" if len(flavors) == len(FLAVORS) else ",".join(flavors)
@@ -913,7 +922,9 @@ OPERAND_SPLIT = re.compile(r"\b(?:and|or)\b")
 ASSERT_CALL = re.compile(r"\bassert[ \t]*\(([^,()]*)(?:,[^()]*)?\)")
 # Accessor functions that hand out a tracked table (MSUF.GetMenu2Namespace() returns MSUF2).
 ACCESSORS = {"GetMenu2Namespace": "MSUF2"}
-ASSIGNMENT = re.compile(r"(?m)^[ \t]*(?:local[ \t]+)?(%s)[ \t]*=(?!=)[ \t]*(.+)$" % NAME)
+ASSIGNMENT_PATH = NAME + r"(?:[ \t]*\.[ \t]*" + NAME + r")*"
+ASSIGNMENT = re.compile(r"(?m)^[ \t]*(?:local[ \t]+)?(%s(?:[ \t]*,[ \t]*%s)*)[ \t]*=(?!=)[ \t]*(.+)$"
+                        % (ASSIGNMENT_PATH, ASSIGNMENT_PATH))
 FUNCTION_START = re.compile(r"(?m)^[ \t]*(?:local[ \t]+)?function[ \t]+(%s)[ \t]*\(" % NAME)
 RETURN_VALUE = re.compile(r"\breturn[ \t]+([^\n]*)")
 END_LINE = re.compile(r"(?m)^[ \t]*end\b")
@@ -942,6 +953,9 @@ def named_tables(text, tables, funcs, aliases):
             operand = operand[1:-1].strip()
         if not operand or operand in ("nil", "false", "true", "{}", "_G") or "==" in operand or "~=" in operand:
             continue
+        if operand in aliases and operand not in tables:
+            found.update(aliases[operand])
+            continue
         match = OPERAND.match(operand)
         if not match:
             return set()
@@ -962,13 +976,43 @@ def named_tables(text, tables, funcs, aliases):
     return found
 
 
-def table_aliases(stripped, tables):
-    """(variable -> tables, function -> tables) for every assignment or return that names a tracked table."""
+def assignment_values(text):
+    """Split assignment operands without splitting calls, strings or constructors."""
+    _stripped, masked = strip_and_mask(text)
+    values, start, depth = [], 0, 0
+    for offset, char in enumerate(masked):
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif not depth and char in ",;":
+            values.append(text[start:offset].strip())
+            if char == ";":
+                return values
+            start = offset + 1
+    values.append(text[start:].strip())
+    return values
+
+
+def addon_namespace_names(stripped):
+    return set(VARARGS.findall(stripped)) | set(NAMESPACE_SELECT.findall(stripped))
+
+
+def table_aliases(stripped, tables, shared_fields=None):
+    """Local aliases, plus proven fields of this addon's own shared namespace."""
+    aliases, funcs = {}, {}
+    for namespace in addon_namespace_names(stripped):
+        for field, owners in (shared_fields or {}).items():
+            aliases[namespace + "." + field] = set(owners)
     present = {t for t in tables if t in stripped}
+    for owners in aliases.values():
+        present.update(owners)
     if not present:
         return {}, {}
-    aliases, funcs = {}, {}
-    assigns = ASSIGNMENT.findall(stripped)
+    assigns = []
+    for left, right in ASSIGNMENT.findall(stripped):
+        assigns.extend((re.sub(r"\s+", "", var), rhs)
+                       for var, rhs in zip(assignment_values(left), assignment_values(right)))
     functions = []
     for match in FUNCTION_START.finditer(stripped):
         body = stripped[match.end():match.end() + 800]
@@ -1035,6 +1079,39 @@ def field_accesses(stripped, masked, aliases, funcs, tables, bare):
     return found
 
 
+def source_identity(source):
+    return source.addon, os.path.normcase(os.path.abspath(source.path))
+
+
+def shared_table_fields(candidates, tables):
+    """Infer addon-namespace handoffs from their real assignments, per addon root.
+
+    One file can publish `state.menu = host`; a sibling can destructure that
+    field without mentioning the exported global again. Other addons never
+    inherit that identity merely because they use the same local names.
+    """
+    shared = collections.defaultdict(dict)
+    parsed = [(source, strip_and_mask(raw.decode("utf-8", "replace").replace("\r\n", "\n"))[0])
+              for source, _rel, _path, raw in candidates]
+    for _ in range(4):
+        changed = False
+        for source, stripped in parsed:
+            fields = shared[source_identity(source)]
+            aliases, _funcs = table_aliases(stripped, tables, fields)
+            for namespace in addon_namespace_names(stripped):
+                prefix = namespace + "."
+                for name, owners in aliases.items():
+                    if not name.startswith(prefix):
+                        continue
+                    known = fields.setdefault(name[len(prefix):], set())
+                    before = len(known)
+                    known.update(owners)
+                    changed |= len(known) != before
+        if not changed:
+            break
+    return shared
+
+
 class ExternalScan:
     """What the outside sources read: globals, prefixes, table fields, and names nothing here exports."""
 
@@ -1053,19 +1130,27 @@ def scan_external(sources, names, tables, luac):
     odd = sorted(n for n in names if not re.search(r"MSUF|MIDNIGHTSUF|MidnightSimpleUnitFrames", n))
     prefilter = re.compile(("MSUF|MIDNIGHTSUF|MidnightSimpleUnitFrames" + "".join("|" + re.escape(n) for n in odd)).encode())
     scan = ExternalScan()
-    candidates, seen = [], set()
+    candidates, all_paths, seen = [], [], set()
     for source in sources:
         for path in source_files(source):
             rel = os.path.relpath(path, source.path).replace("\\", "/")
             key = (source.addon, rel)
             if key in seen:
                 continue
+            seen.add(key)
+            all_paths.append((source, rel, path))
             with open(path, "rb") as handle:
                 raw = handle.read()
             if prefilter.search(raw):
-                seen.add(key)
                 candidates.append((source, rel, path, raw))
-    compiled = global_reads(luac, [c[2] for c in candidates]) if candidates else {}
+    literal_paths = {item[2] for item in candidates}
+    shared = shared_table_fields(candidates, tables)
+    for source, rel, path in all_paths:
+        if path not in literal_paths and shared.get(source_identity(source)):
+            with open(path, "rb") as handle:
+                candidates.append((source, rel, path, handle.read()))
+    shared = shared_table_fields(candidates, tables)
+    compiled = global_reads(luac, sorted(literal_paths)) if literal_paths else {}
     for source, rel, path, raw in candidates:
         text = raw.decode("utf-8", "replace").replace("\r\n", "\n")
         stripped, masked = strip_and_mask(text)
@@ -1081,7 +1166,9 @@ def scan_external(sources, names, tables, luac):
         scan_lua(rel, text, local_exports, _families)
         scan.defined.update(local_exports)
         g_aliases = frozenset({"_G"} | set(G_ALIAS.findall(stripped)))
-        bare = compiled.get(path)
+        # Promoted sibling files contain no literal host/global name. Their
+        # namespace field reads need no extra compiler process.
+        bare = compiled.get(path) if path in literal_paths else []
         if bare is None:
             scan.unparsed.append(key)
             bare = [(m.group(1), lines.of(m.start(1))) for m in re.finditer(r"(?<![\w.:])(%s)\b" % NAME, stripped)
@@ -1112,7 +1199,7 @@ def scan_external(sources, names, tables, luac):
         for pattern in (QUOTED_PREFIX, PREFIX_STRING):
             for match in pattern.finditer(stripped):
                 add(scan.prefixes, match.group("p"), match.start())
-        aliases, funcs = table_aliases(stripped, tables)
+        aliases, funcs = table_aliases(stripped, tables, shared.get(source_identity(source)))
         for table, field, offset, kind in field_accesses(stripped, masked, aliases, funcs, tables, {n for n, _l in bare}):
             if kind == "read":
                 add(scan.fields, (table, field), offset)
@@ -1277,7 +1364,7 @@ def field_rows(root, exports, scan, lua, tables):
     rows, unmatched = [], []
     for key in keys:
         table, field = key
-        flavors = [flavor for flavor in FLAVORS if flavor in seen.get(key, {})]
+        flavors = present_clients(seen.get(key, {}))
         writer = writers.get(key)
         if not flavors and writer is None:
             unmatched.append(key)
@@ -1385,6 +1472,42 @@ def write_ledger(rows, path=LEDGER):
     lines = list(HEADER_COMMENT) + ["\t".join(COLUMNS)] + ["\t".join(row_fields(row)) for row in rows]
     with io.open(path, "w", encoding="utf-8", newline="") as handle:
         handle.write(eol.join(lines) + eol)
+
+
+def preserve_contract_note(current, previous):
+    """Refresh discovery facts without discarding separately reviewed contracts."""
+    annotations = []
+    if "Published compatibility contract" in [part.strip() for part in previous.split(";")]:
+        annotations.append("Published compatibility contract")
+    marker = "Suite nested fields (contract smoke):"
+    offset = previous.find(marker)
+    if offset >= 0:
+        annotations.append(previous[offset:])
+    return "; ".join([current] + [text for text in annotations if text not in current]).strip("; ")
+
+
+def retain_published_rows(rows, previous):
+    """Discovery may add evidence; it must not silently retire a published API.
+
+    Some consumers receive the host through function arguments. Keep their
+    reviewed contract until an explicit retirement is reviewed; the normal
+    exporter/runtime checks still reject missing or renamed providers.
+    """
+    current = {row["name"]: row for row in rows}
+    retained = []
+    for row in previous:
+        if row["name"] in current:
+            fresh = dict(current[row["name"]])
+            fresh["note"] = preserve_contract_note(fresh["note"], row["note"])
+            current[row["name"]] = fresh
+            continue
+        kept = dict(row)
+        prefix = "Published compatibility contract; "
+        if not kept["note"].startswith(prefix):
+            kept["note"] = prefix + kept["note"]
+        current[row["name"]] = kept
+        retained.append(row["name"])
+    return [current[name] for name in sorted(current)], retained
 
 
 def parse_ledger(path=LEDGER):
@@ -1706,12 +1829,12 @@ def refresh_exporters(root):
             continue
         if row["kind"] == "nsfield":
             key = tuple(row["name"].split(".", 1))
-            flavors = [flavor for flavor in FLAVORS if flavor in seen.get(key, {})]
+            flavors = present_clients(seen.get(key, {}))
             if key not in writers and not flavors:
                 dropped.append(row["name"])
                 continue
             row["exporter"] = "%s:%d" % writers[key] if key in writers else site_text(exports[key[0]])
-            row["note"] = "" if key in writers else "dynamic"
+            row["note"] = preserve_contract_note("" if key in writers else "dynamic", row["note"])
             row["clients"] = "static" if not flavors else "all" if len(flavors) == len(FLAVORS) else ",".join(flavors)
             continue
         entry = exports.get(row["name"])
@@ -1719,12 +1842,15 @@ def refresh_exporters(root):
             dropped.append(row["name"])
             continue
         row["kind"], row["exporter"], row["clients"] = entry_kind(entry), site_text(entry), entry_clients(entry)
-        row["note"] = entry_note(entry)
+        row["note"] = preserve_contract_note(entry_note(entry), row["note"])
     if dropped:
         fail("no exporter left for %d ledgered name%s (rename or removal), refusing to refresh: %s"
              % (len(dropped), "" if len(dropped) == 1 else "s", ", ".join(dropped)))
     for row in rows:
         row["readers"], row["addons"] = int(row["readers"]), int(row["addons"])
+    problems = exporter_problems(rows, root)
+    if problems:
+        fail("invalid refreshed exporters; ledger unchanged:\n  " + "\n  ".join(problems))
     write_ledger(rows, os.path.join(root, "tools", "public-globals.tsv"))
     print("public globals ledger: exporters refreshed for %d rows" % len(rows))
 
@@ -1746,8 +1872,14 @@ def main(argv=None):
                 if not os.path.isdir(path):
                     fail("%s is missing; --write needs every external source. Pass --suite-repo, --repo or "
                          "--wow-root, or keep the committed ledger." % path)
+            previous, problems = parse_ledger()
+            problems.extend(validate_rows(previous))
+            if problems:
+                fail("cannot rebuild an invalid published ledger: " + "; ".join(problems))
             result = collect(ROOT, args.suite_repo, repos, args.wow_root)
+            result["rows"], retained = retain_published_rows(result["rows"], previous)
             write_ledger(result["rows"])
+            print("published contracts retained beyond current discovery: %d" % len(retained))
             print("readers searched in %d addon folders" % result["sources"])
             print("\n".join(summary_lines(result)))
             print("\ntop consumed names:")

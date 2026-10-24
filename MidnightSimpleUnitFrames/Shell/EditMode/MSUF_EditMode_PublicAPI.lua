@@ -2,12 +2,11 @@
 --- GetCapabilities/GetElementCapabilities: positionFields advertises host X/Y
 --- popup controls; unreadable geometry keeps owner inspector values read-only.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not (EM2 and EM2.Registry) then return end
 local Util = EM2.Util or {}
-local ReportError = MSUF.ReportError or _G.MSUF_ReportError
+local ReportError = MSUF.ReportError
 
 local API, External = { VERSION = 1 }, {}
 local records, owners, listeners = {}, {}, {}
@@ -126,7 +125,7 @@ local function Restore(record, state, reason)
 end
 
 local function InCombat()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return type(InCombatLockdown) == "function" and InCombatLockdown() == true
 end
 
 local function IsActive()
@@ -617,8 +616,8 @@ function External.GetInspectorValues(key)
             local ratio = 1
             --- Fallback when Core's shared geometry helper is unavailable:
             --- use the same center-facing horizontal edge as native elements.
-            local screenW = _G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth() or 0
-            local screenH = _G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight() or 0
+            local screenW = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+            local screenH = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
             local uiLeft, uiRight = left * ratio, right * ratio
             local centerX = screenW * 0.5
             local x

@@ -18,6 +18,8 @@ local UF = {
 }
 local MSUF = {
     UF = UF,
+    -- The Retail client fact Game/Shared/Initialize.lua publishes before elements load.
+    Client = { MaxArenaOpponents = 3 },
     Secrets = { UnitExistsPlain = function(unit) return liveUnits[unit] == true end },
     ExportPublic = function(name, value)
         _G[name] = value
@@ -66,8 +68,10 @@ local watchedFrame = {
     MSUFSpec = { unit = "arena1", enabled = true },
     _unitWatched = true,
 }
-_G.MSUF_ArenaPrepVisibilityActive = true
-_G.MSUF_ArenaPrepVisibilityCount = 2
+-- LoadConditions reads the prep flags from the namespace registry (the real
+-- ExportPublic, installed by the loader, also mirrors them to the global).
+MSUF.ExportPublic("MSUF_ArenaPrepVisibilityActive", true)
+MSUF.ExportPublic("MSUF_ArenaPrepVisibilityCount", 2)
 Check(registeredLoadConditions.IsEnabled(watchedFrame, watchedFrame.MSUFSpec) == true,
     "arena prep did not enable LoadConditions")
 registeredLoadConditions.Apply(watchedFrame, watchedFrame.MSUFSpec)
@@ -87,8 +91,8 @@ registeredLoadConditions.Apply(excludedFrame, excludedFrame.MSUFSpec)
 Check(excludedFrame._unitWatched == true and excludedFrame._visibilityExpression == nil,
     "2v2 prep replaced arena3's native unit watch")
 
-_G.MSUF_ArenaPrepVisibilityActive = nil
-_G.MSUF_ArenaPrepVisibilityCount = nil
+MSUF.ExportPublic("MSUF_ArenaPrepVisibilityActive", nil)
+MSUF.ExportPublic("MSUF_ArenaPrepVisibilityCount", nil)
 registeredLoadConditions.Disable(watchedFrame)
 Check(watchedFrame._visibilityExpression == nil,
     "arena prep did not remove its secure visibility driver")
@@ -270,8 +274,8 @@ arenaSpecCount = 2
 liveUnits = {}
 prepVisibilityReady = false
 visibilityRefreshes = 0
-_G.MSUF_ArenaPrepVisibilityActive = nil
-_G.MSUF_ArenaPrepVisibilityCount = nil
+MSUF.ExportPublic("MSUF_ArenaPrepVisibilityActive", nil)
+MSUF.ExportPublic("MSUF_ArenaPrepVisibilityCount", nil)
 for index = 1, 3 do
     local frame = frames["arena" .. index]
     frame._shown = nil
@@ -333,8 +337,8 @@ local function ResetArenaSlots()
     liveUnits = {}
     prepVisibilityReady = false
     visibilityRefreshes = 0
-    _G.MSUF_ArenaPrepVisibilityActive = nil
-    _G.MSUF_ArenaPrepVisibilityCount = nil
+    MSUF.ExportPublic("MSUF_ArenaPrepVisibilityActive", nil)
+    MSUF.ExportPublic("MSUF_ArenaPrepVisibilityCount", nil)
     for index = 1, 5 do
         local frame = frames["arena" .. index] or CreateArenaFrame(index)
         frame._shown = nil

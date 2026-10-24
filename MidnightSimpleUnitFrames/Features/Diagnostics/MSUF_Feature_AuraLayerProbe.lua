@@ -91,8 +91,8 @@ local function ProbeLane(unitKey, rootKey)
     end
 end
 
-_G.SLASH_MSUFAURALAYERS1 = "/msufauralayers"
-_G.SlashCmdList["MSUFAURALAYERS"] = function()
+SLASH_MSUFAURALAYERS1 = "/msufauralayers"
+SlashCmdList["MSUFAURALAYERS"] = function()
     ProbeLane("player", "Buffs")
     ProbeLane("player", "Debuffs")
     ProbeLane("target", "Buffs")

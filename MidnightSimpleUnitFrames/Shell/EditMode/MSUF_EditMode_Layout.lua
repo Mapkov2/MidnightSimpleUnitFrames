@@ -5,10 +5,15 @@
 local _, MSUF = ...
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
--- one is missing, and a hook installed on the global still applies.
+-- one is missing. Boss geometry resolves its existing Factory owner; other
+-- legacy providers retain their global hook boundary.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Layout.lua"
+-- Drag-path collaborators (castbars, group popups, the Factory boss geometry)
+-- load after Edit Mode and are never hooked: each is required on its first
+-- use and kept, so a drag tick makes no lookup call.
+local DragProviders = {}
 
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local max   = math.max
@@ -24,11 +29,11 @@ local GetFrameEdgesUI        = EM2.Snap.GetFrameEdgesUI
 local GetCastbarOffsetKeys   = EM2.Nudge.GetCastbarOffsetKeys
 
 local function NotifyGuidedEditModeMoved(key)
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local menu = MSUF.MSUF2
     if menu and type(menu.NotifyGuidedEditModeMoved) == "function" then
         return menu.NotifyGuidedEditModeMoved(key)
     end
-    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+    local tour = MSUF.GuidedTour6
     if tour and type(tour.MarkEditModePlacementComplete) == "function" then
         return tour:MarkEditModePlacementComplete(key)
     end
@@ -126,8 +131,7 @@ local function ResolveNamedEditAnchor(name)
     if type(name) ~= "string" or name == "" then return nil end
     if EDIT_COOLDOWN_ANCHORS[name] then
         local cooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", CALLER)(name) or _G[name]
-        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-        return type(getSize) == "function" and getSize(cooldownFrame) ~= nil and cooldownFrame or nil
+        return MSUF.Require("MSUF_GetUsableCooldownAnchorSize", CALLER)(cooldownFrame) ~= nil and cooldownFrame or nil
     end
     local UF = MSUF and MSUF.UF
     if UF and type(UF.GetFrame) == "function" then
@@ -136,7 +140,7 @@ local function ResolveNamedEditAnchor(name)
     end
     local uf = UF and UF.frames
     if uf and uf[name] then return uf[name] end
-    return _G[name] or _G["MSUF_" .. name]
+    return _G[name] or MSUF.Optional("MSUF_" .. name)
 end
 
 local function UnitCooldownAnchorName(conf)
@@ -148,15 +152,13 @@ local function UnitCooldownAnchorName(conf)
     if EDIT_COOLDOWN_ANCHORS[atv] then return atv end
     if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "global" and atv ~= "FREE" then return nil end
 
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = db and db.general
-    local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
-    -- The Integrations module answers first; without it the client model does.
+    -- The Integrations module answers first; otherwise the client model does.
     -- The C_CooldownViewer namespace is never the signal: the shared engine
     -- exposes it on every client, while only the Mainline family ships
     -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
-    local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
-        and isCooldownAnchorEnabled(general) == true
+    local cooldownAnchorEnabled = MSUF.Require("MSUF_IsCooldownAnchorEnabled", CALLER)(general) == true
         or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
             and general and general.anchorToCooldown == true)
     if cooldownAnchorEnabled then return "EssentialCooldownViewer" end
@@ -166,8 +168,7 @@ local function UnitCooldownAnchorName(conf)
 end
 
 local function ResolveAnchor(key, conf)
-    local anchorFn = _G.MSUF_GetAnchorFrame
-    local anchor = (type(anchorFn) == "function" and anchorFn()) or UIParent
+    local anchor = MSUF.Require("MSUF_GetAnchorFrame", CALLER)() or UIParent
     if not conf then return anchor end
     local cn = conf.anchorFrameName
     if type(cn) == "string" and cn ~= "" then
@@ -261,13 +262,12 @@ local function TryApplyFramePoint(frame, point, anchor, relativePoint, x, y)
 end
 
 local function SetStackedPreviewPosition(unitPrefix, count, layoutDelta, point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
-    if type(layoutDelta) ~= "function" then return false end
     local uf = MSUF and MSUF.UF
     local frames = uf and uf.frames
     local moved = false
     for i = 1, count do
         local unit = unitPrefix .. i
-        local frame = (frames and frames[unit]) or _G["MSUF_" .. unit]
+        local frame = (frames and frames[unit]) or MSUF.Optional("MSUF_" .. unit)
         if frame then
             local dx, dy = layoutDelta(i, conf)
             frame._msufDragActive = true
@@ -275,31 +275,47 @@ local function SetStackedPreviewPosition(unitPrefix, count, layoutDelta, point, 
                 if rollbackX ~= nil and rollbackY ~= nil then
                     for restoreIndex = 1, count do
                         local restoreUnit = unitPrefix .. restoreIndex
-                        local restoreFrame = (frames and frames[restoreUnit]) or _G["MSUF_" .. restoreUnit]
+                        local restoreFrame = (frames and frames[restoreUnit]) or MSUF.Optional("MSUF_" .. restoreUnit)
                         if restoreFrame then
                             local restoreDX, restoreDY = layoutDelta(restoreIndex, conf)
                             TryApplyFramePoint(restoreFrame, point, anchor, relativePoint,
                                 rollbackX + (restoreDX or 0), rollbackY + (restoreDY or 0))
-                            MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", CALLER)(restoreFrame)
+                            local applyGeometry = DragProviders.bossGeometry
+                            if not applyGeometry then
+                                applyGeometry = MSUF.Require("ApplyBossPhysicalBarGeometry", CALLER, MSUF.UF.Factory)
+                                DragProviders.bossGeometry = applyGeometry
+                            end
+                            applyGeometry(restoreFrame)
                         end
                     end
                 end
                 return false
             end
-            MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", CALLER)(frame)
+            local applyGeometry = DragProviders.bossGeometry
+            if not applyGeometry then
+                applyGeometry = MSUF.Require("ApplyBossPhysicalBarGeometry", CALLER, MSUF.UF.Factory)
+                DragProviders.bossGeometry = applyGeometry
+            end
+            applyGeometry(frame)
             moved = true
         end
     end
     return moved
 end
 
+--- Drag-frame hot path: the unit-frame config publishes both layout deltas
+--- once, after Edit Mode loads, so each is bound on its first use.
+local bossLayoutDelta, arenaLayoutDelta
+
 local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
-    return SetStackedPreviewPosition("boss", 5, _G.MSUF_GetBossLayoutDelta,
+    bossLayoutDelta = bossLayoutDelta or MSUF.Require("MSUF_GetBossLayoutDelta", CALLER)
+    return SetStackedPreviewPosition("boss", 5, bossLayoutDelta,
         point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
 end
 
 local function SetArenaPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
-    return SetStackedPreviewPosition("arena", tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3, _G.MSUF_GetArenaLayoutDelta,
+    arenaLayoutDelta = arenaLayoutDelta or MSUF.Require("MSUF_GetArenaLayoutDelta", CALLER)
+    return SetStackedPreviewPosition("arena", tonumber(MSUF_MAX_ARENA_FRAMES) or 3, arenaLayoutDelta,
         point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
 end
 
@@ -434,7 +450,7 @@ local tickerActive = false
 local activeDrag
 local idleMoverDirty = false
 local idleHUDDirty = false
-local C_Timer = _G.C_Timer
+local C_Timer = C_Timer
 local dirtyFlushScheduled = false
 local dirtyFlushGeneration = 0
 
@@ -463,18 +479,18 @@ local function SyncGFPopupDuringDrag(d, elapsed)
     d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
     if d.popupSyncAcc >= 0.05 then
         d.popupSyncAcc = 0
-        MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
+        local syncGFPopups = DragProviders.syncGFPopups
+        if not syncGFPopups then
+            syncGFPopups = MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)
+            DragProviders.syncGFPopups = syncGFPopups
+        end
+        syncGFPopups()
     end
 end
 
 local function CastbarDefaultOffsets(unit)
-    local fn = _G.MSUF_GetCastbarDefaultOffsets
-    if type(fn) == "function" then
-        local x, y = fn(unit)
-        return tonumber(x) or 0, tonumber(y) or 0
-    end
-    if unit == "target" or unit == "focus" then return 65, -15 end
-    return 0, 0
+    local x, y = MSUF.Require("MSUF_GetCastbarDefaultOffsets", CALLER)(unit)
+    return tonumber(x) or 0, tonumber(y) or 0
 end
 
 --- Castbar offsets are SetPoint offsets in the bar's own units, and the bar
@@ -498,8 +514,18 @@ local function ApplyCastbarDragPosition(d, centerX, centerY, uiScale)
     g[d.castbarYKey] = nextY
     MSUF.Castbars.Config.Invalidate()
 
-    if not MSUF.Require("MSUF_PositionCastbarPreviewUnit", CALLER)(d.castbarUnit) then
-        MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(d.castbarUnit)
+    local positionPreview = DragProviders.positionCastbarPreview
+    if not positionPreview then
+        positionPreview = MSUF.Require("MSUF_PositionCastbarPreviewUnit", CALLER)
+        DragProviders.positionCastbarPreview = positionPreview
+    end
+    if not positionPreview(d.castbarUnit) then
+        local applyCastbar = DragProviders.applyCastbar
+        if not applyCastbar then
+            applyCastbar = MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)
+            DragProviders.applyCastbar = applyCastbar
+        end
+        applyCastbar(d.castbarUnit)
     end
 
     return true
@@ -585,7 +611,12 @@ local function SyncCastbarPopupDuringDrag(d, elapsed)
     d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
     if d.popupSyncAcc < 0.05 then return end
     d.popupSyncAcc = 0
-    MSUF.Require("MSUF_SyncCastbarPositionPopup", CALLER)(d.castbarUnit)
+    local syncCastbarPopup = DragProviders.syncCastbarPopup
+    if not syncCastbarPopup then
+        syncCastbarPopup = MSUF.Require("MSUF_SyncCastbarPositionPopup", CALLER)
+        DragProviders.syncCastbarPopup = syncCastbarPopup
+    end
+    syncCastbarPopup(d.castbarUnit)
 end
 
 local function NotifyFocusDuringDrag(d, elapsed)
@@ -631,14 +662,14 @@ local function SetActiveDragFlags(d, active)
     if d.isBossLayout then
         local frames = MSUF and MSUF.UF and MSUF.UF.frames
         for i = 1, 5 do
-            local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+            local frame = (frames and frames["boss" .. i]) or MSUF.Optional("MSUF_boss" .. i)
             if frame then frame._msufDragActive = active end
         end
     end
     if d.isArenaLayout then
         local frames = MSUF and MSUF.UF and MSUF.UF.frames
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-            local frame = (frames and frames["arena" .. i]) or _G["MSUF_arena" .. i]
+        for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
+            local frame = (frames and frames["arena" .. i]) or MSUF.Optional("MSUF_arena" .. i)
             if frame then frame._msufDragActive = active end
         end
     end
@@ -761,32 +792,32 @@ local function OnUpdate(self, elapsed)
     end
 end
 
+--- The cursor offset, mover geometry and snap state every drag starts from.
+local function SetDragGeometry(drag, uiScale, mL, mCX, mR, mB, mCY, mT, cursorPX, cursorPY)
+    drag.offPX, drag.offPY = mCX * uiScale - cursorPX, mCY * uiScale - cursorPY
+    drag.startCX, drag.startCY = mCX, mCY
+    drag.startCenterPX, drag.startCenterPY = mCX * uiScale, mCY * uiScale
+    drag.halfW, drag.halfH = (mR - mL) * 0.5, (mT - mB) * 0.5
+    drag.screenW, drag.screenH = UIParent:GetWidth(), UIParent:GetHeight()
+    drag.focusNotifyAcc = 0.05
+    drag.snapEnabled = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false
+    drag.uiScale = uiScale
+    return drag
+end
+
 local function BuildPublicDrag(mover, key, cfg, bar, uiScale, mL, mCX, mR, mB, mCY, mT, cursorPX, cursorPY)
     local external = EM2.ExternalElements
     local externalStartState = external and type(external.CaptureState) == "function"
         and external.CaptureState(key) or nil
     if externalStartState == nil then return false end
-    return {
+    return SetDragGeometry({
         mover = mover,
         key = key,
         cfg = cfg,
         bar = bar,
-        offPX = mCX * uiScale - cursorPX,
-        offPY = mCY * uiScale - cursorPY,
-        startCX = mCX,
-        startCY = mCY,
-        startCenterPX = mCX * uiScale,
-        startCenterPY = mCY * uiScale,
-        halfW = (mR - mL) * 0.5,
-        halfH = (mT - mB) * 0.5,
-        screenW = UIParent:GetWidth(),
-        screenH = UIParent:GetHeight(),
-        focusNotifyAcc = 0.05,
-        snapEnabled = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false,
-        uiScale = uiScale,
         externalPublicElement = true,
         externalStartState = externalStartState,
-    }
+    }, uiScale, mL, mCX, mR, mB, mCY, mT, cursorPX, cursorPY)
 end
 
 local function ApplyDragStart(drag, start, isSubframe, uiScale)
@@ -824,7 +855,10 @@ local function BuildDrag(mover, key, cfg, start)
     if isCastbar and (not castbarUnit or castbarUnit == "") then
         castbarUnit = key:sub(9)
     end
-    if isCastbar then conf = conf or ((_G.MSUF_DB and _G.MSUF_DB.general) or nil) end
+    if isCastbar and not conf then
+        local db = MSUF_DB
+        conf = db and db.general or nil
+    end
     if not externalPublicElement and type(conf) ~= "table" then return false end
 
     local uiScale = UIParent:GetEffectiveScale() or 1
@@ -846,7 +880,8 @@ local function BuildDrag(mover, key, cfg, start)
         return BuildPublicDrag(mover, key, cfg, bar, uiScale, mL, mCX, mR, mB, mCY, mT, cursorPX, cursorPY)
     end
 
-    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority") or (bar and bar._msufIsGroupFrame == true) or false
+    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority")
+        or (bar and bar._msufIsGroupFrame == true) or false
     local groupKind = (key == "gf_party" and "party")
         or (key == "gf_raid" and "raid")
         or (key == "gf_mythicraid" and "mythicraid")
@@ -921,18 +956,7 @@ local function BuildDrag(mover, key, cfg, start)
         conf         = conf,
         anchor       = anchor,
         ecvRule      = ecvRule,
-        offPX        = mCX * uiScale - cursorPX,
-        offPY        = mCY * uiScale - cursorPY,
-        startCX      = mCX,
-        startCY      = mCY,
-        startCenterPX = mCX * uiScale,
-        startCenterPY = mCY * uiScale,
-        halfW        = (mR - mL) * 0.5,
-        halfH        = (mT - mB) * 0.5,
-        screenW      = UIParent:GetWidth(),
-        screenH      = UIParent:GetHeight(),
         popupSyncAcc = 0.05,
-        focusNotifyAcc = 0.05,
         isGroupFrame = isGroupFrame,
         isBossLayout = isBossLayout,
         isArenaLayout = isArenaLayout,
@@ -947,8 +971,6 @@ local function BuildDrag(mover, key, cfg, start)
         castbarStartX = castbarStartX,
         castbarStartY = castbarStartY,
         castbarReanchorFunc = castbarReanchorFunc,
-        snapEnabled  = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false,
-        uiScale      = uiScale,
         point        = point,
         relativePoint = relativePoint,
         unitStartX   = tonumber(conf and conf.offsetX) or 0,
@@ -958,6 +980,7 @@ local function BuildDrag(mover, key, cfg, start)
         usesECV      = usesECV,
         ecvFrame     = ecvFrame,
     }
+    SetDragGeometry(drag, uiScale, mL, mCX, mR, mB, mCY, mT, cursorPX, cursorPY)
     ApplyDragStart(drag, start, isSubframe, uiScale)
     return drag
 end
@@ -971,7 +994,7 @@ end
 local function FinishUnitDrag(d)
     ApplySettingsForKeySafe(d.key)
     ScheduleMoverSyncAfterDrag()
-    if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
+    MSUF.Require("MSUF_SyncUnitPositionPopup", CALLER)()
     if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
     if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
     RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)

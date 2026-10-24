@@ -19,8 +19,11 @@
 --      holder itself: every forced arena frame shows it with the sample swipe,
 --      anchored by the runtime geometry, and releasing the preview hides it.
 --   5. The show switch hides the live icon, the frame preview and the menu
---      preview; the PvP Trinket section binds all six keys and the Layer
+--      preview; the PvP Trinket section binds its original six keys and the Layer
 --      Overview lists the trinket layer.
+--   6. The icon takes the aura icon shapes: a circle masks the live icon and its
+--      cooldown swipe and the menu preview's art and sample swipe; rectangular
+--      takes the masks off again.
 -- Clients without arena frames (Classic Era, WoW Forever) wire nothing and
 -- list nothing. Plain Lua 5.1.
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
@@ -63,8 +66,8 @@ end
 -- Client facts first, as every core TOC loads them.
 Load(CORE .. "Game/Shared/Initialize.lua")
 local client = assert(ns.Client, flavor .. ": no client model")
-ns.ExportPublic = function(name, value)
-    env[name] = value
+ns.ExportPublic = function(name, value, legacy)
+    if legacy ~= false then env[name] = value end
     return value
 end
 Load(CORE .. "Kernel/MSUF_Require.lua")
@@ -130,14 +133,20 @@ for index = 1, 5 do
     frames["arena" .. index] = frame
 end
 ns.UF.GetFrame = function(unit) return frames[unit] end
+-- The trinket runtime reads the factory's frame registry (UF.frames) directly.
+ns.UF.frames = frames
 ns.Secrets = { UnitExistsPlain = function(unit) return live[unit] == true end }
 
+-- The aura icon shapes the trinket takes (MSUF_Auras3_IconShape.lua).
+ns.MSUF_Auras3 = {}
+-- Both files bind the pixel layout provider when they load.
+env.MSUF_PixelLayoutRegion = function(region) return region end
+Load(CORE .. "Auras3/MSUF_Auras3_IconShape.lua")
 Load(CORE .. "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua")
 local Trinkets = ns.ArenaTrinkets
 
 -- The Arena page section and the menu preview painter; the menu namespace is
 -- the core one, as MSUF_OptionsLOD_Bootstrap.lua links it.
-env.MSUF_PixelLayoutRegion = function(region) return region end
 local registered
 local writes = {}
 local function Write(unit, key, value, _, opts)
@@ -163,6 +172,10 @@ ns.MSUF2 = {
 }
 -- The section declares its controls through the control schema; the bindings below stay fakes.
 ns.CPBuilders = { ExtraAuraDefaults = {} }
+-- The shape choices come from the Auras page (M.IconShapeValues), which this
+-- sandbox does not load; runtime_preview_shared_rules_smoke pins the real list.
+local SHAPE_CHOICES = { { value = "RECTANGLE", text = "Rectangular" }, { value = "CIRCLE", text = "Circle" } }
+ns.MSUF2.IconShapeValues = function() return SHAPE_CHOICES end
 Load(OPTIONS .. "Shell/Menu2/MSUF_Menu2_ControlSchema.lua")
 Load(OPTIONS .. "Shell/Menu2/Pages/MSUF_Menu2_UnitArenaTrinket.lua")
 local M = ns.MSUF2
@@ -214,7 +227,7 @@ if slots == 0 then
     -- holder or row exists.
     Check(client.SupportsUnit("arena1") == false, "a client without arena slots reports arena1 as supported")
     Check(next(bus) == nil, "the trinket runtime subscribed events on a client without arena frames")
-    env.MSUF_ArenaTrinkets_SyncPreview()
+    Trinkets.SyncPreview()
     env.MSUF_ArenaTrinkets_RefreshLayout("arena")
     Check(Holder(1) == nil, "a trinket holder was created on a client without arena frames")
 else
@@ -296,7 +309,7 @@ else
     Check(not (bus.ARENA_COOLDOWNS_UPDATE and bus.ARENA_COOLDOWNS_UPDATE.MSUF_ARENA_TRINKET_COOLDOWN),
         "the trinket runtime kept ARENA_COOLDOWNS_UPDATE subscribed in a raid")
     for index = 1, slots do frames["arena" .. index]._msufArenaPreviewForced = true end
-    env.MSUF_ArenaTrinkets_SyncPreview()
+    Trinkets.SyncPreview()
     for index = 1, slots do
         local previewHolder = Holder(index)
         local context = "arena" .. index .. " preview"
@@ -311,7 +324,7 @@ else
     -- Source pin follows the moved shared lifecycle; all trinket behavior assertions remain.
     local conditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_PreviewFamilies.lua")
     for _, header in ipairs({ "local function ApplyFrames(active)", "local function ClearCombat()" }) do
-        Check(Body(conditions, header):find('MSUF.Require("MSUF_ArenaTrinkets_SyncPreview"', 1, true),
+        Check(Body(conditions, header):find('MSUF.Require("SyncPreview", FILE, MSUF.ArenaTrinkets)', 1, true),
             "the arena preview owner does not sync the trinkets in " .. header)
     end
 
@@ -373,7 +386,8 @@ else
     Check(layerControl and layerControl.label == "Layer" and layerControl.low == 0 and layerControl.high == 30,
         "the trinket layer control is not a 0-30 Layer slider")
     Check(byKey["arena.trinketAnchor"] and #byKey["arena.trinketAnchor"].values == 4, "the side choice does not offer four sides")
-    Check(gate and #gate.entries == 1 and #gate.entries[1].controls == 5, "the show switch does not gate the five placement controls")
+    Check(gate and #gate.entries == 1 and #gate.entries[1].controls == 5,
+        "the show switch does not gate the five icon and placement controls")
     if byKey["arena.trinketSize"] and byKey["arena.trinketLayer"] then
         byKey["arena.trinketSize"].set(26)
         byKey["arena.trinketLayer"].set(14)
@@ -381,6 +395,28 @@ else
             "the section does not write the trinket keys with a preview refresh")
         env.MSUF_ArenaTrinkets_RefreshLayout("arena")
         CheckPlacement(Holder(1), frames.arena1, "RIGHT", "LEFT", -6, 3, 26, 14, "section edit")
+    end
+    -- The aura icon shapes: the live icon, its swipe and the menu preview.
+    -- Input, History and combat of the separate Icon Skins shape row are checked
+    -- by aura_icon_skins_page_smoke on the actual core and Options graph.
+    do
+        arena.trinketShape = "CIRCLE"
+        env.MSUF_ArenaTrinkets_RefreshLayout("arena")
+        local live = Holder(1)
+        local mask = live._msufA3AuraShapeMask
+        Check(mask and live.icon:GetNumMaskTextures() == 1 and live.icon:GetMaskTexture(1) == mask,
+            "a circle trinket shape did not mask the live icon")
+        Check(live.cooldown.swipeTexture and tostring(live.cooldown.swipeTexture):find("circle", 1, true),
+            "a circle trinket shape did not shape the cooldown swipe")
+        M.ArenaTrinketPreview.Paint(mock, "arena", true, S)
+        local preview = mock._msufArenaTrinketPreview
+        Check(preview and preview.art:GetNumMaskTextures() == 1 and preview.dim:GetNumMaskTextures() == 1,
+            "the menu preview did not take the trinket shape")
+        arena.trinketShape = "RECTANGLE"
+        env.MSUF_ArenaTrinkets_RefreshLayout("arena")
+        M.ArenaTrinketPreview.Paint(mock, "arena", true, S)
+        Check(live.icon:GetNumMaskTextures() == 0 and preview.art:GetNumMaskTextures() == 0,
+            "rectangular did not take the trinket masks off again")
     end
 
     -- The Layer Overview row (real provider), on the client's own unit gate.
@@ -415,7 +451,7 @@ else
     Check(row and row.enabled == false, "the Layer Overview still marks a hidden trinket as shown")
     inArena, live.arena2 = true, true
     for index = 1, slots do frames["arena" .. index]._msufArenaPreviewForced = nil end
-    env.MSUF_ArenaTrinkets_SyncPreview()
+    Trinkets.SyncPreview()
     Fire("ARENA_OPPONENT_UPDATE", "arena2", "seen")
     Check(not Holder(2):IsShown(), "the switch did not hide the live trinket in a match")
     arena.showTrinket = true
@@ -488,6 +524,14 @@ else
             AddFooterControls = function() end,
         },
     }
+    -- The popup file binds its core providers when it loads: the shared size
+    -- range (State/MSUF_Defaults.lua) and the power bar capability (Kernel/MSUF_Util.lua).
+    ns.ExportPublic("MSUF_UnitFrameSizeBounds", { minW = 40, maxW = 800, minH = 8, maxH = 200 })
+    -- The factory's frame registry (UF.frames, MSUF_UnitFrames).
+    ns.ExportPublic("MSUF_UnitFrames", ns.UF.frames)
+    -- This sandbox models no detachable power bar (the detach panel stays out of
+    -- the popup, whose base height is 370), as before the popup bound it at load.
+    ns.ExportPublic("MSUF_CanDetachUnitPowerBar", function() return false end)
     Load(CORE .. "Shell/EditMode/MSUF_EditMode_Popups.lua")
     local UnitPopup = env.MSUF_EM2.UnitPopup
     Check(UnitPopup.Open("arena", frames.arena1) == true, "the Edit Mode arena popup did not open")
@@ -545,6 +589,23 @@ end
 
 local function PreviewInteraction()
     local full = World.New(root, flavor)
+    -- The preview model binds MSUF_UFCore_NotifyConfigChanged when it loads, so
+    -- the recording stand-in is installed right after its provider (the UF
+    -- runtime) and before any consumer; it delegates to the real apply until
+    -- the drag section records the unit-frame apply entry point.
+    local recordApply
+    local loadFile = full.LoadFile
+    function full:LoadFile(path, addon, namespace)
+        local ok, message = loadFile(self, path, addon, namespace)
+        if ok and path:find("Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua", 1, true) then
+            local real = self.env.MSUF_UFCore_NotifyConfigChanged
+            self.env.MSUF_UFCore_NotifyConfigChanged = function(...)
+                if recordApply then return recordApply(...) end
+                return real(...)
+            end
+        end
+        return ok, message
+    end
     full:Boot()
     local failure = full:FirstFailure()
     if not Check(failure == nil, "boot failed in " .. tostring(failure and failure.file) .. ": "
@@ -618,7 +679,7 @@ local function PreviewInteraction()
     -- section 2), and the runtime range clamps it. This sandbox has no unit
     -- frames to apply, so the unit-frame apply entry point is recorded.
     local applied = {}
-    fenv.MSUF_UFCore_NotifyConfigChanged = function(key)
+    recordApply = function(key)
         applied[#applied + 1] = key
         return true
     end
@@ -706,7 +767,7 @@ local function PreviewInteraction()
         return true
     end
     bar.openButton:GetScript("OnClick")(bar.openButton)
-    local request = fenv.MSUF_EM2_MenuFocusRequest
+    local request = core.PublicGlobals.MSUF_EM2_MenuFocusRequest
     Check(opened == "uf_arena" and request and request.sectionId == "pvp_trinket",
         "Open settings does not jump to the PvP Trinket section")
 
@@ -741,6 +802,10 @@ local function EditModeMover()
     if not Check(failure == nil, "Edit Mode boot failed in " .. tostring(failure and failure.file)) then return end
     AddWidgetMethods(full)
     local fenv, core = full.env, full.core
+    Check(type(core.ArenaTrinkets.SyncPreview) == "function", "the trinket owner lost its preview provider")
+    Check(fenv.MSUF_ArenaTrinkets_SyncPreview == nil, "the internal preview provider still publishes a global")
+    Check(core.PublicGlobals.MSUF_ArenaTrinkets_SyncPreview == core.ArenaTrinkets.SyncPreview,
+        "the internal preview registry and owner disagree")
     fenv.MSUF_EnsureDB(true)
     local EM2 = fenv.MSUF_EM2
     local cfg = EM2 and EM2.Registry and EM2.Registry.Get("arena_trinket")

@@ -59,13 +59,24 @@ local function LoadHelpers(isForever)
     }
     _G.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
     _G.issecretvalue = function() return false end
-    for _, path in ipairs({ "Kernel/MSUF_Bootstrap.lua", "ClassPower/MSUF_CP_Constants.lua",
-        "ClassPower/MSUF_CP_Controller_Colors.lua" }) do
-        assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", main)
+    -- The shipped Kernel API; a provider a file requires that this smoke never calls is deferred
+    -- (it raises naming the dependency if something does call it).
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    local function Load(addon, relative)
+        local file = assert(io.open(root .. "/" .. relative, "rb"))
+        local source = file:read("*a")
+        file:close()
+        RequireFixture.InstallKernel(root, main)
+        RequireFixture.Install(root, main)
+        RequireFixture.DeferRequired(main, source, relative)
+        assert(loadfile(root .. "/" .. relative))(addon, main)
+    end
+    RequireFixture.InstallKernel(root, main)
+    for _, path in ipairs({ "ClassPower/MSUF_CP_Constants.lua", "ClassPower/MSUF_CP_Controller_Colors.lua" }) do
+        Load("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames/" .. path)
     end
     assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, main)
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))(
-        "MidnightSimpleUnitFrames_Options", main)
+    Load("MidnightSimpleUnitFrames_Options", "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")
     return main.MSUF2.PreviewHelpers, main.MSUF2
 end
 

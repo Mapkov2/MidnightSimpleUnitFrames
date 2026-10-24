@@ -24,6 +24,15 @@ local function Open(page, locale)
             return (tonumber(frame.left) or 0) + (tonumber(frame.width) or 0) / 2,
                 (tonumber(frame.bottom) or 0) + (tonumber(frame.height) or 0) / 2
         end
+    end, beforeOptions = function(world)
+        -- The unit preview model binds MSUF_UFCore_NotifyConfigChanged when the Options graph loads, so a
+        -- case silences the unit-frame apply through this stand-in (world.silenceNotify) instead of
+        -- replacing the export afterwards. It delegates to the real export until a case silences it.
+        local real = world.core.PublicGlobals.MSUF_UFCore_NotifyConfigChanged
+        world.core.ExportPublic("MSUF_UFCore_NotifyConfigChanged", function(...)
+            if world.silenceNotify then return end
+            return real(...)
+        end)
     end })
 end
 local function Unit(mw, key)
@@ -190,7 +199,7 @@ cases["C32-A1"] = function()
     defaults.general[castX], defaults.general[castY] = 24, -183
     mw.core.MSUF_CreateFactoryDefaultProfile = function() return defaults end
     local box = Unit(mw); local p = mw.core.UFPreview
-    mw.env.MSUF_UFCore_NotifyConfigChanged = function() end
+    mw.world.silenceNotify = true
     mw.env.MSUF_DB.player.nameOffsetX = 90
     p.ResetSelectionOffsets(box, box.handleName, "TEST")
     assert(mw.env.MSUF_DB.player.nameOffsetX == 7, "preview Reset ignores client defaults")

@@ -20,12 +20,9 @@ function CreateFrame()
     return schedulerFrame
 end
 
-local namespace = {
-    ExportPublic = function(name, value)
-        _G[name] = value
-        return value
-    end,
-}
+-- The real Kernel bootstrap owns ExportPublic and its global keep policy.
+local namespace = {}
+assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))().InstallKernel(repo, namespace, nil, nil, true)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 
@@ -75,6 +72,8 @@ assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Runtime/MSUF_TooltipSpellIDs.
 loginFrame.onEvent(loginFrame)
 assert(#cvarWrites == 1, "12.1.0 login wrote the unavailable caster-name CVar")
 assert(cvarWrites[1].name == "tooltipShowAuraSpellIDs" and cvarWrites[1].value == "1")
+-- Namespace-only export (Kernel/MSUF_Bootstrap.lua keep policy).
+local MSUF_ApplyTooltipCasterNames = namespace.PublicGlobals.MSUF_ApplyTooltipCasterNames
 assert(MSUF_ApplyTooltipCasterNames(true) == false,
     "12.1.0 accepted the unavailable caster-name CVar")
 assert(#cvarWrites == 1, "12.1.0 caster-name fallback wrote an unknown CVar")

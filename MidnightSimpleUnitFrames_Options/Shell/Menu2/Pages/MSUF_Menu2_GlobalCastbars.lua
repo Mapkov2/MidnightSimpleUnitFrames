@@ -1,16 +1,17 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 
 -- Menu2 global Castbars page.
 -- Exposes shared castbar backend/visual/text/timing controls and drives a page-local preview.
 -- Actual cast/channel state handling is owned by the castbar runtime modules.
 local W = M.Widgets
 local Schema = M.ControlSchema
-local T = M.Theme
 local GP = M.GlobalPage or {}
+local T = M.Theme
 local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
@@ -27,24 +28,41 @@ local BuildCastbarPagePreview = GP.BuildCastbarPagePreview
 local gcdBarSupported
 local function GCDBarSupported()
     if gcdBarSupported ~= nil then return gcdBarSupported end
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     gcdBarSupported = false
     if type(spellAPI) == "table" and type(spellAPI.GetSpellCooldownDuration) == "function" then
         local castbar = MSUF.Castbars.Frames.Get("player")
         local bar = castbar and castbar.statusBar
-        if not bar and type(_G.CreateFrame) == "function" then bar = PixelLayoutRegion(_G.CreateFrame("StatusBar")) end
+        if not bar and type(CreateFrame) == "function" then bar = PixelLayoutRegion(CreateFrame("StatusBar")) end
         gcdBarSupported = bar ~= nil and type(bar.SetTimerDuration) == "function"
         -- The runtime's own answer adds what only it knows: WoW Forever arms
         -- the bar only while its spell data has the GCD spell.
-        local runtimeSupported = _G.MSUF_GCDBar_IsSupported
-        if gcdBarSupported and type(runtimeSupported) == "function" then
-            gcdBarSupported = runtimeSupported() == true
+        if gcdBarSupported then
+            gcdBarSupported = MSUF.Require("MSUF_GCDBar_IsSupported", FILE)() == true
         end
     end
     return gcdBarSupported
 end
 -- Search drops the GCD Bar rows where this page never builds the section.
 M.CastbarGCDBarSupported = GCDBarSupported
+-- Row factories for PageState.BuildCastControlSpecs. Each returns the row tuple
+-- that builder reads; `tooltip` text becomes the castbar tooltip titled with the label.
+local CAST_TIP = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
+local function Flow(key, default, label, x, y, labelWidth, reason, afterWrite, tooltip)
+    return { "flowToggle", key, default, { label }, { x, y },
+        labelWidth = labelWidth, reason = reason, afterWrite = afterWrite, tooltip = tooltip }
+end
+local function Slider(key, default, label, lo, hi, step, x, y, reason, afterWrite, tooltip)
+    return { "slider", key, default, { label, lo, hi, step, 300 }, { x, y, 320 },
+        reason = reason, afterWrite = afterWrite, tooltip = tooltip }
+end
+-- Hover reason of controls that follow a master toggle. Build time only: the refresh
+-- closures that apply the enabled state stay with their sections.
+local function GateReason(controls, label, isOn)
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        W.SetControlsDisabledReason(controls, W.TurnOnReason(label, isOn))
+    end
+end
 -- Section builders take the page state table built by CreateCastbarPageState
 -- (preview handle, refresh requests and the shared cast-control binders) and
 -- re-establish the binder names they use before their unchanged bodies.
@@ -52,12 +70,10 @@ local function BuildBehaviorSection(PageState, secBuilder)
     local BuildCastControlSpecs, ApplyAndRefresh, ApplyCastbarsIfNeeded, ShakeCastPreview = PageState.BuildCastControlSpecs,
         PageState.ApplyAndRefresh, PageState.ApplyCastbarsIfNeeded, PageState.ShakeCastPreview
     local behavior = Schema.Section(secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 224, true), PageState.ctx.key)
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(behavior, { "cast.interrupt_feedback" }, {
-            title = "Interrupt Feedback Color",
-            historySource = "menu:castbars-interrupt-feedback-color",
-        })
-    end
+    Schema.Colors(behavior, { "cast.interrupt_feedback" }, {
+        title = "Interrupt Feedback Color",
+        historySource = "menu:castbars-interrupt-feedback-color",
+    })
     local leftX, rightX = 14, 392
     local syncLastTick
     local function ApplyTicksAndSync(...)
@@ -65,132 +81,89 @@ local function BuildBehaviorSection(PageState, secBuilder)
         if syncLastTick then syncLastTick() end
     end
     local behaviorControls = BuildCastControlSpecs(behavior, {
-        { "flowToggle", "castbarInterruptShake", true, { "Shake on interrupt" }, { leftX, -42 },
-            labelWidth = 260, reason = "MSUF2_CASTBAR_SHAKE", afterWrite = ApplyAndRefresh },
-        { "slider", "castbarShakeStrength", 8, { "Shake strength", 0, 30, 1, 300 }, { leftX, -72, 320 },
-            reason = "MSUF2_CASTBAR_SHAKE_STRENGTH",
-            afterWrite = function(reason, value, applyQueued)
+        Flow("castbarInterruptShake", true, "Shake on interrupt", leftX, -42, 260, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh,
+            "Jolts a castbar sideways when the cast it shows is interrupted, so kicks are easy to notice. Applies to every castbar."),
+        Slider("castbarShakeStrength", 8, "Shake strength", 0, 30, 1, leftX, -72, "MSUF2_CASTBAR_SHAKE_STRENGTH",
+            function(reason, value, applyQueued)
                 ApplyCastbarsIfNeeded(reason, nil, applyQueued)
                 ShakeCastPreview(value)
-            end },
+            end,
+            "How far the bar jolts, in pixels. 0 turns the shake off even while Shake on interrupt is enabled."),
         { "slider", "castbarInterruptFeedbackDuration", 0.5, { "Interrupt display duration (sec)", 0, 5, 0.1, 300 }, { leftX, -126, 320 },
             reason = "MSUF2_CASTBAR_INTERRUPT_DURATION", precise = true, set = function(value)
                 local duration = max(0, min(5, tonumber(value) or 0.5))
                 SetG("castbarInterruptFeedbackDuration", duration, "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true })
                 MSUF.Castbars.Config.Refresh()
                 M.PlayCastbarPreviewInterrupt()
-            end },
-        { "flowToggle", "castbarUnifiedDirection", false, { "Always use fill direction for all casts" }, { rightX, -42 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_UNIFIED_DIRECTION", afterWrite = ApplyAndRefresh },
+            end,
+            tooltip = "How long an interrupted cast stays visible with the interrupt message before the bar hides. 0 hides it immediately." },
+        Flow("castbarUnifiedDirection", false, "Always use fill direction for all casts", rightX, -42, 360,
+            "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh,
+            "Makes channeled spells fill up like normal casts. Off keeps the classic look where a channel starts full and drains."),
         { "dropdown", "castbarFillDirection", "RTL", { "Castbar fill direction", VT("RTL", "Right to left (default)", "LTR",
             "Left to right"), 300 }, { rightX, -72, 300 },
-            reason = "MSUF2_CASTBAR_FILL_DIRECTION", afterWrite = ApplyAndRefresh },
-        { "flowToggle", "castbarOpositeDirectionTarget", false, { "Use opposite fill direction for target" }, { rightX, -126 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_TARGET_DIRECTION", afterWrite = ApplyAndRefresh },
-        { "flowToggle", "castbarShowChannelTicks", false, { "Spell-specific channel tick markers" }, { rightX, -150 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_TICKS", afterWrite = ApplyTicksAndSync },
-        { "flowToggle", "castbarAccentLastTick", false, { "Highlight last channel tick" }, { rightX, -178 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_LAST_TICK", afterWrite = ApplyAndRefresh },
+            reason = "MSUF2_CASTBAR_FILL_DIRECTION", afterWrite = ApplyAndRefresh,
+            tooltip = "Which way the bar grows during a cast, on every castbar. Channels drain the other way unless Always use fill direction for all casts is on." },
+        Flow("castbarOpositeDirectionTarget", false, "Use opposite fill direction for target", rightX, -126, 360,
+            "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh,
+            "Flips the fill direction on the Target castbar only, so it can mirror your Player castbar when the two frames face each other."),
+        Flow("castbarShowChannelTicks", false, "Spell-specific channel tick markers", rightX, -150, 360,
+            "MSUF2_CASTBAR_TICKS", ApplyTicksAndSync,
+            "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling."),
+        Flow("castbarAccentLastTick", false, "Highlight last channel tick", rightX, -178, 360, "MSUF2_CASTBAR_LAST_TICK", ApplyAndRefresh),
     }, "behavior")
-    if M.AddTooltip then
-        M.AddTooltip(behaviorControls.castbarShowChannelTicks,
-            "Spell-specific channel tick markers",
-            "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling.",
-            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
-        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
-        M.AddTooltip(behaviorControls.castbarInterruptShake, "Shake on interrupt",
-            "Jolts a castbar sideways when the cast it shows is interrupted, so kicks are easy to notice. Applies to every castbar.", tip)
-        M.AddTooltip(behaviorControls.castbarShakeStrength, "Shake strength",
-            "How far the bar jolts, in pixels. 0 turns the shake off even while Shake on interrupt is enabled.", tip)
-        M.AddTooltip(behaviorControls.castbarInterruptFeedbackDuration, "Interrupt display duration (sec)",
-            "How long an interrupted cast stays visible with the interrupt message before the bar hides. 0 hides it immediately.", tip)
-        M.AddTooltip(behaviorControls.castbarUnifiedDirection, "Always use fill direction for all casts",
-            "Makes channeled spells fill up like normal casts. Off keeps the classic look where a channel starts full and drains.", tip)
-        M.AddTooltip(behaviorControls.castbarFillDirection, "Castbar fill direction",
-            "Which way the bar grows during a cast, on every castbar. Channels drain the other way unless Always use fill direction for all casts is on.", tip)
-        M.AddTooltip(behaviorControls.castbarOpositeDirectionTarget, "Use opposite fill direction for target",
-            "Flips the fill direction on the Target castbar only, so it can mirror your Player castbar when the two frames face each other.", tip)
-    end
     -- The accent marks the last of the channel tick markers, so it needs them on.
     local lastTick = behaviorControls.castbarAccentLastTick
     local function TicksOn() return ReadGBool("castbarShowChannelTicks", false) end
-    if W.SetControlDisabledReason and W.TurnOnReason then
-        W.SetControlDisabledReason(lastTick, W.TurnOnReason("Spell-specific channel tick markers", TicksOn))
-    end
+    GateReason({ lastTick }, "Spell-specific channel tick markers", TicksOn)
     syncLastTick = function() SetControlEnabled(lastTick, TicksOn()) end
     M.TrackRefresh(PageState.ctx, syncLastTick)
 end
 local function BuildFilterSection(PageState, secBuilder)
-    local BuildCastControlSpecs, ApplyAndRefresh = PageState.BuildCastControlSpecs, PageState.ApplyAndRefresh
+    local ApplyAndRefresh = PageState.ApplyAndRefresh
     local filters = Schema.Section(secBuilder:CollapsibleSection("castbar_filters", "Filtering & Feedback", 110, false), PageState.ctx.key)
     local filterLeftX = 14
-    local filterControls = BuildCastControlSpecs(filters, {
-        { "flowToggle", "castbarHideTradeSkills", false, { "Hide profession casts" }, { filterLeftX, -46 },
-            labelWidth = 320, reason = "MSUF2_CASTBAR_HIDE_TRADESKILLS", afterWrite = ApplyAndRefresh },
-        { "flowToggle", "castbarShowPushback", false, { "Show cast pushback" }, { filterLeftX, -72 },
-            labelWidth = 320, reason = "MSUF2_CASTBAR_PUSHBACK", afterWrite = ApplyAndRefresh },
+    PageState.BuildCastControlSpecs(filters, {
+        Flow("castbarHideTradeSkills", false, "Hide profession casts", filterLeftX, -46, 320, "MSUF2_CASTBAR_HIDE_TRADESKILLS", ApplyAndRefresh,
+            "Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."),
+        Flow("castbarShowPushback", false, "Show cast pushback", filterLeftX, -72, 320, "MSUF2_CASTBAR_PUSHBACK", ApplyAndRefresh,
+            "Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."),
     }, "filters")
-    if M.AddTooltip then
-        M.AddTooltip(filterControls.castbarHideTradeSkills,
-            "Hide profession casts",
-            "Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP.",
-            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(filterControls.castbarShowPushback,
-            "Show cast pushback",
-            "Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar.",
-            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
-    end
 end
 local function BuildGCDSection(PageState, secBuilder)
     local ctx, BuildCastControlSpecs = PageState.ctx, PageState.BuildCastControlSpecs
     local gcd = Schema.Section(secBuilder:CollapsibleSection("castbar_gcd", "GCD Bar", 346, false), PageState.ctx.key)
     local gcdLeftX = 14
     local syncGCD
+    local RefreshGCDLayout = MSUF.Require("MSUF_GCDBar_RefreshLayout", FILE)
     -- The separate-bar controls depend on the master switch and on "Place GCD
     -- bar separately"; re-sync their enabled state after either changes.
     local function ApplyDetached(...)
-        local refreshLayout = _G.MSUF_GCDBar_RefreshLayout
-        if type(refreshLayout) == "function" then refreshLayout(...) end
+        RefreshGCDLayout(...)
         if syncGCD then syncGCD() end
     end
+    local setGCDBarEnabled
     local gcdControls = BuildCastControlSpecs(gcd, {
         { "switch", "showGCDBar", false, { "Show GCD bar for instant casts", gcdLeftX, -46, 300 },
             reason = "MSUF2_CASTBAR_GCD", afterWrite = function(_, enabled)
-                _G.MSUF_SetGCDBarEnabled(enabled and true or false)
+                setGCDBarEnabled = setGCDBarEnabled or MSUF.Require("MSUF_SetGCDBarEnabled", FILE)
+                setGCDBarEnabled(enabled and true or false)
                 if syncGCD then syncGCD() end
-            end },
-        { "flowToggle", "showGCDBarTime", true, { "GCD bar: show time text" }, { gcdLeftX, -78 },
-            labelWidth = 300, reason = "MSUF2_CASTBAR_GCD_TIME" },
-        { "flowToggle", "showGCDBarSpell", true, { "GCD bar: show spell name + icon" }, { gcdLeftX, -104 },
-            labelWidth = 300, reason = "MSUF2_CASTBAR_GCD_SPELL" },
-        { "flowToggle", "gcdBarDetached", false, { "Place GCD bar separately" }, { gcdLeftX, -134 },
-            labelWidth = 340, reason = "MSUF2_CASTBAR_GCD_DETACHED", afterWrite = ApplyDetached },
-        { "flowToggle", "gcdBarIdle", false, { "Keep separate GCD background visible" }, { gcdLeftX, -160 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_GCD_IDLE", afterWrite = _G.MSUF_GCDBar_RefreshLayout },
-        { "flowToggle", "gcdBarCombatOnly", false, { "Separate GCD bar only in combat" }, { gcdLeftX, -186 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_GCD_COMBAT", afterWrite = _G.MSUF_GCDBar_RefreshLayout },
-        { "slider", "gcdBarWidth", 180, { "Separate GCD bar width", 40, 600, 1, 300 }, { gcdLeftX, -218, 320 },
-            reason = "MSUF2_CASTBAR_GCD_WIDTH", afterWrite = _G.MSUF_GCDBar_RefreshLayout },
-        { "slider", "gcdBarHeight", 12, { "Separate GCD bar height", 4, 50, 1, 300 }, { gcdLeftX, -272, 320 },
-            reason = "MSUF2_CASTBAR_GCD_HEIGHT", afterWrite = _G.MSUF_GCDBar_RefreshLayout },
-        { "slider", "gcdBarX", 0, { "Separate GCD horizontal position", -2000, 2000, 1, 300 }, { 392, -46, 320 },
-            reason = "MSUF2_CASTBAR_GCD_X", afterWrite = _G.MSUF_GCDBar_RefreshLayout },
-        { "slider", "gcdBarY", -180, { "Separate GCD vertical position", -1500, 1500, 1, 300 }, { 392, -104, 320 },
-            reason = "MSUF2_CASTBAR_GCD_Y", afterWrite = _G.MSUF_GCDBar_RefreshLayout },
-        { "slider", "gcdBarOpacity", 100, { "Separate GCD opacity (percent)", 0, 100, 5, 300 }, { 392, -162, 320 },
-            reason = "MSUF2_CASTBAR_GCD_ALPHA", afterWrite = _G.MSUF_GCDBar_RefreshLayout },
+            end,
+            tooltip = "Runs a short castbar for the global cooldown whenever an instant spell triggers it.\n\nThe fill and time text are driven natively by the client from the real (haste-scaled) GCD duration - no per-frame addon work while the bar runs. A real cast, channel or empower always takes priority." },
+        Flow("showGCDBarTime", true, "GCD bar: show time text", gcdLeftX, -78, 300, "MSUF2_CASTBAR_GCD_TIME", nil,
+            "Shows the remaining global cooldown in the Player castbar time text while the GCD bar runs."),
+        Flow("showGCDBarSpell", true, "GCD bar: show spell name + icon", gcdLeftX, -104, 300, "MSUF2_CASTBAR_GCD_SPELL", nil,
+            "Writes the instant spell's name on the GCD bar and shows its icon. Off leaves the spell text blank."),
+        Flow("gcdBarDetached", false, "Place GCD bar separately", gcdLeftX, -134, 340, "MSUF2_CASTBAR_GCD_DETACHED", ApplyDetached),
+        Flow("gcdBarIdle", false, "Keep separate GCD background visible", gcdLeftX, -160, 360, "MSUF2_CASTBAR_GCD_IDLE", RefreshGCDLayout),
+        Flow("gcdBarCombatOnly", false, "Separate GCD bar only in combat", gcdLeftX, -186, 360, "MSUF2_CASTBAR_GCD_COMBAT", RefreshGCDLayout),
+        Slider("gcdBarWidth", 180, "Separate GCD bar width", 40, 600, 1, gcdLeftX, -218, "MSUF2_CASTBAR_GCD_WIDTH", RefreshGCDLayout),
+        Slider("gcdBarHeight", 12, "Separate GCD bar height", 4, 50, 1, gcdLeftX, -272, "MSUF2_CASTBAR_GCD_HEIGHT", RefreshGCDLayout),
+        Slider("gcdBarX", 0, "Separate GCD horizontal position", -2000, 2000, 1, 392, -46, "MSUF2_CASTBAR_GCD_X", RefreshGCDLayout),
+        Slider("gcdBarY", -180, "Separate GCD vertical position", -1500, 1500, 1, 392, -104, "MSUF2_CASTBAR_GCD_Y", RefreshGCDLayout),
+        Slider("gcdBarOpacity", 100, "Separate GCD opacity (percent)", 0, 100, 5, 392, -162, "MSUF2_CASTBAR_GCD_ALPHA", RefreshGCDLayout),
     }, "gcd")
-    if M.AddTooltip then
-        M.AddTooltip(gcdControls.showGCDBar,
-            "Show GCD bar for instant casts",
-            "Runs a short castbar for the global cooldown whenever an instant spell triggers it.\n\nThe fill and time text are driven natively by the client from the real (haste-scaled) GCD duration - no per-frame addon work while the bar runs. A real cast, channel or empower always takes priority.",
-            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
-        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
-        M.AddTooltip(gcdControls.showGCDBarTime, "GCD bar: show time text",
-            "Shows the remaining global cooldown in the Player castbar time text while the GCD bar runs.", tip)
-        M.AddTooltip(gcdControls.showGCDBarSpell, "GCD bar: show spell name + icon",
-            "Writes the instant spell's name on the GCD bar and shows its icon. Off leaves the spell text blank.", tip)
-    end
     local masterControls = { gcdControls.showGCDBarTime, gcdControls.showGCDBarSpell, gcdControls.gcdBarDetached }
     local detachedControls = {}
     for _, key in ipairs({ "gcdBarIdle", "gcdBarCombatOnly", "gcdBarWidth", "gcdBarHeight", "gcdBarX", "gcdBarY", "gcdBarOpacity" }) do
@@ -213,20 +186,18 @@ local function BuildTexturesSection(PageState, secBuilder)
     local ApplyCastbarTextures, RequestCastPreviewRefresh, BuildCastControlSpecs = PageState.ApplyCastbarTextures,
         PageState.RequestCastPreviewRefresh, PageState.BuildCastControlSpecs
     local textures = Schema.Section(secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 246, false), PageState.ctx.key)
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(textures, {
-            "cast.interruptible", "cast.non_interruptible", "cast.background", "cast.border",
-        }, {
-            title = "Castbar Colors",
-            historySource = "menu:castbars-texture-colors",
-        })
-    end
+    Schema.Colors(textures, {
+        "cast.interruptible", "cast.non_interruptible", "cast.background", "cast.border",
+    }, {
+        title = "Castbar Colors",
+        historySource = "menu:castbars-texture-colors",
+    })
     local texLeftX, texRightX = 14, 392
     local function ApplyTexturesAndPreview(reason, _, applyQueued)
         if applyQueued ~= true then ApplyCastbarTextures(reason) end
         RequestCastPreviewRefresh()
     end
-    local textureControls = BuildCastControlSpecs(textures, {
+    BuildCastControlSpecs(textures, {
         { "dropdown", "castbarTexture", "Blizzard", { "Castbar texture", function() return TextureValues(nil) end, 300 }, { texLeftX, -42, 300 },
             reason = "MSUF2_CASTBAR_TEXTURE", afterWrite = ApplyTexturesAndPreview },
         { "dropdown", "castbarBackgroundTexture", "Blizzard", { "Castbar background texture",
@@ -235,30 +206,18 @@ local function BuildTexturesSection(PageState, secBuilder)
                 local v = ReadG("castbarBackgroundTexture", nil)
                 return (type(v) == "string" and v ~= "") and v or ReadG("castbarTexture", "Blizzard")
             end },
-        { "slider", "castbarOutlineThickness", 1, { "Outline thickness", 0, 6, 1, 300 }, { texRightX, -42, 320 },
-            reason = "MSUF2_CASTBAR_OUTLINE", afterWrite = ApplyTexturesAndPreview },
-        { "flowToggle", "castbarShowGlow", false, { "Show castbar glow effect" }, { texRightX, -96 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_GLOW", afterWrite = ApplyTexturesAndPreview },
-        { "flowToggle", "castbarShowLatency", true, { "Show latency indicator" }, { texRightX, -120 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_LATENCY", afterWrite = ApplyTexturesAndPreview },
-        { "flowToggle", "castbarShowSpark", false, { "Show spark (leading edge highlight)" }, { texRightX, -144 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_SPARK", afterWrite = ApplyTexturesAndPreview },
-        { "flowToggle", "castbarSparkOverflow", true, { "Spark extends beyond bar" }, { texRightX, -168 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_SPARK_OVERFLOW", afterWrite = ApplyTexturesAndPreview },
-        { "flowToggle", "castbarShowLatencyText", false, { "Show network latency in milliseconds" }, { texRightX, -196 },
-            labelWidth = 360, reason = "MSUF2_CASTBAR_LATENCY_TEXT", afterWrite = ApplyTexturesAndPreview },
+        Slider("castbarOutlineThickness", 1, "Outline thickness", 0, 6, 1, texRightX, -42, "MSUF2_CASTBAR_OUTLINE", ApplyTexturesAndPreview,
+            "Width of the border around each castbar, in pixels; 0 removes it. The Interrupt Ready border style colors this border, so keep it above 0 for that style."),
+        Flow("castbarShowGlow", false, "Show castbar glow effect", texRightX, -96, 360, "MSUF2_CASTBAR_GLOW", ApplyTexturesAndPreview,
+            "Gradually brightens the bar toward white as a cast nears its end, so the last moment of a cast is easy to spot."),
+        Flow("castbarShowLatency", true, "Show latency indicator", texRightX, -120, 360, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview,
+            "Shades the end of the Player castbar by your latency or spell queue window, whichever is larger, to help time your next spell. Player castbar only."),
+        Flow("castbarShowSpark", false, "Show spark (leading edge highlight)", texRightX, -144, 360, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview),
+        Flow("castbarSparkOverflow", true, "Spark extends beyond bar", texRightX, -168, 360, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview,
+            "Lets the spark stick out above and below the bar at about twice its height. Only matters while the spark is shown."),
+        Flow("castbarShowLatencyText", false, "Show network latency in milliseconds", texRightX, -196, 360,
+            "MSUF2_CASTBAR_LATENCY_TEXT", ApplyTexturesAndPreview),
     }, "textures")
-    if M.AddTooltip and textureControls then
-        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
-        M.AddTooltip(textureControls.castbarOutlineThickness, "Outline thickness",
-            "Width of the border around each castbar, in pixels; 0 removes it. The Interrupt Ready border style colors this border, so keep it above 0 for that style.", tip)
-        M.AddTooltip(textureControls.castbarShowGlow, "Show castbar glow effect",
-            "Gradually brightens the bar toward white as a cast nears its end, so the last moment of a cast is easy to spot.", tip)
-        M.AddTooltip(textureControls.castbarShowLatency, "Show latency indicator",
-            "Shades the end of the Player castbar by your latency or spell queue window, whichever is larger, to help time your next spell. Player castbar only.", tip)
-        M.AddTooltip(textureControls.castbarSparkOverflow, "Spark extends beyond bar",
-            "Lets the spark stick out above and below the bar at about twice its height. Only matters while the spark is shown.", tip)
-    end
 end
 local function BuildEmpoweredSection(PageState, secBuilder)
     local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ShowEmpoweredPreview = PageState.ctx,
@@ -271,21 +230,18 @@ local function BuildEmpoweredSection(PageState, secBuilder)
         ShowEmpoweredPreview()
     end
     local empoweredControls = BuildCastControlSpecs(empowered, {
-        { "flowToggle", "empowerColorStages", true, { "Add color to stages (Empowered casts)" }, { empoweredLeftX, -42 },
-            labelWidth = 300, reason = "MSUF2_CASTBAR_EMPOWER_COLOR", afterWrite = ApplyEmpoweredPreview },
-        { "flowToggle", "empowerStageBlink", true, { "Add stage blink (Empowered casts)" }, { empoweredLeftX, -68 },
-            labelWidth = 300, reason = "MSUF2_CASTBAR_EMPOWER_BLINK", afterWrite = function(reason, value, applyQueued)
+        Flow("empowerColorStages", true, "Add color to stages (Empowered casts)", empoweredLeftX, -42, 300,
+            "MSUF2_CASTBAR_EMPOWER_COLOR", ApplyEmpoweredPreview),
+        Flow("empowerStageBlink", true, "Add stage blink (Empowered casts)", empoweredLeftX, -68, 300, "MSUF2_CASTBAR_EMPOWER_BLINK",
+            function(reason, value, applyQueued)
                 ApplyEmpoweredPreview(reason, value, applyQueued)
                 if syncEmpowered then syncEmpowered() end
-            end },
+            end),
         { "slider", "empowerStageBlinkTime", 0.25, { "Stage blink time (sec)", 0.05, 1.00, 0.01, 300 }, { empoweredRightX, -42, 320 },
             reason = "MSUF2_CASTBAR_EMPOWER_TIME", afterWrite = ApplyEmpoweredPreview, precise = true },
     }, "empowered")
     local blinkControls = { empoweredControls.empowerStageBlinkTime }
-    if W.SetControlsDisabledReason and W.TurnOnReason then
-        W.SetControlsDisabledReason(blinkControls,
-            W.TurnOnReason("Add stage blink (Empowered casts)", function() return ReadGBool("empowerStageBlink", true) end))
-    end
+    GateReason(blinkControls, "Add stage blink (Empowered casts)", function() return ReadGBool("empowerStageBlink", true) end)
     syncEmpowered = function() SetControlsEnabled(blinkControls, ReadGBool("empowerStageBlink", true)) end
     M.TrackRefresh(ctx, syncEmpowered)
 end
@@ -293,21 +249,19 @@ local function BuildNameShorteningSection(PageState, secBuilder)
     local ctx, BuildCastControlSpecs, ApplyAndRefresh, RequestCastPreviewRefresh = PageState.ctx,
         PageState.BuildCastControlSpecs, PageState.ApplyAndRefresh, PageState.RequestCastPreviewRefresh
     local text = Schema.Section(secBuilder:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false), PageState.ctx.key)
-    if W.AttachContextColorShortcut then
-        W.AttachContextColorShortcut(text, {
-            title = "Cast Text Settings",
-            historyLabel = "Cast text color",
-            historySource = "menu:castbars-name-text-color",
-            textSettings = {
-                scope = "shared",
-                kind = "cast",
-                colorReferences = { "cast.text" },
-                colorTitle = "Cast Text Color",
-                subtitle = "Castbar font style follows the shared Fonts settings.",
-                capabilities = { baseline = false },
-            },
-        })
-    end
+    Schema.Colors(text, nil, {
+        title = "Cast Text Settings",
+        historyLabel = "Cast text color",
+        historySource = "menu:castbars-name-text-color",
+        textSettings = {
+            scope = "shared",
+            kind = "cast",
+            colorReferences = { "cast.text" },
+            colorTitle = "Cast Text Color",
+            subtitle = "Castbar font style follows the shared Fonts settings.",
+            capabilities = { baseline = false },
+        },
+    })
     local textLeftX, textRightX = 14, 392
     local syncNameShortening
     local function NameShorteningEnabled() return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1 end
@@ -317,46 +271,34 @@ local function BuildNameShorteningSection(PageState, secBuilder)
                 SetG("castbarSpellNameShortening", v and 1 or 0, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
                 RequestCastPreviewRefresh()
                 if syncNameShortening then syncNameShortening() end
-            end },
-        { "slider", "castbarSpellNameMaxLen", 30, { "Max name length", 6, 30, 1, 300 }, { textRightX, -42, 320 },
-            reason = "MSUF2_CASTBAR_NAME_MAX", afterWrite = ApplyAndRefresh },
-        { "slider", "castbarSpellNameReservedSpace", 8, { "Reserved space", 0, 30, 1, 300 }, { textRightX, -96, 320 },
-            reason = "MSUF2_CASTBAR_NAME_RESERVED", afterWrite = ApplyAndRefresh },
+            end,
+            tooltip = "Cuts long spell names on every castbar to Max name length and marks the cut with '...'. Reserved space applies only while this is on." },
+        Slider("castbarSpellNameMaxLen", 30, "Max name length", 6, 30, 1, textRightX, -42, "MSUF2_CASTBAR_NAME_MAX", ApplyAndRefresh,
+            "Spell names longer than this many characters are cut and end in '...'. Names are also trimmed to fit the free bar width, so narrow bars may show fewer."),
+        Slider("castbarSpellNameReservedSpace", 8, "Reserved space", 0, 30, 1, textRightX, -96, "MSUF2_CASTBAR_NAME_RESERVED", ApplyAndRefresh,
+            "Keeps this many extra pixels free next to the spell name, on top of the room kept for the cast time, so long names stay clear of the timer."),
     }, "name_shortening")
     local nameShorteningControls = { textControls.castbarSpellNameMaxLen, textControls.castbarSpellNameReservedSpace }
-    if M.AddTooltip then
-        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
-        M.AddTooltip(textControls.shorten, "Spell name shortening",
-            "Cuts long spell names on every castbar to Max name length and marks the cut with '...'. Reserved space applies only while this is on.", tip)
-        M.AddTooltip(textControls.castbarSpellNameMaxLen, "Max name length",
-            "Spell names longer than this many characters are cut and end in '...'. Names are also trimmed to fit the free bar width, so narrow bars may show fewer.", tip)
-        M.AddTooltip(textControls.castbarSpellNameReservedSpace, "Reserved space",
-            "Keeps this many extra pixels free next to the spell name, on top of the room kept for the cast time, so long names stay clear of the timer.", tip)
-    end
-    if W.SetControlsDisabledReason and W.TurnOnReason then
-        W.SetControlsDisabledReason(nameShorteningControls, W.TurnOnReason("Spell name shortening", NameShorteningEnabled))
-    end
+    GateReason(nameShorteningControls, "Spell name shortening", NameShorteningEnabled)
     syncNameShortening = function() SetControlsEnabled(nameShorteningControls, NameShorteningEnabled()) end
     M.TrackRefresh(ctx, syncNameShortening)
 end
 local function BuildFocusKickSection(PageState, secBuilder)
     local ctx, BuildCastControlSpecs = PageState.ctx, PageState.BuildCastControlSpecs
     local focusKick = Schema.Section(secBuilder:CollapsibleSection("castbar_focus_kick", "Focus Kick", 352, false), PageState.ctx.key)
-    if W.AttachContextColorShortcut then
-        W.AttachContextColorShortcut(focusKick, {
-            title = "Focus Kick Text & Colors",
-            historyLabel = "Focus Kick color",
-            historySource = "menu:castbars-focus-kick-colors",
-            textSettings = {
-                scope = "shared",
-                kind = "cast",
-                colorReferences = { "font.global", "cast.kick_ready", "cast.kick_not_ready" },
-                colorTitle = "Focus Kick Colors",
-                subtitle = "Focus Kick text follows the shared Fonts settings.",
-                capabilities = { shadow = false, opacity = false, baseline = false },
-            },
-        })
-    end
+    Schema.Colors(focusKick, nil, {
+        title = "Focus Kick Text & Colors",
+        historyLabel = "Focus Kick color",
+        historySource = "menu:castbars-focus-kick-colors",
+        textSettings = {
+            scope = "shared",
+            kind = "cast",
+            colorReferences = { "font.global", "cast.kick_ready", "cast.kick_not_ready" },
+            colorTitle = "Focus Kick Colors",
+            subtitle = "Focus Kick text follows the shared Fonts settings.",
+            capabilities = { shadow = false, opacity = false, baseline = false },
+        },
+    })
     local focusHint = Schema.Build(ctx, focusKick, {
         { "text", "menu2.opt_castbar.focusKick.focusHint", nil,
             { "Track interrupts on your focus with a detached kick icon, optionally alongside the Focus castbar.", 14, -38,
@@ -366,6 +308,11 @@ local function BuildFocusKickSection(PageState, secBuilder)
     focusKick._msuf2CursorY = -68
     local focusLeftX, focusRightX = 14, 392
     local syncFocusKick
+    -- Providers resolve on first use (the page needs them only once an option changes) and are
+    -- called as upvalues afterwards; the focus-kick preview state resolves once when the
+    -- section builds.
+    local updateOptions, applyTimeFont, forceUpdate, refreshKickReady, setPreviewEnabled
+    local isPreviewEnabled = MSUF.Require("MSUF_FocusKick_IsPreviewEnabled", FILE)
     local focusKickOptionsQueued = false
     local focusKickTextFontQueued = false
     local function ApplyFocusKickOptions()
@@ -373,7 +320,8 @@ local function BuildFocusKickSection(PageState, secBuilder)
         focusKickOptionsQueued = true
         ScheduleCastbarPageWork("MSUF2_FOCUS_KICK_OPTIONS", CASTBAR_PAGE_WORK_DELAY, function()
             focusKickOptionsQueued = false
-            _G.MSUF_UpdateFocusKickIconOptions()
+            updateOptions = updateOptions or MSUF.Require("MSUF_UpdateFocusKickIconOptions", FILE)
+            updateOptions()
         end)
     end
     local function RequestFocusKickTextFont()
@@ -381,29 +329,38 @@ local function BuildFocusKickSection(PageState, secBuilder)
         focusKickTextFontQueued = true
         ScheduleCastbarPageWork("MSUF2_FOCUS_KICK_TEXT_FONT", CASTBAR_PAGE_WORK_DELAY, function()
             focusKickTextFontQueued = false
-            _G.MSUF_FocusKick_ApplyTimeTextFont()
+            applyTimeFont = applyTimeFont or MSUF.Require("MSUF_FocusKick_ApplyTimeTextFont", FILE)
+            applyTimeFont()
         end)
     end
     local focusControls = BuildCastControlSpecs(focusKick, {
         { "switch", "enableFocusKickIcon", false, { "Focus interrupt tracker", focusLeftX, -74, 260 },
             reason = "MSUF2_FOCUS_KICK_ENABLE", name = "enable", afterWrite = function(_, enabled)
-                _G.MSUF_FocusKickDriver_ForceUpdate()
-                _G.MSUF_KickReady_RefreshAll()
+                forceUpdate = forceUpdate or MSUF.Require("MSUF_FocusKickDriver_ForceUpdate", FILE)
+                forceUpdate()
+                refreshKickReady = refreshKickReady or MSUF.Require("MSUF_KickReady_RefreshAll", FILE)
+                refreshKickReady()
                 ApplyFocusKickOptions()
-                if not enabled then _G.MSUF_FocusKick_SetPreviewEnabled(false) end
+                if not enabled then
+                    setPreviewEnabled = setPreviewEnabled or MSUF.Require("MSUF_FocusKick_SetPreviewEnabled", FILE)
+                    setPreviewEnabled(false)
+                end
                 if syncFocusKick then syncFocusKick() end
             end },
         { "flowToggle", "preview", nil, { "Show on-screen preview" }, { focusLeftX, -100 },
             labelWidth = 300, name = "preview", get = function()
-                local fn = _G.MSUF_FocusKick_IsPreviewEnabled
-                return type(fn) == "function" and fn() or false
-            end, set = function(v) _G.MSUF_FocusKick_SetPreviewEnabled(v and true or false) end, classification = "ephemeral" },
+                return isPreviewEnabled() or false
+            end, set = function(v)
+                setPreviewEnabled = setPreviewEnabled or MSUF.Require("MSUF_FocusKick_SetPreviewEnabled", FILE)
+                setPreviewEnabled(v and true or false)
+            end, classification = "ephemeral" },
         { "flowToggle", "focusKickShowCastbar", false, { "Show castbar with Focus Kick icon" }, { focusLeftX, -126 },
             labelWidth = 340, reason = "MSUF2_FOCUS_KICK_CASTBAR", name = "show_castbar", set = function(v)
                 if M.SetGeneralValue("focusKickShowCastbar", v and true or false, "MSUF2_FOCUS_KICK_CASTBAR",
                     { applyAll = false, preview = false, notify = false }) then
                     MSUF.Castbars.Config.Refresh()
-                    _G.MSUF_FocusKickDriver_ForceUpdate()
+                    forceUpdate = forceUpdate or MSUF.Require("MSUF_FocusKickDriver_ForceUpdate", FILE)
+                    forceUpdate()
                 end
             end },
         { "slider", "focusKickIconWidth", 40, { "Width", 16, 128, 1, 300 }, { focusRightX, -74, 320 },
@@ -441,12 +398,9 @@ local function BuildFocusKickSection(PageState, secBuilder)
     }).resetPosition
     RegisterControl(resetFocus, Meta("focus_kick.reset_position", "action"), "Reset Position", "button")
     Schema.Owned(resetFocus, ctx.key, "castbar")
-    local focusKickControls = { focusControls.preview, focusControls.show_castbar, focusControls.width, focusControls.height, focusControls.text,
-        focusControls.x, focusControls.y, resetFocus }
-    if W.SetControlsDisabledReason and W.TurnOnReason then
-        W.SetControlsDisabledReason(focusKickControls,
-            W.TurnOnReason("Focus interrupt tracker", function() return ReadGBool("enableFocusKickIcon", false) end))
-    end
+    local focusKickControls = { focusControls.preview, focusControls.show_castbar, focusControls.width, focusControls.height,
+        focusControls.text, focusControls.x, focusControls.y, resetFocus }
+    GateReason(focusKickControls, "Focus interrupt tracker", function() return ReadGBool("enableFocusKickIcon", false) end)
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
 end
@@ -486,18 +440,16 @@ local function BuildInterruptReadySection(PageState, secBuilder)
     -- A shown nameplate switch under four castbar toggles moves the placement block down a row.
     local placementShift = (nameplatesTitle and #unitToggles >= 4) and 26 or 0
     local kick = Schema.Section(secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 382, false), PageState.ctx.key)
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(kick, function()
-            if tostring(ReadG("kickReadyStyle", "border") or "border"):lower() == "fill" then
-                return { "cast.interruptible", "cast.interrupt_unavailable" }
-            end
-            return { "cast.kick_ready", "cast.kick_not_ready" }
-        end, {
-            title = "Interrupt Ready Colors",
-            note = "The shown colors follow the selected indicator style.",
-            historySource = "menu:castbars-interrupt-ready-colors",
-        })
-    end
+    Schema.Colors(kick, function()
+        if tostring(ReadG("kickReadyStyle", "border") or "border"):lower() == "fill" then
+            return { "cast.interruptible", "cast.interrupt_unavailable" }
+        end
+        return { "cast.kick_ready", "cast.kick_not_ready" }
+    end, {
+        title = "Interrupt Ready Colors",
+        note = "The shown colors follow the selected indicator style.",
+        historySource = "menu:castbars-interrupt-ready-colors",
+    })
     local kickLeftX, kickRightX = 14, 392
     local function Heading(id, text, x, y)
         local key = "menu2.opt_castbar.interrupt_ready.heading." .. id
@@ -512,45 +464,45 @@ local function BuildInterruptReadySection(PageState, secBuilder)
     end
     Heading("castbars", "Castbars", kickLeftX, -38)
     Heading("appearance", "Appearance", kickRightX, -38)
-    local syncKickReady
+    local syncKickReady, refreshKickReady
     local function ApplyKickReady(reason, _, applyQueued)
         ApplyCastbarsIfNeeded(reason, nil, applyQueued)
-        _G.MSUF_KickReady_RefreshAll()
+        refreshKickReady = refreshKickReady or MSUF.Require("MSUF_KickReady_RefreshAll", FILE)
+        refreshKickReady()
         RequestCastPreviewRefresh()
         if syncKickReady then syncKickReady() end
     end
     local kickSpecs = {}
     for _, unitToggle in ipairs(unitToggles) do
-        kickSpecs[#kickSpecs + 1] = { "flowToggle", unitToggle[3], false, { unitToggle[2] }, { kickLeftX, -56 - #kickSpecs * 26 },
-            labelWidth = 300, reason = "MSUF2_KICK_READY_ENABLE", afterWrite = ApplyKickReady }
+        kickSpecs[#kickSpecs + 1] = Flow(unitToggle[3], false, unitToggle[2], kickLeftX, -56 - #kickSpecs * 26, 300,
+            "MSUF2_KICK_READY_ENABLE", ApplyKickReady)
     end
-    kickSpecs[#kickSpecs + 1] = { "flowToggle", "kickReadyShowNameplates", false,
-        { "Show on enemy nameplates (MSUF Suite)" }, { kickLeftX, -56 - #kickSpecs * 26 },
-            labelWidth = 300, reason = "MSUF2_KICK_READY_ENABLE", afterWrite = ApplyKickReady }
+    kickSpecs[#kickSpecs + 1] = Flow("kickReadyShowNameplates", false, "Show on enemy nameplates (MSUF Suite)",
+        kickLeftX, -56 - #kickSpecs * 26, 300, "MSUF2_KICK_READY_ENABLE", ApplyKickReady)
     kickSpecs[#kickSpecs + 1] = { "dropdown", "kickReadyStyle", "border", { "Indicator style", VT("border", "Castbar border",
         "box", "Color box next to cast", "fill", "Unavailable cast fill"), 300 }, { kickRightX, -56, 300 },
             reason = "MSUF2_KICK_READY_STYLE", afterWrite = ApplyKickReady }
-    kickSpecs[#kickSpecs + 1] = { "slider", "kickReadySize", 16, { "Indicator size", 8, 32, 1, 300 }, { kickRightX, -110, 320 },
-            reason = "MSUF2_KICK_READY_SIZE", afterWrite = ApplyAndRefresh }
-    kickSpecs[#kickSpecs + 1] = { "flowToggle", "kickReadyAutoSize", true, { "Auto-size to castbar height" }, { kickRightX, -164 },
-            labelWidth = 360, reason = "MSUF2_KICK_READY_AUTO", afterWrite = ApplyKickReady }
+    kickSpecs[#kickSpecs + 1] = Slider("kickReadySize", 16, "Indicator size", 8, 32, 1, kickRightX, -110,
+        "MSUF2_KICK_READY_SIZE", ApplyAndRefresh)
+    kickSpecs[#kickSpecs + 1] = Flow("kickReadyAutoSize", true, "Auto-size to castbar height", kickRightX, -164, 360,
+        "MSUF2_KICK_READY_AUTO", ApplyKickReady)
     local kickControls = BuildCastControlSpecs(kick, kickSpecs, "interrupt_ready")
     local colorHint = Schema.Build(ctx, kick, {
         { "text", "menu2.opt_castbar.kick.colorHint", nil, { "Colors: Colors menu > Castbar Colors", kickRightX, -196, 370, T.colors.muted } },
     })["menu2.opt_castbar.kick.colorHint"]
     Heading("placement", "Placement", kickLeftX, -172 - placementShift)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
-        { "flowToggle", "kickReadyTimeMarker", false, { "Show interrupt availability markers" }, { kickRightX, -216 },
-            labelWidth = 370, reason = "MSUF2_KICK_TIME_MARKER", afterWrite = ApplyKickReady },
-        { "flowToggle", "kickReadyTimeSegment", false, { "Shade cast time after interrupts recover" }, { kickRightX, -244 },
-            labelWidth = 370, reason = "MSUF2_KICK_TIME_SEGMENT", afterWrite = ApplyKickReady },
+        Flow("kickReadyTimeMarker", false, "Show interrupt availability markers", kickRightX, -216, 370,
+            "MSUF2_KICK_TIME_MARKER", ApplyKickReady),
+        Flow("kickReadyTimeSegment", false, "Shade cast time after interrupts recover", kickRightX, -244, 370,
+            "MSUF2_KICK_TIME_SEGMENT", ApplyKickReady),
         { "dropdown", "kickReadyAnchor", "RIGHT", { "Anchor", VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM",
             "Bottom"), 260 }, { kickLeftX, -190 - placementShift, 260 },
             reason = "MSUF2_KICK_READY_ANCHOR", afterWrite = ApplyCastbarsIfNeeded },
-        { "slider", "kickReadyOffsetX", 4, { "X offset", -50, 50, 1, 300 }, { kickLeftX, -244 - placementShift, 320 },
-            reason = "MSUF2_KICK_READY_X", afterWrite = ApplyCastbarsIfNeeded },
-        { "slider", "kickReadyOffsetY", 0, { "Y offset", -50, 50, 1, 300 }, { kickLeftX, -298 - placementShift, 320 },
-            reason = "MSUF2_KICK_READY_Y", afterWrite = ApplyCastbarsIfNeeded },
+        Slider("kickReadyOffsetX", 4, "X offset", -50, 50, 1, kickLeftX, -244 - placementShift,
+            "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded),
+        Slider("kickReadyOffsetY", 0, "Y offset", -50, 50, 1, kickLeftX, -298 - placementShift,
+            "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded),
     }, "interrupt_ready.placement"))
     local nameplateToggle = kickControls.kickReadyShowNameplates
     if not nameplatesTitle then
@@ -582,9 +534,12 @@ local function BuildInterruptReadySection(PageState, secBuilder)
     M.TrackRefresh(ctx, syncKickReady)
 end
 local function CreateCastbarPageState(ctx, b)
+    local updateTextures, updateBossPreview
     local function ApplyCastbarTextures(reason)
-        _G.MSUF_UpdateCastbarTextures_Immediate()
-        _G.MSUF_UpdateBossCastbarPreview()
+        updateTextures = updateTextures or MSUF.Require("MSUF_UpdateCastbarTextures_Immediate", FILE)
+        updateTextures()
+        updateBossPreview = updateBossPreview or MSUF.Require("MSUF_UpdateBossCastbarPreview", FILE)
+        updateBossPreview()
         ApplyCastbars(reason or "MSUF2_CASTBAR_TEXTURES")
     end
     local castPreview, castPreviewSection, fixedPreview = BuildCastbarPagePreview(ctx, b)
@@ -651,6 +606,7 @@ local function CreateCastbarPageState(ctx, b)
         local controls = Schema.Build(ctx, parent, rows, options)
         for _, row in ipairs(rows) do
             if row.name then controls[row.name] = controls[row[2]] end
+            if row.tooltip and M.AddTooltip then M.AddTooltip(controls[row[2]], row[4][1], row.tooltip, CAST_TIP) end
         end
         return controls
     end

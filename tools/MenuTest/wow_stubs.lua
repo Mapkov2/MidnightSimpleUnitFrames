@@ -304,8 +304,22 @@ local MSUF = G.MSUF_NS or {}
 G.MSUF_NS = MSUF
 MSUF.MSUF2 = MSUF.MSUF2 or {}
 MSUF.LSM = MSUF.LSM or mediaLibrary
-MSUF.ExportPublic = MSUF.ExportPublic or function(name, value)
-    G[name] = value
+MSUF.Public = MSUF.Public or {}
+MSUF.API = MSUF.Public
+MSUF.PublicGlobals = MSUF.PublicGlobals or {}
+MSUF.Compat = MSUF.Compat or {}
+MSUF.Compat.LegacyGlobals = MSUF.Compat.LegacyGlobals or {}
+MSUF.ExportPublic = MSUF.ExportPublic or function(name, value, publishGlobal)
+    if type(name) == "string" and name ~= "" then
+        local key = name:sub(1, 5) == "MSUF_" and name:sub(6) or name
+        MSUF.Public[key] = value
+        MSUF.PublicGlobals[name] = value
+        -- Keep the menu fixture permissive while mirroring namespace publication.
+        if publishGlobal ~= false then
+            G[name] = value
+            MSUF.Compat.LegacyGlobals[name] = true
+        end
+    end
     return value
 end
 

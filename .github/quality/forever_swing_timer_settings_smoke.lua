@@ -167,6 +167,11 @@ ns.LSM={
     RegisterCallback=function() end,
 }
 ns.ExportPublic=function(key,value) _G[key]=value end
+-- Kernel/MSUF_Util.lua's pixel layout, which SwingTimer requires: fixtures lay out no pixels.
+_G.MSUF_PixelLayoutRegion=function(region,policy,...)
+    if type(policy)=="string" then return region[policy](region,...) end
+    return region
+end
 assert(loadfile(root.."/tools/tests/runtime_media_fixture.lua"))().LoadFonts(root, ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Modules.lua"))("MSUF",ns)
 _G.MSUF_DB={}
@@ -383,10 +388,14 @@ end
 function W.Color() error("inline swing color widgets must not be allocated") end
 function W.AttachContextColorShortcut(section,options) shortcuts[section]=options end
 local page
-ns.Require=function(name)
+local kernelRequire=ns.Require
+ns.Require=function(name,...)
     if name=="MSUF_NormalizeProfileDefaults" then
         return function() error("Swing defaults must remain owned by SwingTimer") end
     end
+    -- ClassPower/MSUF_CP_ExtraAuras.lua requires the font owner's getters
+    -- (Runtime/MSUF_Fonts.lua, loaded above).
+    if name=="MSUF_GetFontPath" or name=="MSUF_GetFontFlags" then return kernelRequire(name,...) end
     assert(name=="MSUF_PixelLayoutRegion")
     return function(region) return region end
 end
@@ -490,7 +499,8 @@ print("PASS Swing menu: scoped appearance, text, reach and main-hand cue color m
 
 -- A fresh login with the feature disabled must leave no subscriber behind.
 assert(swing.SetEnabled(false))
-local disabledNS={Client={IsForever=true},ExportPublic=ns.ExportPublic,LSM=ns.LSM,UI=ns.UI}
+local disabledNS={Client={IsForever=true},LSM=ns.LSM,UI=ns.UI}
+assert(loadfile(root.."/tools/tests/require_fixture.lua"))().InstallKernel(root,disabledNS)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Modules.lua"))("MSUF",disabledNS)
 _G.MSUF_DB={swingTimers={enabled=false}}
 chunk("MSUF",disabledNS)

@@ -22,7 +22,6 @@ if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsCla
 --- in this order: Buttons, Filters, FrameVisuals, Lanes, UnitFrames, Requests.
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
 assert(Backend and Backend.Lanes, "the Classic aura element requires Game/Classic/Auras/MSUF_Auras3_Lanes.lua")
@@ -32,10 +31,10 @@ local Lanes, FrameVisuals = Backend.Lanes, Backend.FrameVisuals
 
 local UF = MSUF.UF
 local type, tonumber, pairs, next = type, tonumber, pairs, next
-local CreateFrame = _G.CreateFrame
-local UnitExists = _G.UnitExists
-local UnitInRange = _G.UnitInRange
-local IsSecret = _G.issecretvalue or function() return false end
+local CreateFrame = CreateFrame
+local UnitExists = UnitExists
+local UnitInRange = UnitInRange
+local IsSecret = issecretvalue or function() return false end
 
 local MANAGED_UNITS = Compile.MANAGED_UNITS
 local NormalizeRuntimeUnit = Compile.NormalizeRuntimeUnit
@@ -77,7 +76,7 @@ end
 --- The member behind a unit token, as a plain string, or nil. Classic has no
 --- secret GUIDs; a secret one would read as unknown on both sides of the check.
 local function RosterGUID(unit)
-    local unitGUID = _G.UnitGUID
+    local unitGUID = UnitGUID
     if unit == nil or type(unitGUID) ~= "function" then return nil end
     -- UnitGUID is SecretWhenUnitIdentityRestricted: read it, then guard it.
     local guid = unitGUID(unit)
@@ -523,7 +522,7 @@ local function BuildAuraEvents(maxArena)
     for i = 1, math.max(3, maxArena) do events.arenaUnits["arena" .. i] = true end
     return events
 end
-local EVENTS = BuildAuraEvents(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)
+local EVENTS = BuildAuraEvents(tonumber(MSUF.Client.MaxArenaOpponents) or 3)
 
 --- Edit Mode and menu group test frames (GF preview rows) are bound to a real
 --- token, usually "player", but draw deterministic sample icons of their own.

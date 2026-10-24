@@ -40,6 +40,12 @@ local function Build(flavor, old)
     load("ClassPower/MSUF_CP_Constants.lua")
     load("ClassPower/MSUF_CP_Visibility.lua")
     if old then
+        -- The frozen pre-refactor oracle reads the three shape helpers as globals when it builds; the
+        -- client keeps them in the namespace registry, so the replay publishes them for it.
+        for _, name in ipairs({ "MSUF_UF_NormalizeClassPowerShape", "MSUF_UF_NormalizePlayerHPShape",
+            "MSUF_UF_ShapeOutlineAlpha" }) do
+            if rawget(_G, name) == nil then _G[name] = ns.PublicGlobals[name] end
+        end
         assert(loadfile(root .. "/tools/fixtures/player_health/CP_PlayerHP.baseline.lua"))("MSUF", ns)
     else
         load("ClassPower/MSUF_CP_PlayerHP.lua")

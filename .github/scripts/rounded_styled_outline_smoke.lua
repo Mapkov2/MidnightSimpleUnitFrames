@@ -189,7 +189,7 @@ assert(loadfile("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpl
 -- Runtime/ loads before the unit-frame engine in every core TOC; the rings
 -- take a True Outline's band width from its EdgeSize.
 assert(loadfile("MidnightSimpleUnitFrames/Runtime/MSUF_BorderStyles.lua"))("MidnightSimpleUnitFrames", MSUF)
-_G.MSUF_ApplyBossPhysicalBarGeometry = function() end
+MSUF.UF.Factory = { ApplyBossPhysicalBarGeometry = function() end }
 
 local engineRoot = "MidnightSimpleUnitFrames/UnitFrames/Engine/"
 local libraryRoot = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/"
@@ -622,15 +622,20 @@ for _, entry in ipairs({ { bossTexture, "boss1" }, { bossArt, "boss2" } }) do
 end
 
 -- The Bars > Border Highlights test buttons go through the same painter.
-_G.MSUF_SetBossTargetBorderTestMode(true)
+-- The test-mode toggles and the dispel overlay refresh are namespace-only exports
+-- (Kernel/MSUF_Bootstrap.lua keep policy).
+local MSUF_SetBossTargetBorderTestMode = MSUF.PublicGlobals.MSUF_SetBossTargetBorderTestMode
+local MSUF_SetPurgeBorderTestMode = MSUF.PublicGlobals.MSUF_SetPurgeBorderTestMode
+local MSUF_RefreshUnitDispelOverlay = MSUF.PublicGlobals.MSUF_RefreshUnitDispelOverlay
+MSUF_SetBossTargetBorderTestMode(true)
 CheckBand(bossTexture, "boss test texture", 1, 4, BOSS_COLOR, ROUNDED_EDGE, TextureCoords)
 CheckArt(bossArt, "slanted boss test art", DIALOG, 16, BOSS_COLOR, { 0, 0, 0, 1 })
-_G.MSUF_SetBossTargetBorderTestMode(false)
+MSUF_SetBossTargetBorderTestMode(false)
 CheckIdle(bossTexture, "boss test cleared")
 CheckIdle(bossArt, "slanted boss test cleared")
-_G.MSUF_SetPurgeBorderTestMode(true, "shared")
+MSUF_SetPurgeBorderTestMode(true, "shared")
 CheckBand(purged, "purge test texture", 1, 4, PURGE_COLOR, ROUNDED_EDGE, TextureCoords)
-_G.MSUF_SetPurgeBorderTestMode(false, "shared")
+MSUF_SetPurgeBorderTestMode(false, "shared")
 CheckIdle(purged, "purge test cleared")
 tested = tested + 3
 
@@ -652,7 +657,7 @@ dispelled._msufA3DispelActive = true
 dispelled._msufA3DispelR, dispelled._msufA3DispelG = secret[1], secret[2]
 dispelled._msufA3DispelB, dispelled._msufA3DispelA = secret[3], secret[4]
 module.Apply()
-_G.MSUF_RefreshUnitDispelOverlay(dispelled)
+MSUF_RefreshUnitDispelOverlay(dispelled)
 local function CheckSecretRings(label)
   local pool = dispelled[POOL]
   Check(pool and pool._msufShownLo == 1 and pool._msufShownHi == 4, label .. ": the dispel band is not shown")
@@ -686,7 +691,7 @@ for _, scenario in ipairs({ { "target", nil }, { "focus", nil } }) do
   frame._msufA3DispelR, frame._msufA3DispelG = secret[1], secret[2]
   frame._msufA3DispelB, frame._msufA3DispelA = secret[3], secret[4]
   module.Apply()
-  _G.MSUF_RefreshUnitDispelOverlay(frame)
+  MSUF_RefreshUnitDispelOverlay(frame)
   frame:SetWidth(frame:GetWidth() + 1)
   module.Apply()
   local pieces = ArtPieces(frame)

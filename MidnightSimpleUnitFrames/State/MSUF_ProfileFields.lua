@@ -87,11 +87,12 @@ DeclareGeneral("castbars", [[
     gcdBarOpacity gcdBarWidth gcdBarX gcdBarY kickReadyAnchor kickReadyAutoSize kickReadyOffsetX
     kickReadyOffsetY kickReadyShowArena kickReadyShowBoss kickReadyShowFocus kickReadyShowNameplates kickReadyShowTarget
     kickReadySize kickReadyStyle kickReadyTimeMarker kickReadyTimeSegment enableFocusKickIcon
-    focusKickIconHeight focusKickIconOffsetX focusKickIconOffsetY focusKickIconWidth focusKickShowCastbar
-    focusKickTextSize showPlayerCastTime showTargetCastTime showFocusCastTime
+    focusKickIconHeight focusKickIconOffsetX focusKickIconOffsetY focusKickIconShape focusKickIconWidth
+    focusKickShowCastbar focusKickTextSize showPlayerCastTime showTargetCastTime showFocusCastTime
 ]])
 -- Unit frame settings whose names read like colours to the fallback rule.
 DeclareGeneral("unitframes", [[
+    healthGlossEnabled healthGlossStrength powerGlossEnabled powerGlossStrength
     useBarBorder portraitFillBorder dispelBorderTrigger fontSlug fontTextAlpha
     hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars
 ]])

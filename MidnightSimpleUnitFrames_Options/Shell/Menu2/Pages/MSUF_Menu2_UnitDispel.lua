@@ -2,6 +2,8 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitDispel.lua"
+local PublicGlobals = MSUF.PublicGlobals
 
 -- UnitFrame dispel presentation belongs beside the unit's Aura workspace and
 -- is owned by that unit.  general.* remains a legacy/default fallback only;
@@ -46,15 +48,14 @@ local UNIT_DISPEL_SYMBOL_ANCHORS = VT("TOPLEFT", "Top Left", "TOP", "Top", "TOPR
     "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
     "BOTTOMLEFT", "Bottom Left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom Right")
 
-local NormalizeDispelTrigger = _G.MSUF_NormalizeDispelBorderTrigger
+local NormalizeDispelTrigger = MSUF.Require("MSUF_NormalizeDispelBorderTrigger", FILE)
+local ModeEnabled = MSUF.Require("MSUF_UF_OutlineModeEnabled", FILE)
+-- Read once: the apply request below runs for every slider step.
+local ApplyService = MSUF.Require("MSUF_Menu2_ApplyService", FILE)
 
 local function NormalizeUnitDispelOverlayTrigger(value)
     if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
     return NormalizeDispelTrigger(value)
-end
-
-local function ValueOwner(unit)
-    return GetConf and GetConf(unit) or nil
 end
 
 local function ReadValue(unit, key, defaultValue)
@@ -69,25 +70,18 @@ local function ReadValue(unit, key, defaultValue)
 end
 
 local function StoreValue(unit, key, value)
-    local owner = ValueOwner(unit)
+    local owner = GetConf and GetConf(unit)
     if not owner or owner[key] == value then return false end
     owner[key] = value
     return true
 end
 
-local function RequestUnitRuntime(unit, reason)
+local function RequestRuntime(unit, reason)
+    reason = reason or "MSUF2_UF_DISPEL"
     if type(M.RequestUnitDomains) == "function" then
         return M.RequestUnitDomains(unit, reason, UNIT_APPLY_OPTS)
     end
-    local service = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if service and type(service.RequestUnitDomains) == "function" then
-        return service.RequestUnitDomains(unit, reason, UNIT_APPLY_OPTS)
-    end
-    return false
-end
-
-local function RequestRuntime(unit, reason)
-    return RequestUnitRuntime(unit, reason or "MSUF2_UF_DISPEL")
+    return ApplyService.RequestUnitDomains(unit, reason, UNIT_APPLY_OPTS)
 end
 
 local function SetValue(unit, key, value, reason)
@@ -129,8 +123,6 @@ local function UnitAuraEnabled(unit)
     return model.UnitEnabled(unit) == true
 end
 
-local ModeEnabled = _G.MSUF_UF_OutlineModeEnabled
-
 local function UnitDispelRequested(unit)
     if ReadValue(unit, "unitDispelOverlayEnabled", false) == true
         or ReadValue(unit, "unitDispelSymbolEnabled", false) == true then
@@ -164,11 +156,6 @@ local function SetDispelMasterValue(unit, key, enabled, reason)
     return changed or sensorChanged
 end
 
-local function RefreshAuraWarning(warning, unit)
-    if not warning then return end
-    warning:SetShown(UnitDispelRequested(unit) and not UnitAuraEnabled(unit))
-end
-
 local function Meta(ctx, unit, path, key, classification)
     local meta = UP.ControlMeta and UP.ControlMeta(ctx, "dispel." .. tostring(path), classification or "setting") or {}
     if key then
@@ -177,22 +164,45 @@ local function Meta(ctx, unit, path, key, classification)
     return meta
 end
 
-local function OverlaySectionHeight()
-    return 390
+local function SymbolSectionHeight(ctx)
+    local width = min(900, max(320, (((ctx and ctx.width) or 720) - 40)))
+    return width >= 760 and 432 or 710
 end
 
--- Section master switches sit in the collapsible header; both sections share the shape.
-local MASTER_SWITCHES = {
-    overlay = { label = "Dispel Overlay", key = "unitDispelOverlayEnabled", reason = "MSUF2_UF_DISPEL_OVERLAY" },
-    symbol = { label = "Dispel Symbol", key = "unitDispelSymbolEnabled", reason = "MSUF2_UF_DISPEL_SYMBOL" },
+-- The two cards share one shape: a header master switch, a live preview toggle (a core hook
+-- paints the live UnitFrame and clears when the page closes), option rows and the sensor warning.
+local KINDS = {
+    overlay = { id = "unit_dispel_overlay", title = "Dispel Overlay", order = 10, height = function() return 390 end,
+        key = "unitDispelOverlayEnabled", reason = "MSUF2_UF_DISPEL_OVERLAY",
+        previewSet = "MSUF_SetDispelOverlayPreview", previewLabel = "Runtime Preview: live UnitFrame",
+        -- Builds the unit's "this preview is running" test once, so each read is one call.
+        activeFor = function(unit)
+            return function()
+                return PublicGlobals.MSUF_DispelOverlayPreviewMode == true and PublicGlobals.MSUF_DispelOverlayPreviewScope == unit
+            end
+        end,
+        previewTip =
+            "Paints a stand-in tint on the live UnitFrame so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
+    },
+    symbol = { id = "unit_dispel_symbol", title = "Dispel Symbol", order = 20, height = SymbolSectionHeight,
+        key = "unitDispelSymbolEnabled", reason = "MSUF2_UF_DISPEL_SYMBOL",
+        previewSet = "MSUF_SetDispelSymbolPreview", previewLabel = "Runtime Preview: live UnitFrame (drag)",
+        activeFor = function(unit)
+            return function()
+                return PublicGlobals.MSUF_DispelSymbolPreviewMode == true and PublicGlobals.MSUF_DispelSymbolPreviewScope == unit
+            end
+        end,
+        previewTip =
+            "Shows stand-in symbols on the live UnitFrame and lets you drag them into position without a real debuff. Turns itself off when this page closes.",
+    },
 }
 local function PrepareSwitch(ctx, sec, unit, which)
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry and entry.featureSwitch then return entry.featureSwitch end
-    local def = MASTER_SWITCHES[which]
+    local def = KINDS[which]
     local meta = Meta(ctx, unit, which .. ".enabled", def.key)
     local master
-    master = Schema.Build(ctx, sec, {{ "sectionSwitch", def.key, false, { def.label }, meta = meta,
+    master = Schema.Build(ctx, sec, {{ "sectionSwitch", def.key, false, { def.title }, meta = meta,
         scope = unit, domain = "dispel",
         get = function() return ReadValue(unit, def.key, false) == true end,
         set = function(value)
@@ -203,39 +213,75 @@ local function PrepareSwitch(ctx, sec, unit, which)
     return master
 end
 
--- Runtime previews paint the live UnitFrame through a core hook and clear when the page closes.
-local PREVIEW_HOOKS = {
-    overlay = { mode = "MSUF_DispelOverlayPreviewMode", scope = "MSUF_DispelOverlayPreviewScope",
-        set = "MSUF_SetDispelOverlayPreview", label = "Runtime Preview: live UnitFrame",
-        tip =
-            "Paints a stand-in tint on the live UnitFrame so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
-    },
-    symbol = { mode = "MSUF_DispelSymbolPreviewMode", scope = "MSUF_DispelSymbolPreviewScope",
-        set = "MSUF_SetDispelSymbolPreview", label = "Runtime Preview: live UnitFrame (drag)",
-        tip =
-            "Shows stand-in symbols on the live UnitFrame and lets you drag them into position without a real debuff. Turns itself off when this page closes.",
-    },
-}
+-- The core preview setter, resolved on first use (false when this client has none). The
+-- refresh and toggle paths below read def.setter directly, so only the first use calls this.
+local function PreviewSetter(def)
+    local setter = def.setter
+    if setter == nil then
+        setter = MSUF.Optional(def.previewSet)
+        if type(setter) ~= "function" then setter = false end
+        def.setter = setter
+    end
+    return setter
+end
 local function PreviewToggle(ctx, unit, card, which, x, y, width)
-    local hook = PREVIEW_HOOKS[which]
-    local function Active() return _G[hook.mode] == true and _G[hook.scope] == unit end
+    local def = KINDS[which]
+    local Active = def.activeFor(unit)
     local meta = Meta(ctx, unit, which .. ".preview", nil, "ephemeral")
-    local preview = Schema.Build(ctx, card, {{ "toggle", "preview", false, { hook.label, x, y, width }, meta = meta,
+    local preview = Schema.Build(ctx, card, {{ "toggle", "preview", false, { def.previewLabel, x, y, width }, meta = meta,
         scope = unit, domain = "dispelPreview", get = Active,
         set = function(value)
-            local fn = _G[hook.set]
-            if type(fn) == "function" then fn(value and true or false, unit) end
+            local fn = def.setter
+            if fn == nil then fn = PreviewSetter(def) end
+            if fn then fn(value and true or false, unit) end
         end,
     }}, ROW_OPTIONS).preview
     preview:HookScript("OnHide", function(self)
-        local fn = _G[hook.set]
-        if Active() and type(fn) == "function" then
+        local fn = Active() and PreviewSetter(def)
+        if fn then
             fn(false)
             if self.SetChecked then self:SetChecked(false) end
         end
     end)
-    if M.AddTooltip then M.AddTooltip(preview, "Runtime Preview", hook.tip, { hook = true }) end
+    if M.AddTooltip then M.AddTooltip(preview, "Runtime Preview", def.previewTip, { hook = true }) end
     return preview
+end
+-- The sensor warning under a card's controls; hidden unless Dispel needs a sensor that is off.
+local function AuraWarning(ctx, unit, card, id, y, width)
+    local warning = Schema.Build(ctx, card, {{ "text", id, nil, { UNITFRAME_DISPEL_AURA_WARNING, 16, y, width,
+        UNITFRAME_DISPEL_AURA_WARNING_COLOR }, scope = unit }})[id]
+    if warning.SetWordWrap then warning:SetWordWrap(true) end
+    return warning
+end
+-- The controls follow the header switch; turning it off also stops the live preview. The
+-- refresh runs on every setting change, so it tests the preview flags inline.
+local function TrackSection(ctx, unit, which, Sync, master, controls, warning, allModeControls)
+    local def = KINDS[which]
+    local key, overlay = def.key, which == "overlay"
+    M.TrackRefresh(ctx, Sync(function()
+        local enabled = ReadValue(unit, key, false) == true
+        if not enabled then
+            local running
+            if overlay then
+                running = PublicGlobals.MSUF_DispelOverlayPreviewMode == true
+                    and PublicGlobals.MSUF_DispelOverlayPreviewScope == unit
+            else
+                running = PublicGlobals.MSUF_DispelSymbolPreviewMode == true
+                    and PublicGlobals.MSUF_DispelSymbolPreviewScope == unit
+            end
+            if running then
+                local fn = def.setter
+                if fn == nil then fn = PreviewSetter(def) end
+                if fn then fn(false) end
+            end
+        end
+        SetControlEnabled(master, true)
+        SetControlsEnabled(controls, enabled)
+        if allModeControls then
+            SetControlsEnabled(allModeControls, enabled and ReadValue(unit, "unitDispelSymbolMode", "ALL") == "ALL")
+        end
+        warning:SetShown(UnitDispelRequested(unit) and not UnitAuraEnabled(unit))
+    end))
 end
 
 -- Rows keep the old per-card read/write rules: stored value, then general fallback.
@@ -279,7 +325,8 @@ local OVERLAY_ROWS = {
 }
 
 local function BuildUnitDispelOverlaySection(ctx, builder, unit)
-    local section = Schema.Section(builder:CollapsibleSection("unit_dispel_overlay", "Dispel Overlay", OverlaySectionHeight(ctx), false), unit)
+    local def = KINDS.overlay
+    local section = Schema.Section(builder:CollapsibleSection(def.id, def.title, def.height(ctx), false), unit)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
     local card = Schema.Build(ctx, section, {{ "card", "dispel.overlay.card", nil, { nil, nil, 20, -38, cardW, 326 },
@@ -302,31 +349,15 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
         controls[#controls + 1] = Schema.Build(ctx, card, { Row(ctx, unit, "overlay", row, Sync, 16, row.y, move, cardW - 32) }, ROW_OPTIONS)[row.key]
     end
     controls[#controls + 1] = PreviewToggle(ctx, unit, card, "overlay", 16, -246, cardW - 32)
-    local warning = Schema.Build(ctx, card, {{ "text", "dispel.overlay.warning", nil, { UNITFRAME_DISPEL_AURA_WARNING, 16, -286, cardW - 32,
-        UNITFRAME_DISPEL_AURA_WARNING_COLOR }, scope = unit }})["dispel.overlay.warning"]
-    if warning.SetWordWrap then warning:SetWordWrap(true) end
-
-    M.TrackRefresh(ctx, Sync(function()
-        local enabled = ReadValue(unit, "unitDispelOverlayEnabled", false) == true
-        if not enabled and _G.MSUF_DispelOverlayPreviewMode == true
-            and _G.MSUF_DispelOverlayPreviewScope == unit
-        then
-            local clear = _G.MSUF_SetDispelOverlayPreview
-            if type(clear) == "function" then clear(false) end
-        end
-        SetControlEnabled(master, true)
-        SetControlsEnabled(controls, enabled)
-        RefreshAuraWarning(warning, unit)
-    end))
+    local warning = AuraWarning(ctx, unit, card, "dispel.overlay.warning", -286, cardW - 32)
+    TrackSection(ctx, unit, "overlay", Sync, master, controls, warning)
 end
 
 local symbolSyncByUnit = {}
 local symbolMoveHandlerInstalled = false
 local function EnsureSymbolMoveHandler()
     if symbolMoveHandlerInstalled then return end
-    local setter = _G.MSUF_SetDispelSymbolPreviewMoveHandler
-    if type(setter) ~= "function" then return end
-    setter(function(scope, x, y)
+    MSUF.Require("MSUF_SetDispelSymbolPreviewMoveHandler", FILE)(function(scope, x, y)
         scope = tostring(scope or "")
         if not SUPPORTED_UNITS[scope] then return end
         UP.WriteDispelSymbolOffsets(scope, x, y, "MSUF2_UF_DISPEL_SYMBOL_DRAG")
@@ -334,11 +365,6 @@ local function EnsureSymbolMoveHandler()
         if type(sync) == "function" then sync() end
     end)
     symbolMoveHandlerInstalled = true
-end
-
-local function SymbolSectionHeight(ctx)
-    local width = min(900, max(320, (((ctx and ctx.width) or 720) - 40)))
-    return width >= 760 and 432 or 710
 end
 
 local SYMBOL_ROWS = {
@@ -365,7 +391,8 @@ local SYMBOL_ROWS = {
 }
 
 local function BuildUnitDispelSymbolSection(ctx, builder, unit)
-    local section = Schema.Section(builder:CollapsibleSection("unit_dispel_symbol", "Dispel Symbol", SymbolSectionHeight(ctx), false), unit)
+    local def = KINDS.symbol
+    local section = Schema.Section(builder:CollapsibleSection(def.id, def.title, def.height(ctx), false), unit)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
     local wide = cardW >= 760
@@ -427,48 +454,25 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
             row.col == 1 and leftX or rightX, wide and row.yWide or row.yNarrow, move) }, ROW_OPTIONS)[row.key]
     end
     controls[#controls + 1] = preview
-    local warning = Schema.Build(ctx, card, {{ "text", "dispel.symbol.warning", nil, { UNITFRAME_DISPEL_AURA_WARNING, 16, wide and -328 or -606, cardW - 32,
-        UNITFRAME_DISPEL_AURA_WARNING_COLOR }, scope = unit }})["dispel.symbol.warning"]
-    if warning.SetWordWrap then warning:SetWordWrap(true) end
-
-    M.TrackRefresh(ctx, Sync(function()
-        local enabled = ReadValue(unit, "unitDispelSymbolEnabled", false) == true
-        if not enabled and _G.MSUF_DispelSymbolPreviewMode == true
-            and _G.MSUF_DispelSymbolPreviewScope == unit
-        then
-            local clear = _G.MSUF_SetDispelSymbolPreview
-            if type(clear) == "function" then clear(false) end
-        end
-        SetControlEnabled(master, true)
-        SetControlsEnabled(controls, enabled)
-        SetControlsEnabled(allModeControls, enabled and ReadValue(unit, "unitDispelSymbolMode", "ALL") == "ALL")
-        RefreshAuraWarning(warning, unit)
-    end))
+    local warning = AuraWarning(ctx, unit, card, "dispel.symbol.warning", wide and -328 or -606, cardW - 32)
+    TrackSection(ctx, unit, "symbol", Sync, master, controls, warning, allModeControls)
 end
 
+KINDS.overlay.build, KINDS.symbol.build = BuildUnitDispelOverlaySection, BuildUnitDispelSymbolSection
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({
-        id = "unit_dispel_overlay",
-        title = "Dispel Overlay",
-        height = OverlaySectionHeight,
-        placement = "after_auras",
-        order = 10,
-        units = SUPPORTED_UNITS,
-        build = BuildUnitDispelOverlaySection,
-        prepareShell = function(ctx, section, unit)
-            return PrepareSwitch(ctx, section, unit, "overlay")
-        end,
-    })
-    UP.RegisterSection({
-        id = "unit_dispel_symbol",
-        title = "Dispel Symbol",
-        height = SymbolSectionHeight,
-        placement = "after_auras",
-        order = 20,
-        units = SUPPORTED_UNITS,
-        build = BuildUnitDispelSymbolSection,
-        prepareShell = function(ctx, section, unit)
-            return PrepareSwitch(ctx, section, unit, "symbol")
-        end,
-    })
+    for _, which in ipairs({ "overlay", "symbol" }) do
+        local def = KINDS[which]
+        UP.RegisterSection({
+            id = def.id,
+            title = def.title,
+            height = def.height,
+            placement = "after_auras",
+            order = def.order,
+            units = SUPPORTED_UNITS,
+            build = def.build,
+            prepareShell = function(ctx, section, unit)
+                return PrepareSwitch(ctx, section, unit, which)
+            end,
+        })
+    end
 end

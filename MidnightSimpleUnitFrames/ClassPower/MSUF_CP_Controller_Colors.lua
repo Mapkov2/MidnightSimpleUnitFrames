@@ -8,11 +8,11 @@
 --- their results into CP.visual once per FullRefresh.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
-local CPConst = _G.MSUF_CP_CONST
+local CPConst = MSUF.Require("MSUF_CP_CONST", "ClassPower/MSUF_CP_Controller_Colors.lua")
 local builders = CPConst.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local GetPowerBarColor = MSUF.Require("MSUF_GetPowerBarColor", "ClassPower/MSUF_CP_Controller_Colors.lua")
 
 local type, tonumber, tostring = type, tonumber, tostring
 local OverrideRGB = CPConst.OverrideRGB
@@ -68,8 +68,8 @@ local function ResolveClassPowerColor(powerType)
     end
 
     --- 2. MSUF power bar color override
-    if _G.MSUF_GetPowerBarColor and token then
-        local r, g, b = _G.MSUF_GetPowerBarColor(powerType, token)
+    if token then
+        local r, g, b = GetPowerBarColor(powerType, token)
         if type(r) == "number" then
             _cachedColorR, _cachedColorG, _cachedColorB = r, g, b
             return r, g, b
@@ -77,7 +77,7 @@ local function ResolveClassPowerColor(powerType)
     end
 
     --- Fallback: MSUF's own resource defaults, then Blizzard PowerBarColor
-    local pbc = _G.PowerBarColor
+    local pbc = PowerBarColor
     local own = MSUF._PBCSnap
     if pbc or own then
         local c = (token and own and own[token]) or (pbc and ((token and pbc[token]) or pbc[powerType]))
@@ -144,13 +144,13 @@ end
 local function MSUF_ClassPower_InvalidateColors()
     CP_InvalidateColorCaches()
     --- Balance Druid: refresh eclipse + prediction overlay colors
-    if _G.MSUF_BAL_InvalidateColors then
-        _G.MSUF_BAL_InvalidateColors()
-    end
-    if _G.MSUF_ClassPower_Apply then
-        _G.MSUF_ClassPower_Apply({ visuals = true, playerHP = true })
-    elseif _G.MSUF_ClassPower_Refresh then
-        _G.MSUF_ClassPower_Refresh()
+    local invalidateBalance = MSUF.Optional("MSUF_BAL_InvalidateColors")
+    if invalidateBalance then invalidateBalance() end
+    local apply = MSUF.Optional("MSUF_ClassPower_Apply")
+    if apply then
+        apply({ visuals = true, playerHP = true })
+    else
+        MSUF.Require("MSUF_ClassPower_Refresh", "ClassPower/MSUF_CP_Controller_Colors.lua")()
     end
 end
 

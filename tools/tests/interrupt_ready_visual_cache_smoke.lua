@@ -94,7 +94,7 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lu
     "MidnightSimpleUnitFrames", interruptNamespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))(
     "MidnightSimpleUnitFrames", interruptNamespace)
-local refresh = assert(_G.MSUF_KickReady_RefreshFrame, "MSUF_KickReady_RefreshFrame missing")
+local refresh = assert(interruptNamespace.PublicGlobals.MSUF_KickReady_RefreshFrame, "MSUF_KickReady_RefreshFrame missing")
 
 -- The outline host the castbar style owner builds (MSUF_CastbarStyle.lua).
 local paints = {}

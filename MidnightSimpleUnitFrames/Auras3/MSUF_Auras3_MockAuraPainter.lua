@@ -6,6 +6,9 @@
 local _, MSUF = ...
 local A3 = assert(MSUF.MSUF_Auras3)
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MockAuraPainter")
+-- Preview sample builders (UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua loads first).
+local BuildPreviewAnimationAuraState = MSUF.Require("MSUF_BuildPreviewAnimationAuraState", "Auras3/MockAuraPainter")
+local GetPreviewAnimationAuraState = MSUF.Require("MSUF_GetPreviewAnimationAuraState", "Auras3/MockAuraPainter")
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local IGNORE_ATLAS_SIZE = TextureKitConstants and TextureKitConstants.IgnoreAtlasSize
 local type, tonumber, tostring = type, tonumber, tostring
@@ -45,15 +48,34 @@ end
 Painter.IconZoom = IconZoom
 
 --- Shared icon art; caller-specific chrome is applied after this base paint.
-function Painter.Art(icon, texture, background, swipe, art, zoom, width, height, shape, barOnly, style, size, edge)
+--- skinWidth/skinHeight size an icon skin when the caller crops the art square
+--- (width and height nil) on an icon that is not.
+function Painter.Art(icon, texture, background, swipe, art, zoom, width, height, shape, barOnly, style, size, edge,
+    skinWidth, skinHeight)
     texture:SetTexture(art)
     IconZoom(texture, zoom, width, height)
     shape = A3.ApplyAuraIconShape(icon, shape, nil, background, texture, swipe)
     background:SetShown(not barOnly)
     texture:SetShown(not barOnly)
     if edge then edge:SetVertexColor(0, 0, 0, 0) end
-    A3.ApplyIconStylePreview(icon, style, size, shape)
-    return shape
+    -- A skin sizes itself from the icon's real width and height (flat icons).
+    local skinned = A3.ApplyIconStyleSkinned(icon, style, size, shape, skinHeight or height, skinWidth or width)
+    Painter.SkinLayers(swipe, skinned)
+    return shape, skinned
+end
+
+--- Live, an icon skin (ARTWORK 5-7, gloss OVERLAY -1) sits under the
+--- cooldown swipe, which sits under the duration bar's and the text's frames
+--- only in order bar < swipe < text. A preview icon without a skin keeps its
+--- swipe on ARTWORK 1 (the frozen preview output); a skinned one lifts it to
+--- OVERLAY 4, above the skin, gloss, dispel border (OVERLAY 0-2) and duration
+--- bar (OVERLAY), below text on OVERLAY 6/7. Nothing is written while the
+--- state is unchanged.
+function Painter.SkinLayers(swipe, skinned)
+    skinned = skinned == true
+    if not swipe or (swipe._msufSkinned == true) == skinned then return end
+    swipe._msufSkinned = skinned
+    if skinned then swipe:SetDrawLayer("OVERLAY", 4) else swipe:SetDrawLayer("ARTWORK", 1) end
 end
 
 --- Justification the live runtime derives from each aura text anchor. Baked into
@@ -228,11 +250,10 @@ function Painter.AuraState(icon, kind, index, cfg, elapsed, duration, oneShot, p
     local fn
     if elapsed ~= nil then
         local animation = MSUF.PreviewAnimation
-        fn = animation and animation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
+        fn = animation and animation.BuildAuraState or BuildPreviewAnimationAuraState
     else
-        fn = _G.MSUF_GetPreviewAnimationAuraState
+        fn = GetPreviewAnimationAuraState
     end
-    if type(fn) ~= "function" then return nil end
     local scratch, options = icon._msufAuraScratch, icon._msufAuraOptions
     if not options then
         scratch, options = {}, {}

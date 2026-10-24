@@ -125,15 +125,15 @@ timerAfterCalls = 0
 -- interruptibility values.
 local secretTrue = { secret = true, value = true }
 local secretFalse = { secret = true, value = false }
-local red, green, blue, alpha = _G.MSUF_KickReady_EvaluateRGBA(true, secretTrue)
+local red, green, blue, alpha = interruptNamespace.PublicGlobals.MSUF_KickReady_EvaluateRGBA(true, secretTrue)
 assert(red == 0.6 and green == 0.6 and blue == 0.6 and alpha == 1)
 assert(scalarCalls == 3, "secret RGB must use three scalar evaluations")
 
-red, green, blue, alpha = _G.MSUF_KickReady_EvaluateRGBA(true, secretFalse)
+red, green, blue, alpha = interruptNamespace.PublicGlobals.MSUF_KickReady_EvaluateRGBA(true, secretFalse)
 assert(red == 0.1 and green == 0.8 and blue == 0.2 and alpha == 1)
 assert(scalarCalls == 6)
 
-red, green, blue, alpha = _G.MSUF_KickReady_EvaluateRGBA(false, false)
+red, green, blue, alpha = interruptNamespace.PublicGlobals.MSUF_KickReady_EvaluateRGBA(false, false)
 assert(red == 0.9 and green == 0.1 and blue == 0.2 and alpha == 1)
 assert(scalarCalls == 6, "plain values must bypass curve evaluation")
 
@@ -166,7 +166,7 @@ end
 
 -- A secret true readiness value must paint green without being inspected in
 -- Lua, and it must arm exactly one native cooldown completion driver.
-_G.MSUF_KickReady_RefreshFrame(targetFrame, {
+interruptNamespace.PublicGlobals.MSUF_KickReady_RefreshFrame(targetFrame, {
     active = true,
     apiNotInterruptibleRaw = false,
 })
@@ -205,9 +205,9 @@ local fillRefreshes = 0
 local lastFillReady
 targetFrame.UpdateColorForInterruptible = function()
     fillRefreshes = fillRefreshes + 1
-    lastFillReady = _G.MSUF_KickReady_GetReadyBoolForTint()
+    lastFillReady = interruptNamespace.PublicGlobals.MSUF_KickReady_GetReadyBoolForTint()
 end
-_G.MSUF_KickReady_RefreshFrame(targetFrame, { active = true })
+interruptNamespace.PublicGlobals.MSUF_KickReady_RefreshFrame(targetFrame, { active = true })
 
 secretReady.value = false
 eventHandler(nil, "SPELL_UPDATE_COOLDOWN", 2139, 2139)
@@ -224,7 +224,7 @@ assert(cooldownFrameCreates == 1 and timerAfterCalls == 0)
 -- Once no indicator is active, event registration and the native driver are
 -- cleared; a stale completion callback becomes a no-op.
 targetFrame.MSUF_castActive = false
-_G.MSUF_KickReady_RefreshFrame(targetFrame, nil)
+interruptNamespace.PublicGlobals.MSUF_KickReady_RefreshFrame(targetFrame, nil)
 assert(cooldownClearCalls >= 1)
 readsBefore = cooldownReads
 cooldownDoneHandler()
@@ -241,11 +241,11 @@ end
 cooldownObject.IsZero = function() error("plain remaining should decide readiness") end
 _G.GetTime = function() return frameStamp end
 frameStamp = frameStamp + 1
-assert(_G.MSUF_KickReady_GetReadyBoolForTint() == true)
-assert(_G.MSUF_KickReady_GetReadyBoolForTint() == true)
+assert(interruptNamespace.PublicGlobals.MSUF_KickReady_GetReadyBoolForTint() == true)
+assert(interruptNamespace.PublicGlobals.MSUF_KickReady_GetReadyBoolForTint() == true)
 assert(remainingReads == 1, "same-frame plain interrupt status was resolved more than once")
 frameStamp = frameStamp + 1
-assert(_G.MSUF_KickReady_GetReadyBoolForTint() == true)
+assert(interruptNamespace.PublicGlobals.MSUF_KickReady_GetReadyBoolForTint() == true)
 assert(remainingReads == 2, "next-frame interrupt status reused a stale snapshot")
 
 -- Budgets (Classic addition): Lua VM instructions and bytes per operation with
@@ -298,7 +298,7 @@ cooldownObject.GetRemainingDuration = function() return secretRemaining end
 cooldownObject.IsZero = function() return secretReady end
 Measure("refresh active border frame", function()
     frameStamp = frameStamp + 1
-    _G.MSUF_KickReady_RefreshFrame(targetFrame, activeState)
+    interruptNamespace.PublicGlobals.MSUF_KickReady_RefreshFrame(targetFrame, activeState)
 end)
 Measure("unrelated cooldown event", function()
     eventHandler(nil, "SPELL_UPDATE_COOLDOWN", 42, 42, nil, 1337)
@@ -308,7 +308,7 @@ Measure("interrupt cooldown event", function()
     eventHandler(nil, "SPELL_UPDATE_COOLDOWN", 2139, 2139)
 end)
 Measure("same-frame readiness read", function()
-    _G.MSUF_KickReady_GetReadyBoolForTint()
+    interruptNamespace.PublicGlobals.MSUF_KickReady_GetReadyBoolForTint()
 end)
 
 print("interrupt ready perf smoke: ok")

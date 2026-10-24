@@ -186,7 +186,7 @@ assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua'))('MidnightSi
 assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua'))('MidnightSimpleUnitFrames', MSUF)
 -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry each border
 -- apply calls; this harness builds no boss frames.
-_G.MSUF_ApplyBossPhysicalBarGeometry = function() end
+MSUF.UF.Factory = { ApplyBossPhysicalBarGeometry = function() end }
 
 local engineRoot = "MidnightSimpleUnitFrames/UnitFrames/Engine/"
 local libraryRoot = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/"
@@ -274,6 +274,8 @@ function Object:CreateTexture(name, layer, template, sublevel)
 end
 function Object:CreateMaskTexture(...) return self:CreateTexture(...) end
 function Object:SetTexture(path) self.texture = path end
+-- The shared border renderer (Runtime/MSUF_BorderStyles.lua) cuts its eight pieces by UV.
+function Object:SetTexCoord() end
 function Object:SetTextureSliceMargins() end
 function Object:SetTextureSliceMode() end
 function Object:SetSnapToPixelGrid() end
@@ -410,19 +412,23 @@ end
 MSUF.GF.RefreshBorder = function()
  for _, f in ipairs(groups) do UF.ApplySpec(f,f.MSUFSpec,nil,{Borders=true}) end
 end
-_G.MSUF_SetAggroBorderTestMode(true,'shared')
+-- The border test-mode toggles are namespace-only exports (Kernel/MSUF_Bootstrap.lua keep policy).
+local MSUF_SetAggroBorderTestMode = MSUF.PublicGlobals.MSUF_SetAggroBorderTestMode
+local MSUF_SetDispelBorderTestMode = MSUF.PublicGlobals.MSUF_SetDispelBorderTestMode
+local MSUF_SetPurgeBorderTestMode = MSUF.PublicGlobals.MSUF_SetPurgeBorderTestMode
+MSUF_SetAggroBorderTestMode(true,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{1,0.55,0},true) end
-_G.MSUF_SetAggroBorderTestMode(false,'shared')
+MSUF_SetAggroBorderTestMode(false,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0,0,0},true) end
-_G.MSUF_SetDispelBorderTestMode(true,'shared')
+MSUF_SetDispelBorderTestMode(true,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0.25,0.75,1},true) end
-_G.MSUF_SetDispelBorderTestMode(false,'shared')
+MSUF_SetDispelBorderTestMode(false,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0,0,0},true) end
-_G.MSUF_SetPurgeBorderTestMode(true,'shared')
+MSUF_SetPurgeBorderTestMode(true,'shared')
 for _, f in ipairs(startupFrames) do
  AssertRounded(f,(f._msufGFKind or f.unit == "pet") and {0,0,0} or {1,0.85,0},true)
 end
-_G.MSUF_SetPurgeBorderTestMode(false,'shared')
+MSUF_SetPurgeBorderTestMode(false,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0,0,0},true) end
 
 local tested = 0

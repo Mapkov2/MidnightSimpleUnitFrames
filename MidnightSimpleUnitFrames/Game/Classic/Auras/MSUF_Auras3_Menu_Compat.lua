@@ -5,11 +5,10 @@
 --- lane, so this post-load adapter makes the menu read that same compiled value
 --- without creating an empty blacklist override merely by opening the page.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local Client = MSUF.Client
 if not (Client and Client.IsClassic == true) then return end
 
-local type, tostring, pairs = type, tostring, pairs
+local type, tostring = type, tostring
 local A3 = MSUF.MSUF_Auras3
 local Model = type(A3) == "table" and A3.MenuModel or nil
 if type(Model) ~= "table" or A3.__classicAuraMenuCompatLoaded == true then return end
@@ -27,7 +26,7 @@ local BOSS_LOOKUP = {
 }
 local ARENA_UNITS = { "arena1", "arena2", "arena3" }
 local ARENA_LOOKUP = { arena1 = true, arena2 = true, arena3 = true }
-for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+for i = 4, tonumber(Client.MaxArenaOpponents) or 3 do
     ARENA_UNITS[#ARENA_UNITS + 1] = "arena" .. i
     ARENA_LOOKUP["arena" .. i] = true
 end

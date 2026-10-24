@@ -25,7 +25,7 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     local g = env.MSUF_DB.general
     g.showGCDBar, g.gcdBarDetached, g.gcdBarCombatOnly = false, true, true
     g.gcdBarX, g.gcdBarY, g.gcdBarWidth, g.gcdBarHeight = 0, -180, 180, 12
-    env.MSUF_GCDBar_RefreshLayout()
+    world.core.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     local em, key = env.MSUF_EM2, "external:msuf.gcd:bar"
     assert(em.Registry.Get(key), flavor .. " GCD mover not registered")
     assert(em.State.Enter("player"), flavor .. " edit entry failed")
@@ -58,17 +58,17 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     em.Undo.DoRedo()
     assert(g.gcdBarHeight == 22, "redo lost new size")
     g.showGCDBarSpell, g.showGCDBarTime = false, false
-    env.MSUF_GCDBar_RefreshLayout()
+    world.core.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     assert(not bar.icon:IsShown() and bar.castText:GetText() == "" and bar.timeText:GetText() == "", "preview ignored text/icon toggles")
     g.showGCDBarSpell, g.showGCDBarTime = true, true
-    env.MSUF_GCDBar_RefreshLayout()
+    world.core.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     assert(bar.icon:IsShown() and bar.timeText:GetText() == "0.8", "preview did not restore details")
     g.gcdBarDetached = false
-    env.MSUF_GCDBar_RefreshLayout()
+    world.core.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     em.Movers.SyncAll()
     assert(not bar:IsShown() and not mover:IsShown(), "attached mode retained detached mover")
     g.gcdBarDetached = true
-    env.MSUF_GCDBar_RefreshLayout()
+    world.core.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     -- The same external transaction used by CancelAll, isolated from the
     -- unrelated full unit-frame rebuild in this fake client.
     assert(external.EndSession("discard"), "discard transaction failed")
@@ -80,7 +80,7 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     -- Registration must follow the current profile, never close over the first DB.
     local old = env.MSUF_DB.general
     env.MSUF_DB.general = { gcdBarDetached = true, gcdBarX = -55, gcdBarY = 68 }
-    env.MSUF_GCDBar_RefreshLayout()
+    world.core.PublicGlobals.MSUF_GCDBar_RefreshLayout()
     assert(em.State.Enter("player"), "second edit entry failed")
     world.widgets:RunTimers(1000)
     assert(external.Nudge(key, 5, 2), "new profile nudge failed")

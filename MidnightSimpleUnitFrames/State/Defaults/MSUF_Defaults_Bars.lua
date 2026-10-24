@@ -287,7 +287,7 @@ local function MSUF_Defaults_Stage_SeedBarTextureDefaults(g)
             end
             return false
         end
-        local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
+        local LSM = (MSUF and MSUF.LSM) or MSUF.PublicGlobals.MSUF_LSM
         if LSM and type(LSM.Fetch) == "function" then
             local tex = LSM:Fetch("statusbar", key, true)
             if type(tex) == "string" and tex ~= "" then

@@ -155,6 +155,53 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local fill = statusbar:GetStatusBarTexture()
     pixel(statusbar)
     assert(not fill or not fill.pixelEnabled, "native interpolated status-bar fill rounded")
+    -- Gloss owns two new visible regions, while the native interpolated fill
+    -- retains its own geometry. Observe the real cold painter and helper.
+    do
+        local common = assert(ns.UFBarTextCommon)
+        statusbar:SetSize(197.375, 19.625)
+        statusbar:SetPoint("CENTER", owner, "CENTER", -2.375, 1.625)
+        fill:SetSize(113.625, 19.625)
+        fill:SetPoint("TOPLEFT", statusbar, "TOPLEFT", 0, 0)
+        local barBefore, fillBefore = Geometry(statusbar), Geometry(fill)
+        local regionsBefore = statusbar:GetNumRegions()
+        local glossSpec = { enabled = true, strength = 0.6 }
+        local gloss = assert(common.ApplyBarGloss(statusbar, statusbar, glossSpec, "pixelGloss", 0.65))
+        assert(statusbar:GetNumRegions() == regionsBefore + 2, flavor .. ": gloss did not retain two regions")
+        for _, reflection in ipairs({ gloss.upper, gloss.lower }) do
+            assert((reflection.pixelEnabled == true) == expected,
+                flavor .. ": gloss reflection registration did not follow the client pixel policy")
+            assert((reflection.pixelCalls or 0) == (expected and 1 or 0),
+                flavor .. ": gloss reflection must opt in once at creation")
+            assert(reflection:GetNumPoints() == 2, flavor .. ": gloss full-fill anchor count changed")
+            for index, corner in ipairs({ "TOPLEFT", "BOTTOMRIGHT" }) do
+                local point, target, relative, x, y = reflection:GetPoint(index)
+                assert(point == corner and target == fill and relative == corner and x == 0 and y == 0,
+                    flavor .. ": gloss no longer spans the exact native fill")
+            end
+        end
+        assert(not fill.pixelEnabled and Equal(fillBefore, Geometry(fill)) and Equal(barBefore, Geometry(statusbar)),
+            flavor .. ": gloss rewrote native fill or owner geometry")
+        local glossWatched = { [pixel] = true, [enable] = true,
+            [env.MSUF_SetRoundLayoutToNearestPixel] = true,
+            [world.widgets.Methods.SetRoundLayoutToNearestPixel] = true }
+        assert(CountCalls(glossWatched, function()
+            for i = 1, 20 do
+                assert(common.ApplyBarGloss(statusbar, statusbar, glossSpec, "pixelGloss", 0.65) == gloss)
+            end
+        end) == 0, flavor .. ": warm gloss apply revisited pixel registration or native rounding")
+        local coldOwner = env.CreateFrame("Frame", nil, env.UIParent)
+        world.widgets:SetCombat(true)
+        assert(ns.Util.InCombat(), flavor .. ": gloss combat case did not reach the actual refusal")
+        assert(CountCalls(glossWatched, function()
+            assert(common.ApplyBarGloss(coldOwner, statusbar, glossSpec, "pixelGloss", 0.65) == nil)
+        end) == 0, flavor .. ": refused cold combat gloss called a pixel helper or native rounding")
+        world.widgets:SetCombat(false)
+        assert(coldOwner.pixelGloss == nil and statusbar:GetNumRegions() == regionsBefore + 2,
+            flavor .. ": refused cold combat gloss created regions")
+        assert(not fill.pixelEnabled and Equal(fillBefore, Geometry(fill)) and Equal(barBefore, Geometry(statusbar)),
+            flavor .. ": repeated gloss changed native fill or owner geometry")
+    end
     local button = ns.MSUF2.Widgets.RoleButton(owner, "Pixel test", "primary", 93.375, 23.625)
     assert((button.pixelEnabled == true) == expected, "real Menu2 widget missed")
 

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets_Buttons.lua
 --- Top-bar and role buttons (W.TopButton, W.RoleButton) and the badges a
 --- collapsible section header shows (W.SetCollapsibleBadges, the Custom badge).
@@ -6,13 +5,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Split from MSUF_Menu2_Widgets.lua; loads after the page builder.
 
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Widgets_Buttons.lua")
 local M = MSUF.MSUF2
 local T = M.Theme
 local W = M.Widgets
 local Shared = W._Shared
-local floor = math.floor
-local max = math.max
-local min = math.min
+local floor, max, min = math.floor, math.max, math.min
 local Tr = M.TranslateText
 local ThemeColor = Shared.ThemeColor
 local WithAlpha = Shared.WithAlpha
@@ -115,18 +113,10 @@ local function StyleTopButton(btn, style)
     ApplyTopActionButtonVisual(btn)
     return btn
 end
-local function StyleTopActionButton(btn)
-    return StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE)
-end
-local function StyleTopDangerButton(btn)
-    return StyleTopButton(btn, TOP_DANGER_BUTTON_STYLE)
-end
-local function StyleTopSuccessButton(btn)
-    return StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE)
-end
 M.Assign(W, {
-    StyleTopActionButton = StyleTopActionButton, StyleTopDangerButton = StyleTopDangerButton,
-    StyleTopSuccessButton = StyleTopSuccessButton,
+    StyleTopActionButton = function(btn) return StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE) end,
+    StyleTopDangerButton = function(btn) return StyleTopButton(btn, TOP_DANGER_BUTTON_STYLE) end,
+    StyleTopSuccessButton = function(btn) return StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE) end,
 })
 function W.RoleButton(parent, label, role, width, height)
     local btn = (T.RoleButton and T.RoleButton(parent, label, role, width, height)) or T.Button(parent, label, width, height)
@@ -187,6 +177,27 @@ local function RefreshBadgeAccentBorder()
         end
     end
 end
+-- Frame, rounded layers and centered text of one header badge.
+local function NewHeaderBadge(header, width, text)
+    local badge = PixelLayoutRegion(CreateFrame("Frame", nil, header))
+    badge:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 2)
+    badge:SetSize(width, 20)
+    local fill, edge = T.CreateSuperellipseLayers(badge, "_msuf2HeaderBadge", 1, "ARTWORK", "OVERLAY")
+    badge.text = T.Font(badge, "GameFontDisableSmall", text, T.colors.text)
+    badge.text:SetPoint("CENTER", badge, "CENTER", 0, 0)
+    return badge, fill, edge
+end
+local function PaintBadgeLayers(fill, edge, style)
+    if fill then
+        local c = style.bg
+        if T.SetFillGradient then T.SetFillGradient(fill, c, 0.12, -0.18)
+        else fill:SetVertexColor(c[1], c[2], c[3], c[4] or 1) end
+    end
+    if edge then
+        local c = style.border
+        edge:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+    end
+end
 function W.SetCollapsibleBadges(section, specs)
     RefreshBadgeAccentBorder()
     local entry = section and section._msuf2CollapsibleEntry
@@ -204,14 +215,10 @@ function W.SetCollapsibleBadges(section, specs)
         local spec = specs[i] or {}
         local badge = entry._msuf2Badges[i]
         if not badge then
-            badge = PixelLayoutRegion(CreateFrame("Frame", nil, header))
-            badge:SetSize(54, 20)
-            badge:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 2)
-            local fill, edge = T.CreateSuperellipseLayers(badge, "_msuf2HeaderBadge", 1, "ARTWORK", "OVERLAY")
+            local fill, edge
+            badge, fill, edge = NewHeaderBadge(header, 54, "")
             badge._msuf2Fill = fill
             badge._msuf2Edge = edge
-            badge.text = T.Font(badge, "GameFontDisableSmall", "", T.colors.text)
-            badge.text:SetPoint("CENTER", badge, "CENTER", 0, 0)
             badge.text:SetJustifyH("CENTER")
             entry._msuf2Badges[i] = badge
         end
@@ -236,18 +243,7 @@ function W.SetCollapsibleBadges(section, specs)
                 if badge.text.SetMaxLines then badge.text:SetMaxLines(1) end
                 if badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
             end
-            if badge._msuf2Fill then
-                local c = style.bg
-                if T.SetFillGradient then
-                    T.SetFillGradient(badge._msuf2Fill, c, 0.12, -0.18)
-                else
-                    badge._msuf2Fill:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
-                end
-            end
-            if badge._msuf2Edge then
-                local c = style.border
-                badge._msuf2Edge:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
-            end
+            PaintBadgeLayers(badge._msuf2Fill, badge._msuf2Edge, style)
         end
         local shown = text ~= ""
         if shown then
@@ -291,17 +287,9 @@ function W.SetCollapsibleCustomBadge(section, shown)
         if not shown then return end
         RefreshBadgeAccentBorder()
         local style = COLLAPSIBLE_BADGE_STYLES.accent
-        badge = PixelLayoutRegion(CreateFrame("Frame", nil, header))
-        badge:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 2)
-        badge:SetSize(CollapsibleBadgeWidth(Tr("Custom")), 20)
-        local fill, edge = T.CreateSuperellipseLayers(badge, "_msuf2HeaderBadge", 1, "ARTWORK", "OVERLAY")
-        if fill then
-            if T.SetFillGradient then T.SetFillGradient(fill, style.bg, 0.12, -0.18)
-            else fill:SetVertexColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] or 1) end
-        end
-        if edge then edge:SetVertexColor(style.border[1], style.border[2], style.border[3], style.border[4] or 1) end
-        badge.text = T.Font(badge, "GameFontDisableSmall", "Custom", T.colors.text)
-        badge.text:SetPoint("CENTER", badge, "CENTER", 0, 0)
+        local fill, edge
+        badge, fill, edge = NewHeaderBadge(header, CollapsibleBadgeWidth(Tr("Custom")), "Custom")
+        PaintBadgeLayers(fill, edge, style)
         badge.text:SetTextColor(style.text[1], style.text[2], style.text[3], style.text[4] or 1)
         if badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
         -- Hover explains the marker; a click still opens or closes the section.
@@ -330,11 +318,11 @@ do
     local carry = T.TrackMenuAnimationGroup({ channels = {}, Stop = function(self) self.key = nil end })
     function W.BeginSelectionMotion(owner, value)
         carry.key = nil
-        if T.ReducedMotionEnabled() then return end
         local selections = owner._msuf2SelectionMotions
         local selection = owner._msuf2SelectionMotion or (selections and #selections == 1 and selections[1])
         local driver = selection and selection.driver
         if not driver or not selection.seeded or not selection.selected or selection.selected._msuf2Value == value then return end
+        if T.ReducedMotionEnabled() then return end
         carry.key, carry.value, carry.time = selection.key, value, GetTime()
         for i = 1, 4 do
             local source = driver.channels[i]
@@ -485,6 +473,14 @@ do
         channel.target = value
     end
     local function ColorChannels(driver, index, r, g, b, a, seed)
+        if not seed then
+            local channels = driver.channels
+            local cr, cg, cb, ca = channels[index], channels[index + 1], channels[index + 2], channels[index + 3]
+            if cr and cg and cb and ca and cr.target == r and cg.target == g and cb.target == b and ca.target == a then
+                cr.target, cg.target, cb.target, ca.target = r, g, b, a
+                return
+            end
+        end
         SetChannel(driver, index, r, seed)
         SetChannel(driver, index + 1, g, seed)
         SetChannel(driver, index + 2, b, seed)
@@ -516,27 +512,33 @@ do
     local function MotionAllowed(owner)
         return owner:IsVisible() and not T.ReducedMotionEnabled()
     end
+    -- Channel 1 is the knob position; 2, 6 and 10 follow the painted fill, edge and knob colors.
+    local function SyncSwitchChannels(driver, button, on, seed)
+        SetChannel(driver, 1, on and 1 or 0, seed)
+        local r, g, b, a = button._msuf2SwitchFill:GetVertexColor()
+        ColorChannels(driver, 2, r, g, b, a, seed)
+        r, g, b, a = button._msuf2SwitchEdge:GetVertexColor()
+        ColorChannels(driver, 6, r, g, b, a, seed)
+        r, g, b, a = button._msuf2SwitchKnob:GetVertexColor()
+        ColorChannels(driver, 10, r, g, b, a, seed)
+    end
     function W.BeginSwitchMotion(button, checked)
-        local driver = button._msuf2SwitchMotion
+        local before, driver = button._msuf2SwitchPaintedChecked, button._msuf2SwitchMotion
+        local unchanged = before == (checked and true or false)
+        local playing = unchanged and driver and driver:GetScript("OnUpdate")
+        if (unchanged and not playing) or (before == nil and not driver) then return end
         if not MotionAllowed(button) or not button:IsEnabled() then
-            if driver and driver:GetScript("OnUpdate") then driver:Stop() end
+            if driver and (playing or driver:GetScript("OnUpdate")) then driver:Stop() end
             return
         end
-        local before = button._msuf2SwitchPaintedChecked
-        if before == nil or (before == (checked and true or false) and not (driver and driver:GetScript("OnUpdate"))) then return end
+        if before == nil then return end
         if not driver then
             driver = W.CreateLayoutMotion(button, PaintSwitch)
             driver.owner, driver.duration = button, 0.12
             button._msuf2SwitchMotion = driver
         end
-        if not driver:GetScript("OnUpdate") then
-            SetChannel(driver, 1, before and 1 or 0, true)
-            local r, g, b, a = button._msuf2SwitchFill:GetVertexColor()
-            ColorChannels(driver, 2, r, g, b, a, true)
-            r, g, b, a = button._msuf2SwitchEdge:GetVertexColor()
-            ColorChannels(driver, 6, r, g, b, a, true)
-            r, g, b, a = button._msuf2SwitchKnob:GetVertexColor()
-            ColorChannels(driver, 10, r, g, b, a, true)
+        if not (playing or driver:GetScript("OnUpdate")) then
+            SyncSwitchChannels(driver, button, before, true)
             driver.dirty, driver.stale = nil, nil
         end
         return driver
@@ -559,14 +561,7 @@ do
             driver.stale, driver.dirty = true, nil
             return
         end
-        local button = driver.owner
-        SetChannel(driver, 1, checked and 1 or 0, snap)
-        local r, g, b, a = button._msuf2SwitchFill:GetVertexColor()
-        ColorChannels(driver, 2, r, g, b, a, snap)
-        r, g, b, a = button._msuf2SwitchEdge:GetVertexColor()
-        ColorChannels(driver, 6, r, g, b, a, snap)
-        r, g, b, a = button._msuf2SwitchKnob:GetVertexColor()
-        ColorChannels(driver, 10, r, g, b, a, snap)
+        SyncSwitchChannels(driver, driver.owner, checked, snap)
         if snap then driver.dirty = nil else W.FinishControlMotion(driver) end
     end
     local function PaintDisclosure(driver)

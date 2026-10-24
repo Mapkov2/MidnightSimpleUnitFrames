@@ -6,12 +6,15 @@
 --- attributes in combat; Runtime handles deferral and calls back here afterward.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local HEADERS_FILE = "UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
 local UF = MSUF.UF
+-- The rounded frames module publishes its block-border callback only while it
+-- is enabled; Public mirrors each export, so a read sees the live toggle.
+local Public = MSUF.Public
 
 local CreateFrame = CreateFrame
 local UIParent = UIParent
@@ -29,7 +32,7 @@ local UnitGUID = UnitGUID
 local UnitClass = UnitClass
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
@@ -46,6 +49,7 @@ GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 local BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
 local IsUnitToken = UF and UF.IsUnitToken
+local raidNameObserver
 
 local LiveGroupKind = GF.GetLiveGroupKind
 
@@ -103,9 +107,9 @@ function GF.ForEachHeader(key, fn)
   return false
 end
 
--- Stop the native roster rebuild too: deferring only Runtime leaves Blizzard's
--- header free to create, compact and resize slots during combat. Unit consumers
--- stay live because raidN can acquire another occupant without changing its token.
+-- Stop native roster rebuilds while the slots are frozen. One owned listener
+-- retains name-only catch-up without replacing the secure header's scripts.
+-- Unit consumers stay live when a raidN token acquires another occupant.
 local function DeferRaidNameUpdate(header, event, unit)
   local reasons = GF._pendingGroupRuntimeReasons
   local kind = GF._pendingGroupRuntimeKind
@@ -119,10 +123,7 @@ local function FreezeRaidRoster(header)
   -- Native OnShow may owe an OOC roster update hidden by an ancestor.
   header._msufRaidRosterHiddenAtFreeze = not header:IsVisible() or nil
   header:UnregisterEvent("GROUP_ROSTER_UPDATE")
-  header._msufRaidRosterOnShow = header:GetScript("OnShow")
-  header._msufRaidRosterOnEvent = header:GetScript("OnEvent")
-  header:SetScript("OnEvent", DeferRaidNameUpdate)
-  header:SetScript("OnShow", nil)
+  header:UnregisterEvent("UNIT_NAME_UPDATE")
   header:SetAttribute("_ignore", true)
   header._msufRaidRosterFrozen = true
   return true
@@ -132,13 +133,10 @@ local function ResumeRaidRoster(header)
   if not header._msufRaidRosterFrozen then return false end
   header._msufRaidRosterFrozen = nil
   header:RegisterEvent("GROUP_ROSTER_UPDATE")
-  header:SetScript("OnShow", header._msufRaidRosterOnShow)
-  header._msufRaidRosterOnShow = nil
-  header:SetScript("OnEvent", header._msufRaidRosterOnEvent)
-  header._msufRaidRosterOnEvent = nil
+  header:RegisterEvent("UNIT_NAME_UPDATE")
   header:SetAttribute("_ignore", nil)
   -- Missed roster/name changes need a native refresh even with identical
-  -- layout attributes. An unchanged combat needs only its handlers restored.
+  -- layout attributes. An unchanged combat needs only its events restored.
   if GF._pendingGroupRuntime or header._msufRaidRosterHiddenAtFreeze then
     header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
   end
@@ -160,7 +158,15 @@ end
 function GF.SetRaidRosterFrozen(frozen)
   -- Keep refusal through the pre-lockdown edge until Runtime handles regen.
   GF._raidRosterCombatActive = frozen and true or nil
-  return GF.ForEachHeader("raid", frozen and FreezeRaidRoster or ResumeRaidRoster)
+  local changed = GF.ForEachHeader("raid", frozen and FreezeRaidRoster or ResumeRaidRoster)
+  if raidNameObserver then
+    if frozen and GF.headers.raid then
+      raidNameObserver:RegisterEvent("UNIT_NAME_UPDATE")
+    else
+      raidNameObserver:UnregisterEvent("UNIT_NAME_UPDATE")
+    end
+  end
+  return changed
 end
 
 function GF.ShowHeaders(key)
@@ -356,42 +362,24 @@ local function ResolveAnchorPoint(kind, conf, parent)
   return point, point
 end
 
-local PointFraction = _G.MSUF_UF_PointFraction
+-- UnitFrames/Engine/MSUF_UF_Shared.lua loads before the group files.
+local PointFraction = MSUF.Require("MSUF_UF_PointFraction", HEADERS_FILE)
 
-local ClampBoxAxis = _G.MSUF_UF_ClampBoxAxis
+local ClampAnchorOffsetOnScreen = MSUF.Require("MSUF_UF_ClampAnchorOffsetOnScreen", HEADERS_FILE)
 
 --- Keep anchor frames on screen when possible; child layout remains relative to
---- the anchor so saved offsets stay meaningful.
+--- the anchor so saved offsets stay meaningful. The shared clamp does the box
+--- math; the anchor is only re-pointed when the box had to move.
 local function ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
-  if not (anchor and parent and parent.GetLeft and UIParent and UIParent.GetWidth) then
+  if not anchor then
     return
   end
-  local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
-  if not (screenW and screenH and screenW > 0 and screenH > 0) then
-    return
-  end
-  local pLeft, pRight = parent:GetLeft(), parent:GetRight()
-  local pBottom, pTop = parent:GetBottom(), parent:GetTop()
-  if not (pLeft and pRight and pBottom and pTop) then
-    return
-  end
-  local fx, fy = PointFraction(point)
-  local rfx, rfy = PointFraction(relativePoint)
-  local px = pLeft + (pRight - pLeft) * rfx + (offsetX or 0)
-  local py = pBottom + (pTop - pBottom) * rfy + (offsetY or 0)
-  local boxW, boxH = totalW or 0, totalH or 0
-  local left = px - boxW * fx
-  local bottom = py - boxH * fy
-  local right = left + boxW
-  local top = bottom + boxH
-
-  local dx = ClampBoxAxis(left, right, screenW)
-  local dy = ClampBoxAxis(bottom, top, screenH)
-  if dx == 0 and dy == 0 then
+  local x, y, moved = ClampAnchorOffsetOnScreen(point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
+  if not moved then
     return
   end
   anchor:ClearAllPoints()
-  anchor:SetPoint(point, parent, relativePoint, (offsetX or 0) + dx, (offsetY or 0) + dy)
+  anchor:SetPoint(point, parent, relativePoint, x, y)
 end
 
 local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
@@ -1268,7 +1256,7 @@ end
 
 --- One birth path for every MSUF SecureGroupHeader (party, raid, preserved raid
 --- groups, priority).
-local function CreateSecureHeader(name, parent)
+local function CreateSecureHeader(name, parent, raid)
   local header = PixelLayoutRegion(CreateFrame("Frame", name, parent, "SecureGroupHeaderTemplate"))
   -- 12.1.5 keeps the header rect on whole pixels in native code, which is
   -- what the secure template anchors its managed children against.
@@ -1276,6 +1264,15 @@ local function CreateSecureHeader(name, parent)
   -- creation and never from a refresh path.
   Dep("MSUF_SetRoundLayoutToNearestPixel")(header, true)
   header[CHILD_INIT_METHOD] = OnHeaderChildInit
+  if raid then
+    -- Keep native handlers inside Blizzard's secure wrapper storage; never
+    -- round-trip them through addon fields or SetScript at combat boundaries.
+    SecureHandlerWrapScript(header, "OnShow", header, "if self:GetAttribute('_ignore') then return false end")
+    if not raidNameObserver then
+      raidNameObserver = CreateFrame("Frame")
+      raidNameObserver:SetScript("OnEvent", DeferRaidNameUpdate)
+    end
+  end
   return header
 end
 
@@ -1293,7 +1290,7 @@ local function ApplyGroupBorder(host, conf, enabled)
     if host.MSUFGFGroupBorder then
       for _, edge in pairs(host.MSUFGFGroupBorder) do edge:Hide() end
     end
-    local rounded = _G.MSUF_RoundedUF_OnGroupBlockBorder
+    local rounded = Public.RoundedUF_OnGroupBlockBorder
     if rounded then rounded(host, conf, false) end
     return false
   end
@@ -1329,7 +1326,7 @@ local function ApplyGroupBorder(host, conf, enabled)
     end
     edge:Show()
   end
-  local rounded = _G.MSUF_RoundedUF_OnGroupBlockBorder
+  local rounded = Public.RoundedUF_OnGroupBlockBorder
   if rounded and rounded(host, conf, true) then
     for _, edge in pairs(edges) do edge:Hide() end
   end
@@ -1342,7 +1339,7 @@ GF.ApplyGroupBorderToFrame = ApplyGroupBorder
 --- its last position/size while the header is retired. Let the preview own the
 --- border for that kind so the two do not draw two boxes at once.
 local function GroupBorderPreviewOwned(anchorKind)
-  if _G.MSUF_UnitEditModeActive == true then return false end
+  if MSUF_UnitEditModeActive == true then return false end
   local active = GF._previewActive
   if not active then return false end
   if anchorKind == "party" then return active.party == true end
@@ -1469,13 +1466,11 @@ local function RuntimeFootprintPadding(kind, conf, anchor)
     if issecretvalue(outline) == true then return nil, true end
     outline = math.max(0, tonumber(outline) or 0)
     padding = math.max(padding, outline)
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local bars = MSUF_DB and MSUF_DB.bars
     local textureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil
       and conf.barOutlineTexture or (bars and bars.barOutlineTexture)
-    local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
-    if outline > 0 and issecretvalue(textureKey) ~= true and type(textureKey) == "string"
-      and styles and type(styles.ResolveFrame) == "function"
-      and type(styles.EdgeSize) == "function" then
+    local styles = MSUF.BorderStyles or MSUF.Require("MSUF_BorderStyles", HEADERS_FILE)
+    if outline > 0 and issecretvalue(textureKey) ~= true and type(textureKey) == "string" then
       local mode, resolvedKey, texture = styles.ResolveFrame(textureKey)
       if mode == styles.FRAME_BORDER and texture then
         local edgeSize = styles.EdgeSize(resolvedKey, outline)
@@ -1501,7 +1496,7 @@ end
 --- produced the secure header rectangles. Re-running SetupHeader always starts
 --- from the saved point clamp, so corrections cannot accumulate.
 local function ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
-  if key == "priority" or InCombat() or _G.MSUF_UnitEditModeActive == true
+  if key == "priority" or InCombat() or MSUF_UnitEditModeActive == true
     or GroupBorderPreviewOwned(key) then
     return false
   end
@@ -1659,7 +1654,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
   for groupIndex = 1, groupCount do
     local header = headers[groupIndex]
     if not header then
-      header = CreateSecureHeader(HeaderName("raid"), anchor)
+      header = CreateSecureHeader(HeaderName("raid"), anchor, true)
       headers[groupIndex] = header
     end
 
@@ -1894,7 +1889,7 @@ function GF.SetupHeader(key, kind)
 
 
   if not header then
-    header = CreateSecureHeader(HeaderName(key), anchor)
+    header = CreateSecureHeader(HeaderName(key), anchor, key == "raid")
     GF.headers[key] = header
     newHeader = true
   end

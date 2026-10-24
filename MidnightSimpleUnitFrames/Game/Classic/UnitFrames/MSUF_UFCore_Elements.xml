@@ -1,6 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Visuals_Common.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_BarsCommon.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_BarGloss.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Health.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_TempMaxHealth.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Power.lua"/>
@@ -34,4 +35,6 @@
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_MockAuraPainter.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_IconShape.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_IconSkins.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_IconSkins_Catalog.lua"/>
 </Ui>

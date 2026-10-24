@@ -27,9 +27,12 @@ local root = assert(arg[1], "repository root argument missing"):gsub("\\", "/"):
 local dumpOnly = arg[2] == "--dump"
 local addon = root .. "/MidnightSimpleUnitFrames/"
 
+-- Files run through the shipped loader: the real Kernel API (ExportPublic with the keep policy,
+-- the registries, Require), and a provider this smoke does not load is a forwarder that
+-- raises when used.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 local function Load(path, namespace)
-    local chunk = assert(loadfile(addon .. path))
-    return chunk("MidnightSimpleUnitFrames", namespace)
+    return RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. path, namespace)
 end
 
 local function ReadSource(path)
@@ -98,22 +101,24 @@ local function RunPath(pathName, arenaSlots, loadRuntime)
     local namespace = {
         Client = { Family = loadRuntime and "Mainline" or "Classic", IsClassic = not loadRuntime,
             MaxArenaOpponents = arenaSlots },
-        ExportPublic = function(name, value) _G[name] = value; return value end,
         MSUF_CreateCanonicalPlayerDefensiveAuraContainer = function() return { name = "Defensive Buffs", placed = {} } end,
     }
     _G.MSUF_NS, _G.MSUF = namespace, namespace
     _G.MSUF_MAX_ARENA_FRAMES = arenaSlots
     _G.MSUF_DB = nil
-    _G.MSUF_NormalizeAuraDebuffTypeBorderMode = function(value, fallback)
+    RequireFixture.InstallKernel(root, namespace)
+    -- Stand-ins for providers a later shipped file replaces with its own export (namespace-only
+    -- exports: the registry, never a global).
+    namespace.ExportPublic("MSUF_NormalizeAuraDebuffTypeBorderMode", function(value, fallback)
         value = type(value) == "string" and value:upper() or nil
         if value == "OFF" or value == "BORDER" or value == "SYMBOL" then return value end
         return fallback or "OFF"
-    end
-    _G.MSUF_AuraTableHasAnyKey = function(tbl, keys)
+    end)
+    namespace.ExportPublic("MSUF_AuraTableHasAnyKey", function(tbl, keys)
         if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
         for key in pairs(keys) do if tbl[key] ~= nil then return true end end
         return false
-    end
+    end)
 
     Load("Auras3/MSUF_Auras3_Core.lua", namespace)
     local A3 = assert(namespace.MSUF_Auras3, "Auras3 core did not publish A3")

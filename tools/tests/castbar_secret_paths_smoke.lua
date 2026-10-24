@@ -454,7 +454,7 @@ local function RunMainline(style)
     end)
     Scenario(world, style .. " GCD detached", function()
         env.MSUF_DB.general.gcdBarDetached = true
-        env.MSUF_GCDBar_RefreshLayout()
+        env.MSUF.PublicGlobals.MSUF_GCDBar_RefreshLayout()
         GCDLife(world)
     end)
     local violations, coverage = stop()

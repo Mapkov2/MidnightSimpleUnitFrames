@@ -1,7 +1,6 @@
 --- Shared helpers for client-specific Classic aura datasets.
 --- Loaded only by Classic-family manifests; Mainline keeps its original data path.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then

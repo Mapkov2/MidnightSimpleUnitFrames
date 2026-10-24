@@ -2,7 +2,6 @@
 -- Keep live alpha updates cheap; range and combat deferral belong to dedicated runtime modules.
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
 
 local Visuals = MSUF.UFVisuals or {}
@@ -16,32 +15,19 @@ local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
 local Clamp01 = Visuals.Clamp01
 local SetFrameAlpha = Visuals.SetFrameAlpha
 local SetAlphaCached = Visuals.SetAlphaCached
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 -- The one combat-state source (Kernel/MSUF_Util.lua). Asking it with the
 -- regen event also marks the combat edge for the group pokes below.
 local InCombat = MSUF.Util.InCombat
-local issecretvalue = _G.issecretvalue
-local EvaluateColorValueFromBoolean = _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorValueFromBoolean
+local issecretvalue = issecretvalue
+local EvaluateColorValueFromBoolean = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")
+local RefreshAllUnitAlphas = MSUF.Require("MSUF_RefreshAllUnitAlphas", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")
 
--- Boss token -> index without a pattern match. Kernel/MSUF_Util.lua (TOC line
--- order: Kernel before UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml)
--- always publishes this in-game; the inline twin only covers harnesses that
--- load this element standalone. Keep both shapes identical to MSUF_Util's.
-local GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
-if type(GetBossIndexFromToken) ~= "function" then
-  local strsub = string.sub
-  GetBossIndexFromToken = function(u)
-    if type(u) ~= "string" or strsub(u, 1, 4) ~= "boss" then
-      return nil
-    end
-    local n = tonumber(strsub(u, 5))
-    if n and n >= 1 then
-      return n
-    end
-    return nil
-  end
-end
-local GetArenaIndexFromToken = MSUF.Require("MSUF_GetArenaIndexFromToken", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")
+-- Token providers are captured once from the owned namespace after Kernel/Util.
+-- Standalone fixtures load the same real Bootstrap/Util provider graph.
+local GetBossIndexFromToken = MSUF.Require("GetBossIndexFromToken", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua", MSUF.Public)
+local GetArenaIndexFromToken = MSUF.Require("GetArenaIndexFromToken", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua", MSUF.Public)
 
 -- Retail live SimpleFrame/CurveUtil APIs accept protected booleans and alpha
 -- components. Select both conditions natively, retaining the ordinary spell
@@ -78,7 +64,7 @@ local function OocMul(cfg)
   if oocInCombat
     or not cfg
     or cfg.oocFade ~= true
-    or _G.MSUF_UnitEditModeActive == true then
+    or MSUF_UnitEditModeActive == true then
     return 1
   end
   return Clamp01(cfg.oocAlpha, 0.5)
@@ -159,6 +145,9 @@ end
 --     built lazily when the feature is switched on, so that leg stays
 --     late-bound and re-resolves until the driver has published its global.
 local castbarCache = {}
+-- Castbars publish the boss pool only through ExportPublic (Castbars.PublicAPI.Publish),
+-- so the Public mirror is live and the miss path below makes no lookup call.
+local PublicAPI = MSUF.Public
 
 local function CastbarForUnit(unit)
   if not unit then
@@ -203,7 +192,7 @@ local function CastbarForUnit(unit)
     return castbar
   end
 
-  local bossCastbars = _G.MSUF_BossCastbars
+  local bossCastbars = PublicAPI.BossCastbars
   local castbar = (bossCastbars and bossCastbars[index])
     or _G["MSUF_BossCastbar" .. index]
   if castbar then
@@ -319,6 +308,11 @@ end
 local function ApplyCoreHealthFillAlpha(frame, alpha, force)
   SetStatusBarFillAlpha(frame.hpBar or frame.Health, alpha, "_msufAlphaHealth", force)
   SetStatusBarFillAlpha(frame.healthLossTrail, alpha, "_msufAlphaHealthLoss", force)
+  local gloss = frame.hpGloss
+  if gloss then
+    SetAlphaCached(gloss.upper, alpha, "_msufGlossAlpha", force)
+    SetAlphaCached(gloss.lower, alpha, "_msufGlossAlpha", force)
+  end
   local gradients = frame.hpGradients
   if gradients then
     for i = 1, #HEALTH_GRADIENT_FIELDS do
@@ -392,7 +386,7 @@ end
 
 local function ConfiguredHPAlpha(cfg)
   local hp = Clamp01(cfg and cfg.hpAlpha, 1)
-  if _G.MSUF_UnitEditModeActive == true and hp < 0.35 then
+  if MSUF_UnitEditModeActive == true and hp < 0.35 then
     hp = 0.35
   end
   return hp
@@ -432,6 +426,11 @@ local function ApplyRangeBooleanAlpha(frame, cfg, force)
     SetFrameAlpha(frame, oocMul)
     SetStatusBarFillRangeBoolean(frame.hpBar or frame.Health, frame, hp, "_msufAlphaHealth")
     SetStatusBarFillRangeBoolean(frame.healthLossTrail, frame, hp, "_msufAlphaHealthLoss")
+    local gloss = frame.hpGloss
+    if gloss then
+      SetRangeBooleanAlpha(gloss.upper, frame, hp, hp * outAlpha, "_msufGlossAlpha")
+      SetRangeBooleanAlpha(gloss.lower, frame, hp, hp * outAlpha, "_msufGlossAlpha")
+    end
     local gradients = frame.hpGradients
     if gradients then
       for i = 1, #HEALTH_GRADIENT_FIELDS do
@@ -692,21 +691,15 @@ do
   local pendingUnits = {}
 
   local function Flush()
-    local refresh = _G.MSUF_RefreshAllUnitAlphas
-    if type(refresh) ~= "function" then
-      pendingAll = nil
-      for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
-      return false
-    end
     if pendingAll then
       pendingAll = nil
       for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
-      return refresh()
+      return RefreshAllUnitAlphas()
     end
     local did = false
     for unit in pairs(pendingUnits) do
       pendingUnits[unit] = nil
-      did = refresh(unit) or did
+      did = RefreshAllUnitAlphas(unit) or did
     end
     return did
   end
@@ -721,12 +714,7 @@ do
     else
       pendingAll = true
     end
-    local scheduleOnce = _G.MSUF_ScheduleOnce
-    if type(scheduleOnce) == "function" then
-      scheduleOnce("UF_ALPHA_FLUSH", Flush)
-    else
-      Flush()
-    end
+    ScheduleOnce("UF_ALPHA_FLUSH", Flush)
     return true
   end
 end

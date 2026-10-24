@@ -23,6 +23,13 @@ _G.UnitChannelDuration = nil
 _G.GetUnitEmpowerStageCount = nil
 _G.issecretvalue = function() return false end
 _G.MSUF_DB = { general = {} }
+-- Blizzard's CreateColor (a ColorMixin object): Runtime/MSUF_Colors.lua builds its
+-- colour objects through it.
+_G.CreateColor = function(r, g, b, a)
+    return { r = r, g = g, b = b, a = a,
+        GetRGB = function(self) return self.r, self.g, self.b end,
+        GetRGBA = function(self) return self.r, self.g, self.b, self.a end }
+end
 if _G.MSUF and _G.MSUF.Castbars and _G.MSUF.Castbars.Config.ready then _G.MSUF.Castbars.Config.Compile() end
 
 local namespace = {
@@ -207,8 +214,17 @@ do
     }
     local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
     _G.MSUF, _G.MSUF_NS = driverNamespace, driverNamespace
+    -- State/MSUF_Defaults.lua's EnsureDB (not loaded here): the harness profile is the profile.
+    _G.MSUF_EnsureDB = function() return _G.MSUF_DB end
+    -- UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua (no unit frames here): a castbar
+    -- without a unit frame has no range alpha to take.
+    _G.MSUF_UF_ApplyCastbarRangeAlpha = function() return false end
     manifest.LoadSelected(root, "Vanilla", driverNamespace, {
         "Kernel/MSUF_Require.lua",
+        -- Kernel Util and the colour owner load before every castbar file in the TOC.
+        "Shell/EditMode/MSUF_EditMode_Geometry.lua",
+        "Kernel/MSUF_Util.lua",
+        "Runtime/MSUF_Colors.lua",
         "Castbars/MSUF_Castbars_PublicAPI.lua",
         "Castbars/MSUF_Castbars_Backend.lua",
         "Castbars/MSUF_CastbarConfig.lua",

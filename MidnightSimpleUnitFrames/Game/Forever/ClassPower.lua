@@ -18,20 +18,17 @@
 --- Every other Mainline client returns at once, so Midnight keeps its routing,
 --- its event bindings and MSUF.CPClient nil.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local Client = MSUF.Client
 if not (Client and Client.IsForever == true) then return end
 
 local TargetCombo = assert(MSUF.CPTargetCombo, "shared target-combo module must load first")
-local K = _G.MSUF_CP_CONST or {}
+local K = MSUF.Require("MSUF_CP_CONST", "Game/Forever/ClassPower.lua")
 local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 local PT = K.PT or {}
 local NotSecret = MSUF.Secrets.NotSecret
-local UnitPowerType = _G.UnitPowerType
-local GetShapeshiftFormID = _G.GetShapeshiftFormID
-local PLAYER_CLASS = select(2, _G.UnitClass("player"))
+local PLAYER_CLASS = select(2, UnitClass("player"))
 
 local Provider = { Flavor = "Forever" }
 
@@ -48,21 +45,21 @@ Provider.comboTargetEvent = type(supportsEvent) == "function"
     and supportsEvent("COMBO_TARGET_CHANGED") == true
 
 local function CreateClassPowerType(PLAYER_CLASS, UnitPowerType, GetShapeshiftFormID)
-return function()
-    if PLAYER_CLASS == "ROGUE" then
-        return PT.ComboPoints, MODE.SEGMENTED, false
-    end
-    if PLAYER_CLASS == "DRUID" then
-        local primaryPower = UnitPowerType("player")
-        if NotSecret(primaryPower) then
-            if primaryPower == PT.Energy then return PT.ComboPoints, MODE.SEGMENTED, false end
-        elseif GetShapeshiftFormID and GetShapeshiftFormID() == 1 then
-            --- DRUID_CAT_FORM is 1 on Forever (Blizzard_FrameXMLBase Constants.lua).
+    return function()
+        if PLAYER_CLASS == "ROGUE" then
             return PT.ComboPoints, MODE.SEGMENTED, false
         end
+        if PLAYER_CLASS == "DRUID" then
+            local primaryPower = UnitPowerType("player")
+            if NotSecret(primaryPower) then
+                if primaryPower == PT.Energy then return PT.ComboPoints, MODE.SEGMENTED, false end
+            elseif GetShapeshiftFormID and GetShapeshiftFormID() == 1 then
+                --- DRUID_CAT_FORM is 1 on Forever (Blizzard_FrameXMLBase Constants.lua).
+                return PT.ComboPoints, MODE.SEGMENTED, false
+            end
+        end
+        return nil, MODE.NONE, false
     end
-    return nil, MODE.NONE, false
-end
 end
 Provider.GetClassPowerType = CreateClassPowerType(PLAYER_CLASS, UnitPowerType, GetShapeshiftFormID)
 function Provider.CreateSampleResolver(sample)

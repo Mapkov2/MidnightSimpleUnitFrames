@@ -21,7 +21,7 @@ for unit, frame in pairs(UF.frames) do
     if tostring(frame) == "<client_world stub>" then UF.frames[unit] = nil end
 end
 env.MSUF_ApplyRoundedUnitframes()
-env.MSUF_RefreshUnitTextureLayers(nil)
+w.core.PublicGlobals.MSUF_RefreshUnitTextureLayers(nil) -- a namespace-only export, not a global
 h:RunTimers()
 -- This kit's synthetic login has incomplete profile APIs. Establish the
 -- measured lifecycle only after the real target/raid frames are configured.
@@ -67,10 +67,17 @@ local costs = { show, combatEnd, raidJoin }
 -- raid join (header birth plus settle) costs +101752 instructions on Mainline,
 -- Vanilla, TBC and Mists and +103312 on Forever. Only the raid-join caps move, to
 -- the exact readings; show and combat-end caps are unchanged.
+-- 2026-10-17: aura icon skins check the combat snapshot flag where a lane compiles
+-- its icon shape and style, a skin on the compiled style and the Icon Skins page's
+-- default skin. A skin-less 20 member raid join reads +300 instructions over the
+-- unchanged source on Mainline/Forever (shape reads) and +1350 on Vanilla, TBC and
+-- Mists (90 lane compiles, 15 each); per-aura updates are unchanged. Only the
+-- raid-join caps move, to the exact readings: +165 on Mainline/Forever and +965 on
+-- Vanilla, TBC and Mists, as the earlier caps left that much slack.
 local limits = {
-    Mainline = { 10438, 271832, 2145249 }, Forever = { 10837, 269792, 2149976 },
-    Vanilla = { 12987, 269712, 1890190 },
-    TBC = { 12987, 271200, 1890520 }, Mists = { 12868, 271210, 1887260 },
+    Mainline = { 10438, 271832, 2145414 }, Forever = { 10837, 269792, 2150141 },
+    Vanilla = { 12987, 269712, 1891155 },
+    TBC = { 12987, 271200, 1891485 }, Mists = { 12868, 271210, 1888225 },
 }
 local labels = { "unit OnShow", "combat end after combat show", "rounded raid join" }
 local failures = {}

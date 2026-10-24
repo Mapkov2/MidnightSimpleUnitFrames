@@ -2,7 +2,6 @@ local repo = assert(arg[1], "repo root required")
 -- The facts Game/Shared/Initialize.lua publishes on Classic Era, the flavor
 -- whose TOC this smoke resolves below. The Defaults file branches on them.
 local ns = { Client = { Family = "Classic", IsClassic = true, IsVanilla = true, SupportsPetHappiness = true } }
-ns.ExportPublic = function(name, value) _G[name] = value end
 _G.MSUF_NS = ns
 function GetLocale() return "enUS" end
 function UnitClass() return "Hunter", "HUNTER" end
@@ -10,12 +9,17 @@ function UnitName() return "Tester" end
 function GetRealmName() return "TestRealm" end
 function InCombatLockdown() return false end
 local function load(path) assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MSUF", ns) end
--- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+-- The real namespace API (Kernel/MSUF_Bootstrap.lua: ExportPublic with the shipped
+-- global keep policy; Kernel/MSUF_Require.lua: MSUF.Require / MSUF.Optional), as in
+-- every core TOC.
+load("Kernel/MSUF_Bootstrap.lua")
 load("Kernel/MSUF_Require.lua")
-load("State/MSUF_StateHelpers.lua")
-load("State/MSUF_ProfileCodec.lua")
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
+-- The shipped Util (MSUF.Util.IsSecret, read by the defaults schema) loads before
+-- the state files, after the geometry owner it needs.
 manifest.LoadSelected(repo, "Vanilla", ns, {
+    "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
+    "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
     "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
     "State/MSUF_Defaults.lua",

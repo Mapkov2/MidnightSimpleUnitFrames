@@ -1,15 +1,14 @@
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua
 --- Aura selection, drag handles and settings inputs for the engine unit scene.
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
-local floor, max, min, ceil = math.floor, math.max, math.min, math.ceil
+local MSUF = _G.MSUF
+local M = MSUF.MSUF2
+local floor, max, min = math.floor, math.max, math.min
 local Preview = MSUF.UFPreview or {}
-local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
 local CurrentPanelKey = PreviewModel.CurrentPanelKey
-local MakeFS = PreviewModel.MakeFS
-local RoundOffset = _G.MSUF_RoundOffset
+local FILE = "Menu2/UnitPreview_Auras"
+local RoundOffset = MSUF.Require("MSUF_RoundOffset", FILE)
 local function ClampNumber(value, defaultValue, minValue, maxValue)
     value = tonumber(value)
     if value == nil then value = defaultValue end
@@ -35,8 +34,7 @@ local function PlaceMinimumHitHandle(handle, parent, left, bottom, visualWidth, 
     return true
 end
 local function PlaceHandleAroundShownRegions(handle, parent, regions, pad)
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    local helpers = menu and menu.PreviewHelpers
+    local helpers = M.PreviewHelpers
     local place = helpers and helpers.PlaceHandleAroundRegions
     if type(place) ~= "function" then return false end
     return place(handle, parent, regions, pad) == true
@@ -62,13 +60,11 @@ local AURA_ANCHOR_OK = {
     BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
 }
 local function MenuModel()
-    local a3 = MSUF and MSUF.MSUF_Auras3
+    local a3 = MSUF.MSUF_Auras3
     return type(a3) == "table" and a3.MenuModel or nil
 end
-local function ApplyService()
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    return (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
-end
+-- Menu2/ApplyService.lua loads earlier in this addon: resolved once, not per drag step.
+local ApplyService = MSUF.Require("MSUF_Menu2_ApplyService", FILE)
 local function NormalizeKind(kind)
     kind = tostring(kind or ""):lower()
     if kind == "buffs" then kind = "buff" end
@@ -83,11 +79,10 @@ end
 --- even if that lane/container is currently disabled or has a zero icon
 --- limit. This is menu-only state; it never reaches the live aura runtime.
 local function SelectedUnitAuraStyleKind(unit)
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    local selections = type(menu) == "table" and menu.unitAuraTabSelection or nil
+    local selections = M.unitAuraTabSelection
     local kind = NormalizeKind(type(selections) == "table" and selections[unit] or nil)
     if not kind then return nil end
-    local allTools = menu.unitAuraToolSelection
+    local allTools = M.unitAuraToolSelection
     local tools = type(allTools) == "table" and allTools[unit] or nil
     return type(tools) == "table" and tools[kind] == "style" and kind or nil
 end
@@ -188,40 +183,8 @@ local function RefreshRuntime(unit, reason)
     unit = Auras.PreviewUnitKey(unit)
     if not unit then return false end
     reason = LiveApplyReason(reason, "MSUF2_UNIT_PREVIEW_AURA_APPLY")
-    local apply = ApplyService()
-    if apply and type(apply.RequestAuras) == "function" then
-        apply.RequestAuras(unit, reason)
-        if type(apply.Flush) == "function" then apply.Flush() end
-        return true
-    elseif apply and type(apply.RequestUnit) == "function" then
-        apply.RequestUnitDomains(unit, reason, { auras = true, preview = true })
-        if type(apply.Flush) == "function" then apply.Flush() end
-        return true
-    end
-    local model = MenuModel()
-    if model and type(model.Apply) == "function" then
-        model.Apply(unit, reason)
-        return true
-    end
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.BumpRuntimeConfig) == "function" and type(a3.RefreshUnit) ~= "function" then a3.BumpRuntimeConfig() end
-    local function Refresh(runtime)
-        if a3 and type(a3.UpdateUnitAnchor) == "function" then
-            a3.UpdateUnitAnchor(runtime)
-        end
-        if a3 and type(a3.RefreshUnit) == "function" then
-            a3.RefreshUnit(runtime)
-        elseif a3 and type(a3.RequestUnit) == "function" then
-            a3.RequestUnit(runtime)
-        end
-    end
-    if unit == "boss" then
-        for i = 1, 5 do Refresh("boss" .. i) end
-    elseif unit == "arena" then
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do Refresh("arena" .. i) end
-    else
-        Refresh(unit)
-    end
+    ApplyService.RequestAuras(unit, reason)
+    ApplyService.Flush()
     return true
 end
 local function RequestPreviewRefresh(box, reason)
@@ -238,8 +201,10 @@ local function RequestPreviewRefresh(box, reason)
     end
     return false
 end
+-- Edit Mode compat export, loaded with the core addon before this one: resolved once, not per nudge or commit.
+local SyncAuras3PositionPopup = MSUF.Require("MSUF_SyncAuras3PositionPopup", FILE)
 local function SyncPopup(unit)
-    if type(_G.MSUF_SyncAuras3PositionPopup) == "function" then _G.MSUF_SyncAuras3PositionPopup(RuntimeUnit(unit)) end
+    SyncAuras3PositionPopup(RuntimeUnit(unit))
 end
 function Auras.ReadOffsets(handle)
     local fields = handle and handle._fields
@@ -356,20 +321,15 @@ function Auras.DragOffsets(handle, x, y)
     end
     return moved == true
 end
+-- Drag state a handle carries between the first drag step and the commit (see CaptureDragPoint).
+local DRAG_STATE_FIELDS = {
+    "_msufAuraDragX", "_msufAuraDragY",
+    "_msufAuraDragHandlePoint", "_msufAuraDragHandleRel", "_msufAuraDragHandleRelPoint", "_msufAuraDragHandleX", "_msufAuraDragHandleY",
+    "_msufAuraDragVisualPoint", "_msufAuraDragVisualRel", "_msufAuraDragVisualRelPoint", "_msufAuraDragVisualX", "_msufAuraDragVisualY",
+}
 function Auras.ClearDragOffsets(handle)
     if not handle then return end
-    handle._msufAuraDragX = nil
-    handle._msufAuraDragY = nil
-    handle._msufAuraDragHandlePoint = nil
-    handle._msufAuraDragHandleRel = nil
-    handle._msufAuraDragHandleRelPoint = nil
-    handle._msufAuraDragHandleX = nil
-    handle._msufAuraDragHandleY = nil
-    handle._msufAuraDragVisualPoint = nil
-    handle._msufAuraDragVisualRel = nil
-    handle._msufAuraDragVisualRelPoint = nil
-    handle._msufAuraDragVisualX = nil
-    handle._msufAuraDragVisualY = nil
+    for i = 1, #DRAG_STATE_FIELDS do handle[DRAG_STATE_FIELDS[i]] = nil end
 end
 function Auras.CommitOffsets(handle, reason)
     local box = handle and handle._preview
@@ -425,10 +385,7 @@ function Auras.CreateHandles(box, makeHandle)
         }, "Dispel Symbol", { 0.30, 0.80, 1.00 })
     end
 end
-local AnchorOffset = _G.MSUF_AuraAnchorOffset
-local function AnchorBase(anchor, frameW, frameH)
-    return AnchorOffset(anchor, frameW, frameH)
-end
+local AnchorOffset = MSUF.Require("MSUF_AuraAnchorOffset", "Menu2/UnitPreview_Auras")
 local function NormalizeAnchor(anchor, fallback)
     anchor = tostring(anchor or "")
     return AURA_ANCHOR_OK[anchor] and anchor or fallback or "TOPLEFT"
@@ -441,15 +398,11 @@ function Auras.SampleEffect(key)
 end
 Auras.DispelPreview = Auras.DispelPreview or {}
 local DispelPreview = Auras.DispelPreview
-local function UnitDispelPage()
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    return menu and menu.UnitPage
-end
 
 function DispelPreview.ReadOffsets(handle)
     local unit = PreviewUnit(handle and handle._preview)
     if not unit then return nil end
-    local page = UnitDispelPage()
+    local page = M.UnitPage
     if page and type(page.ReadDispelSymbolOffsets) == "function" then
         return page.ReadDispelSymbolOffsets(unit)
     end
@@ -457,7 +410,7 @@ end
 
 function DispelPreview.WriteOffsets(handle, x, y, reason)
     local unit = PreviewUnit(handle and handle._preview)
-    local page = unit and UnitDispelPage()
+    local page = unit and M.UnitPage
     if page and type(page.WriteDispelSymbolOffsets) == "function" then
         return page.WriteDispelSymbolOffsets(unit, x, y,
             reason or "MSUF2_UNIT_PREVIEW_DISPEL_SYMBOL_MOVE", reason ~= "UNIT_PREVIEW_DRAG")
@@ -469,7 +422,7 @@ function DispelPreview.CommitOffsets(handle, reason)
     local box = handle and handle._preview
     local unit = PreviewUnit(box)
     if not unit then return false end
-    local page = UnitDispelPage()
+    local page = M.UnitPage
     if not (page and type(page.ApplyDispelSymbolOffsets) == "function") then return false end
     Auras.ClearDragOffsets(handle)
     page.ApplyDispelSymbolOffsets(unit, reason or "MSUF2_UNIT_PREVIEW_DISPEL_SYMBOL_DRAG_END")
@@ -484,15 +437,14 @@ function DispelPreview.Availability(key, runtimeSpec)
         or (model and type(model.UnitEnabled) == "function" and model.UnitEnabled(key) ~= true) then
         return false, false
     end
-    local a3 = MSUF and MSUF.MSUF_Auras3
+    local a3 = MSUF.MSUF_Auras3
     local overlay, symbol = runtimeSpec.dispelOverlay, runtimeSpec.dispelSymbol
     return overlay and overlay.enabled == true or false,
         symbol and symbol.enabled == true and a3 and a3.DispelSymbol ~= nil or false
 end
 
 function DispelPreview.SymbolMetrics(symbol)
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    local DS = a3 and a3.DispelSymbol
+    local DS = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.DispelSymbol
     if not DS then return end
     local size = ClampNumber(symbol and symbol.size, 14, 4, 64)
     local spacing = ClampNumber(symbol and symbol.spacing, 2, 0, 32)
@@ -515,7 +467,7 @@ end
 function DispelPreview.SymbolBounds(symbol, frameW, frameH)
     local DS, count, size, spacing, anchor, growth = DispelPreview.SymbolMetrics(symbol)
     if not DS then return end
-    local baseX, baseY = AnchorBase(anchor, frameW, frameH)
+    local baseX, baseY = AnchorOffset(anchor, frameW, frameH)
     local anchorX, anchorY = AnchorOffset(anchor, size, size)
     local left, right, bottom, top = math.huge, -math.huge, math.huge, -math.huge
     for index = 1, count do

@@ -1,23 +1,21 @@
 --- Details! adapter for MSUF Edit Mode. Snapped windows move as one native group.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local API = _G.MSUF_EditModeAPI
-if not (API and API.RegisterElement) then return end
+local API = MSUF.Require("MSUF_EditModeAPI", "Shell/EditMode/MSUF_EditMode_Details.lua")
 
 local OWNER, SETTING = "MSUF.Details", "detailsEditModeIntegration"
 local registered, active, listening = {}, false, false
 
 local Export = MSUF.ExportPublic
 
-local General = _G.MSUF_GetGeneralDB
+local General = MSUF.Require("MSUF_GetGeneralDB", "Shell/EditMode/MSUF_EditMode_Details.lua")
 
 local function Enabled()
     local general = General()
     return not general or general[SETTING] ~= false
 end
 
-local function Details()
-    local details = _G.Details
+local function GetDetailsAddon()
+    local details = Details
     return type(details) == "table" and type(details.GetInstance) == "function"
         and type(details.GetNumInstances) == "function" and details or nil
 end
@@ -32,7 +30,7 @@ local function Id(instance)
 end
 
 local function Instance(id)
-    local details = Details()
+    local details = GetDetailsAddon()
     local instance = details and details:GetInstance(tonumber(id))
     if type(instance) ~= "table" or not instance.baseframe then return nil end
     if type(instance.IsEnabled) == "function" then
@@ -179,7 +177,7 @@ local function Element(id)
         restoreState = function(state, reason) return Restore(id, state, reason) end,
         movePosition = function(request) return Move(id, request) end,
         openSettings = function()
-            local details, root = Details(), Root(id)
+            local details, root = GetDetailsAddon(), Root(id)
             if details and root and type(details.OpenOptionsWindow) == "function" then
                 details:OpenOptionsWindow(root)
                 return true
@@ -190,12 +188,12 @@ local function Element(id)
 end
 
 local function Sync()
-    local details = active and Enabled() and Details()
+    local details = active and Enabled() and GetDetailsAddon()
     if not details then return end
     for id = 1, tonumber(details:GetNumInstances()) or 0 do
         if not registered[id] and API.RegisterElement(OWNER, Element(id)) then registered[id] = true end
     end
-    if next(registered) and API.RefreshOwner then API.RefreshOwner(OWNER) end
+    if next(registered) then API.RefreshOwner(OWNER) end
 end
 
 local listener = { Enabled = true, __enabled = true, __name = "MSUF Details Edit Mode" }
@@ -211,7 +209,7 @@ end
 
 local function Activate()
     if active or not Enabled() then return false end
-    local details = Details()
+    local details = GetDetailsAddon()
     if not details then return false end
     active = true
     Listen(details, true)
@@ -221,7 +219,7 @@ end
 
 local function Deactivate()
     if not active then return false end
-    local details = Details()
+    local details = GetDetailsAddon()
     active = false
     if details then Listen(details, false) end
     if next(registered) then API.UnregisterOwner(OWNER) end
@@ -229,13 +227,13 @@ local function Deactivate()
     return true
 end
 
-local External = _G.MSUF_EM2.ExternalProviders
+local External = MSUF.Require("MSUF_EM2", "Shell/EditMode/MSUF_EditMode_Details.lua").ExternalProviders
 local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
-Export("MSUF_DetailsEditMode_IsAvailable", function() return Details() ~= nil end)
+Export("MSUF_DetailsEditMode_IsAvailable", function() return GetDetailsAddon() ~= nil end)
 Export("MSUF_DetailsEditMode_SetEnabled", SetEnabled)
 
-local eventFrame = _G.CreateFrame and _G.CreateFrame("Frame")
+local eventFrame = CreateFrame and CreateFrame("Frame")
 if eventFrame then
     eventFrame:RegisterEvent("ADDON_LOADED")
     eventFrame:SetScript("OnEvent", function(_, _, addon)

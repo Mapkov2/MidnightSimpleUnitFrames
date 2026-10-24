@@ -67,7 +67,9 @@ local function Replay(prior)
                     local file = io.open(override, "rb")
                     if file then file:close() else override = nil end
                 end
-                return load(self, prior and originals[relative] or override or path, ...)
+                -- The pinned parents predate namespace-only exports.
+                if prior and originals[relative] then return World.LoadHistorical(self, originals[relative], ...) end
+                return load(self, override or path, ...)
             end
             world.widgets.Methods.GetCenter = function(frame)
                 return (tonumber(frame.left) or 0) + (tonumber(frame.width) or 0) / 2,

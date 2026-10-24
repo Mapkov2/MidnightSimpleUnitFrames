@@ -3,10 +3,10 @@
 --- once (ALT_MANA) instead of carrying the AltMana implementation inline.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_AltMana.lua")
+local FILE = "ClassPower/MSUF_CP_AltMana.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local builders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 --- Bound once by ALT_MANA at controller load: the controller's AltMana state,
 --- its cached profile, the class facts and the APIs it injects.
@@ -17,17 +17,18 @@ local tonumber = tonumber
 local CreateFrame, ResolveClassPowerColor, GetBarTexture
 
 local function ApplyRoundedSurface()
-    local rounded = MSUF and MSUF.RoundedSurface
+    local rounded = MSUF.RoundedSurface
     local apply = rounded and rounded.ApplyAltMana
     if type(apply) == "function" then apply(AM) end
 end
 
 local function NeedsAltManaBar()
     --- The Player surface already represents Mana -> no duplicate alt bar.
-    if MSUF.ClassPowerOwnership.playerManaOverride then return false end
-    if MSUF.ClassPowerOwnership.eleMaelstrom then return false end
-    if MSUF.ClassPowerOwnership.augEvoker then return true end
-    if MSUF.ClassPowerOwnership.shadowMana then return false end
+    local ownership = MSUF.ClassPowerOwnership
+    if ownership.playerManaOverride then return false end
+    if ownership.eleMaelstrom then return false end
+    if ownership.augEvoker then return true end
+    if ownership.shadowMana then return false end
     local pType = UnitPowerType("player")
     if NotSecret(pType) then
         if pType == nil or pType == PT.Mana then return false end

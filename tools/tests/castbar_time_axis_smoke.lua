@@ -292,7 +292,7 @@ do
     -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF", ns)
-    local refresh = Check(_G.MSUF_KickReady_RefreshFrame, "interrupt-ready refresh export is missing")
+    local refresh = Check(ns.PublicGlobals.MSUF_KickReady_RefreshFrame, "interrupt-ready refresh export is missing")
     local eventFrame = Check(named.MSUF_InterruptReady_EventFrame, "interrupt-ready event frame is missing")
 
     -- Horizontal geometry, in bar pixels from the left edge.

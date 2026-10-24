@@ -47,6 +47,7 @@ local function Case(name, fn)
 end
 
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 
 ------------------------------------------------------------------------------
@@ -79,7 +80,8 @@ local function FindFrame(name)
     end
 end
 local function BusHandler(event, key)
-    local ev = env.MSUF_EventBus.handlers[event]
+    -- MSUF_EventBus is a namespace-only export.
+    local ev = world.core.PublicGlobals.MSUF_EventBus.handlers[event]
     local index = ev and ev.index[key]
     return index and ev.list[index].fn or nil
 end
@@ -184,7 +186,7 @@ Case("arena prep regen", function()
     if not regen then return end
     local asked = 0
     env.GetNumArenaOpponentSpecs = function() asked = asked + 1 return 0 end
-    rawset(env, "MSUF_InCombat", true) -- the group runtime's handler has not run yet
+    world.core.ExportPublic("MSUF_InCombat", true) -- the group runtime's handler has not run yet
     W.inCombat = false
     regen("PLAYER_REGEN_ENABLED")
     Check(asked == 1, "arena prep hand-off skipped at PLAYER_REGEN_ENABLED while the latched mirror was set")
@@ -193,7 +195,7 @@ Case("arena prep regen", function()
     env.MSUF_ArenaMatch_SyncPrepDisplay()
     Check(asked == before, "arena prep display ran in combat lockdown")
     W.inCombat = false
-    rawset(env, "MSUF_InCombat", false)
+    world.core.ExportPublic("MSUF_InCombat", false)
 end)
 
 Case("analytics regen", function()
@@ -208,27 +210,30 @@ Case("analytics regen", function()
         if frame.events.PLAYER_REGEN_ENABLED and not registered[frame] then deferFrame = frame end
     end
     assert(deferFrame, "analytics did not defer its session in combat lockdown")
-    rawset(env, "MSUF_InCombat", true) -- the group runtime's handler has not run yet
+    world.core.ExportPublic("MSUF_InCombat", true) -- the group runtime's handler has not run yet
     W.inCombat = false
     local ok, err = pcall(deferFrame.scripts.OnEvent, deferFrame, "PLAYER_REGEN_ENABLED")
     Check(ok, "analytics PLAYER_REGEN_ENABLED handler raised: " .. tostring(err))
     Check(not deferFrame.events.PLAYER_REGEN_ENABLED,
         "analytics re-deferred at PLAYER_REGEN_ENABLED while the latched mirror was set")
-    rawset(env, "MSUF_InCombat", false)
+    world.core.ExportPublic("MSUF_InCombat", false)
 end)
 
 -- 4. Aura tooltip CVars across profile switches ---------------------------------
 Case("tooltip cvars", function()
     if not tooltipCVars then return end
-    env.MSUF_UFCore_NotifyConfigChanged = function() end
-    env.MSUF_GF_RebuildAll = function() end
-    env.MSUF_ClassPower_Apply = function() end
+    -- The profile apply reads some of these from the registry and some from the global: publish
+    -- each stand-in the way its owner does (the registry, and the global for a kept name).
+    local Publish = world.core.ExportPublic
+    Publish("MSUF_UFCore_NotifyConfigChanged", function() end)
+    Publish("MSUF_GF_RebuildAll", function() end)
+    Publish("MSUF_ClassPower_Apply", function() end)
     world.core.Highlight.Refresh = function() end
-    env.MSUF_ApplyAllCastbarsAndSync = function() end
-    env.MSUF_Castbars_OnSettingsChanged = function() end
-    env.MSUF_ApplyPowerBarEmbedLayout_All = function() end
-    env.MSUF_UpdateAllFonts_Immediate = function() end
-    env.MSUF_ApplyModules = function() end
+    Publish("MSUF_ApplyAllCastbarsAndSync", function() end)
+    Publish("MSUF_Castbars_OnSettingsChanged", function() end)
+    Publish("MSUF_ApplyPowerBarEmbedLayout_All", function() end)
+    Publish("MSUF_UpdateAllFonts_Immediate", function() end)
+    Publish("MSUF_ApplyModules", function() end)
     local function Switch(name)
         local ok, err = pcall(env.MSUF_SwitchProfile, name)
         assert(ok, "profile switch to " .. name .. " raised: " .. tostring(err))
@@ -237,8 +242,9 @@ Case("tooltip cvars", function()
     local function Toggle(on)
         Other.general.tooltipShowAuraSpellIDs = on
         Other.general.tooltipShowAuraCasterNames = on
-        env.MSUF_ApplyTooltipSpellIDs(on)
-        env.MSUF_ApplyTooltipCasterNames(on)
+        -- Namespace-only exports of Runtime/MSUF_TooltipSpellIDs.lua.
+        world.core.PublicGlobals.MSUF_ApplyTooltipSpellIDs(on)
+        world.core.PublicGlobals.MSUF_ApplyTooltipCasterNames(on)
         return TakeWrites()
     end
     TakeWrites()
@@ -323,8 +329,10 @@ Case("frame alpha", function()
         value = tonumber(value) or fallback
         return math.max(0, math.min(1, value))
     end } }
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua"))("MidnightSimpleUnitFrames", ns)
-    assert(loadfile(visuals))("MidnightSimpleUnitFrames", ns)
+    -- Files run through the shipped loader: the real Kernel API, and a provider a file requires
+    -- that this case does not load is a forwarder that raises when used.
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua", ns, nil, loadfile)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua", ns, nil, loadfile)
     local SetFrameAlpha = assert(ns.UFVisuals and ns.UFVisuals.SetFrameAlpha, "SetFrameAlpha not exported")
     local current = Secrets.New("number")
     local frame = { _msufLastAlpha = 1, writes = 0 }
@@ -407,7 +415,8 @@ local function PagePreviewWorld()
     G.MSUF_AuraAnchorOffset = function() return 0, 0 end
     G.MSUF_AuraPaddingInset = function() return 0, 0 end
     G.MSUF_AuraButtonAnchor = function(x, y) return (y > 0 and "BOTTOM" or "TOP") .. (x > 0 and "LEFT" or "RIGHT") end
-    local namespace = { ExportPublic = function(key, value) G[key] = value return value end, UF = { frames = {} } }
+    -- The client fact the Edit Mode files read at load (Game/Shared/Initialize.lua): three arena slots.
+    local namespace = { Client = { MaxArenaOpponents = 3 }, UF = { frames = {} } }
     G.MSUF_NS = namespace
     local units = {}
     for i = 1, 5 do units[#units + 1] = "boss" .. i end
@@ -431,15 +440,35 @@ local function PagePreviewWorld()
     namespace.MSUF_Auras3 = A3
     G._G = G
     setmetatable(G, { __index = _G })
+    -- The real Kernel API runs in this world's environment (its exports land in G, kept names as
+    -- globals and the rest in the registry); shipped files run through the shipped loader, so a
+    -- provider a file requires that this world does not load is a forwarder that raises when used.
+    RequireFixture.InstallKernel(root, namespace, G, loadfile, true)
     assert(loadfile(root .. "/tools/tests/editmode_prerequisites.lua"))().Install(root, namespace, G)
     local function Load(relative)
-        local chunk = assert(loadfile(root .. "/" .. relative))
-        setfenv(chunk, G)
-        chunk("MidnightSimpleUnitFrames", namespace)
+        return RequireFixture.LoadShipped(root, relative, namespace, G, loadfile)
     end
     Load("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua")
-    -- Edit Mode Preview requires the core mock aura painter, as the TOCs load it.
-    assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, namespace)
+    -- Edit Mode Preview requires the core mock aura painter, as the TOCs load it. The painter binds
+    -- the preview sample builders at load; this world never builds a sample.
+    -- The painter takes its sample aura state from the preview animation owner
+    -- (UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua), which this world does not load: with no sample
+    -- builder a preview icon gets no sample state, as the painter answered before the owner became required.
+    namespace.ExportPublic("MSUF_BuildPreviewAnimationAuraState", function() return nil end)
+    namespace.ExportPublic("MSUF_GetPreviewAnimationAuraState", function() return nil end)
+    -- The Edit Mode preview takes the global font settings from the font owner; this world keeps the defaults.
+    namespace.ExportPublic("MSUF_GetGlobalFontSettings", function() end)
+    namespace.ExportPublic("MSUF_Auras3", A3)
+    Load("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua")
+    -- The Auras3 Edit Mode registers its any-edit-mode listener at load. The edit-mode state owner
+    -- (Shell/EditMode/MSUF_EditMode_State.lua) is outside this world, which never enters edit mode:
+    -- the listener registry and its registration function, as that owner publishes them.
+    local anyEditModeListeners = {}
+    namespace.ExportPublic("MSUF_AnyEditModeListeners", anyEditModeListeners)
+    namespace.ExportPublic("MSUF_RegisterAnyEditModeListener", function(fn)
+        if type(fn) ~= "function" then return end
+        anyEditModeListeners[#anyEditModeListeners + 1] = fn
+    end)
     for _, part in ipairs({ "Config", "Layout", "Drag", "Preview" }) do
         Load("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_" .. part .. ".lua")
     end
@@ -454,6 +483,10 @@ local function PagePreviewWorld()
     M.frame = NewWidget("MSUF2_Window")
     M.UnitPage.SetBossPagePreviewActive = function(active) G.MSUF2_BossUnitframePreviewActive = active or nil end
     M.UnitPage.SetArenaPagePreviewActive = function(active) G.MSUF2_ArenaUnitframePreviewActive = active or nil end
+    -- PagePreviews binds the castbar page preview and the group-frame preview kind at load or first use.
+    -- This case drives the Boss and Arena aura lanes only: no castbar preview unit, no group preview kind.
+    namespace.ExportPublic("MSUF_ApplyCastbarPagePreviewState", function() return nil end)
+    namespace.ExportPublic("MSUF_GF_EM2_SetActivePreviewKind", function() end)
     Load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PagePreviews.lua")
     local view = { M = M, G = G, RunTimers = RunTimers }
     function view.Combat(state, locked) affecting, lockdown = state, locked end

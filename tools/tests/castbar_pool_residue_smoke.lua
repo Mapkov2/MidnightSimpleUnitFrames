@@ -160,6 +160,11 @@ end
 ---------------------------------------------------------------------------
 -- One client: pools built, previews shown, unit frames for every slot.
 ---------------------------------------------------------------------------
+-- The custom target-name colour the "cast target colours" section turns on. The
+-- castbar driver binds its colour provider when it loads, so the provider is
+-- installed before that and reads this switch (the section flips it).
+local customTargetNameColor = false
+
 local function NewWorld(arenaSlots)
     local unitFrames = {}
     local rounded = {}
@@ -178,6 +183,20 @@ local function NewWorld(arenaSlots)
         _G.MSUF_GetFontPath = function() return "Fonts\FRIZQT__.TTF" end
         _G.MSUF_GetFontFlags = function() return "OUTLINE" end
         _G.MSUF_IsPlayerInCombat = function() return false end
+        -- Kernel/MSUF_Util.lua's change-gated geometry writers, as the traces below
+        -- were recorded (no gating, no pixel snapping): the widget calls are the
+        -- plain ones.
+        local Round = ns.Geometry.RoundOffset
+        _G.MSUF_SetPointIfChanged = function(frame, point, relTo, relPoint, x, y)
+            frame:ClearAllPoints()
+            frame:SetPoint(point, relTo, relPoint, Round(x), Round(y))
+        end
+        _G.MSUF_SetWidthIfChanged = function(frame, width) frame:SetWidth(width) end
+        _G.MSUF_SetHeightIfChanged = function(frame, height) frame:SetHeight(height) end
+        _G.MSUF_Snap = function(_, value) return value end
+        _G.MSUF_GetPhysicalPixelSize = function(_, value) return value end
+        -- Native pixel rounding of a castbar rect: no widget call is recorded.
+        _G.MSUF_SetRoundLayoutToNearestPixel = function() end
         -- Kernel, State and Runtime providers the castbar files require at
         -- load, reduced to what these sites use.
         _G.MSUF_SetTextIfChanged = function(fontString, text) fontString:SetText(text) end
@@ -188,6 +207,13 @@ local function NewWorld(arenaSlots)
         _G.MSUF_GetCastbarTextColor = function() return 1, 1, 1 end
         _G.MSUF_GetConfiguredFontColor = function() return 1, 1, 1 end
         _G.MSUF_GetCastbarBackgroundColor = function() return 0.176, 0.176, 0.176, 1 end
+        -- Runtime/MSUF_Colors.lua's target-name colour getters: no custom colour
+        -- (the getters answer nothing) until the section below turns one on.
+        _G.MSUF_GetCastbarDetailTextColor = function() return nil end
+        _G.MSUF_GetCastbarTargetNameColor = function()
+            if customTargetNameColor then return 0.25, 0.5, 0.75, true end
+            return nil
+        end
         _G.MSUF_NormalizeFontPath = function(path) return path end
         _G.MSUF_GetInternalFontPathByKey = function() return nil end
         -- Shell/EditMode/MSUF_EditMode_Compat.lua: the open castbar popup.
@@ -253,9 +279,9 @@ local function Scenario(arenaSlots)
     world.ns.Castbars.Config.Invalidate()
 
     -- A custom target-name colour makes the preview recolour observable.
-    _G.MSUF_GetCastbarTargetNameColor = function() return 0.25, 0.5, 0.75, true end
+    customTargetNameColor = true
     Add(Run(world, "cast target colours", function() _G.MSUF_RefreshAllCastTargetTextColors() end))
-    _G.MSUF_GetCastbarTargetNameColor = nil
+    customTargetNameColor = false
 
     Add(Run(world, "rounded on", function() world.ns.RoundedCastbarsApplyAll(true) end))
     Add(Run(world, "rounded off", function() world.ns.RoundedCastbarsApplyAll(false) end))

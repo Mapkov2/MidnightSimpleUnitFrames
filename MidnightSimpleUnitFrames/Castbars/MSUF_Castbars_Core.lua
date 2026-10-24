@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Media, visual refresh and cold apply coordination.
 
 local _, MSUF = ...
@@ -30,8 +29,8 @@ local FILE = "Castbars/MSUF_Castbars_Core.lua"
 local Require = MSUF.Require
 local UpdateCastbarEditInfo = Require("MSUF_UpdateCastbarEditInfo", FILE)
 local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
-
-local IsInCombat = _G.MSUF_IsPlayerInCombat
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local IsInCombat = Require("MSUF_IsPlayerInCombat", FILE)
 
 local Preview = MSUF.Require("MSUF", FILE).UF.Preview
 local previewKind = type(Preview)
@@ -753,12 +752,10 @@ local function ApplyAllCastbarsAndSync(current)
     BumpCastbarVisualRevisions()
     ApplyAllCastbarVisuals(general)
 
-    local updateEditInfo = _G.MSUF_UpdateCastbarEditInfo
-    local syncPopup = _G.MSUF_SyncCastbarPositionPopup
     for index = 1, #CASTBAR_SYNC_UNITS do
         local unitKey = CASTBAR_SYNC_UNITS[index]
-        if type(updateEditInfo) == "function" then updateEditInfo(unitKey) end
-        if type(syncPopup) == "function" then syncPopup(unitKey) end
+        UpdateCastbarEditInfo(unitKey)
+        SyncCastbarPositionPopup(unitKey)
     end
     -- Castbars/MSUF_InterruptReady.lua: consumers of the interrupt indicator's
     -- look (the MSUF Suite's nameplates) redraw from the settings just applied.

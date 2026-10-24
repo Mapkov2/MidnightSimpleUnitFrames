@@ -5,7 +5,6 @@ clients+Forever	lua	tools/tests/uf_role_secret_reads_smoke.lua	{root} {flavor}	U
 -	python	tools/tests/release_line_version_smoke.py	{root}	Release-line assertion follows VERSION
 -	python	tools/tests/gate_shard_union_smoke.py	{root}	Push-tier shards do not hold every smoke exactly once
 clients+Forever	lua	tools/tests/portrait_settings_smoke.lua	{root} {flavor}	Portrait settings regression: {flavor}
-clients+Forever	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} {flavor}	Arena PvP trinket placement and previews: {flavor}
 -	lua	tools/tests/menu_advprofiles_parity_smoke.lua	{root} Mainline	Advanced and profile replacing-row parity failed: Mainline	push
 clients+Forever	lua	tools/tests/menu_advprofiles_parity_smoke.lua	{root} {flavor}	Advanced and profile replacing-row parity failed: {flavor}	nightly
 -	lua	tools/tests/portrait_settings_smoke.lua	{root} Mainline	Portrait settings regression: Mainline
@@ -183,7 +182,7 @@ classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Cl
 -	lua+driver	.github/scripts/health_runtime_equivalence_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/health_runtime_equivalence_smoke.lua
 -	lua+driver	.github/scripts/text_runtime_value_parity_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/text_runtime_value_parity_smoke.lua
 -	lua+driver	.github/scripts/castbar_tint_parity_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/castbar_tint_parity_smoke.lua
--	lua+driver	tools/aura_big_defensive_filter_smoke.lua		v6.04 parity smoke failed: tools/aura_big_defensive_filter_smoke.lua
+-	lua+driver	tools/aura_big_defensive_filter_smoke.lua	{root/}	v6.04 parity smoke failed: tools/aura_big_defensive_filter_smoke.lua
 -	lua+driver	tools/aura_group_slot_layer_smoke.lua		v6.04 parity smoke failed: tools/aura_group_slot_layer_smoke.lua
 -	lua+driver	tools/tests/classic_suite_owned_layer_smoke.lua		Suite-owned layer contract failed: classic_suite_owned_layer_smoke.lua
 -	lua+driver	tools/group_preview_roster_handoff_smoke.lua		v6.04 parity smoke failed: tools/group_preview_roster_handoff_smoke.lua
@@ -200,20 +199,17 @@ classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Cl
 -	lua+driver	tools/tests/classic_aura_edit_forbidden_mouse_smoke.lua	{root/}	Classic aura edit forbidden mouse smoke failed
 -	lua	tools/tests/aura_secret_truth_test_smoke.lua	{root}	Aura secret truth-test smoke failed
 -	lua	tools/tests/aura_native_lane_park_smoke.lua	{root}	Aura native lane park smoke failed
--	lua	tools/tests/aura_button_setup_armor_smoke.lua	{root} Mainline	Native aura button setup armor: Mainline
--	lua	tools/tests/aura_button_setup_armor_smoke.lua	{root} Forever	Native aura button setup armor: Forever	nightly
--	lua	tools/tests/aura_button_setup_armor_smoke.lua	{root} Vanilla	Native aura button setup armor: Vanilla	nightly
--	lua	tools/tests/aura_button_setup_armor_smoke.lua	{root} TBC	Native aura button setup armor: TBC	nightly
--	lua	tools/tests/aura_button_setup_armor_smoke.lua	{root} Mists	Native aura button setup armor: Mists	nightly
--	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Mainline	Native aura latch guard: Mainline
--	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Forever	Native aura latch guard: Forever	nightly
--	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Vanilla	Native aura latch guard: Vanilla	nightly
--	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} TBC	Native aura latch guard: TBC	nightly
--	lua	tools/tests/aura_native_latch_guard_smoke.lua	{root} Mists	Native aura latch guard: Mists	nightly
 -	lua	tools/tests/aura_lane_signature_once_smoke.lua	{root} Mainline	Aura lane button signature built once per lane: Mainline
 -	lua	tools/tests/aura_lane_signature_once_smoke.lua	{root} Forever	Aura lane button signature built once per lane: Forever
 -	lua	tools/tests/aura_label_i18n_smoke.lua	{root}	Aura label i18n smoke failed
 -	lua	tools/tests/aura_icon_shape_shared_smoke.lua	{root}	Aura icon shape shared smoke failed
+-	lua	tools/tests/aura_icon_skin_paint_smoke.lua	{root}	Aura icon skin painter smoke failed
+-	lua	tools/tests/aura_icon_skin_combat_smoke.lua	{root}	Aura icon skin combat parity smoke failed
+-	lua	tools/tests/icon_skin_host_api_smoke.lua	{root}	Icon skin host API smoke failed
+-	python	tools/tests/aura_icon_skin_media_smoke.py	{root}	Aura icon skin media smoke failed
+clients+Forever	lua	tools/tests/aura_icon_skin_preview_consumers_smoke.lua	{root} {flavor}	Aura icon skin preview consumers smoke failed: {flavor}
+clients+Forever	lua	tools/tests/aura_icon_skins_page_smoke.lua	{root} {flavor}	Icon Skins page smoke failed: {flavor}
+clients+Forever	lua	tools/tests/icon_shape_page_inputs_smoke.lua	{root} {flavor}	Icon shape page inputs, history, combat, resets and client gates failed: {flavor}
 -	lua+driver	tools/tests/classic_aura_update_path_smoke.lua	{root/}	Classic aura update path smoke failed
 -	lua+driver	tools/tests/classic_aura_hotpath_budget_smoke.lua	{root/}	Classic aura hot-path budget smoke failed
 -	lua+driver	tools/tests/classic_aura_lane_schema_smoke.lua	{root/}	Classic aura lane schema smoke failed
@@ -722,7 +718,11 @@ clients+Forever	lua	tools/tests/group_role_overlay_refresh_smoke.lua	{root} {fla
 -	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} TBC	Menu preview drifted from the live element it stands for: TBC	nightly
 -	lua	tools/tests/menu_preview_runtime_drift_smoke.lua	{root} Mists	Menu preview drifted from the live element it stands for: Mists	nightly
 clients+Forever	lua	tools/tests/menu_group_copy_to_gated_smoke.lua	{root} {flavor}	Group Copy To left the Bars values behind the Custom settings flag or switched a frame provider: {flavor}
-clients+Forever	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} {flavor}	Colors page status text repaint, picker opacity, strength label or preview apply drifted: {flavor}
+-	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} Mainline	Colors page status text repaint, picker opacity, strength label or preview apply drifted: Mainline
+-	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} Vanilla	Colors page status text repaint, picker opacity, strength label or preview apply drifted: Vanilla	nightly
+-	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} TBC	Colors page status text repaint, picker opacity, strength label or preview apply drifted: TBC	nightly
+-	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} Mists	Colors page status text repaint, picker opacity, strength label or preview apply drifted: Mists	nightly
+-	lua	tools/tests/menu_colors_page_bugs_smoke.lua	{root} Forever	Colors page status text repaint, picker opacity, strength label or preview apply drifted: Forever	nightly
 clients+Forever	lua	tools/tests/menu_pages_review_bugs_smoke.lua	{root} {flavor}	A menu page review fix drifted (shake default, ToT color, gated toggles, copy lists, apply modes): {flavor}
 clients+Forever	lua	tools/tests/text_decimals_legacy_migration_smoke.lua	{root} {flavor}	Legacy hpTextDecimals is not folded into healthTextDecimals: {flavor}
 clients	lua	tools/tests/classpower_ownership_notification_order_smoke.lua	{root} {flavor}	ClassPower ownership notification ordering failed
@@ -947,7 +947,6 @@ classics+Forever	lua	tools/tests/menu_grouplayout_parity_smoke.lua	{root} {flavo
 -	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} Vanilla	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): Vanilla	nightly
 -	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} TBC	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): TBC	nightly
 -	lua	tools/tests/preview_health_background_parity_smoke.lua	{root} Mists	Options preview health background drifted from the live frame (gradient or match-health background not following the previewed health): Mists	nightly
--	lua	tools/tests/aura_unit_sensor_owner_split_smoke.lua	{root}	Aura unit sensor owner split smoke failed
 -	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} Mainline	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: Mainline
 -	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} Forever	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: Forever	nightly
 -	lua	tools/tests/preview_sample_effect_layers_smoke.lua	{root} Vanilla	Sample-effect preview layers (dispel overlay and symbol) default off, hint or settings-section follow regressed: Vanilla	nightly
@@ -970,3 +969,37 @@ clients+Forever	lua	tools/tests/menu_group_colors_schema_parity_smoke.lua	{root}
 clients+Forever	lua	tools/tests/menu_castbars_parity_smoke.lua	{root} {flavor}	Castbar settings parent input DB apply refresh history combat parity: {flavor}	nightly
 -	lua	tools/tests/menu_group_bars_schema_parity_smoke.lua	{root} Mainline - push	Group Bars schema push input, history, combat, declaration and 400px parity: Mainline
 clients+Forever	lua	tools/tests/menu_group_bars_schema_parity_smoke.lua	{root} {flavor}	Group Bars schema input, history, combat, scope and layout parity: {flavor}	nightly
+-	lua	tools/tests/menu_global_bars_schema_parity_smoke.lua	{root} Mainline - push	Global Bars schema push, palette, drag, absence and 400px parity: Mainline
+clients+Forever	lua	tools/tests/menu_global_bars_schema_parity_smoke.lua	{root} {flavor}	Global Bars schema input, history, combat, scope and layout parity: {flavor}	nightly
+-	lua	tools/tests/menu_group_aura_schema_parity_smoke.lua	{root} Mainline push	Group aura schema real-parent parity: Mainline push	push
+clients+Forever	lua	tools/tests/menu_group_aura_schema_parity_smoke.lua	{root} {flavor} full	Group aura schema real-parent parity: {flavor}	nightly
+-	lua	tools/tests/menu_group_aura_style_schema_parity_smoke.lua	{root} Mainline push	Group aura style schema parent replay: Mainline push	push
+clients+Forever	lua	tools/tests/menu_group_aura_style_schema_parity_smoke.lua	{root} {flavor} full	Group aura style schema parent replay: {flavor}	nightly
+clients+Forever	lua	tools/tests/group_aura_tooltip_repair_smoke.lua	{root} {flavor}	Group aura inherited tooltip survives repair: {flavor}
+clients+Forever	lua	tools/tests/aura_menu_canonical_revision_smoke.lua	{root} {flavor}	Aura menu canonical revision preserves raw profile: {flavor}
+-	lua	tools/tests/menu_power_colors_schema_parity_smoke.lua	{root} Mainline push	Power Bar Colors native schema input, display, history, combat and 400px parity: Mainline	push
+-	lua	tools/tests/menu_unit_palette_schema_parity_smoke.lua	{root} Mainline - push	Unit and NPC Colors schema changed native controls, layout or binding behavior: Mainline	push
+clients+Forever	lua	tools/tests/menu_unit_palette_schema_parity_smoke.lua	{root} {flavor} - full	Unit and NPC Colors schema changed native controls, layout or binding behavior: {flavor}	nightly
+-	lua	tools/tests/menu_color_styles_schema_parity_smoke.lua	{root} Mainline - push	Shared color-style schema changed native controls, layout or binding behavior: Mainline	push
+clients+Forever	lua	tools/tests/menu_color_styles_schema_parity_smoke.lua	{root} {flavor} - full	Shared color-style schema changed native controls, layout or binding behavior: {flavor}	nightly
+clients+Forever	lua	tools/tests/bar_gloss_runtime_smoke.lua	{root} {flavor}	Health and Power static gloss runtime scopes, masks, alpha and cache: {flavor}
+clients+Forever	lua	tools/tests/bar_gloss_menu_smoke.lua	{root} {flavor}	Bars gloss real controls, lazy profile, scopes, reset and copy: {flavor}
+clients+Forever	lua	tools/tests/bar_gloss_preview_smoke.lua	{root} {flavor}	Runtime gloss shared by Unit and Group preview scenes: {flavor}
+-	lua	tools/tests/bar_gloss_ebon_smoke.lua	{root}	Power gloss follows the native Ebon Might duration fill before handoff
+clients+Forever	lua	tools/tests/bar_gloss_material_smoke.lua	{root} {flavor}	Bar gloss uses transparent full-fill icon reflections without a midpoint seam: {flavor}
+clients+Forever	lua	tools/tests/menu_portrait_schema_smoke.lua	{root} {flavor}	Portrait color schema multi-root history and parent parity
+clients+Forever	lua	tools/tests/menu_castbar_text_schema_smoke.lua	{root} {flavor}	Castbar Text native schema owner, dynamic selection, RGB, history, combat and 400px parity: {flavor}
+clients+Forever	lua	tools/tests/menu_background_appearance_prediction_schema_smoke.lua	{root} {flavor}	Background, Appearance and Bar Prediction native schema owners, history, preview and 400px parity: {flavor}
+clients+Forever	lua	tools/tests/namespace_font_provider_smoke.lua	{root} {flavor}	Owned namespace font/time provider contract failed: {flavor}
+clients+Forever	lua	tools/tests/menu_aura_workspaces_schema_parity_smoke.lua	{root} {flavor}	menu_aura_workspaces_schema_parity_smoke failed: {flavor}
+clients+Forever	lua	tools/tests/menu_castbar_aura_colors_schema_parity_smoke.lua	{root} {flavor}	menu_castbar_aura_colors_schema_parity_smoke failed: {flavor}
+clients+Forever	lua	tools/tests/menu_castbar_picker_cancel_presence_smoke.lua	{root} {flavor}	menu_castbar_picker_cancel_presence_smoke failed: {flavor}
+clients+Forever	lua	tools/tests/menu_class_power_colors_schema_smoke.lua	{root} {flavor}	menu_class_power_colors_schema_smoke failed: {flavor}
+clients+Forever	lua	tools/tests/menu_font_status_colors_schema_parity_smoke.lua	{root} {flavor}	menu_font_status_colors_schema_parity_smoke failed: {flavor}
+clients+Forever	lua	tools/tests/menu_class_power_colors_schema_smoke.lua	{root} {flavor} - - --focused-cancel	Class Power native Cancel exact presence: {flavor}
+clients+Forever	lua	tools/tests/namespace_token_consumers_smoke.lua	{root} {flavor}	Owned namespace token consumers: {flavor}
+clients+Forever	lua	tools/tests/boss_geometry_namespace_smoke.lua	{root} {flavor}	Boss geometry namespace owner: {flavor}	
+-	python	tools/tests/gate_plan_contract_smoke.py	{root}	Gate executable identity, tier coverage and timing observations
+-	lua	tools/tests/fixture_compilation_cache_smoke.lua	{root}	Fixture compilation cache preserves fresh chunks and execution	
+clients+Forever	lua	tools/tests/responsibility_route_inventory_smoke.lua	{root} {flavor}	Complete ordered responsibility inventory and fresh selected worlds: {flavor}	
+-	lua	tools/tests/profile_sparse_backward_migration_smoke.lua	{root/}	Sparse V2 retains legacy migration markers and clears stale masks

@@ -77,9 +77,11 @@ Check(type(api.GetSearchProviderCache) == "function", "the search core API lost 
 Check(M.RegisterSearchProvider(nil, function() end) == false and M.RegisterSearchProvider("", function() end) == false
     and M.RegisterSearchProvider("x", "not a function") == false, "RegisterSearchProvider accepted a bad argument")
 
--- No provider: isolate the generic contract from the native profile editor.
+-- No provider: isolate the generic contract from the native providers (the
+-- profile editor, the Icon Skins page's skins).
 M.RegisterSearchProvider("profile-editors", nil)
 M.RegisterSearchAvailability("profile-editors", nil)
+M.RegisterSearchProvider("icon-skins", nil)
 -- Searches work and nothing is collected.
 local before = api.SearchPages("castbar")
 Check(#before > 0, "baseline search found nothing")

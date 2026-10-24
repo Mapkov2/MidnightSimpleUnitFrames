@@ -170,8 +170,13 @@ end
 
 local function HappinessPreviewSpec(client)
     local main = { Client = client, MSUF2 = { PipeRows = PipeRows } }
+    -- The Options preview files reach the core namespace through the _G.MSUF
+    -- alias Kernel/MSUF_Bootstrap.lua publishes.
+    local previousMSUF = _G.MSUF
+    _G.MSUF = main
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua"))(
         "MidnightSimpleUnitFrames_Options", main)
+    _G.MSUF = previousMSUF
     local rows = main.UFPreviewSpecs.StatusPreview
     for index, spec in ipairs(rows) do
         if spec.id == "statusPetHappiness" then return spec, index, #rows, rows[#rows].id end

@@ -14,6 +14,11 @@ for addon in ["MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options"]:
         if relative == owner:
             continue
         source = path.read_text(encoding="utf-8-sig")
+        if relative == "MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua":
+            # The Kernel's keep policy lists every exported name with `true` (also a global) or `false`
+            # (namespace-only). A policy row publishes nothing; line numbers stay intact.
+            source = re.sub(r"local GlobalExports = \{.*?\n\}\n", lambda m: "\n" * m.group(0).count("\n"),
+                            source, count=1, flags=re.S)
         for name in names:
             patterns = [rf'\b{re.escape(name)}\s*=(?!=)',
                         rf'\[\s*["\']{re.escape(name)}["\']\s*\]\s*=(?!=)',

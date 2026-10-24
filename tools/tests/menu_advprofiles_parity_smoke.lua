@@ -76,9 +76,8 @@ local function Open(prior, edge)
                 local relative = path:sub(#root+2)
                 if prior and sources[relative] then
                     local chunk = assert(loadstring(sources[relative], "@" .. path))
-                    setfenv(chunk, self.env)
-                    chunk(addon,namespace)
-                    return true
+                    -- The pinned parents predate namespace-only exports.
+                    return MenuWorld.RunHistorical(self, chunk, path, addon, namespace)
                 end
                 if not prior and arg[3] and sources[relative] then
                     local candidate=arg[3] .. "/" .. relative
@@ -119,11 +118,14 @@ local function Open(prior, edge)
     local factory = n.ProfileFields.CopySnapshot(e.MSUF_DB)
     n.MSUF_CreateFactoryDefaultProfile = function() return n.ProfileFields.CopySnapshot(factory) end
     -- Native CBOR/compression is a client boundary. Compare its complete payload instead.
-    e.MSUF_EncodeCompactTableMSUF3=function(value)
+    -- MSUF_EncodeCompactTableMSUF3 is a namespace-only export (read from the registry at call time);
+    -- MSUF_EncodeCompactTable is still a global.
+    local capture=function(value)
         h.exported=n.ProfileFields.CopySnapshot(value)
         return "MSUF3:captured"
     end
-    e.MSUF_EncodeCompactTable=e.MSUF_EncodeCompactTableMSUF3
+    n.ExportPublic("MSUF_EncodeCompactTableMSUF3", capture)
+    e.MSUF_EncodeCompactTable=capture
     e.MSUF_TryDecodeCompactString=function(value)
         if value=="MSUF3:captured" then return n.ProfileFields.CopySnapshot(h.exported) end
     end

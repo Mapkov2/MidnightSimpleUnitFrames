@@ -1,15 +1,14 @@
 --- PlayerHP native painters, bound to state owned by UF.PlayerHP.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_PlayerHP.lua")
-
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
-
 local FILE = "ClassPower/MSUF_CP_PlayerHP.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+
+local builders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+
 local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
 local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
-local FontPathEquals = MSUF.Require("MSUF_FontPathEquals", FILE)
-local MarkFontApplyFailed = MSUF.Require("MSUF_MarkFontApplyFailed", FILE)
+local ApplyResolvedFont = MSUF.Require("MSUF_ApplyResolvedFont", FILE)
+local ResolveSafeFontPath = MSUF.Require("MSUF_ResolveSafeFontPath", FILE)
 
 local DISPATCH_KEY = MSUF.UFText and MSUF.UFText.DISPATCH_KEY
 if type(DISPATCH_KEY) ~= "table" then
@@ -33,26 +32,19 @@ local UnitHealth, UnitHealthMax, UnitClass, RAID_CLASS_COLORS
 local CreateFrame, GetPlayerFrame, ResolveTexture
 local tonumber, type, tostring, pairs = tonumber, type, tostring, pairs
 local math_floor, string_format = math.floor, string.format
-local issecretvalue, UnitHealthPercent, SCALE_100
+local IsSecretValue, UnitHealthPercentAPI, SCALE_100
 local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
-local POWER_SHAPE_TEXTURES = {
-    ROUND = {
-        fill = POWER_SHAPE_MEDIA .. "power_round_fill.tga",
-        bg = POWER_SHAPE_MEDIA .. "power_round_bg.tga",
-        edge = POWER_SHAPE_MEDIA .. "power_round_edge.tga",
-    },
-    CRYSTAL = {
-        fill = POWER_SHAPE_MEDIA .. "power_crystal_fill.tga",
-        bg = POWER_SHAPE_MEDIA .. "power_crystal_bg.tga",
-        edge = POWER_SHAPE_MEDIA .. "power_crystal_edge.tga",
-    },
-    ORB = {
-        fill = POWER_SHAPE_MEDIA .. "pip_circle_fill.tga",
-        bg = POWER_SHAPE_MEDIA .. "pip_circle_bg.tga",
-        edge = POWER_SHAPE_MEDIA .. "pip_circle_edge.tga",
-        axis = "VERTICAL",
-    },
-}
+--- shape -> media art name; each art has a fill, a background and an edge image.
+local POWER_SHAPE_ART = { ROUND = "power_round", CRYSTAL = "power_crystal", ORB = "pip_circle" }
+local POWER_SHAPE_TEXTURES = {}
+for shape, art in pairs(POWER_SHAPE_ART) do
+    POWER_SHAPE_TEXTURES[shape] = {
+        fill = POWER_SHAPE_MEDIA .. art .. "_fill.tga",
+        bg = POWER_SHAPE_MEDIA .. art .. "_bg.tga",
+        edge = POWER_SHAPE_MEDIA .. art .. "_edge.tga",
+        axis = shape == "ORB" and "VERTICAL" or nil,
+    }
+end
 
 local HP_TEXT_REVERSE = {
     CURMAX = "MAXCUR",
@@ -66,17 +58,11 @@ local HP_TEXT_REVERSE = {
     PERCENTMAXCUR = "CURMAXPERCENT",
 }
 
-local HP_TEXT_DELIMITERS = {
-    [""] = " ",
-    ["-"] = " - ",
-    ["/"] = " / ",
-    ["\\"] = " \\ ",
-    ["|"] = " | ",
-    ["<"] = " < ",
-    [">"] = " > ",
-    ["~"] = " ~ ",
-    [":"] = " : ",
-}
+--- A delimiter symbol is shown spaced on both sides; no symbol is one space.
+local HP_TEXT_DELIMITERS = { [""] = " " }
+for _, symbol in ipairs({ "-", "/", "\\", "|", "<", ">", "~", ":" }) do
+    HP_TEXT_DELIMITERS[symbol] = " " .. symbol .. " "
+end
 
 local function UsePlayerText(b)
     return b and b.playerHPBarUsePlayerText ~= false
@@ -109,7 +95,7 @@ local function ColorMode(b)
     return "GLOBAL"
 end
 
-local NormalizeClassPowerShape
+local NormalizeClassPowerShape = MSUF.Require("MSUF_UF_NormalizeClassPowerShape", FILE)
 
 local function NormalizePowerShape(value)
     value = tostring(value or "BAR"):upper()
@@ -117,7 +103,7 @@ local function NormalizePowerShape(value)
     return "BAR"
 end
 
-local NormalizeHPShape
+local NormalizeHPShape = MSUF.Require("MSUF_UF_NormalizePlayerHPShape", FILE)
 
 local function ResolveFollowPowerShape(b)
     local db = MSUF_DB
@@ -142,7 +128,7 @@ local function ShapeTextures(shape)
     return POWER_SHAPE_TEXTURES[NormalizePowerShape(shape)]
 end
 
-local ShapeOutlineAlpha
+local ShapeOutlineAlpha = MSUF.Require("MSUF_UF_ShapeOutlineAlpha", FILE)
 
 local function Clamp(value, fallback, minValue, maxValue)
     value = tonumber(value) or fallback
@@ -185,7 +171,7 @@ end
 
 local function ShortValue(value)
     value = tonumber(value) or 0
-    local abbrev = _G.AbbreviateShortNumber or _G.AbbreviateLargeNumbers
+    local abbrev = AbbreviateShortNumber or AbbreviateLargeNumbers
     if type(abbrev) == "function" then
         local text = abbrev(value, NUM_OPTS)
         if text ~= nil then return text end
@@ -222,7 +208,9 @@ local function Percent(hp, maxHP)
 end
 
 local function GlobalHidePercentSymbol()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    -- Per health text update: read the profile inline, not through PlayerConfig.
+    local db = MSUF_DB
+    local g = db and db.general
     return g and g.hidePercentSymbol == true
 end
 
@@ -237,14 +225,14 @@ local function PercentText(pct, hidePercentSymbol)
 end
 
 local function UnitPercent()
-    if not UnitHealthPercent then return nil end
+    if not UnitHealthPercentAPI then return nil end
     local pct
     if SCALE_100 then
-        pct = UnitHealthPercent("player", true, SCALE_100)
+        pct = UnitHealthPercentAPI("player", true, SCALE_100)
     else
-        pct = UnitHealthPercent("player", true)
+        pct = UnitHealthPercentAPI("player", true)
     end
-    if issecretvalue(pct) == true then
+    if IsSecretValue(pct) == true then
         if SCALE_100 then return nil, pct end
         return nil
     end
@@ -257,8 +245,7 @@ local function UnitPercent()
 end
 
 local function DarkColor()
-    local ns = _G.MSUF_NS
-    local cache = ns and ns.UF and ns.UF.Config and ns.UF.Config.settingsCache
+    local cache = MSUF.UF and MSUF.UF.Config and MSUF.UF.Config.settingsCache
     if cache and type(cache.darkBarR) == "number" and type(cache.darkBarG) == "number" and type(cache.darkBarB) == "number" then
         return cache.darkBarR, cache.darkBarG, cache.darkBarB
     end
@@ -276,7 +263,7 @@ local function GradientColor(hp, maxHP, common)
         end
     end
     local pct
-    if issecretvalue(hp) == true or issecretvalue(maxHP) == true then
+    if IsSecretValue(hp) == true or IsSecretValue(maxHP) == true then
         pct = UnitPercent()
         if pct == nil then return 1, 1, 0 end
     else
@@ -323,7 +310,7 @@ end
 
 local function SetText(fs, text)
     if not fs then return end
-    if issecretvalue(text) == true then
+    if IsSecretValue(text) == true then
         fs._msufPHPText = nil
         fs:SetText(text)
         return
@@ -335,7 +322,7 @@ local function SetText(fs, text)
 end
 
 local function SetPercentText(fs, pct, secretPct, hidePercentSymbol)
-    if issecretvalue(secretPct) == true then
+    if IsSecretValue(secretPct) == true then
         if not fs then return end
         fs._msufPHPText = nil
         fs:SetFormattedText(hidePercentSymbol and "%.0f" or "%.0f%%", secretPct)
@@ -386,11 +373,11 @@ local function ReadTextSlot(src)
             text = src._aText
             if text == nil and src.GetText then text = src:GetText() end
         end
-        if issecretvalue(text) ~= true and text == nil then text = "" end
+        if IsSecretValue(text) ~= true and text == nil then text = "" end
         r, g, b, a = src._msufTextR, src._msufTextG, src._msufTextB, src._msufTextA
         if r == nil and src.GetTextColor then
             r, g, b, a = src:GetTextColor()
-            if issecretvalue(r) then return text, r, g, b, a, true end
+            if IsSecretValue(r) then return text, r, g, b, a, true end
         end
     end
     return text, r, g, b, a
@@ -407,10 +394,10 @@ end
 local function CopyCompactText(playerFrame)
     if not (PHP.center and playerFrame) then return false end
     local text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextCenter)
-    if issecretvalue(text) ~= true and text == "" then
+    if IsSecretValue(text) ~= true and text == "" then
         text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextRight)
     end
-    if issecretvalue(text) ~= true and text == "" then
+    if IsSecretValue(text) ~= true and text == "" then
         text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextLeft)
     end
     ApplyCopiedTextColor(PHP.center, r, g, b, a, secretColor)
@@ -449,46 +436,24 @@ local function ApplyFont()
     if not PHP.left then return end
     local b = _cpDB.bars or {}
     local size = b.playerHPBarTextSize
+    local player, general = PlayerConfig()
     if UsePlayerText(b) then
-        local player, general = PlayerConfig()
         size = player and player.hpFontSize or nil
         if size == nil then size = general and general.hpFontSize or nil end
     end
     size = Clamp(size, 14, 6, 48)
-    local fontPath = GetFontPath() or _G.STANDARD_TEXT_FONT
+    local fontPath = GetFontPath() or STANDARD_TEXT_FONT
     local fontFlags = GetFontFlags() or "OUTLINE"
     if not fontPath or fontPath == "" then fontPath = "Fonts\\FRIZQT__.TTF" end
     if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
-    local resolveSafe = _G.MSUF_ResolveSafeFontPath
-    if type(resolveSafe) == "function" then
-        local g = _G.MSUF_DB and _G.MSUF_DB.general
-        fontPath = resolveSafe(fontPath, size, fontFlags, g and g.fontKey)
-    end
-    local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    fontPath = ResolveSafeFontPath(fontPath, size, fontFlags, general and general.fontKey)
+    local fontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
     local stamp = tostring(fontPath) .. ":" .. tostring(size) .. ":" .. tostring(fontFlags)
         .. ":" .. tostring(fontEpoch)
     if PHP._fontStamp == stamp then return end
-    local function FontApplied(fs, path, px, fontFlags)
-        if type(fs.GetFont) ~= "function" then return true end
-        local actual, actualSize, actualFlags = fs:GetFont()
-        if not actual then return false end
-        if actualSize and math.abs((tonumber(actualSize) or 0) - px) > 0.01 then return false end
-        if (actualFlags or "") ~= (fontFlags or "") then return false end
-        if actual == path then return true end
-        return FontPathEquals(path, actual) == true
-    end
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
     for _, fs in pairs({ PHP.left, PHP.center, PHP.right }) do
         if fs.SetFont then
-            local applyResolved = _G.MSUF_ApplyResolvedFont
-            if type(applyResolved) == "function" then
-                applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
-            else
-                if not _G.MSUF_SetFontChecked(fs, fontPath, size, fontFlags) or not FontApplied(fs, fontPath, size, fontFlags) then
-                    _G.MSUF_SetFontChecked(fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
-                    MarkFontApplyFailed()
-                end
-            end
+            ApplyResolvedFont(fs, fontPath, size, fontFlags, general and general.fontKey)
         end
         fs._phpTextR, fs._phpTextG, fs._phpTextB, fs._phpTextA = nil, nil, nil, nil
         if fs.SetTextColor then fs:SetTextColor(1, 1, 1, 1) end
@@ -839,7 +804,7 @@ local function ApplyLayout(playerFrame)
     local smooth = b.playerHPBarSmoothFill == true
     if PHP._smoothFill ~= smooth then
         PHP._smoothFill = smooth
-        local common = _G.MSUF_NS and _G.MSUF_NS.UFBarTextCommon
+        local common = MSUF.UFBarTextCommon
         if common and type(common.SetBarSmoothing) == "function" then
             common.SetBarSmoothing(PHP.bar, smooth)
         elseif PHP.bar then
@@ -870,7 +835,7 @@ end
 local function ApplyColor(hp, maxHP, event)
     local bar = PHP.bar
     if not bar then return end
-    local common = _G.MSUF_NS and _G.MSUF_NS.UFBarTextCommon
+    local common = MSUF.UFBarTextCommon
     local colorMode = PHP._colorMode or "GLOBAL"
     if colorMode == "CLASS" then
         local r, g, b
@@ -892,7 +857,7 @@ local function ApplyColor(hp, maxHP, event)
         --- The shared helper evaluates UnitHealthPercent with a colour curve, which is
         --- SecretReturns while health is secret: such a colour goes to the C sink unread
         --- and leaves no change stamp behind.
-        if issecretvalue(r) == true or issecretvalue(g) == true or issecretvalue(b) == true then
+        if IsSecretValue(r) == true or IsSecretValue(g) == true or IsSecretValue(b) == true then
             bar:SetStatusBarColor(r, g, b, 1)
             bar._phpR, bar._phpG, bar._phpB = nil, nil, nil
             bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
@@ -923,8 +888,8 @@ local function UpdateText(hp, maxHP)
         SetText(PHP.right, "")
         return
     end
-    local hpSecret = issecretvalue(hp) == true
-    local maxSecret = issecretvalue(maxHP) == true
+    local hpSecret = IsSecretValue(hp) == true
+    local maxSecret = IsSecretValue(maxHP) == true
     if not hpSecret and not maxSecret
         and UsePlayerText(b) and CopyRenderedPlayerText(hp, maxHP) then return end
     if (hpSecret or maxSecret) and UsePlayerText(b) and CopyPlayerTextBestEffort() then return end
@@ -1002,11 +967,11 @@ end
 
 local function Update(event)
     if not PHP.visible then return end
-    local common = _G.MSUF_NS and _G.MSUF_NS.UFBarTextCommon
+    local common = MSUF.UFBarTextCommon
     local hp, maxHP
     hp, maxHP = UnitHealth("player"), UnitHealthMax("player")
-    local hpSecret = issecretvalue(hp) == true
-    local maxSecret = issecretvalue(maxHP) == true
+    local hpSecret = IsSecretValue(hp) == true
+    local maxSecret = IsSecretValue(maxHP) == true
     if not hpSecret then hp = tonumber(hp) or 0 end
     if not maxSecret then
         maxHP = tonumber(maxHP) or 1
@@ -1079,12 +1044,9 @@ builders.PLAYER_HP_VISUAL = function(E)
     CreateFrame, GetPlayerFrame, ResolveTexture = E.CreateFrame, E.GetPlayerFrame, E.ResolveTexture
     tonumber, type, tostring, pairs = E.tonumber or tonumber, E.type or type, E.tostring or tostring, E.pairs or pairs
     math_floor, string_format = E.math_floor or math_floor, E.string_format or string_format
-    issecretvalue = _G.issecretvalue
-    UnitHealthPercent = _G.UnitHealthPercent
-    SCALE_100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
-    NormalizeClassPowerShape = _G.MSUF_UF_NormalizeClassPowerShape
-    NormalizeHPShape = _G.MSUF_UF_NormalizePlayerHPShape
-    ShapeOutlineAlpha = _G.MSUF_UF_ShapeOutlineAlpha
+    IsSecretValue = issecretvalue
+    UnitHealthPercentAPI = UnitHealthPercent
+    SCALE_100 = CurveConstants and CurveConstants.ScaleTo100
     return {
         PHP = PHP,
         Apply = ApplyResource,

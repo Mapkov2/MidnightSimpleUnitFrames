@@ -26,7 +26,7 @@ local CreateFrame = Text.CreateFrame
 local InCombatLockdown = Text.InCombatLockdown
 local UnitFullName = UnitFullName
 local GetNormalizedRealmName = GetNormalizedRealmName
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local type = type
 local pairs = pairs
 
@@ -61,8 +61,8 @@ local function ValidUnitToken(unit)
 end
 
 local function GetNSRT()
-  local api = _G.NSAPI
-  local nsrt = _G.NSRT
+  local api = NSAPI
+  local nsrt = NSRT
   local settings = nsrt and nsrt.Settings
   if type(settings) ~= "table" then
     return nil
@@ -98,7 +98,7 @@ local function NSRTSettingsEnabled(settings)
 end
 
 local function MSUFIntegrationEnabled()
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local general = type(db) == "table" and db.general
   return not (type(general) == "table" and general.nsrtNicknameIntegration == false)
 end

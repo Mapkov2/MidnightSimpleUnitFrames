@@ -79,7 +79,10 @@ local editActive = true
 local forwarded = {}
 local group = {}
 function group:GetScript(name) return function(_, button) forwarded[#forwarded + 1] = name .. ":" .. button end end
-local namespace = { MSUF_Auras3 = { EditMode = { groups = { boss1 = { buff = group } } } } }
+-- Client is the fact table Game/Shared/Initialize.lua publishes first in every TOC;
+-- the drag module reads its arena slot count at load.
+local namespace = { Client = { MaxArenaOpponents = 3 },
+    MSUF_Auras3 = { EditMode = { groups = { boss1 = { buff = group } } } } }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_Drag.lua"))("MidnightSimpleUnitFrames", namespace)
 local drag = namespace.MSUF_Auras3.EditModeModules.Drag(
     {}, { GetFrame = function(unit) assert(unit == "boss1"); return unitFrame end },

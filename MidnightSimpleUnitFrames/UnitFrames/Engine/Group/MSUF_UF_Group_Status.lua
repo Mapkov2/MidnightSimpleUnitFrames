@@ -7,7 +7,6 @@
 --- those event needs and updates only the affected status regions.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
@@ -15,8 +14,8 @@ MSUF.GF = GF
 
 if not (UF and UF.RegisterElement) then return end
 
-local CreateFrame = _G.CreateFrame
-local InCombatLockdown = _G.InCombatLockdown
+local CreateFrame = CreateFrame
+local InCombatLockdown = InCombatLockdown
 local next = next
 local type = type
 

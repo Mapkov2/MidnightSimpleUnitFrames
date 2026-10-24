@@ -15,6 +15,7 @@ MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_AuraAliases.lua	*	SpellName alias ca
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua	*	Retail 12.x curated defensive aura IDs; each Classic flavor loads Game/<Flavor>/Auras/MSUF_Auras3_DefensiveData.lua
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DotData.lua	*	Retail 12.x curated player DoT aura IDs; each Classic flavor loads Game/<Flavor>/Auras/MSUF_Auras3_DotData.lua
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_GroupHighlightsData.lua	*	Retail 12.1.0 aura-ID catalog for the Group Highlights filter; Classic ships no Group Highlights dataset, so A3.GetGroupHighlightsSpellIDHash stays undefined there
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconSkins_Host.lua	*	Icon skin interface for painters outside the aura runtime (MSUF_HostAPI.GetIconSkins); its only consumer, the MSUF Suite, runs on Retail and Forever
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua	*	Retail group spell-indicator renderer on 12.1 CustomAuraContainer slots; Blizzard_AuraContainer ships only on upstream/live and the gate forbids this runtime on Classic
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators_Config.lua	*	Submodule of Auras3/MSUF_Auras3_SpellIndicators.lua, the Retail 12.1 CustomAuraContainer spell-indicator renderer
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators_Effects.lua	*	Submodule of Auras3/MSUF_Auras3_SpellIndicators.lua, the Retail 12.1 CustomAuraContainer spell-indicator renderer
@@ -36,7 +37,6 @@ MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityEvents.lua	*
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityRefresh.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityTopology.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LaneConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
-MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LatchGuard.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_OwnerConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces

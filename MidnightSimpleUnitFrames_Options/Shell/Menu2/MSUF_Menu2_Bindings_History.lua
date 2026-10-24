@@ -1,8 +1,8 @@
 local _, MSUF = ...
 local M = MSUF.MSUF2
 local H = MSUF.History
-local KS, DeepCopy = M.KeySet, M.DeepCopy
-local ApplyService, UNIT_KEYS = MSUF.ApplyService, M.UNIT_KEYS
+local KS = M.KeySet
+local ApplyService = MSUF.ApplyService
 local function WipeTable(t)
     for key in pairs(t) do t[key] = nil end
 end
@@ -168,43 +168,18 @@ H.AttachUI(function(name, ...)
     local handler = handlers[name] or M[name]
     if handler then return handler(...) end
 end)
-M.ApplyScopedFeatureRuntime = H.ApplyScopedFeatureRuntime
-M.BeginHistoryTransaction = H.BeginHistoryTransaction
-M.BeginPreparedHistory = H.BeginPreparedHistory
-M.COLOR_CLASSPOWER_RUNTIME = H.COLOR_CLASSPOWER_RUNTIME
-M.CancelHistorySurface = H.CancelHistorySurface
-M.CancelHistoryTransaction = H.CancelHistoryTransaction
-M.CaptureSetterOnlySettings = H.CaptureSetterOnlySettings
-M.CaptureGuidedTourRestorePoint = H.CaptureGuidedTourRestorePoint
-M.CaptureHistory = H.CaptureHistory
-M.CheckpointHistory = H.CheckpointHistory
-M.ClearHistory = H.ClearHistory
-M.CommitHistoryTransaction = H.CommitHistoryTransaction
-M.CommitPreparedHistory = H.CommitPreparedHistory
-M.DeferPreparedHistory = H.DeferPreparedHistory
-M.EndHistorySession = H.EndHistorySession
-M.FlushApplyServiceNow = H.FlushApplyServiceNow
-M.FlushDeferredHistory = H.FlushDeferredHistory
-M.GetHistoryState = H.GetHistoryState
-M.HistoryRetainedBytes = H.HistoryRetainedBytes
-M.IsHistoryCapturing = H.IsHistoryCapturing
-M.IsHistoryTransactionActive = H.IsHistoryTransactionActive
-M.PrepareHistoryChange = H.PrepareHistoryChange
-M.RebaseHistoryForProfileChange = H.RebaseHistoryForProfileChange
-M.Redo = H.Redo
-M.RegisterHistoryProvider = H.RegisterHistoryProvider
-M.RequestGeneralApply = H.RequestGeneralApply
-M.RequestGeneralDomains = H.RequestGeneralDomains
-M.RequestUnitApply = H.RequestUnitApply
-M.RequestUnitDomains = H.RequestUnitDomains
-M.ResetHistorySession = H.ResetHistorySession
-M.RestoreGuidedTourRestorePoint = H.RestoreGuidedTourRestorePoint
-M.ResyncSetterOnlySettings = H.ResyncSetterOnlySettings
-M.RunWithHistory = H.RunWithHistory
-M.StartHistorySession = H.StartHistorySession
-M.SyncExternalHistoryState = H.SyncExternalHistoryState
-M.Undo = H.Undo
-M.UnregisterHistoryProvider = H.UnregisterHistoryProvider
+-- The core history surface the menu republishes on M under the same names.
+for _, name in ipairs(M.WordList [[
+    ApplyScopedFeatureRuntime BeginHistoryTransaction BeginPreparedHistory COLOR_CLASSPOWER_RUNTIME
+    CancelHistorySurface CancelHistoryTransaction CaptureSetterOnlySettings CaptureGuidedTourRestorePoint
+    CaptureHistory CheckpointHistory ClearHistory CommitHistoryTransaction CommitPreparedHistory
+    DeferPreparedHistory EndHistorySession FlushApplyServiceNow FlushDeferredHistory GetHistoryState
+    HistoryRetainedBytes IsHistoryCapturing IsHistoryTransactionActive PrepareHistoryChange
+    RebaseHistoryForProfileChange Redo RegisterHistoryProvider RequestGeneralApply RequestGeneralDomains
+    RequestUnitApply RequestUnitDomains ResetHistorySession RestoreGuidedTourRestorePoint
+    ResyncSetterOnlySettings RunWithHistory StartHistorySession SyncExternalHistoryState Undo
+    UnregisterHistoryProvider
+]]) do M[name] = H[name] end
 -- Preserve public request interception while normal writers stay typed.
 function M.RequestUnitDomains(unit, reason, opts)
     if M.RequestUnitApply ~= H.RequestUnitApply then return M.RequestUnitApply(unit, reason, opts) end

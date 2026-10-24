@@ -35,7 +35,7 @@ Corpus.Login(world, {
 Check(earlyAuraApply == 0, "locale callback requested group visuals at ADDON_LOADED")
 Check(env.MSUF_ActiveProfile == "Solo", "spec auto-switch moved from PLAYER_ENTERING_WORLD to PLAYER_LOGIN")
 Check(#world.runtimeApplies == 0 and #notifications == 0, "login applied a spec profile or notified Suite before frame startup")
-local frame = assert(env.MSUF_SpecProfileEventFrame)
+local frame = assert(ns.PublicGlobals.MSUF_SpecProfileEventFrame)
 assert(frame.events.PLAYER_ENTERING_WORLD, "the original spec event is missing")
 frame.scripts.OnEvent(frame, "PLAYER_ENTERING_WORLD", true, false)
 Check(env.MSUF_ActiveProfile == "Raid" and env.MSUF_DB.player.width == 282,

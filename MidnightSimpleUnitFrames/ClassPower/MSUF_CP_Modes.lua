@@ -5,10 +5,11 @@
 --- Includes smooth Essence recharge animation (Evoker pip fill).
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Modes.lua")
+local FILE = "ClassPower/MSUF_CP_Modes.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local CPConstants = MSUF.Require("MSUF_CP_CONST", FILE)
 
-local modeBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
+local modeBuilders = CPConstants.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
 
 --- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
 local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
@@ -20,8 +21,8 @@ local type = type
 local math_abs = math.abs
 local math_floor = math.floor
 local string_format = string.format
-local _issecretvalue = _G.issecretvalue
-local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
+local _issecretvalue = issecretvalue
+local OverrideRGB = CPConstants.OverrideRGB
 
 local function SignedPowerColor(visual, auras, value)
     if not (visual and visual.solarR) then
@@ -246,14 +247,49 @@ end
 --- owning bar. The legacy Lua ticks remain available only as a degraded path
 --- for incomplete API environments (notably standalone smoke harnesses).
 local nativeTimerSupportCache = setmetatable({}, { __mode = "k" })
+
+local function ResetDuration(duration)
+    if duration and type(duration.Reset) == "function" then duration:Reset() end
+end
+
+local function SetTimeFromStart(duration, startTime, total)
+    if not (duration and type(duration.SetTimeFromStart) == "function") then return false end
+    duration:SetTimeFromStart(startTime, total)
+    return true
+end
+
+local function SetTimeFromEnd(duration, endTime, total)
+    if not (duration and type(duration.SetTimeFromEnd) == "function") then return false end
+    duration:SetTimeFromEnd(endTime, total)
+    return true
+end
+
+--- Switch a duration text binding off and blank its FontString.
+local function DisableBinding(owner, key, fontString)
+    local binding = owner and owner[key]
+    local activeKey = key .. "Active"
+    if binding then
+        if owner[activeKey] == true then
+            if type(binding.Disable) == "function" then binding:Disable()
+            elseif type(binding.SetEnabled) == "function" then binding:SetEnabled(false) end
+        end
+        if owner[activeKey] ~= false then owner[activeKey] = false end
+    end
+    if fontString then
+        fontString:SetText("")
+        fontString:Hide()
+        fontString._msufCPShown = false
+    end
+end
+
 --- Direct calls per the 12.1 C_DurationUtil contract (args
 --- AllowedWhenUntainted, no documented rejection). Secret aura state comes
 --- back as secret RETURNS, handled by NotSecret/PlainNumber value checks; API
 --- absence on the 120007 client is covered by the type guards.
 local function CreateNativeTimerSupport(E)
-    local durationUtil = E.C_DurationUtil or _G.C_DurationUtil
-    local stringUtil = E.C_StringUtil or _G.C_StringUtil
-    local enum = E.Enum or _G.Enum
+    local durationUtil = E.C_DurationUtil or C_DurationUtil
+    local stringUtil = E.C_StringUtil or C_StringUtil
+    local enum = E.Enum or Enum
     local cached = durationUtil and nativeTimerSupportCache[durationUtil]
     if cached and cached.stringUtil == stringUtil and cached.enum == enum then
         return cached.support
@@ -287,39 +323,6 @@ local function CreateNativeTimerSupport(E)
         bar._msufCPMin, bar._msufCPMax = nil, nil
         bar._msufCPValue = nil
         return true
-    end
-
-    local function ResetDuration(duration)
-        if duration and type(duration.Reset) == "function" then duration:Reset() end
-    end
-
-    local function SetTimeFromStart(duration, startTime, total)
-        if not (duration and type(duration.SetTimeFromStart) == "function") then return false end
-        duration:SetTimeFromStart(startTime, total)
-        return true
-    end
-
-    local function SetTimeFromEnd(duration, endTime, total)
-        if not (duration and type(duration.SetTimeFromEnd) == "function") then return false end
-        duration:SetTimeFromEnd(endTime, total)
-        return true
-    end
-
-    local function DisableBinding(owner, key, fontString)
-        local binding = owner and owner[key]
-        local activeKey = key .. "Active"
-        if binding then
-            if owner[activeKey] == true then
-                if type(binding.Disable) == "function" then binding:Disable()
-                elseif type(binding.SetEnabled) == "function" then binding:SetEnabled(false) end
-            end
-            if owner[activeKey] ~= false then owner[activeKey] = false end
-        end
-        if fontString then
-            fontString:SetText("")
-            fontString:Hide()
-            fontString._msufCPShown = false
-        end
     end
 
     local function EnsureFormatter()
@@ -405,8 +408,6 @@ end
 modeBuilders.FRACTIONAL = function(E)
     local tonumber = tonumber
     local _cpDB = E._cpDB or {}
-    local string_format = string.format
-    local math_floor = math.floor
     local CP = E.CP
     local UnitPower = E.UnitPower
     local UnitPowerDisplayMod = E.UnitPowerDisplayMod
@@ -717,7 +718,6 @@ end
 --- file.
 
 modeBuilders.STAGGER = function(E)
-    local type = type
     local tonumber = tonumber
     local CP = E.CP
     local CPK = E.CPK

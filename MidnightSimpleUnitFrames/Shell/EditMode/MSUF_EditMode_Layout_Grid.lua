@@ -4,11 +4,11 @@
 --- The layout family loads from MSUF_EditMode.xml right after Core, whose
 --- Util it reads at load: Grid, Snap, Nudge, then the drag ticker
 --- (MSUF_EditMode_Layout.lua).
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-local ExportPublic = (MSUF or _G.MSUF_NS or {}).ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_Layout_Grid.lua")
+local ExportPublic = MSUF.ExportPublic
 
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local Grid = {}
@@ -18,9 +18,10 @@ local floor = math.floor
 local max   = math.max
 local min   = math.min
 local ThemeColor = (EM2.Util or {}).ThemeColor
+local LegacyTheme = MSUF.Optional("MSUF_THEME")
 
 local function T()
-    local legacy = _G.MSUF_THEME or {}
+    local legacy = LegacyTheme or {}
     local bg = ThemeColor("bg", { legacy.bgR or 0.08, legacy.bgG or 0.09, legacy.bgB or 0.10, legacy.bgA or 0.94 })
     local edge = ThemeColor("borderSoft", { legacy.edgeR or 0.20, legacy.edgeG or 0.30, legacy.edgeB or 0.50, 1 })
     local accent = ThemeColor("accent", { legacy.titleR or 1.00, legacy.titleG or 0.82, legacy.titleB or 0.00, 1 })
@@ -31,52 +32,53 @@ local function T()
     }
 end
 
---- DB helpers (always live)
+--- DB helpers (always live): the active profile's general table, created
+--- only on write so a read never adds keys to the profile.
+local function GeneralDB(create)
+    local db = MSUF_DB
+    if not db then return nil end
+    if create then db.general = db.general or {} end
+    return db.general
+end
+
 local function GetBgAlpha()
-    local db = _G.MSUF_DB
-    if db and db.general and type(db.general.editModeBgAlpha) == "number" then
-        return db.general.editModeBgAlpha
+    local general = GeneralDB()
+    if general and type(general.editModeBgAlpha) == "number" then
+        return general.editModeBgAlpha
     end
     return 0.75
 end
 
 local function SetBgAlpha(v)
-    local db = _G.MSUF_DB
-    if db then
-        db.general = db.general or {}
-        db.general.editModeBgAlpha = v
-    end
+    local general = GeneralDB(true)
+    if general then general.editModeBgAlpha = v end
 end
 
 local function GetGridStep()
-    local db = _G.MSUF_DB
-    if db and db.general and type(db.general.editModeGridStep) == "number" then
-        return db.general.editModeGridStep
+    local general = GeneralDB()
+    if general and type(general.editModeGridStep) == "number" then
+        return general.editModeGridStep
     end
     return 32
 end
 
 local function SetGridStep(v)
-    local db = _G.MSUF_DB
-    if db then
-        db.general = db.general or {}
-        db.general.editModeGridStep = v
-    end
+    local general = GeneralDB(true)
+    if general then general.editModeGridStep = v end
 end
 
 local function GetGridEnabled()
-    local db = _G.MSUF_DB
-    if db and db.general and db.general.editModeGridEnabled == false then
+    local general = GeneralDB()
+    if general and general.editModeGridEnabled == false then
         return false
     end
     return true
 end
 
 local function SetGridEnabled(v)
-    local db = _G.MSUF_DB
-    if db then
-        db.general = db.general or {}
-        db.general.editModeGridEnabled = v and true or false
+    local general = GeneralDB(true)
+    if general then
+        general.editModeGridEnabled = v and true or false
     end
 end
 

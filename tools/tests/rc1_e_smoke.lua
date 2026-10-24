@@ -136,11 +136,11 @@ for _, cue in ipairs(tourCues) do CheckTranslated(cue, "Guided Tour hint") end
 local AURA_PAGES = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
 local AURA_LABELS = {
     { "Non-Player Auras", "MSUF_Menu2_Auras.lua", 'BindSwitch(ctx, section, "Non-Player Auras",' },
-    { "Non-Player Auras", "MSUF_Menu2_Auras_Group.lua", 'BindSwitch(ctx, section, "Non-Player Auras",' },
+    { "Non-Player Auras", "MSUF_Menu2_Auras_Group.lua", 'BoundAura(ctx, section, { "switch", nil, nil, { "Non-Player Auras",' },
     { "Only mine", "MSUF_Menu2_Auras.lua", 'BindSwitch(ctx, section, "Only mine",' },
     { "Only mine", "MSUF_Menu2_Auras_Group.lua", 'VT("ALL", "All", "Player", "Only mine", "NonPlayer", "Non-Player Auras")' },
     { "Hide permanent", "MSUF_Menu2_Auras.lua", 'BindSwitch(ctx, section, "Hide permanent",' },
-    { "Hide permanent", "MSUF_Menu2_Auras_Group.lua", 'BindSwitch(ctx, section, "Hide permanent",' },
+    { "Hide permanent", "MSUF_Menu2_Auras_Group.lua", 'BoundAura(ctx, section, { "switch", nil, nil, { "Hide permanent",' },
     { "Non-player auras", "MSUF_Menu2_Auras.lua", '{ "Non-player auras", "nonPlayer",' },
     { "Crowd control", "MSUF_Menu2_Auras.lua", '{ "Crowd control", "crowdControl",' },
 }
@@ -408,17 +408,19 @@ for _, case in ipairs({ { "Mainline", "deDE" }, { "Forever", "ruRU" }, { "Mists"
     end
     -- 6. RP-3: an unknown font key previews the pipeline's default face.
     local env = world.env
+    -- The preview object and the face resolver are namespace-only exports (the registry, not globals).
+    local public = world.core.PublicGlobals
     local unknown = "MSUF_rc1_UnregisteredFont"
-    local ok, preview = pcall(env.MSUF_GetFontPreviewObject, unknown)
+    local ok, preview = pcall(public.MSUF_GetFontPreviewObject, unknown)
     if Check(ok, flavor .. ": MSUF_GetFontPreviewObject raised on an unknown key: " .. tostring(preview)) then
         local face = preview and preview.GetFont and preview:GetFont()
-        local default = env.MSUF_ResolveFontPath(nil, 14, "", unknown)
+        local default = public.MSUF_ResolveFontPath(nil, 14, "", unknown)
         Check(type(default) == "string" and default ~= "" and face == default,
             flavor .. ": the unknown key previews " .. tostring(face) .. ", not the default face " .. tostring(default))
-        Check(env.MSUF_GetFontPreviewObject(unknown) == preview, flavor .. ": the preview object is not reused")
+        Check(public.MSUF_GetFontPreviewObject(unknown) == preview, flavor .. ": the preview object is not reused")
     end
     local known = env.MSUF_ResolveFontKeyPath("EXPRESSWAY")
-    local expressway = env.MSUF_GetFontPreviewObject("EXPRESSWAY")
+    local expressway = public.MSUF_GetFontPreviewObject("EXPRESSWAY")
     Check(type(known) == "string" and expressway:GetFont() == known,
         flavor .. ": a registered key previews " .. tostring(expressway:GetFont()) .. ", not " .. tostring(known))
 end

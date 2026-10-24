@@ -22,6 +22,13 @@ function Routes.New(World, root, flavor, harness)
     local w, _, _, _, Registry = Base.New(World, root, flavor, harness)
     local text, f, e = w.h.world.core.UFText, w.single, w.env
     local status, gf = w.h.world.core.UFStatusRuntime, w.h.world.core.GF
+    -- The status runtime reads the icon resolvers from the public registry (MSUF.Public), so the
+    -- fixture resolvers are published the way their owner publishes them. The sandbox global holds the
+    -- same function: the native registry counts the fixture client's globals, as it counted these before.
+    local function publish(name, value)
+        w.h.world.core.ExportPublic(name, value)
+        e[name] = value
+    end
     local cases = {}
     local function Add(name, run, prepare)
         cases[#cases + 1] = { name = name, run = run, prepare = prepare, iterations = 10 }
@@ -90,19 +97,19 @@ function Routes.New(World, root, flavor, harness)
             if mode == "custom-pack" then conf.readyCheck.customIcon = "fixture-ready" end
             if mode == "global-role" or mode == "empty-role" or mode == "no-role" then
                 gf.GetRoleTexture = false
-                e.MSUF_GetRoleStatusIconTexture = mode == "no-role" and false or function()
+                publish("MSUF_GetRoleStatusIconTexture", mode == "no-role" and false or function()
                     return mode == "empty-role" and "" or "fixture-role", 0, 1, 0, 1
-                end
+                end)
             end
             if mode:find("pack", 1, true) then
-                e.MSUF_GetStatusIconTexture = function()
+                publish("MSUF_GetStatusIconTexture", function()
                     return mode == "empty-pack" and "" or "fixture-ready", 0, 1, 0, 1
-                end
+                end)
                 if mode == "group-pack" then
-                    e.MSUF_GetStatusIconTexture = false
+                    publish("MSUF_GetStatusIconTexture", false)
                     gf.GetStatusIconTexture = function() return "fixture-ready", 0, 1, 0, 1 end
                 end
-                if mode == "no-pack" then e.MSUF_GetStatusIconTexture, gf.GetStatusIconTexture = false, false end
+                if mode == "no-pack" then publish("MSUF_GetStatusIconTexture", false); gf.GetStatusIconTexture = false end
             end
         end)
     end

@@ -145,7 +145,7 @@ for _, mode in ipairs({ "ramp", "custom" }) do
         Check(CP.currentMax == 7 and CP.visual and CP.visual.maxP == 7,
             label .. ": the visual was not compiled for seven pips (max " .. tostring(CP.currentMax)
             .. ", visual " .. tostring(CP.visual and CP.visual.maxP) .. ")")
-        _G.MSUF_ClassPower_Refresh()
+        t.ns.PublicGlobals.MSUF_ClassPower_Refresh() -- a namespace-only export, not a global
         t.env:RunTimers()
         local full = PipColors(CP)
         Check(SameColors(grown, full), label .. ": the grown pips are painted\n    " .. Describe(grown)
@@ -197,12 +197,20 @@ end
 --    the same expiry callback (no closure per UNIT_SPELLCAST_SUCCEEDED); the
 --    timer of an earlier cast leaves the stacks of a later one alone.
 do
-    local t = World.Start(repo, "Mainline", "HUNTER", 3, 2)
+    -- The keyed scheduler binds C_Timer.After when it loads, so the recording timer is in place before
+    -- it loads and forwards to the client's until the test starts recording.
+    local record
+    local t = World.Start(repo, "Mainline", "HUNTER", 3, 2, nil, { beforeLoad = function()
+        local clientAfter = _G.C_Timer.After
+        _G.C_Timer.After = function(delay, callback)
+            if record then return record(delay, callback) end
+            return clientAfter(delay, callback)
+        end
+    end })
     local CP = t.CP
     Check(CP.visible and CP.powerType == "TIP_OF_THE_SPEAR", "Survival did not route Tip of the Spear")
     local scheduled = {}
-    local after = C_Timer.After
-    C_Timer.After = function(delay, callback)
+    record = function(delay, callback)
         scheduled[#scheduled + 1] = { due = GetTime() + delay, callback = callback }
     end
     local KILL_COMMAND = 259489
@@ -229,7 +237,7 @@ do
     Check(CP.spStacks == stacks, "the first cast's timer expired the stacks the second cast refreshed")
     RunDue(1014.1)
     Check(CP.spStacks == 0 and CP.spExpires == nil, "Tip of the Spear did not expire after its duration")
-    C_Timer.After = after
+    record = nil
 end
 
 -- 4b. With the shared scheduler (it always loads before ClassPower in game) the

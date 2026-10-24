@@ -1,17 +1,26 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
--- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", {
-    "MSUF_UFCore_NotifyConfigChanged",
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+-- Core functions this page calls by their global names: required here at load.
+M.RequireGlobals(FILE, {
     "MSUF_ShowReloadRecommendedPopup",
     "MSUF_ApplyRoundedUnitframes",
 })
+-- Resolved once at load, so the value and refresh paths that call them (setters, the apply
+-- request, the anchor refresh) never resolve a name.
+local Core = {
+    ShowReloadPopup = MSUF.Require("MSUF_ShowReloadRecommendedPopup", FILE),
+    ApplyRounded = MSUF.Require("MSUF_ApplyRoundedUnitframes", FILE),
+    ApplyService = MSUF.Require("MSUF_Menu2_ApplyService", FILE),
+    AutomaticProvider = MSUF.Require("MSUF_GetAutomaticCooldownAnchorProvider", FILE),
+    CooldownEnabled = MSUF.Require("MSUF_IsCooldownAnchorEnabled", FILE),
+    SetCooldownEnabled = MSUF.Require("MSUF_SetCooldownAnchorEnabled", FILE),
+}
 local EnsureDB = M.EnsureDB
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 
 -- Shared Unit page sections.
 -- Builds reusable controls for per-unit basics, load rules, target-of-target text behavior,
@@ -30,13 +39,15 @@ local GetConf, GetGeneral, DefaultCopyTarget, UnitTopLabel = UP.GetConf, UP.GetG
 local UnitTopLabelKey = UP.UnitTopLabelKey
 local UnitTopPillWidth, NewCopyScopeDefaults, ConfirmCopyToAll = UP.UnitTopPillWidth, UP.NewCopyScopeDefaults, UP.ConfirmCopyToAll
 local CopyUnitSettings, ReadBool = UP.CopyUnitSettings, UP.ReadBool
-local SetBool, ReadNumber, SetNumber = UP.SetBool, UP.ReadNumber, UP.SetNumber
+local SetBool, ReadNumber = UP.SetBool, UP.ReadNumber
 local SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive = UP.SetControlEnabled, UP.NormalizeBossLayoutMode, UP.UpdateLoadActive
 local SettingMeta, ReviewedMeta, RegisterControl = UP.SettingMeta, UP.ReviewedMeta, UP.RegisterControl
 local Schema = M.ControlSchema
 local ROW_OPTIONS = Schema.UnitOptions()
 -- Lazy shells declare their header before the body builds, as the pilot sections do.
 local function DeclareSection(_, section, unit) Schema.Section(section, unit) end
+-- Hover options the Basics and Visibility tips share (AddTooltip only reads them).
+local TIP_OPTS = { hook = true, owner = "ANCHOR_RIGHT" }
 local UNIT_ANCHOR_SECTION_HEIGHT = 306
 local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player pet target focus boss arena"
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
@@ -46,13 +57,8 @@ local TOT_INLINE_COLOR_TOT_NAME = "TOT_NAME"
 local TOT_INLINE_COLOR_TARGET_NAME = "TARGET_NAME"
 local TOT_INLINE_COLOR_NPC = "NPC"
 local TOT_INLINE_COLOR_DEFAULT = "DEFAULT"
-local TOT_INLINE_COLOR_VALUES = {
-    [TOT_INLINE_COLOR_AUTO] = true,
-    [TOT_INLINE_COLOR_TOT_NAME] = true,
-    [TOT_INLINE_COLOR_TARGET_NAME] = true,
-    [TOT_INLINE_COLOR_NPC] = true,
-    [TOT_INLINE_COLOR_DEFAULT] = true,
-}
+local TOT_INLINE_COLOR_VALUES = M.KeySet(TOT_INLINE_COLOR_AUTO, TOT_INLINE_COLOR_TOT_NAME, TOT_INLINE_COLOR_TARGET_NAME,
+    TOT_INLINE_COLOR_NPC, TOT_INLINE_COLOR_DEFAULT)
 local HEALTH_COLOR_GLOBAL = "GLOBAL"
 local HEALTH_COLOR_LABELS = {
     class = "Class / Reaction",
@@ -60,23 +66,12 @@ local HEALTH_COLOR_LABELS = {
     unified = "Unified Color",
     dark = "Dark Mode",
 }
-local HEALTH_COLOR_ALIASES = {
-    CLASS = "class",
-    class = "class",
-    GRADIENT = "gradient",
-    gradient = "gradient",
-    UNIFIED = "unified",
-    unified = "unified",
-    DARK = "dark",
-    dark = "dark",
-}
-local HEALTH_COLOR_OPTIONS = {
-    { value = HEALTH_COLOR_GLOBAL, text = "Use Global" },
-    { value = "class", text = HEALTH_COLOR_LABELS.class },
-    { value = "gradient", text = HEALTH_COLOR_LABELS.gradient },
-    { value = "unified", text = HEALTH_COLOR_LABELS.unified },
-    { value = "dark", text = HEALTH_COLOR_LABELS.dark },
-}
+local HEALTH_COLOR_ALIASES = {}
+local HEALTH_COLOR_OPTIONS = { { value = HEALTH_COLOR_GLOBAL, text = "Use Global" } }
+for _, mode in ipairs({ "class", "gradient", "unified", "dark" }) do
+    HEALTH_COLOR_ALIASES[mode], HEALTH_COLOR_ALIASES[mode:upper()] = mode, mode
+    HEALTH_COLOR_OPTIONS[#HEALTH_COLOR_OPTIONS + 1] = { value = mode, text = HEALTH_COLOR_LABELS[mode] }
+end
 -- Fill Direction merges the fill axis (verticalFillBars) with the in-axis
 -- direction (reverseFillBars) into one control. Compiled by CompileUnitHealth/
 -- CompileUnitPower (MSUF_UF_Config.lua) and applied via the SetOrientation +
@@ -98,24 +93,13 @@ local function FillDirectionValue(reverse, vertical)
     return reverse and "rl" or "lr"
 end
 
-local function AutomaticCooldownProvider()
-    local getter = _G.MSUF_GetAutomaticCooldownAnchorProvider
-    if type(getter) ~= "function" then return nil, nil end
-    return getter()
-end
---- The Integrations module answers first; without it the client model does. The
---- C_CooldownViewer namespace is never the signal: the shared engine exposes it
---- on every client, while only the Mainline family ships Blizzard's Cooldown
---- Manager (Client.HostsCooldownManager).
+local AutomaticCooldownProvider = Core.AutomaticProvider
+--- The Integrations module answers whether the switch is on.
 local function CooldownAnchorEnabled()
-    local general = GetGeneral and GetGeneral() or nil
-    local getter = _G.MSUF_IsCooldownAnchorEnabled
-    if type(getter) == "function" then return getter(general) == true end
-    return MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
-        and type(general) == "table" and general.anchorToCooldown == true or false
+    return Core.CooldownEnabled(GetGeneral and GetGeneral() or nil) == true
 end
 --- Hides the anchor switch on clients that can never host a Cooldown Manager.
-local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
+local CooldownAnchorSupported = MSUF.Require("MSUF_CooldownAnchorSupported", FILE)
 
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
 local ENABLED_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
@@ -135,30 +119,16 @@ local function EnabledHeaderColor()
 end
 
 
-local function CurrentApplyService()
-    local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
-    if type(apply) == "table" then return apply end
-    return nil
-end
-
 local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     opts = opts or {}
     opts.history = false
     if M and type(M.RequestUnitDomains) == "function" then
         local ok = M.RequestUnitDomains(unit, reason or "MSUF2_UNIT_SECTION", opts) ~= false
-        if ok and flushNow then
-            local apply = CurrentApplyService()
-            if apply and type(apply.Flush) == "function" then apply.Flush() end
-        end
+        if ok and flushNow then Core.ApplyService.Flush() end
         return ok
     end
-    local apply = CurrentApplyService()
-    if apply and type(apply.RequestUnit) == "function" then
-        apply.RequestUnitDomains(unit, reason or "MSUF2_UNIT_SECTION", opts)
-        if flushNow and type(apply.Flush) == "function" then apply.Flush() end
-        return true
-    end
-    _G.MSUF_UFCore_NotifyConfigChanged(unit, true, true, reason or "MSUF2_UNIT_SECTION")
+    Core.ApplyService.RequestUnitDomains(unit, reason or "MSUF2_UNIT_SECTION", opts)
+    if flushNow then Core.ApplyService.Flush() end
     return true
 end
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "pettarget", "all" }
@@ -233,13 +203,7 @@ local function GlobalHealthColorMode()
     local mode = g and g.barMode
     if type(mode) == "string" then mode = mode:lower() end
     if not HEALTH_COLOR_LABELS[mode] then
-        if g and g.useClassColors == true then
-            mode = "class"
-        elseif g and g.darkMode == true then
-            mode = "dark"
-        else
-            mode = "dark"
-        end
+        mode = g and g.useClassColors == true and "class" or "dark"
     end
     if mode == "gradient" and g and g.enableHealthGradient == false then mode = "class" end
     return mode
@@ -326,6 +290,261 @@ local UNIT_PREVIEW_BOX_HEIGHT = 132
 local UNIT_PREVIEW_EXPANDED_HEIGHT = 358
 local UNIT_PREVIEW_SECTION_HEIGHT = 180
 local UNIT_PREVIEW_TOP_OFFSET = -40
+-- The page preview controller. One state table P per built page holds the shared preview
+-- box with its host panel, the expander record and the queued-refresh bookkeeping; the
+-- steps below read and write it instead of closing over per-build upvalues.
+local Preview = {}
+function Preview.RegisterControls(box, ctx)
+    local preview = MSUF.UFPreview
+    if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
+        preview.RegisterRuntimeControlsForPage(box, ctx and ctx.key)
+    end
+end
+function Preview.SetOwner(P, target)
+    local ctx, expander = P.ctx, P.expander
+    target = target or P.box
+    if not target then return end
+    target._msuf2UnitPageHostShown = P.hostShown
+    target._msuf2PinnedPreviewPageKey = ctx and ctx.key
+    target._msuf2PinnedPreviewWrapper = ctx and ctx.wrapper
+    if not (expander and expander.expanded) then target._msuf2PinnedFloating = nil end
+    target._msuf2PreferredRestoreHeight = expander and expander.expanded
+        and UNIT_PREVIEW_EXPANDED_HEIGHT or UNIT_PREVIEW_BOX_HEIGHT
+    target._msuf2PreferredRestoreYOffset = UNIT_PREVIEW_TOP_OFFSET
+    target._msuf2CompactHeader = P.header
+    target._msuf2CompactExpandButton = expander and expander.button or nil
+    target._msuf2FixedPreviewExpanderRecord = expander
+end
+function Preview.EnsureAttachment(P)
+    local box, ctx = P.box, P.ctx
+    if not box then return end
+    local record = box._msuf2PinnedPreviewRecord
+    local pageKey = ctx and ctx.key
+    local wrapper = ctx and ctx.wrapper
+    if W and W.AttachPinnedPreview
+        and (not record or record.pageKey ~= pageKey or record.pageWrapper ~= wrapper)
+    then
+        W.AttachPinnedPreview(P.sec, box, {
+            stateKey = "unitFramePreview",
+            title = box.title,
+            hint = box.hint,
+            pageKey = pageKey,
+            wrapper = wrapper,
+        })
+        Preview.RegisterControls(box, ctx)
+    end
+    -- The preview is shared across cached unit pages. Reassert the current
+    -- page's gate whenever ownership is rebound so no state from the
+    -- previous page can survive a close/reopen transition.
+    ApplyUnitFrameEnabledGate(ctx, P.unit)
+end
+function Preview.RefreshBox(target, reason)
+    if not target then return end
+    local preview = MSUF.UFPreview
+    if type(preview) == "table" then
+        if type(preview.RequestRefreshForBox) == "function" then
+            preview.RequestRefreshForBox(target, reason)
+            return
+        end
+        preview.active = target
+        if type(preview.Refresh) == "function" and target.IsShown and target:IsShown() then
+            preview.Refresh(target, reason)
+            return
+        end
+    end
+    Core.RequestRefresh = Core.RequestRefresh or MSUF.Require("MSUF_UFPreview_RequestRefresh", FILE)
+    Core.RequestRefresh(reason)
+end
+function Preview.EnsureExpander(P)
+    local box, expander, ctx = P.box, P.expander, P.ctx
+    if not (box and W.AttachFixedPreviewExpander) then return nil end
+    if expander and expander.box == box and not expander.disposed then
+        box._msuf2CompactExpandButton = expander.button
+        box._msuf2FixedPreviewExpanderRecord = expander
+        return expander
+    end
+    expander = W.AttachFixedPreviewExpander(P.sec, P.header, box, {
+        pageKey = ctx and ctx.key,
+        wrapper = ctx and ctx.wrapper,
+        compactHeight = UNIT_PREVIEW_BOX_HEIGHT,
+        compactTop = UNIT_PREVIEW_TOP_OFFSET,
+        expandedHeight = UNIT_PREVIEW_EXPANDED_HEIGHT,
+        refreshPreview = function(target, reason)
+            Preview.RefreshBox(target, reason or "MSUF2_UNIT_PREVIEW_SIZE")
+        end,
+        onStateChanged = function()
+            if P.box.ReleasePreviewInteraction then P.box:ReleasePreviewInteraction() end
+        end,
+    })
+    P.expander = expander
+    if expander and expander.button and not expander.button._msuf2UnitExpandRegistered then
+        expander.button._msuf2UnitExpandRegistered = true
+        RegisterControl(expander.button, ctx, "preview.height.toggle", "Expand Preview", "button", "ephemeral")
+    end
+    Preview.SetOwner(P)
+    return expander
+end
+function Preview.LayoutToolbar(P)
+    local header, expander = P.header, P.expander
+    local layersBtn = P.box and P.box._msuf2LayersButton
+    if not (layersBtn and header) then return end
+    layersBtn:SetParent(header)
+    layersBtn:ClearAllPoints()
+    local expandBtn = expander and expander.button
+    if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
+    else layersBtn:SetPoint("RIGHT", header, "RIGHT", -12, 0) end
+    if layersBtn.SetFrameLevel and header.GetFrameLevel then
+        layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
+    end
+end
+function Preview.ApplyPresentation(P)
+    Preview.EnsureExpander(P)
+    local box, expander, sec = P.box, P.expander, P.sec
+    if expander and expander.expanded then
+        expander:Relayout("MSUF2_UNIT_EXPANDED_PRESENTATION")
+        return
+    end
+    if box and box._msuf2PinnedFloating ~= true then
+        box._msuf2PreferredRestoreHeight = UNIT_PREVIEW_BOX_HEIGHT
+        box._msuf2PreferredRestoreYOffset = UNIT_PREVIEW_TOP_OFFSET
+        box._msuf2CompactHeader = P.header
+        box._msuf2CompactExpandButton = expander and expander.button or nil
+        local previousH = (box.GetHeight and box:GetHeight()) or 0
+        box:ClearAllPoints()
+        box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, UNIT_PREVIEW_TOP_OFFSET)
+        box:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, UNIT_PREVIEW_TOP_OFFSET)
+        if box.ApplyCompactPreviewPresentation then
+            box:ApplyCompactPreviewPresentation(true)
+        end
+        if box.SetHeight then box:SetHeight(UNIT_PREVIEW_BOX_HEIGHT) end
+        Preview.LayoutToolbar(P)
+        if math.abs(previousH - UNIT_PREVIEW_BOX_HEIGHT) > 0.5 and box.RequestRefresh then
+            box:RequestRefresh("MSUF2_UNIT_PREVIEW_HEIGHT")
+        end
+    end
+end
+-- The unit page's own host panel for the shared preview box.
+function Preview.PreparePanel(P)
+    local panel, sec, unit = P.panel, P.sec, P.unit
+    if not panel then
+        panel = PixelLayoutRegion(CreateFrame("Frame", nil, sec))
+    elseif panel.SetParent then
+        panel:SetParent(sec)
+    end
+    P.panel = panel
+    panel._msufLastApplyKey = unit
+    panel._msufGetCurrentKey = function() return unit end
+    panel._msufIsFramesTab = function() return true end
+    panel._msufAPI = {
+        ApplySettingsForKey = function(key)
+            key = key or unit
+            RequestUnitRuntimeApply(key, "MSUF2_UNIT_PREVIEW_APPLY", { preview = true, text = true })
+        end,
+    }
+    panel._msufOpenUnitSection = function() end
+    return panel
+end
+-- Returns the preview box owned by this page, creating or adopting the shared one on first use.
+function Preview.Ensure(P)
+    local ctx, sec = P.ctx, P.sec
+    local box = P.box
+    if box and box.GetParent and box:GetParent() == sec then
+        if not P.hostShown() then return nil end
+        Preview.SetOwner(P)
+        Preview.EnsureAttachment(P)
+        Preview.EnsureExpander(P)
+        local expander = P.expander
+        if expander and expander.expanded then
+            if box.Show then box:Show() end
+            expander:Relayout("MSUF2_UNIT_EXPAND_OWNERSHIP")
+        elseif box.Show then
+            box:Show()
+        end
+        return box
+    end
+    if not P.hostShown() then return nil end
+    local panel = Preview.PreparePanel(P)
+    P.box = UP._sharedUnitPreviewBox
+    box = P.box
+    if box and box.Hide then box:Hide() end
+    if not box then
+        box = P.createPreview(sec, panel, ctx.width - 28, UNIT_PREVIEW_BOX_HEIGHT)
+        P.box = box
+        if not box then return nil end
+        UP._sharedUnitPreviewBox = box
+    else
+        box:SetParent(sec)
+        box:ClearAllPoints()
+        box:SetSize(ctx.width - 28, UNIT_PREVIEW_BOX_HEIGHT)
+        box._msufPanel = panel
+        Preview.RegisterControls(box, ctx)
+    end
+    box._msufPanel = panel
+    Preview.SetOwner(P)
+    box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, UNIT_PREVIEW_TOP_OFFSET)
+    box:Show()
+    if box.title and box.title.SetTextColor then
+        local c = T.colors.accent
+        box.title:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    end
+    panel.unitPreviewBox = box
+    if box.HookScript and not box._msuf2UnitPageShowHooked then
+        box._msuf2UnitPageShowHooked = true
+        box:HookScript("OnShow", function()
+            local hostShown = P.box._msuf2UnitPageHostShown
+            if type(hostShown) == "function" and not hostShown() then return end
+            local preview = MSUF.UFPreview
+            if type(preview) == "table" and type(preview.RequestRefreshForBox) == "function" then
+                preview.RequestRefreshForBox(P.box, "MSUF2_UNIT_PAGE_SHOW")
+            else
+                Core.RequestRefresh = Core.RequestRefresh or MSUF.Require("MSUF_UFPreview_RequestRefresh", FILE)
+                Core.RequestRefresh("MSUF2_UNIT_PAGE_SHOW")
+            end
+        end)
+    end
+    Preview.EnsureAttachment(P)
+    Preview.EnsureExpander(P)
+    Preview.ApplyPresentation(P)
+    return box
+end
+-- Installs the page-bound entry points as closures over P, so each outside call (the host
+-- test, a refresh, Aura Style) stays one call, as the per-build locals they replace were.
+function Preview.Bind(P)
+    local ctx, sec = P.ctx, P.sec
+    P.hostShown = function()
+        if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return false end
+        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
+        if sec and sec.IsShown and not sec:IsShown() then return false end
+        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
+        return true
+    end
+    P.refreshThis = function(reason)
+        local currentBox = Preview.Ensure(P)
+        if not currentBox then return end
+        P.panel._msufLastApplyKey = P.unit
+        Preview.RefreshBox(currentBox, reason or (P.expander and P.expander.expanded
+            and "MSUF2_UNIT_PAGE_EXPANDED" or "MSUF2_UNIT_PAGE_COMPACT"))
+    end
+    P.refreshState = function()
+        if not P.hostShown() then
+            P.serial = P.serial + 1
+            P.queued = nil
+            return
+        end
+        if not P.box and not P.queued then
+            P.queued = true
+            P.serial = P.serial + 1
+            local serial = P.serial
+            C_Timer.After(0, function()
+                if serial ~= P.serial then return end
+                P.queued = nil
+                if P.hostShown() then P.refreshThis("MSUF2_UNIT_PAGE_INITIAL") end
+            end)
+            return
+        end
+        P.refreshThis("MSUF2_UNIT_PAGE")
+    end
+end
 local function BuildPreview(ctx, builder, unit)
     local previewHeaderTitle = M.Tr("Preview - ") .. UnitTopLabel(unit)
     local sec, previewHeader, fixedRecord = W.FixedPreviewSection(ctx, builder, {
@@ -334,255 +553,22 @@ local function BuildPreview(ctx, builder, unit)
         gap = 8,
     })
     if not UnitSectionShared.DeclarePreview(sec, ctx.key, unit, previewHeaderTitle) then return end
-    local createPreview = MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox
-    if not createPreview then
-        W.Text(sec, "The shared unit preview module is not loaded.", 14, -56, ctx.width - 28, T.colors.muted)
-        return
-    end
-    local panel, box, expander
-    local EnsurePreviewExpander
-    local initialPreviewQueued
-    local previewQueueSerial = 0
-    local function PreviewHostShown()
-        if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return false end
-        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
-        if sec and sec.IsShown and not sec:IsShown() then return false end
-        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
-        return true
-    end
-    local function SetPreviewOwner(target)
-        target = target or box
-        if not target then return end
-        target._msuf2UnitPageHostShown = PreviewHostShown
-        target._msuf2PinnedPreviewPageKey = ctx and ctx.key
-        target._msuf2PinnedPreviewWrapper = ctx and ctx.wrapper
-        if not (expander and expander.expanded) then target._msuf2PinnedFloating = nil end
-        target._msuf2PreferredRestoreHeight = expander and expander.expanded
-            and UNIT_PREVIEW_EXPANDED_HEIGHT or UNIT_PREVIEW_BOX_HEIGHT
-        target._msuf2PreferredRestoreYOffset = UNIT_PREVIEW_TOP_OFFSET
-        target._msuf2CompactHeader = previewHeader
-        target._msuf2CompactExpandButton = expander and expander.button or nil
-        target._msuf2FixedPreviewExpanderRecord = expander
-    end
-    local ApplyPreviewPresentation
-    local function EnsurePreviewAttachment()
-        if not box then return end
-        local record = box._msuf2PinnedPreviewRecord
-        local pageKey = ctx and ctx.key
-        local wrapper = ctx and ctx.wrapper
-        if W and W.AttachPinnedPreview
-            and (not record or record.pageKey ~= pageKey or record.pageWrapper ~= wrapper)
-        then
-            W.AttachPinnedPreview(sec, box, {
-                stateKey = "unitFramePreview",
-                title = box.title,
-                hint = box.hint,
-                pageKey = pageKey,
-                wrapper = wrapper,
-            })
-            local preview = MSUF.UFPreview
-            if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
-                preview.RegisterRuntimeControlsForPage(box, ctx and ctx.key)
-            end
-        end
-        -- The preview is shared across cached unit pages. Reassert the current
-        -- page's gate whenever ownership is rebound so no state from the
-        -- previous page can survive a close/reopen transition.
-        ApplyUnitFrameEnabledGate(ctx, unit)
-    end
-    local function EnsurePreview()
-        if box and box.GetParent and box:GetParent() == sec then
-            if not PreviewHostShown() then return nil end
-            SetPreviewOwner()
-            EnsurePreviewAttachment()
-            if EnsurePreviewExpander then EnsurePreviewExpander() end
-            if expander and expander.expanded then
-                if box.Show then box:Show() end
-                expander:Relayout("MSUF2_UNIT_EXPAND_OWNERSHIP")
-            elseif box.Show then
-                box:Show()
-            end
-            return box
-        end
-        if not PreviewHostShown() then return nil end
-        if not panel then
-            panel = PixelLayoutRegion(CreateFrame("Frame", nil, sec))
-        elseif panel.SetParent then
-            panel:SetParent(sec)
-        end
-        panel._msufLastApplyKey = unit
-        panel._msufGetCurrentKey = function() return unit end
-        panel._msufIsFramesTab = function() return true end
-        panel._msufAPI = {
-            ApplySettingsForKey = function(key)
-                key = key or unit
-                RequestUnitRuntimeApply(key, "MSUF2_UNIT_PREVIEW_APPLY", { preview = true, text = true })
-            end,
-        }
-        panel._msufOpenUnitSection = function() end
-        box = UP._sharedUnitPreviewBox
-        if box and box.Hide then box:Hide() end
-        if not box then
-            box = createPreview(sec, panel, ctx.width - 28, UNIT_PREVIEW_BOX_HEIGHT)
-            if not box then return nil end
-            UP._sharedUnitPreviewBox = box
-        else
-            box:SetParent(sec)
-            box:ClearAllPoints()
-            box:SetSize(ctx.width - 28, UNIT_PREVIEW_BOX_HEIGHT)
-            box._msufPanel = panel
-            local preview = MSUF.UFPreview
-            if preview and type(preview.RegisterRuntimeControlsForPage) == "function" then
-                preview.RegisterRuntimeControlsForPage(box, ctx and ctx.key)
-            end
-        end
-        box._msufPanel = panel
-        SetPreviewOwner()
-        box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, UNIT_PREVIEW_TOP_OFFSET)
-        box:Show()
-        if box.title and box.title.SetTextColor then
-            local c = T.colors.accent
-            box.title:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-        end
-        panel.unitPreviewBox = box
-        if box.HookScript and not box._msuf2UnitPageShowHooked then
-            box._msuf2UnitPageShowHooked = true
-            box:HookScript("OnShow", function()
-                local hostShown = box._msuf2UnitPageHostShown
-                if type(hostShown) == "function" and not hostShown() then return end
-                local preview = MSUF.UFPreview
-                if type(preview) == "table" and type(preview.RequestRefreshForBox) == "function" then
-                    preview.RequestRefreshForBox(box, "MSUF2_UNIT_PAGE_SHOW")
-                else
-                    _G.MSUF_UFPreview_RequestRefresh("MSUF2_UNIT_PAGE_SHOW")
-                end
-            end)
-        end
-        EnsurePreviewAttachment()
-        if EnsurePreviewExpander then EnsurePreviewExpander() end
-        if ApplyPreviewPresentation then ApplyPreviewPresentation() end
-        return box
-    end
-    local RefreshPreviewBox
-    local function RefreshThisPreview(reason)
-        local currentBox = EnsurePreview()
-        if not currentBox then return end
-        panel._msufLastApplyKey = unit
-        RefreshPreviewBox(currentBox, reason or (expander and expander.expanded
-            and "MSUF2_UNIT_PAGE_EXPANDED" or "MSUF2_UNIT_PAGE_COMPACT"))
-    end
-    RefreshPreviewBox = function(target, reason)
-        if not target then return end
-        local preview = MSUF.UFPreview
-        if type(preview) == "table" then
-            if type(preview.RequestRefreshForBox) == "function" then
-                preview.RequestRefreshForBox(target, reason)
-                return
-            end
-            preview.active = target
-            if type(preview.Refresh) == "function" and target.IsShown and target:IsShown() then
-                preview.Refresh(target, reason)
-                return
-            end
-        end
-        _G.MSUF_UFPreview_RequestRefresh(reason)
-    end
+    local createPreview = MSUF.MSUF_Menu2_CreateUnitPreviewBox or MSUF.Require("MSUF_Menu2_CreateUnitPreviewBox", FILE)
+    local P = { ctx = ctx, sec = sec, unit = unit, header = previewHeader, createPreview = createPreview, serial = 0 }
+    Preview.Bind(P)
     -- Aura Style owns this exact embedded preview box. Publishing the scoped
     -- refresher avoids repainting Preview.active, which may belong to another
     -- cached, pinned, or reparented unit page.
-    if ctx then ctx._msuf2RefreshUnitPreview = RefreshThisPreview end
-    EnsurePreviewExpander = function()
-        if not (box and W.AttachFixedPreviewExpander) then return nil end
-        if expander and expander.box == box and not expander.disposed then
-            box._msuf2CompactExpandButton = expander.button
-            box._msuf2FixedPreviewExpanderRecord = expander
-            return expander
-        end
-        expander = W.AttachFixedPreviewExpander(sec, previewHeader, box, {
-            pageKey = ctx and ctx.key,
-            wrapper = ctx and ctx.wrapper,
-            compactHeight = UNIT_PREVIEW_BOX_HEIGHT,
-            compactTop = UNIT_PREVIEW_TOP_OFFSET,
-            expandedHeight = UNIT_PREVIEW_EXPANDED_HEIGHT,
-            refreshPreview = function(target, reason)
-                RefreshPreviewBox(target, reason or "MSUF2_UNIT_PREVIEW_SIZE")
-            end,
-            onStateChanged = function()
-                if box.ReleasePreviewInteraction then box:ReleasePreviewInteraction() end
-            end,
-        })
-        if expander and expander.button and not expander.button._msuf2UnitExpandRegistered then
-            expander.button._msuf2UnitExpandRegistered = true
-            RegisterControl(expander.button, ctx, "preview.height.toggle", "Expand Preview", "button", "ephemeral")
-        end
-        SetPreviewOwner()
-        return expander
-    end
-    local function LayoutPreviewToolbar()
-        local layersBtn = box and box._msuf2LayersButton
-        if not (layersBtn and previewHeader) then return end
-        layersBtn:SetParent(previewHeader)
-        layersBtn:ClearAllPoints()
-        local expandBtn = expander and expander.button
-        if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
-        else layersBtn:SetPoint("RIGHT", previewHeader, "RIGHT", -12, 0) end
-        if layersBtn.SetFrameLevel and previewHeader.GetFrameLevel then
-            layersBtn:SetFrameLevel((previewHeader:GetFrameLevel() or 1) + 3)
-        end
-    end
-    ApplyPreviewPresentation = function()
-        EnsurePreviewExpander()
-        if expander and expander.expanded then
-            expander:Relayout("MSUF2_UNIT_EXPANDED_PRESENTATION")
-            return
-        end
-        if box and box._msuf2PinnedFloating ~= true then
-            box._msuf2PreferredRestoreHeight = UNIT_PREVIEW_BOX_HEIGHT
-            box._msuf2PreferredRestoreYOffset = UNIT_PREVIEW_TOP_OFFSET
-            box._msuf2CompactHeader = previewHeader
-            box._msuf2CompactExpandButton = expander and expander.button or nil
-            local previousH = (box.GetHeight and box:GetHeight()) or 0
-            box:ClearAllPoints()
-            box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, UNIT_PREVIEW_TOP_OFFSET)
-            box:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, UNIT_PREVIEW_TOP_OFFSET)
-            if box.ApplyCompactPreviewPresentation then
-                box:ApplyCompactPreviewPresentation(true)
-            end
-            if box.SetHeight then box:SetHeight(UNIT_PREVIEW_BOX_HEIGHT) end
-            LayoutPreviewToolbar()
-            if math.abs(previousH - UNIT_PREVIEW_BOX_HEIGHT) > 0.5 and box.RequestRefresh then
-                box:RequestRefresh("MSUF2_UNIT_PREVIEW_HEIGHT")
-            end
-        end
-    end
-    local function RefreshPreviewState()
-        if not PreviewHostShown() then
-            previewQueueSerial = previewQueueSerial + 1
-            initialPreviewQueued = nil
-            return
-        end
-        if not box and not initialPreviewQueued then
-            initialPreviewQueued = true
-            previewQueueSerial = previewQueueSerial + 1
-            local serial = previewQueueSerial
-            C_Timer.After(0, function()
-                if serial ~= previewQueueSerial then return end
-                initialPreviewQueued = nil
-                if PreviewHostShown() then RefreshThisPreview("MSUF2_UNIT_PAGE_INITIAL") end
-            end)
-            return
-        end
-        RefreshThisPreview("MSUF2_UNIT_PAGE")
-    end
+    ctx._msuf2RefreshUnitPreview = P.refreshThis
     if sec.HookScript then
-        sec:HookScript("OnShow", RefreshPreviewState)
+        sec:HookScript("OnShow", P.refreshState)
         sec:HookScript("OnHide", function()
-            previewQueueSerial = previewQueueSerial + 1
-            initialPreviewQueued = nil
+            P.serial = P.serial + 1
+            P.queued = nil
         end)
     end
-    M.TrackRefresh(ctx, RefreshPreviewState)
-    if fixedRecord then fixedRecord.onActivate = RefreshPreviewState end
+    M.TrackRefresh(ctx, P.refreshState)
+    if fixedRecord then fixedRecord.onActivate = P.refreshState end
 end
 local function SectionNumber(value, fallback)
     return tostring(math.floor((tonumber(value) or fallback or 0) + 0.5))
@@ -643,8 +629,111 @@ local function AttachUnitSectionUX(ctx, unit)
             if id == "load_conditions" then UpdateLoadActive(scope) end
             M.RequestUnitDomains(scope, "MSUF2_SECTION_RESET", { preview = true, text = true, fonts = true, power = true, alpha = true })
             -- The frame bar shape decides whether the rounded runtime runs at all.
-            if id == "frame_basics" then _G.MSUF_ApplyRoundedUnitframes() end
+            if id == "frame_basics" then Core.ApplyRounded() end
         end,
+    })
+end
+-- Copy To: the status line after a copy, the shared target and the popup that runs it.
+local UnitCopy = {
+    failures = {
+        no_categories = "No copy categories selected.",
+        unsupported_aura_scope = "Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames.",
+        aura_copy_unavailable = "Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames.",
+        unsupported_castbar_scope = "Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames.",
+    },
+}
+function UnitCopy.NormalizeDest(src)
+    local dest = M.unitCopyTarget or (DefaultCopyTarget and DefaultCopyTarget(src)) or "target"
+    if dest == src then dest = (DefaultCopyTarget and DefaultCopyTarget(src)) or "target" end
+    M.unitCopyTarget = dest
+    return dest
+end
+function UnitCopy.DefaultScopes()
+    if type(NewCopyScopeDefaults) == "function" then return NewCopyScopeDefaults() end
+    local t = {}
+    for i = 1, #UF_COPY_CATEGORIES do
+        local cat = UF_COPY_CATEGORIES[i]
+        t[cat.key] = cat.default ~= false
+    end
+    return t
+end
+-- Status line after a copy: success names the target and any skipped categories, failure says why.
+function UnitCopy.Feedback(popup, destinationLabel, applied, result)
+    result = type(result) == "table" and result or {}
+    if applied == true then
+        local message = M.Format("Copied to %s", destinationLabel)
+        if result.auraSkipped == true then
+            message = message .. " " .. M.Tr("Aura settings were skipped for unsupported UnitFrames.")
+        end
+        if result.castbarSkipped == true then
+            message = message .. " " .. M.Tr("Castbar settings were skipped for UnitFrames without Castbars.")
+        end
+        local skipped = result.auraSkipped == true or result.castbarSkipped == true
+        if M.ShowStatusFeedback then
+            M.ShowStatusFeedback(message, skipped and "warning" or "ok", 1.8, true)
+        end
+        popup:Hide()
+        return
+    end
+    if M.ShowStatusFeedback then M.ShowStatusFeedback(UnitCopy.failures[result.reason] or "Nothing was copied.", "warning", 2.0) end
+end
+function UnitCopy.Run(unit, popup, copyScopes)
+    -- Copy popup buttons deliberately bypass the generic combat-click
+    -- proxy so this action owns the failure path instead of becoming a
+    -- silent no-op before CopyUnitSettings is reached.
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
+    local dest = UnitCopy.NormalizeDest(unit)
+    local destinationLabel = dest == "all" and M.Tr("All") or UnitTopLabel(dest)
+    local function RunCopy(allConfirmed)
+        return CopyUnitSettings(unit, dest, copyScopes, function(applied, result)
+            UnitCopy.Feedback(popup, destinationLabel, applied, result)
+        end, allConfirmed == true)
+    end
+    local historyKey = "unit:copy:" .. tostring(unit)
+    if dest == "all" and type(ConfirmCopyToAll) == "function" then
+        -- Confirm before opening the history transaction. The old order
+        -- committed an empty undo step and announced success even when
+        -- the player cancelled the confirmation dialog.
+        ConfirmCopyToAll(function()
+            M.RunWithHistory("Copy Unit Settings", historyKey, function() RunCopy(true) end)
+        end)
+        return true
+    else
+        return M.RunWithHistory("Copy Unit Settings", historyKey, RunCopy)
+    end
+end
+function UnitCopy.MakePopup(ctx, copy, unit)
+    M.unitCopyScopes = (type(M.unitCopyScopes) == "table") and M.unitCopyScopes or UnitCopy.DefaultScopes()
+    local copyScopes = M.unitCopyScopes
+    return UnitSectionShared.MakeScopeCopyPopup and UnitSectionShared.MakeScopeCopyPopup(copy, {
+        controlDomain = "unit",
+        controlPageKey = ctx and ctx.key,
+        controlPath = "copy",
+        declareControl = function(widget) Schema.Owned(widget, unit, "copy") end,
+        width = 420,
+        height = 304,
+        categories = UF_COPY_CATEGORIES,
+        scopes = copyScopes,
+        targets = UF_COPY_TARGET_ORDER,
+        targetWidths = UF_COPY_TARGET_WIDTHS,
+        sourceKey = function() return unit end,
+        sourceLabel = UnitTopLabel,
+        targetLabelText = function(key) return UF_COPY_TARGET_SHORT_LABELS[key] or UnitTopLabelKey(key) end,
+        selectedTarget = function() return UnitCopy.NormalizeDest(unit) end,
+        isTargetVisible = function(key, source) return key ~= source end,
+        onTargetClick = function(key) M.unitCopyTarget = key end,
+        runLabel = "Copy Selected",
+        runWidth = 128,
+        onPopupCreated = function(popup)
+            popup._msuf2GuidedNoScroll = true
+            if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, popup, "Copy Player settings", "unit_copy_popup") end
+            -- The one-row target strip keeps ToT/FT/PT compact; hover names the frame in full.
+            for _, key in ipairs({ "targettarget", "focustarget", "pettarget" }) do
+                local chip = popup._targetBtns and popup._targetBtns[key]
+                if chip and M.AddTooltip then M.AddTooltip(chip, UnitTopLabelKey(key), nil, { hook = true }) end
+            end
+        end,
+        onRun = function(_, popup) return UnitCopy.Run(unit, popup, copyScopes) end,
     })
 end
 local function BuildTopActions(ctx, builder, unit, label)
@@ -653,11 +742,11 @@ local function BuildTopActions(ctx, builder, unit, label)
     for i = 1, #UNIT_TAB_ORDER do
         local tabUnit = UNIT_TAB_ORDER[i]
         if UNIT_PAGE_FOR_UNIT[tabUnit] and (not M.SupportsFrameScope or M.SupportsFrameScope(tabUnit)) then
-        scopeValues[#scopeValues + 1] = {
-            value = tabUnit,
-            text = UnitTopTabKey(tabUnit, false),
-            width = UnitTopTabWidth(tabUnit, false),
-        }
+            scopeValues[#scopeValues + 1] = {
+                value = tabUnit,
+                text = UnitTopTabKey(tabUnit, false),
+                width = UnitTopTabWidth(tabUnit, false),
+            }
         end
     end
     local scopeOpts = {
@@ -696,107 +785,10 @@ local function BuildTopActions(ctx, builder, unit, label)
     }).copy
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, rowY)
     -- Opening the selector is safe in combat. The actual copy remains guarded
-    -- in onRun below, where a blocked click can produce visible feedback.
+    -- in UnitCopy.Run, where a blocked click can produce visible feedback.
     copy._msuf2AllowCombatClick = true
     copy._msuf2SkipHistoryCheckpoint = true
-    local function DefaultScopes()
-        if type(NewCopyScopeDefaults) == "function" then return NewCopyScopeDefaults() end
-        local t = {}
-        for i = 1, #UF_COPY_CATEGORIES do
-            local cat = UF_COPY_CATEGORIES[i]
-            t[cat.key] = cat.default ~= false
-        end
-        return t
-    end
-    M.unitCopyScopes = (type(M.unitCopyScopes) == "table") and M.unitCopyScopes or DefaultScopes()
-    local copyScopes = M.unitCopyScopes
-    local function NormalizeCopyDest(src)
-        local dest = M.unitCopyTarget or (DefaultCopyTarget and DefaultCopyTarget(src)) or "target"
-        if dest == src then dest = (DefaultCopyTarget and DefaultCopyTarget(src)) or "target" end
-        M.unitCopyTarget = dest
-        return dest
-    end
-    local copyPopup = UnitSectionShared.MakeScopeCopyPopup and UnitSectionShared.MakeScopeCopyPopup(copy, {
-        controlDomain = "unit",
-        controlPageKey = ctx and ctx.key,
-        controlPath = "copy",
-        declareControl = function(widget) Schema.Owned(widget, unit, "copy") end,
-        width = 420,
-        height = 304,
-        categories = UF_COPY_CATEGORIES,
-        scopes = copyScopes,
-        targets = UF_COPY_TARGET_ORDER,
-        targetWidths = UF_COPY_TARGET_WIDTHS,
-        sourceKey = function() return unit end,
-        sourceLabel = UnitTopLabel,
-        targetLabelText = function(key) return UF_COPY_TARGET_SHORT_LABELS[key] or UnitTopLabelKey(key) end,
-        selectedTarget = function() return NormalizeCopyDest(unit) end,
-        isTargetVisible = function(key, source) return key ~= source end,
-        onTargetClick = function(key) M.unitCopyTarget = key end,
-        runLabel = "Copy Selected",
-        runWidth = 128,
-        onPopupCreated = function(popup)
-            popup._msuf2GuidedNoScroll = true
-            if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, popup, "Copy Player settings", "unit_copy_popup") end
-            -- The one-row target strip keeps ToT/FT/PT compact; hover names the frame in full.
-            for _, key in ipairs({ "targettarget", "focustarget", "pettarget" }) do
-                local chip = popup._targetBtns and popup._targetBtns[key]
-                if chip and M.AddTooltip then M.AddTooltip(chip, UnitTopLabelKey(key), nil, { hook = true }) end
-            end
-        end,
-        onRun = function(api, popup)
-            -- Copy popup buttons deliberately bypass the generic combat-click
-            -- proxy so this action owns the failure path instead of becoming a
-            -- silent no-op before CopyUnitSettings is reached.
-            if M.BlockCombatAction and M.BlockCombatAction() then return false end
-            local dest = NormalizeCopyDest(unit)
-            local destinationLabel = dest == "all" and M.Tr("All") or UnitTopLabel(dest)
-            local function CopyFeedback(applied, result)
-                result = type(result) == "table" and result or {}
-                if applied == true then
-                    local message = M.Format("Copied to %s", destinationLabel)
-                    if result.auraSkipped == true then
-                        message = message .. " " .. M.Tr("Aura settings were skipped for unsupported UnitFrames.")
-                    end
-                    if result.castbarSkipped == true then
-                        message = message .. " " .. M.Tr("Castbar settings were skipped for UnitFrames without Castbars.")
-                    end
-                    local skipped = result.auraSkipped == true or result.castbarSkipped == true
-                    if M.ShowStatusFeedback then
-                        M.ShowStatusFeedback(message, skipped and "warning" or "ok", 1.8, true)
-                    end
-                    popup:Hide()
-                    return
-                end
-                local message
-                if result.reason == "no_categories" then
-                    message = "No copy categories selected."
-                elseif result.reason == "unsupported_aura_scope" or result.reason == "aura_copy_unavailable" then
-                    message = "Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."
-                elseif result.reason == "unsupported_castbar_scope" then
-                    message = "Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."
-                else
-                    message = "Nothing was copied."
-                end
-                if M.ShowStatusFeedback then M.ShowStatusFeedback(message, "warning", 2.0) end
-            end
-            local function RunCopy(allConfirmed)
-                return CopyUnitSettings(unit, dest, copyScopes, CopyFeedback, allConfirmed == true)
-            end
-            local historyKey = "unit:copy:" .. tostring(unit)
-            if dest == "all" and type(ConfirmCopyToAll) == "function" then
-                -- Confirm before opening the history transaction. The old order
-                -- committed an empty undo step and announced success even when
-                -- the player cancelled the confirmation dialog.
-                ConfirmCopyToAll(function()
-                    M.RunWithHistory("Copy Unit Settings", historyKey, function() RunCopy(true) end)
-                end)
-                return true
-            else
-                return M.RunWithHistory("Copy Unit Settings", historyKey, RunCopy)
-            end
-        end,
-    })
+    local copyPopup = UnitCopy.MakePopup(ctx, copy, unit)
     -- Opening the popup changes nothing, but search should still find where copying lives.
     RegisterControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral", { searchIndexed = true })
     copy:SetScript("OnClick", function(self)
@@ -854,10 +846,20 @@ local function AttachBasicsHeaderStatus(sec, unit)
     return Refresh
 end
 local function BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, labelW)
-    local colorMode = Schema.Build(ctx, sec, {
-        { "dropdown", "healthColorMode", HEALTH_COLOR_GLOBAL, { "Health Color Scheme", HealthColorModeOptions, math.min(270, math.max(220, colW * 2)) },
+    local colorW = math.min(270, math.max(220, colW * 2))
+    -- Fill Direction shares the Health Color Scheme row so the section stays within its
+    -- declared height instead of overlapping the next accordion header. Snap to
+    -- the column grid when there is room, otherwise sit just right of the
+    -- width-capped Health Color Scheme dropdown; clamp the width so it never
+    -- runs into the third column (Pet keeps its class-color toggle there).
+    local fillDirW = colorW
+    local fillDirX = math.max(x2, x1 + fillDirW + gap)
+    local fillDirFit = (x3 - gap) - fillDirX
+    if fillDirFit > 0 and fillDirW > fillDirFit then fillDirW = fillDirFit end
+    local rows = {
+        { "dropdown", "healthColorMode", HEALTH_COLOR_GLOBAL, { "Health Color Scheme", HealthColorModeOptions, colorW },
             beforeBind = function(widget)
-                UnitSectionShared.PlaceDropdown(sec, widget, x1, -116, math.min(270, math.max(220, colW * 2)))
+                UnitSectionShared.PlaceDropdown(sec, widget, x1, -116, colorW)
             end,
             get = function()
                 return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or HEALTH_COLOR_GLOBAL
@@ -870,21 +872,9 @@ local function BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, label
             end,
             tip = { "Health Color Scheme",
                 "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.",
-                { hook = true, owner = "ANCHOR_RIGHT" } },
+                TIP_OPTS },
             meta = SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"), scope = unit,
-        }
-    }, ROW_OPTIONS).healthColorMode
-
-    -- Shares the Health Color Scheme row so the section stays within its
-    -- declared height instead of overlapping the next accordion header. Snap to
-    -- the column grid when there is room, otherwise sit just right of the
-    -- width-capped Health Color Scheme dropdown; clamp the width so it never
-    -- runs into the third column (Pet keeps its class-color toggle there).
-    local fillDirW = math.min(270, math.max(220, colW * 2))
-    local fillDirX = math.max(x2, x1 + fillDirW + gap)
-    local fillDirFit = (x3 - gap) - fillDirX
-    if fillDirFit > 0 and fillDirW > fillDirFit then fillDirW = fillDirFit end
-    local fillDir = Schema.Build(ctx, sec, {
+        },
         { "dropdown", "verticalFillBars", "lr", { "Fill Direction", FILL_DIRECTION_OPTIONS, fillDirW },
             beforeBind = function(widget)
                 UnitSectionShared.PlaceDropdown(sec, widget, fillDirX, -116, fillDirW)
@@ -904,29 +894,85 @@ local function BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, label
             end,
             tip = { "Fill Direction",
                 "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.",
-                { hook = true, owner = "ANCHOR_RIGHT" } },
+                TIP_OPTS },
             meta = SettingMeta(ctx, "basics.fill_direction", unit, "verticalFillBars"), scope = unit,
-        }
-    }, ROW_OPTIONS).verticalFillBars
-
-    local petPlayerClassColor
+        },
+    }
     if unit == "pet" then
-        petPlayerClassColor = Schema.Build(ctx, sec, {
-            { "toggle", "petFrameUsePlayerClassColor", false, { "Player Class Color", x3, -116, labelW },
-                get = function() return GetGeneral().petFrameUsePlayerClassColor == true end,
-                set = function(v)
-                    GetGeneral().petFrameUsePlayerClassColor = v and true or false
-                    M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
-                    if M.Refresh then M.Refresh(ctx) end
-                end,
-                tip = { "Use player's class color for Pet Frame",
-                "Colors the Pet health bar with your class color while its Health Color Scheme is Class / Reaction.", { hook = true, owner = "ANCHOR_RIGHT" } },
-                meta = SettingMeta(ctx, "basics.use_player_class_color", "general", "petFrameUsePlayerClassColor"), scope = unit,
-            }
-        }, ROW_OPTIONS).petFrameUsePlayerClassColor
-
+        rows[#rows + 1] = { "toggle", "petFrameUsePlayerClassColor", false, { "Player Class Color", x3, -116, labelW },
+            get = function() return GetGeneral().petFrameUsePlayerClassColor == true end,
+            set = function(v)
+                GetGeneral().petFrameUsePlayerClassColor = v and true or false
+                M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
+                if M.Refresh then M.Refresh(ctx) end
+            end,
+            tip = { "Use player's class color for Pet Frame",
+                "Colors the Pet health bar with your class color while its Health Color Scheme is Class / Reaction.", TIP_OPTS },
+            meta = SettingMeta(ctx, "basics.use_player_class_color", "general", "petFrameUsePlayerClassColor"), scope = unit,
+        }
     end
-    return colorMode, fillDir, petPlayerClassColor
+    local controls = Schema.Build(ctx, sec, rows, ROW_OPTIONS)
+    return controls.healthColorMode, controls.verticalFillBars, controls.petFrameUsePlayerClassColor
+end
+-- The Basics ::: lists the colors the frame's effective Health Color Scheme paints with.
+local function AttachBasicsColorReferences(sec, unit)
+    if not W.AttachContextColorReferences then return end
+    local function EffectiveHealthMode()
+        return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or GlobalHealthColorMode()
+    end
+    W.AttachContextColorReferences(sec, function()
+        local mode = EffectiveHealthMode()
+        local refs = {}
+        local general = GetGeneral()
+        if mode == "gradient" then
+            refs = { "health.gradient.low", "health.gradient.mid", "health.gradient.high" }
+        elseif mode == "unified" then
+            refs = { "health.unified" }
+        elseif mode == "class" then
+            if unit == "pet" and general.petFrameUsePlayerClassColor == true then
+                refs = { "unit.class.current" }
+            else
+                refs = { unit == "pet" and "unit.pet" or "health.current" }
+            end
+        end
+        refs[#refs + 1] = "health.background.current"
+        refs[#refs + 1] = "bar.health_loss"
+        return refs
+    end, {
+        title = M.Format("%s Health Colors", UnitTopLabel(unit)),
+        note = "Colors follow this frame's effective Health Color Scheme.",
+        historySource = "menu:unit-frame-basics-health-colors",
+        maxTargets = 7,
+        context = function()
+            local context = { unit = unit, healthMode = EffectiveHealthMode() }
+            if unit == "pet" and GetGeneral().petFrameUsePlayerClassColor == true and type(UnitClass) == "function" then
+                local _, token = UnitClass("player")
+                context.classToken = token
+            end
+            return context
+        end,
+    })
+end
+-- Smooth fill and chunked health loss exclude each other: switching one on switches its peer off.
+local function SetHealthFillMode(ctx, unit, key, peerKey, value, reason, historyLabel)
+    value = value == true
+    local function Write()
+        local conf = GetConf(unit)
+        local changed = conf[key] ~= value
+        conf[key] = value
+        if value and conf[peerKey] ~= false then
+            conf[peerKey] = false
+            changed = true
+        end
+        if not changed then return false end
+        M.RequestUnitDomains(unit, reason, { preview = true })
+        if M.RequestRefresh then M.RequestRefresh(ctx, "unit-health-fill-mode") end
+        return true
+    end
+    if type(M.RunWithHistory) == "function" then
+        return M.RunWithHistory(historyLabel, "unit:" .. tostring(unit) .. ":healthFillMode", Write)
+    end
+    return Write()
 end
 local function BuildBasics(ctx, builder, unit, label)
     -- Default-open so the page greets users with real settings instead of a
@@ -935,43 +981,7 @@ local function BuildBasics(ctx, builder, unit, label)
     -- accordion header is created later and can otherwise cover the notice's
     -- lower edge at some UI scales.
     local sec = Schema.Section(builder:CollapsibleSection("frame_basics", "Basics", 272, true), unit)
-    if W.AttachContextColorReferences then
-        local function EffectiveHealthMode()
-            return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or GlobalHealthColorMode()
-        end
-        W.AttachContextColorReferences(sec, function()
-            local mode = EffectiveHealthMode()
-            local refs = {}
-            local general = GetGeneral()
-            if mode == "gradient" then
-                refs = { "health.gradient.low", "health.gradient.mid", "health.gradient.high" }
-            elseif mode == "unified" then
-                refs = { "health.unified" }
-            elseif mode == "class" then
-                if unit == "pet" and general.petFrameUsePlayerClassColor == true then
-                    refs = { "unit.class.current" }
-                else
-                    refs = { unit == "pet" and "unit.pet" or "health.current" }
-                end
-            end
-            refs[#refs + 1] = "health.background.current"
-            refs[#refs + 1] = "bar.health_loss"
-            return refs
-        end, {
-            title = M.Format("%s Health Colors", UnitTopLabel(unit)),
-            note = "Colors follow this frame's effective Health Color Scheme.",
-            historySource = "menu:unit-frame-basics-health-colors",
-            maxTargets = 7,
-            context = function()
-                local context = { unit = unit, healthMode = EffectiveHealthMode() }
-                if unit == "pet" and GetGeneral().petFrameUsePlayerClassColor == true and type(_G.UnitClass) == "function" then
-                    local _, token = _G.UnitClass("player")
-                    context.classToken = token
-                end
-                return context
-            end,
-        })
-    end
+    AttachBasicsColorReferences(sec, unit)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 24
     local colW = math.floor((sectionW - 28 - (gap * 2)) / 3)
@@ -981,38 +991,18 @@ local function BuildBasics(ctx, builder, unit, label)
     local x3 = x2 + colW + gap
     local labelW = math.max(104, colW - 34)
     local row1 = -42
-    local function SetHealthFillMode(key, peerKey, value, reason, historyLabel)
-        value = value == true
-        local function Write()
-            local conf = GetConf(unit)
-            local changed = conf[key] ~= value
-            conf[key] = value
-            if value and conf[peerKey] ~= false then
-                conf[peerKey] = false
-                changed = true
-            end
-            if not changed then return false end
-            M.RequestUnitDomains(unit, reason, { preview = true })
-            if M.RequestRefresh then M.RequestRefresh(ctx, "unit-health-fill-mode") end
-            return true
-        end
-        if type(M.RunWithHistory) == "function" then
-            return M.RunWithHistory(historyLabel, "unit:" .. tostring(unit) .. ":healthFillMode", Write)
-        end
-        return Write()
-    end
     local enable = PrepareBasicsSwitch(ctx, sec, unit)
     -- Fill Direction (axis + in-axis direction) is a 4-way dropdown placed on
     -- its own row below Health Color Scheme; Smooth takes the freed x2 slot.
     local basics = Schema.Build(ctx, sec, {
         { "toggle", "smoothFill", false, { "Smooth fill", x1, row1, labelW },
             get = function() return ReadBool(unit, "smoothFill", false) end,
-            set = function(v) SetHealthFillMode("smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL", "Smooth health fill") end,
+            set = function(v) SetHealthFillMode(ctx, unit, "smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL", "Smooth health fill") end,
             meta = SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"), scope = unit,
         },
         { "toggle", "chunkedFill", false, { "Chunked health loss", x2, row1, labelW },
             get = function() return ReadBool(unit, "chunkedFill", false) end,
-            set = function(v) SetHealthFillMode("chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL", "Chunked health loss") end,
+            set = function(v) SetHealthFillMode(ctx, unit, "chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL", "Chunked health loss") end,
             meta = SettingMeta(ctx, "basics.chunked_fill", unit, "chunkedFill"), scope = unit,
         },
         { "switch", "useBlizzardFrame", false, { "Force Blizzard frame on", x1, -76, math.max(196, colW + 24) },
@@ -1024,7 +1014,7 @@ local function BuildBasics(ctx, builder, unit, label)
                 if unit == "pettarget" or ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
                 SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
                 local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
-                _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
+                Core.ShowReloadPopup(reloadLabel)
             end,
             meta = SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"), scope = unit,
         }
@@ -1047,7 +1037,7 @@ local function BuildBasics(ctx, builder, unit, label)
             tooltip = tooltip .. " " .. M.Format("Blizzard Focus Target is a child of Blizzard Focus, so both native frames must remain active.")
         end
         if unit == "pettarget" then tooltip = M.Format("Blizzard has no native Pet Target frame.") end
-        M.AddTooltip(blizzard, "Force Blizzard frame on", tooltip, { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(blizzard, "Force Blizzard frame on", tooltip, TIP_OPTS)
     end
     local colorMode, fillDir, petPlayerClassColor = BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, labelW)
     if W.AttachUnitEditFocus then
@@ -1107,30 +1097,27 @@ local function BuildBasics(ctx, builder, unit, label)
     end
     M.TrackRefresh(ctx, RefreshBasicsEnabled)
 end
-local function BuildLayout(ctx, builder, unit)
-    local sec = Schema.Section(builder:CollapsibleSection("anchoring", "Anchor", UNIT_ANCHOR_SECTION_HEIGHT, false), unit)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local anchorLeftX = 20
-    local anchorGap = 24
-    local anchorInnerW = max(320, sectionW - 40)
-    local anchorColumnW = floor((anchorInnerW - anchorGap) * 0.5)
-    local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
-    local anchorControlW = min(300, max(180, anchorColumnW - 16))
-    local customAnchorW = min(260, max(180, anchorColumnW - 128))
-    local anchorChoices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer", "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget", "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame")
-    local anchorPoints = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
-    local standardAnchorValues = M.KeySetFromWords "GLOBAL global FREE EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer player target targettarget focustarget focus pet"
-    local function CustomAnchorName(conf)
-        local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
-        if custom ~= "" then return custom end
-        local raw = conf.anchorToUnitframe
-        if type(raw) == "string" and raw ~= "" and standardAnchorValues[raw] ~= true then return raw end
-        return ""
-    end
-    local function AnchorValues()
+-- Anchor section sources and rules, per unit rather than per build.
+local UnitAnchor = {
+    choices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer", "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget", "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame"),
+    points = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT"),
+    standard = M.KeySetFromWords "GLOBAL global FREE EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer player target targettarget focustarget focus pet",
+    listed = M.KeySetFromWords "player target targettarget focustarget focus pet EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer",
+}
+function UnitAnchor.CustomName(conf)
+    local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
+    if custom ~= "" then return custom end
+    local raw = conf.anchorToUnitframe
+    if type(raw) == "string" and raw ~= "" and UnitAnchor.standard[raw] ~= true then return raw end
+    return ""
+end
+-- The closures below are built once per section for its unit, so every dropdown read and
+-- every refresh is a single call, as the per-build locals they replace were.
+function UnitAnchor.ValuesFor(unit)
+    return function()
         local values = {}
         local conf = GetConf(unit)
-        local custom = CustomAnchorName(conf)
+        local custom = UnitAnchor.CustomName(conf)
         local _, automaticProviderLabel = AutomaticCooldownProvider()
         local cooldownAnchorEnabled = CooldownAnchorEnabled()
         if custom ~= "" then
@@ -1138,7 +1125,7 @@ local function BuildLayout(ctx, builder, unit)
             if #text > 24 then text = text:sub(1, 21) .. "..." end
             values[#values + 1] = { value = "__CUSTOM", text = M.Format("Custom: %s", text) }
         end
-        local available = M.AnchorTargetValues(anchorChoices, conf.anchorToUnitframe, unit)
+        local available = M.AnchorTargetValues(UnitAnchor.choices, conf.anchorToUnitframe, unit)
         for i = 1, #available do
             local item = available[i]
             if item.value == "GLOBAL" or item.value ~= unit then
@@ -1154,130 +1141,49 @@ local function BuildLayout(ctx, builder, unit)
         end
         return values
     end
-    local function AnchorValue()
+end
+function UnitAnchor.ValueFor(unit)
+    return function()
         local conf = GetConf(unit)
-        if CustomAnchorName(conf) ~= "" then return "__CUSTOM" end
+        if UnitAnchor.CustomName(conf) ~= "" then return "__CUSTOM" end
         local v = conf.anchorToUnitframe
-        if v == "player" or v == "target" or v == "targettarget" or v == "focustarget" or v == "focus" or v == "pet"
-            or v == "EssentialCooldownViewer" or v == "UtilityCooldownViewer" or v == "BuffIconCooldownViewer" then return v end
+        if UnitAnchor.listed[v] then return v end
         return "GLOBAL"
     end
-    local function AnchorPointValue()
+end
+function UnitAnchor.PointValueFor(unit)
+    return function()
         local point = GetConf(unit).point or "CENTER"
-        for i = 1, #anchorPoints do
-            if anchorPoints[i].value == point then return point end
+        local points = UnitAnchor.points
+        for i = 1, #points do
+            if points[i].value == point then return point end
         end
         return "CENTER"
     end
-    local function ApplyAnchorChange()
-        M.RequestUnitDomains(unit, "MSUF2_ANCHORING", { preview = true })
-    end
-    local anchorTo = Schema.Build(ctx, sec, {
-        { "dropdown", "anchorToUnitframe", "GLOBAL", { "Anchor To", AnchorValues, anchorControlW },
-            beforeBind = function(widget)
-                UnitSectionShared.PlaceDropdown(sec, widget, anchorLeftX, -38, anchorControlW)
-                W.AttachUnitEditFocus(widget, unit, "anchoring")
-            end,
-            get = AnchorValue,
-            set = function(v)
-                if v == "__CUSTOM" then return end
-                local conf = GetConf(unit)
-                conf.anchorToUnitframe = v or "GLOBAL"
-                conf.anchorFrameName = nil
-                ApplyAnchorChange()
-            end,
-            meta = ReviewedMeta(ctx, "anchoring.anchor_to", "setting", "compound",
-                "Changing the anchor target also clears any custom anchor frame name."), scope = unit,
-        }
-    }, ROW_OPTIONS).anchorToUnitframe
-    local anchorPoint = Schema.Build(ctx, sec, {
-        { "dropdown", "point", "CENTER", { "Anchor Point", anchorPoints, anchorControlW },
-            beforeBind = function(widget)
-                UnitSectionShared.PlaceDropdown(sec, widget, anchorRightX, -38, anchorControlW)
-                W.AttachUnitEditFocus(widget, unit, "anchoring")
-            end,
-            get = AnchorPointValue,
-            set = function(v)
-                local conf = GetConf(unit)
-                v = v or "CENTER"
-                conf.point = v
-                conf.relativePoint = v
-                ApplyAnchorChange()
-            end,
-            meta = ReviewedMeta(ctx, "anchoring.anchor_point", "setting", "compound",
-                "Changing the anchor point writes both point and relativePoint together."), scope = unit,
-        }
-    }, ROW_OPTIONS).point
-    local function SetCustomAnchorValue(value)
-        value = value or ""
-        local conf = GetConf(unit)
-        conf.anchorFrameName = (value ~= "") and value or nil
-        if value ~= "" or CustomAnchorName(conf) ~= "" then conf.anchorToUnitframe = "GLOBAL" end
-        ApplyAnchorChange()
-    end
-    local customAnchor = UnitSectionShared.CustomAnchorEditor(ctx, sec, {
-        x = anchorLeftX,
-        y = -112,
-        width = customAnchorW,
-        getValue = function() return CustomAnchorName(GetConf(unit)) end,
-        setValue = function(value) SetCustomAnchorValue(value) end,
-        isCandidateAllowed = function(frame)
-            local factory = MSUF.UF and MSUF.UF.Factory
-            return not factory or type(factory.IsAnchorCandidateAllowed) ~= "function"
-                or factory.IsAnchorCandidateAllowed(frame, unit)
-        end,
-        clearValue = function()
-            SetCustomAnchorValue("")
-        end,
-        commitTitle = "Set Unit Anchor",
-        commitKey = function() return "unit:anchorCustom:" .. tostring(unit) end,
-        pickTitle = "Pick custom anchor",
-        pickKey = function() return "unit:anchorPick:" .. tostring(unit) end,
-        attachFocus = function(widget) W.AttachUnitEditFocus(widget, unit, "anchoring") end,
-        controlDomain = "unit",
-        controlPageKey = ctx and ctx.key,
-        controlPath = "anchoring.custom",
-    })
-    customAnchor.clear:SetScript("OnClick", function()
-        local conf = GetConf(unit)
-        conf.anchorFrameName = nil
-        if CustomAnchorName(conf) ~= "" then conf.anchorToUnitframe = "GLOBAL" end
-        customAnchor.box:SetText("")
-        ApplyAnchorChange()
-    end)
-    RegisterControl(customAnchor.clear, ctx, "anchoring.custom.clear", "Clear", "button", "action", {
-        actionKey = "clear_unit_custom_anchor", actionFixedArgs = { unit = unit },
-    })
-    RegisterControl(customAnchor.pick, ctx, "anchoring.custom.pick", "Pick", "button", "action", {
-        actionKey = "start_unit_custom_anchor_picker", actionFixedArgs = { unit = unit },
-    })
-    local cooldownAnchor = Schema.Build(ctx, sec, {
-        { "switch", "anchorToCooldown", false, { "Follow Blizzard's Essential Cooldowns", anchorLeftX, -184, anchorInnerW },
-            get = CooldownAnchorEnabled,
-            set = function(enabled)
-                local setter = _G.MSUF_SetCooldownAnchorEnabled
-                if type(setter) == "function" then
-                    setter(enabled, true)
-                else
-                    local general = GetGeneral()
-                    general.anchorToCooldown = enabled == true
-                end
-                M.RequestOrRefresh(ctx, "unit-anchoring-cooldown-manager")
-            end,
-            meta = SettingMeta(ctx, "anchoring.cooldown_manager", "general", "anchorToCooldown"), scope = unit,
-        }
-    }, ROW_OPTIONS).anchorToCooldown
-    local automaticNotice = UnitSectionShared.CreateSectionNotice(sec, -238)
-    local function RefreshLayoutState()
+end
+function UnitAnchor.Apply(unit)
+    M.RequestUnitDomains(unit, "MSUF2_ANCHORING", { preview = true })
+end
+function UnitAnchor.SetCustom(unit, value)
+    value = value or ""
+    local conf = GetConf(unit)
+    conf.anchorFrameName = (value ~= "") and value or nil
+    if value ~= "" or UnitAnchor.CustomName(conf) ~= "" then conf.anchorToUnitframe = "GLOBAL" end
+    UnitAnchor.Apply(unit)
+end
+-- parts: the cooldown switch, its notice, the custom editor, the two dropdowns and their value readers.
+function UnitAnchor.RefreshFor(sec, parts)
+    local cooldownAnchor, automaticNotice = parts.cooldown, parts.notice
+    return function()
         local _, automaticProviderLabel = AutomaticCooldownProvider()
         local cooldownAnchorEnabled = CooldownAnchorEnabled()
         local cooldownAnchorLabel = automaticProviderLabel and (automaticProviderLabel .. " Anchor") or M.Tr("Follow Blizzard's Essential Cooldowns")
         if cooldownAnchor._msuf2Label and cooldownAnchor._msuf2Label.SetText then
             cooldownAnchor._msuf2Label:SetText(cooldownAnchorLabel)
         end
-        customAnchor.Refresh()
-        if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
-        if anchorPoint.SetValue then anchorPoint:SetValue(AnchorPointValue()) end
+        parts.custom.Refresh()
+        if parts.anchorTo.SetValue then parts.anchorTo:SetValue(parts.value()) end
+        if parts.anchorPoint.SetValue then parts.anchorPoint:SetValue(parts.pointValue()) end
         if not CooldownAnchorSupported() then
             -- The stored preference is kept so the profile stays portable, but
             -- there is nothing to anchor to here: hide the switch instead of
@@ -1313,7 +1219,101 @@ local function BuildLayout(ctx, builder, unit)
             SetSectionHeaderStatus(sec, nil)
         end
     end
-    M.TrackCollapsibleRefresh(ctx, sec, RefreshLayoutState)
+end
+local function BuildLayout(ctx, builder, unit)
+    local sec = Schema.Section(builder:CollapsibleSection("anchoring", "Anchor", UNIT_ANCHOR_SECTION_HEIGHT, false), unit)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local anchorLeftX = 20
+    local anchorGap = 24
+    local anchorInnerW = max(320, sectionW - 40)
+    local anchorColumnW = floor((anchorInnerW - anchorGap) * 0.5)
+    local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
+    local anchorControlW = min(300, max(180, anchorColumnW - 16))
+    local customAnchorW = min(260, max(180, anchorColumnW - 128))
+    local AnchorValue, AnchorPointValue = UnitAnchor.ValueFor(unit), UnitAnchor.PointValueFor(unit)
+    local anchorRows = Schema.Build(ctx, sec, {
+        { "dropdown", "anchorToUnitframe", "GLOBAL", { "Anchor To", UnitAnchor.ValuesFor(unit), anchorControlW },
+            beforeBind = function(widget)
+                UnitSectionShared.PlaceDropdown(sec, widget, anchorLeftX, -38, anchorControlW)
+                W.AttachUnitEditFocus(widget, unit, "anchoring")
+            end,
+            get = AnchorValue,
+            set = function(v)
+                if v == "__CUSTOM" then return end
+                local conf = GetConf(unit)
+                conf.anchorToUnitframe = v or "GLOBAL"
+                conf.anchorFrameName = nil
+                UnitAnchor.Apply(unit)
+            end,
+            meta = ReviewedMeta(ctx, "anchoring.anchor_to", "setting", "compound",
+                "Changing the anchor target also clears any custom anchor frame name."), scope = unit,
+        },
+        { "dropdown", "point", "CENTER", { "Anchor Point", UnitAnchor.points, anchorControlW },
+            beforeBind = function(widget)
+                UnitSectionShared.PlaceDropdown(sec, widget, anchorRightX, -38, anchorControlW)
+                W.AttachUnitEditFocus(widget, unit, "anchoring")
+            end,
+            get = AnchorPointValue,
+            set = function(v)
+                local conf = GetConf(unit)
+                v = v or "CENTER"
+                conf.point = v
+                conf.relativePoint = v
+                UnitAnchor.Apply(unit)
+            end,
+            meta = ReviewedMeta(ctx, "anchoring.anchor_point", "setting", "compound",
+                "Changing the anchor point writes both point and relativePoint together."), scope = unit,
+        },
+    }, ROW_OPTIONS)
+    local customAnchor = UnitSectionShared.CustomAnchorEditor(ctx, sec, {
+        x = anchorLeftX,
+        y = -112,
+        width = customAnchorW,
+        getValue = function() return UnitAnchor.CustomName(GetConf(unit)) end,
+        setValue = function(value) UnitAnchor.SetCustom(unit, value) end,
+        isCandidateAllowed = function(frame)
+            local factory = MSUF.UF and MSUF.UF.Factory
+            return not factory or type(factory.IsAnchorCandidateAllowed) ~= "function"
+                or factory.IsAnchorCandidateAllowed(frame, unit)
+        end,
+        clearValue = function()
+            UnitAnchor.SetCustom(unit, "")
+        end,
+        commitTitle = "Set Unit Anchor",
+        commitKey = function() return "unit:anchorCustom:" .. tostring(unit) end,
+        pickTitle = "Pick custom anchor",
+        pickKey = function() return "unit:anchorPick:" .. tostring(unit) end,
+        attachFocus = function(widget) W.AttachUnitEditFocus(widget, unit, "anchoring") end,
+        controlDomain = "unit",
+        controlPageKey = ctx and ctx.key,
+        controlPath = "anchoring.custom",
+    })
+    customAnchor.clear:SetScript("OnClick", function()
+        local conf = GetConf(unit)
+        conf.anchorFrameName = nil
+        if UnitAnchor.CustomName(conf) ~= "" then conf.anchorToUnitframe = "GLOBAL" end
+        customAnchor.box:SetText("")
+        UnitAnchor.Apply(unit)
+    end)
+    RegisterControl(customAnchor.clear, ctx, "anchoring.custom.clear", "Clear", "button", "action", {
+        actionKey = "clear_unit_custom_anchor", actionFixedArgs = { unit = unit },
+    })
+    RegisterControl(customAnchor.pick, ctx, "anchoring.custom.pick", "Pick", "button", "action", {
+        actionKey = "start_unit_custom_anchor_picker", actionFixedArgs = { unit = unit },
+    })
+    local cooldownAnchor = Schema.Build(ctx, sec, {
+        { "switch", "anchorToCooldown", false, { "Follow Blizzard's Essential Cooldowns", anchorLeftX, -184, anchorInnerW },
+            get = CooldownAnchorEnabled,
+            set = function(enabled)
+                Core.SetCooldownEnabled(enabled, true)
+                M.RequestOrRefresh(ctx, "unit-anchoring-cooldown-manager")
+            end,
+            meta = SettingMeta(ctx, "anchoring.cooldown_manager", "general", "anchorToCooldown"), scope = unit,
+        }
+    }, ROW_OPTIONS).anchorToCooldown
+    local parts = { cooldown = cooldownAnchor, notice = UnitSectionShared.CreateSectionNotice(sec, -238), custom = customAnchor,
+        anchorTo = anchorRows.anchorToUnitframe, anchorPoint = anchorRows.point, value = AnchorValue, pointValue = AnchorPointValue }
+    M.TrackCollapsibleRefresh(ctx, sec, UnitAnchor.RefreshFor(sec, parts))
 end
 local function BuildInlineText(ctx, builder, unit)
     if unit ~= "target" then return end
@@ -1332,6 +1332,13 @@ local function BuildInlineText(ctx, builder, unit)
         RequestUnitRuntimeApply("targettarget", reason, inlineApplyFlags, forceToT == true)
         if not skipRefresh and RefreshInlineControlState then RefreshInlineControlState() end
     end
+    local function ColorMode()
+        return ToTInlineColorDropdownValue(GetConf("targettarget"))
+    end
+    local function SetColorMode(value)
+        GetConf("targettarget").totInlineColorMode = NormalizeToTInlineColorMode(value)
+        ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
+    end
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(sec, {
             title = "Inline Text Settings",
@@ -1344,18 +1351,13 @@ local function BuildInlineText(ctx, builder, unit)
                 colorReferences = { "text.inline_tot.current" },
                 colorTitle = "Inline Text Color",
                 colorModeValues = ToTInlineColorOptions,
-                getColorMode = function()
-                    return ToTInlineColorDropdownValue(GetConf("targettarget"))
-                end,
-                setColorMode = function(value)
-                    GetConf("targettarget").totInlineColorMode = NormalizeToTInlineColorMode(value)
-                    ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
-                end,
+                getColorMode = ColorMode,
+                setColorMode = SetColorMode,
                 subtitle = "Font style follows Target Fonts; color mode follows Inline color.",
             },
         })
     end
-    local show = Schema.Build(ctx, sec, {
+    local controls = Schema.Build(ctx, sec, {
         { "flowToggle", "showToTInTargetName", false, { "Show Target of Target text inline" },
             get = function() return GetConf("targettarget").showToTInTargetName == true end,
             set = function(v)
@@ -1364,23 +1366,15 @@ local function BuildInlineText(ctx, builder, unit)
                 ApplyToTInline("MSUF2_TOT_INLINE")
             end,
             meta = SettingMeta(ctx, "inline_text.show_target_of_target", "targettarget", "showToTInTargetName"), scope = unit,
-        }
-    }, ROW_OPTIONS).showToTInTargetName
-    local color = Schema.Build(ctx, sec, {
+        },
         { "dropdown", "totInlineColorMode", TOT_INLINE_COLOR_AUTO, { "Inline color", ToTInlineColorOptions, rightW },
             beforeBind = function(widget)
                 W.MoveWidget(widget, sec, rightX, -72, rightW)
             end,
-            get = function() return ToTInlineColorDropdownValue(GetConf("targettarget")) end,
-            set = function(v)
-                local conf = GetConf("targettarget")
-                conf.totInlineColorMode = NormalizeToTInlineColorMode(v)
-                ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
-            end,
+            get = ColorMode,
+            set = SetColorMode,
             meta = SettingMeta(ctx, "inline_text.color", "targettarget", "totInlineColorMode"), scope = unit,
-        }
-    }, ROW_OPTIONS).totInlineColorMode
-    local sep = Schema.Build(ctx, sec, {
+        },
         { "dropdown", "totInlineSeparator", "|", { "Inline separator", TOT_INLINE_SEPARATOR_OPTIONS, 170 },
             beforeBind = function(widget)
                 W.MoveWidget(widget, sec, 14, -124, 170)
@@ -1397,9 +1391,7 @@ local function BuildInlineText(ctx, builder, unit)
                 ApplyToTInline("MSUF2_TOT_INLINE_SEPARATOR", true)
             end,
             meta = SettingMeta(ctx, "inline_text.separator", "targettarget", "totInlineSeparator"), scope = unit,
-        }
-    }, ROW_OPTIONS).totInlineSeparator
-    local customSep = Schema.Build(ctx, sec, {
+        },
         { "textinput", "totInlineCustomSeparator", "", { "Custom separator", rightW },
             beforeBind = function(widget)
                 W.MoveWidget(widget, sec, rightX, -124, rightW)
@@ -1425,9 +1417,10 @@ local function BuildInlineText(ctx, builder, unit)
             end,
             commitOnBlur = true,
             meta = SettingMeta(ctx, "inline_text.custom_separator", "targettarget", "totInlineCustomSeparator"), scope = unit,
-        }
-    }, ROW_OPTIONS).totInlineCustomSeparator
-    local totInlineBaseControls = { color, sep }
+        },
+    }, ROW_OPTIONS)
+    local color, customSep = controls.totInlineColorMode, controls.totInlineCustomSeparator
+    local totInlineBaseControls = { color, controls.totInlineSeparator }
     RefreshInlineControlState = function()
         local conf = GetConf("targettarget")
         local enabled = GetConf("targettarget").showToTInTargetName == true
@@ -1441,19 +1434,9 @@ local function BuildInlineText(ctx, builder, unit)
 end
 local function BuildStatus(ctx, builder, unit)
     local fn = M.BuildUnitStatusSection
-    if type(fn) == "function" then
-        if UP.BuildSectionLazy then
-            return UP.BuildSectionLazy(ctx, builder, unit, {
-                id = "status_icons",
-                title = "Status icons",
-                height = 724,
-                build = function(lazyCtx, lazyBuilder, lazyUnit)
-                    return fn(lazyCtx, lazyBuilder, lazyUnit)
-                end,
-            })
-        end
-        return fn(ctx, builder, unit)
-    end
+    if type(fn) ~= "function" then return end
+    if not UP.BuildSectionLazy then return fn(ctx, builder, unit) end
+    return UP.BuildSectionLazy(ctx, builder, unit, { id = "status_icons", title = "Status icons", height = 724, build = fn })
 end
 local function BuildLoadConditions(ctx, builder, unit)
     local sec = Schema.Section(builder:CollapsibleSection("load_conditions", "Visibility", 210, false), unit)
@@ -1478,13 +1461,10 @@ local function BuildLoadConditions(ctx, builder, unit)
     local injured = Row("loadCondShowWhenInjured", label, 14, -166, (ctx.width or 720) - 70)
     injured.tip = { label,
         "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
-        { hook = true, owner = "ANCHOR_RIGHT" } }
+        TIP_OPTS }
     rows[#rows + 1] = injured
     Schema.Build(ctx, sec, rows, ROW_OPTIONS)
-    local function RefreshLoadConditionState()
-        SetSectionHeaderStatus(sec, nil)
-    end
-    M.TrackCollapsibleRefresh(ctx, sec, RefreshLoadConditionState)
+    M.TrackCollapsibleRefresh(ctx, sec, function() SetSectionHeaderStatus(sec, nil) end)
 end
 local BOSS_LAYOUT_TILE_VALUES = {
     { value = "VERTICAL_DOWN", text = "Down", tooltip = "Vertical (top -> bottom)", dx = 0, dy = -1, arrow = "v" },
@@ -1519,16 +1499,18 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
         local innerW = tileW - (pad * 2)
         local innerH = tileH - pad - labelH
         local frameGap = 2
+        local vertical = info.dy ~= 0
+        local reversed = info.dy == 1 or info.dx == -1
         local frameW, frameH
-        if info.dy ~= 0 then
+        if vertical then
             frameW = math.max(18, math.floor(innerW * 0.82))
             frameH = math.max(4, math.floor((innerH - ((count - 1) * frameGap)) / count))
         else
             frameW = math.max(6, math.floor((innerW - ((count - 1) * frameGap)) / count))
             frameH = math.max(14, math.floor(innerH * 0.56))
         end
-        local totalW = (info.dy ~= 0) and frameW or ((count * frameW) + ((count - 1) * frameGap))
-        local totalH = (info.dy ~= 0) and ((count * frameH) + ((count - 1) * frameGap)) or frameH
+        local totalW = vertical and frameW or ((count * frameW) + ((count - 1) * frameGap))
+        local totalH = vertical and ((count * frameH) + ((count - 1) * frameGap)) or frameH
         local originX = pad + math.floor((innerW - totalW) * 0.5 + 0.5)
         local originY = -pad - math.floor((innerH - totalH) * 0.5 + 0.5)
         for i = 1, count do
@@ -1537,13 +1519,10 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
                 tex = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
                 btn._frames[i] = tex
             end
-            local orderIndex = i - 1
-            local visualIndex = orderIndex
-            if info.dy == 1 or info.dx == -1 then visualIndex = count - i end
-            local px = originX
-            local py = originY
-            if info.dy == 0 then px = originX + (visualIndex * (frameW + frameGap)) end
-            if info.dy ~= 0 then py = originY - (visualIndex * (frameH + frameGap)) end
+            local visualIndex = reversed and (count - i) or (i - 1)
+            local px, py = originX, originY
+            if vertical then py = originY - (visualIndex * (frameH + frameGap))
+            else px = originX + (visualIndex * (frameW + frameGap)) end
             tex:ClearAllPoints()
             tex:SetPoint("TOPLEFT", btn, "TOPLEFT", px, py)
             tex:SetSize(frameW, frameH)
@@ -1557,11 +1536,11 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             tex:Show()
         end
         W.EnsureTileFirstBadge(btn)
-        local firstVisualIndex = (info.dy == 1 or info.dx == -1) and (count - 1) or 0
+        local firstVisualIndex = reversed and (count - 1) or 0
         btn._firstText:ClearAllPoints()
         btn._firstText:SetPoint("CENTER", btn, "TOPLEFT",
-            originX + ((info.dy == 0 and firstVisualIndex or 0) * (frameW + frameGap)) + (frameW * 0.5),
-            originY - ((info.dy ~= 0 and firstVisualIndex or 0) * (frameH + frameGap)) - (frameH * 0.5))
+            originX + ((vertical and 0 or firstVisualIndex) * (frameW + frameGap)) + (frameW * 0.5),
+            originY - ((vertical and firstVisualIndex or 0) * (frameH + frameGap)) - (frameH * 0.5))
         btn._firstText:Show()
 
         W.PaintTileDirectionArrow(btn, info, labelH)
@@ -1594,7 +1573,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             })
         end
         local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-        if text.SetFont then text:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+        if text.SetFont then text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(M.Tr(info.text or ""))
         btn._label = text
@@ -1654,29 +1633,12 @@ local function BuildBossTargetHighlight(ctx, builder, unit)
     local function Apply()
         M.RequestUnitDomains("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
     end
-    local styles = {
-        { value = "OFF", text = "Off" }, { value = "BORDER", text = "Border" },
-        { value = "ARROW", text = "Arrow" }, { value = "DOUBLE_ARROW", text = "Double arrow" },
-        { value = "TRIPLE_ARROW", text = "Triple arrow" },
-        { value = "DIAMOND", text = "Diamond" }, { value = "CROSS", text = "Cross" },
-        { value = "BORDER_ARROW", text = "Border and arrow" },
-    }
-    local anchors = {
-        { value = "LEFT", text = "Left" }, { value = "RIGHT", text = "Right" },
-        { value = "TOP", text = "Top" }, { value = "BOTTOM", text = "Bottom" },
-        { value = "CENTER", text = "Center" },
-        { value = "TOPLEFT", text = "Top left" }, { value = "TOPRIGHT", text = "Top right" },
-        { value = "BOTTOMLEFT", text = "Bottom left" }, { value = "BOTTOMRIGHT", text = "Bottom right" },
-    }
-    local directions = {
-        { value = "RIGHT", text = "Right" }, { value = "LEFT", text = "Left" },
-        { value = "UP", text = "Up" }, { value = "DOWN", text = "Down" },
-    }
-    local layouts = {
-        { value = "SINGLE", text = "Single marker" },
-        { value = "BOTH_IN", text = "Both sides: > frame <" },
-        { value = "BOTH_OUT", text = "Both sides: < frame >" },
-    }
+    local styles = VT("OFF", "Off", "BORDER", "Border", "ARROW", "Arrow", "DOUBLE_ARROW", "Double arrow",
+        "TRIPLE_ARROW", "Triple arrow", "DIAMOND", "Diamond", "CROSS", "Cross", "BORDER_ARROW", "Border and arrow")
+    local anchors = VT("LEFT", "Left", "RIGHT", "Right", "TOP", "Top", "BOTTOM", "Bottom", "CENTER", "Center",
+        "TOPLEFT", "Top left", "TOPRIGHT", "Top right", "BOTTOMLEFT", "Bottom left", "BOTTOMRIGHT", "Bottom right")
+    local directions = VT("RIGHT", "Right", "LEFT", "Left", "UP", "Up", "DOWN", "Down")
+    local layouts = VT("SINGLE", "Single marker", "BOTH_IN", "Both sides: > frame <", "BOTH_OUT", "Both sides: < frame >")
     local function Row(kind, label, key, default, x, y, arguments)
         local native = { label }
         for _, value in ipairs(arguments) do native[#native + 1] = value end
@@ -1746,115 +1708,85 @@ local function BuildArenaLayout(ctx, builder, unit)
         spacingLabel = "Arena spacing", spacingDefault = -96, spacingReason = "MSUF2_ARENA_SPACING",
         modeReason = "MSUF2_ARENA_LAYOUT_MODE", tilesTitle = "Arena frame layout" })
 end
-local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)
-    if UP.BuildSectionLazy and not (opts and opts.lazy == false) then
-        return UP.BuildSectionLazy(ctx, builder, unit, {
-            sectionId = opts and opts.sectionId,
-            title = opts and opts.title,
-            height = opts and opts.height,
-            defaultOpen = opts and opts.defaultOpen,
-            prepareShell = opts and opts.prepareShell,
-            build = function(lazyCtx, lazyBuilder, lazyUnit)
-                return buildFn(lazyCtx, lazyBuilder, lazyUnit)
-            end,
-        })
+local function LazySection(ctx, builder, unit, buildFn, sectionId, title, height, prepareShell)
+    if not UP.BuildSectionLazy then return buildFn(ctx, builder, unit) end
+    return UP.BuildSectionLazy(ctx, builder, unit, {
+        sectionId = sectionId,
+        title = title,
+        height = height,
+        prepareShell = prepareShell or DeclareSection,
+        build = buildFn,
+    })
+end
+local function PrepareBasicsShell(ctx, sec, unit)
+    PrepareBasicsSwitch(ctx, sec, unit)
+    local refresh = AttachBasicsHeaderStatus(sec, unit)
+    if refresh then
+        if M.AddRefresherOnce then
+            M.AddRefresherOnce(ctx, "frame-basics-header:" .. tostring(unit), refresh)
+        else
+            M.AddRefresher(ctx, refresh)
+        end
     end
-    return buildFn(ctx, builder, unit)
+    return refresh
+end
+-- Boss and Arena keep their stacked-frame page preview alive only while the page is showing.
+Preview.pages = {
+    boss = { key = "uf_boss", request = "RequestBossPagePreviewForKey", set = "SetBossPagePreviewActive" },
+    arena = { key = "uf_arena", request = "RequestArenaPagePreviewForKey", set = "SetArenaPagePreviewActive" },
+}
+function Preview.TrackPage(ctx, def)
+    local function SetActive(active)
+        if active and type(M[def.request]) == "function" then
+            M[def.request](def.key)
+            return
+        end
+        if M.UnitPage and M.UnitPage[def.set] then M.UnitPage[def.set](active) end
+    end
+    local function Refresh()
+        SetActive(M.frame and M.frame.IsShown and M.frame:IsShown()
+            and M.activeKey == def.key
+            and ctx.wrapper and ctx.wrapper.IsShown and ctx.wrapper:IsShown())
+    end
+    ctx.wrapper:HookScript("OnShow", Refresh)
+    ctx.wrapper:HookScript("OnHide", function() SetActive(false) end)
+    M.TrackRefresh(ctx, Refresh)
 end
 local function BuildUnitPage(info)
     return function(ctx)
-        if info.unit == "boss" and ctx and ctx.wrapper then
-            local function BossPagePreviewShouldBeActive()
-                return M.frame and M.frame.IsShown and M.frame:IsShown()
-                    and M.activeKey == "uf_boss"
-                    and ctx.wrapper and ctx.wrapper.IsShown and ctx.wrapper:IsShown()
-            end
-            local function SetBossPagePreviewActive(active)
-                if active and type(M.RequestBossPagePreviewForKey) == "function" then
-                    M.RequestBossPagePreviewForKey("uf_boss")
-                    return
-                end
-                if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then M.UnitPage.SetBossPagePreviewActive(active) end
-            end
-            local function RefreshBossPagePreviewActive()
-                SetBossPagePreviewActive(BossPagePreviewShouldBeActive())
-            end
-            ctx.wrapper:HookScript("OnShow", RefreshBossPagePreviewActive)
-            ctx.wrapper:HookScript("OnHide", function() SetBossPagePreviewActive(false) end)
-            M.TrackRefresh(ctx, RefreshBossPagePreviewActive)
-        end
-        if info.unit == "arena" and ctx and ctx.wrapper then
-            local function ArenaPagePreviewShouldBeActive()
-                return M.frame and M.frame.IsShown and M.frame:IsShown()
-                    and M.activeKey == "uf_arena"
-                    and ctx.wrapper and ctx.wrapper.IsShown and ctx.wrapper:IsShown()
-            end
-            local function SetArenaPagePreviewActive(active)
-                if active and type(M.RequestArenaPagePreviewForKey) == "function" then
-                    M.RequestArenaPagePreviewForKey("uf_arena")
-                    return
-                end
-                if M.UnitPage and M.UnitPage.SetArenaPagePreviewActive then M.UnitPage.SetArenaPagePreviewActive(active) end
-            end
-            local function RefreshArenaPagePreviewActive()
-                SetArenaPagePreviewActive(ArenaPagePreviewShouldBeActive())
-            end
-            ctx.wrapper:HookScript("OnShow", RefreshArenaPagePreviewActive)
-            ctx.wrapper:HookScript("OnHide", function() SetArenaPagePreviewActive(false) end)
-            M.TrackRefresh(ctx, RefreshArenaPagePreviewActive)
-        end
+        local unit = info.unit
+        local pagePreview = Preview.pages[unit]
+        if pagePreview and ctx and ctx.wrapper then Preview.TrackPage(ctx, pagePreview) end
         local builder = W.PageBuilder(ctx)
-        BuildTopActions(ctx, builder, info.unit, info.label)
-        BuildPreview(ctx, builder, info.unit)
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, function(lazyCtx, lazyBuilder, lazyUnit)
+        BuildTopActions(ctx, builder, unit, info.label)
+        BuildPreview(ctx, builder, unit)
+        LazySection(ctx, builder, unit, function(lazyCtx, lazyBuilder, lazyUnit)
             return BuildBasics(lazyCtx, lazyBuilder, lazyUnit, info.label)
-        end, {
-            sectionId = "frame_basics",
-            title = "Basics",
-            height = 216,
-            prepareShell = function(lazyCtx, sec, lazyUnit)
-                PrepareBasicsSwitch(lazyCtx, sec, lazyUnit)
-                local refresh = AttachBasicsHeaderStatus(sec, lazyUnit)
-                if refresh then
-                    if M.AddRefresherOnce then
-                        M.AddRefresherOnce(lazyCtx, "frame-basics-header:" .. tostring(lazyUnit), refresh)
-                    else
-                        M.AddRefresher(lazyCtx, refresh)
-                    end
-                end
-                return refresh
-            end,
-        })
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchor", height = UNIT_ANCHOR_SECTION_HEIGHT,
-            prepareShell = DeclareSection })
-        if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
+        end, "frame_basics", "Basics", 216, PrepareBasicsShell)
+        LazySection(ctx, builder, unit, BuildLayout, "anchoring", "Anchor", UNIT_ANCHOR_SECTION_HEIGHT)
+        if UNIT_AURAS_MENU_UNITS[unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.
-            M.BuildAuras3UnitSection(ctx, builder, info.unit)
+            M.BuildAuras3UnitSection(ctx, builder, unit)
         end
-        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_auras") end
-        if info.unit == "target" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText, { sectionId = "inline_text", title = "Inline Text", height = 214,
-                prepareShell = DeclareSection })
+        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_auras") end
+        if unit == "target" then
+            LazySection(ctx, builder, unit, BuildInlineText, "inline_text", "Inline Text", 214)
         end
-        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text") end
-        BuildStatus(ctx, builder, info.unit)
-        if info.unit == "boss" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 150,
-                prepareShell = DeclareSection })
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossTargetHighlight, { sectionId = "boss_target_highlight",
-                title = "Boss target highlight", height = 450, prepareShell = DeclareSection })
+        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_inline_text") end
+        BuildStatus(ctx, builder, unit)
+        if unit == "boss" then
+            LazySection(ctx, builder, unit, BuildBossLayout, "boss_layout", "Boss Layout", 150)
+            LazySection(ctx, builder, unit, BuildBossTargetHighlight, "boss_target_highlight", "Boss target highlight", 450)
         end
-        if info.unit == "arena" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildArenaLayout, { sectionId = "arena_layout", title = "Arena Layout", height = 160,
-                prepareShell = DeclareSection })
+        if unit == "arena" then
+            LazySection(ctx, builder, unit, BuildArenaLayout, "arena_layout", "Arena Layout", 160)
         end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Visibility", height = 210,
-            prepareShell = DeclareSection })
-        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
-        AttachUnitSectionUX(ctx, info.unit)
+        LazySection(ctx, builder, unit, BuildLoadConditions, "load_conditions", "Visibility", 210)
+        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_load_conditions") end
+        AttachUnitSectionUX(ctx, unit)
         M.TrackRefresh(ctx, function()
-            ApplyUnitFrameEnabledGate(ctx, info.unit)
+            ApplyUnitFrameEnabledGate(ctx, unit)
         end)
         if builder.RelayoutCollapsibles then builder:RelayoutCollapsibles() end
         ctx:SetContentHeight(math.abs(builder.y) + 42)

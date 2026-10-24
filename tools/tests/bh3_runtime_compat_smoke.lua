@@ -50,7 +50,7 @@ local function ReplaceUpvalue(f,name,value)
 end
 local function TooltipLines()
  local w=WorldWithNativeSpecs("Mists")
- local f=assert(w.env.MSUF_ShowUnitInfoTooltip)
+ local f=assert(w.core.PublicGlobals.MSUF_ShowUnitInfoTooltip) -- a namespace-only export, not a global
  local lines
  assert(ReplaceUpvalue(f,"MSUF_GetPlayerInfoFrame",function()return {}end))
  ReplaceUpvalue(f,"MSUF_UnitInfo_BuildNameLine",function()return "Name"end)

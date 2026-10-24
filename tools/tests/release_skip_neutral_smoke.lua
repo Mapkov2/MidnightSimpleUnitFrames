@@ -47,6 +47,9 @@ for _, width in ipairs({ 480, 960 }) do
         controls[action] = { button = button, metadata = metadata }
     end
     local namespace = { MSUF2 = M, UpgradeHighlights = controller }
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.InstallKernel(root, namespace)
+    RequireFixture.Install(root, namespace, M)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua"))(
         "MidnightSimpleUnitFrames_Options", namespace)
     local ctx = { wrapper = CreateFrame("Frame"), width = width }

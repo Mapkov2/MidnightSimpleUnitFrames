@@ -227,14 +227,8 @@ if spec.classic then providers[#providers + 1] = "Game/Classic/Initialize.lua" e
 manifest.LoadSelected(repo, manifestFlavor, namespace, providers)
 Check(namespace.Client.Flavor == manifestFlavor, "client detection reported " .. tostring(namespace.Client.Flavor))
 
--- Stub: the Kernel bootstrap owns ExportPublic; this smoke loads no Kernel UI.
-function namespace.ExportPublic(name, value)
-    _G[name] = value
-    namespace.Public = namespace.Public or {}
-    namespace.Public[name] = value
-    return value
-end
-
+-- The real Kernel bootstrap (installed into the namespace by LoadSelected) owns
+-- ExportPublic and its global keep policy; this smoke loads no Kernel UI.
 manifest.LoadSelected(repo, manifestFlavor, namespace, {
     "State/MSUF_FirstLoad.lua",
     "Kernel/MSUF_Require.lua", "Runtime/MSUF_NumberFormat.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
@@ -249,14 +243,14 @@ manifest.LoadSelected(repo, manifestFlavor, namespace, {
 })
 
 -- Stub: State/MSUF_Defaults.lua owns MSUF_EnsureDB and the factory profile.
-function MSUF_EnsureDB() end
-function MSUF_NormalizeProfileDefaults(profile) return profile end
+namespace.ExportPublic("MSUF_EnsureDB", function() end)
+namespace.ExportPublic("MSUF_NormalizeProfileDefaults", function(profile) return profile end)
 -- Its portrait render and dispel priority migrations, which an external import runs.
-function MSUF_NormalizePortraitRenderDB(profile) return profile end
-function MSUF_MigrateDispelPriorityProfile(profile) return profile end
-function MSUF_CreateFactoryDefaultProfile()
+namespace.ExportPublic("MSUF_NormalizePortraitRenderDB", function(profile) return profile end)
+namespace.ExportPublic("MSUF_MigrateDispelPriorityProfile", function(profile) return profile end)
+namespace.ExportPublic("MSUF_CreateFactoryDefaultProfile", function()
     return { _msufProfileSchema = 600, general = { marker = "factory" } }
-end
+end)
 -- Stub: ProfileRuntime.Apply fans out to live frames. Count the calls by reason.
 local applies = {}
 namespace.ProfileRuntime = {
@@ -266,7 +260,7 @@ namespace.ProfileRuntime = {
 }
 local function Applies(reason) return applies[reason] or 0 end
 -- Stub: group-frame config cache owner (UnitFrames engine) is not loaded.
-MSUF_GF_InvalidateConfCache = function() end
+namespace.ExportPublic("MSUF_GF_InvalidateConfCache", function() end)
 
 -- The translation core loads ahead of State/ in every core TOC; the profile chat lines use it.
 local localizationPath = repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"
@@ -277,10 +271,18 @@ local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
 local profilesChunk = assert(loadstring(MSUF_Auras3TestLoader.ReadSource(profilesPath), "@" .. profilesPath))
 profilesChunk("MidnightSimpleUnitFrames", namespace)
 
+-- The profile entry points below are namespace-only exports (Kernel/MSUF_Bootstrap.lua
+-- keep policy): the smoke reads them from the namespace registry.
+local MSUF_ImportFromString = namespace.PublicGlobals.MSUF_ImportFromString
+local MSUF_ImportIntoNewProfile = namespace.PublicGlobals.MSUF_ImportIntoNewProfile
+local MSUF_ExportSelectionToString = namespace.PublicGlobals.MSUF_ExportSelectionToString
+
 Check(type(MSUF_ImportFromString) == "function", "MSUF_ImportFromString missing")
 Check(type(MSUF_ImportExternal) == "function", "MSUF_ImportExternal missing")
 Check(type(MSUF_ImportIntoNewProfile) == "function", "MSUF_ImportIntoNewProfile missing")
-Check(namespace.Public.MSUF_Profiles_ImportIntoNewProfile == MSUF_ImportIntoNewProfile
+-- Public keys drop the MSUF_ prefix (Kernel/MSUF_Bootstrap.lua PublicKey).
+Check(namespace.Public.Profiles_ImportIntoNewProfile == MSUF_ImportIntoNewProfile
+    and namespace.PublicGlobals.MSUF_Profiles_ImportIntoNewProfile == MSUF_ImportIntoNewProfile
     and namespace.MSUF_ImportIntoNewProfile == MSUF_ImportIntoNewProfile,
     "MSUF_ImportIntoNewProfile is not exported like its siblings")
 
@@ -360,6 +362,9 @@ local pageChunk = assert(loadstring(pageSource .. "\nreturn ProfilesPage", "@" .
 local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
 local pageNamespace = RequireFixture.Install(repo, { MSUF2 = M, Client = namespace.Client,
     SuiteLink = namespace.SuiteLink }, M)
+-- The page and the profile module share the client's one owned export registry
+-- (the profile entry points the page requires are namespace-only exports).
+pageNamespace.PublicGlobals, pageNamespace.Compat = namespace.PublicGlobals, namespace.Compat
 -- Retain the native widget seams; load the page's new real construction owners.
 pageNamespace.CPBuilders = namespace.CPBuilders or { ExtraAuraDefaults = {} }
 M.ControlMeta = M.AdvancedPage.ControlMeta
@@ -367,14 +372,29 @@ M.RegisterControlMetadata = function(widget, meta, label, kind)
     widget._msuf2RuntimeControlRecord = { controlId = assert(meta.controlId), kind = kind, label = label }
     widget._msuf2SearchMeta = meta
 end
-M.Assign = function(target, values) for key, value in pairs(values) do target[key] = value end end
+-- M.Assign is the shipped menu helper (MSUF_Menu2_Support.lua): it tolerates a
+-- missing source and returns its target, which the page's metadata builders use.
+do
+    local Slice = assert(loadfile(repo .. "/.github/scripts/msuf_source_slice.lua"))()
+    local supportPath = repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"
+    local body = Slice.Function(MSUF_Auras3TestLoader.ReadSource(supportPath), "function M.Assign", supportPath)
+    assert(loadstring("local M = ...\n" .. body, "@" .. supportPath))(M)
+    -- The page's Trim is the shipped M.TrimText (same owner).
+    local trim = Slice.Function(MSUF_Auras3TestLoader.ReadSource(supportPath), "local function TrimText", supportPath)
+    M.TrimText = assert(loadstring(trim .. "\nreturn TrimText", "@" .. supportPath))()
+end
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))(
     "MidnightSimpleUnitFrames_Options", pageNamespace)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Advanced.lua"))(
     "MidnightSimpleUnitFrames_Options", pageNamespace)
 -- The menu's reload prompt (MSUF_Menu2_Support.lua) only asks; it never reloads.
 MSUF_ShowReloadRecommendedPopup = function() end
-RequireFixture.StubRequirements(repo, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua" })
+-- A required name the profile module exports namespace-only resolves through the
+-- shared registry; only the names nothing provides keep a strict stub.
+for _, name in ipairs(RequireFixture.StubRequirements(repo,
+    { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua" })) do
+    if rawget(namespace.PublicGlobals, name) ~= nil then rawset(_G, name, nil) end
+end
 local ProfilesPage = pageChunk("MidnightSimpleUnitFrames_Options", pageNamespace)
 
 local blobText, nameText = "", "Fresh"

@@ -2,20 +2,34 @@
 -- this file owns only saved-value bindings, page layout, and control-state dependencies.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"
 local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", {
+-- load; the apply paths use the copies resolved in Core below.
+M.RequireGlobals(FILE, {
     "MSUF_UFPreview_RequestRefresh",
     "MSUF_GetEffectiveCooldownFrame",
     "MSUF_IsCooldownAnchorSupported",
+    "MSUF_UF_NormalizeShapeAlign",
+    "MSUF_UF_NormalizeDetachedPowerShape",
+    "MSUF_UF_NormalizePlayerHPShape",
+    "MSUF_EnsureCooldownWidthObservers",
 })
-local C_Timer = M.MenuTimer or _G.C_Timer
+-- Collaborators the apply helpers and the Quick Setup tooltip reach on every slider step or
+-- hover: resolved once here, so those paths never go through MSUF.Require / MSUF.Optional.
+local Core = {
+    EnsureCooldownWidthObservers = MSUF.Require("MSUF_EnsureCooldownWidthObservers", FILE),
+    RequestPreviewRefresh = MSUF.Require("MSUF_UFPreview_RequestRefresh", FILE),
+    GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", FILE),
+    GetUsableCooldownAnchorSize = MSUF.Require("MSUF_GetUsableCooldownAnchorSize", FILE),
+    ApplyService = MSUF.Require("MSUF_Menu2_ApplyService", FILE),
+}
+local C_Timer = M.MenuTimer or C_Timer
+local AP = M.AdvancedPage or {}
 local W = M.Widgets
 local T = M.Theme
-local AP = M.AdvancedPage or {}
 
 local floor = math.floor
 local max = math.max
@@ -198,18 +212,12 @@ local CLASSPOWER_TEXT = { fonts = true, text = true }
 local CLASSPOWER_QUICK_RUNTIME = { full = true, cdm = true, playerHP = true, anchor = true, syncNow = false }
 local CLASSPOWER_QUICK_FLAGS = { unit = "player", preview = true, applyAll = false, power = true, classpower = true, classpowerApplied = true }
 local function ApplyClassPowerRuntime(reason, runtime, flags)
-    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if ApplyService and type(ApplyService.RequestClassPowerDomains) == "function" then
-        RefreshClassPowerInlinePreview()
-        return ApplyService.RequestClassPowerDomains(reason or "MSUF2_CLASSPOWER", runtime, flags or APPLY_CLASSPOWER_GENERAL)
-    end
-    _G.MSUF_ClassPower_Apply(runtime)
     RefreshClassPowerInlinePreview()
-    M.RequestGeneralDomains(reason or "MSUF2_CLASSPOWER", flags or APPLY_CLASSPOWER_GENERAL)
+    return Core.ApplyService.RequestClassPowerDomains(reason or "MSUF2_CLASSPOWER", runtime, flags or APPLY_CLASSPOWER_GENERAL)
 end
 local function ApplyClassPower() ApplyClassPowerRuntime("MSUF2_CLASSPOWER", CLASSPOWER_FULL, APPLY_CLASSPOWER_GENERAL) end
 local function ApplyClassPowerSource()
-    _G.MSUF_EnsureCooldownWidthObservers()
+    Core.EnsureCooldownWidthObservers()
     ApplyClassPower()
 end
 local function ApplyClassPowerVisuals() ApplyClassPowerRuntime("MSUF2_CLASSPOWER_VISUALS", CLASSPOWER_VISUALS, APPLY_CLASSPOWER_GENERAL) end
@@ -220,9 +228,9 @@ local VT, VTP = M.ValueTextList, M.ValueTextPairs
 local PLAYER_POWER_SOURCE_VALUES = M.PlayerPowerSourceValues
 local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
 local NormalizeClassPowerShape = CPPreview.NormalizeClassShape
-local NormalizeClassPowerShapeAlign = _G.MSUF_UF_NormalizeShapeAlign
-local NormalizeDetachedPowerShape = _G.MSUF_UF_NormalizeDetachedPowerShape
-local NormalizePlayerHPShape = _G.MSUF_UF_NormalizePlayerHPShape
+local NormalizeClassPowerShapeAlign = MSUF.Require("MSUF_UF_NormalizeShapeAlign", FILE)
+local NormalizeDetachedPowerShape = MSUF.Require("MSUF_UF_NormalizeDetachedPowerShape", FILE)
+local NormalizePlayerHPShape = MSUF.Require("MSUF_UF_NormalizePlayerHPShape", FILE)
 local function ResolvePlayerHPShape(bars, db)
     local value = NormalizePlayerHPShape(bars and bars.playerHPBarShape)
     if value ~= "FOLLOW_POWER" then return CPPreview.ResolvePowerShape(value) end
@@ -241,7 +249,6 @@ local PLAYER_HP_COLOR_VALUES = VTP "GLOBAL=Global|CLASS=Class Color|DARK=Dark Mo
 local PLAYER_HP_TEXT_VALUES = VTP "PERCENT=Percent|CURRENT=Current|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max|NONE=None"
 local DETACHED_POWER_SLOT_VALUES = VTP "CURRENT=Current|MAX=Max|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|NONE=None"
 local DETACHED_POWER_SEPARATORS = VT("", "space", "-", "-", "/", "/", "\\", "\\", "|", "|", "<", "<", ">", ">", "~", "~", ":", ":")
-local PLAYER_HP_SEPARATORS = DETACHED_POWER_SEPARATORS
 local TEXT_SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
 local DETACHED_POWER_TEXT_PRESETS = M.KeySetFromWords "CURRENT CURMAX PERCENT CURPERCENT CURMAXPERCENT"
 local CLASS_POWER_PREVIEW_SPECS = {
@@ -345,7 +352,7 @@ local function ClassPowerPreviewClassTokenForSpec(spec)
 end
 local function RequestClassPowerPreviewRefresh()
     RefreshClassPowerInlinePreview()
-    _G.MSUF_UFPreview_RequestRefresh("MSUF2_CLASSPOWER_PREVIEW_SPEC")
+    Core.RequestPreviewRefresh("MSUF2_CLASSPOWER_PREVIEW_SPEC")
 end
 function M.GetClassPowerPreviewSpecKey() return NormalizeClassPowerPreviewSpecKey(M._msuf2ClassPowerPreviewSpecKey or "rogue_combo") end
 function M.SetClassPowerPreviewSpecKey(key)
@@ -375,26 +382,16 @@ local CP_APPLY_PLAYER_HP = { playerHP = true }
 local CP_APPLY_PLAYER_HP_TEXTURES = { playerHPTextures = true }
 
 local function ApplyClassPowerPage(reason, flags, runtime)
-    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if ApplyService and type(ApplyService.RequestClassPowerDomains) == "function" then
-        RefreshClassPowerInlinePreview()
-        return ApplyService.RequestClassPowerDomains(reason or "MSUF2_CLASSPOWER_PAGE", runtime, flags)
-    end
-    _G.MSUF_ClassPower_Apply(runtime)
     RefreshClassPowerInlinePreview()
-    if type(flags) == "table" and flags.unit and type(M.RequestUnitDomains) == "function" then
-        M.RequestUnitDomains(flags.unit, reason, flags)
-    else
-        M.RequestGeneralDomains(reason, flags)
-    end
+    return Core.ApplyService.RequestClassPowerDomains(reason or "MSUF2_CLASSPOWER_PAGE", runtime, flags)
 end
 local function ApplyDetachedPowerBar() ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER, CP_APPLY_DETACHED_POWER) end
 local function ApplyDetachedPowerSource()
-    _G.MSUF_EnsureCooldownWidthObservers()
+    Core.EnsureCooldownWidthObservers()
     ApplyDetachedPowerBar()
 end
 local function ApplyDetachedPowerWidthMode()
-    _G.MSUF_EnsureCooldownWidthObservers()
+    Core.EnsureCooldownWidthObservers()
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_WIDTH_MODE", APPLY_DETACHED_POWER_WIDTH_MODE, CP_APPLY_DETACHED_POWER)
 end
 --- Forward declaration: the smoothing handler below runs before the accessor
@@ -417,12 +414,7 @@ local function ApplyDetachedPowerText()
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_TEXT", APPLY_DETACHED_POWER_TEXT, CP_APPLY_PLAYER_HP)
 end
 local function ApplyDetachedPowerBarOutline()
-    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if ApplyService and type(ApplyService.RequestBarOutline) == "function" then
-        ApplyService.RequestBarOutline("MSUF2_DETACHED_POWER_OUTLINE", "player")
-    else
-        _G.MSUF_ApplyBarOutlineThickness_All("player")
-    end
+    Core.ApplyService.RequestBarOutline("MSUF2_DETACHED_POWER_OUTLINE", "player")
     ApplyDetachedPowerBar()
 end
 local function ApplyPlayerHPBar() ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP", APPLY_PLAYER_HP, CP_APPLY_PLAYER_HP) end
@@ -552,10 +544,9 @@ local function QuickRestore(snapshot)
     end
 end
 local function QuickGetVisibleCDM()
-    local ecv = _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer") or _G.EssentialCooldownViewer
+    local ecv = Core.GetEffectiveCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer
     if not (MSUF.Client and MSUF.Client.IsClassic) then
-        local usable = _G.MSUF_GetUsableCooldownAnchorSize
-        return type(usable) == "function" and usable(ecv, true) and ecv or nil
+        return Core.GetUsableCooldownAnchorSize(ecv, true) and ecv or nil
     end
     if ecv and ecv.IsShown and ecv:IsShown() and ecv.GetHeight and ecv.GetCenter then
         local h = ecv:GetHeight()
@@ -566,10 +557,10 @@ end
 local function QuickPlayerFrame()
     local uf = MSUF and MSUF.UF
     local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame("player") or nil
-    return frame or (uf and uf.frames and uf.frames.player) or _G.MSUF_player
+    return frame or (uf and uf.frames and uf.frames.player) or MSUF_player
 end
 local function QuickClassPowerVisible()
-    local frame = _G.MSUF_ClassPowerContainer
+    local frame = MSUF_ClassPowerContainer
     return frame and frame.IsShown and frame:IsShown()
 end
 local function QuickCalcCPAboveCDM(ecv)
@@ -680,16 +671,9 @@ local function QuickApplyPhase2NoCP(offsets)
 end
 local function QuickRefreshAll(reason)
     reason = reason or "ClassPowerQuickSetup"
-    _G.MSUF_EnsureCooldownWidthObservers()
-    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if ApplyService and type(ApplyService.RequestClassPowerDomains) == "function" then
-        RefreshClassPowerInlinePreview()
-        return ApplyService.RequestClassPowerDomains(reason, CLASSPOWER_QUICK_RUNTIME, CLASSPOWER_QUICK_FLAGS)
-    end
-    ApplyClassPower()
-    _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true)
-    _G.MSUF_ClassPower_Apply({ playerHP = true })
-    _G.MSUF_UFCore_NotifyConfigChanged("player", false, true, reason)
+    Core.EnsureCooldownWidthObservers()
+    RefreshClassPowerInlinePreview()
+    return Core.ApplyService.RequestClassPowerDomains(reason, CLASSPOWER_QUICK_RUNTIME, CLASSPOWER_QUICK_FLAGS)
 end
 local function QuickOffered(mark)
     local db = M.EnsureDB()
@@ -726,7 +710,7 @@ local function ShowQuickSetupOffer()
         onAccept = function()
             QuickOffered(true)
             C_Timer.After(0.05, function()
-                if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
+                MSUF.Require("MSUF2_ClassPowerQuickSetup", FILE)()
             end)
         end,
         onCancel = function() QuickOffered(true) end,
@@ -736,7 +720,7 @@ local function ApplyQuickSetup()
     QuickOffered(true)
     local ecv = QuickGetVisibleCDM()
     local retail = not (MSUF.Client and MSUF.Client.IsClassic)
-    local supportsCooldown = retail and _G.MSUF_IsCooldownAnchorSupported()
+    local supportsCooldown = retail and MSUF.Require("MSUF_IsCooldownAnchorSupported", FILE)()
     local offsets = (ecv or supportsCooldown) and QuickCalcCPAboveCDM(ecv) or QuickCalcScreenCenter()
     quickSetupUndoSnapshot = QuickSnapshot()
     QuickApplyPhase1(offsets)
@@ -758,7 +742,7 @@ end
 local function ExecuteQuickSetup()
     return M.RunWithHistory("Quick Setup: Class Bar", "classpower:quick_setup", ApplyQuickSetup)
 end
-_G.MSUF2_ClassPowerQuickSetup = ExecuteQuickSetup
+ExportPublic("MSUF2_ClassPowerQuickSetup", ExecuteQuickSetup)
 ExportPublic("MSUF_QuickSetup_ResetFirstRun", function()
     local db = M.EnsureDB()
     db.general = db.general or {}
@@ -1175,19 +1159,15 @@ function Page:BuildClassStyle()
                 includeSlots = includeSlots,
             }
         end
-        local colorOptions = {
-            title = "Class Resource Colors",
-            note = "Colors follow the currently selected preview resource.",
-            historySource = "menu:class-power-resource-colors",
-            context = function() return CurrentClassPowerContext(false) end,
-        }
-        W.AttachContextColorReferences(resourcesCard, CurrentClassPowerRefs, colorOptions)
-        W.AttachContextColorReferences(pipsCard, CurrentClassPowerRefs, {
-            title = colorOptions.title,
-            note = colorOptions.note,
-            historySource = "menu:class-power-pip-colors",
-            context = function() return CurrentClassPowerContext(true) end,
-        })
+        for _, card in ipairs({ { resourcesCard, "menu:class-power-resource-colors", false },
+            { pipsCard, "menu:class-power-pip-colors", true } }) do
+            W.AttachContextColorReferences(card[1], CurrentClassPowerRefs, {
+                title = "Class Resource Colors",
+                note = "Colors follow the currently selected preview resource.",
+                historySource = card[2],
+                context = function() return CurrentClassPowerContext(card[3]) end,
+            })
+        end
     end
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(textCard, {
@@ -1260,10 +1240,6 @@ function Page:BuildResourceVisibility(id, path, prefix, group, apply, combatOnly
                     or "Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached.")
         end
     end
-end
-
-local function DetachedPowerSectionHeight(width)
-    return width < 680 and 1060 or 834
 end
 
 function Page:Section(...)
@@ -1610,7 +1586,7 @@ function Page:BuildPlayerHPText()
         { "dropdown", "right", "CURPERCENT", { "Right slot", PLAYER_HP_TEXT_VALUES, 300 }, field = "playerHPBarTextRight", apply = textRefresh },
         { "dropdown", "left", "NONE", { "Left slot", PLAYER_HP_TEXT_VALUES, 300 }, field = "playerHPBarTextLeft", apply = textRefresh },
         { "dropdown", "center", "NONE", { "Center slot", PLAYER_HP_TEXT_VALUES, 300 }, field = "playerHPBarTextCenter", apply = textRefresh },
-        { "dropdown", "sep", "", { "Delimiter", PLAYER_HP_SEPARATORS, 180 }, field = "playerHPBarTextSeparator" },
+        { "dropdown", "sep", "", { "Delimiter", DETACHED_POWER_SEPARATORS, 180 }, field = "playerHPBarTextSeparator" },
         { "flowToggle", "reverse", false, { "Reverse order" }, field = "playerHPBarTextReverse" },
         { "slider", "size", 14, { "Text size", 6, 48, 1, 300 }, field = "playerHPBarTextSize" },
         { "slider", "x", 0, { "Text X", -300, 300, 1, 300 }, field = "playerHPBarTextOffsetX" },
@@ -1793,7 +1769,7 @@ function Page:LazySection(id, title, height, method, prepareShell)
             build = function(_, proxyBuilder)
                 local outerBuilder = page.b
                 page.b = proxyBuilder
-                local buildError = method(page)
+                method(page)
                 page.b = outerBuilder
 
                 -- Newly built controls need their enabled/disabled state; the
@@ -1823,22 +1799,17 @@ function Page:Build()
     self:LazySection("classpower_player_hp_text", "Text", function() return self.width < 680 and 800 or 620 end, Page.BuildPlayerHPText)
     self:LazySection("classpower_alt_mana", "Layout", 402, Page.BuildAlternativeMana)
     self:LazySection("classpower_alt_mana_behavior", "Behavior", 96, Page.BuildAlternativeManaBehavior)
-    self:LazySection("classpower_detached_power_visibility", "Auto-Hide", 248, function(page)
-        page:BuildResourceVisibility("classpower_detached_power_visibility", "detached_power.visibility",
-            "playerPower", "detachedPlayer", ApplyDetachedPowerBar)
-    end)
-    self:LazySection("classpower_player_hp_visibility", "Auto-Hide", 248, function(page)
-        page:BuildResourceVisibility("classpower_player_hp_visibility", "player_hp.visibility",
-            "playerHPBar", "hp", ApplyPlayerHPBar)
-    end)
-    self:LazySection("classpower_alt_mana_visibility", "Auto-Hide", 248, function(page)
-        page:BuildResourceVisibility("classpower_alt_mana_visibility", "alternative_mana.visibility",
-            "altMana", "altMana", ApplyClassPower)
-    end)
-    self:LazySection("classpower_resource_visibility", "Auto-Hide", 184, function(page)
-        page:BuildResourceVisibility("classpower_resource_visibility", "resource_extras.visibility",
-            "resourceExtra", nil, ApplyClassPower, true)
-    end)
+    -- section id, meta path, saved-key prefix, control group, apply, combat-only rules
+    for _, spec in ipairs({
+        { "classpower_detached_power_visibility", "detached_power.visibility", "playerPower", "detachedPlayer", ApplyDetachedPowerBar },
+        { "classpower_player_hp_visibility", "player_hp.visibility", "playerHPBar", "hp", ApplyPlayerHPBar },
+        { "classpower_alt_mana_visibility", "alternative_mana.visibility", "altMana", "altMana", ApplyClassPower },
+        { "classpower_resource_visibility", "resource_extras.visibility", "resourceExtra", nil, ApplyClassPower, true },
+    }) do
+        self:LazySection(spec[1], "Auto-Hide", spec[6] and 184 or 248, function(page)
+            page:BuildResourceVisibility(spec[1], spec[2], spec[3], spec[4], spec[5], spec[6])
+        end)
+    end
     if M.ResourceExtrasPage then
         M.ResourceExtrasPage.BuildSections(self, Bars, ApplyClassPower)
         self:LazySection("classpower_resource_marks", "Resource marks and thresholds", function() return M.ResourceExtrasPage.MarksHeight(self) end,

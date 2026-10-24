@@ -3,7 +3,6 @@
 -- Unit lane keys and defaults derive from A3.LaneKeySchema (Auras3 core).
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Schema = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 

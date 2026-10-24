@@ -248,6 +248,126 @@ function Fixture.Bind(ns, env)
     -- Internal providers stay in the namespace, exactly as in the real client.
 end
 
+-- Providers the castbar files require when they load. In the client the TOC
+-- loads the real owners first; this adapter loads those that run in a bare
+-- environment (Shell/EditMode Geometry then Kernel Util, Runtime Colors) and
+-- keeps every global the harness defined itself, so a harness stand-in still
+-- wins, as a global defined before the consumer loads does in Require.
+function Fixture.KeepHarnessGlobals(env, ns, run)
+    local held = {}
+    for key, value in pairs(env) do
+        if type(key) == "string" and key:find("MSUF", 1, true) and value ~= nil then held[key] = value end
+    end
+    run()
+    local owned = ns.PublicGlobals
+    for key, value in pairs(held) do
+        if rawget(env, key) ~= value then rawset(env, key, value) end
+        if type(owned) == "table" and type(value) == "function" then owned[key] = value end
+    end
+end
+
+-- Owners the castbar harnesses never load answer what they answer in a session
+-- without their subject: on a client without a Cooldown Manager the anchor is
+-- off and no frame resolves; with no unit frames a castbar has no unit frame to
+-- take a range alpha from (UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua
+-- ApplyCastbarRangeAlphaExport answers false). Each forwarder prefers a provider
+-- the harness installs later.
+local COOLDOWN_STANDINS = {
+    MSUF_IsCooldownAnchorEnabled = function() return false end,
+    MSUF_GetEffectiveCooldownFrame = function() return nil end,
+    MSUF_GetUsableCooldownAnchorSize = function() return nil end,
+    MSUF_GetCooldownAnchorScaledWidth = function() return nil end,
+}
+-- Hot-path providers answer directly (a forwarder would add instructions the
+-- castbar budgets pin).
+local DIRECT_STANDINS = {
+    MSUF_UF_ApplyCastbarRangeAlpha = function() return false end,
+}
+
+-- options.colors == false leaves Runtime/MSUF_Colors.lua to the harness's own TOC walk.
+function Fixture.Providers(root, ns, env, original, options)
+    local RequireFixture = assert(original(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.InstallKernel(root, ns, env, original, true)
+    if ns._castbarFixtureProviders then return RequireFixture end
+    ns._castbarFixtureProviders = true
+    -- State/MSUF_Defaults.lua's EnsureDB (not loaded here): the harness profile
+    -- table is the profile.
+    if env.MSUF_EnsureDB == nil then
+        env.MSUF_EnsureDB = function()
+            assert(type(env.MSUF_DB) == "table", "fixture profile is missing")
+            return env.MSUF_DB
+        end
+    end
+    local owned = ns.PublicGlobals
+    for name, default in pairs(COOLDOWN_STANDINS) do
+        if env[name] == nil and rawget(owned, name) == nil then
+            local proxy
+            proxy = function(...)
+                local live = rawget(env, name)
+                if live == nil or live == proxy then return default(...) end
+                return live(...)
+            end
+            owned[name] = proxy
+        end
+    end
+    for name, standin in pairs(DIRECT_STANDINS) do
+        if env[name] == nil and rawget(owned, name) == nil then owned[name] = standin end
+    end
+    Fixture.KeepHarnessGlobals(env, ns, function()
+        if not ns.Geometry then
+            RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua", ns, env, original)
+        end
+        if rawget(owned, "MSUF_Snap") == nil then
+            RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua", ns, env, original)
+        end
+        if not (options and options.colors == false) and rawget(owned, "MSUF_GetColorRGBFromKey") == nil then
+            RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua", ns, env, original)
+        end
+    end)
+    return RequireFixture
+end
+
+-- The font owners (Kernel/MSUF_Libs.lua, Runtime/MSUF_Fonts.lua and
+-- MSUF_FontRegistry.lua) load first in every TOC; a castbar file that requires
+-- one of their exports gets the real owners.
+local FONT_PROVIDERS = {
+    MSUF_GetFontPath = true, MSUF_GetFontFlags = true, MSUF_GetGlobalFontSettings = true,
+    MSUF_ApplyResolvedFont = true, MSUF_ResolveFontKeyPath = true, MSUF_ResolveSafeFontPath = true,
+    MSUF_LSM = true, MSUF_ClearFontStringApplyCaches = true,
+}
+
+function Fixture.LoadFontOwners(root, ns, env, original, RequireFixture, source)
+    for name in source:gmatch("Require%(%s*\"([%w_]+)\"") do
+        if FONT_PROVIDERS[name] and ns.Optional(name) == nil then
+            Fixture.KeepHarnessGlobals(env, ns, function()
+                assert(original(root .. "/tools/tests/runtime_media_fixture.lua"))().LoadFonts(root, ns, original, env)
+                if ns.Optional("MSUF_ResolveSafeFontPath") == nil then
+                    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua", ns, env, original)
+                end
+            end)
+            return
+        end
+    end
+end
+
+-- Single-export owners that run in a bare environment; a castbar file that
+-- requires one gets the real owner.
+local OWNER_FILES = {
+    MSUF_RegisterModule = "Kernel/MSUF_Modules.lua",
+}
+
+function Fixture.LoadOwners(root, ns, env, original, RequireFixture, source)
+    Fixture.LoadFontOwners(root, ns, env, original, RequireFixture, source)
+    for name in source:gmatch("Require%(%s*\"([%w_]+)\"") do
+        local file = OWNER_FILES[name]
+        if file and ns.Optional(name) == nil then
+            Fixture.KeepHarnessGlobals(env, ns, function()
+                RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. file, ns, env, original)
+            end)
+        end
+    end
+end
+
 function Fixture.Attach(root, ns, original, env)
     env = env or _G
     env.MSUF, env.MSUF_NS = ns, ns
@@ -267,14 +387,9 @@ function Fixture.Attach(root, ns, original, env)
         return chunk, why
     end
     env.MSUF_DB = env.MSUF_DB or { general = {} }
-    if not env.MSUF_EnsureDB then
-        env.MSUF_EnsureDB = function() assert(type(env.MSUF_DB) == "table", "fixture profile is missing") end
-    end
+    Fixture.Providers(root, ns, env, original)
     ns.Public = ns.Public or {}
-    ns.Public.GetCastbarTimeFormat = env.MSUF_GetCastbarTimeFormat
-    if not ns.Require or not ns.Optional then
-        assert(original(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MSUF", ns)
-    end
+    if env.MSUF_GetCastbarTimeFormat ~= nil then ns.Public.GetCastbarTimeFormat = env.MSUF_GetCastbarTimeFormat end
     assert(original(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_PublicAPI.lua"))("MSUF", ns)
     if existing then
         for name, value in pairs(existing) do ns.Castbars[name] = value end
@@ -305,6 +420,18 @@ function Fixture.Attach(root, ns, original, env)
     ns._castbarFixtureAttached = true
 end
 
+-- Runs before a shipped file loads: the real owners of the providers it
+-- requires (fonts, module registry) load, and any provider the harness still
+-- lacks is deferred, so using one raises naming it (require_fixture.lua).
+function Fixture.PrepareFile(root, ns, env, original, path)
+    local file = assert(io.open(path, "rb"))
+    local source = file:read("*a")
+    file:close()
+    local RequireFixture = assert(original(root .. "/tools/tests/require_fixture.lua"))()
+    Fixture.LoadOwners(root, ns, env, original, RequireFixture, source)
+    RequireFixture.DeferRequired(ns, source, (path:gsub("\\", "/"):match("MidnightSimpleUnitFrames/(.*)$")), env)
+end
+
 function Fixture.Loader(original)
     return function(path)
         local chunk, why = original(path)
@@ -327,6 +454,7 @@ function Fixture.Loader(original)
                     owner("MidnightSimpleUnitFrames", ns)
                 end
             end
+            Fixture.PrepareFile(root, ns, getfenv(chunk), original, path)
             local result = chunk(addon, ns)
             Fixture.Bind(ns, getfenv(chunk))
             return result

@@ -1,9 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: Containers.
 -- Native groups/slots, creation and geometry repair. Blizzard owns incremental aura tracking; unchanged descriptors reuse native owners.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua")
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 local pairs = pairs
 local tostring = tostring
@@ -47,6 +46,7 @@ local math_max = math.max
 local math_min = math.min
 local type = type
 local AURA_CONTAINER_ADDON = dependencies.Platform.AURA_CONTAINER_ADDON
+local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", "Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua")
 local ApplyAuraTooltipStyle = dependencies.Platform.ApplyAuraTooltipStyle
 local AuraSortEnums = dependencies.Sort.AuraSortEnums
 local AuraSortSignature = dependencies.Sort.AuraSortSignature
@@ -69,6 +69,26 @@ local SyncFrameStrata = dependencies.Platform.SyncFrameStrata
 local ValidateNativeAuraContainerContract = dependencies.NativeContract.ValidateNativeAuraContainerContract
 
 local ConfigureContainer, SyncDispelSensorGeometry
+
+-- Every builder ends here: register the finished owner, or hide it when the
+-- registry refuses it.
+-- Demand-loads Blizzard_AuraContainer; a refusal is recorded for diagnostics.
+local function NativeAuraRuntimeReady()
+    if EnsureBlizzardAuraContainerLoaded() then return true end
+    A3.nativeAuraRuntimeAvailable = false
+    A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
+    return false
+end
+
+local function PublishNativeContainer(container)
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    container:Show()
+    A3.nativeAuraRuntimeError = nil
+    return container
+end
 
 local function BuildManagedAuraGroupOptions(container, lane)
     lane = CaptureNativeInputs(A3, container, lane)
@@ -111,8 +131,7 @@ local function ManagedAuraGroupLayoutOptions(lane)
 end
 
 local function ApplyManagedAuraGroupLayout(container, groupKey, lane)
-    container._msufA3GroupLayout = ManagedAuraGroupLayoutOptions(lane)
-    container:SetAuraGroupLayout(groupKey, container._msufA3GroupLayout)
+    container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane))
     A3.nativeAuraRuntimeLayoutError = nil
     return true
 end
@@ -131,8 +150,7 @@ local function CreateNativeAuraContainer(root, parentOverride)
     end
     -- Round the native owner itself. Rounding only the MSUF root does not cover
     -- AuraContainer's own flow/slot layout mutations.
-    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-    if type(roundLayout) == "function" then roundLayout(container, true) end
+    SetRoundLayoutToNearestPixel(container, true)
     -- Event registrations on CustomAuraContainerTemplate are intrinsic and
     -- carry Blizzard's forbidden EventRegistrations aspect. Leave the static
     -- AURA_DATA_PROVIDER_SWITCH subscription entirely Blizzard-owned; addon
@@ -227,13 +245,7 @@ local function CreateManagedPriorityNativeLane(container, lane, parentFrame)
     container._msufA3FilterString = lane.nativeFilter
     container.createdButtons = groupCount
     container._msufA3MaxFrameCount = groupCount
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    container:Show()
-    A3.nativeAuraRuntimeError = nil
-    return container
+    return PublishNativeContainer(container)
 end
 
 local function CreateManagedNativeLane(container, lane, parentFrame)
@@ -256,7 +268,7 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     -- weaponEnchants is part of the structural signature -> toggling recreates.
     if lane.weaponEnchants == true and type(container.AddItemEnchantment) == "function" then
         local enchantLane = CaptureNativeInputs(A3, container, lane)
-        local slots = _G.AuraContainerItemEnchantmentSlot
+        local slots = AuraContainerItemEnchantmentSlot
         local enchantOptions = {
             initializeFrame = function(button)
                 button._msufA3ManagedAuraButton = true
@@ -267,7 +279,7 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
         container:AddItemEnchantment(slots and slots.MainHand or 0, enchantOptions)
         container:AddItemEnchantment(slots and slots.OffHand or 1, enchantOptions)
         if type(container.SetItemEnchantmentLayout) == "function" then
-            local placement = _G.CustomAuraContainerItemEnchantmentPlacement
+            local placement = CustomAuraContainerItemEnchantmentPlacement
             container:SetItemEnchantmentLayout({
                 placement = placement and placement.BeforeAuraGroups or 0,
                 elementSpacing = lane.spacing or 0,
@@ -279,13 +291,7 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
         if container.Hide then container:Hide() end
         return nil
     end
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    container:Show()
-    A3.nativeAuraRuntimeError = nil
-    return container
+    return PublishNativeContainer(container)
 end
 
 local function BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex, visuals)
@@ -362,13 +368,7 @@ local function CreateManagedNativeSlotLane(container, lane, parentFrame)
     container._msufA3FilterString = nativeFilter
     container._msufA3CandidateFilterSignature = candidateFilterSignature
     container._msufA3SortSignature = AuraSortSignature(lane)
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    container:Show()
-    A3.nativeAuraRuntimeError = nil
-    return container
+    return PublishNativeContainer(container)
 end
 
 local function UpdateAuraGroupEffectiveFilters(container, lane)
@@ -480,13 +480,7 @@ local function CreateManagedDispelSensor(container, sensor, parentFrame)
         container:AddAuraSlot(slotKey, sensor.nativeFilter, BuildManagedAuraSlotOptions(container, sensor, parentFrame, i, i))
         container._msufA3SensorSlotFilterStrings[slotKey] = sensor.nativeFilter
     end
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    container:Show()
-    A3.nativeAuraRuntimeError = nil
-    return container
+    return PublishNativeContainer(container)
 end
 
 --- Symbol sensors in ALL mode narrow each slot to one dispel type; the PTR 8
@@ -545,6 +539,19 @@ local function AddDispelSensorSlots(container, sensors, parentFrame, firstButton
     return buttonIndex
 end
 
+-- Sensor owners fill their unit frame's root at the health base level.
+local function AnchorSensorContainer(container, parentFrame)
+    local root = container:GetParent()
+    if root then container:SetAllPoints(root) end
+    if parentFrame and container.SetFrameLevel then
+        -- The container owns native assignment only. Keep it at the health
+        -- base so each AuraButton's explicit effect level remains authoritative
+        -- and is not inherited above text/status overlays.
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1)
+        SyncFrameStrata(container, ReadParentFrameStrata(parentFrame))
+    end
+end
+
 local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame, forceGeometry)
     if not (container and sensorRoot and sensorRoot.sensorRoot == true) then return false end
     forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
@@ -562,15 +569,7 @@ local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame, 
     end
     container._msufA3GeomSig = sig
     container._msufA3GeomParent = parentFrame
-    local root = container:GetParent()
-    if root then container:SetAllPoints(root) end
-    if parentFrame and container.SetFrameLevel then
-        -- The container owns native assignment only. Keep it at the health
-        -- base so each AuraButton's explicit effect level remains authoritative
-        -- and is not inherited above text/status overlays.
-        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1)
-        SyncFrameStrata(container, ReadParentFrameStrata(parentFrame))
-    end
+    AnchorSensorContainer(container, parentFrame)
     -- AuraButton setup is callback-only on PTR 5. Layout changes are part of
     -- the structural signature and replace this container instead.
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
@@ -594,13 +593,7 @@ local function CreateManagedDispelSensorRoot(container, sensorRoot, parentFrame)
     local sensors = sensorRoot.sensors or {}
     local buttonIndex = AddDispelSensorSlots(container, sensors, parentFrame, 0)
     container.createdButtons = buttonIndex
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    container:Show()
-    A3.nativeAuraRuntimeError = nil
-    return container
+    return PublishNativeContainer(container)
 end
 
 local function UpdateDispelSensorRootSlots(container, sensorRoot)
@@ -646,12 +639,7 @@ SyncDispelSensorGeometry = function(container, sensor, parentFrame, forceGeometr
     container._msufA3GeomSig = sig
     container._msufA3GeomParent = parentFrame
     container._msufA3GeomTarget = target
-    local root = container:GetParent()
-    if root then container:SetAllPoints(root) end
-    if parentFrame and container.SetFrameLevel then
-        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 1)
-        SyncFrameStrata(container, ReadParentFrameStrata(parentFrame))
-    end
+    AnchorSensorContainer(container, parentFrame)
     -- Do not touch already initialized AuraButtons here; they may be forbidden
     -- while aura data is secret.
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
@@ -659,22 +647,14 @@ SyncDispelSensorGeometry = function(container, sensor, parentFrame, forceGeometr
 end
 
 local function CreateNativeDispelSensor(root, sensor, parentFrame)
-    if not EnsureBlizzardAuraContainerLoaded() then
-        A3.nativeAuraRuntimeAvailable = false
-        A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
-        return nil
-    end
+    if not NativeAuraRuntimeReady() then return nil end
     local container = CreateNativeAuraContainer(root)
     if not container then return nil end
     return CreateManagedDispelSensor(container, sensor, parentFrame)
 end
 
 local function CreateNativeDispelSensorRoot(root, sensorRoot, parentFrame)
-    if not EnsureBlizzardAuraContainerLoaded() then
-        A3.nativeAuraRuntimeAvailable = false
-        A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
-        return nil
-    end
+    if not NativeAuraRuntimeReady() then return nil end
     local container = CreateNativeAuraContainer(root)
     if not container then return nil end
     return CreateManagedDispelSensorRoot(container, sensorRoot, parentFrame)
@@ -791,13 +771,7 @@ local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
     end
     container.createdButtons = buttonIndex
     container._msufA3NativeLaneConfig = groupSlots
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    container:Show()
-    A3.nativeAuraRuntimeError = nil
-    return container
+    return PublishNativeContainer(container)
 end
 
 local function HeaderGroupSlotsContainer(root, parentFrame)
@@ -826,11 +800,7 @@ local function RememberGroupOwner(parentFrame, rootKey, container)
 end
 
 local function CreateNativeGroupSlots(root, groupSlots, parentFrame)
-    if not EnsureBlizzardAuraContainerLoaded() then
-        A3.nativeAuraRuntimeAvailable = false
-        A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
-        return nil
-    end
+    if not NativeAuraRuntimeReady() then return nil end
     -- SecureGroupHeader births one container with each party/raid child. Adopt
     -- it once for the fixed-slot owner; structural replacements deliberately
     -- fall back to a fresh container because AuraSlot definitions are immutable.

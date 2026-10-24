@@ -157,11 +157,11 @@ local function OpenLoadedOptionsFromLauncher()
     optionsOpenPage = nil
     -- Combat can start between the demand load and the next-frame open.
     if _G.InCombatLockdown() then
-        local showLock = _G.MSUF_ShowConfigCombatLockMessage
+        local showLock = MSUF.PublicGlobals.MSUF_ShowConfigCombatLockMessage
         if type(showLock) == "function" then showLock() end
         return false
     end
-    local open = _G.MSUF_OpenStandaloneOptionsWindow
+    local open = MSUF.PublicGlobals.MSUF_OpenStandaloneOptionsWindow
     if type(open) == "function" then return open(pageKey) end
     return false
 end
@@ -173,8 +173,8 @@ end
 function MSUF.OpenOptionsFromLauncher(pageKey)
     optionsOpenPage = pageKey
     if optionsOpenPending then return true end
-    local isLoaded = _G.MSUF_IsOptionsLoaded
-    local ensureLoaded = _G.MSUF_EnsureOptionsLoaded
+    local isLoaded = MSUF.PublicGlobals.MSUF_IsOptionsLoaded
+    local ensureLoaded = MSUF.PublicGlobals.MSUF_EnsureOptionsLoaded
     if type(isLoaded) == "function" and isLoaded() ~= true
         and type(ensureLoaded) == "function" then
         if ensureLoaded("MSUF_OpenStandaloneOptionsWindow") ~= true then
@@ -195,10 +195,10 @@ end
 --- forwarders until the load-on-demand menu replaces them, so the window
 --- controls exist whenever a key is pressed.
 function MSUF_Keybind_ToggleOptions()
-    local win = _G.MSUF_StandaloneOptionsWindow
+    local win = MSUF.PublicGlobals.MSUF_StandaloneOptionsWindow
     if win and win.IsShown and win:IsShown() then
-        if _G.MSUF_HideStandaloneOptionsWindow then
-            _G.MSUF_HideStandaloneOptionsWindow()
+        if MSUF.PublicGlobals.MSUF_HideStandaloneOptionsWindow then
+            MSUF.PublicGlobals.MSUF_HideStandaloneOptionsWindow()
         elseif win.Hide then
             win:Hide()
         end

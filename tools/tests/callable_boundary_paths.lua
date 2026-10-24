@@ -38,7 +38,22 @@ function Paths.New(world, root, flavor, canonical)
     _G.loadfile = function(path) return rawLoad(HarnessPath(path)) end
     _G.dofile = function(path) return rawDofile(HarnessPath(path)) end
     io.open = function(path, mode) return rawOpen(HarnessPath(path), mode) end
-    local w = world.New(root, flavor)
+    -- The unit-frame files bind the cooldown anchor providers when they load: the counting stand-ins go
+    -- in after the real owner exported and before the first consumer loads.
+    local anchor
+    local lookups, callbacks = 0, 0
+    -- One function object each, so the copies the files bound at load are the ones the native
+    -- registry (NativeFunctions) attributes.
+    local function Resolver() lookups = lookups + 1; return anchor end
+    local function UsableSize() lookups = lookups + 1; return anchor:GetWidth(), anchor:GetHeight() end
+    local function Providers(env)
+        env.MSUF_GetEffectiveCooldownFrame, env.MSUF_GetUsableCooldownAnchorSize = Resolver, UsableSize
+    end
+    local w = world.New(root, flavor, { beforeFile = function(path, env)
+        if path:find("Elements/MSUF_UF_Elements_Power.lua", 1, true) or path:find("Engine/MSUF_UF_Factory.lua", 1, true) then
+            Providers(env)
+        end
+    end })
     _G.loadfile, _G.dofile, io.open = rawLoad, rawDofile, rawOpen
     -- Each sandbox captures its own strict primitives; do not nest the
     -- fixture replacements across fresh worlds in the surrounding Lua VM.
@@ -46,13 +61,11 @@ function Paths.New(world, root, flavor, canonical)
     local e, u, f, g = w.env, w.UF, w.single, w.group
     local status, text = w.h.world.core.UFStatusRuntime, w.h.world.core.UFText
     e.UnitName = function() return "Player" end
-    local anchor = e.CreateFrame("Frame", nil, e.UIParent)
+    anchor = e.CreateFrame("Frame", nil, e.UIParent)
     anchor:SetPoint("CENTER", e.UIParent, "CENTER", 0, 0)
     anchor.GetObjectType = function() return "Frame" end
     e.CustomAnchor = anchor
-    local lookups, callbacks = 0, 0
-    e.MSUF_GetEffectiveCooldownFrame = function() lookups = lookups + 1; return anchor end
-    e.MSUF_GetUsableCooldownAnchorSize = function() lookups = lookups + 1; return anchor:GetWidth(), anchor:GetHeight() end
+    Providers(e)
     u.spawned, u.unitOrder, u.frames = true, { "target" }, { target = f }
     local cases = {}
     local function Add(name, run, prepare, iterations)

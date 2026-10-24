@@ -61,6 +61,8 @@ local ns = {
     },
     GF = {},
 }
+-- The shipped Kernel API replaces the export stub: the runtime binds MSUF_UF_MaskHas (a global above) at load.
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, ns, _G, loadfile, true)
 local GF = ns.GF
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Metadata.lua"))(
     "MidnightSimpleUnitFrames", ns)

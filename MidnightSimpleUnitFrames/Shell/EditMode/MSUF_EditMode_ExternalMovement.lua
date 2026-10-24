@@ -1,12 +1,11 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_ExternalMovement.lua")
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_ExternalMovement.lua"
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 local External = EM2 and EM2.ExternalProviders
 local Controller = External and External.Controller
 local Shared = External and External.Shared
@@ -40,19 +39,19 @@ end
 function Controller:EnsureProxy(externalKey)
     local proxy = self.proxyFrames[externalKey]
     if proxy then return proxy end
-    if not (_G.CreateFrame and _G.UIParent) then return nil end
-    proxy = PixelLayoutRegion(_G.CreateFrame("Frame", nil, _G.UIParent), true)
+    if not (CreateFrame and UIParent) then return nil end
+    proxy = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent), true)
     proxy[self:Field("ExternalKey")] = externalKey
     proxy._msufExternalController = self
     proxy:SetSize(1, 1)
-    proxy:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+    proxy:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     if proxy.SetScale then proxy:SetScale(1) end
     if proxy.SetAlpha then proxy:SetAlpha(0) end
     if proxy.EnableMouse then proxy:EnableMouse(false) end
     proxy:Show()
     self.proxyFrames[externalKey] = proxy
-    if type(_G.hooksecurefunc) == "function" then
-        _G.hooksecurefunc(proxy, "SetPoint", function(...)
+    if type(hooksecurefunc) == "function" then
+        hooksecurefunc(proxy, "SetPoint", function(...)
             self:OnProxySetPoint(proxy, ...)
         end)
     end
@@ -119,7 +118,7 @@ function Controller:BeginMove(binding)
     if not binding.externalDrag then return false end
     binding.externalApplied = false
     local category, historyKey = self:HistoryIdentity(binding)
-    binding.historyChange = self:BridgeUndoCall(_G.MSUF_EM_UndoBeginChange,
+    binding.historyChange = self:BridgeUndoCall(MSUF.Require("MSUF_EM_UndoBeginChange", CALLER),
         category, historyKey, "Move")
     return true
 end
@@ -137,7 +136,7 @@ function Controller:MoveChanged(binding)
     if not drag then return false end
     local centerX, centerY = FrameCenterUI(drag.mover)
     if centerX == nil or centerY == nil then return false end
-    local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
+    local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
     return math.abs(centerX - (drag.startCX or centerX)) * uiScale > 0.5
         or math.abs(centerY - (drag.startCY or centerY)) * uiScale > 0.5
 end
@@ -156,7 +155,7 @@ function Controller:FinishMove(binding, applyFinal)
     if changed then
         self.sessionDirty = true
         self:ApplyKey(binding.key)
-        if binding.historyChange then self:BridgeUndoCall(_G.MSUF_EM_UndoCommitChange) end
+        if binding.historyChange then self:BridgeUndoCall(MSUF.Require("MSUF_EM_UndoCommitChange", CALLER)) end
     elseif binding.historyChange and EM2.Undo and EM2.Undo.CancelChange then
         EM2.Undo.CancelChange()
     end
@@ -230,7 +229,7 @@ end
             proxy[self:Field("OwnerOffsetY")] = offsetY
             proxy[self:Field("OwnerAnchored")] = true
         else
-            proxy:SetPoint("CENTER", _G.UIParent, "BOTTOMLEFT", centerX, centerY)
+            proxy:SetPoint("CENTER", UIParent, "BOTTOMLEFT", centerX, centerY)
             proxy[self:Field("Owner")] = nil
             proxy[self:Field("OwnerAnchored")] = false
         end
@@ -239,7 +238,7 @@ end
         local x, y = self:StoredFallback(cfg, key)
         proxy:SetSize(math.max(2, width), math.max(2, height))
         proxy:ClearAllPoints()
-        proxy:SetPoint("CENTER", _G.UIParent, "CENTER", x, y)
+        proxy:SetPoint("CENTER", UIParent, "CENTER", x, y)
         proxy[self:Field("Owner")] = nil
         proxy[self:Field("OwnerAnchored")] = false
     end
@@ -285,13 +284,13 @@ function Controller:OnProxySetPoint(proxy, arg1, arg2, arg3, arg4, arg5, arg6)
     local gestureActive = mover and ((self.spec.IsMoverDragging and self.spec.IsMoverDragging(mover))
         or mover[self:Field("WasDrag")])
     if gestureActive then
-        if relativeTo == _G.UIParent then proxy[self:Field("OwnerAnchored")] = false end
+        if relativeTo == UIParent then proxy[self:Field("OwnerAnchored")] = false end
         return
     end
     if not self:IsSessionReady() then return end
 
     if proxy[self:Field("OwnerAnchored")] and point == "CENTER"
-        and relativeTo == _G.UIParent and relativePoint == "CENTER" then
+        and relativeTo == UIParent and relativePoint == "CENTER" then
         local owner = proxy[self:Field("Owner")]
         local ownerOffsetX = tonumber(proxy[self:Field("OwnerOffsetX")]) or 0
         local ownerOffsetY = tonumber(proxy[self:Field("OwnerOffsetY")]) or 0
@@ -304,12 +303,12 @@ function Controller:OnProxySetPoint(proxy, arg1, arg2, arg3, arg4, arg5, arg6)
             end
             proxy[self:Field("ProxySyncing")] = true
             proxy:ClearAllPoints()
-            proxy:SetPoint("CENTER", _G.UIParent, "BOTTOMLEFT",
+            proxy:SetPoint("CENTER", UIParent, "BOTTOMLEFT",
                 ownerX + (tonumber(x) or ownerOffsetX), ownerY + (tonumber(y) or ownerOffsetY))
             proxy[self:Field("ProxySyncing")] = nil
             proxy[self:Field("OwnerAnchored")] = false
         end
-    elseif relativeTo == _G.UIParent then
+    elseif relativeTo == UIParent then
         proxy[self:Field("OwnerAnchored")] = false
     end
 
@@ -326,11 +325,11 @@ function Controller:ClearPosition(externalKey, cfg, key)
         self:SyncProxy(externalKey, cfg, true)
         return
     end
-    local create = (MSUF and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
+    local create = MSUF.MSUF_CreateFactoryDefaultProfile
     local defaults = type(create) == "function" and create() or nil
     local conf = cfg and cfg.getConf and cfg.getConf() or nil
     if type(defaults) ~= "table" or type(conf) ~= "table" then return end
-    self:BridgeUndoCall(_G.MSUF_EM_UndoBeforeChange, category, historyKey)
+    self:BridgeUndoCall(MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER), category, historyKey)
     if cfg.subframeOffsetXKey then
         local source = cfg.resourceKind == "classpower" and defaults.bars or defaults[cfg.resourceUnit]
         source = source or {}
@@ -414,7 +413,7 @@ function Controller:OnMoverMouseDown(mover, button)
     if button ~= "LeftButton" or not self:IsSessionReady() then return end
     if self.spec.SyncMover then self.spec.SyncMover(mover) end
     local x, y = 0, 0
-    if type(_G.GetCursorPosition) == "function" then x, y = _G.GetCursorPosition() end
+    if type(GetCursorPosition) == "function" then x, y = GetCursorPosition() end
     mover[self:Field("DownX")], mover[self:Field("DownY")] = x, y
     mover[self:Field("WasDrag")] = false
     local binding = self.externalBindings[self.spec.GetMoverKey(mover)]
@@ -435,8 +434,8 @@ function Controller:OnMoverMouseUp(mover, button)
     local downXField, downYField = self:Field("DownX"), self:Field("DownY")
     if button ~= "LeftButton" or mover[downXField] == nil then return end
     local wasDrag = mover[self:Field("WasDrag")] == true
-    if not wasDrag and type(_G.GetCursorPosition) == "function" then
-        local x, y = _G.GetCursorPosition()
+    if not wasDrag and type(GetCursorPosition) == "function" then
+        local x, y = GetCursorPosition()
         wasDrag = math.abs(x - mover[downXField]) > 3 or math.abs(y - mover[downYField]) > 3
     end
     mover[downXField], mover[downYField], mover[self:Field("WasDrag")] = nil, nil, nil
@@ -479,7 +478,7 @@ function Controller:SyncSupplementalRegions(binding, mover)
     for i = 1, count do
         local region = regions[i]
         if not region then
-            region = PixelLayoutRegion(_G.CreateFrame("Button", nil, self.spec.GetRoot() or _G.UIParent), true)
+            region = PixelLayoutRegion(CreateFrame("Button", nil, self.spec.GetRoot() or UIParent), true)
             region:RegisterForDrag("LeftButton")
             if region.RegisterForClicks then region:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
             region:EnableMouse(true)
@@ -590,7 +589,7 @@ function Controller:ScheduleCastbarMoverSync(unit)
             self.pendingCastbarMoverSync[unit] = nil
             return
         end
-        local timer = _G.C_Timer
+        local timer = C_Timer
         if timer and type(timer.After) == "function" then
             timer.After(0.15, function()
                 if generation ~= self.sessionGeneration then return end
@@ -601,7 +600,7 @@ function Controller:ScheduleCastbarMoverSync(unit)
             self.pendingCastbarMoverSync[unit] = nil
         end
     end
-    local timer = _G.C_Timer
+    local timer = C_Timer
     if timer and type(timer.After) == "function" then timer.After(0, run) else run() end
 end
 
@@ -615,6 +614,6 @@ function Controller:ScheduleMoverHooks()
         self.moverHookScheduled = false
         self:HookMovers()
     end
-    local timer = _G.C_Timer
+    local timer = C_Timer
     if timer and type(timer.After) == "function" then timer.After(0.06, run) else run() end
 end

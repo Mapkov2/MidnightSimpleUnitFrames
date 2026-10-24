@@ -62,6 +62,8 @@ for client in client_suffixes():
         ("Kernel/MSUF_Bootstrap.lua", "Kernel/MSUF_RuntimeContracts.lua"),
         ("State/MSUF_AuraDefaults.lua", "Auras3/MSUF_Auras3_Core.lua"),
         ("Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua"),
+        ("Auras3/MSUF_Auras3_IconShape.lua", "Auras3/MSUF_Auras3_IconSkins.lua"),
+        ("Auras3/MSUF_Auras3_IconSkins.lua", "Auras3/MSUF_Auras3_IconSkins_Catalog.lua"),
         ("Kernel/MSUF_Require.lua", "State/MSUF_Profiles.lua"),
         ("State/MSUF_StateHelpers.lua", "State/MSUF_Profiles.lua"),
         ("State/MSUF_ProfileCodec.lua", "State/MSUF_Profiles.lua"),

@@ -1,26 +1,15 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua
 --- Cold-path unitframe preview view.
 ---
 --- Owns: preview frame construction, draggable handle interactions, and
 --- composed refresh layout. Specs, core visuals, castbar helpers, status
 --- elements, DB/model helpers, and public wrappers live in split files.
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
+local MSUF = _G.MSUF
+local FILE = "Menu2/UnitPreview_View"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local ExportPublic = MSUF.ExportPublic
-MSUF.L = MSUF.L or (_G.MSUF_L) or {}
-local L = MSUF.L
-if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
-local isEn = (MSUF and MSUF.LOCALE) == "enUS"
-local function TR(v)
-    if type(v) ~= "string" then return v end
-    if isEn then return v end
-    return L[v] or v
-end
-local floor, max, min, abs = math.floor, math.max, math.min, math.abs
-local format = string.format
+local floor = math.floor
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
-local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
 ExportPublic("MSUF_UFPreview", Preview)
@@ -29,10 +18,20 @@ local PreviewCastbar = MSUF.UFPreviewCastbar or {}
 local PreviewAuras = MSUF.UFPreviewAuras or {}
 local PreviewRuntime = MSUF.UFPreviewRuntime or {}
 local PreviewZoomPan = MSUF.UFPreviewZoomPan or {}
-local M2 = MSUF.MSUF2 or _G.MSUF2 or {}
+local M2 = MSUF.MSUF2
 local PreviewHelpers = M2.PreviewHelpers or {}
 local ViewHandles = MSUF.UFPreviewViewHandles or {}
 local ViewChrome = MSUF.UFPreviewViewChrome or {}
+local TR = ViewChrome.TR
+-- Core providers CommitHandleMove calls on every drag and nudge step. They are
+-- plain core exports that load before this addon, so they are resolved once here.
+local ApplyPowerBarEmbedLayout = MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", FILE)
+local RefreshUnitTextureLayers = MSUF.Require("MSUF_RefreshUnitTextureLayers", FILE)
+-- Edit Mode focus export the handle selection calls on every text-handle pick.
+local SetEditFocusSelection = MSUF.Require("MSUF_EM2_SetFocusSelection", FILE)
+-- Refresh function of each status handle (statusRefresh names the core export),
+-- resolved when the handle is built so a move step only indexes this table.
+local STATUS_REFRESH = {}
 -- Boss units exist only where the client model says so: every Mainline client
 -- and Mists among the Classic ones. Render draws the boss target marker only
 -- when its handle exists, so a client without boss units never shows one.
@@ -40,20 +39,9 @@ local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Cl
 
 local Fallbacks = M2.Fallbacks or {}
 local PreviewModel = Preview.Model or {}
-local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed = PreviewModel.UNIT_LABELS, PreviewModel.UNIT_DATA, PreviewModel.PreviewRaidGroupNameAllowed
-local PreviewRaidGroupNameText = PreviewModel.PreviewRaidGroupNameText
-local NormalizePreviewRaidGroupNameAnchor = PreviewModel.NormalizePreviewRaidGroupNameAnchor
-local CurrentPanelKey, UnitDB, NormalizeHpMode = PreviewModel.CurrentPanelKey, PreviewModel.UnitDB, PreviewModel.NormalizeHpMode
-local NormalizePowerMode, TextScopeGet, TextScopeHasSlots = PreviewModel.NormalizePowerMode, PreviewModel.TextScopeGet, PreviewModel.TextScopeHasSlots
-local TextScopeSlotGet, ToTInlineSeparator = PreviewModel.TextScopeSlotGet, PreviewModel.ToTInlineSeparator
-local ForceTextUnit, ApplyPanelUnit = PreviewModel.ForceTextUnit, PreviewModel.ApplyPanelUnit
-local EnsureUnitPortraitStyle, PortraitStyleGet = PreviewModel.EnsureUnitPortraitStyle, PreviewModel.PortraitStyleGet
-local ApplyPortrait, NormalizeStatusPreviewId, ClassColor = PreviewModel.ApplyPortrait, PreviewModel.NormalizeStatusPreviewId, PreviewModel.ClassColor
-local PowerColor, FontColor, SetTex = PreviewModel.PowerColor, PreviewModel.FontColor, PreviewModel.SetTex
-local ReadPowerBarEnabled = PreviewModel.ReadPowerBarEnabled
-local CanDetachPowerBarKey, ReadPowerBarHeight = PreviewModel.CanDetachPowerBarKey, PreviewModel.ReadPowerBarHeight
-local ResolveNameAnchor = PreviewModel.ResolveNameAnchor
-local UnitPreviewText = PreviewModel.UnitPreviewText
+local UNIT_DATA, UnitDB, ForceTextUnit, ApplyPanelUnit = PreviewModel.UNIT_DATA, PreviewModel.UnitDB, PreviewModel.ForceTextUnit, PreviewModel.ApplyPanelUnit
+local EnsureUnitPortraitStyle, ApplyPortrait = PreviewModel.EnsureUnitPortraitStyle, PreviewModel.ApplyPortrait
+local NormalizeStatusPreviewId = PreviewModel.NormalizeStatusPreviewId
 Preview.statusPreviewMode = "current"
 Preview.selectedStatusId = nil
 local SelectPreviewHandle
@@ -76,10 +64,7 @@ local RoundOffset = PreviewCore.RoundOffset
 -- EM2 nudge targets, and text-focus guards stay identical across preview types.
 local GetNudgeStep = PreviewHelpers.NudgeStep or Fallbacks.One
 
-local CastbarOffsetFields, CastbarDetached, ReadCastbarSize = PreviewCastbar.OffsetFields, PreviewCastbar.Detached, PreviewCastbar.ReadSize
-local ReadCastbarNum = PreviewCastbar.ReadNumber
-local ClampPreviewLayer = PreviewCore.ClampLayer
-local RuntimeSpecForPreviewKey = PreviewRuntime.SpecForPreviewKey or Fallbacks.Nil
+local CastbarOffsetFields = PreviewCastbar.OffsetFields
 local RuntimeVisualScaleForPreviewKey = PreviewRuntime.VisualScaleForPreviewKey or Fallbacks.One
 -- Handle storage/navigation and chrome helpers live in the *_View_Handles and
 -- *_View_Chrome siblings. The ones on the drag/nudge path stay upvalues here.
@@ -112,29 +97,29 @@ function Preview.LegacyTextOffsetAlias(key)
         return prefix .. side .. "Offset" .. axis
     end
 end
+local function ReadStoredOffset(fields, key, store, conf, general)
+    if not key then return nil end
+    local value = store and store[key]
+    if value == nil and fields.text then
+        local alias = Preview.LegacyTextOffsetAlias(key)
+        if alias then value = conf and conf[alias] end
+        if value == nil then value = general and general[key] end
+        if value == nil and alias then value = general and general[alias] end
+    end
+    return tonumber(value)
+end
 local function ReadHandleOffsets(handle)
     if not handle then return 0, 0 end
     local preview = handle._preview
     local fields = handle._fields or {}
-    if type(fields.readOffsets) == "function" then
+    if fields.readOffsets then
         local x, y, xKey, yKey = fields.readOffsets(handle)
         if x ~= nil and y ~= nil then return x, y, xKey, yKey end
     end
     local xKey, yKey, defX, defY = ResolveHandleFields(preview, fields)
     local store, _, conf, general = HandleStore(preview, fields)
-    local function ReadValue(key)
-        if not key then return nil end
-        local value = store and store[key]
-        if value == nil and fields.text then
-            local alias = Preview.LegacyTextOffsetAlias(key)
-            if alias then value = conf and conf[alias] end
-            if value == nil then value = general and general[key] end
-            if value == nil and alias then value = general and general[alias] end
-        end
-        return tonumber(value)
-    end
-    local x = ReadValue(xKey)
-    local y = ReadValue(yKey)
+    local x = ReadStoredOffset(fields, xKey, store, conf, general)
+    local y = ReadStoredOffset(fields, yKey, store, conf, general)
     if x == nil then x = tonumber(defX) or 0 end
     if y == nil then y = tonumber(defY) or 0 end
     return x, y, xKey, yKey
@@ -180,7 +165,11 @@ function Preview.ApplyDirectTextMoveDelta(store, prefixes, dx, dy)
     end
     return true
 end
-local MenuTheme
+local MenuTheme = PreviewCore.MenuTheme
+local function OpenHandleFromGear(handle) return OpenPreviewHandleSettings(handle, "gear") end
+local function GearOptions(shown)
+    return { T = MenuTheme and MenuTheme(), Tr = TR, shown = shown, openSettings = OpenHandleFromGear }
+end
 local function RefreshHandleSelectionVisuals(box)
     if not box then return end
     if not box._selectedHandle and Preview.RestoreQueuedHandle(box) then return end
@@ -221,7 +210,7 @@ local function RefreshHandleSelectionVisuals(box)
             T = MenuTheme and MenuTheme(),
             Tr = TR,
             shown = true,
-            openSettings = function(handle) return OpenPreviewHandleSettings(handle, "gear") end,
+            openSettings = OpenHandleFromGear,
         })
         local previewPageKey = box._msuf2PinnedPreviewPageKey or M2.activeKey
         if gear and not gear._msuf2UnitPreviewOpenCommand then
@@ -254,15 +243,14 @@ local function CommitHandleMove(handle, reason)
     elseif fields.portrait then
         ApplyPortrait(box and box._msufPanel, key, reason or "UNIT_PREVIEW_PORTRAIT_MOVE")
     elseif fields.detachedPower then
-        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true) end
+        ApplyPowerBarEmbedLayout(key, true)
     elseif fields.castbar then
         ApplyCastbarRuntimeForKey(key)
     elseif fields.texLayer then
-        local fn = _G.MSUF_RefreshUnitTextureLayers
-        if type(fn) == "function" then fn(key) end
+        RefreshUnitTextureLayers(key)
     elseif fields.statusRefresh then
-        local fn = _G[fields.statusRefresh]
-        if type(fn) == "function" then fn(key, moveReason) end
+        local refresh = STATUS_REFRESH[fields.statusRefresh]
+        if refresh then refresh(key, moveReason) end
     end
     ApplyPanelUnit(box and box._msufPanel, key, moveReason)
     RequestPreviewLayoutRefresh(box, moveReason)
@@ -270,6 +258,10 @@ local function CommitHandleMove(handle, reason)
 end
 -- Deltas stored by the controls are unit-frame coordinates. The handle lives on the outer stage; engine texts
 -- live inside the zoomed scene. Convert through each real region's effective scale, as the group preview does.
+local DRAG_TEXT_FIELD = {
+    hpLeft = "hpTextLeft", hpCenter = "hpTextCenter", hpRight = "hpText",
+    powerLeft = "powerTextLeft", powerCenter = "powerTextCenter", powerRight = "powerText",
+}
 local function DragSceneText(handle, dx, dy)
     local box, key = handle._preview, handle._key
     local mock = box and box.mock
@@ -280,8 +272,7 @@ local function DragSceneText(handle, dx, dy)
     elseif key == "hp" then regions = { body.hpTextLeft, body.hpTextCenter, body.hpText }
     elseif key == "power" then regions = { body.powerTextLeft, body.powerTextCenter, body.powerText }
     else
-        local field = ({ hpLeft = "hpTextLeft", hpCenter = "hpTextCenter", hpRight = "hpText",
-            powerLeft = "powerTextLeft", powerCenter = "powerTextCenter", powerRight = "powerText" })[key]
+        local field = DRAG_TEXT_FIELD[key]
         if field then regions[1] = body[field] end
     end
     local stageScale = mock:GetEffectiveScale()
@@ -308,11 +299,11 @@ local function WriteHandleOffsets(handle, x, y, reason)
     if not handle then return false end
     local box = handle._preview
     local fields = handle._fields or {}
-    if type(fields.writeOffsets) == "function" then
+    if fields.writeOffsets then
         if not fields.writeOffsets(handle, x, y, reason) then return false end
         local fastDrag = reason == "UNIT_PREVIEW_DRAG"
             and fields.visualOnly == true
-            and type(fields.dragOffsets) == "function"
+            and fields.dragOffsets
             and fields.dragOffsets(handle, x, y) == true
         if not fastDrag then RequestPreviewLayoutRefresh(box, reason or "UNIT_PREVIEW_MOVE") end
         RefreshHandleSelectionVisuals(box)
@@ -327,7 +318,7 @@ local function WriteHandleOffsets(handle, x, y, reason)
     store[xKey], store[yKey] = nextX, nextY
     local directPrefixes = fields.text and Preview.ActiveDirectTextMovePrefixes(handle, store)
     if directPrefixes then
-        if reason == "PREVIEW_RESET_OFFSET" and type(M2.SyncDirectTextOffsets) == "function" then
+        if reason == "PREVIEW_RESET_OFFSET" and M2.SyncDirectTextOffsets then
             -- Reset is an explicit request to return this handle to its
             -- canonical layout, so its active direct values may be rebuilt.
             M2.SyncDirectTextOffsets(store, xKey)
@@ -339,13 +330,13 @@ local function WriteHandleOffsets(handle, x, y, reason)
             -- values and snapping the text to another position.
             Preview.ApplyDirectTextMoveDelta(store, directPrefixes, nextX - beforeX, nextY - beforeY)
         end
-    elseif fields.text and type(M2.SyncDirectTextOffsets) == "function" then
+    elseif fields.text and M2.SyncDirectTextOffsets then
         M2.SyncDirectTextOffsets(store, xKey)
         M2.SyncDirectTextOffsets(store, yKey)
     end
     if fields.text and reason == "UNIT_PREVIEW_DRAG" then
         local dx, dy = nextX - beforeX, nextY - beforeY
-        if not directPrefixes and type(fields.resolveOffsetDelta) == "function" then
+        if not directPrefixes and fields.resolveOffsetDelta then
             dx, dy = fields.resolveOffsetDelta(handle, dx, dy)
         end
         DragSceneText(handle, dx, dy)
@@ -359,7 +350,7 @@ local function ShouldSkipDuplicateNudge(box, dx, dy)
 end
 local function StoredHandleDelta(handle, dx, dy)
     local fields = handle and handle._fields
-    if fields and type(fields.resolveOffsetDelta) == "function" then
+    if fields and fields.resolveOffsetDelta then
         return fields.resolveOffsetDelta(handle, dx, dy)
     end
     return dx, dy
@@ -394,7 +385,7 @@ end
 function Preview.ReadSelectionCoordinates(box, handle)
     local selection = M2.PreviewSelectionBar
     local x, y
-    if selection and type(selection.ReadRenderedCoordinates) == "function" then
+    if selection and selection.ReadRenderedCoordinates then
         x, y = selection.ReadRenderedCoordinates(handle, box and box.mock,
             box and (box._mockEffectiveScale or box._mockScale or box._mockAutoScale) or 1)
     end
@@ -480,7 +471,7 @@ local UF_PREVIEW_ARROW_BINDINGS = {
     ownerName = "MSUF_UFPreview_NudgeOwner",
     activeName = "MSUF_UFPreview_ActiveNudgeBox",
     buttonPrefix = "MSUF_UFPreview_Nudge",
-    getActive = function() return _G.MSUF_UFPreview_ActiveNudgeBox or Preview.active end,
+    getActive = function() return MSUF_UFPreview_ActiveNudgeBox or Preview.active end,
     onClick = OnUFPreviewArrowNudge,
     onDisable = OnUFPreviewArrowDisable,
 }
@@ -509,20 +500,16 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
     if handle then
         local p = box._msufPanel
         local fields = handle._fields or {}
-        local menu = _G.MSUF2
         RegisterPreviewNudgeTarget(box)
         if fields.statusRefresh then
             Preview.selectedStatusId = NormalizeStatusPreviewId(handle._key)
-            if not skipSectionOpen and p and type(p._msufUFStatusSet) == "function" then p._msufUFStatusSet("selected", handle._key) end
+            if not skipSectionOpen and p and p._msufUFStatusSet then p._msufUFStatusSet("selected", handle._key) end
         end
         local textKind, textSlot = ViewHandles.PreviewTextKindSlotForKey(handle._key)
-        ViewHandles.StorePreviewTextSelection(menu, box.key, textKind, textSlot)
-        do
-            local focus = _G.MSUF_EM2_SetFocusSelection
-            if type(focus) == "function" then
-                local kind, slot = ViewHandles.PreviewTextKindSlotForKey(handle._key)
-                if kind then focus(box.key or "player", kind, slot, { source = "unit-preview", clearHover = true }) end
-            end
+        ViewHandles.StorePreviewTextSelection(M2, box.key, textKind, textSlot)
+        if textKind then
+            SetEditFocusSelection(box.key or "player", textKind, textSlot,
+                { source = "unit-preview", clearHover = true })
         end
         FocusPreviewKeyboardTarget(box, handle, true)
     end
@@ -578,7 +565,7 @@ end
 --- mover. The write is accepted only after exact DB readback; a failed readback
 --- is rolled back before returning false.
 function Preview.NudgeHandle(unitKey, handleKey, dx, dy)
-    if type(M2.IsConfigCombatLocked) == "function" and M2.IsConfigCombatLocked() then return false, "combat-locked" end
+    if M2.IsConfigCombatLocked and M2.IsConfigCombatLocked() then return false, "combat-locked" end
     unitKey = ExactUnitPreviewKey(unitKey)
     if not unitKey then return false, "unknown-unit" end
     if type(handleKey) ~= "string" or handleKey == "" then return false, "handle-required" end
@@ -634,7 +621,7 @@ function Preview.NudgeHandle(unitKey, handleKey, dx, dy)
     return true, beforeX, beforeY, afterX, afterY
 end
 function Preview.Pan(unitKey, dx, dy)
-    if type(M2.IsConfigCombatLocked) == "function" and M2.IsConfigCombatLocked() then return false, "combat-locked" end
+    if M2.IsConfigCombatLocked and M2.IsConfigCombatLocked() then return false, "combat-locked" end
     unitKey = ExactUnitPreviewKey(unitKey)
     if not unitKey then return false, "unknown-unit" end
     dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
@@ -643,7 +630,7 @@ function Preview.Pan(unitKey, dx, dy)
     if not (box and box.IsShown and box:IsShown() and (not box.IsVisible or box:IsVisible())) then return false, "preview-not-visible" end
     if unitKey ~= ExactUnitPreviewKey(box.key) then return false, "unit-preview-mismatch" end
     if (box.canvas and box.canvas._msufPreviewPanning) or (box.dragFrame and box.dragFrame._handle) then return false, "preview-busy" end
-    if type(PreviewZoomPan.NudgePan) ~= "function" then return false, "pan-api-unavailable" end
+    if not PreviewZoomPan.NudgePan then return false, "pan-api-unavailable" end
     return PreviewZoomPan.NudgePan(box, dx, dy)
 end
 ExportPublic("MSUF_UFPreview_NudgeHandle", function(unitKey, handleKey, dx, dy)
@@ -673,8 +660,137 @@ local function PreviewArrowKeyDown(self, keyName)
     end
 end
 local StartPreviewPan, StopPreviewPan
-local function MakeHandle(preview, key, fields, label, color)
+-- Handle scripts read the owning preview from the handle, so every handle
+-- shares one function per script instead of building a closure set per handle.
+local function HandleOnEnter(self)
+    local preview = self._preview
+    self._hovering = true
+    RefreshHandleSelectionVisuals(preview)
+    local showTooltip = GameTooltip and (not PreviewHelpers.ShouldShowPreviewHandleTooltip
+        or PreviewHelpers.ShouldShowPreviewHandleTooltip(preview))
+    if showTooltip then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        -- `_label` can be rebound per unit on the shared box (custom
+        -- container 4 is Defensive Buffs on player, Dots on target
+        -- elsewhere), so the tooltip reads it at hover time.
+        GameTooltip:SetText(TR(self._label or self._key), 1, 1, 1)
+        GameTooltip:AddLine(TR("Drag to move. Arrow keys nudge."), 0.82, 0.82, 0.82, true)
+        GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
+        GameTooltip:Show()
+    end
+end
+local function HandleOnLeave(self)
+    self._hovering = nil
+    RefreshHandleSelectionVisuals(self._preview)
+    if GameTooltip then GameTooltip:Hide() end
+end
+local function HandleOnClick(self, button)
+    if self._suppressNextClick then
+        self._suppressNextClick = nil
+        return
+    end
+    if button == "RightButton" then
+        SelectPreviewHandle(self, true)
+        if PreviewHelpers.ShowPreviewHandleContext then
+            PreviewHelpers.ShowPreviewHandleContext(self, {
+                M = M2,
+                T = MenuTheme and MenuTheme(),
+                Tr = TR,
+                title = self._label or self._key,
+                openSettings = OpenPreviewHandleSettings,
+            })
+        end
+        return
+    end
+    SelectPreviewHandle(self)
+end
+local function DragFrameMouseUp(df, upButton)
+    local activeHandle = df and df._handle
+    local stop = activeHandle and activeHandle.GetScript and activeHandle:GetScript("OnMouseUp")
+    if stop then stop(activeHandle, upButton) end
+end
+-- Per-drag state a handle carries between press and release.
+local HANDLE_DRAG_STATE = { "_dragging", "_lastDragX", "_lastDragY", "_dragPoint", "_dragRelTo", "_dragRelPoint",
+    "_dragOffsetX", "_dragOffsetY", "_didDragMove" }
+local function StartHandleDrag(self, button)
+    local preview = self._preview
+    if button and button ~= "LeftButton" then return end
+    if self._dragging == true or preview.dragFrame._handle == self or (preview.canvas and preview.canvas._msufPreviewPanning) then return true end
+    self._didDragMove = nil
+    if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPreviewPan and StartPreviewPan(preview.canvas, preview, button) then
+        self._suppressNextClick = true
+        return
+    end
+    SelectPreviewHandle(self, true)
+    if PreviewHelpers.ShowPreviewMoveCue then PreviewHelpers.ShowPreviewMoveCue(preview, self) end
+    local x, y = ReadHandleOffsets(self)
+    self._startX = x
+    self._startY = y
+    self._lastDragX = nil
+    self._lastDragY = nil
+    self._dragging = true
+    preview._dragFrozenScale = tonumber(preview._mockScale) or tonumber(preview._mockAutoScale) or 1
+    preview._dragFrozenBaseOffsetX = tonumber(preview._mockBaseOffsetX) or 0
+    preview._dragFrozenBaseOffsetY = tonumber(preview._mockBaseOffsetY) or 0
+    self._msuf2PreviewHistoryTx = BeginMenuHistory(self, "Move")
+    local cx, cy = GetCursorPosition()
+    self._cursorX, self._cursorY = cx, cy
+    self._dragPoint, self._dragRelTo, self._dragRelPoint, self._dragOffsetX, self._dragOffsetY = self:GetPoint(1)
+    preview.dragFrame._handle = self
+    if preview.dragFrame.SetAllPoints then preview.dragFrame:SetAllPoints(preview.canvas) end
+    preview.dragFrame:SetScript("OnUpdate", preview._onDragUpdate)
+    preview.dragFrame:SetScript("OnMouseUp", DragFrameMouseUp)
+    preview.dragFrame:Show()
+    RefreshHandleSelectionVisuals(preview)
+end
+local function StopHandleDrag(self, button, allowOpenSettings)
+    local preview = self._preview
+    if StopPreviewPan and preview.canvas and preview.canvas._msufPreviewPanning then StopPreviewPan(preview.canvas) end
+    if button and button ~= "LeftButton" then return end
+    local wasDragging = self._dragging == true or preview.dragFrame._handle == self
+    if not wasDragging then return end
+    local didMove = self._didDragMove == true
+    if didMove and PreviewHelpers.NotePreviewElementMoved then PreviewHelpers.NotePreviewElementMoved() end
+    local openSettingsOnRelease = allowOpenSettings == true
+        and button == "LeftButton"
+        and not didMove
+    if preview.dragFrame._handle == self then
+        preview.dragFrame:SetScript("OnUpdate", nil)
+        preview.dragFrame:SetScript("OnMouseUp", nil)
+        preview.dragFrame._handle = nil
+        preview.dragFrame:Hide()
+    end
+    local fields = self._fields or {}
+    if fields.commitOffsets then fields.commitOffsets(self, "UNIT_PREVIEW_DRAG_END") end
+    if self._msuf2PreviewHistoryTx then
+        self._msuf2PreviewHistoryTx = nil
+        CommitMenuHistory()
+    end
+    local hadFrozenScale = preview._dragFrozenScale ~= nil
+    preview._dragFrozenScale = nil
+    preview._dragFrozenBaseOffsetX = nil
+    preview._dragFrozenBaseOffsetY = nil
+    if fields.clearDragOffsets then fields.clearDragOffsets(self) end
+    for i = 1, #HANDLE_DRAG_STATE do self[HANDLE_DRAG_STATE[i]] = nil end
+    RefreshHandleSelectionVisuals(preview)
+    if hadFrozenScale and not preview._manualZoom then RequestPreviewLayoutRefresh(preview, "UNIT_PREVIEW_DRAG_END") end
+    if openSettingsOnRelease then OpenPreviewHandleSettings(self, "click") end
+end
+local function HandleOnMouseUp(self, button) StopHandleDrag(self, button, true) end
+local function HandleOnDragStop(self, button) StopHandleDrag(self, button, false) end
+local function HandleOnHide(self) StopHandleDrag(self, nil, false) end
+local HANDLE_SCRIPTS = {
+    OnEnter = HandleOnEnter, OnLeave = HandleOnLeave, OnClick = HandleOnClick,
+    OnMouseDown = StartHandleDrag, OnMouseUp = HandleOnMouseUp, OnDragStart = StartHandleDrag,
+    OnDragStop = HandleOnDragStop, OnHide = HandleOnHide, OnKeyDown = PreviewArrowKeyDown,
+}
+--- The handle frame: hit area, hover/selection textures and the selection border.
+local function CreateHandleFrame(preview, key, fields, label, color)
     local h = PixelLayoutRegion(CreateFrame("Button", nil, preview.canvas), true)
+    local statusRefresh = fields and fields.statusRefresh
+    if statusRefresh and STATUS_REFRESH[statusRefresh] == nil then
+        STATUS_REFRESH[statusRefresh] = MSUF.Optional(statusRefresh) or false
+    end
     -- Composite elements need a deterministic mouse-hit hierarchy. The broad
     -- container handle stays on the base interaction plane while its smaller
     -- icon/text/time handles sit above it; creation/show order must not decide
@@ -714,127 +830,11 @@ local function MakeHandle(preview, key, fields, label, color)
         h._selBorder[side] = line
     end
     h._selBorder:Hide()
-    h:SetScript("OnEnter", function(self)
-        self._hovering = true
-        RefreshHandleSelectionVisuals(preview)
-        local showTooltip = GameTooltip and (not PreviewHelpers.ShouldShowPreviewHandleTooltip
-            or PreviewHelpers.ShouldShowPreviewHandleTooltip(preview))
-        if showTooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            -- `_label` can be rebound per unit on the shared box (custom
-            -- container 4 is Defensive Buffs on player, Dots on target
-            -- elsewhere); the creation-time closure label is only the fallback.
-            GameTooltip:SetText(TR(self._label or label), 1, 1, 1)
-            GameTooltip:AddLine(TR("Drag to move. Arrow keys nudge."), 0.82, 0.82, 0.82, true)
-            GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
-            GameTooltip:Show()
-        end
-    end)
-    h:SetScript("OnLeave", function(self)
-        self._hovering = nil
-        RefreshHandleSelectionVisuals(preview)
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    h:SetScript("OnClick", function(self, button)
-        if self._suppressNextClick then
-            self._suppressNextClick = nil
-            return
-        end
-        if button == "RightButton" then
-            SelectPreviewHandle(self, true)
-            if PreviewHelpers.ShowPreviewHandleContext then
-                PreviewHelpers.ShowPreviewHandleContext(self, {
-                    M = M2,
-                    T = MenuTheme and MenuTheme(),
-                    Tr = TR,
-                    title = self._label or self._key,
-                    openSettings = OpenPreviewHandleSettings,
-                })
-            end
-            return
-        end
-        SelectPreviewHandle(self)
-    end)
-    local function StartHandleDrag(self, button)
-        if button and button ~= "LeftButton" then return end
-        if self._dragging == true or preview.dragFrame._handle == self or (preview.canvas and preview.canvas._msufPreviewPanning) then return true end
-        self._didDragMove = nil
-        if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPreviewPan and StartPreviewPan(preview.canvas, preview, button) then
-            self._suppressNextClick = true
-            return
-        end
-        SelectPreviewHandle(self, true)
-        if PreviewHelpers.ShowPreviewMoveCue then PreviewHelpers.ShowPreviewMoveCue(preview, self) end
-        local x, y = ReadHandleOffsets(self)
-        self._startX = x
-        self._startY = y
-        self._lastDragX = nil
-        self._lastDragY = nil
-        self._dragging = true
-        preview._dragFrozenScale = tonumber(preview._mockScale) or tonumber(preview._mockAutoScale) or 1
-        preview._dragFrozenBaseOffsetX = tonumber(preview._mockBaseOffsetX) or 0
-        preview._dragFrozenBaseOffsetY = tonumber(preview._mockBaseOffsetY) or 0
-        self._msuf2PreviewHistoryTx = BeginMenuHistory(self, "Move")
-        local cx, cy = GetCursorPosition()
-        self._cursorX, self._cursorY = cx, cy
-        self._dragPoint, self._dragRelTo, self._dragRelPoint, self._dragOffsetX, self._dragOffsetY = self:GetPoint(1)
-        preview.dragFrame._handle = self
-        if preview.dragFrame.SetAllPoints then preview.dragFrame:SetAllPoints(preview.canvas) end
-        preview.dragFrame:SetScript("OnUpdate", preview._onDragUpdate)
-        preview.dragFrame:SetScript("OnMouseUp", function(df, upButton)
-            local activeHandle = df and df._handle
-            local stop = activeHandle and activeHandle.GetScript and activeHandle:GetScript("OnMouseUp")
-            if type(stop) == "function" then stop(activeHandle, upButton) end
-        end)
-        preview.dragFrame:Show()
-        RefreshHandleSelectionVisuals(preview)
-    end
-    local function StopHandleDrag(self, button, allowOpenSettings)
-        if StopPreviewPan and preview.canvas and preview.canvas._msufPreviewPanning then StopPreviewPan(preview.canvas) end
-        if button and button ~= "LeftButton" then return end
-        local wasDragging = self._dragging == true or preview.dragFrame._handle == self
-        if not wasDragging then return end
-        local didMove = self._didDragMove == true
-        if didMove and PreviewHelpers.NotePreviewElementMoved then PreviewHelpers.NotePreviewElementMoved() end
-        local openSettingsOnRelease = allowOpenSettings == true
-            and button == "LeftButton"
-            and not didMove
-        if preview.dragFrame._handle == self then
-            preview.dragFrame:SetScript("OnUpdate", nil)
-            preview.dragFrame:SetScript("OnMouseUp", nil)
-            preview.dragFrame._handle = nil
-            preview.dragFrame:Hide()
-        end
-        local fields = self._fields or {}
-        if type(fields.commitOffsets) == "function" then fields.commitOffsets(self, "UNIT_PREVIEW_DRAG_END") end
-        if self._msuf2PreviewHistoryTx then
-            self._msuf2PreviewHistoryTx = nil
-            CommitMenuHistory()
-        end
-        local hadFrozenScale = preview._dragFrozenScale ~= nil
-        preview._dragFrozenScale = nil
-        preview._dragFrozenBaseOffsetX = nil
-        preview._dragFrozenBaseOffsetY = nil
-        if type(fields.clearDragOffsets) == "function" then fields.clearDragOffsets(self) end
-        self._dragging = nil
-        self._lastDragX = nil
-        self._lastDragY = nil
-        self._dragPoint = nil
-        self._dragRelTo = nil
-        self._dragRelPoint = nil
-        self._dragOffsetX = nil
-        self._dragOffsetY = nil
-        self._didDragMove = nil
-        RefreshHandleSelectionVisuals(preview)
-        if hadFrozenScale and not preview._manualZoom then RequestPreviewLayoutRefresh(preview, "UNIT_PREVIEW_DRAG_END") end
-        if openSettingsOnRelease then OpenPreviewHandleSettings(self, "click") end
-    end
-    h:SetScript("OnMouseDown", StartHandleDrag)
-    h:SetScript("OnMouseUp", function(self, button) StopHandleDrag(self, button, true) end)
-    h:SetScript("OnDragStart", StartHandleDrag)
-    h:SetScript("OnDragStop", function(self, button) StopHandleDrag(self, button, false) end)
-    h:SetScript("OnHide", function(self) StopHandleDrag(self, nil, false) end)
-    h:SetScript("OnKeyDown", PreviewArrowKeyDown)
+    return h
+end
+local function MakeHandle(preview, key, fields, label, color)
+    local h = CreateHandleFrame(preview, key, fields, label, color)
+    for script, handler in pairs(HANDLE_SCRIPTS) do h:SetScript(script, handler) end
     h._msuf2CommandAction = {
         kind = "button",
         historyMode = "none",
@@ -850,12 +850,7 @@ local function MakeHandle(preview, key, fields, label, color)
         end,
     }
     if PreviewHelpers.EnsurePreviewHandleGear then
-        local gear = PreviewHelpers.EnsurePreviewHandleGear(h, {
-            T = MenuTheme and MenuTheme(),
-            Tr = TR,
-            shown = false,
-            openSettings = function(handle) return OpenPreviewHandleSettings(handle, "gear") end,
-        })
+        local gear = PreviewHelpers.EnsurePreviewHandleGear(h, GearOptions(false))
         if gear and not gear._msuf2UnitPreviewOpenCommand then
             gear._msuf2UnitPreviewOpenCommand = {
                 kind = "button",
@@ -868,7 +863,6 @@ local function MakeHandle(preview, key, fields, label, color)
     preview.handles[#preview.handles + 1] = h
     return h
 end
-MenuTheme = PreviewCore.MenuTheme
 local ApplyPreviewBackdrop = PreviewCore.ApplyBackdrop
 local STATUS_PREVIEW = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.StatusPreview) or {}
 local PREVIEW_LAYERS = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.PreviewLayers) or {}
@@ -923,11 +917,11 @@ function BoxBuild.Frame(parent, panel, width, height)
         local preview = MSUF.UFPreview or Preview
         if type(preview) == "table" then
             if self:IsShown() then preview.active = self end
-            if type(preview.RequestRefreshForBox) == "function" then
+            if preview.RequestRefreshForBox then
                 preview.RequestRefreshForBox(self, reason)
                 return
             end
-            if type(preview.Refresh) == "function" and self:IsShown() and (not self.IsVisible or self:IsVisible()) then
+            if preview.Refresh and self:IsShown() and (not self.IsVisible or self:IsVisible()) then
                 preview.Refresh(self, reason)
             end
         end
@@ -1140,11 +1134,11 @@ function BoxBuild.Selection(box, s)
             ReadOffsets = Preview.ReadSelectionCoordinates,
             WriteOffsets = Preview.WriteSelectionCoordinates,
             ResetOffsets = Preview.ResetSelectionOffsets,
-            NudgeDelta = function(owner, dx, dy) return NudgeSelectedHandleDelta(owner, dx, dy) end,
+            NudgeDelta = NudgeSelectedHandleDelta,
             DefaultOffsets = Preview.DefaultSelectionOffsets,
             OpenSettings = function(_, handle, source) return OpenPreviewHandleSettings(handle, source) end,
             SelectHandle = function(_, handle) return SelectPreviewHandle(handle, true) end,
-            UpdateHint = function(owner, handle) return UpdateHandleHint(owner, handle) end,
+            UpdateHint = UpdateHandleHint,
         })
         M2.PreviewSelectionBar.CreatePicker(box, canvas)
     end
@@ -1209,6 +1203,82 @@ function BoxBuild.MockCast(box, s)
     if T and T.StyleFontString then T.StyleFontString(mock.cast.sizeTag, { 0.20, 0.90, 0.85, 0.95 }, 0) end
     mock.icons = {}
 end
+--- While a handle is dragged this runs every frame on the drag frame; it only writes when the rounded position changed.
+local function HandleDragUpdate(df)
+    local h = df._handle
+    if not h then return end
+    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+        local stop = h.GetScript and h:GetScript("OnMouseUp")
+        if stop then stop(h, "LeftButton") end
+        return
+    end
+    local box = h._preview
+    local cx, cy = GetCursorPosition()
+    local scale = box._mockEffectiveScale or box._mockScale or 1
+    local uiScale = (box.canvas and box.canvas.GetEffectiveScale and box.canvas:GetEffectiveScale())
+        or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
+        or 1
+    if uiScale <= 0 then uiScale = 1 end
+    local dx = (((cx or 0) - (h._cursorX or 0)) / uiScale) / scale
+    local dy = (((cy or 0) - (h._cursorY or 0)) / uiScale) / scale
+    dx, dy = Preview.ActiveHandleDelta(h, dx, dy)
+    local nextX = RoundOffset((h._startX or 0) + dx)
+    local nextY = RoundOffset((h._startY or 0) + dy)
+    if nextX ~= h._startX or nextY ~= h._startY then h._didDragMove = true end
+    if h._lastDragX == nextX and h._lastDragY == nextY then return end
+    h._lastDragX = nextX
+    h._lastDragY = nextY
+    WriteHandleOffsets(h, nextX, nextY, "UNIT_PREVIEW_DRAG")
+end
+-- Handle recipes. A frame's place in the preview tree is its creation order, so
+-- the rows below and the calls in BoxBuild.Handles keep the order the handles
+-- were always built in. Colours are shared, read-only tables.
+local COLOR_HP, COLOR_POWER, COLOR_TEXLAYER = { 0.25, 0.90, 0.42 }, { 0.95, 0.72, 0.18 }, { 0.80, 0.55, 0.25 }
+local COLOR_CLASS_POWER, COLOR_CAST, COLOR_CAST_TARGET = { 0.30, 0.78, 0.55 }, { 0.20, 0.90, 0.85 }, { 0.95, 0.78, 0.22 }
+-- box field, handle key, offset key prefix, label, colour, default X, default Y
+local TEXT_HANDLES = {
+    { "handleHP", "hp", "hp", "HP text", COLOR_HP, -4, -4 },
+    { "handleHPLeft", "hpLeft", "hpTextLeft", "HP left text", COLOR_HP, 0, 0 },
+    { "handleHPCenter", "hpCenter", "hpTextCenter", "HP center text", COLOR_HP, 0, 0 },
+    { "handleHPRight", "hpRight", "hpTextRight", "HP right text", COLOR_HP, 0, 0 },
+    { "handlePower", "power", "power", "Power text", COLOR_POWER, -4, 4 },
+    { "handlePowerLeft", "powerLeft", "powerTextLeft", "Power left text", COLOR_POWER, 0, 0 },
+    { "handlePowerCenter", "powerCenter", "powerTextCenter", "Power center text", COLOR_POWER, 0, 0 },
+    { "handlePowerRight", "powerRight", "powerTextRight", "Power right text", COLOR_POWER, 0, 0 },
+}
+-- handle key (also the offset key prefix), label
+local TEXTURE_LAYER_HANDLES = {
+    { "texLayer", "Texture layer 1" }, { "texLayer2", "Texture layer 2" }, { "texLayer3", "Texture layer 3" },
+}
+-- box field, handle key (also the offset key prefix), label
+local CLASS_POWER_HANDLES = {
+    { "handleClassPower", "classPower", "Class power" },
+    { "handleClassPowerText", "classPowerText", "Class power text" },
+}
+-- box field, handle key, castbar offset key part, label, colour, default X, default Y, extra fields
+local CASTBAR_SUB_HANDLES = {
+    { "handleCastbarIcon", "castbarIcon", "Icon", "Castbar icon", COLOR_CAST, 0, 0, { iconFallback = true } },
+    { "handleCastbarText", "castbarText", "Text", "Castbar text", COLOR_CAST, 0, 0 },
+    { "handleCastbarTarget", "castbarTarget", "TargetName", "Cast target text", COLOR_CAST_TARGET, 0, 1 },
+    { "handleCastbarTime", "castbarTime", "Time", "Castbar time", COLOR_CAST, -2, 0, {
+        bossBaseX = -2, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY",
+    } },
+}
+local function TextHandleFields(prefix, defaultX, defaultY, resolveOffsetDelta)
+    return { x = prefix .. "OffsetX", y = prefix .. "OffsetY", defaultX = defaultX, defaultY = defaultY, text = true,
+        resolveOffsetDelta = resolveOffsetDelta, section = "text" }
+end
+local function CastbarSubHandleFields(part, defaultX, defaultY, extra)
+    local fields = {
+        suffixX = part .. "OffsetX", suffixY = part .. "OffsetY",
+        bossX = "bossCast" .. part .. "OffsetX", bossY = "bossCast" .. part .. "OffsetY",
+        defaultX = defaultX, defaultY = defaultY,
+        readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets,
+        section = "castbar", interactionPriority = 1,
+    }
+    for name, value in pairs(extra or {}) do fields[name] = value end
+    return fields
+end
 function BoxBuild.Handles(box, s)
     local canvas = s.canvas
     box.handles = {}
@@ -1220,81 +1290,37 @@ function BoxBuild.Handles(box, s)
             or ((canvas:GetFrameLevel() or 0) + 32))
     end
     box.dragFrame:Hide()
-    box._onDragUpdate = function(df)
-        local h = df._handle
-        if not h then return end
-        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
-            local stop = h.GetScript and h:GetScript("OnMouseUp")
-            if type(stop) == "function" then stop(h, "LeftButton") end
-            return
-        end
-        local cx, cy = GetCursorPosition()
-        local scale = box._mockEffectiveScale or box._mockScale or 1
-        local uiScale = (box.canvas and box.canvas.GetEffectiveScale and box.canvas:GetEffectiveScale())
-            or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
-            or 1
-        if uiScale <= 0 then uiScale = 1 end
-        local dx = (((cx or 0) - (h._cursorX or 0)) / uiScale) / scale
-        local dy = (((cy or 0) - (h._cursorY or 0)) / uiScale) / scale
-        dx, dy = Preview.ActiveHandleDelta(h, dx, dy)
-        local nextX = RoundOffset((h._startX or 0) + dx)
-        local nextY = RoundOffset((h._startY or 0) + dy)
-        if nextX ~= h._startX or nextY ~= h._startY then h._didDragMove = true end
-        if h._lastDragX == nextX and h._lastDragY == nextY then return end
-        h._lastDragX = nextX
-        h._lastDragY = nextY
-        WriteHandleOffsets(h, nextX, nextY, "UNIT_PREVIEW_DRAG")
-    end
-    box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true,
-        resolveOffsetDelta = ViewHandles.NameHandleOffsetDelta, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
+    box._onDragUpdate = HandleDragUpdate
+    box.handleName = MakeHandle(box, "name", TextHandleFields("name", 4, -4, ViewHandles.NameHandleOffsetDelta),
+        "Name text", { 0.30, 0.66, 1.0 })
     box.handleRaidGroupName = MakeHandle(box, "raidgroupname", { x = "raidGroupNameOffsetX", y = "raidGroupNameOffsetY", defaultX = 3, defaultY = 0,
         statusRefresh = "MSUF_RefreshRaidGroupNameFrames", section = "status" }, "Raid group", { 0.45, 0.70, 1.0 })
-    box.handleHP = MakeHandle(box, "hp", { x = "hpOffsetX", y = "hpOffsetY", defaultX = -4, defaultY = -4, text = true, section = "text" },
-        "HP text", { 0.25, 0.90, 0.42 })
-    box.handleHPLeft = MakeHandle(box, "hpLeft", { x = "hpTextLeftOffsetX", y = "hpTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true,
-        section = "text" }, "HP left text", { 0.25, 0.90, 0.42 })
-    box.handleHPCenter = MakeHandle(box, "hpCenter", { x = "hpTextCenterOffsetX", y = "hpTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true,
-        section = "text" }, "HP center text", { 0.25, 0.90, 0.42 })
-    box.handleHPRight = MakeHandle(box, "hpRight", { x = "hpTextRightOffsetX", y = "hpTextRightOffsetY", defaultX = 0, defaultY = 0, text = true,
-        section = "text" }, "HP right text", { 0.25, 0.90, 0.42 })
-    box.handlePower = MakeHandle(box, "power", { x = "powerOffsetX", y = "powerOffsetY", defaultX = -4, defaultY = 4, text = true, section = "text" },
-        "Power text", { 0.95, 0.72, 0.18 })
-    box.handlePowerLeft = MakeHandle(box, "powerLeft", { x = "powerTextLeftOffsetX", y = "powerTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true,
-        section = "text" }, "Power left text", { 0.95, 0.72, 0.18 })
-    box.handlePowerCenter = MakeHandle(box, "powerCenter", { x = "powerTextCenterOffsetX", y = "powerTextCenterOffsetY", defaultX = 0, defaultY = 0,
-        text = true, section = "text" }, "Power center text", { 0.95, 0.72, 0.18 })
-    box.handlePowerRight = MakeHandle(box, "powerRight", { x = "powerTextRightOffsetX", y = "powerTextRightOffsetY", defaultX = 0, defaultY = 0, text = true,
-        section = "text" }, "Power right text", { 0.95, 0.72, 0.18 })
+    for i = 1, #TEXT_HANDLES do
+        local spec = TEXT_HANDLES[i]
+        box[spec[1]] = MakeHandle(box, spec[2], TextHandleFields(spec[3], spec[6], spec[7]), spec[4], spec[5])
+    end
     box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true,
         section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
     box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4,
-        detachedPower = true, section = "power", playerSection = "classPower" }, "Detached power bar", { 0.95, 0.72, 0.18 })
-    box.texLayerHandles = {
-        MakeHandle(box, "texLayer", { x = "texLayerOffsetX", y = "texLayerOffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" },
-            "Texture layer 1", { 0.80, 0.55, 0.25 }),
-        MakeHandle(box, "texLayer2", { x = "texLayer2OffsetX", y = "texLayer2OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" },
-            "Texture layer 2", { 0.80, 0.55, 0.25 }),
-        MakeHandle(box, "texLayer3", { x = "texLayer3OffsetX", y = "texLayer3OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" },
-            "Texture layer 3", { 0.80, 0.55, 0.25 }),
-    }
-    box.handleClassPower = MakeHandle(box, "classPower", { barsX = "classPowerOffsetX", barsY = "classPowerOffsetY", defaultX = 0, defaultY = 0,
-        classPower = true, readOffsets = ViewHandles.ReadBarsHandleOffsets, writeOffsets = ViewHandles.WriteBarsHandleOffsets, section = "classPower" },
-        "Class power", { 0.30, 0.78, 0.55 })
-    box.handleClassPowerText = MakeHandle(box, "classPowerText", { barsX = "classPowerTextOffsetX", barsY = "classPowerTextOffsetY", defaultX = 0, defaultY = 0,
-        classPower = true, readOffsets = ViewHandles.ReadBarsHandleOffsets, writeOffsets = ViewHandles.WriteBarsHandleOffsets, section = "classPower" },
-        "Class power text", { 0.30, 0.78, 0.55 })
-    box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })
-    box.handleCastbarIcon = MakeHandle(box, "castbarIcon", { suffixX = "IconOffsetX", suffixY = "IconOffsetY", bossX = "bossCastIconOffsetX",
-        bossY = "bossCastIconOffsetY", defaultX = 0, defaultY = 0, iconFallback = true, readOffsets = ViewHandles.ReadCastbarSubOffsets,
-        writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar icon", { 0.20, 0.90, 0.85 })
-    box.handleCastbarText = MakeHandle(box, "castbarText", { suffixX = "TextOffsetX", suffixY = "TextOffsetY", bossX = "bossCastTextOffsetX",
-        bossY = "bossCastTextOffsetY", defaultX = 0, defaultY = 0, readOffsets = ViewHandles.ReadCastbarSubOffsets,
-        writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar text", { 0.20, 0.90, 0.85 })
-    box.handleCastbarTarget = MakeHandle(box, "castbarTarget", { suffixX = "TargetNameOffsetX", suffixY = "TargetNameOffsetY",
-        bossX = "bossCastTargetNameOffsetX", bossY = "bossCastTargetNameOffsetY", defaultX = 0, defaultY = 1, readOffsets = ViewHandles.ReadCastbarSubOffsets,
-        writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Cast target text", { 0.95, 0.78, 0.22 })
-    box.handleCastbarTime = MakeHandle(box, "castbarTime", { suffixX = "TimeOffsetX", suffixY = "TimeOffsetY", bossX = "bossCastTimeOffsetX", bossY = "bossCastTimeOffsetY", bossBaseX = -2, defaultX = -2, defaultY = 0, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY", readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar time", { 0.20, 0.90, 0.85 })
-    if type(PreviewAuras.CreateHandles) == "function" then PreviewAuras.CreateHandles(box, MakeHandle) end
+        detachedPower = true, section = "power", playerSection = "classPower" }, "Detached power bar", COLOR_POWER)
+    box.texLayerHandles = {}
+    for i = 1, #TEXTURE_LAYER_HANDLES do
+        local key, label = TEXTURE_LAYER_HANDLES[i][1], TEXTURE_LAYER_HANDLES[i][2]
+        box.texLayerHandles[i] = MakeHandle(box, key, { x = key .. "OffsetX", y = key .. "OffsetY", defaultX = 0, defaultY = 0, texLayer = true,
+            section = "texture_layer" }, label, COLOR_TEXLAYER)
+    end
+    for i = 1, #CLASS_POWER_HANDLES do
+        local spec = CLASS_POWER_HANDLES[i]
+        box[spec[1]] = MakeHandle(box, spec[2], { barsX = spec[2] .. "OffsetX", barsY = spec[2] .. "OffsetY", defaultX = 0, defaultY = 0,
+            classPower = true, readOffsets = ViewHandles.ReadBarsHandleOffsets, writeOffsets = ViewHandles.WriteBarsHandleOffsets,
+            section = "classPower" }, spec[3], COLOR_CLASS_POWER)
+    end
+    box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", COLOR_CAST)
+    for i = 1, #CASTBAR_SUB_HANDLES do
+        local spec = CASTBAR_SUB_HANDLES[i]
+        box[spec[1]] = MakeHandle(box, spec[2], CastbarSubHandleFields(spec[3], spec[6], spec[7], spec[8]), spec[4], spec[5])
+    end
+    if PreviewAuras.CreateHandles then PreviewAuras.CreateHandles(box, MakeHandle) end
     box.statusHandles = { raidgroupname = box.handleRaidGroupName }
     if HAS_BOSS_UNITS then
         box.handleBossTarget = MakeHandle(box, "bossTarget", {
@@ -1309,6 +1335,14 @@ function BoxBuild.Handles(box, s)
         local spec = STATUS_PREVIEW[i]
         box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0,
             statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)
+    end
+end
+--- Gives the keyboard back: the shared capture release when it exists, else the plain propagate flag.
+local function ReleasePreviewKeyboard(box)
+    if PreviewHelpers.ReleaseKeyboardCapture then
+        PreviewHelpers.ReleaseKeyboardCapture(box)
+    elseif box.SetPropagateKeyboardInput then
+        box:SetPropagateKeyboardInput(true)
     end
 end
 function BoxBuild.Scripts(box)
@@ -1326,16 +1360,10 @@ function BoxBuild.Scripts(box)
             self.dragFrame:Hide()
         end
         if self._msufPreviewNudgeTarget
-            and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget
-            and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function"
-        then
-            _G.MSUF_EM2_SetPreviewNudgeTarget(nil)
+            and MSUF.Optional("MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget then
+            MSUF.Require("MSUF_EM2_SetPreviewNudgeTarget", FILE)(nil)
         end
-        if PreviewHelpers.ReleaseKeyboardCapture then
-            PreviewHelpers.ReleaseKeyboardCapture(self)
-        elseif self.SetPropagateKeyboardInput then
-            self:SetPropagateKeyboardInput(true)
-        end
+        ReleasePreviewKeyboard(self)
     end
     box:SetScript("OnShow", function(self)
         self._msuf2PreviewShowSerial = (tonumber(self._msuf2PreviewShowSerial) or 0) + 1
@@ -1359,7 +1387,7 @@ function BoxBuild.Scripts(box)
         end
         self:ReleasePreviewInteraction()
         if Preview.active == self then Preview.active = nil end
-        if type(Preview.UninstallRefreshHooks) == "function" then Preview.UninstallRefreshHooks() end
+        if Preview.UninstallRefreshHooks then Preview.UninstallRefreshHooks() end
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
@@ -1368,11 +1396,7 @@ function BoxBuild.Scripts(box)
             self._refreshQueued = nil
             self._selectedHandle = nil
             Preview.SetArrowBindings(self, false)
-            if PreviewHelpers.ReleaseKeyboardCapture then
-                PreviewHelpers.ReleaseKeyboardCapture(self)
-            elseif self.SetPropagateKeyboardInput then
-                self:SetPropagateKeyboardInput(true)
-            end
+            ReleasePreviewKeyboard(self)
             RefreshHandleSelectionVisuals(self)
         end
     end)
@@ -1409,58 +1433,41 @@ local function BuildPreview(parent, panel, width, height)
     BoxBuild.Scripts(box)
     return box
 end
-local CastbarEnabled = PreviewCastbar.Enabled
-local CastbarShowIcon = PreviewCastbar.ShowIcon
-local CastbarShowText = PreviewCastbar.ShowText
-local PlaceHandle = PreviewCore.PlaceHandle
-local SetShownSafe = PreviewCore.SetShownSafe
-local PreviewRoundedOutlineThickness = PreviewCore.RoundedOutlineThickness
-local ApplyPreviewRounded = PreviewCore.ApplyRounded
-local ApplyPreviewFrameBorder = PreviewCore.ApplyFrameBorder
-local ApplyPreviewBoundsGuide = PreviewCore.ApplyBoundsGuide
-local ApplyPreviewLayerVisibility = PreviewCore.ApplyLayerVisibility
 local PreviewInCombat = PreviewCore.InCombat
 do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
+    -- Model helpers the render reads under the names the model exports.
+    M2.PickFallbackTable(PreviewModel, nil, "UNIT_LABELS UNIT_DATA CurrentPanelKey UnitDB NormalizeHpMode NormalizePowerMode "
+        .. "TextScopeGet TextScopeHasSlots TextScopeSlotGet ToTInlineSeparator PortraitStyleGet ClassColor PowerColor FontColor "
+        .. "SetTex ReadPowerBarEnabled ReadPowerBarHeight CanDetachPowerBarKey ResolveNameAnchor UnitPreviewText "
+        .. "NormalizeStatusPreviewId PreviewRaidGroupNameAllowed PreviewRaidGroupNameText LiveUnitData", deps)
     M2.Assign(deps, {
-        PreviewInCombat = PreviewInCombat, TR = TR, PortraitStyleGet = PortraitStyleGet,
-        RuntimeSpecForPreviewKey = RuntimeSpecForPreviewKey,
+        PreviewInCombat = PreviewInCombat, TR = TR,
+        NormalizeRaidGroupNameAnchor = PreviewModel.NormalizePreviewRaidGroupNameAnchor,
+        RuntimeSpecForPreviewKey = PreviewRuntime.SpecForPreviewKey or Fallbacks.Nil,
         RuntimeAppliedPortraitSizeForPreviewKey = PreviewRuntime.AppliedPortraitSizeForPreviewKey or Fallbacks.Nil,
         DetachedCastbarOffsetForPreviewKey = PreviewRuntime.DetachedCastbarOffsetForPreviewKey,
         RuntimeVisualScaleForPreviewKey = RuntimeVisualScaleForPreviewKey,
         RuntimeCastbarVisualScaleForPreviewKey = PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey,
         ClampPreviewZoom = ClampPreviewZoom,
         ResolveDefaultPreviewZoomLock = PreviewZoomPan.ResolveDefaultLock or Fallbacks.Noop,
-        UpdatePreviewZoomControls = UpdatePreviewZoomControls, ZOOM_MIN = ZOOM_MIN, max = max, min = min, abs = abs,
-        floor = floor, format = format, TEX_W8 = TEX_W8, FONT = FONT, STATUS_PREVIEW = STATUS_PREVIEW,
-        CurrentPanelKey = CurrentPanelKey, UnitDB = UnitDB, UNIT_DATA = UNIT_DATA, UNIT_LABELS = UNIT_LABELS,
-        ReadPowerBarEnabled = ReadPowerBarEnabled, ReadPowerBarHeight = ReadPowerBarHeight,
-        LiveUnitData = PreviewModel.LiveUnitData, SyncLiveStateDriver = ViewChrome.SyncUnitPreviewLiveState,
-    })
-    M2.Assign(deps, {
-        PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed,
-        PreviewRaidGroupNameText = PreviewRaidGroupNameText,
-        NormalizeRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor, CastbarEnabled = CastbarEnabled,
-        CastbarShowIcon = CastbarShowIcon, CastbarShowText = CastbarShowText, ReadCastbarSize = ReadCastbarSize,
-        ReadCastbarNum = ReadCastbarNum,
-        CastbarOffsetFields = CastbarOffsetFields, CastbarDetached = CastbarDetached,
-        CanDetachPowerBarKey = CanDetachPowerBarKey, ClampPreviewLayer = ClampPreviewLayer, SetTex = SetTex,
-        PlaceHandle = PlaceHandle, PlaceHandleAroundRegions = UnitPreviewText.PlaceHandleAroundRegions,
-        UnitPreviewText = UnitPreviewText, UnitPreviewTextMovesTogether = ViewHandles.UnitPreviewTextMovesTogether,
-        NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode, TextScopeGet = TextScopeGet,
-        TextScopeHasSlots = TextScopeHasSlots, TextScopeSlotGet = TextScopeSlotGet,
-        ToTInlineSeparator = ToTInlineSeparator,
-        ResolveNameAnchor = ResolveNameAnchor, ClassColor = ClassColor,
-    })
-    M2.Assign(deps, {
-        PowerColor = PowerColor, FontColor = FontColor,
-        NormalizeStatusPreviewId = NormalizeStatusPreviewId,
-        ApplyPreviewTextFocus = ViewChrome.ApplyPreviewTextFocus, ApplyPreviewRounded = ApplyPreviewRounded,
-        ApplyPreviewFrameBorder = ApplyPreviewFrameBorder,
-        PreviewRoundedOutlineThickness = PreviewRoundedOutlineThickness,
-        ApplyPreviewBoundsGuide = ApplyPreviewBoundsGuide, SetShownSafe = SetShownSafe,
-        ApplyPreviewLayerVisibility = ApplyPreviewLayerVisibility,
+        UpdatePreviewZoomControls = UpdatePreviewZoomControls, ZOOM_MIN = ZOOM_MIN,
+        max = math.max, min = math.min, abs = math.abs, floor = floor, format = string.format,
+        TEX_W8 = TEX_W8, FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", STATUS_PREVIEW = STATUS_PREVIEW,
+        SyncLiveStateDriver = ViewChrome.SyncUnitPreviewLiveState,
+        CastbarEnabled = PreviewCastbar.Enabled, CastbarShowIcon = PreviewCastbar.ShowIcon,
+        CastbarShowText = PreviewCastbar.ShowText, ReadCastbarSize = PreviewCastbar.ReadSize,
+        ReadCastbarNum = PreviewCastbar.ReadNumber, CastbarOffsetFields = CastbarOffsetFields,
+        CastbarDetached = PreviewCastbar.Detached,
+        ClampPreviewLayer = PreviewCore.ClampLayer, PlaceHandle = PreviewCore.PlaceHandle,
+        PlaceHandleAroundRegions = PreviewModel.UnitPreviewText.PlaceHandleAroundRegions,
+        UnitPreviewTextMovesTogether = ViewHandles.UnitPreviewTextMovesTogether,
+        ApplyPreviewTextFocus = ViewChrome.ApplyPreviewTextFocus, ApplyPreviewRounded = PreviewCore.ApplyRounded,
+        ApplyPreviewFrameBorder = PreviewCore.ApplyFrameBorder,
+        PreviewRoundedOutlineThickness = PreviewCore.RoundedOutlineThickness,
+        ApplyPreviewBoundsGuide = PreviewCore.ApplyBoundsGuide, SetShownSafe = PreviewCore.SetShownSafe,
+        ApplyPreviewLayerVisibility = PreviewCore.ApplyLayerVisibility,
         ApplyPreviewTransparency = Preview.ApplyPreviewTransparency,
         RefreshHandleSelectionVisuals = RefreshHandleSelectionVisuals, Auras = PreviewAuras,
     })

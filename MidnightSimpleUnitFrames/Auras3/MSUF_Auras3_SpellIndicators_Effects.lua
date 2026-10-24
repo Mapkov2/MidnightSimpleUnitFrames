@@ -1,8 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/SpellIndicator_Effects: frame/icon effects, output gates and retirement of owned effect surfaces.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Auras3/MSUF_Auras3_SpellIndicators_Effects.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local ApplyResolvedFont = MSUF.Require("MSUF_ApplyResolvedFont", FILE)
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -68,14 +69,76 @@ function MirrorNameOverlays(parentFrame)
         nameRetryFrame:RegisterEvent(restriction and "ADDON_RESTRICTION_STATE_CHANGED" or "PLAYER_REGEN_ENABLED")
     end
 end
+
+-- Slice edges of the radial texture behind the full-frame glow halo below.
+local FRAME_GLOW_EDGE_LOW, FRAME_GLOW_EDGE_HIGH = 31 / 64, 33 / 64
+-- The glow rectangle sits this many pixels inside the bar edge, so the bright
+-- core overlaps the bar's own border art and the halo reads as attached to
+-- the frame instead of floating next to it.
+local FRAME_GLOW_INSET = 2
+
+--- Buff Reminder click-to-cast.
+---
+--- One SecureActionButton per reminder slot, written once and then left
+--- alone: no OnUpdate, no event registration and no aura read. A click just
+--- casts the spell the slot was configured with, which is why it keeps
+--- working while the aura is up (re-applying a poison or flask) as well as
+--- while it is missing.
+---
+--- Everything here is protected-frame work, so it runs strictly out of
+--- combat; the caller re-queues an apply for PLAYER_REGEN_ENABLED instead.
+--- The buttons are children of the UnitFrame, never of an AuraButton: that
+--- tree is access-restricted while auras are secret and forbids scripts.
+--- The cast button covers the AuraButton, so it also swallows the mouse
+--- motion that would raise Blizzard's aura tooltip. Show the slot's own
+--- spell instead -- that is plain catalog data, readable under every secret
+--- restriction, and it names the very spell the click will cast. Scripts run
+--- on hover only; nothing here is registered, polled or timed.
+local function ReminderCastButtonOnEnter(self)
+    local tooltip = GameTooltip
+    if not (self._msufA3CastTooltip and tooltip) then return end
+    local itemID = self._msufA3CastItemID
+    if itemID and type(tooltip.SetItemByID) == "function" then
+        tooltip:SetOwner(self, "ANCHOR_RIGHT")
+        tooltip:SetItemByID(itemID)
+        tooltip:Show()
+        return
+    end
+    local spellID = self._msufA3CastSpellID
+    if not (spellID and type(tooltip.SetSpellByID) == "function") then return end
+    tooltip:SetOwner(self, "ANCHOR_RIGHT")
+    tooltip:SetSpellByID(spellID)
+    tooltip:Show()
+end
+
+local function ReminderCastButtonOnLeave(self)
+    local tooltip = GameTooltip
+    if tooltip and tooltip:IsOwned(self) then tooltip:Hide() end
+end
+
+local function EnsureReminderCastButton(store, parentFrame, slot)
+    local button = store[slot.slotKey]
+    if not button then
+        button = PixelLayoutRegion(CreateFrame("Button", nil, parentFrame, "SecureActionButtonTemplate"))
+        -- Both edges, exactly like Blizzard's action buttons: the secure
+        -- handler itself decides which one fires from ActionButtonUseKeyDown,
+        -- so registering only one would drop the click for half the users.
+        button:RegisterForClicks("AnyUp", "AnyDown")
+        button:SetScript("OnEnter", ReminderCastButtonOnEnter)
+        button:SetScript("OnLeave", ReminderCastButtonOnLeave)
+        store[slot.slotKey] = button
+    end
+    return button
+end
+
 A3.SpellIndicatorModules.Effects = function(config)
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local math_min, math_max = math.min, math.max
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
 local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1
-local CreateFrame = _G.CreateFrame
-local InCombat = _G.InCombatLockdown
-local issecretvalue = _G.issecretvalue
+local CreateFrame = CreateFrame
+local InCombat = InCombatLockdown
+local issecretvalue = issecretvalue
 local ICON_ALERT_TEXTURE = [[Interface\SpellActivationOverlay\IconAlert]]
 local ICON_ALERT_ANTS_TEXTURE = [[Interface\SpellActivationOverlay\IconAlertAnts]]
 local FRAME_GLOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
@@ -225,11 +288,6 @@ end
 -- round at any bar aspect ratio instead of smearing Blizzard's square
 -- action-button alert art across a wide health bar, and there is no
 -- animation, so an active glow costs zero Lua and zero C-side ticks.
-local FRAME_GLOW_EDGE_LOW, FRAME_GLOW_EDGE_HIGH = 31 / 64, 33 / 64
--- The glow rectangle sits this many pixels inside the bar edge, so the bright
--- core overlaps the bar's own border art and the halo reads as attached to
--- the frame instead of floating next to it.
-local FRAME_GLOW_INSET = 2
 
 local function EnsureFrameGlow(owner)
     if not owner then return nil end
@@ -324,15 +382,8 @@ local function SyncNameOverlayFont(overlay, source)
     if not (overlay and source) then return end
     local path, size, flags = source:GetFont()
     if path and size then
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
-        local applyResolved = _G.MSUF_ApplyResolvedFont
-        if type(applyResolved) == "function" then
-            applyResolved(overlay, path, size, flags, general and general.fontKey)
-        else
-            if not _G.MSUF_SetFontChecked(overlay, path, size, flags) and type(_G.MSUF_MarkFontApplyFailed) == "function" then
-                _G.MSUF_MarkFontApplyFailed()
-            end
-        end
+        local general = MSUF_DB and MSUF_DB.general
+        ApplyResolvedFont(overlay, path, size, flags, general and general.fontKey)
     end
     if source.GetJustifyH then overlay:SetJustifyH(source:GetJustifyH()) end
     if source.GetJustifyV then overlay:SetJustifyV(source:GetJustifyV()) end
@@ -383,17 +434,23 @@ local function StopPulse(root)
     if root then root:SetAlpha(1) end
 end
 
+-- The 0.7 s alpha bounce behind both the Pulse effect and the pandemic pulse.
+local function NewAlphaPulse(root)
+    local pulse = root:CreateAnimationGroup()
+    local alpha = pulse:CreateAnimation("Alpha")
+    alpha:SetFromAlpha(0.45)
+    alpha:SetToAlpha(1)
+    alpha:SetDuration(0.7)
+    if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
+    pulse:SetLooping("BOUNCE")
+    return pulse
+end
+
 local function StartPulse(root)
     if not root then return end
     local pulse = root._msufA3SpellIndicatorPulse
     if not pulse then
-        pulse = root:CreateAnimationGroup()
-        local alpha = pulse:CreateAnimation("Alpha")
-        alpha:SetFromAlpha(0.45)
-        alpha:SetToAlpha(1)
-        alpha:SetDuration(0.7)
-        if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
-        pulse:SetLooping("BOUNCE")
+        pulse = NewAlphaPulse(root)
         root._msufA3SpellIndicatorPulse = pulse
     end
     if not pulse:IsPlaying() then pulse:Play() end
@@ -441,13 +498,7 @@ local function EnsurePandemicPulse(root)
     if not root then return nil end
     local pulse = root._msufA3PandemicActivePulse
     if pulse then return pulse end
-    pulse = root:CreateAnimationGroup()
-    local alpha = pulse:CreateAnimation("Alpha")
-    alpha:SetFromAlpha(0.45)
-    alpha:SetToAlpha(1)
-    alpha:SetDuration(0.7)
-    if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
-    pulse:SetLooping("BOUNCE")
+    pulse = NewAlphaPulse(root)
     root._msufA3PandemicActivePulse = pulse
     return pulse
 end
@@ -503,60 +554,6 @@ function Runtime.HideRootMissing(parentFrame, slotRoot, ownerContainer)
         end
     end
     return any
-end
-
---- Buff Reminder click-to-cast.
----
---- One SecureActionButton per reminder slot, written once and then left
---- alone: no OnUpdate, no event registration and no aura read. A click just
---- casts the spell the slot was configured with, which is why it keeps
---- working while the aura is up (re-applying a poison or flask) as well as
---- while it is missing.
----
---- Everything here is protected-frame work, so it runs strictly out of
---- combat; the caller re-queues an apply for PLAYER_REGEN_ENABLED instead.
---- The buttons are children of the UnitFrame, never of an AuraButton: that
---- tree is access-restricted while auras are secret and forbids scripts.
---- The cast button covers the AuraButton, so it also swallows the mouse
---- motion that would raise Blizzard's aura tooltip. Show the slot's own
---- spell instead -- that is plain catalog data, readable under every secret
---- restriction, and it names the very spell the click will cast. Scripts run
---- on hover only; nothing here is registered, polled or timed.
-local function ReminderCastButtonOnEnter(self)
-    local tooltip = _G.GameTooltip
-    if not (self._msufA3CastTooltip and tooltip) then return end
-    local itemID = self._msufA3CastItemID
-    if itemID and type(tooltip.SetItemByID) == "function" then
-        tooltip:SetOwner(self, "ANCHOR_RIGHT")
-        tooltip:SetItemByID(itemID)
-        tooltip:Show()
-        return
-    end
-    local spellID = self._msufA3CastSpellID
-    if not (spellID and type(tooltip.SetSpellByID) == "function") then return end
-    tooltip:SetOwner(self, "ANCHOR_RIGHT")
-    tooltip:SetSpellByID(spellID)
-    tooltip:Show()
-end
-
-local function ReminderCastButtonOnLeave(self)
-    local tooltip = _G.GameTooltip
-    if tooltip and tooltip:IsOwned(self) then tooltip:Hide() end
-end
-
-local function EnsureReminderCastButton(store, parentFrame, slot)
-    local button = store[slot.slotKey]
-    if not button then
-        button = PixelLayoutRegion(CreateFrame("Button", nil, parentFrame, "SecureActionButtonTemplate"))
-        -- Both edges, exactly like Blizzard's action buttons: the secure
-        -- handler itself decides which one fires from ActionButtonUseKeyDown,
-        -- so registering only one would drop the click for half the users.
-        button:RegisterForClicks("AnyUp", "AnyDown")
-        button:SetScript("OnEnter", ReminderCastButtonOnEnter)
-        button:SetScript("OnLeave", ReminderCastButtonOnLeave)
-        store[slot.slotKey] = button
-    end
-    return button
 end
 
 --- Returns true when combat blocked the work and the caller must retry.
@@ -714,7 +711,8 @@ local function LayoutEdges(button, parentFrame, target, effect)
         edge:SetVertexColor(r, g, b, a)
         edge:Show()
     end
-    local rounded = _G.MSUF_RoundedUF_OnSpellIndicatorEdge
+    -- RoundedFrames publishes and clears this callback as the feature toggles.
+    local rounded = MSUF.Public.RoundedUF_OnSpellIndicatorEdge
     if rounded and rounded(button, parentFrame, target, true, thickness, r, g, b, a,
         effect and effect.type == "pulse" and "ADD" or "BLEND") then
         for i = 1, 4 do edges[i]:Hide() end
@@ -730,7 +728,8 @@ local function HideEffectRegions(button)
             if edges[i] then edges[i]:Hide() end
         end
     end
-    local rounded = _G.MSUF_RoundedUF_OnSpellIndicatorEdge
+    -- RoundedFrames publishes and clears this callback as the feature toggles.
+    local rounded = MSUF.Public.RoundedUF_OnSpellIndicatorEdge
     if rounded then rounded(button, nil, nil, false) end
     StopAnimatedGlow(button and button._msufA3SpellIndicatorEffectRoot)
     StopFrameGlow(button and button._msufA3SpellIndicatorEffectRoot)

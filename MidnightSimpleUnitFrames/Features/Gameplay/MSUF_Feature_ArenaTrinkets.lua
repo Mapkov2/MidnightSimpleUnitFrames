@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua
 --- Enemy arena trinket display shared by Retail and supported Classic clients.
 ---
@@ -19,14 +18,18 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- All work is event-driven. There is no OnUpdate, ticker, or polling loop.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"
+local Require = MSUF.Require
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local EventBusRegister = Require("MSUF_EventBus_Register", FILE)
+local EventBusUnregister = Require("MSUF_EventBus_Unregister", FILE)
 
 local type = type
 local tonumber = tonumber
 -- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
 -- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
 -- 0..5 and fall back to 3 when the client initializer did not run.
-local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
+local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(MSUF_MAX_ARENA_FRAMES) or 3)))
 local RETAIL_TRINKET_TEXTURE = 1322720 -- inv_jewelry_trinketpvp_01
 local CLASSIC_TRINKET_TEXTURE = 133453 -- inv_jewelry_trinketpvp_02
 local MISTS_TRINKET_SPELL_ID = 42292
@@ -39,10 +42,7 @@ local IS_RETAIL = Client.IsRetail == true
 local IS_MISTS = Client.IsMists == true
 local FALLBACK_TEXTURE = IS_RETAIL and RETAIL_TRINKET_TEXTURE or CLASSIC_TRINKET_TEXTURE
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 -- The factory look: a 20 px icon 4 px right of the arena frame, on a layer
 -- above every default layer of the arena frame (custom aura containers sit on
@@ -73,7 +73,7 @@ local layoutSerial = 1
 local previewSlots = 0
 
 local function ArenaConf()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     return db and db.arena or nil
 end
 
@@ -100,6 +100,24 @@ local function TrinketLayout()
         WholeNumber(conf.trinketLayer, TRINKET_DEFAULTS.layer, 0, 30)
 end
 
+--- The icon shape, one of the aura icon shapes (Auras3/MSUF_Auras3_IconShape.lua);
+--- unset (old profiles) is the rectangular icon. A trinket has no portrait to
+--- follow, so Shape.Resolve reads Follow Portrait as rectangular too.
+local function TrinketShape()
+    local auras = MSUF.MSUF_Auras3
+    local shapes = auras and auras.IconShape
+    if not shapes then return "RECTANGLE" end
+    return (shapes.Resolve((ArenaConf() or NO_CONF).trinketShape))
+end
+
+--- Masks the icon and the cooldown swipe of a holder or preview icon with the
+--- trinket shape. A never-shaped rectangular owner is left untouched.
+local function ApplyTrinketShape(owner, cooldown, ...)
+    local auras = MSUF.MSUF_Auras3
+    local shapes = auras and auras.IconShape
+    if shapes then shapes.ApplyIconShape(owner, TrinketShape(), cooldown, true, ...) end
+end
+
 local function ArenaEnabled()
     local conf = ArenaConf()
     return not conf or conf.enabled ~= false
@@ -110,18 +128,14 @@ local function ShowTrinketEnabled()
     return not conf or conf.showTrinket ~= false
 end
 
+-- UF.GetFrame is a plain UF.frames lookup, so the registry is read directly.
 local function ArenaFrame(index)
-    local uf = MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame("arena" .. index)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
+    local frames = MSUF.UF.frames
     return (frames and frames["arena" .. index]) or _G["MSUF_arena" .. index]
 end
 
 local function IsSecret(value)
-    local issecret = _G.issecretvalue
+    local issecret = issecretvalue
     return type(issecret) == "function" and issecret(value) == true
 end
 
@@ -131,13 +145,13 @@ local function LiveUnitExists(unit)
     if type(existsPlain) == "function" then
         return existsPlain(unit) == true
     end
-    local exists = _G.UnitExists
+    local exists = UnitExists
     return type(exists) == "function" and exists(unit) == true
 end
 
 --- The client's instance type, nil when the client has no IsInInstance.
 local function InstanceType()
-    local isInInstance = _G.IsInInstance
+    local isInInstance = IsInInstance
     if type(isInInstance) ~= "function" then return nil end
     local _, instanceType = isInInstance()
     return instanceType
@@ -145,13 +159,13 @@ end
 
 local function InArenaMatch()
     if IS_RETAIL then
-        local pvp = _G.C_PvP
+        local pvp = C_PvP
         local considered = pvp and pvp.IsMatchConsideredArena
         if type(considered) ~= "function" or considered() ~= true then return false end
         local active = pvp.IsMatchActive
         local complete = pvp.IsMatchComplete
         local getState = pvp.GetActiveMatchState
-        local states = _G.Enum and _G.Enum.PvPMatchState
+        local states = Enum and Enum.PvPMatchState
         local engaged = states and states.Engaged
         return (type(active) == "function" and active() == true)
             or (type(complete) == "function" and complete() == true)
@@ -196,6 +210,7 @@ local function ApplyHolderLayout(holder, frame)
     local level = layers.ElementLevel(layer, TRINKET_DEFAULTS.layer, 0)
     holder:SetFrameLevel(level)
     holder.cooldown:SetFrameLevel(level + 1)
+    ApplyTrinketShape(holder, holder.cooldown, holder.icon)
     holder._msufTrinketAnchor = frame
     holder._msufTrinketSerial = layoutSerial
 end
@@ -249,31 +264,31 @@ end
 
 local function ClassicSpellTexture(spellID, itemID)
     if itemID and itemID ~= 0 then
-        local getItemIcon = _G.C_Item and _G.C_Item.GetItemIconByID
+        local getItemIcon = C_Item and C_Item.GetItemIconByID
         if type(getItemIcon) == "function" then
             local texture = getItemIcon(itemID)
             if texture then return texture end
         end
-        getItemIcon = _G.GetItemIcon
+        getItemIcon = GetItemIcon
         if type(getItemIcon) == "function" then
             local texture = getItemIcon(itemID)
             if texture then return texture end
         end
     end
 
-    local getSpellTexture = _G.GetSpellTexture
+    local getSpellTexture = GetSpellTexture
     if type(getSpellTexture) == "function" then
         local texture, textureNoOverride = getSpellTexture(spellID)
         return textureNoOverride or texture
     end
-    getSpellTexture = _G.C_Spell and _G.C_Spell.GetSpellTexture
+    getSpellTexture = C_Spell and C_Spell.GetSpellTexture
     return type(getSpellTexture) == "function" and getSpellTexture(spellID) or nil
 end
 
 local function ActiveMistsFallback(index)
     local fallback = mistsFallback[index]
     if not fallback then return nil end
-    local getTime = _G.GetTime
+    local getTime = GetTime
     local now = type(getTime) == "function" and getTime() or 0
     if now < fallback.startTime + fallback.duration then return fallback end
     mistsFallback[index] = nil
@@ -290,7 +305,7 @@ end
 local function RefreshRetailCooldown(holder, index)
     local cooldown = holder and holder.cooldown
     if not cooldown then return end
-    local pvp = _G.C_PvP
+    local pvp = C_PvP
 
     -- Preferred Midnight path: DurationObject flows directly from Blizzard to
     -- the native Cooldown widget without exposing or comparing secret numbers.
@@ -312,7 +327,7 @@ local function RefreshRetailCooldown(holder, index)
     local duration = (tonumber(durationMs) or 0) / 1000
     if spellID and duration > 0 then
         cooldown:SetCooldown((tonumber(startTimeMs) or 0) / 1000, duration)
-        local getTexture = _G.C_Spell and _G.C_Spell.GetSpellTexture
+        local getTexture = C_Spell and C_Spell.GetSpellTexture
         if type(getTexture) == "function" then ApplyTexture(holder, getTexture(spellID)) end
     else
         cooldown:Clear()
@@ -322,7 +337,7 @@ end
 local function RefreshClassicCooldown(holder, index)
     local cooldown = holder and holder.cooldown
     if not cooldown then return end
-    local getInfo = _G.C_PvP and _G.C_PvP.GetArenaCrowdControlInfo
+    local getInfo = C_PvP and C_PvP.GetArenaCrowdControlInfo
     if type(getInfo) ~= "function" then
         if not ApplyMistsFallback(holder, index) then cooldown:Clear() end
         return
@@ -363,7 +378,7 @@ local function AttachRetailRelay(index, holder)
     local ccRemover = member and member.CcRemoverFrame
     if not ccRemover or relaySources[index] == ccRemover then return end
 
-    local hook = _G.hooksecurefunc
+    local hook = hooksecurefunc
     if type(hook) ~= "function" then return end
 
     if ccRemover.Icon and type(ccRemover.Icon.SetTexture) == "function" then
@@ -412,7 +427,7 @@ local function SyncTrinketIcons(allowRequest)
             EndPreview(holder)
             holder:Show()
             if allowRequest and not requested[index] then
-                local request = _G.C_PvP and _G.C_PvP.RequestCrowdControlSpell
+                local request = C_PvP and C_PvP.RequestCrowdControlSpell
                 if type(request) == "function" then
                     requested[index] = true
                     request(unit)
@@ -498,17 +513,17 @@ local function HandleMistsCombatLog()
     -- SyncMistsCombatLog delivers this event inside arena instances only, so the
     -- per-event path does not ask the client for the instance type again.
     if not IS_MISTS or not ArenaEnabled() or not ShowTrinketEnabled() then return end
-    local getInfo = _G.CombatLogGetCurrentEventInfo
+    local getInfo = CombatLogGetCurrentEventInfo
     if type(getInfo) ~= "function" then return end
     local _, subEvent, _, sourceGUID, _, _, _, _, _, _, _, spellID = getInfo()
     if subEvent ~= "SPELL_CAST_SUCCESS" or spellID ~= MISTS_TRINKET_SPELL_ID then return end
 
-    local unitGUID = _G.UnitGUID
+    local unitGUID = UnitGUID
     if type(unitGUID) ~= "function" then return end
     for index = 1, MAX_ARENA do
         local unit = "arena" .. index
         if sourceGUID == unitGUID(unit) then
-            local getTime = _G.GetTime
+            local getTime = GetTime
             local startTime = type(getTime) == "function" and getTime() or 0
             mistsFallback[index] = { startTime = startTime, duration = MISTS_TRINKET_DURATION }
             local holder = EnsureHolder(index)
@@ -569,9 +584,9 @@ local COOLDOWN_KEY = "MSUF_ARENA_TRINKET_COOLDOWN"
 --- Subscribes or releases one event on the EventBus.
 local function SetSubscribed(event, key, wanted)
     if wanted then
-        _G.MSUF_EventBus_Register(event, key, HandleEvent)
+        EventBusRegister(event, key, HandleEvent)
     else
-        _G.MSUF_EventBus_Unregister(event, key)
+        EventBusUnregister(event, key)
     end
 end
 
@@ -619,9 +634,8 @@ local function WireEvents()
     mistsLogWired = IS_MISTS
     cooldownEventWired = true
 
-    local register = _G.MSUF_EventBus_Register
     for index = 1, #events do
-        register(events[index][1], events[index][2], HandleEvent)
+        EventBusRegister(events[index][1], events[index][2], HandleEvent)
     end
 end
 
@@ -635,14 +649,17 @@ end
 ExportPublic("MSUF_ArenaMatch_SyncTrinketIcons", function()
     SyncTrinketIcons(true)
 end)
-ExportPublic("MSUF_ArenaTrinkets_SyncPreview", SyncTrinketPreview)
+ExportPublic("MSUF_ArenaTrinkets_SyncPreview", SyncTrinketPreview, false)
 ExportPublic("MSUF_ArenaTrinkets_RefreshLayout", RefreshTrinketLayout)
 
 --- Read-only surface for the menu (unit preview, PvP Trinket section, Layer
 --- Overview) and the Edit Mode mover: the resolver, the factory values the
 --- runtime itself uses and the holder of an arena slot.
 MSUF.ArenaTrinkets = {
+    SyncPreview = SyncTrinketPreview,
     Layout = TrinketLayout,
+    Shape = TrinketShape,
+    ApplyShape = ApplyTrinketShape,
     Shown = function() return ArenaEnabled() and ShowTrinketEnabled() end,
     Holder = function(index) return holders[index] end,
     DEFAULTS = TRINKET_DEFAULTS,

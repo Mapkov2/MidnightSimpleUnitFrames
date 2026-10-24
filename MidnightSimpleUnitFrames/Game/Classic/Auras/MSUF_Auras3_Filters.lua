@@ -10,7 +10,6 @@
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
 assert(Backend, "Classic aura filters require Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
@@ -20,12 +19,12 @@ local Filters = {}
 
 local type, tonumber = type, tonumber
 local math_floor = math.floor
-local UnitIsUnit = _G.UnitIsUnit
-local UnitIsPlayer = _G.UnitIsPlayer
-local UnitPlayerOrPetInParty = _G.UnitPlayerOrPetInParty
-local UnitPlayerOrPetInRaid = _G.UnitPlayerOrPetInRaid
-local IsSecret = _G.issecretvalue or function() return false end
-local C_UnitAuras = _G.C_UnitAuras
+local UnitIsUnit = UnitIsUnit
+local UnitIsPlayer = UnitIsPlayer
+local UnitPlayerOrPetInParty = UnitPlayerOrPetInParty
+local UnitPlayerOrPetInRaid = UnitPlayerOrPetInRaid
+local IsSecret = issecretvalue or function() return false end
+local C_UnitAuras = C_UnitAuras
 local GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 

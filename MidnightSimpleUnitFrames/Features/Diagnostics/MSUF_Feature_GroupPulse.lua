@@ -14,9 +14,9 @@
 -- profile-wide applies.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
 
-local GetTimePreciseSec = _G.GetTimePreciseSec
+local GetTimePreciseSec = GetTimePreciseSec
 if not GetTimePreciseSec then return end
 
 local enabled = false
@@ -109,7 +109,7 @@ local function WrapDriver(driver, label)
 end
 
 local function WrapKnownDrivers()
-  WrapDriver(_G.MSUF_SchedulerFrame, "driver:Scheduler")
+  WrapDriver(MSUF.Scheduler.frame, "driver:Scheduler")
 end
 
 local function RestoreKnownDrivers()
@@ -133,7 +133,7 @@ local function CallFrameMethod(frame, key, ...)
 end
 
 local function DumpDrivers()
-  local EnumerateFrames = _G.EnumerateFrames
+  local EnumerateFrames = EnumerateFrames
   if not EnumerateFrames then
     print("|cff7fd5ffMSUF|r group pulse: EnumerateFrames unavailable")
     return
@@ -214,13 +214,13 @@ local function Reset()
 end
 
 local function AddonRowMsPerSecond()
-  local profiler = _G.C_AddOnProfiler
-  local metricEnum = _G.Enum and _G.Enum.AddOnProfilerMetric
+  local profiler = C_AddOnProfiler
+  local metricEnum = Enum and Enum.AddOnProfilerMetric
   if not (profiler and type(profiler.GetAddOnMetric) == "function" and metricEnum) then return nil end
   local metric = metricEnum.RecentAverageTime or metricEnum.SessionAverageTime
   if metric == nil then return nil end
   local msPerFrame = profiler.GetAddOnMetric("MidnightSimpleUnitFrames", metric)
-  local fps = type(_G.GetFramerate) == "function" and _G.GetFramerate() or nil
+  local fps = type(GetFramerate) == "function" and GetFramerate() or nil
   if type(msPerFrame) == "number" and type(fps) == "number" and fps > 0 then
     return msPerFrame * fps
   end
@@ -294,12 +294,16 @@ local LEAN_SCOPE_KEYS = {
 local LEAN_ABSORB_KEYS = { "overAbsorbOverlay", "fullHealthAbsorbStripe" }
 local LEAN_SCOPE_PROFILES = { "gf_party", "gf_raid", "gf_mythicraid" }
 
+local function RefreshGroupFrames()
+  Require("MSUF_GF_RefreshAll", "Features/Diagnostics/MSUF_Feature_GroupPulse.lua")()
+end
+
 local function ApplyLeanScope(state, keys, backupField, label)
-  if _G.InCombatLockdown and _G.InCombatLockdown() then
+  if InCombatLockdown and InCombatLockdown() then
     print("|cff7fd5ffMSUF|r group pulse: leave combat first")
     return
   end
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   if type(db) ~= "table" then
     print("|cff7fd5ffMSUF|r group pulse: MSUF_DB unavailable")
     return
@@ -326,7 +330,7 @@ local function ApplyLeanScope(state, keys, backupField, label)
         end
       end
     end
-    if type(_G.MSUF_GF_RefreshAll) == "function" then _G.MSUF_GF_RefreshAll() end
+    RefreshGroupFrames()
     print(("|cff7fd5ffMSUF|r group pulse: %s ON -- measure, then the matching off restores"):format(label))
   else
     local backup = db[backupField]
@@ -343,7 +347,7 @@ local function ApplyLeanScope(state, keys, backupField, label)
       end
     end
     db[backupField] = nil
-    if type(_G.MSUF_GF_RefreshAll) == "function" then _G.MSUF_GF_RefreshAll() end
+    RefreshGroupFrames()
     print(("|cff7fd5ffMSUF|r group pulse: %s OFF (settings restored)"):format(label))
   end
 end
@@ -356,8 +360,8 @@ local function LeanAbsorb(state)
   ApplyLeanScope(state, LEAN_ABSORB_KEYS, "_msufGPLeanAbsorbBackup", "lean absorb (plain bar, no glow)")
 end
 
-_G.SLASH_MSUFGROUPPULSE1 = "/msufgp"
-_G.SlashCmdList["MSUFGROUPPULSE"] = function(msg)
+SLASH_MSUFGROUPPULSE1 = "/msufgp"
+SlashCmdList["MSUFGROUPPULSE"] = function(msg)
   msg = type(msg) == "string" and msg:lower():gsub("^%s+", ""):gsub("%s+$", "") or ""
   if msg == "on" then
     if enabled then Reset() else Enable() end
@@ -378,19 +382,19 @@ _G.SlashCmdList["MSUFGROUPPULSE"] = function(msg)
   elseif msg == "leanabsorb off" then
     LeanAbsorb("off")
   elseif msg == "suspendhidden on" or msg == "suspendhidden" then
-    _G.MSUF_GF_SuspendHidden = true
+    ExportPublic("MSUF_GF_SuspendHidden", true)
     print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend FORCED ON for ALL scopes (single frames too). Toggle a frame's visibility to apply.")
   elseif msg == "suspendhidden off" then
-    _G.MSUF_GF_SuspendHidden = false
+    ExportPublic("MSUF_GF_SuspendHidden", false)
     print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend FORCED OFF (A/B baseline: keep events registered while hidden).")
   elseif msg == "suspendhidden default" then
-    _G.MSUF_GF_SuspendHidden = nil
+    ExportPublic("MSUF_GF_SuspendHidden", nil)
     print("|cff7fd5ffMSUF|r group pulse: hidden-frame event suspend back to DEFAULT (ON for group frames, off for single).")
   elseif msg == "predsync on" or msg == "predsync" then
-    _G.MSUF_GF_PredictionSync = true
+    ExportPublic("MSUF_GF_PredictionSync", true)
     print("|cff7fd5ffMSUF|r group pulse: synchronous absorb/heal prediction ON (no render-frame coalescer).")
   elseif msg == "predsync off" then
-    _G.MSUF_GF_PredictionSync = nil
+    ExportPublic("MSUF_GF_PredictionSync", nil)
     print("|cff7fd5ffMSUF|r group pulse: synchronous prediction OFF (default: render-frame coalescer).")
   else
     print("|cff7fd5ffMSUF|r group pulse: /msufgp on | dump | drivers | reset | off | leanscope on|off | leanabsorb on|off")

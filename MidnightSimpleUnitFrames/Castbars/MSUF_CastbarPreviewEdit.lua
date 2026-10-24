@@ -19,7 +19,18 @@ local function InCombat()
     return InCombatLockdown and InCombatLockdown()
 end
 
-local Round = _G.MSUF_RoundOffset
+--- Kernel Util and the Edit Mode shell (EM2, the nudge target, the castbar
+--- popup, the undo history) load before this file. MSUF_EM_UndoBeforeChange
+--- stays late-bound: the external Edit Mode provider hooks it at run time.
+local FILE = "Castbars/MSUF_CastbarPreviewEdit.lua"
+local Require = MSUF.Require
+local Round = Require("MSUF_RoundOffset", FILE)
+local UndoBeginChange = Require("MSUF_EM_UndoBeginChange", FILE)
+local UndoCommitChange = Require("MSUF_EM_UndoCommitChange", FILE)
+local OpenCastbarPositionPopup = Require("MSUF_OpenCastbarPositionPopup", FILE)
+local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
+local EM2 = MSUF.Optional("MSUF_EM2")
+local SetPreviewNudgeTarget = Require("MSUF_EM2_SetPreviewNudgeTarget", FILE)
 
 local function OffsetX(general, config)
     return tonumber(general[config.x])
@@ -59,7 +70,7 @@ local function ThrottledApplyUnitAndSync(frame, unit, elapsed)
 end
 
 local function PulsePreview(unit)
-    if not _G.MSUF_UnitEditModeActive then
+    if not MSUF_UnitEditModeActive then
         return
     end
 
@@ -85,7 +96,7 @@ local function PulsePreview(unit)
     timers[unit] = token
 
     C_Timer.After(8, function()
-        if token.cancelled or timers[unit] ~= token or not _G.MSUF_UnitEditModeActive or InCombat() then
+        if token.cancelled or timers[unit] ~= token or not MSUF_UnitEditModeActive or InCombat() then
             return
         end
 
@@ -100,7 +111,7 @@ local function PulsePreview(unit)
             return
         end
 
-        local popup = _G.MSUF_EM2 and _G.MSUF_EM2.CastPopup
+        local popup = EM2 and EM2.CastPopup
         if popup and popup.IsOpen and popup:IsOpen() then
             return
         end
@@ -111,23 +122,18 @@ local function PulsePreview(unit)
 end
 
 local function RegisterPreviewNudgeTarget(frame, unit, config)
-    local setNudgeTarget = _G.MSUF_EM2_SetPreviewNudgeTarget
-    if type(setNudgeTarget) ~= "function" then
-        return
-    end
-
-    setNudgeTarget({
+    SetPreviewNudgeTarget({
         frame = frame,
         IsActive = function()
-            return _G.MSUF_UnitEditModeActive and frame.IsShown and frame:IsShown()
+            return MSUF_UnitEditModeActive and frame.IsShown and frame:IsShown()
         end,
         Nudge = function(_, deltaX, deltaY)
-            if not _G.MSUF_UnitEditModeActive or InCombat() then
+            if not MSUF_UnitEditModeActive or InCombat() then
                 return
             end
 
             local general = GeneralDB()
-            _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
+            Require("MSUF_EM_UndoBeforeChange", FILE)("castbar", unit, true)
 
             general[config.x] = Round(OffsetX(general, config) + (deltaX or 0))
             general[config.y] = Round(OffsetY(general, config) + (deltaY or 0))
@@ -171,7 +177,7 @@ local function PreviewDragUpdate(unit, config)
         if not dragFrame.dragMoved then
             dragFrame.dragMoved = true
 
-            dragFrame._msufCastbarHistoryDrag = _G.MSUF_EM_UndoBeginChange("castbar", unit, "Move") == true
+            dragFrame._msufCastbarHistoryDrag = UndoBeginChange("castbar", unit, "Move") == true
         end
 
         local liveGeneral = GeneralDB()
@@ -184,7 +190,7 @@ local function PreviewDragUpdate(unit, config)
         else
             local snappedDeltaX = deltaX
             local snappedDeltaY = deltaY
-            local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+            local snap = EM2 and EM2.Snap
 
             if snap and snap.IsEnabled and snap.IsEnabled() and snap.Apply then
                 local snappedX, snappedY = snap.Apply(
@@ -210,7 +216,7 @@ local function PreviewDragUpdate(unit, config)
             dragFrame._msufPopupSyncAcc = (tonumber(dragFrame._msufPopupSyncAcc) or 0) + (tonumber(elapsed) or 0)
             if dragFrame._msufPopupSyncAcc >= CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then
                 dragFrame._msufPopupSyncAcc = 0
-                MSUF_SyncCastbarPositionPopup(unit)
+                SyncCastbarPositionPopup(unit)
             end
         else
             ThrottledApplyUnitAndSync(dragFrame, unit, elapsed)
@@ -222,21 +228,21 @@ end
 --- position popup and the start of a move or size drag.
 local function PreviewMouseDown(unit, config)
     return function(self, button)
-        if _G.MSUF_UnitEditModeActive then
+        if MSUF_UnitEditModeActive then
             RegisterPreviewNudgeTarget(self, unit, config)
         end
 
         if button == "RightButton" then
-            if _G.MSUF_UnitEditModeActive
+            if MSUF_UnitEditModeActive
                 and not MSUF_EditModeSizing
                 and not InCombat()
             then
-                MSUF_OpenCastbarPositionPopup(unit, self)
+                OpenCastbarPositionPopup(unit, self)
             end
             return
         end
 
-        if button ~= "LeftButton" or not _G.MSUF_UnitEditModeActive or InCombat() then
+        if button ~= "LeftButton" or not MSUF_UnitEditModeActive or InCombat() then
             return
         end
 
@@ -304,7 +310,7 @@ local function PreviewMouseUp(unit)
             self._msufPreviewApplyAcc = nil
             self._msufPopupSyncAcc = nil
 
-            local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+            local snap = EM2 and EM2.Snap
             if snap and snap.HideGuides then
                 snap.HideGuides()
             end
@@ -317,14 +323,14 @@ local function PreviewMouseUp(unit)
         end
         if self._msufCastbarHistoryDrag then
             self._msufCastbarHistoryDrag = nil
-            _G.MSUF_EM_UndoCommitChange()
+            UndoCommitChange()
         end
 
         if not moved
-            and _G.MSUF_UnitEditModeActive
+            and MSUF_UnitEditModeActive
             and not InCombat()
         then
-            MSUF_OpenCastbarPositionPopup(unit, self)
+            OpenCastbarPositionPopup(unit, self)
         end
     end
 end

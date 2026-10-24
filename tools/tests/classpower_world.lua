@@ -29,7 +29,10 @@
 -- the stubs are installed and before the first addon file loads, so a smoke can
 -- swap in stricter globals (classpower_secrets.lua) that the files capture.
 -- The cross-file providers ClassPower requires come from
--- classpower_collaborators.lua unless the hook defined its own.
+-- classpower_collaborators.lua unless the hook defined its own. An optional
+-- afterCollaborators hook runs after those providers are installed (they export
+-- real fonts, media and colours over a global a beforeLoad hook set for the same
+-- name) and before the first ClassPower file loads.
 --
 -- Plain Lua 5.1.
 
@@ -200,6 +203,32 @@ function World.Start(repo, toc, class, spec, primary, bars, hooks)
     InstallClient(S)
     if hooks and hooks.beforeLoad then hooks.beforeLoad(env, S) end
     Collaborators.Install(repo, ns)
+    -- The collaborators export the real providers (fonts, media, colours), which replace a global a
+    -- beforeLoad hook set for the same name; a smoke that needs its own controllable provider sets it here.
+    if hooks and hooks.afterCollaborators then hooks.afterCollaborators(env, S) end
+    -- The controller defers work to the next frame through the real keyed scheduler, whose next-frame
+    -- queue is its own frame's OnUpdate (the client runs it once per rendered frame). env:RunTimers() is
+    -- this world's "time passes": it runs that frame first and again after timers queued more work.
+    do
+        local runTimers = env.RunTimers
+        local function NextFrame()
+            local frame = rawget(_G, "MSUF_SchedulerFrame")
+            local flush = frame and frame.scripts and frame.scripts.OnUpdate
+            if not flush then return false end
+            flush(frame, 0)
+            return true
+        end
+        env.RunTimers = function(self, limit)
+            local ran = 0
+            for _ = 1, 50 do
+                local flushed = NextFrame()
+                local count = runTimers(self, limit)
+                ran = ran + count
+                if not flushed and count == 0 then break end
+            end
+            return ran
+        end
+    end
     MSUF_DB = {
         general = {},
         bars = { showClassPower = true, showAltMana = false, playerHPBarEnabled = false },
@@ -219,7 +248,7 @@ function World.Start(repo, toc, class, spec, primary, bars, hooks)
     local CP = World.Upvalue(World.Upvalue(module.Enable, "FullRefresh"), "CP")
     local eventFrame = World.Upvalue(assert(CP.SyncControllerEvents), "eventFrame")
     return {
-        env = env, S = S, CP = CP, eventFrame = eventFrame, module = module,
+        env = env, ns = ns, S = S, CP = CP, eventFrame = eventFrame, module = module,
         onEvent = assert(eventFrame.scripts.OnEvent, "controller OnEvent script missing"),
     }
 end

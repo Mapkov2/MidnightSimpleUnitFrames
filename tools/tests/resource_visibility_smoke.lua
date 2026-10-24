@@ -301,7 +301,7 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists" }) do
     end
     assert(hpFrame.alpha == 0 and manaFrame.alpha == 1, flavor .. ": Health auto-hide leaked into Mana")
     MSUF_DB.bars.showClassPower = false
-    MSUF_ClassPower_Refresh()
+    t.ns.PublicGlobals.MSUF_ClassPower_Refresh() -- a namespace-only export of this client's world, not a global
     assert(hpFrame.shown and manaFrame.shown, flavor .. ": disabling Class Resource disabled independent resources")
     t.module.Disable()
 end

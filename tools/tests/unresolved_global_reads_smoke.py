@@ -60,14 +60,20 @@ select setfenv setmetatable tonumber tostring type unpack xpcall
 coroutine debug io math os package string table
 """.split())
 
-# One pass over the listing. luac -l prints a header per compiled function, both
-# forms carrying that function's source file, then one tab-separated line per
-# instruction; the global's name is the comment at the end of the line. Matching
-# headers and GETGLOBAL/SETGLOBAL lines with a single ordered scan over the raw
-# bytes keeps a 130 MB listing well inside the gate's time budget.
+# One pass over the listing. Validate each function's instruction sequence and
+# source as well as the global lines, so a valid local-only batch is distinguishable
+# from missing or changed compiler output without copying the large raw listing.
 LISTING = re.compile(
-    rb"(?m)^(?:main|function) <([^>]+):\d+,\d+>"
-    rb"|^\t\d+\t\[(\d+)\]\t([GS])ETGLOBAL\t[^\t]*\t; (\S+)\r?$")
+    rb"(?m)^(?P<kind>main|function) <(?P<header>[^>]+):\d+,\d+>"
+    rb" \((?P<count>\d+) instruction(?:s)?,[^\r\n]*\)\r?$"
+    rb"|^\t(?P<global_pc>\d+)\t\[(?P<line>\d+)\]\t(?P<operation>[GS])ETGLOBAL"
+    rb"\t[^\t\r\n]*\t; (?P<name>\S+)\r?$"
+    rb"|^\t(?P<pc>\d+)\t\[(?:\d+|-)\]\t(?![GS]ETGLOBAL\b)"
+    rb"(?P<opcode>[A-Z][A-Z0-9_]*) *\t(?P<operands>[^\r\n]*)\r?$"
+    rb"|^(?P<malformed_global>[ \t]*\d+[^\r\n]*\b[GS]ETGLOBAL\b[^\r\n]*)\r?$")
+
+# Lua 5.1 prints SETLIST's extra word as a comment, skipping its instruction PC.
+SETLIST_EXTRA = re.compile(rb"^\d+ \d+ 0\t; \d+$")
 
 # The globals this addon is allowed to write: its own namespace, its keybinding
 # header/name strings and its slash commands. Blizzard reads the last two by
@@ -141,33 +147,61 @@ def batches(paths, limit=24000):
 
 def listing(luac, paths):
     """GETGLOBAL reads and SETGLOBAL writes of every file, attributed by source."""
-    reads, writes = {}, set()
+    reads, writes, matched = {}, set(), 0
     for batch in batches(paths):
         run = subprocess.run([luac, "-l", "-p"] + batch, capture_output=True)
         if run.returncode != 0:
             fail("luac could not compile a batch starting at %s:\n%s"
                  % (os.path.relpath(batch[0], ROOT), (run.stderr or b"").decode("utf-8", "replace").strip()))
-        source, matched = None, 0
+        requested = {os.path.normcase(os.path.abspath(path)): path for path in batch}
+        seen = set()
+        source, count, next_pc = None, None, 1
         for entry in LISTING.finditer(run.stdout):
-            header = entry.group(1)
+            header = entry.group("header")
             if header is not None:
+                if count is not None and next_pc != count + 1:
+                    fail("luac printed an incomplete instruction listing before its next function")
                 candidate = header.decode("utf-8", "replace")
                 # luac wraps several files in a synthetic "(luac)" chunk of its own.
-                source = None if candidate == "(luac)" else (
-                    os.path.relpath(candidate, ROOT).replace("\\", "/"))
+                source = None
+                if candidate != "(luac)":
+                    key = os.path.normcase(os.path.abspath(candidate))
+                    if key not in requested:
+                        fail("luac printed an unrequested source header: " + candidate)
+                    source = os.path.relpath(requested[key], ROOT).replace("\\", "/")
+                    if entry.group("kind") == b"main":
+                        seen.add(key)
+                count, next_pc = int(entry.group("count")), 1
+                if count == 0:
+                    fail("luac printed a function without any instructions")
+                continue
+            if entry.group("malformed_global") is not None:
+                fail("luac printed a GETGLOBAL or SETGLOBAL line in an unrecognized format")
+            pc = int(entry.group("global_pc") or entry.group("pc"))
+            if count is None or pc != next_pc or pc > count:
+                fail("luac printed an instruction without a complete, ordered function listing")
+            next_pc += 1
+            if entry.group("opcode") == b"SETLIST" and SETLIST_EXTRA.match(entry.group("operands")):
+                next_pc += 1
+            if entry.group("global_pc") is None:
                 continue
             matched += 1
             if source is None:
                 continue
-            name = entry.group(4).decode("utf-8", "replace")
-            if entry.group(3) == b"S":
+            name = entry.group("name").decode("utf-8", "replace")
+            if entry.group("operation") == b"S":
                 writes.add(name)
             else:
                 reads.setdefault(name, []).append(
-                    source + ":" + entry.group(2).decode("ascii"))
-        if matched == 0:
-            fail("luac printed no GETGLOBAL or SETGLOBAL line for a batch of %d files; its "
-                 "listing format changed and this smoke would silently pass" % len(batch))
+                    source + ":" + entry.group("line").decode("ascii"))
+        if count is None or next_pc != count + 1:
+            fail("luac printed no complete instruction listing for a batch of %d files" % len(batch))
+        missing = sorted(set(requested) - seen)
+        if missing:
+            fail("luac printed no main source header for requested file: " + requested[missing[0]])
+    if matched == 0:
+        fail("luac printed no GETGLOBAL or SETGLOBAL line across %d files; its "
+             "listing format changed and this smoke would silently pass" % len(paths))
     return reads, writes
 
 

@@ -231,7 +231,7 @@ local function MSUF_Defaults_Stage_SeedHighlightStatusTooltipDefaults(profileDB,
     if highlightThickness < 1 then highlightThickness = 1 end
     if highlightThickness > 16 then highlightThickness = 16 end
     g.highlightThickness = highlightThickness
-    local fontColors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
+    local fontColors = (MSUF and MSUF.MSUF_FONT_COLORS) or MSUF.PublicGlobals.MSUF_FONT_COLORS
     if type(g.highlightColor) == "table" then
         local color = g.highlightColor
             local r = tonumber(color[1] or color.r or color["1"])

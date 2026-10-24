@@ -43,13 +43,10 @@ local function CheckNavigation(issues)
             if type(item.label) ~= "string" or item.label == "" then
                 Report(issues, "error", ("nav item '%s' has no label"):format(item.key))
             end
-        elseif item.header then
+        elseif item.header or item.title then
             if type(item.id) ~= "string" or item.id == "" then
-                Report(issues, "warn", ("nav header '%s' has no group id"):format(tostring(item.header)))
-            end
-        elseif item.title then
-            if type(item.id) ~= "string" or item.id == "" then
-                Report(issues, "warn", ("nav title '%s' has no group id"):format(tostring(item.title)))
+                local kind = item.header and "header" or "title"
+                Report(issues, "warn", ("nav %s '%s' has no group id"):format(kind, tostring(item.header or item.title)))
             end
         else
             Report(issues, "error", ("nav row %d is neither page nor header/title (DSL parse defect)"):format(i))
@@ -151,9 +148,9 @@ end
 
 _G.SLASH_MSUFMENUCHECK1 = "/msufmenucheck"
 -- Blizzard owns this table; reassigning the global taints protected commands such as /tm.
-_G.SlashCmdList.MSUFMENUCHECK = RunChecks
+SlashCmdList.MSUFMENUCHECK = RunChecks
 --- Listed in /msuf help only while this file is actually loaded.
-if MSUF and MSUF.SlashCommands and MSUF.SlashCommands.RegisterExternal then
+if MSUF.SlashCommands and MSUF.SlashCommands.RegisterExternal then
     MSUF.SlashCommands.RegisterExternal({
         usage = "/msufmenucheck",
         help = "Check the options menu for structural problems.",

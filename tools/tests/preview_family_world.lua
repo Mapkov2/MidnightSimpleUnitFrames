@@ -1,7 +1,6 @@
 -- Compare the actual frozen original family owner with the shipped real graph.
 local root, flavor, sourceRoot, oldRoot = ...
 sourceRoot = sourceRoot or root
-local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
 local oldFile = root .. "/tools/fixtures/preview/LoadConditions.baseline.lua"
 -- Compile each exact source once, but instantiate it anew in every graph.
@@ -17,6 +16,11 @@ local function Compile(path)
     end
     return loadstring(binary)
 end
+-- Route only this fixture module's nested loads through the compilation cache.
+-- Its widget/manifest chunks still execute anew for every fresh world.
+local worldChunk = assert(Compile(root .. "/tools/tests/client_world.lua"))
+setfenv(worldChunk, setmetatable({ loadfile = Compile }, { __index = getfenv(worldChunk) }))
+local World = worldChunk()
 local activeCalls
 local queryHookActive, priorHook, priorMask, priorCount
 local function Observe(name, native)
@@ -106,6 +110,35 @@ local function New(original, cold, queries)
         end
     end
     if queries then ObserveQueries(env) end
+    if original then
+        -- The frozen original owner (tools/fixtures/preview/LoadConditions.baseline.lua) reads and writes the
+        -- namespace-only names below as globals. It gets the legacy global view of the registry the providers
+        -- publish to, so it sees (and, for the six preview request flags, updates) the same state the shipped
+        -- graph does.
+        local legacy = { MSUF_PreviewTestMode = true, MSUF_BossTestMode = true, MSUF_ArenaTestMode = true,
+            MSUF2_BossUnitframePreviewActive = true, MSUF2_ArenaUnitframePreviewActive = true,
+            MSUF_UnitPreviewActive = true }
+        local readOnly = { MSUF_InCombat = true, MSUF_UFCore_RefreshHealthBarColor = true,
+            MSUF_UF_RangeFade_Refresh = true }
+        local meta = getmetatable(env)
+        local inner = meta.__index
+        meta.__index = function(table_, key)
+            if legacy[key] or readOnly[key] then
+                local owned = w.core.PublicGlobals
+                local value = type(owned) == "table" and owned[key] or nil
+                if value ~= nil then return value end
+            end
+            if type(inner) == "function" then return inner(table_, key) end
+            return inner and inner[key]
+        end
+        meta.__newindex = function(table_, key, value)
+            if legacy[key] and type(w.core.ExportPublic) == "function" then
+                w.core.ExportPublic(key, value)
+                return
+            end
+            rawset(table_, key, value)
+        end
+    end
     w:Boot()
     local failure = w:FirstFailure()
     assert(not failure, tostring(failure and failure.file) .. ": " .. tostring(failure and failure.message))
@@ -227,7 +260,14 @@ local function Snapshot(w)
             end
         end
     end
-    for _, name in ipairs({ "MSUF2_BossUnitframePreviewActive", "MSUF2_ArenaUnitframePreviewActive" }) do Save(name, w.env[name]) end
+    -- The preview request provider publishes these two flags to the namespace registry only;
+    -- the frozen original world still keeps them as globals.
+    local owned = type(w.core.PublicGlobals) == "table" and w.core.PublicGlobals or {}
+    for _, name in ipairs({ "MSUF2_BossUnitframePreviewActive", "MSUF2_ArenaUnitframePreviewActive" }) do
+        local value = owned[name]
+        if value == nil then value = w.env[name] end
+        Save(name, value)
+    end
     Save("attachedFrames", #w.core.UF.attachedFrameList)
     Save("unitFrames", #w.core.UF.frameList)
     return out

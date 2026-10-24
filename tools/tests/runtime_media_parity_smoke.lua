@@ -17,7 +17,17 @@ local function Probe(repo, locale)
     world:Boot()
     local failure = world:FirstFailure()
     assert(not failure, failure and (failure.file .. ": " .. failure.message))
-    local env, ns = world.env, world.core
+    local sandbox, ns = world.env, world.core
+    -- The probes call the providers the way a consumer resolves them: a global first, then the
+    -- namespace's registry for the exports the client keeps off _G. Writes go to the sandbox.
+    local env = setmetatable({}, {
+        __index = function(_, key)
+            local value = sandbox[key]
+            if value == nil and ns.PublicGlobals then value = ns.PublicGlobals[key] end
+            return value
+        end,
+        __newindex = function(_, key, value) sandbox[key] = value end,
+    })
     env.MSUF_EnsureDB()
     local general = env.MSUF_DB.general
     local out = {}

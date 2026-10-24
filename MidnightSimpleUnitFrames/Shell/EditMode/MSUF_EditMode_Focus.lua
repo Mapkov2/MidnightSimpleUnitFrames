@@ -1,12 +1,11 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Focus.lua - shared Edit Mode focus, hover, and Menu2 state.
 --- Owns visual focus/highlight bookkeeping between edit-mode movers, quick popups, and Menu2.
 --- It should not save positions directly; drag/commit code owns persistent layout writes.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_Focus.lua")
 local ExportPublic = MSUF.ExportPublic
 
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local Focus = EM2.Focus or {}
@@ -18,12 +17,12 @@ local W8 = "Interface/Buttons/WHITE8X8"
 local U = EM2.Util or {}
 
 local function Menu2Theme()
-    local M2 = (type(MSUF) == "table" and MSUF.MSUF2) or _G.MSUF2
+    local M2 = MSUF.MSUF2
     return (type(M2) == "table" and type(M2.Theme) == "table") and M2.Theme or nil
 end
 
 local function ThemeColor(key, fallback)
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     if ui and ui.Color then return ui.Color(key, fallback) end
     local T = Menu2Theme()
     return (T and T.colors and T.colors[key]) or fallback
@@ -80,12 +79,12 @@ local function IsPopupOpen()
     if EM2.Popups and EM2.Popups.IsAnyOpen then
         return EM2.Popups.IsAnyOpen() == true
     end
-    local st = _G.MSUF_EditState
+    local st = MSUF.Optional("MSUF_EditState")
     return st and st.popupOpen == true or false
 end
 
 local function Menu2()
-    return _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    return MSUF.MSUF2
 end
 
 local function PersistMenuValue(M, key, value)
@@ -134,7 +133,7 @@ local function GroupSectionForComponent(pageKey, component)
 end
 
 local function ClearPassiveMenuFocusRequest()
-    local req = _G.MSUF_EM2_MenuFocusRequest
+    local req = MSUF.Optional("MSUF_EM2_MenuFocusRequest")
     if type(req) == "table" and req.explicit ~= true then
         ExportPublic("MSUF_EM2_MenuFocusRequest", nil)
     end

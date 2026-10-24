@@ -1,14 +1,10 @@
---- GroupFrames/MSUF_GroupFrames_DB_Migrations.lua - cold Group Frame profile repair
---- One-time migrations, the legacy (pre-Auras3) aura model fillers, the Menu2
---- dropdown-domain repair and the ordered EnsureDB repair pipeline.
---- Loads directly after MSUF_GroupFrames_DB.lua. Nothing here runs per frame
---- or per event: GF.EnsureDB (DB.lua) keeps the stable-cache fast path and
---- calls GF.RepairGroupDB once per DB invalidation.
+--- Cold group profile migrations, legacy aura fillers, Menu2 domains and ordered repair.
+--- After DB.lua: GF.EnsureDB calls GF.RepairGroupDB once per invalidation, never per frame/event.
+--- DB.lua owns the stable-cache fast path.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local GF = MSUF.GF or {}
 MSUF.GF = GF
-local ExportPublic = MSUF.ExportPublic
+local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
 
 local tonumber = tonumber
 local tostring = tostring
@@ -16,12 +12,8 @@ local type = type
 local pairs = pairs
 local ipairs = ipairs
 
---- The defaults tables are built once by MSUF_GroupFrames_DB.lua and never
---- replaced, so capturing them at load time is equivalent to reading GF.*.
---- That equivalence only holds while this file loads after DB.lua, so state
---- the load-order contract loudly here. A manifest reorder in
---- UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Group.xml would otherwise alias
---- nil and silently disable every migration below.
+--- DB.lua builds these defaults once and never replaces them; capture only after it loads.
+--- Keep DB.lua first in every Group manifest; the guard below enforces this contract.
 if type(GF.PARTY_DEFAULTS) ~= "table"
     or type(GF.RAID_DEFAULTS) ~= "table"
     or type(GF.MYTHIC_RAID_DEFAULTS) ~= "table"
@@ -538,11 +530,8 @@ local function MigratePortraitSizeMode(conf)
     end
 end
 
---- MSUF <= 5.57 stored early Group Frame aura settings as flat fields. The
---- 5.57 runtime migrated them through GF.MigrateAuraConfig, but that owner no
---- longer exists in 6.0. Keep the migration in the DB layer so it runs for
---- SavedVariables startup, profile switches, full imports, and group-only
---- snapshot imports before the compiled Group Frame spec consumes the data.
+--- Migrate <=5.57 flat aura fields before compiling group specs.
+--- DB repair covers startup, profile switches, full imports and group-only snapshot imports.
 local function LegacyAuraGrowth(conf, fallback)
     local x = tostring(conf and conf.auraGrowthX or ""):upper()
     local y = tostring(conf and conf.auraGrowthY or ""):upper()
@@ -699,6 +688,15 @@ function GF.EnsureSpellIndicatorStyle(conf)
     return si.style, changed
 end
 
+-- Canonical factory states are fresh. Keep a missing lane tooltip inherited
+-- from an explicitly disabled root instead of completing it to true.
+local function PreserveInheritedAuraTooltips(auras, defaults)
+    if auras.showTooltip ~= false or type(defaults) ~= "table" then return end
+    if type(defaults.buff) == "table" then defaults.buff.showTooltip = nil end
+    if type(defaults.debuff) == "table" then defaults.debuff.showTooltip = nil end
+    if type(defaults.externals) == "table" then defaults.externals.showTooltip = nil end
+end
+
 function GF.MigrateAuraConfig(conf, isRaid)
     if type(conf) ~= "table" then return false end
     local changed = false
@@ -710,26 +708,25 @@ function GF.MigrateAuraConfig(conf, isRaid)
         changed = ClearRetiredAuraRootFields(conf) or changed
         -- Native 6.0 profiles are completed only from the native factory
         -- model. Never run the legacy flat/Aura2 default fillers over them.
-        local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalGroupAuraState)
-            or _G.MSUF_CreateCanonicalGroupAuraState
-        if type(createCanonical) == "function" then
-            -- This is repair of an existing canonical profile, not a factory
-            -- creation/reset. Fill missing fields with the former filter
-            -- defaults so installing a new built-in filter cannot opt it in.
-            local state = createCanonical(true)
-            state = type(state) == "table" and state[isRaid and "gf_raid" or "gf_party"] or nil
-            if type(state) == "table" then
-                changed = FillMissingAuraModel(conf.auras, state.auras) or changed
-                if type(conf.privateAuras) ~= "table" and type(state.privateAuras) == "table" then
-                    conf.privateAuras = {}
-                    FillMissingAuraModel(conf.privateAuras, state.privateAuras)
-                    changed = true
-                end
-                if type(conf.spellIndicators) ~= "table" and type(state.spellIndicators) == "table" then
-                    conf.spellIndicators = {}
-                    FillMissingAuraModel(conf.spellIndicators, state.spellIndicators)
-                    changed = true
-                end
+        local createCanonical = MSUF.MSUF_CreateCanonicalGroupAuraState
+            or Require("MSUF_CreateCanonicalGroupAuraState", "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua")
+        -- This is repair of an existing canonical profile, not a factory
+        -- creation/reset. Fill missing fields with the former filter
+        -- defaults so installing a new built-in filter cannot opt it in.
+        local state = createCanonical(true)
+        state = type(state) == "table" and state[isRaid and "gf_raid" or "gf_party"] or nil
+        if type(state) == "table" then
+            PreserveInheritedAuraTooltips(conf.auras, state.auras)
+            changed = FillMissingAuraModel(conf.auras, state.auras) or changed
+            if type(conf.privateAuras) ~= "table" and type(state.privateAuras) == "table" then
+                conf.privateAuras = {}
+                FillMissingAuraModel(conf.privateAuras, state.privateAuras)
+                changed = true
+            end
+            if type(conf.spellIndicators) ~= "table" and type(state.spellIndicators) == "table" then
+                conf.spellIndicators = {}
+                FillMissingAuraModel(conf.spellIndicators, state.spellIndicators)
+                changed = true
             end
         end
         if type(GF.EnsureSpellIndicatorStyle) == "function" then

@@ -40,7 +40,7 @@ local function Boot(flavor)
         .. tostring(failure and failure.message))
     local env = world.env
     world.core.UF.Apply = function() return true end
-    env.MSUF_ForceReanchorAllUnitFrames_Once = function() end
+    world.core.ExportPublic("MSUF_ForceReanchorAllUnitFrames_Once", function() end)
     env.MSUF_InitProfiles()
     env.MSUF2.ApplyService.Flush = function() return true end
     local tooltip = env.CreateFrame("GameTooltip")
@@ -103,13 +103,17 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local texts = LabelTexts(world)
     Check(texts["Arena Name Position"] == nil, context .. " F17: the arena cluster shows a name-position label")
     if client.SupportsUnit("arena") then
-        local saveUnit, saveGroup, isOpen = env.MSUF_EM2_ActiveAuraUnit, env.MSUF_EM2_ActiveAuraGroup, EM2.AuraPopup.IsOpen
-        env.MSUF_EM2_ActiveAuraUnit, env.MSUF_EM2_ActiveAuraGroup = "arena2", "buff"
+        local core = world.core
+        local saveUnit, saveGroup, isOpen = core.PublicGlobals.MSUF_EM2_ActiveAuraUnit, core.PublicGlobals.MSUF_EM2_ActiveAuraGroup, EM2.AuraPopup.IsOpen
+        core.ExportPublic("MSUF_EM2_ActiveAuraUnit", "arena2")
+        core.ExportPublic("MSUF_EM2_ActiveAuraGroup", "buff")
         EM2.AuraPopup.IsOpen = function() return true end
         local text = tostring(InspectorText(world, env))
         Check(text:find("^Arena") and text:find("Auras", 1, true), context
             .. " F17: an open arena aura lane shows in the inspector as " .. text)
-        env.MSUF_EM2_ActiveAuraUnit, env.MSUF_EM2_ActiveAuraGroup, EM2.AuraPopup.IsOpen = saveUnit, saveGroup, isOpen
+        core.ExportPublic("MSUF_EM2_ActiveAuraUnit", saveUnit)
+        core.ExportPublic("MSUF_EM2_ActiveAuraGroup", saveGroup)
+        EM2.AuraPopup.IsOpen = isOpen
         EM2.State.SetUnitKey("arena")
         local arenaText = tostring(InspectorText(world, env))
         Check(arenaText:find("^Arena"), context .. " F17: the arena selection is labelled " .. arenaText)
@@ -141,7 +145,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     conf.offsetX, conf.offsetY = 5, 5
     EM2.State.SetUnitKey("player")
     EM2.HUD.ResetCurrentPosition()
-    local defaultX, defaultY = env.MSUF_GetDefaultUnitOffsets("player")
+    local defaultX, defaultY = world.core.PublicGlobals.MSUF_GetDefaultUnitOffsets("player")
     Check(conf.offsetX == defaultX and conf.offsetY == defaultY, context .. " F20: HUD Reset put the player frame at "
         .. tostring(conf.offsetX) .. ", " .. tostring(conf.offsetY))
     EM2.HUD.SetStatus = setStatus

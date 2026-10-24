@@ -246,7 +246,7 @@ Check(ManagedArenaUnits(forever) == 0 and forever.core.UF.IsManagedUnit("arena1"
 -- Events -------------------------------------------------------------------
 local ARENA_EVENTS = { "ARENA_OPPONENT_UPDATE", "ARENA_PREP_OPPONENT_SPECIALIZATIONS", "PVP_MATCH_STATE_CHANGED" }
 local function Handlers(run, event)
-    local bus = run.env.MSUF_EventBus
+    local bus = run.core.PublicGlobals.MSUF_EventBus
     Check(type(bus) == "table" and type(bus.handlers) == "table", label[run] .. ": EventBus missing")
     local ev = bus.handlers[event]
     local live = {}

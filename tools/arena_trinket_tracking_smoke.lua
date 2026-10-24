@@ -139,7 +139,8 @@ local function RunScenario(kind, startZone)
             IsMists = kind == "mists",
             IsTBC = kind == "classic" or kind == "tbc5",
         },
-        UF = { GetFrame = function(unit) return arenaFrames[unit] end },
+        -- The module reads the UF.frames registry directly (UF.GetFrame is a plain lookup of it).
+        UF = { frames = arenaFrames, GetFrame = function(unit) return arenaFrames[unit] end },
         Secrets = { UnitExistsPlain = function(unit) return liveUnits[unit] == true end },
         ExportPublic = function(name, value)
             _G[name] = value

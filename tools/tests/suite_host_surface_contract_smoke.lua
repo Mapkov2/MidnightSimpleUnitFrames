@@ -42,6 +42,7 @@ local PUBLIC_NAMES = {
     "MSUF2.GetSectionWidth",
     "MSUF2.GlobalPage",
     "MSUF2.HOST_API_VERSION",
+    "MSUF2.IconSkinsPage",
     "MSUF2.InvalidatePage",
     "MSUF2.InvalidateSearchProvider",
     "MSUF2.IsHistoryCapturing",
@@ -131,6 +132,7 @@ local PUBLIC_NAMES = {
     "MSUF_GlobalDB",
     "MSUF_HostAPI",
     "MSUF_HostAPI.ApplyUIScaleProfile",
+    "MSUF_HostAPI.GetIconSkins",
     "MSUF_HostAPI.GetKickReady",
     "MSUF_HostAPI.SetResourceStack",
     "MSUF_HostAPI.version",
@@ -203,7 +205,12 @@ local function Functions(owner, names, label)
     end
 end
 
-Functions(api, "ApplyUIScaleProfile SetResourceStack GetResourceStack GetKickReady", "MSUF_HostAPI")
+Functions(api, "ApplyUIScaleProfile SetResourceStack GetResourceStack GetKickReady GetIconSkins", "MSUF_HostAPI")
+-- Icon skins (2026-10-17): the interface the Suite paints with, and the page that lists its areas.
+local iconSkins = api.GetIconSkins()
+assert(type(iconSkins) == "table" and iconSkins.version == 1 and iconSkins.DEFAULT == "DEFAULT", "icon skin interface")
+Functions(iconSkins, "Compile Paint Subscribe Unsubscribe", "MSUF_HostAPI.GetIconSkins()")
+Functions(menu.IconSkinsPage, "RegisterArea", "MSUF2.IconSkinsPage")
 assert(api.GetKickReady() == host.KickReady and host.KickReady.version == 1)
 Functions(host.KickReady, "Register Unregister HasConsumers SetActive Look RGBA FillColors SelectColor SlotCount Cooldown",
     "MSUF.KickReady")

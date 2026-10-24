@@ -51,8 +51,7 @@ end
 -- pre-translated flag. Each entry names the page line that composes the text;
 -- it matches any page frame on the stack.
 local WIDGET_GAPS = {
-    { file = "Pages/MSUF_Menu2_AdvancedColors.lua", source = "ColorValueAt(ctx, texLayer, colorLabel, 12, rowY," },
-    { file = "Pages/MSUF_Menu2_AdvancedColors.lua", source = "ColorValueAt(ctx, texLayer, gradientLabel, 12, rowY - 36," },
+    { file = "Pages/MSUF_Menu2_AdvancedColors.lua", source = "SchemaRows(ctx, texLayer, {" },
     { file = "Pages/MSUF_Menu2_Auras.lua", source = "W.Text(top, workspaceHintText" },
     { file = "Pages/MSUF_Menu2_Auras.lua", source = 'M.Format("%s Icon Shape"' },
     { file = "Pages/MSUF_Menu2_Auras_Preview.lua", source = 'W.LabelAt(section, M.Format("Shared Preview - %s"' },

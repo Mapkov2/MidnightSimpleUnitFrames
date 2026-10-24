@@ -241,14 +241,8 @@ manifest.LoadSelected(repo, flavor, namespace, providers)
 Check(namespace.Client.Flavor == flavor, "client detection reported " .. tostring(namespace.Client.Flavor))
 Check(namespace.Client.SupportsBlizzardEditMode == true, "Edit Mode enum was not detected")
 
--- Stub: the Kernel bootstrap owns ExportPublic; this smoke loads no Kernel UI.
-function namespace.ExportPublic(name, value)
-    _G[name] = value
-    namespace.Public = namespace.Public or {}
-    namespace.Public[name] = value
-    return value
-end
-
+-- The real Kernel bootstrap (installed into the namespace by LoadSelected) owns
+-- ExportPublic and its global keep policy; this smoke loads no Kernel UI.
 manifest.LoadSelected(repo, flavor, namespace, {
     "State/MSUF_FirstLoad.lua",
     "Kernel/MSUF_Require.lua", "Runtime/MSUF_NumberFormat.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
@@ -262,9 +256,9 @@ manifest.LoadSelected(repo, flavor, namespace, {
 
 -- Stub: State/MSUF_Defaults.lua owns MSUF_EnsureDB and pulls in the whole
 -- defaults stack. Imports only need the call to exist.
-function MSUF_EnsureDB() end
+namespace.ExportPublic("MSUF_EnsureDB", function() end)
 -- The import stages its candidate through the same defaults owner.
-function MSUF_NormalizeProfileDefaults(profile) return profile end
+namespace.ExportPublic("MSUF_NormalizeProfileDefaults", function(profile) return profile end)
 -- Stub: ProfileRuntime.Apply fans out to live frames. Count the calls instead.
 local runtimeApplies = 0
 namespace.ProfileRuntime = {
@@ -274,7 +268,7 @@ namespace.ProfileRuntime = {
     end,
 }
 -- Stub: group-frame config cache owner (UnitFrames engine) is not loaded.
-MSUF_GF_InvalidateConfCache = function() end
+namespace.ExportPublic("MSUF_GF_InvalidateConfCache", function() end)
 
 -- The translation core loads ahead of State/ in every core TOC; the profile chat lines use it.
 local localizationPath = repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"
@@ -284,6 +278,12 @@ assert(loadstring(MSUF_Auras3TestLoader.ReadSource(normalizePath), "@" .. normal
 local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
 local profilesChunk = assert(loadstring(MSUF_Auras3TestLoader.ReadSource(profilesPath), "@" .. profilesPath))
 profilesChunk("MidnightSimpleUnitFrames", namespace)
+
+-- The profile entry points are namespace-only exports (Kernel/MSUF_Bootstrap.lua
+-- keep policy): the smoke reads them from the namespace registry.
+local MSUF_ImportFromString = namespace.PublicGlobals.MSUF_ImportFromString
+local MSUF_ExportSelectionToString = namespace.PublicGlobals.MSUF_ExportSelectionToString
+local MSUF_Profiles_SetImportBlizzardEditMode = namespace.PublicGlobals.MSUF_Profiles_SetImportBlizzardEditMode
 
 Check(type(MSUF_ImportFromString) == "function", "profile import entry point missing")
 Check(type(MSUF_ExportSelectionToString) == "function", "profile export entry point missing")
@@ -376,9 +376,9 @@ do
     ResetActiveProfile()
     MSUF_Profiles_SetImportBlizzardEditMode(true)
     local applied = 0
-    MSUF_BlizzardEditMode_ApplyProfileSnapshot = function()
+    namespace.ExportPublic("MSUF_BlizzardEditMode_ApplyProfileSnapshot", function()
         applied = applied + 1
-    end
+    end)
     local before = runtimeApplies
     Check(MSUF_ImportFromString(editModeString) == true, "import with the Edit Mode switch on failed")
     Check(applied == 1, "Edit Mode snapshot apply ran " .. applied .. " times")
@@ -391,7 +391,7 @@ end
 do
     ResetActiveProfile()
     MSUF_Profiles_SetImportBlizzardEditMode(true)
-    MSUF_BlizzardEditMode_ApplyProfileSnapshot = nil
+    namespace.ExportPublic("MSUF_BlizzardEditMode_ApplyProfileSnapshot", nil)
     namespace.Client.SupportsBlizzardEditMode = false
     local before = runtimeApplies
     Check(MSUF_ImportFromString(editModeString) == true,
@@ -457,14 +457,14 @@ do
     end
     ResetActiveProfile()
     local canonicalCalls = 0
-    MSUF_CreateCanonicalUnitAuras = function()
+    namespace.ExportPublic("MSUF_CreateCanonicalUnitAuras", function()
         canonicalCalls = canonicalCalls + 1
         return { shared = {}, perUnit = {} }
-    end
+    end)
     local before = runtimeApplies
     Check(MSUF_ImportFromString(MSUF_EncodeCompactTable(Snapshot(arenaPayload))) == true,
         "arena slot import failed on " .. flavor)
-    MSUF_CreateCanonicalUnitAuras = nil
+    namespace.ExportPublic("MSUF_CreateCanonicalUnitAuras", nil)
     Check(runtimeApplies == before + 1, "arena slot import did not apply once")
     Check(canonicalCalls > 0, "arena slot import never reached the unit aura reset")
     local perUnit = type(MSUF_DB.auras3) == "table" and type(MSUF_DB.auras3.perUnit) == "table"

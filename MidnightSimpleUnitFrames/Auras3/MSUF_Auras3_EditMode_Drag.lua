@@ -1,8 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/EditMode_Drag: drag capture, throttled layout writes and reversible native mouse forwarding.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_EditMode_Drag.lua")
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -19,19 +18,23 @@ end
 A3.EditModeModules.Drag = function(config, layout, IsEditModeActive, IsConfigBlocked, RequestUnitFrameMenuPreview)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_max, math_abs = math.max, math.abs
-local CreateFrame = _G.CreateFrame
-local UIParent = _G.UIParent
-local GetCursorPosition = _G.GetCursorPosition
-local IsMouseButtonDown = _G.IsMouseButtonDown
-local C_Timer = _G.C_Timer
-local issecretvalue = _G.issecretvalue
-local InCombatLockdown = _G.InCombatLockdown
+local CreateFrame = CreateFrame
+local UIParent = UIParent
+local GetCursorPosition = GetCursorPosition
+local IsMouseButtonDown = IsMouseButtonDown
+local C_Timer = C_Timer
+local issecretvalue = issecretvalue
+local InCombatLockdown = InCombatLockdown
 -- Native aura buttons are Blizzard-owned; a raised accessor is a normal miss.
 local EM = A3.EditMode
 local ExportPublic = MSUF.ExportPublic
+local CALLER = "Auras3/MSUF_Auras3_EditMode_Drag.lua"
+local EM2 = MSUF.EditModeController
+local SyncPositionPopup = MSUF.Require("MSUF_SyncAuras3PositionPopup", CALLER)
+local MAX_ARENA_FRAMES = tonumber(MSUF.Client.MaxArenaOpponents) or 3
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- driver disabled and silently kills the drag OnUpdate.
-local Enum = _G.Enum
+local Enum = Enum
 local ONUPDATE_MODE_DISABLED = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.Disabled) or 0
 local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.RunWhenVisible) or 1
 local AURA_DRAG_RUNTIME_INTERVAL = 0.05
@@ -96,7 +99,7 @@ local function RefreshAffectedRuntimeUnits(unit, shared)
             A3.RefreshUnit("boss" .. i)
         end
     elseif ARENA_UNITS[unit] and shared and shared.arenaEditTogether ~= false then
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+        for i = 1, MAX_ARENA_FRAMES do
             A3.RefreshUnit("arena" .. i)
         end
     elseif unit then
@@ -119,8 +122,7 @@ local function FlushDragRuntime(self, baseUnit, shared, reason, force)
     if not force and not ShouldFlushDragRuntime(self, self and self._lastDragElapsed) then return end
     RefreshAffectedRuntimeUnits(baseUnit, shared)
     RequestUnitFrameMenuPreview(reason or "AURAS3_EDITMODE_DRAG")
-    local sync = _G.MSUF_SyncAuras3PositionPopup
-    if type(sync) == "function" then sync(baseUnit) end
+    SyncPositionPopup(baseUnit)
 end
 
 --- Drag writes are throttled by value equality and blocked in combat. Boss aura
@@ -152,7 +154,7 @@ local function ApplyDragDelta(self, dx, dy, elapsed)
             ApplyDragUnit(auras, "boss" .. i, moverKind, x, y)
         end
     elseif ARENA_UNITS[baseUnit] and shared.arenaEditTogether ~= false then
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+        for i = 1, MAX_ARENA_FRAMES do
             ApplyDragUnit(auras, "arena" .. i, moverKind, x, y)
         end
     elseif baseUnit then
@@ -183,7 +185,7 @@ local function AuraGroupDragOnUpdate(me, elapsed)
         me._dragMoved = true
     end
 
-    local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+    local Snap = EM2 and EM2.Snap
     if Snap and Snap.IsEnabled and Snap.IsEnabled() and Snap.Apply then
         if Snap.HideGuides then Snap.HideGuides() end
         local sx, sy = Snap.Apply((me._snapStartCX or 0) + dx, (me._snapStartCY or 0) + dy, me._snapHW or 0, me._snapHH or 0, me._msufA3SnapName)
@@ -205,10 +207,10 @@ local BeginAuraGroupDrag
 
 local function OpenAuraGroupPopup(group)
     if not (group and IsEditModeActive() and not IsConfigBlocked()) then return false end
-    if type(_G.MSUF_OpenAuras3PositionPopup) ~= "function" then return false end
+    local open = MSUF.Require("MSUF_OpenAuras3PositionPopup", CALLER)
     ExportPublic("MSUF_EM2_ActiveAuraGroup", group._msufA3MoverKind)
     ExportPublic("MSUF_EM2_ActiveAuraUnit", group._msufA3Unit)
-    _G.MSUF_OpenAuras3PositionPopup(group._msufA3Unit, group)
+    open(group._msufA3Unit, group)
     return true
 end
 
@@ -336,11 +338,10 @@ BeginAuraGroupDrag = function(self, fromMotion)
     if not scale or scale == 0 then scale = 1 end
     local cx, cy = GetCursorPosition()
     if not (cx and cy) then return false end
-    if type(_G.MSUF_EM_UndoBeginChange) == "function" and not _G.MSUF__UndoRestoring then
-        self._msufA3HistoryDrag = _G.MSUF_EM_UndoBeginChange("aura", self._msufA3Unit, "Move") == true
-    else
-        local before = _G.MSUF_EM_UndoBeforeChange
-        if type(before) == "function" and not _G.MSUF__UndoRestoring then before("aura", self._msufA3Unit) end
+    -- Undo entry points stay use-time reads: edit-mode providers hook them.
+    if not MSUF.PublicGlobals.MSUF__UndoRestoring then
+        local beginChange = MSUF.Require("MSUF_EM_UndoBeginChange", CALLER)
+        self._msufA3HistoryDrag = beginChange("aura", self._msufA3Unit, "Move") == true
     end
     self._dragStartCursorX = cx / scale
     self._dragStartCursorY = cy / scale
@@ -398,19 +399,18 @@ local function EndAuraGroupDrag(self, button, suppressClick)
     self._dragRuntimePending = nil
     self._lastDragElapsed = nil
     self._dragStartedByMotion = nil
-    if self._msufA3HistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+    if self._msufA3HistoryDrag then
         self._msufA3HistoryDrag = nil
-        _G.MSUF_EM_UndoCommitChange()
+        MSUF.Require("MSUF_EM_UndoCommitChange", CALLER)()
     end
-    local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+    local Snap = EM2 and EM2.Snap
     if Snap and Snap.HideGuides then Snap.HideGuides() end
 
     if moved then
         local _, shared = EnsureDB()
         RefreshAffectedRuntimeUnits(self._msufA3Unit, shared)
         RequestUnitFrameMenuPreview("AURAS3_EDITMODE_DRAG_END")
-        local sync = _G.MSUF_SyncAuras3PositionPopup
-        if type(sync) == "function" then sync(self._msufA3Unit) end
+        SyncPositionPopup(self._msufA3Unit)
         self._lastDragX = nil
         self._lastDragY = nil
         self._dragMoved = false
@@ -593,7 +593,7 @@ local function SetLaneMouseSuppressed(container, suppressed)
     -- forbids untrusted scripts and AlwaysPropagateInput (Blizzard_AuraButton.xml),
     -- and a SetScript or HookScript on it then raises "blocked by secret
     -- aspects". Its input is final from initializeFrame (PrepareStage
-    -- BindRegions, Runtime_ButtonVisuals), so
+    -- BindLaneIdentity and BindPandemicAndTooltip, Runtime_ButtonVisuals), so
     -- the container is the only surface rewired there.
     if type(container.AddAuraSlot) == "function" then return restored end
 

@@ -13,9 +13,9 @@ end
 
 --- Fixed per client once the integration resolved it, so this stays a single
 --- boolean read on the cold anchor path.
-local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
+local CooldownAnchorSupported = MSUF.Require("MSUF_CooldownAnchorSupported", "UnitFrames/Engine/MSUF_UF_Factory_Anchors.lua")
 
-local IsGlobalCooldownAnchorEnabled = _G.MSUF_GlobalCooldownAnchorEnabled
+local IsGlobalCooldownAnchorEnabled = MSUF.Require("MSUF_GlobalCooldownAnchorEnabled", "UnitFrames/Engine/MSUF_UF_Factory_Anchors.lua")
 
 local function CanonicalAnchorFrameName(name)
   if name == "UI_Parent" then return "UIParent" end

@@ -42,7 +42,10 @@ _G.CreateFrame = function(kind) return NewObject(kind) end
 _G.UIParent = NewObject("Frame")
 
 local NS = { MSUF2 = {} }
-assert(loadfile(ROOT .. "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua"))("x", NS)
+-- The selection bar requires the core's pixel layout provider (Kernel API, Geometry, Util).
+local REPO = ROOT:gsub("/$", "")
+local RequireFixture = assert(loadfile(ROOT .. "tools/tests/menu_core_world.lua"))().LoadPixelLayoutProvider(REPO, NS)
+RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua", NS)
 local SB = NS.MSUF2.PreviewSelectionBar
 
 local stored = { x = 12, y = 4 }

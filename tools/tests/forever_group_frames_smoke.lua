@@ -45,8 +45,9 @@ local function LoadSpellIndicators(client, classToken, specIndex)
     local namespace = {
         Client = client,
         GF = {},
-        ExportPublic = function(name, value) _G[name] = value; return value end,
     }
+    -- The shipped Kernel API: the export policy and registry, then Require.
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, namespace)
     for _, path in ipairs({
         "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
         "UnitFrames/Engine/Group/MSUF_UF_Group_SpellIndicators_Data.lua",
@@ -369,6 +370,9 @@ do
         _G.GameEvent = isForever and { RegisterCamelotEvents = function() end } or nil
         _G.MSUF, _G.MSUF_NS = nil, nil
         local namespace = {}
+        -- The core TOC order: Kernel API first (Bootstrap publishes the namespace as _G.MSUF).
+        assert(loadfile(core .. "Kernel/MSUF_Bootstrap.lua"))("MidnightSimpleUnitFrames", namespace)
+        assert(loadfile(core .. "Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
         assert(loadfile(core .. "Game/Shared/Initialize.lua"))("MidnightSimpleUnitFrames", namespace)
         assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua"))(
             "MidnightSimpleUnitFrames_Options", {})

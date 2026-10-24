@@ -1,6 +1,7 @@
 local _,MSUF=...
 local M=MSUF.MSUF2
-local W,T=M.Widgets,M.Theme
+local FILE="Shell/Menu2/Pages/MSUF_Menu2_ProfileSync.lua"
+local T=M.Theme
 local AP=M.AdvancedPage
 local VariantPage,Fields,Sync= M.ProfileVariantPage,MSUF.ProfileFields,MSUF.ProfileSync
 local selected,selectedField,excludedField
@@ -23,7 +24,7 @@ end
 -- variant or sync action reuses it and a new setting still appears.
 local catalogCache
 local function FieldCatalog()
-    local db,profile,revision=M.EnsureDB(),_G.MSUF_ActiveProfile,M._msuf2MenuDataRevision
+    local db,profile,revision=M.EnsureDB(),MSUF_ActiveProfile,M._msuf2MenuDataRevision
     local cached=catalogCache
     if cached and cached.db==db and cached.profile==profile and cached.revision==revision then return cached.list end
     local out,path={},{}
@@ -49,10 +50,7 @@ end
 local function Save(ctx,groups) return VariantPage.Result(ctx,Sync.Replace(groups)) end
 local function Exclusions(state,section,group,groups,y,width)
     local query=""
-    local input=AP.Row(nil, section, { "textinput", VariantPage.Meta("profiles_sync","sync.field.search").controlId, nil,
-        { "Find a setting to exclude",width }, bind = AP.NativeInput })
-    W.MoveWidget(input,section,20,y,width)
-    M.AdvancedPage.RegisterControl(input,VariantPage.Meta("profiles_sync","sync.field.search"),"Find a setting to exclude","editbox")
+    local input=VariantPage.Input(section,"Find a setting to exclude","sync.field.search",20,y,width)
     input:HookScript("OnTextChanged",function(self) query=tostring(self:GetText() or ""):lower() end)
     local function Values()
         local out={{value="",text="Choose a setting"}}
@@ -85,12 +83,7 @@ local function Exclusions(state,section,group,groups,y,width)
     VariantPage.Drop(state,section,"Excluded settings","sync.exclusion.select",Excluded,function() return excludedField or "" end,
         function(value) excludedField=value end,20,y,width)
     VariantPage.Button(state,section,"Remove exclusion","sync.exclusion.remove",30+width,y-24,function()
-        for i,path in ipairs(group.exclude) do
-            if Fields.ID(path)==excludedField then
-                table.remove(group.exclude,i)
-                break
-            end
-        end
+        VariantPage.RemoveFirst(group.exclude,function(path) return Fields.ID(path)==excludedField end)
         return Save(state.ctx,groups)
     end,width)
 end
@@ -104,7 +97,7 @@ function M.ProfileSyncPageBuild(state)
         group=groups[1]
     end
     M.ProfileSearch.Selecting("sync",selected)
-    local names=_G.MSUF_GetAllProfiles()
+    local names=MSUF.Require("MSUF_GetAllProfiles",FILE)()
     local rows=math.ceil(#names/2)
     local width=math.max(180,math.floor((state.contentW-50)/2))
     local section=state.b:CollapsibleSection("profiles_sync","Profile synchronization",group
@@ -116,14 +109,11 @@ function M.ProfileSyncPageBuild(state)
         20,-40,state.contentW-40,T.colors.muted } })
     VariantPage.Drop(state,section,"Sync group","sync.group.select",GroupValues,function() return selected or "" end,
         function(value) selected=value; selectedField=nil; excludedField=nil; VariantPage.Refresh(ctx) end,20,-108,width)
-    local input=AP.Row(nil, section, { "textinput", VariantPage.Meta("profiles_sync","sync.group.name").controlId, nil,
-        { "New sync group name",width }, bind = AP.NativeInput })
-    W.MoveWidget(input,section,30+width,-108,width)
-    M.AdvancedPage.RegisterControl(input,VariantPage.Meta("profiles_sync","sync.group.name"),"New sync group name","editbox")
+    local input=VariantPage.Input(section,"New sync group name","sync.group.name",30+width,-108,width)
     VariantPage.Button(state,section,"Create sync group","sync.group.create",30+width,-178,function()
         local current=Sync.GetGroups() or {}
         local name=tostring(input:GetText() or ""):match("^%s*(.-)%s*$")
-        current[#current+1]={name=name,members={[_G.MSUF_ActiveProfile]=true},modules={unitframes=true},exclude={}}
+        current[#current+1]={name=name,members={[MSUF_ActiveProfile]=true},modules={unitframes=true},exclude={}}
         local ok,why=Sync.Replace(current)
         if ok then selected=name end
         return VariantPage.Result(ctx,ok,why)
@@ -154,12 +144,7 @@ function M.ProfileSyncPageBuild(state)
     VariantPage.Button(state,section,"Save sync group","sync.group.save",20,y,function() return Save(ctx,groups) end,width)
     VariantPage.Button(state,section,"Delete sync group","sync.group.delete",30+width,y,function()
         local current=Sync.GetGroups() or {}
-        for i,g in ipairs(current) do
-            if g.name==selected then
-                table.remove(current,i)
-                break
-            end
-        end
+        VariantPage.RemoveFirst(current,function(g) return g.name==selected end)
         selected=nil
         return Save(ctx,current)
     end,width)

@@ -2,7 +2,6 @@
 -- Client capability checks and shared numeric/frame primitives. The loaded-addon latch belongs here; no aura payload is read.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Platform = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local math_floor = math.floor
@@ -21,17 +20,17 @@ local BORDER_SENSOR_DETAIL = 8
         - (tonumber(FrameLayers.FRAME_BORDER_NORMAL_OFFSET) or 35))
 local AURA_ICON_BASE_OFFSET = tonumber(FrameLayers.AURA_ICON_BASE_OFFSET) or 64
 local UNIT_AURA_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
-local CreateFrame = _G.CreateFrame
-local C_AddOns = _G.C_AddOns
-local C_Timer = _G.C_Timer
+local FILE = "Auras3/Runtime/MSUF_Auras3_Runtime_Platform.lua"
+local Require = MSUF.Require
+local CreateFrame = CreateFrame
+local C_AddOns = C_AddOns
+local C_Timer = C_Timer
 --- Kernel next-frame queue. It dedupes by key and shares one OnUpdate, so a
 --- burst of deferrals costs table stores instead of one C_Timer object each.
 --- Exported by MSUF_Scheduler.lua, which loads long before Auras3.
-local RunNextFrame = _G.MSUF_RunNextFrame
-local issecretvalue = _G.issecretvalue
---- The native latch guard compares Enum.OnUpdateMode values; Enum is absent only in stripped test clients.
-local Enum = MSUF.Optional("Enum")
-local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local RunNextFrame = Require("MSUF_RunNextFrame", FILE)
+local issecretvalue = issecretvalue
+local STANDARD_TEXT_FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local ClampNumber, Clamp01
 
 local EMPTY_EVENTS = {}
@@ -42,7 +41,7 @@ local MAX_CONFIGURABLE_DEBUFF_DURATION = 180
 -- "exclude permanent" rule without dropping normal long-duration auras.
 local MAX_FINITE_AURA_DURATION = 2147483647
 local function InCombat()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return type(InCombatLockdown) == "function" and InCombatLockdown() == true
 end
 
 -- NOTE: Inbound AuraContainer/AuraButton methods (SetEnabled, SetUnit,
@@ -55,30 +54,31 @@ end
 -- AuraButton objects directly; all lane/sensor buttons are created by
 -- AddAuraGroup/AddAuraSlot and customized in initializeFrame.
 
-local function IsAddOnLoaded(addonName)
+-- C_AddOns first; pre-C_AddOns clients keep the plain global.
+local function AddOnLoaded(addonName)
     if C_AddOns and type(C_AddOns.IsAddOnLoaded) == "function" then
         return C_AddOns.IsAddOnLoaded(addonName) == true
     end
-    if type(_G.IsAddOnLoaded) == "function" then
-        return _G.IsAddOnLoaded(addonName) == true
+    if type(IsAddOnLoaded) == "function" then
+        return IsAddOnLoaded(addonName) == true
     end
     return false
 end
 
 local function EnsureBlizzardAuraContainerLoaded()
-    if IsAddOnLoaded(AURA_CONTAINER_ADDON) then
+    if AddOnLoaded(AURA_CONTAINER_ADDON) then
         A3.nativeAuraRuntimeLoadError = nil
         return true
     end
 
-    local loadAddOn = C_AddOns and C_AddOns.LoadAddOn or _G.LoadAddOn
+    local loadAddOn = C_AddOns and C_AddOns.LoadAddOn or LoadAddOn
     if type(loadAddOn) ~= "function" then
         A3.nativeAuraRuntimeLoadError = "LoadAddOn API is unavailable"
         return false
     end
 
     local loaded, reason = loadAddOn(AURA_CONTAINER_ADDON)
-    if loaded == true or IsAddOnLoaded(AURA_CONTAINER_ADDON) then
+    if loaded == true or AddOnLoaded(AURA_CONTAINER_ADDON) then
         A3.nativeAuraRuntimeLoadError = nil
         return true
     end
@@ -96,7 +96,7 @@ end
 local _auraContainerLoadedOnce = false
 local function AuraRuntimeCombatBlocked()
     if _auraContainerLoadedOnce then return false end
-    if IsAddOnLoaded(AURA_CONTAINER_ADDON) then
+    if AddOnLoaded(AURA_CONTAINER_ADDON) then
         _auraContainerLoadedOnce = true
         return false
     end
@@ -108,14 +108,14 @@ end
 -- aura hovers match; GAME-provider users keep Blizzard's default style.
 -- SetTooltipBackdrop/ResetTooltipStyle are secure delegates: call directly.
 local function ApplyAuraTooltipStyle()
-    local inbound = _G.AuraContainerInbound
+    local inbound = AuraContainerInbound
     if not (inbound and type(inbound.SetTooltipBackdrop) == "function") then return end
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local general = MSUF_DB and MSUF_DB.general
     local wantMSUF = (general and general.unitTooltipProvider) == "MSUF"
     local applied = A3._auraTooltipStyleApplied
     if wantMSUF then
         if applied == "MSUF" then return end
-        local createColor = _G.CreateColor
+        local createColor = CreateColor
         inbound.SetTooltipBackdrop({
             backdropInfo = {
                 bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -149,16 +149,16 @@ Clamp01 = function(value, fallback)
     return ClampNumber(value, fallback or 1, 0, 1)
 end
 
-local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
+local NormalizeFrameStrata = Require("MSUF_NormalizeFrameStrata", FILE)
 
-local ReadParentFrameStrata = _G.MSUF_AuraReadParentFrameStrata
+local ReadParentFrameStrata = Require("MSUF_AuraReadParentFrameStrata", FILE)
 
 local function ResolveFrameStrata(parentFrame, value)
     -- Legacy per-element strata cannot bypass the universal 0..30 order.
     return ReadParentFrameStrata(parentFrame)
 end
 
-local SyncFrameStrata = _G.MSUF_AuraSyncFrameStrata
+local SyncFrameStrata = Require("MSUF_AuraSyncFrameStrata", FILE)
 
 return {
     AURA_CONTAINER_ADDON = AURA_CONTAINER_ADDON,
@@ -167,8 +167,6 @@ return {
     AuraRuntimeCombatBlocked = AuraRuntimeCombatBlocked,
     BORDER_SENSOR_DETAIL = BORDER_SENSOR_DETAIL,
     C_Timer = C_Timer,
-    OnUpdateMode = Enum and Enum.OnUpdateMode,
-    tostring = tostring,
     Clamp01 = Clamp01,
     ClampNumber = ClampNumber,
     CreateFrame = CreateFrame,

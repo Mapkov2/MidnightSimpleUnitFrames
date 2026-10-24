@@ -256,6 +256,7 @@ assert(select(1, roundedState()) == 1 and select(2, roundedState()) == 1 and sel
 local presetStart = assert(menuSource:find("local function BuildSlantedSection", 1, true))
 local presetEnd = assert(menuSource:find("\n-- Upgrade-tour playground", presetStart, true))
 local buildPreset = menuSource:sub(presetStart, presetEnd - 1)
+local rowOptions = Slice.Function(menuSource, "function Rows.Options", menuPath)
 local selectedStyles = Slice.Function(menuSource, "local function SlantedStylesSelected", menuPath)
 local switchOn = Slice.Function(menuSource, "local function SlantedSwitchOn", menuPath)
 local applyCount = 0
@@ -263,7 +264,12 @@ local oldApply = _G.MSUF_ApplyRoundedUnitframes
 _G.MSUF_ApplyRoundedUnitframes = function() applyCount = applyCount + 1 end
 local directionGet = Slice.Function(menuSource, "local function SlantedDirectionForScope", menuPath)
 local directionSet = Slice.Function(menuSource, "local function SetSlantedDirectionForScope", menuPath)
+-- The page resolves its core collaborators through the Kernel's MSUF.Require.
+local pageNamespace = {}
+assert(loadfile("tools/tests/require_fixture.lua"))().InstallKernel(".", pageNamespace, nil, nil, true)
 local presetHarness = [[
+local MSUF = ...
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua"
 local db = { player = { healthColorMode = "class" }, gf_party = { portraitMode = "LEFT" } }
 local presetButton, historySource, refreshCount, directionSetter, previewCount, switchGet, switchSet
 local scopeControls = {}
@@ -299,7 +305,7 @@ local M = {
     end,
 }
 local W = {
-    Text = function() end,
+    Text = function() return {} end,
     Dropdown = function() return {} end,
     SwitchAt = function() return {} end,
     ToggleAt = function() return {} end,
@@ -325,15 +331,28 @@ local function ReadB(key, fallback)
 end
 local function CreateSlantedBarPreview() return { RefreshSlantedPreview = function() previewCount = previewCount + 1 end } end
 local function min(a, b) return math.min(a, b) end
-local function Meta(path) return { path = path } end
-local function RegisterControl() end
-]] .. selectedStyles .. "\n" .. switchOn .. "\n" .. directionGet .. "\n" .. directionSet .. "\n" .. buildPreset .. [[
+local floor = math.floor
+local function Meta(path) return { path = path, controlId = path } end
+local function RegisterControl(control, meta, label, kind)
+    control._msuf2RuntimeControlRecord = { controlId = meta.controlId, kind = kind, label = label }
+end
+-- Keep the standalone shape assertions while loading the actual replacing-row
+-- engine and the page's actual policy, with only native widgets/binders stubbed.
+M.Widgets, M.Theme = W, T
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))(
+    "shape-fixture", { MSUF2 = M, CPBuilders = { ExtraAuraDefaults = {} } })
+local Rows = { Schema = M.ControlSchema }
+]] .. rowOptions .. "\nRows.Commands = Rows.Options()\n" .. selectedStyles .. "\n" .. switchOn .. "\n" .. directionGet .. "\n" .. directionSet .. "\n" .. buildPreset .. [[
 return BuildSlantedSection, function()
     return presetButton, historySource, refreshCount, directionSetter, previewCount, switchGet, switchSet, scopeControls
 end, db
 ]]
-local build, state, db = assert(compile(presetHarness))()
-build({}, { width = 720, CollapsibleSection = function() return {} end })
+local build, state, db = assert(compile(presetHarness))(pageNamespace)
+build({}, { width = 720, CollapsibleSection = function()
+    return { _msuf2CollapsibleEntry = { header = { _msuf2RuntimeControlRecord = {
+        controlId = "shape.slanted.section", kind = "toggle", label = "Slanted Bars",
+    } } } }
+end })
 local presetButton, historySource, refreshCount = state()
 assert(presetButton and type(presetButton.click) == "function")
 local _, _, _, _, _, getSwitch, setSwitch = state()

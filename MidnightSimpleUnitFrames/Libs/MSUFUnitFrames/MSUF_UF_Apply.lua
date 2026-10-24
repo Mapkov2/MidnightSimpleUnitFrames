@@ -1,6 +1,4 @@
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-
 
 local Apply = MSUF.Apply or {}
 MSUF.Apply = Apply
@@ -15,7 +13,7 @@ MSUF.Apply = Apply
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret
 Apply.IsSecret = IsSecret
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 function Apply.Texture(region, tex)
   if not region then return end

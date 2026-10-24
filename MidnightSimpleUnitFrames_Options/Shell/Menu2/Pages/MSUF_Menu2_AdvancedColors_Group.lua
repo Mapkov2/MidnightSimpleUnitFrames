@@ -17,7 +17,7 @@ local DB, G, MoveWidget = AP.DB, AP.G, AP.MoveWidget
 local ValueTextPairs = M.ValueTextPairs
 local CP = M.ColorsPage or {}
 M.ColorsPage = CP
-local CurrentApplyService, Meta = CP.CurrentApplyService, CP.Meta
+local CurrentApplyService, Meta, Opt = CP.CurrentApplyService, CP.Meta, CP.Opt
 local GROUP_COLOR_DB_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local GROUP_COLOR_KINDS = { "party", "raid", "mythicraid" }
 local GROUP_BAR_MODES = (M.GroupSpecs and M.GroupSpecs.GF_BAR_MODES)
@@ -151,7 +151,7 @@ local GroupRows = { bind = function(ctx, control, row, kind)
     end
 end }
 local function CurrentGlobalBarColor()
-    local getCache = _G.MSUF_UFCore_GetSettingsCache
+    local getCache = Opt.MSUF_UFCore_GetSettingsCache
     local cache = (type(getCache) == "function") and getCache() or nil
     local modeKey = cache and cache.barMode
     if modeKey == "unified" then
@@ -167,23 +167,20 @@ local function GroupBarMode()
     if mode == nil or mode == "" then return "GLOBAL" end
     return mode
 end
+-- Bar mode -> stored colour prefix and default RGB of the modes that own a colour.
+local HEALTH_BAR_COLOR_KEYS = {
+    dark = { "gfDark", 0, 0, 0 }, unified = { "gfUnified", 0.10, 0.60, 0.90 }, CUSTOM = { "healthCustom", 0.20, 0.80, 0.20 },
+}
 local function GroupHealthBarRGB()
     local mode = GroupBarMode()
     if mode == "GLOBAL" then return CurrentGlobalBarColor() end
-    if mode == "dark" then return GroupRGB("gfDark", 0, 0, 0) end
-    if mode == "unified" then return GroupRGB("gfUnified", 0.10, 0.60, 0.90) end
-    if mode == "CUSTOM" then return GroupRGB("healthCustom", 0.20, 0.80, 0.20) end
+    local key = HEALTH_BAR_COLOR_KEYS[mode]
+    if key then return GroupRGB(key[1], key[2], key[3], key[4]) end
     return 0.20, 0.80, 0.20
 end
 local function SetGroupHealthBarRGB(r, g, b)
-    local mode = GroupBarMode()
-    if mode == "dark" then
-        SetGroupRGB("gfDark", r, g, b, "MSUF2_GROUP_HEALTH_COLOR", "visual")
-    elseif mode == "unified" then
-        SetGroupRGB("gfUnified", r, g, b, "MSUF2_GROUP_HEALTH_COLOR", "visual")
-    elseif mode == "CUSTOM" then
-        SetGroupRGB("healthCustom", r, g, b, "MSUF2_GROUP_HEALTH_COLOR", "visual")
-    end
+    local key = HEALTH_BAR_COLOR_KEYS[GroupBarMode()]
+    if key then SetGroupRGB(key[1], r, g, b, "MSUF2_GROUP_HEALTH_COLOR", "visual") end
 end
 local function BuildGroupFrameColors(ctx, b)
     local pageW = b.width or ctx.width or 720
@@ -206,9 +203,7 @@ local function BuildGroupFrameColors(ctx, b)
         { "dropdown", "gfBarMode", "GLOBAL", { "Bar Color Mode", GROUP_BAR_MODES, min(360, cardW - 32) },
             position = { 12, -10 }, path = "group_frame.health.mode", get = GroupBarMode, set = function(value)
                 value = value or "GLOBAL"
-                local selectedValue1
-                if not (value == "GLOBAL") then selectedValue1 = value end
-                SetGroupValue("gfBarMode", selectedValue1, "MSUF2_GROUP_HEALTH_MODE", "visual")
+                SetGroupValue("gfBarMode", value ~= "GLOBAL" and value or nil, "MSUF2_GROUP_HEALTH_MODE", "visual")
                 if value == "CLASS" or value == "GRADIENT" then
                     SetGroupValue("healthColorMode", value, "MSUF2_GROUP_HEALTH_MODE", "visual")
                 end

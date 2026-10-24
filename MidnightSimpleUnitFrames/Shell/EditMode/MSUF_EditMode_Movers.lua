@@ -1,11 +1,12 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Movers.lua - Edit Mode mover overlays
 --- Movers are dumb overlays. All drag math lives in the drag ticker
 --- (MSUF_EditMode_Layout.lua). Elements and Compat load right after this file.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_Movers.lua")
 local ExportPublic = MSUF.ExportPublic
-local EM2 = _G.MSUF_EM2
+local PublicGlobals = MSUF.PublicGlobals
+local LegacyTheme = MSUF.Optional("MSUF_THEME")
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local Movers = {}
@@ -26,7 +27,7 @@ local function FontSize(role)
 end
 
 local function T()
-    local legacy = _G.MSUF_THEME or {}
+    local legacy = LegacyTheme or {}
     local bg = ThemeColor("card", { legacy.bgR or 0.08, legacy.bgG or 0.09, legacy.bgB or 0.10, legacy.bgA or 0.55 })
     local edge = ThemeColor("borderSoft", { legacy.edgeR or 0.20, legacy.edgeG or 0.30, legacy.edgeB or 0.50, legacy.edgeA or 0.60 })
     local text = ThemeColor("text", { legacy.textR or 0.92, legacy.textG or 0.94, legacy.textB or 1.00, legacy.textA or 1.00 })
@@ -49,7 +50,7 @@ local pendingDragStartY
 local guidedCueMover
 
 local function GuidedPlacementPending()
-    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+    local tour = MSUF.GuidedTour6
     if not (tour and type(tour.GetState) == "function") then return false end
     local state = tour:GetState()
     local preferences = state and state.preferences
@@ -82,7 +83,7 @@ local function EnsureGuidedPlacementCue(mover)
         local usedAtlas = false
         -- Classic Era / TBC clients do not ship the NPE atlas; SetAtlas on an
         -- unknown name raises, so probe the atlas before using it.
-        local atlasAPI = _G.C_Texture
+        local atlasAPI = C_Texture
         local hasAtlas = arrow.SetAtlas and atlasAPI and type(atlasAPI.GetAtlasInfo) == "function"
             and atlasAPI.GetAtlasInfo("NPE_ArrowRight") ~= nil
         if hasAtlas then
@@ -123,7 +124,7 @@ function Movers.RefreshGuidedPlacementCue()
     if not target then return end
     guidedCueMover = target
     local cue = EnsureGuidedPlacementCue(target)
-    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
+    local tour = MSUF.GuidedTour6
     local state = tour and type(tour.GetState) == "function" and tour:GetState() or nil
     local preferences = state and state.preferences or {}
     local moved = preferredKey == "gf_party"
@@ -134,7 +135,7 @@ function Movers.RefreshGuidedPlacementCue()
 end
 
 local function RefreshUFPreview(reason)
-    if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
+    if PublicGlobals.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
     if U.RefreshUFPreview then U.RefreshUFPreview(reason or "EM2_MOVERS") end
 end
 --- Compat refreshes the unit preview the same way.
@@ -143,13 +144,27 @@ Movers.RefreshUFPreview = RefreshUFPreview
 local IsConfigCombatLocked = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 
-local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
+local CALLER = "Shell/EditMode/MSUF_EditMode_Movers.lua"
+local FrameRectToUI = MSUF.Require("MSUF_UF_FrameRectToUI", CALLER)
+
+--- Collaborators of the mover handlers, resolved per call so a hook on
+--- their globals still applies.
+local function ClearPreviewNudgeTarget()
+    MSUF.Require("MSUF_EM2_SetPreviewNudgeTarget", CALLER)(nil)
+end
+
+local function UndoBeginMove(category, key)
+    return MSUF.Require("MSUF_EM_UndoBeginChange", CALLER)(category, key, "Move")
+end
+
+local function UndoCommitMove()
+    MSUF.Require("MSUF_EM_UndoCommitChange", CALLER)()
+end
 
 local function ExpandBounds(bounds, l, r, t, b)
     if not l then return bounds end
-    if not bounds then
-        return { l = l, r = r, t = t, b = b }
-    end
+    if not bounds then return { l = l, r = r, t = t, b = b } end
+    -- Plain comparisons: mover syncs expand every visual rect through here.
     if l < bounds.l then bounds.l = l end
     if r > bounds.r then bounds.r = r end
     if t > bounds.t then bounds.t = t end
@@ -347,7 +362,8 @@ local function ConfigureMoverVisuals(mover, key, cfg, th)
     --- active so hidden/offset name text can still be inspected.
     function mover:UpdateLabelVisibility()
         if self._label then self._label:SetText(MoverLabelText(key, cfg)) end
-        if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then
+        if PublicGlobals.MSUF_PreviewTestMode
+            and not (PublicGlobals.MSUF_InCombat or (InCombatLockdown and InCombatLockdown())) then
             if cfg.externalPublicElement or cfg.popupType == "resource" then
                 --- Resources can be only a few pixels tall or use a hidden
                 --- layout anchor. Keep their drag surface visible in preview.
@@ -409,10 +425,10 @@ local function CreateMover(key, cfg)
         StopPendingDrag(self)
         if self._dragging then return true end
         if BlockConfigCombatLocked() then return end
-        if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
+        ClearPreviewNudgeTarget()
         local externalHistoryStarted = false
         if cfg.externalPublicElement == true then
-            if _G.MSUF_EM_UndoBeginChange("external", key, "Move") ~= true then
+            if UndoBeginMove("external", key) ~= true then
                 return false
             end
             externalHistoryStarted = true
@@ -422,8 +438,8 @@ local function CreateMover(key, cfg)
             return false
         end
         self._dragging = true
-        if type(_G.GetCursorPosition) == "function" then
-            self._msufDragCursorX, self._msufDragCursorY = _G.GetCursorPosition()
+        if type(GetCursorPosition) == "function" then
+            self._msufDragCursorX, self._msufDragCursorY = GetCursorPosition()
         else
             self._msufDragCursorX, self._msufDragCursorY = nil, nil
         end
@@ -436,7 +452,7 @@ local function CreateMover(key, cfg)
             self._msufHistoryDrag = true
         else
             local historyCategory, historyKey = MSUF.EditModeKinds.For(key, cfg):history(key, cfg)
-            self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
+            self._msufHistoryDrag = UndoBeginMove(historyCategory, historyKey) == true
         end
 
         SelectDraggedMover(key, cfg)
@@ -456,7 +472,7 @@ local function CreateMover(key, cfg)
         if EM2.Ticker then moved = EM2.Ticker.EndDrag() end
         if self._msufHistoryDrag then
             self._msufHistoryDrag = nil
-            _G.MSUF_EM_UndoCommitChange()
+            UndoCommitMove()
         end
 
         --- Restore hover
@@ -470,8 +486,8 @@ local function CreateMover(key, cfg)
         --- OnClick (select + open popup) gets eaten on the first click of a
         --- new element. Only a real cursor drag suppresses it.
         local suppress = moved
-        if suppress and self._msufDragCursorX and type(_G.GetCursorPosition) == "function" then
-            local cursorX, cursorY = _G.GetCursorPosition()
+        if suppress and self._msufDragCursorX and type(GetCursorPosition) == "function" then
+            local cursorX, cursorY = GetCursorPosition()
             if cursorX and math.abs(cursorX - self._msufDragCursorX) <= 4
                 and math.abs(cursorY - (self._msufDragCursorY or 0)) <= 4 then
                 suppress = false
@@ -505,7 +521,7 @@ local function CreateMover(key, cfg)
             return
         end
         if button ~= "LeftButton" and button ~= "RightButton" then return end
-        if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
+        ClearPreviewNudgeTarget()
         if EM2.State then EM2.State.SetUnitKey(key) end
         if EM2.HUD then EM2.HUD.RefreshUnitSelector() end
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "mover" }) end

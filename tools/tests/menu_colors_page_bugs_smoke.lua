@@ -20,7 +20,16 @@
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2], "flavor required")
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
-local mw = MenuWorld.Open(root, flavor, { page = "home", keepFlush = true })
+local mw = MenuWorld.Open(root, flavor, { page = "home", keepFlush = true,
+    clientScriptBindings = true, nativeButtonLifecycle = true,
+    beforeOptions = arg[3] and function(world)
+        local load = world.LoadFile
+        world.LoadFile = function(self, path, addon, namespace)
+            local target = arg[4] or "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"
+            if path:gsub("\\", "/") == root .. "/" .. target then path = arg[3] end
+            return load(self, path, addon, namespace)
+        end
+    end })
 local M, env, core = mw.M, mw.env, mw.core
 local db = env.MSUF_DB
 -- The canonical Colors transaction also repaints unrelated gameplay features;
@@ -40,13 +49,14 @@ local function Near(a, b) return type(a) == "number" and math.abs(a - b) < 1e-6 
 
 -- Registered controls by control id and by setting key, with the Colors and Bars
 -- pages' sections built.
-local byId, bySetting = {}, {}
+local byId, bySetting, controlWidgets = {}, {}, {}
 local Register = M.RegisterRuntimeControl
 M.RegisterRuntimeControl = function(widget, payload, ...)
     if type(payload) == "table" and payload.controlId then
         local copy = {}
         for field, value in pairs(payload) do copy[field] = value end
         byId[copy.controlId] = copy
+        controlWidgets[copy.controlId] = widget
         if copy.settingKey then
             bySetting[copy.settingKey] = bySetting[copy.settingKey] or {}
             table.insert(bySetting[copy.settingKey], copy)
@@ -174,6 +184,206 @@ Section("Colors page unit previews request their apply as (unit, reason, opts)",
             .. ") does not match (unit, reason, opts)")
     end
 end)
+
+-- All ten ordinary Dispel controls use their actual client widget callbacks.
+-- The page's other categories and shortcut owners keep their separate contracts.
+local function Same(a, b)
+    if type(a) ~= type(b) then return false end
+    if type(a) ~= "table" then return a == b end
+    for key, value in pairs(a) do if not Same(value, b[key]) then return false end end
+    for key in pairs(b) do if a[key] == nil then return false end end
+    return true
+end
+local function Snapshot() return core.ProfileFields.CopySnapshot(env.MSUF_DB) end
+local function RefreshDispel() M.Refresh() mw:RunTimers() end
+local function DispelInput(widget, kind)
+    if kind == "enabled" then widget:Click("LeftButton")
+    else
+        widget:_msuf2BeginColorInteraction()
+        widget._msuf2OnColorChanged(0, 0.37, 0.91)
+        widget:_msuf2CommitColorInteraction()
+    end
+    mw:RunTimers()
+end
+local function DispelControls(spec)
+    local id = "menu2.opt.colors.advanced.auras.dispel." .. spec.path
+    return Check(controlWidgets[id .. ".enabled"], "missing switch " .. id),
+        Check(controlWidgets[id .. ".color"], "missing color " .. id)
+end
+local function DispelDisplay(spec)
+    local enabled, color = DispelControls(spec)
+    return { enabled = enabled:GetChecked(), rgb = { color:GetRGB() } }
+end
+local function CheckDispelDisplay(spec, enabled, rgb, phase, actual)
+    actual = actual or DispelDisplay(spec)
+    Check(actual.enabled == enabled, phase .. " paired switch display drift " .. spec.key)
+    Check(Near(actual.rgb[1], rgb[1]) and Near(actual.rgb[2], rgb[2]) and Near(actual.rgb[3], rgb[3]),
+        phase .. " paired swatch display drift " .. spec.key)
+end
+local function DispelSetup(spec, state)
+    local general = env.MSUF_DB.general
+    general.dispelTypeColorOverrides = state == "edge"
+        and { [spec.key] = { 0, 0.2, 0.3 }, futureFlag = false } or nil
+    RefreshDispel() M.ClearHistory()
+end
+local function CheckDispel(widget, kind, spec, state, factory)
+    local overrides = env.MSUF_DB.general.dispelTypeColorOverrides
+    local stored = overrides and overrides[spec.key]
+    if kind == "enabled" then
+        Check((stored ~= nil) == (state ~= "edge"), "switch input did not toggle " .. spec.key)
+        Check(widget:GetChecked() == (stored ~= nil), "switch refresh drift " .. spec.key)
+    else
+        Check(stored and stored[1] == 0 and Near(stored[2], 0.37) and Near(stored[3], 0.91),
+            "color input did not save " .. spec.key)
+        local r, g, b = widget:GetRGB()
+        Check(r == 0 and Near(g, 0.37) and Near(b, 0.91), "color widget did not refresh " .. spec.key)
+    end
+    local enabled = DispelControls(spec)
+    Check(enabled:GetChecked() == (stored ~= nil), "paired switch refresh drift " .. spec.key)
+    if state == "edge" then Check(overrides.futureFlag == false, "input dropped unknown false field") end
+    CheckDispelDisplay(spec, kind ~= "enabled" or state ~= "edge",
+        kind == "enabled" and factory or { 0, 0.37, 0.91 }, "input")
+    if kind == "enabled" and state ~= "edge" then
+        Check(stored and Near(stored[1], factory[1]) and Near(stored[2], factory[2]) and Near(stored[3], factory[3]),
+            "switch did not store factory RGB " .. spec.key)
+    end
+end
+Section("Malformed Dispel override containers retain factory fallback", function()
+    local original = env.MSUF_DB.general.dispelTypeColorOverrides
+    for _, invalid in ipairs({ true, false, 0, "invalid" }) do
+        env.MSUF_DB.general.dispelTypeColorOverrides = invalid
+        for _, spec in ipairs(M.DISPEL_COLOR_SPECS) do
+            local r, g, b = M._GetDispelTypeRGB(spec.key, true)
+            local dr, dg, dbb = M._GetDispelTypeRGB(spec.key, false)
+            Check(Near(r, dr) and Near(g, dg) and Near(b, dbb), "malformed fallback drift " .. spec.key)
+            Check(env.MSUF_DB.general.dispelTypeColorOverrides == invalid, "getter repaired profile on read")
+        end
+    end
+    env.MSUF_DB.general.dispelTypeColorOverrides = original
+end)
+local auraApplies = 0
+local auraApply = M.ApplyService.RequestAuraFonts
+M.ApplyService.RequestAuraFonts = function(...) auraApplies = auraApplies + 1 return auraApply(...) end
+local savedOverrides = env.MSUF_DB.general.dispelTypeColorOverrides
+for _, width in ipairs({ 720, 400 }) do
+    local builder = M.Widgets.PageBuilder
+    M.Widgets.PageBuilder = function(ctx, ...) ctx.width = width return builder(ctx, ...) end
+    mw:Select("home") M.InvalidatePage("opt_colors") mw:Select("opt_colors") mw:RunTimers()
+    M.ColorsEnsureCategoryBuilt("colors_auras") BuildSections("opt_colors", "colors_auras")
+    M.Widgets.PageBuilder = builder
+    for _, spec in ipairs(M.DISPEL_COLOR_SPECS) do
+        -- Explicit useOverride=false reads the actual factory owner, never the displayed swatch.
+        local factory = { M._GetDispelTypeRGB(spec.key, false) }
+        local enabled, color = DispelControls(spec)
+        for _, row in ipairs({ { "enabled", enabled }, { "color", color } }) do
+            local kind, widget = row[1], row[2]
+            local id = tostring(widget._msuf2ControlId)
+            Section("Dispel declarations " .. width .. " " .. spec.key .. " " .. kind, function()
+                local declaration = Check(widget._msuf2ControlSchema, "missing typed Dispel declaration")
+                Check(declaration.id == widget._msuf2CommandAction.controlId, "stable control ID changed")
+                Check(declaration.scope == "general" and declaration.applyDomain == "auras", "scope/domain missing")
+                Check(widget._msuf2CommandAction.settingKey == (kind == "color"
+                    and "general.dispelTypeColorOverrides." .. spec.key or nil), "search setting changed")
+            end)
+            for _, state in ipairs({ "default", "edge" }) do
+                Section("Dispel combat " .. width .. " " .. spec.key .. " " .. kind .. " " .. state, function()
+                    DispelSetup(spec, state)
+                    local initial = state == "edge" and { 0, 0.2, 0.3 } or factory
+                    CheckDispelDisplay(spec, state == "edge", initial, "combat setup refresh")
+                    local before, calls = Snapshot(), auraApplies
+                    core.Util.InCombat("PLAYER_REGEN_DISABLED")
+                    env.InCombatLockdown = function() return false end
+                    DispelInput(widget, kind)
+                    local early = Same(before, Snapshot()) and calls == auraApplies
+                    env.InCombatLockdown = function() return true end
+                    DispelInput(widget, kind)
+                    local locked = Same(before, Snapshot()) and calls == auraApplies
+                    core.Util.InCombat("PLAYER_REGEN_ENABLED")
+                    env.InCombatLockdown = function() return false end
+                    mw:Fire("PLAYER_REGEN_ENABLED") mw:RunTimers()
+                    Check(early and locked, "combat input wrote/applied " .. spec.key .. " " .. kind)
+                    Check(not M.Undo(), "combat refusal created undo entry")
+                    CheckDispelDisplay(spec, state == "edge", initial, "combat release")
+                end)
+                Section("Dispel history/input " .. width .. " " .. spec.key .. " " .. kind .. " " .. state, function()
+                    DispelSetup(spec, state)
+                    local initial = state == "edge" and { 0, 0.2, 0.3 } or factory
+                    CheckDispelDisplay(spec, state == "edge", initial, "setup refresh")
+                    local before, applies = Snapshot(), auraApplies
+                    DispelInput(widget, kind) CheckDispel(widget, kind, spec, state, factory)
+                    Check(auraApplies > applies, "input did not request aura apply")
+                    local after = Snapshot()
+                    RefreshDispel()
+                    Check(Same(after, Snapshot()), "input refresh changed exact edited profile")
+                    CheckDispel(widget, kind, spec, state, factory)
+                    Check(M.Undo(), "input created no undo entry") mw:RunTimers()
+                    Check(Same(before, Snapshot()), "undo did not restore exact sparse profile")
+                    -- Inspect Undo's own repaint before asking for any additional refresh.
+                    CheckDispelDisplay(spec, state == "edge", initial, "undo")
+                    RefreshDispel()
+                    Check(Same(before, Snapshot()), "undo refresh changed exact sparse profile")
+                    CheckDispelDisplay(spec, state == "edge", initial, "undo refresh")
+                    Check(not M.Undo(), "one input created multiple undo entries")
+                    local pending, pendingApplies = M.GetHistoryState(), auraApplies
+                    local pendingEntry = Check(M.historyRedo[1], "Undo left no real pending Redo entry")
+                    Check(pending.canRedo and pending.redoCount == 1 and pending.undoCount == 0,
+                        "Undo did not leave exactly one pending Redo")
+                    local function CapturePending(phase, redoResult)
+                        return { phase = phase, redoResult = redoResult, db = Snapshot(), display = DispelDisplay(spec),
+                            history = M.GetHistoryState(), entry = M.historyRedo[1],
+                            undoCount = #M.historyUndo, redoCount = #M.historyRedo, applies = auraApplies }
+                    end
+                    -- No Setup, ClearHistory or successful Redo until both actual refused inputs and release.
+                    core.Util.InCombat("PLAYER_REGEN_DISABLED")
+                    env.InCombatLockdown = function() return false end
+                    DispelInput(widget, kind)
+                    local edge = CapturePending("pending combat-edge", M.Redo())
+                    env.InCombatLockdown = function() return true end
+                    DispelInput(widget, kind)
+                    local locked = CapturePending("pending combat", M.Redo())
+                    core.Util.InCombat("PLAYER_REGEN_ENABLED")
+                    env.InCombatLockdown = function() return false end
+                    mw:Fire("PLAYER_REGEN_ENABLED") mw:RunTimers()
+                    local released = CapturePending("pending combat-release")
+                    -- Check captured phases after unlocking, so a failed assertion cannot strand this section in combat.
+                    for _, observed in ipairs({ edge, locked, released }) do
+                        Check(Same(before, observed.db) and observed.applies == pendingApplies,
+                            observed.phase .. " wrote/applied while Redo pending")
+                        Check(Same(pending, observed.history) and observed.entry == pendingEntry
+                            and observed.undoCount == 0 and observed.redoCount == 1,
+                            observed.phase .. " destroyed or replaced pending Redo")
+                        CheckDispelDisplay(spec, state == "edge", initial, observed.phase, observed.display)
+                    end
+                    Check(edge.redoResult == false and locked.redoResult == false, "combat Redo was not refused")
+                    Check(M.Redo(), "input created no redo entry") mw:RunTimers()
+                    Check(Same(after, Snapshot()), "redo did not restore exact edited profile")
+                    CheckDispel(widget, kind, spec, state, factory)
+                    RefreshDispel()
+                    Check(Same(after, Snapshot()), "redo refresh changed exact edited profile")
+                    CheckDispel(widget, kind, spec, state, factory)
+                end)
+            end
+        end
+        Section("Dispel readback edge " .. width .. " " .. spec.key, function()
+            local defaults = { M._GetDispelTypeRGB(spec.key, false) }
+            env.MSUF_DB.general.dispelTypeColorOverrides = { [spec.key] = { r = -2, g = 1.4, b = 0 } }
+            local r, g, b = M._GetDispelTypeRGB(spec.key, true)
+            Check(r == 0 and g == 1 and b == 0, "named RGB was not clamped")
+            env.MSUF_DB.general.dispelTypeColorOverrides[spec.key] = { 0.2, 0.3 }
+            r, g, b = M._GetDispelTypeRGB(spec.key, true)
+            Check(Near(r, defaults[1]) and Near(g, defaults[2]) and Near(b, defaults[3]), "incomplete RGB fallback drift")
+            env.MSUF_DB.general.dispelTypeColorOverrides = nil
+            RefreshDispel() color._msuf2OnColorChanged(0, 0.37, 0.91) mw:RunTimers()
+            mw:Select("home") mw:Select("opt_colors") mw:RunTimers()
+            r, g, b = M._GetDispelTypeRGB(spec.key, true)
+            Check(r == 0 and Near(g, 0.37) and Near(b, 0.91), "reopen readback drift")
+            enabled:Click("LeftButton") mw:RunTimers()
+            Check(env.MSUF_DB.general.dispelTypeColorOverrides == nil, "last disable materialized defaults")
+        end)
+    end
+end
+M.ApplyService.RequestAuraFonts = auraApply
+env.MSUF_DB.general.dispelTypeColorOverrides = savedOverrides
 
 if #failures > 0 then
     error("menu_colors_page_bugs_smoke (" .. flavor .. "): " .. #failures .. " section(s) failed\n  "

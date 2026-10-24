@@ -2,15 +2,27 @@
 local root = assert(arg[1], "repo root required")
 local function Noop() end
 local namespace = { Client = { IsClassic = true }, MSUF_Auras3 = {} }
+-- Files run through the shipped loader: the real Kernel API, and a provider this file
+-- requires and the zoom checks never reach is a forwarder that raises when used.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 local function Load(path)
-    return assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", namespace)
+    return RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. path, namespace)
 end
+-- The real pixel layout owner (Util, after the geometry owner it needs): IconShape.lua binds
+-- MSUF_PixelLayoutRegion at load. This namespace has no Midnight client, so it hands frames back.
+Load("Shell/EditMode/MSUF_EditMode_Geometry.lua")
+Load("Kernel/MSUF_Util.lua")
 Load("Auras3/MSUF_Auras3_IconShape.lua")
 local A3 = namespace.MSUF_Auras3
 A3.Runtime = { ConfigValues = {} }
 local function Clamp(value, fallback, low, high)
     return math.max(low, math.min(high, tonumber(value) or fallback))
 end
+-- ConfigValues takes NormalizeCandidateSpellIDs from the spell-indicator config owner, which
+-- the TOC initializes before the aura runtime (Auras3/MSUF_Auras3_SpellIndicators.lua runs it).
+A3.SpellIndicators = {}
+Load("Auras3/MSUF_Auras3_SpellIndicators_Config.lua")
+A3.SpellIndicatorModules.Config()
 Load("Auras3/Runtime/MSUF_Auras3_Runtime_ConfigValues.lua")
 local native = namespace.Auras3RuntimeFactories.ConfigValues("MidnightSimpleUnitFrames", namespace, A3, {}, nil, {
     Appearance = { Shape = A3.IconShape }, Platform = { ClampNumber = Clamp }, Schema = {}, Signatures = {},
@@ -52,6 +64,14 @@ local function PreviewZoom(path, functionName)
         PaintIconLayers=Noop, ShowPreviewTimer=Noop,
     }, {__index=_G}))
     return chunk()
+end
+-- The mock painter binds the preview sample builders at load (the TOC loads
+-- UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua first); the crop checks never build a
+-- sample, so those providers are forwarders that raise when used.
+do
+    local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua", "rb"))
+    RequireFixture.DeferRequired(namespace, file:read("*a"), "Auras3/MSUF_Auras3_MockAuraPainter.lua")
+    file:close()
 end
 local mock = assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, namespace)
 local function SharedPreviewZoom(path, callsite, binding)

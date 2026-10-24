@@ -114,16 +114,20 @@ local function Start(spec)
     _G.MSUF_NS = ns
     t.ns = ns
     t.player = player
-    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
-    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
+    -- The real Kernel API (Bootstrap's exports, Require/Optional) replaces the export stub; the
+    -- Power and Text files require the pixel regions the real Geometry and Util own.
+    local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.InstallKernel(repo, ns, nil, nil, true)
+    RequireFixture.LoadShipped(repo, "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua", ns)
+    RequireFixture.LoadShipped(repo, "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua", ns)
     -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry the Power
     -- apply calls; this harness has no boss frames.
-    _G.MSUF_ApplyBossPhysicalBarGeometry = function() end
+    ns.UF.Factory = { ApplyBossPhysicalBarGeometry = function() end }
 
     -- The actual Power element owns all surfaces. The text layout module owns
     -- the independent hover overlay, which must not reveal hidden power text.
-    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"))("MidnightSimpleUnitFrames", ns)
-    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua"))("MidnightSimpleUnitFrames", ns)
+    RequireFixture.LoadShipped(repo, "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua", ns)
+    RequireFixture.LoadShipped(repo, "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua", ns)
     local bar = env:CreateFrame("StatusBar", nil, player)
     bar.MSUFPowerBorderHost = env:CreateFrame("Frame", nil, player)
     local background = player:CreateTexture()

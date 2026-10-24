@@ -5,8 +5,9 @@
 --- 12.1 native UnitFrame backend split so secure aura objects stay isolated
 --- from menu/edit code.
 local addonName, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local ExportPublic = MSUF.ExportPublic
+local Optional = MSUF.Optional
+local TranslateProfileToCurrent = MSUF.Require("MSUF_ProfileIO_TranslateProfileToCurrent", "Auras3/MSUF_Auras3_Core.lua")
 
 local type = type
 local tostring = tostring
@@ -178,7 +179,7 @@ function A3._RecordNativeAuraRuntimeError(message)
     A3.nativeAuraRuntimeError = message
     if reportedNativeAuraRuntimeErrors[message] then return message end
     reportedNativeAuraRuntimeErrors[message] = true
-    local report = MSUF.ReportError or _G.MSUF_ReportError
+    local report = MSUF.ReportError
     if type(report) == "function" and NativeAuraRuntimeExpected() then
         report("Auras3", message)
     end
@@ -202,7 +203,7 @@ A3.PlayerDefensiveFactoryPolicyMarker = PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER
 A3.NewPlayerDefensiveContainer = NewPlayerDefensiveContainer
 A3.EnsurePlayerDefensiveCoreDefault = EnsurePlayerDefensiveCoreDefault
 
-MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
+MSUF.AuraCore = MSUF.AuraCore or Optional("MSUF_AuraCore") or {}
 ExportPublic("MSUF_AuraCore", MSUF.AuraCore)
 MSUF.AuraCore.Auras3 = A3
 
@@ -470,7 +471,7 @@ function A3.ForEachRuntimeUnit(scope, callback, context)
 end
 
 local function RootDB()
-    return _G.MSUF_DB
+    return MSUF_DB
 end
 
 local function EnsureRootDB()
@@ -506,7 +507,7 @@ function A3.NormalizeProfileDB(db)
         --- exported, or an import candidate whose payload already ran the untrusted
         --- import pass. Without the trust flag the translator wiped the defaults and
         --- dispel migration stamps and forced showNavigationIcons back on.
-        _G.MSUF_ProfileIO_TranslateProfileToCurrent(db, {
+        TranslateProfileToCurrent(db, {
             source = "auras3_core", markProfile = true, trustProfileMetadata = true,
         })
     end
@@ -731,22 +732,17 @@ end
 A3.NormalizeDebuffTypeBorderMode = NormalizeDebuffTypeBorderMode
 ExportPublic("MSUF_NormalizeAuraDebuffTypeBorderMode", NormalizeDebuffTypeBorderMode)
 
--- Legacy group flags intentionally retain their own fallback semantics.
+-- Legacy group flags intentionally retain their own fallback semantics: an
+-- off or unknown string value (but never a saved false) follows the legacy flag.
 local function NormalizeDispelBorderMode(value, legacyEnabled)
-  if value == true then return "SYMBOL" end
-  if value == false then return "OFF" end
-  value = tostring(value or ""):upper()
-  if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
-  if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
-    or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
-    return "SYMBOL"
-  end
-  if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
-  return legacyEnabled == true and "SYMBOL" or "OFF"
+  if value == true or value == false then return NormalizeDebuffTypeBorderMode(value) end
+  local mode = NormalizeDebuffTypeBorderMode(value, "OFF")
+  if mode == "OFF" then return legacyEnabled == true and "SYMBOL" or "OFF" end
+  return mode
 end
 ExportPublic("MSUF_NormalizeLegacyDispelBorderMode", NormalizeDispelBorderMode)
 
-local AuraStrataIsSecret = _G.issecretvalue
+local AuraStrataIsSecret = issecretvalue
 local function SyncFrameStrata(frame, strata)
     if not (frame and frame.SetFrameStrata) then return false end
     if AuraStrataIsSecret(strata) == true then return false end

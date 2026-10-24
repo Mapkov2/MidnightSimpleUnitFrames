@@ -16,7 +16,6 @@
 ---   there is no taint surface and no combat gating is required.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -51,7 +50,7 @@ end
 local hasNativeAuraRuntime
 do
     local client = MSUF.Client
-    local addOns = _G.C_AddOns
+    local addOns = C_AddOns
     local isAddOnLoaded = type(addOns) == "table" and addOns.IsAddOnLoaded or nil
     hasNativeAuraRuntime = (type(client) == "table" and client.IsForever == true)
         or (type(isAddOnLoaded) == "function" and isAddOnLoaded("Blizzard_AuraContainer") == true)
@@ -99,8 +98,8 @@ local function Init()
     wired = true
 
     MSUF.MSUF_EventBus:Register("PLAYER_ENTERING_WORLD", KEY .. "_PEW", function()
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(1.5, Show)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1.5, Show)
         else
             Show()
         end

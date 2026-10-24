@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ============================================================================
 --- MSUF_Widgets.lua
 --- Minimal widget helpers for Midnight Simple Unit Frames.
@@ -6,12 +5,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- removed - zero external callers after Widget SDK migration.
 --- ============================================================================
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/UI/MSUF_Widgets.lua")
 local ExportPublic = MSUF.ExportPublic
 
 --- Shared UI primitives used by Menu2 and Edit Mode.
 --- Keep this layer independent from Menu2 load order: Edit Mode loads first.
-local UI = MSUF.UI or _G.MSUF_UI or {}
+local UI = MSUF.UI or {}
 MSUF.UI = UI
 ExportPublic("MSUF_UI", UI)
 
@@ -20,7 +19,8 @@ local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
 local EXPRESSWAY_SEMIBOLD = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway SemiBold.ttf"
 local max = math.max
-local SetFontChecked = _G.MSUF_SetFontChecked
+local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", "Shell/UI/MSUF_Widgets.lua")
+local SkinButton = MSUF.Require("MSUF_SkinButton", "Shell/UI/MSUF_Widgets.lua")
 
 -- One shared type scale for Menu2 and Edit Mode. Preview content may use the
 -- micro token, but configurable unit-frame text remains outside this system.
@@ -106,16 +106,14 @@ function UI.ResolveRoleFontPath(fontPath, role)
 end
 
 function UI.ResolveConfiguredFontPath(role, fallback, size, flags)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general or nil
     local key = type(general) == "table" and general.menuFontKey or nil
     local path = type(key) == "string" and key ~= "" and key or fallback or FONT
     if type(path) == "string" and not (path:find("\\", 1, true) or path:find("/", 1, true)) then
-        local resolver = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey
-        if type(resolver) == "function" then path = resolver(path, size, flags) or path end
+        path = MSUF.Require("MSUF_ResolveFontKeyPath", "Shell/UI/MSUF_Widgets.lua")(path, size, flags) or path
     end
-    local safe = _G.MSUF_ResolveSafeFontPath
-    if type(safe) == "function" then path = safe(path, size, flags, key) or path end
+    path = MSUF.Require("MSUF_ResolveSafeFontPath", "Shell/UI/MSUF_Widgets.lua")(path, size, flags, key) or path
     return UI.ResolveRoleFontPath(path, role)
 end
 
@@ -163,7 +161,7 @@ end
 
 function UI.GetMenu2Theme()
     if type(UI._menu2Theme) == "table" then return UI._menu2Theme end
-    local m2 = (type(MSUF) == "table" and MSUF.MSUF2) or _G.MSUF2
+    local m2 = MSUF.MSUF2
     local theme = type(m2) == "table" and m2.Theme
     return type(theme) == "table" and theme or nil
 end
@@ -174,7 +172,7 @@ local function Tr(text)
         local translated = MSUF.Translate(text)
         if translated ~= nil then return translated end
     end
-    local locale = MSUF.L or _G.MSUF_L
+    local locale = MSUF.L
     if type(locale) == "table" and locale[text] ~= nil then return locale[text] end
     if type(MSUF.TR) == "function" then
         local translated = MSUF.TR(text)
@@ -311,12 +309,12 @@ function UI.Button(parent, text, width, height, opts)
         return btn
     end
 
-    btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, _G.BackdropTemplateMixin and "BackdropTemplate" or nil))
+    btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil))
     btn:SetSize(width or 120, height or 24)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
     local fill = PixelLayoutRegion(btn:CreateTexture(nil, "BACKGROUND"))
     fill:SetAllPoints()
-    local edge = PixelLayoutRegion(CreateFrame("Frame", nil, btn, _G.BackdropTemplateMixin and "BackdropTemplate" or nil))
+    local edge = PixelLayoutRegion(CreateFrame("Frame", nil, btn, BackdropTemplateMixin and "BackdropTemplate" or nil))
     edge:SetAllPoints()
     edge:SetFrameLevel(max(0, (btn.GetFrameLevel and btn:GetFrameLevel() or 1) - 1))
     if edge.SetBackdrop then PixelLayoutRegion(edge, "SetBackdrop", { edgeFile = W8, edgeSize = 1 }) end
@@ -516,7 +514,7 @@ local function BuildPromptFrame(style)
         button._msufPromptField = field
         button:RegisterForClicks("LeftButtonUp")
         button:SetScript("OnClick", PromptButtonClick)
-        MSUF_SkinButton(button)
+        SkinButton(button)
         buttons[index] = button
     end
     frame:SetScript("OnKeyDown", PromptKeyDown)
@@ -552,7 +550,7 @@ local function LayoutPromptChoices(frame, spec)
             if not button then
                 button = PixelLayoutRegion(CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"))
                 button:SetScript("OnClick", PromptChoiceClick)
-                MSUF_SkinButton(button)
+                SkinButton(button)
                 frame._msufPromptChoices[index] = button
             end
             button._msufChoiceValue = choice.value

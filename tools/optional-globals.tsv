@@ -36,6 +36,55 @@ MSUF_UpdateAbsorbBarTextures	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_Te
 MSUF_UpdateAllFonts	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
 MSUF_UpdateAllFonts_Immediate	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
 MSUF_UpdateCastbarTextures	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a texture refresh during the core load leaves the castbars to their own first apply
-MSUF_DB	load-order	MidnightSimpleUnitFrames/State/MSUF_Defaults.lua	SavedVariables can be absent until profile initialization; Config reads them only at an apply/login boundary.
 MSUF_IsAvailableFontPath	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua	early Fonts resolution precedes registry metadata; look up at use time
 MSUF_GetConfiguredFontColor	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua	early Fonts settings precede Colors; default white until its owner loads
+MSUF2	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua	the always-loaded scale runtime creates the menu namespace before the load-on-demand menu exists
+MSUF_AnyEditModeListeners	load-order	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua	the listener owner creates its table before the first publication; later consumers use that same table
+MSUF_ArenaCastbarPreview1	module-toggle	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua	the suffixed arena preview frame is created lazily through the real preview pool only on supported clients
+MSUF_ArenaCastbars	module-toggle	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua	the arena descriptor publishes its frame pool only after supported enabled arena castbars are first created
+MSUF_AuraCore	load-order	MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua	the owning file reuses a prior AuraCore table before its first publication; initial absence creates the owner
+MSUF_BAL_InvalidateColors	optional-module	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_BalanceDruid.lua	the Balance owner returns for non-Druids and is absent from Classic TOCs; shared class-power color updates tolerate that absence
+MSUF_BossCastbars	module-toggle	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua	the boss descriptor publishes its frame pool only after enabled boss castbars are first created
+MSUF_CP_CONST	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Constants.lua	the first ClassPower file creates its shared constants table before initial publication
+MSUF_ClassPowerContainer	module-toggle	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Build.lua	the named container is created only when enabled class resources obtain a real player frame
+MSUF_EM2	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_EditPopupUI.lua	popup primitives load before Edit Mode Core and create the EM2 table which Core later reuses
+MSUF_EM2_ActivePreviewNudgeTarget	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua	a preview publishes its active nudge target only while selected and clears it with nil when released
+MSUF_EM2_AuraPopup	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_AuraPopup.lua	the named aura popup is created only when the user opens that Edit Mode popup
+MSUF_EM2_CancelConfirm	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua	the named confirmation popup is created lazily on the first discard request
+MSUF_EM2_CastPopup	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_CastPopup.lua	the named castbar popup is created only when the user opens that Edit Mode popup
+MSUF_EM2_HUD	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua	the named dock frame is created only when the Edit Mode HUD is first built
+MSUF_EM2_HUD_PreviewAddonSlot	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua	the named preview-addon slot exists only after the Edit Mode HUD is first built
+MSUF_EM2_HUD_Row2	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua	the named inspector frame is created only when the Edit Mode HUD inspector is first built
+MSUF_EM2_Menu2Style	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_EditPopupUI.lua	the popup style adapter is created when no prior independent adapter has been published
+MSUF_EM2_MenuFocusRequest	module-toggle	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Focus.lua	a pending menu-focus request is published on demand and consumed by clearing it with nil
+MSUF_EditState	load-order	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua	the owning file creates and publishes EditState when its initial lookup has no prior table
+MSUF_EllesmereEditMode_ResumePreview	optional-module	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	the external-edit bridge is loaded by the Mainline TOC only; Classic Edit Mode retains its own preview lifecycle
+MSUF_EllesmereEditMode_SuspendPreview	optional-module	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	the external-edit bridge is loaded by the Mainline TOC only; Classic Edit Mode retains its own preview lifecycle
+MSUF_FONT_COLORS	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua	the palette owner adopts an existing public palette before its first publication; otherwise it publishes its default table
+MSUF_FONT_LIST	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_Fonts.lua	the font catalogue owner adopts an existing catalogue or publishes its own on first load
+MSUF_GetPetHappinessIcon	optional-module	MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua	the icon provider returns when SupportsPetHappiness is false and is not loaded by Mists; shared status preparation runs on those clients too
+MSUF_HideLayerOverviewForAnchor	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua	Edit Mode can close an anchor before the load-on-demand options module publishes the layer-overview action
+MSUF_LateAnchorReanchorState	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua	the shared late-anchor request state is created on the first scheduled reanchor request
+MSUF_PetBattleFrameHider	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua	the secure named hider is created lazily out of combat when a unit frame first needs it
+MSUF_PredictionTestModes	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua	the preview-state publisher clears the test-mode table when no prediction preview is enabled
+MSUF_RoundedUF_OnApplyAll	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua	the rounded-frame installer publishes this callback only while rounded frames are enabled and clears it when disabled
+MSUF_STYLE	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua	the style owner adopts a previous public uppercase style alias or publishes its own during initial publication
+MSUF_ShowLayerOverview	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua	Edit Mode can run before the load-on-demand options module publishes the layer-overview action
+MSUF_ShowReloadRecommendedPopup	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua	the factory can request a reload hint before the load-on-demand options support popup is available
+MSUF_StandaloneOptionsWindow	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua	the named window is published only after the load-on-demand menu builds its window shell
+MSUF_Style	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua	the style owner adopts a previous public style table or publishes its own during initial publication
+MSUF_THEME	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua	the style owner creates the theme table when no earlier public theme exists
+MSUF_UIThemeProviderCandidate	optional-module	MidnightSimpleUnitFrames/Runtime/MSUF_UIThemeBridge.lua	an external skin may park a theme provider before the bridge loads; no external provider is the documented normal state
+MSUF_UpdateAllBarGradients	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua	the gradient owner preserves an existing updater or publishes its local updater on first load
+MSUF_UpdateAllBarTextures_Immediate	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_TextureRuntime.lua	the texture owner checks for a previous immediate updater before installing its own implementation and deferred wrapper
+MSUF_UpdateCastbarTextures_Immediate	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a texture refresh while the core loads runs before Castbars_Core; castbars retain their own first apply
+MSUF_ArenaCastbar	module-toggle	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua	the literal is the descriptor-owned indexed frame prefix; a supported arena castbar instance may be absent before the enabled pool is created
+MSUF_ArenaCastbarPreview	module-toggle	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua	the literal is the descriptor-owned suffixed lazy preview frame family, absent until a supported arena preview is requested
+MSUF_BossCastbar	module-toggle	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua	the literal is the descriptor-owned indexed frame prefix; a boss castbar instance may be absent before the enabled pool is created
+MSUF_BossCastbarPreview	module-toggle	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars_Preview.lua	the literal is the descriptor-owned lazy preview frame family: boss slot1 is unsuffixed and higher slots use its index; no mandatory function absence is allowed
+MSUF_EnsureAnchorPicker	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_AnchorPicker.lua	the singleton provider checks its own previous publication at file entry; initial absence permits its one-time construction
+MSUF_GF_AuraFilter	load-order	MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua	only the GroupFilters factory initial lookup may be absent before it creates and publishes its table; later Common readers require the composed owner
+MSUF_AddTooltip	load-order	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua	the Support provider adopts a previously published tooltip helper or installs its local helper on the first Options load
+MSUF_LeftJustifyButtonText	load-order	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua	the Support provider adopts a previous button-text helper or installs its local helper on the first Options load
+MSUF_GetUITheme	optional-module	MidnightSimpleUnitFrames/Runtime/MSUF_UIThemeBridge.lua	the retained theme bridge is intentionally not loaded by the Core TOCs; ThemeSkin keeps its native palette when no separately supplied bridge theme API exists
+MSUF_AddUIThemeListener	optional-module	MidnightSimpleUnitFrames/Runtime/MSUF_UIThemeBridge.lua	the retained theme bridge is intentionally not loaded by the Core TOCs; ThemeSkin registers a live theme listener only when that bridge API exists

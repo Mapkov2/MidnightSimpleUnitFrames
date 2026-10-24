@@ -1,7 +1,5 @@
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
-
 local UF = MSUF.UF
 if not UF then return end
 
@@ -21,7 +19,7 @@ local GetShapeshiftForm = GetShapeshiftForm
 local GetShapeshiftFormInfo = GetShapeshiftFormInfo
 local type = type
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 local nameBySpellID = {}
 
@@ -50,7 +48,7 @@ function Stance.Resolve()
   end
   local name = nameBySpellID[spellID]
   if name == nil then
-    local spell = _G.C_Spell
+    local spell = C_Spell
     local getName = spell and spell.GetSpellName
     if type(getName) ~= "function" then return nil end
     name = getName(spellID)

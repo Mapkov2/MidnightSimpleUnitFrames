@@ -85,11 +85,11 @@ assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF",ns)
 local target={unit="target",statusBar=Frame(),MSUF_castActive=true,MSUF_durationObj=duration,
     isNotInterruptible=false,MSUF_kickInterruptibleConfirmed=true}
-MSUF_KickReady_RefreshFrame(target)
+ns.PublicGlobals.MSUF_KickReady_RefreshFrame(target)
 local projection=assert(target._msufKickTimeProjections[1])
 assert(rawequal(projection.minimum,start) and rawequal(projection.maximum,finish) and rawequal(projection.value,kickEnd),
     "secret timestamps did not reach native min/max/value sinks")
 assert(projection.marker.shown and projection.segment.shown)
 assert(projection.marker.points[1][2]==projection:GetStatusBarTexture(),"marker does not follow native geometry")
-target.MSUF_castActive=false;MSUF_KickReady_RefreshFrame(target);assert(not projection.shown,"timeline survived cast teardown")
+target.MSUF_castActive=false;ns.PublicGlobals.MSUF_KickReady_RefreshFrame(target);assert(not projection.shown,"timeline survived cast teardown")
 print("castbar_combat_details_smoke: ok")

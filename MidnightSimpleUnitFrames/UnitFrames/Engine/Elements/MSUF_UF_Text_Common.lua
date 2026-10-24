@@ -1,13 +1,8 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
-
 local C = MSUF.UFBarTextCommon
 if not C then return end
-local IsArenaOpponentUnit = C.IsArenaOpponentUnit or function(unit)
-  return unit == "arena1" or unit == "arena2" or unit == "arena3"
-    or unit == "arena4" or unit == "arena5"
-end
+local IsArenaOpponentUnit = C.IsArenaOpponentUnit
 
 local function SecretClassColorAllowed(unit)
   return unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget"
@@ -46,7 +41,7 @@ local UnitReaction = C.UnitReaction
 local UnitSelectionColor = C.UnitSelectionColor
 local PowerBarColor = C.PowerBarColor
 local RAID_CLASS_COLORS = C.RAID_CLASS_COLORS
-local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+local C_ClassColor_GetClassColor = C_ClassColor and C_ClassColor.GetClassColor
 local type = C.type
 local tonumber = C.tonumber
 local format = C.format
@@ -93,12 +88,14 @@ local Secrets = MSUF.Secrets or {}
 
 -- Retail secret values can flow through health/color APIs during restricted
 -- states. Cache normal numbers, but never persist secret-backed color tuples.
-local nativeSecrets = _G.issecretvalue ~= nil
-local issecretvalue = _G.issecretvalue
+local nativeSecrets = issecretvalue ~= nil
+local issecretvalue = issecretvalue
+local ClearFontStringApplyCaches = MSUF.Require("MSUF_ClearFontStringApplyCaches", "UnitFrames/Engine/Elements/MSUF_UF_Text_Common.lua")
+local MarkFontApplyFailed = MSUF.Require("MSUF_MarkFontApplyFailed", "UnitFrames/Engine/Elements/MSUF_UF_Text_Common.lua")
 local SECRET_NATIVE_CLASS_COLOR = 2
 local DispatchClassColor = C.DispatchClassColor
 
-local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local STANDARD_FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
 local EXPRESSWAY_SEMIBOLD = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway SemiBold.ttf"
 
@@ -125,7 +122,7 @@ local function SetFont(fs, spec, size, role)
   local fontSize = ClampFontSize(size, 12)
   local font = ResolveRoleFont((spec and spec.font) or STANDARD_FONT, role, fontSize)
   local flags = spec and spec.fontFlags or "OUTLINE"
-  local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+  local fontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
   local fontReady = fs._msufFontPending ~= true
   if fs._msufFontAttemptEpoch ~= fontEpoch
     or fs._msufFont ~= font
@@ -142,16 +139,14 @@ local function SetFont(fs, spec, size, role)
       fontReady = true
     else
       if font ~= STANDARD_FONT then ApplyFontChecked(fs, STANDARD_FONT, fontSize, flags) end
-      local clear = _G.MSUF_ClearFontStringApplyCaches
-      if type(clear) == "function" then clear(fs) end
+      ClearFontStringApplyCaches(fs)
       -- Remember this epoch's bounded fallback attempt so ordinary unit events
       -- do not retry SetFont. The coordinator's next epoch is the retry owner.
       fs._msufFont, fs._msufFontSize, fs._msufFontFlags = font, fontSize, flags
       fs._msufFontEpoch = nil
       fs._msufFontAttemptEpoch = fontEpoch
       fs._msufFontPending = true
-      local markFailed = _G.MSUF_MarkFontApplyFailed
-      if type(markFailed) == "function" then markFailed() end
+      MarkFontApplyFailed()
       fontReady = false
     end
   end

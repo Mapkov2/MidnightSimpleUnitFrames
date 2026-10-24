@@ -3,7 +3,6 @@
 -- from the runtime lane schema, so controls and compiled config agree on scope.
 -- Do not mutate these tables during reads or seed new canonical profile aliases.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}

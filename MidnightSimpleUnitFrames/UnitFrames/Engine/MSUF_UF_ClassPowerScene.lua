@@ -11,6 +11,19 @@ local function SceneFrame(kind, _, parent, template)
   return PixelLayoutRegion(CreateFrame(kind, nil, parent, template))
 end
 
+local FILE = "UnitFrames/Engine/MSUF_UF_ClassPowerScene.lua"
+-- ClassPower/MSUF_CP_Constants.lua loads after the preview scenes; a scene first
+-- builds on demand, so the constants (and their builder registries) resolve once then.
+local cpConst
+local function Constants()
+  local K = cpConst
+  if not K then
+    K = MSUF.CPConst or MSUF.Require("MSUF_CP_CONST", FILE)
+    cpConst = K
+  end
+  return K
+end
+
 local function Sample(scene) return scene.opts.sample or EMPTY_SAMPLE end
 local function Count(scene) return tonumber(Sample(scene).count) or 3 end
 
@@ -34,8 +47,8 @@ local function Resolve(scene, config)
 end
 
 local function Build(scene, frame)
-  local K = MSUF.CPConst or _G.MSUF_CP_CONST
-  local builders = _G.MSUF_CP_CORE_BUILDERS
+  local K = Constants()
+  local builders = K.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
   local config = {}
   scene.compileConfig = MSUF.ClassPowerConfig.CreateCompiler(config)
   scene.compileConfig()
@@ -190,7 +203,7 @@ local function Modes(scene, class)
     return
   end
   scene.ironfur, scene.CP.nativeAuras = nil, nil
-  local E, builders = scene.env, _G.MSUF_CP_MODE_BUILDERS
+  local E, builders = scene.env, Constants().BuilderRegistry("MSUF_CP_MODE_BUILDERS")
   E.PLAYER_CLASS = class
   local seg, frac, aura = builders.SEGMENTED(E), builders.FRACTIONAL(E), builders.AURA(E)
   local cont, rune, stagger = builders.CONTINUOUS(E), builders.RUNE(E), builders.STAGGER(E)
@@ -239,7 +252,7 @@ function Surface.Paint(scene)
     end
   end
   local power, mode = Resolve(scene, cfg)
-  local K = _G.MSUF_CP_CONST
+  local K = Constants()
   if scene.ironfur and mode ~= K.CPK.MODE.IRONFUR then scene.ironfur.SetActive(false) end
   if not power or mode == K.CPK.MODE.NONE or b.showClassPower == false then
     CP.visible = false

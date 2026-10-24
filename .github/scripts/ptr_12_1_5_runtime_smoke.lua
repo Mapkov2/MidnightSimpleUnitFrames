@@ -42,12 +42,9 @@ C_Timer = {
     end,
 }
 
-local namespace = {
-    ExportPublic = function(name, value)
-        _G[name] = value
-        return value
-    end,
-}
+-- The real Kernel bootstrap owns ExportPublic and its global keep policy.
+local namespace = {}
+assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))().InstallKernel(repo, namespace, nil, nil, true)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 
@@ -101,6 +98,8 @@ loginFrame.onEvent(loginFrame)
 assert(#cvarWrites == 2, "login did not restore both enabled aura tooltip CVars")
 assert(cvarWrites[1].name == "tooltipShowAuraSpellIDs" and cvarWrites[1].value == "1")
 assert(cvarWrites[2].name == "tooltipShowAuraCasterNames" and cvarWrites[2].value == "1")
+-- Namespace-only export (Kernel/MSUF_Bootstrap.lua keep policy).
+local MSUF_ApplyTooltipCasterNames = namespace.PublicGlobals.MSUF_ApplyTooltipCasterNames
 assert(MSUF_ApplyTooltipCasterNames(false) == true)
 assert(cvarWrites[#cvarWrites].name == "tooltipShowAuraCasterNames"
     and cvarWrites[#cvarWrites].value == "0", "explicit caster toggle did not write off")

@@ -61,7 +61,8 @@ else
     assert(MSUF_BlizzardEditMode_SetEnabled == nil)
 end
 for _, name in ipairs({ "Grid2", "Details", "Dominos", "Danders" }) do
-    assert(_G["MSUF_" .. name .. "EditMode_IsAvailable"]() == false)
+    -- The availability probes are namespace-only exports; the setters stay global.
+    assert(ns.PublicGlobals["MSUF_" .. name .. "EditMode_IsAvailable"]() == false)
     _G["MSUF_" .. name .. "EditMode_SetEnabled"](false)
     assert(MSUF_DB.general[name:lower() .. "EditModeIntegration"] == false)
 end
@@ -73,19 +74,34 @@ MSUF_ClassPower_Apply MSUF_ApplyPowerBarEmbedLayout_All MSUF_Castbars_OnSettings
 MSUF_ApplyAllCastbarsAndSync MSUF_UpdateAllFonts_Immediate MSUF_UpdateCastbarVisuals_Immediate
 MSUF_ApplyCastbarVisualsForUnit MSUF_ApplyCurrentProfileGlobalUiScale]]):gmatch("%S+") do
     local key = name
-    _G[key] = function() calls[key] = true end
+    -- Published as the client's owners publish them: the registry, and the global for a kept name.
+    ns.ExportPublic(key, function() calls[key] = true end)
 end
 -- The shared EventBus is outside this fixture: subscriptions are accepted and nothing is delivered.
-_G.MSUF_EventBus_Register = function() return true end
-_G.MSUF_EventBus_Unregister = function() end
+ns.ExportPublic("MSUF_EventBus_Register", function() return true end)
+ns.ExportPublic("MSUF_EventBus_Unregister", function() end)
 ns.UF = { DisableBlizzardFrames = function() end, RefreshElements = function() end }
 ns.GF = { RefreshFonts = function() end, RefreshColors = function() end, RefreshVisuals = function() end }
 -- Required core providers precede the integration apply in the real graph.
+-- UnitTooltips registers its edit-preview listener at load. The edit-mode state owner
+-- (Shell/EditMode/MSUF_EditMode_State.lua) is outside this fixture, which never enters edit mode:
+-- the listener registry and its registration function, as that owner publishes them.
+local anyEditModeListeners = {}
+ns.ExportPublic("MSUF_AnyEditModeListeners", anyEditModeListeners)
+ns.ExportPublic("MSUF_RegisterAnyEditModeListener", function(fn)
+    if type(fn) ~= "function" then return end
+    anyEditModeListeners[#anyEditModeListeners + 1] = fn
+end)
 manifest.LoadSelected(repo, flavor, ns, {
+    -- The gameplay runtime registers its module at load through the real registry.
+    "Kernel/MSUF_Modules.lua",
     "Runtime/MSUF_NumberFormat.lua", "State/MSUF_ProfileRuntime.lua", "Runtime/MSUF_UnitTooltips.lua",
     "UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua", "Features/Gameplay/MSUF_Feature_GameplayHelpers.lua",
     "Features/Gameplay/MSUF_Feature_GameplayConfig.lua", "Features/Gameplay/MSUF_Feature_GameplayRuntime.lua",
 })
+-- The registry is real; the enable/disable pass over the other modules stays the unrelated runtime
+-- service stubbed above (the registry's export replaced that stub when it loaded).
+ns.ExportPublic("MSUF_ApplyModules", function() calls.MSUF_ApplyModules = true end)
 load("Kernel/MSUF_RuntimeContracts.lua")
 ns.ProfileRuntime.Apply("NO_EXTERNAL_ADDONS", false)
 assert(calls.MSUF_UpdateAllFonts_Immediate, "profile apply aborted before final font pass")
@@ -94,8 +110,10 @@ local setter = MSUF_Grid2EditMode_SetEnabled
 MSUF_Grid2EditMode_SetEnabled = nil
 local ok, err = pcall(load, "Kernel/MSUF_RuntimeContracts.lua")
 assert(not ok and tostring(err):find("MSUF_Grid2EditMode_SetEnabled", 1, true))
-MSUF_Grid2EditMode_SetEnabled = function() error("INTEGRATION_FAILURE_MARKER") end
+-- The profile apply resolves the adapter from the registry at call time, so the broken one is
+-- published the way the adapter's owner publishes it (the registry, and the kept global).
+ns.ExportPublic("MSUF_Grid2EditMode_SetEnabled", function() error("INTEGRATION_FAILURE_MARKER") end)
 ok, err = pcall(ns.ProfileRuntime.Apply, "BROKEN_ADAPTER", false)
 assert(not ok and tostring(err):find("INTEGRATION_FAILURE_MARKER", 1, true))
-MSUF_Grid2EditMode_SetEnabled = setter
+ns.ExportPublic("MSUF_Grid2EditMode_SetEnabled", setter)
 print("PASS " .. flavor .. ": optional addons absent, real adapters and profile apply, errors propagate")

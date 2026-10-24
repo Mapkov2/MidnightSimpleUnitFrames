@@ -1,13 +1,12 @@
 --- Unit preview public API, settings subscription, and legacy globals.
 -- Bridges preview refresh calls for Menu2 without owning live unit-frame runtime state.
 
-local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
+local MSUF = _G.MSUF
+local FILE = "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_API.lua"
 local ExportPublic = MSUF.ExportPublic
-local Preview = MSUF.UFPreview or MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
-if not Preview then return end
-local M = (MSUF and MSUF.MSUF2) or _G.MSUF2 or {}
-local C_Timer = M.MenuTimer or _G.C_Timer
+local Preview = MSUF.UFPreview or MSUF.Require("MSUF_UFPreview", FILE)
+local M = MSUF.MSUF2
+local C_Timer = M.MenuTimer or C_Timer
 local InstallPreviewHooks
 local UninstallPreviewHooks
 local UNIT_PREVIEW_REFRESH_DELAY = 0.05
@@ -39,10 +38,9 @@ local function CancelQueuedRefresh(box)
     box._refreshSerial = (tonumber(box._refreshSerial) or 0) + 1
 end
 local function BoxOwnerInactive(box)
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    if menu and menu.frame and menu.frame.IsShown and not menu.frame:IsShown() then return true end
+    if M.frame and M.frame.IsShown and not M.frame:IsShown() then return true end
     local pageKey = box and (box._msuf2PinnedPreviewPageKey or box._msufGFNativePreviewPageKey)
-    if pageKey and menu and menu.activeKey and menu.activeKey ~= pageKey then return true end
+    if pageKey and M.activeKey and M.activeKey ~= pageKey then return true end
     -- A pinned preview is deliberately reparented out of the page wrapper.
     -- During that hand-off the wrapper can briefly be non-visible even though
     -- the floating preview is the active, visible owner.

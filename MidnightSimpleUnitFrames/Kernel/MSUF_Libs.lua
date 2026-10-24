@@ -11,7 +11,7 @@ local ExportPublic = MSUF.ExportPublic
 local Optional = MSUF.Optional
 
 local function GetLSM()
-    local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
+    local LSM = (MSUF and MSUF.LSM) or MSUF.PublicGlobals.MSUF_LSM
     if not LSM and type(_G.LibStub) == "function" then
         LSM = _G.LibStub("LibSharedMedia-3.0", true)
     end
@@ -151,7 +151,7 @@ end
 local function MSUF_MarkFontApplyFailed()
     _MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial + 1
     _G.MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial
-    local notify = _G.MSUF_OnFontApplyFailed
+    local notify = MSUF.PublicGlobals.MSUF_OnFontApplyFailed
     if type(notify) == "function" then notify(_MSUF_FontApplyFailureSerial) end
     return _MSUF_FontApplyFailureSerial
 end
@@ -194,9 +194,9 @@ local function MSUF_IsKnownFileAsset(asset)
     return nil
 end
 
-ExportPublic("MSUF_IsKnownFileAsset", _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset)
-ExportPublic("MSUF_GetRegisteredLSMFontPath", MSUF_GetRegisteredLSMFontPath)
-ExportPublic("MSUF_IsRegisteredLSMFontPath", MSUF_IsRegisteredLSMFontPath)
+ExportPublic("MSUF_IsKnownFileAsset", MSUF.PublicGlobals.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset)
+ExportPublic("MSUF_GetRegisteredLSMFontPath", MSUF_GetRegisteredLSMFontPath, false)
+ExportPublic("MSUF_IsRegisteredLSMFontPath", MSUF_IsRegisteredLSMFontPath, false)
 ExportPublic("MSUF_FontApplicationMatches", MSUF_FontApplicationMatches)
 ExportPublic("MSUF_ApplyFontScaleAnimationMode", MSUF_ApplyFontScaleAnimationMode)
 ExportPublic("MSUF_ClearFontStringApplyCaches", MSUF_ClearFontStringApplyCaches)
@@ -221,8 +221,8 @@ local function TryInitLSM()
         ExportPublic("MSUF_LSM", lsm)
 
         --- Inform Main (which caches LSM in a local upvalue) that LSM is now ready.
-        if _G.MSUF_OnLSMReady then
-            _G.MSUF_OnLSMReady(lsm)
+        if MSUF.PublicGlobals.MSUF_OnLSMReady then
+            MSUF.PublicGlobals.MSUF_OnLSMReady(lsm)
         end
 
         return true
@@ -254,13 +254,14 @@ local function RunStatusbarMediaRefresh()
     local clearTextureCache = Optional("MSUF_ClearResolvedStatusbarTextureCache")
     if clearTextureCache then clearTextureCache() end
 
-    local updateBars = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures
+    local updateBars = MSUF.PublicGlobals.MSUF_UpdateAllBarTextures_Immediate or MSUF.PublicGlobals.MSUF_UpdateAllBarTextures
     if type(updateBars) == "function" then updateBars() end
 
     local updateAbsorb = Optional("MSUF_UpdateAbsorbBarTextures")
     if updateAbsorb then updateAbsorb() end
 
-    local updateCastbars = _G.MSUF_UpdateCastbarTextures_Immediate or _G.MSUF_UpdateCastbarTextures
+    local core = MSUF.Castbars.Core
+    local updateCastbars = core and (core.UpdateCastbarTextures_Immediate or core.UpdateCastbarTextures)
     if type(updateCastbars) == "function" then updateCastbars() end
 
     local refreshClassPower = Optional("MSUF_ClassPower_RefreshTextures")
@@ -333,8 +334,8 @@ local function ScheduleMediaRefresh()
     if mediaRefreshQueued then return end
     if IsCombatLocked() then FlushMediaRefresh(); return end
     mediaRefreshQueued = true
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("LSM_MEDIA_REFRESH", FlushMediaRefresh)
+    if MSUF.PublicGlobals.MSUF_ScheduleOnce then
+        MSUF.PublicGlobals.MSUF_ScheduleOnce("LSM_MEDIA_REFRESH", FlushMediaRefresh)
     else
         _G.C_Timer.After(0, FlushMediaRefresh)
     end
@@ -345,7 +346,7 @@ end
 local function RefreshFontMedia(key, forceApply, registeredPath)
     local needsFontRefresh = forceApply == true
     if not needsFontRefresh and key ~= nil then
-        local normalizeFontKey = _G.MSUF_NormalizeFontKey
+        local normalizeFontKey = MSUF.PublicGlobals.MSUF_NormalizeFontKey
         local general = _G.MSUF_DB and _G.MSUF_DB.general
         local configured = general and general.fontKey
         needsFontRefresh = configured ~= nil
@@ -414,14 +415,14 @@ local GetStatusbarLSM = GetLSM
 
 local function StatusbarAssetAllowed(texture)
     if type(texture) ~= "string" or texture == "" then return nil end
-    local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+    local isKnown = MSUF.PublicGlobals.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
     if type(isKnown) == "function" and isKnown(texture) == false then return nil end
     return texture
 end
 
 local function FetchStatusbarTexture(lsm, key)
     if type(key) ~= "string" or key == "" then return nil end
-    local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
+    local builtins = MSUF.PublicGlobals.MSUF_BUILTIN_BAR_TEXTURES
     if type(builtins) == "table" then
         local texture = builtins[key]
         texture = StatusbarAssetAllowed(texture)
@@ -497,7 +498,7 @@ ExportPublic("MSUF_StatusBarTextureItems", StatusBarTextureItems)
 --- Bundled fonts (Media/Fonts)
 
 RegisterBundledFonts = function()
-    if _G.MSUF_BUNDLED_FONTS_REGISTERED == true then return end
+    if MSUF.PublicGlobals.MSUF_BUNDLED_FONTS_REGISTERED == true then return end
 
     if IsCombatLocked() then
         _MSUF_BundledMediaRegistrationPending = true
@@ -510,7 +511,7 @@ RegisterBundledFonts = function()
     local LSM = MSUF.LSM
     if not LSM or type(LSM.Register) ~= "function" then return end
     local wasDeferred = _MSUF_BundledMediaRegistrationPending == true
-        or _G.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED == true
+        or MSUF.PublicGlobals.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED == true
     _MSUF_BundledMediaRegistrationPending = false
     ExportPublic("MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED", nil)
 

@@ -12,13 +12,21 @@
 --- MidnightSimpleUnitFrames_Options (e.g. MSUF_Menu2_AdvancedColors.lua).
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = _G.MSUF or MSUF
+local FILE = "Runtime/MSUF_Colors.lua"
 MSUF.Public = MSUF.Public or {}
 
 local ExportPublic = MSUF.ExportPublic
-local G = _G
+local Require, Optional = MSUF.Require, MSUF.Optional
+local PublicGlobals = MSUF.PublicGlobals
 local string_lower = string.lower
+
+--- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
+--- exports MSUF_EnsureDB at its top level, long before this file. The cached
+--- resolver below rebuilds MSUF_DB.general through it on every profile switch,
+--- so a missing export must fail at load instead of silently skipping repair.
+local EnsureDB = Require("MSUF_EnsureDB", FILE)
+-- The colour getters below read the live profile inline (EnsureDB seeds it
+-- while the client has none yet): power and reaction colours resolve per event.
 
 -- Keep the namespace defaults distinct from the replaceable public palette.
 local DEFAULT_FONT_COLORS = {
@@ -39,9 +47,9 @@ local DEFAULT_FONT_COLORS = {
     gold      = { 1.0, 0.85, 0.1 },
 }
 MSUF.MSUF_FONT_COLORS = DEFAULT_FONT_COLORS
-G.MSUF_FONT_COLORS = G.MSUF_FONT_COLORS or DEFAULT_FONT_COLORS
+ExportPublic("MSUF_FONT_COLORS", Optional("MSUF_FONT_COLORS") or DEFAULT_FONT_COLORS)
 
-G.MSUF_GetNPCReactionColor = function(kind)
+ExportPublic("MSUF_GetNPCReactionColor", function(kind)
     local defaultR, defaultG, defaultB
     if kind == "friendly" then
         defaultR, defaultG, defaultB = 0, 1, 0
@@ -54,26 +62,31 @@ G.MSUF_GetNPCReactionColor = function(kind)
     else
         defaultR, defaultG, defaultB = 1, 1, 1
     end
-    if not G.MSUF_EnsureDB then
-        return defaultR, defaultG, defaultB
+    local db = MSUF_DB
+    if not db then
+        EnsureDB()
+        db = MSUF_DB
     end
-    if not G.MSUF_DB then G.MSUF_EnsureDB() end
-    G.MSUF_DB.npcColors = G.MSUF_DB.npcColors or {}
-    local t = G.MSUF_DB.npcColors[kind]
+    db.npcColors = db.npcColors or {}
+    local t = db.npcColors[kind]
     if t and t.r and t.g and t.b then
         return t.r, t.g, t.b
     end
     return defaultR, defaultG, defaultB
-end
+end)
 
-G.MSUF_GetClassBarColor = function(classToken)
+ExportPublic("MSUF_GetClassBarColor", function(classToken)
     local defaultR, defaultG, defaultB = 0, 1, 0
     if not classToken then
         return defaultR, defaultG, defaultB
     end
-    if not G.MSUF_DB then G.MSUF_EnsureDB() end
-    G.MSUF_DB.classColors = G.MSUF_DB.classColors or {}
-    local override = G.MSUF_DB.classColors[classToken]
+    local db = MSUF_DB
+    if not db then
+        EnsureDB()
+        db = MSUF_DB
+    end
+    db.classColors = db.classColors or {}
+    local override = db.classColors[classToken]
     if override and override.r and override.g and override.b then
         return override.r, override.g, override.b
     end
@@ -81,12 +94,12 @@ G.MSUF_GetClassBarColor = function(classToken)
         local c = DEFAULT_FONT_COLORS[override]
         return c[1], c[2], c[3]
     end
-    local color = G.RAID_CLASS_COLORS and G.RAID_CLASS_COLORS[classToken]
+    local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
     if color then
         return color.r, color.g, color.b
     end
     return defaultR, defaultG, defaultB
-end
+end)
 
 -- Some NPC unit tokens expose only the numeric UnitPowerType metadata. Keep
 -- their configured resource color on the same token-keyed override path used
@@ -94,7 +107,7 @@ end
 local POWER_TOKEN_BY_TYPE = {}
 local CONFIGURABLE_POWER_TOKENS = {}
 do
-    local powerTypeEnum = G.Enum and G.Enum.PowerType
+    local powerTypeEnum = Enum and Enum.PowerType
     local function RegisterPowerToken(enumKey, fallbackType, token)
         local numericType = powerTypeEnum and powerTypeEnum[enumKey]
         if type(numericType) ~= "number" then numericType = fallbackType end
@@ -125,11 +138,12 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     if not powerToken then
         return nil
     end
-    if not G.MSUF_EnsureDB then
-        return nil
+    local db = MSUF_DB
+    if not db then
+        EnsureDB()
+        db = MSUF_DB
     end
-    if not G.MSUF_DB then G.MSUF_EnsureDB() end
-    local g = G.MSUF_DB.general
+    local g = db.general
     local ov = g and g.powerColorOverrides
     local c = ov and ov[powerToken] or nil
     if type(c) ~= "table" then
@@ -146,7 +160,7 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     end
     return nil
 end
-G.MSUF_GetPowerBarColor = MSUF_GetPowerBarColor
+ExportPublic("MSUF_GetPowerBarColor", MSUF_GetPowerBarColor)
 
 local function MSUF_GetResolvedPowerColor(powerType, powerToken)
     powerToken = NormalizePowerToken(powerType, powerToken)
@@ -167,7 +181,7 @@ local function MSUF_GetResolvedPowerColor(powerType, powerToken)
         end
     end
 
-    local pbc = G.PowerBarColor
+    local pbc = PowerBarColor
     if type(powerToken) == "string" and pbc and pbc[powerToken] then
         local c = pbc[powerToken]
         local r = c.r or c[1]
@@ -194,12 +208,16 @@ local function MSUF_GetResolvedPowerColor(powerType, powerToken)
     end
     return nil
 end
-G.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
+ExportPublic("MSUF_GetResolvedPowerColor", MSUF_GetResolvedPowerColor)
 MSUF.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
 
 local function MSUF_GetConfiguredFontColor()
-    if not G.MSUF_DB then G.MSUF_EnsureDB() end
-    local g = G.MSUF_DB.general or {}
+    local db = MSUF_DB
+    if not db then
+        EnsureDB()
+        db = MSUF_DB
+    end
+    local g = db.general or {}
     if g.useCustomFontColor and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB then
         return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
     end
@@ -207,7 +225,7 @@ local function MSUF_GetConfiguredFontColor()
     local color = DEFAULT_FONT_COLORS[key] or DEFAULT_FONT_COLORS.white
     return color[1], color[2], color[3]
 end
-G.MSUF_GetConfiguredFontColor = MSUF_GetConfiguredFontColor
+ExportPublic("MSUF_GetConfiguredFontColor", MSUF_GetConfiguredFontColor)
 MSUF.MSUF_GetConfiguredFontColor = MSUF_GetConfiguredFontColor
 
 local MSUF_COLOR_OBJECT_CACHE = {}
@@ -215,7 +233,7 @@ local MSUF_DEFAULT_COLOR_OBJECT
 
 local function DefaultColorObject()
     if not MSUF_DEFAULT_COLOR_OBJECT then
-        MSUF_DEFAULT_COLOR_OBJECT = G.CreateColor(1, 1, 1, 1)
+        MSUF_DEFAULT_COLOR_OBJECT = CreateColor(1, 1, 1, 1)
     end
     return MSUF_DEFAULT_COLOR_OBJECT
 end
@@ -243,7 +261,7 @@ local function MSUF_GetColorFromKey(key, fallbackColor)
         if cached and cached.r == r and cached.g == g and cached.b == b then
             return cached.object
         end
-        local object = G.CreateColor(r, g, b, 1)
+        local object = CreateColor(r, g, b, 1)
         MSUF_COLOR_OBJECT_CACHE[normalized] = { r = r, g = g, b = b, object = object }
         return object
     end
@@ -253,7 +271,7 @@ local function MSUF_GetColorFromKey(key, fallbackColor)
     return DefaultColorObject()
 end
 MSUF.MSUF_GetColorFromKey = MSUF_GetColorFromKey
-G.MSUF_GetColorFromKey = MSUF_GetColorFromKey
+ExportPublic("MSUF_GetColorFromKey", MSUF_GetColorFromKey)
 
 -- Numeric-only runtime consumers should not force a ColorObject into
 -- existence. Share the canonical palette lookup while retaining the object
@@ -266,33 +284,27 @@ local function MSUF_GetColorRGBFromKey(key)
     return rgb[1] or 1, rgb[2] or 1, rgb[3] or 1
 end
 MSUF.MSUF_GetColorRGBFromKey = MSUF_GetColorRGBFromKey
-G.MSUF_GetColorRGBFromKey = MSUF_GetColorRGBFromKey
+ExportPublic("MSUF_GetColorRGBFromKey", MSUF_GetColorRGBFromKey)
 
-G.MSUF_DARK_TONES = {
+ExportPublic("MSUF_DARK_TONES", {
     black    = { 0.0, 0.0, 0.0 },
     darkgray = { 0.08, 0.08, 0.08 },
     softgray = { 0.16, 0.16, 0.16 },
-}
+})
 
 
 
 ---
 --- Local shortcuts (core only - no UI-framework refs)
 ---
---- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
---- exports MSUF_EnsureDB at its top level, long before this file. The cached
---- resolver below rebuilds MSUF_DB.general through it on every profile switch,
---- so a missing export must fail at load instead of silently skipping repair.
-local EnsureDB              = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_Colors.lua")
 local RAID_CLASS_COLORS     = RAID_CLASS_COLORS
 local C_Timer               = C_Timer
-local _G                    = _G
 local type                  = type
 local tonumber              = tonumber
 local pairs                 = pairs
 local next                  = next
-local CreateFrame           = _G.CreateFrame
-local RunNextFrame          = _G.MSUF_RunNextFrame
+local CreateFrame           = CreateFrame
+local RunNextFrame          = Require("MSUF_RunNextFrame", FILE)
 local COLOR_PUSH_DELAY      = 0.04
 
 ---
@@ -377,29 +389,16 @@ local function _Call(fn, ...)
     return true
 end
 
-local function _RefreshUnitFrameColors()
-    if _Call(_G.MSUF_RefreshAllFrameColors) then return true end
-    if _Call(MSUF and MSUF.UF and MSUF.UF.RefreshColors) then return true end
-    -- Legacy-only fallback: without UF.RefreshColors there is no Config.serial
-    -- advance to invalidate the lazy settings cache for us.
-    _Call(_G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
-    local did = _Call(_G.MSUF_RefreshAllIdentityColors)
-    did = _Call(_G.MSUF_RefreshAllPowerTextColors) or did
-    return did
-end
-
-local function _RefreshAllBarBackgroundVisuals(colorsAlreadyRefreshed)
-    local applyBg = _G.MSUF_ApplyBarBackgroundVisual
-    local refreshHP = _G.MSUF_UFCore_RefreshHealthBarColor
+--- The bar colours were refreshed by UF.RefreshColors just before, so only
+--- the background visual is reapplied here.
+local function _RefreshAllBarBackgroundVisuals()
+    local applyBg = Require("MSUF_ApplyBarBackgroundVisual", FILE)
     local UF = MSUF and MSUF.UF
     local frames = UF and UF.frames
-    if type(frames) ~= "table" or type(applyBg) ~= "function" then return end
+    if type(frames) ~= "table" then return end
 
     for _, frame in pairs(frames) do
         if frame and (frame.hpBarBG or frame.powerBarBG or frame.bg) then
-            if colorsAlreadyRefreshed ~= true and type(refreshHP) == "function" and frame.hpBar then
-                refreshHP(frame)
-            end
             applyBg(frame)
         end
     end
@@ -416,11 +415,12 @@ local function _PushVisualUpdates_Flush()
     --- schedules normally. Cleared at END.
     ---
     --- Same defense-in-depth pattern as _gfRosterFlush.
-    --- UF.RefreshColors advances Config.serial before elements read color
-    --- settings, so the lazy settings cache is rebuilt once on first use.
-    local colorsAlreadyRefreshed = _RefreshUnitFrameColors()
-    _Call(_RefreshAllBarBackgroundVisuals, colorsAlreadyRefreshed)
-    _Call(_G.MSUF_UpdateCastbarVisuals)
+    --- UF.RefreshColors (MSUF_RefreshAllFrameColors) advances Config.serial
+    --- before elements read color settings, so the lazy settings cache is
+    --- rebuilt once on first use.
+    Require("MSUF_RefreshAllFrameColors", FILE)()
+    _RefreshAllBarBackgroundVisuals()
+    Require("MSUF_UpdateCastbarVisuals", FILE)()
     if MSUF.MSUF_ApplyGameplayVisuals then
         _Call(MSUF.MSUF_ApplyGameplayVisuals)
     end
@@ -428,10 +428,8 @@ local function _PushVisualUpdates_Flush()
     --- so shared bar-color swatches (absorb/heal-absorb, borders, etc.) live-apply.
     do
         local gf = MSUF and MSUF.GF
-        local refreshGFColors = (gf and gf.RefreshColors) or _G.MSUF_GF_RefreshColors
-        if type(refreshGFColors) == "function" then
-            _Call(refreshGFColors)
-        end
+        local refreshGFColors = (gf and gf.RefreshColors) or Require("MSUF_GF_RefreshColors", FILE)
+        refreshGFColors()
     end
 
     --- No highlight-priority step here on purpose: the priority rows are
@@ -440,21 +438,15 @@ local function _PushVisualUpdates_Flush()
     --- hook and died with that panel; the runtime border order itself is part
     --- of the Borders refresh above.
 
-    --- UF.RefreshColors already includes both Borders and Power. Running the
-    --- legacy outline fanout afterwards would compile every unit spec and walk
-    --- every frame a second time. Keep it only for the legacy fallback path,
-    --- where the consolidated UF color refresh is unavailable.
-    if colorsAlreadyRefreshed ~= true then
-        local applyAll = _G.MSUF_ApplyBarOutlineThickness_All
-        _Call(applyAll)
-    end
-    _Call(_G.MSUF_ApplyRoundedUnitframes)
+    --- UF.RefreshColors already includes both Borders and Power, so the
+    --- outline fanout does not run a second time here.
+    Require("MSUF_ApplyRoundedUnitframes", FILE)()
     local auras = MSUF.MSUF_Auras3
     if auras and auras.RefreshNativeVisuals then auras.RefreshNativeVisuals() end
-    _Call(_G.MSUF_UFPreview_RequestRefresh, "MSUF_COLOR_CHANGE")
+    _Call(Optional("MSUF_UFPreview_RequestRefresh"), "MSUF_COLOR_CHANGE")
 
     --- Repaint the mouseover highlight cache so colour/size edits apply live.
-    _Call(_G.MSUF_RefreshMouseoverHighlight)
+    Require("MSUF_RefreshMouseoverHighlight", FILE)()
 
     --- Pending flag cleared at END (see header comment for rationale).
     _pushPending = false
@@ -465,11 +457,9 @@ local function _PushCastbarVisuals_Flush()
         _castbarPushPending = false
         return DeferVisualFlushUntilCombatEnds("castbar")
     end
-    if not _Call(_G.MSUF_UpdateCastbarVisuals) then
-        _Call(_G.MSUF_UpdateBossCastbarPreview)
-    end
-    _Call(_G.MSUF_RefreshAllCastTargetTextColors)
-    _Call(_G.MSUF_UFPreview_RequestRefresh, "MSUF_CASTBAR_COLOR_CHANGE")
+    Require("MSUF_UpdateCastbarVisuals", FILE)()
+    Require("MSUF_RefreshAllCastTargetTextColors", FILE)()
+    _Call(Optional("MSUF_UFPreview_RequestRefresh"), "MSUF_CASTBAR_COLOR_CHANGE")
     _castbarPushPending = false
 end
 
@@ -506,9 +496,7 @@ end
 --- These shims keep external callers working; they just repaint the cache.
 --- ---------------------------------------------------------------------------
 function MSUF.MSUF_FixMouseoverHighlightBindings()
-    if _G.MSUF_RefreshMouseoverHighlight then
-        _G.MSUF_RefreshMouseoverHighlight()
-    end
+    Require("MSUF_RefreshMouseoverHighlight", FILE)()
 end
 MSUF.MSUF_ScheduleMouseoverHighlightFix = MSUF.MSUF_FixMouseoverHighlightBindings
 
@@ -555,11 +543,13 @@ local function _getRGBPalette(rKey, gKey, bKey, palKey, palDefault, defR, defG, 
     if not g then return defR, defG, defB end
     if g[rKey] and g[gKey] and g[bKey] then return g[rKey], g[gKey], g[bKey] end
     local pal = g[palKey]
-    if pal and MSUF_FONT_COLORS and MSUF_FONT_COLORS[pal] then
-        local c = MSUF_FONT_COLORS[pal]; return c[1], c[2], c[3]
+    -- Namespace read: these getters run per paint, and a table read costs no call.
+    local colors = PublicGlobals.MSUF_FONT_COLORS
+    if pal and colors and colors[pal] then
+        local c = colors[pal]; return c[1], c[2], c[3]
     end
-    if palDefault and MSUF_FONT_COLORS and MSUF_FONT_COLORS[palDefault] then
-        local c = MSUF_FONT_COLORS[palDefault]; return c[1], c[2], c[3]
+    if palDefault and colors and colors[palDefault] then
+        local c = colors[palDefault]; return c[1], c[2], c[3]
     end
     return defR, defG, defB
 end
@@ -572,11 +562,12 @@ local function _getRGBTonumber(rKey, gKey, bKey, palKey, palDefault, defR, defG,
     local gg = tonumber(g[gKey])
     local b = tonumber(g[bKey])
     if r and gg and b then return r, gg, b end
-    if g[palKey] and MSUF_FONT_COLORS and MSUF_FONT_COLORS[g[palKey]] then
-        local c = MSUF_FONT_COLORS[g[palKey]]; return c[1], c[2], c[3]
+    local colors = PublicGlobals.MSUF_FONT_COLORS
+    if g[palKey] and colors and colors[g[palKey]] then
+        local c = colors[g[palKey]]; return c[1], c[2], c[3]
     end
-    if palDefault and MSUF_FONT_COLORS and MSUF_FONT_COLORS[palDefault] then
-        local c = MSUF_FONT_COLORS[palDefault]; return c[1], c[2], c[3]
+    if palDefault and colors and colors[palDefault] then
+        local c = colors[palDefault]; return c[1], c[2], c[3]
     end
     return defR, defG, defB
 end
@@ -588,7 +579,8 @@ local function GetGlobalFontColor()
     if g.useCustomFontColor and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB then
         return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
     end
-    local color = MSUF_FONT_COLORS and MSUF_FONT_COLORS[(g.fontColor or "white"):lower()]
+    local colors = PublicGlobals.MSUF_FONT_COLORS
+    local color = colors and colors[(g.fontColor or "white"):lower()]
     if color then return color[1], color[2], color[3] end
     return 1, 1, 1
 end
@@ -741,7 +733,7 @@ local function SetPlayerCastbarOverrideColor(r, g, b) _setRGB("playerCastbarOver
 --- - Class Colors -
 local CLASS_TOKENS = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
 local function GetClassColor(token)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if db and db.classColors and db.classColors[token] then
         local t = db.classColors[token]
         return t.r or 1, t.g or 1, t.b or 1
@@ -751,13 +743,14 @@ local function GetClassColor(token)
     return 1, 1, 1
 end
 local function SetClassColor(token, r, g, b)
-    local db = _G.MSUF_DB; if not db then return end
+    local db = MSUF_DB; if not db then return end
     db.classColors = db.classColors or {}
     db.classColors[token] = { r = r or 1, g = g or 1, b = b or 1 }
     PushVisualUpdates()
 end
 local function ResetAllClassColors()
-    if _G.MSUF_DB then _G.MSUF_DB.classColors = nil end; PushVisualUpdates()
+    local db = MSUF_DB
+    if db then db.classColors = nil end; PushVisualUpdates()
 end
 
 --- - Class Bar Background Color -
@@ -836,7 +829,7 @@ local NPC_TYPE_KEYS = { "npcBoss", "npcMiniboss", "npcCaster", "npcMelee", "npcR
 local NPC_TYPE_UNITS = { { key = "npcTypeTarget", label = "Target" }, { key = "npcTypeFocus", label = "Focus" }, { key = "npcTypeBoss", label = "Boss" }, { key = "npcTypeToT", label = "Target of Target" } }
 
 local function GetNPCColor(kind)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if db and db.npcColors and db.npcColors[kind] then
         local t = db.npcColors[kind]; return t.r or 0, t.g or 1, t.b or 0
     end
@@ -845,12 +838,15 @@ local function GetNPCColor(kind)
     local d = def[kind] or def.enemy; return d[1], d[2], d[3]
 end
 local function SetNPCColor(kind, r, g, b)
-    local db = _G.MSUF_DB; if not db then return end
+    local db = MSUF_DB; if not db then return end
     db.npcColors = db.npcColors or {}
     db.npcColors[kind] = { r = r or 0, g = g or 1, b = b or 0 }
     PushVisualUpdates()
 end
-local function ResetAllNPCColors() if _G.MSUF_DB then _G.MSUF_DB.npcColors = nil end; PushVisualUpdates() end
+local function ResetAllNPCColors()
+    local db = MSUF_DB
+    if db then db.npcColors = nil end; PushVisualUpdates()
+end
 local function GetNPCColorMode() return (_general() or {}).npcColorMode or "reaction" end
 local function SetNPCColorMode(mode) local g = _general(); if g then g.npcColorMode = mode; PushVisualUpdates() end end
 local function GetNPCTypeColorBar() local g = _general(); return not g or g.npcTypeColorBar ~= false end
@@ -860,7 +856,7 @@ local function SetNPCTypeColorText(v) local g = _general(); if g then g.npcTypeC
 local function GetNPCClassColorBar() local g = _general(); return g and g.npcClassColorBar == true or false end
 local function SetNPCClassColorBar(v) local g = _general(); if g then g.npcClassColorBar = v and true or false; PushVisualUpdates() end end
 local function ResetNPCTypeColors()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local colors = db and db.npcColors
     if type(colors) == "table" then
         for i = 1, #NPC_TYPE_KEYS do colors[NPC_TYPE_KEYS[i]] = nil end

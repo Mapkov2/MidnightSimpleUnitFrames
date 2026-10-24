@@ -3,7 +3,6 @@
 -- Keep item IDs distinct from bare spell IDs and preserve explicit keep/custom
 -- choices when normalizing the curated Player Defensive and Target DoT lists.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}
@@ -25,7 +24,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
     local next = next
     local math_floor = math.floor
     local table_sort = table.sort
-    local UnitClass = _G.UnitClass
+    local UnitClass = UnitClass
     local CUSTOM_CONTAINER_MAX = Schema.CUSTOM_CONTAINER_MAX
     local PLAYER_DEFENSIVE_CONTAINER_INDEX = Schema.PLAYER_DEFENSIVE_CONTAINER_INDEX
     local TARGET_DOT_CONTAINER_INDEX = Schema.TARGET_DOT_CONTAINER_INDEX
@@ -60,7 +59,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
     function Model.ItemInfo(itemID)
         itemID = tonumber(itemID)
         if not itemID then return nil end
-        local CI = _G.C_Item
+        local CI = C_Item
         local name, icon, spellID
         if type(CI) == "table" then
             if type(CI.GetItemNameByID) == "function" then name = CI.GetItemNameByID(itemID) end
@@ -81,10 +80,10 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
         if tonumber(itemID) then return "item" end
         spellID = tonumber(spellID)
         if not spellID then return nil end
-        local book = _G.C_SpellBook
+        local book = C_SpellBook
         if type(book) == "table" and type(book.IsSpellKnown) == "function"
             and book.IsSpellKnown(spellID) == true then return "spell" end
-        if type(_G.IsPlayerSpell) == "function" and _G.IsPlayerSpell(spellID) == true then
+        if type(IsPlayerSpell) == "function" and IsPlayerSpell(spellID) == true then
             return "spell"
         end
         return nil
@@ -200,15 +199,25 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
         return true
     end
 
-    function Model.MoveCustomContainerSpell(unit, index, value, direction)
+    -- One container's reconciled priority list and the input spell's place in it.
+    local function PrioritySpellSlot(unit, index, value)
         local spellID = SpellIDFromInput(value)
         local item = Model.CustomContainer(unit, index, true)
-        if not (spellID and item) then return false, "invalid" end
+        if not (spellID and item) then return nil end
         local ordered = ReconcileCustomContainerSpellPriority(item, true)
         local from
         for i = 1, #ordered do
-            if ordered[i] == spellID then from = i; break end
+            if ordered[i] == spellID then
+                from = i
+                break
+            end
         end
+        return item, ordered, from, spellID
+    end
+
+    function Model.MoveCustomContainerSpell(unit, index, value, direction)
+        local item, ordered, from = PrioritySpellSlot(unit, index, value)
+        if not item then return false, "invalid" end
         direction = tonumber(direction) or 0
         local to = from and (direction < 0 and from - 1 or direction > 0 and from + 1 or from)
         if not (from and to and to >= 1 and to <= #ordered and to ~= from) then return false, "unchanged" end
@@ -218,14 +227,8 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
     end
 
     function Model.MoveCustomContainerSpellToIndex(unit, index, value, targetIndex)
-        local spellID = SpellIDFromInput(value)
-        local item = Model.CustomContainer(unit, index, true)
-        if not (spellID and item) then return false, "invalid" end
-        local ordered = ReconcileCustomContainerSpellPriority(item, true)
-        local from
-        for i = 1, #ordered do
-            if ordered[i] == spellID then from = i; break end
-        end
+        local item, ordered, from, spellID = PrioritySpellSlot(unit, index, value)
+        if not item then return false, "invalid" end
         local to = math_floor(tonumber(targetIndex) or 0)
         if not from or to < 1 or to > #ordered or to == from then return false, "unchanged" end
         table.remove(ordered, from)

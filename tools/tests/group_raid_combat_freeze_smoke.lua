@@ -3,6 +3,11 @@
 -- freeze: nameplates add 34.2k VM and 800 secret checks, 0 KB and 0 layouts.
 -- Raid names add 13.4k VM, one secret check and one 64-byte defer per batch;
 -- a covered roster returns before reading any further unit data.
+-- 2026-10-21: one shared name observer replaces the eight frozen header
+-- callbacks above. The same 100-event Mainline/Vanilla probe now measures
+-- nameplates 40,714 -> 5,714 VM instructions, 800 -> 100 secret checks and
+-- 0 bytes (minimum of two runs); raid names 16,802 -> 2,802 instructions,
+-- retaining one secret check, one coalesced defer and 64 bytes per batch.
 local root, flavor = assert(arg[1]), arg[2] or "Mainline"
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 for _, preserved in ipairs({ false, true }) do
@@ -18,9 +23,14 @@ for _, preserved in ipairs({ false, true }) do
     GF.InvalidateCompiledSpecs("raid")
     GF.RefreshHeaderLayout()
     h:RunTimers()
-    local before, writes, nativeEvents = {}, 0, {}
+    local before, writes, nativeEvents, nativeShows, scriptWrites = {}, 0, {}, {}, 0
     GF.ForEachHeader("raid", function(header)
-        nativeEvents[header] = header:GetScript("OnEvent")
+        nativeEvents[header], nativeShows[header] = header:GetScript("OnEvent"), header:GetScript("OnShow")
+        local setScript = header.SetScript
+        header.SetScript = function(self, script, handler)
+            if script == "OnEvent" or script == "OnShow" then scriptWrites = scriptWrites + 1 end
+            return setScript(self, script, handler)
+        end
         for _, child in ipairs(h:Children(header)) do
             before[child] = { child:GetAttribute("unit"), child:IsShown() }
             for _, method in ipairs({ "SetAttribute", "SetPoint", "Show", "Hide" }) do
@@ -32,12 +42,28 @@ for _, preserved in ipairs({ false, true }) do
             end
         end
     end)
+    local function NameObservers()
+        local count = 0
+        for _, frame in ipairs(h.widgets.frames) do
+            local handler = frame:GetScript("OnEvent")
+            local source = handler and debug.getinfo(handler, "S").source or ""
+            if not frame._harnessHeader and frame.events and frame.events.UNIT_NAME_UPDATE
+                and source:find("MSUF_UF_Group_Headers.lua", 1, true) then
+                assert(not frame.protected, "shared raid name observer must be unprotected")
+                count = count + 1
+            end
+        end
+        return count
+    end
+    local ordinaryNameObservers = NameObservers()
     local births = #h.born
     h:EnterCombat(function()
         GF.ForEachHeader("raid", function(header)
-            assert(not header.events.GROUP_ROSTER_UPDATE and header.events.UNIT_NAME_UPDATE
-                and header:GetScript("OnEvent") ~= nativeEvents[header],
-                "native layout handler must stop before lockdown")
+            assert(scriptWrites == 0 and header:GetScript("OnEvent") == nativeEvents[header]
+                and header:GetScript("OnShow") == nativeShows[header],
+                "combat freeze replaced a native header handler")
+            assert(not header.events.GROUP_ROSTER_UPDATE and not header.events.UNIT_NAME_UPDATE,
+                "both native layout events must stop before lockdown")
         end)
         local first = GF.headers.raid
         conf.enabled = false
@@ -53,6 +79,7 @@ for _, preserved in ipairs({ false, true }) do
             assert(header._msufRaidRosterFrozen and header:GetAttribute("_ignore"), "pre-lock restore thawed header")
         end)
     end)
+    assert(NameObservers() == ordinaryNameObservers + 1, "freeze must add exactly one shared name observer")
     h:SetRaid(21)
     GF.ForEachHeader("raid", function(header)
         -- Additional native entry points: a secure attribute write and a
@@ -78,8 +105,15 @@ for _, preserved in ipairs({ false, true }) do
     h:RunTimers()
     GF.ForEachHeader("raid", function(header)
         assert(header.events.GROUP_ROSTER_UPDATE and header.events.UNIT_NAME_UPDATE
-            and header:GetScript("OnEvent") == nativeEvents[header], "roster handlers not restored")
+            and header:GetScript("OnEvent") == nativeEvents[header]
+            and header:GetScript("OnShow") == nativeShows[header], "roster handlers not restored")
+        local wrap = assert(h.scriptWraps[header], "native OnShow has no restricted guard")
+        assert(wrap.original and wrap.wrapper == nativeShows[header] and wrap.owner == header,
+            "secure guard did not retain the native OnShow")
     end)
+    assert(scriptWrites == 0 and NameObservers() == ordinaryNameObservers,
+        "regen replaced native handlers or retained the combat name observer: writes=" .. scriptWrites
+            .. " names=" .. NameObservers() .. " baseline=" .. ordinaryNameObservers)
     assert(not GF.FrameForUnit("raid20") and GF.FrameForUnit("raid19"), "regen did not apply final roster")
     -- The next ordinary out-of-combat join must work without a reset/reload.
     h:SetRaid(22)
@@ -89,6 +123,8 @@ for _, preserved in ipairs({ false, true }) do
     -- Constant configured capacity/count: restoration alone cannot rebuild a
     -- header. A deferred 22 -> 23 join still needs an explicit native refresh.
     h:EnterCombat()
+    assert(scriptWrites == 0 and NameObservers() == ordinaryNameObservers + 1,
+        "second freeze must retain native scripts and one shared name observer")
     h:SetRaid(23)
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
@@ -96,6 +132,8 @@ for _, preserved in ipairs({ false, true }) do
     h:LeaveCombat()
     h:RunTimers()
     assert(GF.FrameForUnit("raid23"), "unchanged attributes lost the regen refresh")
+    assert(scriptWrites == 0 and NameObservers() == ordinaryNameObservers,
+        "second combat cycle replaced a native handler or leaked the name observer")
     assert(#h.violations == 0 and #h.callMethodErrors == 0, "unsafe header lifecycle")
 end
 -- Disabling all scopes while locked down must retain the combat-end listener.

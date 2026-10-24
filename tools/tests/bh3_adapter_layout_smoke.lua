@@ -48,7 +48,11 @@ if Wanted("danders") then
   CreateEnabledSetter=function(_,_,activate,deactivate) return function(on) if on then return activate() else return deactivate() end end end,
   ActivateAtLogin=function(_,activate) activate() end}}
  env._G=env;setmetatable(env,{__index=_G})
- local ns={ExportPublic=function(name,fn) env[name]=fn end};local fn=assert(loadfile(root.."/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Danders.lua"));setfenv(fn,env);fn("MSUF",ns)
+ -- The real Kernel API (Bootstrap's exports, Require/Optional) replaces the export stub inside this environment.
+ local ns={ExportPublic=function(name,fn) env[name]=fn end}
+ local RequireFixture=assert(loadfile(root.."/tools/tests/require_fixture.lua"))()
+ RequireFixture.InstallKernel(root,ns,env,nil,true)
+ RequireFixture.LoadShipped(root,"MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Danders.lua",ns,env)
  local p=assert(elements.party);local q=assert(elements.raid)
  p.onSelect();assert(mover.active and openCount==1,"native mover session was not acquired")
  listener(false);assert(not mover.active and closeCount==1,"MSUF-owned native session was not released")

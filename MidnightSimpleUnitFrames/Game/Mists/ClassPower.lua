@@ -3,15 +3,14 @@
 --- classpower/eclipse elements.  This module is loaded only by the Mists TOC.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local TargetCombo = assert(MSUF.CPTargetCombo, "shared target-combo module must load first")
-local K = _G.MSUF_CP_CONST or {}
+local K = MSUF.Require("MSUF_CP_CONST", "Game/Mists/ClassPower.lua")
 local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 local PT = K.PT or {}
-local NativeUnitPowerDisplayMod = _G.UnitPowerDisplayMod
-local NativeUnitPowerMax = _G.UnitPowerMax
+local NativeUnitPowerDisplayMod = UnitPowerDisplayMod
+local NativeUnitPowerMax = UnitPowerMax
 --- Blizzard Mists ShardBar.lua: MAX_POWER_PER_EMBER = 10 raw power per ember.
 local EMBER_POWER_SCALE = 10
 --- Blizzard_FrameXMLBase/Classic/Constants.lua WARLOCK_BURNING_EMBERS: Mists
@@ -55,67 +54,66 @@ function Provider.UnitPowerMax(unit, powerType, unmodified)
     return NativeUnitPowerMax(unit, powerType, unmodified)
 end
 
-local function CreateResolver(SetComboUnit, _G)
-return function(env)
-    local class = env.playerClass
-    local spec = env.spec
-    SetComboUnit("player")
+local function CreateResolver(SetComboUnit)
+    return function(env)
+        local class = env.playerClass
+        local spec = env.spec
+        SetComboUnit("player")
 
-    if env.inVehicle then
-        local vehiclePower = type(_G.UnitPowerType) == "function" and _G.UnitPowerType("vehicle") or nil
-        if env.vehicleHasCombo or vehiclePower == PT.ComboPoints then
-            SetComboUnit("vehicle")
-            return true, PT.ComboPoints, MODE.SEGMENTED, false
+        if env.inVehicle then
+            local vehiclePower = type(UnitPowerType) == "function" and UnitPowerType("vehicle") or nil
+            if env.vehicleHasCombo or vehiclePower == PT.ComboPoints then
+                SetComboUnit("vehicle")
+                return true, PT.ComboPoints, MODE.SEGMENTED, false
+            end
+            return true, nil, MODE.NONE, false
         end
+
+        if class == "DEATHKNIGHT" then
+            return true, PT.Runes, MODE.RUNE_CD, false
+        elseif class == "ROGUE" then
+            return true, PT.ComboPoints, MODE.SEGMENTED, false
+        elseif class == "PALADIN" then
+            return true, PT.HolyPower, MODE.SEGMENTED, false
+        elseif class == "WARLOCK" then
+            if spec == 2 then return true, PT.DemonicFury, MODE.CONTINUOUS, false end
+            if spec == 3 and env.isPlayerSpell(BURNING_EMBERS_SPELL) then
+                return true, PT.BurningEmbers, MODE.FRACTIONAL, false
+            end
+            if spec == 1 and env.isPlayerSpell(AFFLICTION_SHARD_SPELL) then
+                return true, PT.SoulShards, MODE.SEGMENTED, false
+            end
+            return true, nil, MODE.NONE, false
+        elseif class == "MAGE" then
+            if spec == 1 then
+                return true, "MISTS_ARCANE_CHARGES", MODE.AURA_SEGMENTED, true
+            end
+            return true, nil, MODE.NONE, false
+        elseif class == "MONK" then
+            return true, PT.Chi, MODE.SEGMENTED, false
+        elseif class == "PRIEST" then
+            if spec == 3 then return true, PT.ShadowOrbs, MODE.SEGMENTED, false end
+            return true, nil, MODE.NONE, false
+        elseif class == "DRUID" then
+            if env.primaryPower == PT.Energy then
+                return true, PT.ComboPoints, MODE.SEGMENTED, false
+            end
+            local form = env.formID
+            local moonkin = MOONKIN_FORM
+            if spec == 1 and (form == nil or (moonkin ~= nil and form == moonkin)) then
+                return true, PT.Balance, MODE.SIGNED_CONTINUOUS, false
+            end
+            return true, nil, MODE.NONE, false
+        end
+
+        --- Retail-only class resource trackers must never become active on MoP.
         return true, nil, MODE.NONE, false
     end
-
-    if class == "DEATHKNIGHT" then
-        return true, PT.Runes, MODE.RUNE_CD, false
-    elseif class == "ROGUE" then
-        return true, PT.ComboPoints, MODE.SEGMENTED, false
-    elseif class == "PALADIN" then
-        return true, PT.HolyPower, MODE.SEGMENTED, false
-    elseif class == "WARLOCK" then
-        if spec == 2 then return true, PT.DemonicFury, MODE.CONTINUOUS, false end
-        if spec == 3 and env.isPlayerSpell(BURNING_EMBERS_SPELL) then
-            return true, PT.BurningEmbers, MODE.FRACTIONAL, false
-        end
-        if spec == 1 and env.isPlayerSpell(AFFLICTION_SHARD_SPELL) then
-            return true, PT.SoulShards, MODE.SEGMENTED, false
-        end
-        return true, nil, MODE.NONE, false
-    elseif class == "MAGE" then
-        if spec == 1 then
-            return true, "MISTS_ARCANE_CHARGES", MODE.AURA_SEGMENTED, true
-        end
-        return true, nil, MODE.NONE, false
-    elseif class == "MONK" then
-        return true, PT.Chi, MODE.SEGMENTED, false
-    elseif class == "PRIEST" then
-        if spec == 3 then return true, PT.ShadowOrbs, MODE.SEGMENTED, false end
-        return true, nil, MODE.NONE, false
-    elseif class == "DRUID" then
-        if env.primaryPower == PT.Energy then
-            return true, PT.ComboPoints, MODE.SEGMENTED, false
-        end
-        local form = env.formID
-        local moonkin = _G.MOONKIN_FORM
-        if spec == 1 and (form == nil or (moonkin ~= nil and form == moonkin)) then
-            return true, PT.Balance, MODE.SIGNED_CONTINUOUS, false
-        end
-        return true, nil, MODE.NONE, false
-    end
-
-    --- Retail-only class resource trackers must never become active on MoP.
-    return true, nil, MODE.NONE, false
 end
-
-end
-Provider.Resolve = CreateResolver(SetComboUnit, _G)
+Provider.Resolve = CreateResolver(SetComboUnit)
 local function IgnoreSampleComboUnit() end
 function Provider.CreateSampleResolver(sample)
-    local resolve = CreateResolver(IgnoreSampleComboUnit, _G)
+    local resolve = CreateResolver(IgnoreSampleComboUnit)
     return function()
         local _, power, mode, aura = resolve(sample)
         return power, mode, aura
@@ -141,7 +139,7 @@ local function RestoreShown(frame, method)
     if type(fn) == "function" then fn(frame) end
 end
 
-local _, playerClass = _G.UnitClass("player")
+local _, playerClass = UnitClass("player")
 local comboFrame = TargetCombo.ComboFrameDefinition(playerClass)
 if comboFrame then
     Provider.BlizzardFrames = { comboFrame }
@@ -160,7 +158,7 @@ elseif playerClass == "DEATHKNIGHT" then
     --- repaints on RUNE_TYPE_UPDATE(runeIndex). A Death rune replaces a Blood,
     --- Frost or Unholy one. Indexed by rune type: 1 Blood, 2 Frost, 3 Unholy,
     --- 4 Death.
-    local getRuneType = _G.GetRuneType
+    local getRuneType = GetRuneType
     if type(getRuneType) == "function" then
         Provider.RuneTypes = {
             Get = getRuneType,

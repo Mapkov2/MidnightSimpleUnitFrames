@@ -3,8 +3,7 @@
 --- open/toggle/select calls delegate to Menu2, and combat entry hides the menu safely.
 
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
-local M = MSUF.MSUF2 or _G.MSUF2
+local M = MSUF.MSUF2
 if not M then return end
 local MenuRuntime = M.MenuRuntime or {}
 
@@ -14,14 +13,16 @@ local Fmt = M.Format
 
 local ExportPublic = MSUF.ExportPublic
 
-ExportPublic("MSUF2_Open", function(pageKey) M.Open(pageKey) end)
+local function OpenPageKey(pageKey) M.Open(pageKey) end
+local function SelectPageKey(pageKey) return M.SelectPage(pageKey or "home") end
+ExportPublic("MSUF2_Open", OpenPageKey)
 ExportPublic("MSUF2_Toggle", function(pageKey) M.Toggle(pageKey) end)
-ExportPublic("MSUF_OpenStandaloneOptionsWindow", function(pageKey) M.Open(pageKey) end)
-ExportPublic("MSUF_ShowStandaloneOptionsWindow", function(pageKey) M.Open(pageKey) end)
+ExportPublic("MSUF_OpenStandaloneOptionsWindow", OpenPageKey)
+ExportPublic("MSUF_ShowStandaloneOptionsWindow", OpenPageKey)
 ExportPublic("MSUF_HideStandaloneOptionsWindow", function() M.HideSlashMenuAndMinibar(M.frame) end)
 ExportPublic("MSUF_OpenOptionsMenu", function() M.Open() end)
-ExportPublic("MSUF_OpenPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
-ExportPublic("MSUF_SwitchMirrorPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
+ExportPublic("MSUF_OpenPage", SelectPageKey)
+ExportPublic("MSUF_SwitchMirrorPage", SelectPageKey)
 ExportPublic("MSUF_GetCurrentMirrorPage", function() return M.activeKey or "home" end)
 ExportPublic("MSUF_GetMirrorPages", function() return M.pages end)
 
@@ -204,8 +205,7 @@ RegisterMenuCommand({
         --- Edit Mode is already running: re-entering with a unit retargets it
         --- rather than toggling the whole mode off under the player.
         if unitKey and status.active then
-            local setFn = rawget(_G, "MSUF_SetMSUFEditModeDirect")
-            if type(setFn) == "function" then setFn(true, unitKey) end
+            MSUF.Require("MSUF_SetMSUFEditModeDirect", "Shell/Menu2/MSUF_Menu2_API.lua")(true, unitKey)
             return
         end
         if unitKey then return M.SetMSUFEditModeActive(true, unitKey, { source = "slash" }) end
@@ -248,7 +248,7 @@ RegisterMenuCommand({
     help = "Start or resume the guided setup.",
     run = function()
         if M.BlockCombatAction and M.BlockCombatAction() then return end
-        local tour = MSUF and MSUF.GuidedTour6
+        local tour = MSUF.GuidedTour6
         local active = type(tour) == "table" and type(tour.IsActive) == "function" and tour:IsActive()
         if active and type(M.ResumeGuidedTour) == "function" then
             M.ResumeGuidedTour()
@@ -281,7 +281,7 @@ RegisterMenuCommand({
     dev = true,
     usage = "/msuf versiontest",
     help = "Fake an available update to test the version-check popup.",
-    run = function() _G.MSUF_VersionCheck_DebugFakeUpdate() end,
+    run = function() MSUF.Require("MSUF_VersionCheck_DebugFakeUpdate", "Shell/Menu2/MSUF_Menu2_API.lua")() end,
 })
 
 RegisterMenuCommand({
@@ -292,7 +292,7 @@ RegisterMenuCommand({
     help = "Replay the first-start flow or the upgrade highlights.",
     run = function(rest)
         local msg = rest:lower()
-        local firstLoad = MSUF and MSUF.FirstLoad6
+        local firstLoad = MSUF.FirstLoad6
         if type(firstLoad) ~= "table" or type(firstLoad.Reset) ~= "function" then
             print("|cff00b7ebMSUF|r: " .. M.Tr("First-load module is not loaded."))
             return
@@ -307,7 +307,7 @@ RegisterMenuCommand({
                 tostring(shows), tostring(detection.reason), tostring(detection.existingProfile),
                 tostring(detection.legacyProfile), tostring(detection.profileSchema or "none"),
                 tostring(detection.rawDB), tostring(detection.rawProfiles)))
-            local highlights = MSUF and MSUF.UpgradeHighlights
+            local highlights = MSUF.UpgradeHighlights
             if type(highlights) == "table" and type(highlights.GetDebugSummary) == "function" then
                 local releaseKey, status, index, count = highlights:GetDebugSummary()
                 print(string.format("|cff00b7ebMSUF|r upgrade-highlights: release=%s status=%s index=%s count=%s shows=%s",
@@ -323,10 +323,10 @@ RegisterMenuCommand({
         if M.BlockCombatAction and M.BlockCombatAction() then return end
         -- A clean preview also needs the guided tour parked, otherwise an
         -- active tour would take over the next menu open.
-        local tour = MSUF and MSUF.GuidedTour6
+        local tour = MSUF.GuidedTour6
         if type(tour) == "table" and type(tour.Reset) == "function" then tour:Reset() end
         firstLoad:Reset(arg ~= "" and arg or nil)
-        local highlights = MSUF and MSUF.UpgradeHighlights
+        local highlights = MSUF.UpgradeHighlights
         if type(highlights) == "table" then
             if firstLoad:GetInstallKind() == "fresh" and type(highlights.BaselineKnownReleases) == "function" then
                 highlights:BaselineKnownReleases()

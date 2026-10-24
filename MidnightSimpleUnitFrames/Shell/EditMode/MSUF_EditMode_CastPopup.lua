@@ -7,12 +7,12 @@ local addonName, MSUF = ...
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_CastPopup.lua"
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local floor = math.floor
 local max, min = math.max, math.min
-local Style = _G.MSUF_EM2_Menu2Style or {}
+local Style = MSUF.Optional("MSUF_EM2_Menu2Style") or {}
 local Quick = EM2.QuickPopup or Style.QuickPopup
 if not Quick then return end
 
@@ -43,28 +43,38 @@ local function ButtonOpts(sync)
 end
 
 local function General()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     return db and db.general or {}
 end
 
 local function EditableGeneral()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then return nil end
     db.general = db.general or {}
     return db.general
 end
 
+-- The castbar module loads after Edit Mode and publishes these getters once.
+-- Each is resolved on its first use and kept: the castbar drag syncs this
+-- popup at 20 Hz and must not pay a lookup per tick.
+local CastbarProviders = {}
+
 local function Prefix(unit)
-    local fn = _G.MSUF_GetCastbarPrefix
-    return type(fn) == "function" and fn(unit) or nil
+    local fn = CastbarProviders.prefix
+    if fn == nil then
+        fn = MSUF.Require("MSUF_GetCastbarPrefix", CALLER)
+        CastbarProviders.prefix = fn
+    end
+    return fn(unit) or nil
 end
 
 local function DefaultOffsets(unit)
-    local fn = _G.MSUF_GetCastbarDefaultOffsets
-    if type(fn) == "function" then return fn(unit) end
-    if unit == "player" then return 0, 5 end
-    if unit == "target" or unit == "focus" then return 65, -15 end
-    return 0, 0
+    local fn = CastbarProviders.defaultOffsets
+    if fn == nil then
+        fn = MSUF.Require("MSUF_GetCastbarDefaultOffsets", CALLER)
+        CastbarProviders.defaultOffsets = fn
+    end
+    return fn(unit)
 end
 
 local function OffsetKeys(unit)
@@ -83,11 +93,13 @@ local function HeightKey(unit)
 end
 
 local function WidthSourceKey(unit)
-    local fn = _G.MSUF_GetCastbarWidthSourceKey
-    if type(fn) == "function" then
-        local key = fn(unit)
-        if key then return key end
+    local fn = CastbarProviders.widthSourceKey
+    if fn == nil then
+        fn = MSUF.Require("MSUF_GetCastbarWidthSourceKey", CALLER)
+        CastbarProviders.widthSourceKey = fn
     end
+    local key = fn(unit)
+    if key then return key end
     local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
     return fields and fields.match
 end
@@ -113,25 +125,30 @@ local function CastbarFrame(unit)
     if unit == "player" then return MSUF.Castbars.Frames.Get("playerPreview") or MSUF.Castbars.Frames.Get("player") end
     if unit == "target" then return MSUF.Castbars.Frames.Get("targetPreview") or MSUF.Castbars.Frames.Get("target") end
     if unit == "focus" then return MSUF.Castbars.Frames.Get("focusPreview") or MSUF.Castbars.Frames.Get("focus") end
-    if unit == "boss" then return MSUF.Castbars.Frames.Get("bossPreview") or _G["MSUF_BossCastbarPreview1"] end
+    if unit == "boss" then return MSUF.Castbars.Frames.Get("bossPreview") end
     if unit == "arena" then
-        local frames = _G.MSUF_ArenaCastbars
-        return MSUF.Castbars.Frames.Get("arenaPreview") or _G["MSUF_ArenaCastbarPreview1"]
-            or (frames and frames[1]) or _G.MSUF_ArenaCastbar1
+        local preview = MSUF.Castbars.Frames.Get("arenaPreview")
+        if preview then return preview end
+        -- Registry miss only: the legacy globals and the live arena pool.
+        local frames = MSUF.Optional("MSUF_ArenaCastbars")
+        return MSUF.Optional("MSUF_ArenaCastbarPreview1")
+            or (frames and frames[1]) or MSUF.Optional("MSUF_ArenaCastbar1")
     end
 end
 
 local function EffectiveSize(g, unit)
-    local fn = _G.MSUF_GetCastbarDesiredSize
-    if type(fn) == "function" then
-        local w, h = fn(unit, g, CastbarFrame(unit), ManualWidth(g, unit), ManualHeight(g, unit))
-        if w and h then return floor(w + 0.5), floor(h + 0.5) end
+    local fn = CastbarProviders.desiredSize
+    if fn == nil then
+        fn = MSUF.Require("MSUF_GetCastbarDesiredSize", CALLER)
+        CastbarProviders.desiredSize = fn
     end
+    local w, h = fn(unit, g, CastbarFrame(unit), ManualWidth(g, unit), ManualHeight(g, unit))
+    if w and h then return floor(w + 0.5), floor(h + 0.5) end
     return floor(ManualWidth(g, unit) + 0.5), floor(ManualHeight(g, unit) + 0.5)
 end
 
 local function RefreshUFPreview(reason)
-    local fn = _G.MSUF_UFPreview_RequestRefresh
+    local fn = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
     if type(fn) == "function" then fn(reason or "EM2_CASTBAR_POPUP") end
 end
 
@@ -162,7 +179,7 @@ local function Apply(mode)
     local wKey, hKey = WidthKey(unit), HeightKey(unit)
     if not (xKey and yKey and wKey and hKey) then return end
 
-    _G.MSUF_EM_UndoBeforeChange("castbar", unit)
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("castbar", unit)
 
     local dx, dy = DefaultOffsets(unit)
     local currentX = Quick.San(g[xKey], dx)
@@ -207,7 +224,7 @@ local function ResetPosition()
     local unit = pf.unit
     local xKey, yKey = OffsetKeys(unit)
     if not (xKey and yKey) then return end
-    _G.MSUF_EM_UndoBeforeChange("castbar", unit)
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("castbar", unit)
     local dx, dy = DefaultOffsets(unit)
     g[xKey], g[yKey] = dx, dy
     ReapplyCastbar(unit)
@@ -221,23 +238,17 @@ local function ApplyDetach(checked)
     local key = DetachedKey(pf.unit)
     if not key then return end
 
-    _G.MSUF_EM_UndoBeforeChange("castbar", pf.unit)
-    local setAnchored = _G.MSUF_EM_SetCastbarAnchoredToUnit
-    if type(setAnchored) == "function" then
-        --- The canonical owner preserves the current on-screen center when a
-        --- unitframe-relative castbar becomes UIParent-relative. Writing only
-        --- the flag would reinterpret the old offsets and can move it off-screen.
-        setAnchored(pf.unit, checked ~= true)
-    else
-        g[key] = checked and true or false
-        ReapplyCastbar(pf.unit)
-    end
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("castbar", pf.unit)
+    --- The canonical owner preserves the current on-screen center when a
+    --- unitframe-relative castbar becomes UIParent-relative. Writing only
+    --- the flag would reinterpret the old offsets and can move it off-screen.
+    MSUF.Require("MSUF_EM_SetCastbarAnchoredToUnit", CALLER)(pf.unit, checked ~= true)
     if pf and pf:IsShown() then Sync() end
 end
 
 local function SetTest(unit, on)
     for key, fnName in pairs(TEST_FUNCS) do
-        local fn = _G[fnName]
+        local fn = MSUF.Optional(fnName)
         if type(fn) == "function" then fn(key == unit and on, true) end
     end
 end
@@ -308,18 +319,7 @@ end
 
 
 local function ApplySize(changed)
-    if pf and pf._lockRatio then
-        local ratio = tonumber(pf._sizeRatio)
-        local w = pf.wBox and tonumber(pf.wBox:GetText())
-        local h = pf.hBox and tonumber(pf.hBox:GetText())
-        if ratio and ratio > 0 then
-            if changed == "width" and w then
-                Quick.SetBoxText(pf.hBox, floor(max(8, min(100, w / ratio)) + 0.5))
-            elseif changed == "height" and h then
-                Quick.SetBoxText(pf.wBox, floor(max(50, min(600, h * ratio)) + 0.5))
-            end
-        end
-    end
+    Quick.EnforceSizeRatio(pf, changed, 50, 600, 8, 100)
     Apply("all")
 end
 
@@ -340,7 +340,7 @@ local function Build()
         hoverSource = "cast-popup",
         onHide = function(s)
             local self = pf or s
-            if self and self.unit and not _G.MSUF_UnitPreviewActive then SetTest(self.unit, false) end
+            if self and self.unit and not MSUF.PublicGlobals.MSUF_UnitPreviewActive then SetTest(self.unit, false) end
         end,
     })
     local opts = ButtonOpts()
@@ -389,7 +389,7 @@ end
 
 function CastPopup.Close()
     if pf then
-        if pf.unit and not _G.MSUF_UnitPreviewActive then SetTest(pf.unit, false) end
+        if pf.unit and not MSUF.PublicGlobals.MSUF_UnitPreviewActive then SetTest(pf.unit, false) end
         pf:Hide()
     end
 end

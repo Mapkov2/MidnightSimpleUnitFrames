@@ -129,6 +129,9 @@ _G.MSUF_DB = { general = {}, auras3 = { enabled = true, shared = {}, perUnit = {
 
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(root, flavor, namespace, {
+    -- The real Util owns MSUF_GetGeneralDB and MSUF_PixelLayoutRegion, which the aura files bind;
+    -- it loads after the geometry owner it needs, as in the TOC.
+    "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
     "Game/Shared/Initialize.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
     "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",

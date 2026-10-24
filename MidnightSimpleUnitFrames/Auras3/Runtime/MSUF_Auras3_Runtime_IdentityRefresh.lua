@@ -9,7 +9,6 @@ local Identity = Runtime.Identity
 local IdentityRefresh = Runtime.IdentityRefresh
 local Presence = Runtime.Presence
 local next, pairs, type = next, pairs, type
-local C_Timer = dependencies.Platform.C_Timer
 local RunNextFrame = dependencies.Platform.RunNextFrame
 local InCombat = dependencies.Platform.InCombat
 local IsLiveGroupAuraFrame = dependencies.Identity.IsLiveGroupAuraFrame
@@ -43,7 +42,7 @@ local function RefreshOwners(unit, skipLiveGroup, gateIdentity, seedGroupAssist)
             local filterChanged = SyncCuratedBigDefensiveContainer(container)
             local update = container and container.UpdateAllAuras
             if type(update) == "function" then
-                if identityEligible then Runtime.LatchGuard.RefreshNativeAuraOwner(container, filterChanged) end
+                if identityEligible and not filterChanged and Containers.NativeContainerVisible(container) then update(container) end
                 if container._msufA3ForceManagedAuraGeometry == true
                     or container._msufA3ForceSpellIndicatorGeometry == true then
                     Containers.SyncManagedAuraContainerGeometry(container, true)
@@ -152,13 +151,7 @@ IdentityRefresh.QueueDirectIdentityRefreshAllFlush = function()
         or A3._directIdentityRefreshTimerPending == true
         or InCombat() then return false end
     A3._directIdentityRefreshTimerPending = true
-    if RunNextFrame then
-        RunNextFrame(IdentityRefresh.FlushScheduledDirectIdentityRefreshAll)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, IdentityRefresh.FlushScheduledDirectIdentityRefreshAll)
-    else
-        IdentityRefresh.FlushScheduledDirectIdentityRefreshAll()
-    end
+    RunNextFrame(IdentityRefresh.FlushScheduledDirectIdentityRefreshAll)
     return true
 end
 
@@ -183,13 +176,7 @@ IdentityRefresh.QueueDeferredDirectIdentityColdWork = function()
     -- one-shot timer.
     A3._groupAuraPresenceRefreshAllTimerPending = true
     A3._directIdentityRefreshTimerPending = true
-    if RunNextFrame then
-        RunNextFrame(IdentityRefresh.FlushDeferredDirectIdentityColdWork)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, IdentityRefresh.FlushDeferredDirectIdentityColdWork)
-    else
-        IdentityRefresh.FlushDeferredDirectIdentityColdWork()
-    end
+    RunNextFrame(IdentityRefresh.FlushDeferredDirectIdentityColdWork)
     return true
 end
 
@@ -246,13 +233,7 @@ IdentityRefresh.ScheduleDirectIdentityEventRefresh = function(unit, nonGroupOnly
     if units[unit] ~= "all" then units[unit] = requestedMode end
     if A3._directIdentityEventRefreshPending == true then return true end
     A3._directIdentityEventRefreshPending = true
-    if RunNextFrame then
-        RunNextFrame(IdentityRefresh.FlushScheduledDirectIdentityEventRefresh)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, IdentityRefresh.FlushScheduledDirectIdentityEventRefresh)
-    else
-        IdentityRefresh.FlushScheduledDirectIdentityEventRefresh()
-    end
+    RunNextFrame(IdentityRefresh.FlushScheduledDirectIdentityEventRefresh)
     return true
 end
 
@@ -262,7 +243,7 @@ end
 -- useful point to restore the configured candidate-filter assignments. Cache
 -- this cold state so ordinary player flag churn never schedules an aura parse.
 IdentityRefresh.UpdateDirectIdentityPlayerTaxiState = function()
-    local unitOnTaxi = _G.UnitOnTaxi
+    local unitOnTaxi = UnitOnTaxi
     if type(unitOnTaxi) ~= "function" then return nil, nil end
     local onTaxi = unitOnTaxi("player")
     if issecretvalue(onTaxi) == true or onTaxi == nil then return nil, nil end

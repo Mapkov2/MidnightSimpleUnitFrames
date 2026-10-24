@@ -13,15 +13,14 @@
 --- file. It only defines functions: nothing runs until a provider asks for a
 --- part, and Midnight has no provider.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local K = _G.MSUF_CP_CONST or {}
+local K = MSUF.Require("MSUF_CP_CONST", "Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua")
 local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 local PT = K.PT or {}
-local NativeUnitPower = _G.UnitPower
-local GetComboPoints = _G.GetComboPoints
-local issecretvalue = _G.issecretvalue
+local NativeUnitPower = UnitPower
+local GetComboPoints = GetComboPoints
+local issecretvalue = issecretvalue
 local type = type
 
 local TargetCombo = {}
@@ -83,7 +82,7 @@ end
 --- Blizzard's own combo point display, for the compat layer that suppresses
 --- and restores the client's resource frames.
 local function RestoreComboFrame(frame)
-    local update = _G.ComboFrame_UpdateMax or _G.ComboFrame_Update
+    local update = ComboFrame_UpdateMax or ComboFrame_Update
     if type(update) == "function" then update(frame) end
 end
 

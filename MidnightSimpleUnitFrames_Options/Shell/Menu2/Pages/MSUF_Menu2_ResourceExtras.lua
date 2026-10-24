@@ -81,18 +81,13 @@ function ResourceExtras.ClientOnlySettings()
     return all,built
 end
 function ResourceExtras.Specs()
-    local specs={
-        {key="manaUpcomingCost",kind="toggle",labelKey="Mana spend preview"},
-    }
-    local own={}
+    local specs={}
     for _,group in ipairs(CLIENT_EXTRAS) do
         if group.wanted() then
-            for _,spec in ipairs(group.specs()) do own[#own+1]=spec end
+            for _,spec in ipairs(group.specs()) do specs[#specs+1]=spec end
         end
     end
-    for i,spec in ipairs(own) do
-        table.insert(specs,i,spec)
-    end
+    specs[#specs+1]={key="manaUpcomingCost",kind="toggle",labelKey="Mana spend preview"}
     return specs
 end
 local GROUPS = {

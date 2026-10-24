@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Colors, previews, feedback, fill direction and spell-name shortening.
 -- Namespace utilities; public aliases belong to PublicAPI.
 
@@ -14,7 +13,18 @@ local Utils = Castbars.Utils
 
 local Publish = PublicAPI.Publish
 
-local C_Timer = _G.C_Timer
+--- Kernel Util, Runtime/MSUF_Colors.lua and the cooldown integrations load
+--- before this file and resolve once here.
+local FILE = "Castbars/MSUF_CastbarUtils.lua"
+local Require = MSUF.Require
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local IsCooldownAnchorEnabled = Require("MSUF_IsCooldownAnchorEnabled", FILE)
+local GetEffectiveCooldownFrame = Require("MSUF_GetEffectiveCooldownFrame", FILE)
+local GetUsableCooldownAnchorSize = Require("MSUF_GetUsableCooldownAnchorSize", FILE)
+local GetColorRGBFromKey = Require("MSUF_GetColorRGBFromKey", FILE)
+local GetColorFromKey = Require("MSUF_GetColorFromKey", FILE)
+local GetInterruptFeedbackCastColor = Require("MSUF_GetInterruptFeedbackCastColor", FILE)
+
 local type = type
 local tonumber = tonumber
 local tostring = tostring
@@ -22,13 +32,13 @@ local string_byte = string.byte
 local string_sub = string.sub
 local math_floor = math.floor
 local math_abs = math.abs
-local IsSecretValue = type(_G.issecretvalue) == "function" and _G.issecretvalue
-local CurveUtil = _G.C_CurveUtil
+local IsSecretValue = type(issecretvalue) == "function" and issecretvalue
+local CurveUtil = C_CurveUtil
 local EvaluateColorFromBoolean = CurveUtil and type(CurveUtil.EvaluateColorFromBoolean) == "function"
     and CurveUtil.EvaluateColorFromBoolean
 
 local function PlainPositiveNumber(value)
-    local isSecret = _G.issecretvalue
+    local isSecret = issecretvalue
     if type(isSecret) == "function" and isSecret(value) == true then return nil end
 
     value = tonumber(value)
@@ -108,25 +118,20 @@ Utils.Castbar_DisableFrameOnUpdate = DisableFrameOnUpdate
 local function GetAnchorFrame()
     local source = Config.Source()
     local general = (source and source.general) or {}
-    local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
-    -- The Integrations module answers first; without it the client model does.
+    -- The Integrations module answers first; otherwise the client model does.
     -- The C_CooldownViewer namespace is never the signal: the shared engine
     -- exposes it on every client, while only the Mainline family ships
     -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
-    local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
-        and isCooldownAnchorEnabled(general) == true
+    local cooldownAnchorEnabled = IsCooldownAnchorEnabled(general) == true
         or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
             and general.anchorToCooldown == true)
 
     if cooldownAnchorEnabled then
-        local getCooldown = _G.MSUF_GetEffectiveCooldownFrame
-        local cooldown = (type(getCooldown) == "function" and getCooldown("EssentialCooldownViewer"))
-            or _G.EssentialCooldownViewer
-        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-        if type(getSize) == "function" and getSize(cooldown) ~= nil then
+        local cooldown = GetEffectiveCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer
+        if GetUsableCooldownAnchorSize(cooldown) ~= nil then
             return cooldown
         end
-        return _G.UIParent
+        return UIParent
     end
 
     local anchorName = general.anchorName
@@ -137,7 +142,7 @@ local function GetAnchorFrame()
         end
     end
 
-    return _G.UIParent
+    return UIParent
 end
 Utils.GetAnchorFrame = GetAnchorFrame
 Publish("MSUF_GetAnchorFrame", Utils.GetAnchorFrame)
@@ -188,7 +193,7 @@ local function CachedColor(cache, red, green, blue, alpha)
         return cache.obj
     end
     cache.r, cache.g, cache.b, cache.a = red, green, blue, alpha
-    cache.obj = _G.CreateColor(red, green, blue, alpha)
+    cache.obj = CreateColor(red, green, blue, alpha)
     return cache.obj
 end
 
@@ -239,7 +244,7 @@ local function ApplyNonInterruptibleTint(
 
     local texture = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture()
     local usedBooleanTint = false
-    if texture and texture.SetVertexColorFromBoolean and _G.CreateColor then
+    if texture and texture.SetVertexColorFromBoolean and CreateColor then
         local nonColor = CachedColor(nonInterruptibleColorCache, nonR, nonG, nonB, nonA or 1)
         local castColor = CachedColor(interruptibleColorCache, castR, castG, castB, castA or 1)
         local activeCastColor = castColor
@@ -313,21 +318,11 @@ local function ApplyNonInterruptibleTint(
 end
 Utils.Castbar_ApplyNonInterruptibleTint = ApplyNonInterruptibleTint
 
-local SetTextIfChanged = _G.MSUF_SetTextIfChanged
+local SetTextIfChanged = Require("MSUF_SetTextIfChanged", FILE)
 
 local function SetText(textRegion, text)
     if not (textRegion and textRegion.SetText) then return end
-    if SetTextIfChanged then
-        SetTextIfChanged(textRegion, text or "")
-    else
-        textRegion:SetText(text or "")
-    end
-end
-
-if C_Timer and C_Timer.After then
-    C_Timer.After(0, function()
-        SetTextIfChanged = _G.MSUF_SetTextIfChanged or SetTextIfChanged
-    end)
+    SetTextIfChanged(textRegion, text or "")
 end
 
 local function ResolveReverseFill(frame, override, isChanneled)
@@ -439,10 +434,9 @@ local function ResolveCastbarColors()
     local castR, castG, castB = GetInterruptibleCastColor(general)
     if not (castR and castG and castB) then
         local key = general.castbarInterruptibleColor or "teal"
-        local getRGB = _G.MSUF_GetColorRGBFromKey
-        if type(getRGB) == "function" then castR, castG, castB = getRGB(key) end
+        castR, castG, castB = GetColorRGBFromKey(key)
         if not (castR and castG and castB) then
-            local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+            local color = GetColorFromKey(key)
             if color and color.GetRGB then castR, castG, castB = color:GetRGB() end
         end
     end
@@ -451,10 +445,9 @@ local function ResolveCastbarColors()
     local nonR, nonG, nonB = GetNonInterruptibleCastColor(general)
     if not (nonR and nonG and nonB) then
         local key = general.castbarNonInterruptibleColor or "red"
-        local getRGB = _G.MSUF_GetColorRGBFromKey
-        if type(getRGB) == "function" then nonR, nonG, nonB = getRGB(key) end
+        nonR, nonG, nonB = GetColorRGBFromKey(key)
         if not (nonR and nonG and nonB) then
-            local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+            local color = GetColorFromKey(key)
             if color and color.GetRGB then nonR, nonG, nonB = color:GetRGB() end
         end
     end
@@ -526,9 +519,8 @@ Utils.GetInterruptUnavailableCastColor = GetInterruptUnavailableCastColor
 
 local function ResolveInterruptFeedbackCastColor()
 
-    local getter = _G.MSUF_GetInterruptFeedbackCastColor
-    if type(getter) == "function" then
-        local red, green, blue = getter()
+    do
+        local red, green, blue = GetInterruptFeedbackCastColor()
         if red and green and blue then return red, green, blue, 1 end
     end
 
@@ -539,13 +531,10 @@ local function ResolveInterruptFeedbackCastColor()
     if red and green and blue then return red, green, blue, 1 end
 
     local key = general.castbarInterruptFeedbackColor or "yellow"
-    local getRGB = _G.MSUF_GetColorRGBFromKey
-    if type(getRGB) == "function" then
-        red, green, blue = getRGB(key)
-        if red and green and blue then return red, green, blue, 1 end
-    end
+    red, green, blue = GetColorRGBFromKey(key)
+    if red and green and blue then return red, green, blue, 1 end
 
-    local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+    local color = GetColorFromKey(key)
     if color and color.GetRGB then
         red, green, blue = color:GetRGB()
         if red and green and blue then return red, green, blue, 1 end
@@ -611,7 +600,7 @@ local function ResolveInterruptUnavailableCastColor()
 
     if not (red and green and blue) then
         local key = general.castbarInterruptUnavailableColor
-        local color = key and type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+        local color = key and GetColorFromKey(key) or nil
         if color and color.GetRGB then
             red, green, blue = color:GetRGB()
         end
@@ -628,7 +617,7 @@ Publish("MSUF_ResolveInterruptUnavailableCastColor", Utils.ResolveInterruptUnava
 
 local function GetInterruptUnavailableTintArgs(frame)
     if not ShouldUseInterruptUnavailableColor(frame) then return nil end
-    if not (_G.C_CurveUtil and type(_G.C_CurveUtil.EvaluateColorFromBoolean) == "function") then return nil end
+    if not (C_CurveUtil and type(C_CurveUtil.EvaluateColorFromBoolean) == "function") then return nil end
     if type(KickReady.KickReady_GetSpellID) == "function" and not KickReady.KickReady_GetSpellID() then return nil end
 
     local readyBool
@@ -644,7 +633,7 @@ local function GetInterruptUnavailableTintArgs(frame)
 end
 Utils.Castbar_GetInterruptUnavailableTintArgs = GetInterruptUnavailableTintArgs
 
-local toPlainIsSecret = _G.issecretvalue
+local toPlainIsSecret = issecretvalue
 local toPlainHuge = math.huge
 
 --- Canonical castbar scalar unwrapper. Dragonflight+ APIs may return value
@@ -669,7 +658,7 @@ local function PlainNumber(value)
         return value
     end
 
-    local toPlain = _G.ToPlain
+    local toPlain = ToPlain
     if type(toPlain) == "function" then
         local plain = toPlain(value)
         if plain ~= nil and toPlainIsSecret(plain) ~= true then
@@ -746,11 +735,11 @@ MSUF.Castbars.EnsureGlowOverlay = EnsureCastbarGlowOverlay
 
 local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     if not frame or not frame.statusBar then return end
-    if (frame._msufIsPreview or frame.MSUF_testMode) and not _G.MSUF_UnitEditModeActive then return end
+    if (frame._msufIsPreview or frame.MSUF_testMode) and not MSUF_UnitEditModeActive then return end
     if frame.interrupted then return end
 
     if frame.interruptFeedbackEndTime then
-        local now = (_G.GetTimePreciseSec and _G.GetTimePreciseSec()) or _G.GetTime()
+        local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
         if now < frame.interruptFeedbackEndTime then return end
     end
 
@@ -846,7 +835,7 @@ local function PrepareRuler(sourceFS)
     if not (font and size) then return nil end
 
     if not measureFS then
-        local parent = _G.UIParent
+        local parent = UIParent
         if not (parent and parent.CreateFontString) then return nil end
         measureFS = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", "GameFontNormal"), true)
         if not measureFS then return nil end
@@ -975,7 +964,7 @@ end
 Utils.GetCastbarSpellNameShorteningConfig = GetSpellNameShorteningConfig
 
 local function ShortenCastbarSpellName(frame, text)
-    local isSecret = _G.issecretvalue
+    local isSecret = issecretvalue
     if type(isSecret) == "function" and isSecret(text) == true then
         -- A secret name is neither measured nor cached, but the previous plain
         -- name must go too: RefreshCastbarSpellNameText (the cold re-layout)

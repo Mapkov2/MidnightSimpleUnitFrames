@@ -1,9 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: NativeContract.
 -- Native capability validation and MSUF root reuse checks. Native delegates are called directly; MSUF never reaches into restricted AuraButtons.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua")
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.NativeContract = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local Runtime = A3.Runtime
@@ -12,6 +11,7 @@ local Presence = Runtime.Presence
 local tostring = tostring
 local type = type
 local COLD_APPLY_REASONS = dependencies.Schema.COLD_APPLY_REASONS
+local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", "Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua")
 local CreateFrame = dependencies.Platform.CreateFrame
 local FrameAuraConfig = dependencies.GroupConfig.FrameAuraConfig
 local IDENTITY_AURA_REFRESH_REASONS = dependencies.Schema.IDENTITY_AURA_REFRESH_REASONS
@@ -110,8 +110,7 @@ local function EnsureRoot(frame)
     local root = frame.Auras
     if root and root._msufA3NativeRoot == true then return root end
     root = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
-    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-    if type(roundLayout) == "function" then roundLayout(root, true) end
+    SetRoundLayoutToNearestPixel(root, true)
     root._msufA3ParentFrame = frame
     root._msufA3NativeRoot = true
     root:SetAllPoints(frame)

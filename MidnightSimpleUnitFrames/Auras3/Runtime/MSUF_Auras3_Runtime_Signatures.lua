@@ -2,7 +2,6 @@
 -- The canonical distinction between tracking, structural and layout changes. A sealed native child is recreated when its immutable inputs change.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Signatures = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local tostring = tostring

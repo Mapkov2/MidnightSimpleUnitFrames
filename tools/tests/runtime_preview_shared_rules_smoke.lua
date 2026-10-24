@@ -392,6 +392,19 @@ end, "castbar page text")
 general.castbarPlayerSpellNamePosition = nil
 core.Castbars.Config.Refresh()
 
+local shapeChoices = M.IconShapeValues()
+assert(#shapeChoices == 7, "icons without a portrait must offer seven aura shapes")
+for _, item in ipairs(shapeChoices) do
+    assert(item.value ~= "FOLLOW_PORTRAIT", "an icon without a portrait offers Follow Portrait")
+end
+general.castbarPlayerIconShape = "CIRCLE"
+Calls(Castbars.ApplyIconShape, function() RefreshCast("SHARED_CAST_SHAPE") end, "unit scene cast shape")
+assert(playerScene.icon._msufA3AuraShapeMask, "the unit scene cast icon kept square art")
+Calls(Castbars.ApplyIconShape, function() castPage:Refresh() end, "castbar page scene shape")
+general.castbarPlayerIconShape = nil
+RefreshCast("SHARED_CAST_NO_SHAPE")
+castPage:Refresh()
+
 local liveCast = env.CreateFrame("Frame", nil, env.UIParent)
 liveCast:SetSize(250, 18)
 liveCast.statusBar = env.CreateFrame("StatusBar", nil, liveCast)
@@ -450,6 +463,8 @@ local CPWorld = assert(loadfile(root .. "/tools/tests/classpower_world.lua"))()
 local t = CPWorld.Start(root, flavor == "Forever" and "Mainline" or flavor, "ROGUE", 1, CPWorld.PT.ENERGY,
     { classPowerSlotColorModes = { COMBO_POINTS = "ramp" }, classPowerFullColorEnabled = { COMBO_POINTS = true } })
 local liveColors = _G.MSUF_NS.ClassPowerColors
-Calls(liveColors.ResolveSlotColor, _G.MSUF_ClassPower_Refresh, "live slot compiler")
-Calls(liveColors.ResolveFullColor, _G.MSUF_ClassPower_Refresh, "live full compiler")
+-- Class power exports its refresh to the namespace registry only.
+local liveRefresh = _G.MSUF_NS.PublicGlobals.MSUF_ClassPower_Refresh
+Calls(liveColors.ResolveSlotColor, liveRefresh, "live slot compiler")
+Calls(liveColors.ResolveFullColor, liveRefresh, "live full compiler")
 print("runtime_preview_shared_rules_smoke: ok (" .. flavor .. "; runtime/menu call identity, changed rule, portrait, CP, tint, details)")

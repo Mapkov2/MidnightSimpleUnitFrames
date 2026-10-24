@@ -1,7 +1,6 @@
 --- Auras3/EditMode_Config: saved layout readers and preview scope/style schema; no frame ownership.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -16,7 +15,7 @@ local AURA_UNITS = { "player", "pet", "target", "focus", "boss1", "boss2", "boss
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local ARENA_UNITS = { arena1=true, arena2=true, arena3=true }
 -- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on Mainline).
-for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+for arenaIndex = 4, tonumber(MSUF.Client.MaxArenaOpponents) or 3 do
     AURA_UNITS[#AURA_UNITS + 1] = "arena" .. arenaIndex
     ARENA_UNITS["arena" .. arenaIndex] = true
 end
@@ -210,7 +209,7 @@ local function EnsureDB()
     if A3.EnsureDB then
         auras, shared = A3.EnsureDB()
     else
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         auras = db and (db.auras3 or db.auras3)
         shared = auras and auras.shared
     end

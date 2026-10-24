@@ -1,9 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua"
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 
 -- Menu2 Unit text section.
 -- Builds name/HP/power text controls and edit-mode focus hooks. Text rendering, event
@@ -28,6 +30,18 @@ TEXT_ANCHORS = TEXT_ANCHORS or {}
 HP_MODES = HP_MODES or {}
 POWER_MODES = POWER_MODES or {}
 SEPARATORS = SEPARATORS or {}
+-- One-row builds: unit rows go through the typed unit binding, cards through the plain builder.
+local function Control(ctx, parent, row)
+    return Schema.Build(ctx, parent, { row }, Schema.UnitOptions())[row[2]]
+end
+local function TextCard(ctx, unit, parent, id, path, title, subtitle, x, y, width, height)
+    return Schema.Build(ctx, parent, {
+        { "card", id, nil, { title, subtitle, x, y, width, height }, scope = unit, domain = "layout",
+            meta = ControlMeta(ctx, path, "ephemeral") },
+    })[id]
+end
+-- Resolved on the first Move-together change.
+local RequestPreviewRefresh
 -- The section is assembled by TextSection.Build from one stage per tab, card or
 -- helper group. Stages share one per-build `state` table and run in the order
 -- the controls used to be created inline; RefreshTextControlState stays the
@@ -77,12 +91,12 @@ function TextSection.OpenSection(state, ctx, builder, unit)
     do
         -- Edit Mode can request that Menu2 opens directly on the text section/component the
         -- user clicked. Consume that request visually without changing any text settings.
-        local req = _G.MSUF_EM2_MenuFocusRequest
+        local req = PublicGlobals.MSUF_EM2_MenuFocusRequest
         if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit
             and (req.component == "name" or req.component == "hp" or req.component == "power") then
             ExportPublic("MSUF_EM2_MenuFocusSection", sec)
             C_Timer.After(0, function()
-                if _G.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
+                if PublicGlobals.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
                 local entry = sec and sec._msuf2CollapsibleEntry
                 local outer = entry and entry.outer
                 local scroll = M.scrollFrame
@@ -139,7 +153,7 @@ function TextSection.PrepareSlotState(state, unit)
     M.unitTextSlotSelection = M.unitTextSlotSelection or {}
     M.unitTextMoveTogether = M.unitTextMoveTogether or {}
     do
-        local req = _G.MSUF_EM2_MenuFocusRequest
+        local req = PublicGlobals.MSUF_EM2_MenuFocusRequest
         if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit then
             local component = req.component
             if component == "health" or component == "healthText" or component == "hpText" then component = "hp" end
@@ -154,20 +168,25 @@ function TextSection.PrepareSlotState(state, unit)
     local textSlotState = UnitSectionShared.MakeTextSlotState(M, function() return unit end, "unitTextSlotSelection", "unitTextMoveTogether")
     local CurrentSlot, SetCurrentSlot, SlotFontSizeKey = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotFontSizeKey
     local MoveTogether, SetMoveTogether = textSlotState.MoveTogether, textSlotState.SetMoveTogether
+    -- The focus providers resolve once, on the first focus change: hover and drag steps call this.
+    local focusResolved, focusSlotFn, focusSelectFn, focusHoverFn, focusClearFn
     local function FocusPreviewText(kind, slot, active)
-        local fn = _G.MSUF_UFPreview_FocusTextSlot
-        if type(fn) == "function" then fn(unit, kind, slot, active == true) end
+        if not focusResolved then
+            focusResolved = true
+            focusSlotFn = MSUF.Require("MSUF_UFPreview_FocusTextSlot", FILE)
+            focusSelectFn = MSUF.Require("MSUF_EM2_SetFocusSelection", FILE)
+            focusHoverFn = MSUF.Require("MSUF_EM2_SetFocusHover", FILE)
+            focusClearFn = MSUF.Require("MSUF_EM2_ClearFocusHover", FILE)
+        end
+        focusSlotFn(unit, kind, slot, active == true)
         if kind then
             if active == true then
-                local set = _G.MSUF_EM2_SetFocusSelection
-                if type(set) == "function" then set(unit, kind, slot, { source = "menu2", clearHover = true }) end
+                focusSelectFn(unit, kind, slot, { source = "menu2", clearHover = true })
             else
-                local hover = _G.MSUF_EM2_SetFocusHover
-                if type(hover) == "function" then hover(unit, kind, slot, { source = "menu2" }) end
+                focusHoverFn(unit, kind, slot, { source = "menu2" })
             end
         else
-            local clear = _G.MSUF_EM2_ClearFocusHover
-            if type(clear) == "function" then clear() end
+            focusClearFn()
         end
     end
     local function FocusActivePreviewText()
@@ -218,10 +237,7 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
     local tabFrames = {}
     local mouseoverFadeControls = {}
     local function MouseoverControl(tab, kind, key, y)
-        local card = Schema.Build(ctx, tab, {
-            { "card", "card", nil, { "Visibility", nil, rightX, y, rightW, 288 }, scope = unit, domain = "layout",
-                meta = ControlMeta(ctx, "text." .. kind .. ".visibility", "ephemeral") },
-        }).card
+        local card = TextCard(ctx, unit, tab, "card", "text." .. kind .. ".visibility", "Visibility", nil, rightX, y, rightW, 288)
         local control = Schema.Build(ctx, card, {
             { "toggle", "control", nil, { "Only show on mouseover", 16, -48, rightW - 56 },
                 get = function() return ReadBool(unit, key, false) end,
@@ -240,15 +256,13 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
             local settingKey = key .. suffix
             local meta = FixedSettingMeta("text." .. kind .. ".mouseover." .. suffix, settingKey)
             meta.step = 0.05
-            return Schema.Build(ctx, card, {
-                { "slider", "slider", 0, { label, 0, 2, 0.05, rightW - 58 }, { 16, offset, rightW - 58, "CENTER" },
-                    get = function() return ReadNumber(unit, settingKey, 0) end,
-                    set = function(v) SetNumber(unit, settingKey, v, "MSUF2_TEXT_MOUSEOVER_FADE", { text = true, preview = true }) end,
-                    meta = meta, scope = unit,
-                    tip = { label, suffix == "FadeIn"
-                    and "How long the text takes to fully appear once your mouse enters the unit frame. 0 shows it instantly."
-                    or "How long the text takes to fully fade away after your mouse leaves the unit frame. 0 hides it instantly.", { hook = true } } },
-            }, Schema.UnitOptions()).slider
+            return Control(ctx, card, { "slider", "slider", 0, { label, 0, 2, 0.05, rightW - 58 }, { 16, offset, rightW - 58, "CENTER" },
+                get = function() return ReadNumber(unit, settingKey, 0) end,
+                set = function(v) SetNumber(unit, settingKey, v, "MSUF2_TEXT_MOUSEOVER_FADE", { text = true, preview = true }) end,
+                meta = meta, scope = unit,
+                tip = { label, suffix == "FadeIn"
+                and "How long the text takes to fully appear once your mouse enters the unit frame. 0 shows it instantly."
+                or "How long the text takes to fully fade away after your mouse leaves the unit frame. 0 hides it instantly.", { hook = true } } })
         end
         mouseoverFadeControls[kind] = {
             FadeSlider("Fade in (seconds)", "FadeIn", -154),
@@ -479,10 +493,7 @@ function TextSection.BuildNameTab(state, ctx, unit)
     local RefreshTextControlState, FixedSettingMeta = state.RefreshTextControlState, state.FixedSettingMeta
     local FocusPreviewText = state.FocusPreviewText
     local RefreshTextHeader, MouseoverControl, EffectiveTextSize = state.RefreshTextHeader, state.MouseoverControl, state.EffectiveTextSize
-    local nameContent = Schema.Build(ctx, nameTab, {
-        { "card", "nameContent", nil, { nil, nil, leftX, -4, cardW, 116 }, scope = unit, domain = "layout",
-            meta = ControlMeta(ctx, "text.name.content", "ephemeral") },
-    }).nameContent
+    local nameContent = TextCard(ctx, unit, nameTab, "nameContent", "text.name.content", nil, nil, leftX, -4, cardW, 116)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(nameContent, {
             title = "Name text settings",
@@ -493,43 +504,31 @@ function TextSection.BuildNameTab(state, ctx, unit)
         })
     end
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
-    local showNameText = Schema.Build(ctx, nameContent, {
-        { "switch", "showNameText", nil, { "Show Name", 16, -24, 0, "HIDDEN" },
-            get = function() return ReadBool(unit, "showName", true) end,
-            set = function(v)
-                SetBool(unit, "showName", v, "MSUF2_SHOW_NAME_TEXT", { text = true, preview = true })
-                RefreshTextControlState()
-            end,
-            meta = FixedSettingMeta("text.name.show", "showName"), scope = unit,
-            tip = { "Show Name", "Turns this frame's name text on or off. Its anchor, size and color stay saved while it is off.", { hook = true } } },
-    }, Schema.UnitOptions()).showNameText
-    local namePosition = Schema.Build(ctx, nameTab, {
-        { "card", "namePosition", nil, { "Position", "Move the name directly in Preview.", leftX, -136, cardW, 134 },
-            scope = unit, domain = "layout",
-            meta = ControlMeta(ctx, "text.name.position", "ephemeral") },
-    }).namePosition
-    local nameAnchor = Schema.Build(ctx, namePosition, {
-        { "dropdown", "nameAnchor", nil, { "Anchor", TEXT_ANCHORS, 210 }, { 16, -48, cardW - 32, "LEFT" },
-            get = function() return ReadText(unit, "nameTextAnchor", "TOPLEFT") end,
-            set = function(v)
-                SetText(unit, "nameTextAnchor", v or "TOPLEFT", "MSUF2_NAME_ANCHOR")
-                FocusPreviewText("name", nil, true)
-                RefreshTextHeader()
-            end,
-            meta = FixedSettingMeta("text.name.anchor", "nameTextAnchor"), scope = unit,
-            tip = { "Anchor", "Where the name is pinned on the frame and how it aligns. Dragging it in Preview offsets it from this point.", { hook = true } } },
-    }, Schema.UnitOptions()).nameAnchor
-    local nameAppearance = Schema.Build(ctx, nameTab, {
-        { "card", "nameAppearance", nil, { "Appearance", nil, rightX, -4, rightW, 150 }, scope = unit, domain = "layout",
-            meta = ControlMeta(ctx, "text.name.appearance", "ephemeral") },
-    }).nameAppearance
+    local showNameText = Control(ctx, nameContent, { "switch", "showNameText", nil, { "Show Name", 16, -24, 0, "HIDDEN" },
+        get = function() return ReadBool(unit, "showName", true) end,
+        set = function(v)
+            SetBool(unit, "showName", v, "MSUF2_SHOW_NAME_TEXT", { text = true, preview = true })
+            RefreshTextControlState()
+        end,
+        meta = FixedSettingMeta("text.name.show", "showName"), scope = unit,
+        tip = { "Show Name", "Turns this frame's name text on or off. Its anchor, size and color stay saved while it is off.", { hook = true } } })
+    local namePosition = TextCard(ctx, unit, nameTab, "namePosition", "text.name.position", "Position", "Move the name directly in Preview.",
+        leftX, -136, cardW, 134)
+    local nameAnchor = Control(ctx, namePosition, { "dropdown", "nameAnchor", nil, { "Anchor", TEXT_ANCHORS, 210 }, { 16, -48, cardW - 32, "LEFT" },
+        get = function() return ReadText(unit, "nameTextAnchor", "TOPLEFT") end,
+        set = function(v)
+            SetText(unit, "nameTextAnchor", v or "TOPLEFT", "MSUF2_NAME_ANCHOR")
+            FocusPreviewText("name", nil, true)
+            RefreshTextHeader()
+        end,
+        meta = FixedSettingMeta("text.name.anchor", "nameTextAnchor"), scope = unit,
+        tip = { "Anchor", "Where the name is pinned on the frame and how it aligns. Dragging it in Preview offsets it from this point.", { hook = true } } })
+    local nameAppearance = TextCard(ctx, unit, nameTab, "nameAppearance", "text.name.appearance", "Appearance", nil, rightX, -4, rightW, 150)
     local nameMouseover = MouseoverControl(nameTab, "name", "nameTextMouseover", -172)
-    local nameSize = Schema.Build(ctx, nameAppearance, {
-        { "slider", "nameSize", 12, { "Size", 6, 48, 1, 260 }, { 16, -58, rightW - 58, "CENTER" },
-            get = function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
-            set = function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, fonts = true, preview = true }) end,
-            meta = FixedSettingMeta("text.name.size", "nameFontSize"), roundStep = true, scope = unit },
-    }, Schema.UnitOptions()).nameSize
+    local nameSize = Control(ctx, nameAppearance, { "slider", "nameSize", 12, { "Size", 6, 48, 1, 260 }, { 16, -58, rightW - 58, "CENTER" },
+        get = function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
+        set = function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, fonts = true, preview = true }) end,
+        meta = FixedSettingMeta("text.name.size", "nameFontSize"), roundStep = true, scope = unit })
     state.namePreviewValue, state.showNameText, state.nameAnchor, state.nameMouseover, state.nameSize =
         namePreviewValue, showNameText, nameAnchor, nameMouseover, nameSize
 end
@@ -538,10 +537,8 @@ function TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, contro
     local MoveTogether, SetMoveTogether, CurrentSlot = state.MoveTogether, state.SetMoveTogether, state.CurrentSlot
     local SlotFontSizeKey, EffectiveTextSize, FocusPreviewText = state.SlotFontSizeKey, state.EffectiveTextSize, state.FocusPreviewText
     local SelectedSlotMeta = state.SelectedSlotMeta
-    local position = Schema.Build(ctx, tab, {
-        { "card", "position", nil, { cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 220 }, scope = unit, domain = "layout",
-            meta = ControlMeta(ctx, "text." .. kind .. ".position", "ephemeral") },
-    }).position
+    local position = TextCard(ctx, unit, tab, "position", "text." .. kind .. ".position", cfg.positionTitle, cfg.positionSubtitle,
+        rightX, -4, rightW, 220)
     Schema.Build(ctx, position, {
         { "toggle", "moveTogether", nil, { "Move text as one group", 16, -64, rightW - 32 },
             get = function() return MoveTogether(kind) end,
@@ -550,7 +547,8 @@ function TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, contro
                 local selectedValue1
                 if not (v) then selectedValue1 = CurrentSlot(kind) end
                 FocusPreviewText(kind, selectedValue1, true)
-                _G.MSUF_UFPreview_RequestRefresh(cfg.moveReason)
+                RequestPreviewRefresh = RequestPreviewRefresh or MSUF.Require("MSUF_UFPreview_RequestRefresh", "Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua")
+                RequestPreviewRefresh(cfg.moveReason)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-move-together") elseif M.Refresh then M.Refresh(ctx) end
             end,
             meta = ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"), scope = unit,
@@ -570,29 +568,17 @@ function TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, contro
             tip = { "Selected slot size", "Font size of the slot picked in Text slots only. Slots you never resize keep the normal text size.", TIP_HOOK } },
     }, Schema.UnitOptions(), controls)
 end
-function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
-    local leftX, cardW, rightX, rightW, halfDropdownW = state.leftX, state.cardW, state.rightX, state.rightW, state.halfDropdownW
-    local MouseoverControl, PreviewText, SLOT_VALUES = state.MouseoverControl, state.PreviewText, state.SLOT_VALUES
-    local ABSORB_STYLE_VALUES = state.ABSORB_STYLE_VALUES
+-- The HP / Power content card: preview, Show switch, slot selector, value, absorb and hide-percent
+-- controls. Returns the card; the refresh helpers other parts call are stored on `controls`.
+function TextSection.BuildValueTextContent(state, ctx, unit, kind, tab, cfg, controls)
+    local leftX, cardW = state.leftX, state.cardW
+    local PreviewText, SLOT_VALUES, ABSORB_STYLE_VALUES = state.PreviewText, state.SLOT_VALUES, state.ABSORB_STYLE_VALUES
     local RefreshTextControlState, FixedSettingMeta, SelectedSlotMeta = state.RefreshTextControlState, state.FixedSettingMeta, state.SelectedSlotMeta
     local CurrentSlot, SetCurrentSlot, ReadSlot, FocusPreviewText = state.CurrentSlot, state.SetCurrentSlot, state.ReadSlot, state.FocusPreviewText
     local RefreshTextHeader = state.RefreshTextHeader
     local ReadSlotHidePercentSymbol, TextModeHasPercent = state.ReadSlotHidePercentSymbol, state.TextModeHasPercent
-    local ReversePreviewHealthMode, TextModeExample = state.ReversePreviewHealthMode, state.TextModeExample
-    local controls = {}
-    controls.mouseover = MouseoverControl(tab, kind, cfg.mouseoverKey, -240)
-    local function FullValueShortEnabled()
-        if not cfg.fullValueShortKey then return false end
-        local value = ReadText(unit, cfg.fullValueShortKey, nil)
-        if value ~= nil then return value == true end
-        return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
-    end
     local hasAbsorb = cfg.absorbIconKey ~= nil
-    local contentHeight = hasAbsorb and 430 or 370
-    local content = Schema.Build(ctx, tab, {
-        { "card", "content", nil, { nil, nil, leftX, -4, cardW, contentHeight }, scope = unit, domain = "layout",
-            meta = ControlMeta(ctx, "text." .. kind .. ".content", "ephemeral") },
-    }).content
+    local content = TextCard(ctx, unit, tab, "content", "text." .. kind .. ".content", nil, nil, leftX, -4, cardW, hasAbsorb and 430 or 370)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(content, {
             title = kind == "hp" and "HP text settings" or "Power text settings",
@@ -608,18 +594,16 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
         local default = type(cfg.showDefault) == "function" and cfg.showDefault() or cfg.showDefault
         return ReadBool(unit, cfg.showKey, default)
     end
-    controls.show = Schema.Build(ctx, content, {
-        { "switch", "show", nil, { cfg.showLabel, 16, -24, 0, "HIDDEN" },
-            get = TextEnabled,
-            set = function(v)
-                SetBool(unit, cfg.showKey, v, cfg.showReason, { text = true, preview = true })
-                RefreshTextControlState()
-            end,
-            meta = FixedSettingMeta("text." .. kind .. ".show", cfg.showKey), scope = unit,
-            tip = { cfg.showLabel, kind == "hp"
-            and "Turns every HP text slot on this frame on or off. The health bar is not affected, and your slot setup is kept."
-            or "Turns every power text slot on this frame on or off. The power bar is not affected, and your slot setup is kept.", TIP_HOOK } },
-    }, Schema.UnitOptions()).show
+    controls.show = Control(ctx, content, { "switch", "show", nil, { cfg.showLabel, 16, -24, 0, "HIDDEN" },
+        get = TextEnabled,
+        set = function(v)
+            SetBool(unit, cfg.showKey, v, cfg.showReason, { text = true, preview = true })
+            RefreshTextControlState()
+        end,
+        meta = FixedSettingMeta("text." .. kind .. ".show", cfg.showKey), scope = unit,
+        tip = { cfg.showLabel, kind == "hp"
+        and "Turns every HP text slot on this frame on or off. The health bar is not affected, and your slot setup is kept."
+        or "Turns every power text slot on this frame on or off. The power bar is not affected, and your slot setup is kept.", TIP_HOOK } })
     local function SelectedSlotSpec()
         return cfg.slots[CurrentSlot(kind)] or cfg.slots.center
     end
@@ -664,41 +648,36 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
             tip = { cfg.valueLabel or "Value", "What the selected slot shows. None leaves the slot empty; choices with several values are joined by the Delimiter.", TIP_HOOK } },
     }, Schema.UnitOptions(), controls)
     if hasAbsorb then
-        controls.absorb = Schema.Build(ctx, content, {
-            { "segment", "absorb", nil, { "Absorb", ABSORB_STYLE_VALUES, cardW - 32 }, { 16, -216, cardW - 32, "LEFT" },
-                get = function()
-                    if not UnitSectionShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
-                    local spec = SelectedSlotSpec()
-                    return ReadText(unit, spec.absorbIconKey, ReadText(unit, cfg.absorbIconKey, false)) == true and "icon" or "value"
-                end,
-                set = function(v)
-                    local spec = SelectedSlotSpec()
-                    local mode = UnitSectionShared.HealthModeWithAbsorb(CurrentMode(), v ~= "off")
-                    SetText(unit, spec.key, mode, spec.reason)
-                    if v ~= "off" then SetText(unit, spec.absorbIconKey, v == "icon", cfg.absorbIconReason) end
-                    AfterModeChanged(mode)
-                    if controls.RefreshPreview then controls.RefreshPreview() end
-                end,
-                meta = SelectedSlotMeta("text." .. kind .. ".slot.absorb"), scope = unit },
-        }, Schema.UnitOptions()).absorb
-    end
-    local hidePercentY = hasAbsorb and -278 or -216
-    controls.hidePercent = Schema.Build(ctx, content, {
-        { "toggle", "hidePercent", nil, { "Hide % sign", 16, hidePercentY, cardW - 32 },
+        controls.absorb = Control(ctx, content, { "segment", "absorb", nil, { "Absorb", ABSORB_STYLE_VALUES, cardW - 32 }, { 16, -216, cardW - 32, "LEFT" },
             get = function()
+                if not UnitSectionShared.HealthModeHasAbsorb(CurrentMode()) then return "off" end
                 local spec = SelectedSlotSpec()
-                return spec.hidePercentKey and ReadSlotHidePercentSymbol(spec.hidePercentKey) or false
+                return ReadText(unit, spec.absorbIconKey, ReadText(unit, cfg.absorbIconKey, false)) == true and "icon" or "value"
             end,
             set = function(v)
                 local spec = SelectedSlotSpec()
-                if spec.hidePercentKey then SetText(unit, spec.hidePercentKey, v and true or false, spec.hidePercentReason) end
-                FocusPreviewText(kind, CurrentSlot(kind), true)
-                RefreshTextHeader()
+                local mode = UnitSectionShared.HealthModeWithAbsorb(CurrentMode(), v ~= "off")
+                SetText(unit, spec.key, mode, spec.reason)
+                if v ~= "off" then SetText(unit, spec.absorbIconKey, v == "icon", cfg.absorbIconReason) end
+                AfterModeChanged(mode)
+                if controls.RefreshPreview then controls.RefreshPreview() end
             end,
-            meta = SelectedSlotMeta("text." .. kind .. ".slot.hide_percent"), scope = unit,
-            tip = { "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value includes a percent.",
-                TIP_TOGGLE } },
-    }, Schema.UnitOptions()).hidePercent
+            meta = SelectedSlotMeta("text." .. kind .. ".slot.absorb"), scope = unit })
+    end
+    controls.hidePercent = Control(ctx, content, { "toggle", "hidePercent", nil, { "Hide % sign", 16, hasAbsorb and -278 or -216, cardW - 32 },
+        get = function()
+            local spec = SelectedSlotSpec()
+            return spec.hidePercentKey and ReadSlotHidePercentSymbol(spec.hidePercentKey) or false
+        end,
+        set = function(v)
+            local spec = SelectedSlotSpec()
+            if spec.hidePercentKey then SetText(unit, spec.hidePercentKey, v and true or false, spec.hidePercentReason) end
+            FocusPreviewText(kind, CurrentSlot(kind), true)
+            RefreshTextHeader()
+        end,
+        meta = SelectedSlotMeta("text." .. kind .. ".slot.hide_percent"), scope = unit,
+        tip = { "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value includes a percent.",
+            TIP_TOGGLE } })
     function controls.RefreshPercentToggles(enabled)
         SetControlEnabled(controls.hidePercent, enabled == true and TextModeHasPercent(CurrentMode()))
     end
@@ -706,6 +685,19 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
         if controls.absorb then
             SetControlEnabled(controls.absorb, enabled == true and UnitSectionShared.HealthModeSupportsAbsorb(CurrentMode()))
         end
+    end
+    return content
+end
+-- The Formatting block: delimiter, reverse, decimals and short numbers, plus the live preview text.
+function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, cfg, controls)
+    local cardW, halfDropdownW, FixedSettingMeta = state.cardW, state.halfDropdownW, state.FixedSettingMeta
+    local ReadSlot, ReadSlotHidePercentSymbol = state.ReadSlot, state.ReadSlotHidePercentSymbol
+    local ReversePreviewHealthMode, TextModeExample = state.ReversePreviewHealthMode, state.TextModeExample
+    local function FullValueShortEnabled()
+        if not cfg.fullValueShortKey then return false end
+        local value = ReadText(unit, cfg.fullValueShortKey, nil)
+        if value ~= nil then return value == true end
+        return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
     end
     function controls.RefreshPreview()
         if not (controls.preview and controls.preview.SetText) then return end
@@ -742,50 +734,42 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
         end
         controls.preview:SetText(#parts > 0 and table.concat(parts, "  ") or "(none)")
     end
-    local formattingY = hasAbsorb and -310 or -248
+    local formattingY = cfg.absorbIconKey ~= nil and -310 or -248
     Schema.Build(ctx, content, {
         { "text", "formatting", nil, { "Formatting", 16, formattingY, cardW - 32, T.colors.text }, scope = unit,
             meta = ControlMeta(ctx, "text." .. kind .. ".formatting", "ephemeral") },
     })
-    controls.separator = Schema.Build(ctx, content, {
-        { "dropdown", "separator", nil, { "Delimiter", SEPARATORS, 160 }, { 16, formattingY - 28, halfDropdownW, "LEFT" },
-            get = cfg.separatorGet,
-            set = function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end,
-            meta = FixedSettingMeta("text." .. kind .. ".separator", cfg.separatorKey), scope = unit,
-            tip = { "Delimiter", "Symbol placed between values that share one slot, like Current and Percent. Used by all slots of this text.", TIP_HOOK } },
-    }, Schema.UnitOptions()).separator
+    controls.separator = Control(ctx, content, { "dropdown", "separator", nil, { "Delimiter", SEPARATORS, 160 }, { 16, formattingY - 28, halfDropdownW, "LEFT" },
+        get = cfg.separatorGet,
+        set = function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end,
+        meta = FixedSettingMeta("text." .. kind .. ".separator", cfg.separatorKey), scope = unit,
+        tip = { "Delimiter", "Symbol placed between values that share one slot, like Current and Percent. Used by all slots of this text.", TIP_HOOK } })
     if cfg.reverseKey then
-        controls.reverse = Schema.Build(ctx, content, {
-            { "toggle", "reverse", nil, { "Reverse order", 28 + halfDropdownW, formattingY - 50, halfDropdownW },
-                get = function() return ReadText(unit, cfg.reverseKey, false) == true end,
-                set = function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end,
-                meta = FixedSettingMeta("text." .. kind .. ".reverse", cfg.reverseKey), scope = unit,
-                tip = { "Reverse order", "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent becomes Percent / Current.",
-                TIP_TOGGLE } },
-        }, Schema.UnitOptions()).reverse
+        controls.reverse = Control(ctx, content, { "toggle", "reverse", nil, { "Reverse order", 28 + halfDropdownW, formattingY - 50, halfDropdownW },
+            get = function() return ReadText(unit, cfg.reverseKey, false) == true end,
+            set = function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end,
+            meta = FixedSettingMeta("text." .. kind .. ".reverse", cfg.reverseKey), scope = unit,
+            tip = { "Reverse order", "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent becomes Percent / Current.",
+            TIP_TOGGLE } })
     end
     if cfg.decimalsKey then
-        controls.decimals = Schema.Build(ctx, content, {
-            { "toggle", "decimals", nil, { "Decimal percent", 28 + halfDropdownW, formattingY - 78, halfDropdownW },
-                get = function() return ReadText(unit, cfg.decimalsKey, false) == true end,
-                set = function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end,
-                meta = FixedSettingMeta("text." .. kind .. ".decimals", cfg.decimalsKey), scope = unit,
-                tip = { "Decimal percent", "Shows HP percent with one decimal (for example, 63.4 instead of 63) in every HP slot that shows a percent.",
-                TIP_TOGGLE } },
-        }, Schema.UnitOptions()).decimals
+        controls.decimals = Control(ctx, content, { "toggle", "decimals", nil, { "Decimal percent", 28 + halfDropdownW, formattingY - 78, halfDropdownW },
+            get = function() return ReadText(unit, cfg.decimalsKey, false) == true end,
+            set = function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end,
+            meta = FixedSettingMeta("text." .. kind .. ".decimals", cfg.decimalsKey), scope = unit,
+            tip = { "Decimal percent", "Shows HP percent with one decimal (for example, 63.4 instead of 63) in every HP slot that shows a percent.",
+            TIP_TOGGLE } })
     end
     if cfg.fullValueShortKey then
-        controls.fullValueShort = Schema.Build(ctx, content, {
-            { "toggle", "fullValueShort", nil, { "Short numbers", 16, formattingY - 78, halfDropdownW },
-                get = FullValueShortEnabled,
-                set = function(v)
-                    SetText(unit, cfg.fullValueShortKey, v and true or false, cfg.fullValueShortReason)
-                    if controls.RefreshPreview then controls.RefreshPreview() end
-                end,
-                meta = FixedSettingMeta("text." .. kind .. ".full_value_short", cfg.fullValueShortKey), scope = unit,
-                tip = { "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot shows a number.",
-                TIP_TOGGLE } },
-        }, Schema.UnitOptions()).fullValueShort
+        controls.fullValueShort = Control(ctx, content, { "toggle", "fullValueShort", nil, { "Short numbers", 16, formattingY - 78, halfDropdownW },
+            get = FullValueShortEnabled,
+            set = function(v)
+                SetText(unit, cfg.fullValueShortKey, v and true or false, cfg.fullValueShortReason)
+                if controls.RefreshPreview then controls.RefreshPreview() end
+            end,
+            meta = FixedSettingMeta("text." .. kind .. ".full_value_short", cfg.fullValueShortKey), scope = unit,
+            tip = { "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot shows a number.",
+            TIP_TOGGLE } })
         function controls.RefreshFullValueToggle(enabled)
             local hasNumericValue = false
             for _, spec in pairs(cfg.slots or {}) do
@@ -798,6 +782,12 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
             SetControlEnabled(controls.fullValueShort, enabled == true and hasNumericValue)
         end
     end
+end
+function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
+    local controls = {}
+    controls.mouseover = state.MouseoverControl(tab, kind, cfg.mouseoverKey, -240)
+    local content = TextSection.BuildValueTextContent(state, ctx, unit, kind, tab, cfg, controls)
+    TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, cfg, controls)
     TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, controls)
     if M.AddTooltip then
         for _, button in ipairs(controls.slot and controls.slot.buttons or {}) do
@@ -885,10 +875,9 @@ function TextSection.BuildValueTextTabs(state, ctx, unit)
         sizeKey = "powerFontSize",
         generalSizeKey = "powerFontSize",
     })
-    local powerManagedNotice, powerManagedNoticeButton
+    local powerManagedNotice, _, powerManagedNoticeButton
     if UnitSectionShared.CreateSectionNotice then
-        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -548, "Class Resources", 126)
-        powerManagedNotice, powerManagedNoticeButton = notice, button
+        powerManagedNotice, _, powerManagedNoticeButton = UnitSectionShared.CreateSectionNotice(powerTab, -548, "Class Resources", 126)
     end
     if powerManagedNoticeButton then
         RegisterControl(powerManagedNoticeButton, ctx, "text.power.navigation.class_resources", "Class Resources", "button", "navigation",
@@ -903,24 +892,19 @@ end
 function TextSection.BuildAdvancedTab(state, ctx, unit)
     local advancedTab, leftX, cardW = state.advancedTab, state.leftX, state.cardW
     local RefreshTextHeader, FixedSettingMeta = state.RefreshTextHeader, state.FixedSettingMeta
-    local advancedLayers = Schema.Build(ctx, advancedTab, {
-        { "card", "advancedLayers", nil, { "Text Layers", "Controls text layers when text overlaps bars, portraits, or status icons.",
-            leftX, -4, cardW, 260 }, scope = unit, domain = "layout",
-            meta = ControlMeta(ctx, "text.advanced.layers", "ephemeral") },
-    }).advancedLayers
+    local advancedLayers = TextCard(ctx, unit, advancedTab, "advancedLayers", "text.advanced.layers", "Text Layers",
+        "Controls text layers when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
     local function BindAdvancedLayer(label, y, key, defaultValue, reason)
-        return Schema.Build(ctx, advancedLayers, {
-            { "slider", "control", defaultValue, { label, 0, 30, 1, 260 }, { 16, y, cardW - 72, "CENTER" },
-                get = function() return ReadNumber(unit, key, defaultValue) end,
-                set = function(v)
-                    SetNumber(unit, key, v, reason, { text = true, fonts = true, preview = true })
-                    RefreshTextHeader()
-                end,
-                meta = FixedSettingMeta("text.advanced." .. tostring(key), key), roundStep = true, scope = unit,
-                tip = { label,
-                    "Higher numbers draw this text in front. Portrait, aura and status icon layers use the same 0-30 scale; set it above whatever covers the text.",
-                    { hook = true } } },
-        }, Schema.UnitOptions()).control
+        return Control(ctx, advancedLayers, { "slider", "control", defaultValue, { label, 0, 30, 1, 260 }, { 16, y, cardW - 72, "CENTER" },
+            get = function() return ReadNumber(unit, key, defaultValue) end,
+            set = function(v)
+                SetNumber(unit, key, v, reason, { text = true, fonts = true, preview = true })
+                RefreshTextHeader()
+            end,
+            meta = FixedSettingMeta("text.advanced." .. tostring(key), key), roundStep = true, scope = unit,
+            tip = { label,
+                "Higher numbers draw this text in front. Portrait, aura and status icon layers use the same 0-30 scale; set it above whatever covers the text.",
+                { hook = true } } })
     end
     local advNameLayer = BindAdvancedLayer("Name layer", -76, "nameTextLayer", 5, "MSUF2_NAME_TEXT_LAYER_ADV")
     local advHpLayer = BindAdvancedLayer("HP layer", -136, "hpTextLayer", 5, "MSUF2_HP_TEXT_LAYER_ADV")

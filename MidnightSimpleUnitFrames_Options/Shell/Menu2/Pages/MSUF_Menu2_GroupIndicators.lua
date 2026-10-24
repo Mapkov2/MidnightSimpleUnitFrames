@@ -1,11 +1,13 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua", {
+-- load, resolved per call so a hook installed on one later still applies.
+M.RequireGlobals(FILE, {
     "MSUF_SetIconTexture",
 })
 
@@ -22,12 +24,11 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local table_concat = table.concat
-local C_Timer = M.MenuTimer or _G.C_Timer
-local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
+local C_Timer = M.MenuTimer or C_Timer
 local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
 local SPELL_INDICATORS_121_PTR_DISABLED = false
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue or function() return false end
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
 local STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS = GP.STATUS_ICON_ANCHORS or {}, GP.GF_STATUS_ICON_SPECS or {}
 local GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES = GP.GF_STATUS_ICON_VALUES or {}, GP.PLACED_INDICATOR_TYPES or {}
@@ -108,18 +109,6 @@ end
 local function StepMeta(ctx, path, step)
     local meta = ControlMeta(ctx, path)
     meta.step, meta.roundStep = step, true
-    if path == "spell.icon_zoom" or path == "spell.icon_scale" then
-        local scope = CurrentScope()
-        local setting = path == "spell.icon_scale" and "iconScale" or "iconZoom"
-        if scope == "party" then
-            meta.searchSettingKeys = { "gf_party.spellIndicators." .. setting }
-        else
-            meta.searchSettingKeys = {
-                "gf_raid.spellIndicators." .. setting,
-                "gf_mythicraid.spellIndicators." .. setting,
-            }
-        end
-    end
     return meta
 end
 
@@ -166,7 +155,7 @@ local function ResolveCustomBuffSpellIDs(value)
     if ids then return ids end
     local identifier = tostring(value or ""):match("^%s*(.-)%s*$")
     if identifier == "" then return nil end
-    local cs = _G.C_Spell
+    local cs = C_Spell
     local resolver = cs and cs.GetSpellIDForSpellIdentifier
     if type(resolver) ~= "function" then return nil end
     local spellID = resolver(identifier)
@@ -178,7 +167,7 @@ local function ResolveCustomBuffSpellIDs(value)
 end
 
 local function RequestCustomBuffSpellData(spellIDs)
-    local request = _G.C_Spell and _G.C_Spell.RequestLoadSpellData
+    local request = C_Spell and C_Spell.RequestLoadSpellData
     if type(request) ~= "function" or type(spellIDs) ~= "table" then return end
     for i = 1, #spellIDs do request(spellIDs[i]) end
 end
@@ -199,7 +188,7 @@ end
 --- for it yet.
 local function CustomBuffInfo(spellID)
     local name, icon
-    local cs = _G.C_Spell
+    local cs = C_Spell
     if cs and type(cs.GetSpellInfo) == "function" then
         local info = cs.GetSpellInfo(spellID)
         if issecretvalue(info) ~= true and type(info) == "table" then
@@ -215,8 +204,8 @@ local function CustomBuffInfo(spellID)
     if issecretvalue(name) == true then name = nil end
     if not icon and cs and type(cs.GetSpellTexture) == "function" then icon = cs.GetSpellTexture(spellID) end
     if issecretvalue(icon) == true then icon = nil end
-    if (not name or not icon) and type(_G.GetSpellInfo) == "function" then
-        local n, _, tex = _G.GetSpellInfo(spellID)
+    if (not name or not icon) and type(GetSpellInfo) == "function" then
+        local n, _, tex = GetSpellInfo(spellID)
         if issecretvalue(n) ~= true then name = name or n end
         if issecretvalue(tex) ~= true then icon = icon or tex end
     end
@@ -225,11 +214,11 @@ end
 
 local function SuggestedActivePlayerAuraID(spellIDs)
     if type(spellIDs) ~= "table" or #spellIDs ~= 1 then return nil end
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
+    if InCombatLockdown and InCombatLockdown() then return nil end
     local enteredID = spellIDs[1]
     local spellName = CustomBuffInfo(enteredID)
     if issecretvalue(spellName) == true or type(spellName) ~= "string" or spellName == "" then return nil end
-    local getByName = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataBySpellName
+    local getByName = C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName
     if type(getByName) ~= "function" then return nil end
     local aura = getByName("player", spellName, "HELPFUL")
 
@@ -263,25 +252,28 @@ local function DefaultCustomBuffPlaced(index)
     }
 end
 
+-- The color shortcut of a card whose single color is shared by Party, Raid and Mythic Raid.
+local function SharedColors(card, reference, title, historySource)
+    Schema.Colors(card, { reference }, {
+        title = title, note = "Shared by Party, Raid and Mythic Raid.", historySource = historySource, offsetX = -76,
+    })
+end
 local function BuildIndicatorsSection(ctx, b)
     local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 710, true)
     local leftX, leftW, rightX, rightW, innerW = Schema.Columns(indicators, ctx.width, 20, 16, 0.48)
     local highlightCard = W.ControlCard(indicators, "Target Highlight",
         M.Format("Configure target highlighting in %s.", M.NavPath("opt_misc", "Frame Highlights")),
         leftX, -38, innerW, 92)
-    Schema.Colors(highlightCard, { "group.target" }, {
-        title = "Target Highlight Color", note = "Shared by Party, Raid and Mythic Raid.",
-        historySource = "menu:group-target-highlight-color", offsetX = -76,
-    })
+    SharedColors(highlightCard, "group.target", "Target Highlight Color", "menu:group-target-highlight-color")
     local function OpenFrameHighlights()
-        _G.MSUF_EM2_MenuFocusRequest = {
+        ExportPublic("MSUF_EM2_MenuFocusRequest", {
             pageKey = "opt_misc",
             sectionId = "misc_mouseover_highlight",
             explicit = true,
             consumed = false,
-        }
+        })
         if M.SelectPage and M.SelectPage("opt_misc") == false then
-            _G.MSUF_EM2_MenuFocusRequest = nil
+            ExportPublic("MSUF_EM2_MenuFocusRequest", nil)
         end
     end
     local openHighlights = Schema.Build(ctx, highlightCard, {
@@ -304,7 +296,8 @@ local function BuildIndicatorsSection(ctx, b)
         },
     })
     local groupNumber = Schema.Build(ctx, groupNumberCard, {
-        { "switch", "showGroupNumber", false, { "Group Number", leftW - 62, -24, 0, "HIDDEN" } },
+        { "switch", "showGroupNumber", false, { "Group Number", leftW - 62, -24, 0, "HIDDEN" },
+            flagsAfter = { _msuf2GroupFrameGateAlwaysEnabled = true } },
         -- The styles and all nine anchors match the runtime formatter and preview drag handle.
         { "dropdown", "groupNumberStyle", "PAREN", { "Style", GROUP_NUMBER_STYLES, leftW }, { 16, -66, leftW - 32, "LEFT" } },
         { "slider", "groupNumberSize", 10, { "Size", 6, 24, 1, leftW }, { 16, -116, leftW - 58, "CENTER" }, domain = "font" },
@@ -313,20 +306,16 @@ local function BuildIndicatorsSection(ctx, b)
         { "slider", "groupNumberLayer", 7, { "Layer", 0, 30, 1, leftW }, { 16, -216, leftW - 58, "CENTER" } },
     }, ROW_OPTIONS)
     local groupNumberToggle = groupNumber.showGroupNumber
-    groupNumberToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupNumberControls = { groupNumber.groupNumberStyle, groupNumber.groupNumberSize,
         groupNumber.groupNumberAnchor, groupNumber.groupNumberLayer }
     local groupNumberScopeHint = W.Text(groupNumberCard, "", 16, -268, leftW - 32, T.colors.muted)
     if groupNumberScopeHint.SetWordWrap then groupNumberScopeHint:SetWordWrap(true) end
     local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -148, rightW, 190)
-    Schema.Colors(focusCard, { "group.focus" }, {
-        title = "Focus Highlight Color", note = "Shared by Party, Raid and Mythic Raid.",
-        historySource = "menu:group-focus-highlight-color", offsetX = -76,
-    })
+    SharedColors(focusCard, "group.focus", "Focus Highlight Color", "menu:group-focus-highlight-color")
     local focusToggle = Schema.Build(ctx, focusCard, {
-        { "switch", "hlFocusEnabled", true, { "Focus Highlight", rightW - 62, -24, 0, "HIDDEN" } },
+        { "switch", "hlFocusEnabled", true, { "Focus Highlight", rightW - 62, -24, 0, "HIDDEN" },
+            flagsAfter = { _msuf2GroupFrameGateAlwaysEnabled = true } },
     }, ROW_OPTIONS).hlFocusEnabled
-    focusToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local focusHint = focusCard and focusCard.subtitle
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     local focusControls = { Schema.Build(ctx, focusCard, {
@@ -335,17 +324,14 @@ local function BuildIndicatorsSection(ctx, b)
     local focusColorHint = W.Text(focusCard, M.Format("Focus color is in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
     local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -486, leftW, 202)
-    Schema.Colors(groupBorderCard, { "group.border" }, {
-        title = "Group Border Color", note = "Shared by Party, Raid and Mythic Raid.",
-        historySource = "menu:group-border-color", offsetX = -76,
-    })
+    SharedColors(groupBorderCard, "group.border", "Group Border Color", "menu:group-border-color")
     local groupBorder = Schema.Build(ctx, groupBorderCard, {
-        { "switch", "groupBorderEnabled", false, { "Group Border", leftW - 62, -24, 0, "HIDDEN" } },
+        { "switch", "groupBorderEnabled", false, { "Group Border", leftW - 62, -24, 0, "HIDDEN" },
+            flagsAfter = { _msuf2GroupFrameGateAlwaysEnabled = true } },
         { "slider", "groupBorderSize", 1, { "Border Thickness", 1, 12, 1, leftW }, { 16, -66, leftW - 58, "CENTER" } },
         { "slider", "groupBorderPadding", 2, { "Padding", 0, 40, 1, leftW }, { 16, -116, leftW - 58, "CENTER" } },
     }, ROW_OPTIONS)
     local groupBorderToggle = groupBorder.groupBorderEnabled
-    groupBorderToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupBorderControls = { groupBorder.groupBorderSize, groupBorder.groupBorderPadding }
     local groupBorderColorHint = W.Text(groupBorderCard, M.Format("Border color and opacity are in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -168, leftW - 32, T.colors.muted)
     if groupBorderColorHint.SetWordWrap then groupBorderColorHint:SetWordWrap(true) end
@@ -418,14 +404,18 @@ function StatusIcons.SetDropdownTitle(control, label)
         control._msuf2Title:SetText(label)
     end
 end
+-- The pack probe and the texture resolver run from refreshes and dropdown sources, so each core
+-- function is resolved once, on first use (the core publishes both before this page loads).
+local packSupports, previewTexture
 --- Each style value carries its own Midnight flag now, so the support probe runs per entry
 --- and silently drops packs that ship no art for the selected indicator.
 function StatusIcons.IconPackValues()
     local values = IconPackValues()
     local spec = CurrentGFStatusSpec()
     local entries = StatusIcons.PreviewEntries(spec)
-    local supports = _G.MSUF_StatusIconPackSupports
-    if type(supports) ~= "function" or type(entries) ~= "table" then return values end
+    if type(entries) ~= "table" then return values end
+    packSupports = packSupports or MSUF.Require("MSUF_StatusIconPackSupports", FILE)
+    local supports = packSupports
     local out = {}
     for i = 1, #values do
         local item = values[i]
@@ -447,13 +437,8 @@ function StatusIcons.IconAssetValues()
     return M.UnitPage.StatusIconAssetValues(StatusIcons.PreviewEntries(CurrentGFStatusSpec()))
 end
 function StatusIcons.ResolvePreviewIcon(style, iconType, variant, useMidnight)
-    local resolver = _G.MSUF_GetStatusIconTexture
-    if type(resolver) ~= "function" then
-        local gf = GF()
-        resolver = gf and gf.GetStatusIconTexture
-    end
-    if type(resolver) ~= "function" then return nil end
-    return resolver(style, iconType, variant, useMidnight == true)
+    previewTexture = previewTexture or MSUF.Require("MSUF_GetStatusIconTexture", FILE)
+    return previewTexture(style, iconType, variant, useMidnight == true)
 end
 --- Profiles saved before the per-indicator split still store "DEFAULT"; resolve it through
 --- the runtime so the dropdown shows the style that is actually drawn rather than an entry
@@ -1179,6 +1164,7 @@ local function SetSpellTileBorder(tile, selected, color, scale, alpha)
         selected and 1 or color[3] * scale, selected and 1 or alpha)
 end
 
+local SetIconTexture -- the tile painter runs on every refresh, so MSUF_SetIconTexture is required once, on first use
 local SpellTileGrid = {}
 SpellTileGrid.__index = SpellTileGrid
 local SpellTileDragOnUpdate
@@ -1399,7 +1385,7 @@ function SpellTileGrid:EnsureTile(index)
     tile.addText:SetTextColor(0.70, 0.90, 1, 1)
     tile.addText:Hide()
     tile.label = PixelLayoutRegion(tile:CreateFontString(nil, "OVERLAY"))
-    tile.label:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
+    tile.label:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
     tile.label:SetPoint("BOTTOM", tile, "BOTTOM", 0, 2)
     tile.label:SetWidth(self.tileSize - 4)
     tile.label:SetMaxLines(1)
@@ -1462,7 +1448,8 @@ function SpellTileGrid:Refresh()
         tile.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         tile.icon:SetVertexColor(1, 1, 1, 1)
         if runtime and type(runtime.GetAuraIcon) == "function" then
-            _G.MSUF_SetIconTexture(tile.icon, runtime.GetAuraIcon(specKey, info.name), "")
+            SetIconTexture = SetIconTexture or MSUF.Require("MSUF_SetIconTexture", "Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
+            SetIconTexture(tile.icon, runtime.GetAuraIcon(specKey, info.name), "")
         else
             tile.icon:SetTexture(136243)
         end
@@ -1507,7 +1494,7 @@ local function IconScaleLifecycle(iconScale)
     local pendingApply, pendingScope, releaseScheduled
     local function CombatLocked()
         if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
-        return (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true
+        return (InCombatLockdown and InCombatLockdown()) or MSUF.PublicGlobals.MSUF_InCombat == true
     end
     local function RefreshPreviewOnly(scope)
         if CombatLocked() then return false end
@@ -1587,19 +1574,13 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     local styleRows, styleControls = Schema.GroupRecordOptions(styleOwner), {}
     styleRows.beforeBind = Track
 
-    Schema.Build(ctx, section, {
-        { "slider", "iconZoom", 100, { "Icon Zoom (%)", 100, 200, 1, leftW },
-            { leftX, -72, leftW, "LEFT" }, path = "spell.icon_zoom", source = SpellIndicators },
-    }, styleRows)
-
-    Schema.Build(ctx, section, {
-        { "slider", "iconScale", 100, { "Icon Scale (%)", 20, 300, 1, leftW }, { leftX, -128, leftW, "LEFT" },
-            path = "spell.icon_scale", lifecycle = IconScaleLifecycle },
-    }, styleRows)
-
     local halfRight = max(100, floor((rightW - 12) / 2))
     local halfLeft = max(100, floor((leftW - 12) / 2))
     Schema.Build(ctx, section, {
+        { "slider", "iconZoom", 100, { "Icon Zoom (%)", 100, 200, 1, leftW },
+            { leftX, -72, leftW, "LEFT" }, path = "spell.icon_zoom", source = SpellIndicators },
+        { "slider", "iconScale", 100, { "Icon Scale (%)", 20, 300, 1, leftW }, { leftX, -128, leftW, "LEFT" },
+            path = "spell.icon_scale", lifecycle = IconScaleLifecycle },
         { "slider", "alpha", 100, { "Opacity", 10, 100, 5, leftW }, { leftX, -184, leftW, "LEFT" },
             get = function() return floor(((tonumber(Style().alpha) or 1) * 100) + 0.5) end,
             convert = function(value) return min(1, max(0.1, (tonumber(value) or 100) / 100)) end },
@@ -1786,7 +1767,7 @@ function SpellSection.BuildSpecControls(state, ctx)
     end
     local function SetPreviewAllSpecIcons(enabled)
         if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false end
-        if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then return false end
+        if (InCombatLockdown and InCombatLockdown()) or MSUF.PublicGlobals.MSUF_InCombat == true then return false end
         local kind = CurrentScope()
         M.gfPreviewAllSpecSpellIcons = M.gfPreviewAllSpecSpellIcons or {}
         M.gfPreviewAllSpecSpellIcons[kind] = enabled == true or nil
@@ -2044,10 +2025,8 @@ function SpellSection.BuildFrameCard(state, ctx)
         end,
     })
     RegisterControl(state.frameColorShortcut, ctx, "spell.frame.color", "Health bar highlight color", "button", "action")
-    state.framePriority = Schema.Build(ctx, spells, {
+    local rows = Schema.Build(ctx, spells, {
         { "slider", "priority", 5, { "Priority", 1, 10, 1, siRightW }, { siRightX, -544, siRightW, "LEFT" } },
-    }, state.frameRows).priority
-    local frameAlpha = Schema.Build(ctx, spells, {
         { "slider", "alpha", 25, { "Tint Alpha", 5, 100, 5, siRightW }, { siRightX, -598, siRightW, "LEFT" },
             get = function()
                 local frame = FrameEffectConfig(CurrentScope(), false)
@@ -2055,13 +2034,10 @@ function SpellSection.BuildFrameCard(state, ctx)
             end,
             convert = function(value) return (tonumber(value) or 25) / 100 end,
             afterWrite = function(frame, alpha) if frame.color then frame.color[4] = alpha end end },
-    }, state.frameRows).alpha
-    state.frameAlpha = frameAlpha
-    local rows = Schema.Build(ctx, spells, {
         { "slider", "thickness", 2, { "Border / Glow Thickness", 1, 8, 1, siRightW }, { siRightX, -652, siRightW, "LEFT" } },
         { "slider", "layer", 0, { "Effect Layer (0-30)", 0, 30, 1, siRightW }, { siRightX, -706, siRightW, "LEFT" } },
     }, state.frameRows)
-    state.frameThickness, state.frameLayer = rows.thickness, rows.layer
+    state.framePriority, state.frameAlpha, state.frameThickness, state.frameLayer = rows.priority, rows.alpha, rows.thickness, rows.layer
 end
 --- The spell grid grows by rows; the Show on Frame card and its controls move
 --- down with it and the section grows to fit.
@@ -2232,10 +2208,9 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         local slotInfo = CI_SLOT_VALUES[i]
         local slotKey = slotInfo.value
         local p = slotPositions[slotKey] or { x = leftX, y = -304 - (i - 1) * 58 }
-        local w = slotKey == "C" and slotW or slotW
         local field, label = "ciSlot" .. slotKey, M.Format("%s Indicator", Tr(slotInfo.text or slotKey))
         local assignmentDrop = Schema.Build(ctx, corners, {
-            { "dropdown", field, CI_SLOT_DEFAULTS[slotKey] or "none", { label, CICategoryValues, w }, { p.x, p.y, w, "LEFT" },
+            { "dropdown", field, CI_SLOT_DEFAULTS[slotKey] or "none", { label, CICategoryValues, slotW }, { p.x, p.y, slotW, "LEFT" },
                 path = "corner.assignment." .. tostring(slotKey), binding = "scopeValue", writeDefault = "none", afterSet = RefreshPage,
                 select = { "gfCornerSlotSelection", slotKey } },
         }, ROW_OPTIONS)[field]

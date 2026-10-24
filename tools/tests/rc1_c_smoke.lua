@@ -34,7 +34,8 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
-local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
+local CastbarFixture = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))()
+local loadfile = CastbarFixture.Loader(loadfile)
 local core = root .. "/MidnightSimpleUnitFrames/"
 
 local function Check(condition, message)
@@ -46,12 +47,10 @@ local function Load(relative, ns)
     return assert(loadfile(core .. relative))("MidnightSimpleUnitFrames", ns)
 end
 
+-- The real Kernel/MSUF_Bootstrap.lua and MSUF_Require.lua: ExportPublic keeps the
+-- shipped global policy, MSUF.Public and MSUF.PublicGlobals.
 local function ExportInto(ns)
-    ns.ExportPublic = function(name, value)
-        _G[name] = value
-        ns.Public[(name:gsub("^MSUF_", ""))] = value
-        return value
-    end
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, ns, nil, loadfile)
 end
 
 ---------------------------------------------------------------------------
@@ -137,7 +136,7 @@ local function ResolveInterrupt(case)
         Load(file, ns)
     end
     _G.MSUF_KickReady_RefreshAll()
-    return _G.MSUF_KickReady_GetSpellID(), ns.KickReady.SlotCount(), model
+    return ns.PublicGlobals.MSUF_KickReady_GetSpellID(), ns.KickReady.SlotCount(), model
 end
 
 local COMMAND_DEMON, AXE_TOSS, SPELL_LOCK, SILENCE = 119898, 119914, 19647, 15487
@@ -271,6 +270,10 @@ do
     _G.MSUF_PixelLayoutRegion = nil
     local ns = { Public = {} }
     ExportInto(ns)
+    -- The rounded surface requires Kernel Util's pixel layout at file load; the
+    -- castbar fixture's providers (real Util, Colors) load first, as in the TOC.
+    _G.MSUF = ns
+    CastbarFixture.Providers(root, ns, _G, loadfile)
     Load("UnitFrames/Effects/MSUF_UF_RoundedSurface.lua", ns)
     Load("Castbars/MSUF_CastbarUtils.lua", ns)
     Load("Castbars/MSUF_CastbarRounded.lua", ns)
@@ -439,7 +442,11 @@ do
         return frame
     end
     _G.MSUF_SetFontChecked = function(region, ...) region:SetFont(...) return true end
-    _G.MSUF_ApplyResolvedFont = nil
+    -- Runtime/MSUF_Fonts.lua's ApplyResolvedFont is a required provider of the
+    -- effects file; here it applies through the checked setter above.
+    _G.MSUF_ApplyResolvedFont = function(region, path, size, flags)
+        return _G.MSUF_SetFontChecked(region, path, size, flags)
+    end
     _G.MSUF_AuraReadParentFrameStrata = function(frame) return frame:GetFrameStrata() end
     _G.MSUF_AuraSyncFrameStrata = function(frame, strata) frame:SetFrameStrata(strata) end
     _G.MSUF_RoundedUF_OnSpellIndicatorEdge = nil
@@ -470,14 +477,20 @@ do
     ExportInto(ns)
     local runtimePath = core .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua"
     local effectsPath = core .. "Auras3/MSUF_Auras3_SpellIndicators_Effects.lua"
-    Load("Libs/MSUFUnitFrames/MSUF_UF_Apply.lua", ns)
-    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_SlotCompile.lua", ns)
-    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Drain.lua", ns)
-    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Name.lua", ns)
-    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua", ns)
-    Load("UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua", ns)
-    Load("Auras3/MSUF_Auras3_SpellIndicators_Config.lua", ns)
-    Load("Auras3/MSUF_Auras3_SpellIndicators_Effects.lua", ns)
+    -- Providers these files require and this scene never uses (aura spell keys,
+    -- unit-frame owners) are deferred: using one raises, naming it.
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    local function LoadDeferred(relative)
+        return RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. relative, ns, nil, loadfile)
+    end
+    LoadDeferred("Libs/MSUFUnitFrames/MSUF_UF_Apply.lua")
+    LoadDeferred("UnitFrames/Engine/Elements/MSUF_UF_Text_SlotCompile.lua")
+    LoadDeferred("UnitFrames/Engine/Elements/MSUF_UF_Text_Drain.lua")
+    LoadDeferred("UnitFrames/Engine/Elements/MSUF_UF_Text_Name.lua")
+    LoadDeferred("UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua")
+    LoadDeferred("UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua")
+    LoadDeferred("Auras3/MSUF_Auras3_SpellIndicators_Config.lua")
+    LoadDeferred("Auras3/MSUF_Auras3_SpellIndicators_Effects.lua")
     local A3 = ns.MSUF_Auras3
     local effects = A3.SpellIndicatorModules.Effects(A3.SpellIndicatorModules.Config())
     local NameText = Check(UF.elements.NameText, "the real NameText element did not register")

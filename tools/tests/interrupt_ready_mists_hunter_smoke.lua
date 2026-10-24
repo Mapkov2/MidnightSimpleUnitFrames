@@ -99,7 +99,7 @@ local function Load(flavor)
         Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF", ns)
-    return _G.MSUF_KickReady_GetSpellID()
+    return _G.MSUF.PublicGlobals.MSUF_KickReady_GetSpellID()
 end
 
 local function ExpectSpec(spec)
@@ -108,26 +108,26 @@ local function ExpectSpec(spec)
     -- Both off cooldown: ready.
     cooldowns = {}
     now = now + 1
-    Check(_G.MSUF_KickReady_IsReady() == true, label .. ": the interrupt off cooldown does not read ready")
+    Check(_G.MSUF.PublicGlobals.MSUF_KickReady_IsReady() == true, label .. ": the interrupt off cooldown does not read ready")
 
     -- The active interrupt recovers; the replaced spell reports no cooldown.
     cooldowns = { [spec.active] = { start = now, duration = 24 } }
     now = now + 1
-    Check(_G.MSUF_KickReady_IsReady() == false,
+    Check(_G.MSUF.PublicGlobals.MSUF_KickReady_IsReady() == false,
         label .. ": reads ready while its interrupt recovers (the replaced spell has no cooldown)")
 
     -- The replaced spell on a cooldown of its own must not hide a ready interrupt.
     cooldowns = { [spec.replaced] = { start = now, duration = 24 } }
     now = now + 1
-    Check(_G.MSUF_KickReady_IsReady() == true, label .. ": a cooldown on the replaced spell hid a ready interrupt")
+    Check(_G.MSUF.PublicGlobals.MSUF_KickReady_IsReady() == true, label .. ": a cooldown on the replaced spell hid a ready interrupt")
 
     -- The active interrupt comes back: ready again.
     cooldowns = { [spec.active] = { start = now - 30, duration = 24 } }
     now = now + 1
-    Check(_G.MSUF_KickReady_IsReady() == true, label .. ": does not read ready once its interrupt has recovered")
+    Check(_G.MSUF.PublicGlobals.MSUF_KickReady_IsReady() == true, label .. ": does not read ready once its interrupt has recovered")
 
-    Check(_G.MSUF_KickReady_GetSpellID() == spec.active,
-        label .. " hunters must track spell " .. spec.active .. ", got " .. tostring(_G.MSUF_KickReady_GetSpellID()))
+    Check(_G.MSUF.PublicGlobals.MSUF_KickReady_GetSpellID() == spec.active,
+        label .. " hunters must track spell " .. spec.active .. ", got " .. tostring(_G.MSUF.PublicGlobals.MSUF_KickReady_GetSpellID()))
 end
 
 for _, withDuration in ipairs({ true, false }) do

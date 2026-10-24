@@ -40,11 +40,15 @@ MSUF.UF = UF
 MSUF.Secrets = { IsNil = function(v) return v == nil end, NotSecret = function() return true end }
 
 local function Load(rel) assert(loadfile(CORE .. rel))("MidnightSimpleUnitFrames", MSUF) end
+Load("Kernel/MSUF_Bootstrap.lua")
 Load("Kernel/MSUF_Require.lua")
 Load("Shell/EditMode/MSUF_EditMode_Geometry.lua")
 Load("Kernel/MSUF_Util.lua")
 Load("UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua")
-Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")
+-- The alpha element requires the unit-frame runtime and scheduler providers at load;
+-- this range-alpha check never reaches them, so they are deferred (they raise if used).
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().LoadShipped(root,
+  "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua", MSUF)
 
 local arenaPool = assert(MSUF.Castbars.Pools.kinds.arena, "arena castbar pool did not register")
 

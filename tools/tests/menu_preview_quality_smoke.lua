@@ -30,6 +30,8 @@ local function Check(condition, message)
 end
 
 local world = World.New(root, flavor)
+-- The scene checks spawn real unit frames, named from the core TOC's X-MSUF-UnitFrames-Prefix.
+assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))().ApplyCoreTocMetadata(world)
 -- Blizzard's boss frame count, read by the core at load (the harness has none).
 world.env.MAX_BOSS_FRAMES = 5
 world:Boot()
@@ -333,6 +335,11 @@ do
     local general, bars = env.MSUF_DB.general, env.MSUF_DB.bars
     local GetCache = env.MSUF_UFCore_GetSettingsCache
     env.MSUF_UFCore_GetSettingsCache = function() return nil end
+    -- The Class Resources second HP bar reads the cache table itself (MSUF.UF.Config.settingsCache),
+    -- not the getter, so "no settings cache" takes the cached dark colour away too.
+    local settingsCache = MSUF.UF.Config.settingsCache
+    local cachedDark = { settingsCache.darkBarR, settingsCache.darkBarG, settingsCache.darkBarB }
+    settingsCache.darkBarR, settingsCache.darkBarG, settingsCache.darkBarB = nil, nil, nil
     local saved = { general.barMode, general.darkBarR, general.darkBarG, general.darkBarB, general.darkBarGray,
         general.darkBgBrightness }
     general.barMode = "dark"
@@ -385,6 +392,7 @@ do
     general.barMode, general.darkBarR, general.darkBarG, general.darkBarB, general.darkBarGray, general.darkBgBrightness =
         saved[1], saved[2], saved[3], saved[4], saved[5], saved[6]
     env.MSUF_UFCore_GetSettingsCache = GetCache
+    settingsCache.darkBarR, settingsCache.darkBarG, settingsCache.darkBarB = cachedDark[1], cachedDark[2], cachedDark[3]
     group:Hide()
     unitBox:Hide()
 end

@@ -3,6 +3,7 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_AuraSettings.lua"
 local EnsureDB = M.EnsureDB
 local GP = M.GroupPage or {}
 local VT, VTP = M.ValueTextList, M.ValueTextPairs
@@ -109,12 +110,13 @@ local function Round(value)
     return floor(value + 0.5)
 end
 
-local NormalizeDebuffTypeBorderMode = _G.MSUF_NormalizeAuraDebuffTypeBorderMode
+local NormalizeDebuffTypeBorderMode = MSUF.Require("MSUF_NormalizeAuraDebuffTypeBorderMode", FILE)
 
+-- Resolved once: every live preview refresh asks for the combat lock.
+local IsConfigCombatLocked = MSUF.Require("MSUF_IsConfigCombatLocked", FILE)
 local function AurasMenuCombatLocked()
     if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() and true or false end
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then return _G.MSUF_IsConfigCombatLocked() and true or false end
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+    return IsConfigCombatLocked() and true or false
 end
 
 local function CurrentScope()

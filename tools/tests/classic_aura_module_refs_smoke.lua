@@ -29,12 +29,15 @@ local CASES = {
     { file = "Preview", needs = "MSUF_Auras3_Requests.lua" },
     { file = "Preview", backend = { Buttons = {}, Lanes = {}, Element = {} }, needs = "MSUF_Auras3_Requests.lua" },
 }
+-- Each file runs through the shipped loader (the real Kernel API; a provider it requires and this
+-- namespace does not load is a forwarder), so the load reaches the predecessor import.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 for _, case in ipairs(CASES) do
     local A3 = { _ClassicBackend = case.backend, _ClassicCompile = {} }
     local namespace = { Client = { IsClassic = true }, MSUF_Auras3 = A3, UF = {} }
     _G.MSUF_NS = namespace
-    local chunk = assert(loadfile(AURAS .. "MSUF_Auras3_" .. case.file .. ".lua"))
-    local ok, message = pcall(chunk, "MidnightSimpleUnitFrames", namespace)
+    local ok, message = pcall(RequireFixture.LoadShipped, root,
+        "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_" .. case.file .. ".lua", namespace)
     assert(not ok, case.file .. ".lua loaded without its predecessor instead of naming it")
     assert(tostring(message):find(case.needs, 1, true),
         case.file .. ".lua failed without naming " .. case.needs .. ": " .. tostring(message))

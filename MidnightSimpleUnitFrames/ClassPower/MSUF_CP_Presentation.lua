@@ -4,18 +4,20 @@ local builders = shared.builders
 local type = shared.type
 local math_floor = shared.math_floor
 local tonumber = shared.tonumber
-local math_abs = shared.math_abs
-local FontPathEquals = shared.FontPathEquals
-local tostring = shared.tostring
-local MarkFontApplyFailed = shared.MarkFontApplyFailed
 local GetGlobalFontSettings = shared.GetGlobalFontSettings
 local OverrideRGB = shared.OverrideRGB
 local CP_ShapeTextures = shared.CP_ShapeTextures
 local CP_UseNativeShapeFill = shared.CP_UseNativeShapeFill
 local ClearShapeEdge = shared.ClearShapeEdge
+local CP_ResolveBarPaths = shared.CP_ResolveBarPaths
+local CP_ApplyRoundedSurface = shared.CP_ApplyRoundedSurface
+local FILE = "ClassPower/MSUF_CP_Presentation.lua"
+local ApplyResolvedFont = MSUF.Require("MSUF_ApplyResolvedFont", FILE)
+local ResolveFontShadowMetrics = MSUF.Require("MSUF_ResolveFontShadowMetrics", FILE)
+local PublicGlobals = MSUF.PublicGlobals
 
 builders.PRESENTATION = function(E)
-    local _G = E.globals or _G
+    local ApplyRoundedSurface = E.ApplyRoundedSurface or CP_ApplyRoundedSurface
     --- Bound once by PRESENTATION at controller load. RunActiveUpdate is the
     --- controller's active-mode dispatch (CP_RunActiveUpdate): Stagger, runes,
     --- aura, continuous and native modes each repaint with their own painter,
@@ -25,8 +27,7 @@ builders.PRESENTATION = function(E)
     local _cpFontRev
 
     local function CDM_GetScaledWidth(cdmFrame, targetFrame)
-        local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
-        local width = type(getScaledWidth) == "function" and getScaledWidth(cdmFrame, targetFrame) or nil
+        local width = MSUF.Require("MSUF_GetCooldownAnchorScaledWidth", FILE)(cdmFrame, targetFrame)
         return width and math_floor(width + 0.5) or nil
     end
 
@@ -74,29 +75,10 @@ builders.PRESENTATION = function(E)
         region._msufCPShadowX, region._msufCPShadowY = targetShadowX, targetShadowY
     end
 
-    local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
-        if type(region.GetFont) ~= "function" then return true end
-        local actual, actualSize, actualFlags = region:GetFont()
-        if not actual then return false end
-        if actualSize and math_abs((tonumber(actualSize) or 0) - size) > 0.01 then return false end
-        if (actualFlags or "") ~= (fontFlags or "") then return false end
-        if actual == fontPath then return true end
-        if FontPathEquals(fontPath, actual) == true then return true end
-        return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(fontPath or ""):gsub("/", "\\"):lower()
-    end
-
     local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
         if not (region and region.SetFont) then return false end
-        local applyResolved = _G.MSUF_ApplyResolvedFont
-        if type(applyResolved) == "function" then
-            local ok, _, source = applyResolved(region, fontPath, size, fontFlags)
-            return ok == true and source ~= "fallback"
-        end
-        if _G.MSUF_SetFontChecked(region, fontPath, size, fontFlags) and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
-        local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
-        _G.MSUF_SetFontChecked(region, fallback, size, fontFlags)
-        MarkFontApplyFailed()
-        return false
+        local ok, _, source = ApplyResolvedFont(region, fontPath, size, fontFlags)
+        return ok == true and source ~= "fallback"
     end
 
     --- Font refresh is driven by global font serials and ClassPower options.
@@ -119,7 +101,7 @@ builders.PRESENTATION = function(E)
         if type(general) == "table" then
             textAlpha = tonumber(general.fontTextAlpha) or 1
             if textAlpha < 0.7 then textAlpha = 0.7 elseif textAlpha > 1 then textAlpha = 1 end
-            shadowAlpha, shadowX, shadowY = _G.MSUF_ResolveFontShadowMetrics(
+            shadowAlpha, shadowX, shadowY = ResolveFontShadowMetrics(
                 general.fontShadowOpacity, general.fontShadowDistance, general.fontShadowStrength)
         end
 
@@ -129,8 +111,8 @@ builders.PRESENTATION = function(E)
         end
         if fontSize < 6 then fontSize = 6 end
 
-        local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003
-        local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+        local rev = (PublicGlobals.MSUF_FontPathSerial or 0) + fontSize * 1000003
+        local fontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
         if fs and (_cpFontRev ~= rev or fs._msufCPFontEpoch ~= fontEpoch) then
             ApplyClassPowerFont(fs, path, fontSize, flags)
             -- Stamp the bounded attempt, including fallback. Epoch transition
@@ -174,17 +156,7 @@ builders.PRESENTATION = function(E)
     --- this function only replaces media and native reverse-fill state.
     local function CP_RefreshTexture()
         local b = _cpDB.bars or {}
-        local fgKey = b.classPowerTexture
-        local bgKey = b.classPowerBgTexture
-
-        local fgPath = CP_ResolveTexture(fgKey)
-        local bgPath
-        if bgKey and bgKey ~= "" then
-            local resolve = _G.MSUF_ResolveStatusbarTextureKey
-            bgPath = (type(resolve) == "function" and resolve(bgKey)) or fgPath
-        else
-            bgPath = fgPath
-        end
+        local fgPath, bgPath = CP_ResolveBarPaths(b, CP_ResolveTexture)
         local shapeInfo = not (CP.powerType == "WHIRLWIND" or CP.powerType == "SWEEPING_STRIKES")
             and CP_ShapeTextures(b.classPowerShape) or nil
         local activeFgPath = (shapeInfo and shapeInfo.fill) or fgPath
@@ -215,8 +187,7 @@ builders.PRESENTATION = function(E)
             CP.bgTex:SetTexture(activeBgPath)
             CP._msufCPBgTexturePath = activeBgPath
         end
-        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
-        if type(applyRounded) == "function" then applyRounded() end
+        ApplyRoundedSurface()
     end
 
     local API = {

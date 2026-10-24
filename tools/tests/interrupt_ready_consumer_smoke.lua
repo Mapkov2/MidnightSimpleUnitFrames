@@ -79,13 +79,10 @@ _G.CreateFrame = function(frameType)
     }
 end
 
--- ExportPublic as Kernel/MSUF_Bootstrap.lua: the global and MSUF.Public.
-local ns = { Public = {} }
-ns.ExportPublic = function(name, value)
-    _G[name] = value
-    ns.Public[(name:gsub("^MSUF_", ""))] = value
-    return value
-end
+-- The real Kernel/MSUF_Bootstrap.lua and MSUF_Require.lua: ExportPublic keeps the
+-- shipped global policy, MSUF.Public and MSUF.PublicGlobals.
+local ns = {}
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, ns, nil, loadfile)
 for key, value in pairs({
     Scheduler = { ScheduleAfter = function() error("native wakes must not fall back to the scheduler") end },
     Util = { InCombat = function() return false end },
@@ -95,6 +92,10 @@ ns.Public.GetCastbarTexture = function() return "Interface\\MSUF\\Lucent" end
 local reports = {}
 _G.geterrorhandler = function() return function(message) reports[#reports + 1] = message end end
 _G.MSUF_ApplyCastbarOutline = function() end
+-- The palette (Runtime/MSUF_Colors.lua) is not under test: a colour key resolves
+-- to nothing, so the castbar colour defaults answer, as in a profile without keys.
+_G.MSUF_GetColorRGBFromKey = function() return nil end
+_G.MSUF_GetColorFromKey = function() return nil end
 -- The real boundary: consumer callbacks run through MSUF.RunHostAPIStep.
 for _, file in ipairs({ "Kernel/MSUF_Boundary.lua", "Runtime/MSUF_HostAPI.lua", "Castbars/MSUF_CastbarUtils.lua",
     "Castbars/MSUF_InterruptReady.lua" }) do
@@ -131,7 +132,7 @@ assert(not events.SPELL_UPDATE_COOLDOWN, "an inactive consumer registered the co
 assert(#calls == 1 and Last() == "settings", "an inactive consumer missed MSUF's settings")
 Calls()
 assert(KickReady.SlotCount() == 2, "Avenger's Shield was not tracked as the second interrupt")
-assert(_G.MSUF_KickReady_IsReady() == nil and _G.MSUF_KickReady_GetSpellID() == nil,
+assert(ns.PublicGlobals.MSUF_KickReady_IsReady() == nil and ns.PublicGlobals.MSUF_KickReady_GetSpellID() == nil,
     "MSUF's own readiness exports must stay gated by MSUF's castbar settings")
 assert(#calls == 0, "an inactive consumer was notified")
 
@@ -294,7 +295,7 @@ assert(#calls == 0, "an inactive consumer was notified of a lifecycle event")
 local idle = 0
 KickReady.Register("idle", function(reason) assert(reason == "settings"); idle = idle + 1 end)
 Calls()
-_G.MSUF_KickReady_NotifySettings()
+ns.PublicGlobals.MSUF_KickReady_NotifySettings()
 assert(idle == 1 and #calls == 1 and Last() == "settings", "MSUF's appearance pass did not reach every consumer")
 KickReady.Unregister("idle")
 Calls()

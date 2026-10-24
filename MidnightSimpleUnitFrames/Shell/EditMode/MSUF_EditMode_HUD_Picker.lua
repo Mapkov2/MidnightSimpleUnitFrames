@@ -1,5 +1,6 @@
 --- EditMode/MSUF_EditMode_HUD_Picker.lua - the toolbar's frame and settings pickers
-local EM2 = _G.MSUF_EM2
+local _, MSUF = ...
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local HUD, DockUI, Kit, Selection = EM2.HUD, EM2.HUDDock, EM2.HUDKit, EM2.HUDSelection
@@ -70,8 +71,9 @@ local function OpenSettingsForKey(key)
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(key, nil, nil, { source = "hud-menu-picker", openSettings = true })
     end
-    local opener = (EM2.Focus and EM2.Focus.OpenFullSettings) or _G.MSUF_EM2_OpenFocusSettings
-    if type(opener) == "function" and opener() then
+    local opener = (EM2.Focus and EM2.Focus.OpenFullSettings)
+        or MSUF.Require("MSUF_EM2_OpenFocusSettings", "Shell/EditMode/MSUF_EditMode_HUD_Picker.lua")
+    if opener() then
         HUD.SetStatus(HelpText("Opened settings"), "ok")
     else
         HUD.SetStatus(HelpText("Settings unavailable"), "warn")

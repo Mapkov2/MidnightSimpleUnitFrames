@@ -1,7 +1,6 @@
 --- Classic-only ownership for Blizzard frames replaced by MSUF.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local Client = MSUF.Client
 if not (Client and Client.IsClassic == true) then return end
@@ -12,7 +11,7 @@ local state = Compat.ClassicFrameOwnership or {}
 Compat.ClassicFrameOwnership = state
 
 local function InCombat()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return type(InCombatLockdown) == "function" and InCombatLockdown() == true
 end
 
 local function Protected(frame)
@@ -73,7 +72,7 @@ end
 
 local function EnsureDeferredDriver()
     if state.driver then return state.driver end
-    local driver = _G.CreateFrame("Frame")
+    local driver = CreateFrame("Frame")
     driver:SetScript("OnEvent", function(self, event)
         if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
@@ -180,19 +179,19 @@ end
 --- secure ArenaEnemyFrameN children). Treat the containers like the boss
 --- container (reparent + hook) and the secure children like boss frames
 --- (unregister + hide, never reparent). Only the MSUF arena slots
---- (_G.MSUF_MAX_ARENA_FRAMES) are hidden; Vanilla has 0 and is never touched.
+--- (Client.MaxArenaOpponents) are hidden; Vanilla has 0 and is never touched.
 --- The addon only loads when an arena match starts, so the pass also re-runs
 --- once on its ADDON_LOADED. HandleFrame keeps the Kernel combat deferral.
 local function HideLegacyArenaFrames(handleFrame, shouldHide)
-    if _G.CompactArenaFrame or not shouldHide("arena") then return end
-    local slots = tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 0
+    if CompactArenaFrame or not shouldHide("arena") then return end
+    local slots = tonumber(Client.MaxArenaOpponents) or 0
     -- MAX_ARENA_ENEMIES is defined only by LoadOnDemand Blizzard_ArenaUI, so it
     -- is nil at every login until that addon loads: never compare it bare. If
     -- Blizzard fields more opponents than MSUF has slots, stand down entirely.
-    local blizzardSlots = tonumber(_G.MAX_ARENA_ENEMIES)
+    local blizzardSlots = tonumber(MAX_ARENA_ENEMIES)
     if slots <= 0 or (blizzardSlots ~= nil and blizzardSlots > slots) then return end
-    handleFrame(_G.ArenaEnemyFrames, nil, "arena")
-    handleFrame(_G.ArenaPrepFrames, nil, "arena")
+    handleFrame(ArenaEnemyFrames, nil, "arena")
+    handleFrame(ArenaPrepFrames, nil, "arena")
     for i = 1, slots do
         handleFrame(_G["ArenaEnemyFrame" .. i], true, "arena")
         handleFrame(_G["ArenaPrepFrame" .. i], true, "arena")
@@ -201,9 +200,9 @@ end
 
 local function LegacyArenaSuppressionPass(handleFrame, shouldHide)
     HideLegacyArenaFrames(handleFrame, shouldHide)
-    if state.legacyArenaWatcher or _G.CompactArenaFrame or _G.ArenaEnemyFrames then return end
-    if (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 0) <= 0 or not shouldHide("arena") then return end
-    local watcher = _G.CreateFrame("Frame")
+    if state.legacyArenaWatcher or CompactArenaFrame or ArenaEnemyFrames then return end
+    if (tonumber(Client.MaxArenaOpponents) or 0) <= 0 or not shouldHide("arena") then return end
+    local watcher = CreateFrame("Frame")
     state.legacyArenaWatcher = watcher
     watcher:RegisterEvent("ADDON_LOADED")
     watcher:SetScript("OnEvent", function(self, _, addonName)

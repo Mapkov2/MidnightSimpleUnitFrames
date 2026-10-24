@@ -49,18 +49,20 @@ T.media.gradH = T.media.gradH or ADDON_PATH .. "Media\\MSUF_Grad_H.tga"
 T.media.gradHRev = T.media.gradHRev or ADDON_PATH .. "Media\\MSUF_Grad_H_Rev.tga"
 T.media.gradV = T.media.gradV or ADDON_PATH .. "Media\\MSUF_Grad_V.tga"
 T.media.gradVRev = T.media.gradVRev or ADDON_PATH .. "Media\\MSUF_Grad_V_Rev.tga"
+-- "0.1,0.2,0.3" -> { 0.1, 0.2, 0.3 }
+local function ParseNumbers(values)
+    local out, n = {}, 0
+    for value in values:gmatch("[^,]+") do
+        n = n + 1
+        out[n] = tonumber(value)
+    end
+    return out
+end
 local function ColorRows(rows)
     local out = {}
     for line in M.Lines(rows) do
         local key, values = line:match("^([^=]+)=(.+)$")
-        if key then
-            local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do
-                n = n + 1
-                c[n] = tonumber(value)
-            end
-            out[key] = c
-        end
+        if key then out[key] = ParseNumbers(values) end
     end
     return out
 end
@@ -143,11 +145,7 @@ local function NavIconColors(rows)
     for line in M.Lines(rows) do
         local keys, values = line:match("^([^=]+)=(.+)$")
         if keys then
-            local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do
-                n = n + 1
-                c[n] = tonumber(value)
-            end
+            local c = ParseNumbers(values)
             for key in keys:gmatch("%S+") do out[key] = { c[1], c[2], c[3] } end
         end
     end
@@ -159,12 +157,7 @@ local function GlassVariants(rows)
         local key, rest = line:match("^(%S+)%s+(.+)$")
         local spec = {}
         for field, values in tostring(rest or ""):gmatch("(%w+)=([%d%.,]+)") do
-            local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do
-                n = n + 1
-                c[n] = tonumber(value)
-            end
-            spec[field] = c
+            spec[field] = ParseNumbers(values)
         end
         if key then out[key] = spec end
     end
@@ -321,6 +314,8 @@ T.focusVeils.edit = T.focusVeils.edit or {
 -- Structural surfaces and the green/red/amber semantics stay untouched. This
 -- must run before the first themed frame is built; a mid-session change needs
 -- a UI reload, mirroring the locale contract.
+-- The token tables every accent swap (and the optional surface re-hue) walks.
+local ACCENT_TOKEN_TABLES = { "colors", "navIconColors", "glassVariants", "gradients" }
 local ACCENT_SOURCE_TONES = {
     { 0.141, 0.365, 0.741 }, -- deep (coreBlue family)
     { 0.231, 0.510, 0.965 }, -- base (coreGlow family)
@@ -450,23 +445,29 @@ end
 --- little as possible; if nothing clears the floor it takes the best available.
 --- The surface is treated as opaque -- what sits behind a translucent panel is
 --- the game world, so the surface's own RGB is the only honest reference.
-local function EnforceContrast(colorKey, surfaceKey, floor)
-    local c, surface = T.colors[colorKey], T.colors[surfaceKey]
-    if type(c) ~= "table" or type(surface) ~= "table" or type(c[1]) ~= "number" then return end
-    if ContrastRatio(CompositeOver(c, surface), surface) >= floor then return end
-    local h, s, v0 = RGBToHSV(c[1], c[2], c[3])
+--- The shared sweep re-values `color` in place; ratioAt(r, g, b) answers the
+--- contrast a candidate of that hue and saturation reaches.
+local function SweepValueForContrast(color, floor, ratioAt)
+    local h, s, v0 = RGBToHSV(color[1], color[2], color[3])
     local nearestV, nearestGap, bestV, bestRatio = nil, math.huge, v0, -1
     for i = 0, 40 do
         local v = i / 40
-        local r, g, b = HSVToRGB(h, s, v)
-        local ratio = ContrastRatio(CompositeOver({ r, g, b, c[4] }, surface), surface)
+        local ratio = ratioAt(HSVToRGB(h, s, v))
         if ratio >= floor then
             local gap = v > v0 and (v - v0) or (v0 - v)
             if gap < nearestGap then nearestV, nearestGap = v, gap end
         end
         if ratio > bestRatio then bestV, bestRatio = v, ratio end
     end
-    c[1], c[2], c[3] = HSVToRGB(h, s, nearestV or bestV)
+    color[1], color[2], color[3] = HSVToRGB(h, s, nearestV or bestV)
+end
+local function EnforceContrast(colorKey, surfaceKey, floor)
+    local c, surface = T.colors[colorKey], T.colors[surfaceKey]
+    if type(c) ~= "table" or type(surface) ~= "table" or type(c[1]) ~= "number" then return end
+    if ContrastRatio(CompositeOver(c, surface), surface) >= floor then return end
+    SweepValueForContrast(c, floor, function(r, g, b)
+        return ContrastRatio(CompositeOver({ r, g, b, c[4] }, surface), surface)
+    end)
 end
 -- Text on a structural (neutral) surface: the surface is the design, so the
 -- label moves. Floors sit at or below what stock midnight already achieves, so
@@ -494,19 +495,9 @@ local function EnforceSurfaceContrast(surfaceKey, backdropKey, textKey, floor)
         return ContrastRatio(CompositeOver(text, candidate), candidate)
     end
     if RatioAt(CompositeOver(surface, backdrop)) >= floor then return end
-    local h, s, v0 = RGBToHSV(surface[1], surface[2], surface[3])
-    local nearestV, nearestGap, bestV, bestRatio = nil, math.huge, v0, -1
-    for i = 0, 40 do
-        local v = i / 40
-        local r, g, b = HSVToRGB(h, s, v)
-        local ratio = RatioAt(CompositeOver({ r, g, b, surface[4] }, backdrop))
-        if ratio >= floor then
-            local gap = v > v0 and (v - v0) or (v0 - v)
-            if gap < nearestGap then nearestV, nearestGap = v, gap end
-        end
-        if ratio > bestRatio then bestV, bestRatio = v, ratio end
-    end
-    surface[1], surface[2], surface[3] = HSVToRGB(h, s, nearestV or bestV)
+    SweepValueForContrast(surface, floor, function(r, g, b)
+        return RatioAt(CompositeOver({ r, g, b, surface[4] }, backdrop))
+    end)
 end
 -- Text on an accent-colored surface: here the *surface* moves instead. An active
 -- pill is meant to carry a near-white label in every accent, and a bright pick
@@ -590,9 +581,8 @@ function T.MenuAccentRGBToHex(r, g, b)
     return string.format("%02x%02x%02x", AccentColorByte(r), AccentColorByte(g), AccentColorByte(b))
 end
 local function PlayerClassAccent()
-    local UnitClass = _G.UnitClass
     local class = type(UnitClass) == "function" and select(2, UnitClass("player")) or nil
-    local colors = _G.CUSTOM_CLASS_COLORS or _G.RAID_CLASS_COLORS
+    local colors = CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS
     local c = class and type(colors) == "table" and colors[class] or nil
     if type(c) ~= "table" or type(c.r) ~= "number" then return nil end
     return c.r, c.g, c.b, class
@@ -689,10 +679,7 @@ function T.ApplyMenuAccent()
         { r, gr, b },
         { r * brightScale, gr * brightScale, b * brightScale },
     }
-    SwapAccentDeep(T.colors, tones, 1)
-    SwapAccentDeep(T.navIconColors, tones, 1)
-    SwapAccentDeep(T.glassVariants, tones, 1)
-    SwapAccentDeep(T.gradients, tones, 1)
+    for i = 1, #ACCENT_TOKEN_TABLES do SwapAccentDeep(T[ACCENT_TOKEN_TABLES[i]], tones, 1) end
     ApplyAccentNavHoverColors(tones)
     -- Optional second pass: rotate the structural midnight body onto the accent
     -- hue so the whole menu follows the accent, not just interactive highlights.
@@ -704,10 +691,7 @@ function T.ApplyMenuAccent()
         local satScale = sat / 0.761
         if satScale > 1.05 then satScale = 1.05 end
         T._menuAccentSatScale = satScale
-        RehueDeep(T.colors, 1)
-        RehueDeep(T.navIconColors, 1)
-        RehueDeep(T.glassVariants, 1)
-        RehueDeep(T.gradients, 1)
+        for i = 1, #ACCENT_TOKEN_TABLES do RehueDeep(T[ACCENT_TOKEN_TABLES[i]], 1) end
         RehueDeep(T.focusVeils, 1)
     end
     -- Runs for every accent, tinted or not: the tone swap alone already repaints

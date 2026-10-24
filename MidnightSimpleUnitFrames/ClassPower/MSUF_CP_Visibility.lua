@@ -64,7 +64,7 @@ local function Paint(entry, event)
     if entry.released then return end
     if entry.kind == "class" then return end -- Class Resource owns its value rules.
     local region = entry.region
-    if _G.MSUF_UnitEditModeActive == true then region:SetAlpha(1) return end
+    if MSUF_UnitEditModeActive == true then region:SetAlpha(1) return end
     if entry.hideOOC and not Combat(event) then region:SetAlpha(0) return end
     local full, empty = entry.hideFull, entry.hideEmpty
     if not (full or empty) or entry.kind == "extra" then region:SetAlpha(1) return end
@@ -244,8 +244,6 @@ function V.ClearExtras()
     end
 end
 
-if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
-    _G.MSUF_RegisterAnyEditModeListener(function()
-        for _, entry in pairs(entries) do Paint(entry) end
-    end)
-end
+MSUF.Require("MSUF_RegisterAnyEditModeListener", "ClassPower/MSUF_CP_Visibility.lua")(function()
+    for _, entry in pairs(entries) do Paint(entry) end
+end)

@@ -58,6 +58,10 @@ local function HasLabel(label)
     for _, value in ipairs(labels) do if value == label then return true end end
 end
 
+-- The shipped Kernel API (Require/Optional/ExportPublic) the files resolve their providers through.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, msuf)
+RequireFixture.Install(root, msuf, menu)
 -- The core's Suite link (Kernel/MSUF_SuiteLink.lua), which the page asks for the Suite changelog.
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", msuf)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua"))("MidnightSimpleUnitFrames_Options", msuf)

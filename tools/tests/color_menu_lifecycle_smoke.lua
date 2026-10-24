@@ -163,8 +163,20 @@ function M.TrackRefresh(_, callback) refreshers[#refreshers + 1] = callback end
 function M.SetMenuStateValue(key, value) M[key] = value end
 function M.AddTooltip() end
 
+-- The real Kernel namespace API (Bootstrap, Require) for each namespace this fixture loads page files into,
+-- plus the pixel layout stand-in the shared fixtures use: this fixture lays out no pixels.
+local RequireFixture = assert(loadfile("tools/tests/require_fixture.lua"))()
+local function Kernel(namespace)
+    RequireFixture.InstallKernel(".", namespace)
+    namespace.ExportPublic("MSUF_PixelLayoutRegion", function(region, policy, ...)
+        if type(policy) == "string" then return region[policy](region, ...) end
+        return region
+    end)
+    return namespace
+end
+
 local selectionPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua"
-local selectionMSUF = { MSUF2 = M }
+local selectionMSUF = Kernel({ MSUF2 = M })
 assert(loadfile(selectionPath))("MidnightSimpleUnitFrames", selectionMSUF)
 local selectionContractBox = NewFrame()
 selectionContractBox._msuf2SelectionBar = NewFrame(selectionContractBox)
@@ -194,7 +206,7 @@ function builder:Section(title, height)
     error("unexpected Color Painter section: " .. tostring(title))
 end
 
-local MSUF = { MSUF2 = M }
+local MSUF = Kernel({ MSUF2 = M })
 function MSUF.MSUF_Menu2_CreateUnitPreviewBox(parent, panel, width, height)
     local box = NewFrame(parent)
     box:SetSize(width, height)

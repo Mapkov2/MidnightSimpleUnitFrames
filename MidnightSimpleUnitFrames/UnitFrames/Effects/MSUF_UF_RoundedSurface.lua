@@ -1,7 +1,6 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
-MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Effects/MSUF_UF_RoundedSurface.lua")
 
 -- Rounded and slanted surface layer shared by every rounded renderer: the mask
 -- and edge media, the frame shape each scope resolves to, the combat gate and
@@ -9,7 +8,7 @@ local ExportPublic = MSUF.ExportPublic
 -- contract for renderers outside this folder (castbars, class resources);
 -- MSUF.RoundedSurfaceKit hands the complete layer to MSUF_UF_RoundedResources.lua
 -- and MSUF_UF_RoundedFrames.lua, which load right after this file.
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 
 local MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local CLEAN_MASK_PATHS = {
@@ -52,10 +51,10 @@ local ROUNDED_MEDIA_SLICE_MARGIN = 9.5
 local DEFAULT_ROUNDED_STRENGTH = 3
 local MAX_HIGHLIGHT_BORDER_THICKNESS = 30
 
-local InCombatLockdown = _G.InCombatLockdown
-local issecretvalue = _G.issecretvalue
-local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
-  and _G.Enum.UITextureSliceMode.Stretched
+local InCombatLockdown = InCombatLockdown
+local issecretvalue = issecretvalue
+local STRETCHED_SLICE_MODE = Enum and Enum.UITextureSliceMode
+  and Enum.UITextureSliceMode.Stretched
 
 local forceDisabled = false
 local UNIT_SHAPE_KEYS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget", "boss", "arena" }
@@ -90,7 +89,7 @@ local function CanCreateRoundedRegion(existing)
 end
 
 local function BarsDB()
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   return db and db.bars or nil
 end
 
@@ -122,7 +121,7 @@ end
 
 local function IsConfiguredEnabled()
   if ReadRoundedBool("roundedFramesEnabled", false) then return true end
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   if not db then return false end
   if slantedExtraSurfacesEnabled then return true end
   for _, key in ipairs(UNIT_SHAPE_KEYS) do
@@ -145,7 +144,7 @@ end
 local function RoundedUnitFramesEnabled()
   if not IsEnabled() then return false end
   if ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedUnitFrames", true) then return true end
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   for _, key in ipairs(UNIT_SHAPE_KEYS) do
     local style = db and db[key] and db[key].frameBarShape
     if style == "ROUNDED" or (slantedBarsEnabled and slantedUnitFramesEnabled and style == "SLANTED") then return true end
@@ -156,7 +155,7 @@ end
 local function RoundedGroupFramesEnabled()
   if not IsEnabled() then return false end
   if ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedGroupFrames", true) then return true end
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   for _, key in ipairs(GROUP_SHAPE_KEYS) do
     local style = db and db[key] and db[key].frameBarShape
     if style == "ROUNDED" or (slantedBarsEnabled and slantedGroupFramesEnabled and style == "SLANTED") then return true end
@@ -191,7 +190,7 @@ end
 -- Resolve the same config for shape and cut direction, including group members
 -- and boss/arena unit tokens. No saved config means the shared value applies.
 local function FrameConfig(f)
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   if type(f) == "string" then return db and db[f] end
   if not f then return end
   f = f._msufRUFStyleOwner or f
@@ -243,7 +242,9 @@ local function SlantedDirection(scope, conf)
   conf = conf or FrameConfig(scope)
   local direction = conf and conf.slantedBarDirection
   if SLANTED_MASK_PATHS[direction] then return direction end
-  local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+  -- Dispel overlay signatures reach this; read the profile inline.
+  local db = MSUF_DB
+  local bars = db and db.bars
   direction = bars and bars.slantedBarDirection
   return SLANTED_MASK_PATHS[direction] and direction or "RIGHT_DOWN"
 end
@@ -295,7 +296,8 @@ local function DispelFrameSignature(frame)
 end
 
 local function MouseoverHighlightEnabled()
-  local gen = _G.MSUF_DB and _G.MSUF_DB.general
+  local db = MSUF_DB
+  local gen = db and db.general
   if gen and gen.highlightEnabled == nil and gen.enableHighlightOnHover ~= nil then
     return gen.enableHighlightOnHover == true
   end

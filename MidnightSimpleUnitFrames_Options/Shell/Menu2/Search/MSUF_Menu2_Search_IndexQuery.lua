@@ -1715,18 +1715,13 @@ local STATIC_ROW_CLIENT_CAPABILITY = {
     ["id\031uf_target\031menu2%2Euf_target%2Eunit%2Estatus%2Eindicator%2Ethreat"] = "SupportsThreatText",
     ["id\031uf_focus\031menu2%2Euf_focus%2Eunit%2Estatus%2Eindicator%2Ethreat"] = "SupportsThreatText",
     ["id\031uf_boss\031menu2%2Euf_boss%2Eunit%2Estatus%2Eindicator%2Ethreat"] = "SupportsThreatText",
-    -- Its "Color by threat" toggle on the same pages, and the three threat colors
-    -- on Colors > Status Text Colors (MSUF_Menu2_AdvancedColors.lua).
     ["id\031uf_target\031menu2%2Euf_target%2Eunit%2Estatus%2Ethreat%2Ecolor_curve"] = "SupportsThreatText",
     ["id\031uf_focus\031menu2%2Euf_focus%2Eunit%2Estatus%2Ethreat%2Ecolor_curve"] = "SupportsThreatText",
     ["id\031uf_boss\031menu2%2Euf_boss%2Eunit%2Estatus%2Ethreat%2Ecolor_curve"] = "SupportsThreatText",
     ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Ethreat%2Ecurve%2Elow"] = "SupportsThreatText",
     ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Ethreat%2Ecurve%2Emid"] = "SupportsThreatText",
     ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Ethreat%2Ecurve%2Ehigh"] = "SupportsThreatText",
-    -- Group Frames > Status & Indicators: the group Threat %'s "Color by threat"
-    -- toggle (MSUF_Menu2_GroupIndicators.lua).
     ["id\031gf_indicators\031menu2%2Egf_indicators%2Egroup%2Efield%2Ethreattextcolorcurve"] = "SupportsThreatText",
-    -- The dark plate behind the number ("Background") on the same unit and group cards.
     ["id\031uf_target\031menu2%2Euf_target%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
     ["id\031uf_focus\031menu2%2Euf_focus%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
     ["id\031uf_boss\031menu2%2Euf_boss%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
@@ -1789,6 +1784,11 @@ local STATIC_ROW_CLIENT_CAPABILITY = {
 -- units (MSUF_Menu2_GroupLayoutAdditional.lua), the Mythic raid group cap the
 -- Mythic Raid scope (MSUF_Menu2_GroupLayout.lua).
 local STATIC_ROW_FRAME_SCOPE = {
+    ["id\031icon_skins\031menu2%2Eicon_skins%2Eicon_skins%2Ecastbar_shape%2Efocus"] = "focus",
+    ["id\031icon_skins\031menu2%2Eicon_skins%2Eicon_skins%2Ecastbar_shape%2Eboss"] = "boss",
+    ["id\031icon_skins\031menu2%2Eicon_skins%2Eicon_skins%2Ecastbar_shape%2Earena"] = "arena",
+    ["id\031icon_skins\031menu2%2Eicon_skins%2Eicon_skins%2Efocus_kick_shape"] = "focus",
+    ["id\031icon_skins\031menu2%2Eicon_skins%2Eunit%2Etrinket_shape"] = "arena",
     ["id\031opt_bars\031menu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Epreview%2Eboss%2Etarget"] = "boss",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybossenabled"] = "boss",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosshealeronly"] = "boss",

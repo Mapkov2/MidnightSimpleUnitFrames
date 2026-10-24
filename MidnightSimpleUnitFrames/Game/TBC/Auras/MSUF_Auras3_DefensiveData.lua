@@ -1,9 +1,11 @@
 --- TBC Classic player defensive aura IDs.
 --- Baseline: WeakAuras TBC templates and ElvUI TBC defensive filters, 2026-08-02.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then A3 = {}; MSUF.MSUF_Auras3 = A3 end
+if type(A3) ~= "table" then
+    A3 = {}
+    MSUF.MSUF_Auras3 = A3
+end
 
 A3.PlayerDefensiveDataVersion = "TBC-2.5.6.68941"
 A3.PlayerDefensiveData = {

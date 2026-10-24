@@ -1,9 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Color buttons (W.Color) and the menu's Color Picker Plus panel beside
 -- Blizzard's ColorPickerFrame. Loads right after MSUF_Menu2_Widgets.lua and
 -- reads the row cursor and search helpers it publishes.
 local _, MSUF = ...
 local M = MSUF.MSUF2
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_ColorPicker.lua")
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -54,7 +54,7 @@ local function HexColor(value)
            (tonumber(hex:sub(5, 6), 16) or 255) / 255
 end
 local function ColorPickerPlusStore()
-    local db = type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
+    local db = M.EnsureDB() or MSUF_DB
     if type(db) ~= "table" then return nil end
     db.menu2ColorPicker = type(db.menu2ColorPicker) == "table" and db.menu2ColorPicker or {}
     local store = db.menu2ColorPicker
@@ -72,7 +72,7 @@ local function AddRecentColor(hex)
     while #store.recent > 9 do table.remove(store.recent) end
 end
 local function PickerPlusApply(r, g, b)
-    local picker = _G.ColorPickerFrame
+    local picker = ColorPickerFrame
     if not picker then return end
     picker:SetColorRGB(ClampColor(r), ClampColor(g), ClampColor(b))
     if picker._msuf2ColorOwner then
@@ -84,6 +84,16 @@ local function PickerPlusApply(r, g, b)
     end
     if colorPickerPlus and colorPickerPlus.Refresh then colorPickerPlus:Refresh() end
 end
+local function PickerPlusApplyHex(hex)
+    local r, g, b = HexColor(hex)
+    if r then PickerPlusApply(r, g, b) end
+end
+-- A label on the side panel, placed with one anchor.
+local function PanelText(panel, template, text, color, ...)
+    local fs = T.Font(panel, template, text, color)
+    fs:SetPoint(...)
+    return fs
+end
 local function PickerPlusInput(parent, width, numeric)
     local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     edit:SetSize(width, 22)
@@ -92,7 +102,10 @@ local function PickerPlusInput(parent, width, numeric)
     edit:SetMaxLetters(numeric and 3 or 7)
     if edit.SetNumeric then edit:SetNumeric(numeric and true or false) end
     if T and T.SkinEditBox then T.SkinEditBox(edit) end
-    edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); if colorPickerPlus then colorPickerPlus:Refresh() end end)
+    edit:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+        if colorPickerPlus then colorPickerPlus:Refresh() end
+    end)
     edit:SetScript("OnEnterPressed", function(self)
         if type(self._msuf2Commit) == "function" then self:_msuf2Commit() end
         self:ClearFocus()
@@ -127,17 +140,15 @@ local function ClassDisplayName(token)
     return (token:gsub("DEATHKNIGHT", "Death Knight"):gsub("DEMONHUNTER", "Demon Hunter"))
 end
 local function BuildPickerPlusInputs(panel)
-    local rgbLabel = T.Font(panel, "GameFontNormalSmall", "RGB", T.colors.muted)
-    rgbLabel:SetPoint("TOPLEFT", 16, -108)
+    PanelText(panel, "GameFontNormalSmall", "RGB", T.colors.muted, "TOPLEFT", 16, -108)
     local fields = {}
     for i, label in ipairs({ "R", "G", "B" }) do
         local field = PickerPlusInput(panel, 58, true)
         field:SetPoint("TOPLEFT", 52 + (i - 1) * 66, -104)
-        local fs = T.Font(panel, "GameFontDisableSmall", label, T.colors.dim)
-        fs:SetPoint("RIGHT", field, "LEFT", -3, 0)
+        PanelText(panel, "GameFontDisableSmall", label, T.colors.dim, "RIGHT", field, "LEFT", -3, 0)
         fields[i] = field
         field._msuf2Commit = function()
-            local pickerFrame = _G.ColorPickerFrame
+            local pickerFrame = ColorPickerFrame
             if not pickerFrame then return end
             local r, g, b = pickerFrame:GetColorRGB()
             local values = { ColorByte(r), ColorByte(g), ColorByte(b) }
@@ -149,18 +160,14 @@ local function BuildPickerPlusInputs(panel)
         end
     end
     panel._msuf2RGB = fields
-    local hexLabel = T.Font(panel, "GameFontNormalSmall", "HEX", T.colors.muted)
-    hexLabel:SetPoint("TOPLEFT", 16, -140)
+    PanelText(panel, "GameFontNormalSmall", "HEX", T.colors.muted, "TOPLEFT", 16, -140)
     local hex = PickerPlusInput(panel, 118, false)
     hex:SetPoint("TOPLEFT", 52, -136)
     hex._msuf2Commit = function(self)
         local r, g, b = HexColor(self:GetText())
         if r then PickerPlusApply(r, g, b) elseif colorPickerPlus then colorPickerPlus:Refresh() end
     end
-    hex._msuf2LiveCommit = function(self)
-        local r, g, b = HexColor(self:GetText())
-        if r then PickerPlusApply(r, g, b) end
-    end
+    hex._msuf2LiveCommit = function(self) PickerPlusApplyHex(self:GetText()) end
     panel._msuf2Hex = hex
     local copy = T.Button(panel, "Copy", 68, 22)
     copy:SetPoint("LEFT", hex, "RIGHT", 8, 0)
@@ -172,7 +179,7 @@ local function BuildPickerPlusInputs(panel)
     save:SetPoint("LEFT", copy, "RIGHT", 6, 0)
     save:SetScript("OnClick", function()
         local store = ColorPickerPlusStore()
-        local pickerFrame = _G.ColorPickerFrame
+        local pickerFrame = ColorPickerFrame
         if not (store and pickerFrame) then return end
         local r, g, b = pickerFrame:GetColorRGB()
         local value = ColorHex(r, g, b)
@@ -181,9 +188,31 @@ local function BuildPickerPlusInputs(panel)
         panel:RefreshPalettes()
     end)
 end
+local CLASS_TOKENS = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
+-- Fills list[1..count] with swatches laid out row-major in a grid.
+local function BuildSwatchGrid(panel, list, count, perRow, size, x0, y0, stepX, stepY, onClick, init)
+    for i = 1, count do
+        local btn = PickerPlusSwatch(panel, size, onClick)
+        if init then init(btn, i) end
+        btn:SetPoint("TOPLEFT", x0 + ((i - 1) % perRow) * stepX, y0 - floor((i - 1) / perRow) * stepY)
+        list[i] = btn
+    end
+end
+local function PaintSwatchButtons(buttons, values)
+    values = type(values) == "table" and values or {}
+    for i = 1, #buttons do
+        local btn, value = buttons[i], values[i]
+        btn._msuf2Hex = value
+        btn:SetShown(value ~= nil)
+        if value then
+            local r, g, b = HexColor(value)
+            btn._msuf2Fill:SetColorTexture(r or 1, g or 1, b or 1, 1)
+        end
+    end
+end
 local function EnsureColorPickerPlus()
-    if colorPickerPlus or not _G.ColorPickerFrame then return colorPickerPlus end
-    local picker = _G.ColorPickerFrame
+    if colorPickerPlus or not ColorPickerFrame then return colorPickerPlus end
+    local picker = ColorPickerFrame
     local panel = (T and T.Panel and T.Panel(picker, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft))
         or PixelLayoutRegion(CreateFrame("Frame", nil, picker, "BackdropTemplate"))
     colorPickerPlus = panel
@@ -209,89 +238,51 @@ local function EnsureColorPickerPlus()
     current:SetPoint("TOPRIGHT", -16, -62)
     current:SetSize(151, 34)
     panel._msuf2Original, panel._msuf2Current = original, current
-    local oldLabel = T.Font(panel, "GameFontDisableSmall", "Original", T.colors.dim)
-    oldLabel:SetPoint("BOTTOMLEFT", original, "TOPLEFT", 0, 2)
-    local newLabel = T.Font(panel, "GameFontDisableSmall", "Current", T.colors.dim)
-    newLabel:SetPoint("BOTTOMRIGHT", current, "TOPRIGHT", 0, 2)
+    PanelText(panel, "GameFontDisableSmall", "Original", T.colors.dim, "BOTTOMLEFT", original, "TOPLEFT", 0, 2)
+    PanelText(panel, "GameFontDisableSmall", "Current", T.colors.dim, "BOTTOMRIGHT", current, "TOPRIGHT", 0, 2)
 
     BuildPickerPlusInputs(panel)
 
-    local recentTitle = T.Font(panel, "GameFontNormalSmall", "Recent", T.colors.text)
-    recentTitle:SetPoint("TOPLEFT", 16, -176)
-    local savedTitle = T.Font(panel, "GameFontNormalSmall", "Saved colors", T.colors.text)
-    savedTitle:SetPoint("TOPLEFT", 16, -230)
-    local savedHint = T.Font(panel, "GameFontDisableSmall", "Right-click a saved color to remove it.", T.colors.dim)
-    savedHint:SetPoint("TOPRIGHT", -16, -230)
-    panel._msuf2RecentButtons, panel._msuf2SavedButtons = {}, {}
-    for i = 1, 9 do
-        local btn = PickerPlusSwatch(panel, 24, function(self)
-            local r, g, b = HexColor(self._msuf2Hex)
-            if r then PickerPlusApply(r, g, b) end
-        end)
-        btn:SetPoint("TOPLEFT", 16 + (i - 1) * 34, -194)
-        panel._msuf2RecentButtons[i] = btn
-    end
-    for i = 1, 27 do
-        local col, row = (i - 1) % 9, floor((i - 1) / 9)
-        local btn = PickerPlusSwatch(panel, 24, function(self, button)
-            local store = ColorPickerPlusStore()
-            if button == "RightButton" and store then
-                table.remove(store.saved, self._msuf2Index)
-                panel:RefreshPalettes()
-                return
-            end
-            local r, g, b = HexColor(self._msuf2Hex)
-            if r then PickerPlusApply(r, g, b) end
-        end)
-        btn._msuf2Index = i
-        btn:SetPoint("TOPLEFT", 16 + col * 34, -250 - row * 31)
-        panel._msuf2SavedButtons[i] = btn
-    end
+    PanelText(panel, "GameFontNormalSmall", "Recent", T.colors.text, "TOPLEFT", 16, -176)
+    PanelText(panel, "GameFontNormalSmall", "Saved colors", T.colors.text, "TOPLEFT", 16, -230)
+    PanelText(panel, "GameFontDisableSmall", "Right-click a saved color to remove it.", T.colors.dim, "TOPRIGHT", -16, -230)
+    panel._msuf2RecentButtons, panel._msuf2SavedButtons, panel._msuf2ClassButtons = {}, {}, {}
+    BuildSwatchGrid(panel, panel._msuf2RecentButtons, 9, 9, 24, 16, -194, 34, 0, function(self)
+        PickerPlusApplyHex(self._msuf2Hex)
+    end)
+    BuildSwatchGrid(panel, panel._msuf2SavedButtons, 27, 9, 24, 16, -250, 34, 31, function(self, button)
+        local store = ColorPickerPlusStore()
+        if button == "RightButton" and store then
+            table.remove(store.saved, self._msuf2Index)
+            panel:RefreshPalettes()
+            return
+        end
+        PickerPlusApplyHex(self._msuf2Hex)
+    end, function(btn, i) btn._msuf2Index = i end)
 
-    local classTitle = T.Font(panel, "GameFontNormalSmall", "Class colors", T.colors.text)
-    classTitle:SetPoint("TOPLEFT", 16, -354)
-    panel._msuf2ClassButtons = {}
-    local tokens = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
-    for i = 1, #tokens do
-        local col, row = (i - 1) % 7, floor((i - 1) / 7)
-        local token = tokens[i]
-        local btn = PickerPlusSwatch(panel, 28, function(self)
-            local c = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[self._msuf2Token]
-            if c then PickerPlusApply(c.r, c.g, c.b) end
-        end)
-        btn._msuf2Token = token
-        btn:SetPoint("TOPLEFT", 16 + col * 44, -374 - row * 34)
-        if M.AddTooltip then M.AddTooltip(btn, ClassDisplayName(token), Tr("Apply this class color.")) end
-        panel._msuf2ClassButtons[i] = btn
-    end
-    local note = T.Font(panel, "GameFontDisableSmall", "Opacity remains beside the setting when that element supports it.", T.colors.dim)
-    note:SetPoint("BOTTOMLEFT", 16, 14)
-    note:SetWidth(312)
+    PanelText(panel, "GameFontNormalSmall", "Class colors", T.colors.text, "TOPLEFT", 16, -354)
+    BuildSwatchGrid(panel, panel._msuf2ClassButtons, #CLASS_TOKENS, 7, 28, 16, -374, 44, 34, function(self)
+        local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[self._msuf2Token]
+        if c then PickerPlusApply(c.r, c.g, c.b) end
+    end, function(btn, i)
+        btn._msuf2Token = CLASS_TOKENS[i]
+        if M.AddTooltip then M.AddTooltip(btn, ClassDisplayName(CLASS_TOKENS[i]), Tr("Apply this class color.")) end
+    end)
+    PanelText(panel, "GameFontDisableSmall", "Opacity remains beside the setting when that element supports it.", T.colors.dim,
+        "BOTTOMLEFT", 16, 14):SetWidth(312)
 
     function panel:RefreshPalettes()
         local store = ColorPickerPlusStore() or {}
-        local function RefreshButtons(buttons, values)
-            values = type(values) == "table" and values or {}
-            for i = 1, #buttons do
-                local btn, value = buttons[i], values[i]
-                btn._msuf2Hex = value
-                btn:SetShown(value ~= nil)
-                if value then
-                    local r, g, b = HexColor(value)
-                    btn._msuf2Fill:SetColorTexture(r or 1, g or 1, b or 1, 1)
-                end
-            end
-        end
-        RefreshButtons(self._msuf2RecentButtons, store.recent)
-        RefreshButtons(self._msuf2SavedButtons, store.saved)
+        PaintSwatchButtons(self._msuf2RecentButtons, store.recent)
+        PaintSwatchButtons(self._msuf2SavedButtons, store.saved)
         for i = 1, #self._msuf2ClassButtons do
             local btn = self._msuf2ClassButtons[i]
-            local c = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[btn._msuf2Token]
+            local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[btn._msuf2Token]
             btn._msuf2Fill:SetColorTexture(c and c.r or 1, c and c.g or 1, c and c.b or 1, 1)
         end
     end
     function panel:Refresh()
-        local pickerFrame = _G.ColorPickerFrame
+        local pickerFrame = ColorPickerFrame
         local owner = pickerFrame and pickerFrame._msuf2ColorOwner
         if not (pickerFrame and owner) then return end
         local r, g, b = pickerFrame:GetColorRGB()
@@ -304,9 +295,9 @@ local function EnsureColorPickerPlus()
         self:RefreshPalettes()
     end
     function panel:LayoutBesidePicker()
-        local pickerFrame = _G.ColorPickerFrame
+        local pickerFrame = ColorPickerFrame
         if not pickerFrame then return end
-        local uiW = _G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth()
+        local uiW = UIParent.GetWidth and UIParent:GetWidth()
         local pickerRight = pickerFrame.GetRight and pickerFrame:GetRight()
         self:ClearAllPoints()
         if uiW and pickerRight and pickerRight + 352 > uiW then
@@ -330,11 +321,12 @@ local function ColorPickerCommit()
     ColorApply(btn, r, g, b)
 end
 local function ColorPickerCancel(prev)
-    local btn = ColorPickerFrame and ColorPickerFrame._msuf2ColorOwner
+    local picker = ColorPickerFrame
+    local btn = picker and picker._msuf2ColorOwner
     if not btn then return end
     local r, g, b = btn._msuf2PrevR or 1, btn._msuf2PrevG or 1, btn._msuf2PrevB or 1
     if type(prev) == "table" then r, g, b = prev.r or r, prev.g or g, prev.b or b end
-    if ColorPickerFrame then ColorPickerFrame._msuf2ColorCancelled = true end
+    picker._msuf2ColorCancelled = true
     ColorApply(btn, r, g, b)
 end
 local colorPickerHideHooked = false
@@ -359,9 +351,8 @@ local function EnsureColorPickerHideHook()
         -- cancelFunc, which still need the owner. A stale owner made this hook
         -- commit an MSUF control, and the menu's close hide the picker, when
         -- another addon used the picker later.
-        local timer = _G.C_Timer
-        if btn and timer and timer.After then
-            timer.After(0, function()
+        if btn and C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
                 W.EndNativeColorInteraction(ticket)
                 if self._msuf2ColorOwner == btn and not (self.IsShown and self:IsShown()) then
                     self._msuf2ColorOwner = nil
@@ -374,7 +365,7 @@ local function EnsureColorPickerHideHook()
 end
 function W.CloseMenuOwnedColorPicker()
     if colorPickerPlus and colorPickerPlus.Hide then colorPickerPlus:Hide() end
-    local picker = _G.ColorPickerFrame
+    local picker = ColorPickerFrame
     if not (picker and picker._msuf2ColorOwner) then return false end
     if picker.Hide then picker:Hide() end
     picker._msuf2ColorOwner = nil

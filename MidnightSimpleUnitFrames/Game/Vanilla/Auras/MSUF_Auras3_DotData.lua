@@ -1,9 +1,11 @@
 --- Classic Era target DoT aura IDs.
 --- Baseline: ElvUI Classic filters and Blizzard upstream/classic_era, 2026-08-03.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then A3 = {}; MSUF.MSUF_Auras3 = A3 end
+if type(A3) ~= "table" then
+    A3 = {}
+    MSUF.MSUF_Auras3 = A3
+end
 
 A3.TargetDotDataVersion = "Vanilla-1.15.9.68940"
 A3.TargetDotData = {

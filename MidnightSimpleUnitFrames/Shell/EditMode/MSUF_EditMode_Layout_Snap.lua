@@ -2,10 +2,10 @@
 --- Full 9+9 edge-pair snap: for each axis, 3 edges (min, center, max) against
 --- 3 edges on the target = 9 pairs. Snaps independently per axis and shows
 --- 1px guide lines at snap points.
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 
 local _, MSUF = ...
-local EM2 = _G.MSUF_EM2
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_Layout_Snap.lua")
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local floor = math.floor
@@ -22,7 +22,7 @@ local THRESH  = 8
 
 --- Snap persists per profile via general.editModeSnapEnabled; the session
 --- local only covers reads before SavedVariables exist.
-local SnapGeneral = _G.MSUF_GetGeneralDB
+local SnapGeneral = MSUF.Require("MSUF_GetGeneralDB", "Shell/EditMode/MSUF_EditMode_Layout_Snap.lua")
 
 function Snap.IsEnabled()
     local g = SnapGeneral()
@@ -47,10 +47,11 @@ local guideFadeFrame
 --- Snap.Apply runs every drag frame: the guide colour reuses one fallback
 --- table and the edge lists below are scratch arrays refilled per call.
 local guideAccentFallback = { 1.00, 0.82, 0.00, 1 }
+local LegacyTheme = MSUF.Optional("MSUF_THEME")
 local snapDragX, snapDragY, snapTargetX, snapTargetY = {}, {}, {}, {}
 
 local function GuideAccent()
-    local legacy = _G.MSUF_THEME
+    local legacy = LegacyTheme
     guideAccentFallback[1] = legacy and legacy.titleR or 1.00
     guideAccentFallback[2] = legacy and legacy.titleG or 0.82
     guideAccentFallback[3] = legacy and legacy.titleB or 0.00

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Game/Classic/Auras/MSUF_Auras3_Lanes.lua
 --- Lane state of the Classic scan backend: a frame's lane frames and button
 --- pools, applying a compiled config, full scans (capped, inline-rendered or
@@ -11,7 +10,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua")
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
 assert(Backend, "Classic aura lanes require Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
@@ -24,10 +23,10 @@ local CompactLaneOrder
 local type, tonumber, pairs, next = type, tonumber, pairs, next
 local math_ceil, math_min = math.ceil, math.min
 local table_sort = table.sort
-local CreateFrame = _G.CreateFrame
-local AuraUtil = _G.AuraUtil
-local IsSecret = _G.issecretvalue or function() return false end
-local C_UnitAuras = _G.C_UnitAuras
+local CreateFrame = CreateFrame
+local AuraUtil = AuraUtil
+local IsSecret = issecretvalue or function() return false end
+local C_UnitAuras = C_UnitAuras
 local GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local GetAuraDataByAuraInstanceID = C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID
@@ -355,8 +354,8 @@ local function AppendClassicWeaponEnchantSlot(lane, unit, slot, hasEnchant, expi
     data.isFromPlayerOrPlayerPet = true
     data.isPlayerAura = true
     lane.mine[auraInstanceID] = true
-    data.name = _G.ENCHANTED or "Weapon Enchant"
-    data.icon = _G.GetInventoryItemTexture and _G.GetInventoryItemTexture("player", slot) or nil
+    data.name = ENCHANTED or "Weapon Enchant"
+    data.icon = GetInventoryItemTexture and GetInventoryItemTexture("player", slot) or nil
     data.applications = tonumber(charges) or 0
     data.duration = duration
     data.expirationTime = now + remaining
@@ -378,7 +377,7 @@ end
 
 local function AppendWeaponEnchants(lane, unit, inlineRender, visible, maxVisible, visibleByID, updateButton)
     local cfg = lane and lane.config
-    if not (cfg and cfg.weaponEnchants == true and unit == "player" and type(_G.GetWeaponEnchantInfo) == "function") then
+    if not (cfg and cfg.weaponEnchants == true and unit == "player" and type(GetWeaponEnchantInfo) == "function") then
         return visible
     end
     -- GetWeaponEnchantInfo reports main hand, off hand, then ranged in blocks
@@ -386,8 +385,8 @@ local function AppendWeaponEnchants(lane, unit, inlineRender, visible, maxVisibl
     -- read into locals instead of being packed into a table on every scan.
     local mainHas, mainExpiration, mainCharges, _,
         offHas, offExpiration, offCharges, _,
-        rangedHas, rangedExpiration, rangedCharges = _G.GetWeaponEnchantInfo()
-    local now = _G.GetTime and _G.GetTime() or 0
+        rangedHas, rangedExpiration, rangedCharges = GetWeaponEnchantInfo()
+    local now = GetTime and GetTime() or 0
     -- Injection order is ranged, off hand, then main hand.
     visible = AppendClassicWeaponEnchantSlot(lane, unit, 18, rangedHas, rangedExpiration, rangedCharges, now,
         inlineRender, visible, maxVisible, visibleByID, updateButton)

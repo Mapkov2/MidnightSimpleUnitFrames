@@ -30,8 +30,8 @@ end
 
 function UF.RegisterClickCastFrame(frame)
   if not frame then return false end
-  _G.ClickCastFrames = type(_G.ClickCastFrames) == "table" and _G.ClickCastFrames or {}
-  _G.ClickCastFrames[frame] = true
+  ClickCastFrames = type(ClickCastFrames) == "table" and ClickCastFrames or {}
+  ClickCastFrames[frame] = true
   clickCastRegistered[frame] = true
   return true
 end
@@ -73,7 +73,7 @@ local function PlayerFramePingGetTargetInfo(frame)
 end
 
 local function PlayerResourcePingSettingEnabled()
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local general = type(db) == "table" and type(db.general) == "table" and db.general or nil
   return general and general.playerResourcePingEnabled == true or false
 end

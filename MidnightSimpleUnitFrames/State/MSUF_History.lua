@@ -17,7 +17,7 @@ local function IsConfigCombatLocked()
 end
 function M.BlockCombatAction()
     if not IsConfigCombatLocked() then return false end
-    _G.MSUF_ShowConfigCombatLockMessage()
+    MSUF.PublicGlobals.MSUF_ShowConfigCombatLockMessage()
     return true
 end
 local function QueueMenuRefresh() UI("QueueMenuRefresh") end
@@ -52,7 +52,7 @@ function M.EnsureDB()
     if ProfileSystemNeedsInit() then
         _G.MSUF_InitProfiles()
     end
-    local ensure = _G.MSUF_EnsureDB
+    local ensure = MSUF.PublicGlobals.MSUF_EnsureDB
     if type(ensure) == "function" then ensure() end
     MSUF.ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
@@ -344,7 +344,7 @@ local function CurrentHistorySnapshot()
 end
 local function NotifyHistoryChanged(refreshMenu)
     UI("NotifyHistoryChanged")
-    _G.MSUF_EM_RefreshHistoryControls()
+    MSUF.PublicGlobals.MSUF_EM_RefreshHistoryControls()
     if refreshMenu == true then QueueMenuRefresh() end
 end
 function M.SyncExternalHistoryState()
@@ -829,12 +829,12 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
         if ApplyService.RequestCastbars then return ApplyService.RequestCastbars(reason, "history") ~= false end
         if M.RequestGeneralDomains then return M.RequestGeneralDomains(reason, { history = false, preview = true, applyAll = false, castbar = true,
             castbarTextures = true }) ~= false end
-        _G.MSUF_UpdateCastbarVisuals()
-        _G.MSUF_UpdateBossCastbarPreview()
+        MSUF.PublicGlobals.MSUF_UpdateCastbarVisuals()
+        MSUF.PublicGlobals.MSUF_UpdateBossCastbarPreview()
         return true
     end
     if kind == "classpower" then
-        _G.MSUF_ApplyModules()
+        MSUF.PublicGlobals.MSUF_ApplyModules()
         if ApplyService.RequestClassPowerDomains then
             ApplyService.RequestClassPowerDomains(reason, CLASSPOWER_FULL_RUNTIME)
             return true
@@ -878,13 +878,13 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
         return false
     end
     if kind == "modules" then
-        return true, _G.MSUF_ApplyModules()
+        return true, MSUF.PublicGlobals.MSUF_ApplyModules()
     end
     return false
 end
 local function ApplyScopedHistoryRestore(reason, source)
     if source == "classpower:playerPowerSource" then
-        _G.MSUF_ApplyModules()
+        MSUF.PublicGlobals.MSUF_ApplyModules()
         _G.MSUF_ClassPower_Apply(CLASSPOWER_FULL_RUNTIME)
         UI("RefreshUnitPreview", reason)
         UI("RefreshPlayerPowerSource")
@@ -1117,7 +1117,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
         FlushApplyServiceNow()
         M.MarkMenuDataDirty(reason or "history")
         RepaintActivePage(reason)
-        _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
+        MSUF.PublicGlobals.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
         return true
     end
     RequestHistoryApply("RequestGeneralDomains", reason or "MSUF2_HISTORY", {
@@ -1143,7 +1143,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     UI("ApplyLocaleSelection")
     M.MarkMenuDataDirty(reason or "history")
     RepaintActivePage(reason)
-    _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
+    MSUF.PublicGlobals.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
     return true
 end
 function M.CaptureGuidedTourRestorePoint()

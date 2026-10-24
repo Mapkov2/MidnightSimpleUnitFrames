@@ -73,8 +73,9 @@ assert(stages.ResolveMaxPower(K.PT.Balance, K.CPK.MODE.SIGNED_CONTINUOUS) == 1)
 assert(stages.ResolveMaxPower("MISTS_ARCANE_CHARGES", K.CPK.MODE.AURA_SEGMENTED) == 4)
 
 module.Enable()
-MSUF_ClassPower_Refresh()
-MSUF_ClassPower_ApplyFonts()
+-- Namespace-only exports (MSUF.PublicGlobals), not globals.
+ns.PublicGlobals.MSUF_ClassPower_Refresh()
+ns.PublicGlobals.MSUF_ClassPower_ApplyFonts()
 module.Disable()
 module.Shutdown()
 assert(not MSUF_CP_CORE_BUILDERS.EBON_MIGHT, "Classic unexpectedly loaded Retail Ebon builder")

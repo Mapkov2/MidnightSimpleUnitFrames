@@ -52,8 +52,16 @@ GF.ForEachFrameForUnit = function(unit, fn, ...)
 end
 local ns = { UF = UF, GF = GF, Secrets = { PlainBool = function(v) return v end } }
 -- Group visuals write region visibility through the shared Apply owner.
-assert(loadfile(ROOT .. "Libs/MSUFUnitFrames/MSUF_UF_Apply.lua"))("MidnightSimpleUnitFrames", ns)
-assert(loadfile(ROOT .. "UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua"))("MidnightSimpleUnitFrames", ns)
+-- The real Kernel API is installed into the namespace; providers the files require that this probe
+-- does not load are deferred and raise when used.
+local RequireFixture = assert(loadfile(arg[1] .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(arg[1], ns)
+-- The pixel regions are the core's (Kernel/MSUF_Util.lua): these stub regions lay out no pixels, so the
+-- shared stand-in serves.
+ns.ExportPublic("MSUF_PixelLayoutRegion",
+  assert(loadfile(arg[1] .. "/tools/tests/classpower_collaborators.lua"))().STANDINS.MSUF_PixelLayoutRegion)
+RequireFixture.LoadShipped(arg[1], "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Apply.lua", ns)
+RequireFixture.LoadShipped(arg[1], "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua", ns)
 local GV = elements.GroupVisuals
 
 local frame = Region()

@@ -88,6 +88,8 @@ local function Start(spec)
         SupportsEvent = function(event)
         return event ~= "UNIT_POWER_POINT_CHARGE" and event ~= "WAR_MODE_STATUS_UPDATE"
     end } }
+    -- The ClassPower entry points are namespace-only exports (ns.PublicGlobals), read through t.ns.
+    t.ns = ns
     local player = env:CreateFrame("Frame", "MSUF_player", UIParent)
     player.shown = true
     ns.UF = { GetFrame = function(unit) if unit == "player" then return player end end }
@@ -237,10 +239,10 @@ end
 Case("inactive class resource retains an Edit Mode layout anchor", nil, function()
     local t = Start({ class = "DRUID", spec = 2, primary = PT.Mana, hasMana = true })
     assert(t.CP.visible == false and t.CP.container == nil, "Druid outside Cat Form started with a resource")
-    assert(_G.MSUF_ClassPower_EnsureEditModeAnchor() == false,
+    assert(t.ns.PublicGlobals.MSUF_ClassPower_EnsureEditModeAnchor() == false,
         "inactive resource anchor was created outside Edit Mode")
     _G.MSUF_UnitEditModeActive = true
-    assert(_G.MSUF_ClassPower_EnsureEditModeAnchor() == true,
+    assert(t.ns.PublicGlobals.MSUF_ClassPower_EnsureEditModeAnchor() == true,
         "Druid outside Cat Form has no Edit Mode anchor")
     local frame = assert(t.CP.container, "Edit Mode did not create the resource container")
     assert(frame._msufAnchorOnly == true and frame:IsShown() == false,
@@ -248,7 +250,7 @@ Case("inactive class resource retains an Edit Mode layout anchor", nil, function
     MSUF_DB.bars.classPowerWidthMode = "custom"
     MSUF_DB.bars.classPowerWidth = 180
     MSUF_DB.bars.classPowerHeight = 12
-    assert(_G.MSUF_ClassPower_RefreshLayout() == true,
+    assert(t.ns.PublicGlobals.MSUF_ClassPower_RefreshLayout() == true,
         "width/height refresh ignored the inactive Edit Mode anchor")
     assert(Near(frame:GetWidth(), 180) and Near(frame:GetHeight(), 12),
         "inactive Edit Mode anchor did not follow the configured size")
@@ -266,7 +268,7 @@ Case("mana source publishes before one re-apply", nil, function()
     ExpectBars(t, { 1, 1, 0, 0, 0 }, "class power next to the Mana source")
     -- An unchanged refresh is not a change: no second re-apply.
     t.FullRefresh()
-    _G.MSUF_ClassPower_Refresh()
+    t.ns.PublicGlobals.MSUF_ClassPower_Refresh()
     ExpectMana(t, true, 1, "unchanged refreshes")
     return t
 end)
@@ -482,7 +484,7 @@ Case("rune types colour each rune", MISTS, function()
     assert(reads == 0, "a RUNE_POWER_UPDATE after a type change read " .. reads .. " rune types")
     ExpectColors(expected, "a Death rune after a rune power update")
     MSUF_DB.general.classPowerColorOverrides = { RUNES = { 0.2, 0.3, 0.4 } }
-    _G.MSUF_ClassPower_InvalidateColors()
+    t.ns.PublicGlobals.MSUF_ClassPower_InvalidateColors()
     t.FullRefresh()
     local custom = {}
     for i = 1, 6 do custom[i] = { 0.2, 0.3, 0.4 } end

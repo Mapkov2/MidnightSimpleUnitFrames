@@ -1,12 +1,12 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
-addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
-    or "MidnightSimpleUnitFrames"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2/GroupPreview_Native")
+local ResolveIconTexturePath = MSUF.Require("MSUF_ResolveIconTexturePath", "Menu2/GroupPreview_Native")
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 
 -- Native group preview renderer.
 -- Draws the Menu2 party/raid preview using lightweight mock data and page settings. It should
@@ -18,15 +18,11 @@ local GFZoomPan = M.GroupPreviewZoomPan or {}
 
 local Fallbacks = M.Fallbacks or {}
 local floor = math.floor
-local max = math.max
-local min = math.min
-local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 local GROUP_PREVIEW_REFRESH_DELAY = 0.05
-local GROUP_PREVIEW_ANIMATION_INTERVAL = 1 / 20
 local WHITE8X8 = Specs.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
 local function RegisterGroupPreviewControl(widget, semanticPath, label, kind, classification, extra)
     local page = M.GroupPage
-    if page and type(page.RegisterControl) == "function" then
+    if page and page.RegisterControl then
         page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification, extra)
     end
     return widget
@@ -35,8 +31,7 @@ local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local HANDLE_FALLBACK_COLOR = { 0.70, 0.80, 1.00 }
 local GF_PREVIEW_ROLE_DEFAULT = Specs.ROLE or "HEALER"
-local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES = Specs.SECTION_PAGE or {}, Specs.PAGE_FOCUS or {}, Specs.CLASSES or {}
-local GF_PREVIEW_NAMES, GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS = Specs.NAMES or {}, Specs.ANCHOR_FRAC or {}, Specs.AURA_MOCK_ICON_IDS or {}
+local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_ANCHOR_FRAC = Specs.SECTION_PAGE or {}, Specs.PAGE_FOCUS or {}, Specs.ANCHOR_FRAC or {}
 local GF_AURA_GROWTH_TABLE, GF_STATUS_RUNTIME_KEYS = Specs.AURA_GROWTH_TABLE or {}, Specs.STATUS_RUNTIME_KEYS or {}
 -- The threat text's compiled group entry (Classic Era, TBC and WoW Forever only).
 -- Added here rather than in the specs file, which stays a plain Retail copy.
@@ -50,11 +45,10 @@ local function ShallowCopy(src)
     end
     return out
 end
-local function SetFSColor(fs, color)
-    if fs and fs.SetTextColor and color then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
+local function TrText(text)
+    return (M.Tr and M.Tr(text)) or text
 end
-local function ScheduleNativePreviewRefresh(box, fn, delay)
-    if type(fn) ~= "function" then return end
+local function ScheduleNativePreviewRefresh(fn, delay)
     if C_Timer and C_Timer.After then
         C_Timer.After(tonumber(delay) or GROUP_PREVIEW_REFRESH_DELAY, fn)
     else
@@ -62,10 +56,11 @@ local function ScheduleNativePreviewRefresh(box, fn, delay)
     end
 end
 local function LayerFont(parent, text, color)
+    color = color or LAYER_TEXT_ON
     local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
-    fs:SetText((M.Tr and M.Tr(text or "")) or (text or ""))
-    SetFSColor(fs, color or LAYER_TEXT_ON)
-    if T and T.StyleFontString then T.StyleFontString(fs, color or LAYER_TEXT_ON, 0) end
+    fs:SetText(TrText(text or ""))
+    if fs.SetTextColor then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
+    if T and T.StyleFontString then T.StyleFontString(fs, color, 0) end
     return fs
 end
 local function GroupPage()
@@ -74,7 +69,7 @@ local function GroupPage()
 end
 local function CurrentScope()
     local gp = GroupPage()
-    if type(gp.CurrentScope) == "function" then return gp.CurrentScope() end
+    if gp.CurrentScope then return gp.CurrentScope() end
     local scope = M.gfScope or "party"
     return M.NormalizeGroupScope and M.NormalizeGroupScope(scope) or scope
 end
@@ -83,9 +78,9 @@ local GF_PREVIEW_ROLE_LABELS = {
     HEALER = "Healer",
     DAMAGER = "DPS",
 }
-local GF_PREVIEW_ROLE_ORDER = { "TANK", "HEALER", "DAMAGER" }
+local GF_PREVIEW_NEXT_ROLE = { TANK = "HEALER", HEALER = "DAMAGER", DAMAGER = "TANK" }
 local function NormalizePreviewRole(role)
-    if role == "TANK" or role == "HEALER" or role == "DAMAGER" then return role end
+    if GF_PREVIEW_ROLE_LABELS[role] then return role end
     return GF_PREVIEW_ROLE_DEFAULT
 end
 local function PreviewRole(kind)
@@ -102,24 +97,18 @@ local function SetPreviewRole(kind, role)
     return true
 end
 local function NextPreviewRole(kind)
-    local current = PreviewRole(kind)
-    for i = 1, #GF_PREVIEW_ROLE_ORDER do
-        if GF_PREVIEW_ROLE_ORDER[i] == current then
-            return GF_PREVIEW_ROLE_ORDER[(i % #GF_PREVIEW_ROLE_ORDER) + 1]
-        end
-    end
-    return GF_PREVIEW_ROLE_DEFAULT
+    return GF_PREVIEW_NEXT_ROLE[PreviewRole(kind)] or GF_PREVIEW_ROLE_DEFAULT
 end
 local function Conf(kind)
     local gp = GroupPage()
-    if type(gp.Conf) == "function" then return gp.Conf(kind) end
+    if gp.Conf then return gp.Conf(kind) end
     return {}
 end
 -- The native menu sample uses the same role/geometry overlay as live bindings.
 local previewSpecSlots = {}
 local function CompiledSpec(kind)
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.CompileSpec) == "function" then
+    local gf = MSUF.GF
+    if gf and gf.CompileSpec then
         kind = kind or CurrentScope()
         local base = gf.CompileSpec(kind, nil, nil)
         if type(base) ~= "table" then return base end
@@ -143,80 +132,75 @@ local function PreviewFocusForPage(pageKey)
     if focus and PageForGFSection(focus) == pageKey then return focus end
     return PAGE_FOCUS[pageKey]
 end
+-- The aura lane each aura section drives; the EM2 focus request names the same lane.
+local SECTION_AURA_LANE = { buffs = "buff", debuffs = "debuff", externals = "externals" }
+local SCOPE_PAGE_KEY = { raid = "gf_raid", mythicraid = "gf_mythicraid" }
 local function OpenGFSection(sectionKey)
     M.gfPreviewFocus = sectionKey
     local pageKey = PageForGFSection(sectionKey)
-    if pageKey and M.SelectPage then
-        local auraLane = sectionKey == "buffs" or sectionKey == "debuffs" or sectionKey == "externals"
-        local focusSectionId = auraLane and "auras" or sectionKey
-        local scope = CurrentScope()
-        local previousAuraLane
-        local previousAuraTool
-        local requestedAuraLane
-        if M.SetMenuStateValue then
-            M.SetMenuStateValue("gfScope", scope)
-            if pageKey == "gf_auras" then
-                M.SetMenuStateValue("auraStyleGFScope", scope == "mythicraid" and "raid" or scope)
-                local lane
-                if sectionKey == "buffs" then
-                    lane = "buff"
-                elseif sectionKey == "debuffs" then
-                    lane = "debuff"
-                elseif sectionKey == "externals" then
-                    lane = "externals"
+    if not (pageKey and M.SelectPage) then return false end
+    local lane = SECTION_AURA_LANE[sectionKey]
+    local scope = CurrentScope()
+    local previousAuraLane, previousAuraTool, requestedAuraLane
+    if M.SetMenuStateValue then
+        M.SetMenuStateValue("gfScope", scope)
+        if pageKey == "gf_auras" then
+            M.SetMenuStateValue("auraStyleGFScope", scope == "mythicraid" and "raid" or scope)
+            if lane then
+                M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
+                previousAuraLane = M.gfAuraLaneSelection[scope] or "buff"
+                requestedAuraLane = lane
+                M.gfAuraLaneSelection[scope] = lane
+                M.gfAuraToolSelection = M.gfAuraToolSelection or {}
+                local tools = M.gfAuraToolSelection[scope]
+                if type(tools) ~= "table" then
+                    tools = {}
+                    M.gfAuraToolSelection[scope] = tools
                 end
-                if lane then
-                    M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
-                    previousAuraLane = M.gfAuraLaneSelection[scope] or "buff"
-                    requestedAuraLane = lane
-                    M.gfAuraLaneSelection[scope] = lane
-                    M.gfAuraToolSelection = M.gfAuraToolSelection or {}
-                    local tools = M.gfAuraToolSelection[scope]
-                    if type(tools) ~= "table" then
-                        tools = {}
-                        M.gfAuraToolSelection[scope] = tools
-                    end
-                    previousAuraTool = tools[lane]
-                    tools[lane] = "layout"
-                    if lane ~= "externals" then M.SetMenuStateValue("auraStyleGFLane", lane) end
-                end
+                previousAuraTool = tools[lane]
+                tools[lane] = "layout"
+                if lane ~= "externals" then M.SetMenuStateValue("auraStyleGFLane", lane) end
             end
         end
-        if sectionKey == "portrait" then
-            M.unitPortraitTabSelection = M.unitPortraitTabSelection or {}
-            M.unitPortraitTabSelection.gf_party = "placement"
-        elseif sectionKey == "sicons" then
-            M.gfStatusIconTabSelection = M.gfStatusIconTabSelection or {}
-            M.gfStatusIconTabSelection[scope] = "basic"
-        end
-        ExportPublic("MSUF_EM2_MenuFocusRequest", {
-            key = (scope == "raid" and "gf_raid") or (scope == "mythicraid" and "gf_mythicraid") or "gf_party",
-            component = sectionKey,
-            lane = sectionKey == "buffs" and "buff"
-                or (sectionKey == "debuffs" and "debuff"
-                or (sectionKey == "externals" and "externals" or nil)),
-            pageKey = pageKey,
-            sectionId = focusSectionId,
-            source = "group-preview",
-            explicit = true,
-            changedAt = GetTime and GetTime() or 0,
-        })
-        -- Group Auras builds its lane-specific controls from gfAuraLaneSelection.
-        -- Selecting another preview lane must rebuild any cached Group Auras
-        -- page, whether it is active or hidden; refreshers still target the old lane.
-        if requestedAuraLane and (requestedAuraLane ~= previousAuraLane or previousAuraTool ~= "layout")
-            and type(M.InvalidatePage) == "function" then
-            M.InvalidatePage(pageKey)
-        end
-        return M.SelectPage(pageKey) ~= false
     end
-    return false
+    if sectionKey == "portrait" then
+        M.unitPortraitTabSelection = M.unitPortraitTabSelection or {}
+        M.unitPortraitTabSelection.gf_party = "placement"
+    elseif sectionKey == "sicons" then
+        M.gfStatusIconTabSelection = M.gfStatusIconTabSelection or {}
+        M.gfStatusIconTabSelection[scope] = "basic"
+    end
+    ExportPublic("MSUF_EM2_MenuFocusRequest", {
+        key = SCOPE_PAGE_KEY[scope] or "gf_party",
+        component = sectionKey,
+        lane = lane,
+        pageKey = pageKey,
+        sectionId = lane and "auras" or sectionKey,
+        source = "group-preview",
+        explicit = true,
+        changedAt = GetTime and GetTime() or 0,
+    })
+    -- Group Auras builds its lane-specific controls from gfAuraLaneSelection.
+    -- Selecting another preview lane must rebuild any cached Group Auras
+    -- page, whether it is active or hidden; refreshers still target the old lane.
+    if requestedAuraLane and (requestedAuraLane ~= previousAuraLane or previousAuraTool ~= "layout")
+        and M.InvalidatePage then
+        M.InvalidatePage(pageKey)
+    end
+    return M.SelectPage(pageKey) ~= false
 end
 local function PreviewAnimationInCombat()
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true
+    return (InCombatLockdown and InCombatLockdown()) or PublicGlobals.MSUF_InCombat == true
 end
 local function PreviewAnimationActive(box)
     return box and box._animationEnabled == true
+end
+local function SetPillText(btn, text)
+    if btn.fs and btn.fs.SetText then
+        btn.fs:SetText(text)
+    elseif btn.SetText then
+        btn:SetText(text)
+    end
 end
 local function RefreshPreviewAnimationButton(box)
     local btn = box and box._previewAnimationButton
@@ -224,85 +208,34 @@ local function RefreshPreviewAnimationButton(box)
     local active = PreviewAnimationActive(box)
     -- The button plays an animation loop; it does not switch the preview into a
     -- combat state. Label it after what it does, matching the Unit preview.
-    local label = active and "Stop" or "Animate"
-    local text = (M.Tr and M.Tr(label)) or label
-    if btn.fs then
-        btn.fs:SetText(text)
-    elseif btn.SetText then
-        btn:SetText(text)
-    end
+    SetPillText(btn, TrText(active and "Stop" or "Animate"))
     if btn.MSUF2RefreshPreviewPill then
         btn:MSUF2RefreshPreviewPill(active)
     elseif btn.SetActive then
         btn:SetActive(active)
     end
 end
-local function StopPreviewAnimationDriver(box)
-    if not (box and box.SetScript) then return end
-    box:SetScript("OnUpdate", nil)
-end
-local function KillPreviewAnimationForCombat(box)
-    if not box then return end
-    StopPreviewAnimationDriver(box)
-    box._animationEnabled = nil
-    box._animationElapsed = 0
-    box._animationAccum = 0
-    box._msufGFMenuPreviewAnimState = nil
-    box._msufGFMenuPreviewAuraStates = nil
-    RefreshPreviewAnimationButton(box)
-end
 --- One animation frame: the light tick advances the last scene; only without
 --- one (first frame, scope switch, combat, text drag) the full refresh runs.
 local function RefreshPreviewAnimationFrame(box)
-    if box and type(box.RefreshAnimation) == "function" and box:RefreshAnimation() == true then return end
-    if box and type(box.Refresh) == "function" then
+    if not box then return end
+    if box.RefreshAnimation and box:RefreshAnimation() == true then return end
+    if box.Refresh then
         box:Refresh("GROUP_PREVIEW_ANIMATE")
-    elseif box and type(box.RequestRefresh) == "function" then
+    elseif box.RequestRefresh then
         box:RequestRefresh("GROUP_PREVIEW_ANIMATE")
     end
 end
-local function PreviewAnimationOnUpdate(box, elapsed)
-    if not (box and box._animationEnabled == true and box.IsShown and box:IsShown()) then
-        StopPreviewAnimationDriver(box)
-        return
-    end
-    if PreviewAnimationInCombat() then
-        KillPreviewAnimationForCombat(box)
-        if box._hint then box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.") end
-        return
-    end
-    elapsed = tonumber(elapsed) or 0
-    box._animationElapsed = (tonumber(box._animationElapsed) or 0) + elapsed
-    box._animationAccum = (tonumber(box._animationAccum) or 0) + elapsed
-    if box._animationAccum < GROUP_PREVIEW_ANIMATION_INTERVAL then return end
-    box._animationAccum = 0
-    RefreshPreviewAnimationFrame(box)
+local function ClearPreviewAnimationState(box)
+    box._msufGFMenuPreviewAnimState = nil
+    box._msufGFMenuPreviewAuraStates = nil
 end
-local StartPreviewAnimationDriver = M.PreviewHelpers.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
-local function SetPreviewAnimationEnabled(box, enabled, reason)
-    if not box then return end
-    enabled = enabled == true
-    if enabled and PreviewAnimationInCombat() then
-        KillPreviewAnimationForCombat(box)
-        if box._hint then box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.") end
-        RefreshPreviewAnimationButton(box)
-        return
-    end
-    if enabled and box._animationEnabled ~= true then
-        box._animationElapsed = 0
-        box._animationAccum = 0
-    end
-    box._animationEnabled = enabled
-    if enabled then
-        StartPreviewAnimationDriver(box)
-    else
-        StopPreviewAnimationDriver(box)
-        box._msufGFMenuPreviewAnimState = nil
-        box._msufGFMenuPreviewAuraStates = nil
-    end
-    RefreshPreviewAnimationButton(box)
-    RefreshPreviewAnimationFrame(box)
+local function PreviewAnimationCombatHint(box)
+    if box._hint then box._hint:SetText(TrText("Preview animation pauses during combat.")) end
 end
+local StartPreviewAnimationDriver, StopPreviewAnimationDriver, KillPreviewAnimationForCombat, SetPreviewAnimationEnabled =
+    M.PreviewHelpers.CreateAnimationStarter(PreviewAnimationInCombat, RefreshPreviewAnimationFrame,
+        RefreshPreviewAnimationButton, ClearPreviewAnimationState, PreviewAnimationCombatHint, RefreshPreviewAnimationFrame)
 local function TogglePreviewAnimation(box)
     SetPreviewAnimationEnabled(box, not PreviewAnimationActive(box), "GROUP_PREVIEW_COMBAT_ANIMATE_TOGGLE")
 end
@@ -310,18 +243,27 @@ local function PreviewAllSpecSpellIcons(kind)
     local state = M.gfPreviewAllSpecSpellIcons
     return type(state) == "table" and state[kind or CurrentScope()] == true
 end
-local function CreatePreviewAnimationButton(box, registerControl)
-    if not box or box._previewAnimationButton then return end
-    local parent = box._stage or box
+-- The Animate and Role pills share one frame recipe: backdrop, centred label, pill style, level above the stage.
+local function NewPreviewPill(parent, width)
     local template = (T and T.Template and T.Template()) or "BackdropTemplate"
     local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
-    btn:SetSize(74, 22)
-    if btn.SetBackdrop then PixelLayoutRegion(btn, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }) end
+    btn:SetSize(width, 22)
+    if btn.SetBackdrop then PixelLayoutRegion(btn, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 }) end
     btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
     btn.fs:SetJustifyH("CENTER")
     if btn.fs.SetJustifyV then btn.fs:SetJustifyV("MIDDLE") end
     if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or LAYER_TEXT_ON, 0) end
+    return btn
+end
+local function StylePreviewPill(btn, parent)
+    if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
+    if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
+end
+local function CreatePreviewAnimationButton(box, registerControl)
+    if not box or box._previewAnimationButton then return end
+    local parent = box._stage or box
+    local btn = NewPreviewPill(parent, 74)
     btn._preview = box
     btn._msuf2AllowCombatClick = true
     if box._zoomBar then
@@ -331,8 +273,7 @@ local function CreatePreviewAnimationButton(box, registerControl)
     else
         btn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -104, -34)
     end
-    if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
-    if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
+    StylePreviewPill(btn, parent)
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
     btn._msuf2CommandAction = {
         kind = "toggle",
@@ -357,30 +298,18 @@ end
 local function RefreshPreviewRoleButton(box, kind)
     local btn = box and box._previewRoleButton
     if not btn then return end
-    local role = PreviewRole(kind)
-    local text = (M.Tr and M.Tr(GF_PREVIEW_ROLE_LABELS[role])) or GF_PREVIEW_ROLE_LABELS[role]
-    if btn.fs and btn.fs.SetText then btn.fs:SetText(text)
-    elseif btn.SetText then btn:SetText(text) end
+    SetPillText(btn, TrText(GF_PREVIEW_ROLE_LABELS[PreviewRole(kind)]))
 end
 local function CreatePreviewRoleButton(box, registerControl)
     if not box or box._previewRoleButton then return end
     local parent = box._stage or box
-    local template = (T and T.Template and T.Template()) or "BackdropTemplate"
-    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
-    btn:SetSize(92, 22)
-    if btn.SetBackdrop then PixelLayoutRegion(btn, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 }) end
-    btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
-    btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
-    btn.fs:SetJustifyH("CENTER")
-    if btn.fs.SetJustifyV then btn.fs:SetJustifyV("MIDDLE") end
-    if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or LAYER_TEXT_ON, 0) end
+    local btn = NewPreviewPill(parent, 92)
     if box._previewAnimationButton then
         btn:SetPoint("RIGHT", box._previewAnimationButton, "LEFT", -6, 0)
     elseif box._zoomBar then
         btn:SetPoint("RIGHT", box._zoomBar, "LEFT", -86, 0)
     end
-    if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
-    if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
+    StylePreviewPill(btn, parent)
     btn:SetScript("OnClick", function()
         local kind = CurrentScope()
         SetPreviewRole(kind, NextPreviewRole(kind))
@@ -393,31 +322,26 @@ local function CreatePreviewRoleButton(box, registerControl)
     box.RefreshRoleButton = RefreshPreviewRoleButton
     RefreshPreviewRoleButton(box)
 end
-local function ApplyGroupPreviewFlatBackdrop(frame, texture, bg, border)
+local function ApplyGroupPreviewFlatBackdrop(frame, bg, border)
     if not (frame and frame.SetBackdrop) then return end
-    texture = texture or "Interface\\Buttons\\WHITE8X8"
-    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = texture, edgeFile = texture, edgeSize = 1 })
+    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
     bg = bg or { 0, 0, 0, 1 }
     frame:SetBackdropColor(bg[1] or 0, bg[2] or 0, bg[3] or 0, bg[4] or 1)
     if border and frame.SetBackdropBorderColor then
         frame:SetBackdropBorderColor(border[1] or 0, border[2] or 0, border[3] or 0, border[4] or 1)
     end
 end
-local UpdateHint
-local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
-    if not box then return end
-    local colors = (T and T.colors) or {}
-    local shade, line = PreviewHelpers.EnsurePinnedHeader(box)
-    if M.PreviewSelectionBar then M.PreviewSelectionBar.SetShown(box, true) end
-    if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
-    if box._footer then box._footer:SetShown(not pinned) end
-    PreviewHelpers.PaintPinnedHeader(shade, line, colors, pinned)
-    if UpdateHint then UpdateHint(box, box._selectedHandle) end
+-- Role chrome from the shared helper; the flat colours apply only when it is missing.
+local function ApplyGroupChrome(frame, role, bg, border)
+    if PreviewHelpers.ApplyPreviewChrome then
+        return PreviewHelpers.ApplyPreviewChrome(frame, role, T, ApplyGroupPreviewFlatBackdrop)
+    end
+    ApplyGroupPreviewFlatBackdrop(frame, bg, border)
 end
 local function EnsureGroupLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
     local btn = T.Button(box, "", 132, 20)
-    btn:SetText(((M.Tr and M.Tr("Preview Layers")) or "Preview Layers") .. " v", true)
+    btn:SetText(TrText("Preview Layers") .. " v", true)
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     btn:SetScript("OnClick", function()
         if box._layers then box._layers:SetShown(not box._layers:IsShown()) end
@@ -428,32 +352,34 @@ local function EnsureGroupLayersButton(box)
     box._msuf2LayersButton = btn
     return btn
 end
+local COMPACT_TOOL_FIELDS = { "_zoomBar", "_previewAnimationButton", "_previewRoleButton" }
 local function SetGroupPreviewToolsShown(box, shown)
-    local controlsHint = box and box._msuf2PreviewControlsHint
     if not box then return end
-    if not shown then
-        if box._msuf2CompactToolsHidden ~= true then
-            box._msuf2CompactControlsHintWasShown = controlsHint and controlsHint.IsShown and controlsHint:IsShown() or false
-        end
-        box._msuf2CompactToolsHidden = true
-        if box._zoomBar then box._zoomBar:Hide() end
-        if box._previewAnimationButton then box._previewAnimationButton:Hide() end
-        if box._previewRoleButton then box._previewRoleButton:Hide() end
-        if controlsHint then controlsHint:Hide() end
-        return
+    local controlsHint = box._msuf2PreviewControlsHint
+    local method = shown and "Show" or "Hide"
+    if not shown and box._msuf2CompactToolsHidden ~= true then
+        box._msuf2CompactControlsHintWasShown = controlsHint and controlsHint.IsShown and controlsHint:IsShown() or false
     end
-    box._msuf2CompactToolsHidden = nil
-    if box._zoomBar then box._zoomBar:Show() end
-    if box._previewAnimationButton then box._previewAnimationButton:Show() end
-    if box._previewRoleButton then box._previewRoleButton:Show() end
-    if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
+    box._msuf2CompactToolsHidden = not shown or nil
+    for i = 1, #COMPACT_TOOL_FIELDS do
+        local tool = box[COMPACT_TOOL_FIELDS[i]]
+        if tool then tool[method](tool) end
+    end
+    if controlsHint and (not shown or box._msuf2CompactControlsHintWasShown) then controlsHint[method](controlsHint) end
 end
 -- The Theme button translates "Preview Layers" itself; the compact label is
 -- composed, so it is translated first and set as translated.
 local function LayoutGroupPreviewHeaderControls(box, compact)
     PreviewHelpers.LayoutCompactLayersButton(box, compact, M.Tr)
 end
-local function ApplyGroupCompactPresentation(box, compact, sideW)
+-- The full-size header: title, hint and tool buttons back, layers button back in its docked place.
+local function ShowExpandedHeader(box)
+    if box._title then box._title:Show() end
+    if box._hint then box._hint:Show() end
+    SetGroupPreviewToolsShown(box, true)
+    LayoutGroupPreviewHeaderControls(box, false)
+end
+local function ApplyGroupCompactPresentation(box, compact)
     if not box then return end
     compact = compact == true
     box._msuf2CompactPreview = compact
@@ -490,21 +416,15 @@ local function ApplyGroupCompactPresentation(box, compact, sideW)
         return
     end
     box._msuf2LayerPopoverWidth = nil
-    if box._title then box._title:Show() end
-    if box._hint then box._hint:Show() end
-    SetGroupPreviewToolsShown(box, true)
-    LayoutGroupPreviewHeaderControls(box, false)
+    ShowExpandedHeader(box)
     if M.PreviewSelectionBar then M.PreviewSelectionBar.SetShown(box, true) end
     if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
 end
+local SCOPE_LABELS = { raid = "Raid", mythicraid = "Mythic Raid" }
 local function PreviewScopeLabel(kind)
-    if kind == "raid" then return "Raid" end
-    if kind == "mythicraid" then return "Mythic Raid" end
-    return "Party"
+    return SCOPE_LABELS[kind] or "Party"
 end
-local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
-local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
 local Tr = M.Tr
 local ClassColor = MSUF.UF.Config.ClassColor
 local function AuraGrowth(growth)
@@ -520,81 +440,66 @@ local function GrowthFromCompiled(primary, wrap, fallback)
     end
     return wrap == "UP" and "RIGHTUP" or (fallback or "RIGHTDOWN")
 end
+-- Lane key -> compiled key prefix, show flag and max-count key.
+local COMPILED_LANES = {
+    buff = { "buff", "showBuffs", "maxBuffs" },
+    trackedBuff = { "trackedBuff", "showTrackedBuffs", "maxTrackedBuffs" },
+    debuff = { "debuff", "showDebuffs", "maxDebuffs" },
+    external = { "external", "showExternals", "maxExternals" },
+}
+-- Lane field, then the compiled key suffix that follows the lane prefix.
+local COMPILED_LANE_FIELDS = {
+    "perRow", "PerRow", "size", "IconSize", "spacing", "Spacing", "anchor", "Anchor",
+    "x", "OffsetX", "y", "OffsetY", "layer", "Layer", "strata", "Strata",
+    "showCooldownSwipe", "ShowCooldownSwipe", "cooldownSwipeReverse", "CooldownSwipeReverse",
+    "showCooldown", "ShowCooldown", "showCooldownText", "ShowCooldown",
+    "showStacks", "ShowStacks", "showTooltip", "ShowTooltip", "showDurationBar", "ShowDurationBar",
+    "durationBarHeight", "DurationBarHeight", "durationBarDisplay", "DurationBarDisplay",
+    "durationBarPosition", "DurationBarPosition", "durationBarDirection", "DurationBarDirection",
+    "cooldownSize", "CooldownSize", "cooldownAnchor", "CooldownAnchor", "cooldownX", "CooldownX",
+    "cooldownY", "CooldownY", "cooldownDecimalSeconds", "CooldownDecimalSeconds",
+    "stackSize", "StackSize", "stackAnchor", "StackAnchor", "stackX", "StackX", "stackY", "StackY",
+}
+-- Each lane's full compiled keys are joined once here, so a repaint concatenates no strings.
+for _, lane in pairs(COMPILED_LANES) do
+    local prefix, keys = lane[1], {}
+    for i = 1, #COMPILED_LANE_FIELDS, 2 do
+        keys[(i + 1) / 2] = prefix .. COMPILED_LANE_FIELDS[i + 1]
+    end
+    lane.keys, lane.growthX, lane.growthY, lane.alphaKey = keys, prefix .. "GrowthX", prefix .. "GrowthY", prefix .. "Alpha"
+end
 local function CompiledAuraLane(auras, key, fallback, out)
     if type(auras) ~= "table" then return fallback or {} end
-    local prefix, showKey
-    if key == "buff" then
-        prefix, showKey = "buff", "showBuffs"
-    elseif key == "trackedBuff" then
-        prefix, showKey = "trackedBuff", "showTrackedBuffs"
-    elseif key == "debuff" then
-        prefix, showKey = "debuff", "showDebuffs"
-    elseif key == "external" then
-        prefix, showKey = "external", "showExternals"
-    else
-        return fallback or {}
-    end
-    local maxKey = key == "trackedBuff" and "maxTrackedBuffs"
-        or (key == "buff" and "maxBuffs")
-        or (key == "debuff" and "maxDebuffs")
-        or "maxExternals"
+    local lane = COMPILED_LANES[key]
+    if not lane then return fallback or {} end
+    local keys = lane.keys
     -- A caller that keeps one table per lane passes it as out: the lane is
     -- rebuilt in place, so a preview repaint allocates no lane table.
     if out then wipe(out) else out = {} end
     out._compiled = true
-    out.enabled = auras[showKey] == true
-    out.max = auras[maxKey]
-    out.perRow = auras[prefix .. "PerRow"]
-    out.size = auras[prefix .. "IconSize"]
+    out.enabled = auras[lane[2]] == true
+    out.max = auras[lane[3]]
     out.iconZoom = auras.iconZoom
-    out.spacing = auras[prefix .. "Spacing"]
-    out.anchor = auras[prefix .. "Anchor"]
-    out.growth = GrowthFromCompiled(auras[prefix .. "GrowthX"], auras[prefix .. "GrowthY"], fallback and fallback.growth)
-    out.x = auras[prefix .. "OffsetX"]
-    out.y = auras[prefix .. "OffsetY"]
-    out.layer = auras[prefix .. "Layer"]
-    out.strata = auras[prefix .. "Strata"]
-    out.showCooldownSwipe = auras[prefix .. "ShowCooldownSwipe"]
-    out.cooldownSwipeReverse = auras[prefix .. "CooldownSwipeReverse"]
-    out.showCooldown = auras[prefix .. "ShowCooldown"]
-    out.showCooldownText = auras[prefix .. "ShowCooldown"]
-    out.showStacks = auras[prefix .. "ShowStacks"]
-    out.showTooltip = auras[prefix .. "ShowTooltip"]
-    out.showDurationBar = auras[prefix .. "ShowDurationBar"]
-    out.durationBarHeight = auras[prefix .. "DurationBarHeight"]
-    out.durationBarDisplay = auras[prefix .. "DurationBarDisplay"]
-    out.durationBarPosition = auras[prefix .. "DurationBarPosition"]
-    out.durationBarDirection = auras[prefix .. "DurationBarDirection"]
-    out.cooldownSize = auras[prefix .. "CooldownSize"]
-    out.cooldownAnchor = auras[prefix .. "CooldownAnchor"]
-    out.cooldownX = auras[prefix .. "CooldownX"]
-    out.cooldownY = auras[prefix .. "CooldownY"]
-    out.cooldownDecimalSeconds = auras[prefix .. "CooldownDecimalSeconds"]
-    out.stackSize = auras[prefix .. "StackSize"]
-    out.stackAnchor = auras[prefix .. "StackAnchor"]
-    out.stackX = auras[prefix .. "StackX"]
-    out.stackY = auras[prefix .. "StackY"]
+    out.growth = GrowthFromCompiled(auras[lane.growthX], auras[lane.growthY], fallback and fallback.growth)
+    for n = 1, #keys do
+        out[COMPILED_LANE_FIELDS[2 * n - 1]] = auras[keys[n]]
+    end
     out.dispelBorderMode = key == "debuff" and auras.debuffDispelBorderMode or nil
     out.showDispelBorder = key == "debuff" and auras.debuffShowDispelBorder or nil
     out.showDispelSymbol = key == "debuff" and auras.debuffShowDispelSymbol or nil
-    out.alpha = tonumber(auras[prefix .. "Alpha"]) or 1
-    out.behindBar = (tonumber(auras[prefix .. "Alpha"]) or 1) < 1
+    local alpha = tonumber(auras[lane.alphaKey]) or 1
+    out.alpha = alpha
+    out.behindBar = alpha < 1
     return out
 end
+local STATUS_TEXT_SUBKEYS = { statusGhostText = "ghost", statusAFKText = "afk", statusAFKTimer = "afkTimer", statusDNDText = "dnd" }
 local function RuntimeStatusConfig(status, spec)
     if type(status) ~= "table" or type(spec) ~= "table" then return nil end
     local value = spec.value
-    if value == "statusText" then
-        return status.statusText and status.statusText.dead or status.statusText
-    elseif value == "statusGhostText" then
-        return status.statusText and status.statusText.ghost or nil
-    elseif value == "statusAFKText" then
-        return status.statusText and status.statusText.afk or nil
-    elseif value == "statusAFKTimer" then
-        return status.statusText and status.statusText.afkTimer or nil
-    elseif value == "statusDNDText" then
-        return status.statusText and status.statusText.dnd or nil
-    end
+    local text = status.statusText
+    if value == "statusText" then return text and text.dead or text end
+    local sub = STATUS_TEXT_SUBKEYS[value]
+    if sub then return text and text[sub] or nil end
     local key = GF_STATUS_RUNTIME_KEYS[value]
     return key and status[key] or nil
 end
@@ -608,30 +513,23 @@ local gfMockSpellTextureCache = {}
 local function MockSpellTexture(spellId)
     local cached = gfMockSpellTextureCache[spellId]
     if cached then return cached end
-    if C_Spell and C_Spell.GetSpellTexture then
-        local tex = C_Spell.GetSpellTexture(spellId)
-        if tex then
-            tex = (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(tex)) or tex
-            gfMockSpellTextureCache[spellId] = tex
-            return tex
-        end
-    end
-    if GetSpellInfo then
+    local tex
+    if C_Spell and C_Spell.GetSpellTexture then tex = C_Spell.GetSpellTexture(spellId) end
+    if not tex and GetSpellInfo then
         local _, _, icon = GetSpellInfo(spellId)
-        if icon then
-            icon = (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(icon)) or icon
-            gfMockSpellTextureCache[spellId] = icon
-            return icon
-        end
+        tex = icon
     end
-    return "Interface\\Icons\\INV_Misc_QuestionMark"
+    if not tex then return "Interface\\Icons\\INV_Misc_QuestionMark" end
+    tex = ResolveIconTexturePath(tex) or tex
+    gfMockSpellTextureCache[spellId] = tex
+    return tex
 end
 local function CurrentSpellInfo(kind)
     local gp = GroupPage()
-    local gf = MSUF and MSUF.GF
+    local gf = MSUF.GF
     local si = gf and gf.SpellIndicators
-    local specKey = type(gp.EffectiveSpellSpec) == "function" and gp.EffectiveSpellSpec(kind) or nil
-    local auraName = type(gp.CurrentSpellAura) == "function" and gp.CurrentSpellAura(kind) or nil
+    local specKey = gp.EffectiveSpellSpec and gp.EffectiveSpellSpec(kind) or nil
+    local auraName = gp.CurrentSpellAura and gp.CurrentSpellAura(kind) or nil
     if not (specKey and auraName and auraName ~= "") then return nil, specKey, auraName end
     local trackable = si and si.TrackableAuras and si.TrackableAuras[specKey]
     if type(trackable) == "table" then
@@ -644,7 +542,7 @@ local function CurrentSpellInfo(kind)
 end
 local function CurrentSpellConfig(kind)
     local gp = GroupPage()
-    if type(gp.CurrentSpellConfig) == "function" then
+    if gp.CurrentSpellConfig then
         local cfg = gp.CurrentSpellConfig(kind, false)
         if type(cfg) == "table" then return cfg end
     end
@@ -652,7 +550,7 @@ local function CurrentSpellConfig(kind)
 end
 local function CurrentSpellPlaced(kind)
     local gp = GroupPage()
-    if type(gp.PlacedConfig) == "function" then
+    if gp.PlacedConfig then
         local placed = gp.PlacedConfig(kind, false)
         if type(placed) == "table" then return placed end
     end
@@ -661,9 +559,9 @@ local function CurrentSpellPlaced(kind)
 end
 local function CurrentSpellTexture(kind)
     local info, specKey, auraName = CurrentSpellInfo(kind)
-    local gf = MSUF and MSUF.GF
+    local gf = MSUF.GF
     local si = gf and gf.SpellIndicators
-    if si and type(si.GetAuraIcon) == "function" and specKey and auraName and auraName ~= "" then
+    if si and si.GetAuraIcon and specKey and auraName and auraName ~= "" then
         local icon = si.GetAuraIcon(specKey, auraName)
         if icon then return icon end
     end
@@ -683,40 +581,7 @@ local function ScaleValue(value, scale, minValue)
     if minValue ~= nil and v < minValue then v = minValue end
     return v
 end
-if GFZoomPan.Configure then
-    GFZoomPan.Configure({
-        T = T,
-        TR = Tr,
-        WHITE8X8 = WHITE8X8,
-        UpdateHint = function(box, selected)
-            if UpdateHint then UpdateHint(box, selected) end
-        end,
-    })
-end
-local ClampZoom = GFZoomPan.Clamp
-local UpdateZoomControls = GFZoomPan.UpdateControls or Fallbacks.Noop
-local ResolveDefaultZoomLock = GFZoomPan.ResolveDefaultLock or Fallbacks.Noop
-local SetZoom = GFZoomPan.SetZoom or Fallbacks.Noop
-local StepZoom = GFZoomPan.Step or Fallbacks.Noop
-local StartPan = GFZoomPan.Start or Fallbacks.False
-local StopPan = GFZoomPan.Stop or Fallbacks.Noop
-local ReadBarsBool = MSUF.MSUF2.PreviewHelpers.ReadPreviewBarsBool
-local function SharedHealPredictionEnabled()
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if type(gen) ~= "table" then return false end
-    if gen.showSelfHealPrediction ~= nil then return gen.showSelfHealPrediction == true end
-    if gen.enableHealPrediction ~= nil then return gen.enableHealPrediction ~= false end
-    return false
-end
-local function HealPredictionEnabled(kind, conf)
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.IsHealPredictionEnabled) == "function" then return gf.IsHealPredictionEnabled(kind, conf) == true end
-    if conf and conf.hlOverride == true and conf.healPredEnabled ~= nil then return conf.healPredEnabled == true end
-    return SharedHealPredictionEnabled()
-end
-local function ConfigToOffset(value, scale)
-    return Round((tonumber(value) or 0) * (tonumber(scale) or 1))
-end
+local ConfigToOffset = ScaleValue -- the same maths without a minimum
 local function OffsetToConfig(value, scale)
     scale = tonumber(scale) or 1
     if scale <= 0 then scale = 1 end
@@ -732,6 +597,7 @@ local function ResolveAnchor(rx, ry)
     end
     return best
 end
+-- Drag loops call these every update, so the anchor point maths stays inline.
 local function HandleOffset(handle, anchorFrame, anchor)
     local frac = GF_PREVIEW_ANCHOR_FRAC[anchor]
     if not (handle and anchorFrame and frac) then return 0, 0 end
@@ -754,7 +620,7 @@ local function PointOffset(px, py, anchorFrame, anchor)
 end
 local function MockPowerHeight(kind, conf, zoom, frameScale)
     local livePowerH
-    local gf = MSUF and MSUF.GF
+    local gf = MSUF.GF
     local previewRole = PreviewRole(kind)
     if gf and gf.GetEffectivePowerHeight then livePowerH = gf.GetEffectivePowerHeight(kind, nil, previewRole, conf) end
     if livePowerH == nil then
@@ -816,7 +682,7 @@ local function StatusSpecs()
 end
 local function CurrentStatusSpec()
     local gp = GroupPage()
-    if type(gp.CurrentGFStatusSpec) == "function" then
+    if gp.CurrentGFStatusSpec then
         local spec = gp.CurrentGFStatusSpec()
         if type(spec) == "table" then return spec end
     end
@@ -827,20 +693,20 @@ local function CurrentStatusSpec()
     end
     return specs[1]
 end
+local STATUS_TEXT_VALUES = {
+    statusText = true, statusGhostText = true, statusAFKText = true, statusAFKTimer = true, statusDNDText = true,
+    levelText = true,
+}
 local function StatusSpecIsText(spec)
-    if spec and spec.isText == true then return true end
-    local value = spec and spec.value
-    return value == "statusText" or value == "statusGhostText"
-        or value == "statusAFKText" or value == "statusAFKTimer" or value == "statusDNDText"
-        or value == "levelText"
+    return (spec and spec.isText == true) or STATUS_TEXT_VALUES[spec and spec.value] == true
 end
 --- Sample subgroup label, formatted by the live raid-group formatter so the
 --- preview cannot drift from what the frame actually prints.
 local PREVIEW_RAID_GROUP = 3
 local function PreviewRaidGroupText(style)
-    local runtime = MSUF and MSUF.UFStatusRuntime
+    local runtime = MSUF.UFStatusRuntime
     local format = runtime and runtime.RaidGroupText
-    if type(format) == "function" then return format(style, PREVIEW_RAID_GROUP) end
+    if format then return format(style, PREVIEW_RAID_GROUP) end
     if style == "BRACKET" then return "[" .. PREVIEW_RAID_GROUP .. "]" end
     if style == "NONE" then return tostring(PREVIEW_RAID_GROUP) end
     return "(" .. PREVIEW_RAID_GROUP .. ")"
@@ -853,7 +719,7 @@ local function StatusText(spec, runtimeCfg, conf)
     if value == "statusDNDText" then return "DND" end
     if value == "threatText" then return "85%" end
     if value == "levelText" then
-        local level = _G.UnitLevel and tonumber(_G.UnitLevel("player")) or nil
+        local level = UnitLevel and tonumber(UnitLevel("player")) or nil
         return tostring(level and level > 0 and level or 80)
     end
     if value == "showGroupNumber" then
@@ -862,32 +728,18 @@ local function StatusText(spec, runtimeCfg, conf)
     end
     return "DEAD"
 end
+local STATUS_LABELS = {
+    roleIcon = "Role", leaderIcon = "Leader", assistIcon = "Assist", raidMarker = "Marker", readyCheckIcon = "Ready",
+    summonIcon = "Summon", resurrectIcon = "Rez", pvpIcon = "PvP", phaseIcon = "Phase", statusText = "Dead Text",
+    statusGhostText = "Ghost Text", statusAFKText = "AFK Text", statusAFKTimer = "AFK Timer", statusDNDText = "DND Text",
+    levelText = "Level Text", showGroupNumber = "Group #",
+}
 local function StatusLabel(spec)
-    local value = spec and spec.value
-    if value == "roleIcon" then return "Role" end
-    if value == "leaderIcon" then return "Leader" end
-    if value == "assistIcon" then return "Assist" end
-    if value == "raidMarker" then return "Marker" end
-    if value == "readyCheckIcon" then return "Ready" end
-    if value == "summonIcon" then return "Summon" end
-    if value == "resurrectIcon" then return "Rez" end
-    if value == "pvpIcon" then return "PvP" end
-    if value == "phaseIcon" then return "Phase" end
-    if value == "statusText" then return "Dead Text" end
-    if value == "statusGhostText" then return "Ghost Text" end
-    if value == "statusAFKText" then return "AFK Text" end
-    if value == "statusAFKTimer" then return "AFK Timer" end
-    if value == "statusDNDText" then return "DND Text" end
-    if value == "levelText" then return "Level Text" end
-    if value == "showGroupNumber" then return "Group #" end
-    return (spec and spec.text) or "Status"
+    return STATUS_LABELS[spec and spec.value] or (spec and spec.text) or "Status"
 end
 local function StatusPreviewMode()
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.GetStatusPreviewMode) == "function" then
-        local mode = gf.GetStatusPreviewMode()
-        if mode == "all" then return "all" end
-    end
+    local gf = MSUF.GF
+    if gf and gf.GetStatusPreviewMode and gf.GetStatusPreviewMode() == "all" then return "all" end
     return M.gfStatusPreviewMode == "all" and "all" or "current"
 end
 local function StatusSpecEnabled(conf, spec)
@@ -906,18 +758,10 @@ end
 local GFTextFocus = (M.GroupPreviewTextFocus and M.GroupPreviewTextFocus.Install and M.GroupPreviewTextFocus.Install({
     CurrentScope = CurrentScope,
     Conf = Conf,
-    min = min,
-    max = max,
 })) or {}
 local CurrentTextKind = GFTextFocus.CurrentTextKind
 local TextOffsetKeys = GFTextFocus.TextOffsetKeys
 local TextLabel = GFTextFocus.TextLabel
-local TextMovesTogether = GFTextFocus.TextMovesTogether or Fallbacks.True
-local SetTextMoveTogether = GFTextFocus.SetTextMoveTogether or Fallbacks.Noop
-local PlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or Fallbacks.False
-local NormalizeTextFocusKind = GFTextFocus.NormalizeTextFocusKind or Fallbacks.Identity
-local NormalizeTextFocusSlot = GFTextFocus.NormalizeTextFocusSlot or Fallbacks.Identity
-local ApplyTextFocus = GFTextFocus.ApplyTextFocus or Fallbacks.Noop
 local function SpellPlacedForHandle(handle, conf)
     local item = handle and handle._cfgSpellItem
     if type(item) ~= "table" then return nil end
@@ -1003,11 +847,14 @@ local function GroupPreviewDefaultHint()
     end
     return base
 end
-UpdateHint = function(box, handle)
+local function UpdateHint(box)
     if not box then return end
     if M.PreviewSelectionBar then M.PreviewSelectionBar.Refresh(box) end
     if not box._hint then return end
     T.SetTranslatedText(box._hint, GroupPreviewDefaultHint())
+end
+if GFZoomPan.Configure then
+    GFZoomPan.Configure({ T = T, TR = Tr, WHITE8X8 = WHITE8X8, UpdateHint = UpdateHint })
 end
 local NudgeStep = PreviewHelpers.NudgeStep or Fallbacks.One
 --- The selected element is user intent, but `_selectedHandle` is a live frame
@@ -1103,15 +950,18 @@ local function RefreshHandleSelection(box)
             end
         end
     end
-    UpdateHint(box, selected)
+    UpdateHint(box)
 end
 local Helpers = {
     CurrentScope = CurrentScope, Conf = Conf, PreviewScopeLabel = PreviewScopeLabel,
-    SetTextMoveTogether = SetTextMoveTogether, CurrentTextKind = CurrentTextKind, TextOffsetKeys = TextOffsetKeys,
+    SetTextMoveTogether = GFTextFocus.SetTextMoveTogether or Fallbacks.Noop,
+    CurrentTextKind = CurrentTextKind, TextOffsetKeys = TextOffsetKeys,
     NudgeStep = NudgeStep, StatusSpecs = StatusSpecs, TextLabel = TextLabel, PreviewFocusForPage = PreviewFocusForPage,
-    MockPowerHeight = MockPowerHeight, HealPredictionEnabled = HealPredictionEnabled, TextMovesTogether = TextMovesTogether,
-    PlaceHandleAroundRegions = PlaceHandleAroundRegions, NormalizeTextFocusKind = NormalizeTextFocusKind,
-    NormalizeTextFocusSlot = NormalizeTextFocusSlot, ApplyTextFocus = ApplyTextFocus,
+    MockPowerHeight = MockPowerHeight, TextMovesTogether = GFTextFocus.TextMovesTogether or Fallbacks.True,
+    PlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or Fallbacks.False,
+    NormalizeTextFocusKind = GFTextFocus.NormalizeTextFocusKind or Fallbacks.Identity,
+    NormalizeTextFocusSlot = GFTextFocus.NormalizeTextFocusSlot or Fallbacks.Identity,
+    ApplyTextFocus = GFTextFocus.ApplyTextFocus or Fallbacks.Noop,
 }
 local NativeDeps = {
     M = M,
@@ -1121,16 +971,10 @@ local NativeDeps = {
     H = Helpers,
     Helpers = Helpers,
     OpenSection = OpenGFSection,
-    LayerFont = LayerFont,
-    LayerHeaderColor = LAYER_HEADER_COLOR,
-    CreateZoomButton = GFZoomPan.CreateButton,
     TR = Tr,
-    Tr = Tr,
-    StepZoom = StepZoom,
-    SetZoom = SetZoom,
-    ResolveDefaultZoomLock = ResolveDefaultZoomLock,
-    StartPan = StartPan,
-    StopPan = StopPan,
+    ResolveDefaultZoomLock = GFZoomPan.ResolveDefaultLock or Fallbacks.Noop,
+    StartPan = GFZoomPan.Start or Fallbacks.False,
+    StopPan = GFZoomPan.Stop or Fallbacks.Noop,
     ZoomWheel = Fallbacks.Noop,
     UpdateHint = UpdateHint,
     Round = Round,
@@ -1144,21 +988,17 @@ local NativeDeps = {
     CurrentSpellConfig = CurrentSpellConfig,
     CurrentSpellPlaced = CurrentSpellPlaced,
     HandleText = HandleText,
-    HandleOffsets = HandleOffsets, DefaultHandleOffsets = DefaultHandleOffsets,
+    HandleOffsets = HandleOffsets,
     RefreshHandleSelection = RefreshHandleSelection,
     StatusLabel = StatusLabel,
-    NAMES = GF_PREVIEW_NAMES,
-    CLASSES = GF_PREVIEW_CLASSES,
-    AURA_MOCK_ICON_IDS = GF_AURA_MOCK_ICON_IDS,
-    MIN_W = GF_PREVIEW_MIN_W,
-    MIN_H = GF_PREVIEW_MIN_H,
+    NAMES = Specs.NAMES or {},
+    CLASSES = Specs.CLASSES or {},
+    AURA_MOCK_ICON_IDS = Specs.AURA_MOCK_ICON_IDS or {},
+    MIN_W = Specs.MIN_W or 380,
+    MIN_H = Specs.MIN_H or 130,
     ROLE = GF_PREVIEW_ROLE_DEFAULT,
     PreviewRole = PreviewRole,
     ANCHOR_FRAC = GF_PREVIEW_ANCHOR_FRAC,
-    AUTO_ZOOM_MIN = Specs.AUTO_ZOOM_MIN or 0.75,
-    AUTO_ZOOM_MAX = Specs.AUTO_ZOOM_MAX or 1.65,
-    AUTO_ZOOM_STAGE_PAD_X = Specs.AUTO_ZOOM_STAGE_PAD_X or 48,
-    AUTO_ZOOM_STAGE_PAD_Y = Specs.AUTO_ZOOM_STAGE_PAD_Y or 72,
     CompiledSpec = CompiledSpec,
     CompiledAuraLane = CompiledAuraLane,
     RuntimeStatusConfig = RuntimeStatusConfig,
@@ -1171,13 +1011,12 @@ local NativeDeps = {
     MockSpellTexture = MockSpellTexture,
     Int = Int,
     ScaleValue = ScaleValue,
-    ClampZoom = ClampZoom,
-    UpdateZoomControls = UpdateZoomControls,
+    ClampZoom = GFZoomPan.Clamp,
+    UpdateZoomControls = GFZoomPan.UpdateControls or Fallbacks.Noop,
     ConfigToOffset = ConfigToOffset,
     AuraGrowth = AuraGrowth,
     ApplyBoundsGuide = MSUF.UFPreviewCore and MSUF.UFPreviewCore.ApplyBoundsGuide,
     ClampLayer = ClampLayer,
-    HealPredictionEnabled = HealPredictionEnabled,
     MockPowerHeight = MockPowerHeight,
     ClassColor = ClassColor,
 }
@@ -1187,7 +1026,6 @@ local NativeDeps = {
 local NativeBuild = {}
 function NativeBuild.Frame(parent, ctx)
     local Deps = ShallowCopy(NativeDeps) or {}
-    local H, T, M = Deps.Helpers, Deps.T, Deps.M
     local width = (ctx.width or 720) - 28
     local layerW = 104
     local box = PixelLayoutRegion(CreateFrame("Frame", nil, parent, T.Template()))
@@ -1209,7 +1047,7 @@ function NativeBuild.Frame(parent, ctx)
     box._msuf2RegisterGroupPreviewControl = RegisterPreviewControl
     function box:RegisterRuntimeControlsForPage(pageKey)
         local page = M.GroupPage
-        if not (page and type(page.RegisterControl) == "function") then return false end
+        if not (page and page.RegisterControl) then return false end
         runtimePageContext.key = pageKey
         for i = 1, #previewControls do
             local widget = previewControls[i]
@@ -1222,37 +1060,29 @@ function NativeBuild.Frame(parent, ctx)
         end
         return true
     end
-    local chrome
-    if PreviewHelpers.ApplyPreviewChrome then
-        chrome = PreviewHelpers.ApplyPreviewChrome(box, "outer", T, function(frame, bg, border)
-            ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
-        end)
-    else
-        chrome = { title = T.colors.title or T.colors.text, layerHeader = T.colors.muted }
-        ApplyGroupPreviewFlatBackdrop(box, Deps.WHITE8X8, T.colors.panel or T.colors.panel2, T.colors.borderSoft or T.colors.border)
-    end
+    local chrome = ApplyGroupChrome(box, "outer", T.colors.panel or T.colors.panel2, T.colors.borderSoft or T.colors.border)
+        or { title = T.colors.title or T.colors.text, layerHeader = T.colors.muted }
     box:SetSize(width, 358)
     box._msufStaticH = 358
-    box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
+    box.ApplyPinnedPreviewPresentation = function(self, pinned)
         if pinned then
             if PreviewHelpers.SwitchCompactZoomMode then PreviewHelpers.SwitchCompactZoomMode(self, false, 1.50) end
-            SetGroupPreviewToolsShown(self, true)
-            LayoutGroupPreviewHeaderControls(self, false)
-            if self._title then self._title:Show() end
-            if self._hint then self._hint:Show() end
+            ShowExpandedHeader(self)
             if self._msuf2LayersButton then self._msuf2LayersButton:Hide() end
         end
-        ApplyGroupPinnedPresentation(self, pinned, opts, layerW)
-        if not pinned and self._msuf2CompactPreview then ApplyGroupCompactPresentation(self, true, layerW) end
+        local shade, line = PreviewHelpers.EnsurePinnedHeader(self)
+        if M.PreviewSelectionBar then M.PreviewSelectionBar.SetShown(self, true) end
+        if self.ApplyDockedPreviewLayout then self:ApplyDockedPreviewLayout(12) end
+        if self._footer then self._footer:SetShown(not pinned) end
+        PreviewHelpers.PaintPinnedHeader(shade, line, T.colors or {}, pinned)
+        UpdateHint(self)
+        if not pinned and self._msuf2CompactPreview then ApplyGroupCompactPresentation(self, true) end
     end
-    box.ApplyCompactPreviewPresentation = function(self, compact)
-        ApplyGroupCompactPresentation(self, compact, layerW)
-    end
+    box.ApplyCompactPreviewPresentation = ApplyGroupCompactPresentation
     if parent and parent.GetFrameLevel and box.SetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
     local title = T.Font(box, "GameFontNormal", "", chrome.title or T.colors.title or T.colors.text)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
-    T.SetTranslatedText(title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview",
-        H.PreviewScopeLabel(H.CurrentScope())))
+    T.SetTranslatedText(title, string.format(TrText("%s - %s"), TrText("Group Frame Preview"), PreviewScopeLabel(CurrentScope())))
     box._title = title
     local hint = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
@@ -1264,20 +1094,13 @@ function NativeBuild.Frame(parent, ctx)
 end
 function NativeBuild.Stage(state)
     local Deps, box, RegisterPreviewControl = state.R, state.box, state.RegisterPreviewControl
-    local T, M = Deps.T, Deps.M
     -- The stage is re-anchored against the selection bar by
     -- ApplyDockedPreviewLayout once the layer rail exists.
     local stage = PixelLayoutRegion(CreateFrame("Frame", nil, box, T.Template()))
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     stage._msuf2PreviewCanvasUnderlay = box
-    if PreviewHelpers.ApplyPreviewChrome then
-        PreviewHelpers.ApplyPreviewChrome(stage, "canvas", T, function(frame, bg, border)
-            ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
-        end)
-    else
-        ApplyGroupPreviewFlatBackdrop(stage, Deps.WHITE8X8, { 0.020, 0.039, 0.071, 0.92 }, T.colors.borderSoft)
-    end
+    ApplyGroupChrome(stage, "canvas", { 0.020, 0.039, 0.071, 0.92 }, T.colors.borderSoft)
     if stage.SetClipsChildren then stage:SetClipsChildren(true) end
     stage:EnableMouse(true)
     stage:EnableMouseWheel(true)
@@ -1285,15 +1108,15 @@ function NativeBuild.Stage(state)
     box._stage = stage
     PreviewHelpers.BuildZoomBar(box, stage, {
         template = T.Template(),
-        texture = Deps.WHITE8X8,
+        texture = WHITE8X8,
         T = T,
         themeReadout = true,
         fieldPrefix = "_",
         wheelField = "_zoomWheel",
-        CreateZoomButton = Deps.CreateZoomButton,
-        Tr = Deps.Tr,
-        StepZoom = Deps.StepZoom,
-        SetZoom = Deps.SetZoom,
+        CreateZoomButton = GFZoomPan.CreateButton,
+        Tr = Tr,
+        StepZoom = GFZoomPan.Step or Fallbacks.Noop,
+        SetZoom = GFZoomPan.SetZoom or Fallbacks.Noop,
         StartPan = Deps.StartPan,
         StopPan = Deps.StopPan,
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
@@ -1322,7 +1145,7 @@ function NativeBuild.Stage(state)
         RegisterPreviewControl(box[info[1]], info[2], info[3], "button", "ephemeral")
     end
     if PreviewHelpers.EnsurePreviewControlsHint then
-        local controlsHint = PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = Deps.Tr })
+        local controlsHint = PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = Tr })
         RegisterPreviewControl(controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
     end
     Deps.ZoomWheel = box._zoomWheel or Deps.ZoomWheel
@@ -1406,84 +1229,60 @@ function GroupLayerChip.Enter(self, owner, available, on, tr)
     local action = solo and "Shift-click clears solo layer" or (on and "click to hide - Shift-click to solo" or "click to show")
     owner._hint:SetText(label .. " - " .. tr(action))
 end
+--- Preview layers: label, swatch colour, owning settings section, layer key and whether the layer starts on.
+--- The order follows the Unit preview wherever the two share concepts: guides, text, portrait, resources,
+--- content, status, then the optional bounds measurement at the far right. The configured frame outline
+--- is rendered independently, so Bounds is only the cyan measurement guide and starts off; sample-effect
+--- layers stay off until a chip click or their open settings section asks for them.
+--- A chip whose layer is off in settings turns into a shortcut to the setting that enables it, so the
+--- Dispel Symbol chip names its own accordion rather than the overlay's.
+local LAYER_DEFS = {
+    { "Guides", { 0.42, 0.72, 1.00 }, "layout", "guides", false },
+    { "Text", { 0.70, 0.90, 1.00 }, "text", "text", true },
+    { "Portrait", { 0.90, 0.42, 1.00 }, "portrait", "portrait", true },
+    { "Power", { 0.30, 0.62, 0.98 }, "power", "power", true },
+    { "Buffs", { 0.20, 0.90, 0.35 }, "buffs", "buff", true },
+    { "Tracked", { 0.42, 0.68, 1.00 }, "buffs", "trackedBuff", true },
+    { "Debuffs", { 0.90, 0.20, 0.22 }, "debuffs", "debuff", true },
+    { "External", { 0.30, 0.72, 1.00 }, "externals", "external", true },
+    { "Spells", { 0.86, 0.50, 1.00 }, "si", "si", true },
+    { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText", true },
+    { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status", true },
+    { "Dispel Overlay", { 0.25, 0.72, 1.00 }, "dispel", "dispelOverlay", false },
+    { "Dispel Symbol", { 0.34, 0.84, 1.00 }, "dispelSymbol", "dispelSymbol", false },
+    { "Bounds", { 0.25, 0.75, 0.88 }, "layout", "bounds", false },
+}
 function NativeBuild.LayerRail(state)
-    local Deps, box, chrome, layerW, RegisterPreviewControl = state.R, state.box, state.chrome, state.layerW, state.RegisterPreviewControl
-    local T, M = Deps.T, Deps.M
+    local box, chrome, layerW, RegisterPreviewControl = state.box, state.chrome, state.layerW, state.RegisterPreviewControl
     local layers = PixelLayoutRegion(CreateFrame("Frame", nil, box, T.Template()))
     local layerColors = T.colors or {}
-    if PreviewHelpers.ApplyPreviewChrome then
-        PreviewHelpers.ApplyPreviewChrome(layers, "sidebar", T, function(frame, bg, border)
-            ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
-        end)
-    else
-        ApplyGroupPreviewFlatBackdrop(layers, Deps.WHITE8X8, layerColors.coreShadow or layerColors.panel, layerColors.borderSoft)
-    end
+    ApplyGroupChrome(layers, "sidebar", layerColors.coreShadow or layerColors.panel, layerColors.borderSoft)
     -- Layer chips flow along the bottom edge instead of holding a fixed column,
     -- so the stage keeps the full card width. Same treatment as the Unit preview.
     layers:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
     layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     layers:SetHeight(30)
     box._layers = layers
-    local layersTitle = Deps.LayerFont(layers, "Preview Layers", chrome.layerHeader or (T.colors and T.colors.muted) or Deps.LayerHeaderColor)
+    local layersTitle = LayerFont(layers, "Preview Layers", chrome.layerHeader or (T.colors and T.colors.muted) or LAYER_HEADER_COLOR)
     layersTitle:SetPoint("LEFT", layers, "LEFT", 10, 0)
     box._msuf2LayerRailHeader = layersTitle
-    local layerDefaults = {
-        guides = false,
-        -- The configured frame outline is rendered independently. Bounds is
-        -- only the optional cyan measurement guide and therefore starts off.
-        bounds = false,
-        power = true,
-        portrait = true,
-        buff = true,
-        trackedBuff = true,
-        debuff = true,
-        external = true,
-        status = true,
-        si = true,
-        auraText = true,
-        text = true,
-        -- Sample-effect layers stay off until a chip click or their open settings section asks for them.
-        dispelOverlay = false,
-        dispelSymbol = false,
-    }
     if type(M.gfPreviewLayerVisible) ~= "table" then M.gfPreviewLayerVisible = {} end
-    for key, value in pairs(layerDefaults) do
-        if M.gfPreviewLayerVisible[key] == nil then M.gfPreviewLayerVisible[key] = value end
-    end
     local layerVisibility = M.gfPreviewLayerVisible
-    local layerDefs = {
-        { "Guides", { 0.42, 0.72, 1.00 }, "layout", "guides" },
-        -- Follow the Unit preview's semantic order wherever the two previews
-        -- share concepts: guides, text, portrait, resources, content, status,
-        -- then the optional bounds measurement at the far right.
-        { "Text", { 0.70, 0.90, 1.00 }, "text", "text" },
-        { "Portrait", { 0.90, 0.42, 1.00 }, "portrait", "portrait" },
-        { "Power", { 0.30, 0.62, 0.98 }, "power", "power" },
-        { "Buffs", { 0.20, 0.90, 0.35 }, "buffs", "buff" },
-        { "Tracked", { 0.42, 0.68, 1.00 }, "buffs", "trackedBuff" },
-        { "Debuffs", { 0.90, 0.20, 0.22 }, "debuffs", "debuff" },
-        { "External", { 0.30, 0.72, 1.00 }, "externals", "external" },
-        { "Spells", { 0.86, 0.50, 1.00 }, "si", "si" },
-        { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText" },
-        { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
-        { "Dispel Overlay", { 0.25, 0.72, 1.00 }, "dispel", "dispelOverlay" },
-        -- Own section, not the overlay's: a chip whose layer is off in settings
-        -- turns into a shortcut to the setting that enables it, so it has to name
-        -- the accordion that actually owns it.
-        { "Dispel Symbol", { 0.34, 0.84, 1.00 }, "dispelSymbol", "dispelSymbol" },
-        { "Bounds", { 0.25, 0.75, 0.88 }, "layout", "bounds" },
-    }
+    for i = 1, #LAYER_DEFS do
+        local def = LAYER_DEFS[i]
+        if layerVisibility[def[4]] == nil then layerVisibility[def[4]] = def[5] end
+    end
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
-    local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(Deps.Tr, layerColors, chrome, {
+    local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(Tr, layerColors, chrome, {
         IsAvailable = GroupLayerChip.Available,
         IsOn = GroupLayerChip.On,
         OnClick = GroupLayerChip.Click,
         OnEnter = GroupLayerChip.Enter,
-        OnLeave = function(_, owner) Deps.UpdateHint(owner, owner._selectedHandle) end,
+        OnLeave = function(_, owner) UpdateHint(owner) end,
     })
-    for i = 1, #layerDefs do
-        local def = layerDefs[i]
+    for i = 1, #LAYER_DEFS do
+        local def = LAYER_DEFS[i]
         local btn = PreviewHelpers.CreateLayerButton(layers, box, {
             key = def[4], label = def[1], color = def[2],
         }, i, layerW, groupLayerButtonOpts)
@@ -1518,7 +1317,7 @@ function NativeBuild.LayerRail(state)
         box._layerButtons[#box._layerButtons + 1] = btn
     end
     PreviewHelpers.SetupSampleEffectHint(box, state.stage, {
-        Tr = Deps.Tr, T = T, buttons = "_layerButtons", IsOn = GroupLayerChip.On, Hide = GroupLayerChip.HideSamples,
+        Tr = Tr, T = T, buttons = "_layerButtons", IsOn = GroupLayerChip.On, Hide = GroupLayerChip.HideSamples,
     })
     box.LayoutLayerRail = function(self, railWidth)
         return PreviewHelpers.LayoutLayerRail(self, self._layers, self._layerButtons, railWidth)
@@ -1530,9 +1329,8 @@ function NativeBuild.LayerRail(state)
 end
 function NativeBuild.Mock(state)
     local Deps, box, stage, bounds, RegisterPreviewControl = state.R, state.box, state.stage, state.bounds, state.RegisterPreviewControl
-    local T, M = Deps.T, Deps.M
     local mock = PixelLayoutRegion(CreateFrame("Frame", nil, stage, T.Template()), true)
-    PixelLayoutRegion(mock, "SetBackdrop", { bgFile = Deps.WHITE8X8 })
+    PixelLayoutRegion(mock, "SetBackdrop", { bgFile = WHITE8X8 })
     mock:SetBackdropColor(0, 0, 0, 0)
     mock:SetBackdropBorderColor(0, 0, 0, 0)
     mock:EnableMouse(true)
@@ -1549,17 +1347,17 @@ function NativeBuild.Mock(state)
     box._mock = mock
     box.mock, mock.bounds = mock, bounds
     function box:PanExact(dx, dy)
-        if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
+        if M.IsConfigCombatLocked and M.IsConfigCombatLocked() then return false, "combat-locked" end
         if self._msufGFNativePreviewDisposed then return false, "preview-disposed" end
         if not (self.IsShown and self:IsShown() and (not self.IsVisible or self:IsVisible())) then return false, "preview-not-visible" end
         if (self._stage and self._stage._msufGFPreviewPanning) or (self._dragFrame and self._dragFrame._handle) then return false, "preview-busy" end
-        if type(GFZoomPan.NudgePan) ~= "function" then return false, "pan-api-unavailable" end
+        if not GFZoomPan.NudgePan then return false, "pan-api-unavailable" end
         return GFZoomPan.NudgePan(self, dx, dy)
     end
     box._msuf2PanCommand = box._msuf2PanCommand or (PreviewHelpers.BuildPanCommand and PreviewHelpers.BuildPanCommand(
         box, GFZoomPan,
         function(dx, dy)
-            if not (M.GroupPreview and type(M.GroupPreview.Pan) == "function") then return false end
+            if not (M.GroupPreview and M.GroupPreview.Pan) then return false end
             return M.GroupPreview.Pan(dx, dy)
         end,
         { previewSurface = "group" }
@@ -1574,181 +1372,173 @@ function NativeBuild.Mock(state)
     -- a preview that is never shown, or a host without the engine, never builds a scene.
     state.mock = mock
 end
-function NativeBuild.Handles(state)
-    local Deps, box, stage, RegisterPreviewControl = state.R, state.box, state.stage, state.RegisterPreviewControl
-    local T, M = Deps.T, Deps.M
-    box._selectedHandle = nil
-    Deps.RegisterPreviewControl = RegisterPreviewControl
-    local handleBundle = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, Deps)) or {}
-    local buffHandle = handleBundle.buffHandle
-    local trackedBuffHandle = handleBundle.trackedBuffHandle
-    local debuffHandle = handleBundle.debuffHandle
-    local externalHandle = handleBundle.externalHandle
-    local powerBarHandle = handleBundle.powerBarHandle
-    local portraitHandle = handleBundle.portraitHandle
-    local dispelSymbolHandle = handleBundle.dispelSymbolHandle
-    local statusHandles = handleBundle.statusHandles or {}
-    local spellHandle = handleBundle.spellHandle
-    local SelectHandle = handleBundle.SelectHandle
-    local NudgeHandlePosition = handleBundle.NudgeHandlePosition
-    local AddIconPool = handleBundle.AddIconPool
-    local StopHandleDrag = handleBundle.StopHandleDrag
-    local function ReadGroupSelectionCoordinates(owner, handle)
-        -- Name X/Y are anchor-local offsets. Reading the rendered handle
-        -- center here makes X=0 mean "center the glyphs in the frame", which
-        -- silently rewrites LEFT/RIGHT/TOP anchors into an apparent CENTER.
-        -- Keep every other Group handle in the shared rendered-coordinate
-        -- space; only Name mirrors the stored offset contract used by its
-        -- anchor control and renderer.
-        if handle and handle._cfgText == true and handle._cfgTextKind == "name" then
-            local _, rawX, rawY = Deps.HandleOffsets(handle)
-            return Deps.Round(tonumber(rawX) or 0), Deps.Round(tonumber(rawY) or 0)
-        end
-        local selection = M.PreviewSelectionBar
-        local x, y
-        if selection and type(selection.ReadRenderedCoordinates) == "function" then
-            x, y = selection.ReadRenderedCoordinates(handle, owner and owner._mock,
-                owner and (owner._mockScale or (owner._mock and owner._mock._previewScale)) or 1)
-        end
-        if x == nil or y == nil then
-            local _, rawX, rawY = Deps.HandleOffsets(handle)
-            x, y = rawX, rawY
-        end
-        return Deps.Round(tonumber(x) or 0), Deps.Round(tonumber(y) or 0)
-    end
-    local function WriteGroupStoredOffsets(owner, handle, x, y)
-        local _, curX, curY = Deps.HandleOffsets(handle)
-        local dx = (tonumber(x) or 0) - (tonumber(curX) or 0)
-        local dy = (tonumber(y) or 0) - (tonumber(curY) or 0)
-        if dx == 0 and dy == 0 then return true end
-        if type(owner.NudgeHandleExact) ~= "function" then return false end
-        return owner:NudgeHandleExact(handle._key, dx, dy) == true
-    end
-    local function WriteGroupSelectionCoordinates(owner, handle, x, y)
-        if handle and handle._cfgText == true and handle._cfgTextKind == "name" then
-            return WriteGroupStoredOffsets(owner, handle, x, y)
-        end
-        local curX, curY = ReadGroupSelectionCoordinates(owner, handle)
-        local dx = (tonumber(x) or curX) - curX
-        local dy = (tonumber(y) or curY) - curY
-        if dx == 0 and dy == 0 then return true end
-        if type(owner.NudgeHandleExact) ~= "function" then return false end
-        return owner:NudgeHandleExact(handle._key, dx, dy) == true
-    end
-    local function ResetGroupSelectionOffsets(owner, handle)
-        local defaultX, defaultY = Deps.DefaultHandleOffsets(handle)
-        return WriteGroupStoredOffsets(owner, handle, defaultX, defaultY)
-    end
-    if M.PreviewSelectionBar then
-        M.PreviewSelectionBar.Create(box, {
-            Tr = Deps.Tr,
-            Theme = function() return T end,
-            ApplyBackdrop = function(frame, bg, border)
-                ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
-            end,
-            Round = Deps.Round,
-            HandleList = function(owner) return owner._handleList end,
-            HandleLabel = Deps.HandleText,
-            -- Locked handles are shown but not movable, so they are not a
-            -- selectable row or a Tab stop either.
-            IsPlaced = function(handle)
-                if handle._locked then return false end
-                return not (handle.IsShown and not handle:IsShown())
-            end,
-            ReadOffsets = ReadGroupSelectionCoordinates,
-            -- NudgeHandleExact remains the audited storage writer. Name uses
-            -- its anchor-local stored offsets; every other handle translates
-            -- exact entry from the shared rendered coordinate space.
-            WriteOffsets = WriteGroupSelectionCoordinates,
-            ResetOffsets = ResetGroupSelectionOffsets,
-            NudgeDelta = function(owner, dx, dy)
-                local handle = owner._selectedHandle
-                if not (handle and type(owner.NudgeHandleExact) == "function") then return false end
-                return owner:NudgeHandleExact(handle._key, dx, dy) == true
-            end,
-            -- Mirrors the fallbacks ReadHandlePositionExact already treats as
-            -- each handle type's default.
-            DefaultOffsets = function(_, handle)
-                return Deps.DefaultHandleOffsets(handle)
-            end,
-            OpenSettings = function(_, handle)
-                local open = M.GroupPreview and M.GroupPreview.OpenSection
-                if not (handle._sectionKey and type(open) == "function") then return false end
-                open(handle._sectionKey)
-                return true
-            end,
-            SelectHandle = function(_, handle) return SelectHandle(handle) end,
-            UpdateHint = function(owner, handle) return UpdateHint(owner, handle) end,
-        })
-        M.PreviewSelectionBar.CreatePicker(box, stage)
-        local registerControl = box._msuf2RegisterGroupPreviewControl or RegisterGroupPreviewControl
-        registerControl(box._msuf2ElementPicker, "element_picker", "Group Preview Element Picker", "button", "ephemeral")
-        local selectionBar = box._msuf2SelectionBar
-        if selectionBar then
-            local selectionAPI = M.PreviewSelectionBar
-            selectionAPI.BindExactOffsetSearchTarget(selectionBar.editX, box, "portrait")
-            selectionAPI.BindExactOffsetSearchTarget(selectionBar.editY, box, "portrait")
-            -- Exact offset rows belong to the Group Frames pages; a preview inside
-            -- another page (each Colors category) keeps its fields ephemeral.
-            local offsetClass = tostring(M.activeKey or ""):match("^gf_") and "setting" or "ephemeral"
-            registerControl(selectionBar.editX, "selection.portrait_offset_x", "Party Portrait X Offset",
-                "textinput", offsetClass, {
-                    searchRouteDisposition = "dynamic",
-                    searchRouteDispositionReason = "The shared Preview X field is pinned to the Party Portrait handle for this exact Search route.",
-                    searchSettingKeys = { "gf_party.portraitOffsetX" },
-                    command = selectionAPI.BuildExactOffsetCommand(box, "portrait", "x", {
-                        previewSurface = "group", previewScope = "party",
-                    }),
-                })
-            registerControl(selectionBar.editY, "selection.portrait_offset_y", "Party Portrait Y Offset",
-                "textinput", offsetClass, {
-                    searchRouteDisposition = "dynamic",
-                    searchRouteDispositionReason = "The shared Preview Y field is pinned to the Party Portrait handle for this exact Search route.",
-                    searchSettingKeys = { "gf_party.portraitOffsetY" },
-                    command = selectionAPI.BuildExactOffsetCommand(box, "portrait", "y", {
-                        previewSurface = "group", previewScope = "party",
-                    }),
-                })
-            registerControl(selectionBar.resetButton, "selection.reset", "Reset selected preview element offset", "button", "ephemeral")
-            registerControl(selectionBar.openButton, "selection.open_settings", "Open selected preview element settings", "button", "ephemeral")
-        end
-    end
-    state.buffHandle, state.trackedBuffHandle, state.debuffHandle = buffHandle, trackedBuffHandle, debuffHandle
-    state.externalHandle, state.powerBarHandle, state.portraitHandle = externalHandle, powerBarHandle, portraitHandle
-    state.dispelSymbolHandle, state.statusHandles, state.spellHandle = dispelSymbolHandle, statusHandles, spellHandle
-    state.SelectHandle, state.NudgeHandlePosition, state.AddIconPool = SelectHandle, NudgeHandlePosition, AddIconPool
-    state.StopHandleDrag = StopHandleDrag
+--- The selection bar reads and writes the same stored offsets the handles drag.
+local GroupSelection = {}
+function GroupSelection.Theme()
+    return T
 end
+function GroupSelection.HandleList(owner)
+    return owner._handleList
+end
+-- Locked handles are shown but not movable, so they are not a
+-- selectable row or a Tab stop either.
+function GroupSelection.IsPlaced(handle)
+    if handle._locked then return false end
+    return not (handle.IsShown and not handle:IsShown())
+end
+function GroupSelection.Read(owner, handle)
+    -- Name X/Y are anchor-local offsets. Reading the rendered handle
+    -- center here makes X=0 mean "center the glyphs in the frame", which
+    -- silently rewrites LEFT/RIGHT/TOP anchors into an apparent CENTER.
+    -- Keep every other Group handle in the shared rendered-coordinate
+    -- space; only Name mirrors the stored offset contract used by its
+    -- anchor control and renderer.
+    if handle and handle._cfgText == true and handle._cfgTextKind == "name" then
+        local _, rawX, rawY = HandleOffsets(handle)
+        return Round(tonumber(rawX) or 0), Round(tonumber(rawY) or 0)
+    end
+    local selection = M.PreviewSelectionBar
+    local x, y
+    if selection and selection.ReadRenderedCoordinates then
+        x, y = selection.ReadRenderedCoordinates(handle, owner and owner._mock,
+            owner and (owner._mockScale or (owner._mock and owner._mock._previewScale)) or 1)
+    end
+    if x == nil or y == nil then
+        local _, rawX, rawY = HandleOffsets(handle)
+        x, y = rawX, rawY
+    end
+    return Round(tonumber(x) or 0), Round(tonumber(y) or 0)
+end
+-- NudgeHandleExact remains the audited storage writer. Name uses its
+-- anchor-local stored offsets; every other handle translates exact
+-- entry from the shared rendered coordinate space.
+function GroupSelection.Nudge(owner, handle, dx, dy)
+    if dx == 0 and dy == 0 then return true end
+    if not owner.NudgeHandleExact then return false end
+    return owner:NudgeHandleExact(handle._key, dx, dy) == true
+end
+function GroupSelection.WriteStored(owner, handle, x, y)
+    local _, curX, curY = HandleOffsets(handle)
+    return GroupSelection.Nudge(owner, handle, (tonumber(x) or 0) - (tonumber(curX) or 0), (tonumber(y) or 0) - (tonumber(curY) or 0))
+end
+function GroupSelection.Write(owner, handle, x, y)
+    if handle and handle._cfgText == true and handle._cfgTextKind == "name" then
+        return GroupSelection.WriteStored(owner, handle, x, y)
+    end
+    local curX, curY = GroupSelection.Read(owner, handle)
+    return GroupSelection.Nudge(owner, handle, (tonumber(x) or curX) - curX, (tonumber(y) or curY) - curY)
+end
+function GroupSelection.Reset(owner, handle)
+    return GroupSelection.WriteStored(owner, handle, DefaultHandleOffsets(handle))
+end
+function GroupSelection.NudgeDelta(owner, dx, dy)
+    local handle = owner._selectedHandle
+    if not (handle and owner.NudgeHandleExact) then return false end
+    return owner:NudgeHandleExact(handle._key, dx, dy) == true
+end
+-- Mirrors the fallbacks ReadHandlePositionExact already treats as
+-- each handle type's default.
+function GroupSelection.DefaultOffsets(_, handle)
+    return DefaultHandleOffsets(handle)
+end
+function GroupSelection.OpenSettings(_, handle)
+    local open = M.GroupPreview and M.GroupPreview.OpenSection
+    if not (handle._sectionKey and open) then return false end
+    open(handle._sectionKey)
+    return true
+end
+-- Selection bar edit field, its axis, Search path, label, route note and setting key: the shared X/Y
+-- fields are pinned to the Party Portrait handle for Search.
+GroupSelection.OffsetRows = {
+    { "editX", "x", "selection.portrait_offset_x", "Party Portrait X Offset",
+        "The shared Preview X field is pinned to the Party Portrait handle for this exact Search route.",
+        "gf_party.portraitOffsetX" },
+    { "editY", "y", "selection.portrait_offset_y", "Party Portrait Y Offset",
+        "The shared Preview Y field is pinned to the Party Portrait handle for this exact Search route.",
+        "gf_party.portraitOffsetY" },
+}
+function GroupSelection.Create(box, stage, selectHandle)
+    local selectionAPI = M.PreviewSelectionBar
+    selectionAPI.Create(box, {
+        Tr = Tr,
+        Theme = GroupSelection.Theme,
+        ApplyBackdrop = ApplyGroupPreviewFlatBackdrop,
+        Round = Round,
+        HandleList = GroupSelection.HandleList,
+        HandleLabel = HandleText,
+        IsPlaced = GroupSelection.IsPlaced,
+        ReadOffsets = GroupSelection.Read,
+        WriteOffsets = GroupSelection.Write,
+        ResetOffsets = GroupSelection.Reset,
+        NudgeDelta = GroupSelection.NudgeDelta,
+        DefaultOffsets = GroupSelection.DefaultOffsets,
+        OpenSettings = GroupSelection.OpenSettings,
+        SelectHandle = function(_, handle) return selectHandle(handle) end,
+        UpdateHint = UpdateHint,
+    })
+    selectionAPI.CreatePicker(box, stage)
+    local registerControl = box._msuf2RegisterGroupPreviewControl or RegisterGroupPreviewControl
+    registerControl(box._msuf2ElementPicker, "element_picker", "Group Preview Element Picker", "button", "ephemeral")
+    local selectionBar = box._msuf2SelectionBar
+    if not selectionBar then return end
+    -- Exact offset rows belong to the Group Frames pages; a preview inside
+    -- another page (each Colors category) keeps its fields ephemeral.
+    local offsetClass = tostring(M.activeKey or ""):match("^gf_") and "setting" or "ephemeral"
+    local rows = GroupSelection.OffsetRows
+    for i = 1, #rows do
+        local row = rows[i]
+        local edit = selectionBar[row[1]]
+        selectionAPI.BindExactOffsetSearchTarget(edit, box, "portrait")
+        registerControl(edit, row[3], row[4], "textinput", offsetClass, {
+            searchRouteDisposition = "dynamic",
+            searchRouteDispositionReason = row[5],
+            searchSettingKeys = { row[6] },
+            command = selectionAPI.BuildExactOffsetCommand(box, "portrait", row[2], {
+                previewSurface = "group", previewScope = "party",
+            }),
+        })
+    end
+    registerControl(selectionBar.resetButton, "selection.reset", "Reset selected preview element offset", "button", "ephemeral")
+    registerControl(selectionBar.openButton, "selection.open_settings", "Open selected preview element settings", "button", "ephemeral")
+end
+function NativeBuild.Handles(state)
+    local Deps, box = state.R, state.box
+    box._selectedHandle = nil
+    Deps.RegisterPreviewControl = state.RegisterPreviewControl
+    local handles = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, Deps)) or {}
+    state.handles = handles
+    if M.PreviewSelectionBar then GroupSelection.Create(box, state.stage, handles.SelectHandle) end
+end
+-- What Handles.Install returns that the renderer consumes (statusHandles is defaulted separately).
+local RENDER_HANDLE_FIELDS = {
+    "buffHandle", "trackedBuffHandle", "debuffHandle", "externalHandle", "powerBarHandle", "portraitHandle",
+    "dispelSymbolHandle", "spellHandle", "SelectHandle", "NudgeHandlePosition", "AddIconPool",
+}
 function NativeBuild.Render(state)
-    local ctx, Deps, box, width, mock = state.ctx, state.R, state.box, state.width, state.mock
-    local H, M = Deps.Helpers, Deps.M
-    local buffHandle, trackedBuffHandle, debuffHandle = state.buffHandle, state.trackedBuffHandle, state.debuffHandle
-    local externalHandle, powerBarHandle, portraitHandle = state.externalHandle, state.powerBarHandle, state.portraitHandle
-    local dispelSymbolHandle, statusHandles, spellHandle = state.dispelSymbolHandle, state.statusHandles, state.spellHandle
-    local SelectHandle, NudgeHandlePosition, AddIconPool = state.SelectHandle, state.NudgeHandlePosition, state.AddIconPool
+    local box, handles = state.box, state.handles
     box.OnPreviewCanvasMoved = function(_, button)
         if PreviewHelpers.NotePreviewCanvasMoved then PreviewHelpers.NotePreviewCanvasMoved(button) end
     end
     if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if M.GroupPreviewRender and M.GroupPreviewRender.Install then
-        local renderDeps = ShallowCopy(Deps) or {}
-        renderDeps.width, renderDeps.mock = width, mock
-        renderDeps.buffHandle, renderDeps.debuffHandle = buffHandle, debuffHandle
-        renderDeps.trackedBuffHandle = trackedBuffHandle
-        renderDeps.externalHandle = externalHandle
-        renderDeps.powerBarHandle = powerBarHandle
-        renderDeps.portraitHandle = portraitHandle
-        renderDeps.dispelSymbolHandle = dispelSymbolHandle
-        renderDeps.statusHandles, renderDeps.spellHandle = statusHandles, spellHandle
-        renderDeps.statusSpecs = H.StatusSpecs and H.StatusSpecs()
-        renderDeps.SelectHandle = SelectHandle
-        renderDeps.NudgeHandlePosition = NudgeHandlePosition
-        renderDeps.AddIconPool = AddIconPool
-        M.GroupPreviewRender.Install(box, ctx, renderDeps)
+        local renderDeps = ShallowCopy(state.R) or {}
+        renderDeps.width, renderDeps.mock = state.width, state.mock
+        for i = 1, #RENDER_HANDLE_FIELDS do
+            local key = RENDER_HANDLE_FIELDS[i]
+            renderDeps[key] = handles[key]
+        end
+        renderDeps.statusHandles = handles.statusHandles or {}
+        renderDeps.statusSpecs = StatusSpecs()
+        M.GroupPreviewRender.Install(box, state.ctx, renderDeps)
     end
 end
+-- The page that owns this preview has hidden it: callers release the runtime preview instead of painting.
+local function PreviewHostHidden(box)
+    local hostShown = box._msufGFPreviewHostShown
+    return hostShown and not hostShown()
+end
 function NativeBuild.Lifecycle(state)
-    local box, StopHandleDrag = state.box, state.StopHandleDrag
+    local box, StopHandleDrag = state.box, state.handles.StopHandleDrag
     function box:CancelPendingRefresh()
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
         self._msufGFRefreshQueued = nil
@@ -1769,16 +1559,11 @@ function NativeBuild.Lifecycle(state)
             return
         end
         self._msufGFRefreshAfterCombat = nil
-        local hostShown = self._msufGFPreviewHostShown
-        if type(hostShown) == "function" and not hostShown() then
+        if PreviewHostHidden(self) then
             self:ReleaseRuntimePreview()
             return
         end
-        if self._msufGFTextDragActive then
-            self._msufGFRefreshReason = reason or self._msufGFRefreshReason
-            return
-        end
-        if self._msufGFRefreshQueued then
+        if self._msufGFTextDragActive or self._msufGFRefreshQueued then
             self._msufGFRefreshReason = reason or self._msufGFRefreshReason
             return
         end
@@ -1796,8 +1581,7 @@ function NativeBuild.Lifecycle(state)
             end
             if self._msufGFNativePreviewDisposed then return end
             if self.IsShown and not self:IsShown() then return end
-            local currentHostShown = self._msufGFPreviewHostShown
-            if type(currentHostShown) == "function" and not currentHostShown() then
+            if PreviewHostHidden(self) then
                 self:ReleaseRuntimePreview()
                 return
             end
@@ -1806,13 +1590,10 @@ function NativeBuild.Lifecycle(state)
         end
         -- Live-mirror events (player regen ticks out of combat) coalesce on a
         -- wider window so value streams cost at most five renders per second.
-        ScheduleNativePreviewRefresh(self, RunRefresh,
-            reason == "GROUP_PREVIEW_LIVE_STATE" and 0.2 or nil)
+        ScheduleNativePreviewRefresh(RunRefresh, reason == "GROUP_PREVIEW_LIVE_STATE" and 0.2 or nil)
     end
     function box:ReleaseRuntimePreview()
-        self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
-        self._msufGFRefreshQueued = nil
-        self._msufGFRefreshReason = nil
+        self:CancelPendingRefresh()
         if M.GroupPreviewRender and M.GroupPreviewRender.HideAdditionalPreview then
             M.GroupPreviewRender.HideAdditionalPreview(self)
         end
@@ -1910,7 +1691,7 @@ function NativeBuild.LiveState(state)
     box:HookScript("OnShow", box.ArmLiveStateDriver)
     box:HookScript("OnHide", box.ReleaseLiveStateDriver)
 end
-function NativeBuild.Create(parent, ctx, onOpen)
+function NativeBuild.Create(parent, ctx)
     local state = NativeBuild.Frame(parent, ctx)
     NativeBuild.Stage(state)
     NativeBuild.LayerRail(state)

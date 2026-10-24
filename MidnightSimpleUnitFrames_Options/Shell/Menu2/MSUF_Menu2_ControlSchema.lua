@@ -263,14 +263,19 @@ local function CreateCompositeRow(ctx, parent, row)
     end
     error("unsupported replacing row")
 end
+-- The same native scope selector may be built by a page-owned composite.
+function Schema.ScopeOwner(widget, scope, domain)
+    Schema.Owned(widget, scope, domain or "menuState")
+    local spec = widget._msuf2ControlSchema
+    spec.get = function() return widget:GetValue() end
+    spec.set = function(value) return widget:SetValue(value) end
+    spec.values = widget.values
+    return widget
+end
 local function DeclareRow(ctx, widget, row, kind)
     local scope = row.scope or (ctx and ctx.key) or "shared"
     if row[1] == "scopebar" then
-        Schema.Owned(widget, scope, row.domain or "menuState")
-        local spec = widget._msuf2ControlSchema
-        spec.get = function() return widget:GetValue() end
-        spec.set = function(value) return widget:SetValue(value) end
-        spec.values = widget.values
+        Schema.ScopeOwner(widget, scope, row.domain)
         return
     end
     local meta = row.meta
@@ -293,7 +298,7 @@ function Schema.UnitBinding(ctx, widget, row, kind)
     local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
         meta = meta, scope = row.scope or ctx.key, applyDomain = row.domain or "unit",
         settingPath = meta.settingKey, get = row.get, set = row.set, unit = row.unit,
-        reason = row.reason, commitOnBlur = row.commitOnBlur,
+        reason = row.reason, commitOnBlur = row.commitOnBlur, textAdapter = row.textAdapter,
         defaultSource = function() return row[3] end, roundStep = row.roundStep }
     if kind == "slider" then spec.range = { row[4][2], row[4][3], row[4][4] } end
     return Schema.Bind(ctx, widget, spec)

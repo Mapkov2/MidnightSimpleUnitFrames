@@ -3,7 +3,6 @@
 -- established scope fanout; blacklist reads never become live render work.
 -- Live menu inspection keeps the existing secret-value and access guards.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}
@@ -22,7 +21,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     local tostring = tostring
     local pairs = pairs
     local table_sort = table.sort
-    local C_Spell = _G.C_Spell
+    local C_Spell = C_Spell
 
     local DEFAULT_SHARED = Schema.DEFAULT_SHARED
     local ClampNumber = Common.ClampNumber
@@ -186,21 +185,21 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     --- PvP matches, and instanced combat while aura secrecy is active; plain
     --- open-world combat keeps the query callable with per-field secrets.
     local function LiveAuraAccessRestricted()
-        local IsEncounterInProgress = _G.IsEncounterInProgress
+        local IsEncounterInProgress = IsEncounterInProgress
         if type(IsEncounterInProgress) == "function" and IsEncounterInProgress() then return true end
-        local ChallengeMode = _G.C_ChallengeMode
+        local ChallengeMode = C_ChallengeMode
         if type(ChallengeMode) == "table" and type(ChallengeMode.IsChallengeModeActive) == "function"
             and ChallengeMode.IsChallengeModeActive() then return true end
-        local PartyInfo = _G.C_PartyInfo
+        local PartyInfo = C_PartyInfo
         if type(PartyInfo) == "table" and type(PartyInfo.ChallengeModeRestrictionsActive) == "function"
             and PartyInfo.ChallengeModeRestrictionsActive() then return true end
-        local PvP = _G.C_PvP
+        local PvP = C_PvP
         if type(PvP) == "table" and type(PvP.IsMatchActive) == "function"
             and PvP.IsMatchActive() then return true end
-        local SecretsAPI = _G.C_Secrets
+        local SecretsAPI = C_Secrets
         if type(SecretsAPI) == "table" and type(SecretsAPI.ShouldAurasBeSecret) == "function"
             and SecretsAPI.ShouldAurasBeSecret() == true then
-            local IsInInstance = _G.IsInInstance
+            local IsInInstance = IsInInstance
             if type(IsInInstance) == "function" then
                 local inInstance = IsInInstance()
                 if inInstance == true or inInstance == 1 then return true end
@@ -215,8 +214,8 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     --- restricted context above forbids querying at all); the callback may
     --- return false to stop the walk early.
     local function ForEachLiveUnitAura(scope, kind, callback)
-        local CUA = _G.C_UnitAuras
-        local UnitExists = _G.UnitExists
+        local CUA = C_UnitAuras
+        local UnitExists = UnitExists
         if type(UnitExists) ~= "function" or type(CUA) ~= "table" then return false, 0 end
         local GetByIndex = type(CUA.GetAuraDataByIndex) == "function" and CUA.GetAuraDataByIndex or nil
         if not GetByIndex then return false, 0 end

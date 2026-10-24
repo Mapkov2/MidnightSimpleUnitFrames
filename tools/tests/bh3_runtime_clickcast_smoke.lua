@@ -16,8 +16,6 @@ local function NewFrame()
   return f
 end
 local MSUF = {}
-MSUF.Require = function(name) return function(x) return x end end
-MSUF.ExportPublic = function(n, v) _G[n] = v end
 MSUF.UF = {
   AttachFrame = function() end,
   ApplySpec = function() return true end,
@@ -30,8 +28,15 @@ MSUF.GF = {
       groupLayout = { clickCastEnabled = false, hideInClientScene = true, hideInHousing = false } }
   end,
 }
-local chunk = assert(loadfile(ROOT .. "UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua"))
-chunk("MidnightSimpleUnitFrames", MSUF)
+-- The real Kernel API (Bootstrap's exports and Public registry, Require/Optional). The pixel regions
+-- are the core's (Kernel/MSUF_Util.lua): these stub frames lay out no pixels, so the shared stand-in
+-- serves; providers the adapter requires that this probe does not load are deferred.
+local REPO = assert(arg[1])
+local RequireFixture = assert(loadfile(REPO .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(REPO, MSUF)
+MSUF.ExportPublic("MSUF_PixelLayoutRegion",
+  assert(loadfile(REPO .. "/tools/tests/classpower_collaborators.lua"))().STANDINS.MSUF_PixelLayoutRegion)
+RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua", MSUF)
 local GF = MSUF.GF
 local button = NewFrame()
 button.attrs.unit = "party1"

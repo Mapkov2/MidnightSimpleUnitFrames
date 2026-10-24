@@ -2,7 +2,6 @@
 -- Custom containers, curated spell sets, portrait lanes and reminder descriptors. This module owns their cold configuration and capability watchers.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.CustomConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local Runtime = A3.Runtime
@@ -496,7 +495,7 @@ end
 function CustomConfig.ReminderItemIcon(itemID)
     itemID = tonumber(itemID)
     if not itemID then return nil end
-    local CI = _G.C_Item
+    local CI = C_Item
     if type(CI) == "table" and type(CI.GetItemIconByID) == "function" then
         return CI.GetItemIconByID(itemID)
     end
@@ -506,7 +505,7 @@ end
 function CustomConfig.ReminderSpellIcon(spellID)
     spellID = tonumber(spellID)
     if not spellID then return nil end
-    local CS = _G.C_Spell
+    local CS = C_Spell
     if type(CS) ~= "table" then return nil end
     if type(CS.GetSpellTexture) == "function" then
         local icon = CS.GetSpellTexture(spellID)
@@ -526,10 +525,10 @@ end
 function CustomConfig.ReminderSpellIsSelfCastable(spellID)
     spellID = tonumber(spellID)
     if not spellID then return false end
-    local book = _G.C_SpellBook
+    local book = C_SpellBook
     if type(book) == "table" and type(book.IsSpellKnown) == "function"
         and book.IsSpellKnown(spellID) == true then return true end
-    local isPlayerSpell = _G.IsPlayerSpell
+    local isPlayerSpell = IsPlayerSpell
     if type(isPlayerSpell) == "function" and isPlayerSpell(spellID) == true then return true end
     return false
 end
@@ -580,10 +579,10 @@ end
 A3.REMINDER_ENCHANT_SLOTS = A3.REMINDER_ENCHANT_SLOTS or {
     { key = "mainHand", token = "MAINHAND", label = "Main Hand",
       enabledKey = "reminderEnchantMainHand",
-      inventorySlot = _G.INVSLOT_MAINHAND or 16 },
+      inventorySlot = INVSLOT_MAINHAND or 16 },
     { key = "offHand", token = "OFFHAND", label = "Off Hand",
       enabledKey = "reminderEnchantOffHand",
-      inventorySlot = _G.INVSLOT_OFFHAND or 17 },
+      inventorySlot = INVSLOT_OFFHAND or 17 },
 }
 
 local function AppendReminderEnchantItems(lane, entry, index, items, GridOffset, placedCount,

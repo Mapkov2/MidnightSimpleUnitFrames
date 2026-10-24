@@ -130,6 +130,166 @@ function Loader.Group(path)
     return nil
 end
 
+-- The shipped Kernel namespace API (Bootstrap's ExportPublic with the global
+-- keep policy, Public/PublicGlobals, and Require/Optional), run from the owners
+-- into a harness namespace that has none (tools/tests/require_fixture.lua).
+-- With a file's source, providers that file requires and the harness does not
+-- load get forwarders that raise when used without a provider (DeferRequired).
+local RequireFixture
+local InstallKernel
+
+-- The Kernel owners every core TOC loads ahead of its consumers (in this order).
+-- A consumer a harness loads without one of them gets that real owner, found by
+-- the names it exports: nothing is mirrored here. A provider the harness already
+-- supplied is kept. An owner that builds frames when it loads (`lazy`) loads on
+-- the first use of one of its names instead of with its consumer, so a world
+-- that never reaches it creates no frame for it.
+local KERNEL_OWNERS = {
+    { file = "Shell/EditMode/MSUF_EditMode_Geometry.lua" },
+    { file = "Kernel/MSUF_Util.lua", needs = "Shell/EditMode/MSUF_EditMode_Geometry.lua" },
+    { file = "Kernel/MSUF_EventBus.lua", lazy = true },
+    -- The font stack's early owner: it needs event-capable frames at load.
+    { file = "Kernel/MSUF_Libs.lua", fonts = true, lazy = true },
+    { file = "Runtime/MSUF_BorderStyles.lua" },
+}
+local ownerByFile, ownerByExport = {}, nil
+local loadedOwners = setmetatable({}, { __mode = "k" })
+
+local function OwnerFor(name)
+    if not ownerByExport then
+        ownerByExport = {}
+        for _, owner in ipairs(KERNEL_OWNERS) do
+            ownerByFile[owner.file] = owner
+            local text = Read(SourcePath("MidnightSimpleUnitFrames/" .. owner.file))
+            for exported in text:gmatch('ExportPublic%(%s*"([%w_]+)"') do
+                ownerByExport[exported] = ownerByExport[exported] or owner
+            end
+        end
+    end
+    return ownerByExport[name]
+end
+
+-- A live value a harness published for a name (a global, or an owned registry
+-- entry); the empty forwarders DeferRequired parks do not count.
+local function IsForwarder(value)
+    if type(value) ~= "table" or next(value) ~= nil then return false end
+    local meta = getmetatable(value)
+    return type(meta) == "table" and meta.__call ~= nil and meta.__index ~= nil and meta.__newindex ~= nil
+end
+
+local function LoadOwner(namespace, env, owner)
+    local done = loadedOwners[namespace]
+    if not done then done = {}; loadedOwners[namespace] = done end
+    if done[owner.file] then return end
+    done[owner.file] = true
+    if owner.needs then LoadOwner(namespace, env, ownerByFile[owner.needs]) end
+    local relative = "MidnightSimpleUnitFrames/" .. owner.file
+    local text = Read(SourcePath(relative))
+    local aliasMSUF, aliasNS = rawget(env, "MSUF"), rawget(env, "MSUF_NS")
+    InstallKernel(namespace, env, text, relative)
+    -- Providers the harness supplied before this owner loaded stay in place.
+    local registry, kept = namespace.PublicGlobals, {}
+    for exported in text:gmatch('ExportPublic%(%s*"([%w_]+)"') do
+        local global, owned = rawget(env, exported), rawget(registry, exported)
+        if global ~= nil or (owned ~= nil and not IsForwarder(owned)) then
+            kept[#kept + 1] = { exported, global, not IsForwarder(owned) and owned or nil }
+        end
+    end
+    if owner.fonts then
+        assert(originalLoadfile("tools/tests/runtime_media_fixture.lua"))().LoadFonts(".", namespace, originalLoadfile, env)
+    else
+        local chunk = assert(originalLoadfile(SourcePath(relative)))
+        if env ~= _G then setfenv(chunk, env) end
+        chunk("MidnightSimpleUnitFrames", namespace)
+    end
+    for i = 1, #kept do
+        local name, global, owned = kept[i][1], kept[i][2], kept[i][3]
+        if global ~= nil then rawset(env, name, global) end
+        if owned ~= nil then
+            rawset(registry, name, owned)
+            if type(namespace.Public) == "table" then namespace.Public[name:gsub("^MSUF_", "")] = owned end
+        end
+    end
+    rawset(env, "MSUF", aliasMSUF)
+    rawset(env, "MSUF_NS", aliasNS)
+end
+
+-- One named owner from the list above, with the owners it needs.
+local function LoadKernelOwner(namespace, file, env)
+    OwnerFor("")
+    LoadOwner(namespace, env or _G, assert(ownerByFile[file], "auras3_test_loader: unknown Kernel owner " .. file))
+end
+
+-- A name resolves to a live provider; the empty forwarder an earlier file's
+-- DeferRequired parked in the registry (require_fixture.lua) is not one.
+local function IsProvided(namespace, name)
+    local value = namespace.Optional(name)
+    if value == nil then return false end
+    if type(value) == "table" and next(value) == nil then
+        local meta = getmetatable(value)
+        if type(meta) == "table" and meta.__call and meta.__index and meta.__newindex then return false end
+    end
+    return true
+end
+
+local function EnsureOwners(namespace, env, source)
+    local seen = {}
+    for name in source:gmatch("Require%(%s*\"([%w_]+)\"") do
+        if not seen[name] and not IsProvided(namespace, name) then
+            seen[name] = true
+            local owner = OwnerFor(name)
+            if owner and not owner.lazy then LoadOwner(namespace, env, owner) end
+        end
+    end
+end
+
+-- The forwarder for a name a lazy owner provides: the first use loads the
+-- owner, which replaces the registry entry, and every use reaches the live value.
+local function ForwardLazily(namespace, env, name, owner)
+    local registry = namespace.PublicGlobals
+    local proxy
+    local function Live()
+        LoadOwner(namespace, env, owner)
+        local live = rawget(env, name)
+        if live == nil or live == proxy then live = rawget(registry, name) end
+        if live == nil or live == proxy then
+            error("fixture: " .. name .. " was used, but its owner " .. owner.file .. " does not export it", 3)
+        end
+        return live
+    end
+    proxy = setmetatable({}, {
+        __index = function(_, key) return Live()[key] end,
+        __newindex = function(_, key, value) Live()[key] = value end,
+        __call = function(_, ...) return Live()(...) end,
+    })
+    rawset(registry, name, proxy)
+end
+
+function InstallKernel(namespace, env, source, path)
+    if type(namespace) ~= "table" then return end
+    env = env or _G
+    RequireFixture = RequireFixture or assert(originalLoadfile("tools/tests/require_fixture.lua"))()
+    if not (type(namespace.ExportPublic) == "function" and type(namespace.PublicGlobals) == "table"
+        and type(namespace.Require) == "function" and type(namespace.Optional) == "function") then
+        RequireFixture.InstallKernel(".", namespace, env, originalLoadfile, true)
+    end
+    if source then
+        EnsureOwners(namespace, env, source)
+        for _, name in ipairs(RequireFixture.DeferRequired(namespace, source, path, env)) do
+            local owner = OwnerFor(name)
+            if owner and owner.lazy then ForwardLazily(namespace, env, name, owner) end
+        end
+    end
+end
+
+local function UsesKernel(source)
+    for _, key in ipairs({ "MSUF.Require", "MSUF.Optional", "MSUF.ExportPublic", "MSUF.Public", "MSUF.ExportCompat",
+        "MSUF.ExportGlobal", "ns.Require", "ns.Optional", "ns.ExportPublic", "ns.Public" }) do
+        if source:find(key, 1, true) then return true end
+    end
+    return false
+end
+
 local function SharedSourceFunction(path, name, preamble)
     local source = Read(SourcePath(path))
     local body = Slice.Function(source, "local function " .. name, path)
@@ -144,21 +304,12 @@ local function PrepareDirectContracts(source, namespace)
     _G.wipe = _G.wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
     _G.canaccesstable = _G.canaccesstable or function() return true end
     local function Uses(text) return source:find(text, 1, true) ~= nil end
-    -- A menu file that requires the core's PixelLayoutRegion gets the stand-in
-    -- the other menu files fall back to (the harness lays out no pixels).
     -- Both aura backends lay their dispel overlay strip out through the shared
     -- border runtime (Runtime/MSUF_BorderStyles.lua, loaded early by every TOC).
     if Uses("MSUF.BorderStyles.LayoutEdgeStrip") or Uses("MSUF.BorderStyles and MSUF.BorderStyles.LayoutEdgeStrip") then
         local styles = namespace.BorderStyles
         if not (type(styles) == "table" and type(styles.LayoutEdgeStrip) == "function") then
-            local owner = "MidnightSimpleUnitFrames/Runtime/MSUF_BorderStyles.lua"
-            assert(compileSource(Read(owner), "@" .. owner))("MidnightSimpleUnitFrames", namespace)
-        end
-    end
-    if Uses('MSUF.Require("MSUF_PixelLayoutRegion"') and type(_G.MSUF_PixelLayoutRegion) ~= "function" then
-        _G.MSUF_PixelLayoutRegion = function(region, policy, ...)
-            if type(policy) == "string" then return region[policy](region, ...) end
-            return region
+            LoadKernelOwner(namespace, "Runtime/MSUF_BorderStyles.lua")
         end
     end
     local function Bind(owner, name, preamble, ...)
@@ -171,7 +322,10 @@ local function PrepareDirectContracts(source, namespace)
         local body = Slice.Function(source, "function " .. prefix .. "." .. name, owner)
         assert(compileSource("local " .. prefix .. " = ...\n" .. body))(target)
     end
-    if Uses("_G.MSUF_EM2.ExternalProviders.Create") then
+    -- An external Edit Mode provider takes the controller's registrar and setter from
+    -- MSUF.Require("MSUF_EM2").ExternalProviders; the owner's own bodies stand in for it.
+    if Uses("_G.MSUF_EM2.ExternalProviders.Create")
+        or (Uses('Require("MSUF_EM2"') and Uses("ExternalProviders.CreateElementRegistrar")) then
         _G.MSUF_EM2 = _G.MSUF_EM2 or {}
         _G.MSUF_EM2.ExternalProviders = _G.MSUF_EM2.ExternalProviders or {}
         local target = _G.MSUF_EM2.ExternalProviders
@@ -196,14 +350,8 @@ local function PrepareDirectContracts(source, namespace)
         assert(compileSource("local MSUF = ...\nlocal L = MSUF.L or _G.MSUF_L or {}\n" .. body))(namespace)
     end
     if (source:match("= MSUF%.ExportPublic[ \t]*[\r\n]") or source:match("= ns%.ExportPublic[ \t]*[\r\n]")) and not namespace.ExportPublic then
-        local text = Read(SourcePath("MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua"))
-        local body = Slice.Function(text, "function MSUF.MSUF_ExportPublic", "MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua")
-        namespace.Public, namespace.PublicGlobals = {}, {}
-        namespace.Compat = namespace.Compat or {}
-        namespace.Compat.LegacyGlobals = namespace.Compat.LegacyGlobals or {}
-        local key = Slice.Function(text, "local function PublicKey", "MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua")
-        assert(compileSource("local MSUF = ...\n" .. key .. "\n" .. body))(namespace)
-        namespace.ExportPublic = namespace.MSUF_ExportPublic
+        -- The whole Bootstrap owner: ExportPublic reads its global keep policy.
+        InstallKernel(namespace)
     end
     if Uses("= MSUF.UF.GetFrame") then
         namespace.UF = namespace.UF or {}
@@ -330,8 +478,8 @@ local function PrepareDirectContracts(source, namespace)
     end
     -- The explicit optional-dependency helper (Kernel/MSUF_Require.lua), loaded
     -- from its owner into a harness namespace that has no kernel.
-    if Uses("MSUF.Optional(") and not namespace.Optional and namespace.ExportPublic then
-        assert(originalLoadfile("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
+    if Uses("MSUF.Optional(") and not namespace.Optional then
+        InstallKernel(namespace)
     end
     if Uses("MSUF_NormalizeFontKey") or Uses("MSUF.MSUF_GetGlobalFontSettings()")
         or Uses("A3.NormalizeProfileDB") or Uses("MSUF.DefaultsStageFactories") then
@@ -481,7 +629,7 @@ end
 
 local function NeedsDirectContracts(source)
     if (source:match("= MSUF%.ExportPublic[ \t]*[\r\n]") or source:match("= ns%.ExportPublic[ \t]*[\r\n]")) then return true end
-    for _, key in ipairs({ "CreateAnimationStarter", "_G.MSUF_EM2.ExternalProviders.Create", "MSUF_IsGroupUnitToken", "Text.ApplyNameTextColor", "Text.ApplyInlineTextColor", "MSUF.Secrets", "Layers.BorderOffset", "= Apply.ColorTexture", "_G.issecretvalue", "_G.wipe", "M.Lines", "M.KeySetFromWords", "M.FindPageEntry", "M.PageKeyForWidget", "MSUF_NormalizeFontKey", "A3.NormalizeProfileDB", "M.TranslateText", "M.Tr", "= MSUF.Translate", "= MSUF.UF.GetFrame", "MSUF.Secrets.PlainBool",
+    for _, key in ipairs({ "CreateAnimationStarter", "_G.MSUF_EM2.ExternalProviders.Create", "ExternalProviders.CreateElementRegistrar", "MSUF_IsGroupUnitToken", "Text.ApplyNameTextColor", "Text.ApplyInlineTextColor", "MSUF.Secrets", "Layers.BorderOffset", "= Apply.ColorTexture", "_G.issecretvalue", "_G.wipe", "M.Lines", "M.KeySetFromWords", "M.FindPageEntry", "M.PageKeyForWidget", "MSUF_NormalizeFontKey", "A3.NormalizeProfileDB", "M.TranslateText", "M.Tr", "= MSUF.Translate", "= MSUF.UF.GetFrame", "MSUF.Secrets.PlainBool",
         "MSUF.MSUF_Auras3.GetDurationBarColor", "Layers.BaseFrameLevel", "= Apply.Text", "= Apply.Shown", "= Apply.Texture", "MSUF.UF.Clamp01", "MSUF.UFBarTextCommon.HealthModeNeedsIdentity", "UF.IsBossUnit", "GF.GetLiveGroupKind", "GF.GetAnchorPoint", "_G.MSUF_UF_ScheduleApplyCommit", "_G.MSUF_GetSharedMedia", "_G.MSUF_EnsureCastbarGeneralDB", "M.AuraCatalogToken", "M.GroupAuraSettingKeys", "M.TrimText", "PreviewHelpers.ReadPreviewBarsBool", "M.Widgets.SetTextLayout", "M.Widgets.ResolveContextColorOption", "M.NormalizeControlPath", "M.PortableControlToken", "M.AccessibleNumber",
         "M.ApplyService.CallGlobal", "= M.Format", "W.ThemedControlCard", "W.ToggleBadge", "W.SetTileVisual", "PreviewHelpers.ExactPreviewDelta",
         "MSUF.Optional(", "MSUF.MSUF_GetGlobalFontSettings()", "A3.SyncFrameStrata(", "A3.ReadParentFrameStrata(",
@@ -529,18 +677,23 @@ local function DependencyChunk(path, ...)
     if path:match("/MSUFUnitFrames/init%.lua$") then return originalLoadfile(path, ...) end
     local source = Read(path)
     local product = path:find("MidnightSimpleUnitFrames/", 1, true) or path:find("MidnightSimpleUnitFrames_Options/", 1, true)
+    -- Every shipped file runs after the Kernel in its TOC; a harness namespace
+    -- without one gets the real Kernel API before the file's main chunk.
+    local kernel = product and UsesKernel(source) and not (path:match("/Kernel/MSUF_Bootstrap%.lua$")
+        or path:match("/Kernel/MSUF_Require%.lua$"))
     if product and (source:find("MSUF.Geometry", 1, true) or source:find("MSUF.Castbars.UNIT_CASTBAR", 1, true)
         or source:find("MSUF.EditModeKinds", 1, true)) then
         local chunk, message = originalLoadfile(path, ...)
         if not chunk then return nil, message end
         return function(addon, namespace)
+            if kernel then InstallKernel(namespace, getfenv and getfenv(1) or _G, source, path) end
             assert(originalLoadfile("tools/tests/editmode_prerequisites.lua"))().Install(".", namespace, nil, originalLoadfile)
             PrepareSharedDependencies(path, namespace)
             return chunk(addon, namespace)
         end
     end
     local direct = NeedsDirectContracts(source)
-    if not direct and not (path:match("MSUF_UF_Shared%.lua$") or path:match("MSUF_UF_Group_Config%.lua$")
+    if not direct and not kernel and not (path:match("MSUF_UF_Shared%.lua$") or path:match("MSUF_UF_Group_Config%.lua$")
         or path:match("MSUF_EditMode_Core%.lua$") or path:match("MSUF_AnchorPicker%.lua$")
         or path:match("MSUF_Menu2_State%.lua$") or path:match("MSUF_EditMode_HUD_Dock%.lua$")
         or path:match("MSUF_Menu2_UnitPreview_Render%.lua$") or path:match("MSUF_Menu2_GroupPreview_Render%.lua$")
@@ -551,6 +704,7 @@ local function DependencyChunk(path, ...)
     if not chunk then return nil, message end
     return function(addon, namespace, ...)
         local dependencyNamespace = namespace or _G.MSUF_NS or _G.MSUF
+        if kernel then InstallKernel(namespace, getfenv and getfenv(1) or _G, source, path) end
         PrepareSharedDependencies(path, dependencyNamespace)
         if direct then PrepareDirectContracts(source, dependencyNamespace) end
         if setfenv and getfenv then setfenv(chunk, getfenv(1)) end
@@ -795,7 +949,8 @@ function Loader.Install()
 
         { "Auras3/MSUF_Auras3_Core.lua", "NormalizeDebuffTypeBorderMode", "MSUF_NormalizeAuraDebuffTypeBorderMode" },
         { "UnitFrames/Engine/MSUF_UF_Shared.lua", "PointFraction", "MSUF_UF_PointFraction" },
-        { "Auras3/MSUF_Auras3_Core.lua", "NormalizeDispelBorderMode", "MSUF_NormalizeLegacyDispelBorderMode" },
+        -- Built on the debuff-type rule above, which the core binds as a sibling local.
+        { "Auras3/MSUF_Auras3_Core.lua", "NormalizeDispelBorderMode", "MSUF_NormalizeLegacyDispelBorderMode", "local NormalizeDebuffTypeBorderMode = _G.MSUF_NormalizeAuraDebuffTypeBorderMode\n" },
         { "Auras3/MSUF_Auras3_Core.lua", "ReadParentFrameStrata", "MSUF_AuraReadParentFrameStrata", "local function AuraStrataIsSecret(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },
         { "Auras3/MSUF_Auras3_Core.lua", "SyncFrameStrata", "MSUF_AuraSyncFrameStrata", "local function AuraStrataIsSecret(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },
         { "Kernel/MSUF_Util.lua", "NormalizeFrameStrata", "MSUF_NormalizeFrameStrata", "local function IsSecretValue(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },

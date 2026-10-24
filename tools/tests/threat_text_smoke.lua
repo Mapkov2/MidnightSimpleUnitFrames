@@ -34,6 +34,14 @@ local KEYS = {
 }
 local REFRESH = "MSUF_RequestThreatIndicatorRefresh"
 local MODULE = "Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua"
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+-- The module requires the core's pixel region and general-DB readers at load: the real
+-- Geometry and Util owners provide them, in the client's TOC order, after the real Kernel.
+local function LoadModule(namespace)
+    for _, path in ipairs({ "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua", MODULE }) do
+        RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. path, namespace, nil, loadfile)
+    end
+end
 
 ---------------------------------------------------------------------------
 -- 1. Client fact: Classic Era, TBC and WoW Forever; not Mists or Midnight
@@ -173,7 +181,7 @@ local function LoadElement(client, extra)
         },
     }
     for key, value in pairs(extra or {}) do namespace[key] = value end
-    assert(loadfile(core .. MODULE))("MidnightSimpleUnitFrames", namespace)
+    LoadModule(namespace)
     return registered.element, registered, namespace
 end
 
@@ -467,8 +475,8 @@ do
             RegisterElement = function() end, RefreshElements = function() return true end,
         },
     }
-    assert(loadfile(core .. MODULE))("MidnightSimpleUnitFrames", namespace)
-    local exported = Check(namespace.UFThreatText, "the module no longer exports its curve for the menu")
+    LoadModule(namespace)
+    local exported =Check(namespace.UFThreatText, "the module no longer exports its curve for the menu")
     local stops = exported.CURVE_STOPS
     Check(#stops == 3 and stops[1][1] == "threatColorLow" and stops[2][1] == "threatColorMid"
         and stops[3][1] == "threatColorHigh", "the curve stop keys changed")
@@ -876,11 +884,13 @@ local function CompileStatus(configRelative, namespace, db)
     _G.MSUF_ResolveFontShadowMetrics = function() return 0, 0, 0 end
     _G.MSUF_CooldownAnchorSupported = function() return false end
     _G.MSUF_GlobalCooldownAnchorEnabled = function() return false end
-    local function load(path) assert(loadfile(core .. path))("MidnightSimpleUnitFrames", namespace) end
-    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
-    load("Kernel/MSUF_Require.lua")
-    load("Kernel/MSUF_EventBus.lua")
-    load("Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
+    -- The real Kernel API replaces the export stub, and the config compile resolves its textures,
+    -- colours, fonts and pixel regions through their real owners (providers a loaded file requires
+    -- that this harness does not run are deferred and raise when used).
+    assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().InstallConfigProviders(root, namespace)
+    local function load(path)
+        RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. path, namespace, nil, loadfile)
+    end
     load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
     load("UnitFrames/Engine/MSUF_UF_Shared.lua")
     load("UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua")
@@ -1119,8 +1129,12 @@ do
     end
     local function PreviewRows(client)
         local main = { Client = client, MSUF2 = { PipeRows = PipeRows } }
+        -- The preview family reads the namespace through the client's _G.MSUF alias.
+        local clientAlias = rawget(_G, "MSUF")
+        _G.MSUF = main
         assert(loadfile(options .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua"))(
             "MidnightSimpleUnitFrames_Options", main)
+        _G.MSUF = clientAlias
         local rows = main.UFPreviewSpecs.StatusPreview
         for index, spec in ipairs(rows) do
             if spec.id == "statusThreat" then return spec, index, rows end
@@ -1206,7 +1220,7 @@ do
     local function ThreatNamespace(client)
         local ns = { Client = client, UF = { Layers = {}, Shared = {}, RegisterElement = function() end,
             RefreshElements = function() return true end } }
-        assert(loadfile(core .. MODULE))("MidnightSimpleUnitFrames", ns)
+        LoadModule(ns)
         return ns
     end
     local namespace = ThreatNamespace((LoadMainlineClient(true)))
@@ -1309,6 +1323,7 @@ do
     local function GroupSpecs(client)
         local namespace = { Client = client, ExportPublic = function() end, Translate = function(text) return text end,
             MSUF2 = { Widgets = {} } }
+        RequireFixture.Install(root, namespace)
         assert(loadfile(options .. "Shell/Menu2/MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", namespace)
         assert(loadfile(options .. "Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua"))("MidnightSimpleUnitFrames_Options", namespace)
         local specs = namespace.MSUF2.GroupSpecs

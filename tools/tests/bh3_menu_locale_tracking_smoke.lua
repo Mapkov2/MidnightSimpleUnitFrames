@@ -9,7 +9,10 @@ ns.MSUF2 = {
     Theme = { colors = { text = { 1, 1, 1 } }, ApplyMenuAccent = function() end },
 }
 IsLoggedIn = function() return true end
-assert(loadfile(ROOT .. "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"))("MidnightSimpleUnitFrames", ns)
+-- The core providers the theme file requires at load (Kernel API, pixel layout, UI primitives).
+local REPO = ROOT:gsub("/$", "")
+local RequireFixture = assert(loadfile(ROOT .. "tools/tests/menu_core_world.lua"))().LoadThemeProviders(REPO, ns)
+RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua", ns)
 local T = ns.MSUF2.Theme
 T.StyleFontString = function(fs) return fs end
 local parent = { CreateFontString = function() return { SetText = function(self, s) self.text = s end } end }

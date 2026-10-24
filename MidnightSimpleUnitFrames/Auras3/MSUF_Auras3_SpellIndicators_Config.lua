@@ -1,7 +1,8 @@
 --- Auras3/SpellIndicator_Config: immutable slot compilation, signatures and shared layout rules.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local Require = MSUF.Require
+local FILE = "Auras3/MSUF_Auras3_SpellIndicators_Config.lua"
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -15,7 +16,7 @@ local math_floor = math.floor
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
 local SPELL_ICON_BASE_OFFSET = tonumber(FrameLayers.SPELL_ICON_BASE_OFFSET) or 64
 local UNIT_SPELL_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local MAX_FINITE_AURA_DURATION = 2147483647
 local Runtime = A3.SpellIndicators
 local DEFAULT_SHARED = {
@@ -48,9 +49,9 @@ local function Clamp01(value, fallback)
     return n
 end
 
-local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
+local NormalizeFrameStrata = Require("MSUF_NormalizeFrameStrata", FILE)
 
-local ReadParentFrameStrata = _G.MSUF_AuraReadParentFrameStrata
+local ReadParentFrameStrata = Require("MSUF_AuraReadParentFrameStrata", FILE)
 
 local function ResolveFrameStrata(parentFrame, value)
     -- Retained legacy strata values are migration data only. All layer-aware
@@ -58,7 +59,7 @@ local function ResolveFrameStrata(parentFrame, value)
     return ReadParentFrameStrata(parentFrame)
 end
 
-local SyncFrameStrata = _G.MSUF_AuraSyncFrameStrata
+local SyncFrameStrata = Require("MSUF_AuraSyncFrameStrata", FILE)
 
 local VALID_NATIVE_FILTER_TOKENS = {
     HELPFUL = true, HARMFUL = true, PLAYER = true, RAID = true,
@@ -112,11 +113,24 @@ local function NormalizeNativeFilterString(filter, fallback)
     return table_concat(out, "|")
 end
 
-local AuraSpellIDFromKey = _G.MSUF_AuraSpellIDFromKey
+local SpellIDFromKey = Require("MSUF_AuraSpellIDFromKey", FILE)
 
-local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
-    fieldName = fieldName or "includeSpellIDs"
+local function AuraSpellIDFromKey(value)
+    -- Saved hashes and compiled catalogs normally already contain numeric IDs.
+    -- Positive integers below Lua 5.1's scientific-notation boundary need no string or
+    -- pattern work. Keep the legacy parser for links, tokens and all other values.
+    if type(value) == "number" and value > 0 and value < 100000000000000 and value % 1 == 0 then
+        return value
+    end
+    return SpellIDFromKey(value)
+end
+
+--- The exact-ID candidate set of one spell list plus its signature. The aura
+--- runtime's ConfigValues binds this same normalizer for blacklists.
+local function NormalizeCandidateSpellIDs(spellIDs, fieldName)
     if type(spellIDs) ~= "table" then return nil, nil end
+    local addAliases = A3.AddAuraSpellIDAndAliases
+    if type(addAliases) ~= "function" then addAliases = nil end
     local out
     for key, enabled in pairs(spellIDs) do
         local spellID
@@ -132,8 +146,8 @@ local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
         end
         if spellID then
             if not out then out = {} end
-            if type(A3.AddAuraSpellIDAndAliases) == "function" then
-                A3.AddAuraSpellIDAndAliases(out, spellID)
+            if addAliases then
+                addAliases(out, spellID)
             else
                 out[spellID] = true
             end
@@ -147,7 +161,14 @@ local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
     end
     if count == 0 then return nil, nil end
     table_sort(parts)
-    return { [fieldName] = out }, fieldName .. ":" .. table_concat(parts, ",")
+    return out, fieldName .. ":" .. table_concat(parts, ",")
+end
+Runtime.NormalizeCandidateSpellIDs = NormalizeCandidateSpellIDs
+
+local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
+    fieldName = fieldName or "includeSpellIDs"
+    local ids, signature = NormalizeCandidateSpellIDs(spellIDs, fieldName)
+    return ids and { [fieldName] = ids } or nil, signature
 end
 
 local function AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature, hidePermanent)

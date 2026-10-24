@@ -3,11 +3,10 @@
 --- Loaded before the ClassPower controller.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
-ExportPublic("MSUF_CP_CONST", _G.MSUF_CP_CONST or {})
-local K = _G.MSUF_CP_CONST
+local K = MSUF.Optional("MSUF_CP_CONST") or {}
+ExportPublic("MSUF_CP_CONST", K)
 
 --- The builder registries the ClassPower files add their builders to. This
 --- file loads first in every client TOC, so it publishes all three; a file
@@ -52,16 +51,16 @@ K.CPK = {
         NATIVE_AURA    = 11,
     },
     SPEC = {
-        DH_DEVOURER          = _G.SPEC_DEMONHUNTER_DEVOURER or 3,
-        MAGE_ARCANE          = _G.SPEC_MAGE_ARCANE or 1,
+        DH_DEVOURER          = SPEC_DEMONHUNTER_DEVOURER or 3,
+        MAGE_ARCANE          = SPEC_MAGE_ARCANE or 1,
         MAGE_FROST           = 3,
-        MONK_WINDWALKER      = _G.SPEC_MONK_WINDWALKER or 3,
-        MONK_BREWMASTER      = _G.SPEC_MONK_BREWMASTER or 1,
+        MONK_WINDWALKER      = SPEC_MONK_WINDWALKER or 3,
+        MONK_BREWMASTER      = SPEC_MONK_BREWMASTER or 1,
         SHAMAN_ENHANCEMENT   = 2,
         SHAMAN_ELEMENTAL     = 1,
-        WARLOCK_DESTRUCTION  = _G.SPEC_WARLOCK_DESTRUCTION or 3,
-        WARLOCK_DEMONOLOGY   = _G.SPEC_WARLOCK_DEMONOLOGY or 2,
-        DH_VENGEANCE         = _G.SPEC_DEMONHUNTER_VENGEANCE or 2,
+        WARLOCK_DESTRUCTION  = SPEC_WARLOCK_DESTRUCTION or 3,
+        WARLOCK_DEMONOLOGY   = SPEC_WARLOCK_DEMONOLOGY or 2,
+        DH_VENGEANCE         = SPEC_DEMONHUNTER_VENGEANCE or 2,
         HUNTER_SURVIVAL      = 3,
         EVOKER_AUG           = 3,
         PRIEST_SHADOW        = 3,
@@ -158,8 +157,8 @@ K.EBON = {
 }
 
 K.STAGGER = {
-    YELLOW_TRANSITION = _G.STAGGER_YELLOW_TRANSITION or 0.3,
-    RED_TRANSITION = _G.STAGGER_RED_TRANSITION or 0.6,
+    YELLOW_TRANSITION = STAGGER_YELLOW_TRANSITION or 0.3,
+    RED_TRANSITION = STAGGER_RED_TRANSITION or 0.6,
     COLOR_DEFAULTS = {
         { 0.52, 1.00, 0.52 },
         { 1.00, 0.98, 0.72 },

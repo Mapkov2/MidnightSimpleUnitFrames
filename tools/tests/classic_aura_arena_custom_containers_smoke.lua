@@ -47,10 +47,16 @@ _G.MSUF_NS, _G.MSUF = namespace, namespace
 _G.MSUF_DB = { auras3 = { enabled = true, shared = {}, perUnit = {} } }
 
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+-- The real Kernel API replaces the export stub before any shipped file runs, so the exports below
+-- land where the client puts them.
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, namespace, nil, nil, true)
 -- The menu model reads the stored-token check from the real profile normalizer.
 assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))().Install(root, namespace)
 local FEATURES = "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
 manifest.LoadSelected(root, flavor, namespace, {
+    -- The real Util owns MSUF_GetGeneralDB and MSUF_PixelLayoutRegion, which the aura files bind;
+    -- it loads after the geometry owner it needs, as in the TOC.
+    "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
     "Game/Shared/Initialize.lua", "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
     "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
     "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",

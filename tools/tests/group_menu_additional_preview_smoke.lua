@@ -118,6 +118,9 @@ local moduleChunk=assert(loadfile(root..'/MidnightSimpleUnitFrames/Game/Forever/
 rawset(sampleEnv,'_G',sampleEnv);setfenv(moduleChunk,sampleEnv)
 local mgf={RegisterRuntimeObserver=function() end,RegisterFrameRegistryObserver=function() end}
 local sampleNS={Client={IsForever=true},GF=mgf}
+-- The shipped Kernel API in the sample globals, and the pixel layout provider the module binds when it loads.
+assert(loadfile(root..'/tools/tests/require_fixture.lua'))().InstallKernel(root,sampleNS,sampleEnv)
+sampleNS.ExportPublic('MSUF_PixelLayoutRegion',function(region) return region end)
 local policyChunk=assert(loadfile(root..'/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua'))
 setfenv(policyChunk,sampleEnv);policyChunk('MidnightSimpleUnitFrames',sampleNS)
 moduleChunk('MidnightSimpleUnitFrames',sampleNS)

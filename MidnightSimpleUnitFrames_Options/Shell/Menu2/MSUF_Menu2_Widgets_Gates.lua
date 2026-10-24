@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets_Gates.lua
 --- Control visibility and enable gates, disabled-reason tooltips, and the
 --- placement helpers pages use to put a control at fixed coordinates
@@ -7,13 +6,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Split from MSUF_Menu2_Widgets.lua; loads after the controls.
 
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Widgets_Gates.lua")
 local M = MSUF.MSUF2
 local T = M.Theme
 local W = M.Widgets
 local Shared = W._Shared
-local floor = math.floor
-local max = math.max
-local min = math.min
+local floor, max, min = math.floor, math.max, math.min
 local Tr = M.TranslateText
 local SetSearchText = Shared.SetSearchText
 local RegisterSearchObject = W.RegisterSearchObject
@@ -96,6 +94,19 @@ local function HasDisableGate(control)
     end
     return false
 end
+-- An input part (value box, step button, segment button) follows its control:
+-- same enabled state, and a slightly faded look while disabled.
+local function ApplyPartEnabled(part, enabled)
+    SetEnabledState(part, enabled)
+    if part.SetAlpha and part._msuf2EnabledAlphaState ~= enabled then
+        part._msuf2EnabledAlphaState = enabled
+        part:SetAlpha(enabled and 1 or 0.85)
+    end
+end
+local function ApplyPartsEnabled(parts, enabled)
+    if not parts then return end
+    for i = 1, #parts do ApplyPartEnabled(parts[i], enabled) end
+end
 local function ApplyEnabledVisuals(control, enabled)
     SetEnabledState(control, enabled)
     if control._msuf2DisabledReasonProxy then control._msuf2DisabledReasonProxy:SetShown(not enabled) end
@@ -116,33 +127,9 @@ local function ApplyEnabledVisuals(control, enabled)
         control._msuf2LabelHit:EnableMouse(labelMouseEnabled)
     end
     local edit = control.editBox or control.__MSUF_valueBox
-    if edit then
-        SetEnabledState(edit, enabled)
-        if edit.SetAlpha and edit._msuf2EnabledAlphaState ~= enabled then
-            edit._msuf2EnabledAlphaState = enabled
-            edit:SetAlpha(enabled and 1 or 0.85)
-        end
-    end
-    if control._msuf2StepButtons then
-        for i = 1, #control._msuf2StepButtons do
-            local btn = control._msuf2StepButtons[i]
-            SetEnabledState(btn, enabled)
-            if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
-                btn._msuf2EnabledAlphaState = enabled
-                btn:SetAlpha(enabled and 1 or 0.85)
-            end
-        end
-    end
-    if control.buttons then
-        for i = 1, #control.buttons do
-            local btn = control.buttons[i]
-            SetEnabledState(btn, enabled)
-            if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
-                btn._msuf2EnabledAlphaState = enabled
-                btn:SetAlpha(enabled and 1 or 0.85)
-            end
-        end
-    end
+    if edit then ApplyPartEnabled(edit, enabled) end
+    ApplyPartsEnabled(control._msuf2StepButtons, enabled)
+    ApplyPartsEnabled(control.buttons, enabled)
 end
 local function ApplyControlEnabled(control)
     if not control then return end
@@ -292,7 +279,7 @@ function W.ShowDisabledReason(self)
     if not self or self._msuf2TooltipTarget then return end
     local control = self._msuf2ReasonOwner or self
     local text = W.DisabledReasonText(control)
-    local tip = _G.GameTooltip
+    local tip = GameTooltip
     if not (text and tip) then return end
     if not (tip.IsOwned and tip:IsOwned(self) and tip:IsShown()) then
         tip:SetOwner(self, "ANCHOR_RIGHT")
@@ -305,7 +292,7 @@ function W.ShowDisabledReason(self)
 end
 function W.HideDisabledReason(self)
     if not self or self._msuf2TooltipTarget then return end
-    local tip = _G.GameTooltip
+    local tip = GameTooltip
     if tip and tip.IsOwned and tip:IsOwned(self) then tip:Hide() end
 end
 --- Standard wording for a dependent control: 'Turn on "<label>" to change

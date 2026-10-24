@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Rounded surface renderer for MSUF-owned castbars and their previews.
 ---
 --- This module owns no events and no OnUpdate. The existing rounded-frame
@@ -14,8 +13,9 @@ local Rounded = Castbars.Rounded
 local Style = Castbars.Style
 
 local Publish = PublicAPI.Publish
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Castbars/MSUF_CastbarRounded.lua")
 local RoundedSurface = MSUF.RoundedSurface or {}
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 
 local MASK_KEY = "_msufRoundedCastbarMask"
 local MASKED_KEY = "_msufRoundedCastbarMasked"
@@ -52,7 +52,7 @@ end
 local function CanCreate(existing)
     local fn = RoundedSurface.CanCreateRegion
     if type(fn) == "function" then return fn(existing) end
-    local locked = _G.InCombatLockdown and _G.InCombatLockdown()
+    local locked = InCombatLockdown and InCombatLockdown()
     return existing ~= nil or not locked
 end
 
@@ -295,15 +295,8 @@ local function ForEachCastbar(callback)
     Visit(Frames.focusPreview)
     -- Boss, then arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
     local pools = MSUF.Castbars and MSUF.Castbars.Pools
-    local order = pools and pools.order
-    for poolIndex = 1, order and #order or 0 do
-        local pool = order[poolIndex]
-        local preview = pool.preview
-        for index = 1, pool.maxFrames do
-            Visit(pool.Bar(index))
-            if preview then Visit(preview:Frame(index)) end
-        end
-    end
+    local forEachFrame = pools and pools.ForEachFrame
+    if forEachFrame then forEachFrame(Visit, Visit) end
 end
 
 local function ApplyAll(masterActive)

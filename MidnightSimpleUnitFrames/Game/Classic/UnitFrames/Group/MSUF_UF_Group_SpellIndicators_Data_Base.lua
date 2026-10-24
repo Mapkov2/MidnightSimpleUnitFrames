@@ -1,11 +1,7 @@
 --- Shared Classic-family spell-indicator data contract.
 --- Flavor files populate only spells/specs that exist on their client.
 local _, ns = ...
-ns = ns or (_G.MSUF_NS) or {}
-local ExportPublic = ns.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = ns.ExportPublic
 
 local GF = ns.GF
 if not GF then return end
@@ -68,7 +64,10 @@ function SI.BuildNameLookup(specKey)
     elseif type(GetSpellInfo) == "function" then
       name = GetSpellInfo(spellID)
     end
-    if name then lookup[name] = auraName; any = true end
+    if name then
+      lookup[name] = auraName
+      any = true
+    end
   end
   return any and lookup or nil
 end

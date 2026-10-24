@@ -955,7 +955,7 @@ local function MSUF_ProfileIO_ResetUnitAuras(profile)
     local snapshots = sourceA3 and MSUF_ProfileIO_AuraResetSnapshotA3(sourceA3)
         or sourceA2 and MSUF_ProfileIO_AuraResetSnapshotA2(sourceA2) or nil
     local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalUnitAuras)
-        or _G.MSUF_CreateCanonicalUnitAuras
+        or MSUF.PublicGlobals.MSUF_CreateCanonicalUnitAuras
     local cleanAuras = createCanonical()
     if type(cleanAuras) ~= "table" then
         -- Never destroy the old data if the Defaults-owned factory is missing.
@@ -1161,7 +1161,7 @@ end
 local function MSUF_ProfileIO_ResetGroupAuras(profile, groupCount)
     if type(profile) ~= "table" then return false end
     local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalGroupAuraState)
-        or _G.MSUF_CreateCanonicalGroupAuraState
+        or MSUF.PublicGlobals.MSUF_CreateCanonicalGroupAuraState
     local canonical
     local changed = false
     for i = 1, #MSUF_PROFILEIO_GROUP_AURA_SCOPES do
@@ -1256,6 +1256,7 @@ end
 --- above MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION for its Defaults twin).
 MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     if type(profile) ~= "table" then return profile, false end
+    local changed = MSUF.DefaultsSchema.RestorePersistence(profile)
     context = type(context) == "table" and context or {}
     --- Only internal callers operating on an already-stored profile may trust
     --- the persisted marker. Import payloads are deliberately never trusted:
@@ -1266,9 +1267,8 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
         and tonumber(profile._msufProfileNormalizationRevision) == MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION
         and type(profile.general) == "table"
         and not MSUF_ProfileIO_ProfileNeedsNormalization(profile) then
-        return profile, false
+        return profile, changed
     end
-    local changed = false
     --- trustProfileMetadata: a local pass over a stored or factory profile (the
     --- defaults pass). It still runs every normalizer below, but the profile's
     --- own migration stamps and Menu2 choices are not import metadata.
@@ -1323,7 +1323,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
     changed = MSUF_ProfileIO_DropRetiredGroupFilterStamp(profile, true) or changed
     changed = MSUF_ProfileIO_CarryFormerResourceExtras(profile.bars) or changed
-    local normalizeLayers = _G.MSUF_NormalizeNumericLayers
+    local normalizeLayers = MSUF.PublicGlobals.MSUF_NormalizeNumericLayers
     if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
         normalizeLayers = MSUF.MSUF_NormalizeNumericLayers
     end

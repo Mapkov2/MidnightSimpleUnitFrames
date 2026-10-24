@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Pure geometry and width-source hooks, with bounded retries for late providers outside combat.
 -- Manual/unitframe/cooldown width precedence and provider lifecycle: Castbars/README.md.
 
@@ -19,16 +18,27 @@ local Visuals = Castbars.Visuals
 local Publish = PublicAPI.Publish
 
 --- Every provider this file calls is addon code: State defaults, Kernel Util,
---- the unit-frame factory and the Edit Mode castbar popup load before it;
+--- the unit-frame factory, the cooldown integrations and the Edit Mode
+--- castbar popup load before it and resolve once here;
 --- Castbars/MSUF_CastbarStyle.lua and _Visuals.lua (and the Classic visual
 --- compat, which replaces the outline inset and spark exports) are resolved
 --- when they are used. A missing one fails loudly instead of silently
 --- skipping a layout step.
 local FILE = "Castbars/MSUF_CastbarAnchors.lua"
 local Require = MSUF.Require
-local function Later(name)
-    return Require(name, FILE)
-end
+local EnsureDB = Require("MSUF_EnsureDB", FILE)
+local InCombat = Require("MSUF_IsPlayerInCombat", FILE)
+local GetPhysicalPixelSize = Require("MSUF_GetPhysicalPixelSize", FILE)
+local SetTextIfChanged = Require("MSUF_SetTextIfChanged", FILE)
+local EnsureCooldownWidthObservers = Require("MSUF_EnsureCooldownWidthObservers", FILE)
+local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
+local SetPointIfChanged = Require("MSUF_SetPointIfChanged", FILE)
+local SetWidthIfChanged = Require("MSUF_SetWidthIfChanged", FILE)
+local SetHeightIfChanged = Require("MSUF_SetHeightIfChanged", FILE)
+local SnapToPixel = Require("MSUF_Snap", FILE)
+local GetEffectiveCooldownFrame = Require("MSUF_GetEffectiveCooldownFrame", FILE)
+local GetUsableCooldownAnchorSize = Require("MSUF_GetUsableCooldownAnchorSize", FILE)
+local GetCooldownAnchorScaledWidth = Require("MSUF_GetCooldownAnchorScaledWidth", FILE)
 local floor = math.floor
 local ceil = math.ceil
 local type = type
@@ -87,7 +97,7 @@ local ApplyCastbarEffectiveSizeUnit
 local Round = MSUF.Geometry.RoundOffset
 
 local function GeneralDB()
-    Later("MSUF_EnsureDB")()
+    EnsureDB()
     return (Config.Read().general) or {}
 end
 
@@ -100,8 +110,6 @@ local function GetUnitFrames()
     unitFramesCache = (uf and uf.frames) or unitFramesCache
     return unitFramesCache
 end
-
-local InCombat = _G.MSUF_IsPlayerInCombat
 
 -- "boss", "boss1".."boss5" -> "boss"; "arena", "arena1".."arena3" -> "arena";
 -- everything else unchanged.
@@ -130,33 +138,10 @@ local function ShouldUseMSUFCastbar(unit, g)
     return not (def and g and g[def.enable] == false)
 end
 
--- Dirty-only SetPoint wrapper (rounds in the fallback path only; the shared
--- MSUF_SetPointIfChanged rounds internally).
-local function SetPoint(frame, point, relTo, relPoint, x, y)
-    local fn = _G.MSUF_SetPointIfChanged
-    if type(fn) == "function" then
-        fn(frame, point, relTo, relPoint, x, y)
-        return
-    end
-    frame:ClearAllPoints()
-    frame:SetPoint(point, relTo, relPoint, Round(x), Round(y))
-end
-
-local function SetWidth(frame, width)
-    if _G.MSUF_SetWidthIfChanged then
-        _G.MSUF_SetWidthIfChanged(frame, width)
-    else
-        frame:SetWidth(width)
-    end
-end
-
-local function SetHeight(frame, height)
-    if _G.MSUF_SetHeightIfChanged then
-        _G.MSUF_SetHeightIfChanged(frame, height)
-    else
-        frame:SetHeight(height)
-    end
-end
+-- Dirty-only geometry writers (the shared MSUF_SetPointIfChanged rounds internally).
+local SetPoint = SetPointIfChanged
+local SetWidth = SetWidthIfChanged
+local SetHeight = SetHeightIfChanged
 
 -- Frame lookups
 
@@ -263,14 +248,14 @@ local function UnitframeNormalBorderInsetForTarget(frame, sourceFrame, targetFra
         -- Mirror the boss border's own conversion: the setting is a unitframe-unit
         -- value, so it becomes a physical-pixel count through the unitframe's
         -- scale, not one pixel per configured unit.
-        local framePixel = Later("MSUF_GetPhysicalPixelSize")(frame, 1)
+        local framePixel = GetPhysicalPixelSize(frame, 1)
         local pixels = inset
         if type(framePixel) == "number" and framePixel > 0 then
             pixels = inset / framePixel
         end
         pixels = math.floor(pixels + 0.5)
         if pixels < 1 then pixels = 1 end
-        return _G.MSUF_GetPhysicalPixelSize(targetFrame, pixels)
+        return GetPhysicalPixelSize(targetFrame, pixels)
     end
 
     return ScaledValue(sourceFrame or frame, targetFrame, inset)
@@ -297,12 +282,11 @@ end
 -- Resolve the effective Cooldown Viewer frame for a viewer global name.
 local function EffectiveCooldownViewer(viewerKey)
     return viewerKey
-        and (_G.MSUF_GetEffectiveCooldownFrame and _G.MSUF_GetEffectiveCooldownFrame(viewerKey) or _G[viewerKey])
+        and (GetEffectiveCooldownFrame(viewerKey) or _G[viewerKey])
 end
 
 local function CooldownWidthFrameWidth(frame)
-    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-    return type(getSize) == "function" and getSize(frame) or nil
+    return GetUsableCooldownAnchorSize(frame) or nil
 end
 
 local function CooldownWidthSourceFrame(kind)
@@ -337,11 +321,8 @@ local function WidthFromSource(unit, kind, targetFrame)
         return UnitframeVisibleWidth(unit, targetFrame)
     end
 
-    local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
     local frame, width = CooldownWidthSourceFrame(kind)
-    return type(getScaledWidth) == "function"
-        and getScaledWidth(frame, targetFrame, width)
-        or nil
+    return GetCooldownAnchorScaledWidth(frame, targetFrame, width) or nil
 end
 
 -- The configured (and validated) width-source kind for a unit, or nil.
@@ -503,8 +484,7 @@ end
 -- Their validated width plus one protected scale probe is the only signature
 -- needed by width-sync; height changes cannot alter the receiving castbar width.
 local function StoreCooldownFrameSignature(state, offset, frame, width)
-    local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
-    local scaledWidth = type(getScaledWidth) == "function" and getScaledWidth(frame, nil, width) or nil
+    local scaledWidth = GetCooldownAnchorScaledWidth(frame, nil, width)
     scaledWidth = scaledWidth and Round(scaledWidth * 100) or 0
     local changed = state[offset] ~= frame or state[offset + 1] ~= scaledWidth
     state[offset], state[offset + 1] = frame, scaledWidth
@@ -628,7 +608,7 @@ local function QueueWidthSourceSync()
     if type(runNext) == "function" then
         runNext(FlushWidthSourceSync)
     else
-        _G.C_Timer.After(0, FlushWidthSourceSync)
+        C_Timer.After(0, FlushWidthSourceSync)
     end
 end
 
@@ -748,7 +728,7 @@ local function WidthSourceRetryStep()
 
     local delay = WIDTH_SOURCE_RETRY_DELAYS[widthSourceRetryIndex]
     if delay then
-        _G.C_Timer.After(delay, function()
+        C_Timer.After(delay, function()
             if generation == widthSourceRetryGeneration then WidthSourceRetryStep() end
         end)
     else
@@ -766,7 +746,7 @@ local function StartWidthSourceRetry()
     widthSourceRetryActive = true
     widthSourceRetryIndex = 0
     local generation = widthSourceRetryGeneration
-    _G.C_Timer.After(0, function()
+    C_Timer.After(0, function()
         if generation == widthSourceRetryGeneration then WidthSourceRetryStep() end
     end)
 end
@@ -779,7 +759,7 @@ function Anchors.UpdateCastbarWidthSourceSync(g, unit, keepSignature)
     -- installing duplicate hooks. Its generation fastpath makes unchanged
     -- castbar applies O(1), while profile/import changes still activate the
     -- newly selected viewer immediately.
-    Later("MSUF_EnsureCooldownWidthObservers")()
+    EnsureCooldownWidthObservers()
     if SyncWidthSourceLifecycle and not SyncWidthSourceLifecycle(g) then
         InvalidateWidthSourceSignature(unit)
         return
@@ -891,11 +871,8 @@ end
 local function ApplyPlayerCastbarSizeAndLayout(bar, g, w, h, preserveWidth)
     if not bar then return end
 
-    local snap = _G.MSUF_Snap
-    if type(snap) == "function" then
-        if w ~= nil and not preserveWidth then w = snap(bar, w) end
-        if h ~= nil then h = snap(bar, h) end
-    end
+    if w ~= nil and not preserveWidth then w = SnapToPixel(bar, w) end
+    if h ~= nil then h = SnapToPixel(bar, h) end
 
     SetWidth(bar, w)
     SetHeight(bar, h)
@@ -976,7 +953,7 @@ local function ApplyPoolCastbarEffectiveSize(pool, g)
             end
         end
     end
-    if _G.MSUF_UnitEditModeActive == true and pool.preview then
+    if MSUF_UnitEditModeActive == true and pool.preview then
         pool.preview:Update()
         applied = true
     end
@@ -1037,7 +1014,7 @@ local function HideCastbar(frame, preview)
     if frame then
         frame:SetScript("OnUpdate", nil)
         if frame.timeText and Manager.IsCastTimeEnabled(frame) then
-            _G.MSUF_SetTextIfChanged(frame.timeText, "")
+            SetTextIfChanged(frame.timeText, "")
         end
         if frame.latencyBar then frame.latencyBar:Hide() end
         frame:Hide()
@@ -1047,7 +1024,7 @@ end
 
 -- Shared re-anchor for the Target and Focus castbars.
 local function ReanchorTargetOrFocusCastbarBase(unit)
-    _G.MSUF_EnsureDB()
+    EnsureDB()
     local g = Config.Read().general or {}
     local frame, preview = TargetFocusCastbar(unit)
     if not frame then return end
@@ -1075,8 +1052,7 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
         (frame.GetWidth and frame:GetWidth()) or 240,
         (frame.GetHeight and frame:GetHeight()) or 18)
 
-    local snap = _G.MSUF_Snap
-    if not preserveWidth and type(snap) == "function" then width = snap(frame, width) end
+    if not preserveWidth then width = SnapToPixel(frame, width) end
     SetWidth(frame, width)
     SetHeight(frame, desiredHeight)
     if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight, preserveWidth) end
@@ -1115,7 +1091,7 @@ function Anchors.ReanchorFocusCastBar()
 end
 
 local function ReanchorPlayerCastBarBase()
-    _G.MSUF_EnsureDB()
+    EnsureDB()
     local g = Config.Read().general or {}
 
     if not (Backend.ShouldUseBlizzardCastbar and Backend.ShouldUseBlizzardCastbar("player", g))
@@ -1181,7 +1157,7 @@ local function ReanchorPoolCastBar(kind)
     if not InCombat() and pool and pool.preview then
         pool.preview:Update()
     end
-    Later("MSUF_SyncCastbarPositionPopup")(kind)
+    SyncCastbarPositionPopup(kind)
 end
 
 function Anchors.ReanchorBossCastBar()

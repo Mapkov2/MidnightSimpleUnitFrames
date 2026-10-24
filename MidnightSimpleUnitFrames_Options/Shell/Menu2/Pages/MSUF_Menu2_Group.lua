@@ -1,19 +1,23 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
--- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Group.lua", {
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_Group.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+-- Functions this page calls by their global names: required once at load (a missing
+-- one is a wiring bug) and kept in upvalues, so no setting change or drag step resolves them.
+M.RequireGlobals(FILE, {
     "MSUF_ShowGroupFrameReloadRequiredPopup",
     "MSUF_GF_EM2_SetActivePreviewKind",
 })
-local C_Timer = M.MenuTimer or _G.C_Timer
+local ShowGroupFrameReloadRequiredPopup = MSUF.Require("MSUF_ShowGroupFrameReloadRequiredPopup", FILE)
+local SetActivePreviewKind = MSUF.Require("MSUF_GF_EM2_SetActivePreviewKind", FILE)
+local ApplyService = MSUF.Require("MSUF_Menu2_ApplyService", FILE)
+local C_Timer = M.MenuTimer or C_Timer
 
 -- Menu2 Group page foundation.
 -- Owns party/raid/mythicraid option binding and preview sync. Apply work is routed through
--- the shared Menu2 ApplyService when available; the page-local queue remains as a fallback.
+-- the shared Menu2 ApplyService.
 local W = M.Widgets
 local Schema = M.ControlSchema
 local T = M.Theme
@@ -27,30 +31,12 @@ local min = math.min
 local Specs = M.GroupSpecs or {}
 -- Keep every option domain bound by name. A positional multi-return here made
 -- one omitted key shift every following Group dropdown onto the next domain.
--- Explicit reads make additions/removals local and impossible to cascade.
+-- Explicit reads make additions/removals local and impossible to cascade. The
+-- domains this page uses itself are read here; the others are republished on
+-- GroupPage by name (SPEC_DOMAINS, at the end of the file).
 local SCOPE_VALUES = Specs.SCOPE_VALUES or {}
 local GROWTH_VALUES = Specs.GROWTH_VALUES or {}
-local BLIZZARD_FALLBACK_VALUES = Specs.BLIZZARD_FALLBACK_VALUES or {}
-local HEALTH_MODES = Specs.HEALTH_MODES or {}
-local TEXT_MODES = Specs.TEXT_MODES or {}
-local DELIMITER_VALUES = Specs.DELIMITER_VALUES or {}
-local ANCHORS = Specs.ANCHORS or {}
-local AURA_ANCHORS = Specs.AURA_ANCHORS or {}
-local SORT_MODES = Specs.SORT_MODES or {}
-local GF_BAR_MODES = Specs.GF_BAR_MODES or {}
-local GF_ANCHOR_TO = Specs.GF_ANCHOR_TO or {}
-local GF_ANCHOR_POINTS = Specs.GF_ANCHOR_POINTS or {}
-local STATUS_ICON_ANCHORS = Specs.STATUS_ICON_ANCHORS or {}
 local GF_STATUS_ICON_SPECS = Specs.GF_STATUS_ICON_SPECS or {}
-local GF_STATUS_ICON_VALUES = Specs.GF_STATUS_ICON_VALUES or {}
-local PLACED_INDICATOR_TYPES = Specs.PLACED_INDICATOR_TYPES or {}
-local FRAME_EFFECT_TYPES = Specs.FRAME_EFFECT_TYPES or {}
-local ICON_EFFECT_TYPES = Specs.ICON_EFFECT_TYPES or {}
-local SPELL_GROWTH_VALUES = Specs.SPELL_GROWTH_VALUES or {}
-local CI_SLOT_VALUES = Specs.CI_SLOT_VALUES or {}
-local CI_SLOT_DEFAULTS = Specs.CI_SLOT_DEFAULTS or {}
-local DISPEL_OVERLAY_STYLES = Specs.DISPEL_OVERLAY_STYLES or {}
-local DEBUFF_STRIPE_EDGES = Specs.DEBUFF_STRIPE_EDGES or {}
 local GROUP_FRAME_PROVIDER_VALUES = Specs.GROUP_FRAME_PROVIDER_VALUES or {
     { value = "MSUF", text = "MSUF frames" },
     { value = "AUTO", text = "Blizzard frames (WoW settings)" },
@@ -63,11 +49,6 @@ local GROUP_RAID_MANAGER_VALUES = Specs.GROUP_RAID_MANAGER_VALUES or {
     { value = "MOUSEOVER", text = "Show on mouseover" },
     { value = "HIDDEN", text = "Always hidden" },
 }
-local HEALTH_TEXT_MODES = Specs.HEALTH_TEXT_MODES or TEXT_MODES
-local SIMPLE_TEXTURES = Specs.SimpleTextures
-local pendingGF = {}
-local gfFlushQueued = false
-local GF_APPLY_DELAY = 0.04
 local SCOPE_LABELS = { party = "Party", raid = "Raid", mythicraid = "Mythic Raid" }
 local SCOPE_SHORT_LABELS = { mythicraid = "Mythic" }
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
@@ -132,28 +113,6 @@ local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, tab
 local function GF()
     return MSUF and MSUF.GF
 end
-local function CurrentApplyService()
-    local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
-    if type(apply) == "table" then return apply end
-    return nil
-end
--- The apply service owns the group dirty-mask merge; this page's pending
--- queue merges without the DIRTY_CONFIG bit.
-local function MergeDirtyMask(gf, current, incoming)
-    return M.ApplyService.MergeGroupDirty(gf, current, incoming, true)
-end
-local function ModeDirtyMask(gf, mode)
-    if not gf then return nil end
-    if mode == "visual" or mode == nil then return gf.DIRTY_VISUAL end
-    if mode == "font" or mode == "fonts" then return gf.DIRTY_FONT end
-    if mode == "color" or mode == "colors" then return gf.DIRTY_COLOR end
-    if mode == "border" or mode == "borders" then return gf.DIRTY_BORDER end
-    if mode == "aggro" then return gf.DIRTY_AGGRO or gf.DIRTY_COLOR end
-    if mode == "auras" then return gf.DIRTY_AURAS end
-    if mode == "geometry" then return M.ApplyService.AddDirty(gf.DIRTY_GEOMETRY, gf.DIRTY_LAYOUT) end
-    if mode == "config" then return gf.DIRTY_CONFIG end
-    return nil
-end
 local function RequestGFPagePreview()
     if type(M.RequestGFPagePreviewForKey) == "function" then
         return M.RequestGFPagePreviewForKey(M.activeKey)
@@ -203,110 +162,12 @@ local function Val(kind, key, default)
     if conf[key] ~= nil then return conf[key] end
     return default
 end
-local function FlushGF()
-    gfFlushQueued = false
-    local gf = GF()
-    if not gf then return end
-    local rebuild = pendingGF.rebuild
-    local geometry = pendingGF.geometry
-    local dirtyMask = pendingGF.dirtyMask
-    local kind = pendingGF.kind
-    pendingGF.rebuild = nil
-    pendingGF.geometry = nil
-    pendingGF.dirtyMask = nil
-    pendingGF.kind = nil
-    if kind == false then kind = nil end
-    if InCombatLockdown and InCombatLockdown() then
-        if rebuild and type(gf.Rebuild) == "function" then
-            gf.Rebuild(kind)
-            RefreshGFPreview(kind)
-            return
-        elseif rebuild and type(gf.RebuildAll) == "function" then
-            gf.RebuildAll()
-            RefreshGFPreview(kind)
-            return
-        end
-        if geometry and type(gf.DeferGroupRuntime) == "function" then
-            gf.DeferGroupRuntime("layout", kind, dirtyMask)
-        elseif geometry then
-            gf._pendingRefreshGeometry = true
-        end
-        if dirtyMask and not geometry and type(gf.DeferGroupRuntime) == "function" then
-            gf.DeferGroupRuntime("refresh", kind, dirtyMask)
-        elseif dirtyMask and not geometry then
-            gf._pendingRefreshVisuals = true
-        end
-        RefreshGFPreview(kind)
-        return
-    end
-    if rebuild then
-        if type(gf.Rebuild) == "function" then
-            gf.Rebuild(kind)
-        elseif type(gf.RebuildAll) == "function" then
-            gf.RebuildAll()
-        end
-        RefreshGFPreview()
-        return
-    end
-    if geometry then
-        if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind) end
-    end
-    if dirtyMask then
-        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind, dirtyMask) end
-    end
-    RefreshGFPreview(kind)
-end
-local QueueGF
-local function QueueGFLegacy(kind, mode)
-    local gf = GF()
-    if kind ~= nil then
-        if pendingGF.kind == nil then
-            pendingGF.kind = kind
-        elseif pendingGF.kind ~= kind then
-            pendingGF.kind = false
-        end
-    end
-    if mode == "rebuild" then pendingGF.rebuild = true end
-    if mode == "geometry" then pendingGF.geometry = true end
-    local dirty = ModeDirtyMask(gf, mode)
-    if dirty then pendingGF.dirtyMask = MergeDirtyMask(gf, pendingGF.dirtyMask, dirty) end
-    if gfFlushQueued then return end
-    gfFlushQueued = true
-    if C_Timer and C_Timer.After then
-        C_Timer.After(GF_APPLY_DELAY, FlushGF)
-    else
-        FlushGF()
-    end
+local function QueueGF(kind, mode)
+    return ApplyService.RequestGroup(kind, mode or "visual", "GF_PAGE")
 end
 local function QueueGFDirtyMask(kind, dirtyMask)
-    local gf = GF()
     if not dirtyMask then return QueueGF(kind, "visual") end
-    local apply = CurrentApplyService()
-    if apply and type(apply.RequestGroupDirtyMask) == "function" then
-        return apply.RequestGroupDirtyMask(kind, dirtyMask, "GF_PAGE_DIRTY")
-    end
-    if kind ~= nil then
-        if pendingGF.kind == nil then
-            pendingGF.kind = kind
-        elseif pendingGF.kind ~= kind then
-            pendingGF.kind = false
-        end
-    end
-    pendingGF.dirtyMask = MergeDirtyMask(gf, pendingGF.dirtyMask, dirtyMask)
-    if gfFlushQueued then return end
-    gfFlushQueued = true
-    if C_Timer and C_Timer.After then
-        C_Timer.After(GF_APPLY_DELAY, FlushGF)
-    else
-        FlushGF()
-    end
-end
-function QueueGF(kind, mode)
-    local apply = CurrentApplyService()
-    if apply and type(apply.RequestGroup) == "function" then
-        return apply.RequestGroup(kind, mode or "visual", "GF_PAGE")
-    end
-    return QueueGFLegacy(kind, mode)
+    return ApplyService.RequestGroupDirtyMask(kind, dirtyMask, "GF_PAGE_DIRTY")
 end
 local function Set(kind, key, value, mode)
     local function Write()
@@ -320,7 +181,7 @@ local function Set(kind, key, value, mode)
             conf.hlOverride = true
         end
         QueueGF(kind, mode or "visual")
-        if key == "enabled" then _G.MSUF_ShowGroupFrameReloadRequiredPopup() end
+        if key == "enabled" then ShowGroupFrameReloadRequiredPopup() end
         return true
     end
     return M.RunWithHistory(M.TranslatedHistoryLabel(M.Format("Group %s", tostring(key))),
@@ -415,7 +276,7 @@ local function SetSyncedValue(key, value, apply)
 end
 --- "DEFAULT" is the pre-release spelling of AUTO; map it so a profile from an in-between
 --- build keeps its choice instead of resetting. Mirrors the engine normalizer.
-local NormalizeRaidManagerMode = _G.MSUF_NormalizeRaidManagerMode
+local NormalizeRaidManagerMode = MSUF.Require("MSUF_NormalizeRaidManagerMode", FILE)
 local function RaidManagerMode()
     return NormalizeRaidManagerMode(SyncedVal("raidManagerMode", "AUTO"))
 end
@@ -441,7 +302,7 @@ local function SetFrameProvider(kind, provider)
         conf.enabled = nextEnabled
         if not nextEnabled then conf.blizzardFallbackMode = provider end
         QueueGF(kind, "rebuild")
-        if enabledChanged or fallbackChanged then _G.MSUF_ShowGroupFrameReloadRequiredPopup() end
+        if enabledChanged or fallbackChanged then ShowGroupFrameReloadRequiredPopup() end
         return true
     end
     return M.RunWithHistory("Group frame provider", "group:" .. tostring(kind) .. ":frameProvider", Write)
@@ -855,13 +716,7 @@ local function RefreshScopeContext(ctx, previousScope)
         RefreshContext(ctx)
     end
 end
-local function PriorityScopeNote(ctx, builder, sec, noteY, pageW)
-    local note = Schema.Build(ctx, sec, {
-        { "text", "note", nil, { "Profile-wide · follows the active Party, Raid, or Mythic Raid frame appearance",
-            16, noteY, pageW - 32, T.colors.muted },
-            meta = GroupControlMeta(ctx, "scope.priority_note"), scope = "group", domain = "layout" },
-    }).note
-    if note and note.SetJustifyH then note:SetJustifyH("LEFT") end
+local function AttachStickyScopeHeader(ctx, builder, sec)
     if W.AttachStickyPageHeader then
         W.AttachStickyPageHeader(sec, {
             pageKey = ctx and ctx.key,
@@ -873,9 +728,17 @@ local function PriorityScopeNote(ctx, builder, sec, noteY, pageW)
         })
     end
 end
-local function ScopeSection(ctx, builder, opts)
-    opts = opts or {}
-    local priorityMode = opts.priorityMode == true
+local function PriorityScopeNote(ctx, builder, sec, layout)
+    local note = Schema.Build(ctx, sec, {
+        { "text", "note", nil, { "Profile-wide · follows the active Party, Raid, or Mythic Raid frame appearance",
+            16, layout.noteY, layout.pageW - 32, T.colors.muted },
+            meta = GroupControlMeta(ctx, "scope.priority_note"), scope = "group", domain = "layout" },
+    }).note
+    if note and note.SetJustifyH then note:SetJustifyH("LEFT") end
+    AttachStickyScopeHeader(ctx, builder, sec)
+end
+-- Measures the Page bar and the scope bar; the panel height, the note row and both bars derive from it.
+local function ScopeHeaderLayout(builder, priorityMode)
     local pageW = tonumber(builder.width) or 720
     local pageValues = {}
     for i = 1, #GROUP_PAGE_TABS do
@@ -913,28 +776,34 @@ local function ScopeSection(ctx, builder, opts)
     })
     local noteY = min(-50, pageBottomY - 10)
     local scopeBottomY = (scopeMetrics and scopeMetrics.bottomY) or -72
-    local h = priorityMode
-        and max(70, math.abs(noteY) + 20)
-        or max(92, math.abs(scopeBottomY) + 14)
+    return {
+        pageW = pageW, pageOpts = pageOpts, scopeValues = scopeValues, scopeCenterY = scopeCenterY, noteY = noteY,
+        height = priorityMode and max(70, math.abs(noteY) + 20) or max(92, math.abs(scopeBottomY) + 14),
+    }
+end
+-- The status panel holding the Page bar, the scope bar and Copy To; it takes its slot in the page flow.
+local function NewScopePanel(ctx, builder, layout, priorityMode)
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
-    sec:SetSize(pageW, h)
-    sec._msuf2Width = pageW
+    sec:SetSize(layout.pageW, layout.height)
+    sec._msuf2Width = layout.pageW
     if W.RegisterGuidedRegion then
         W.RegisterGuidedRegion(ctx, sec, priorityMode and "Priority Frames workspace" or "Party frame and Copy To", "group_scope")
     end
-    builder.y = builder.y - h - 8
+    builder.y = builder.y - layout.height - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
-
-    local function SelectScope(kind)
+    return sec
+end
+local function NewScopeSelector(ctx)
+    return function(kind)
         if M.NormalizeGroupScope then kind = M.NormalizeGroupScope(kind) end
         local previousScope = M.gfScope
         M.SetMenuStateValue("gfScope", kind or "party")
         if previousScope ~= M.gfScope and W.CloseTextQuickSettings then W.CloseTextQuickSettings() end
         if previousScope ~= M.gfScope then ShowScopeFeedback() end
         local gf = GF()
-        _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope)
+        SetActivePreviewKind(M.gfScope)
         RequestGFPagePreview()
         if gf and type(gf.PreviewScopeChanged) == "function" then
             gf.PreviewScopeChanged()
@@ -943,39 +812,10 @@ local function ScopeSection(ctx, builder, opts)
         end
         RefreshScopeContext(ctx, previousScope)
     end
-    sec._msuf2GuidedSelectScope = SelectScope
-
-    local command = sec
-    pageOpts.getValue = function() return ctx and ctx.key end
-    pageOpts.setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end
-    Schema.Build(ctx, command, {
-        { "scopebar", "page", nil, { pageOpts }, scope = "group", domain = "navigation",
-            beforeBind = function(widget) RegisterGroupControl(widget, ctx, "navigation.section.selector", "Page", "segment", "ephemeral") end },
-    })
-
-    if priorityMode then
-        PriorityScopeNote(ctx, builder, sec, noteY, pageW)
-        return sec
-    end
-
-    local copyPopup
-    local copy = Schema.Build(ctx, sec, {
-        { W.RoleButton and "roleButton" or "topButton", "copy", nil,
-            W.RoleButton and { "Copy To", "success", 86, 24 } or { "Copy To", 86, 24, {} },
-            anchor = { "TOPRIGHT", sec, "TOPRIGHT", -16, -16 },
-            action = function(self) if copyPopup then copyPopup.Show(self) end end,
-            meta = GroupControlMeta(ctx, "copy.open", "ephemeral"), scope = "group", domain = "copy" },
-    }).copy
-    local scopeBtns = {}
-    local scopeBar = Schema.Build(ctx, command, {
-        { "scopebar", "scope", nil, { { values = scopeValues, width = pageW, label = "", labelWidth = 0,
-            startX = 16, centerY = scopeCenterY, getValue = CurrentScope, setValue = SelectScope } },
-            scope = "group", domain = "scope",
-            beforeBind = function(widget) RegisterGroupControl(widget, ctx, "scope.selector", "Editing", "segment", "ephemeral") end },
-    }).scope
-    for i = 1, #SCOPE_VALUES do scopeBtns[SCOPE_VALUES[i].value] = scopeBar and scopeBar.buttons and scopeBar.buttons[i] end
-    M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
-    copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
+end
+-- The Copy To popup; its target click copies the selected scope's settings to that scope, in one history step.
+local function NewScopeCopyPopup(ctx, copy)
+    return Shared.MakeScopeCopyPopup(copy, {
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "copy",
@@ -1008,21 +848,53 @@ local function ScopeSection(ctx, builder, opts)
             popup:Hide()
         end,
     })
+end
+local function ScopeSection(ctx, builder, opts)
+    opts = opts or {}
+    local priorityMode = opts.priorityMode == true
+    local layout = ScopeHeaderLayout(builder, priorityMode)
+    local sec = NewScopePanel(ctx, builder, layout, priorityMode)
+    local SelectScope = NewScopeSelector(ctx)
+    sec._msuf2GuidedSelectScope = SelectScope
+
+    local command = sec
+    local pageOpts = layout.pageOpts
+    pageOpts.getValue = function() return ctx and ctx.key end
+    pageOpts.setValue = function(pageKey) if pageKey and pageKey ~= ctx.key then M.SelectPage(pageKey) end end
+    Schema.Build(ctx, command, {
+        { "scopebar", "page", nil, { pageOpts }, scope = "group", domain = "navigation",
+            beforeBind = function(widget) RegisterGroupControl(widget, ctx, "navigation.section.selector", "Page", "segment", "ephemeral") end },
+    })
+
+    if priorityMode then
+        PriorityScopeNote(ctx, builder, sec, layout)
+        return sec
+    end
+
+    local copyPopup
+    local copy = Schema.Build(ctx, sec, {
+        { W.RoleButton and "roleButton" or "topButton", "copy", nil,
+            W.RoleButton and { "Copy To", "success", 86, 24 } or { "Copy To", 86, 24, {} },
+            anchor = { "TOPRIGHT", sec, "TOPRIGHT", -16, -16 },
+            action = function(self) if copyPopup then copyPopup.Show(self) end end,
+            meta = GroupControlMeta(ctx, "copy.open", "ephemeral"), scope = "group", domain = "copy" },
+    }).copy
+    local scopeBtns = {}
+    local scopeBar = Schema.Build(ctx, command, {
+        { "scopebar", "scope", nil, { { values = layout.scopeValues, width = layout.pageW, label = "", labelWidth = 0,
+            startX = 16, centerY = layout.scopeCenterY, getValue = CurrentScope, setValue = SelectScope } },
+            scope = "group", domain = "scope",
+            beforeBind = function(widget) RegisterGroupControl(widget, ctx, "scope.selector", "Editing", "segment", "ephemeral") end },
+    }).scope
+    for i = 1, #SCOPE_VALUES do scopeBtns[SCOPE_VALUES[i].value] = scopeBar and scopeBar.buttons and scopeBar.buttons[i] end
+    M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
+    copyPopup = Shared.MakeScopeCopyPopup and NewScopeCopyPopup(ctx, copy)
     RegisterGroupControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral", { searchIndexed = true }) -- searchable opener
     if type(M.RegisterGuidedCopyPopup) == "function" then
         M.RegisterGuidedCopyPopup("group", ctx.key, M.CreateGuidedCopyOpener(copyPopup, copy))
     end
     sec:SetScript("OnHide", function() if copyPopup then copyPopup.Hide() end end)
-    if W.AttachStickyPageHeader then
-        W.AttachStickyPageHeader(sec, {
-            pageKey = ctx and ctx.key,
-            wrapper = ctx and ctx.wrapper,
-            gap = 4,
-            builder = builder,
-            ctx = ctx,
-            flowGap = 8,
-        })
-    end
+    AttachStickyScopeHeader(ctx, builder, sec)
     local function RefreshTop()
         local current = CurrentScope()
         for i = 1, #SCOPE_VALUES do
@@ -1486,16 +1358,10 @@ end
 function PortraitBuild.Gates(ctx, s)
     local kind, sec, portraitEnable, RefreshPortraitControls = s.kind, s.sec, s.portraitEnable, s.RefreshPortraitControls
     local c = s.controls
-    local side, render, clickable, shape, sizeMode = c.position, c.portraitRender, c.portraitClickable, c.portraitShape, c.portraitSizeMode
-    local size, width, height, zoom, panX, panY = c.portraitSizeOverride, c.portraitWidth, c.portraitHeight, c.portraitZoom, c.portraitPanX, c.portraitPanY
-    local placement, detachedPoint, detachedTo, overlayAlign = c.portraitPlacement, c.portraitDetachedPoint, c.portraitDetachedTo, c.portraitOverlayAlign
-    local level, alpha, border, edgeSoftness, borderArt =
-        c.portraitLevelOffset, c.portraitAlpha, c.portraitBorderStyle, c.portraitEdgeSoftness, c.portraitBorderArt
-    local direction, thickness, fill, classStyle = c.portraitBorderDirection, c.portraitBorderThickness, c.portraitFillBorder, c.portraitClassStyle
-    local background, backgroundColor, backgroundAlpha, castIcon = c.portraitBgEnabled, c.portraitBgColor, c.portraitBgColorA, c.portraitCastSpellIcon
     local activeControls = {
-        render, clickable, shape, sizeMode, size, width, height, placement, level, alpha,
-        border, edgeSoftness, background, castIcon,
+        c.portraitRender, c.portraitClickable, c.portraitShape, c.portraitSizeMode, c.portraitSizeOverride, c.portraitWidth,
+        c.portraitHeight, c.portraitPlacement, c.portraitLevelOffset, c.portraitAlpha, c.portraitBorderStyle,
+        c.portraitEdgeSoftness, c.portraitBgEnabled, c.portraitCastSpellIcon,
     }
     local function Active(conf) return (conf.portraitMode or "OFF") ~= "OFF" end
     local function Placed(conf, value)
@@ -1514,34 +1380,37 @@ function PortraitBuild.Gates(ctx, s)
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return Conf(kind) end, {
         { enable = { portraitEnable } },
         { controls = activeControls, on = Active, reason = W.TurnOnReason and W.TurnOnReason("Portrait") },
-        { controls = side, on = function(conf) return Placed(conf, "ATTACHED") end },
-        { controls = { detachedPoint, detachedTo }, on = function(conf) return Placed(conf, "DETACHED") end },
-        { controls = overlayAlign, on = function(conf) return Placed(conf, "OVERLAY") end },
-        { controls = sizeMode, on = function(conf) return Active(conf) and not FillsBar(conf) end },
-        { controls = size, on = function(conf)
+        { controls = c.position, on = function(conf) return Placed(conf, "ATTACHED") end },
+        { controls = { c.portraitDetachedPoint, c.portraitDetachedTo }, on = function(conf) return Placed(conf, "DETACHED") end },
+        { controls = c.portraitOverlayAlign, on = function(conf) return Placed(conf, "OVERLAY") end },
+        { controls = c.portraitSizeMode, on = function(conf) return Active(conf) and not FillsBar(conf) end },
+        { controls = c.portraitSizeOverride, on = function(conf)
             return Active(conf) and not FillsBar(conf) and not UsesSeparateSize(conf)
         end },
-        { controls = { width, height }, on = function(conf)
+        { controls = { c.portraitWidth, c.portraitHeight }, on = function(conf)
             return Active(conf) and not FillsBar(conf) and UsesSeparateSize(conf)
         end },
-        { controls = { zoom, panX, panY }, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") ~= "CLASS" end },
-        { controls = edgeSoftness, on = function(conf)
+        { controls = { c.portraitZoom, c.portraitPanX, c.portraitPanY },
+            on = function(conf) return Active(conf) and (conf.portraitRender or "2D") ~= "CLASS" end },
+        { controls = c.portraitEdgeSoftness, on = function(conf)
             return Active(conf)
                 and (conf.portraitShape or "SQUARE") ~= "BLIZZARD"
                 and (conf.portraitBorderStyle or "NONE") == "NONE"
         end },
-        { controls = { thickness, borderArt }, on = function(conf) return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE" end },
-        { controls = direction, on = function(conf)
+        { controls = { c.portraitBorderThickness, c.portraitBorderArt },
+            on = function(conf) return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE" end },
+        { controls = c.portraitBorderDirection, on = function(conf)
             return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE"
                 and (conf.portraitBorderArt or "FLAT") == "RELIEF"
         end },
-        { controls = fill, on = function(conf)
+        { controls = c.portraitFillBorder, on = function(conf)
             return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE"
                 and (conf.portraitShape or "SQUARE") == "SQUARE"
                 and (conf.portraitBorderArt or "FLAT") ~= "RELIEF"
         end },
-        { controls = classStyle, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") == "CLASS" end },
-        { controls = { backgroundColor, backgroundAlpha }, on = function(conf) return Active(conf) and conf.portraitBgEnabled == true end },
+        { controls = c.portraitClassStyle, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") == "CLASS" end },
+        { controls = { c.portraitBgColor, c.portraitBgColorA },
+            on = function(conf) return Active(conf) and conf.portraitBgEnabled == true end },
     }, {
         also = function() SetSectionHeaderStatus(sec, nil) end,
         track = function(c, refresh) return M.TrackCollapsibleRefresh(c, sec, refresh) end,
@@ -1597,6 +1466,73 @@ local GROWTH_TILE_VALUES = {
     { value = "RIGHT", text = "Right", dx = 1, dy = 0, arrow = ">" },
     { value = "LEFT", text = "Left", dx = -1, dy = 0, arrow = "<" },
 }
+-- Runs on every refresh of the growth tiles, so the cell order is computed inline (no helper call).
+local function DrawGrowthMiniPreview(btn, info, raidLike, tileW, tileH)
+    if not btn or not info then return end
+    btn._cells = btn._cells or {}
+    local vertical = info.dy ~= 0
+    local cols, rows
+    if raidLike then
+        cols, rows = vertical and 4 or 5, vertical and 5 or 4
+    else
+        cols, rows = vertical and 1 or 5, vertical and 5 or 1
+    end
+    local pad = 5
+    local labelH = 13
+    local innerW = tileW - (pad * 2)
+    local innerH = tileH - pad - labelH
+    local cellGap = 1
+    local cellW = max(3, floor((innerW - ((cols - 1) * cellGap)) / cols))
+    local cellH = max(3, floor((innerH - ((rows - 1) * cellGap)) / rows))
+    local gridW = (cols * cellW) + ((cols - 1) * cellGap)
+    local gridH = (rows * cellH) + ((rows - 1) * cellGap)
+    local originX = pad + floor((innerW - gridW) * 0.5 + 0.5)
+    local originY = -pad - floor((innerH - gridH) * 0.5 + 0.5)
+    -- Vertical growth fills columns top to bottom (UP from the bottom), horizontal growth fills rows
+    -- left to right (LEFT from the right); the first cell is badged.
+    local positions = {}
+    local outer, inner = vertical and cols or rows, vertical and rows or cols
+    local reversed
+    if vertical then reversed = info.dy == 1 else reversed = info.dx == -1 end
+    for o = 0, outer - 1 do
+        for n = 0, inner - 1 do
+            local i = reversed and (inner - 1 - n) or n
+            positions[#positions + 1] = vertical and { col = o, row = i } or { col = i, row = o }
+        end
+    end
+    for i = 1, #positions do
+        local cell = btn._cells[i]
+        if not cell then
+            cell = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
+            btn._cells[i] = cell
+        end
+        local pos = positions[i]
+        cell:ClearAllPoints()
+        cell:SetPoint("TOPLEFT", btn, "TOPLEFT", originX + (pos.col * (cellW + cellGap)), originY - (pos.row * (cellH + cellGap)))
+        cell:SetSize(cellW, cellH)
+        if i == 1 then
+            cell:SetColorTexture(0.120, 0.950, 0.620, 0.98)
+        elseif i <= 4 then
+            cell:SetColorTexture(0.220, 0.580, 0.940, 0.78)
+        else
+            cell:SetColorTexture(0.160, 0.360, 0.640, 0.42)
+        end
+        cell:Show()
+    end
+    for i = #positions + 1, #btn._cells do
+        btn._cells[i]:Hide()
+    end
+    W.EnsureTileFirstBadge(btn)
+    local first = positions[1]
+    if first then
+        btn._firstText:ClearAllPoints()
+        btn._firstText:SetPoint("CENTER", btn, "TOPLEFT",
+            originX + (first.col * (cellW + cellGap)) + (cellW * 0.5),
+            originY - (first.row * (cellH + cellGap)) - (cellH * 0.5))
+        btn._firstText:Show()
+    end
+    W.PaintTileDirectionArrow(btn, info, labelH)
+end
 local function BuildGrowthDirectionTiles(ctx, section, opts)
     if not section then return nil end
     opts = opts or {}
@@ -1615,83 +1551,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         kind = "growthTiles", labelKey = "Growth Direction", scope = "group", applyDomain = "layout", owner = holder })
     local buttons = {}
     local SetTileVisual = W.SetTileVisual
-    local function DrawMiniPreview(btn, info, raidLike)
-        if not btn or not info then return end
-        btn._cells = btn._cells or {}
-        local cols, rows
-        if raidLike then
-            if info.dy ~= 0 then
-                cols, rows = 4, 5
-            else
-                cols, rows = 5, 4
-            end
-        elseif info.dy ~= 0 then
-            cols, rows = 1, 5
-        else
-            cols, rows = 5, 1
-        end
-        local pad = 5
-        local labelH = 13
-        local innerW = tileW - (pad * 2)
-        local innerH = tileH - pad - labelH
-        local cellGap = 1
-        local cellW = max(3, floor((innerW - ((cols - 1) * cellGap)) / cols))
-        local cellH = max(3, floor((innerH - ((rows - 1) * cellGap)) / rows))
-        local gridW = (cols * cellW) + ((cols - 1) * cellGap)
-        local gridH = (rows * cellH) + ((rows - 1) * cellGap)
-        local originX = pad + floor((innerW - gridW) * 0.5 + 0.5)
-        local originY = -pad - floor((innerH - gridH) * 0.5 + 0.5)
-        local positions = {}
-        if info.dy ~= 0 then
-            local rowStart, rowEnd, rowStep = 0, rows - 1, 1
-            if info.dy == 1 then rowStart, rowEnd, rowStep = rows - 1, 0, -1 end
-            for col = 0, cols - 1 do
-                for row = rowStart, rowEnd, rowStep do
-                    positions[#positions + 1] = { col = col, row = row }
-                end
-            end
-        else
-            local colStart, colEnd, colStep = 0, cols - 1, 1
-            if info.dx == -1 then colStart, colEnd, colStep = cols - 1, 0, -1 end
-            for row = 0, rows - 1 do
-                for col = colStart, colEnd, colStep do
-                    positions[#positions + 1] = { col = col, row = row }
-                end
-            end
-        end
-        for i = 1, #positions do
-            local cell = btn._cells[i]
-            if not cell then
-                cell = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
-                btn._cells[i] = cell
-            end
-            local pos = positions[i]
-            cell:ClearAllPoints()
-            cell:SetPoint("TOPLEFT", btn, "TOPLEFT", originX + (pos.col * (cellW + cellGap)), originY - (pos.row * (cellH + cellGap)))
-            cell:SetSize(cellW, cellH)
-            if i == 1 then
-                cell:SetColorTexture(0.120, 0.950, 0.620, 0.98)
-            elseif i <= 4 then
-                cell:SetColorTexture(0.220, 0.580, 0.940, 0.78)
-            else
-                cell:SetColorTexture(0.160, 0.360, 0.640, 0.42)
-            end
-            cell:Show()
-        end
-        for i = #positions + 1, #btn._cells do
-            btn._cells[i]:Hide()
-        end
-        W.EnsureTileFirstBadge(btn)
-        local first = positions[1]
-        if first then
-            btn._firstText:ClearAllPoints()
-            btn._firstText:SetPoint("CENTER", btn, "TOPLEFT",
-                originX + (first.col * (cellW + cellGap)) + (cellW * 0.5),
-                originY - (first.row * (cellH + cellGap)) - (cellH * 0.5))
-            btn._firstText:Show()
-        end
-        W.PaintTileDirectionArrow(btn, info, labelH)
-    end
     local function RefreshGrowthTiles()
         local current = Val(CurrentScope(), "growth", "DOWN")
         local raidLike = CurrentScope() ~= "party"
@@ -1699,7 +1558,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             local info = GROWTH_TILE_VALUES[i]
             local btn = buttons[info.value]
             if btn then
-                DrawMiniPreview(btn, info, raidLike)
+                DrawGrowthMiniPreview(btn, info, raidLike, tileW, tileH)
                 SetTileVisual(btn, current == info.value, btn.IsMouseOver and btn:IsMouseOver())
             end
         end
@@ -1717,7 +1576,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             })
         end
         local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-        if text.SetFont then text:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+        if text.SetFont then text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(M.Tr(info.text))
         btn._label = text
@@ -1924,33 +1783,21 @@ ApplyScopeEnabledGate = function(ctx)
         W.SetControlGateEnabled(control, gateKey, enabled)
     end)
 end
+-- Spec catalogue domains this page only republishes; each is bound by name.
+local SPEC_DOMAINS = WL [[
+    BLIZZARD_FALLBACK_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS AURA_ANCHORS SORT_MODES
+    GF_BAR_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS STATUS_ICON_ANCHORS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES
+    FRAME_EFFECT_TYPES ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS
+    DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES
+]]
+for i = 1, #SPEC_DOMAINS do GroupPage[SPEC_DOMAINS[i]] = Specs[SPEC_DOMAINS[i]] or {} end
 M.Assign(GroupPage, {
     SCOPE_VALUES = SCOPE_VALUES,
     GROWTH_VALUES = GROWTH_VALUES,
-    BLIZZARD_FALLBACK_VALUES = BLIZZARD_FALLBACK_VALUES,
     GROUP_FRAME_PROVIDER_VALUES = GROUP_FRAME_PROVIDER_VALUES,
-    HEALTH_MODES = HEALTH_MODES,
-    TEXT_MODES = TEXT_MODES,
-    HEALTH_TEXT_MODES = HEALTH_TEXT_MODES,
-    DELIMITER_VALUES = DELIMITER_VALUES,
-    ANCHORS = ANCHORS,
-    AURA_ANCHORS = AURA_ANCHORS,
-    SORT_MODES = SORT_MODES,
-    GF_BAR_MODES = GF_BAR_MODES,
-    SIMPLE_TEXTURES = SIMPLE_TEXTURES,
-    GF_ANCHOR_TO = GF_ANCHOR_TO,
-    GF_ANCHOR_POINTS = GF_ANCHOR_POINTS,
-    STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS,
+    HEALTH_TEXT_MODES = Specs.HEALTH_TEXT_MODES or GroupPage.TEXT_MODES,
+    SIMPLE_TEXTURES = Specs.SimpleTextures,
     GF_STATUS_ICON_SPECS = GF_STATUS_ICON_SPECS,
-    GF_STATUS_ICON_VALUES = GF_STATUS_ICON_VALUES,
-    PLACED_INDICATOR_TYPES = PLACED_INDICATOR_TYPES,
-    FRAME_EFFECT_TYPES = FRAME_EFFECT_TYPES,
-    ICON_EFFECT_TYPES = ICON_EFFECT_TYPES,
-    SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES,
-    CI_SLOT_VALUES = CI_SLOT_VALUES,
-    CI_SLOT_DEFAULTS = CI_SLOT_DEFAULTS,
-    DISPEL_OVERLAY_STYLES = DISPEL_OVERLAY_STYLES,
-    DEBUFF_STRIPE_EDGES = DEBUFF_STRIPE_EDGES,
     GF = GF,
     ControlMeta = GroupControlMeta,
     RegisterControl = RegisterGroupControl,

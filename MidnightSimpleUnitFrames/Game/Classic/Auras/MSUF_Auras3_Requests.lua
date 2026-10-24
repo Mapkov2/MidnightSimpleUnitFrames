@@ -10,7 +10,6 @@
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
 assert(Backend and Backend.Element, "Classic aura requests require Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
@@ -19,15 +18,22 @@ local Compile = A3._ClassicCompile
 local Requests = {}
 
 local UF = MSUF.UF
+local Client = MSUF.Client
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local math_max = math.max
-local CreateFrame = _G.CreateFrame
-local C_Timer = _G.C_Timer
+local CreateFrame = CreateFrame
+local C_Timer = C_Timer
 
 local MANAGED_UNITS = Compile.MANAGED_UNITS
 local NormalizeRuntimeUnit = Compile.NormalizeRuntimeUnit
 local WipeTable = Compile.WipeTable
 local CombatBlocked = Compile.AuraRuntimeCombatBlocked
+
+--- Boss frames come in fives; the arena slots this client fields, at least three.
+local BOSS_SLOTS = 5
+local function ArenaSlots()
+    return math_max(3, tonumber(Client.MaxArenaOpponents) or 3)
+end
 
 function A3._EnsureDeferredAuraRuntimeDriver()
     if A3._deferredAuraRuntimeFrame then return A3._deferredAuraRuntimeFrame end
@@ -130,6 +136,15 @@ function A3._RequestGroupUnitNow(unit)
     return frame and A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) or false
 end
 
+--- Applies prefix1..prefixN; true when any of them had a frame.
+local function ApplyRuntimeUnits(prefix, count)
+    local didWork = false
+    for i = 1, count do
+        didWork = ApplyRuntimeUnit(prefix .. i) or didWork
+    end
+    return didWork
+end
+
 local function RequestUnitNow(unit)
     unit = tostring(unit or "")
     if unit == "" or unit == "*" then
@@ -137,28 +152,16 @@ local function RequestUnitNow(unit)
         didWork = ApplyRuntimeUnit("pet") or didWork
         didWork = ApplyRuntimeUnit("target") or didWork
         didWork = ApplyRuntimeUnit("focus") or didWork
-        for i = 1, 5 do
-            didWork = ApplyRuntimeUnit("boss" .. i) or didWork
-        end
-        for i = 1, math_max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) do
-            didWork = ApplyRuntimeUnit("arena" .. i) or didWork
-        end
+        didWork = ApplyRuntimeUnits("boss", BOSS_SLOTS) or didWork
+        didWork = ApplyRuntimeUnits("arena", ArenaSlots()) or didWork
         didWork = A3._RequestGroupKindNow(nil) or didWork
         return didWork
     end
     if unit == "boss" then
-        local didWork = false
-        for i = 1, 5 do
-            didWork = ApplyRuntimeUnit("boss" .. i) or didWork
-        end
-        return didWork
+        return ApplyRuntimeUnits("boss", BOSS_SLOTS)
     end
     if unit == "arena" then
-        local didWork = false
-        for i = 1, math_max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) do
-            didWork = ApplyRuntimeUnit("arena" .. i) or didWork
-        end
-        return didWork
+        return ApplyRuntimeUnits("arena", ArenaSlots())
     end
     if unit == "group" or unit == "groups" then
         return A3._RequestGroupKindNow(nil)
@@ -256,9 +259,9 @@ function A3.RefreshUnit(unit)
     end
     local key = tostring(unit or ""):lower()
     if key == "boss" then
-        for i = 1, 5 do A3.InvalidateUnitRuntimeConfig("boss" .. i) end
+        for i = 1, BOSS_SLOTS do A3.InvalidateUnitRuntimeConfig("boss" .. i) end
     elseif key == "arena" then
-        for i = 1, math_max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) do
+        for i = 1, ArenaSlots() do
             A3.InvalidateUnitRuntimeConfig("arena" .. i)
         end
     elseif MANAGED_UNITS[key] then

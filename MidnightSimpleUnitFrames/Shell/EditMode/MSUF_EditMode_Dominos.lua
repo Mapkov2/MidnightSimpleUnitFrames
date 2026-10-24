@@ -1,9 +1,7 @@
 --- Dominos adapter for MSUF Edit Mode. Dominos keeps ownership of all bars/positions.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local API = _G.MSUF_EditModeAPI
-if not (API and API.RegisterElement) then return end
+local API = MSUF.Require("MSUF_EditModeAPI", "Shell/EditMode/MSUF_EditMode_Dominos.lua")
 
 local OWNER, SETTING = "MSUF.Dominos", "dominosEditModeIntegration"
 local registered = {}
@@ -11,15 +9,15 @@ local active, listening, syncQueued = false, false, false
 
 local Export = MSUF.ExportPublic
 
-local General = _G.MSUF_GetGeneralDB
+local General = MSUF.Require("MSUF_GetGeneralDB", "Shell/EditMode/MSUF_EditMode_Dominos.lua")
 
 local function Enabled()
     local general = General()
     return not general or general[SETTING] ~= false
 end
 
-local function Dominos()
-    local dominos = _G.Dominos
+local function GetDominosAddon()
+    local dominos = Dominos
     if type(dominos) ~= "table" or type(dominos.RegisterCallback) ~= "function"
         or type(dominos.UnregisterCallback) ~= "function" then return nil end
     local frames = dominos.Frame
@@ -29,11 +27,11 @@ local function Dominos()
 end
 
 local function InCombat()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return type(InCombatLockdown) == "function" and InCombatLockdown() == true
 end
 
 local function Bar(id)
-    local dominos = Dominos()
+    local dominos = GetDominosAddon()
     local bar = dominos and dominos.Frame:Get(id)
     if type(bar) ~= "table" or type(bar.sets) ~= "table"
         or type(bar.GetSavedPosition) ~= "function" or type(bar.SavePosition) ~= "function"
@@ -127,7 +125,7 @@ end
 local function Move(id, request)
     local state, bar = request and request.state, Movable(id)
     if type(state) ~= "table" or not bar then return false end
-    local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
+    local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
     local barScale = bar.GetEffectiveScale and bar:GetEffectiveScale() or uiScale
     if uiScale <= 0 then uiScale = 1 end
     if not barScale or barScale <= 0 then barScale = uiScale end
@@ -155,7 +153,7 @@ local function OpenSettings(id)
         bar:ShowMenu()
         if type(bar.menu) == "table" then return true end
     end
-    local dominos = Dominos()
+    local dominos = GetDominosAddon()
     if dominos and type(dominos.ShowOptionsFrame) == "function" then
         return dominos:ShowOptionsFrame() == true
     end
@@ -308,7 +306,7 @@ local function Element(id, elementId, label, order)
 end
 
 local function Sync()
-    local dominos = active and Enabled() and Dominos()
+    local dominos = active and Enabled() and GetDominosAddon()
     if not dominos then return end
     for id, bar in dominos.Frame:GetAll() do
         local stem = tostring(id):lower():gsub("[^%w_.%-]+", "_")
@@ -320,7 +318,7 @@ local function Sync()
             end
         end
     end
-    if next(registered) and API.RefreshOwner then API.RefreshOwner(OWNER) end
+    if next(registered) then API.RefreshOwner(OWNER) end
 end
 
 --- Dominos rebuilds its bars inside the same callbacks we subscribe to, and
@@ -329,8 +327,8 @@ end
 local function QueueSync()
     if syncQueued or not active then return end
     syncQueued = true
-    if _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, function()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
             syncQueued = false
             Sync()
         end)
@@ -354,7 +352,7 @@ end
 
 local function Activate()
     if active or not Enabled() then return false end
-    local dominos = Dominos()
+    local dominos = GetDominosAddon()
     if not dominos then return false end
     active = true
     Listen(dominos, true)
@@ -364,7 +362,7 @@ end
 
 local function Deactivate()
     if not active then return false end
-    local dominos = Dominos()
+    local dominos = GetDominosAddon()
     active = false
     if dominos then Listen(dominos, false) end
     if next(registered) then API.UnregisterOwner(OWNER) end
@@ -372,13 +370,13 @@ local function Deactivate()
     return true
 end
 
-local External = _G.MSUF_EM2.ExternalProviders
+local External = MSUF.Require("MSUF_EM2", "Shell/EditMode/MSUF_EditMode_Dominos.lua").ExternalProviders
 local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
-Export("MSUF_DominosEditMode_IsAvailable", function() return Dominos() ~= nil end)
+Export("MSUF_DominosEditMode_IsAvailable", function() return GetDominosAddon() ~= nil end)
 Export("MSUF_DominosEditMode_SetEnabled", SetEnabled)
 
-local eventFrame = _G.CreateFrame and _G.CreateFrame("Frame")
+local eventFrame = CreateFrame and CreateFrame("Frame")
 if eventFrame then
     eventFrame:RegisterEvent("ADDON_LOADED")
     eventFrame:SetScript("OnEvent", function(_, _, addon)

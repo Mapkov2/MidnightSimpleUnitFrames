@@ -24,18 +24,22 @@ local ClearShapeEdge = shared.ClearShapeEdge
 local CP_LayoutShown = shared.CP_LayoutShown
 local CoreUnitFrame = shared.CoreUnitFrame
 local ApplyPowerBarEmbedLayout = shared.ApplyPowerBarEmbedLayout
+local CP_ApplyRoundedSurface = shared.CP_ApplyRoundedSurface
+local CP_LevelOffset = shared.CP_LevelOffset
+local Snap = MSUF.Require("MSUF_Snap", "ClassPower/MSUF_CP_Layout.lua")
 
 builders.LAYOUT = function(E)
-    local _G = E.globals or _G
+    local ApplyRoundedSurface = E.ApplyRoundedSurface or CP_ApplyRoundedSurface
     local CoreUnitFrame = E.CoreUnitFrame or CoreUnitFrame
     local CP_AboveCooldownGap = E.AboveCooldownGap or CP_AboveCooldownGap
     local GetProfileScopedCache = E.GetProfileScopedCache or GetProfileScopedCache
     local GetEffectiveCooldownFrame = E.GetCooldownFrame or GetEffectiveCooldownFrame
     local CacheScreenPosition = E.CacheScreenPosition or CacheScreenPosition
     local ApplyCachedScreenPosition = E.ApplyCachedScreenPosition or ApplyCachedScreenPosition
+    local CreateFrame = E.CreateFrame or CreateFrame
     --- Bound once by LAYOUT at controller load: the shared state, the cached
     --- config and presentation collaborators.
-    local CP, _cpDB, CPConst, CreateFrame
+    local CP, _cpDB, CPConst
     local ResolveClassPowerBgColor
 
     --- CP_Layout runs as a fixed sequence of named stages. They share one
@@ -78,9 +82,7 @@ builders.LAYOUT = function(E)
         local b = _cpDB.bars or {}
         pass.b = b
         pass.layoutCache = GetProfileScopedCache("classPowerLayoutCache") or nil
-        local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
-        if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
-        levelOffset = math_floor(levelOffset + 0.5)
+        local levelOffset = CP_LevelOffset(b.classPowerFrameLevelOffset, 5)
         if playerFrame.GetFrameLevel and CP.container.SetFrameLevel then
             local layers = MSUF.UF and MSUF.UF.Layers
             local targetLevel = layers and layers.ElementLevel and layers.ElementLevel(levelOffset, 5, 0)
@@ -109,7 +111,7 @@ builders.LAYOUT = function(E)
         if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
         pass.tickW = tickW
 
-        pass.snap = _G.MSUF_Snap
+        pass.snap = Snap
 
         local shape = (powerType == "WHIRLWIND" or powerType == "SWEEPING_STRIKES")
             and "BAR" or CP_NormalizeShape(b.classPowerShape)
@@ -137,7 +139,7 @@ builders.LAYOUT = function(E)
         if shapeMode and widthMode == "auto_pips" then
             local slot = tonumber(h) or 1
             if slot < 1 then slot = 1 end
-            if type(snap) == "function" then slot = snap(CP.container, slot) or slot end
+            slot = snap(CP.container, slot) or slot
             if slot < 1 then slot = 1 end
             userW = (slot * maxPower) + ((maxPower - 1) * snapAutoGap)
         elseif cdmName then
@@ -146,10 +148,8 @@ builders.LAYOUT = function(E)
                 userW = cachedW
             else
                 local cdmFrame = GetEffectiveCooldownFrame(cdmName) or _G[cdmName]
-                local cdmWidthFn = CP.cdmScaledWidth or _G.MSUF_CDM_GetScaledWidth
-                if type(cdmWidthFn) == "function" then
-                    userW = cdmWidthFn(cdmFrame, CP.container)
-                end
+                local cdmWidthFn = CP.cdmScaledWidth or MSUF.Require("MSUF_CDM_GetScaledWidth", "ClassPower/MSUF_CP_Layout.lua")
+                userW = cdmWidthFn(cdmFrame, CP.container)
             end
             if not userW or userW < 30 then
                 userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
@@ -174,9 +174,7 @@ builders.LAYOUT = function(E)
             end
             if widthMode ~= "player" then userW = userW - 4 end
         end
-        if type(snap) == "function" then
-            userW = snap(CP.container, userW)
-        end
+        userW = snap(CP.container, userW)
         if not userW or userW < 1 then userW = 1 end
         pass.userW = userW
         pass.cdmName = cdmName
@@ -219,7 +217,7 @@ builders.LAYOUT = function(E)
         if not positionFrozen then CP.container:ClearAllPoints() end
         if b.classPowerAnchorToCooldown == true and not positionFrozen then
             local ecv = not inLockdown and (
-                GetEffectiveCooldownFrame("EssentialCooldownViewer") or _G["EssentialCooldownViewer"]
+                GetEffectiveCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer
             ) or nil
             local anchorFrame = nil
             if CP_IsUsableCooldownAnchorFrame(ecv) then
@@ -302,7 +300,7 @@ builders.LAYOUT = function(E)
                 CP._outline = ol
                 CP._outlineEdge = -1
             end
-            local edge = (type(snap) == "function") and snap(CP._outline, outlineThick) or outlineThick
+            local edge = snap(CP._outline, outlineThick) or outlineThick
             if not edge or edge <= 0 then
                 CP._outline:Hide()
             else
@@ -331,11 +329,11 @@ builders.LAYOUT = function(E)
         local frameW = pass.userW
         local gap = tonumber(b.classPowerGap) or 0
         if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
-        local snapGap = (gap > 0 and type(snap) == "function") and snap(CP.container, gap) or gap
+        local snapGap = gap > 0 and snap(CP.container, gap) or gap
 
         pass.fillReverse = (b.classPowerFillReverse == true)
         local numTicks = maxPower - 1
-        local snapTickW = (tickW > 0 and type(snap) == "function") and snap(CP.container, tickW) or tickW
+        local snapTickW = tickW > 0 and snap(CP.container, tickW) or tickW
         local sepW = snapTickW + snapGap
         if numTicks > 0 then
             local maxSepW = math_floor((frameW - maxPower) / numTicks)
@@ -390,7 +388,7 @@ builders.LAYOUT = function(E)
             local shapeBg = shapeInfo.bg
             local slot = h
             if slot < 1 then slot = 1 end
-            if type(snap) == "function" then slot = snap(CP.container, slot) or slot end
+            slot = snap(CP.container, slot) or slot
             if slot < 1 then slot = 1 end
             local totalGap = (maxPower - 1) * snapGap
             local maxSlot = math_floor((frameW - totalGap) / maxPower)
@@ -518,14 +516,13 @@ builders.LAYOUT = function(E)
             refreshFragmentNotches((not shapeMode) and (powerType or CP.powerType) == "SOUL_FRAGMENTS")
         end
 
-        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
-        if type(applyRounded) == "function" then applyRounded() end
+        ApplyRoundedSurface()
 
         --- Detached player power can anchor to ClassPower. If ClassPower's
         --- anchor dimensions changed, ask the power-bar embed layout to refresh
         --- outside combat or mark it dirty for the post-combat pass.
         local needPBRefresh = false
-        local pf = CoreUnitFrame("player") or _G.MSUF_player
+        local pf = CoreUnitFrame("player")
         local powerSpec = pf and pf.MSUFSpec and pf.MSUFSpec.power
         if powerSpec and powerSpec.detached == true and (powerSpec.detachedSyncClass == true or powerSpec.detachedAnchorClass == true) then
             local anchorW = math_floor(userW + 0.5)
@@ -569,7 +566,6 @@ builders.LAYOUT = function(E)
     }
 
         CP, _cpDB, CPConst = E.CP, E._cpDB, E.CPConst
-        CreateFrame = E.CreateFrame or _G.CreateFrame
         ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     return API
 end

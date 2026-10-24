@@ -148,6 +148,9 @@ local function LoadAnchors(client, projectID, state)
     -- The core prompt layer (MSUF_UI, Shell/UI/MSUF_Widgets.lua): this smoke
     -- counts the prompts the file shows.
     MSUF_UI = { ShowPrompt = function(name) popups[#popups + 1] = name; return {} end, HidePrompt = function() end }
+    -- The pixel layout provider the file binds when it loads (Kernel/MSUF_Util.lua);
+    -- this smoke lays out no pixels.
+    MSUF_PixelLayoutRegion = function(region) return region end
     MSUF_DB = { general = { anchorToCooldown = state.anchor ~= false } }
     MSUF_GlobalDB = {}
     local namespace = { Client = client }
@@ -155,7 +158,9 @@ local function LoadAnchors(client, projectID, state)
     namespace.ExportPublic = function(name, value) _G[name] = value return value end
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", namespace)
-    namespace.ExportPublic = nil
+    -- The translation core loads ahead of the anchors file in every core TOC; its prompt text uses it.
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))("MidnightSimpleUnitFrames", namespace)
+    -- The anchors file captures MSUF.ExportPublic when it loads, as in the client.
     assert(loadfile(ANCHORS))("MidnightSimpleUnitFrames", namespace)
     return namespace, frames, timers, popups
 end
@@ -233,7 +238,8 @@ local function OpenOptions(client, loadResult, reason)
     local lines, wrapperCalls, directCalls = {}, 0, 0
     local loaded = false
     local namespace = { Client = client }
-    namespace.ExportPublic = function(name, value) _G[name] = value end
+    -- The shipped Kernel API (export policy, registry, Require), as in every core TOC.
+    assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))().InstallKernel(repo, namespace)
     _G.MSUF_NS, _G.MSUF2 = nil, nil
     SlashCmdList = {}
     InCombatLockdown = function() return false end
@@ -253,11 +259,11 @@ local function OpenOptions(client, loadResult, reason)
         end,
     }
     LoadAddOn = nil
-    MSUF_EnsureAddonLoaded = function(name)
+    namespace.ExportPublic("MSUF_EnsureAddonLoaded", function(name)
         wrapperCalls = wrapperCalls + 1
         local _, _ = C_AddOns.LoadAddOn(name)
         return loaded
-    end
+    end)
     print = function(message) lines[#lines + 1] = tostring(message) end
     -- The translation core loads ahead of the loader in every core TOC; its failure line uses it.
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))("MidnightSimpleUnitFrames", namespace)

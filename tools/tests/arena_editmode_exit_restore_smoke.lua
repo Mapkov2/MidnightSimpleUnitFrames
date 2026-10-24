@@ -348,9 +348,10 @@ local function NewWorld(flavor, roster)
     end
     _G.MSUF_EventBus_Unregister = function() end
 
+    -- MSUF_InCombat is a namespace-only export (Kernel/MSUF_Bootstrap.lua keep policy).
     function W.EnterCombat()
         W.combat = true
-        _G.MSUF_InCombat = true
+        W.MSUF.ExportPublic("MSUF_InCombat", true)
         W.Fire("PLAYER_REGEN_DISABLED")
         W.RunTimers()
         W.SecureTick()
@@ -360,9 +361,9 @@ local function NewWorld(flavor, roster)
     -- every PLAYER_REGEN_ENABLED handler ran (worst-case handler order).
     function W.LeaveCombat(lagInCombatFlag)
         W.combat = false
-        if not lagInCombatFlag then _G.MSUF_InCombat = false end
+        if not lagInCombatFlag then W.MSUF.ExportPublic("MSUF_InCombat", false) end
         W.Fire("PLAYER_REGEN_ENABLED")
-        _G.MSUF_InCombat = false
+        W.MSUF.ExportPublic("MSUF_InCombat", false)
         W.RunTimers()
         W.SecureTick()
     end
@@ -634,14 +635,12 @@ local function NewWorld(flavor, roster)
     local MSUF = {
         UF = UF,
         Secrets = { UnitExistsPlain = function(unit) return W.liveUnits[unit] == true end },
-        ExportPublic = function(name, value)
-            _G[name] = value
-            return value
-        end,
         Client = {
             IsRetail = flavor == "Mainline",
             IsMists = flavor == "Mists",
             SupportsUnit = function() return true end,
+            -- The client's arena slot fact (Game/Shared/Initialize.lua).
+            MaxArenaOpponents = W.roster,
         },
         MSUF_Auras3 = {
             RefreshEditPreview = function() W.auraRefreshes = W.auraRefreshes + 1 end,
@@ -650,11 +649,13 @@ local function NewWorld(flavor, roster)
     }
     W.MSUF = MSUF
     _G.MSUF_NS = MSUF
-    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
-    assert(loadfile(Path("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua")))("MidnightSimpleUnitFrames", MSUF)
+    -- The real Kernel namespace API (Bootstrap's ExportPublic with its global keep policy,
+    -- then MSUF.Require / MSUF.Optional), as in every core TOC.
+    assert(loadfile(Path("tools/tests/require_fixture.lua")))().InstallKernel(root, MSUF, nil, nil, true)
     -- The real event-edge combat state (Kernel/MSUF_Util.lua), as in every core TOC,
     -- in its own namespace so the stubs here stay in place.
-    local utilityNS = { ExportPublic = function(_, value) return value end }
+    -- Its exports go to a private sink (and registry), never to the globals this world fakes.
+    local utilityNS = { ExportPublic = function(_, value) return value end, PublicGlobals = {} }
     local previousMSUF = _G.MSUF
     assert(loadfile(Path("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames", utilityNS)
     _G.MSUF = previousMSUF
@@ -698,6 +699,26 @@ local function NewWorld(flavor, roster)
     end
 
     function W.Boot()
+        -- Shell/EditMode/MSUF_EditMode_Logo.lua is a purely visual intro animation (a frame
+        -- with an OnUpdate ring); this world models secure visibility, not chrome. The
+        -- state machine requires both entry points: they are present and inert here.
+        MSUF.ExportPublic("MSUF_PlayEditModeLogoIntro", function() return true end)
+        MSUF.ExportPublic("MSUF_StopEditModeLogoIntro", function() return true end)
+        -- The arrow-key nudge driver (Layout_Nudge.lua) binds keys; Enter/Exit only switch it.
+        MSUF.ExportPublic("MSUF_EnableArrowKeyNudge", function() end)
+        -- The boss castbar preview batch (Castbars/MSUF_BossCastbars_Preview.lua) belongs to the
+        -- boss descriptor of the pool previews; this world models only the arena descriptor.
+        MSUF.ExportPublic("MSUF_BeginBossCastbarPreviewBatch", function() end)
+        MSUF.ExportPublic("MSUF_EndBossCastbarPreviewBatch", function() end)
+        MSUF.ExportPublic("MSUF_UpdateBossCastbarPreview", function() end)
+        -- Group frames (UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua) are not part of this world.
+        MSUF.ExportPublic("MSUF_GF_EM2_HidePreview", function() end)
+        -- Preview families repaint prep health colour and range fade through the Health, Alpha
+        -- and RangeFade owners (UnitFrames/Engine/Elements, UnitFrames/Range), which paint
+        -- colours this world does not model; visibility and ownership are what it compares.
+        MSUF.ExportPublic("MSUF_UFCore_RefreshHealthBarColor", function() end)
+        MSUF.ExportPublic("MSUF_UF_ApplyRangeModifier", function() end)
+        MSUF.ExportPublic("MSUF_UF_RangeFade_Refresh", function() end)
         Load(FILES.loadConditions)
         Check(type(UF.elements.LoadConditions) == "table", "LoadConditions did not register")
         Load(FILES.editCore)
@@ -732,7 +753,7 @@ local function NewWorld(flavor, roster)
         local state = rawget(_G, "MSUF_EditState")
         local editActive = (type(state) == "table" and state.active == true)
             or rawget(_G, "MSUF_UnitEditModeActive") == true
-        return (editActive and rawget(_G, "MSUF_UnitPreviewActive") == true)
+        return (editActive and W.MSUF.PublicGlobals.MSUF_UnitPreviewActive == true)
             or rawget(_G, "MSUF2_ArenaPageAuraPreviewActive") == true
     end
 
@@ -755,14 +776,16 @@ local function NewWorld(flavor, roster)
             local trinket = rawget(_G, "MSUF_ArenaTrinket" .. index)
             Add(unit .. ".trinketShown", trinket ~= nil and trinket:IsShown())
         end
-        Add("MSUF_ArenaTestMode", rawget(_G, "MSUF_ArenaTestMode") == true)
-        Add("MSUF2_ArenaUnitframePreviewActive", rawget(_G, "MSUF2_ArenaUnitframePreviewActive") == true)
-        Add("MSUF_PreviewTestMode", rawget(_G, "MSUF_PreviewTestMode") == true)
+        -- The preview/test-mode flags are namespace-only exports (Kernel/MSUF_Bootstrap.lua keep policy).
+        local published = W.MSUF.PublicGlobals
+        Add("MSUF_ArenaTestMode", published.MSUF_ArenaTestMode == true)
+        Add("MSUF2_ArenaUnitframePreviewActive", published.MSUF2_ArenaUnitframePreviewActive == true)
+        Add("MSUF_PreviewTestMode", published.MSUF_PreviewTestMode == true)
         Add("MSUF_UnitEditModeActive", rawget(_G, "MSUF_UnitEditModeActive") == true)
-        Add("MSUF_UnitPreviewActive", rawget(_G, "MSUF_UnitPreviewActive") == true)
+        Add("MSUF_UnitPreviewActive", published.MSUF_UnitPreviewActive == true)
         Add("auraPreviewGate", W.AuraPreviewGate())
-        Add("previewAnimationArenaGate", rawget(_G, "MSUF_ArenaTestMode") == true
-            or rawget(_G, "MSUF2_ArenaUnitframePreviewActive") == true)
+        Add("previewAnimationArenaGate", published.MSUF_ArenaTestMode == true
+            or published.MSUF2_ArenaUnitframePreviewActive == true)
         return lines
     end
 
@@ -851,7 +874,7 @@ local function EnterEditMode(W, context)
     W.SecureTick()
     CheckNoViolations(W, context .. " (enter)")
     Check(_G.MSUF_EM2.State.IsActive() == true, context .. ": Edit Mode is not active after entry")
-    Check(rawget(_G, "MSUF_ArenaTestMode") == true,
+    Check(W.MSUF.PublicGlobals.MSUF_ArenaTestMode == true,
         context .. ": arena preview flag was not raised on entry (harness would be vacuous)")
     local castbars = 0
     for index = 1, W.roster do
@@ -988,7 +1011,7 @@ local function Menu2PreviewScenario(flavor, roster)
     EnterEditMode(W, context)
     W.UF.Preview.SetArenaPage(true)
     ExitEditMode(W, context)
-    Check(rawget(_G, "MSUF2_ArenaUnitframePreviewActive") ~= true,
+    Check(W.MSUF.PublicGlobals.MSUF2_ArenaUnitframePreviewActive ~= true,
         context .. ": Menu2 arena page preview flag survived Edit Mode exit")
     CompareSnapshot(context, fresh, W.Snapshot())
 end

@@ -5,11 +5,10 @@
 --- smooth fill toggle, hideInClientScene, target/aggro upgrades
 --- Midnight 12.0 secret-safe, zero combat overhead
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
-local ExportPublic = MSUF.ExportPublic
+local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
 -- WoW Forever client fact, read once. Harnesses without MSUF.Client are not Forever.
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
@@ -752,7 +751,7 @@ function GF.ShouldShowNameText(frame, conf)
 end
 
 local function ResolveLegacyHealPredictionEnabled(db)
-    db = db or _G.MSUF_DB
+    db = db or MSUF_DB
     local gen = db and db.general
     if type(gen) ~= "table" then return false end
     if gen.healPredEnabled ~= nil then return gen.healPredEnabled == true end
@@ -771,7 +770,7 @@ local ensureDBReady = false
 local ensureDBRoot, ensureDBParty, ensureDBRaid, ensureDBMythic, ensureDBPriority
 
 function GF.EnsureDB()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then return end
     if ensureDBRoot == db
         and ensureDBParty == db.gf_party
@@ -782,7 +781,7 @@ function GF.EnsureDB()
         if ensureDBReady then return end
         --- In-place menu/profile mutations are already visible through the
         --- stable tables. Defer structural repair until the first OOC boundary.
-        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+        if InCombatLockdown and InCombatLockdown() then return end
     end
     --- Cold body: materialize the scope tables and run the ordered repair
     --- pipeline (one-time migrations, defaults, legacy aura model, menu-domain
@@ -805,7 +804,7 @@ function GF.EnsureDB()
 end
 
 ---
---- Config resolution (cached - eliminates _G.MSUF_DB + type() per call)
+--- Config resolution (cached - eliminates the MSUF_DB read + type() per call)
 ---
 local _confParty, _confRaid, _confMythicRaid, _confPriority
 
@@ -839,11 +838,11 @@ end
 --- select the same saved configuration. Brawls deliberately retain their normal
 --- roster scope, matching Blizzard_GroupFrameVisibility.
 function GF.IsArenaPartyContext()
-    local isActiveArena = _G.IsActiveBattlefieldArena
+    local isActiveArena = IsActiveBattlefieldArena
     if type(isActiveArena) ~= "function" or isActiveArena() ~= true then
         return false
     end
-    local pvp = _G.C_PvP
+    local pvp = C_PvP
     local isInBrawl = type(pvp) == "table" and pvp.IsInBrawl or nil
     return type(isInBrawl) ~= "function" or isInBrawl() ~= true
 end
@@ -851,10 +850,10 @@ end
 --- A raid of up to five shown with the Party layout. Only while the Party scope
 --- itself is on: otherwise the Raid scope keeps the raid, or nothing would show.
 function GF.IsSmallRaidPartyContext()
-    if not _G.IsInRaid() then return false end
+    if not IsInRaid() then return false end
     local conf = GF.GetConf("party")
     if not (conf.enabled == true and conf.smallRaidAsParty == true) then return false end
-    local count = _G.GetNumGroupMembers()
+    local count = GetNumGroupMembers()
     return count > 0 and count <= 5
 end
 
@@ -863,10 +862,10 @@ function GF.GetLiveGroupKind()
         return "party"
     end
     if GF.IsSmallRaidPartyContext() then return "party" end
-    if _G.IsInRaid and _G.IsInRaid() then
+    if IsInRaid and IsInRaid() then
         return GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid"
     end
-    if _G.IsInGroup and _G.IsInGroup() then
+    if IsInGroup and IsInGroup() then
         return "party"
     end
     return nil
@@ -902,7 +901,7 @@ function GF.InvalidateConfCache(keepDBReady)
     if keepDBReady ~= true then
         ensureDBReady = false
     end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then
         _confParty, _confRaid, _confMythicRaid, _confPriority = nil, nil, nil, nil
         return
@@ -942,8 +941,8 @@ end
 
 local function GetFactoryGroupFrameDefaults(profile)
     if type(profile) ~= "table" then
-        local createProfile = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
-        if type(createProfile) ~= "function" then return nil end
+        local createProfile = MSUF.MSUF_CreateFactoryDefaultProfile
+            or Require("MSUF_CreateFactoryDefaultProfile", "GroupFrames/MSUF_GroupFrames_DB.lua")
         profile = createProfile()
     end
     if type(profile) ~= "table" then return nil end
@@ -952,7 +951,7 @@ local function GetFactoryGroupFrameDefaults(profile)
 end
 
 function GF.ResetAllToDefaults(factoryDefaults, deferRefresh)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then return false end
 
     -- Menu resets pass their one factory snapshot and apply after cache purge.

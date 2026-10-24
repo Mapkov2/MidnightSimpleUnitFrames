@@ -193,11 +193,15 @@ local namespace = { ExportPublic = function() end, UF = { Layers = {}, RegisterE
     if name == "Prediction" then registered = element end
 end } }
 -- The saved overlay anchor modes (UF.Shared.ABSORB_ANCHOR) come from the file that owns them.
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua"))(
-    "MidnightSimpleUnitFrames", namespace)
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))(
-    "MidnightSimpleUnitFrames", namespace)
+-- The real Kernel API replaces the export stub; providers a file requires that this harness does
+-- not load are deferred and raise when used.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, namespace, nil, nil, true)
+for _, relative in ipairs({ "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
+    "UnitFrames/Engine/MSUF_UF_Shared.lua", "UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua" }) do
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. relative, namespace)
+end
 assert(registered, "the prediction element did not register")
 
 local function Upvalue(fn, wanted)

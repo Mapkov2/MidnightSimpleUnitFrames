@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua
 --- Cold-path selection chrome shared by the Unit and Group frame previews.
 ---
@@ -13,6 +12,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- into either preview.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua")
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local SB = M.PreviewSelectionBar or {}
@@ -21,46 +21,46 @@ M.PreviewSelectionBar = SB
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local floor = math.floor
 
-local function Deps(box)
-    return (box and box._msuf2SelectionDeps) or nil
+-- A preview surface registers its own handles and callbacks on its box; each
+-- accessor below falls back to the shared Menu2 behaviour when one is missing.
+local function DepFn(box, name)
+    local deps = box and box._msuf2SelectionDeps
+    local fn = deps and deps[name]
+    if type(fn) == "function" then return fn end
 end
 local function Call(box, name, ...)
-    local deps = Deps(box)
-    local fn = deps and deps[name]
-    if type(fn) ~= "function" then return nil end
+    local fn = DepFn(box, name)
+    if not fn then return nil end
     return fn(...)
 end
 local function Tr(box, value)
-    local deps = Deps(box)
-    local fn = deps and deps.Tr
-    if type(fn) == "function" then return fn(value) end
+    local fn = DepFn(box, "Tr")
+    if fn then return fn(value) end
     return value
 end
 local function Theme(box)
-    local deps = Deps(box)
-    local fn = deps and deps.Theme
-    if type(fn) == "function" then return fn() end
+    local fn = DepFn(box, "Theme")
+    if fn then return fn() end
     return M.Theme
 end
 local function Round(box, value)
-    local deps = Deps(box)
-    local fn = deps and deps.Round
-    if type(fn) == "function" then return fn(value) end
+    local fn = DepFn(box, "Round")
+    if fn then return fn(value) end
     return floor((tonumber(value) or 0) + 0.5)
 end
 local function ConfigLocked()
     return type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() == true
 end
 local function SelectionAttentionEnabled(box)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local db = MSUF_DB
+    local general = db and db.general
     if type(general) == "table" and general.previewDragHintAnimationEnabled == false then return false end
     local T = Theme(box)
     return not (T and T.ReducedMotionEnabled and T.ReducedMotionEnabled())
 end
 local function ApplyBackdrop(box, frame, bg, border)
-    local deps = Deps(box)
-    local fn = deps and deps.ApplyBackdrop
-    if type(fn) == "function" then return fn(frame, bg, border) end
+    local fn = DepFn(box, "ApplyBackdrop")
+    if fn then return fn(frame, bg, border) end
     if not (frame and frame.SetBackdrop) then return end
     PixelLayoutRegion(frame, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
@@ -81,9 +81,8 @@ end
 --- locked elements must never become a selectable row or a Tab stop.
 local function IsPlaced(box, handle)
     if not handle then return false end
-    local deps = Deps(box)
-    local fn = deps and deps.IsPlaced
-    if type(fn) == "function" then return fn(handle) == true end
+    local fn = DepFn(box, "IsPlaced")
+    if fn then return fn(handle) == true end
     if handle._msufPlaced == false then return false end
     if handle.IsShown and not handle:IsShown() then return false end
     return true
@@ -95,19 +94,21 @@ local function SelectedHandle(box)
 end
 local function HandleLabel(box, handle)
     if not handle then return Tr(box, "No element selected") end
-    local deps = Deps(box)
-    local fn = deps and deps.HandleLabel
-    if type(fn) == "function" then
+    local fn = DepFn(box, "HandleLabel")
+    if fn then
         local label = fn(handle)
         if label and label ~= "" then return Tr(box, label) end
     end
     return Tr(box, handle._label or handle._key or "?")
 end
+local function HandleList(box)
+    local fn = DepFn(box, "HandleList")
+    return fn and fn(box) or nil
+end
 local function PlacedHandles(box, out)
     out = out or {}
     for index = #out, 1, -1 do out[index] = nil end
-    local deps = Deps(box)
-    local list = deps and type(deps.HandleList) == "function" and deps.HandleList(box) or nil
+    local list = HandleList(box)
     for index = 1, #(list or {}) do
         local handle = list[index]
         if IsPlaced(box, handle) then out[#out + 1] = handle end
@@ -139,8 +140,7 @@ function SB.ReadRenderedCoordinates(handle, reference, renderScale)
 end
 
 local function HandleByKey(box, handleKey)
-    local deps = Deps(box)
-    local list = deps and type(deps.HandleList) == "function" and deps.HandleList(box) or nil
+    local list = HandleList(box)
     for index = 1, #(list or {}) do
         local handle = list[index]
         if handle and tostring(handle._key or "") == tostring(handleKey or "") then return handle end
@@ -257,6 +257,20 @@ local function StepAxis(box, axis, delta)
     return ok == true
 end
 
+local function TrackedAnimationGroup(region, T)
+    local group = region:CreateAnimationGroup()
+    if T and T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(group) end
+    return group
+end
+local function AddAlphaStep(group, order, fromAlpha, toAlpha, duration, smoothing)
+    local step = group:CreateAnimation("Alpha")
+    step:SetOrder(order)
+    step:SetFromAlpha(fromAlpha)
+    step:SetToAlpha(toAlpha)
+    step:SetDuration(duration)
+    if step.SetSmoothing then step:SetSmoothing(smoothing) end
+end
+
 local function BuildAxis(box, bar, axis, caption, anchor, gap)
     local T = Theme(box)
     local colors = (T and T.colors) or {}
@@ -340,20 +354,9 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
     end
 
     if attention.CreateAnimationGroup then
-        local group = attention:CreateAnimationGroup()
-        if T and T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(group) end
-        local fadeIn = group:CreateAnimation("Alpha")
-        fadeIn:SetOrder(1)
-        fadeIn:SetFromAlpha(0)
-        fadeIn:SetToAlpha(1)
-        fadeIn:SetDuration(0.16)
-        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("OUT") end
-        local fadeOut = group:CreateAnimation("Alpha")
-        fadeOut:SetOrder(2)
-        fadeOut:SetFromAlpha(1)
-        fadeOut:SetToAlpha(0)
-        fadeOut:SetDuration(0.44)
-        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN_OUT") end
+        local group = TrackedAnimationGroup(attention, T)
+        AddAlphaStep(group, 1, 0, 1, 0.16, "OUT")
+        AddAlphaStep(group, 2, 1, 0, 0.44, "IN_OUT")
         group:SetScript("OnFinished", function()
             attention:SetAlpha(0)
             attention:Hide()
@@ -362,20 +365,9 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
         controls._msuf2AttentionAnim = group
     end
     if titleHolder.CreateAnimationGroup then
-        local group = titleHolder:CreateAnimationGroup()
-        if T and T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(group) end
-        local dim = group:CreateAnimation("Alpha")
-        dim:SetOrder(1)
-        dim:SetFromAlpha(1)
-        dim:SetToAlpha(0.28)
-        dim:SetDuration(0.16)
-        if dim.SetSmoothing then dim:SetSmoothing("IN") end
-        local brighten = group:CreateAnimation("Alpha")
-        brighten:SetOrder(2)
-        brighten:SetFromAlpha(0.28)
-        brighten:SetToAlpha(1)
-        brighten:SetDuration(0.44)
-        if brighten.SetSmoothing then brighten:SetSmoothing("OUT") end
+        local group = TrackedAnimationGroup(titleHolder, T)
+        AddAlphaStep(group, 1, 1, 0.28, 0.16, "IN")
+        AddAlphaStep(group, 2, 0.28, 1, 0.44, "OUT")
         group:SetScript("OnFinished", function() titleHolder:SetAlpha(1) end)
         controls._msuf2TitleAttentionAnim = group
     end
@@ -424,17 +416,19 @@ function SB.Create(box, deps)
     bar.editX, bar.editY = editX, editY
     bar.axisX, bar.axisY = stepX, stepY
 
-    local openBtn = (T and T.Button and T.Button(bar, "Open settings", 110, 18))
-        or PixelLayoutRegion(CreateFrame("Button", nil, bar, "BackdropTemplate"))
-    if T and T.CenterButtonLabel then T.CenterButtonLabel(openBtn) end
+    local function BarButton(text, width, opts)
+        local btn = (T and T.Button and T.Button(bar, text, width, 18, opts))
+            or PixelLayoutRegion(CreateFrame("Button", nil, bar, "BackdropTemplate"))
+        if T and T.CenterButtonLabel then T.CenterButtonLabel(btn) end
+        return btn
+    end
+    local openBtn = BarButton("Open settings", 110)
     openBtn:SetPoint("RIGHT", bar, "RIGHT", -8, 0)
     openBtn:SetScript("OnClick", function()
         local handle = SelectedHandle(box)
         if handle then Call(box, "OpenSettings", box, handle, "selectionbar") end
     end)
-    local resetBtn = (T and T.Button and T.Button(bar, "Reset", 60, 18, { history = true }))
-        or PixelLayoutRegion(CreateFrame("Button", nil, bar, "BackdropTemplate"))
-    if T and T.CenterButtonLabel then T.CenterButtonLabel(resetBtn) end
+    local resetBtn = BarButton("Reset", 60, { history = true })
     resetBtn:SetPoint("RIGHT", openBtn, "LEFT", -6, 0)
     resetBtn:SetScript("OnClick", function()
         local handle = SelectedHandle(box)
@@ -546,6 +540,17 @@ local function EnsurePickerPopup(box, picker)
     return popup
 end
 
+--- The color dot and the single-line label both the picker button and its rows carry.
+local function AddDotLabel(owner, rightInset)
+    owner.dot = PixelLayoutRegion(owner:CreateTexture(nil, "ARTWORK"))
+    owner.dot:SetSize(7, 7)
+    owner.dot:SetPoint("LEFT", owner, "LEFT", 7, 0)
+    owner.fs = PixelLayoutRegion(owner:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+    owner.fs:SetPoint("LEFT", owner.dot, "RIGHT", 7, 0)
+    owner.fs:SetPoint("RIGHT", owner, "RIGHT", rightInset, 0)
+    owner.fs:SetJustifyH("LEFT")
+end
+
 local function PickerRow(box, popup, index)
     local row = popup._rows[index]
     if row then return row end
@@ -556,13 +561,7 @@ local function PickerRow(box, popup, index)
     row.bg = PixelLayoutRegion(row:CreateTexture(nil, "BACKGROUND"))
     row.bg:SetAllPoints()
     row.bg:SetColorTexture(0, 0, 0, 0)
-    row.dot = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
-    row.dot:SetSize(7, 7)
-    row.dot:SetPoint("LEFT", row, "LEFT", 7, 0)
-    row.fs = PixelLayoutRegion(row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
-    row.fs:SetPoint("LEFT", row.dot, "RIGHT", 7, 0)
-    row.fs:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-    row.fs:SetJustifyH("LEFT")
+    AddDotLabel(row, -6)
     if T and T.StyleFontString then T.StyleFontString(row.fs, { 0.82, 0.88, 1.00, 1 }, 0) end
     row:SetScript("OnEnter", function(self) self.bg:SetColorTexture(0.10, 0.28, 0.42, 0.55) end)
     row:SetScript("OnLeave", function(self)
@@ -605,13 +604,7 @@ function SB.CreatePicker(box, parent)
     if picker.SetFrameLevel and parent.GetFrameLevel then
         picker:SetFrameLevel((parent:GetFrameLevel() or 0) + 82)
     end
-    picker.dot = PixelLayoutRegion(picker:CreateTexture(nil, "ARTWORK"))
-    picker.dot:SetSize(7, 7)
-    picker.dot:SetPoint("LEFT", picker, "LEFT", 7, 0)
-    picker.fs = PixelLayoutRegion(picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
-    picker.fs:SetPoint("LEFT", picker.dot, "RIGHT", 7, 0)
-    picker.fs:SetPoint("RIGHT", picker, "RIGHT", -16, 0)
-    picker.fs:SetJustifyH("LEFT")
+    AddDotLabel(picker, -16)
     picker.caret = PixelLayoutRegion(picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     picker.caret:SetPoint("RIGHT", picker, "RIGHT", -6, 0)
     picker.caret:SetText("v")

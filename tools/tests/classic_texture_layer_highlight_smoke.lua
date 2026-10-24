@@ -30,6 +30,10 @@ local namespace = {
 }
 -- Kernel/MSUF_Util.lua loads before the runtime in every TOC and provides the
 -- combat-state source the layer visibility asks.
+-- The real Kernel API (Bootstrap's exports, Require/Optional) replaces the export stub; providers a
+-- file requires that this smoke does not load are deferred and raise when used.
+local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(repo, namespace, nil, nil, true)
 for _, relative in ipairs({
     "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua",
     "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua",
@@ -39,8 +43,7 @@ for _, relative in ipairs({
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer.lua",
 }) do
-    local chunk = assert(loadfile(repo .. "/" .. relative))
-    chunk("MidnightSimpleUnitFrames", namespace)
+    RequireFixture.LoadShipped(repo, relative, namespace)
 end
 
 local resolve = assert(namespace.TextureLayer and namespace.TextureLayer.ResolveLayerTexture,

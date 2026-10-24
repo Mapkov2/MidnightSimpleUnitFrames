@@ -7,8 +7,6 @@
 
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-
 local GF = MSUF.GF or {}
 MSUF.GF = GF
 

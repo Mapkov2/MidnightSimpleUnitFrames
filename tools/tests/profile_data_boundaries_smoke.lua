@@ -145,17 +145,17 @@ Run("boundaries", function()
     assert(env.MSUF_GlobalDB.profiles.Copy.gf_party.tooltipMode == nil, "copy did not migrate")
     -- Original late-LSM probe: activating an old profile before bundled registration.
     ns.LSM = { Register = function() end }
-    env.MSUF_BUNDLED_FONTS_REGISTERED = false
-    env.MSUF_UpdateAllBarTextures = function() end
-    env.MSUF_ApplyCastbarVisualsForUnit = function() end
+    ns.ExportPublic("MSUF_BUNDLED_FONTS_REGISTERED", false)
+    ns.ExportPublic("MSUF_UpdateAllBarTextures", function() end)
+    ns.ExportPublic("MSUF_ApplyCastbarVisualsForUnit", function() end)
     local callbacks = {}
     env.C_Timer.After = function(_, callback) callbacks[#callbacks + 1] = callback end
-    env.MSUF_RegisterBundledMediaWithLSM()
+    ns.PublicGlobals.MSUF_RegisterBundledMediaWithLSM()
     for _, callback in ipairs(callbacks) do callback() end
     assert(old.general.barTexture == "MSUF Smooth" and old.general.castbarTexture == "Solid", "late LSM regressed")
 end)
 Run("import", function()
-    local _, env = World()
+    local _, env, ns = World()
     local normalize = env.MSUF_NormalizeProfileDefaults
     local heavyIndex, heavy
     for index = 1, 60 do
@@ -180,8 +180,8 @@ Run("import", function()
     for _, path in ipairs({ "active", "new", "externalActive", "externalStored" }) do
         calls = 0
         local ok, why
-        if path == "active" then ok, why = env.MSUF_ImportFromString(text)
-        elseif path == "new" then ok, why = env.MSUF_ImportIntoNewProfile("Imported", text)
+        if path == "active" then ok, why = ns.PublicGlobals.MSUF_ImportFromString(text)
+        elseif path == "new" then ok, why = ns.PublicGlobals.MSUF_ImportIntoNewProfile("Imported", text)
         else ok, why = env.MSUF_ImportExternal(text, path == "externalActive" and env.MSUF_ActiveProfile or "Stored") end
         assert(ok, path .. " import failed: " .. tostring(why))
         assert(calls == 1, path .. " normalized imported profile " .. calls .. " times")
@@ -191,16 +191,16 @@ Run("import", function()
     end
 end)
 Run("beta", function()
-    local _, env = World()
+    local _, env, ns = World()
     local text = Corpus.ReadImportFixture(root, "tools/fixtures/profiles/imports/hist_2026-08-06_msuf3_full_schema1.txt")
-    local ok, why = env.MSUF_ImportIntoNewProfile("Beta", text)
+    local ok, why = ns.PublicGlobals.MSUF_ImportIntoNewProfile("Beta", text)
     assert(ok, "valid beta profile refused: " .. tostring(why))
     assert(env.MSUF_DB._msufStateSchema == 700 and env.MSUF_DB._msufProfileSchema == 600)
     local before = Literal(env.MSUF_GlobalDB)
     for _, bad in ipairs({ {}, { general = {} }, { general = "bad", player = {} }, { player = { enabled = true } } }) do
         local malformed = Literal({ addon = "MSUF", fmt = 2, schema = 1, kind = "all", payload = {},
             msuf6 = { schema = 1, kind = "all", payload = bad } })
-        assert(env.MSUF_ImportIntoNewProfile("Invalid", malformed) == false, "invalid beta data admitted")
+        assert(ns.PublicGlobals.MSUF_ImportIntoNewProfile("Invalid", malformed) == false, "invalid beta data admitted")
         assert(Literal(env.MSUF_GlobalDB) == before, "invalid beta input mutated profile store")
     end
 end)

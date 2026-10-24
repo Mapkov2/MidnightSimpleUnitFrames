@@ -27,13 +27,11 @@ if _G.__MSUF_ClassPower_Loaded then return end
 _G.__MSUF_ClassPower_Loaded = true
 
 local MSUF = select(2, ...)
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Controller.lua")
+local FILE = "ClassPower/MSUF_CP_Controller.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local ExportPublic = MSUF.ExportPublic
 
-
-local CoreUnitFrame = _G.MSUF_CP_CoreUnitFrame
-
+local CoreUnitFrame = MSUF.Require("MSUF_CP_CoreUnitFrame", FILE)
 
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 
@@ -49,7 +47,9 @@ local InCombatLockdown = InCombatLockdown
 local UnitAffectingCombat = UnitAffectingCombat
 local GetTime = GetTime
 local C_Timer = C_Timer
-local SMOOTH_INTERP = _G.Enum and _G.Enum.StatusBarInterpolation
+local GetBarTexture = MSUF.Require("MSUF_GetBarTexture", FILE)
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", FILE)
+local SMOOTH_INTERP = Enum and Enum.StatusBarInterpolation
 SMOOTH_INTERP = SMOOTH_INTERP and SMOOTH_INTERP.ExponentialEaseOut or nil
 
 --- Spell API (player-only class resources; unitframe aura display is native 12.1)
@@ -85,7 +85,7 @@ local function CP_CanEditInactiveClassResource()
 end
 
 
-local CPConst = _G.MSUF_CP_CONST or {}
+local CPConst = MSUF.Require("MSUF_CP_CONST", FILE)
 local CPK = CPConst.CPK or {
     MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5,
         CONTINUOUS = 6, TIMER_BAR = 8, STAGGER = 9, IRONFUR = 10, NATIVE_AURA = 11 },
@@ -116,9 +116,9 @@ if IS_CLASSIC then
 end
 
 
-local CPCoreBuilders = (type(_G.MSUF_CP_CORE_BUILDERS) == "table") and _G.MSUF_CP_CORE_BUILDERS or {}
-local CPModeBuilders = (type(_G.MSUF_CP_MODE_BUILDERS) == "table") and _G.MSUF_CP_MODE_BUILDERS or {}
-local CPFeatureBuilders = (type(_G.MSUF_CP_FEATURE_BUILDERS) == "table") and _G.MSUF_CP_FEATURE_BUILDERS or {}
+local CPCoreBuilders = CPConst.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local CPModeBuilders = CPConst.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
+local CPFeatureBuilders = CPConst.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 
 local function CP_CallBuilder(builder, env)
     if type(builder) ~= "function" then return nil end
@@ -342,7 +342,7 @@ local CP_RefreshTexture
 -- or adds an event/ticker for this preference.
 local function CP_SyncPlayerPowerOOC(hidden)
     hidden = hidden == true
-    local frame = CoreUnitFrame("player") or _G.MSUF_player
+    local frame = CoreUnitFrame("player")
     if not frame then return end
     if CP._playerPowerOocHidden == hidden and CP._playerPowerOocFrame == frame then return end
     local sync = MSUF.UF and MSUF.UF.SetPlayerPowerClassResourceHidden
@@ -359,7 +359,7 @@ local function CP_CheckAutoHide(cur, maxP)
         return
     end
 
-    if _G.MSUF_UnitEditModeActive == true then
+    if MSUF_UnitEditModeActive == true then
         CP.container:SetAlpha(1)
         if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
         return
@@ -458,9 +458,9 @@ do
         CP_CheckAutoHide = CP_CheckAutoHide,
         TIP = TIP,
         GetPowerRegenForPowerType = GetPowerRegenForPowerType,
-        C_DurationUtil = _G.C_DurationUtil,
-        C_StringUtil = _G.C_StringUtil,
-        Enum = _G.Enum,
+        C_DurationUtil = C_DurationUtil,
+        C_StringUtil = C_StringUtil,
+        Enum = Enum,
         EnsureRuneText = CP_EnsureRuneText,
         EnsureMainText = CP_EnsureMainText,
         ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
@@ -740,8 +740,7 @@ do
             CreateFrame = CreateFrame,
             ResolveClassPowerColor = CPColors.ResolveClassPowerColor,
             GetBarTexture = function()
-                local getTexture = _G.MSUF_GetBarTexture
-                return getTexture and getTexture() or "Interface\\Buttons\\WHITE8x8"
+                return GetBarTexture() or"Interface\\Buttons\\WHITE8x8"
             end,
         })
     if altMana then
@@ -757,7 +756,7 @@ end
 --- Master show/hide + layout integration
 
 local function GetPlayerFrame()
-    return CoreUnitFrame("player") or _G.MSUF_player or nil
+    return CoreUnitFrame("player") or nil
 end
 
 --- "Sync width to Class Resource" matches the live container or the hidden
@@ -774,8 +773,7 @@ function CP.RefreshSyncedPowerWidth(playerFrame)
     --- Geometry stays out of lockdown like every other layout path here; the
     --- element refresh queues itself until combat ends.
     if InCombatLockdown and InCombatLockdown() then
-        local queued = _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey
-        return type(queued) == "function" and queued("player") and true or false
+        return MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", FILE)("player") and true or false
     end
     local elements = MSUF and MSUF.UF and MSUF.UF.Elements
     local element = elements and elements.Power
@@ -1180,7 +1178,7 @@ local function FullRefresh()
     --- Edit mode: keep class power visible as live preview so bars-menu
     --- adjustments (width, height, offsets) are visible immediately.
     --- Alt-mana remains a live Menu2/runtime surface, not an Edit Mode mover.
-    local inEditMode = (_G.MSUF_UnitEditModeActive == true)
+    local inEditMode = (MSUF_UnitEditModeActive == true)
 
     --- --- ClassPower ---
     local cpEnabled = (b.showClassPower ~= false)
@@ -1208,10 +1206,11 @@ local function FullRefresh()
         playerFrame._msufCPSizeHooked = true
         playerFrame:HookScript("OnSizeChanged", function()
             if not CPConfig.ClassPowerEnabled() then return end
-            if _G.MSUF_ClassPower_Apply then
-                _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
-            elseif _G.MSUF_ClassPower_Refresh then
-                _G.MSUF_ClassPower_Refresh()
+            local apply = MSUF.Optional("MSUF_ClassPower_Apply")
+            if apply then
+                apply({ anchor = true, cdm = true, syncNow = false })
+            else
+                MSUF.Require("MSUF_ClassPower_Refresh", FILE)()
             end
         end)
     end
@@ -1398,12 +1397,13 @@ end
 --- Defined once at file scope - zero closure allocations per PLAYER_ENTERING_WORLD.
 local function _CP_DeferredPBRelayout()
     if not (CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync()) then return end
-    local fr = CoreUnitFrame("player") or _G.MSUF_player
+    local fr = CoreUnitFrame("player")
     if fr and fr._msufStampCache then
         fr._msufStampCache["PBEmbedLayout"] = nil
     end
-    if _G.MSUF_ClassPower_Apply then
-        _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
+    local apply = MSUF.Optional("MSUF_ClassPower_Apply")
+    if apply then
+        apply({ anchor = true, cdm = true, syncNow = false })
     else
         FullRefresh()
     end
@@ -1421,12 +1421,7 @@ end
 local function CP_DeferAuraUpdate()
     if _cpAuraDeferred then return end
     _cpAuraDeferred = true
-    local scheduleOnce = _G.MSUF_ScheduleOnce
-    if type(scheduleOnce) == "function" then
-        scheduleOnce("MSUF_CP_AURA_UPDATE", CP_RunDeferredAuraUpdate)
-    else
-        C_Timer.After(0, CP_RunDeferredAuraUpdate)
-    end
+    ScheduleOnce("MSUF_CP_AURA_UPDATE", CP_RunDeferredAuraUpdate)
 end
 
 --- Rare events: vehicle, combat, death, structural, target and startup.
@@ -1510,7 +1505,7 @@ local function ClassPowerOnRareEvent(event, arg1)
         local retries = 0
         local function TryRefresh()
             retries = retries + 1
-            local pf = CoreUnitFrame("player") or _G.MSUF_player
+            local pf = CoreUnitFrame("player")
             if pf then
                 FullRefresh()
                 --- Deferred re-layout: frame dimensions and CDM frames may not
@@ -1796,7 +1791,7 @@ end)
 -- Called only while Edit Mode is building its resource movers. A Druid outside
 -- Cat Form (or a spec with no active resource) has no live container yet.
 ExportPublic("MSUF_ClassPower_EnsureEditModeAnchor", function()
-    if _G.MSUF_UnitEditModeActive ~= true or not CP_CanEditInactiveClassResource()
+    if MSUF_UnitEditModeActive ~= true or not CP_CanEditInactiveClassResource()
         or (InCombatLockdown and InCombatLockdown()) then return false end
     if CP.visible and CP.container then return true end
     CPConfig.RefreshConfig()
@@ -1891,9 +1886,8 @@ CP.ApplyPublic = function(opts)
     else
         local visuals = opts.visuals == true or opts.colors == true or opts.textures == true
         if visuals then
-            if opts.colors == true and _G.MSUF_BAL_InvalidateColors then
-                _G.MSUF_BAL_InvalidateColors()
-            end
+            local invalidateBalance = opts.colors == true and MSUF.Optional("MSUF_BAL_InvalidateColors")
+            if invalidateBalance then invalidateBalance() end
             CP.RefreshVisualsPublic()
             did = true
         end
@@ -1905,7 +1899,8 @@ CP.ApplyPublic = function(opts)
             did = true
         end
         if opts.anchor == true or opts.reanchor == true or opts.geometry == true then
-            if _G.MSUF_ClassPower_RefreshLayout and _G.MSUF_ClassPower_RefreshLayout() then
+            local refreshLayout = MSUF.Optional("MSUF_ClassPower_RefreshLayout")
+            if refreshLayout and refreshLayout() then
                 did = true
             end
         end
@@ -1938,7 +1933,7 @@ end
 ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)
 
 do
-    MSUF.Require("MSUF_RegisterAnyEditModeListener", "ClassPower/MSUF_CP_Controller.lua")(function(active)
+    MSUF.Require("MSUF_RegisterAnyEditModeListener", FILE)(function(active)
         --- A full refresh during an Edit Mode session hides Alt Mana
         --- (Refresh.ApplyAltMana); leaving Edit Mode shows it again.
         if active ~= true and not AM.visible and _cpDB.bars and _cpDB.bars.showAltMana == true then
@@ -1962,28 +1957,6 @@ do
                 CP.ApplyPublic({ visuals = true, playerHP = true })
             end
         end)
-    end
-end
-
---- Compatibility: hook bar texture change for live refresh.
---- Options panels should prefer MSUF_ClassPower_Apply(opts) after DB changes.
-do
-    --- Deferred hook: MSUF_TryApplyBarTextureLive is created in Options (LoadOnDemand).
-    --- We post-hook it on first FullRefresh when it exists.
-    CP._texHooked = false
-    CP._origFullRefresh = FullRefresh
-    FullRefresh = function()
-        if not CP._texHooked then
-            local origTex = _G.MSUF_TryApplyBarTextureLive
-            if type(origTex) == "function" then
-                ExportPublic("MSUF_TryApplyBarTextureLive", function(...)
-                    origTex(...)
-                    Refresh.VisibleTextures()
-                end)
-                CP._texHooked = true
-            end
-        end
-        CP._origFullRefresh()
     end
 end
 
@@ -2020,7 +1993,7 @@ end
 --- Phase 4: Module Registration
 do
     do
-        MSUF.Require("MSUF_RegisterModule", "ClassPower/MSUF_CP_Controller.lua")("ClassPower", {
+        MSUF.Require("MSUF_RegisterModule", FILE)("ClassPower", {
             order = 30,
             IsEnabled = function()
                 return CPConfig.AnyFeatureEnabled()

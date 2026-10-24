@@ -143,6 +143,11 @@ for _, page in ipairs({ "MSUF_Menu2_Auras.lua", "MSUF_Menu2_Auras_Group.lua" }) 
         page .. " retains an unresolved global VT call")
 end
 
+-- The aura pages request their runtime applies through the shared menu ApplyService
+-- (MSUF_Menu2_ApplyService, bound at load). Its aura boundary is the model's Apply
+-- recorder here; every other request is inert.
+_G.MSUF_Menu2_ApplyService = setmetatable({ RequestAuras = function(...) return model.Apply(...) end },
+    { __index = function() return function() end end })
 -- The group page requires the shipped group aura filter table at load.
 assert(loadfile(root .. "/tools/tests/gf_aura_filter_fixture.lua"))().Install(root, _G, namespace)
 -- Both aura pages require their core collaborators at load (M.RequireGlobals).
@@ -156,6 +161,29 @@ for _, helper in ipairs({ "AuraSettings", "AuraControls" }) do
     assert(loadfile(pagesPath .. "MSUF_Menu2_" .. helper .. ".lua"))(
         "MidnightSimpleUnitFrames", namespace)
 end
+-- Load the real row owner (the aura pages declare their rows through it at load);
+-- recording widgets retain the existing assertions.
+namespace.CPBuilders = { ExtraAuraDefaults = {} }
+widgets.SwitchAt = function(_, label, x, y, width)
+    return { label = label, x = x, y = y, width = width }
+end
+menu.BindBoolWidget = function(_, control, get, set, meta)
+    control.getValue, control.setValue, control.meta = get, set, meta
+    controls[#controls + 1] = control
+    return control
+end
+-- Slider rows are created, placed and bound through the same row owner.
+widgets.MoveWidget = function() end
+widgets.Slider = function(_, label, minimum, maximum, step, width)
+    return { label = label, minimum = minimum, maximum = maximum, step = step, width = width }
+end
+menu.BindNumberWidget = function(_, control, get, set, _, meta)
+    control.getValue, control.setValue, control.meta = get, set, meta
+    controls[#controls + 1] = control
+    return control
+end
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))(
+    "MidnightSimpleUnitFrames", namespace)
 assert(loadfile(pagesPath .. "MSUF_Menu2_Auras.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(menu.CLASSIC_AURA_FILTERS_REDUCED == true,
     "the aura page did not read the Classic client fact")
@@ -260,8 +288,12 @@ function unitBuilder:Section(title, height)
     sections[#sections + 1] = section
     return section
 end
+-- The aura page declares each collapsible section through the row owner, which reads the
+-- header's runtime control record (the native header registers it).
 function unitBuilder:CollapsibleSection(_, title, height)
-    return { sectionTitle = title, height = height }
+    return { sectionTitle = title, height = height, _msuf2CollapsibleEntry = { header = {
+        _msuf2RuntimeControlRecord = { controlId = "menu2.auras.section." .. tostring(title), kind = "toggle", label = title },
+    } } }
 end
 
 assert(type(menu.BuildAuras3UnitSection) == "function",

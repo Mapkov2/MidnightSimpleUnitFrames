@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2/MSUF_Menu2_Window_PageEntry.lua
 --- Cold-path page entry construction support: the page context object, the
 --- secondary tab/rail navigation, the placeholder page and the normal/maximized
@@ -7,10 +6,11 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 ---
 --- Split from MSUF_Menu2_Window.lua; it loads before the window shell and reads
 --- the live content metrics through M.GetContentMetrics at call time.
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Window_PageEntry.lua")
 local T = M.Theme
 local W = M.Widgets
 local function SetFrameHeightIfChanged(frame, height)
@@ -101,6 +101,17 @@ local function FinishSecondaryMotion(owner, buttons, key, vertical)
     W.AttachSelectionMotion(owner, buttons, vertical, "secondary-navigation")
     for i = 1, #buttons do buttons[i]:SetActive(buttons[i]._msuf2Value == key) end
 end
+local function AddSecondaryNavButton(owner, buttons, tab, width, y, x)
+    local btn = SecondaryNavButton(owner, tab.label, width, tab.key)
+    btn._msuf2SkipHistoryCheckpoint = true
+    btn:SetPoint("TOPLEFT", owner, "TOPLEFT", x, y)
+    btn:SetScript("OnClick", SecondaryNavClick)
+    buttons[#buttons + 1] = btn
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
+            { navigationKey = tab.key })
+    end
+end
 local function BuildSecondaryTabs(ctx, key, group)
     if not (ctx and ctx.wrapper and group and group.tabs) then return end
     ctx._msuf2TopInset = 44
@@ -111,15 +122,7 @@ local function BuildSecondaryTabs(ctx, key, group)
     for i = 1, #group.tabs do
         local tab = group.tabs[i]
         local w = tonumber(tab.width) or 72
-        local btn = SecondaryNavButton(bar, tab.label, w, tab.key)
-        btn._msuf2SkipHistoryCheckpoint = true
-        btn:SetPoint("TOPLEFT", bar, "TOPLEFT", x, -SECONDARY_NAV_TAB_PAD_Y)
-        btn:SetScript("OnClick", SecondaryNavClick)
-        buttons[#buttons + 1] = btn
-        if M.RegisterMenuChromeControl then
-            M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
-                { navigationKey = tab.key })
-        end
+        AddSecondaryNavButton(bar, buttons, tab, w, -SECONDARY_NAV_TAB_PAD_Y, x)
         x = x + w + 8
     end
     FinishSecondaryMotion(bar, buttons, key, false)
@@ -145,16 +148,7 @@ local function BuildSecondaryRail(ctx, key, group)
     title:SetJustifyH("LEFT")
     local y, buttons = -40, {}
     for i = 1, #group.tabs do
-        local tab = group.tabs[i]
-        local btn = SecondaryNavButton(rail, tab.label, SECONDARY_NAV_RAIL_W - 24, tab.key)
-        btn._msuf2SkipHistoryCheckpoint = true
-        btn:SetPoint("TOPLEFT", rail, "TOPLEFT", 12, y)
-        btn:SetScript("OnClick", SecondaryNavClick)
-        buttons[#buttons + 1] = btn
-        if M.RegisterMenuChromeControl then
-            M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
-                { navigationKey = tab.key })
-        end
+        AddSecondaryNavButton(rail, buttons, group.tabs[i], SECONDARY_NAV_RAIL_W - 24, y, 12)
         y = y - 32
     end
     FinishSecondaryMotion(rail, buttons, key, true)

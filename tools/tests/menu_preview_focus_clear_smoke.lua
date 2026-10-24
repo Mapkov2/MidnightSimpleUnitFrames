@@ -22,18 +22,25 @@ end
 local mw = MenuWorld.Open(root, flavor, { page = "uf_player" })
 local M, env = mw.M, mw.env
 local W = Check(M.Widgets, "Menu2 widgets missing")
-Check(type(env.MSUF_UFPreview_FocusTextSlot) == "function", "the unit preview focus provider is missing")
-Check(type(env.MSUF_UFPreview_ClearTextFocus) == "function", "the unit preview clear provider is missing")
+-- The preview publishes both providers to the namespace registry only; the
+-- widgets resolve them there (a wrapper installed as a global is resolved first).
+local function Published(name)
+    local value = env[name]
+    if value == nil then value = mw.core.PublicGlobals[name] end
+    return value
+end
+Check(type(Published("MSUF_UFPreview_FocusTextSlot")) == "function", "the unit preview focus provider is missing")
+Check(type(Published("MSUF_UFPreview_ClearTextFocus")) == "function", "the unit preview clear provider is missing")
 
 -- The docked unit preview the page shows: the preview owns one active box.
 local cleared = 0
-local ClearTextFocus = env.MSUF_UFPreview_ClearTextFocus
+local ClearTextFocus = Published("MSUF_UFPreview_ClearTextFocus")
 env.MSUF_UFPreview_ClearTextFocus = function(...)
     cleared = cleared + 1
     return ClearTextFocus(...)
 end
 local focused = {}
-local FocusTextSlot = env.MSUF_UFPreview_FocusTextSlot
+local FocusTextSlot = Published("MSUF_UFPreview_FocusTextSlot")
 env.MSUF_UFPreview_FocusTextSlot = function(unitKey, kind, slot, active)
     focused[#focused + 1] = { unitKey, kind, slot, active }
     return FocusTextSlot(unitKey, kind, slot, active)

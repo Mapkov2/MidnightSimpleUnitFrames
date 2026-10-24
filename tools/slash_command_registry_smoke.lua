@@ -184,6 +184,18 @@ chunk("MidnightSimpleUnitFrames", MSUF)
 --- The tooltip runtime and the Edit Mode bridge shared this file before the
 --- split. Load them too so the inertness budget below keeps covering the whole
 --- former surface: the tooltip hover-inert watcher owns the only allowed frame.
+--- The tooltip runtime registers its AnyEditMode listener with the Edit Mode state
+--- owner (Shell/EditMode/MSUF_EditMode_State.lua), which loads earlier in every
+--- TOC and builds Edit Mode machinery this smoke must not. Its registrar is the
+--- owner's own body over its listener table: inert, no frame, event or timer.
+do
+    local Slice = assert(loadfile(".github/scripts/msuf_source_slice.lua"))()
+    local statePath = ResolvePath("Shell/EditMode/MSUF_EditMode_State.lua")
+    local body = Slice.Function(Slice.Read(statePath), "local function MSUF_RegisterAnyEditModeListener", statePath)
+    MSUF.ExportPublic("MSUF_AnyEditModeListeners", {})
+    assert(loadstring("local MSUF = ...\nlocal CALLER = 'Shell/EditMode/MSUF_EditMode_State.lua'\n" .. body
+        .. "\nMSUF.ExportPublic('MSUF_RegisterAnyEditModeListener', MSUF_RegisterAnyEditModeListener)", "@" .. statePath))(MSUF)
+end
 chunk, err = loadfile(TOOLTIP_PATH)
 assert(chunk, err)
 chunk("MidnightSimpleUnitFrames", MSUF)

@@ -13,6 +13,19 @@ local AP = M.AdvancedPage or {}
 local ControlMeta = AP.ControlMeta
 local CP = M.ColorsPage or {}
 M.ColorsPage = CP
+-- Core functions the Colors files call from color commits and refreshes. Each name resolves on its
+-- first read and is a plain table hit afterwards, so those paths never call Require / Optional:
+-- Req raises when a provider is missing, Opt keeps false for an absent one.
+CP.Req = setmetatable({}, { __index = function(cache, name)
+    local value = MSUF.Require(name, "Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
+    cache[name] = value
+    return value
+end })
+CP.Opt = setmetatable({}, { __index = function(cache, name)
+    local value = MSUF.Optional(name) or false
+    cache[name] = value
+    return value
+end })
 local COLOR_SETTING_KEY_BY_PATH = {
     ["power.color_by_class"] = "general.powerColorMode",
     ["api.SetAbsorbOverlayColor"] = "general.absorbBarColor",
@@ -31,18 +44,10 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["appearance.dark_mode_tone"] = "general.darkBarGray",
     ["appearance.gradient.enabled"] = "general.enableHealthGradient",
     ["appearance.gradient.strength"] = "general.gradientStrength",
-    ["auras.color.aurasCooldownTextSafeColor"] = "general.aurasCooldownTextSafeColor",
-    ["auras.color.aurasCooldownTextUrgentColor"] = "general.aurasCooldownTextUrgentColor",
-    ["auras.color.aurasCooldownTextWarningColor"] = "general.aurasCooldownTextWarningColor",
     ["auras.cooldown.color_by_time"] = "general.aurasCooldownTextUseBuckets",
     ["auras.cooldown.safe_seconds"] = "general.aurasCooldownTextSafeSeconds",
     ["auras.cooldown.urgent_seconds"] = "general.aurasCooldownTextUrgentSeconds",
     ["auras.cooldown.warning_seconds"] = "general.aurasCooldownTextWarningSeconds",
-    ["auras.dispel.magic.color"] = "general.dispelTypeColorOverrides.Magic",
-    ["auras.dispel.curse.color"] = "general.dispelTypeColorOverrides.Curse",
-    ["auras.dispel.disease.color"] = "general.dispelTypeColorOverrides.Disease",
-    ["auras.dispel.poison.color"] = "general.dispelTypeColorOverrides.Poison",
-    ["auras.dispel.bleed.color"] = "general.dispelTypeColorOverrides.Bleed",
     ["background.color_mode"] = "general.barBgColorMode",
     ["background.dark_mode_custom_color"] = "general.darkBgCustomColor",
     ["background.fill_mode"] = "general.barBgFillMode",
@@ -57,70 +62,14 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["general.castbarBg"] = "general.castbarBackgroundColor",
     ["general.castbarBorder"] = "general.castbarBorderColor",
     ["general.classBarBg"] = "general.classBarBgColor",
-    ["general.healthGradientHigh"] = "general.healthGradientHigh",
-    ["general.healthGradientLow"] = "general.healthGradientLow",
-    ["general.healthGradientMid"] = "general.healthGradientMid",
     ["general.unifiedBar"] = "general.unifiedBarColor",
     ["highlight.mouseover.color"] = "general.highlightColor",
-    ["npc.color.dead"] = "npcColors.dead",
-    ["npc.color.enemy"] = "npcColors.enemy",
-    ["npc.color.friendly"] = "npcColors.friendly",
-    ["npc.color.neutral"] = "npcColors.neutral",
-    ["npc.color.npcBoss"] = "npcColors.npcBoss",
-    ["npc.color.npcCaster"] = "npcColors.npcCaster",
-    ["npc.color.npcMelee"] = "npcColors.npcMelee",
-    ["npc.color.npcMiniboss"] = "npcColors.npcMiniboss",
-    ["npc.color.npcRegular"] = "npcColors.npcRegular",
-    ["npc.color.tapped"] = "npcColors.tapped",
     ["npc.tap_denied_gray"] = "general.tapDeniedGray",
     ["npc.class_color_bar"] = "general.npcClassColorBar",
     ["unit.pet.use_player_class_color"] = "general.petFrameUsePlayerClassColor",
     ["npc_type.enabled"] = "general.npcColorMode",
-    ["npc_type.option.npcTypeBoss"] = "general.npcTypeBoss",
-    ["npc_type.option.npcTypeColorBar"] = "general.npcTypeColorBar",
-    ["npc_type.option.npcTypeColorText"] = "general.npcTypeColorText",
-    ["npc_type.option.npcTypeFocus"] = "general.npcTypeFocus",
-    ["npc_type.option.npcTypeTarget"] = "general.npcTypeTarget",
-    ["npc_type.option.npcTypeToT"] = "general.npcTypeToT",
     ["portrait.background_color"] = "general.portraitBgColor",
     ["portrait.border_color"] = "general.portraitBorderColor",
-    ["table.bossTargetHighlightColor"] = "general.bossTargetHighlightColor",
-    ["table.combatStateLeaveColor"] = "gameplay.combatStateLeaveColor",
-    ["table.combatTimerColor"] = "gameplay.combatTimerColor",
-    ["table.crosshairInRangeColor"] = "gameplay.crosshairInRangeColor",
-    ["table.crosshairOutRangeColor"] = "gameplay.crosshairOutRangeColor",
-    ["table.kickNotReadyColor"] = "general.kickNotReadyColor",
-    ["table.kickReadyColor"] = "general.kickReadyColor",
-}
-local COLOR_ACTION_KEY_BY_PATH = {
-    ["appearance.gradient.reset"] = "reset_health_gradient_colors",
-    ["auras.reset"] = "reset_aura_colors",
-    ["background.reset_to_black"] = "reset_bar_background_color",
-    ["bar_gradient.reset"] = "reset_bar_gradient_colors",
-    ["bar.reset"] = "reset_bar_colors",
-    ["castbar.reset"] = "reset_castbar_colors",
-    ["class_bar.reset_all"] = "reset_class_colors",
-    ["font.use_palette"] = "reset_global_font_color",
-    ["gameplay.reset"] = "reset_gameplay_colors",
-    ["npc_type.reset"] = "reset_npc_type_colors",
-    ["portrait.reset"] = "reset_portrait_colors",
-    ["power.editor.reset"] = "reset_power_color_token",
-    ["class_power.editor.reset_foreground"] = "reset_class_power_color_token",
-    ["class_power.editor.reset_background"] = "reset_class_power_color_token",
-    ["class_power.resource_slots.reset"] = "reset_class_power_slot_colors",
-    ["class_power.full_resource.reset"] = "reset_class_power_full_color",
-    ["unitframe.reset"] = "reset_unitframe_colors",
-}
-local COLOR_ACTION_INPUT_BY_PATH = {
-    ["power.editor.reset"] = "token",
-    ["class_power.editor.reset_foreground"] = "token",
-    ["class_power.editor.reset_background"] = "token",
-    ["class_power.resource_slots.reset"] = "resourceToken",
-    ["class_power.full_resource.reset"] = "resourceToken",
-}
-local COLOR_ACTION_FIXED_ARGS_BY_PATH = {
-    ["class_power.editor.reset_foreground"] = { background = false },
-    ["class_power.editor.reset_background"] = { background = true },
 }
 M.DISPEL_COLOR_SPECS = M.DISPEL_COLOR_SPECS or {
     { key = "Magic", path = "magic" },
@@ -129,41 +78,61 @@ M.DISPEL_COLOR_SPECS = M.DISPEL_COLOR_SPECS or {
     { key = "Poison", path = "poison" },
     { key = "Bleed", path = "bleed" },
 }
+-- Path families whose last segment is the stored key: path prefix + name -> key prefix + name.
+local function AddSettingKeys(pathPrefix, keyPrefix, names)
+    for name in names:gmatch("%S+") do COLOR_SETTING_KEY_BY_PATH[pathPrefix .. name] = keyPrefix .. name end
+end
+AddSettingKeys("auras.color.", "general.", "aurasCooldownTextSafeColor aurasCooldownTextUrgentColor aurasCooldownTextWarningColor")
+AddSettingKeys("general.", "general.", "healthGradientHigh healthGradientLow healthGradientMid")
+AddSettingKeys("npc.color.", "npcColors.", "dead enemy friendly neutral npcBoss npcCaster npcMelee npcMiniboss npcRegular tapped")
+AddSettingKeys("npc_type.option.", "general.", "npcTypeBoss npcTypeColorBar npcTypeColorText npcTypeFocus npcTypeTarget npcTypeToT")
+AddSettingKeys("table.", "general.", "bossTargetHighlightColor kickNotReadyColor kickReadyColor")
+AddSettingKeys("table.", "gameplay.", "combatStateLeaveColor combatTimerColor crosshairInRangeColor crosshairOutRangeColor")
+for i = 1, #M.DISPEL_COLOR_SPECS do
+    local spec = M.DISPEL_COLOR_SPECS[i]
+    COLOR_SETTING_KEY_BY_PATH["auras.dispel." .. spec.path .. ".color"] = "general.dispelTypeColorOverrides." .. spec.key
+end
+-- Reset buttons: path -> { action key, input arg name, fixed args }.
+local COLOR_ACTION_BY_PATH = {
+    ["appearance.gradient.reset"] = { "reset_health_gradient_colors" },
+    ["auras.reset"] = { "reset_aura_colors" },
+    ["background.reset_to_black"] = { "reset_bar_background_color" },
+    ["bar_gradient.reset"] = { "reset_bar_gradient_colors" },
+    ["bar.reset"] = { "reset_bar_colors" },
+    ["castbar.reset"] = { "reset_castbar_colors" },
+    ["class_bar.reset_all"] = { "reset_class_colors" },
+    ["font.use_palette"] = { "reset_global_font_color" },
+    ["gameplay.reset"] = { "reset_gameplay_colors" },
+    ["npc_type.reset"] = { "reset_npc_type_colors" },
+    ["portrait.reset"] = { "reset_portrait_colors" },
+    ["power.editor.reset"] = { "reset_power_color_token", "token" },
+    ["class_power.editor.reset_foreground"] = { "reset_class_power_color_token", "token", { background = false } },
+    ["class_power.editor.reset_background"] = { "reset_class_power_color_token", "token", { background = true } },
+    ["class_power.resource_slots.reset"] = { "reset_class_power_slot_colors", "resourceToken" },
+    ["class_power.full_resource.reset"] = { "reset_class_power_full_color", "resourceToken" },
+    ["unitframe.reset"] = { "reset_unitframe_colors" },
+}
 local function PrefixedSettingKeys(prefix, tokens)
     local keys = {}
     for token in tostring(tokens or ""):gmatch("%S+") do keys[#keys + 1] = prefix .. token end
     return keys
 end
+-- The castbar text colors keep one stored key per castbar unit.
+local CAST_DETAIL_UNIT_KEYS = { "castbarPlayer", "castbarTarget", "castbarFocus", "bossCast", "arenaCast" }
+local function CastDetailKeys(suffix)
+    local keys = {}
+    for i = 1, #CAST_DETAIL_UNIT_KEYS do keys[i] = "general." .. CAST_DETAIL_UNIT_KEYS[i] .. suffix .. "Color" end
+    return keys
+end
 local COLOR_DYNAMIC_SETTING_KEYS_BY_PATH = {
-    ["castbar.text_color.spell_name"] = {
-        "general.castbarPlayerSpellNameColor", "general.castbarTargetSpellNameColor",
-        "general.castbarFocusSpellNameColor", "general.bossCastSpellNameColor", "general.arenaCastSpellNameColor",
-    },
-    ["castbar.text_color.time"] = {
-        "general.castbarPlayerTimeColor", "general.castbarTargetTimeColor",
-        "general.castbarFocusTimeColor", "general.bossCastTimeColor", "general.arenaCastTimeColor",
-    },
-    ["castbar.text_color.target_name"] = {
-        "general.castbarPlayerTargetNameColor", "general.castbarTargetTargetNameColor",
-        "general.castbarFocusTargetNameColor", "general.bossCastTargetNameColor", "general.arenaCastTargetNameColor",
-    },
-    ["bar_gradient.health.color"] = {
-        "general.healthBarGradientColorR", "general.healthBarGradientColorG", "general.healthBarGradientColorB",
-    },
-    ["bar_gradient.power.color"] = {
-        "general.powerBarGradientColorR", "general.powerBarGradientColorG", "general.powerBarGradientColorB",
-    },
-    ["prediction.heal_color"] = {
-        "general.healPredictionColorR",
-        "general.healPredictionColorG",
-        "general.healPredictionColorB",
-    },
-    ["bar.health_loss_color"] = {
-        "general.healthLossColorR", "general.healthLossColorG", "general.healthLossColorB",
-    },
-    ["bar.power_loss_color"] = {
-        "general.powerLossColorR", "general.powerLossColorG", "general.powerLossColorB",
-    },
+    ["castbar.text_color.spell_name"] = CastDetailKeys("SpellName"),
+    ["castbar.text_color.time"] = CastDetailKeys("Time"),
+    ["castbar.text_color.target_name"] = CastDetailKeys("TargetName"),
+    ["bar_gradient.health.color"] = PrefixedSettingKeys("general.healthBarGradientColor", "R G B"),
+    ["bar_gradient.power.color"] = PrefixedSettingKeys("general.powerBarGradientColor", "R G B"),
+    ["prediction.heal_color"] = PrefixedSettingKeys("general.healPredictionColor", "R G B"),
+    ["bar.health_loss_color"] = PrefixedSettingKeys("general.healthLossColor", "R G B"),
+    ["bar.power_loss_color"] = PrefixedSettingKeys("general.powerLossColor", "R G B"),
     ["level_difficulty.impossible"] = PrefixedSettingKeys("general.levelColorImpossible", "R G B"),
     ["level_difficulty.very_difficult"] = PrefixedSettingKeys("general.levelColorVeryDifficult", "R G B"),
     ["level_difficulty.standard"] = PrefixedSettingKeys("general.levelColorStandard", "R G B"),
@@ -186,6 +155,7 @@ local CLASS_POWER_SLOT_RESOURCES = {
     { "ARCANE_CHARGES", 4 }, { "RUNES", 6 }, { "ESSENCE", 6 }, { "SOUL_FRAGMENTS_VENG", 6 },
     { "MAELSTROM", 10 }, { "WHIRLWIND", 4 }, { "TIP_OF_THE_SPEAR", 3 }, { "ICICLES", 5 },
 }
+CP.CLASS_POWER_SLOT_RESOURCES = CLASS_POWER_SLOT_RESOURCES
 for slot = 1, 10 do
     local keys = {}
     for i = 1, #CLASS_POWER_SLOT_RESOURCES do
@@ -218,9 +188,12 @@ local function Meta(path, classification, exact)
         local classToken = path:match("^class_bar%.token%.([A-Z]+)$")
         if classToken then exact.settingKey = "classColors." .. classToken end
     end
-    if exact.actionKey == nil then exact.actionKey = COLOR_ACTION_KEY_BY_PATH[path] end
-    if exact.actionInputArg == nil then exact.actionInputArg = COLOR_ACTION_INPUT_BY_PATH[path] end
-    if exact.actionFixedArgs == nil then exact.actionFixedArgs = COLOR_ACTION_FIXED_ARGS_BY_PATH[path] end
+    local action = COLOR_ACTION_BY_PATH[path]
+    if action then
+        if exact.actionKey == nil then exact.actionKey = action[1] end
+        if exact.actionInputArg == nil then exact.actionInputArg = action[2] end
+        if exact.actionFixedArgs == nil then exact.actionFixedArgs = action[3] end
+    end
     if exact.settingKey == nil and exact.actionKey == nil then
         exact.searchSettingKeys = COLOR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
         exact.searchSettingKeyPatterns = COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]

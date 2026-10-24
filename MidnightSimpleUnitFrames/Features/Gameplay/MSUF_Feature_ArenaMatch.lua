@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Features/Gameplay/MSUF_Feature_ArenaMatch.lua
 --- Arena match helpers for the dedicated arena1..N unit frames
 --- (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists):
@@ -14,19 +13,18 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- All work is event-driven; no OnUpdate, no polling.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local FILE = "Features/Gameplay/MSUF_Feature_ArenaMatch.lua"
+local Require = MSUF.Require
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local ExportPublic = MSUF.ExportPublic
 
 -- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
 -- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
 -- 0..5 and fall back to 3 when the client initializer did not run.
-local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
-local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
-    and type(_G.C_EventUtils.IsEventValid) == "function"
-    and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
+local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(MSUF_MAX_ARENA_FRAMES) or 3)))
+local HAS_PVP_MATCH_STATE_CHANGED = C_EventUtils
+    and type(C_EventUtils.IsEventValid) == "function"
+    and C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
 local classicMatchEngaged = false
 
 -- Event-derived combat state (Kernel/MSUF_Util.lua), not the latched MSUF_InCombat
@@ -36,7 +34,7 @@ local function InCombat(event)
 end
 
 local function ArenaConf()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     return db and db.arena or nil
 end
 
@@ -45,31 +43,27 @@ local function ArenaEnabled()
     return not conf or conf.enabled ~= false
 end
 
+-- UF.GetFrame is a plain UF.frames lookup, so the registry is read directly.
 local function ArenaFrame(index)
-    local uf = MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame("arena" .. index)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
+    local frames = MSUF.UF.frames
     return (frames and frames["arena" .. index]) or _G["MSUF_arena" .. index]
 end
 
 local function MatchState()
-    local getState = _G.C_PvP and _G.C_PvP.GetActiveMatchState
+    local getState = C_PvP and C_PvP.GetActiveMatchState
     if type(getState) ~= "function" then return nil end
     return getState()
 end
 
 local function MatchEngaged()
-    local states = _G.Enum and _G.Enum.PvPMatchState
+    local states = Enum and Enum.PvPMatchState
     local engaged = states and states.Engaged
     if engaged ~= nil and MatchState() == engaged then return true end
     return HAS_PVP_MATCH_STATE_CHANGED ~= true and classicMatchEngaged == true
 end
 
 local function MatchPreparing()
-    local considered = _G.C_PvP and _G.C_PvP.IsMatchConsideredArena
+    local considered = C_PvP and C_PvP.IsMatchConsideredArena
     if type(considered) == "function" then
         if considered() ~= true then return false end
 
@@ -77,7 +71,7 @@ local function MatchPreparing()
         -- state satisfies IsMatchActive/IsMatchEngaged, so using the live-match
         -- gate here suppresses every unitless preparation frame.
         local state = MatchState()
-        local states = _G.Enum and _G.Enum.PvPMatchState
+        local states = Enum and Enum.PvPMatchState
         local waiting = states and states.Waiting or 1
         local startUp = states and states.StartUp or 2
         return state == waiting or state == startUp
@@ -86,23 +80,23 @@ local function MatchPreparing()
     -- Classic has the arena/prep events and opponent-spec APIs, but no
     -- PVP_MATCH_STATE_CHANGED or C_PvP match-state API. The prep event arms
     -- this path; the first opponent update performs the engaged hand-off.
-    local activeArena = _G.IsActiveBattlefieldArena
+    local activeArena = IsActiveBattlefieldArena
     return HAS_PVP_MATCH_STATE_CHANGED ~= true
         and type(activeArena) == "function" and activeArena() == true
         and classicMatchEngaged ~= true
 end
 
 local function InArenaMatch()
-    local considered = _G.C_PvP and _G.C_PvP.IsMatchConsideredArena
+    local considered = C_PvP and C_PvP.IsMatchConsideredArena
     if type(considered) == "function" then
         if considered() ~= true then return false end
-        local active = _G.C_PvP and _G.C_PvP.IsMatchActive
-        local complete = _G.C_PvP and _G.C_PvP.IsMatchComplete
+        local active = C_PvP and C_PvP.IsMatchActive
+        local complete = C_PvP and C_PvP.IsMatchComplete
         return (type(active) == "function" and active() == true)
             or (type(complete) == "function" and complete() == true)
             or MatchEngaged()
     end
-    local activeArena = _G.IsActiveBattlefieldArena
+    local activeArena = IsActiveBattlefieldArena
     return HAS_PVP_MATCH_STATE_CHANGED ~= true
         and type(activeArena) == "function" and activeArena() == true
 end
@@ -118,8 +112,9 @@ local function SyncPrepVisibility(opponentCount)
     if opponentCount < 0 then opponentCount = 0 end
     if opponentCount > MAX_ARENA then opponentCount = MAX_ARENA end
     local active = opponentCount > 0
-    local previousCount = tonumber(_G.MSUF_ArenaPrepVisibilityCount) or 0
-    if (_G.MSUF_ArenaPrepVisibilityActive == true) == active
+    local PublicGlobals = MSUF.PublicGlobals
+    local previousCount = tonumber(PublicGlobals.MSUF_ArenaPrepVisibilityCount) or 0
+    if (PublicGlobals.MSUF_ArenaPrepVisibilityActive == true) == active
         and previousCount == opponentCount then
         return false
     end
@@ -130,8 +125,8 @@ local function SyncPrepVisibility(opponentCount)
     -- wins over a direct frame:Show(). Hand visibility to LoadConditions for
     -- this out-of-combat phase; it installs the existing secure
     -- "[nocombat] show" driver and restores RegisterUnitWatch when prep ends.
-    _G.MSUF_ArenaPrepVisibilityActive = active and true or nil
-    _G.MSUF_ArenaPrepVisibilityCount = active and opponentCount or nil
+    ExportPublic("MSUF_ArenaPrepVisibilityActive", active and true or nil)
+    ExportPublic("MSUF_ArenaPrepVisibilityCount", active and opponentCount or nil)
     local uf = MSUF.UF
     if uf and type(uf.RefreshVisibilityDrivers) == "function" then
         uf.RefreshVisibilityDrivers("arena")
@@ -140,20 +135,20 @@ local function SyncPrepVisibility(opponentCount)
 end
 
 local function OpponentSpecInfo(index)
-    local getSpec = _G.GetArenaOpponentSpec
+    local getSpec = GetArenaOpponentSpec
     if type(getSpec) ~= "function" then return nil end
     local specID, gender = getSpec(index)
-    local issecret = _G.issecretvalue
+    local issecret = issecretvalue
     if issecret and (issecret(specID) == true or issecret(gender) == true) then return nil end
     if not specID or specID <= 0 then return nil end
-    local getInfo = _G.GetSpecializationInfoByID
+    local getInfo = GetSpecializationInfoByID
     if type(getInfo) ~= "function" then return nil end
     local _, specName, _, icon, role, classToken, className = getInfo(specID, gender)
     return specName, icon, role, classToken, className
 end
 
 local function ClassColor(classToken)
-    local getColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+    local getColor = C_ClassColor and C_ClassColor.GetClassColor
     if type(getColor) == "function" and classToken then
         local color = getColor(classToken)
         if color and color.r then return color.r, color.g, color.b end
@@ -223,7 +218,7 @@ local function SeedPrepFrameState(frame, classToken, className)
 end
 
 local function ApplyPrepFrame(frame, index)
-    local util = _G.UnitFrameUtil
+    local util = UnitFrameUtil
     local updateDisplay = util and util.UpdateArenaOpponentSpecDisplay
     if type(updateDisplay) == "function" then
         -- The delegate owns all secret spec/class decisions. Its hasSpec
@@ -298,8 +293,8 @@ local function LiveUnitExists(unit)
     if secrets and type(secrets.UnitExistsPlain) == "function" then
         return secrets.UnitExistsPlain(unit) == true
     end
-    local exists = _G.UnitExists and _G.UnitExists(unit)
-    if _G.issecretvalue and _G.issecretvalue(exists) == true then return true end
+    local exists = UnitExists and UnitExists(unit)
+    if issecretvalue and issecretvalue(exists) == true then return true end
     return exists == true
 end
 
@@ -315,7 +310,7 @@ local function SyncPrepDisplay(event)
     -- frame visibility once combat lockdown is up.
     if InCombat(event) then return end
 
-    local numSpecs = tonumber(_G.GetNumArenaOpponentSpecs and _G.GetNumArenaOpponentSpecs()) or 0
+    local numSpecs = tonumber(GetNumArenaOpponentSpecs and GetNumArenaOpponentSpecs()) or 0
     numSpecs = math.max(0, math.min(MAX_ARENA, math.floor(numSpecs)))
     local wantPrep = ArenaEnabled()
         and MatchPreparing()
@@ -377,7 +372,7 @@ local function EnsureStealthOverlay(index)
 
     overlay.text = PixelLayoutRegion(overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     overlay.text:SetPoint("LEFT", overlay.icon, "RIGHT", 6, 0)
-    overlay.text:SetText(_G.ARENA_UNIT_STEALTHED or "Stealthed")
+    overlay.text:SetText(ARENA_UNIT_STEALTHED or "Stealthed")
 
     stealthOverlays[index] = overlay
     return overlay
@@ -430,7 +425,7 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
     end
     if event == "ARENA_OPPONENT_UPDATE" then
         local unit, reason = arg1, arg2
-        local issecret = _G.issecretvalue
+        local issecret = issecretvalue
         if type(unit) == "string" and (not issecret or issecret(unit) ~= true) then
             local index = tonumber(unit:match("^arena(%d+)$"))
             if index then
@@ -440,7 +435,7 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
                     if plainReason == "seen" or plainReason == "unseen" or plainReason == "destroyed" then
                         classicMatchEngaged = true
                     elseif plainReason == "cleared" then
-                        local activeArena = _G.IsActiveBattlefieldArena
+                        local activeArena = IsActiveBattlefieldArena
                         if type(activeArena) ~= "function" or activeArena() ~= true then
                             classicMatchEngaged = false
                         end
@@ -471,7 +466,7 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
 end
 
 local function WireEvents()
-    local register = _G.MSUF_EventBus_Register
+    local register = Require("MSUF_EventBus_Register", FILE)
     register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_MATCH_PREP", HandleArenaMatchEvent)
     if HAS_PVP_MATCH_STATE_CHANGED then
         register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_MATCH_STATE", HandleArenaMatchEvent)

@@ -128,8 +128,8 @@ end
 -- (a) five slots, Blizzard fields five: containers + frames 1-5.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 5
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 5
     _G.MAX_ARENA_ENEMIES = 5
     CreateArenaFrames(6)
     local calls, handleFrame = Spy()
@@ -142,8 +142,8 @@ end
 -- (b) Blizzard fields more opponents than MSUF slots: stand down.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 5
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 5
     _G.MAX_ARENA_ENEMIES = 6
     CreateArenaFrames(6)
     local calls, handleFrame = Spy()
@@ -155,8 +155,8 @@ end
 -- (c) MSUF does not own arena: nothing, no watcher.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 5
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 5
     local calls, handleFrame = Spy()
     local asked, shouldHide = ShouldHide(false)
     pass(handleFrame, shouldHide)
@@ -168,8 +168,8 @@ end
 -- (d) login before Blizzard_ArenaUI loads: MAX_ARENA_ENEMIES nil, no frames.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 5
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 5
     local calls, handleFrame = Spy()
     local _, shouldHide = ShouldHide(true)
     pass(handleFrame, shouldHide)
@@ -201,8 +201,8 @@ end
 -- (d2) Blizzard_ArenaUI loads with MAX_ARENA_ENEMIES still nil: no error, hides.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 5
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 5
     local calls, handleFrame = Spy()
     local _, shouldHide = ShouldHide(true)
     pass(handleFrame, shouldHide)
@@ -218,8 +218,8 @@ end
 -- (e) zero slots (Vanilla): nothing, no watcher.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 0
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 0
     CreateArenaFrames(5)
     local calls, handleFrame = Spy()
     local _, shouldHide = ShouldHide(true)
@@ -228,7 +228,7 @@ do
     _G.ArenaEnemyFrames, _G.ArenaPrepFrames = nil, nil
     pass(handleFrame, shouldHide)
     Check(#calls == 0 and #Watchers() == 0, "(e) zero slots must not arm a watcher")
-    _G.MSUF_MAX_ARENA_FRAMES = nil
+    MSUF.Client.MaxArenaOpponents = nil
     pass(handleFrame, shouldHide)
     Check(#calls == 0 and #Watchers() == 0, "(e) missing slot global means zero slots")
 end
@@ -236,8 +236,8 @@ end
 -- (f) containers exist while MAX_ARENA_ENEMIES is nil: no error, slots 1-5 hidden.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 5
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 5
     CreateArenaFrames(5)
     local calls, handleFrame = Spy()
     local _, shouldHide = ShouldHide(true)
@@ -252,8 +252,8 @@ do
     for _, case in ipairs({ { max = "5", hides = true }, { max = "6", hides = false },
         { max = "junk", hides = true } }) do
         ResetGlobals()
-        local _, pass = Load()
-        _G.MSUF_MAX_ARENA_FRAMES = "5"
+        local MSUF, pass = Load()
+        MSUF.Client.MaxArenaOpponents = "5"
         _G.MAX_ARENA_ENEMIES = case.max
         CreateArenaFrames(5)
         local calls, handleFrame = Spy()
@@ -271,8 +271,8 @@ end
 -- (h) three slots hide exactly three slot children; CompactArenaFrame wins.
 do
     ResetGlobals()
-    local _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 3
+    local MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 3
     _G.MAX_ARENA_ENEMIES = 3
     CreateArenaFrames(5)
     local calls, handleFrame = Spy()
@@ -281,8 +281,8 @@ do
     CheckHidden(calls, 3, "(h) slots 3")
 
     ResetGlobals()
-    _, pass = Load()
-    _G.MSUF_MAX_ARENA_FRAMES = 5
+    MSUF, pass = Load()
+    MSUF.Client.MaxArenaOpponents = 5
     _G.CompactArenaFrame = NewFrame("CompactArenaFrame")
     calls, handleFrame = Spy()
     pass(handleFrame, shouldHide)

@@ -934,6 +934,33 @@
    "evidence": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua: the Pandemic Warning & Style note and the Show Pandemic State tooltip now begin \"PERFORMANCE NOTE: On 12.1.0 Blizzard runs an OnUpdate\" and \"Disabled by default. On 12.1.0 Blizzard's native implementation\"; all twelve packs carry the reworded keys (tools/tests/timed_signal_deadlines_smoke.lua).",
    "reason": "The per-frame OnUpdate warning holds only on 12.1.0; 12.1.5 and WoW Forever drive the pandemic window with a native timed signal map, so the note and its tooltip were reworded, not removed.",
    "date": "2026-10-20"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: uf_arena | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_boss | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_focus | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_focustarget | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_pet | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_pettarget | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_player | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_target | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "classic: uf_targettarget | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_arena | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_boss | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_focus | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_focustarget | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_pet | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_pettarget | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_player | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_target | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle",
+    "main: uf_targettarget | Status > Selected | BLIZZARD | dropdown | no key | unit.status.selected.iconstyle"
+   ],
+   "basis": "migration",
+   "evidence": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua:BuildIconStyleControls; Search/MSUF_Menu2_Search_StaticIndex_Data.lua and Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua retain unit.status.selected.iconstyle for all nine units",
+   "reason": "The generated selected-status dropdown caption now resolves BLIZZARD to the localized display label Blizzard (Default). Both client catalogs retain the same eighteen page/scope/control identities; the iconStyle setting, BLIZZARD default and status-icon selector remain in BuildIconStyleControls. This records the caption migration only, not removal of a control.",
+   "date": "2026-10-24"
   }
  ]
 }

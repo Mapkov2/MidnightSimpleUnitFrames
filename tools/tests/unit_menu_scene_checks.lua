@@ -3,7 +3,9 @@ return function(root, client)
 assert(root and client)
 local World = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local SECRET = {}
-local w = World.Open(root, client, { page = "home", beforeCore = function(world)
+local w = World.Open(root, client, { page = "home", tocMetadata = true, beforeCore = function(world)
+ -- Real unit frames spawn here: the native power, formatter and class colour inputs they read.
+ World.InstallNativeUnitInputs(world)
  world.env.issecretvalue = function(value) return value == SECRET end
 end })
 local env, core = w.env, w.core

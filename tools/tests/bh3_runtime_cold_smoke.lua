@@ -48,7 +48,7 @@ Check("C11-A3",function()
 end)
 Check("C05-A2",function()
  local source=Slice("UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua","local PREVIEW_NAME_LABELS", "local driver")
- local labels,casts=Compile("local Translate=MSUF.Translate\n"..source.."return PREVIEW_NAME_LABELS,CASTBAR_PREVIEWS",{MSUF={Translate=function(s)return "de:"..s end,UF={}}})()
+ local labels,casts=Compile("local Translate=MSUF.Translate\n"..source.."return PREVIEW_NAME_LABELS,CASTBAR_PREVIEWS",{MSUF={Translate=function(s)return "de:"..s end,UF={},Castbars={Frames={}},Optional=function() return nil end}})()
  assert(labels.player=="de:Player Name Position" and labels.pettarget=="de:Pet Target Name Position","preview names untranslated")
  for _,entry in ipairs(casts)do assert(entry.label=="de:Test Cast","preview cast untranslated")end
 end)
@@ -61,6 +61,7 @@ Check("MT3-A1",function()
  local env={crosshairFrame=frame,UIParent=parent,GetCVar=function(k)return k=="cameraDistanceMaxZoomFactor" and "1" or "0" end,GetCVarBool=function()return false end,GetCameraZoom=function()return zoom end,math_min=math.min}
  env.MSUF={Util={IsSecret=function()return false end}} -- plain heights; rc1_b_smoke covers a secret one
  env._G={C_NamePlate={GetNamePlateForUnit=function(unit)assert(unit=="player");queries=queries+1;return active end}}
+ env.C_NamePlate=env._G.C_NamePlate -- the file reads the native client table directly
  local apply=Compile(Slice("Features/Gameplay/MSUF_Feature_GameplayRuntime.lua",first,"local UpdateCrosshairRangeColor").."return AnchorCombatCrosshair",env)()
  apply();assert(frame.anchor==plate.UnitFrame and frame.parent==parent,"personal nameplate not used or adopted")
  assert(frame.y==-60,"zoomed-out offset wrong");zoom=0;apply();assert(frame.y==-96,"camera zoom offset stale")
@@ -112,7 +113,7 @@ Check("CX1-02",function()
  conf.enableCombatTimer=true;apply(conf);assert(retries==1,"supported not-yet-born target lost bounded pending retry")
 end)
 Check("C04-A2",function()
- local restored=0;local native={};local env={_G={TotemFrame=native,MSUF_DB={player={enabled=false}}},_CanMoveBlizzardTotemFrame=function()return true end,_RestoreBlizzardTotemFrame=function()restored=restored+1;return true end,
+ local restored=0;local native={};local env={_G={TotemFrame=native,MSUF_DB={player={enabled=false}}},TotemFrame=native,MSUF_DB={player={enabled=false}},MSUF={UF={frames={}}},_CanMoveBlizzardTotemFrame=function()return true end,_RestoreBlizzardTotemFrame=function()restored=restored+1;return true end,
  _StoreOriginalLayout=function()error("disabled player took native totem ownership")end}
  local apply=Compile(Slice("Features/Gameplay/MSUF_Feature_TotemPreview.lua","    local function _ApplyBlizzardTotemFrame", "    local function _ApplyPreviewAnchorOnly").."return _ApplyBlizzardTotemFrame",env)()
  assert(apply({})==true and restored==1,"native totem not released when MSUF player is disabled")

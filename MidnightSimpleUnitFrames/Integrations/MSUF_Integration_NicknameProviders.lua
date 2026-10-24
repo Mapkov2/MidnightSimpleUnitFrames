@@ -10,25 +10,24 @@
 --- issecretvalue).
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local Text = MSUF.UFText
 if not Text then return end
 
-local UnitName = Text.UnitName or _G.UnitName
-local UnitFullName = _G.UnitFullName
-local UnitIsPlayer = _G.UnitIsPlayer
+local UnitName = Text.UnitName or UnitName
+local UnitFullName = UnitFullName
+local UnitIsPlayer = UnitIsPlayer
 local ReadUnitIsPlayerCached = MSUF.UF and MSUF.UF.ReadUnitIsPlayerCached
-local GetNormalizedRealmName = _G.GetNormalizedRealmName
-local CreateFrame = Text.CreateFrame or _G.CreateFrame
-local InCombatLockdown = Text.InCombatLockdown or _G.InCombatLockdown
-local issecretvalue = _G.issecretvalue
+local GetNormalizedRealmName = GetNormalizedRealmName
+local CreateFrame = Text.CreateFrame or CreateFrame
+local InCombatLockdown = Text.InCombatLockdown or InCombatLockdown
+local issecretvalue = issecretvalue
 local type = type
 local pairs = pairs
 local sort = table.sort
 -- Providers are foreign code; registration-owned handlers report and quarantine
 -- failures before the resolver's stack unwinds.
-local ReportError = MSUF.ReportError or _G.MSUF_ReportError
+local ReportError = MSUF.ReportError
 
 local API = { VERSION = 1 }
 local providers = {}

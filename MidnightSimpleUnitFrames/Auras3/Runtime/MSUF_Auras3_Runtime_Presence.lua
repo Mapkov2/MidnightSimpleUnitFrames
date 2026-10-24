@@ -2,7 +2,6 @@
 -- Group token generation, connection/phase and out-of-combat presence state. Presence hides output without interrupting native incremental tracking.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Presence = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local Runtime = A3.Runtime
@@ -11,8 +10,7 @@ local Presence = Runtime.Presence
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local pairs = pairs
 local type = type
-local C_Timer = dependencies.Platform.C_Timer
-local RunNextFrame = _G.MSUF_RunNextFrame
+local RunNextFrame = dependencies.Platform.RunNextFrame
 local InCombat = dependencies.Platform.InCombat
 local IsLiveGroupAuraFrame = dependencies.Identity.IsLiveGroupAuraFrame
 local SetAssistAlpha = dependencies.Identity.SetAssistAlpha
@@ -26,7 +24,7 @@ local issecretvalue = dependencies.Platform.issecretvalue
 -- shown and enabled so Blizzard can continue delivering incremental UNIT_AURA
 -- updates while another party member is in a different instance.
 Presence.ReadGroupAuraPresenceMapID = function(unit)
-    local unitPosition = _G.UnitPosition
+    local unitPosition = UnitPosition
     if type(unitPosition) ~= "function" then return nil, false end
     local _, _, _, mapID = unitPosition(unit)
     if issecretvalue(mapID) == true or type(mapID) ~= "number" or mapID <= 0 then
@@ -147,7 +145,7 @@ Presence.UpdateGroupAuraPresenceIdentityState = function(unit, forceApply, allow
         state.awaitingFullPresence = nil
         return Presence.CommitGroupAuraPresenceState(unit, state, forceApply)
     end
-    local unitGUID = _G.UnitGUID
+    local unitGUID = UnitGUID
     if type(unitGUID) ~= "function" then return Presence.CommitGroupAuraPresenceState(unit, state, forceApply) end
     local guid = unitGUID(unit)
     if issecretvalue(guid) == true or type(guid) ~= "string" then
@@ -191,7 +189,7 @@ Presence.UpdateGroupAuraPresencePhaseState = function(unit, forceApply, allowUnr
     if unit == "player" then return Presence.CommitGroupAuraPresenceState(unit, state, forceApply) end
     -- UnitPhaseReason is SecretWhenUnitIdentityRestricted: assign its result
     -- first, and test it only after issecretvalue says it is plain.
-    local unitPhaseReason = _G.UnitPhaseReason
+    local unitPhaseReason = UnitPhaseReason
     local phaseReason = nil
     if type(unitPhaseReason) == "function" then phaseReason = unitPhaseReason(unit) end
     if issecretvalue(phaseReason) ~= true then
@@ -217,7 +215,7 @@ Presence.UpdateGroupAuraPresenceConnectionState = function(
     if unit == "player" then return Presence.CommitGroupAuraPresenceState(unit, state, forceApply) end
     local connected = connectedPayload
     if issecretvalue(connected) == true or type(connected) ~= "boolean" then
-        local unitIsConnected = _G.UnitIsConnected
+        local unitIsConnected = UnitIsConnected
         if type(unitIsConnected) == "function" then connected = unitIsConnected(unit) end
     end
     if issecretvalue(connected) ~= true and type(connected) == "boolean" then
@@ -267,7 +265,7 @@ Presence.UpdateGroupAuraPresenceState = function(
         state.mapMismatch = playerMapKnown == true and unitMapKnown == true
             and playerMapID ~= unitMapID or nil
 
-        local unitPhaseReason = _G.UnitPhaseReason
+        local unitPhaseReason = UnitPhaseReason
         local phaseReason = nil
         if type(unitPhaseReason) == "function" then phaseReason = unitPhaseReason(unit) end
         state.phaseAbsent = issecretvalue(phaseReason) ~= true and phaseReason ~= nil or nil
@@ -276,13 +274,13 @@ Presence.UpdateGroupAuraPresenceState = function(
         -- reasons. It is the dedicated signal for a member that is currently
         -- inside a different instance group, including same-map copies where
         -- mapID and phase alone cannot distinguish presence.
-        local unitInOtherParty = _G.UnitInOtherParty
+        local unitInOtherParty = UnitInOtherParty
         local inOtherParty = type(unitInOtherParty) == "function"
             and unitInOtherParty(unit) or nil
         state.otherParty = issecretvalue(inOtherParty) ~= true
             and type(inOtherParty) == "boolean" and inOtherParty == true or nil
 
-        local unitIsConnected = _G.UnitIsConnected
+        local unitIsConnected = UnitIsConnected
         local connected = type(unitIsConnected) == "function" and unitIsConnected(unit) or nil
         state.offline = issecretvalue(connected) ~= true
             and type(connected) == "boolean" and connected == false or nil
@@ -412,13 +410,7 @@ Presence.QueueGroupAuraPresenceRefreshAllFlush = function()
         or A3._groupAuraPresenceRefreshAllTimerPending == true
         or InCombat() then return false end
     A3._groupAuraPresenceRefreshAllTimerPending = true
-    if RunNextFrame then
-        RunNextFrame(Presence.FlushScheduledGroupAuraPresenceRefreshAll)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Presence.FlushScheduledGroupAuraPresenceRefreshAll)
-    else
-        Presence.FlushScheduledGroupAuraPresenceRefreshAll()
-    end
+    RunNextFrame(Presence.FlushScheduledGroupAuraPresenceRefreshAll)
     return true
 end
 

@@ -99,13 +99,14 @@ local function Boot(flavor)
     assert(not failure, flavor .. ": boot failed: " .. tostring(failure and failure.file) .. ": "
         .. tostring(failure and failure.message))
     local env, core = world.env, world.core
-    for _, name in ipairs(FANOUT) do env[name] = function() end end
+    -- The apply reads these through the namespace registry (and a global for the kept names).
+    for _, name in ipairs(FANOUT) do core.ExportPublic(name, function() end) end
     core.UF.DisableBlizzardFrames = function() end
     -- The unit-frame engine has no unit data offline; its apply is out of scope.
     core.UF.Apply = function() return true end
     if core.SwingTimer then core.SwingTimer.Apply = function() end end
     local applied = { count = 0 }
-    env.MSUF_BlizzardEditMode_ApplyProfileSnapshot = function() applied.count = applied.count + 1; return true end
+    core.ExportPublic("MSUF_BlizzardEditMode_ApplyProfileSnapshot", function() applied.count = applied.count + 1; return true end)
     world.snapshotApplies = applied
     env.MSUF_InitProfiles()
     local history = assert(env.MSUF2, flavor .. ": Menu2 history missing")
@@ -215,12 +216,12 @@ local function RunImport(flavor)
     local _, a = Seed(env, flavor)
     local context = flavor .. " import"
     a.gameplay = { crosshairSize = 31 }
-    local encoded = env.MSUF_ExportSelectionToString("gameplay")
+    local encoded = world.core.PublicGlobals.MSUF_ExportSelectionToString("gameplay")
     Check(type(encoded) == "string", context .. ": gameplay export failed")
     Check(history.StartHistorySession("menu"), context .. ": menu history session did not start")
     Check(history.CaptureHistory("Gameplay", "gameplay:crosshairSize", function() a.gameplay.crosshairSize = 7; return true end),
         context .. ": change before import was not captured")
-    Check(env.MSUF_ImportFromString(encoded) == true and env.MSUF_DB == a, context .. ": import failed")
+    Check(world.core.PublicGlobals.MSUF_ImportFromString(encoded) == true and env.MSUF_DB == a, context .. ": import failed")
     Check(a.gameplay.crosshairSize == 31, context .. ": import did not apply")
     Check(history.Undo() ~= true and a.gameplay.crosshairSize == 31,
         context .. ": Undo replayed a snapshot from before the import")
@@ -228,7 +229,7 @@ local function RunImport(flavor)
 
     local guided = history.CaptureGuidedTourRestorePoint()
     a.gameplay.crosshairSize = 9
-    Check(env.MSUF_ImportFromString(encoded) == true, context .. ": second import failed")
+    Check(world.core.PublicGlobals.MSUF_ImportFromString(encoded) == true, context .. ": second import failed")
     a.gameplay.crosshairSize = 11
     Check(history.RestoreGuidedTourRestorePoint(guided) == true and a.gameplay.crosshairSize == 31,
         context .. ": the guided tour restore point no longer restores on its own profile")
@@ -239,17 +240,17 @@ local function RunImport(flavor)
     -- string's data is stripped and nothing is applied.
     a.general = a.general or {}
     a.general.blizzardEditModeSnapshot = { minimap = { point = "CENTER", x = 1, y = 2 } }
-    env.MSUF_Profiles_SetExportBlizzardEditMode(true)
-    local full = env.MSUF_ExportSelectionToString("all")
-    env.MSUF_Profiles_SetExportBlizzardEditMode(false)
-    env.MSUF_Profiles_SetImportBlizzardEditMode(true)
+    world.core.PublicGlobals.MSUF_Profiles_SetExportBlizzardEditMode(true)
+    local full = world.core.PublicGlobals.MSUF_ExportSelectionToString("all")
+    world.core.PublicGlobals.MSUF_Profiles_SetExportBlizzardEditMode(false)
+    world.core.PublicGlobals.MSUF_Profiles_SetImportBlizzardEditMode(true)
     local before = world.snapshotApplies.count
-    Check(env.MSUF_ImportFromString(full) == true, context .. ": full opt-in import failed")
+    Check(world.core.PublicGlobals.MSUF_ImportFromString(full) == true, context .. ": full opt-in import failed")
     Check(world.snapshotApplies.count == before + 1, context .. ": opt-in import applied the Blizzard layout "
         .. (world.snapshotApplies.count - before) .. " times")
-    env.MSUF_Profiles_SetImportBlizzardEditMode(false)
+    world.core.PublicGlobals.MSUF_Profiles_SetImportBlizzardEditMode(false)
     before = world.snapshotApplies.count
-    Check(env.MSUF_ImportFromString(full) == true, context .. ": full import without opt-in failed")
+    Check(world.core.PublicGlobals.MSUF_ImportFromString(full) == true, context .. ": full import without opt-in failed")
     Check(world.snapshotApplies.count == before, context .. ": import without the opt-in applied the Blizzard layout")
 end
 

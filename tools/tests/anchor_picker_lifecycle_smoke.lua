@@ -29,7 +29,7 @@ assert(not world:FirstFailure(), "whole client graph did not load")
 env.MSUF_BlockConfigCombatLocked = function() return blocked end
 local messages = 0
 env.MSUF_ShowConfigCombatLockMessage = function() messages = messages + 1 end
-local ensure = assert(env.MSUF_EnsureAnchorPicker)
+local ensure = assert(world.core.PublicGlobals.MSUF_EnsureAnchorPicker)
 local picker = assert(ensure())
 -- Shared widget stubs keep visibility flags; deliver native visibility scripts here.
 local show, hide = picker.Show, picker.Hide

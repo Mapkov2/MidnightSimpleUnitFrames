@@ -1,7 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Integrations/MSUF_Integration_ThirdPartyAnchors.lua"
+local Optional, ExportPublic = MSUF.Optional, MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 -- WoW Forever, read once from the client model. A harness without MSUF.Client
 -- models a client that is not Forever.
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
@@ -13,17 +13,21 @@ local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 -- Foreign symbols this file depends on. Apart from the MSUF Suite entries, none
 -- is a documented public API; every read is type-checked and an absent symbol
 -- only leaves that provider unregistered, it never errors:
---   MSUFSuite.API.GetCooldownAnchorFrame("EssentialCooldownViewer"), through
---     MSUF.SuiteLink (Kernel/MSUF_SuiteLink.lua; an older Suite: MSUFSuite.
+--   MSUFSuite.API.GetCooldownAnchorFrame(viewerName) for the three viewer
+--     names in SUITE_COOLDOWN_VIEWERS, through MSUF.SuiteLink
+--     (Kernel/MSUF_SuiteLink.lua; an older Suite: MSUFSuite.
 --     CooldownManager.GetAnchorFrame)
 --     (MSUF_Suite_CooldownManager, LoadOnDemand, Mainline family only): a plain
---     insecure frame covering the Suite's Essential bar, nil while the module is
---     off. Absent: RegisterSuiteCooldownAnchor returns false unless the addon is
---     loaded, then the retry ladder polls; Classic clients never ask.
+--     insecure frame covering the Suite's bar of that name, nil while the module
+--     or that bar is off. Absent: RegisterSuiteCooldownAnchor returns false
+--     unless the addon is loaded, then the retry ladder polls; Classic clients
+--     never ask.
 --   EventRegistry callback "MSUFSuite.CooldownManager.AnchorChanged": optional;
 --     the Suite fires it when its module is enabled or disabled and whenever
---     that frame is (re)created. Without it the OnShow/OnHide/OnSizeChanged
---     observers and ADDON_LOADED still acquire the frame. The Suite detects this
+--     the Essential frame is (re)created. Without it the OnShow/OnHide/
+--     OnSizeChanged observers and ADDON_LOADED still acquire Essential; a
+--     Utility or Tracked Buffs bar first shown after the retry ladder waits
+--     for the next event or loading screen. The Suite detects this
 --     integration by _G.MSUF_GetSuiteCooldownAnchor.
 --   ArcUI_Public.GetGroupAnchor("Essential"), .ANCHOR_CHANGED_EVENT (ArcUI):
 --     the Essential group anchor frame. Absent: RegisterArcUIAnchor returns
@@ -55,12 +59,12 @@ local C_Timer = C_Timer
 local EventRegistry = EventRegistry
 local UIParent = UIParent
 local type = type
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 --- MSUF owners that load after this file (UnitFrames/Engine/MSUF_UF_Factory.lua,
 --- ClassPower/MSUF_CP_Controller.lua). A provider that is already present
 --- (the Suite loading first) is acquired at login, when the profile exists.
 local function RunOptional(name, ...)
-    local fn = MSUF.Optional(name)
+    local fn = Optional(name)
     if fn then return fn(...) end
 end
 -- Every provider frame and CVar accessor here is foreign. The probes check
@@ -73,6 +77,11 @@ local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
 local SKIRON_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
 local SUITE_COOLDOWN_ADDON = "MSUF_Suite_CooldownManager"
 local SUITE_ANCHOR_CHANGED_EVENT = "MSUFSuite.CooldownManager.AnchorChanged"
+-- The viewer names the Suite stands in for, Essential first. Essential also
+-- has third-party providers and its own consumers; Utility and Tracked Buffs
+-- ("BuffIcon") follow only the Suite.
+local SUITE_ESSENTIAL_VIEWER = "EssentialCooldownViewer"
+local SUITE_COOLDOWN_VIEWERS = { SUITE_ESSENTIAL_VIEWER, "UtilityCooldownViewer", "BuffIconCooldownViewer" }
 local AUTOMATIC_COOLDOWN_ADDONS = {
     -- First-party: the MSUF Suite wins over every third-party provider.
     { id = SUITE_COOLDOWN_ADDON, label = "MSUF Suite" },
@@ -99,12 +108,12 @@ local watcher
 local loginReached = false
 local skironSourceHookPending = false
 local skironProxyRefreshAfterCombat = false
-local skironResolveGeneration = 0
+local skironResolveState = { generation = 0 }
 local observedSkironSources = setmetatable({}, { __mode = "k" })
 local refreshCoolinatorAnchor
 local coolinatorSourceHookPending = false
 local coolinatorRefreshAfterCombat = false
-local coolinatorResolveGeneration = 0
+local coolinatorResolveState = { generation = 0 }
 local coolinatorActiveSource
 local observedCoolinatorSources = setmetatable({}, { __mode = "k" })
 local ellesmereCooldownRefreshAfterCombat = false
@@ -115,8 +124,10 @@ local registeredSuiteCooldown
 local refreshSuiteCooldownAnchor
 local suiteCooldownSourceHookPending = false
 local suiteCooldownRefreshAfterCombat = false
-local suiteCooldownResolveGeneration = 0
-local suiteCooldownActiveSource
+local suiteCooldownResolveState = { generation = 0 }
+-- [viewer name] = the acquired Suite frame of that name.
+local suiteCooldownActiveSources = {}
+-- [frame] = the viewer name its observers refresh.
 local observedSuiteCooldownSources = setmetatable({}, { __mode = "k" })
 local automaticCooldownProviderId
 local automaticCooldownProviderLabel
@@ -146,7 +157,7 @@ local cooldownAnchorClientSupported = ClientHostsCooldownManager()
 --- stands in for.
 local cooldownAnchorSupported = MSUF.Client ~= nil
     and MSUF.Client.HostsCooldownManager == true
-    or (MSUF.Client == nil and type(_G.C_CooldownViewer) == "table")
+    or (MSUF.Client == nil and type(C_CooldownViewer) == "table")
 local InCombat
 local cooldownConsentPromptProviderId
 local cooldownConsentPromptAfterCombat = false
@@ -155,7 +166,7 @@ local COOLDOWN_CONFIRM_POPUP = "MSUF_COOLDOWN_ANCHOR_CONFIRM"
 local COOLDOWN_MISSING_ANCHOR_POPUP = "MSUF_COOLDOWN_ANCHOR_MISSING"
 --- The core prompt layer (Shell/UI/MSUF_Widgets.lua); nothing here writes
 --- Blizzard's StaticPopupDialogs.
-local UI = MSUF.Require("MSUF_UI", "Integrations/MSUF_Integration_ThirdPartyAnchors.lua")
+local UI = MSUF.Require("MSUF_UI", FILE)
 --- The existing bounded provider acquisition chain can take up to 4.05 seconds.
 --- Warn only after it has had time to resolve so login order does not create a
 --- false positive for Skiron, Coolinator or EllesmereUI.
@@ -163,10 +174,16 @@ local COOLDOWN_MISSING_ANCHOR_WARNING_DELAY = 4.25
 local missingAnchorWarningShown = false
 
 local function Tr(text)
-    local translate = MSUF and MSUF.Translate
+    local translate = MSUF.Translate
     if type(translate) == "function" then return translate(text) end
-    local L = (MSUF and MSUF.L) or _G.MSUF_L
-    return type(L) == "table" and L[text] or text
+    local L = MSUF.L or MSUF.Require("MSUF_L", FILE)
+    return L[text] or text
+end
+
+-- The active profile's general table, or nil before a profile exists.
+local function GeneralDB()
+    local db = MSUF_DB
+    return type(db) == "table" and db.general or nil
 end
 
 local function IsAddOnFullyLoaded(addonName)
@@ -177,7 +194,7 @@ local function IsAddOnFullyLoaded(addonName)
         -- Test/legacy shims may expose the historical single return value.
         return loadedOrLoading == true
     end
-    local legacy = _G.IsAddOnLoaded
+    local legacy = IsAddOnLoaded
     return type(legacy) == "function" and legacy(addonName) == true or false
 end
 
@@ -197,11 +214,11 @@ local function RefreshAutomaticCooldownAnchorConsumers(reanchor)
         factory.ForceReanchor()
     end
 
-    local editMode = _G.MSUF_EM2
+    local editMode = Optional("MSUF_EM2")
     local hud = editMode and editMode.HUD
     if hud and type(hud.RefreshControls) == "function" then hud.RefreshControls(true) end
 
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local menu = MSUF.MSUF2 or Optional("MSUF2")
     if menu and type(menu.RequestRefresh) == "function" then
         menu.RequestRefresh(nil, "automatic-cooldown-anchor-provider")
     end
@@ -228,7 +245,7 @@ local function RefreshAutomaticCooldownProvider(notify)
         HideCooldownConsentPrompts()
     end
     if changed and notify ~= false then
-        local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
+        local general = GeneralDB()
         RefreshAutomaticCooldownAnchorConsumers(type(general) == "table" and general.anchorToCooldown == true)
     end
     return providerId, providerLabel, changed
@@ -251,11 +268,11 @@ function MSUF.IsCooldownAnchorEnabled(general)
 end
 
 local function CooldownConsentDecisions(create)
-    local globalDB = _G.MSUF_GlobalDB
+    local globalDB = MSUF_GlobalDB
     if type(globalDB) ~= "table" then
         if not create then return nil end
         globalDB = {}
-        _G.MSUF_GlobalDB = globalDB
+        ExportPublic("MSUF_GlobalDB", globalDB)
     end
     if type(globalDB.global) ~= "table" then
         if not create then return nil end
@@ -302,7 +319,7 @@ local function RememberCooldownLayoutOrigin(db)
 end
 
 function MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision, position)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then return false end
     if type(db.general) ~= "table" then db.general = {} end
     enabled = enabled == true
@@ -346,7 +363,7 @@ end
 --- is still at its default (anchor off, Player frame width, no offset): a value
 --- the user chose is never overwritten. Returns true when it wrote the keys.
 local function AdoptSuiteClassPowerAnchor()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then return false end
     local bars = db.bars
     if bars ~= nil and type(bars) ~= "table" then return false end
@@ -422,8 +439,7 @@ local function MaybeShowCooldownConsent()
     if not cooldownAnchorSupported then return false end
     if MSUF.SuiteLink.InstallerBusy() then return false end
     if not providerId or cooldownConsentPromptProviderId == providerId then return false end
-    local db = _G.MSUF_DB
-    local general = type(db) == "table" and db.general or nil
+    local general = GeneralDB()
     if type(general) ~= "table" then return false end
 
     if general.anchorToCooldown == true then
@@ -441,26 +457,6 @@ local function MaybeShowCooldownConsent()
     ShowFirstCooldownConsent({ providerId = providerId, providerLabel = providerLabel, position = position })
     cooldownConsentPromptProviderId = providerId
     return true
-end
-
-_G.MSUF_GetAutomaticCooldownAnchorProvider = function()
-    return MSUF.GetAutomaticCooldownAnchorProvider()
-end
-
-_G.MSUF_IsCooldownAnchorEnabled = function(general)
-    return MSUF.IsCooldownAnchorEnabled(general)
-end
-
-_G.MSUF_IsCooldownAnchorSupported = function()
-    return MSUF.IsCooldownAnchorSupported()
-end
-
-_G.MSUF_GetCooldownAnchorConsentDecision = function(providerId)
-    return MSUF.GetCooldownAnchorConsentDecision(providerId)
-end
-
-_G.MSUF_SetCooldownAnchorEnabled = function(enabled, rememberDecision, position)
-    return MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision, position)
 end
 
 InCombat = function()
@@ -483,7 +479,7 @@ end
 -- child. On 12.1 that makes geometry accessors return secret numbers, which must
 -- never enter Lua comparisons or arithmetic. Restrictions precede native reads.
 local function GetUsableCooldownAnchorSize(frame, requireHeight, requireSetPoint)
-    if not frame or IsSecretValue(frame) or frame == UIParent or frame == _G.WorldFrame then
+    if not frame or IsSecretValue(frame) or frame == UIParent or frame == WorldFrame then
         return nil
     end
 
@@ -539,8 +535,8 @@ end
 
 MSUF.GetUsableCooldownAnchorSize = GetUsableCooldownAnchorSize
 MSUF.GetCooldownAnchorScaledWidth = GetCooldownAnchorScaledWidth
-_G.MSUF_GetUsableCooldownAnchorSize = GetUsableCooldownAnchorSize
-_G.MSUF_GetCooldownAnchorScaledWidth = GetCooldownAnchorScaledWidth
+ExportPublic("MSUF_GetUsableCooldownAnchorSize", GetUsableCooldownAnchorSize)
+ExportPublic("MSUF_GetCooldownAnchorScaledWidth", GetCooldownAnchorScaledWidth)
 
 local function IsFrameUsable(frame)
     return GetUsableCooldownAnchorSize(frame, true, true) ~= nil
@@ -560,7 +556,7 @@ end
 -- IsFrameUsable: observation validates only frame access and the hook method,
 -- and never reads or compares foreign geometry.
 local function IsFrameObservable(frame)
-    if not frame or IsSecretValue(frame) or frame == UIParent or frame == _G.WorldFrame then
+    if not frame or IsSecretValue(frame) or frame == UIParent or frame == WorldFrame then
         return false
     end
     local legacy, canAccess, forbidden, anchoringRestricted, anchoringSecret, hookScript = ProbeCooldownAnchorObserver(frame)
@@ -586,31 +582,31 @@ local function ResolveSkironAnchorSource(preferredFrame, isActiveProxy)
         return preferredFrame
     end
 
-    local proxy = _G.SCM_GroupAnchorProxy_1
+    local proxy = SCM_GroupAnchorProxy_1
     if IsFrameUsable(proxy) then
         return proxy
     end
 
-    local groupAnchor = _G.SCM_GroupAnchor_1
+    local groupAnchor = SCM_GroupAnchor_1
     if IsFrameUsable(groupAnchor) then
         return groupAnchor
     end
 end
 
 local function ResolveCoolinatorAnchorSource()
-    local source = _G.CoolinatorPrimaryGroupAnchor
+    local source = CoolinatorPrimaryGroupAnchor
     if IsFrameUsable(source) then return source end
 end
 
 local function ResolveArcUIAnchorSource()
-    local api = _G.ArcUI_Public
+    local api = ArcUI_Public
     local getAnchor = api and api.GetGroupAnchor
     local source = type(getAnchor) == "function" and getAnchor("Essential") or nil
     if IsFrameUsable(source) then return source end
 end
 
 local function GetEllesmereCooldownAnchorSource()
-    local getBarFrame = _G._ECME_GetBarFrame
+    local getBarFrame = _ECME_GetBarFrame
     if type(getBarFrame) ~= "function" then return nil end
     local source = getBarFrame("cooldowns")
     do
@@ -675,7 +671,7 @@ local function EnsureCoolinatorAnchorSource()
     -- Coolinator keeps this frame identity stable and repoints it at the first
     -- designer/runtime group. Out of combat MSUF consumers follow it live; the
     -- Factory combat-edge freeze severs those links while a fight lasts.
-    ObserveCoolinatorSource(_G.CoolinatorPrimaryGroupAnchor)
+    ObserveCoolinatorSource(CoolinatorPrimaryGroupAnchor)
     local source = ResolveCoolinatorAnchorSource()
     local previousSource = coolinatorActiveSource
     local transition = previousSource ~= source
@@ -693,16 +689,17 @@ end
 --- The MSUF Suite's cooldown manager exists on the Mainline family only (Retail
 --- and WoW Forever). Classic clients never ask for it, so the provider stays
 --- inert there even if a table of that name exists.
-local function GetSuiteCooldownAnchorCandidate()
+local function GetSuiteCooldownAnchorCandidate(viewerName)
     if not cooldownAnchorClientSupported then return nil end
-    return MSUF.SuiteLink.GetCooldownAnchorFrame("EssentialCooldownViewer")
+    return MSUF.SuiteLink.GetCooldownAnchorFrame(viewerName)
 end
 
-local function OnSuiteCooldownSourceChanged()
-    refreshSuiteCooldownAnchor(true)
+-- Hook callbacks receive the frame first; it names the bar to refresh.
+local function OnSuiteCooldownSourceChanged(source)
+    refreshSuiteCooldownAnchor(observedSuiteCooldownSources[source], true)
 end
 
-local function ObserveSuiteCooldownSource(source)
+local function ObserveSuiteCooldownSource(source, viewerName)
     if not IsFrameObservable(source) then return false end
     if observedSuiteCooldownSources[source] then return true end
     -- The Suite promises a plain insecure frame; the protected-frame deferral is
@@ -713,21 +710,21 @@ local function ObserveSuiteCooldownSource(source)
         if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false
     end
-    observedSuiteCooldownSources[source] = true
+    observedSuiteCooldownSources[source] = viewerName
     source:HookScript("OnSizeChanged", OnSuiteCooldownSourceChanged)
     source:HookScript("OnShow", OnSuiteCooldownSourceChanged)
     source:HookScript("OnHide", OnSuiteCooldownSourceChanged)
     return true
 end
 
-local function EnsureSuiteCooldownAnchorSource()
+local function EnsureSuiteCooldownAnchorSource(viewerName)
     -- Observe the frame the Suite hands out even while it is hidden or not laid
     -- out yet, so its first OnShow/OnSizeChanged acquires it without polling.
     -- A recreated frame is a new identity: it is observed once and "switched".
-    local candidate = GetSuiteCooldownAnchorCandidate()
-    ObserveSuiteCooldownSource(candidate)
+    local candidate = GetSuiteCooldownAnchorCandidate(viewerName)
+    ObserveSuiteCooldownSource(candidate, viewerName)
     local source = IsFrameUsable(candidate) and candidate or nil
-    local previousSource = suiteCooldownActiveSource
+    local previousSource = suiteCooldownActiveSources[viewerName]
     local transition = previousSource ~= source
         and (not previousSource and "acquired" or not source and "lost" or "switched")
         or nil
@@ -736,7 +733,7 @@ local function EnsureSuiteCooldownAnchorSource()
         if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return previousSource, false, nil, true
     end
-    suiteCooldownActiveSource = source
+    suiteCooldownActiveSources[viewerName] = source
     return source, transition ~= nil, transition, false
 end
 
@@ -762,14 +759,17 @@ local function ObserveSkironSource(source)
     return true
 end
 
+-- The MSUF-owned proxy frame over the Skiron anchor; created on first acquire.
+local skironAnchorProxy
+
 local function EnsureSkironAnchorProxy(source, isActiveProxy)
     -- Hook both candidates, including a currently hidden proxy. Skiron can
     -- switch back to that proxy with Show() and unchanged size, which does not
     -- guarantee its public size callback will fire.
-    ObserveSkironSource(_G.SCM_GroupAnchorProxy_1)
-    ObserveSkironSource(_G.SCM_GroupAnchor_1)
+    ObserveSkironSource(SCM_GroupAnchorProxy_1)
+    ObserveSkironSource(SCM_GroupAnchor_1)
     source = ResolveSkironAnchorSource(source, isActiveProxy)
-    local proxy = _G.MSUF_SkironCooldownAnchor
+    local proxy = skironAnchorProxy
     local previousSource = proxy and proxy.MSUFSkironSource or nil
     local transition = previousSource ~= source
         and (not previousSource and "acquired" or not source and "lost" or "switched")
@@ -797,7 +797,7 @@ local function EnsureSkironAnchorProxy(source, isActiveProxy)
         proxy._msufExternalAnchorCacheKey = "SkironCooldownManager"
         if proxy.EnableMouse then proxy:EnableMouse(false) end
         if proxy.SetAlpha then proxy:SetAlpha(0) end
-        _G.MSUF_SkironCooldownAnchor = proxy
+        skironAnchorProxy = ExportPublic("MSUF_SkironCooldownAnchor", proxy)
     end
 
     local changed = proxy.MSUFSkironSource ~= source
@@ -814,18 +814,16 @@ function MSUF.GetSkironCooldownAnchorProxy()
     -- Resolver reads must not consume a source transition. Creation, loss and
     -- rebinding are owned by refreshSkironAnchorProxy so every state change
     -- reaches the same targeted anchor/width notification path.
-    local proxy = _G.MSUF_SkironCooldownAnchor
+    local proxy = skironAnchorProxy
     if proxy and proxy.MSUFSkironSource ~= nil and (not proxy.IsShown or proxy:IsShown()) then
         return proxy
     end
 end
 
-_G.MSUF_GetSkironCooldownAnchorProxy = function()
-    return MSUF.GetSkironCooldownAnchorProxy()
-end
-
-function MSUF.GetSuiteCooldownAnchor()
-    local source = suiteCooldownActiveSource
+--- viewerName is one of SUITE_COOLDOWN_VIEWERS; nil asks for Essential, the
+--- only bar callers named before Utility and Tracked Buffs followed the Suite.
+function MSUF.GetSuiteCooldownAnchor(viewerName)
+    local source = suiteCooldownActiveSources[viewerName or SUITE_ESSENTIAL_VIEWER]
     if source and IsFrameUsable(source) then return source end
 end
 
@@ -844,21 +842,21 @@ function MSUF.GetArcUICooldownAnchor()
 end
 
 local function BlizzardCooldownViewerEnabled()
-    local registry = _G.CVarCallbackRegistry
+    local registry = CVarCallbackRegistry
     local getCached = registry and registry.GetCVarValueBool
     if type(getCached) == "function" then
         local enabled = getCached(registry, "cooldownViewerEnabled")
         if enabled ~= nil then return enabled == true end
     end
 
-    local cvar = _G.C_CVar
+    local cvar = C_CVar
     local getCVarBool = cvar and cvar.GetCVarBool
     if type(getCVarBool) == "function" then
         local enabled = getCVarBool("cooldownViewerEnabled")
         if enabled ~= nil then return enabled == true end
     end
 
-    local legacy = _G.GetCVarBool
+    local legacy = GetCVarBool
     if type(legacy) == "function" then
         local enabled = legacy("cooldownViewerEnabled")
         if enabled ~= nil then return enabled == true end
@@ -867,15 +865,15 @@ local function BlizzardCooldownViewerEnabled()
 end
 
 local function BlizzardEssentialCooldownAnchorActive()
-    local api = _G.C_CooldownViewer
+    local api = C_CooldownViewer
     local isAvailable = api and api.IsCooldownViewerAvailable
     if type(isAvailable) ~= "function" then return false end
     local available = isAvailable()
     if available ~= true or not BlizzardCooldownViewerEnabled() then return false end
 
-    local viewer = _G.EssentialCooldownViewer
+    local viewer = EssentialCooldownViewer
     if not viewer then return false end
-    local visibleEnum = _G.Enum and _G.Enum.CooldownViewerVisibleSetting
+    local visibleEnum = Enum and Enum.CooldownViewerVisibleSetting
     if visibleEnum and viewer.visibleSetting == visibleEnum.Hidden then return false end
     return true
 end
@@ -885,17 +883,18 @@ end
 --- loaded without exposing an anchor, while Coolinator exposes its own anchor
 --- with Blizzard's cooldownViewerEnabled CVar disabled.
 function MSUF.GetActiveCooldownAnchorProvider()
-    if suiteCooldownActiveSource then return SUITE_COOLDOWN_ADDON, suiteCooldownActiveSource end
+    local suiteSource = suiteCooldownActiveSources[SUITE_ESSENTIAL_VIEWER]
+    if suiteSource then return SUITE_COOLDOWN_ADDON, suiteSource end
     if arcUIAnchor then return "ArcUI", arcUIAnchor end
 
-    local skironProxy = _G.MSUF_SkironCooldownAnchor
+    local skironProxy = skironAnchorProxy
     if skironProxy and skironProxy.MSUFSkironSource ~= nil then
         return "SkironCooldownManager", skironProxy
     end
     if coolinatorActiveSource then return "Coolinator", coolinatorActiveSource end
     if ellesmereCooldownActiveSource then return "EllesmereUICooldownManager", ellesmereCooldownActiveSource end
     if BlizzardEssentialCooldownAnchorActive() then
-        return "Blizzard", _G.EssentialCooldownViewer
+        return "Blizzard", EssentialCooldownViewer
     end
 end
 
@@ -911,9 +910,8 @@ local function MissingCooldownAnchorWarningText()
 end
 
 local function OpenCooldownAnchorSetting()
-    local open = _G.MSUF_OpenExactSettingControl
-    if type(open) ~= "function" then return false end
-    return open("general.anchorToCooldown", Tr("Follow Blizzard's Essential Cooldowns"), "uf_player")
+    return MSUF.Require("MSUF_OpenExactSettingControl", FILE)("general.anchorToCooldown",
+        Tr("Follow Blizzard's Essential Cooldowns"), "uf_player")
 end
 
 --- WoW Forever characters start at level 1, and Blizzard's Cooldown Manager
@@ -926,15 +924,15 @@ end
 --- or a hidden viewer still warns.
 local function ForeverCooldownManagerUnavailable()
     if not IS_FOREVER or MSUF.GetAutomaticCooldownAnchorProvider() ~= nil then return false end
-    local api = _G.C_CooldownViewer
+    local api = C_CooldownViewer
     local isAvailable = api and api.IsCooldownViewerAvailable
-    if type(isAvailable) ~= "function" or _G.EssentialCooldownViewer == nil then return true end
+    if type(isAvailable) ~= "function" or EssentialCooldownViewer == nil then return true end
     return isAvailable() ~= true
 end
 
 local function ShowMissingCooldownAnchorWarning()
     if missingAnchorWarningShown then return false end
-    local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
+    local general = GeneralDB()
     if not MSUF.IsCooldownAnchorEnabled(general) then return false end
     if MSUF.GetActiveCooldownAnchorProvider() then return false end
     if ForeverCooldownManagerUnavailable() then return false end
@@ -949,33 +947,42 @@ local function ShowMissingCooldownAnchorWarning()
 end
 
 local function ScheduleMissingCooldownAnchorWarning()
-    local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
+    local general = GeneralDB()
     if not MSUF.IsCooldownAnchorEnabled(general) then return end
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(COOLDOWN_MISSING_ANCHOR_WARNING_DELAY, ShowMissingCooldownAnchorWarning)
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(COOLDOWN_MISSING_ANCHOR_WARNING_DELAY, ShowMissingCooldownAnchorWarning)
     else
         ShowMissingCooldownAnchorWarning()
     end
 end
 
-_G.MSUF_GetSuiteCooldownAnchor = function()
-    return MSUF.GetSuiteCooldownAnchor()
+-- Legacy globals that forward to the namespace function of the same name. The
+-- namespace function is looked up per call, so a replaced one is still honored.
+local FORWARDED_ANCHOR_GLOBALS = {
+    "GetAutomaticCooldownAnchorProvider", "IsCooldownAnchorEnabled", "IsCooldownAnchorSupported",
+    "GetCooldownAnchorConsentDecision", "SetCooldownAnchorEnabled", "GetSkironCooldownAnchorProxy",
+    "GetSuiteCooldownAnchor", "GetCoolinatorCooldownAnchor", "GetEllesmereCooldownAnchor",
+    "GetArcUICooldownAnchor", "GetActiveCooldownAnchorProvider",
+}
+local function ForwardToNamespace(name)
+    ExportPublic("MSUF_" .. name, function(...) return MSUF[name](...) end)
 end
+for index = 1, #FORWARDED_ANCHOR_GLOBALS do ForwardToNamespace(FORWARDED_ANCHOR_GLOBALS[index]) end
 
-_G.MSUF_GetCoolinatorCooldownAnchor = function()
-    return MSUF.GetCoolinatorCooldownAnchor()
-end
-
-_G.MSUF_GetEllesmereCooldownAnchor = function()
-    return MSUF.GetEllesmereCooldownAnchor()
-end
-
-_G.MSUF_GetArcUICooldownAnchor = function()
-    return MSUF.GetArcUICooldownAnchor()
-end
-
-_G.MSUF_GetActiveCooldownAnchorProvider = function()
-    return MSUF.GetActiveCooldownAnchorProvider()
+-- Re-places what is anchored to one viewer name (unit and group frames; for
+-- Essential also class power) through the Factory's coalesced cold refresh.
+-- False while the Factory is not loaded.
+local function ScheduleCooldownAnchorConsumers(viewerName)
+    local UF = MSUF.UF
+    local factory = UF and UF.Factory
+    if factory and type(factory.ScheduleExternalAnchorRefresh) == "function" then
+        factory.ScheduleExternalAnchorRefresh(viewerName)
+        return true
+    elseif factory and type(factory.RefreshExternalAnchor) == "function" then
+        factory.RefreshExternalAnchor(viewerName)
+        return true
+    end
+    return false
 end
 
 local function RefreshEssentialCooldownAnchorConsumers(transition)
@@ -983,18 +990,10 @@ local function RefreshEssentialCooldownAnchorConsumers(transition)
     if transition == "acquired" or transition == "switched" then
         UI.HidePrompt(COOLDOWN_MISSING_ANCHOR_POPUP)
     end
-    local UF = MSUF.UF
-    local factory = UF and UF.Factory
-    local factoryHandled = false
-    if factory and type(factory.ScheduleExternalAnchorRefresh) == "function" then
-        factory.ScheduleExternalAnchorRefresh("EssentialCooldownViewer")
-        factoryHandled = true
-    elseif factory and type(factory.RefreshExternalAnchor) == "function" then
-        factory.RefreshExternalAnchor("EssentialCooldownViewer")
-        factoryHandled = true
-    end
+    local factoryHandled = ScheduleCooldownAnchorConsumers("EssentialCooldownViewer")
 
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local db = MSUF_DB
+    local bars = db and db.bars
     if not factoryHandled and bars and bars.classPowerAnchorToCooldown == true
         and bars.classPowerWidthMode ~= "cooldown" then
         RunOptional("MSUF_ClassPower_RefreshLayout")
@@ -1015,6 +1014,17 @@ local function NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
     if changed or sizeChanged == true then
         RunOptional("MSUF_ScheduleCooldownWidthRefresh", "EssentialCooldownViewer", false, true)
     end
+end
+
+-- Utility and Tracked Buffs follow only the Suite and have none of Essential's
+-- own consumers (missing-anchor prompt, class power anchor). A new, lost or
+-- switched frame re-arms the width observers, then refreshes that name's
+-- anchored frames and width modes once; a resize is the width observer's job.
+local function NotifySuiteViewerTransition(viewerName, changed)
+    if not changed then return end
+    RunOptional("MSUF_EnsureCooldownWidthObservers", true)
+    ScheduleCooldownAnchorConsumers(viewerName)
+    RunOptional("MSUF_ScheduleCooldownWidthRefresh", viewerName, false, true)
 end
 
 refreshArcUIAnchor = function(sizeChanged)
@@ -1047,11 +1057,25 @@ refreshCoolinatorAnchor = function(sizeChanged)
     return source ~= nil
 end
 
-refreshSuiteCooldownAnchor = function(sizeChanged)
-    local source, changed, transition, deferred = EnsureSuiteCooldownAnchorSource()
+refreshSuiteCooldownAnchor = function(viewerName, sizeChanged)
+    local source, changed, transition, deferred = EnsureSuiteCooldownAnchorSource(viewerName)
     if deferred then return source ~= nil end
-    NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
+    if viewerName == SUITE_ESSENTIAL_VIEWER then
+        NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
+    else
+        NotifySuiteViewerTransition(viewerName, changed)
+    end
     return source ~= nil
+end
+
+-- Every Suite bar MSUF follows, Essential first. True once all are acquired,
+-- so the retry ladder runs all its steps while a Suite bar is switched off.
+local function refreshSuiteCooldownAnchors(sizeChanged)
+    local all = true
+    for i = 1, #SUITE_COOLDOWN_VIEWERS do
+        all = refreshSuiteCooldownAnchor(SUITE_COOLDOWN_VIEWERS[i], sizeChanged) and all
+    end
+    return all
 end
 
 local function refreshEllesmereCooldownAnchor()
@@ -1061,13 +1085,15 @@ local function refreshEllesmereCooldownAnchor()
     return source ~= nil, false
 end
 
-local function ScheduleSkironAnchorResolve()
-    skironResolveGeneration = skironResolveGeneration + 1
-    local generation = skironResolveGeneration
+-- One bounded retry ladder: try now, then after each SKIRON_RETRY_DELAYS step until
+-- refresh() reports success. A newer ladder on the same state supersedes this one.
+local function RunAnchorResolveLadder(state, refresh)
+    state.generation = state.generation + 1
+    local generation = state.generation
     local index = 1
     local function run()
-        if generation ~= skironResolveGeneration then return end
-        if refreshSkironAnchorProxy() then return end
+        if generation ~= state.generation then return end
+        if refresh() then return end
         index = index + 1
         local delay = SKIRON_RETRY_DELAYS[index]
         if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
@@ -1077,42 +1103,18 @@ local function ScheduleSkironAnchorResolve()
         return
     end
     C_Timer.After(SKIRON_RETRY_DELAYS[index], run)
+end
+
+local function ScheduleSkironAnchorResolve()
+    RunAnchorResolveLadder(skironResolveState, refreshSkironAnchorProxy)
 end
 
 local function ScheduleCoolinatorAnchorResolve()
-    coolinatorResolveGeneration = coolinatorResolveGeneration + 1
-    local generation = coolinatorResolveGeneration
-    local index = 1
-    local function run()
-        if generation ~= coolinatorResolveGeneration then return end
-        if refreshCoolinatorAnchor() then return end
-        index = index + 1
-        local delay = SKIRON_RETRY_DELAYS[index]
-        if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
-    end
-    if not (C_Timer and C_Timer.After) then
-        run()
-        return
-    end
-    C_Timer.After(SKIRON_RETRY_DELAYS[index], run)
+    RunAnchorResolveLadder(coolinatorResolveState, refreshCoolinatorAnchor)
 end
 
 local function ScheduleSuiteCooldownAnchorResolve()
-    suiteCooldownResolveGeneration = suiteCooldownResolveGeneration + 1
-    local generation = suiteCooldownResolveGeneration
-    local index = 1
-    local function run()
-        if generation ~= suiteCooldownResolveGeneration then return end
-        if refreshSuiteCooldownAnchor() then return end
-        index = index + 1
-        local delay = SKIRON_RETRY_DELAYS[index]
-        if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
-    end
-    if not (C_Timer and C_Timer.After) then
-        run()
-        return
-    end
-    C_Timer.After(SKIRON_RETRY_DELAYS[index], run)
+    RunAnchorResolveLadder(suiteCooldownResolveState, refreshSuiteCooldownAnchors)
 end
 
 local function ScheduleEllesmereCooldownAnchorResolve()
@@ -1163,7 +1165,7 @@ local function OnArcUIAnchorChanged(_, groupName)
 end
 
 local function RegisterArcUIAnchor()
-    local api = _G.ArcUI_Public
+    local api = ArcUI_Public
     if not (api and type(api.GetGroupAnchor) == "function") then return false end
     if not registeredArcUI then
         if not (EventRegistry and type(EventRegistry.RegisterCallback) == "function") then return false end
@@ -1189,7 +1191,7 @@ local function RegisterSkironAnchorProxy()
 end
 
 local function RegisterCoolinatorAnchor()
-    if not _G.CoolinatorPrimaryGroupAnchor then
+    if not CoolinatorPrimaryGroupAnchor then
         local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded
         if type(isLoaded) ~= "function" or not isLoaded("Coolinator") then return false end
     end
@@ -1199,7 +1201,7 @@ end
 
 local function RegisterEllesmereCooldownAnchor()
     if IsFrameUsable(ellesmereCooldownActiveSource) then return true end
-    if type(_G._ECME_GetBarFrame) ~= "function"
+    if type(_ECME_GetBarFrame) ~= "function"
         and not IsAddOnFullyLoaded("EllesmereUICooldownManager") then
         return false
     end
@@ -1208,7 +1210,7 @@ local function RegisterEllesmereCooldownAnchor()
 end
 
 local function OnSuiteCooldownAnchorChanged()
-    refreshSuiteCooldownAnchor(true)
+    refreshSuiteCooldownAnchors(true)
 end
 
 local function RegisterSuiteCooldownAnchor()
@@ -1266,7 +1268,7 @@ watcher:SetScript("OnEvent", function(self, event, addon)
         coolinatorSourceHookPending = false
         coolinatorRefreshAfterCombat = false
         ellesmereCooldownRefreshAfterCombat = false
-        if refreshSuite then refreshSuiteCooldownAnchor() end
+        if refreshSuite then refreshSuiteCooldownAnchors() end
         if refreshArcUI then refreshArcUIAnchor(true) end
         if refreshSkiron then refreshSkironAnchorProxy(nil, false, true) end
         if refreshCoolinator then refreshCoolinatorAnchor() end

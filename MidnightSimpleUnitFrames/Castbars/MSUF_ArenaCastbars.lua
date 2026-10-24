@@ -14,7 +14,7 @@ local Publish = PublicAPI.Publish
 -- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
 -- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
 -- 0..5 and fall back to 3 when the client initializer did not run.
-local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
+local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(MSUF_MAX_ARENA_FRAMES) or 3)))
 -- Classic Era and WoW Forever load this file without arena units
 -- (MSUF.Client.SupportsUnit). The answer is fixed for the session, so read it once.
 local HAS_ARENA_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("arena"))
@@ -24,13 +24,16 @@ local HAS_PVP_MATCH_STATE_CHANGED
 if MSUF.Client and type(MSUF.Client.SupportsEvent) == "function" then
     HAS_PVP_MATCH_STATE_CHANGED = MSUF.Client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
 else
-    HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
-        and type(_G.C_EventUtils.IsEventValid) == "function"
-        and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
+    HAS_PVP_MATCH_STATE_CHANGED = C_EventUtils
+        and type(C_EventUtils.IsEventValid) == "function"
+        and C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
 end
 
+-- UF_Config loads first and exports the arena layout delta at file load.
+local GetArenaLayoutDelta = MSUF.Require("MSUF_GetArenaLayoutDelta", "Castbars/MSUF_ArenaCastbars.lua")
+
 local function MatchIsComplete()
-    local isComplete = _G.C_PvP and _G.C_PvP.IsMatchComplete
+    local isComplete = C_PvP and C_PvP.IsMatchComplete
     return type(isComplete) == "function" and isComplete() == true
 end
 
@@ -57,7 +60,7 @@ local pool = Pools.Define({
         width = "arenaCastbarWidth",
         height = "arenaCastbarHeight",
     },
-    GetLayoutDelta = function() return _G.MSUF_GetArenaLayoutDelta end,
+    GetLayoutDelta = function() return GetArenaLayoutDelta end,
     GetPreviewUpdate = function() return Previews.UpdateArenaCastbarPreview end,
     scheduleKeys = { pass = "MSUF_ARENA_POOL_LIFECYCLE" },
     lifecycle = {

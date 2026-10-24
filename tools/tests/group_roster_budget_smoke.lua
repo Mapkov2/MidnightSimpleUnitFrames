@@ -62,6 +62,19 @@
 -- x64 burst38.6/401.2KB. New cases use measured values+2%; no live CPU claim.
 -- Restoring the party-only combat border adds about 1k VM instructions to the
 -- forty-frame burst; all existing limits and counted native calls still hold.
+-- 2026-10-17 (on 2a1e3ff5e): aura icon skins check, per Classic lane compile, whether
+-- a skin is set, a default skin exists (the Icon Skins page) or a combat snapshot is
+-- frozen (Auras3/MSUF_Auras3_IconSkins.lua); buttons and aura updates pay nothing.
+-- With none of them, as in this profile, Vanilla raid_build measures 1516k -> 1518k,
+-- raid_apply 1124k -> 1126k and party_apply 306k -> 307k; Mainline stays within its limits.
+-- Allocation and counted native calls are unchanged on both clients. Only the Vanilla
+-- raid_build limit moves, to exactly the measured value.
+-- 2026-10-21: native raid handlers now remain permanently secure. The once-only
+-- restricted OnShow guard plus shared name observer adds 1k VM instructions and
+-- 2.2 KB to Mainline's 20-frame cold birth (1523k/3749.2 -> 1524k/3751.4 KB).
+-- Only that VM cap moves by 1k. Every existing allocation/native-call limit and
+-- party, steady roster, apply and combat-burst VM limit stays unchanged. There
+-- is no per-unit tick work; eight frozen name handlers become one observer.
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required")
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
@@ -69,12 +82,12 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 -- [flavor] = { [case] = { k instructions, KB } }
 local BUDGETS = {
     Mainline = {
-        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1523, 3912 },
+        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1524, 3912 },
         raid_settle = { 133, 8 }, raid_apply = { 1097, 594 }, raid_shift = { 125, 26 },
         raid40_settle = { 275, 10 }, raid40_burst = { 683, 29 },
     },
     Vanilla = {
-        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1516, 4865 },
+        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1518, 4865 },
         raid_settle = { 134, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 151, 75 },
         raid40_settle = { 284, 23 }, raid40_burst = { 914, 297 },
     },

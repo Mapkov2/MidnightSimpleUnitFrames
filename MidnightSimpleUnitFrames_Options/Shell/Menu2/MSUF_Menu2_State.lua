@@ -24,7 +24,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     auraStyleGFLane = "debuff",
     auraStyleContainer = "debuff",
     auraAppearanceContainer = "debuff",
-    previewBackground = (MSUF.Client and MSUF.Client.IsRetail == true) and "silvermoon" or "studio",
+    previewBackground = MSUF.Client.IsRetail == true and "silvermoon" or "studio",
     previewBackgroundCustomR = 0.08,
     previewBackgroundCustomG = 0.12,
     previewBackgroundCustomB = 0.18,
@@ -43,7 +43,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     dashboardScalingOpen = false,
     lastPandemicMode = "PULSE",
 }
-local MenuCharKey = _G.MSUF_GetCharKey
+local MenuCharKey = MSUF.Require("MSUF_GetCharKey", "Shell/Menu2/MSUF_Menu2_State.lua")
 local function CopyMissingStateValues(dst, src)
     if type(dst) ~= "table" or type(src) ~= "table" then return end
     for k, v in pairs(src) do
@@ -70,8 +70,8 @@ local function MigrateMenuState(state, oldVersion)
     end
 end
 local function EnsurePersistentMenuState()
-    ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
-    local gdb = _G.MSUF_GlobalDB
+    local liveDB = MSUF_GlobalDB
+    local gdb = ExportPublic("MSUF_GlobalDB", type(liveDB) == "table" and liveDB or {})
     gdb.char = type(gdb.char) == "table" and gdb.char or {}
     local charKey = MenuCharKey()
     local charDB = type(gdb.char[charKey]) == "table" and gdb.char[charKey] or {}
@@ -113,9 +113,7 @@ local function SavePersistentMenuState()
     end
     return state
 end
-function M.EnsurePersistentMenuState()
-    return EnsurePersistentMenuState()
-end
+M.EnsurePersistentMenuState = EnsurePersistentMenuState
 function M.GetPersistentMenuStateTable(field)
     local state = EnsurePersistentMenuState()
     if type(state[field]) ~= "table" then state[field] = {} end
@@ -128,6 +126,4 @@ function M.PersistMenuStateValue(field, value)
     state[field] = value
     return value
 end
-function M.SavePersistentMenuState()
-    return SavePersistentMenuState()
-end
+M.SavePersistentMenuState = SavePersistentMenuState

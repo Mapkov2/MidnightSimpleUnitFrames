@@ -17,9 +17,14 @@ local function Start(flavor, enabled, lite)
     return S.health end
         UnitHealthPercent = function() return S.percent or 50 end
         CurveConstants = { ScaleTo100 = {} }
+        -- The real Kernel API replaces the world's export stub; providers Shared requires that load
+        -- later (the collaborators) are resolved live, and one this world never loads raises when used.
+        local RequireFixture = dofile(root .. "/tools/tests/require_fixture.lua")
+        RequireFixture.InstallKernel(root, MSUF_NS, nil, nil, true)
+        RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua", MSUF_NS)
+    end, afterCollaborators = function()
+        -- A controllable font provider, in place before the files that bind it load; the test changes `font`.
         MSUF_GetFontPath = function() return font end
-        assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))(
-            "MidnightSimpleUnitFrames", MSUF_NS)
     end })
     MSUF_DB.general.perfLiteClassPowerEvents = lite
     t.CP.RefreshPublic()

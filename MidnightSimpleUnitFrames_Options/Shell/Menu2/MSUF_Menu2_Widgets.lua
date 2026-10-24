@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets.lua
 --- Shared Menu2 widget factory: the primitives every widget file uses.
 ---
@@ -23,11 +22,13 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/MSUF_Menu2_Widgets.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
     or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local T = M.Theme
 local W = M.Widgets or {}
 M.Widgets = W
@@ -44,8 +45,8 @@ local ACCORDION_OPEN_CORNER_UV = 17 / 128
 -- builder x=12 + ctx width=(CONTENT_W-32), viewport right=(CONTENT_W-28).
 -- Keep only the header cap inside the viewport; body layout remains unchanged.
 local ACCORDION_HEADER_RIGHT_INSET = 8
-local Tr = M.TranslateText
-local EM2Util = (_G.MSUF_EM2 and _G.MSUF_EM2.Util) or {}
+local EM2 = MSUF.Optional("MSUF_EM2")
+local EM2Util = (EM2 and EM2.Util) or {}
 local function ThemeColor(name, fallback)
     local c = T and T.colors and T.colors[name]
     return c or fallback
@@ -272,6 +273,15 @@ local GROUP_FOCUS_KIND = {
 local NormalizeFocusKey = EM2Util.NormalizeFocusKey
 local NormalizeFocusComponent = EM2Util.NormalizeFocusComponent
 local NormalizeFocusSlot = EM2Util.NormalizeFocusSlot
+-- Hover and press send focus on every enter, leave and click, so no lookup runs
+-- there: the Edit Mode focus bridge loads with the core and is captured here; the
+-- unit preview text focus exports load after this file and resolve on first use.
+local EditFocus = {
+    hover = MSUF.Require("MSUF_EM2_SetFocusHover", FILE),
+    clear = MSUF.Require("MSUF_EM2_ClearFocusHover", FILE),
+    selection = MSUF.Require("MSUF_EM2_SetFocusSelection", FILE),
+}
+local ClearUnitTextFocus, FocusUnitTextSlot
 
 --- Bridge hover/selection in menu controls to the live unit/group preview focus
 --- system. The preview modules own rendering; widgets only send focus intent.
@@ -282,37 +292,45 @@ function W.SetPreviewFocus(key, component, slot, active)
     local textComponent = (component == "name" or component == "hp" or component == "power")
     local didFocus = false
     if (not key) or (not component) then
-        local clearUnit = _G.MSUF_UFPreview_ClearTextFocus
-        if type(clearUnit) == "function" then didFocus = clearUnit() or didFocus end
+        local clearUnit = ClearUnitTextFocus
+        if clearUnit == nil then
+            clearUnit = MSUF.Require("MSUF_UFPreview_ClearTextFocus", FILE)
+            ClearUnitTextFocus = clearUnit
+        end
+        didFocus = clearUnit() or didFocus
         if type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(nil, nil, false) or didFocus end
         return didFocus
     end
     if textComponent and UNIT_FOCUS_KEYS[key] then
-        local fn = _G.MSUF_UFPreview_FocusTextSlot
-        if type(fn) == "function" then didFocus = fn(key, component, slot, active == true) or didFocus end
+        local fn = FocusUnitTextSlot
+        if fn == nil then
+            fn = MSUF.Require("MSUF_UFPreview_FocusTextSlot", FILE)
+            FocusUnitTextSlot = fn
+        end
+        didFocus = fn(key, component, slot, active == true) or didFocus
     end
     if textComponent and GROUP_FOCUS_KIND[key] and type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(component, slot,
         active == true) or didFocus end
     return didFocus
 end
+-- Hover and press forward to the Edit Mode focus bridge, which loads with the core.
 function W.AttachEditFocus(widget, key, component, slot, opts)
     if not (widget and widget.HookScript) then return widget end
     opts = opts or {}
     widget:HookScript("OnEnter", function()
         W.SetPreviewFocus(key, component, slot, false)
-        local fn = _G.MSUF_EM2_SetFocusHover
-        if type(fn) == "function" then fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" }) end
+        EditFocus.hover(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot),
+            { source = opts.source or "menu2" })
     end)
     widget:HookScript("OnLeave", function()
         W.SetPreviewFocus(nil, nil, nil, false)
-        local fn = _G.MSUF_EM2_ClearFocusHover
-        if type(fn) == "function" then fn() end
+        EditFocus.clear()
     end)
     if opts.selectOnDown ~= false then
         widget:HookScript("OnMouseDown", function()
             W.SetPreviewFocus(key, component, slot, true)
-            local fn = _G.MSUF_EM2_SetFocusSelection
-            if type(fn) == "function" then fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" }) end
+            EditFocus.selection(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot),
+                { source = opts.source or "menu2" })
         end)
     end
     return widget
@@ -421,6 +439,15 @@ local function PaintControlGroupDivider(divider)
     local color = T.colors.borderSoft
     divider:SetColorTexture(color[1], color[2], color[3], 0.55)
 end
+-- A filled card surface: the default fill is the core shadow tone at 0.86 alpha.
+local function CreateCardPanel(parent, bg, border)
+    local base = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
+    bg = bg or { base[1], base[2], base[3], 0.86 }
+    border = border or T.colors.cardBorder or T.colors.borderSoft
+    local card = T.Panel(parent, nil, bg, border)
+    T.ApplySurface(card, { bg = bg, border = border, plastic = false })
+    return card
+end
 -- A group keeps the same layout and control metadata without nesting another
 -- filled surface inside an accordion. Other cards retain their material.
 function W.ControlCard(parent, title, subtitle, x, y, width, height, style)
@@ -437,11 +464,7 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height, style)
         PaintControlGroupDivider(divider)
         if MSUF.MenuSkin then MSUF.MenuSkin.TrackPaint(divider, PaintControlGroupDivider) end
     else
-        local cardBase = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
-        local cardBg = { cardBase[1], cardBase[2], cardBase[3], 0.86 }
-        local cardBorder = T.colors.cardBorder or T.colors.borderSoft
-        card = T.Panel(parent, nil, cardBg, cardBorder)
-        T.ApplySurface(card, { bg = cardBg, border = cardBorder, plastic = false })
+        card = CreateCardPanel(parent)
     end
     SetSearchTitle(card, title)
     RegisterSearchObject(card, title, "section")
@@ -478,11 +501,7 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     height = max(24, floor((tonumber(height) or 120) + 0.5))
     x = floor((tonumber(x) or 0) + 0.5)
     y = floor((tonumber(y) or 0) + 0.5)
-    local cardBase = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
-    local cardBg = bg or { cardBase[1], cardBase[2], cardBase[3], 0.86 }
-    local cardBorder = border or T.colors.cardBorder or T.colors.borderSoft
-    local card = T.Panel(parent, nil, cardBg, cardBorder)
-    T.ApplySurface(card, { bg = cardBg, border = cardBorder, plastic = false })
+    local card = CreateCardPanel(parent, bg, border)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     card:SetSize(width, height)
     PlaceBackdropFrameBehindControls(card, parent)

@@ -1,12 +1,12 @@
 -- Instance-local public runtime bridge for embedded MSUFUnitFrames hosts.
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.UF = MSUF.UF or {}
 
 local UF = MSUF.UF
 local Metadata = UF.Metadata or {}
 local ExportPublic = MSUF.ExportPublic
+local GetProfileScopedCache = MSUF.Require("MSUF_GetProfileScopedCache", "Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua")
 
 local type = type
 local pairs = pairs
@@ -14,7 +14,7 @@ local tostring = tostring
 local tonumber = tonumber
 local math_floor = math.floor
 local InCombatLockdown = InCombatLockdown
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 local DEFERRED_REFRESH_ALL = "*"
 local EMPTY_LIST = {}
@@ -207,8 +207,7 @@ local function GetUnitFrameScreenCacheKey(key, unit)
 end
 
 local function GetUnitFrameScreenCacheBucket()
-  local fn = _G.MSUF_GetProfileScopedCache
-  return type(fn) == "function" and fn("unitFrameScreenCache") or nil
+  return GetProfileScopedCache("unitFrameScreenCache")
 end
 
 local function GetFramePoint(frame, point)
@@ -240,7 +239,7 @@ local function GetFramePoint(frame, point)
 end
 
 local function CacheUnitFrameScreenPosition(frame, key, unit, point, allowLocked)
-  local uiParent = _G.UIParent
+  local uiParent = UIParent
   if not frame or not key or not uiParent or not uiParent.GetCenter then return false end
   if allowLocked ~= true and InCombat() then return false end
   local fx, fy, usedPoint = GetFramePoint(frame, point or frame._msufHardLockPoint or "CENTER")
@@ -266,7 +265,7 @@ local function CacheUnitFrameScreenPosition(frame, key, unit, point, allowLocked
 end
 
 local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
-  local uiParent = _G.UIParent
+  local uiParent = UIParent
   local bucket = GetUnitFrameScreenCacheBucket()
   local id = GetUnitFrameScreenCacheKey(key, unit)
   local cached = bucket and id and bucket[id]
@@ -479,6 +478,36 @@ local function InvalidateGroupPredictionSpecs(GF, scope)
   end
 end
 
+local function ApplyGroupPredictionSpec(frame, spec, unit, reason)
+  UF.SetFrameSpec(frame, spec, unit)
+  UF.ApplyElementsToFrame(frame, GROUP_PREDICTION_ELEMENTS, spec, reason)
+  UF.ApplyPredictionAlphaFills(frame, spec, true)
+  UF.elements.GroupRangeFade.RecomposePredictionAlpha(frame)
+end
+
+local function ApplyGroupTempMaxHealthSpec(frame, spec, unit, reason)
+  UF.SetFrameSpec(frame, spec, unit)
+  UF.ApplyElementToFrame(frame, "TempMaxHealth", spec, reason)
+end
+
+-- Recompiles the spec of every group frame in scope and hands it to
+-- apply(frame, spec, unit, reason). True when at least one frame was applied.
+local function RefreshGroupSpecs(scope, reason, apply)
+  local GF = MSUF.GF
+  local did = false
+  InvalidateGroupPredictionSpecs(GF, scope)
+  GF.ForEachFrame(function(frame, unit, kind)
+    if GroupPredictionScopeMatches(kind, scope) ~= true then return end
+    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
+    local spec = GF.CompileSpec(kind, frame, unit)
+    if spec then
+      apply(frame, spec, unit, reason)
+      did = true
+    end
+  end, true)
+  return did
+end
+
 function UF.RefreshPredictionBars(scope, reason, skipUnitFrames)
   reason = reason or "MSUF2_ABSORB"
   local did = false
@@ -487,21 +516,7 @@ function UF.RefreshPredictionBars(scope, reason, skipUnitFrames)
     if not (scope == "shared") then selectedValue2 = scope end
     did = UF.RefreshElements(selectedValue2, PREDICTION_ELEMENTS, reason) or false
   end
-  local GF = MSUF.GF
-  InvalidateGroupPredictionSpecs(GF, scope)
-  GF.ForEachFrame(function(frame, unit, kind)
-    if GroupPredictionScopeMatches(kind, scope) ~= true then return end
-    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
-    local spec = GF.CompileSpec(kind, frame, unit)
-    if spec then
-      UF.SetFrameSpec(frame, spec, unit)
-      UF.ApplyElementsToFrame(frame, GROUP_PREDICTION_ELEMENTS, spec, reason)
-      UF.ApplyPredictionAlphaFills(frame, spec, true)
-      UF.elements.GroupRangeFade.RecomposePredictionAlpha(frame)
-      did = true
-    end
-  end, true)
-  return did
+  return RefreshGroupSpecs(scope, reason, ApplyGroupPredictionSpec) or did
 end
 
 function UF.RefreshTempMaxHealth(scope, reason)
@@ -509,19 +524,7 @@ function UF.RefreshTempMaxHealth(scope, reason)
   local selectedValue1
   if not (scope == "shared") then selectedValue1 = scope end
   local did = UF.RefreshElements(selectedValue1, TEMP_MAX_HEALTH_ELEMENTS, reason) or false
-  local GF = MSUF.GF
-  InvalidateGroupPredictionSpecs(GF, scope)
-  GF.ForEachFrame(function(frame, unit, kind)
-    if GroupPredictionScopeMatches(kind, scope) ~= true then return end
-    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
-    local spec = GF.CompileSpec(kind, frame, unit)
-    if spec then
-      UF.SetFrameSpec(frame, spec, unit)
-      UF.ApplyElementToFrame(frame, "TempMaxHealth", spec, reason)
-      did = true
-    end
-  end, true)
-  return did
+  return RefreshGroupSpecs(scope, reason, ApplyGroupTempMaxHealthSpec) or did
 end
 
 function UF.RefreshPowerLayout(unit)

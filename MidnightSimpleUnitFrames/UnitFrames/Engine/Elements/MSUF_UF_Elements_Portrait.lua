@@ -1,7 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Portrait.lua")
+local EventBusRegister = MSUF.Require("MSUF_EventBus_Register", "MSUF_UF_Elements_Portrait.lua")
+local EventBusUnregister = MSUF.Require("MSUF_EventBus_Unregister", "MSUF_UF_Elements_Portrait.lua")
+local PublicGlobals = MSUF.PublicGlobals
 
 -- Era's legacy PlayerFrame does not use the modern HUD portrait atlases.
 -- Do not select them merely because GetAtlasInfo exposes an atlas entry.
@@ -191,7 +192,7 @@ local PORTRAIT_DIRECT_IDENTITY_EVENTS = {
 local PORTRAIT_UNITLESS_EVENTS = { "PORTRAITS_UPDATED" }
 local TARGET_PORTRAIT_EXTRA_EVENTS = { "PORTRAITS_UPDATED", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 local SetShown = Visuals.SetShown
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 local Portrait = {}
 local Details = MSUF.PortraitDetails
@@ -226,7 +227,7 @@ local function BumpPortraitUnitGeneration(unit)
 end
 
 local function BumpPortraitGenerationForEvent(event, unit)
-  local now = (_G.GetTime and _G.GetTime()) or 0
+  local now = (GetTime and GetTime()) or 0
   local stampKey = event
   if event == "UNIT_TARGET" then
     stampKey = event .. "|" .. (unit ~= nil and tostring(unit) or "")
@@ -365,8 +366,7 @@ local function SyncPlayerPortraitWorldEvent(frame, spec, p)
   if ownsPlayerPortrait then
     playerPortraitWorldFrame = frame
     if playerPortraitWorldEventRegistered == true then return end
-    local registerEvent = _G.MSUF_EventBus_Register
-    if registerEvent("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY, OnPlayerPortraitWorldEntry) ~= false then
+    if EventBusRegister("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY, OnPlayerPortraitWorldEntry) ~= false then
       playerPortraitWorldEventRegistered = true
     end
     return
@@ -375,7 +375,7 @@ local function SyncPlayerPortraitWorldEvent(frame, spec, p)
   if frame ~= playerPortraitWorldFrame then return end
   playerPortraitWorldFrame = nil
   if playerPortraitWorldEventRegistered == true then
-    _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY)
+    EventBusUnregister("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY)
     playerPortraitWorldEventRegistered = nil
   end
 end
@@ -861,9 +861,9 @@ local function BossPreviewActive(unit, frame)
     return false
   end
   return (frame and frame._msufBossPreviewForced == true)
-    or _G.MSUF2_BossUnitframePreviewActive == true
-    or _G.MSUF_BossTestMode == true
-    or _G.MSUF_PreviewTestMode == true
+    or PublicGlobals.MSUF2_BossUnitframePreviewActive == true
+    or PublicGlobals.MSUF_BossTestMode == true
+    or PublicGlobals.MSUF_PreviewTestMode == true
 end
 
 local function BossPreviewClassToken(unit, frame)
@@ -1096,7 +1096,7 @@ local function BorderStyleColor(border, class, reaction)
     return nil
   end
   if style == "CLASS_COLOR" then
-    local c = class and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[class]
+    local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
     if c then
       return c.r or 1, c.g or 1, c.b or 1, 1
     end
@@ -1330,7 +1330,7 @@ local function LayoutBlizzardPortraitCorner(holder, p)
   -- live region or repeating the native probe on each menu repaint.
   local available = p.blizzardCornerAvailable
   if available == nil then
-    local getAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+    local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
     available = not MSUF.Client or MSUF.Client.IsForever == true
       or (getAtlasInfo and getAtlasInfo(BLIZZARD_PORTRAIT_CORNER_ATLAS))
   end
@@ -1376,6 +1376,20 @@ local function LayoutBlizzardPortraitRing(holder, p)
   if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
   LayoutBlizzardPortraitCorner(holder, p)
   return true
+end
+
+-- Hides everything drawn around the portrait texture: backdrop, rings, dragon, edges.
+local function HidePortraitDecor(holder)
+  if holder.bg then SetShown(holder.bg, false) end
+  if holder.ring then SetShown(holder.ring, false) end
+  if holder.artBorder then SetShown(holder.artBorder, false) end
+  if holder.blizzRing then SetShown(holder.blizzRing, false) end
+  if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
+  if holder.blizzCorner then SetShown(holder.blizzCorner, false) end
+  if holder.blizzElite then SetShown(holder.blizzElite, false) end
+  if holder.edges then
+    for i = 1, 4 do SetShown(holder.edges[i], false) end
+  end
 end
 
 LayoutPortraitBorder = function(holder, p, r, g, b, a)
@@ -1547,7 +1561,7 @@ function Portrait.PaintClassification(holder, enabled, classification, width, he
   end
   local atlasInfo = style.info
   if not atlasInfo then
-    local getInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+    local getInfo = C_Texture and C_Texture.GetAtlasInfo
     atlasInfo = getInfo and getInfo(style.atlas)
     if not atlasInfo then
       if dragon then SetShown(dragon, false) end
@@ -1610,7 +1624,7 @@ local function UpdatePortraitClassification(frame, p)
   if enabled and p.dragonArtwork ~= true and unit then
     classification = Portrait.GetClassificationPreview(frame.MSUFSpec and frame.MSUFSpec.key or unit)
     if not classification and BossPreviewActive(unit, frame) then classification = "worldboss" end
-    if not classification and _G.UnitClassification then classification = _G.UnitClassification(unit) end
+    if not classification and UnitClassification then classification = UnitClassification(unit) end
   end
   Portrait.PaintClassification(frame.MSUFPortraitHolder, enabled, classification, nil, nil, nil, p, unit)
 end
@@ -1622,7 +1636,7 @@ end
 function Portrait.SetClassificationPreview(scope, classification)
   local active = type(scope) == "string" and type(classification) == "string"
     and CLASSIFICATION_DRAGONS[classification] ~= nil
-  if active and _G.InCombatLockdown and _G.InCombatLockdown() then active = false end
+  if active and InCombatLockdown and InCombatLockdown() then active = false end
   classificationPreview.scope = active and scope or nil
   classificationPreview.classification = active and classification or nil
   local driver = classificationPreview.driver
@@ -1717,16 +1731,7 @@ function Portrait.AcquirePositionAnchor(frame, p)
   if holder.innerShadow then holder.innerShadow:Hide() end
   SetShown(frame.portrait, false)
   if frame.MSUFPortraitCastIcon then SetShown(frame.MSUFPortraitCastIcon, false) end
-  if holder.bg then SetShown(holder.bg, false) end
-  if holder.ring then SetShown(holder.ring, false) end
-  if holder.artBorder then SetShown(holder.artBorder, false) end
-  if holder.blizzRing then SetShown(holder.blizzRing, false) end
-  if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
-  if holder.blizzCorner then SetShown(holder.blizzCorner, false) end
-  if holder.blizzElite then SetShown(holder.blizzElite, false) end
-  if holder.edges then
-    for i = 1, 4 do SetShown(holder.edges[i], false) end
-  end
+  HidePortraitDecor(holder)
   SetShown(holder, true)
   return holder
 end
@@ -1870,18 +1875,7 @@ function Portrait.Disable(frame)
   end
   if holder then
     SetShown(holder, false)
-    if holder.blizzElite then SetShown(holder.blizzElite, false) end
-    if holder.bg then SetShown(holder.bg, false) end
-    if holder.ring then SetShown(holder.ring, false) end
-    if holder.artBorder then SetShown(holder.artBorder, false) end
-    if holder.blizzRing then SetShown(holder.blizzRing, false) end
-    if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
-    if holder.blizzCorner then SetShown(holder.blizzCorner, false) end
-    if holder.edges then
-      for i = 1, 4 do
-        SetShown(holder.edges[i], false)
-      end
-    end
+    HidePortraitDecor(holder)
   elseif frame.portrait then
     SetShown(frame.portrait, false)
   end

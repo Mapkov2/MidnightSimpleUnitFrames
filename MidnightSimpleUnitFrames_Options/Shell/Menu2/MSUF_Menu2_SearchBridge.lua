@@ -113,6 +113,6 @@ function Bridge.CurrentMenuLocaleKey()
         if locale then return tostring(locale) end
     end
     if MSUF.LOCALE then return tostring(MSUF.LOCALE) end
-    if type(_G.GetLocale) == "function" then return tostring(_G.GetLocale()) end
+    if type(GetLocale) == "function" then return tostring(GetLocale()) end
     return ""
 end

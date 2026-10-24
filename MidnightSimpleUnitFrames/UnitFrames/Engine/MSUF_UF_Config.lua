@@ -1,7 +1,7 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
+local CONFIG_FILE = "UnitFrames/Engine/MSUF_UF_Config.lua"
 
 --- UnitFrames/Engine/MSUF_UF_Config.lua
 ---
@@ -21,8 +21,8 @@ local tostring = tostring
 local pairs = pairs
 local byte, sub = string.byte, string.sub
 local max, min, abs, floor = math.max, math.min, math.abs, math.floor
-local InCombatLockdown = _G.InCombatLockdown
-local wipe = _G.wipe or table.wipe
+local InCombatLockdown = InCombatLockdown
+local wipe = wipe or table.wipe
 local Clamp01 = UF.Clamp01
 local Number = UF.NumberWithFallback
 local NormalizeDispelDetectTrigger = UF.NormalizeDispelDetectTrigger
@@ -33,11 +33,11 @@ local NormalizeAbsorbTestScope = UF.NormalizeAbsorbTestScope
 local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope
 local ScopedValue = UF.ConfigScopedValue
 local CompileBorderPriority = UF.CompileBorderPriority
-local ResolveBarGradient = UF.ResolveBarGradient
+local CompileBarMaterials = UF.CompileBarMaterials
 local FillPredictionColors = UF.FillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
-local DEFAULT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local DEFAULT_FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local CDM_WIDTH_FRAMES = {
   cooldown = "EssentialCooldownViewer",
   utility = "UtilityCooldownViewer",
@@ -129,14 +129,6 @@ local function IsCooldownViewerFrameName(frameName)
   return COOLDOWN_VIEWER_FRAMES[frameName] == true
 end
 
-local CASTBAR_KEYS = {
-  player = "enablePlayerCastbar",
-  target = "enableTargetCastbar",
-  focus = "enableFocusCastbar",
-  boss = "enableBossCastbar",
-  arena = "enableArenaCastbar",
-}
-
 local RANGE_KEYS = {
   target = true,
   targettarget = true,
@@ -155,11 +147,16 @@ local CLASS_TOKENS = {
 
 local playerClassToken
 local function PlayerClassToken()
-  if playerClassToken == nil and type(_G.UnitClass) == "function" then
-    local _, token = _G.UnitClass("player")
+  if playerClassToken == nil and type(UnitClass) == "function" then
+    local _, token = UnitClass("player")
     if type(token) == "string" and token ~= "" then playerClassToken = token end
   end
   return playerClassToken
+end
+
+-- Runtime/MSUF_Colors.lua loads after this compiler; compiles read its palette.
+local function FontColorPalette()
+  return MSUF.MSUF_FONT_COLORS or MSUF.Optional("MSUF_FONT_COLORS")
 end
 
 local function ResolveClassColor(db, token)
@@ -168,12 +165,12 @@ local function ResolveClassColor(db, token)
   if type(src) == "table" and tonumber(src.r or src[1]) and tonumber(src.g or src[2]) and tonumber(src.b or src[3]) then
     return Number(src.r or src[1], 1), Number(src.g or src[2], 1), Number(src.b or src[3], 1)
   end
-  local palette = MSUF.MSUF_FONT_COLORS or _G.MSUF_FONT_COLORS
+  local palette = FontColorPalette()
   if type(src) == "string" and palette and palette[src] then
     local color = palette[src]
     return Number(color.r or color[1], 1), Number(color.g or color[2], 1), Number(color.b or color[3], 1)
   end
-  local color = token and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
+  local color = token and RAID_CLASS_COLORS and RAID_CLASS_COLORS[token]
   if color then return color.r or 0.12, color.g or 0.62, color.b or 0.95 end
   return Shared.FallbackClassColor()
 end
@@ -197,17 +194,17 @@ local dbInitialized = false
 --- The real client binds at ADDON_LOADED. Standalone config fixtures still
 --- bootstrap through State when they host this module without the lifecycle.
 local function EnsureDB()
-  if not dbInitialized or type(_G.MSUF_DB) ~= "table" then
+  if not dbInitialized or type(MSUF_DB) ~= "table" then
     if not MSUF.Lifecycle or not MSUF.Lifecycle.Bound then
-      MSUF.Require("MSUF_InitProfiles", "UnitFrames/Engine/MSUF_UF_Config.lua")()
+      MSUF.Require("MSUF_InitProfiles", CONFIG_FILE)()
     end
-    MSUF.Require("MSUF_EnsureDB", "UnitFrames/Engine/MSUF_UF_Config.lua")()
+    MSUF.Require("MSUF_EnsureDB", CONFIG_FILE)()
     dbInitialized = true
   end
-  if type(_G.MSUF_DB) ~= "table" then
+  if type(MSUF_DB) ~= "table" then
     ExportPublic("MSUF_DB", {})
   end
-  return _G.MSUF_DB
+  return MSUF_DB
 end
 
 local Bool = UF.BoolWithFallback
@@ -227,7 +224,7 @@ local function AggroBorderDefault(general)
   return general.enableAggroHighlight ~= false
 end
 
-local OutlineModeEnabled = _G.MSUF_UF_OutlineModeEnabled
+local OutlineModeEnabled = MSUF.Require("MSUF_UF_OutlineModeEnabled", CONFIG_FILE)
 
 local function CopyColor(dst, r, g, b, a)
   dst.r = Number(r, dst.r or 1)
@@ -285,6 +282,8 @@ local function CopyPowerColorOverrides(dst, src, onlyMissing)
     end
   end
 end
+-- Group frames compile the same account-wide power colour overrides.
+Config.CopyPowerColorOverrides = CopyPowerColorOverrides
 
 local DIRECT_TEXT_LAYOUTS = {
   "Name", "HealthLeft", "HealthCenter", "HealthRight",
@@ -385,7 +384,7 @@ Config.ResolveDarkColor = ResolveDarkColor
 
 local function ResolveTextColor(general, dst)
   dst = dst or {}
-  local getColor = _G.MSUF_GetConfiguredFontColor or MSUF.MSUF_GetConfiguredFontColor
+  local getColor = MSUF.Optional("MSUF_GetConfiguredFontColor") or MSUF.MSUF_GetConfiguredFontColor
   if type(getColor) == "function" then
     local r, g, b = getColor()
     if type(r) == "number" and type(g) == "number" and type(b) == "number" then
@@ -400,7 +399,7 @@ local function ResolveTextColor(general, dst)
     CopyColor(dst, general.fontColorCustomR, general.fontColorCustomG, general.fontColorCustomB, 1)
     return dst
   end
-  local palette = MSUF.MSUF_FONT_COLORS or _G.MSUF_FONT_COLORS
+  local palette = FontColorPalette()
   local key = general and general.fontColor
   if type(key) == "string" and palette then
     local c = palette[key:lower()]
@@ -470,14 +469,7 @@ end
 
 local function ResolveHealthBackground(general, bars, health, dst, conf)
   dst = dst or {}
-  local r, g, b, tintAlpha
-  local getBg = _G.MSUF_GetBarBackgroundTintRGBA
-  if type(getBg) == "function" then
-    r, g, b, tintAlpha = getBg()
-  else
-    r, g, b = DarkTint(general, Number(general and general.classBarBgR, 0), Number(general and general.classBarBgG, 0), Number(general and general.classBarBgB, 0))
-    tintAlpha = Number(general and general.classBarBgA, 1)
-  end
+  local r, g, b, tintAlpha = MSUF.Require("MSUF_GetBarBackgroundTintRGBA", CONFIG_FILE)()
   if ResolveBarBackgroundColorMode(general) == "match_health" and health then
     r, g, b = DarkTint(general, health.r, health.g, health.b)
   end
@@ -490,14 +482,7 @@ end
 
 local function ResolvePowerBackground(general, bars, health, dst, conf)
   dst = dst or {}
-  local r, g, b, tintAlpha
-  local getBg = _G.MSUF_GetPowerBarBackgroundTintRGBA
-  if type(getBg) == "function" then
-    r, g, b, tintAlpha = getBg()
-  else
-    r, g, b = DarkTint(general, Number(general and general.powerBarBgColorR, Number(general and general.classBarBgR, 0)), Number(general and general.powerBarBgColorG, Number(general and general.classBarBgG, 0)), Number(general and general.powerBarBgColorB, Number(general and general.classBarBgB, 0)))
-    tintAlpha = Number(general and general.powerBarBgColorA, Number(general and general.classBarBgA, 1))
-  end
+  local r, g, b, tintAlpha = MSUF.Require("MSUF_GetPowerBarBackgroundTintRGBA", CONFIG_FILE)()
   if (general and general.powerBarBgMatchBarColor == true) or (bars and bars.powerBarBgMatchBarColor == true) then
     r, g, b = DarkTint(general, health and health.r or r, health and health.g or g, health and health.b or b)
   end
@@ -520,7 +505,7 @@ end
 local SetAbsorbTextureTestMode = function(enabled, scope, category)
   local normalizedScope = NormalizeAbsorbTestScope(scope)
   local normalizedCategory = NormalizePredictionTestCategory(category)
-  local modes = _G.MSUF_PredictionTestModes
+  local modes = MSUF.Optional("MSUF_PredictionTestModes")
   if type(modes) ~= "table" then modes = {} end
   local bucket = modes[normalizedScope]
   if type(bucket) ~= "table" then bucket = {}; modes[normalizedScope] = bucket end
@@ -827,19 +812,11 @@ local function CompileLoadConditions(out, conf)
 end
 
 local function TextureFromGlobal()
-  local fn = _G.MSUF_GetBarTexture
-  if type(fn) == "function" then
-    return fn() or WHITE
-  end
-  return WHITE
+  return MSUF.Require("MSUF_GetBarTexture", CONFIG_FILE)() or WHITE
 end
 
 local function BackgroundTextureFromGlobal()
-  local fn = _G.MSUF_GetBarBackgroundTexture
-  if type(fn) == "function" then
-    return fn() or WHITE
-  end
-  return WHITE
+  return MSUF.Require("MSUF_GetBarBackgroundTexture", CONFIG_FILE)() or WHITE
 end
 
 local function TextureFromScope(conf, general)
@@ -902,7 +879,7 @@ local function ClassPowerFallbackWidth(out, bars)
   if widthMode == "auto_pips" then
     local shape = tostring((bars and bars.classPowerShape) or "BAR"):upper()
     if shape == "CIRCLE" or shape == "DIAMOND" or shape == "HEX" then
-      local container = _G.MSUF_ClassPowerContainer
+      local container = MSUF.Optional("MSUF_ClassPowerContainer")
       local liveW = container and container.GetWidth and container:GetWidth() or nil
       if liveW and liveW >= 20 then
         return liveW
@@ -923,7 +900,7 @@ local function CooldownWidthFrameName(mode)
   return CDM_WIDTH_FRAMES[mode]
 end
 
-local NormalizeClassPowerShape = _G.MSUF_UF_NormalizeClassPowerShape
+local NormalizeClassPowerShape = MSUF.Require("MSUF_UF_NormalizeClassPowerShape", CONFIG_FILE)
 
 local function ResolveDetachedPowerShape(conf, bars)
   local value = tostring((conf and conf.detachedPowerBarShape) or "BAR"):upper()
@@ -936,23 +913,18 @@ local function ResolveDetachedPowerShape(conf, bars)
   return "BAR"
 end
 
+-- Runtime/MSUF_Fonts.lua loads before this compiler.
+local GetFontPath = MSUF.Require("MSUF_GetFontPath", CONFIG_FILE)
+local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", CONFIG_FILE)
 local function FontFromGlobal()
-  local fn = _G.MSUF_GetFontPath
-  if type(fn) == "function" then
-    return fn() or DEFAULT_FONT
-  end
-  return DEFAULT_FONT
+  return GetFontPath() or DEFAULT_FONT
 end
 
 local function FontFlagsFromGlobal()
-  local fn = _G.MSUF_GetFontFlags
-  if type(fn) == "function" then
-    return fn() or "OUTLINE"
-  end
-  return "OUTLINE"
+  return GetFontFlags() or "OUTLINE"
 end
 
-local ComposeFontFlags = _G.MSUF_ComposeFontFlags
+local ComposeFontFlags = MSUF.Require("MSUF_ComposeFontFlags", CONFIG_FILE)
 
 local function ResolveFontFlags(general, conf)
   local outline = "OUTLINE"
@@ -1006,7 +978,7 @@ local function ResolveFontBaselineOffset(general, conf)
   return value
 end
 
-local ResolveFontShadowMetrics = _G.MSUF_ResolveFontShadowMetrics
+local ResolveFontShadowMetrics = MSUF.Require("MSUF_ResolveFontShadowMetrics", CONFIG_FILE)
 
 local function ResolveFontShadow(general, conf, flags)
   local enabled = not (general and general.textBackdrop == false)
@@ -1069,29 +1041,17 @@ local function PowerEnabled(unit, key, conf, bars)
   return DEFAULTS[key] and DEFAULTS[key].showPower ~= false
 end
 
-local function CastbarEnabled(unit, key, general)
-  local shouldUseGlobal = _G.MSUF_ShouldUseMSUFCastbar
-  if type(shouldUseGlobal) == "function" then
-    return shouldUseGlobal(unit, general) == true
-  end
-  local shouldUse = UF.ShouldUseMSUFCastbar
-  if type(shouldUse) == "function" then
-    return shouldUse(unit) == true
-  end
-  local castbarKey = CASTBAR_KEYS[key]
-  if not castbarKey then
-    return false
-  end
-  return not (general and general[castbarKey] == false)
+local function CastbarEnabled(unit, general)
+  return MSUF.Require("MSUF_ShouldUseMSUFCastbar", CONFIG_FILE)(unit, general) == true
 end
 
 --- A client that cannot host a Cooldown Manager anchor must also ignore a
 --- stored one: imported profiles carry the viewer name, and resolving it would
 --- otherwise apply cooldown-space offsets against UIParent. Treating it as
 --- unconfigured routes the frame through the ordinary global anchor instead.
-local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
+local CooldownAnchorSupported = MSUF.Require("MSUF_CooldownAnchorSupported", CONFIG_FILE)
 
-local IsGlobalCooldownAnchorEnabled = _G.MSUF_GlobalCooldownAnchorEnabled
+local IsGlobalCooldownAnchorEnabled = MSUF.Require("MSUF_GlobalCooldownAnchorEnabled", CONFIG_FILE)
 
 local function ResolveAnchorSettings(conf, general)
   local cooldownSupported = CooldownAnchorSupported()
@@ -1459,7 +1419,7 @@ local function PetFrameColorEnabled(general)
     and type(general.petFrameColorB) == "number"
 end
 
-local function CompileUnitHealth(out, db, conf, general, bars)
+local function CompileUnitHealth(out, db, conf, general, bars, gloss)
   local health = out.health or {}
   out.health = health
   health.texture = out.texture
@@ -1482,7 +1442,7 @@ local function CompileUnitHealth(out, db, conf, general, bars)
   health.gradientHighR = Number(general.healthGradientHighR, 0)
   health.gradientHighG = Number(general.healthGradientHighG, 1)
   health.gradientHighB = Number(general.healthGradientHighB, 0)
-  health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
+  CompileBarMaterials(health, conf, general, "health", gloss)
   ApplyNpcTypeFlags(health, general, "npcTypeColorBar", out.key)
   -- Boss frames keep reaction coloring (hostile red / friendly green). The
   -- optional NPC class-color override only applies to non-boss NPC frames.
@@ -1527,7 +1487,7 @@ local function CompileUnitTempMaxHealth(out, conf, general, key)
   cfg.backgroundAlpha = Clamp01(ScopedValue(conf, general, "tempMaxHealthBackgroundOpacity", 0.65), 0.65)
 end
 
-local function CompileUnitPower(out, unit, key, conf, general, bars, health)
+local function CompileUnitPower(out, unit, key, conf, general, bars, health, gloss)
   local power = out.power or {}
   out.power = power
   power.enabled = PowerEnabled(unit, key, conf, bars)
@@ -1616,7 +1576,7 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   end
   power.background = ResolvePowerBackground(general, bars, health, power.background or {}, conf)
   power.backgroundMatchHealth = general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true
-  power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
+  CompileBarMaterials(power, conf, general, "power", gloss)
   power.reverse = health.reverse == true
   power.vertical = health.vertical == true
   power.lossR = Clamp01(general.powerLossColorR, 0.70)
@@ -1732,9 +1692,8 @@ local function CompileUnitBorder(out, conf, general, bars)
   -- Rounded and slanted frames draw both as masked rings along their shape.
   border.textureMode, border.textureKey, border.texture = nil, nil, nil
   local outlineTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or bars.barOutlineTexture
-  local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
-  if type(outlineTextureKey) == "string" and outlineTextureKey ~= ""
-    and styles and type(styles.ResolveFrame) == "function" then
+  local styles = MSUF.BorderStyles or MSUF.Require("MSUF_BorderStyles", CONFIG_FILE)
+  if type(outlineTextureKey) == "string" and outlineTextureKey ~= "" then
     border.textureMode, border.textureKey, border.texture = styles.ResolveFrame(outlineTextureKey)
   end
   border.r = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
@@ -1795,7 +1754,7 @@ local function CompileUnitTail(out, unit, key, conf, general, bars)
     or false
 
   out.castbar = out.castbar or {}
-  out.castbar.enabled = CastbarEnabled(unit, key, general)
+  out.castbar.enabled = CastbarEnabled(unit, general)
 
   out.classPower = out.classPower or {}
   out.classPower.enabled = key == "player" and bars.showClassPower ~= false or false
@@ -1806,20 +1765,19 @@ end
 --- and event registration happen in Factory/Core after this spec exists.
 local function ResolveUnit(db, unit, out)
   out = out or {}
-  -- wipe() clears the sub-tables away as well, so every `out.X or {}` fallback
-  -- below allocates a fresh table on each compile. That is deliberate: keeping
-  -- a sub-table alive would carry over keys this compile no longer writes, and
-  -- turn a formerly nil sub-table into an empty (truthy) one for consumers that
-  -- test the spec field for presence. Do not read the reuse pattern as a
-  -- no-allocation guarantee -- compiling a spec is a cold path.
+  local healthGloss = out.health and out.health.barGloss
+  local powerGloss = out.power and out.power.barGloss
+  -- Domain tables stay fresh: retaining them could carry stale keys or change
+  -- nil-presence semantics. Only the owned two-field Gloss records survive;
+  -- their compiler overwrites both fields on every refresh.
   wipe(out)
 
   local key, def, conf, general, bars, bossIndex = ResolveUnitContext(db, unit)
   CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   CompileUnitText(out, db, unit, key, conf, general, bars)
-  local health = CompileUnitHealth(out, db, conf, general, bars)
+  local health = CompileUnitHealth(out, db, conf, general, bars, healthGloss)
   CompileUnitTempMaxHealth(out, conf, general, key)
-  CompileUnitPower(out, unit, key, conf, general, bars, health)
+  CompileUnitPower(out, unit, key, conf, general, bars, health, powerGloss)
   CompileUnitPrediction(out, conf, general, key)
 
   out.alpha = Shared.CompileAlpha(out.alpha or {}, conf)
@@ -1999,7 +1957,7 @@ local function BuildSettingsCache(db)
   cache.npcClassColorBar = general.npcClassColorBar == true
   cache.classColors = cache.classColors or {}
   local classColors = type(db.classColors) == "table" and db.classColors or nil
-  local palette = MSUF.MSUF_FONT_COLORS or _G.MSUF_FONT_COLORS
+  local palette = FontColorPalette()
   for i = 1, #CLASS_TOKENS do
     local token = CLASS_TOKENS[i]
     local dst = cache.classColors[token] or {}
@@ -2011,7 +1969,7 @@ local function BuildSettingsCache(db)
       local c = palette[src]
       dst.r, dst.g, dst.b = Number(c.r or c[1], 1), Number(c.g or c[2], 1), Number(c.b or c[3], 1)
     else
-      local c = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
+      local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[token]
       dst.r, dst.g, dst.b = c and c.r or 0.12, c and c.g or 0.62, c and c.b or 0.95
     end
   end
@@ -2079,7 +2037,7 @@ local function MSUF_UFCore_GetClassBarColorFast(classToken)
   if c then
     return c.r, c.g, c.b
   end
-  c = classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+  c = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
   if c then
     return c.r, c.g, c.b
   end

@@ -55,6 +55,13 @@ _G.GetCVar = function(name)
     return nil
 end
 _G.MSUF_DB = { general = {} }
+-- Blizzard's CreateColor (a ColorMixin object): Runtime/MSUF_Colors.lua builds its
+-- colour objects through it.
+_G.CreateColor = function(r, g, b, a)
+    return { r = r, g = g, b = b, a = a,
+        GetRGB = function(self) return self.r, self.g, self.b end,
+        GetRGBA = function(self) return self.r, self.g, self.b, self.a end }
+end
 
 -- Widget factory. The explicit methods record what the castbar writes; any
 -- other CamelCase method is a no-op. Data fields stay nil, and the native
@@ -127,8 +134,14 @@ local ns = {
 
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 _G.MSUF, _G.MSUF_NS = ns, ns
+-- State/MSUF_Defaults.lua's EnsureDB (not loaded here): the harness profile is the profile.
+_G.MSUF_EnsureDB = function() return _G.MSUF_DB end
 manifest.LoadSelected(root, "Vanilla", ns, {
     "Kernel/MSUF_Require.lua",
+    -- Kernel Util and the colour owner load before every castbar file in the TOC.
+    "Shell/EditMode/MSUF_EditMode_Geometry.lua",
+    "Kernel/MSUF_Util.lua",
+    "Runtime/MSUF_Colors.lua",
     "Castbars/MSUF_Castbars_PublicAPI.lua",
     "Castbars/MSUF_Castbars_Backend.lua",
     "Castbars/MSUF_CastbarConfig.lua",

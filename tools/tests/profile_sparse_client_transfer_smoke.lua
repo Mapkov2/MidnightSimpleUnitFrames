@@ -19,11 +19,30 @@ local function Load(flavor, saved)
     return world
 end
 local original, control = Load(source), Load(source)
+-- Include inactive, trusted and explicit historical marker values in every transfer.
+local marker = "_msufPreviewDragHintExperienced"
+for _, world in ipairs({ original, control }) do
+    local pool = world.env.MSUF_GlobalDB.profiles
+    for i, value in ipairs({ true, false, 0, "", {}, { false, 0, "" } }) do
+        local profile = C.Copy(world.env.MSUF_DB)
+        profile.general[marker] = C.Copy(value)
+        profile.general.markerTransferUnknown = { [0] = "zero", false, 0, "" }
+        pool["Marker" .. i] = profile
+    end
+    pool.MarkerAbsent = C.Copy(world.env.MSUF_DB)
+    pool.MarkerAbsent.general[marker] = nil
+end
 control.core.DefaultsSchema.Persist = function() return false end
 original:FireEvent("PLAYER_LOGOUT")
 control:FireEvent("PLAYER_LOGOUT")
 local full, compact = Saved(control, source), Saved(original, source)
 assert(full.MSUF_DB == nil and compact.MSUF_DB == nil, "terminal alias remained")
+assert(full.MSUF_GlobalDB.profiles.Marker1.general[marker] == true, "marker control was pruned")
+assert(compact.MSUF_GlobalDB.profiles.Marker1.general[marker] == true, "internal experience marker changed")
+assert(type(compact.MSUF_GlobalDB.profiles.Marker1._msufSparseDefaultsV2) == "string", "V2 mask missing")
+assert(compact.MSUF_GlobalDB.profiles.Marker1._msufDefaultsRevision == 17.5, "V2 revision missing")
+assert(#H.Literal(compact) < #H.Literal(full), "declared SavedVariables did not shrink")
+assert(compact.MSUF_GlobalDB.profiles.Marker2.general[marker] == false, "factory cadence was pruned")
 for _, destination in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local a, b = Load(destination, full), Load(destination, compact)
     assert(H.Literal(a.env.MSUF_GlobalDB) == H.Literal(b.env.MSUF_GlobalDB),

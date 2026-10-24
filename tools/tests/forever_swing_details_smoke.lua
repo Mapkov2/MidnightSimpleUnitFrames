@@ -20,6 +20,7 @@
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 local function Check(condition, message)
     if not condition then error(message, 2) end
     return condition
@@ -115,15 +116,25 @@ C_Spell = {
     IsCurrentSpell = function(name) apiCalls.current = apiCalls.current + 1; return queued == name end,
 }
 local module
+-- Kernel/MSUF_Util.lua's pixel layout and Runtime/MSUF_Fonts.lua's default font, which
+-- SwingTimer requires; fixtures lay out no pixels and use the client font.
+_G.MSUF_PixelLayoutRegion = function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
+_G.MSUF_GetFontPath = function() return "Fonts/FRIZQT__.TTF" end
 local function Load(class)
     Install(class)
     MSUF_DB = { swingTimers = { enabled = true } }
-    local ns = { Client = { IsForever = true }, MSUF_RegisterModule = function(_, m) module = m end }
+    -- Kernel/MSUF_Libs.lua's LibSharedMedia handle, with no registered media.
+    local ns = { Client = { IsForever = true }, MSUF_RegisterModule = function(_, m) module = m end,
+        LSM = { Fetch = function() return nil end, List = function() return {} end,
+            HashTable = function() return {} end, RegisterCallback = function() end } }
     ns.MSUF_ApplyModules = function() if ns.SwingTimer.GetEnabled() then module.Enable() else module.Disable() end end
     local created = {}
     local create = CreateFrame
     CreateFrame = function(...) local w = create(...); created[#created + 1] = w; return w end
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"))("test", ns)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua", ns)
     module.Enable()
     return ns.SwingTimer, created[1]
 end
@@ -267,7 +278,7 @@ MSUF_DB = { swingTimers = { enabled = true, main = { combineOffhand = true, rang
     heroicText = "HS", maulText = "", cleaveText = "CL" } } }
 do
     local formerNS = { Client = { IsForever = true }, MSUF_RegisterModule = function(_, m) module = m end }
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"))("test", formerNS)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua", formerNS)
     local carried = formerNS.SwingTimer
     Check(carried.Get("main", "offhandLane") == true and carried.Get("main", "reachCheck") == true
         and carried.Get("main", "reachOpacity") == 40 and carried.Get("main", "reachColor")[2] == 0.2,

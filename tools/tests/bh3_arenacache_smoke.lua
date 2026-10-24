@@ -31,7 +31,12 @@ local MSUF = {
   ExportPublic = function(name, v) _G[name] = v; return v end,
 }
 _G.MSUF_GetProfileScopedCache = function() return bucket end
-assert(loadfile(ROOT .. "Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua"))("MidnightSimpleUnitFrames", MSUF)
+-- The real Kernel API (Bootstrap's exports, Require/Optional) replaces the export stub; the profile
+-- cache provider the runtime requires is this probe's _G.MSUF_GetProfileScopedCache above.
+local REPO = (ROOT:gsub("/MidnightSimpleUnitFrames/$", ""))
+local RequireFixture = assert(loadfile(REPO .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(REPO, MSUF, nil, nil, true)
+RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua", MSUF)
 
 -- Session 1: provider present, arena frames stacked 50 px apart below it.
 for i = 1, 3 do

@@ -1,0 +1,30 @@
+name	kind	outer	inner	extent
+msuf_skin_shadow_soft	band	4	10	
+msuf_skin_shadow_outer	band	4	0	
+msuf_skin_shadow_hard	band	0	13	
+msuf_skin_shadow_ring	band	3.75	5	
+msuf_skin_vignette_crisp	band	0	9	
+msuf_skin_vignette_soft	band	0	14	
+msuf_skin_vignette_heavy	band	0	11	
+msuf_skin_frame_slim	band	0.5	2.5	
+msuf_skin_frame_bold	band	1	4	
+msuf_skin_frame_double	band	0.7	2.9	
+msuf_skin_frame_bevel	band	0.5	3	
+msuf_skin_frame_dark	band	1	7	
+msuf_skin_frame_clean	band	0.8	5	
+msuf_skin_frame_rounded	band	2	3.5	
+msuf_skin_frame_steel	band	2	3.5	
+msuf_skin_metal_frame	band	1	4	
+msuf_skin_gloss_crescent	quad			0
+msuf_skin_gloss_sheen	quad			0
+msuf_skin_gloss_top	quad			0
+msuf_skin_gloss_dome	quad			0
+msuf_skin_glass_gloss	quad			0
+msuf_skin_ring_segmented	quad			4
+msuf_skin_ring_simple	quad			4
+msuf_skin_shadow_round	quad			5
+msuf_skin_gear_ring	quad			6
+msuf_skin_orb_ring	quad			4
+msuf_skin_orb_thin	quad			4
+msuf_skin_glass_ring	quad			2
+msuf_skin_glass_thick	quad			4

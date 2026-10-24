@@ -1,39 +1,47 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 full changelog page with direct links from release highlights to the
 -- owning Menu2 controls. Both payloads (the compact State/MSUF_Changelog.lua
 -- and the full history) are bundled with the LoD Options addon; core parses no
 -- changelog at login.
 local _, MSUF = ...
 MSUF = MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Changelog.lua")
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
 local T = M.Theme
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 local max = math.max
 local tostring = tostring
 local type = type
 
 local Tr = M.Tr
 
+-- A release history is usable only when its first entry is a table.
+local function UsableHistory(data)
+    if type(data) == "table" and type(data.entries) == "table" and type(data.entries[1]) == "table" then
+        return data
+    end
+end
+
 local function ChangelogData()
-    local full = (type(MSUF) == "table" and MSUF.MSUF_FullChangelog) or _G.MSUF_FullChangelog
-    if type(full) == "table" and type(full.entries) == "table" and type(full.entries[1]) == "table" then
-        return full
-    end
-    local compact = (type(MSUF) == "table" and MSUF.MSUF_Changelog) or _G.MSUF_Changelog
-    if type(compact) == "table" and type(compact.entries) == "table" and type(compact.entries[1]) == "table" then
-        return compact
-    end
+    return UsableHistory(MSUF.MSUF_FullChangelog) or UsableHistory(MSUF.MSUF_Changelog)
 end
 
 -- The optional Suite owns its release history and exposes it from its core addon.
 local function SuiteChangelogData()
-    local data = MSUF.SuiteLink.GetChangelog()
-    if type(data) == "table" and type(data.entries) == "table" and type(data.entries[1]) == "table" then
-        return data
-    end
+    return UsableHistory(MSUF.SuiteLink.GetChangelog())
+end
+
+local function SourceData(source)
+    if source == "suite" then return SuiteChangelogData() end
+    return ChangelogData()
+end
+local function SelectedField(source)
+    return source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"
+end
+local function SeenField(source)
+    return source == "suite" and "seenSuiteChangelogVersion" or "seenChangelogVersion"
 end
 
 local function BulletParts(value)
@@ -94,6 +102,16 @@ local function AddSourceTabs(root, contentWidth, y, source)
     return y - 42
 end
 
+-- Wrapped left-aligned release text; returns the height it needs.
+local function FlowText(fs, width)
+    fs:SetWidth(width)
+    fs:SetJustifyH("LEFT")
+    if fs.SetWordWrap then fs:SetWordWrap(true) end
+    if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
+    if fs.SetSpacing then fs:SetSpacing(3) end
+    return max(14, (fs.GetStringHeight and fs:GetStringHeight()) or 0, (fs.GetHeight and fs:GetHeight()) or 0)
+end
+
 local function BuildFullChangelog(ctx)
     local suiteData = SuiteChangelogData()
     local source = M.changelogSource == "suite" and suiteData and "suite" or "msuf"
@@ -106,12 +124,7 @@ local function BuildFullChangelog(ctx)
     local function AddText(text, template, color, x, availableWidth, gap, role)
         local fs = T.Font(root, template or "GameFontHighlightSmall", text, color or T.colors.text, role)
         fs:SetPoint("TOPLEFT", root, "TOPLEFT", x or 18, y)
-        fs:SetWidth(max(80, availableWidth or contentWidth))
-        fs:SetJustifyH("LEFT")
-        if fs.SetWordWrap then fs:SetWordWrap(true) end
-        if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
-        if fs.SetSpacing then fs:SetSpacing(3) end
-        local height = max(14, (fs.GetStringHeight and fs:GetStringHeight()) or 0, (fs.GetHeight and fs:GetHeight()) or 0)
+        local height = FlowText(fs, max(80, availableWidth or contentWidth))
         y = y - height - (gap or 6)
         return fs, height
     end
@@ -123,12 +136,7 @@ local function BuildFullChangelog(ctx)
         button:SetWidth(linkWidth)
         local fs = T.Font(button, "GameFontHighlightSmall", text, T.colors.accent2 or T.colors.warning, "body")
         fs:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
-        fs:SetWidth(linkWidth)
-        fs:SetJustifyH("LEFT")
-        if fs.SetWordWrap then fs:SetWordWrap(true) end
-        if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
-        if fs.SetSpacing then fs:SetSpacing(3) end
-        local height = max(14, (fs.GetStringHeight and fs:GetStringHeight()) or 0, (fs.GetHeight and fs:GetHeight()) or 0)
+        local height = FlowText(fs, linkWidth)
         button:SetHeight(height)
         local PaintFeatureLink = T.StyleFeatureLink(button, fs) or nil
         button:SetScript("OnClick", function()
@@ -165,7 +173,7 @@ local function BuildFullChangelog(ctx)
     end
 
     local entries = data.entries
-    local selectedField = source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"
+    local selectedField = SelectedField(source)
     local selectedVersion = tostring(M[selectedField] or data.currentVersion or entries[1].version or "")
     local selectedFound = false
     for i = 1, #entries do
@@ -241,8 +249,7 @@ local function BuildFullChangelog(ctx)
 end
 
 local function CurrentChangelogVersion(source)
-    local data
-    if source == "suite" then data = SuiteChangelogData() else data = ChangelogData() end
+    local data = SourceData(source)
     if type(data) ~= "table" then return "" end
     local version = tostring(data.currentVersion or "")
     if version ~= "" then return version end
@@ -254,11 +261,10 @@ end
 -- the player has already read. Re-resolved on every call because profile repair
 -- and a full reset replace the SavedVariables root (see MSUF_UpgradeHighlights).
 local function SeenStore(create)
-    local gdb = _G.MSUF_GlobalDB
+    local gdb = MSUF_GlobalDB
     if type(gdb) ~= "table" then
         if not create then return nil end
-        gdb = {}
-        _G.MSUF_GlobalDB = gdb
+        gdb = MSUF.ExportPublic("MSUF_GlobalDB", {})
     end
     if type(gdb.global) ~= "table" then
         if not create then return nil end
@@ -267,22 +273,17 @@ local function SeenStore(create)
     return gdb.global
 end
 
---- True while the bundled release has never been opened through the toolbar.
---- Drives the Blizzard NEW badge on the See New Features button.
-function M.HasUnseenChangelog()
-    local store = SeenStore(false)
-    local msuf = CurrentChangelogVersion("msuf")
-    local suite = CurrentChangelogVersion("suite")
-    return (msuf ~= "" and tostring(store and store.seenChangelogVersion or "") ~= msuf)
-        or (suite ~= "" and tostring(store and store.seenSuiteChangelogVersion or "") ~= suite)
-end
-
 local function HasUnseenSource(source)
     local version = CurrentChangelogVersion(source)
     if version == "" then return false end
     local store = SeenStore(false)
-    local field = source == "suite" and "seenSuiteChangelogVersion" or "seenChangelogVersion"
-    return tostring(store and store[field] or "") ~= version
+    return tostring(store and store[SeenField(source)] or "") ~= version
+end
+
+--- True while the bundled release has never been opened through the toolbar.
+--- Drives the Blizzard NEW badge on the See New Features button.
+function M.HasUnseenChangelog()
+    return HasUnseenSource("msuf") or HasUnseenSource("suite")
 end
 
 function M.MarkChangelogSeen(source)
@@ -291,7 +292,7 @@ function M.MarkChangelogSeen(source)
     if version == "" then return false end
     local store = SeenStore(true)
     if type(store) ~= "table" then return false end
-    local field = source == "suite" and "seenSuiteChangelogVersion" or "seenChangelogVersion"
+    local field = SeenField(source)
     if tostring(store[field] or "") == version then return false end
     store[field] = version
     if type(M.RefreshSeeNewFeaturesBadge) == "function" then M.RefreshSeeNewFeaturesBadge() end
@@ -304,10 +305,8 @@ function M.OpenSeeNewFeatures()
         or HasUnseenSource("suite") and "suite"
         or (M.changelogSource == "suite" and SuiteChangelogData() and "suite") or "msuf"
     M.changelogSource = source
-    local data = source == "suite" and SuiteChangelogData() or ChangelogData()
-    if data and data.currentVersion then
-        M[source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"] = tostring(data.currentVersion)
-    end
+    local data = SourceData(source)
+    if data and data.currentVersion then M[SelectedField(source)] = tostring(data.currentVersion) end
     M.InvalidatePage("changelog")
     if M.SelectPage("changelog") then
         M.MarkChangelogSeen(source)
@@ -321,7 +320,7 @@ end
 local CHANGELOG_VIEWS = { msuf = {}, suite = {} }
 local function ChangelogViewKey()
     local source = M.changelogSource == "suite" and "suite" or "msuf"
-    local selected = M[source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"]
+    local selected = M[SelectedField(source)]
     if selected == nil then return source end
     local views = CHANGELOG_VIEWS[source]
     local view = views[selected]

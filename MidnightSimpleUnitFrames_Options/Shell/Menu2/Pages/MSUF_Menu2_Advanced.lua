@@ -1,4 +1,5 @@
 local addonName, MSUF = ...
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_Advanced.lua"
 local M = MSUF.MSUF2
 
 -- AdvancedPage helper module.
@@ -49,7 +50,7 @@ local function Row(ctx, parent, row)
     return widget
 end
 
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 
 local ControlMeta = M.ControlMeta
 local RegisterControl = M.RegisterControlMetadata
@@ -57,21 +58,14 @@ local RegisterControl = M.RegisterControlMetadata
 local function DB()
     return M.EnsureDB()
 end
-local function G()
-    local db = DB()
-    db.general = db.general or {}
-    return db.general
+local function DBSection(key)
+    return function()
+        local db = DB()
+        db[key] = db[key] or {}
+        return db[key]
+    end
 end
-local function Bars()
-    local db = DB()
-    db.bars = db.bars or {}
-    return db.bars
-end
-local function Gameplay()
-    local db = DB()
-    db.gameplay = db.gameplay or {}
-    return db.gameplay
-end
+local G, Bars, Gameplay = DBSection("general"), DBSection("bars"), DBSection("gameplay")
 local function BoolValue(tbl, key, default)
     local value = tbl and tbl[key]
     if value == nil then return default and true or false end
@@ -94,7 +88,7 @@ local function BindSliderControl(ctx, slider, getValue, setValue, fallback, step
     opts.roundStep = true
     return M.BindNumberWidget(ctx, slider, getValue, setValue, fallback, opts)
 end
-local function BoundRow(ctx, parent, kind, key, default, args, get, set, metadata)
+local function BoundRow(ctx, parent, kind, key, default, args, metadata, get, set)
     return Row(ctx, parent, { kind, key, default, args, bind = function(widget)
         if kind == "slider" then
             BindSliderControl(ctx, widget, get, set, default, args[4], metadata)
@@ -102,33 +96,36 @@ local function BoundRow(ctx, parent, kind, key, default, args, get, set, metadat
         else BindToggleControl(ctx, widget, get, set, metadata) end
     end })
 end
+-- Getter/setter pair over one DB sub-table key, shared by the toggle and switch rows.
+local function TableBool(getTable, key, default, apply)
+    return function() return BoolValue(getTable(), key, default) end,
+        function(v) SetValue(getTable(), key, v, apply) end
+end
 local function BindTableToggle(ctx, section, label, getTable, key, default, apply, metadata)
-    return BoundRow(ctx, section, "flowToggle", key, default, { label },
-        function() return BoolValue(getTable(), key, default) end,
-        function(v) SetValue(getTable(), key, v, apply) end, metadata)
+    return BoundRow(ctx, section, "flowToggle", key, default, { label }, metadata,
+        TableBool(getTable, key, default, apply))
 end
 local function BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply, metadata)
-    return BoundRow(ctx, section, "switch", key, default, { label, x, y, labelWidth },
-        function() return BoolValue(getTable(), key, default) end,
-        function(v) SetValue(getTable(), key, v, apply) end, metadata)
+    return BoundRow(ctx, section, "switch", key, default, { label, x, y, labelWidth }, metadata,
+        TableBool(getTable, key, default, apply))
 end
 local function BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply, metadata)
-    return BoundRow(ctx, section, "slider", key, default, { label, minVal, maxVal, step, width or 300 },
+    return BoundRow(ctx, section, "slider", key, default, { label, minVal, maxVal, step, width or 300 }, metadata,
         function() return NumValue(getTable(), key, default) end,
-        function(v) SetValue(getTable(), key, v, apply) end, metadata)
+        function(v) SetValue(getTable(), key, v, apply) end)
 end
 local function BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply, metadata)
-    return BoundRow(ctx, section, "dropdown", key, default, { label, values, width or 220 },
+    return BoundRow(ctx, section, "dropdown", key, default, { label, values, width or 220 }, metadata,
         function()
             local tbl = getTable()
             if tbl and tbl[key] ~= nil then return tbl[key] end
             return default
         end,
-        function(v) SetValue(getTable(), key, v or default, apply) end, metadata)
+        function(v) SetValue(getTable(), key, v or default, apply) end)
 end
 local function BindValueDropdown(ctx, section, label, values, width, getValue, setValue, metadata)
     return BoundRow(ctx, section, "dropdown", metadata and metadata.controlId or label, nil,
-        { label, values, width or 220 }, getValue, setValue, metadata)
+        { label, values, width or 220 }, metadata, getValue, setValue)
 end
 local A3_APPLY_QUEUED = false
 local A3_APPLY_DELAY = 0.04
@@ -140,12 +137,8 @@ local function ApplyAuras()
         local api = MSUF and MSUF.MSUF_Auras3
         if api and api.DB and type(api.DB.InvalidateCache) == "function" then api.DB.InvalidateCache() end
         if api and api.Colors and type(api.Colors.InvalidateCache) == "function" then api.Colors.InvalidateCache() end
-        local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
-        if apply and type(apply.RequestAuras) == "function" then
-            apply.RequestAuras("shared", "MSUF2_AURAS_APPLY")
-        elseif api and type(api.RequestApply) == "function" then
-            api.RequestApply()
-        end
+        local apply = M.ApplyService or MSUF.Require("MSUF_Menu2_ApplyService", FILE)
+        apply.RequestAuras("shared", "MSUF2_AURAS_APPLY")
     end
     if C_Timer and C_Timer.After then
         C_Timer.After(A3_APPLY_DELAY, Run)
@@ -166,33 +159,23 @@ local function LabelAt(parent, text, x, y, width, template, color)
         scope = "shared", applyDomain = "presentation", owner = widget })
 end
 local function BindValueToggle(ctx, section, label, getValue, setValue, metadata)
-    return BoundRow(ctx, section, "flowToggle", metadata and metadata.controlId or label, nil, { label }, getValue, setValue, metadata)
+    return BoundRow(ctx, section, "flowToggle", metadata and metadata.controlId or label, nil, { label }, metadata, getValue, setValue)
 end
 local function BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue, metadata)
-    return BoundRow(ctx, section, "switch", metadata and metadata.controlId or label, nil, { label, x, y, labelWidth }, getValue, setValue, metadata)
+    return BoundRow(ctx, section, "switch", metadata and metadata.controlId or label, nil, { label, x, y, labelWidth }, metadata, getValue, setValue)
 end
 local function BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue, metadata)
     return BoundRow(ctx, section, "slider", metadata and metadata.controlId or label, minVal,
-        { label, minVal, maxVal, step, width or 160 }, getValue, setValue, metadata)
+        { label, minVal, maxVal, step, width or 160 }, metadata, getValue, setValue)
 end
-local function SwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply, metadata)
-    return BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply, metadata)
+-- The *At variants take (ctx, section, label, x, y, ...) and place the row the bind function builds.
+local function At(bind)
+    return function(ctx, section, label, x, y, ...)
+        return MoveWidget(bind(ctx, section, label, ...), section, x, y)
+    end
 end
-local function ValueToggleAt(ctx, section, label, x, y, getValue, setValue, metadata)
-    return MoveWidget(BindValueToggle(ctx, section, label, getValue, setValue, metadata), section, x, y)
-end
-local function ValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue, metadata)
-    return BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue, metadata)
-end
-local function SliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getTable, key, default, apply, metadata)
-    return MoveWidget(BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply, metadata), section, x, y)
-end
-local function ValueSliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getValue, setValue, metadata)
-    return MoveWidget(BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue, metadata), section, x, y)
-end
-local function ValueDropdownAt(ctx, section, label, x, y, values, width, getValue, setValue, metadata)
-    return MoveWidget(BindValueDropdown(ctx, section, label, values, width, getValue, setValue, metadata), section, x, y)
-end
+local ValueToggleAt, SliderAt = At(BindValueToggle), At(BindTableSlider)
+local ValueSliderAt, ValueDropdownAt = At(BindValueSlider), At(BindValueDropdown)
 local function BuildTableControlSpecs(ctx, parent, getTable, defaultApply, specs, customKinds)
     return M.BuildControlSpecs(specs, { ["*"] = function(s)
         local kind = s[2]
@@ -222,7 +205,7 @@ M.Assign(AdvancedPage, {
     BindTableToggle = BindTableToggle, BindTableSwitchAt = BindTableSwitchAt, BindTableSlider = BindTableSlider, BindTableDropdown = BindTableDropdown,
     BindValueDropdown = BindValueDropdown, ApplyAuras = ApplyAuras, MoveWidget = MoveWidget, LabelAt = LabelAt,
     BindValueToggle = BindValueToggle, BindValueSwitchAt = BindValueSwitchAt, BindValueSlider = BindValueSlider,
-    SwitchAt = SwitchAt, ValueToggleAt = ValueToggleAt, ValueSwitchAt = ValueSwitchAt,
+    SwitchAt = BindTableSwitchAt, ValueToggleAt = ValueToggleAt, ValueSwitchAt = BindValueSwitchAt,
     SliderAt = SliderAt, ValueSliderAt = ValueSliderAt, ValueDropdownAt = ValueDropdownAt,
     BuildTableControlSpecs = BuildTableControlSpecs,
     SetControlEnabled = SetControlEnabled,

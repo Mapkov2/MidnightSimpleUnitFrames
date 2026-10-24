@@ -2,10 +2,8 @@
 --- every container and saved position; all anchors are screen-space pixels
 --- relative to UIParent CENTER, so mover deltas apply without scale math.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local API = _G.MSUF_EditModeAPI
-if not (API and API.RegisterElement) then return end
+local API = MSUF.Require("MSUF_EditModeAPI", "Shell/EditMode/MSUF_EditMode_Danders.lua")
 
 local OWNER, SETTING = "MSUF.DandersFrames", "dandersEditModeIntegration"
 local registered = {}
@@ -40,7 +38,7 @@ local function MoverLocked()
     unlockedScope = nil
 end
 local function SessionMover()
-    local libStub = _G.LibStub
+    local libStub = LibStub
     local lib = libStub and libStub("DandersMover-1.0", true)
     -- LibStub's versioned library contract owns these method types.
     if not (lib and lib.IsUnlocked and lib.Lock and lib.RegisterCallback) then return nil end
@@ -54,8 +52,8 @@ end
 
 local Export = MSUF.ExportPublic
 
-local General = _G.MSUF_GetGeneralDB
-local InCombatLockdown = _G.InCombatLockdown
+local General = MSUF.Require("MSUF_GetGeneralDB", "Shell/EditMode/MSUF_EditMode_Danders.lua")
+local InCombatLockdown = InCombatLockdown
 
 local function Enabled()
     local general = General()
@@ -67,7 +65,7 @@ local function InCombat()
 end
 
 local function Danders()
-    local df = _G.DandersFrames
+    local df = DandersFrames
     if type(df) ~= "table" or type(df.GetDB) ~= "function" or type(df.GetRaidDB) ~= "function"
         or type(df.UpdateContainerPosition) ~= "function"
         or type(df.UpdateRaidContainerPosition) ~= "function" then return nil end
@@ -323,11 +321,11 @@ local function UnlockScope(scope)
         unlockedScope = scope
         EnsurePreview(df, scope)
     end
-    if API.RefreshOwner then API.RefreshOwner(OWNER) end
+    API.RefreshOwner(OWNER)
 end
 
 local function PinnedScope()
-    return type(_G.IsInRaid) == "function" and _G.IsInRaid() and "raid" or "party"
+    return type(IsInRaid) == "function" and IsInRaid() and "raid" or "party"
 end
 
 local function SelectMode(mode)
@@ -405,7 +403,7 @@ local function ModeControls(mode)
     return controls
 end
 
-local Add = _G.MSUF_EM2.ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
+local Add = MSUF.Require("MSUF_EM2", "Shell/EditMode/MSUF_EditMode_Danders.lua").ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
 
 --- Never unlock at session start: entering the session must stay free (no
 --- companion load, no frame pool, no animation ticker) and live frames must
@@ -448,7 +446,7 @@ local function Activate()
             function(_, context) return OpenScopeSettings(PinnedScope(), context) end))
     end
     API.RegisterSessionListener(OWNER, SessionChanged)
-    if API.RefreshOwner then API.RefreshOwner(OWNER) end
+    API.RefreshOwner(OWNER)
     return true
 end
 
@@ -461,13 +459,13 @@ local function Deactivate()
     return true
 end
 
-local External = _G.MSUF_EM2.ExternalProviders
+local External = MSUF.Require("MSUF_EM2", "Shell/EditMode/MSUF_EditMode_Danders.lua").ExternalProviders
 local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_DandersEditMode_IsAvailable", function() return Danders() ~= nil end)
 Export("MSUF_DandersEditMode_SetEnabled", SetEnabled)
 
-local eventFrame = _G.CreateFrame and _G.CreateFrame("Frame")
+local eventFrame = CreateFrame and CreateFrame("Frame")
 if eventFrame then
     eventFrame:RegisterEvent("ADDON_LOADED")
     eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")

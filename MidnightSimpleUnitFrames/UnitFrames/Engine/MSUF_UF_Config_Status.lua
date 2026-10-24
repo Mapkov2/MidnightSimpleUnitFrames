@@ -1,7 +1,5 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
-
 --- UnitFrames/Engine/MSUF_UF_Config_Status.lua
 ---
 --- Status part of the cold unit-frame config compiler: the indicator entries
@@ -18,11 +16,11 @@ local Shared = UF.Shared
 local type = type
 local tonumber = tonumber
 local tostring = tostring
-local CreateFrame = _G.CreateFrame
-local InCombatLockdown = _G.InCombatLockdown
-local IsInInstance = _G.IsInInstance
-local GetInstanceInfo = _G.GetInstanceInfo
-local wipe = _G.wipe or table.wipe
+local CreateFrame = CreateFrame
+local InCombatLockdown = InCombatLockdown
+local IsInInstance = IsInInstance
+local GetInstanceInfo = GetInstanceInfo
+local wipe = wipe or table.wipe
 local Clamp01 = UF.Clamp01
 local Number = UF.NumberWithFallback
 local Bool = UF.BoolWithFallback
@@ -38,7 +36,9 @@ local function ClampStatusLayer(value, fallback)
   return value
 end
 
-local function StatusBool(conf, general, key, fallback, legacyKey)
+--- The stored status value: the unit's key, then its legacy key, then the
+--- same pair on general. StatusBool and StatusNumber apply their fallback.
+local function StatusRawValue(conf, general, key, legacyKey)
   local value = conf and conf[key]
   if value == nil and legacyKey then
     value = conf and conf[legacyKey]
@@ -49,7 +49,11 @@ local function StatusBool(conf, general, key, fallback, legacyKey)
       value = general and general[legacyKey]
     end
   end
-  return Bool(value, fallback)
+  return value
+end
+
+local function StatusBool(conf, general, key, fallback, legacyKey)
+  return Bool(StatusRawValue(conf, general, key, legacyKey), fallback)
 end
 
 local Secrets = MSUF.Secrets or {}
@@ -81,8 +85,8 @@ end
 local _pvpContextKnown, _pvpContextActive = false, false
 
 local function UnitFramePVPContextualDisabled()
-  local gameRules = _G.C_GameRules
-  local enum = _G.Enum
+  local gameRules = C_GameRules
+  local enum = Enum
   local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
   return gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil
     and APIBool(gameRules.IsGameRuleActive, rule)
@@ -104,7 +108,7 @@ local function ComputePVPIndicatorContextActive(warModeOverride)
     return warModeOverride == true
   end
 
-  local cpvp = _G.C_PvP
+  local cpvp = C_PvP
   if not cpvp then return false end
   -- This indicator is intentionally a PvP-mode feature, not a general
   -- UnitIsPVP flag display. Outside War Mode, arenas and battlegrounds its
@@ -207,7 +211,7 @@ if IS_CLASSIC_FAMILY then
       end
     end
   end
-  local UnitIsPVP, UnitIsPVPFreeForAll, IsPVPTimerRunning = _G.UnitIsPVP, _G.UnitIsPVPFreeForAll, _G.IsPVPTimerRunning
+  local UnitIsPVP, UnitIsPVPFreeForAll, IsPVPTimerRunning = UnitIsPVP, UnitIsPVPFreeForAll, IsPVPTimerRunning
   ComputePVPIndicatorContextActive = function()
     local instanceType = CurrentInstanceType()
     if instanceType == "pvp" or instanceType == "arena" then
@@ -215,7 +219,7 @@ if IS_CLASSIC_FAMILY then
     elseif instanceType == "party" or instanceType == "raid" then
       return false
     end
-    local cpvp = _G.C_PvP
+    local cpvp = C_PvP
     if cpvp and (APIBool(cpvp.IsWarModeActive) or APIBool(cpvp.IsWarModeDesired)) then
       return true
     end
@@ -290,17 +294,7 @@ if not UF.pvpIndicatorContextDriver then
 end
 
 local function StatusNumber(conf, general, key, fallback, legacyKey)
-  local value = conf and conf[key]
-  if value == nil and legacyKey then
-    value = conf and conf[legacyKey]
-  end
-  if value == nil then
-    value = general and general[key]
-    if value == nil and legacyKey then
-      value = general and general[legacyKey]
-    end
-  end
-  return Number(value, fallback)
+  return Number(StatusRawValue(conf, general, key, legacyKey), fallback)
 end
 
 local function StatusString(conf, general, key, fallback, legacyKey)

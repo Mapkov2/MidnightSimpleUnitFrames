@@ -2,7 +2,6 @@
 -- Group configuration/cache and common preview metrics. Synthetic previews share immutable descriptors; live party/raid tokens retain separate identities.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.GroupConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
@@ -279,7 +278,7 @@ end
 --- function only resolves/caches immutable configuration and creates no frame,
 --- event, timer, or OnUpdate.
 function A3.ResolveAuraPreviewConfig(frame, unit, frameSpec)
-    if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then return nil end
+    if (InCombatLockdown and InCombatLockdown()) or MSUF.PublicGlobals.MSUF_InCombat == true then return nil end
     if frameSpec ~= nil and frame and frameSpec ~= frame.MSUFSpec and IsGroupFrame(frame) then
         local proxy = frame._msufA3AuraPreviewConfigProxy
         if not proxy then

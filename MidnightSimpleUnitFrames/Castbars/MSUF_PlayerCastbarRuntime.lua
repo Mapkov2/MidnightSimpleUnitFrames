@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Player castbar runtime.
 ---
 --- Player is special because it supports vehicle casts, latency display,
@@ -22,36 +21,39 @@ local Utils = Castbars.Utils
 
 local Publish = PublicAPI.Publish
 
-local C_Timer = _G.C_Timer
-local RunNextFrame = _G.MSUF_RunNextFrame
-local ScheduleAfter = _G.MSUF_ScheduleAfter
-local CancelScheduled = _G.MSUF_CancelScheduled
+-- Kernel (Scheduler, Util) and Runtime/MSUF_Colors.lua load before every
+-- castbar file; their per-cast helpers resolve once here.
+local FILE = "Castbars/MSUF_PlayerCastbarRuntime.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
+local GetClassBarColor = MSUF.Require("MSUF_GetClassBarColor", FILE)
+local GetColorFromKey = MSUF.Require("MSUF_GetColorFromKey", FILE)
+local RunNextFrame = MSUF.Require("MSUF_RunNextFrame", FILE)
+local ScheduleAfter = MSUF.Require("MSUF_ScheduleAfter", FILE)
+local CancelScheduled = MSUF.Require("MSUF_CancelScheduled", FILE)
+
 local type = type
 local tonumber = tonumber
 local tostring = tostring
 local select = select
 local math_max = math.max
-local issecretvalue = _G.issecretvalue
--- Per-event/per-cast API aliases; MSUF_* and RAID_CLASS_COLORS stay late-bound.
-local GetTime = _G.GetTime
-local GetTimePreciseSec = _G.GetTimePreciseSec
-local GetCVar = _G.GetCVar
-local GetNetStats = _G.GetNetStats
-local UnitClass = _G.UnitClass
-local UnitExists = _G.UnitExists
-local UnitHasVehicleUI = _G.UnitHasVehicleUI
-local C_NamePlate = _G.C_NamePlate
-local issecure = _G.issecure
-local INTERRUPTED = _G.INTERRUPTED
+local issecretvalue = issecretvalue
+-- Per-event/per-cast API aliases; RAID_CLASS_COLORS stays late-bound.
+local GetTime = GetTime
+local GetTimePreciseSec = GetTimePreciseSec
+local GetCVar = GetCVar
+local GetNetStats = GetNetStats
+local UnitClass = UnitClass
+local UnitExists = UnitExists
+local UnitHasVehicleUI = UnitHasVehicleUI
+local C_NamePlate = C_NamePlate
+local issecure = issecure
+local INTERRUPTED = INTERRUPTED
 local castbarEngine
 local castDebug = false
 
 local function ScheduleDelayed(callback, delay)
-    if type(ScheduleAfter) == "function" then
-        return ScheduleAfter(callback, delay, callback)
-    end
-    C_Timer.After(delay, callback)
-    return true
+    return ScheduleAfter(callback, delay, callback)
 end
 
 local function CastbarEngine()
@@ -189,7 +191,7 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
         frame.latencyBar:Hide()
         return
     end
-    if (frame.MSUF_testMode or frame._msufIsPreview) and not _G.MSUF_UnitEditModeActive then
+    if (frame.MSUF_testMode or frame._msufIsPreview) and not MSUF_UnitEditModeActive then
         frame.latencyBar:Hide()
         return
     end
@@ -239,11 +241,7 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
     if not statusWidth or statusWidth <= 1 then
         latencyQueue[#latencyQueue + 1] = frame
         latencyQueue[#latencyQueue + 1] = generation
-        if type(RunNextFrame) == "function" then
-            RunNextFrame(FlushLatencyQueue)
-        else
-            C_Timer.After(0, FlushLatencyQueue)
-        end
+        RunNextFrame(FlushLatencyQueue)
         return
     end
 
@@ -276,7 +274,7 @@ local function UpdateColorForInterruptible(frame)
                     -- Runtime/MSUF_FontRegistry.lua (loads before the castbars)
                     -- owns it: MSUF's custom class colour (db.classColors, the
                     -- one the unit frames use), else RAID_CLASS_COLORS.
-                    red, green, blue = _G.MSUF_GetClassBarColor(classToken)
+                    red, green, blue = GetClassBarColor(classToken)
                 end
             end
 
@@ -316,7 +314,7 @@ local function UpdateColorForInterruptible(frame)
         end
         if not red or not green or not blue then
             local key = general.castbarNonInterruptibleColor or "red"
-            local color = _G.MSUF_GetColorFromKey and _G.MSUF_GetColorFromKey(key)
+            local color = GetColorFromKey(key)
             if color then red, green, blue, alpha = color:GetRGBA() end
         end
         if not red or not green or not blue then
@@ -329,7 +327,7 @@ local function UpdateColorForInterruptible(frame)
         end
         if not red or not green or not blue then
             local key = general.castbarInterruptibleColor or "turquoise"
-            local color = _G.MSUF_GetColorFromKey and _G.MSUF_GetColorFromKey(key)
+            local color = GetColorFromKey(key)
             if color then red, green, blue, alpha = color:GetRGBA() end
         end
         if not red or not green or not blue then
@@ -518,7 +516,7 @@ local function InvalidatePlayerInterruptHide(frame)
     -- Cancellation removes the callback that would otherwise clear this flag.
     -- A following cast/interrupt must be able to schedule its own hide.
     frame._msufPlayerInterruptHidePending = nil
-    if frame._msufPlayerInterruptHideCB and type(CancelScheduled) == "function" then
+    if frame._msufPlayerInterruptHideCB then
         CancelScheduled(frame._msufPlayerInterruptHideCB)
     end
 end
@@ -740,7 +738,7 @@ local function StopPlayerCastbar(frame)
         if Manager.UnregisterCastbar then Manager.UnregisterCastbar(frame) end
         if frame.latencyBar then frame.latencyBar:Hide() end
         if frame.latencyText then frame.latencyText:Hide() end
-        if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
+        if frame.timeText then SetTextIfChanged(frame.timeText, "") end
         frame:Hide()
     end
     if frame.statusBar and frame.statusBar.SetValue then
@@ -822,11 +820,7 @@ local function ScheduleSoftResync(frame)
     end
     if not frame._msufSoftResyncPending then
         frame._msufSoftResyncPending = true
-        if type(RunNextFrame) == "function" then
-            RunNextFrame(frame._msufSoftResyncCB)
-        else
-            C_Timer.After(0, frame._msufSoftResyncCB)
-        end
+        RunNextFrame(frame._msufSoftResyncCB)
     end
 end
 
@@ -849,7 +843,7 @@ local function HidePlayerFrameIfNoLongerCasting(frame)
 
     DisableFrameOnUpdate(frame)
     ReleaseRuntimeActive(frame)
-    if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
+    if frame.timeText then SetTextIfChanged(frame.timeText, "") end
     if Manager.UnregisterCastbar then Manager.UnregisterCastbar(frame) end
     frame._msufActiveCastGUID = nil
     frame._msufActiveSpellID = nil
@@ -896,7 +890,7 @@ local function ShowInterruptFeedback(frame, label)
         DisableFrameOnUpdate(frame)
         ReleaseRuntimeActive(frame)
         frame.interruptFeedbackEndTime = nil
-        if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
+        if frame.timeText then SetTextIfChanged(frame.timeText, "") end
         if frame.statusBar and frame.statusBar.SetValue then frame.statusBar:SetValue(0) end
         frame:Hide()
         return
@@ -959,7 +953,7 @@ local function DisablePlayerCastbar(frame)
     ClearActiveCastIdentity(frame)
     frame._msufActiveCastUnit = nil
     ClearPendingPlayerInterrupt(frame)
-    if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
+    if frame.timeText then SetTextIfChanged(frame.timeText, "") end
     if frame.latencyBar then frame.latencyBar:Hide() end
     if frame.latencyText then frame.latencyText:Hide() end
     frame:Hide()

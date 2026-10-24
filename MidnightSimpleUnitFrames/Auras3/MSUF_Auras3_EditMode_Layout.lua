@@ -1,7 +1,8 @@
 --- Auras3/EditMode_Layout: shared anchor/grid geometry used by both dragging and preview rendering.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local Require = MSUF.Require
+local FILE = "Auras3/MSUF_Auras3_EditMode_Layout.lua"
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -11,7 +12,7 @@ A3.EditModeModules = A3.EditModeModules or {}
 A3.EditModeModules.Layout = function(config)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_min, math_max, math_ceil = math.min, math.max, math.ceil
-local UIParent = _G.UIParent
+local UIParent = UIParent
 local Clamp = config.Clamp
 local Round = config.Round
 local function GetFrame(unit)
@@ -45,7 +46,7 @@ local function ApplyGroupScaleForFrame(group, frame)
     return scale
 end
 
-local AnchorOffset = _G.MSUF_AuraAnchorOffset
+local AnchorOffset = Require("MSUF_AuraAnchorOffset", FILE)
 
 local function AnchorBase(anchor, frame)
     local w = frame and frame.GetWidth and frame:GetWidth() or 0
@@ -55,7 +56,7 @@ end
 
 
 
-local ButtonAnchor = _G.MSUF_AuraButtonAnchor
+local ButtonAnchor = Require("MSUF_AuraButtonAnchor", FILE)
 
 local function GrowthParts(growth, rowWrap)
     if growth == "LEFTUP" then return -1, 1, false, "BOTTOMRIGHT" end
@@ -105,7 +106,7 @@ end
 
 --- Inward offset from the lane's initial corner for the shared style padding,
 --- mirroring the runtime container's SetFlowLayoutPadding inset.
-local PaddingInset = _G.MSUF_AuraPaddingInset
+local PaddingInset = Require("MSUF_AuraPaddingInset", FILE)
 
 --- Shared icon style for a previewed lane: the compiled runtime style when the
 --- lane metrics carry one, otherwise the scope-resolved preview style. Bar-only

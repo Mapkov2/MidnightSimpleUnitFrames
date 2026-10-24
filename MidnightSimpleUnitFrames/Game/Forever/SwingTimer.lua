@@ -2,10 +2,10 @@
 -- Reference: upstream/forever Blizzard_SwingTimer and Blizzard_CustomAuraButton.
 local _, MSUF = ...
 if not (MSUF.Client and MSUF.Client.IsForever) then return end
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
+local FILE = "Game/Forever/SwingTimer.lua"
+local Require = MSUF.Require
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local issecretvalue = issecretvalue
 local Swing = {}
 MSUF.SwingTimer = Swing
 local HANDS = { "main", "off", "ranged" }
@@ -45,7 +45,9 @@ local NEXT_SWING_ORDER = { 78, 845, 6807, 2973 }
 local CUE_LABEL_LIMIT = 40
 local cueNames, cueIcons, cueLabelKeys, cueSpell, cueTitled = {}, {}, {}, nil, false
 local cueEventsBound, reachEventsBound, equippedOff, equippedRanged = false, false, nil, nil
-local Public = _G.issecretvalue and function(value) return not _G.issecretvalue(value) end or function() return true end
+local function Public(value)
+    return not (issecretvalue and issecretvalue(value))
+end
 -- UnitAttackSpeed is SecretWhenUnitStatsRestricted. A hand without a weapon
 -- answers nil; a secret speed is a returned speed, so its weapon is equipped.
 local function Equipped(speed)
@@ -73,14 +75,14 @@ local function Copy(value)
 end
 
 local function ProfileDB()
-    return _G.MSUF_DB
+    return MSUF_DB
 end
 local function DB()
     local db = ProfileDB()
     if type(db) ~= "table" then return nil end
     if type(db.swingTimers) ~= "table" then
         -- Migrate the previous native master switch once.
-        db.swingTimers = { enabled = (active and nativeEnabled or _G.GetCVarBool("showSwingTimer")) == true }
+        db.swingTimers = { enabled = (active and nativeEnabled or GetCVarBool("showSwingTimer")) == true }
     end
     local cfg = db.swingTimers
     for i = 1, #HANDS do
@@ -101,8 +103,8 @@ local function DB()
 end
 
 function Swing.IsAvailable()
-    return _G.Enum and _G.Enum.PlayerSwingType ~= nil
-        and _G.C_DurationUtil and type(_G.C_DurationUtil.CreateDurationTextBinding) == "function"
+    return Enum and Enum.PlayerSwingType ~= nil
+        and C_DurationUtil and type(C_DurationUtil.CreateDurationTextBinding) == "function"
 end
 function Swing.GetEnabled()
     local cfg = DB()
@@ -128,8 +130,8 @@ function Swing.ResolveTexture(key, fallback)
     end
     local texture = texturePaths[key]
     if texture then return texture end
-    local lsm = MSUF.LSM or _G.MSUF_LSM
-    return (lsm and lsm:Fetch("statusbar", key, true)) or fallback
+    local lsm = MSUF.LSM or Require("MSUF_LSM", FILE)
+    return lsm:Fetch("statusbar", key, true) or fallback
 end
 local function Stop(frame)
     frame.endsAt = nil
@@ -138,38 +140,44 @@ local function Stop(frame)
     frame.Time:SetText("0.0")
     frame.Bar:SetTimerDuration(frame.duration)
     frame.Bar:SetValue(0)
-    if frame.Lane then frame.Lane:SetTimerDuration(frame.duration); frame.Lane:SetValue(0) end
+    if frame.Lane then
+        frame.Lane:SetTimerDuration(frame.duration)
+        frame.Lane:SetValue(0)
+    end
 end
 local function BindTimer(frame)
     local cfg = frame.config
-    local direction = cfg.fill == "remaining" and _G.Enum.StatusBarTimerDirection.RemainingTime
-        or _G.Enum.StatusBarTimerDirection.ElapsedTime
+    local direction = cfg.fill == "remaining" and Enum.StatusBarTimerDirection.RemainingTime
+        or Enum.StatusBarTimerDirection.ElapsedTime
     if cfg.display == "bar" then
-        frame.Bar:SetTimerDuration(frame.duration, _G.Enum.StatusBarInterpolation.Immediate, direction)
+        frame.Bar:SetTimerDuration(frame.duration, Enum.StatusBarInterpolation.Immediate, direction)
     end
     if frame.Lane and frames.main.config.offhandLane and frames.main.config.display == "bar" then
         local main = frames.main.config
-        local laneDirection = main.fill == "remaining" and _G.Enum.StatusBarTimerDirection.RemainingTime
-            or _G.Enum.StatusBarTimerDirection.ElapsedTime
-        frame.Lane:SetTimerDuration(frame.duration, _G.Enum.StatusBarInterpolation.Immediate, laneDirection)
+        local laneDirection = main.fill == "remaining" and Enum.StatusBarTimerDirection.RemainingTime
+            or Enum.StatusBarTimerDirection.ElapsedTime
+        frame.Lane:SetTimerDuration(frame.duration, Enum.StatusBarInterpolation.Immediate, laneDirection)
     end
     frame.binding:SetDuration(frame.duration)
     frame.binding:SetEnabled((cfg.time or cfg.display == "text") and frame:IsShown())
 end
 local function Start(frame, duration)
-    if not duration or duration <= 0 then Stop(frame); return end
-    frame.endsAt = _G.GetTime() + duration
+    if not duration or duration <= 0 then
+        Stop(frame)
+        return
+    end
+    frame.endsAt = GetTime() + duration
     frame.duration:SetTimeFromEnd(frame.endsAt, duration)
     BindTimer(frame)
 end
 local function OnDragStart(frame)
-    if preview and not _G.InCombatLockdown() then frame:StartMoving() end
+    if preview and not InCombatLockdown() then frame:StartMoving() end
 end
 local function OnDragStop(frame)
     frame:StopMovingOrSizing()
     if not preview then return end
     local x, y = frame:GetCenter()
-    local parentX, parentY = _G.UIParent:GetCenter()
+    local parentX, parentY = UIParent:GetCenter()
     local scale = frame:GetScale()
     frame.config.x = math.floor(x * scale - parentX + 0.5)
     frame.config.y = math.floor(y * scale - parentY + 0.5)
@@ -181,7 +189,7 @@ local function OnDragStop(frame)
 end
 
 local function CreateSurface(frame)
-    local bar = PixelLayoutRegion(_G.CreateFrame("StatusBar", nil, frame))
+    local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
     bar:SetMinMaxValues(0, 1)
     bar.Background = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
     bar.Background:SetAllPoints()
@@ -210,8 +218,8 @@ end
 
 local function CreateBar(hand, parent)
     local sample = parent ~= nil
-    local frame = PixelLayoutRegion(_G.CreateFrame("Frame", not sample and "MSUF_SwingTimer_" .. hand or nil,
-        parent or _G.UIParent, "BackdropTemplate"))
+    local frame = PixelLayoutRegion(CreateFrame("Frame", not sample and "MSUF_SwingTimer_" .. hand or nil,
+        parent or UIParent, "BackdropTemplate"))
     frame.hand = hand
     if not sample then
         frame:SetMovable(true)
@@ -221,7 +229,7 @@ local function CreateBar(hand, parent)
         frame:SetScript("OnDragStop", OnDragStop)
     end
     frame.Bar = CreateSurface(frame)
-    frame.Text = PixelLayoutRegion(_G.CreateFrame("Frame", nil, frame))
+    frame.Text = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     frame.Text:SetAllPoints()
     frame.Text:SetFrameLevel(frame.Bar:GetFrameLevel() + 2)
     frame.Title = PixelLayoutRegion(frame.Text:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
@@ -238,24 +246,24 @@ local function CreateBar(hand, parent)
         end })
         return frame
     end
-    frame.duration = _G.C_DurationUtil.CreateDuration()
-    frame.binding = _G.C_DurationUtil.CreateDurationTextBinding()
+    frame.duration = C_DurationUtil.CreateDuration()
+    frame.binding = C_DurationUtil.CreateDurationTextBinding()
     frame.binding:SetFontString(frame.Time)
     frame.binding:SetUpdateInterval(0.1)
     frame.binding:SetExpiredText("0.0")
     frame.binding:SetZeroDurationText("0.0")
     if not formatter then
-        formatter = _G.C_StringUtil.CreateNumericRuleFormatter()
+        formatter = C_StringUtil.CreateNumericRuleFormatter()
         formatter:SetBreakpoints({ { threshold = 0, step = 0.1,
-            rounding = _G.Enum.NumericRuleFormatRounding.Nearest, format = "%.1f" } })
+            rounding = Enum.NumericRuleFormatRounding.Nearest, format = "%.1f" } })
     end
     frame.binding:SetTextFormat("{}", {
-        { property = _G.Enum.DurationTextBindingProperty.RemainingDuration, formatter = formatter },
+        { property = Enum.DurationTextBindingProperty.RemainingDuration, formatter = formatter },
     })
     Stop(frame)
     frame:Hide()
     frames[hand] = frame
-    byType[_G.Enum.PlayerSwingType[NAMES[hand]]] = frame
+    byType[Enum.PlayerSwingType[NAMES[hand]]] = frame
     return frame
 end
 
@@ -289,7 +297,7 @@ local function RestoreNative()
     end
 end
 local function SuppressNative()
-    if _G.GetCVarBool("showSwingTimer") then _G.SetCVar("showSwingTimer", "0") end
+    if GetCVarBool("showSwingTimer") then SetCVar("showSwingTimer", "0") end
     for i = 1, #HANDS do
         local frame = _G["SwingTimer" .. NAMES[HANDS[i]] .. "Frame"]
         if frame then
@@ -302,7 +310,7 @@ local function SuppressNative()
     end
 end
 local function RefreshVisibility()
-    local main, off, ranged = _G.UnitAttackSpeed("player")
+    local main, off, ranged = UnitAttackSpeed("player")
     equippedOff, equippedRanged = Equipped(off), Equipped(ranged)
     local listen = false
     for i = 1, #HANDS do
@@ -314,7 +322,7 @@ local function RefreshVisibility()
         frame.handlesSwings = cfg.enabled and equipped == true
         if frame.handlesSwings and not preview then listen = true end
         local shown = active and cfg.enabled and (preview or (equipped
-            and (cfg.visibility == "always" or _G.UnitAffectingCombat("player"))))
+            and (cfg.visibility == "always" or UnitAffectingCombat("player"))))
         -- The off-hand lane draws the off-hand timer inside the main-hand bar.
         local lane = frame.hand == "off" and frames.main.config.offhandLane == true
             and frames.main.config.display == "bar" and frames.main.handlesSwings == true
@@ -334,7 +342,7 @@ local function RefreshVisibility()
             end
             if frame.PreviewBar then frame.PreviewBar:SetValue(cfg.fill == "remaining" and 0.35 or 0.65) end
             frame.Time:SetText("1.2")
-        elseif frame.endsAt and frame.endsAt > _G.GetTime() then
+        elseif frame.endsAt and frame.endsAt > GetTime() then
             BindTimer(frame)
         else
             Stop(frame)
@@ -367,12 +375,12 @@ local function SyncRanges(force)
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
         local enabled = (active and frame.handlesSwings and frame.config.reachCheck and not preview) and true or false
-        local swingType = _G.Enum.PlayerSwingType[NAMES[frame.hand]]
+        local swingType = Enum.PlayerSwingType[NAMES[frame.hand]]
         if force or enabled ~= frame.rangeEnabled then
             frame.rangeEnabled = enabled
-            _G.C_SwingTimer.EnableRangeCheck(swingType, enabled)
+            C_SwingTimer.EnableRangeCheck(swingType, enabled)
         end
-        local range = enabled and _G.C_SwingTimer.IsTargetWithinSwingRange(swingType)
+        local range = enabled and C_SwingTimer.IsTargetWithinSwingRange(swingType)
         frame.outside = enabled and Public(range) and range == false or false
         PaintReach(frame)
     end
@@ -396,9 +404,9 @@ end
 -- Spell names and icons are static: read once per apply, never per event.
 local function ResolveCue()
     for i = #cueNames, 1, -1 do cueNames[i] = nil end
-    local _, class = _G.UnitClass("player")
+    local _, class = UnitClass("player")
     local list = NEXT_SWING[class]
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     if not (list and spellAPI and spellAPI.GetSpellName) then return end
     for i = 1, #list do
         local name = spellAPI.GetSpellName(list[i])
@@ -418,10 +426,13 @@ local function UpdateCue()
     local c = main.config
     local current
     if c.nextSwingCue and c.display == "bar" and not preview then
-        local isCurrent = _G.C_Spell.IsCurrentSpell
+        local isCurrent = C_Spell.IsCurrentSpell
         for i = 1, #cueNames do
             local answer = isCurrent(cueNames[i])
-            if Public(answer) and answer then current = cueNames[i]; break end
+            if Public(answer) and answer then
+                current = cueNames[i]
+                break
+            end
         end
     end
     if current == cueSpell then return end
@@ -495,7 +506,7 @@ local function StyleLane(main, off)
 end
 
 local function StyleFonts(frame, cfg)
-    local font = cfg.font ~= "" and cfg.font or (_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or _G.STANDARD_TEXT_FONT
+    local font = cfg.font ~= "" and cfg.font or Require("MSUF_GetFontPath", FILE)() or STANDARD_TEXT_FONT
     frame.Title:SetFont(font, cfg.fontSize, cfg.outline)
     frame.Time:SetFont(font, cfg.fontSize, cfg.outline)
     frame.Title:SetTextColor(unpack(cfg.textColor))
@@ -517,7 +528,7 @@ local function Style(frame, cfg, sample)
     frame:SetAlpha(cfg.opacity / 100)
     if not sample then
         frame:ClearAllPoints()
-        frame:SetPoint("CENTER", _G.UIParent, "CENTER", cfg.x / frame:GetScale(), cfg.y / frame:GetScale())
+        frame:SetPoint("CENTER", UIParent, "CENTER", cfg.x / frame:GetScale(), cfg.y / frame:GetScale())
     end
     local inset = math.min(cfg.borderSize, (cfg.height - 1) / 2, (cfg.width - 1) / 2)
     PixelLayoutRegion(frame, "SetBackdrop", cfg.display == "bar" and cfg.borderSize > 0 and {
@@ -586,9 +597,12 @@ local function OnEvent(_, event, a, b, c)
     elseif event == "PLAYER_LOGOUT" then
         -- Restore the account CVar before a reload as well as when disabling.
         active = false
-        _G.SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
+        SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
     elseif event == "CVAR_UPDATE" then
-        if active and a == "showSwingTimer" then SuppressNative(); SyncRanges(true) end
+        if active and a == "showSwingTimer" then
+            SuppressNative()
+            SyncRanges(true)
+        end
     elseif event == "ADDON_LOADED" then
         if a == "Blizzard_SwingTimer" then SuppressNative() end
     elseif event == "PLAYER_SWING_RANGE_UPDATE" then
@@ -604,7 +618,7 @@ local function OnEvent(_, event, a, b, c)
     elseif event == "UNIT_ATTACK_SPEED" then
         -- Haste procs change the speeds many times a minute; only equipping or
         -- removing an off-hand or ranged weapon changes which bars run.
-        local _, off, ranged = _G.UnitAttackSpeed("player")
+        local _, off, ranged = UnitAttackSpeed("player")
         if Equipped(off) ~= equippedOff or Equipped(ranged) ~= equippedRanged then
             RefreshVisibility()
             SyncRanges()
@@ -629,7 +643,7 @@ local function OnEvent(_, event, a, b, c)
             -- plain numbers only); the running swing keeps its timer.
             for i = 1, #HANDS do
                 local frame = frames[HANDS[i]]
-                if frame.endsAt and frame.endsAt > _G.GetTime() and Public(frame.speed) then
+                if frame.endsAt and frame.endsAt > GetTime() and Public(frame.speed) then
                     Start(frame, frame.speed)
                 end
             end
@@ -655,9 +669,9 @@ function Swing.Apply()
 end
 local function Enable()
     if active or not Swing.IsAvailable() then return end
-    nativeEnabled = _G.GetCVarBool("showSwingTimer")
+    nativeEnabled = GetCVarBool("showSwingTimer")
     active = true
-    if not driver then driver = _G.CreateFrame("Frame") end
+    if not driver then driver = CreateFrame("Frame") end
     driver:SetScript("OnEvent", OnEvent)
     driver:RegisterEvent("PLAYER_IN_COMBAT_CHANGED")
     driver:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -679,7 +693,7 @@ local function Disable()
         Stop(frame)
         frame:Hide()
         frame:EnableMouse(false)
-        if frame.rangeEnabled then _G.C_SwingTimer.EnableRangeCheck(_G.Enum.PlayerSwingType[NAMES[frame.hand]], false) end
+        if frame.rangeEnabled then C_SwingTimer.EnableRangeCheck(Enum.PlayerSwingType[NAMES[frame.hand]], false) end
         frame.rangeEnabled, frame.outside, frame.reachShown = false, false, nil
         if frame.Lane then frame.Lane:Hide() end
     end
@@ -688,11 +702,11 @@ local function Disable()
     -- Blizzard's CVar callback shows its bars and re-registers PLAYER_SWING;
     -- a bar muted in Edit Mode gets its alpha back first.
     RestoreNative()
-    _G.SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
+    SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
 end
 function Swing.SetEnabled(value)
     local cfg = DB()
-    if not cfg or _G.InCombatLockdown() then return false end
+    if not cfg or InCombatLockdown() then return false end
     cfg.enabled = value == true
     MSUF.MSUF_ApplyModules()
     return true
@@ -726,19 +740,23 @@ function Swing.Set(hand, key, value)
     return true
 end
 function Swing.SetPreview(value)
-    if value and (not active or _G.InCombatLockdown()) then return false end
+    if value and (not active or InCombatLockdown()) then return false end
     preview = value == true
     if preview then
         for i = 1, #HANDS do Stop(frames[HANDS[i]]) end
     end
-    if active then RefreshVisibility(); SyncRanges(); UpdateCue() end
+    if active then
+        RefreshVisibility()
+        SyncRanges()
+        UpdateCue()
+    end
     return true
 end
 function Swing.GetPreview() return preview == true end
 -- The next-swing attacks with a cue text, in menu order: spell ID, the
 -- client's spell name (nil when the client has none) and the setting key.
 function Swing.CueAttacks()
-    local list, spellAPI = {}, _G.C_Spell
+    local list, spellAPI = {}, C_Spell
     for i = 1, #NEXT_SWING_ORDER do
         local id = NEXT_SWING_ORDER[i]
         local name = spellAPI and spellAPI.GetSpellName and spellAPI.GetSpellName(id)
@@ -760,7 +778,7 @@ MSUF.MSUF_RegisterModule("SwingTimers", {
 -- once after PLAYER_LOGIN has bound the profile, also on /reload. Reuse the
 -- runtime driver; a disabled module drops this subscription immediately.
 if not active then
-    driver = driver or _G.CreateFrame("Frame")
+    driver = driver or CreateFrame("Frame")
     driver:RegisterEvent("PLAYER_ENTERING_WORLD")
     driver:SetScript("OnEvent", function(self)
         self:UnregisterEvent("PLAYER_ENTERING_WORLD")

@@ -7,7 +7,6 @@
 --- handles presentation; Containers/CustomSpells handle custom products;
 --- Filters/GroupFilters handle rules; Presets supplies curated menu choices.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
 local type, tostring = type, tostring
 local A3 = MSUF.MSUF_Auras3
@@ -191,7 +190,7 @@ function Model.Apply(unit, reason)
     end
     local normalizedScope = unit and NormalizeScope(unit) or "shared"
     local globalScope = (not unit) or normalizedScope == "shared" or IsGroupApplyScope(unit)
-    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true then
+    if type(InCombatLockdown) == "function" and InCombatLockdown() == true then
         if type(A3._QueueDeferredAuraRuntime) == "function" then
             return A3._QueueDeferredAuraRuntime(unit or "shared", reason, false)
         end
@@ -204,6 +203,9 @@ function Model.Apply(unit, reason)
             and type(A3.InvalidateGroupRuntimeConfig) == "function"
             and A3.InvalidateGroupRuntimeConfig(unit)
         if not scopedGroup and A3.BumpRuntimeConfig then A3.BumpRuntimeConfig() end
+        -- Icon skins painted outside the aura runtime follow an edit, undo or
+        -- reset of the default skin (Auras3/MSUF_Auras3_IconSkins_Host.lua).
+        if not scopedGroup and A3.IconSkins then A3.IconSkins.NotifyChanged("apply") end
     end
     local function RefreshGroup(scope)
         if A3.RequestUnit then
@@ -244,7 +246,8 @@ function Model.Apply(unit, reason)
     end
     if type(A3.NotifyPreview) == "function" then
         A3.NotifyPreview(reason, unit or normalizedScope)
-    elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh(reason)
+    else
+        local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+        if refreshPreview then refreshPreview(reason) end
     end
 end

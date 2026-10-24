@@ -297,7 +297,7 @@ local PAGE_OWNED = {
     { "opt_castbar", Words [[general.kickReadyTimeMarker general.kickReadyTimeSegment
         general.showGCDBar general.showGCDBarTime general.showGCDBarSpell general.gcdBarDetached general.gcdBarIdle
         general.gcdBarCombatOnly general.gcdBarWidth general.gcdBarHeight general.gcdBarX general.gcdBarY
-        general.gcdBarOpacity]] },
+        general.gcdBarOpacity general.focusKickIconShape]] },
     { "opt_bars", Words [[bars.powerBarTexture bars.powerBarBgTexture bars.roundedCornerStrength
         general.powerGradientStrength player.powerGradientStrength gf_party.powerGradientStrength
         bars.slantedBarsEnabled bars.slantedBarDirection bars.slantedUnitFrames bars.slantedGroupFrames
@@ -320,6 +320,8 @@ for _, scope in ipairs({ "player", "target", "targettarget", "focus", "focustarg
     paths[#paths + 1] = scope .. ".frameBarShape"
     paths[#paths + 1] = scope .. ".slantedBarDirection"
 end
+-- A unit page's reset covers its castbar's icon shape like the icon's other details.
+PAGE_OWNED[#PAGE_OWNED + 1] = { "uf_player", Words [[general.castbarPlayerIconShape]] }
 local covered = 0
 for _, row in ipairs(PAGE_OWNED) do
     local pageKey, paths = row[1], row[2]
@@ -339,8 +341,8 @@ for _, row in ipairs(PAGE_OWNED) do
         covered = covered + 1
     end
 end
-summary[#summary + 1] = string.format("%d named settings restored by the Fonts, Castbar, Bars, Class Resources and Miscellaneous resets",
-    covered)
+summary[#summary + 1] = string.format("%d named settings restored by the Fonts, Castbar, Bars, Class Resources,"
+    .. " Miscellaneous and Player resets", covered)
 -- Reset Miscellaneous now resets the group target highlight switches (and the
 -- number format group texts use), so it must repaint the group frames too.
 do

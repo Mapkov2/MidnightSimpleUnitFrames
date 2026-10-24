@@ -68,8 +68,7 @@ local function RestoreHidden(hidden)
     end
 end
 local function Suppress(target, record, keys)
-    -- Search adds its rounded layers after the first skin pass. Include their
-    -- identity in the cache so newly created, untinted artwork is hidden too.
+    -- Late artwork cache: docs/MENU_SKIN_BRIDGE.md.
     if record.suppressed and record.roundedFill == target._msuf2RoundedEditFill
         and record.roundedEdge == target._msuf2RoundedEditEdge then return end
     record.hidden = record.hidden or {}
@@ -92,7 +91,7 @@ local function Restore(target, record)
     if record.edge and record.edge[1] and target.SetBackdropBorderColor then target:SetBackdropBorderColor(unpack(record.edge)) end
     record.bg, record.edge, record.suppressed, record.skinned = nil, nil, nil, nil
     record.focused, record.roundedFill, record.roundedEdge = nil, nil, nil
-    -- Native painters cache previous writes; restoring a provider is a paint boundary.
+    -- Reset native painter caches.
     target._msuf2BackdropInfoApplied, target._msuf2BackdropR, target._msuf2BackdropBorderR = nil, nil, nil
     target._msuf2GlassApplied, target._msuf2SliderVisualReady = nil, nil
 end
@@ -122,7 +121,8 @@ function Skin.Surface(target, role, paint, a, b, rank)
     if not record or not active then return false end
     role = Role(role)
     if not record.skinned or record.role ~= role then
-        local ok, reason = client:SkinFrame(target, { role = role, activeRole = role == "input" and "navigationActive" or nil })
+        local ok, reason = client:SkinFrame(target, { role = role, activeRole = role == "input" and "navigationActive" or nil,
+            paletteMotion = true })
         if not ok or reason ~= "applied" then return false end
         record.skinned, record.role = true, role
     end
@@ -147,12 +147,10 @@ function Skin.Button(button, selected, hover, paint)
         or (button._msuf2Primary or button._msufUIPrimary) and "buttonPrimary"
         or nav and "navigation" or "button"
     if not record.skinned or record.role ~= role or record.nav ~= nav then
-        -- Menu2 T.Button (the only setter of _msuf2RawSetScript) builds plain
-        -- Buttons: no template, native state textures, Icon/Checked fields,
-        -- dropdown mixin or Blizzard-gold text, and its pages never add them.
+        -- Native button ownership: docs/MENU_SKIN_BRIDGE.md.
         local ok, reason = client:SkinButton(button, { role = role,
             activeRole = nav and "button" or role == "button" and "buttonPrimary" or role,
-            useControlShape = true, active = surfaceSelected, listItem = nav,
+            useControlShape = true, active = surfaceSelected, listItem = nav, paletteMotion = true,
             ownedArt = button._msuf2RawSetScript ~= nil })
         if not ok or reason ~= "applied" then return false end
         record.skinned, record.role, record.nav, record.selected = true, role, nav, surfaceSelected
@@ -221,6 +219,12 @@ function Skin.BindColors(colors)
     end
 end
 function Skin.IsActive() return active == true end
+function Skin.MotionReduced()
+    return active == true and (appearance.menuAnimations == false or appearance.reduceMotion == true)
+end
+function Skin.ScrollMotionReduced()
+    return active == true and (appearance.smoothScrolling == false or appearance.reduceMotion == true)
+end
 function Skin.Owns(target) return active == true and records[target] and records[target].skinned == true end
 
 local function Repaint(target, record)
@@ -230,7 +234,7 @@ end
 function Skin.Refresh(_, domain, key)
     if not api then return end
     if domain and domain ~= "ready" and domain ~= "profile" and domain ~= "color" and domain ~= "theme"
-        and domain ~= "appearance" and domain ~= "geometry" and domain ~= "windowAction"
+        and domain ~= "appearance" and domain ~= "geometry" and domain ~= "windowAction" and domain ~= "motion"
         and not (domain == "adapter" and key == "master") then return end
     if InCombatLockdown and InCombatLockdown() then
         Skin.pending = true
@@ -239,8 +243,12 @@ function Skin.Refresh(_, domain, key)
     end
     active = api:IsEnabled() and not (MSUF_DB and MSUF_DB.general and MSUF_DB.general.mapkoSkinMenus == false)
     appearance = api:GetAppearanceSnapshot()
+    if Skin.MotionReduced() then
+        local menu = MSUF.MSUF2
+        if menu and menu.Theme then menu.Theme.StopAllMenuAnimations() end
+    end
     for color, entry in pairs(palettes) do PaintPalette(color, entry) end
-    -- Release before native repaint, including a modern -> native glyph switch.
+    -- Release before repaint.
     if not active then client:ReleaseAll() end
     for _, hidden in pairs(groups) do RestoreHidden(hidden) end
     for target, record in pairs(records) do
@@ -260,11 +268,10 @@ function Skin.Refresh(_, domain, key)
     if events then events:UnregisterEvent("PLAYER_REGEN_ENABLED") end
 end
 
---- Refresh reads the profile opt-out: connect at login at the earliest;
---- profile binds refresh again (MSUF_InitProfiles, ProfileRuntime.Apply).
+-- Connect after login; refresh on profile binds.
 local function Connect()
     if not loginReached or api then return end
-    local provider = _G.MapkoSkin
+    local provider = MapkoSkin
     if provider and provider.migrationOnly then return end
     local candidate = provider and provider.GetAPI and provider.GetAPI(2, 1)
     if not candidate or type(hooksecurefunc) ~= "function" then return end

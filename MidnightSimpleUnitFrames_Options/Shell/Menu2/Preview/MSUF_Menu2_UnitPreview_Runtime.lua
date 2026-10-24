@@ -7,10 +7,11 @@
 --- renderer's existing fallbacks until the runtime publishes them.
 
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
+MSUF = MSUF or _G.MSUF
 local Runtime = MSUF.UFPreviewRuntime or {}
 MSUF.UFPreviewRuntime = Runtime
 local CoreFrame = MSUF.UF.GetFrame
+-- Drag, pan and zoom loops reach these readers every update: they stay inline, one call per helper, no wrappers.
 local function ClampRuntimeVisualScale(scale)
     scale = tonumber(scale)
     if not scale or scale <= 0 then return 1 end
@@ -26,6 +27,7 @@ local function ClampEffectiveScaleRatio(scale)
     return scale
 end
 local LiveCastbarFrame = MSUF.UFPreviewCastbar.RuntimeFrame
+local RUNTIME_UNIT = { boss = "boss1", arena = "arena1" }
 local function ScaledCenter(frame)
     if not (frame and frame.GetCenter and frame.GetEffectiveScale) then return nil end
     local x, y = frame:GetCenter()
@@ -48,21 +50,20 @@ local function PreviewUnitSupported(runtimeUnit)
     local supported = previewUnitSupported[runtimeUnit]
     if supported == nil then
         local client = MSUF.Client
-        supported = not (client and type(client.SupportsUnit) == "function") or client.SupportsUnit(runtimeUnit) == true
+        supported = not (client and client.SupportsUnit) or client.SupportsUnit(runtimeUnit) == true
         previewUnitSupported[runtimeUnit] = supported
     end
     return supported
 end
 function Runtime.SpecForPreviewKey(key)
-    local uf = MSUF and MSUF.UF
-    local config = uf and uf.Config
-    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
+    local config = MSUF.UF.Config
+    local runtimeUnit = RUNTIME_UNIT[key] or key
     if not runtimeUnit or not PreviewUnitSupported(runtimeUnit) then return nil end
     local specs = config and config.specs
     return type(specs) == "table" and specs[runtimeUnit] or nil
 end
 function Runtime.AppliedPortraitSizeForPreviewKey(key)
-    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
+    local runtimeUnit = RUNTIME_UNIT[key] or key
     local frame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
     local portrait = frame and frame.MSUFSpec and frame.MSUFSpec.portrait
     local holder = frame and frame.MSUFPortraitHolder
@@ -81,7 +82,7 @@ function Runtime.AppliedPortraitSizeForPreviewKey(key)
     return width, height
 end
 function Runtime.VisualScaleForPreviewKey(key, targetFrame)
-    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
+    local runtimeUnit = RUNTIME_UNIT[key] or key
     local frame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
     local runtimeEffective = frame and frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale())
     local targetEffective = targetFrame and targetFrame.GetEffectiveScale and tonumber(targetFrame:GetEffectiveScale())
@@ -90,17 +91,17 @@ function Runtime.VisualScaleForPreviewKey(key, targetFrame)
     end
     local scale = frame and frame.GetScale and tonumber(frame:GetScale())
     if scale and scale > 0 and targetEffective and targetEffective > 0 then
-        local uiEffective = _G.UIParent and _G.UIParent.GetEffectiveScale and tonumber(_G.UIParent:GetEffectiveScale())
+        local uiEffective = UIParent and UIParent.GetEffectiveScale and tonumber(UIParent:GetEffectiveScale())
         if uiEffective and uiEffective > 0 then
             return ClampEffectiveScaleRatio((scale * uiEffective) / targetEffective)
         end
     end
     if scale then return ClampRuntimeVisualScale(scale) end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local g = db and db.general
     scale = ClampRuntimeVisualScale(g and (g.msufUiScale or g.uiScale) or 1)
     if targetEffective and targetEffective > 0 then
-        local uiEffective = _G.UIParent and _G.UIParent.GetEffectiveScale and tonumber(_G.UIParent:GetEffectiveScale())
+        local uiEffective = UIParent and UIParent.GetEffectiveScale and tonumber(UIParent:GetEffectiveScale())
         if uiEffective and uiEffective > 0 then
             return ClampEffectiveScaleRatio((scale * uiEffective) / targetEffective)
         end
@@ -112,14 +113,14 @@ function Runtime.CastbarVisualScaleForPreviewKey(key, targetFrame)
     -- are independent UIParent frames. Read the live castbar's own effective
     -- scale so its castbar-local desired width is rendered at the same screen
     -- size as runtime instead of inheriting the unit-frame scale.
-    return EffectiveScaleRatio(LiveCastbarFrame(key) or _G.UIParent, targetFrame) or 1
+    return EffectiveScaleRatio(LiveCastbarFrame(key) or UIParent, targetFrame) or 1
 end
 function Runtime.DetachedCastbarOffsetForPreviewKey(key)
     -- Detached castbar offsets are UIParent-relative SavedVariables, while the
     -- Unit Preview canvas is unit-frame-relative. Project the already-applied
     -- live geometry into unit-frame coordinates so the preview mirrors the
     -- real relationship without rewriting the user's absolute position.
-    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
+    local runtimeUnit = RUNTIME_UNIT[key] or key
     local unitFrame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
     local castbar = LiveCastbarFrame(key)
     local unitX, unitY = ScaledCenter(unitFrame)

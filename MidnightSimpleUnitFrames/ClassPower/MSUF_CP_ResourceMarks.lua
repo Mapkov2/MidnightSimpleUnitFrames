@@ -411,7 +411,7 @@ function MSUF.CPBuilders.ResourceMarks(boundE)
     E = boundE
     views, active, overlays = {}, {}, {}
     events = CreateFrame("Frame")
-    local constants = _G.MSUF_CP_CONST
+    local constants = MSUF.Optional("MSUF_CP_CONST")
     local modes = constants and constants.CPK and constants.CPK.MODE
     SIGNED = modes and modes.SIGNED_CONTINUOUS
     pending = false

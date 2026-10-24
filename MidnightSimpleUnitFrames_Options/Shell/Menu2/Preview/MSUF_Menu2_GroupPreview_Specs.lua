@@ -1,14 +1,14 @@
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
-addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
-    or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
 -- Group preview spec data.
 -- Declarative mock layout maps, growth vectors, anchors, classes, and icon IDs for the Menu2
 -- preview renderer. Live group-frame specs remain in the GroupFrames runtime.
-local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+local addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
+    or "MidnightSimpleUnitFrames"
+local maskRoot = "Interface\\AddOns\\" .. addonName .. "\\Media\\Masks\\"
 M.GroupPreviewSpecs = {
     SECTION_PAGE = M.KeyLabelMap [[
 general=gf_layout

@@ -9,15 +9,18 @@
 --- Hooks are installed lazily on first toggle-on; no PLAYER_LOGIN frame needed.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
+local FILE = "Features/Diagnostics/MSUF_Feature_DebugPosition.lua"
+-- The flag is a namespace export (no published global), so it is read back
+-- from the same mirror ExportPublic writes.
+local PublicGlobals = MSUF.PublicGlobals
 
 ExportPublic("MSUF_DebugPositions", false)
 
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- overlay's OnUpdate disabled.
-local ONUPDATE_MODE_DISABLED = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.Disabled) or 0
-local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.RunWhenVisible) or 1
+local ONUPDATE_MODE_DISABLED = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.Disabled) or 0
+local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.RunWhenVisible) or 1
 
 --- ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -32,12 +35,21 @@ local function Fmt(n)
     return type(n) == "number" and string.format("%.1f", n) or tostring(n)
 end
 
+--- Cooldown-anchor providers, bound on the first overlay tick or log line so
+--- the overlay OnUpdate never repeats the lookup.
+local GetCooldownFrame, GetAnchorSize, GetAutomaticProvider, IsAnchorEnabled
+
+local function BindAnchorProviders()
+    GetCooldownFrame = Require("MSUF_GetEffectiveCooldownFrame", FILE)
+    GetAnchorSize = Require("MSUF_GetUsableCooldownAnchorSize", FILE)
+    GetAutomaticProvider = Require("MSUF_GetAutomaticCooldownAnchorProvider", FILE)
+    IsAnchorEnabled = Require("MSUF_IsCooldownAnchorEnabled", FILE)
+end
+
 local function GetECV()
-    local frame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function"
-        and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
-        or _G["EssentialCooldownViewer"]
-    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-    return type(getSize) == "function" and getSize(frame) ~= nil and frame or nil
+    if not GetCooldownFrame then BindAnchorProviders() end
+    local frame = GetCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer
+    return GetAnchorSize(frame) ~= nil and frame or nil
 end
 
 local function ECVLine()
@@ -60,27 +72,21 @@ local _overlay
 
 local function UpdateOverlay()
     --- guard: scheduled debug updates can run after toggle-off; bail instantly
-    if not _G.MSUF_DebugPositions then return end
+    if not PublicGlobals.MSUF_DebugPositions then return end
     if not _overlay then return end
     local l   = _overlay.lines
     local ecv = GetECV()
-    local g   = MSUF_DB and MSUF_DB.general
+    local db  = MSUF_DB
+    local g   = db and db.general
     local UF = MSUF and MSUF.UF
     local frames = UF and UF.frames
 
     l[1]:SetText("|cFFFFFF00MSUF Position Debug|r  Combat: "
-        .. (_G.MSUF_InCombat and "|cFFFF4444IN|r" or "|cFF44FF44OUT|r"))
+        .. (MSUF.PublicGlobals.MSUF_InCombat and "|cFFFF4444IN|r" or "|cFF44FF44OUT|r"))
 
-    local providerGetter = _G.MSUF_GetAutomaticCooldownAnchorProvider
-    local automaticProvider
-    if type(providerGetter) == "function" then
-        local _, providerLabel = providerGetter()
-        automaticProvider = providerLabel
-    end
-    local enabledGetter = _G.MSUF_IsCooldownAnchorEnabled
-    local cooldownEnabled = type(enabledGetter) == "function"
-        and enabledGetter(g) == true
-        or (type(_G.C_CooldownViewer) == "table" and g and g.anchorToCooldown == true)
+    local _, automaticProvider = GetAutomaticProvider()
+    local cooldownEnabled = IsAnchorEnabled(g) == true
+        or (type(C_CooldownViewer) == "table" and g and g.anchorToCooldown == true)
     local ancLabel = cooldownEnabled
         and ("|cFFFFAA00CooldownManager%s|r"):format(automaticProvider and (" (" .. automaticProvider .. ")") or "")
         or  "|cFFAAAAFF" .. tostring(g and g.anchorName or "UIParent") .. "|r"
@@ -108,7 +114,7 @@ local function UpdateOverlay()
         local li = l[3 + i]
         if frame then
             local cx, cy = frame:GetCenter()
-            local conf = MSUF_DB and MSUF_DB[frame.msufConfigKey or unit]
+            local conf = db and db[frame.msufConfigKey or unit]
             local ox = conf and conf.offsetX or "?"
             local oy = conf and conf.offsetY or "?"
             local snapAnchor = "UIParent"
@@ -185,7 +191,7 @@ end
 --- ── hooks (installed on demand, removed when debug turns off) ─────────────────
 
 local _hooksInstalled = false
-local _origMark, _origFlush, _origSnapshot
+local _origSnapshot
 local _combatFrame
 
 local function InstallHooks()
@@ -205,40 +211,18 @@ local function InstallHooks()
         Dbg(prefix .. "  " .. ECVLine())
     end)
 
-    --- CDMBridge: fires when size/show/point hooks detect a genuine anchor move or first usable anchor
-    _origMark = _G.MSUF_MarkExternalAnchorForReanchor
-    if _origMark then
-        local function DebugMarkExternalAnchorForReanchor(...)
-            Dbg("CDMBridge:MarkExternalAnchorForReanchor  " .. ECVLine())
-            return _origMark(...)
-        end
-        ExportPublic("MSUF_MarkExternalAnchorForReanchor", DebugMarkExternalAnchorForReanchor)
-    end
-
-    --- Flush: runs out-of-combat after a reanchor was queued
-    _origFlush = _G.MSUF_FlushCDMBridgeRefresh
-    if _origFlush then
-        local function DebugFlushCDMBridgeRefresh(...)
-            Dbg("CDMBridge:FlushCDMBridgeRefresh  " .. ECVLine())
-            return _origFlush(...)
-        end
-        ExportPublic("MSUF_FlushCDMBridgeRefresh", DebugFlushCDMBridgeRefresh)
-    end
-
     --- Snapshot: read resulting SetPoint data after the call
-    _origSnapshot = _G.MSUF_SnapshotFrameToUIParentCenter
-    if _origSnapshot then
-        local function DebugSnapshotFrameToUIParentCenter(frame, ...)
-            local result = _origSnapshot(frame, ...)
-            if result and frame and frame.GetPoint then
-                local _, _, _, px, py = frame:GetPoint(1)
-                Dbg("Snapshot " .. ((frame.GetName and frame:GetName()) or "?")
-                    .. " -> UIParent CENTER (" .. tostring(px) .. "," .. tostring(py) .. ")")
-            end
-            return result
+    _origSnapshot = Require("MSUF_SnapshotFrameToUIParentCenter", FILE)
+    local function DebugSnapshotFrameToUIParentCenter(frame, ...)
+        local result = _origSnapshot(frame, ...)
+        if result and frame and frame.GetPoint then
+            local _, _, _, px, py = frame:GetPoint(1)
+            Dbg("Snapshot " .. ((frame.GetName and frame:GetName()) or "?")
+                .. " -> UIParent CENTER (" .. tostring(px) .. "," .. tostring(py) .. ")")
         end
-        ExportPublic("MSUF_SnapshotFrameToUIParentCenter", DebugSnapshotFrameToUIParentCenter)
+        return result
     end
+    ExportPublic("MSUF_SnapshotFrameToUIParentCenter", DebugSnapshotFrameToUIParentCenter)
 end
 
 local function RemoveHooks()
@@ -249,16 +233,17 @@ local function RemoveHooks()
         _combatFrame:UnregisterAllEvents()
     end
 
-    if _origMark     then ExportPublic("MSUF_MarkExternalAnchorForReanchor", _origMark)    ; _origMark     = nil end
-    if _origFlush    then ExportPublic("MSUF_FlushCDMBridgeRefresh", _origFlush)            ; _origFlush    = nil end
-    if _origSnapshot then ExportPublic("MSUF_SnapshotFrameToUIParentCenter", _origSnapshot) ; _origSnapshot = nil end
+    if _origSnapshot then
+        ExportPublic("MSUF_SnapshotFrameToUIParentCenter", _origSnapshot)
+        _origSnapshot = nil
+    end
 end
 
 --- ── toggle ───────────────────────────────────────────────────────────────────
 
 local function DebugPositionsToggle()
-    ExportPublic("MSUF_DebugPositions", not _G.MSUF_DebugPositions)
-    if _G.MSUF_DebugPositions then
+    ExportPublic("MSUF_DebugPositions", not PublicGlobals.MSUF_DebugPositions)
+    if PublicGlobals.MSUF_DebugPositions then
         InstallHooks()
         CreateOverlay()
         if _overlay then _overlay:Show() end
@@ -277,7 +262,7 @@ ExportPublic("MSUF_DebugPositions_Toggle", DebugPositionsToggle)
 
 SLASH_MSUFDBGPOS1 = "/msufdbgpos"
 SlashCmdList["MSUFDBGPOS"] = function()
-    _G.MSUF_DebugPositions_Toggle()
+    DebugPositionsToggle()
 end
 --- This file is excluded from the shipped TOC, so the registration keeps
 --- /msuf help honest: the command is listed only where it actually exists.

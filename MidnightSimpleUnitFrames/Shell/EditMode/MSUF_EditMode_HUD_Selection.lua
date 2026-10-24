@@ -6,8 +6,9 @@ local _, MSUF = ...
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_HUD_Selection.lua"
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
+local PublicGlobals = MSUF.PublicGlobals
 
 local HUD = EM2.HUD
 local Selection = {}
@@ -18,28 +19,44 @@ local U = EM2.Util or {}
 local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe
 local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
 
+-- The cooldown anchor integration loads after Edit Mode. HUD.RefreshControls
+-- reads both getters at 20 Hz while a frame is dragged, so they are resolved
+-- once per HUD session (HUD.Show) and read from this table.
+local CooldownGetters = {}
+
+function HUD.ResolveCooldownGetters()
+    CooldownGetters.provider = MSUF.Require("MSUF_GetAutomaticCooldownAnchorProvider", CALLER)
+    CooldownGetters.enabled = MSUF.Require("MSUF_IsCooldownAnchorEnabled", CALLER)
+end
+
 function HUD.AutomaticCooldownProvider()
-    local getter = _G.MSUF_GetAutomaticCooldownAnchorProvider
-    if type(getter) ~= "function" then return nil, nil end
+    local getter = CooldownGetters.provider
+    if getter == nil then
+        HUD.ResolveCooldownGetters()
+        getter = CooldownGetters.provider
+    end
     return getter()
 end
 
 --- Clients without a Cooldown Manager never get the toolbar toggle: it would
 --- write a preference that no anchor can consume.
-HUD.CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
+HUD.CooldownAnchorSupported = MSUF.Require("MSUF_CooldownAnchorSupported", CALLER)
 
---- The Integrations module answers first; without it the client model does. The
---- C_CooldownViewer namespace is never the signal: the shared engine exposes it
---- on every client, while only the Mainline family ships Blizzard's Cooldown
---- Manager (Client.HostsCooldownManager).
+--- The Integrations module answers; a client without cooldown anchor support
+--- reads as off there.
 function HUD.CooldownAnchorEnabled(general)
-    local getter = _G.MSUF_IsCooldownAnchorEnabled
-    if type(getter) == "function" then return getter(general) == true end
-    return MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
-        and general and general.anchorToCooldown == true or false
+    local getter = CooldownGetters.enabled
+    if getter == nil then
+        HUD.ResolveCooldownGetters()
+        getter = CooldownGetters.enabled
+    end
+    return getter(general) == true
 end
 
-local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, pettarget = true, boss = true, arena = true }
+local UNIT_KEYS = {
+    player = true, target = true, focus = true, focustarget = true, targettarget = true,
+    pet = true, pettarget = true, boss = true, arena = true,
+}
 
 local GROUP_KEY_TO_KIND = {
     gf_party = "party",
@@ -83,7 +100,7 @@ local COMPONENT_LABEL = {
 }
 
 local function CurrentSelectionKey()
-    local key = (EM2.State and EM2.State.GetUnitKey and EM2.State.GetUnitKey()) or _G.MSUF_CurrentEditUnitKey
+    local key = (EM2.State and EM2.State.GetUnitKey and EM2.State.GetUnitKey()) or PublicGlobals.MSUF_CurrentEditUnitKey
     if not key and EM2.Focus and EM2.Focus.GetSelection then
         key = EM2.Focus.GetSelection()
     end
@@ -93,7 +110,7 @@ end
 local function CurrentFocusSelection()
     local auraPopup = EM2.AuraPopup
     if auraPopup and type(auraPopup.IsOpen) == "function" and auraPopup.IsOpen() then
-        local unit = rawget(_G, "MSUF_EM2_ActiveAuraUnit")
+        local unit = PublicGlobals.MSUF_EM2_ActiveAuraUnit
         if type(unit) == "string" then
             local key = (unit:match("^boss%d+$") and "boss") or (unit:match("^arena%d+$") and "arena") or unit
             if UNIT_KEYS[key] then return key, "auras", nil end
@@ -114,8 +131,8 @@ end
 
 local function AuraSelectionFrame(key, component)
     if component ~= "auras" then return nil end
-    local unit = rawget(_G, "MSUF_EM2_ActiveAuraUnit")
-    local kind = rawget(_G, "MSUF_EM2_ActiveAuraGroup")
+    local unit = PublicGlobals.MSUF_EM2_ActiveAuraUnit
+    local kind = PublicGlobals.MSUF_EM2_ActiveAuraGroup
     if type(unit) ~= "string" or type(kind) ~= "string" then return nil end
     local selectionUnit = (unit:match("^boss%d+$") and "boss") or (unit:match("^arena%d+$") and "arena") or unit
     if selectionUnit ~= key then return nil end
@@ -136,7 +153,7 @@ local function SelectionValues(key, component, slot)
         end
         return HelpText(cfg.label or key)
     end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local conf
     local groupKind = GROUP_KEY_TO_KIND[key]
     if groupKind then
@@ -201,8 +218,8 @@ function HUD.OpenSelectedSettings()
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(key, component, slot, { source = "hud-settings", openSettings = true })
     end
-    local opener = (EM2.Focus and EM2.Focus.OpenFullSettings) or _G.MSUF_EM2_OpenFocusSettings
-    if type(opener) == "function" and opener() then
+    local opener = (EM2.Focus and EM2.Focus.OpenFullSettings) or MSUF.Require("MSUF_EM2_OpenFocusSettings", CALLER)
+    if opener() then
         HUD.SetStatus(HelpText("Opened settings"), "ok")
     else
         HUD.SetStatus(HelpText("Settings unavailable"), "warn")
@@ -242,10 +259,10 @@ function HUD.ResetCurrentPosition()
         HUD.SetStatus(HelpText("Reset unavailable"), "warn")
         return
     end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local conf = db and db[key]
     if not conf then return end
-    _G.MSUF_EM_UndoBeforeChange("unit", key)
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("unit", key)
     local defaultX, defaultY = MSUF.Require("MSUF_GetDefaultUnitOffsets", CALLER)(key)
     conf.offsetX = defaultX
     conf.offsetY = defaultY

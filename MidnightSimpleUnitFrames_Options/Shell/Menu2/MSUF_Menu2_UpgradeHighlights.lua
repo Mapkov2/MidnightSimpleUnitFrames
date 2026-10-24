@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Interactive, non-destructive release highlights for existing profiles.
 -- Lifecycle and release data live in State/MSUF_UpgradeHighlights.lua.
 local _, MSUF = ...
@@ -7,7 +6,9 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
-local CreateFrame = _G.CreateFrame
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua")
+local ExportPublic = MSUF.ExportPublic
+local CreateFrame = CreateFrame
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -106,12 +107,12 @@ local function ApplyTargetRoute(item)
     if type(route.accordion) == "string" and route.accordion ~= "" then
         local pageKey, sectionId = route.accordion:match("^([^:]+):(.+)$")
         if pageKey and sectionId then
-            _G.MSUF_EM2_MenuFocusRequest = {
+            ExportPublic("MSUF_EM2_MenuFocusRequest", {
                 pageKey = pageKey,
                 sectionId = sectionId,
                 explicit = true,
                 consumed = false,
-            }
+            })
         end
     end
 end
@@ -126,7 +127,7 @@ local function OpenPage(item)
     -- A refused page change (combat) must not leave the focus request armed, or
     -- it fires at the next unrelated navigation.
     if M.SelectPage(pageKey or "home") == false then
-        _G.MSUF_EM2_MenuFocusRequest = nil
+        ExportPublic("MSUF_EM2_MenuFocusRequest", nil)
     end
 end
 
@@ -181,6 +182,61 @@ local function Button(parent, T, releaseKey, suffix, label, x, y, width, onClick
     return button
 end
 
+--- Font string anchored at (x, y) from `point` of its parent, wrapped to `width` when given.
+local function Text(parent, T, template, text, color, point, x, y, width, justify)
+    local fs = T.Font(parent, template, text, color)
+    fs:SetPoint(point, parent, point, x, y)
+    if width then SetTextLayout(fs, width, justify) end
+    return fs
+end
+
+--- Click handler: run a lifecycle step on the controller, then rebuild Home.
+local function HomeAction(method)
+    return function()
+        local controller = Controller()
+        controller[method](controller)
+        RefreshHome()
+    end
+end
+
+--- Centres one or two action buttons under the scene (stacked when compact). Each spec is
+--- { suffix, label, onClick, role, help }; `widths` are the compact cap and the wide width.
+--- Returns the y of the last button row.
+local function ButtonRow(scene, T, releaseKey, top, compact, contentWidth, widths, first, second)
+    local sceneWidth, gap = scene:GetWidth(), 12
+    local function Make(spec, x, y, width)
+        Button(scene, T, releaseKey, spec[1], spec[2], x, y, width, spec[3], spec[4], spec[5])
+    end
+    if compact then
+        local width = min(widths[1], contentWidth)
+        local x = floor((sceneWidth - width) / 2)
+        if first then
+            Make(first, x, top, width)
+            top = top - 36
+        end
+        Make(second, x, top, width)
+        return top
+    end
+    local width = widths[2]
+    local x
+    if first then
+        x = floor((sceneWidth - (width * 2) - gap) / 2)
+        Make(first, x, top, width)
+        x = x + width + gap
+    else
+        x = floor((sceneWidth - width) / 2)
+    end
+    Make(second, x, top, width)
+    return top
+end
+
+--- Sizes the scene to its last element and tells the page about its content height.
+local function FinishScene(ctx, scene, sceneTop, lastTop, pad)
+    local height = math.abs(lastTop) + pad
+    scene:SetHeight(height)
+    ctx:SetContentHeight(height + math.abs(sceneTop) + 24)
+end
+
 local function CreateIconWell(parent, T, navKey, size, x, y)
     local well = T.Panel(parent, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
     well:SetSize(size, size)
@@ -221,18 +277,10 @@ local function CreateScene(ctx, T)
 end
 
 local function Header(scene, T, releaseKey, title, copy, contentWidth)
-    local kicker = T.Font(scene, "GameFontDisableSmall", "", T.colors.coreHot or T.colors.accent)
+    local kicker = Text(scene, T, "GameFontDisableSmall", "", T.colors.coreHot or T.colors.accent, "TOP", 0, -32, contentWidth, "CENTER")
     T.SetTranslatedText(kicker, format(Tr("UPGRADED TO MSUF %s"), releaseKey))
-    kicker:SetPoint("TOP", scene, "TOP", 0, -32)
-    SetTextLayout(kicker, contentWidth, "CENTER")
-
-    local heading = T.Font(scene, "GameFontNormalHuge", title, T.colors.title or T.colors.text)
-    heading:SetPoint("TOP", scene, "TOP", 0, -64)
-    SetTextLayout(heading, contentWidth, "CENTER")
-
-    local body = T.Font(scene, "GameFontHighlight", copy, T.colors.muted)
-    body:SetPoint("TOP", scene, "TOP", 0, -106)
-    SetTextLayout(body, min(680, contentWidth), "CENTER")
+    Text(scene, T, "GameFontNormalHuge", title, T.colors.title or T.colors.text, "TOP", 0, -64, contentWidth, "CENTER")
+    Text(scene, T, "GameFontHighlight", copy, T.colors.muted, "TOP", 0, -106, min(680, contentWidth), "CENTER")
 end
 
 local function SummaryRow(parent, T, item, number, x, y, width, compact)
@@ -243,15 +291,10 @@ local function SummaryRow(parent, T, item, number, x, y, width, compact)
     if type(T.ApplySurface) == "function" then T.ApplySurface(row, "card") end
 
     CreateIconWell(row, T, item.icon, 32, 10, -8)
-    local numberText = T.Font(row, "GameFontDisableSmall", format("%02d", number), T.colors.coreHot or T.colors.accent)
-    numberText:SetPoint("TOPLEFT", row, "TOPLEFT", 52, -8)
-    local title = T.Font(row, "GameFontHighlight", item.title, T.colors.text)
-    title:SetPoint("TOPLEFT", row, "TOPLEFT", 78, -8)
-    SetTextLayout(title, width - 90, "LEFT")
+    Text(row, T, "GameFontDisableSmall", format("%02d", number), T.colors.coreHot or T.colors.accent, "TOPLEFT", 52, -8)
+    Text(row, T, "GameFontHighlight", item.title, T.colors.text, "TOPLEFT", 78, -8, width - 90, "LEFT")
     if not compact then
-        local copy = T.Font(row, "GameFontDisableSmall", item.summary, T.colors.dim)
-        copy:SetPoint("TOPLEFT", row, "TOPLEFT", 80, -28)
-        SetTextLayout(copy, width - 90, "LEFT")
+        Text(row, T, "GameFontDisableSmall", item.summary, T.colors.dim, "TOPLEFT", 80, -28, width - 90, "LEFT")
     end
     return height
 end
@@ -272,14 +315,13 @@ local function BuildLanding(ctx, scene, T, releaseKey, spec, record, contentWidt
         format(Tr("Your current profile stays unchanged. Review %d new highlights and choose only what you want to configure."), count),
         contentWidth)
 
-    local profile = tostring(_G.MSUF_ActiveProfile or "Default")
+    local profile = tostring(MSUF_ActiveProfile or "Default")
     -- Highlight cards now host live controls, so the old absolute promise
     -- ("no settings will be changed") would be a lie the moment someone uses
     -- one. The tour still never writes a value on its own.
-    local safety = T.Font(scene, "GameFontDisableSmall",
-        format(Tr("CURRENT PROFILE: %s - NOTHING CHANGES UNTIL YOU CHANGE IT"), profile), T.colors.ok or T.colors.coreHot)
-    safety:SetPoint("TOP", scene, "TOP", 0, -154)
-    SetTextLayout(safety, contentWidth, "CENTER")
+    Text(scene, T, "GameFontDisableSmall",
+        format(Tr("CURRENT PROFILE: %s - NOTHING CHANGES UNTIL YOU CHANGE IT"), profile), T.colors.ok or T.colors.coreHot,
+        "TOP", 0, -154, contentWidth, "CENTER")
 
     local listTop = -188
     local gap = 8
@@ -289,35 +331,17 @@ local function BuildLanding(ctx, scene, T, releaseKey, spec, record, contentWidt
             listTop - ((i - 1) * (rowHeight + gap)), contentWidth, compact)
     end
 
-    local buttonsTop = listTop - (count * rowHeight) - ((count - 1) * gap) - 20
-    if compact then
-        local buttonWidth = min(260, contentWidth)
-        local x = floor((scene:GetWidth() - buttonWidth) / 2)
-        Button(scene, T, releaseKey, "start", format(Tr("Start %d-highlight tour"), count), x, buttonsTop, buttonWidth,
-            function() Controller():Start(); RefreshHome() end, "primary",
-            "Review the release highlights without changing your current profile.")
-        Button(scene, T, releaseKey, "skip_request", "Continue with current profile", x, buttonsTop - 36, buttonWidth,
-            function() Controller():RequestSkip(); RefreshHome() end, nil,
-            "Review exactly what you would skip before closing the tour.")
-        buttonsTop = buttonsTop - 36
-    else
-        local primaryWidth, secondaryWidth, gapWidth = 212, 212, 12
-        local x = floor((scene:GetWidth() - primaryWidth - secondaryWidth - gapWidth) / 2)
-        Button(scene, T, releaseKey, "start", format(Tr("Start %d-highlight tour"), count), x, buttonsTop, primaryWidth,
-            function() Controller():Start(); RefreshHome() end, "primary",
-            "Review the release highlights without changing your current profile.")
-        Button(scene, T, releaseKey, "skip_request", "Continue with current profile", x + primaryWidth + gapWidth, buttonsTop, secondaryWidth,
-            function() Controller():RequestSkip(); RefreshHome() end, nil,
-            "Review exactly what you would skip before closing the tour.")
-    end
+    local buttonsTop = ButtonRow(scene, T, releaseKey, listTop - (count * rowHeight) - ((count - 1) * gap) - 20, compact, contentWidth,
+        { 260, 212 },
+        { "start", format(Tr("Start %d-highlight tour"), count), HomeAction("Start"), "primary",
+            "Review the release highlights without changing your current profile." },
+        { "skip_request", "Continue with current profile", HomeAction("RequestSkip"), nil,
+            "Review exactly what you would skip before closing the tour." })
 
     local hintTop = buttonsTop - 44
-    local hint = T.Font(scene, "GameFontDisableSmall", "About two minutes. You can leave at any point and configure each area later.", T.colors.dim)
-    hint:SetPoint("TOP", scene, "TOP", 0, hintTop)
-    SetTextLayout(hint, contentWidth, "CENTER")
-    local height = math.abs(hintTop) + 36
-    scene:SetHeight(height)
-    ctx:SetContentHeight(height + math.abs(sceneTop) + 24)
+    Text(scene, T, "GameFontDisableSmall", "About two minutes. You can leave at any point and configure each area later.", T.colors.dim,
+        "TOP", 0, hintTop, contentWidth, "CENTER")
+    FinishScene(ctx, scene, sceneTop, hintTop, 36)
 end
 
 local function Progress(scene, T, count, current, contentWidth, top)
@@ -345,8 +369,7 @@ local function BuildLayerDummyPreview(card, T, x, width)
 
     local half = floor(width / 2)
     local accent = T.colors.coreHot or T.colors.accent
-    local label = T.Font(panel, "GameFontDisableSmall", "Layer (0-30)", T.colors.muted)
-    label:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
+    Text(panel, T, "GameFontDisableSmall", "Layer (0-30)", T.colors.muted, "TOPLEFT", 14, -12)
 
     local trackWidth = max(56, half - 58)
     local track = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK", nil, 1))
@@ -370,15 +393,12 @@ local function BuildLayerDummyPreview(card, T, x, width)
     value:SetPoint("LEFT", track, "RIGHT", 10, 0)
 
     local overviewX = half + 12
-    local overviewTitle = T.Font(panel, "GameFontDisableSmall", "Layer Overview", T.colors.muted)
-    overviewTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX, -12)
+    Text(panel, T, "GameFontDisableSmall", "Layer Overview", T.colors.muted, "TOPLEFT", overviewX, -12)
     local rows = { { "18", "Text" }, { "12", "Auras" }, { "5", "Border" } }
     for i = 1, #rows do
         local y = -28 - ((i - 1) * 15)
-        local num = T.Font(panel, "GameFontHighlightSmall", rows[i][1], accent)
-        num:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX, y)
-        local name = T.Font(panel, "GameFontHighlightSmall", rows[i][2], T.colors.text)
-        name:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX + 26, y)
+        Text(panel, T, "GameFontHighlightSmall", rows[i][1], accent, "TOPLEFT", overviewX, y)
+        Text(panel, T, "GameFontHighlightSmall", rows[i][2], T.colors.text, "TOPLEFT", overviewX + 26, y)
     end
     return panel
 end
@@ -390,9 +410,7 @@ end
 local function BuildTourControls(ctx, card, T, spec, x, y, width)
     local rows = spec.rows()
     if type(rows) ~= "table" or #rows == 0 then return false end
-    local hint = T.Font(card, "GameFontDisableSmall", "TRY IT RIGHT HERE", T.colors.coreHot or T.colors.accent)
-    hint:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
-    SetTextLayout(hint, width, "LEFT")
+    Text(card, T, "GameFontDisableSmall", "TRY IT RIGHT HERE", T.colors.coreHot or T.colors.accent, "TOPLEFT", x, y, width, "LEFT")
     local result = M.Widgets.SettingsRows(ctx, card, {
         x = x,
         y = y - TOUR_CONTROLS_LABEL_HEIGHT,
@@ -437,19 +455,10 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     CreateIconWell(card, T, item.icon, compact and 44 or 52, 20, -20)
 
     local titleTop = compact and -80 or -24
-    local title = T.Font(card, "GameFontNormalLarge", item.title, T.colors.title or T.colors.text)
-    title:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop)
-    SetTextLayout(title, textWidth, "LEFT")
-
-    local summary = T.Font(card, "GameFontHighlight", item.summary, T.colors.muted)
-    summary:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 40)
-    SetTextLayout(summary, textWidth, "LEFT")
-
-    local why = T.Font(card, "GameFontDisableSmall", "WHY IT MATTERS", T.colors.coreHot or T.colors.accent)
-    why:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 104)
-    local impact = T.Font(card, "GameFontHighlight", item.impact, T.colors.text)
-    impact:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 124)
-    SetTextLayout(impact, textWidth, "LEFT")
+    Text(card, T, "GameFontNormalLarge", item.title, T.colors.title or T.colors.text, "TOPLEFT", textX, titleTop, textWidth, "LEFT")
+    Text(card, T, "GameFontHighlight", item.summary, T.colors.muted, "TOPLEFT", textX, titleTop - 40, textWidth, "LEFT")
+    Text(card, T, "GameFontDisableSmall", "WHY IT MATTERS", T.colors.coreHot or T.colors.accent, "TOPLEFT", textX, titleTop - 104)
+    Text(card, T, "GameFontHighlight", item.impact, T.colors.text, "TOPLEFT", textX, titleTop - 124, textWidth, "LEFT")
     if hasLayerPreview then
         BuildLayerDummyPreview(card, T, textX, textWidth)
     end
@@ -462,8 +471,6 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
         BuildTourControls(ctx, card, T, controlsSpec, textX, controlsTop, textWidth)
     end
 
-    local buttonsTop = cardTop - cardHeight - 20
-    local buttonY = buttonsTop
     local function ConfigureCurrent()
         Controller():Advance("opened")
         OpenPage(item)
@@ -485,51 +492,24 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     -- Linkless cards (inline dummy preview instead of a route) offer only the
     -- review flow, so "Next" takes over the primary role there.
     local nextLabel = index == count and "Finish tour" or "Next highlight"
-    local selectedValue1
-    if not (item.action) then selectedValue1 = "primary" end
-    local nextRole = selectedValue1
     local function AdvanceReviewed()
         Controller():Advance("reviewed")
         RefreshHome()
     end
-    if compact then
-        local w = min(250, contentWidth)
-        local x = floor((scene:GetWidth() - w) / 2)
-        if item.action then
-            Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
-                ConfigureCurrent, "primary", item.impact)
-            buttonY = buttonY - 36
-        end
-        Button(scene, T, releaseKey, "next_" .. item.id, nextLabel, x, buttonY, w,
-            AdvanceReviewed, nextRole, "Mark this highlight as reviewed and continue.")
-    else
-        local w, gap = 172, 12
-        local x
-        if item.action then
-            x = floor((scene:GetWidth() - (w * 2) - gap) / 2)
-            Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
-                ConfigureCurrent, "primary", item.impact)
-            x = x + w + gap
-        else
-            x = floor((scene:GetWidth() - w) / 2)
-        end
-        Button(scene, T, releaseKey, "next_" .. item.id, nextLabel, x, buttonY, w,
-            AdvanceReviewed, nextRole, "Mark this highlight as reviewed and continue.")
-    end
+    local buttonY = ButtonRow(scene, T, releaseKey, cardTop - cardHeight - 20, compact, contentWidth, { 250, 172 },
+        item.action and { "configure_" .. item.id, item.action, ConfigureCurrent, "primary", item.impact } or nil,
+        { "next_" .. item.id, nextLabel, AdvanceReviewed, (not item.action) and "primary" or nil,
+            "Mark this highlight as reviewed and continue." })
 
     local utilityTop = buttonY - 44
     local backWidth, skipWidth = 92, 104
     local utilityX = floor((scene:GetWidth() - backWidth - skipWidth - 12) / 2)
-    local back = Button(scene, T, releaseKey, "back", "Back", utilityX, utilityTop, backWidth,
-        function() Controller():Back(); RefreshHome() end, nil)
+    local back = Button(scene, T, releaseKey, "back", "Back", utilityX, utilityTop, backWidth, HomeAction("Back"), nil)
     if index <= 1 and type(back.Disable) == "function" then back:Disable() end
     Button(scene, T, releaseKey, "skip_request", "Skip tour", utilityX + backWidth + 12, utilityTop, skipWidth,
-        function() Controller():RequestSkip(); RefreshHome() end, nil,
-        "See the remaining highlights before deciding to skip them.")
+        HomeAction("RequestSkip"), nil, "See the remaining highlights before deciding to skip them.")
 
-    local height = math.abs(utilityTop) + 48
-    scene:SetHeight(height)
-    ctx:SetContentHeight(height + math.abs(sceneTop) + 24)
+    FinishScene(ctx, scene, sceneTop, utilityTop, 48)
 end
 
 local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
@@ -547,38 +527,19 @@ local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, content
         row:SetPoint("TOPLEFT", scene, "TOPLEFT", floor((scene:GetWidth() - contentWidth) / 2), listTop - ((i - 1) * (rowHeight + gap)))
         row:SetSize(contentWidth, rowHeight)
         if type(T.ApplySurface) == "function" then T.ApplySurface(row, "card") end
-        local marker = T.Font(row, "GameFontHighlight", format("%d.", i), T.colors.coreHot or T.colors.accent)
-        marker:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -12)
-        local text = T.Font(row, "GameFontHighlight", item.missed, T.colors.text)
-        text:SetPoint("TOPLEFT", row, "TOPLEFT", 40, -12)
-        SetTextLayout(text, contentWidth - 52, "LEFT")
+        Text(row, T, "GameFontHighlight", format("%d.", i), T.colors.coreHot or T.colors.accent, "TOPLEFT", 12, -12)
+        Text(row, T, "GameFontHighlight", item.missed, T.colors.text, "TOPLEFT", 40, -12, contentWidth - 52, "LEFT")
     end
 
-    local buttonsTop = listTop - (count * rowHeight) - (max(0, count - 1) * gap) - 24
-    if compact then
-        local w = min(270, contentWidth)
-        local x = floor((scene:GetWidth() - w) / 2)
-        Button(scene, T, releaseKey, "cancel_skip", "Show me the highlights", x, buttonsTop, w,
-            function() Controller():CancelSkip(); RefreshHome() end, "primary")
-        Button(scene, T, releaseKey, "confirm_skip", format(Tr("Skip all %d and continue"), count), x, buttonsTop - 36, w,
-            function() Controller():ConfirmSkip(); RefreshHome() end, "secondary")
-        buttonsTop = buttonsTop - 36
-    else
-        local w, gapWidth = 212, 12
-        local x = floor((scene:GetWidth() - (w * 2) - gapWidth) / 2)
-        Button(scene, T, releaseKey, "cancel_skip", "Show me the highlights", x, buttonsTop, w,
-            function() Controller():CancelSkip(); RefreshHome() end, "primary")
-        Button(scene, T, releaseKey, "confirm_skip", format(Tr("Skip all %d and continue"), count), x + w + gapWidth, buttonsTop, w,
-            function() Controller():ConfirmSkip(); RefreshHome() end, "secondary")
-    end
+    local buttonsTop = ButtonRow(scene, T, releaseKey, listTop - (count * rowHeight) - (max(0, count - 1) * gap) - 24, compact,
+        contentWidth, { 270, 212 },
+        { "cancel_skip", "Show me the highlights", HomeAction("CancelSkip"), "primary" },
+        { "confirm_skip", format(Tr("Skip all %d and continue"), count), HomeAction("ConfirmSkip"), "secondary" })
 
     local noteTop = buttonsTop - 44
-    local note = T.Font(scene, "GameFontDisableSmall", "Skipping closes this release tour only. Every setting remains available in Menu2.", T.colors.dim)
-    note:SetPoint("TOP", scene, "TOP", 0, noteTop)
-    SetTextLayout(note, contentWidth, "CENTER")
-    local height = math.abs(noteTop) + 36
-    scene:SetHeight(height)
-    ctx:SetContentHeight(height + math.abs(sceneTop) + 24)
+    Text(scene, T, "GameFontDisableSmall", "Skipping closes this release tour only. Every setting remains available in Menu2.", T.colors.dim,
+        "TOP", 0, noteTop, contentWidth, "CENTER")
+    FinishScene(ctx, scene, sceneTop, noteTop, 36)
 end
 
 function M.BuildUpgradeHighlightDashboardScene(ctx)

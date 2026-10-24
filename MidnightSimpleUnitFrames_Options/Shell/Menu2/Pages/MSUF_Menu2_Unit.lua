@@ -1,13 +1,14 @@
 local MSUF = select(2, ...)
 MSUF = MSUF or {}
-local Preview = MSUF.Require("MSUF", "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua").UF.Preview
+local SELF = "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"
+local Preview = MSUF.Require("MSUF", SELF).UF.Preview
 local previewKind = type(Preview)
 assert(previewKind == "table",
   "MSUF: missing required dependency 'UF.Preview' required by Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
 local validateKind = type(Preview.Validate)
 assert(validateKind == "function",
   "MSUF: missing required dependency 'UF.Preview.Validate' required by Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
-Preview.Validate("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
+Preview.Validate(SELF)
 local SetArenaPage = Preview.SetArenaPage
 local SetBossPage = Preview.SetBossPage
 local previewState = Preview.State
@@ -21,7 +22,7 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua", {
     "MSUF_ApplyBossUnitframePreviewState",
     "MSUF_ApplyArenaUnitframePreviewState",
 })
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 
 -- Menu2 Unit page definitions.
 -- Declares per-unit page metadata, value lists, copy categories, and shared control constants.
@@ -67,13 +68,13 @@ local function DropUnsupportedUnits(units)
     return units
 end
 UNIT_PAGES = DropUnsupportedUnits(UNIT_PAGES)
-local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
+local CanDetachUnitPowerBar = MSUF.Require("MSUF_CanDetachUnitPowerBar", SELF)
 -- Built in a function: a loop here would keep its control variables as
 -- main-chunk locals (the chunk has a local budget).
 local POWER_UNITS = (function()
     local units = {}
     for _, page in pairs(UNIT_PAGES) do
-        if type(CanDetachUnitPowerBar) ~= "function" or CanDetachUnitPowerBar(page.unit) then
+        if CanDetachUnitPowerBar(page.unit) then
             units[page.unit] = true
         end
     end
@@ -86,51 +87,40 @@ local function AppendCombinedFields(list, lead, prefixes, suffixes)
     end
     return list
 end
-local CASTBAR_FIELDS = {
-    -- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
-    -- place where unit pages translate a unit key into the correct castbar field names.
-    player = {
-        stylePrefix = "castbarPlayer", enable = "enablePlayerCastbar", backend = "castbarPlayerBackend",
-        providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime",
-        icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName",
-        timeFormat = "castbarPlayerTimeFormat", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight",
-        match = "castbarPlayerMatchWidth", detached = "castbarPlayerDetached",
-        offsetX = "castbarPlayerOffsetX", offsetY = "castbarPlayerOffsetY",
-    },
-    target = {
-        stylePrefix = "castbarTarget", enable = "enableTargetCastbar", backend = "castbarTargetBackend",
-        providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime",
-        icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName",
-        targetName = "castbarTargetShowTargetName", timeFormat = "castbarTargetTimeFormat",
-        w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", match = "castbarTargetMatchWidth",
-        detached = "castbarTargetDetached", offsetX = "castbarTargetOffsetX", offsetY = "castbarTargetOffsetY",
-    },
-    focus = {
-        stylePrefix = "castbarFocus", enable = "enableFocusCastbar", backend = "castbarFocusBackend",
-        providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime",
-        icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName",
-        targetName = "castbarFocusShowTargetName", timeFormat = "castbarFocusTimeFormat",
-        w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", match = "castbarFocusMatchWidth",
-        detached = "castbarFocusDetached", offsetX = "castbarFocusOffsetX", offsetY = "castbarFocusOffsetY",
-    },
-    boss = {
-        stylePrefix = "bossCast", enable = "enableBossCastbar", backend = "bossCastbarBackend",
-        providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime",
-        icon = "showBossCastIcon", text = "showBossCastName", targetName = "showBossCastTargetName",
-        timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight",
-        match = "bossCastbarMatchWidth", detached = "bossCastbarDetached",
-        offsetX = "bossCastbarOffsetX", offsetY = "bossCastbarOffsetY",
-    },
-    arena = {
-        stylePrefix = "arenaCast", enable = "enableArenaCastbar", backend = "arenaCastbarBackend",
-        providerMemory = "arenaCastbarBackendBeforeHide", time = "showArenaCastTime",
-        icon = "showArenaCastIcon", text = "showArenaCastName", targetName = "showArenaCastTargetName",
-        timeFormat = "arenaCastTimeFormat", w = "arenaCastbarWidth", h = "arenaCastbarHeight",
-        match = "arenaCastbarMatchWidth", detached = "arenaCastbarDetached",
-        offsetX = "arenaCastbarOffsetX", offsetY = "arenaCastbarOffsetY",
-    },
-}
-local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
+-- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
+-- place where unit pages translate a unit key into the correct castbar field names.
+-- Player, Target and Focus castbars share one key pattern ("castbarTargetBarWidth"), Boss
+-- and Arena another ("bossCastbarWidth"); $U is the capitalized unit, $u the unit key.
+-- The Player castbar has no target-name key.
+local CASTBAR_FIELDS = (function()
+    local patterns = {
+        { units = "player target focus", stylePrefix = "castbar$U", enable = "enable$UCastbar",
+            backend = "castbar$UBackend", providerMemory = "castbar$UBackendBeforeHide", time = "show$UCastTime",
+            icon = "castbar$UShowIcon", text = "castbar$UShowSpellName", targetName = "castbar$UShowTargetName",
+            timeFormat = "castbar$UTimeFormat", w = "castbar$UBarWidth", h = "castbar$UBarHeight",
+            match = "castbar$UMatchWidth", detached = "castbar$UDetached", offsetX = "castbar$UOffsetX",
+            offsetY = "castbar$UOffsetY" },
+        { units = "boss arena", stylePrefix = "$uCast", enable = "enable$UCastbar", backend = "$uCastbarBackend",
+            providerMemory = "$uCastbarBackendBeforeHide", time = "show$UCastTime", icon = "show$UCastIcon",
+            text = "show$UCastName", targetName = "show$UCastTargetName", timeFormat = "$uCastTimeFormat",
+            w = "$uCastbarWidth", h = "$uCastbarHeight", match = "$uCastbarMatchWidth",
+            detached = "$uCastbarDetached", offsetX = "$uCastbarOffsetX", offsetY = "$uCastbarOffsetY" },
+    }
+    local fields = {}
+    for _, pattern in ipairs(patterns) do
+        for _, unit in ipairs(WL(pattern.units)) do
+            local capitalized = unit:sub(1, 1):upper() .. unit:sub(2)
+            local entry = {}
+            for field, template in pairs(pattern) do
+                if field ~= "units" then entry[field] = template:gsub("%$U", capitalized):gsub("%$u", unit) end
+            end
+            if unit == "player" then entry.targetName = nil end
+            fields[unit] = entry
+        end
+    end
+    return fields
+end)()
+local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconShape IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
 --- OffsetX/OffsetY mean two different things depending on the detach state: anchored
 --- to the unit frame they are a relative gap and safe to copy, detached they are an
 --- absolute UIParent position (see MSUF_CastbarAnchors) and copying them would stack
@@ -163,78 +153,119 @@ local COMBAT_SYMBOLS = VTP "DEFAULT=Default|weapon_axes_crossed=Axes|weapon_bows
 local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_blizzard_animated=Blizzard animated Zzz|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz"
 local RESS_SYMBOLS = VTP "DEFAULT=Default|resurrection_ankh=Ankh|resurrection_cross=Cross|resurrection_soul=Soul|resurrection_wings=Angelic Wings"
 local DEFAULT_SYMBOLS = VT("DEFAULT", "Default")
-local function StatusIconPackValues()
-    local fn = _G.MSUF_GetStatusIconPackValues
-    if type(fn) == "function" then return fn(false) end
-    return VTP "BLIZZARD=Blizzard (Default)|CLASSIC=Classic|MIDNIGHT=Midnight|UXPRO=UX Pro|GLOSSY_ORBS=Glossy Orbs|DARK_EMBOSS=Dark Emboss|GLASS_PANELS=Glass Panels|NEON_OUTLINE=Neon Outline|RING_SYMBOLS=Ring Symbols|DOTS=Dots|SHAPES=Shapes|DIAMONDS=Diamonds|SQUARES=Squares"
+local UnitPage = M.UnitPage or {}
+M.UnitPage = UnitPage
+-- The icon pack list is rebuilt on every status refresh: resolve its provider once.
+local packValuesFn
+function UnitPage.StatusIconPackValues()
+    packValuesFn = packValuesFn or MSUF.Require("MSUF_GetStatusIconPackValues", SELF)
+    return packValuesFn(false)
 end
-local function StatusControl(value, text, show, defaultShow, size, defaultSize, anchor, defaultAnchor, anchors, x, defaultX, y, defaultY, layer, defaultLayer, refresh, extra)
+local function StatusControl(value, text, show, defaultShow, prefix, defaultSize, defaultAnchor, anchors, defaultX, defaultY, defaultLayer, refresh, extra)
     local spec = {
         value = value, text = text, show = show, defaultShow = defaultShow,
-        size = size, defaultSize = defaultSize, anchor = anchor, defaultAnchor = defaultAnchor, anchors = anchors,
-        x = x, defaultX = defaultX, y = y, defaultY = defaultY, layer = layer, defaultLayer = defaultLayer,
+        size = prefix .. "Size", defaultSize = defaultSize, anchor = prefix .. "Anchor", defaultAnchor = defaultAnchor, anchors = anchors,
+        x = prefix .. "OffsetX", defaultX = defaultX, y = prefix .. "OffsetY", defaultY = defaultY,
+        layer = prefix .. "Layer", defaultLayer = defaultLayer,
         refresh = refresh,
     }
     if extra then for k, v in pairs(extra) do spec[k] = v end end
     return spec
 end
 local STATUS_CONTROLS = {
-    StatusControl("leader", "Leader Icon", "showLeaderIcon", true, "leaderIconSize", 14, "leaderIconAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "leaderIconOffsetX", 0, "leaderIconOffsetY", 3, "leaderIconLayer", 7, "MSUF_RefreshLeaderIconFrames", { allowed = function(unit) return unit == "player" or unit == "target" end, iconStyle = "leaderIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "leaderIconCustomIcon" }),
-    StatusControl("assist", "Assist Icon", "showLeaderIcon", true, "leaderIconSize", 14, "leaderIconAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "leaderIconOffsetX", 0, "leaderIconOffsetY", 3, "leaderIconLayer", 7, "MSUF_RefreshLeaderIconFrames", { allowed = function(unit) return unit == "player" or unit == "target" end, iconStyle = "assistIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "assistIconCustomIcon" }),
-    StatusControl("raidmarker", "Raid Marker", "showRaidMarker", true, "raidMarkerSize", 18, "raidMarkerAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "raidMarkerOffsetX", 16, "raidMarkerOffsetY", 3, "raidMarkerLayer", 7, "MSUF_RefreshRaidMarkerFrames", { iconStyle = "raidMarkerIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "raidMarkerCustomIcon" }),
-    StatusControl("level", "Level Text", "showLevelIndicator", true, "levelIndicatorSize", 14, "levelIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS,
-        "levelIndicatorOffsetX", 0, "levelIndicatorOffsetY", 0, "levelIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames",
+    StatusControl("leader", "Leader Icon", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", STATUS_CORNER_ANCHORS, 0, 3, 7,
+        "MSUF_RefreshLeaderIconFrames",
+        { allowed = function(unit) return unit == "player" or unit == "target" end, iconStyle = "leaderIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "leaderIconCustomIcon" }),
+    StatusControl("assist", "Assist Icon", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", STATUS_CORNER_ANCHORS, 0, 3, 7,
+        "MSUF_RefreshLeaderIconFrames",
+        { allowed = function(unit) return unit == "player" or unit == "target" end, iconStyle = "assistIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "assistIconCustomIcon" }),
+    StatusControl("raidmarker", "Raid Marker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", STATUS_CORNER_ANCHORS, 16, 3, 7,
+        "MSUF_RefreshRaidMarkerFrames", { iconStyle = "raidMarkerIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "raidMarkerCustomIcon" }),
+    StatusControl("level", "Level Text", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", STATUS_LEVEL_ANCHORS, 0, 0, 7,
+        "MSUF_RefreshIdentityTextFrames",
         { textIndicator = true, colorPrefix = "levelIndicator" }),
-    StatusControl("bossNumber", "Boss Number", "showBossNumberIndicator", false, "bossNumberIndicatorSize", 14, "bossNumberIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "bossNumberIndicatorOffsetX", 4, "bossNumberIndicatorOffsetY", -4, "bossNumberIndicatorLayer", 7, "MSUF_RefreshStatusIndicators", { allowed = function(unit) return unit == "boss" end, textIndicator = true, colorPrefix = "bossNumberIndicator" }),
-    StatusControl("raceText", "Race Text", "showRaceIndicator", false, "raceIndicatorSize", 14, "raceIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS,
-        "raceIndicatorOffsetX", 0, "raceIndicatorOffsetY", 0, "raceIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames",
+    StatusControl("bossNumber", "Boss Number", "showBossNumberIndicator", false, "bossNumberIndicator", 14, "TOPLEFT", STATUS_CORNER_ANCHORS, 4, -4, 7,
+        "MSUF_RefreshStatusIndicators", { allowed = function(unit) return unit == "boss" end, textIndicator = true, colorPrefix = "bossNumberIndicator" }),
+    StatusControl("raceText", "Race Text", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", STATUS_LEVEL_ANCHORS, 0, 0, 7,
+        "MSUF_RefreshIdentityTextFrames",
         { textIndicator = true, colorPrefix = "raceIndicator" }),
-    StatusControl("classText", "Class Text", "showClassTextIndicator", false, "classTextIndicatorSize", 14, "classTextIndicatorAnchor", "NAMERIGHT",
-        STATUS_LEVEL_ANCHORS, "classTextIndicatorOffsetX", 0, "classTextIndicatorOffsetY", 0, "classTextIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames",
+    StatusControl("classText", "Class Text", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", STATUS_LEVEL_ANCHORS, 0, 0, 7,
+        "MSUF_RefreshIdentityTextFrames",
         { textIndicator = true, colorPrefix = "classTextIndicator" }),
-    StatusControl("raidgroupname", "Raid Group", "showRaidGroupInName", false, "raidGroupNameSize", 14, "raidGroupNameAnchor", "NAMERIGHT", RAID_GROUP_NAME_ANCHORS, "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, "MSUF_RefreshRaidGroupNameFrames", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget" or unit == "focus" end, inlineName = true, legacyLayer = "nameTextLayer", colorPrefix = "raidGroupName", copyProps = "show size anchor x y layer", copyExtra = WL("raidGroupNameStyle") }),
-    StatusControl("eliteicon", "Elite / Rare", "showEliteIcon", true, "eliteIconSize", 20, "eliteIconAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "eliteIconOffsetX", 2, "eliteIconOffsetY", 2, "eliteIconLayer", 7, "MSUF_RefreshEliteIconFrames", { allowed = function(unit) return unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget" or unit == "boss" end, iconStyle = "eliteIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "eliteIconCustomIcon" }),
-    StatusControl("statusText", "Dead / Offline Text", "statusDeadTextEnabled", true, "statusTextSize", 16, "statusTextAnchor", "CENTER", STATUS_CORNER_ANCHORS,
-        "statusTextOffsetX", 0, "statusTextOffsetY", 0, "statusTextLayer", 7, "MSUF_RequestStatusTextRefresh",
+    StatusControl("raidgroupname", "Raid Group", "showRaidGroupInName", false, "raidGroupName", 14, "NAMERIGHT", RAID_GROUP_NAME_ANCHORS, 3, 0, 5,
+        "MSUF_RefreshRaidGroupNameFrames",
+        { allowed = function(unit) return unit == "player" or unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget"
+        or unit == "focus" end, inlineName = true, legacyLayer = "nameTextLayer", colorPrefix = "raidGroupName", copyProps = "show size anchor x y layer",
+        copyExtra = WL("raidGroupNameStyle") }),
+    StatusControl("eliteicon", "Elite / Rare", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", STATUS_CORNER_ANCHORS, 2, 2, 7,
+        "MSUF_RefreshEliteIconFrames",
+        { allowed = function(unit) return unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget"
+        or unit == "boss" end, iconStyle = "eliteIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "eliteIconCustomIcon" }),
+    StatusControl("statusText", "Dead / Offline Text", "statusDeadTextEnabled", true, "statusText", 16, "CENTER", STATUS_CORNER_ANCHORS, 0, 0, 7,
+        "MSUF_RequestStatusTextRefresh",
         { statusRuntime = true, statusTextState = "DEAD", colorPrefix = "statusText", legacyShow = "statusTextEnabled", legacyState = "showDead" }),
-    StatusControl("statusGhostText", "Ghost Text", "statusGhostTextEnabled", true, "statusGhostTextSize", 16, "statusGhostTextAnchor", "CENTER",
-        STATUS_CORNER_ANCHORS, "statusGhostTextOffsetX", 0, "statusGhostTextOffsetY", 0, "statusGhostTextLayer", 7, "MSUF_RequestStatusTextRefresh",
+    StatusControl("statusGhostText", "Ghost Text", "statusGhostTextEnabled", true, "statusGhostText", 16, "CENTER", STATUS_CORNER_ANCHORS, 0, 0, 7,
+        "MSUF_RequestStatusTextRefresh",
         { statusRuntime = true, statusTextState = "GHOST", colorPrefix = "statusGhostText", legacyShow = "statusTextEnabled", legacyState = "showGhost",
         legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY",
         legacyLayer = "statusTextLayer" }),
-    StatusControl("statusAFKText", "AFK Text", "statusAFKTextEnabled", false, "statusAFKTextSize", 16, "statusAFKTextAnchor", "CENTER", STATUS_CORNER_ANCHORS,
-        "statusAFKTextOffsetX", 0, "statusAFKTextOffsetY", 0, "statusAFKTextLayer", 7, "MSUF_RequestStatusTextRefresh",
+    StatusControl("statusAFKText", "AFK Text", "statusAFKTextEnabled", false, "statusAFKText", 16, "CENTER", STATUS_CORNER_ANCHORS, 0, 0, 7,
+        "MSUF_RequestStatusTextRefresh",
         { statusRuntime = true, statusTextState = "AFK", colorPrefix = "statusAFKText", legacyShow = "statusTextEnabled", legacyState = "showAFK",
         legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY",
         legacyLayer = "statusTextLayer" }),
-    StatusControl("statusAFKTimer", "AFK Timer", "statusAFKTimerEnabled", false, "statusAFKTimerSize", 12, "statusAFKTimerAnchor", "CENTER",
-        STATUS_CORNER_ANCHORS, "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY", -14, "statusAFKTimerLayer", 7, "MSUF_RequestStatusTextRefresh",
+    StatusControl("statusAFKTimer", "AFK Timer", "statusAFKTimerEnabled", false, "statusAFKTimer", 12, "CENTER", STATUS_CORNER_ANCHORS, 0, -14, 7,
+        "MSUF_RequestStatusTextRefresh",
         { statusRuntime = true, statusTextState = "AFKTIMER", colorPrefix = "statusAFKTimer" }),
-    StatusControl("statusDNDText", "DND Text", "statusDNDTextEnabled", false, "statusDNDTextSize", 16, "statusDNDTextAnchor", "CENTER", STATUS_CORNER_ANCHORS,
-        "statusDNDTextOffsetX", 0, "statusDNDTextOffsetY", 0, "statusDNDTextLayer", 7, "MSUF_RequestStatusTextRefresh",
+    StatusControl("statusDNDText", "DND Text", "statusDNDTextEnabled", false, "statusDNDText", 16, "CENTER", STATUS_CORNER_ANCHORS, 0, 0, 7,
+        "MSUF_RequestStatusTextRefresh",
         { statusRuntime = true, statusTextState = "DND", colorPrefix = "statusDNDText", legacyShow = "statusTextEnabled", legacyState = "showDND",
         legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY",
         legacyLayer = "statusTextLayer" }),
-    StatusControl("statusCombat", "Combat", "showCombatStateIndicator", true, "combatStateIndicatorSize", 18, "combatStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "combatStateIndicatorOffsetX", 0, "combatStateIndicatorOffsetY", 0, "combatStateIndicatorLayer", 7, "MSUF_RequestStatusCombatIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "combatStateIndicatorSymbol", symbols = COMBAT_SYMBOLS, statusRuntime = true, iconStyle = "combatStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "combatStateIndicatorCustomIcon" }),
-    StatusControl("statusResting", "Rested (player only)", "showRestingIndicator", true, "restedStateIndicatorSize", 39, "restedStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "restedStateIndicatorOffsetX", -40, "restedStateIndicatorOffsetY", 50, "restedStateIndicatorLayer", 25, "MSUF_RequestStatusRestingIndicatorRefresh", { allowed = function(unit) return unit == "player" end, symbol = "restedStateIndicatorSymbol", symbols = RESTED_SYMBOLS, statusRuntime = true, iconStyle = "restedStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "restedStateIndicatorCustomIcon" }),
-    StatusControl("statusIncomingRes", "Incoming Rez", "showIncomingResIndicator", true, "incomingResIndicatorSize", 18, "incomingResIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "incomingResIndicatorOffsetX", 0, "incomingResIndicatorOffsetY", 0, "incomingResIndicatorLayer", 7, "MSUF_RequestStatusIncomingResIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "incomingResIndicatorSymbol", symbols = RESS_SYMBOLS, statusRuntime = true, iconStyle = "incomingResIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "incomingResIndicatorCustomIcon" }),
-    StatusControl("stance", "Stance", "showStanceIndicator", false, "stanceIndicatorSize", 12, "stanceIndicatorAnchor", "TOP", STATUS_LEVEL_ANCHORS, "stanceIndicatorOffsetX", 0, "stanceIndicatorOffsetY", -2, "stanceIndicatorLayer", 7, "MSUF_RequestStatusIconsRefreshForCurrent", { allowed = function(unit) return unit == "player" end, statusRuntime = true, textIndicator = true, colorPrefix = "stanceIndicator" }),
-    StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7, "MSUF_RequestStatusPvpIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "pvpIndicatorCustomIcon" }),
+    StatusControl("statusCombat", "Combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", STATUS_CORNER_ANCHORS, 0, 0, 7,
+        "MSUF_RequestStatusCombatIndicatorRefresh",
+        { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "combatStateIndicatorSymbol", symbols = COMBAT_SYMBOLS,
+        statusRuntime = true, iconStyle = "combatStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "combatStateIndicatorCustomIcon" }),
+    StatusControl("statusResting", "Rested (player only)", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", STATUS_CORNER_ANCHORS, -40,
+        50, 25, "MSUF_RequestStatusRestingIndicatorRefresh",
+        { allowed = function(unit) return unit == "player" end, symbol = "restedStateIndicatorSymbol", symbols = RESTED_SYMBOLS, statusRuntime = true,
+        iconStyle = "restedStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "restedStateIndicatorCustomIcon" }),
+    StatusControl("statusIncomingRes", "Incoming Rez", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", STATUS_CORNER_ANCHORS, 0, 0,
+        7, "MSUF_RequestStatusIncomingResIndicatorRefresh",
+        { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "incomingResIndicatorSymbol", symbols = RESS_SYMBOLS,
+        statusRuntime = true, iconStyle = "incomingResIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "incomingResIndicatorCustomIcon" }),
+    StatusControl("stance", "Stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", STATUS_LEVEL_ANCHORS, 0, -2, 7,
+        "MSUF_RequestStatusIconsRefreshForCurrent",
+        { allowed = function(unit) return unit == "player" end, statusRuntime = true, textIndicator = true, colorPrefix = "stanceIndicator" }),
+    StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", STATUS_CORNER_ANCHORS, 0, 0, 7,
+        "MSUF_RequestStatusPvpIndicatorRefresh",
+        { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget"
+        or unit == "pettarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "pvpIndicatorCustomIcon" }),
 }
 -- Hunter pet happiness exists again on WoW Forever, Classic Era and TBC, which
 -- all load this page. Midnight and Mists have none, so the control is only
 -- added where the client supports it.
 if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
-    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetHappiness", "Pet Happiness", "showPetHappinessIndicator", true, "petHappinessIndicatorSize", 24, "petHappinessIndicatorAnchor", "RIGHT", STATUS_CORNER_ANCHORS, "petHappinessIndicatorOffsetX", -7, "petHappinessIndicatorOffsetY", -4, "petHappinessIndicatorLayer", 7, "MSUF_RequestPetHappinessIndicatorRefresh", { allowed = function(unit) return unit == "pet" end, statusRuntime = true })
+    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetHappiness", "Pet Happiness", "showPetHappinessIndicator", true, "petHappinessIndicator",
+        24, "RIGHT", STATUS_CORNER_ANCHORS, -7, -4, 7, "MSUF_RequestPetHappinessIndicatorRefresh",
+        { allowed = function(unit) return unit == "pet" end, statusRuntime = true })
 end
 if MSUF.Client ~= nil and MSUF.Client.IsClassic == true then
-    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetXP", "Pet XP Bar", "showPetXPBar", true, "petXPBarSize", 8, "petXPBarAnchor", "BOTTOM", STATUS_CORNER_ANCHORS, "petXPBarOffsetX", 0, "petXPBarOffsetY", -5, "petXPBarLayer", 7, "MSUF_RequestPetXPBarRefresh", { allowed = function(unit) return unit == "pet" end, statusRuntime = true, width = "petXPBarWidth", defaultWidth = 80 })
+    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetXP", "Pet XP Bar", "showPetXPBar", true, "petXPBar", 8, "BOTTOM", STATUS_CORNER_ANCHORS,
+        0, -5, 7, "MSUF_RequestPetXPBarRefresh",
+        { allowed = function(unit) return unit == "pet" end, statusRuntime = true, width = "petXPBarWidth", defaultWidth = 80 })
 end
 -- The threat percentage text exists on WoW Forever, Classic Era and TBC, which
 -- all load this page; Midnight and Mists have none. statusTextState gives it the
 -- status text color shortcut without the name-font size fallback of textIndicator.
 if MSUF.Client ~= nil and MSUF.Client.SupportsThreatText == true then
-    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusThreat", "Threat %", "showThreatIndicator", true, "threatIndicatorSize", 11, "threatIndicatorAnchor", "BOTTOMLEFT", STATUS_CORNER_ANCHORS, "threatIndicatorOffsetX", 6, "threatIndicatorOffsetY", 2, "threatIndicatorLayer", 7, "MSUF_RequestThreatIndicatorRefresh", { allowed = function(unit) return unit == "target" or unit == "focus" or unit == "boss" end, statusRuntime = true, statusTextState = "THREAT", colorPrefix = "threatIndicator" })
+    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusThreat", "Threat %", "showThreatIndicator", true, "threatIndicator", 11, "BOTTOMLEFT",
+        STATUS_CORNER_ANCHORS, 6, 2, 7, "MSUF_RequestThreatIndicatorRefresh",
+        { allowed = function(unit) return unit == "target" or unit == "focus" or unit == "boss" end, statusRuntime = true, statusTextState = "THREAT",
+        colorPrefix = "threatIndicator" })
 end
 -- LEFT/CENTER/RIGHT were legacy 5.77 tokens for the top row. Profiles migrate
 -- those values to TOPLEFT/TOP/TOPRIGHT; FRAME* keeps the new middle row
@@ -266,10 +297,6 @@ local function UnitSettingMeta(ctx, semanticPath, unit, key)
     if unit ~= "" and key ~= "" then meta.settingKey = unit .. "." .. key end
     return meta
 end
--- Call sites keep Retail's disposition and reason arguments; nothing reads them.
-local function UnitReviewedMeta(ctx, semanticPath, classification)
-    return UnitControlMeta(ctx, semanticPath, classification)
-end
 local function RegisterUnitControl(widget, ctx, semanticPath, label, kind, classification, extra)
     if not widget then return widget end
     local meta = UnitControlMeta(ctx, semanticPath, classification)
@@ -300,7 +327,7 @@ end
 local function GetGeneral()
     return M.GetGeneralDB()
 end
-local function GetBars()
+function UnitPage.GetBars()
     local db = M.EnsureDB()
     db.bars = db.bars or {}
     return db.bars
@@ -406,7 +433,7 @@ local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 -- TBC and Mists field five arena opponents, Classic Era and WoW Forever none,
 -- Midnight three (MSUF.Client.MaxArenaOpponents, published as MSUF_MAX_ARENA_FRAMES).
 local ARENA_SLOTS = tonumber(MSUF.Client and MSUF.Client.MaxArenaOpponents)
-    or (IS_CLASSIC_FAMILY and tonumber(_G.MSUF_MAX_ARENA_FRAMES)) or 3
+    or (IS_CLASSIC_FAMILY and tonumber(MSUF_MAX_ARENA_FRAMES)) or 3
 local AURA_ARENA_RUNTIME_UNITS = (function()
     local units = WL("arena1 arena2 arena3")
     for arenaIndex = 4, ARENA_SLOTS do units[#units + 1] = "arena" .. arenaIndex end
@@ -450,7 +477,7 @@ local function UnitTopLabel(unit)
     local label = UNIT_LABELS[unit] or tostring(unit or "")
     return (M.Tr and M.Tr(label)) or label
 end
-local function UnitTopPillWidth(unit)
+function UnitPage.UnitTopPillWidth(unit)
     return UNIT_PILL_WIDTHS[unit] or 56
 end
 local UNIT_KEY_SET = KSW("player target targettarget focustarget focus pet pettarget boss arena")
@@ -463,31 +490,23 @@ local function CanonUnitKey(key)
     if key:match("^arena") then return "arena" end
     return key
 end
+-- Older profiles stored these units' tables under other names; the first one found moves over.
+local UNIT_DB_ALIASES = { targettarget = WL "tot targetoftarget target_of_target", focustarget = WL "focus_target focustargettarget" }
 local function EnsureUnitDB(key)
     local db = M.EnsureDB()
     key = CanonUnitKey(key)
     if not UNIT_KEY_SET[key] then return nil, nil end
-    if key == "targettarget" then
-        if type(db.targettarget) ~= "table" then
-            db.targettarget = type(db.tot) == "table" and db.tot
-                or type(db.targetoftarget) == "table" and db.targetoftarget
-                or type(db.target_of_target) == "table" and db.target_of_target
-                or {}
+    local aliases = UNIT_DB_ALIASES[key]
+    if aliases then
+        if type(db[key]) ~= "table" then
+            local found
+            for i = 1, #aliases do
+                if not found and type(db[aliases[i]]) == "table" then found = db[aliases[i]] end
+            end
+            db[key] = found or {}
         end
-        db.tot = nil
-        db.targetoftarget = nil
-        db.target_of_target = nil
-        return db.targettarget, key
-    end
-    if key == "focustarget" then
-        if type(db.focustarget) ~= "table" then
-            db.focustarget = type(db.focus_target) == "table" and db.focus_target
-                or type(db.focustargettarget) == "table" and db.focustargettarget
-                or {}
-        end
-        db.focus_target = nil
-        db.focustargettarget = nil
-        return db.focustarget, key
+        for i = 1, #aliases do db[aliases[i]] = nil end
+        return db[key], key
     end
     db[key] = db[key] or {}
     return db[key], key
@@ -561,7 +580,7 @@ local POWER_COPY_OVERRIDES = {
     end },
 }
 local function ReadPowerCopyValue(conf, unitKey, spec)
-    local fn = spec.fn and _G[spec.fn]
+    local fn = spec.fn and MSUF.Optional(spec.fn)
     if type(fn) == "function" then return fn(unitKey) end
     local ok, value = spec.read(conf and conf[spec.key])
     if ok then return value end
@@ -581,6 +600,8 @@ local function CopyPowerBarFields(dst, src, srcKey, dstKey)
         end
     end
 end
+-- Plain castbar keys by CASTBAR_FIELDS name; the Player castbar has no targetName, which is skipped.
+local CASTBAR_COPY_FIELDS = WL "time icon text targetName timeFormat w h match"
 local function CopyCastbarValue(g, sourceKey, destinationKey)
     if not sourceKey or not destinationKey then return end
     local value = g[sourceKey]
@@ -593,8 +614,7 @@ local function CopyCastbar(g, src, dst)
     src, dst = CanonUnitKey(src), CanonUnitKey(dst)
     local s, d = CASTBAR_FIELDS[src], CASTBAR_FIELDS[dst]
     if not s or not d then return end
-    local normalize = _G.MSUF_NormalizeCastbarBackendForUnit
-    local backend = (type(normalize) == "function") and normalize(dst, g[s.backend]) or g[s.backend]
+    local backend = MSUF.Require("MSUF_NormalizeCastbarBackendForUnit", SELF)(dst, g[s.backend]) or g[s.backend]
     if backend == nil then backend = (g[s.enable] == false) and ((dst == "player") and "BLIZZARD" or "HIDE") or "MSUF" end
     if backend == "BLIZZARD" and dst ~= "player" then backend = "HIDE" end
     local remembered = g[s.providerMemory]
@@ -602,14 +622,10 @@ local function CopyCastbar(g, src, dst)
     g[d.enable] = (backend == "MSUF")
     g[d.backend] = backend
     if remembered ~= nil then g[d.providerMemory] = remembered end
-    CopyCastbarValue(g, s.time, d.time)
-    CopyCastbarValue(g, s.icon, d.icon)
-    CopyCastbarValue(g, s.text, d.text)
-    if s.targetName and d.targetName then CopyCastbarValue(g, s.targetName, d.targetName) end
-    CopyCastbarValue(g, s.timeFormat, d.timeFormat)
-    CopyCastbarValue(g, s.w, d.w)
-    CopyCastbarValue(g, s.h, d.h)
-    CopyCastbarValue(g, s.match, d.match)
+    for i = 1, #CASTBAR_COPY_FIELDS do
+        local field = CASTBAR_COPY_FIELDS[i]
+        CopyCastbarValue(g, s[field], d[field])
+    end
     local srcPrefix = s.stylePrefix
     local dstPrefix = d.stylePrefix
     if not srcPrefix or not dstPrefix then return true end
@@ -651,34 +667,11 @@ local function ForEachAuraRuntimeTarget(unit, callback)
     callback(unit)
 end
 local function ApplyAuras3Unit(unit)
-    local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if apply and type(apply.RequestAuras) == "function" then
-        return apply.RequestAuras(unit, "MSUF2_COPY_UNIT_AURAS")
-    end
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    local model = a3 and a3.MenuModel
-    if model and type(model.Apply) == "function" then
-        model.Apply(unit, "MSUF2_COPY_UNIT_AURAS")
-        return true
-    end
-    if a3 and type(a3.RequestScope) == "function" then
-        a3.RequestScope(unit, "MSUF2_COPY_UNIT_AURAS")
-        return true
-    end
-    if a3 and type(a3.RefreshUnit) == "function" then
-        a3.RefreshUnit(unit)
-        return true
-    end
-    if a3 and type(a3.RequestUnit) == "function" then
-        a3.RequestUnit(unit)
-        return true
-    end
-    if a3 and type(a3.RequestApply) == "function" then
-        a3.RequestApply(unit, "MSUF2_COPY_UNIT_AURAS")
-        return true
-    end
-    return false
+    local apply = M.ApplyService or MSUF.Require("MSUF_Menu2_ApplyService", SELF)
+    return apply.RequestAuras(unit, "MSUF2_COPY_UNIT_AURAS")
 end
+local AURA_COPY_DEFAULTS = { enabled = true, showPlayer = false, showPet = true, showTarget = true, showFocus = true,
+    showBoss = true, showArena = true }
 local function EnsureAuras3CopyDB()
     local a3 = MSUF and MSUF.MSUF_Auras3
     local model = a3 and a3.MenuModel
@@ -694,13 +687,9 @@ local function EnsureAuras3CopyDB()
         auras = db.auras3
     end
     if type(auras) ~= "table" then return nil end
-    if auras.enabled == nil then auras.enabled = true end
-    if auras.showPlayer == nil then auras.showPlayer = false end
-    if auras.showPet == nil then auras.showPet = true end
-    if auras.showTarget == nil then auras.showTarget = true end
-    if auras.showFocus == nil then auras.showFocus = true end
-    if auras.showBoss == nil then auras.showBoss = true end
-    if auras.showArena == nil then auras.showArena = true end
+    for key, default in pairs(AURA_COPY_DEFAULTS) do
+        if auras[key] == nil then auras[key] = default end
+    end
     if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
     return auras
 end
@@ -727,11 +716,7 @@ local function CopyAuras3UnitSettings(src, dst)
 
     local sourceConfig = auras.perUnit[AuraRuntimeSource(src)]
     ForEachAuraRuntimeTarget(dst, function(runtimeUnit)
-        if type(sourceConfig) == "table" then
-            auras.perUnit[runtimeUnit] = DeepCopy(sourceConfig)
-        else
-            auras.perUnit[runtimeUnit] = nil
-        end
+        auras.perUnit[runtimeUnit] = type(sourceConfig) == "table" and DeepCopy(sourceConfig) or nil
     end)
 
     local function CopyScopedAuraRecord(rootKey, preserveIncompatibleSpecial)
@@ -800,7 +785,7 @@ local function CompleteUnitCopy(callback, applied, result)
     if type(callback) == "function" then callback(applied == true, result) end
     return applied == true, result
 end
-local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
+function UnitPage.CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     local profileDB = M.EnsureDB()
     profileDB.general = profileDB.general or {}
     local g = profileDB.general
@@ -875,7 +860,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
             if CopyCastbar(g, srcKey, dstKey) then
                 result.castbarApplied = true
                 MSUF.Castbars.Config.Invalidate()
-                _G.MSUF_UpdateCastbarWidthSourceSync(g, dstKey)
+                MSUF.Require("MSUF_UpdateCastbarWidthSourceSync", SELF)(g, dstKey)
             end
         end
         if scopes.load then CopyFields(dst, src, COPY_LOAD_CONDITION_FIELDS) end
@@ -898,7 +883,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     end
     local function FinishCopy(statusUnit)
         if scopes.status then
-            _G.MSUF_RefreshStatusIndicators(statusUnit, "MSUF2_COPY_UNIT_STATUS")
+            MSUF.Require("MSUF_RefreshStatusIndicators", SELF)(statusUnit, "MSUF2_COPY_UNIT_STATUS")
         end
     end
     if target == "all" then
@@ -947,110 +932,25 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     if applied then FinishCopy(target) end
     return CompleteUnitCopy(onComplete, applied, result)
 end
-local function ToggleEditMode(unit)
+function UnitPage.ToggleEditMode(unit)
     if M.BlockCombatAction() then return end
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
+    if InCombatLockdown and InCombatLockdown() then
         M.ShowConfigCombatLockMessage()
         return
     end
     local active = previewState.editMode == true
-    _G.MSUF_SetMSUFEditModeDirect(not active, CanonUnitKey(unit))
+    MSUF.Require("MSUF_SetMSUFEditModeDirect", SELF)(not active, CanonUnitKey(unit))
 end
-local function IsEditModeActive()
+function UnitPage.IsEditModeActive()
     return previewState.editMode == true
 end
-local bossPagePreviewEvents
-local bossPagePreviewPendingCleanup
-local function BossPagePreviewInCombat()
-    return (_G.InCombatLockdown and _G.InCombatLockdown())
-        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+local function PagePreviewInCombat()
+    return (InCombatLockdown and InCombatLockdown())
+        or (UnitAffectingCombat and UnitAffectingCombat("player"))
 end
-local function ClearBossPagePreviewForCombat()
-    local clear = _G.MSUF_ClearBossUnitframePreviewForCombat
-    return type(clear) == "function" and clear() == true
-end
-
-local BossPreviewFramesVisible = M.BossPreviewFramesVisible
-local function SyncBossPagePreview()
-    local active = (previewState.bossPage == true)
-    if BossPagePreviewInCombat() then
-        local cleared = ClearBossPagePreviewForCombat()
-        SetBossPage(nil)
-        if active or cleared then bossPagePreviewPendingCleanup = true end
-        return
-    end
-    _G.MSUF_ApplyBossUnitframePreviewState(active, active and "MSUF2_BOSS_PAGE" or "MSUF2_BOSS_PAGE_OFF")
-end
-local function EnsureBossPagePreviewEvents()
-    if bossPagePreviewEvents then return bossPagePreviewEvents end
-    bossPagePreviewEvents = CreateFrame("Frame")
-    bossPagePreviewEvents:SetScript("OnEvent", function(self, event)
-        if event == "PLAYER_REGEN_DISABLED" then
-            -- Another Menu2 coordinator may already have cleared the global
-            -- flag. Always run the frame handoff and remember the OOC rebuild.
-            ClearBossPagePreviewForCombat()
-            SetBossPage(nil)
-            bossPagePreviewPendingCleanup = true
-            return
-        end
-        if event == "PLAYER_REGEN_ENABLED" and bossPagePreviewPendingCleanup then
-            bossPagePreviewPendingCleanup = nil
-            SyncBossPagePreview()
-            if previewState.bossPage ~= true then self:UnregisterAllEvents() end
-            return
-        end
-        if previewState.bossPage == true then SyncBossPagePreview() end
-    end)
-    return bossPagePreviewEvents
-end
-local function SetBossPagePreviewActive(active)
-    active = active and true or false
-    if active and BossPagePreviewInCombat() then
-        ClearBossPagePreviewForCombat()
-        SetBossPage(nil)
-        bossPagePreviewPendingCleanup = nil
-        if bossPagePreviewEvents then bossPagePreviewEvents:UnregisterAllEvents() end
-        return
-    end
-    local current = previewState.bossPage == true
-    if current == active then
-        if active and not BossPagePreviewInCombat() and not BossPreviewFramesVisible() then SyncBossPagePreview() end
-        if not active and previewState.boss == true and not BossPagePreviewInCombat() then SyncBossPagePreview() end
-        return
-    end
-    SetBossPage(active or nil)
-    local events = EnsureBossPagePreviewEvents()
-    if active then
-        bossPagePreviewPendingCleanup = nil
-        events:RegisterEvent("PLAYER_REGEN_DISABLED")
-        events:RegisterEvent("PLAYER_REGEN_ENABLED")
-    elseif BossPagePreviewInCombat() then
-        bossPagePreviewPendingCleanup = true
-        events:UnregisterEvent("PLAYER_REGEN_DISABLED")
-        events:RegisterEvent("PLAYER_REGEN_ENABLED")
-        return
-    else
-        bossPagePreviewPendingCleanup = nil
-        events:UnregisterAllEvents()
-    end
-    SyncBossPagePreview()
-    if active then
-        C_Timer.After(0, SyncBossPagePreview)
-        C_Timer.After(0.12, SyncBossPagePreview)
-    end
-end
-
---- Arena page preview: mirrors the boss page-preview coordinator against the
---- arena preview globals/entry points exported by the engine.
-local arenaPagePreviewEvents
-local arenaPagePreviewPendingCleanup
 --- The engine's live frame reader, bound the same way every other Menu2
 --- file binds it (PagePreviews, UnitPreview_Castbar, UnitPreview_Runtime).
 local CoreFrame = MSUF.UF.GetFrame
-local function ClearArenaPagePreviewForCombat()
-    local clear = _G.MSUF_ClearArenaUnitframePreviewForCombat
-    return type(clear) == "function" and clear() == true
-end
 local function ArenaPreviewFramesVisible()
     local sawFrame = false
     for i = 1, ARENA_SLOTS do
@@ -1063,112 +963,147 @@ local function ArenaPreviewFramesVisible()
     end
     return sawFrame
 end
-local function SyncArenaPagePreview()
-    local active = (previewState.arenaPage == true)
-    if BossPagePreviewInCombat() then
-        local cleared = ClearArenaPagePreviewForCombat()
-        SetArenaPage(nil)
-        if active or cleared then arenaPagePreviewPendingCleanup = true end
+--- Boss and Arena page preview coordinators, one state table each, working
+--- against the preview globals/entry points the engine exports. While the page is
+--- open the engine shows its preview frames (stateKey is the page flag in the
+--- preview state, unitKey the unit flag); combat clears them at once and remembers
+--- the out-of-combat rebuild. `events` and `pendingCleanup` are the page's own event
+--- frame and rebuild flag, `sync` its shared sync closure.
+local function PagePreviewClear(page)
+    if not page.clearResolved then
+        page.clearResolved = true
+        page.clearFn = MSUF.Optional(page.clear)
+    end
+    local clear = page.clearFn
+    return type(clear) == "function" and clear() == true
+end
+local function SyncPagePreview(page)
+    local active = (previewState[page.stateKey] == true)
+    if PagePreviewInCombat() then
+        local cleared = PagePreviewClear(page)
+        page.setPage(nil)
+        if active or cleared then page.pendingCleanup = true end
         return
     end
-    _G.MSUF_ApplyArenaUnitframePreviewState(active, active and "MSUF2_ARENA_PAGE" or "MSUF2_ARENA_PAGE_OFF")
+    local apply = page.applyFn or MSUF.Require(page.apply, SELF)
+    page.applyFn = apply
+    apply(active, active and page.reasonOn or page.reasonOff)
 end
-local function EnsureArenaPagePreviewEvents()
-    if arenaPagePreviewEvents then return arenaPagePreviewEvents end
-    arenaPagePreviewEvents = CreateFrame("Frame")
-    arenaPagePreviewEvents:SetScript("OnEvent", function(self, event)
+local function NewPagePreview(page)
+    page.sync = function() SyncPagePreview(page) end
+    return page
+end
+local BOSS_PAGE = NewPagePreview({
+    stateKey = "bossPage", unitKey = "boss", setPage = SetBossPage, framesVisible = M.BossPreviewFramesVisible,
+    clear = "MSUF_ClearBossUnitframePreviewForCombat", apply = "MSUF_ApplyBossUnitframePreviewState",
+    reasonOn = "MSUF2_BOSS_PAGE", reasonOff = "MSUF2_BOSS_PAGE_OFF",
+})
+local ARENA_PAGE = NewPagePreview({
+    stateKey = "arenaPage", unitKey = "arena", setPage = SetArenaPage, framesVisible = ArenaPreviewFramesVisible,
+    clear = "MSUF_ClearArenaUnitframePreviewForCombat", apply = "MSUF_ApplyArenaUnitframePreviewState",
+    reasonOn = "MSUF2_ARENA_PAGE", reasonOff = "MSUF2_ARENA_PAGE_OFF",
+})
+local function EnsurePagePreviewEvents(page)
+    if page.events then return page.events end
+    local events = CreateFrame("Frame")
+    page.events = events
+    events:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
-            ClearArenaPagePreviewForCombat()
-            SetArenaPage(nil)
-            arenaPagePreviewPendingCleanup = true
+            -- Another Menu2 coordinator may already have cleared the global
+            -- flag. Always run the frame handoff and remember the OOC rebuild.
+            PagePreviewClear(page)
+            page.setPage(nil)
+            page.pendingCleanup = true
             return
         end
-        if event == "PLAYER_REGEN_ENABLED" and arenaPagePreviewPendingCleanup then
-            arenaPagePreviewPendingCleanup = nil
-            SyncArenaPagePreview()
-            if previewState.arenaPage ~= true then self:UnregisterAllEvents() end
+        if event == "PLAYER_REGEN_ENABLED" and page.pendingCleanup then
+            page.pendingCleanup = nil
+            SyncPagePreview(page)
+            if previewState[page.stateKey] ~= true then self:UnregisterAllEvents() end
             return
         end
-        if previewState.arenaPage == true then SyncArenaPagePreview() end
+        if previewState[page.stateKey] == true then SyncPagePreview(page) end
     end)
-    return arenaPagePreviewEvents
+    return events
 end
-local function SetArenaPagePreviewActive(active)
+local function SetPagePreviewActive(page, active)
     active = active and true or false
-    if active and BossPagePreviewInCombat() then
-        ClearArenaPagePreviewForCombat()
-        SetArenaPage(nil)
-        arenaPagePreviewPendingCleanup = nil
-        if arenaPagePreviewEvents then arenaPagePreviewEvents:UnregisterAllEvents() end
+    if active and PagePreviewInCombat() then
+        PagePreviewClear(page)
+        page.setPage(nil)
+        page.pendingCleanup = nil
+        if page.events then page.events:UnregisterAllEvents() end
         return
     end
-    local current = previewState.arenaPage == true
+    local current = previewState[page.stateKey] == true
     if current == active then
-        if active and not BossPagePreviewInCombat() and not ArenaPreviewFramesVisible() then SyncArenaPagePreview() end
-        if not active and previewState.arena == true and not BossPagePreviewInCombat() then SyncArenaPagePreview() end
+        if active and not PagePreviewInCombat() and not page.framesVisible() then SyncPagePreview(page) end
+        if not active and previewState[page.unitKey] == true and not PagePreviewInCombat() then SyncPagePreview(page) end
         return
     end
-    SetArenaPage(active or nil)
-    local events = EnsureArenaPagePreviewEvents()
+    page.setPage(active or nil)
+    local events = EnsurePagePreviewEvents(page)
     if active then
-        arenaPagePreviewPendingCleanup = nil
+        page.pendingCleanup = nil
         events:RegisterEvent("PLAYER_REGEN_DISABLED")
         events:RegisterEvent("PLAYER_REGEN_ENABLED")
-    elseif BossPagePreviewInCombat() then
-        arenaPagePreviewPendingCleanup = true
+    elseif PagePreviewInCombat() then
+        page.pendingCleanup = true
         events:UnregisterEvent("PLAYER_REGEN_DISABLED")
         events:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
     else
-        arenaPagePreviewPendingCleanup = nil
+        page.pendingCleanup = nil
         events:UnregisterAllEvents()
     end
-    SyncArenaPagePreview()
+    SyncPagePreview(page)
     if active then
-        C_Timer.After(0, SyncArenaPagePreview)
-        C_Timer.After(0.12, SyncArenaPagePreview)
+        C_Timer.After(0, page.sync)
+        C_Timer.After(0.12, page.sync)
     end
 end
-local function ReadBool(unit, key, default)
+local function SetBossPagePreviewActive(active) return SetPagePreviewActive(BOSS_PAGE, active) end
+local function SetArenaPagePreviewActive(active) return SetPagePreviewActive(ARENA_PAGE, active) end
+function UnitPage.ReadBool(unit, key, default)
     local conf = GetConf(unit)
     local value = conf[key]
     if value == nil then return default and true or false end
     return value and true or false
 end
-local function SetBool(unit, key, value, reason, opts)
+function UnitPage.SetBool(unit, key, value, reason, opts)
     M.SetUnitValue(unit, key, value and true or false, reason, opts)
 end
-local function ReadNumber(unit, key, default)
+function UnitPage.ReadNumber(unit, key, default)
     local conf = GetConf(unit)
     local value = tonumber(conf[key])
     if value == nil then value = default or 0 end
     return value
 end
-local function SetNumber(unit, key, value, reason, opts)
+function UnitPage.SetNumber(unit, key, value, reason, opts)
     value = tonumber(value)
     if value == nil then return end
     if math.abs(value - floor(value + 0.5)) < 0.001 then value = floor(value + 0.5) end
     M.SetUnitValue(unit, key, value, reason, opts)
 end
-local function IsPlayerPowerManagedByClassResources(unit)
+function UnitPage.IsPlayerPowerManagedByClassResources(unit)
     if unit ~= "player" then return false end
     local conf = GetConf("player")
     if not (conf and conf.powerBarDetached == true) then return false end
     return conf.detachedPowerBarAnchorToClassPower == true
 end
-local function SetString(unit, key, value, reason, opts)
+function UnitPage.SetString(unit, key, value, reason, opts)
     M.SetUnitValue(unit, key, tostring(value or ""), reason, opts)
 end
-local function ReadGeneralBool(key, default)
+function UnitPage.ReadGeneralBool(key, default)
     local g = GetGeneral()
     local value = g[key]
     if value == nil then return default and true or false end
     return value and true or false
 end
-local function SetGeneralBool(key, value, reason, opts)
+function UnitPage.SetGeneralBool(key, value, reason, opts)
     M.SetGeneralValue(key, value and true or false, reason, opts)
 end
-local function ClampStatusLayer(value, default)
+function UnitPage.ClampStatusLayer(value, default)
     value = tonumber(value) or default or 7
     value = floor(value + 0.5)
     if value < 0 then return 0 end
@@ -1178,7 +1113,7 @@ end
 local function StatusAllowed(unit, spec)
     return spec and (not spec.allowed or spec.allowed(unit))
 end
-local function StatusValues(unit)
+function UnitPage.StatusValues(unit)
     local values = {}
     for i = 1, #STATUS_CONTROLS do
         local spec = STATUS_CONTROLS[i]
@@ -1197,13 +1132,13 @@ local function FindStatusSpec(unit, value)
     end
     return nil
 end
-local function CurrentStatusSpec(unit)
+function UnitPage.CurrentStatusSpec(unit)
     M.unitStatusSelection = M.unitStatusSelection or {}
     local spec = FindStatusSpec(unit, M.unitStatusSelection[unit])
     if spec then M.unitStatusSelection[unit] = spec.value end
     return spec
 end
-local function ReadStatusBool(unit, key, default)
+function UnitPage.ReadStatusBool(unit, key, default)
     local conf = GetConf(unit)
     local g = GetGeneral()
     local value = conf[key]
@@ -1211,7 +1146,7 @@ local function ReadStatusBool(unit, key, default)
     if value == nil then return default and true or false end
     return value and true or false
 end
-local function ReadStatusNumber(unit, key, default, legacyKey)
+function UnitPage.ReadStatusNumber(unit, key, default, legacyKey)
     local conf = GetConf(unit)
     local g = GetGeneral()
     local value = tonumber(conf[key])
@@ -1221,7 +1156,7 @@ local function ReadStatusNumber(unit, key, default, legacyKey)
     if value == nil then value = default or 0 end
     return value
 end
-local function ReadStatusString(unit, key, default, legacyKey)
+function UnitPage.ReadStatusString(unit, key, default, legacyKey)
     local conf = GetConf(unit)
     local g = GetGeneral()
     local value = conf[key]
@@ -1231,46 +1166,53 @@ local function ReadStatusString(unit, key, default, legacyKey)
     if type(value) ~= "string" or value == "" then value = default end
     return value or ""
 end
-local function RefreshStatusRuntime(unit, spec)
+-- Core refresh entry points by global name, resolved on first use: this runs on every
+-- status setting change, a slider drag included.
+local StatusRuntimeFns = {}
+function UnitPage.RefreshStatusRuntime(unit, spec)
     local runtimeRefreshed = false
     if spec and spec.refresh then
-        runtimeRefreshed = true, _G[spec.refresh](unit, "MSUF2_STATUS_INDICATOR")
+        local refresh = StatusRuntimeFns[spec.refresh] or MSUF.Require(spec.refresh, SELF)
+        StatusRuntimeFns[spec.refresh] = refresh
+        runtimeRefreshed = true, refresh(unit, "MSUF2_STATUS_INDICATOR")
     end
     if spec and spec.statusRuntime and not runtimeRefreshed then
-        _G.MSUF_RefreshStatusIndicators(unit, "MSUF2_STATUS_INDICATOR")
+        local indicators = StatusRuntimeFns.MSUF_RefreshStatusIndicators or MSUF.Require("MSUF_RefreshStatusIndicators", SELF)
+        StatusRuntimeFns.MSUF_RefreshStatusIndicators = indicators
+        indicators(unit, "MSUF2_STATUS_INDICATOR")
     end
     if spec and spec.value == "level" then
-        if unit == "boss" and previewState.boss == true then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
+        if unit == "boss" and previewState.boss == true then
+            local preview = StatusRuntimeFns.MSUF_ApplyBossUnitframePreviewState or MSUF.Require("MSUF_ApplyBossUnitframePreviewState", SELF)
+            StatusRuntimeFns.MSUF_ApplyBossUnitframePreviewState = preview
+            preview(true, "MSUF2_LEVEL_INDICATOR")
+        end
     end
     M.RequestUnitDomains(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true, fonts = spec and spec.value == "level" })
 end
-local SetControlEnabled = W.SetControlEnabled
 -- Text keys are read with a general fallback (ReadText), so no seeding step
--- writes the general values into the unit config.
-local function SeedText(unit)
-    return GetConf(unit)
-end
-local function ReadText(unit, key, default)
-    local conf = SeedText(unit)
+-- writes the general values into the unit config (SeedText is the plain config).
+function UnitPage.ReadText(unit, key, default)
+    local conf = GetConf(unit)
     if conf[key] ~= nil then return conf[key] end
     local g = GetGeneral()
     if g[key] ~= nil then return g[key] end
     return default
 end
-local function SetText(unit, key, value, reason)
-    local conf = SeedText(unit)
+function UnitPage.SetText(unit, key, value, reason)
+    local conf = GetConf(unit)
     if conf[key] == value then return end
     conf[key] = value
     conf.hpPowerTextOverride = nil
     M.RequestUnitDomains(unit, reason or "MSUF2_TEXT", { text = true, preview = true })
 end
-local function NormalizePortrait(unit)
+function UnitPage.NormalizePortrait(unit)
     local conf = GetConf(unit)
     local value = conf.portraitMode or "OFF"
     if value ~= "LEFT" and value ~= "RIGHT" then value = "OFF" end
     return value
 end
-local function SetPortraitValue(unit, key, value, reason)
+function UnitPage.SetPortraitValue(unit, key, value, reason)
     local mask = { preview = true }
     if unit == "player" then
         local a3 = MSUF and MSUF.MSUF_Auras3
@@ -1281,12 +1223,12 @@ local function SetPortraitValue(unit, key, value, reason)
     end
     M.SetUnitValue(unit, key, value, reason or "MSUF2_PORTRAIT", mask)
 end
-local function NormalizeBossLayoutMode(value, legacyInvert)
+function UnitPage.NormalizeBossLayoutMode(value, legacyInvert)
     if type(value) == "string" and BOSS_LAYOUT_VALID[value] then return value end
     if legacyInvert == true then return "VERTICAL_UP" end
     return "VERTICAL_DOWN"
 end
-local function UpdateLoadActive(unit)
+function UnitPage.UpdateLoadActive(unit)
     local conf = GetConf(unit)
     local active = conf.loadCondShowWhenInjured == true
     for i = 1, #LOAD_CONDITIONS do
@@ -1297,16 +1239,16 @@ local function UpdateLoadActive(unit)
     end
     conf.loadCondActive = active or nil
 end
-local UnitPage = M.UnitPage or {}
-M.UnitPage = UnitPage
 -- Status icon helpers the unit and group status pages share.
 --- Every icon asset the status preview entries offer (the first entry's
 --- list first, no repeats), or the single "Use default icon" row.
+local assetValuesFn
 function UnitPage.StatusIconAssetValues(entries)
-    local valuesFn = _G.MSUF_GetStatusIconAssetValues
-    if type(valuesFn) ~= "function" or type(entries) ~= "table" then
+    if type(entries) ~= "table" then
         return { { value = "", text = "Use default icon" } }
     end
+    assetValuesFn = assetValuesFn or MSUF.Require("MSUF_GetStatusIconAssetValues", SELF)
+    local valuesFn = assetValuesFn
     local out, used = {}, {}
     for i = 1, #entries do
         local entry = entries[i]
@@ -1327,7 +1269,7 @@ end
 --- The five-slot icon preview strip of a status card, at (16, y) inside the
 --- card: dark holders with a centred 22 px texture each.
 function UnitPage.CreateStatusIconStrip(card, y, width)
-    local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region) return region end
+    local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", SELF)
     local iconPreviewStrip = PixelLayoutRegion(CreateFrame("Frame", nil, card))
     iconPreviewStrip:SetPoint("TOPLEFT", card, "TOPLEFT", 16, y)
     iconPreviewStrip:SetSize(width, 24)
@@ -1361,7 +1303,6 @@ M.Assign(UnitPage, {
     LOAD_CONDITIONS = LOAD_CONDITIONS,
     STATUS_ANCHORS = STATUS_ANCHORS,
     DEFAULT_SYMBOLS = DEFAULT_SYMBOLS,
-    StatusIconPackValues = StatusIconPackValues,
     STATUS_CONTROLS = STATUS_CONTROLS,
     TEXT_ANCHORS = TEXT_ANCHORS,
     HP_MODES = HP_MODES,
@@ -1375,47 +1316,22 @@ M.Assign(UnitPage, {
     UF_COPY_CATEGORIES = UF_COPY_CATEGORIES,
     GetConf = GetConf,
     GetGeneral = GetGeneral,
-    GetBars = GetBars,
     DeepCopy = DeepCopy,
     DefaultCopyTarget = DefaultCopyTarget,
     UnitTopLabel = UnitTopLabel,
     -- The raw key of UnitTopLabel, for widgets that translate their own label.
     UnitTopLabelKey = function(unit) return UNIT_LABELS[unit] or tostring(unit or "") end,
-    UnitTopPillWidth = UnitTopPillWidth,
     ControlMeta = UnitControlMeta,
     SettingMeta = UnitSettingMeta,
-    ReviewedMeta = UnitReviewedMeta,
+    -- Call sites keep Retail's disposition and reason arguments; nothing reads them.
+    ReviewedMeta = UnitControlMeta,
     RegisterControl = RegisterUnitControl,
     NewCopyScopeDefaults = NewCopyScopeDefaults,
     ConfirmCopyToAll = ConfirmCopyToAll,
-    CopyUnitSettings = CopyUnitSettings,
-    ToggleEditMode = ToggleEditMode,
-    IsEditModeActive = IsEditModeActive,
     SetBossPagePreviewActive = SetBossPagePreviewActive,
     SetArenaPagePreviewActive = SetArenaPagePreviewActive,
-    ReadBool = ReadBool,
-    SetBool = SetBool,
-    ReadNumber = ReadNumber,
-    SetNumber = SetNumber,
-    IsPlayerPowerManagedByClassResources = IsPlayerPowerManagedByClassResources,
-    SetString = SetString,
-    ReadGeneralBool = ReadGeneralBool,
-    SetGeneralBool = SetGeneralBool,
-    ClampStatusLayer = ClampStatusLayer,
     StatusAllowed = StatusAllowed,
-    StatusValues = StatusValues,
     FindStatusSpec = FindStatusSpec,
-    CurrentStatusSpec = CurrentStatusSpec,
-    ReadStatusBool = ReadStatusBool,
-    ReadStatusNumber = ReadStatusNumber,
-    ReadStatusString = ReadStatusString,
-    RefreshStatusRuntime = RefreshStatusRuntime,
-    SetControlEnabled = SetControlEnabled,
-    SeedText = SeedText,
-    ReadText = ReadText,
-    SetText = SetText,
-    NormalizePortrait = NormalizePortrait,
-    SetPortraitValue = SetPortraitValue,
-    NormalizeBossLayoutMode = NormalizeBossLayoutMode,
-    UpdateLoadActive = UpdateLoadActive,
+    SetControlEnabled = W.SetControlEnabled,
+    SeedText = GetConf,
 })

@@ -1,7 +1,5 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -13,9 +11,12 @@ local type = type
 local table_remove = table.remove
 local next = next
 local InCombatLockdown = InCombatLockdown
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 -- Kernel/MSUF_Util.lua export; the Kernel loads before every group file.
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua")
+-- The rounded frames module publishes its group callbacks only while it is
+-- enabled; Public mirrors each export, so a read sees the live toggle.
+local Public = MSUF.Public
 
 GF.frames = GF.frames or setmetatable({}, { __mode = "k" })
 GF.frameList = GF.frameList or {}
@@ -188,15 +189,15 @@ end
 function GF.RegisterClickCastFrame(frame)
   RegisterDefaultClicks(frame)
   if not frame then return false end
-  _G.ClickCastFrames = type(_G.ClickCastFrames) == "table" and _G.ClickCastFrames or {}
-  _G.ClickCastFrames[frame] = true
+  ClickCastFrames = type(ClickCastFrames) == "table" and ClickCastFrames or {}
+  ClickCastFrames[frame] = true
   frame._msufGFClickCastRegistered = true
   return true
 end
 
 function GF.UnregisterClickCastFrame(frame)
   if not frame then return false end
-  local frames = rawget(_G, "ClickCastFrames")
+  local frames = ClickCastFrames
   if type(frames) == "table" then frames[frame] = nil end
   frame._msufGFClickCastRegistered = nil
   return true
@@ -702,7 +703,7 @@ local function ApplyUnitFrame(frame, kind, unit, reason, applyMask, forceApply)
   -- built after the startup pass (login roster races, later joins) must adopt
   -- them itself. The callback is nil while the module is disabled and defers
   -- to the regen edge in combat.
-  local rounded = _G.MSUF_RoundedUF_OnGroupFrameApplied
+  local rounded = Public.RoundedUF_OnGroupFrameApplied
   if rounded then rounded(visual, kind) end
   return true
 end
@@ -805,7 +806,7 @@ local function OnChildAttributeChanged(self, name, value)
     -- pass. One catch-up per rendered frame per visual keeps the barrier
     -- semantics at a fraction of the cost; GetTime is frame-constant.
     if (kind or visual._msufGFKind) == "party" or IsPriorityFrame(visual) then
-      local now = _G.GetTime and _G.GetTime()
+      local now = GetTime and GetTime()
       if now == nil or visual._msufGFCatchupFrameStamp ~= now then
         visual._msufGFCatchupFrameStamp = now
         RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)

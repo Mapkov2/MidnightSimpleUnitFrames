@@ -4,9 +4,12 @@ do
 local isolated = setmetatable({}, { __index = _G })
 isolated._G = isolated
 local ns = { Client = { IsClassic = flavor ~= "Mainline" and flavor ~= "Forever" } }
-for _, path in ipairs({ "Kernel/MSUF_Bootstrap.lua", "ClassPower/MSUF_CP_Constants.lua",
-    "ClassPower/MSUF_CP_Controller_Colors.lua" }) do
-    setfenv(assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path)), isolated)("MidnightSimpleUnitFrames", ns)
+-- The real Kernel API (Bootstrap, Require) is installed into the namespace inside the isolated
+-- environment; providers the colour file requires that this section does not load are deferred.
+local RequireFixture = dofile(root .. "/tools/tests/require_fixture.lua")
+RequireFixture.InstallKernel(root, ns, isolated)
+for _, path in ipairs({ "ClassPower/MSUF_CP_Constants.lua", "ClassPower/MSUF_CP_Controller_Colors.lua" }) do
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. path, ns, isolated)
 end
 local shared = assert(ns.ClassPowerColors, "colour API must exist before controller build")
 local fields = { OverrideRGB = "function", ResolveSlotColorMode = "function", ResolveSlotColor = "function",
@@ -40,12 +43,25 @@ assert(live.ResolveClassPowerColor("COMBO_POINTS") == .7)
 assert(scene.ResolveClassPowerColor("COMBO_POINTS") == .1, "live invalidated scene config")
 end
 local W = dofile(root .. "/tools/tests/preview_surface_world.lua")
+-- The probes call the providers the way a consumer resolves them: a global first, then the namespace's
+-- registry for the exports the client keeps off _G. Writes go to the world's environment.
+local function WithExports(h)
+  local sandbox, registry = h.env, h.core.PublicGlobals
+  return setmetatable({}, {
+    __index = function(_, key)
+      local value = sandbox[key]
+      if value == nil then value = registry[key] end
+      return value
+    end,
+    __newindex = function(_, key, value) sandbox[key] = value end,
+  })
+end
 local classes = { "ROGUE" }
 local cases = 0
 for _, class in ipairs(classes) do
   local sample = { class = class, spec = 1, count = 3, maximum = 5, primaryPower = 3, time = 100 }
   local h = W.Open(root, flavor, sample)
-  local env, ns = h.env, h.core
+  local env, ns = WithExports(h), h.core
   local owner = h:Host()
   local pf = env.CreateFrame("Frame", nil, owner)
   pf:SetSize(275, 40); pf:SetPoint("CENTER", owner, "CENTER", 0, 0)
@@ -148,7 +164,7 @@ end
 for _, class in ipairs(allClasses) do
   local sample = { class = class, spec = 1, count = 3, maximum = 5, primaryPower = 0, time = 100 }
   local h = W.Open(root, flavor, sample)
-  local env, ns, owner = h.env, h.core, h:Host()
+  local env, ns, owner = WithExports(h), h.core, h:Host()
   local pf = env.CreateFrame("Frame", nil, owner)
   pf:SetSize(275, 40); pf:SetPoint("CENTER", owner, "CENTER", 0, 0)
   ns.UF.frames.player, env.MSUF_player = pf, pf

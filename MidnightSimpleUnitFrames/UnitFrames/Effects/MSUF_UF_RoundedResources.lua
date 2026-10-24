@@ -1,6 +1,5 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-MSUF = MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Effects/MSUF_UF_RoundedResources.lua")
 
 -- Rounded and slanted class resources: the segmented class power bar and the
 -- alternative mana bar, published as RoundedSurface.ApplyClassPower and
@@ -11,7 +10,7 @@ if type(Kit) ~= "table" then
   error("UnitFrames/Effects/MSUF_UF_RoundedSurface.lua must load before UnitFrames/Effects/MSUF_UF_RoundedResources.lua")
 end
 local RoundedSurface = MSUF.RoundedSurface
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 local SLANTED_MASK_PATHS, SLANTED_EDGE_PATHS = Kit.SLANTED_MASK_PATHS, Kit.SLANTED_EDGE_PATHS
 local IsCombatLocked, DeferApply, CanCreateRoundedRegion = Kit.IsCombatLocked, Kit.DeferApply, Kit.CanCreateRoundedRegion
 local BarsDB, ReadRoundedBool, IsEnabled = Kit.BarsDB, Kit.ReadRoundedBool, Kit.IsEnabled
@@ -222,7 +221,7 @@ local function ApplyAltManaRounded(AM, masterEnabled)
   if not container then return false end
   local master = masterEnabled
   if master == nil then master = IsEnabled() end
-  local db = _G.MSUF_DB
+  local db = MSUF_DB
   local explicit = db and db.player and db.player.frameBarShape
   local selectedSlanted = explicit == "SLANTED" and SlantedScopeEnabled(false)
   local slanted = selectedSlanted and SlantedPowerBarsEnabled()

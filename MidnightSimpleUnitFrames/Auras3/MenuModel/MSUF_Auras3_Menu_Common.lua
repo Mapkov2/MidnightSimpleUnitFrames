@@ -3,7 +3,6 @@
 -- dispatch wrapper, live event handler, or per-read dependency-table lookup.
 -- Spell queries remain lazy because item/spell data can arrive after login.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}
@@ -38,8 +37,8 @@ function Factories.Common(Schema, A3)
     local pairs = pairs
     local math_floor = math.floor
     local string_format = string.format
-    local C_Spell = _G.C_Spell
-    local GetSpellInfo = _G.GetSpellInfo
+    local C_Spell = C_Spell
+    local GetSpellInfo = GetSpellInfo
     local BOSS_LOOKUP = Schema.BOSS_LOOKUP
     local BOSS_UNITS = Schema.BOSS_UNITS
     local ARENA_UNITS = Schema.ARENA_UNITS
@@ -134,7 +133,7 @@ function Factories.Common(Schema, A3)
         return kind
     end
 
-    local NormalizeDebuffTypeBorderMode = _G.MSUF_NormalizeAuraDebuffTypeBorderMode
+    local NormalizeDebuffTypeBorderMode = MSUF.Require("MSUF_NormalizeAuraDebuffTypeBorderMode", "Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua")
 
     local function NormalizeGroupScope(scope)
         scope = tostring(scope or "raid"):lower()
@@ -148,8 +147,9 @@ function Factories.Common(Schema, A3)
         return "raid", "mythicraid"
     end
 
+    -- Published by the group filter model, which loads after this file.
     local function AuraFilter()
-        return _G.MSUF_GF_AuraFilter
+        return MSUF.Optional("MSUF_GF_AuraFilter")
     end
 
     local function CompactKey(value)

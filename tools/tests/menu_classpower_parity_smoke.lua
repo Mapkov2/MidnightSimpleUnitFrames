@@ -52,10 +52,26 @@ local function Diff(a, b, path, out)
     return out
 end
 local function Replay(path, converted)
+    local calls = {}
     local mw = World.Open(root, flavor, { clientScriptBindings = true, beforeCore = function(world)
         local load = world.LoadFile
         world.LoadFile = function(self, name, ...)
-            if name:sub(-#target) == target then name = path
+            if name:sub(-#target) == target then
+                -- Direct runtime fan-out is a native-rendering boundary: the recorders are in place
+                -- before the page loads, because the current page binds these providers when it loads.
+                for _, recorded in ipairs({ "MSUF_ApplyModules", "MSUF_ClassPower_Apply", "MSUF_UFPreview_RequestRefresh",
+                    "MSUF_EnsureCooldownWidthObservers" }) do
+                    world.env[recorded] = function(...) calls[#calls + 1] = { recorded, ... } end
+                end
+                name = path
+                -- The authentic parent reads these three shape normalizers as globals when it loads;
+                -- the client now keeps them in the namespace registry, so the replay publishes them.
+                if not converted then
+                    for _, global in ipairs({ "MSUF_UF_NormalizeShapeAlign", "MSUF_UF_NormalizeDetachedPowerShape",
+                        "MSUF_UF_NormalizePlayerHPShape" }) do
+                        if rawget(world.env, global) == nil then world.env[global] = world.core.PublicGlobals[global] end
+                    end
+                end
             elseif not converted and name:sub(-#workspaceTarget) == workspaceTarget then name = parentWorkspace end
             return load(self, name, ...)
         end
@@ -90,7 +106,7 @@ local function Replay(path, converted)
             return result
         end
     end
-    local F, receipts, calls = core.ProfileFields, {}, {}
+    local F, receipts = core.ProfileFields, {}
     core.ProfileRuntime.Apply = function() end
     env.MSUF_ForceReanchorAllUnitFrames_Once = function() end
     env.MSUF_UFCore_NotifyConfigChanged = function() end

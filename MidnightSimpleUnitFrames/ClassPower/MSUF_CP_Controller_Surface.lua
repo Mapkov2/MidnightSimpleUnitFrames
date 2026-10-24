@@ -9,24 +9,31 @@
 --- controller next to its event frame.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local FILE = "ClassPower/MSUF_CP_Controller_Surface.lua"
 local ExportPublic = MSUF.ExportPublic
 
 --- The player-frame resolver is owned by ClassPower/MSUF_CP_Core.lua, which
 --- the TOC loads before this file.
-local CoreUnitFrame = _G.MSUF_CP_CoreUnitFrame
+local CoreUnitFrame = MSUF.Require("MSUF_CP_CoreUnitFrame", FILE)
 
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local builders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type, tonumber = type, tonumber
 local math_floor = math.floor
 
 --- Cross-file collaborators; every provider loads before ClassPower in each
 --- client TOC (Castbars, the unit-frame runtime), so a missing one fails here.
-local FILE = "ClassPower/MSUF_CP_Controller_Surface.lua"
 local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
 local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
 local ApplyPowerBarEmbedLayoutAll = MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_All", FILE)
+local ResolveSafeFontPath = MSUF.Require("MSUF_ResolveSafeFontPath", FILE)
+local GetConfiguredFontColor = MSUF.Optional("MSUF_GetConfiguredFontColor")
+local ReadUnitPowerBarEnabled = MSUF.Require("MSUF_ReadUnitPowerBarEnabled", FILE)
+-- The CDM width watcher runs at every combat end: its providers load before ClassPower
+-- (Runtime bar background, Integrations third-party anchors) and are read once here.
+local GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", FILE)
+local GetUsableCooldownAnchorSize = MSUF.Require("MSUF_GetUsableCooldownAnchorSize", FILE)
+local GetCooldownAnchorScaledWidth = MSUF.Require("MSUF_GetCooldownAnchorScaledWidth", FILE)
 local table_sort = table.sort
 local InCombatLockdown = InCombatLockdown
 
@@ -78,7 +85,7 @@ end
 --- the ordinary Player Power settings; ClassPower only mounts the native
 --- AuraContainer on top of it.
 local function CP_ResolveEbonHost()
-    local playerFrame = CP._pf or (CoreUnitFrame and CoreUnitFrame("player")) or _G.MSUF_player
+    local playerFrame = CP._pf or CoreUnitFrame("player")
     local bar = playerFrame and playerFrame.targetPowerBar or nil
     if bar then CP.ebonHost = bar end
     return bar or CP.ebonHost
@@ -91,7 +98,7 @@ local GetEbonTextLevel
 --- still resolves through the EBON_MIGHT token, because that is where every
 --- other class-resource colour lives on the Colors page.
 local function CP_GetEbonStyle()
-    local playerFrame = CP._pf or CoreUnitFrame("player") or _G.MSUF_player
+    local playerFrame = CP._pf or CoreUnitFrame("player")
     local powerSpec = playerFrame and playerFrame.MSUFSpec and playerFrame.MSUFSpec.power or nil
     local p = MSUF_DB and MSUF_DB.player or nil
     local general = MSUF_DB and MSUF_DB.general or nil
@@ -104,14 +111,11 @@ local function CP_GetEbonStyle()
 
     local fontPath = GetFontPath()
     local fontFlags = GetFontFlags()
-    if not fontPath or fontPath == "" then fontPath = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF" end
+    if not fontPath or fontPath == "" then fontPath = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF" end
     if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
     local fontSize = tonumber(p and p.powerFontSize) or tonumber(general and general.powerFontSize) or 14
     if fontSize < 6 then fontSize = 6 elseif fontSize > 48 then fontSize = 48 end
-    local resolveSafe = _G.MSUF_ResolveSafeFontPath
-    if type(resolveSafe) == "function" then
-        fontPath = resolveSafe(fontPath, fontSize, fontFlags, general and general.fontKey) or fontPath
-    end
+    fontPath = ResolveSafeFontPath(fontPath, fontSize, fontFlags, general and general.fontKey) or fontPath
 
     --- Same precedence the Text element uses for ordinary power slots: a frame
     --- font override may flip colour-by-type, otherwise the shared Fonts scope
@@ -128,9 +132,8 @@ local function CP_GetEbonStyle()
     if colorByType then
         textR, textG, textB = r, g, blue
     else
-        local getColor = _G.MSUF_GetConfiguredFontColor
-        if type(getColor) == "function" then
-            local cr, cg, cb, ca = getColor()
+        if type(GetConfiguredFontColor) == "function" then
+            local cr, cg, cb, ca = GetConfiguredFontColor()
             textR = tonumber(cr) or 1
             textG = tonumber(cg) or 1
             textB = tonumber(cb) or 1
@@ -143,6 +146,7 @@ local function CP_GetEbonStyle()
                 or b.powerBarTexture or b.classPowerTexture),
             barR = r, barG = g, barB = blue,
             barA = tonumber(powerSpec and powerSpec.alpha) or 1,
+            barGloss = powerSpec and powerSpec.barGloss,
             fontPath = fontPath, fontSize = fontSize, fontFlags = fontFlags,
             textR = textR, textG = textG, textB = textB, textA = textA,
             textLevel = CP.GetEbonTextLevel(),
@@ -164,7 +168,7 @@ end
 
 local function CP_ShouldMaintainHiddenAnchor(forEditMode)
     local b = _cpDB.bars or {}
-    if forEditMode == true and _G.MSUF_UnitEditModeActive == true
+    if forEditMode == true and MSUF_UnitEditModeActive == true
         and b.showClassPower ~= false then
         return true
     end
@@ -199,8 +203,7 @@ end
 
 local function CP_CDMWidthResolveFrame(frameName)
     if type(frameName) ~= "string" or frameName == "" then return nil end
-    local resolver = _G.MSUF_GetEffectiveCooldownFrame
-    local frame = type(resolver) == "function" and resolver(frameName) or nil
+    local frame = GetEffectiveCooldownFrame(frameName)
     return frame or _G[frameName]
 end
 
@@ -214,13 +217,12 @@ local function CDMWidthGetDetachedPowerBarName()
     if not cdmName then return nil end
     local db = MSUF_DB
     if not db then return nil end
-    local readEnabled = _G.MSUF_ReadUnitPowerBarEnabled
     local player = db.player
     -- The Detached width mode drives the bar with or without width sync, so this
     -- watcher must not be gated on sync: doing so watched the one case where the
     -- source is a fallback and went blind in the case where it owns the width.
     if not player or player.powerBarDetached ~= true then return nil end
-    if readEnabled and readEnabled("player", db) == false then return nil end
+    if ReadUnitPowerBarEnabled("player", db) == false then return nil end
     return cdmName
 end
 
@@ -238,8 +240,7 @@ end
 
 local function CDMWidthFrameUsable(frameName)
     local cdm = CP_CDMWidthResolveFrame(frameName)
-    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-    return type(getSize) == "function" and getSize(cdm) ~= nil
+    return GetUsableCooldownAnchorSize(cdm) ~= nil
 end
 
 local function CDMWidthGetNames()
@@ -256,8 +257,7 @@ end
 
 local function CDMWidthReadSig(frameName)
     local cdm = CP_CDMWidthResolveFrame(frameName)
-    local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
-    local width = type(getScaledWidth) == "function" and getScaledWidth(cdm) or nil
+    local width = GetCooldownAnchorScaledWidth(cdm)
     return width and math_floor(width + 0.5) or 0
 end
 

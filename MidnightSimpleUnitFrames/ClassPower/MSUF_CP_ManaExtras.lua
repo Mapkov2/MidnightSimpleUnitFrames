@@ -8,7 +8,7 @@ MSUF.CPBuilders = MSUF.CPBuilders or {}
 -- has them); their bars need the native duration API.
 function MSUF.CPBuilders.ManaRegenTimersSupported()
     local client = MSUF.Client or {}
-    local durationUtil = _G.C_DurationUtil
+    local durationUtil = C_DurationUtil
     return (client.IsVanilla == true or client.IsTBC == true or client.IsForever == true)
         and type(durationUtil) == "table" and type(durationUtil.CreateDuration) == "function"
 end
@@ -55,7 +55,7 @@ local function PublicRegion(region)
 end
 local function Editing()
     if state.editActive ~= nil then return state.editActive end
-    return _G.MSUF_UnitEditModeActive == true
+    return MSUF_UnitEditModeActive == true
 end
 local function HideSamples()
     for _, bar in pairs(state.samples or {}) do bar:Hide() end

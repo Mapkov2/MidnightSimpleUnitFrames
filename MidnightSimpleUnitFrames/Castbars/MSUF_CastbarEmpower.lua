@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Empower castbar support.
 ---
 --- Computes empower stage timing and draws stage tick/blink visuals for
@@ -19,8 +18,13 @@ local Utils = Castbars.Utils
 
 local Publish = PublicAPI.Publish
 
-local C_Timer = _G.C_Timer
-local issecretvalue = _G.issecretvalue
+local FILE = "Castbars/MSUF_CastbarEmpower.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local EnsureDB = MSUF.Require("MSUF_EnsureDB", FILE)
+local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
+
+local C_Timer = C_Timer
+local issecretvalue = issecretvalue
 local type = type
 local tonumber = tonumber
 local tostring = tostring
@@ -41,9 +45,9 @@ local function DurationToSeconds(value)
 end
 
 local function GetEmpowerStageDuration(unit, stageIndex)
-    if type(_G.GetUnitEmpowerStageDuration) ~= "function" then return nil end
+    if type(GetUnitEmpowerStageDuration) ~= "function" then return nil end
 
-    local duration = _G.GetUnitEmpowerStageDuration(unit, stageIndex)
+    local duration = GetUnitEmpowerStageDuration(unit, stageIndex)
     duration = DurationToSeconds(duration)
     if not duration or duration <= 0 then
         return nil
@@ -56,8 +60,8 @@ local function BuildEmpowerTimeline(unit, castState)
     local totalStage = 0
     local stageCount
 
-    if type(_G.GetUnitEmpowerStageCount) == "function" then
-        local count = PlainNumber(_G.GetUnitEmpowerStageCount(unit))
+    if type(GetUnitEmpowerStageCount) == "function" then
+        local count = PlainNumber(GetUnitEmpowerStageCount(unit))
         if count and count > 0 then
             stageCount = count
         end
@@ -84,18 +88,18 @@ local function BuildEmpowerTimeline(unit, castState)
     end
 
     local holdAtMax = 0
-    if type(_G.GetUnitEmpowerHoldAtMaxTime) == "function" then
-        holdAtMax = DurationToSeconds(_G.GetUnitEmpowerHoldAtMaxTime(unit)) or 0
+    if type(GetUnitEmpowerHoldAtMaxTime) == "function" then
+        holdAtMax = DurationToSeconds(GetUnitEmpowerHoldAtMaxTime(unit)) or 0
         if holdAtMax < 0 then holdAtMax = 0 end
     end
 
     local castStartSec, castEndSec, castTotal
-    if castState or type(_G.UnitCastingInfo) == "function" then
+    if castState or type(UnitCastingInfo) == "function" then
         local startMS, endMS
         if castState then
             startMS, endMS = castState.startTimeMS, castState.endTimeMS
         else
-            local _, _, _, apiStartMS, apiEndMS = _G.UnitCastingInfo(unit)
+            local _, _, _, apiStartMS, apiEndMS = UnitCastingInfo(unit)
             startMS, endMS = apiStartMS, apiEndMS
         end
         startMS = PlainNumber(startMS)
@@ -290,7 +294,7 @@ local function IsEmpowerColorStagesEnabled()
         return cachedColorStages
     end
 
-    _G.MSUF_EnsureDB()
+    EnsureDB()
     db = Config.Read()
     cachedColorStages = not (db and db.general and db.general.empowerColorStages == false)
     return cachedColorStages
@@ -534,8 +538,8 @@ local function PlayerCastbarEmpowerStart(frame)
     local icon = castState and castState.icon
     -- SecretWhenUnitSpellCastRestricted: only a plain missing name falls back.
     if not issecretvalue(spellName) and not spellName then
-        spellName, _, icon = _G.UnitCastingInfo("player")
-        if not spellName then spellName, _, icon = _G.UnitChannelInfo("player") end
+        spellName, _, icon = UnitCastingInfo("player")
+        if not spellName then spellName, _, icon = UnitChannelInfo("player") end
     end
 
     if frame.icon and icon then
@@ -546,7 +550,7 @@ local function PlayerCastbarEmpowerStart(frame)
     end
 
     local timeline = BuildEmpowerTimeline("player", castState)
-    local now = ((_G.GetTimePreciseSec and _G.GetTimePreciseSec()) or _G.GetTime())
+    local now = ((GetTimePreciseSec and GetTimePreciseSec()) or GetTime())
     frame.empowerStartTime = timeline.castStartSec or now
     frame.empowerStageEnds = timeline.stageEnds
     frame.empowerTotalBase = timeline.totalBase
@@ -568,8 +572,8 @@ local function PlayerCastbarEmpowerStart(frame)
 
     local reverseFill = Utils.GetReverseFillSafe(frame, true)
     local durationObj = castState and castState.durationObj
-    if not durationObj and type(_G.UnitCastingDuration) == "function" then
-        durationObj = _G.UnitCastingDuration("player")
+    if not durationObj and type(UnitCastingDuration) == "function" then
+        durationObj = UnitCastingDuration("player")
     end
     local runtime = Castbars.Runtime
     if runtime and type(runtime.RetainDuration) == "function" then
@@ -652,7 +656,7 @@ local function PlayerCastbarClearEmpower(frame, hideFrame)
     end
     Manager.UnregisterCastbar(frame)
     if frame.timeText then
-        _G.MSUF_SetTextIfChanged(frame.timeText, "")
+        SetTextIfChanged(frame.timeText, "")
     end
     if frame.latencyBar and frame.latencyBar.Hide then
         frame.latencyBar:Hide()

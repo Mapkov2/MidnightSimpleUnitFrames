@@ -9,9 +9,9 @@
 --- runners, which hand over their tick and stop functions by value.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local FILE = "ClassPower/MSUF_CP_Controller_Ticker.lua"
 
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local builders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type = type
 

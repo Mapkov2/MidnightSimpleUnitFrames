@@ -1,30 +1,20 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 unit preview model: creates fake preview data and model state for unit pages.
 -- Preview-only state must not leak into live unit frames or profile runtime paths.
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
-local M = MSUF.MSUF2 or _G.MSUF2 or {}
+local MSUF = _G.MSUF
+local FILE = "Menu2/UnitPreview_Model"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local M = MSUF.MSUF2 or {}
 local ExportPublic = MSUF.ExportPublic
-MSUF.L = MSUF.L or (_G.MSUF_L) or {}
+MSUF.L = MSUF.L or {}
 local L = MSUF.L
 if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
-local isEn = (MSUF and MSUF.LOCALE) == "enUS"
+local isEn = MSUF.LOCALE == "enUS"
 local function TR(v)
     if type(v) ~= "string" then return v end
     if isEn then return v end
     return L[v] or v
 end
-local floor, max, min = math.floor, math.max, math.min
-local format = string.format
---- Mirrors the live abbreviation style so the preview shows what the frames
---- will actually render (see Runtime/MSUF_NumberFormat.lua).
-local PreviewNumOpts = nil
-do
-    local NumberFormat = MSUF.NumberFormat
-    if NumberFormat and NumberFormat.Register then
-        NumberFormat.Register(function(options) PreviewNumOpts = options end)
-    end
-end
+local max, min = math.max, math.min
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local Preview = MSUF.UFPreview or {}
@@ -38,7 +28,7 @@ local Model = Preview.Model or {}
 Preview.Model = Model
 local PreviewHelpers = M.PreviewHelpers or {}
 local UnitPage = M.UnitPage or {}
-local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
+local CanDetachUnitPowerBar = MSUF.Require("MSUF_CanDetachUnitPowerBar", FILE)
 local UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "pettarget" }
 local UNIT_SET = {}
 for i = 1, #UNIT_KEYS do UNIT_SET[UNIT_KEYS[i]] = true end
@@ -79,17 +69,8 @@ local POWER_BAR_MASTER_KEYS = {
     boss = "showBossPowerBar",
     arena = "showArenaPowerBar",
 }
-local POWER_BAR_DEFAULT_ON = {
-    player = true,
-    target = true,
-    focus = false,
-    targettarget = false,
-    focustarget = false,
-    pettarget = false,
-    pet = true,
-    boss = false,
-    arena = true,
-}
+-- Units not listed (focus, targettarget, focustarget, pettarget, boss) default to off.
+local POWER_BAR_DEFAULT_ON = { player = true, target = true, pet = true, arena = true }
 local function PreviewRaidGroupNameAllowed(key)
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "pettarget" or key == "focus"
 end
@@ -100,15 +81,12 @@ local function PreviewRaidGroupNameText(conf)
     if style == "NONE" then return group end
     return "(" .. group .. ")"
 end
+local RAID_GROUP_NAME_ANCHORS = {
+    NAMELEFT = true, NAMERIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true,
+    CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
+}
 local function NormalizePreviewRaidGroupNameAnchor(anchor)
-    if anchor == "NAMELEFT" or anchor == "NAMERIGHT"
-        or anchor == "TOPLEFT" or anchor == "TOPRIGHT"
-        or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
-        or anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM"
-        or anchor == "LEFT" or anchor == "RIGHT" then
-        return anchor
-    end
-    return "NAMERIGHT"
+    return RAID_GROUP_NAME_ANCHORS[anchor] and anchor or "NAMERIGHT"
 end
 local function KeyLabelValues(values)
     local out = {}
@@ -169,7 +147,7 @@ local function CanonKey(key)
     if UNIT_SET[key] then return key end
     return "player"
 end
-local IsSecretValue = _G.issecretvalue
+local IsSecretValue = issecretvalue or function() return false end
 local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1",
     arena = "arena1", pet = "pet", pettarget = "pettarget" }
 local liveUnitDataCache = {}
@@ -190,9 +168,8 @@ end
 local function LiveUnitData(key, playerManaSourceActive)
     key = CanonKey(key)
     local unit = LIVE_UNIT_TOKENS[key]
-    local UnitExists = _G.UnitExists
     if not (unit and type(UnitExists) == "function") then return nil end
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
+    if InCombatLockdown and InCombatLockdown() then return nil end
     local exists = UnitExists(unit)
     if IsSecretValue(exists) == true or exists ~= true then return nil end
     local mock = UNIT_DATA[key] or UNIT_DATA.player or {}
@@ -203,29 +180,29 @@ local function LiveUnitData(key, playerManaSourceActive)
     end
     d.live = true
     d.liveUnit = unit
-    d.name = LivePlain(_G.UnitName and _G.UnitName(unit)) or TR(mock.name)
+    d.name = LivePlain(UnitName and UnitName(unit)) or TR(mock.name)
     local className, classToken
-    if _G.UnitClass then className, classToken = _G.UnitClass(unit) end
+    if UnitClass then className, classToken = UnitClass(unit) end
     d.class = LivePlain(classToken) or mock.class
     d.className = LivePlain(className) or mock.className
-    d.race = (_G.UnitRace and LivePlain(_G.UnitRace(unit)))
-        or (_G.UnitCreatureType and LivePlain(_G.UnitCreatureType(unit)))
+    d.race = (UnitRace and LivePlain(UnitRace(unit)))
+        or (UnitCreatureType and LivePlain(UnitCreatureType(unit)))
         or mock.race
-    local level = _G.UnitLevel and LiveNumber(_G.UnitLevel(unit))
+    local level = UnitLevel and LiveNumber(UnitLevel(unit))
     d.level = (level and level > 0 and tostring(level)) or (level and "??") or mock.level
-    local isPlayer = _G.UnitIsPlayer and _G.UnitIsPlayer(unit)
+    local isPlayer = UnitIsPlayer and UnitIsPlayer(unit)
     if IsSecretValue(isPlayer) == true then isPlayer = mock.isPlayer end
     d.isPlayer = isPlayer == true
     d.isPet = key == "pet"
-    local classification = _G.UnitClassification and LivePlain(_G.UnitClassification(unit))
+    local classification = UnitClassification and LivePlain(UnitClassification(unit))
     d.classification = classification or mock.classification
     d.elite = classification == "elite" or classification == "rareelite"
         or classification == "worldboss" or classification == "rare"
         or (classification == nil and mock.elite == true)
-    local dead = _G.UnitIsDeadOrGhost and _G.UnitIsDeadOrGhost(unit)
+    local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
     if IsSecretValue(dead) == true then dead = false end
     d.dead = dead == true
-    local reaction = _G.UnitReaction and LiveNumber(_G.UnitReaction(unit, "player"))
+    local reaction = UnitReaction and LiveNumber(UnitReaction(unit, "player"))
     if d.isPlayer or dead ~= true then
         if reaction and reaction >= 5 then
             d.reactionKind = "friendly"
@@ -239,31 +216,31 @@ local function LiveUnitData(key, playerManaSourceActive)
     else
         d.reactionKind = "dead"
     end
-    local hpCur = _G.UnitHealth and LiveNumber(_G.UnitHealth(unit))
-    local hpMax = _G.UnitHealthMax and LiveNumber(_G.UnitHealthMax(unit))
+    local hpCur = UnitHealth and LiveNumber(UnitHealth(unit))
+    local hpMax = UnitHealthMax and LiveNumber(UnitHealthMax(unit))
     d.hpMax = hpMax and hpMax > 0 and hpMax or nil
     d.hpCur = hpCur and max(0, min(d.hpMax or MSUF.UF.UnitScene.HEALTH_MAX, hpCur)) or nil
     -- A live unit whose current health is secret shows a full bar, like its frame out of combat, instead of the
     -- stylized 72% sample; units without readable live health keep the sample.
     d.hp = d.hpCur and d.hpMax and d.hpCur / d.hpMax or (d.hpMax and 1) or mock.hp or 0.72
     local powerType = playerManaSourceActive == true
-        and ((_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0) or nil
+        and ((Enum and Enum.PowerType and Enum.PowerType.Mana) or 0) or nil
     local powerToken
     if powerType then
         powerToken = "MANA"
-    elseif _G.UnitPowerType then
-        local id, token = _G.UnitPowerType(unit)
+    elseif UnitPowerType then
+        local id, token = UnitPowerType(unit)
         powerType, powerToken = LiveNumber(id), LivePlain(token)
     end
     d.powerType = powerType
     d.powerToken = powerToken or mock.powerToken or "MANA"
-    local powerCur = _G.UnitPower and LiveNumber(_G.UnitPower(unit, powerType))
-    local powerMax = _G.UnitPowerMax and LiveNumber(_G.UnitPowerMax(unit, powerType))
+    local powerCur = UnitPower and LiveNumber(UnitPower(unit, powerType))
+    local powerMax = UnitPowerMax and LiveNumber(UnitPowerMax(unit, powerType))
     d.powerMax = powerMax and powerMax > 0 and powerMax or nil
     d.powerCur = powerCur and max(0, min(d.powerMax or 100, powerCur)) or nil
     d.power = d.powerCur and d.powerMax and d.powerCur / d.powerMax or mock.power or 0.5
     -- Keep the absorb element inspectable when the live unit has no shield.
-    local absorb = _G.UnitGetTotalAbsorbs and LiveNumber(_G.UnitGetTotalAbsorbs(unit))
+    local absorb = UnitGetTotalAbsorbs and LiveNumber(UnitGetTotalAbsorbs(unit))
     d.absorb = (absorb and absorb > 0) and absorb or nil
     -- Type classification mirrors the live NPC tint decisions closely enough
     -- for a preview; PreviewNPCKind applies the same settings gating on top.
@@ -288,9 +265,9 @@ end
 --- Player's current raid subgroup for the raid-group name preview. nil when
 --- not in a raid (callers keep their stylized fallback).
 local function LiveRaidSubgroup()
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
-    if not (_G.IsInRaid and _G.IsInRaid() and _G.GetRaidRosterInfo) then return nil end
-    local index = _G.UnitInRaid and _G.UnitInRaid("player")
+    if InCombatLockdown and InCombatLockdown() then return nil end
+    if not (IsInRaid and IsInRaid() and GetRaidRosterInfo) then return nil end
+    local index = UnitInRaid and UnitInRaid("player")
     if IsSecretValue(index) == true then return nil end
     index = tonumber(index)
     if not index then return nil end
@@ -299,10 +276,10 @@ local function LiveRaidSubgroup()
     local candidate = index
     for _ = 1, 2 do
         if candidate >= 1 and candidate <= 40 then
-            local name, _, subgroup = _G.GetRaidRosterInfo(candidate)
+            local name, _, subgroup = GetRaidRosterInfo(candidate)
             if name ~= nil and not IsSecretValue(subgroup) then
-                local mine = _G.UnitIsUnit and _G.UnitIsUnit("player", "raid" .. candidate)
-                if (not IsSecretValue(mine) and mine == true) or _G.UnitIsUnit == nil then return tonumber(subgroup) end
+                local mine = UnitIsUnit and UnitIsUnit("player", "raid" .. candidate)
+                if (not IsSecretValue(mine) and mine == true) or UnitIsUnit == nil then return tonumber(subgroup) end
             end
         end
         candidate = index + 1
@@ -312,19 +289,16 @@ end
 Preview.LiveUnitData = LiveUnitData
 Preview.LiveRaidSubgroup = LiveRaidSubgroup
 local ProfileSystemNeedsInit = M.ProfileSystemNeedsInit
+-- Core State providers, loaded before the Options addon and never reassigned: resolved once, since EnsureDB
+-- runs for every preview setting read.
+local CoreEnsureDB = MSUF.Optional("MSUF_EnsureDB") or MSUF.MSUF_EnsureDB or MSUF.EnsureDB
+local InitProfiles = MSUF.Require("MSUF_InitProfiles", FILE)
 local function EnsureDB()
-    if ProfileSystemNeedsInit() and type(_G.MSUF_InitProfiles) == "function" then
-        _G.MSUF_InitProfiles()
-    end
-    local ensureDB = _G.MSUF_EnsureDB
-    if type(ensureDB) == "function" then
-        ensureDB()
-    elseif MSUF and type(MSUF.MSUF_EnsureDB or MSUF.EnsureDB) == "function" then
-        (MSUF.MSUF_EnsureDB or MSUF.EnsureDB)()
-    end
-    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
-    _G.MSUF_DB.general = _G.MSUF_DB.general or {}
-    local db = _G.MSUF_DB
+    if ProfileSystemNeedsInit() then InitProfiles() end
+    if CoreEnsureDB then CoreEnsureDB() end
+    ExportPublic("MSUF_DB", MSUF_DB or {})
+    MSUF_DB.general = MSUF_DB.general or {}
+    local db = MSUF_DB
     for i = 1, #UNIT_KEYS do
         db[UNIT_KEYS[i]] = db[UNIT_KEYS[i]] or {}
     end
@@ -422,27 +396,28 @@ local function TextScopeSet(key, field, value)
     u[field] = value
     u.hpPowerTextOverride = nil
 end
-local function ForceTextUnit(key, reason)
-    key = CanonKey(key)
-    if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
-        _G.MSUF_ForceTextLayoutForUnitKey(key)
-    elseif type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
-        -- Text-layout entry unavailable: a full scoped apply must still land
-        -- so a preview edit can never stay preview-only.
-        _G.MSUF_UFCore_NotifyConfigChanged(key, true, true, reason or "UNIT_TEXT_OPTIONS")
-    end
+-- Core providers (UnitFrames runtime, Edit Mode) load before the Options addon and are exported once, so they are
+-- resolved here: ForceTextUnit and ApplyPanelUnit run on every preview drag step.
+local ForceTextLayoutForUnitKey = MSUF.Require("MSUF_ForceTextLayoutForUnitKey", FILE)
+local NotifyConfigChanged = MSUF.Require("MSUF_UFCore_NotifyConfigChanged", FILE)
+local SyncUnitPositionPopup = MSUF.Require("MSUF_SyncUnitPositionPopup", FILE)
+local function ForceTextUnit(key)
+    ForceTextLayoutForUnitKey(CanonKey(key))
 end
 local function ApplyPanelUnit(panel, key, reason)
     key = CanonKey(key or CurrentPanelKey(panel))
-    if panel and panel._msufAPI and type(panel._msufAPI.ApplySettingsForKey) == "function" then
-        panel._msufAPI.ApplySettingsForKey(key)
-    elseif type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+    local api = panel and panel._msufAPI
+    if api and type(api.ApplySettingsForKey) == "function" then
+        api.ApplySettingsForKey(key)
+    else
         -- Pinned/floating previews can commit without a host panel; the live
         -- frame must still re-apply the written settings (preview<->live parity).
-        _G.MSUF_UFCore_NotifyConfigChanged(key, true, true, reason or "UNIT_OPTIONS")
+        NotifyConfigChanged(key, true, true, reason or "UNIT_OPTIONS")
     end
-    if type(_G.MSUF_SyncUnitPositionPopup) == "function" then _G.MSUF_SyncUnitPositionPopup(key, M.EnsureDB()[key]) end
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "UNIT_OPTIONS") end
+    SyncUnitPositionPopup(key, M.EnsureDB()[key])
+    -- API.lua exports MSUF_UFPreview_RequestRefresh as a forwarder to this method.
+    local requestRefresh = Preview.RequestRefresh
+    if requestRefresh then requestRefresh(reason or "UNIT_OPTIONS") end
 end
 local function RefreshAllControls(list)
     if not list then return end
@@ -481,6 +456,21 @@ local function AddOptionDivider(parent, anchor, y, width)
     line:SetWidth(width or 260)
     return line
 end
+local function SetTextTint(region, enabled)
+    if not (region and region.SetTextColor) then return end
+    if enabled then region:SetTextColor(1, 1, 1, 1) else region:SetTextColor(0.55, 0.55, 0.55, 1) end
+end
+--- Greys out or restores one part of a control: mouse, Enable/Disable, then optionally alpha and text tint.
+local function SetPartEnabled(part, enabled, withAlpha, withTint)
+    if part.EnableMouse then part:EnableMouse(enabled) end
+    if enabled then
+        if part.Enable then part:Enable() end
+    elseif part.Disable then
+        part:Disable()
+    end
+    if withAlpha and part.SetAlpha then part:SetAlpha(enabled and 1 or 0.45) end
+    if withTint then SetTextTint(part, enabled) end
+end
 local function SetWidgetEnabled(w, enabled)
     if not w then return end
     enabled = enabled and true or false
@@ -498,50 +488,17 @@ local function SetWidgetEnabled(w, enabled)
         local n = w:GetName()
         label = n and (_G[n .. "Text"] or _G[n .. "Label"])
     end
-    if label and label.SetTextColor then
-        if enabled then label:SetTextColor(1, 1, 1, 1) else label:SetTextColor(0.55, 0.55, 0.55, 1) end
-    end
-    if w.editBox then
-        if w.editBox.EnableMouse then w.editBox:EnableMouse(enabled) end
-        if enabled then
-            if w.editBox.Enable then w.editBox:Enable() end
-            if w.editBox.SetTextColor then w.editBox:SetTextColor(1, 1, 1, 1) end
-        else
-            if w.editBox.Disable then w.editBox:Disable() end
-            if w.editBox.SetTextColor then w.editBox:SetTextColor(0.55, 0.55, 0.55, 1) end
-        end
-    end
+    SetTextTint(label, enabled)
+    if w.editBox then SetPartEnabled(w.editBox, enabled, false, true) end
     for _, childKey in ipairs(CONTROL_CHILD_KEYS) do
         local child = w[childKey]
-        if child then
-            if child.EnableMouse then child:EnableMouse(enabled) end
-            if enabled then
-                if child.Enable then child:Enable() end
-                if child.SetAlpha then child:SetAlpha(1) end
-            else
-                if child.Disable then child:Disable() end
-                if child.SetAlpha then child:SetAlpha(0.45) end
-            end
-        end
+        if child then SetPartEnabled(child, enabled, true, false) end
     end
-    if w.GetName then
-        local n = w:GetName()
-        if n then
-            for _, suffix in ipairs(CONTROL_NAME_SUFFIXES) do
-                local obj = _G[n .. suffix]
-                if obj then
-                    if obj.EnableMouse then obj:EnableMouse(enabled) end
-                    if enabled then
-                        if obj.Enable then obj:Enable() end
-                        if obj.SetAlpha then obj:SetAlpha(1) end
-                        if obj.SetTextColor then obj:SetTextColor(1, 1, 1, 1) end
-                    else
-                        if obj.Disable then obj:Disable() end
-                        if obj.SetAlpha then obj:SetAlpha(0.45) end
-                        if obj.SetTextColor then obj:SetTextColor(0.55, 0.55, 0.55, 1) end
-                    end
-                end
-            end
+    local n = w.GetName and w:GetName()
+    if n then
+        for _, suffix in ipairs(CONTROL_NAME_SUFFIXES) do
+            local obj = _G[n .. suffix]
+            if obj then SetPartEnabled(obj, enabled, true, true) end
         end
     end
     if type(w.Refresh) == "function" then w:Refresh() end
@@ -585,28 +542,16 @@ local function NormalizeStatusPreviewId(id)
 end
 local ClassColor = MSUF.UF.Config.ClassColor
 local Clamp01 = M.Clamp01
-local function SettingsCache()
-    return type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil
-end
+local SettingsCache = MSUF.Require("MSUF_UFCore_GetSettingsCache", FILE)
+-- Settings-cache switch of the NPC type tint per unit; units not listed always allow it.
+local NPC_TYPE_SWITCHES = {
+    target = "npcTypeTarget", focus = "npcTypeFocus", boss = "npcTypeBoss", targettarget = "npcTypeToT", focustarget = "npcTypeToT",
+}
 local function PreviewNPCKind(key, data, cache, forText)
     data = data or {}
-    local typeColorEnabled
-    if cache then
-        if forText then
-            typeColorEnabled = cache.npcTypeColorText
-        else
-            typeColorEnabled = cache.npcTypeColorBar
-        end
-    end
-    if cache and cache.npcColorMode == "type" and typeColorEnabled then
-        local allowed = true
-        if key == "target" then allowed = cache.npcTypeTarget ~= false
-        elseif key == "focus" then allowed = cache.npcTypeFocus ~= false
-        elseif key == "boss" then allowed = cache.npcTypeBoss ~= false
-        elseif key == "targettarget" then allowed = cache.npcTypeToT ~= false
-        elseif key == "focustarget" then allowed = cache.npcTypeToT ~= false
-        end
-        if allowed and data.npcKind then return data.npcKind end
+    if cache and cache.npcColorMode == "type" and cache[forText and "npcTypeColorText" or "npcTypeColorBar"] then
+        local switch = NPC_TYPE_SWITCHES[key]
+        if (not switch or cache[switch] ~= false) and data.npcKind then return data.npcKind end
     end
     return data.reactionKind or "enemy"
 end
@@ -616,20 +561,19 @@ end
 local function GradientPreviewColor(pct, health)
     return MSUF.UFBarTextCommon.PreviewHealthGradientColor(health, Clamp01(pct, 0.75))
 end
+local ResolvePowerColor = MSUF.Require("MSUF_GetResolvedPowerColor", FILE)
 local function PowerColor(token)
-    if type(_G.MSUF_GetResolvedPowerColor) == "function" then
-        local r, g, b = _G.MSUF_GetResolvedPowerColor(0, token or "MANA")
-        if r then return r, g, b end
-    end
+    local r, g, b = ResolvePowerColor(0, token or "MANA")
+    if r then return r, g, b end
     if token == "ENERGY" then return 1, 0.82, 0.10 end
     if token == "RAGE" then return 0.82, 0.12, 0.08 end
     if token == "FOCUS" then return 0.95, 0.45, 0.10 end
     return 0.10, 0.35, 0.95
 end
+local GetConfiguredFontColor = MSUF.MSUF_GetConfiguredFontColor or MSUF.Optional("MSUF_GetConfiguredFontColor")
 local function FontColor()
-    local fn = (MSUF and MSUF.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
-    if type(fn) == "function" then
-        local r, g, b = fn()
+    if GetConfiguredFontColor then
+        local r, g, b = GetConfiguredFontColor()
         if r then return r, g, b end
     end
     local g = M.EnsureDB().general or {}
@@ -658,13 +602,7 @@ local function ReadPowerBarEnabled(conf, key)
     return POWER_BAR_DEFAULT_ON[key] == true
 end
 local function CanDetachPowerBarKey(key)
-    if type(CanDetachUnitPowerBar) == "function" then
-        return CanDetachUnitPowerBar(key) == true
-    end
-    key = CanonKey(key)
-    local powerUnits = UnitPage.POWER_UNITS
-    if type(powerUnits) == "table" then return powerUnits[key] == true end
-    return UNIT_SET[key] == true
+    return CanDetachUnitPowerBar(key) == true
 end
 local function ReadPowerBarHeight(conf)
     local h = tonumber(conf.powerBarHeight) or 3

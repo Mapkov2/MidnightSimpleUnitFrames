@@ -8,8 +8,8 @@
 --- behind existing public helpers where possible, and keep destructive commands
 --- guarded by combat checks and explicit confirmation.
 local addonName, MSUF = ...
-MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local Optional = MSUF.Optional
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
 end
@@ -80,17 +80,18 @@ end
 local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "focustarget", "pet", "pettarget", "targettarget", "boss", "arena" }
 local MSUF_FullResetPending = false
 local function MSUF_ResetPositionAnchorsToScreen()
-    if type(MSUF_DB) ~= "table" then return end
+    local db = MSUF_DB
+    if type(db) ~= "table" then return end
 
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    db.general = db.general or {}
+    local g = db.general
     g.anchorToCooldown = false
     MSUF.Castbars.Config.Invalidate()
     g.anchorName = "UIParent"
 
     for i = 1, #MSUF_RESET_ANCHOR_UNITS do
         local unit = MSUF_RESET_ANCHOR_UNITS[i]
-        local conf = MSUF_DB[unit]
+        local conf = db[unit]
         if type(conf) == "table" then
             conf.anchorFrameName = nil
             conf.anchorToUnitframe = "GLOBAL"
@@ -108,7 +109,7 @@ local function MSUF_DoFullReset(opts)
     end
     MSUF_DB = nil
     MSUF_GlobalDB = nil
-    MSUF_ActiveProfile = nil
+    ExportPublic("MSUF_ActiveProfile", nil)
     print(Tr("|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account."))
     if skipReload then
         print(Tr("|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu > Advanced > Factory Reset."))
@@ -274,7 +275,7 @@ local function MSUF_PrintInputDebug()
     local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     print("Keyboard focus: " .. MSUF_FrameDebugName(focus))
 
-    local st = _G.MSUF_EditState
+    local st = Optional("MSUF_EditState")
     print("MSUF edit: active=" .. tostring(st and st.active)
         .. " popupOpen=" .. tostring(st and st.popupOpen)
         .. " unit=" .. tostring(st and st.unitKey))
@@ -371,6 +372,20 @@ local function CommandsProfilesUnavailable()
     print(Tr("|cffff0000MSUF:|r The profile module is not loaded."))
 end
 
+--- CommandsResolveProfile for the commands that act on the typed name: when it
+--- does not resolve, the reason is reported and nil comes back.
+local function CommandsResolveProfileOrReport(rest)
+    local name, reason = CommandsResolveProfile(rest)
+    if name then return name end
+    if reason == "ambiguous" then
+        print(string.format(Tr("|cffff0000MSUF:|r '%s' matches more than one profile. Type the full name."), rest))
+    elseif reason == "unavailable" then
+        CommandsProfilesUnavailable()
+    else
+        print(string.format(Tr("|cffff0000MSUF:|r Unknown profile '%s'. Type /msuf profile to list them."), rest))
+    end
+end
+
 Commands.Register({
     name = "help",
     aliases = { "commands" },
@@ -395,7 +410,7 @@ Commands.Register({
         local editing = MSUF.Require("MSUF_IsInEditMode", "Runtime/MSUF_SlashCommands.lua")() == true
         print("|cff00b7ebMSUF|r " .. CommandsAddonVersion())
         print(string.format(Tr("  Profile: %s (%d saved)"),
-            tostring(_G.MSUF_ActiveProfile or "?"), list and #list or 0))
+            tostring(MSUF_ActiveProfile or "?"), list and #list or 0))
         print(string.format(Tr("  Edit Mode: %s - In combat: %s"),
             editing and "|cff73dacaON|r" or "|cfff7768eOFF|r",
             CommandsInCombat() and "|cff73dacaYES|r" or "|cfff7768eNO|r"))
@@ -449,7 +464,8 @@ Commands.Register({
             return
         end
         MSUF_Chat_RunEnsureDB()
-        local g = (type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
+        local db = MSUF_DB
+        local g = (type(db) == "table" and type(db.general) == "table") and db.general or nil
         if not g then
             print(Tr("|cffff0000MSUF:|r DB not initialized."))
             return
@@ -475,7 +491,7 @@ Commands.Register({
     run = function(rest)
         local list = CommandsProfileList()
         if not list then return CommandsProfilesUnavailable() end
-        local active = tostring(_G.MSUF_ActiveProfile or "")
+        local active = tostring(MSUF_ActiveProfile or "")
         if rest == "" then
             print(Tr("|cff00b7ebMSUF|r profiles:"))
             for i = 1, #list do
@@ -515,18 +531,9 @@ Commands.Register({
             print(Tr("|cffff0000MSUF:|r Cannot change profiles while in combat."))
             return
         end
-        local name, reason = CommandsResolveProfile(rest)
-        if not name then
-            if reason == "ambiguous" then
-                print(string.format(Tr("|cffff0000MSUF:|r '%s' matches more than one profile. Type the full name."), rest))
-            elseif reason == "unavailable" then
-                CommandsProfilesUnavailable()
-            else
-                print(string.format(Tr("|cffff0000MSUF:|r Unknown profile '%s'. Type /msuf profile to list them."), rest))
-            end
-            return
-        end
-        if name == _G.MSUF_ActiveProfile then
+        local name = CommandsResolveProfileOrReport(rest)
+        if not name then return end
+        if name == MSUF_ActiveProfile then
             print(string.format(Tr("|cffffd700MSUF:|r Profile '%s' is already active."), name))
             return
         end
@@ -552,17 +559,8 @@ Commands.Register({
             print(Tr("|cffff0000MSUF:|r Cannot change profiles while in combat."))
             return
         end
-        local name, reason = CommandsResolveProfile(rest)
-        if not name then
-            if reason == "ambiguous" then
-                print(string.format(Tr("|cffff0000MSUF:|r '%s' matches more than one profile. Type the full name."), rest))
-            elseif reason == "unavailable" then
-                CommandsProfilesUnavailable()
-            else
-                print(string.format(Tr("|cffff0000MSUF:|r Unknown profile '%s'. Type /msuf profile to list them."), rest))
-            end
-            return
-        end
+        local name = CommandsResolveProfileOrReport(rest)
+        if not name then return end
         if MSUF_PendingProfileDelete ~= name then
             MSUF_PendingProfileDelete = name
             print(string.format(Tr("|cffffcc00MSUF:|r Repeat |cffffff00/msuf delete %s|r to delete that profile for good."), name))
@@ -592,7 +590,8 @@ Commands.Register({
         -- The defaults pass gives every frame its code default where the factory
         -- snapshot has none (Pet Target), exactly as a fresh profile gets it.
         MSUF.Require("MSUF_NormalizeProfileDefaults", "Runtime/MSUF_SlashCommands.lua")(factory, true)
-        if MSUF_DB then
+        local db = MSUF_DB
+        if db then
             local client = MSUF.Client
             for i = 1, #MSUF_RESET_UNITS do
                 local unit = MSUF_RESET_UNITS[i]
@@ -600,8 +599,8 @@ Commands.Register({
                 -- A unit this client cannot show (arena on Era and Forever, boss
                 -- on Era and TBC) keeps its stored settings.
                 if not (client and client.SupportsUnit) or client.SupportsUnit(unit) then
-                    MSUF_DB[unit] = MSUF_DB[unit] or {}
-                    local t = MSUF_DB[unit]
+                    db[unit] = db[unit] or {}
+                    local t = db[unit]
                     MSUF_ResetCopyKeys(t, defaults, MSUF_RESET_FRAME_KEYS)
                     if MSUF_RESET_GROUP_UNITS[unit] then MSUF_ResetCopyKeys(t, defaults, MSUF_RESET_GROUP_KEYS) end
                     if MSUF_RESET_FORCES_ENABLED[unit] or t.enabled == nil then
@@ -614,7 +613,7 @@ Commands.Register({
         MSUF_Chat_RunApplyAllSettings()
         -- UnitFrames/Engine/MSUF_UF_Factory.lua loads after this file.
         MSUF.Require("MSUF_ForceReanchorAllUnitFrames_Once", "Runtime/MSUF_SlashCommands.lua")()
-        local updateFonts = _G.MSUF_UpdateAllFonts
+        local updateFonts = Optional("MSUF_UpdateAllFonts")
         if type(updateFonts) == "function" then
             updateFonts()
         end
@@ -634,7 +633,7 @@ Commands.Register({
             print(Tr("|cffff0000MSUF:|r Cannot reset a profile while in combat."))
             return
         end
-        local active = tostring(_G.MSUF_ActiveProfile or "")
+        local active = tostring(MSUF_ActiveProfile or "")
         if rest:lower() ~= "confirm" then
             MSUF_ProfileResetPending = MSUF.ProfileRuntime.Identity()
             print(string.format(Tr("|cffffcc00MSUF:|r This resets every setting in profile '%s', not just positions."), active))
@@ -758,11 +757,11 @@ end
 --- Deliberately a plain table read on the load path: the command surface has to
 --- stay inert (no frame, no event, no ticker -- slash_command_registry_smoke).
 local function SlashTokenClaimed(token)
-    local hash = _G.hash_SlashCmdList
+    local hash = hash_SlashCmdList
     if type(hash) == "table" and hash[token] ~= nil then
         return true
     end
-    local list = _G.SlashCmdList
+    local list = SlashCmdList
     if type(list) ~= "table" then
         return false
     end

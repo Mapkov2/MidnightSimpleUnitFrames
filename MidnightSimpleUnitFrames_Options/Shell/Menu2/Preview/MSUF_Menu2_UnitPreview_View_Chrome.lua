@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua
 --- Cold-path unitframe preview chrome.
 ---
@@ -8,13 +7,13 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- which keeps drag, nudge, refresh and construction; it loads before the view
 --- and publishes through MSUF.UFPreviewViewChrome (public routes stay on
 --- MSUF.UFPreview).
-local addonName, addonNS = ...
-local MSUF = addonNS or (_G.MSUF_NS) or {}
+local MSUF = _G.MSUF
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2/UnitPreview_View_Chrome")
 local ExportPublic = MSUF.ExportPublic
-MSUF.L = MSUF.L or (_G.MSUF_L) or {}
+MSUF.L = MSUF.L or {}
 local L = MSUF.L
 if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
-local isEn = (MSUF and MSUF.LOCALE) == "enUS"
+local isEn = MSUF.LOCALE == "enUS"
 local function TR(v)
     if type(v) ~= "string" then return v end
     if isEn then return v end
@@ -25,7 +24,7 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
 local PreviewCore = MSUF.UFPreviewCore or {}
-local M2 = MSUF.MSUF2 or _G.MSUF2 or {}
+local M2 = MSUF.MSUF2
 local EnsureDB = M2.EnsureDB
 local PreviewHelpers = M2.PreviewHelpers or {}
 
@@ -78,11 +77,11 @@ local function UpdateHandleHint(box, handle)
 end
 local function RequestPreviewLayoutRefresh(box, reason)
     if not box then return end
-    if type(Preview.RequestRefreshForBox) == "function" then
+    if Preview.RequestRefreshForBox then
         Preview.RequestRefreshForBox(box, reason)
-    elseif type(Preview.RequestRefresh) == "function" and (not Preview.active or Preview.active == box) then
+    elseif Preview.RequestRefresh and (not Preview.active or Preview.active == box) then
         Preview.RequestRefresh(reason)
-    elseif type(Preview.Refresh) == "function" then
+    elseif Preview.Refresh then
         Preview.Refresh(box, reason)
     end
 end
@@ -139,24 +138,12 @@ function Preview.FocusTextSlot(unitKey, kind, slot, active)
     if targetKey and boxKey and targetKey ~= boxKey then return false end
     kind = NormalizePreviewTextFocusKind(kind)
     slot = NormalizePreviewTextFocusSlot(slot)
-    if not kind then
-        box._msufMenuTextFocus = nil
-        if type(Preview.RequestRefresh) == "function" then
-            Preview.RequestRefresh("MENU_TEXT_CLEAR_FOCUS")
-        else
-            Preview.Refresh(box, "MENU_TEXT_CLEAR_FOCUS")
-        end
-        return true
-    end
-    box._msufMenuTextFocus = {
-        kind = kind,
-        slot = slot,
-        active = active == true,
-    }
-    if type(Preview.RequestRefresh) == "function" then
-        Preview.RequestRefresh("MENU_TEXT_FOCUS")
+    box._msufMenuTextFocus = kind and { kind = kind, slot = slot, active = active == true } or nil
+    local reason = kind and "MENU_TEXT_FOCUS" or "MENU_TEXT_CLEAR_FOCUS"
+    if Preview.RequestRefresh then
+        Preview.RequestRefresh(reason)
     else
-        Preview.Refresh(box, "MENU_TEXT_FOCUS")
+        Preview.Refresh(box, reason)
     end
     return true
 end
@@ -166,11 +153,9 @@ end)
 ExportPublic("MSUF_UFPreview_ClearTextFocus", function()
     return Preview.FocusTextSlot(nil, nil, nil, false)
 end)
-local UNIT_PREVIEW_ANIMATION_INTERVAL = 1 / 20
-local SetPreviewAnimationEnabled
 local function PreviewAnimationInCombat()
     local fn = PreviewCore.InCombat
-    if type(fn) == "function" then return fn() == true end
+    if fn then return fn() == true end
     return InCombatLockdown and InCombatLockdown() or false
 end
 local function PreviewAnimationActive(box)
@@ -182,27 +167,15 @@ local function RefreshPreviewAnimationButton(box)
     if not btn then return end
     PreviewHelpers.PaintAnimateButton(btn, PreviewAnimationActive(box), TR, ANIMATE_IDLE_FILL, ANIMATE_IDLE_BORDER)
 end
-local function StopPreviewAnimationDriver(box)
-    if not (box and box.SetScript) then return end
-    box:SetScript("OnUpdate", nil)
-    if box.UnregisterEvent then box:UnregisterEvent("PLAYER_REGEN_DISABLED") end
-end
-local function KillPreviewAnimationForCombat(box)
-    if not box then return end
-    StopPreviewAnimationDriver(box)
-    box._animationEnabled = nil
-    box._animationElapsed = 0
-    box._animationAccum = 0
-    box._previewAnimationState = nil
-    box._previewAnimationData = nil
-    RefreshPreviewAnimationButton(box)
-end
 --- Live-state driver: keeps the preview mirroring the real unit (target
 --- swaps, health/power ticks, roster changes) while the menu is open.
 --- Zero combat overhead by construction: PLAYER_REGEN_DISABLED drops every
 --- listener for the whole fight (only the single re-arm signal stays), and
 --- the driver exists only while a preview box is in use.
-local LIVE_STATE_UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
+local LIVE_STATE_UNIT_EVENTS = {
+    "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
+    "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION",
+}
 local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus",
     boss = "boss1", arena = "arena1", pet = "pet", pettarget = "pettarget" }
 local SyncUnitPreviewLiveState
@@ -263,10 +236,10 @@ end
 --- and aura timers on the scene the last full refresh built. Only when there
 --- is no complete scene yet (first frame, unit switch) does a full refresh run.
 local function RefreshPreviewAnimationFrame(box)
-    local animate = Preview and Preview.RefreshAnimation
-    if not (type(animate) == "function" and animate(box) == true) then
-        local refresh = Preview and Preview.Refresh
-        if type(refresh) == "function" then
+    local animate = Preview.RefreshAnimation
+    if not (animate and animate(box) == true) then
+        local refresh = Preview.Refresh
+        if refresh then
             refresh(box, "UNIT_PREVIEW_ANIMATE")
         else
             RequestPreviewLayoutRefresh(box, "UNIT_PREVIEW_ANIMATE")
@@ -275,61 +248,32 @@ local function RefreshPreviewAnimationFrame(box)
     -- The large menu preview owns this clock.  Feed the exact same elapsed
     -- value into already-built Edit Mode aura dummies so their timers/swipes
     -- stay in phase without starting a second OnUpdate or doing full layouts.
-    local a3 = MSUF and MSUF.MSUF_Auras3
+    local a3 = MSUF.MSUF_Auras3
     local refreshEditAnimation = a3 and a3.RefreshEditPreviewAnimation
-    if type(refreshEditAnimation) == "function" then
+    if refreshEditAnimation then
         refreshEditAnimation(box and box.key, box and box._animationElapsed)
     end
 end
 
 Preview.RestoreStaticEditModeAuraPreview = function(box)
-    local a3 = MSUF and MSUF.MSUF_Auras3
+    local a3 = MSUF.MSUF_Auras3
     local refresh = a3 and a3.RefreshEditPreview
-    if type(refresh) == "function" then refresh(box and box.key) end
+    if refresh then refresh(box and box.key) end
 end
-local function PreviewAnimationOnUpdate(box, elapsed)
-    if not (box and box._animationEnabled == true and box.IsShown and box:IsShown()) then
-        StopPreviewAnimationDriver(box)
-        return
-    end
-    if PreviewAnimationInCombat() then
-        KillPreviewAnimationForCombat(box)
-        if box.hint then box.hint:SetText(TR("Preview animation pauses during combat.")) end
-        return
-    end
-    elapsed = tonumber(elapsed) or 0
-    box._animationElapsed = (tonumber(box._animationElapsed) or 0) + elapsed
-    box._animationAccum = (tonumber(box._animationAccum) or 0) + elapsed
-    if box._animationAccum < UNIT_PREVIEW_ANIMATION_INTERVAL then return end
-    box._animationAccum = 0
-    RefreshPreviewAnimationFrame(box)
+local function ClearPreviewAnimationState(box, restoreStatic)
+    box._previewAnimationState = nil
+    box._previewAnimationData = nil
+    if restoreStatic then Preview.RestoreStaticEditModeAuraPreview(box) end
 end
-local StartPreviewAnimationDriver = PreviewHelpers.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
-SetPreviewAnimationEnabled = function(box, enabled, reason)
-    if not box then return end
-    enabled = enabled == true
-    if enabled and PreviewAnimationInCombat() then
-        KillPreviewAnimationForCombat(box)
-        if box.hint then box.hint:SetText(TR("Preview animation pauses during combat.")) end
-        RefreshPreviewAnimationButton(box)
-        return
-    end
-    if enabled and box._animationEnabled ~= true then
-        box._animationElapsed = 0
-        box._animationAccum = 0
-    end
-    box._animationEnabled = enabled
-    if enabled then
-        StartPreviewAnimationDriver(box)
-    else
-        StopPreviewAnimationDriver(box)
-        box._previewAnimationState = nil
-        box._previewAnimationData = nil
-        Preview.RestoreStaticEditModeAuraPreview(box)
-    end
-    RefreshPreviewAnimationButton(box)
+local function PreviewAnimationCombatHint(box)
+    if box.hint then box.hint:SetText(TR("Preview animation pauses during combat.")) end
+end
+local function FinishPreviewAnimationToggle(box, reason)
     RequestPreviewLayoutRefresh(box, reason or "UNIT_PREVIEW_ANIMATE_TOGGLE")
 end
+local StartPreviewAnimationDriver, StopPreviewAnimationDriver, KillPreviewAnimationForCombat, SetPreviewAnimationEnabled =
+    PreviewHelpers.CreateAnimationStarter(PreviewAnimationInCombat, RefreshPreviewAnimationFrame,
+        RefreshPreviewAnimationButton, ClearPreviewAnimationState, PreviewAnimationCombatHint, FinishPreviewAnimationToggle, true)
 local function TogglePreviewAnimation(box)
     SetPreviewAnimationEnabled(box, not PreviewAnimationActive(box), "UNIT_PREVIEW_COMBAT_ANIMATE")
 end
@@ -362,7 +306,9 @@ local function CreatePreviewAnimationButton(box)
         end,
     }
     if M2.AddTooltip then
-        M2.AddTooltip(btn, "Animate Preview", "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic window. Matching Edit Mode aura dummies use the same clock. Pauses during combat.", { hook = true })
+        M2.AddTooltip(btn, "Animate Preview",
+            "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic window. Matching Edit Mode aura dummies use the same clock. Pauses during combat.",
+            { hook = true })
     end
     box.animateCombatButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -398,7 +344,7 @@ local function EnsureUnitLayersButton(box)
         local sidebar = box.sidebar
         if sidebar then sidebar:SetShown(not sidebar:IsShown()) end
     end)
-    if M2 and M2.AddTooltip then
+    if M2.AddTooltip then
         M2.AddTooltip(btn, "Preview Layers", "Toggle the preview layer list.", { hook = true })
     end
     box._msuf2LayersButton = btn
@@ -475,7 +421,7 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
     end
 end
 M2.Assign(Chrome, {
-    PreviewGuidesEnabled = PreviewGuidesEnabled, SetPreviewGuidesEnabled = SetPreviewGuidesEnabled,
+    TR = TR, PreviewGuidesEnabled = PreviewGuidesEnabled, SetPreviewGuidesEnabled = SetPreviewGuidesEnabled,
     PreviewGuidesVisible = PreviewGuidesVisible, DefaultPreviewHint = DefaultPreviewHint,
     UpdateHandleHint = UpdateHandleHint, RequestPreviewLayoutRefresh = RequestPreviewLayoutRefresh,
     ApplyPreviewTextFocus = ApplyPreviewTextFocus, PreviewAnimationActive = PreviewAnimationActive,

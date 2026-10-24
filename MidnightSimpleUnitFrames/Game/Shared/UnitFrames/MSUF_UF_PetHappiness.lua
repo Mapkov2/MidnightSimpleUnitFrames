@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Hunter Pet Happiness indicator for the clients that have it.
 ---
 --- Classic Era and TBC expose the global GetPetHappiness. WoW Forever brought
@@ -9,19 +8,19 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Forever, the client gate below returns before anything is registered.
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 -- Only an explicit "no" stops the file, so a harness without the client model
 -- still gets the element.
 if MSUF.Client and MSUF.Client.SupportsPetHappiness == false then return end
 local UF = MSUF.UF
 if not (UF and type(UF.RegisterElement) == "function") then return end
 
-local CreateFrame = _G.CreateFrame
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua")
+local CreateFrame = CreateFrame
 -- Forever has only the namespaced function, Classic Era and TBC only the global.
-local petInfo = _G.C_PetInfo
-local GetPetHappiness = type(petInfo) == "table" and petInfo.GetPetHappiness or _G.GetPetHappiness
-local IsSecret = _G.issecretvalue
-local HasPetUI = _G.HasPetUI
+local petInfo = C_PetInfo
+local GetPetHappiness = type(petInfo) == "table" and petInfo.GetPetHappiness or GetPetHappiness
+local IsSecret = issecretvalue
+local HasPetUI = HasPetUI
 local tonumber = tonumber
 local type = type
 local floor = math.floor
@@ -44,7 +43,7 @@ local TEX_COORDS = {
 -- PetHappiness.lua, Forever 1.60.1.70009 and later) uses these atlases. Resolved
 -- once: a client without the atlases keeps the texture cells.
 local ATLASES = { [1] = "UI-PetMad", [2] = "UI-PetNeutral", [3] = "UI-PetHappiness" }
-local textureInfo = _G.C_Texture
+local textureInfo = C_Texture
 local USE_ATLAS = type(petInfo) == "table" and type(petInfo.GetPetHappiness) == "function"
     and type(textureInfo) == "table" and type(textureInfo.GetAtlasInfo) == "function"
     and textureInfo.GetAtlasInfo(ATLASES[3]) ~= nil
@@ -223,19 +222,19 @@ UF.RegisterElement("PetHappinessIndicator", Happiness, {
     forceUpdate = true,
 })
 
-_G.MSUF_RequestPetHappinessIndicatorRefresh = function(unit, reason)
+MSUF.ExportPublic("MSUF_RequestPetHappinessIndicatorRefresh", function(unit, reason)
     if type(UF.RefreshElements) == "function" then
         return UF.RefreshElements(unit or "pet", { "PetHappinessIndicator" }, reason or "MSUF_PET_HAPPINESS")
     end
     return false
-end
+end)
 
 --- The art of one state (1 unhappy, 2 content, 3 happy; anything else draws
 --- happy) in the menu's status icon shape: texture, left, right, top, bottom,
 --- atlas. The atlas is set only where this client draws atlases. The unit
 --- preview and the Pet page icon strip read it, so they match the live icon.
-_G.MSUF_GetPetHappinessIcon = function(happiness)
+MSUF.ExportPublic("MSUF_GetPetHappinessIcon", function(happiness)
     if not TEX_COORDS[happiness] then happiness = 3 end
     local coords = TEX_COORDS[happiness]
     return TEXTURE, coords[1], coords[2], coords[3], coords[4], USE_ATLAS and ATLASES[happiness] or nil
-end
+end)

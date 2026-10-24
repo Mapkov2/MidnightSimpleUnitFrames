@@ -1,10 +1,13 @@
 -- Dense parity against frozen formulas, including typed/stored fractional positions.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
-local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
+local ns = {}
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, ns)
 local base = root .. "/MidnightSimpleUnitFrames/Shell/EditMode/"
 assert(loadfile(base .. "MSUF_EditMode_Geometry.lua"))("MidnightSimpleUnitFrames", ns)
 MSUF_RoundOffset = ns.Geometry.RoundOffset
-assert(loadfile(base .. "MSUF_EditMode_Core.lua"))("MidnightSimpleUnitFrames", ns)
+-- Core requires providers that load later in the TOC (group geometry apply ...); this parity test never calls them.
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua", ns)
 local Legacy = assert(loadfile(root .. "/tools/fixtures/editmode_geometry_legacy.lua"))()
 local Geometry, Util = ns.Geometry, MSUF_EM2.Util
 local checks = 0

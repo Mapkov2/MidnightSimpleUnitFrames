@@ -5,7 +5,6 @@
 --- textures and updates threat-driven visibility during unit events.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local UF = MSUF.UF
@@ -23,7 +22,7 @@ local type = type
 local pairs = pairs
 local floor = math.floor
 local max = math.max
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local Visuals = MSUF.UFVisuals or {}
 local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
 local Apply = MSUF.Apply or {}

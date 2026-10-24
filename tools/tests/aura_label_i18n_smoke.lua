@@ -24,9 +24,16 @@ local translated = {
     ["Defensive Buffs"] = "Defensive",
 }
 local namespace = {
+    -- The client fact the Edit Mode config reads at load: three arena slots.
+    Client = { MaxArenaOpponents = 3 },
     Translate = function(text) return translated[text] or text end,
 }
 _G.MSUF_NS = namespace
+-- The shipped Kernel API; the model files below run through the shipped loader, so a
+-- provider this file does not load (the label helpers never call it) is a forwarder
+-- that raises when used.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, namespace)
 _G.C_Spell = {
     GetSpellInfo = function(spellID)
         if spellID == 1001 then return { name = "Heiliges Licht", spellID = 1001, iconID = 1 } end
@@ -35,7 +42,7 @@ _G.C_Spell = {
 }
 
 -- 1a. Menu model label helpers (Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua).
-assert(loadfile(ADDON .. "Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua"))("MidnightSimpleUnitFrames", namespace)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua", namespace)
 local Common = namespace.Auras3MenuModelFactories.Common({ BOSS_LOOKUP = {}, BOSS_UNITS = {}, ARENA_UNITS = {}, ARENA_LOOKUP = {} })
 assert(type(Common.SpellIDText) == "function" and type(Common.UnresolvedSpellText) == "function",
     "the menu model exports no translated spell label helpers")
@@ -49,7 +56,7 @@ assert(Common.UnresolvedSpellText("mystery") == "mystery (nicht aufgelöst)",
 
 -- 1b. The Edit Mode preview header (Auras3/MSUF_Auras3_EditMode_Config.lua).
 namespace.MSUF_Auras3 = {}
-assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_EditMode_Config.lua"))("MidnightSimpleUnitFrames", namespace)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_Config.lua", namespace)
 local config = namespace.MSUF_Auras3.EditModeModules.Config()
 local GroupTitle = assert(config.GroupTitle, "the Edit Mode config exports no preview group title")
 local groups = config.GROUPS
@@ -66,7 +73,7 @@ assert(GroupTitle("player", "custom4", groups.custom4) == "Player · Defensive",
 -- English in every language). The menu translates item tooltips at display.
 _G.MSUF_GF_AuraFilter = nil
 assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))().Install(root, namespace)
-assert(loadfile(ADDON .. "Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua"))("MidnightSimpleUnitFrames", namespace)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua", namespace)
 namespace.Auras3MenuModelFactories.GroupFilters({}, {}, {}, {}, function(name, value) _G[name] = value; return value end)
 local groupFilters = assert(_G.MSUF_GF_AuraFilter, "the group aura filter list did not load")
 local tooltips = {}

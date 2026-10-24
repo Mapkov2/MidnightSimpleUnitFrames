@@ -13,10 +13,20 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local ns = MSUF_NS
     local function Reject(tbl, key, expected, load, wrong)
         local original = tbl[key]
+        -- A namespace-only provider also lives in the registry (ns.PublicGlobals): a missing one is
+        -- absent from the global table and from the registry.
+        local registry = tbl == _G and ns.PublicGlobals or nil
+        local registered = registry and registry[key]
         for _, bad in ipairs({ false, wrong or {} }) do
-            if bad == false then tbl[key] = nil else tbl[key] = bad end
+            if bad == false then
+                tbl[key] = nil
+                if registry then registry[key] = nil end
+            else
+                tbl[key] = bad
+            end
             local ok, err = pcall(load or function() assert(loadfile(ownerPath))("MSUF", ns) end)
             tbl[key] = original
+            if registry then registry[key] = registered end
             assert(not ok and tostring(err):find(expected, 1, true),
                 "unnamed/missing dependency failure: " .. expected .. " -> " .. tostring(err))
             count = count + 1

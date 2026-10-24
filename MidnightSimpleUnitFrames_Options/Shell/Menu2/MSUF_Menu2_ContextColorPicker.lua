@@ -1,8 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_ContextColorPicker.lua")
 local W = M.Widgets or {}
 local T = M.Theme
 local abs, floor, max, min = math.abs, math.floor, math.max, math.min
@@ -46,7 +46,7 @@ local function HSV(h, s, v)
 end
 
 local function Store()
-    local db = M.EnsureDB() or _G.MSUF_DB
+    local db = M.EnsureDB() or MSUF_DB
     if type(db) ~= "table" then return nil end
     db.menu2ColorPicker = type(db.menu2ColorPicker) == "table" and db.menu2ColorPicker or {}
     local store = db.menu2ColorPicker
@@ -82,11 +82,16 @@ end
 local function Font(parent, template, text, color)
     return T.Font(parent, template, text or "", color or T.colors.text)
 end
+local function FontAt(parent, template, text, color, ...)
+    local fs = Font(parent, template, text, color)
+    fs:SetPoint(...)
+    return fs
+end
 local function MenuFontStamp()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general or nil
     return tostring(type(general) == "table" and general.menuFontKey or "")
-        .. "\030" .. tostring(tonumber(_G.MSUF_FontApplyEpoch) or 0)
+        .. "\030" .. tostring(tonumber(MSUF_FontApplyEpoch) or 0)
 end
 local function RefreshPickerFonts(panel)
     if not (panel) then return end
@@ -96,12 +101,11 @@ local function RefreshPickerFonts(panel)
     panel._msuf2MenuFontStamp = stamp
 end
 local function PickerInfoOwnsTooltip(button)
-    local tooltip = _G.GameTooltip
-    if not tooltip then return false end
-    return not tooltip.GetOwner or tooltip:GetOwner() == button
+    if not GameTooltip then return false end
+    return not GameTooltip.GetOwner or GameTooltip:GetOwner() == button
 end
 local function ShowPickerInfo(button)
-    local tooltip = _G.GameTooltip
+    local tooltip = GameTooltip
     if not (button and tooltip) then return end
     local title = button._msuf2PickerInfoTitle or Tr("Color context")
     local text = button._msuf2PickerInfoText or ""
@@ -112,7 +116,7 @@ local function ShowPickerInfo(button)
 end
 local function HidePickerInfo(button)
     if button then button._msuf2PickerInfoPinned = nil end
-    if PickerInfoOwnsTooltip(button) then _G.GameTooltip:Hide() end
+    if PickerInfoOwnsTooltip(button) then GameTooltip:Hide() end
 end
 local function RaisePickerInfo(panel)
     local button = panel and panel.infoButton
@@ -159,6 +163,17 @@ local function BrightSurface(frame, r, g, b, a)
     wash:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -5, 5)
     wash:SetColorTexture(r, g, b, a or 0.94)
     return wash
+end
+-- An inset card of the picker: surface, backdrop and bright wash, anchored TOPLEFT.
+local function SurfaceCard(parent, x, y, width, height)
+    local card = T.Panel(parent, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
+    card:SetPoint("TOPLEFT", x, y)
+    card:SetSize(width, height)
+    if T.ApplySurface then T.ApplySurface(card, "card") end
+    if T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft) end
+    card._msuf2PickerBrightSurface = BrightSurface(card,
+        T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], 0.92)
+    return card
 end
 local TRUE_COLOR_KEYS = { "L", "M", "R" }
 local CIRCLE_MASK = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
@@ -240,30 +255,28 @@ local function Input(parent, width, numeric)
     if edit.SetNumeric then edit:SetNumeric(numeric and true or false) end
     if numeric and edit.SetTextInsets then edit:SetTextInsets(3, 12, 0, 0) end
     if T.SkinEditBox then T.SkinEditBox(edit) end
-    edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); if picker then picker:Refresh() end end)
+    edit:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+        if picker then picker:Refresh() end
+    end)
     edit:SetScript("OnEnterPressed", function(self)
         if type(self._commit) == "function" then self:_commit() end
         self:ClearFocus()
     end)
     if numeric then
-        local function Step(delta)
-            local value = min(255, max(0, (tonumber(edit:GetText()) or 0) + delta))
-            edit:SetText(value)
-            if type(edit._commit) == "function" then edit:_commit() end
+        local function Stepper(glyph, point, offsetY, delta)
+            local button = PixelLayoutRegion(CreateFrame("Button", nil, edit))
+            button:SetSize(10, 10)
+            button:SetPoint(point, -2, offsetY)
+            Font(button, "GameFontDisableSmall", glyph, T.colors.dim):SetPoint("CENTER", 0, offsetY)
+            button:SetScript("OnClick", function()
+                local value = min(255, max(0, (tonumber(edit:GetText()) or 0) + delta))
+                edit:SetText(value)
+                if type(edit._commit) == "function" then edit:_commit() end
+            end)
+            return button
         end
-        local up = PixelLayoutRegion(CreateFrame("Button", nil, edit))
-        up:SetSize(10, 10)
-        up:SetPoint("TOPRIGHT", -2, -1)
-        local upText = Font(up, "GameFontDisableSmall", "^", T.colors.dim)
-        upText:SetPoint("CENTER", 0, -1)
-        up:SetScript("OnClick", function() Step(1) end)
-        local down = PixelLayoutRegion(CreateFrame("Button", nil, edit))
-        down:SetSize(10, 10)
-        down:SetPoint("BOTTOMRIGHT", -2, 1)
-        local downText = Font(down, "GameFontDisableSmall", "v", T.colors.dim)
-        downText:SetPoint("CENTER", 0, 1)
-        down:SetScript("OnClick", function() Step(-1) end)
-        edit.stepUp, edit.stepDown = up, down
+        edit.stepUp, edit.stepDown = Stepper("^", "TOPRIGHT", -1, 1), Stepper("v", "BOTTOMRIGHT", 1, -1)
     end
     return edit
 end
@@ -271,18 +284,10 @@ local function ColorChip(parent, width, height)
     local chip = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     chip:SetSize(width, height)
     local fill, edge = CreateTrueColorPill(chip, "_msuf2ColorChip", 1)
-    if fill then
-        fill:SetColorTexture(1, 1, 1, 1)
-        edge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.88)
-        function chip:SetColorTexture(r, g, b, a) fill:SetColorTexture(r, g, b, a or 1) end
-    else
-        fill = PixelLayoutRegion(chip:CreateTexture(nil, "ARTWORK"))
-        fill:SetAllPoints()
-        fill:SetColorTexture(1, 1, 1, 1)
-        function chip:SetColorTexture(r, g, b, a) fill:SetColorTexture(r, g, b, a or 1) end
-    end
+    fill:SetColorTexture(1, 1, 1, 1)
+    edge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.88)
+    function chip:SetColorTexture(r, g, b, a) fill:SetColorTexture(r, g, b, a or 1) end
     function chip:SetActive(active)
-        if not edge then return end
         local color = active and (T.colors.coreHot or T.colors.accent) or T.colors.borderSoft
         edge:SetColorTexture(color[1], color[2], color[3], active and 1 or 0.88)
     end
@@ -369,6 +374,27 @@ local function Swatch(parent, size, onClick)
     button:SetScript("OnClick", onClick)
     return button
 end
+local CLASS_TOKENS = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
+-- `count` 24px swatches that share one click handler; `init` runs on each.
+local function SwatchList(parent, count, onClick, init)
+    local list = {}
+    for i = 1, count do
+        list[i] = Swatch(parent, 24, onClick)
+        if init then init(list[i], i) end
+    end
+    return list
+end
+local function ApplySwatchHex(panel, hex)
+    local r, g, b = FromHex(hex)
+    if r then panel:Apply(r, g, b) end
+end
+-- Row-major swatch grid inside the advanced card, `perRow` to a row.
+local function PlaceSwatches(list, perRow, top, stepX, stepY)
+    for i = 1, #list do
+        local slot = i - 1
+        list[i]:SetPoint("TOPLEFT", 12 + (slot % perRow) * stepX, -top - floor(slot / perRow) * stepY)
+    end
+end
 
 local function OpacityDisplay(parent, width)
     local frame = PixelLayoutRegion(CreateFrame("Slider", nil, parent))
@@ -382,8 +408,7 @@ local function OpacityDisplay(parent, width)
     if frame.SetObeyStepOnDrag then frame:SetObeyStepOnDrag(true) end
     if T.ApplyBackdrop then T.ApplyBackdrop(frame, T.colors.coreShadow, T.colors.borderSoft) end
     local innerWidth, innerHeight = width - 2, 18
-    local atlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-        and _G.C_Texture.GetAtlasInfo("colorpicker-checkerboard")
+    local atlasInfo = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("colorpicker-checkerboard")
     local checkerScale = 0.75
     local checkerWidth = ((atlasInfo and tonumber(atlasInfo.width)) or 32) * checkerScale
     local checkerHeight = ((atlasInfo and tonumber(atlasInfo.height)) or 32) * checkerScale
@@ -403,8 +428,8 @@ local function OpacityDisplay(parent, width)
     shade:SetPoint("TOPLEFT", 1, -1)
     shade:SetPoint("BOTTOMRIGHT", -1, 1)
     shade:SetColorTexture(1, 1, 1, 1)
-    if shade.SetGradient and _G.CreateColor then
-        shade:SetGradient("HORIZONTAL", _G.CreateColor(0.02, 0.04, 0.07, 0), _G.CreateColor(0.02, 0.04, 0.07, 0.96))
+    if shade.SetGradient and CreateColor then
+        shade:SetGradient("HORIZONTAL", CreateColor(0.02, 0.04, 0.07, 0), CreateColor(0.02, 0.04, 0.07, 0.96))
     else
         shade:SetColorTexture(0.02, 0.04, 0.07, 0.56)
     end
@@ -416,6 +441,11 @@ local function OpacityDisplay(parent, width)
     frame.checkerHost, frame.shade, frame.thumb = checkerHost, shade, thumb
     return frame
 end
+local function SetOpacityShown(panel, shown)
+    panel.opacityLabel:SetShown(shown)
+    panel.opacity:SetShown(shown)
+    panel.opacityValue:SetShown(shown)
+end
 local function OwnerOpacity(owner)
     if not (owner and owner._msuf2ColorHasOpacity == true
         and type(owner._msuf2GetColorOpacity) == "function") then return nil end
@@ -426,6 +456,14 @@ end
 local function OwnerState(owner)
     if not (owner and type(owner._msuf2CaptureColorState) == "function") then return nil end
     return owner:_msuf2CaptureColorState()
+end
+-- First edit of a session opens the owner's history entry; every edit marks it touched.
+local function BeginOwnerEdit(panel, owner)
+    if not panel.historyOwner then
+        panel.historyOwner = owner
+        if type(owner._msuf2BeginColorInteraction) == "function" then owner:_msuf2BeginColorInteraction() end
+    end
+    panel.touched[owner] = true
 end
 local function ApplyOwner(owner, r, g, b, alpha, preclamped)
     if not owner then return end
@@ -482,8 +520,14 @@ function Picker.BuildTitleBar(panel)
     drag:SetHeight(44)
     drag:RegisterForDrag("LeftButton")
     drag:RegisterForClicks("LeftButtonUp")
-    drag:SetScript("OnDragStart", function() panel:SetContextListShown(false); panel:StartMoving() end)
-    drag:SetScript("OnDragStop", function() panel:StopMovingOrSizing(); panel:SavePosition() end)
+    drag:SetScript("OnDragStart", function()
+        panel:SetContextListShown(false)
+        panel:StartMoving()
+    end)
+    drag:SetScript("OnDragStop", function()
+        panel:StopMovingOrSizing()
+        panel:SavePosition()
+    end)
     drag:SetScript("OnDoubleClick", function() panel:ResetPosition() end)
     if M.AddTooltip then M.AddTooltip(drag, "Move color picker", "Drag to move. Double-click to center it again.") end
 
@@ -502,7 +546,7 @@ function Picker.BuildTitleBar(panel)
     end)
     info:HookScript("OnEnter", function(self) ShowPickerInfo(self) end)
     info:HookScript("OnLeave", function(self)
-        if not self._msuf2PickerInfoPinned and PickerInfoOwnsTooltip(self) then _G.GameTooltip:Hide() end
+        if not self._msuf2PickerInfoPinned and PickerInfoOwnsTooltip(self) then GameTooltip:Hide() end
     end)
     panel.infoButton = info
     RaisePickerInfo(panel)
@@ -558,10 +602,8 @@ function Picker.BuildPreviewFields(panel)
     original:SetActive(false)
     current:SetActive(true)
     panel.original, panel.current = original, current
-    local originalLabel = Font(panel, "GameFontDisableSmall", "Original", T.colors.dim)
-    originalLabel:SetPoint("BOTTOMLEFT", original, "TOPLEFT", 0, 2)
-    local currentLabel = Font(panel, "GameFontDisableSmall", "Current", T.colors.dim)
-    currentLabel:SetPoint("BOTTOMLEFT", current, "TOPLEFT", 0, 2)
+    FontAt(panel, "GameFontDisableSmall", "Original", T.colors.dim, "BOTTOMLEFT", original, "TOPLEFT", 0, 2)
+    FontAt(panel, "GameFontDisableSmall", "Current", T.colors.dim, "BOTTOMLEFT", current, "TOPLEFT", 0, 2)
 end
 
 --- Enter handler for a HEX input. The wheel card and the Advanced card each
@@ -575,15 +617,8 @@ local function HexCommitter(panel)
 end
 
 function Picker.BuildWheelCard(panel)
-    local wheelCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
-    wheelCard:SetPoint("TOPLEFT", PICKER_PAD, -133)
-    wheelCard:SetSize(SIMPLE_WIDTH - PICKER_PAD * 2, 138)
-    if T.ApplySurface then T.ApplySurface(wheelCard, "card") end
-    if T.ApplyBackdrop then T.ApplyBackdrop(wheelCard, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft) end
-    wheelCard._msuf2PickerBrightSurface = BrightSurface(wheelCard,
-        T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], 0.92)
-    local wheelTitle = Font(wheelCard, "GameFontNormalSmall", "Color & Brightness", T.colors.text)
-    wheelTitle:SetPoint("TOPLEFT", 10, -8)
+    local wheelCard = SurfaceCard(panel, PICKER_PAD, -133, SIMPLE_WIDTH - PICKER_PAD * 2, 138)
+    FontAt(wheelCard, "GameFontNormalSmall", "Color & Brightness", T.colors.text, "TOPLEFT", 10, -8)
 
     -- Use Blizzard's native ColorSelect engine. This is the same wheel/value
     -- interaction as ColorPickerFrame, embedded in the MSUF surface so the
@@ -616,10 +651,8 @@ function Picker.BuildWheelCard(panel)
     valueHandle:SetSize(31, 6)
     valueHandle:SetPoint("CENTER", valueThumb, "CENTER", 0, 0)
     if T.ApplyBackdrop then T.ApplyBackdrop(valueHandle, T.colors.coreShadow, T.colors.text) end
-    local valueUp = Font(colorSelect, "GameFontHighlightSmall", "^", T.colors.dim)
-    valueUp:SetPoint("BOTTOM", value, "TOP", 0, 3)
-    local valueDown = Font(colorSelect, "GameFontHighlightSmall", "v", T.colors.dim)
-    valueDown:SetPoint("TOP", value, "BOTTOM", 0, -3)
+    local valueUp = FontAt(colorSelect, "GameFontHighlightSmall", "^", T.colors.dim, "BOTTOM", value, "TOP", 0, 3)
+    local valueDown = FontAt(colorSelect, "GameFontHighlightSmall", "v", T.colors.dim, "TOP", value, "BOTTOM", 0, -3)
     colorSelect:SetScript("OnColorSelect", function(_, r, g, b)
         if not panel._syncingColorSelect then panel:Apply(r, g, b, true) end
     end)
@@ -653,19 +686,12 @@ function Picker.BuildWheelCard(panel)
 end
 
 function Picker.BuildAdvancedCard(panel)
-    local advancedCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
-    advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133)
-    advancedCard:SetSize(ADVANCED_WIDTH - PICKER_PAD * 2 - LEFT_CARD_WIDTH - PICKER_GAP, 227)
-    if T.ApplySurface then T.ApplySurface(advancedCard, "card") end
-    if T.ApplyBackdrop then T.ApplyBackdrop(advancedCard, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft) end
-    advancedCard._msuf2PickerBrightSurface = BrightSurface(advancedCard,
-        T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], 0.92)
+    local advancedCard = SurfaceCard(panel, PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133,
+        ADVANCED_WIDTH - PICKER_PAD * 2 - LEFT_CARD_WIDTH - PICKER_GAP, 227)
     advancedCard:Hide()
     panel.advancedCard = advancedCard
 
-    local paletteTitle = Font(advancedCard, "GameFontNormalSmall", "Palette", T.colors.text)
-    paletteTitle:SetPoint("TOPLEFT", 12, -10)
-    panel.paletteTitle = paletteTitle
+    panel.paletteTitle = FontAt(advancedCard, "GameFontNormalSmall", "Palette", T.colors.text, "TOPLEFT", 12, -10)
     panel.paletteLookups = { quick = {}, class = {}, recent = {}, saved = {} }
     panel.paletteTabs = {}
     local tabSpecs = { { "quick", "Quick" }, { "class", "Class" }, { "recent", "Recent" }, { "saved", "Saved" } }
@@ -696,13 +722,11 @@ function Picker.BuildAdvancedCard(panel)
         end
     end
 
-    local rgbTitle = Font(advancedCard, "GameFontNormalSmall", "RGB", T.colors.muted)
-    panel.rgbTitle = rgbTitle
+    panel.rgbTitle = Font(advancedCard, "GameFontNormalSmall", "RGB", T.colors.muted)
     panel.rgb, panel.rgbLabels = {}, {}
     for i, channel in ipairs({ "R", "G", "B" }) do
         local input = Input(advancedCard, 40, true)
-        local label = Font(advancedCard, "GameFontDisableSmall", channel, T.colors.dim)
-        panel.rgbLabels[i] = label
+        panel.rgbLabels[i] = Font(advancedCard, "GameFontDisableSmall", channel, T.colors.dim)
         input._commit = function(self)
             if not panel.owner then return end
             local r, g, b = panel.owner:GetRGB()
@@ -712,36 +736,33 @@ function Picker.BuildAdvancedCard(panel)
         end
         panel.rgb[i] = input
     end
-    local hexTitle = Font(advancedCard, "GameFontNormalSmall", "HEX", T.colors.muted)
-    panel.hexTitle = hexTitle
+    panel.hexTitle = Font(advancedCard, "GameFontNormalSmall", "HEX", T.colors.muted)
     local hex = Input(advancedCard, 64, false)
     panel.hex = hex
     hex._commit = HexCommitter(panel)
-    local copy = T.Button(advancedCard, "Copy", 54, 22)
+    local function FlatButton(text, kind, opts)
+        local button = T.Button(advancedCard, text, 54, 22, opts)
+        if button._msuf2Label then
+            button._msuf2Label:ClearAllPoints()
+            button._msuf2Label:SetPoint("LEFT", 4, 0)
+            button._msuf2Label:SetPoint("RIGHT", -4, 0)
+            button._msuf2Label:SetJustifyH("CENTER")
+        end
+        AddFlatButtonIcon(button, kind)
+        return button
+    end
+    local copy = FlatButton("Copy", "copy")
     panel.copy = copy
-    if copy._msuf2Label then
-        copy._msuf2Label:ClearAllPoints()
-        copy._msuf2Label:SetPoint("LEFT", 4, 0)
-        copy._msuf2Label:SetPoint("RIGHT", -4, 0)
-        copy._msuf2Label:SetJustifyH("CENTER")
-    end
-    AddFlatButtonIcon(copy, "copy")
-    copy:SetScript("OnClick", function() hex:SetFocus(); hex:HighlightText() end)
-    local save = T.Button(advancedCard, "Save", 54, 22, { history = true })
+    copy:SetScript("OnClick", function()
+        hex:SetFocus()
+        hex:HighlightText()
+    end)
+    local save = FlatButton("Save", "save", { history = true })
     panel.save = save
-    if save._msuf2Label then
-        save._msuf2Label:ClearAllPoints()
-        save._msuf2Label:SetPoint("LEFT", 4, 0)
-        save._msuf2Label:SetPoint("RIGHT", -4, 0)
-        save._msuf2Label:SetJustifyH("CENTER")
-    end
-    AddFlatButtonIcon(save, "save")
     save:SetScript("OnClick", function()
         if not panel.owner then return end
         local store = Store()
-        if not store then
-            return
-        end
+        if not store then return end
         local r, g, b = panel.owner:GetRGB()
         local value = ToHex(r, g, b)
         for i = 1, #store.saved do if store.saved[i] == value then return end end
@@ -749,49 +770,27 @@ function Picker.BuildAdvancedCard(panel)
         panel:RefreshPalettes()
     end)
 
-    panel.recent = {}
-    for i = 1, 9 do
-        panel.recent[i] = Swatch(advancedCard, 24, function(self)
-            local r, g, b = FromHex(self.hex)
-            if r then
-                panel:Apply(r, g, b)
-            end
-        end)
-    end
-
-    local savedHint = Font(advancedCard, "GameFontDisableSmall", "Right-click a saved color to remove it.", T.colors.dim)
-    panel.savedHint = savedHint
-    panel.saved = {}
-    for i = 1, 27 do
-        local swatch = Swatch(advancedCard, 24, function(self, button)
-            local store = Store()
-            if button == "RightButton" and store then
-                table.remove(store.saved, self.index)
-                panel:RefreshPalettes()
-                return
-            end
-            local r, g, b = FromHex(self.hex)
-            if r then
-                panel:Apply(r, g, b)
-            end
-        end)
-        swatch.index = i
-        panel.saved[i] = swatch
-    end
-
-    panel.classes = {}
-    local tokens = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
+    panel.recent = SwatchList(advancedCard, 9, function(self) ApplySwatchHex(panel, self.hex) end)
+    panel.savedHint = Font(advancedCard, "GameFontDisableSmall", "Right-click a saved color to remove it.", T.colors.dim)
+    panel.saved = SwatchList(advancedCard, 27, function(self, button)
+        local store = Store()
+        if button == "RightButton" and store then
+            table.remove(store.saved, self.index)
+            panel:RefreshPalettes()
+            return
+        end
+        ApplySwatchHex(panel, self.hex)
+    end, function(swatch, i) swatch.index = i end)
     -- Tooltips show the client's class name; the swatch keeps the token.
     local classNames = LOCALIZED_CLASS_NAMES_MALE or {}
-    for i = 1, #tokens do
-        local swatch = Swatch(advancedCard, 24, function(self)
-            local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[self.token]
-            if color then panel:Apply(color.r, color.g, color.b) end
-        end)
-        swatch.token = tokens[i]
-        panel.classes[i] = swatch
-        if M.AddTooltip then M.AddTooltip(swatch, classNames[tokens[i]] or tokens[i], Tr("Apply this class color.")) end
-    end
+    panel.classes = SwatchList(advancedCard, #CLASS_TOKENS, function(self)
+        local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[self.token]
+        if color then panel:Apply(color.r, color.g, color.b) end
+    end, function(swatch, i)
+        local token = CLASS_TOKENS[i]
+        swatch.token = token
+        if M.AddTooltip then M.AddTooltip(swatch, classNames[token] or token, Tr("Apply this class color.")) end
+    end)
 
     local emptyHint = Font(advancedCard, "GameFontDisableSmall", "No colors here yet.", T.colors.dim)
     emptyHint:SetJustifyH("CENTER")
@@ -805,31 +804,36 @@ function Picker.BuildActionBar(panel)
     actionBar:SetHeight(42)
     if T.ApplySurface then T.ApplySurface(actionBar, "status") end
     panel.actionBar = actionBar
-    local more = T.Button(actionBar, "Advanced", 110, 26)
+    local function ActionButton(text, width)
+        local button = T.Button(actionBar, text, width, 26)
+        if button._msuf2Label then button._msuf2Label:SetJustifyH("CENTER") end
+        return button
+    end
+    local more = ActionButton("Advanced", 110)
     panel.more = more
-    if more._msuf2Label then more._msuf2Label:SetJustifyH("CENTER") end
     more._msuf2SkipHistoryCheckpoint = true
     more:SetScript("OnClick", function() panel:SetAdvanced(not panel.advanced) end)
     if M.AddTooltip then
         M.AddTooltip(more, "Advanced color tools", "Quick colors, precise RGB and HEX values, recent colors, saved colors, and class colors.")
     end
-    local cancel = T.Button(actionBar, "Cancel", 98, 26)
-    panel.cancel = cancel
-    if cancel._msuf2Label then cancel._msuf2Label:SetJustifyH("CENTER") end
-    cancel:SetScript("OnClick", function() panel:Finish(true) end)
-    local done = T.Button(actionBar, "Apply Color", 94, 26)
+    panel.cancel = ActionButton("Cancel", 98)
+    panel.cancel:SetScript("OnClick", function() panel:Finish(true) end)
+    local done = ActionButton("Apply Color", 94)
     panel.done = done
-    if done._msuf2Label then done._msuf2Label:SetJustifyH("CENTER") end
     if T.ApplyButtonRole then T.ApplyButtonRole(done, "primary") end
     done:SetScript("OnClick", function() panel:Finish(false) end)
+end
+
+-- Replaces every anchor of `frame` with a single one.
+local function Anchor(frame, ...)
+    frame:ClearAllPoints()
+    frame:SetPoint(...)
 end
 
 function Picker.DefinePositioning(panel, parent)
     function panel:SavePosition()
         local store = Store()
-        if not store then
-            return
-        end
+        if not store then return end
         local cx, cy = self:GetCenter()
         local px, py = parent:GetCenter()
         if cx and cy and px and py then store.x, store.y = floor(cx - px + 0.5), floor(cy - py + 0.5) end
@@ -839,13 +843,11 @@ function Picker.DefinePositioning(panel, parent)
         if store then
             store.x, store.y = nil, nil
         end
-        self:ClearAllPoints()
-        self:SetPoint("CENTER", parent, "CENTER", 0, 0)
+        Anchor(self, "CENTER", parent, "CENTER", 0, 0)
     end
     function panel:RestorePosition()
         local store = Store() or {}
-        self:ClearAllPoints()
-        self:SetPoint("CENTER", parent, "CENTER", tonumber(store.x) or 0, tonumber(store.y) or 0)
+        Anchor(self, "CENTER", parent, "CENTER", tonumber(store.x) or 0, tonumber(store.y) or 0)
     end
     function panel:ClampPosition()
         local cx, cy = self:GetCenter()
@@ -859,8 +861,7 @@ function Picker.DefinePositioning(panel, parent)
         local x = min(limitX, max(-limitX, currentX))
         local y = min(limitY, max(-limitY, currentY))
         if abs(x - currentX) < 0.01 and abs(y - currentY) < 0.01 then return end
-        self:ClearAllPoints()
-        self:SetPoint("CENTER", parent, "CENTER", x, y)
+        Anchor(self, "CENTER", parent, "CENTER", x, y)
         local store = Store()
         if store then store.x, store.y = floor(x + 0.5), floor(y + 0.5) end
     end
@@ -907,11 +908,7 @@ function Picker.DefineContextList(panel)
         end
         if not owner or type(owner._msuf2SetColorByClass) ~= "function" then return end
         if M.BlockCombatAction and M.BlockCombatAction() then return end
-        if not panel.historyOwner then
-            panel.historyOwner = owner
-            if type(owner._msuf2BeginColorInteraction) == "function" then owner:_msuf2BeginColorInteraction() end
-        end
-        panel.touched[owner] = true
+        BeginOwnerEdit(panel, owner)
         owner._msuf2SetColorByClass(not owner._msuf2GetColorByClass())
         panel:NotifyLiveChange(owner)
         panel:Refresh()
@@ -939,25 +936,19 @@ function Picker.DefineLayout(panel)
         self.original:SetWidth(previewWidth)
         self.current:SetWidth(previewWidth)
 
-        self.wheelCard:ClearAllPoints()
-        self.wheelCard:SetPoint("TOPLEFT", PICKER_PAD, -133 - modeHeight)
-        self.advancedCard:ClearAllPoints()
-        self.advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133 - modeHeight)
+        Anchor(self.wheelCard, "TOPLEFT", PICKER_PAD, -133 - modeHeight)
+        Anchor(self.advancedCard, "TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133 - modeHeight)
         self.wheelCard:SetSize(advanced and LEFT_CARD_WIDTH or selectorWidth, advanced and 227 or 138)
-        self.colorSelect:ClearAllPoints()
         local wheelSize = advanced and 126 or 102
-        self.colorSelect:SetPoint("TOPLEFT", advanced and 28 or 80, advanced and -30 or -27)
+        Anchor(self.colorSelect, "TOPLEFT", advanced and 28 or 80, advanced and -30 or -27)
         self.colorSelect:SetSize(advanced and 170 or 150, wheelSize + 10)
         self.colorWheel:SetSize(wheelSize, wheelSize)
-        self.colorValue:ClearAllPoints()
-        self.colorValue:SetPoint("LEFT", self.colorWheel, "RIGHT", 10, 0)
+        Anchor(self.colorValue, "LEFT", self.colorWheel, "RIGHT", 10, 0)
         self.colorValue:SetSize(25, wheelSize)
         self.colorValueThumb:SetSize(35, 11)
         self.advancedCard:SetShown(advanced)
-        self.compactHex:ClearAllPoints()
-        self.compactHex:SetPoint("TOPRIGHT", self.wheelCard, "TOPRIGHT", -6, -55)
-        self.compactHexTitle:ClearAllPoints()
-        self.compactHexTitle:SetPoint("BOTTOMLEFT", self.compactHex, "TOPLEFT", 0, 3)
+        Anchor(self.compactHex, "TOPRIGHT", self.wheelCard, "TOPRIGHT", -6, -55)
+        Anchor(self.compactHexTitle, "BOTTOMLEFT", self.compactHex, "TOPLEFT", 0, 3)
         self.compactHexTitle:SetShown(not advanced)
         self.compactHex:SetShown(not advanced)
         if not self._advancedChildLayout then
@@ -965,23 +956,10 @@ function Picker.DefineLayout(panel)
             self.opacityLabel:SetPoint("TOPLEFT", 12, -171)
             self.opacity:SetPoint("TOPLEFT", 12, -190)
             self.opacityValue:SetPoint("LEFT", self.opacity, "RIGHT", 8, 0)
-            for i = 1, #self.spectrum do
-                local swatch = self.spectrum[i]
-                local slot = i - 1
-                local col, row = slot % 10, floor(slot / 10)
-                swatch:SetPoint("TOPLEFT", 12 + col * 33, -67 - row * 28)
-            end
-            for i = 1, #self.classes do
-                local slot = i - 1
-                local col, row = slot % 8, floor(slot / 8)
-                self.classes[i]:SetPoint("TOPLEFT", 12 + col * 40, -69 - row * 32)
-            end
-            for i = 1, #self.recent do self.recent[i]:SetPoint("TOPLEFT", 12 + (i - 1) * 36, -69) end
-            for i = 1, #self.saved do
-                local slot = i - 1
-                local col, row = slot % 9, floor(slot / 9)
-                self.saved[i]:SetPoint("TOPLEFT", 12 + col * 36, -69 - row * 32)
-            end
+            PlaceSwatches(self.spectrum, 10, 67, 33, 28)
+            PlaceSwatches(self.classes, 8, 69, 40, 32)
+            PlaceSwatches(self.recent, #self.recent, 69, 36, 0)
+            PlaceSwatches(self.saved, 9, 69, 36, 32)
             self.emptyHint:SetPoint("TOPLEFT", 12, -90)
             self.emptyHint:SetWidth(328)
             self.savedHint:SetPoint("TOPRIGHT", -12, -169)
@@ -996,10 +974,7 @@ function Picker.DefineLayout(panel)
             self.copy:SetPoint("LEFT", self.hex, "RIGHT", 6, 0)
             self.save:SetPoint("LEFT", self.copy, "RIGHT", 6, 0)
         end
-        local showOpacity = advanced and self.owner and self.owner._msuf2ColorHasOpacity == true
-        self.opacityLabel:SetShown(showOpacity)
-        self.opacity:SetShown(showOpacity)
-        self.opacityValue:SetShown(showOpacity)
+        SetOpacityShown(self, advanced and self.owner and self.owner._msuf2ColorHasOpacity == true)
         for i = 1, 3 do
             self.rgb[i]:SetShown(advanced)
             self.rgbLabels[i]:SetShown(advanced)
@@ -1012,12 +987,9 @@ function Picker.DefineLayout(panel)
         self.more:SetText(Tr(advanced and "Back to controls" or "More Options"), true)
         self.cancel:SetSize(advanced and ADVANCED_CANCEL_WIDTH or SIMPLE_CANCEL_WIDTH, 26)
         self.done:SetSize(advanced and ADVANCED_DONE_WIDTH or SIMPLE_DONE_WIDTH, 26)
-        self.more:ClearAllPoints()
-        self.more:SetPoint("LEFT", ACTION_SIDE_PAD, 0)
-        self.done:ClearAllPoints()
-        self.done:SetPoint("RIGHT", -ACTION_SIDE_PAD, 0)
-        self.cancel:ClearAllPoints()
-        self.cancel:SetPoint("RIGHT", self.done, "LEFT", -ACTION_GAP, 0)
+        Anchor(self.more, "LEFT", ACTION_SIDE_PAD, 0)
+        Anchor(self.done, "RIGHT", -ACTION_SIDE_PAD, 0)
+        Anchor(self.cancel, "RIGHT", self.done, "LEFT", -ACTION_GAP, 0)
         self:ClampPosition()
     end
 
@@ -1068,7 +1040,7 @@ function Picker.DefinePaletteRefresh(panel)
         for i = 1, #self.spectrum do self.spectrum[i]:SetShown(tab == "quick") end
         for i = 1, #self.classes do
             local button = self.classes[i]
-            local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[button.token]
+            local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[button.token]
             button.fill:SetColorTexture(color and color.r or 1, color and color.g or 1, color and color.b or 1, 1)
             button:SetShown(tab == "class")
             if color then lookups.class[ToHex(color.r, color.g, color.b)] = button end
@@ -1119,6 +1091,7 @@ function Picker.DefineReadout(panel)
             self._syncingOpacity = nil
             self.opacityValue:SetText(string.format("%d%%", floor(alpha * 100 + 0.5)))
         end
+        -- SetOpacityShown inline: every opacity drag tick refreshes here.
         local showOpacity = self.advanced and hasOpacity
         self.opacityLabel:SetShown(showOpacity)
         self.opacity:SetShown(showOpacity)
@@ -1165,6 +1138,7 @@ function Picker.DefineSession(panel)
         local currentR, currentG, currentB = self.owner:GetRGB()
         if abs(r - currentR) < 0.000001 and abs(g - currentG) < 0.000001 and abs(b - currentB) < 0.000001 then return end
         if not self.nativeColorTicket then self.nativeColorTicket = W.BeginNativeColorInteraction() end
+        -- BeginOwnerEdit inline: the colour wheel applies on every drag tick.
         if not self.historyOwner then
             self.historyOwner = self.owner
             if type(self.owner._msuf2BeginColorInteraction) == "function" then self.owner:_msuf2BeginColorInteraction() end
@@ -1187,6 +1161,7 @@ function Picker.DefineSession(panel)
             return
         end
         if not self.nativeColorTicket then self.nativeColorTicket = W.BeginNativeColorInteraction() end
+        -- BeginOwnerEdit inline: the opacity slider applies on every drag tick.
         if not self.historyOwner then
             self.historyOwner = self.owner
             if type(self.owner._msuf2BeginColorInteraction) == "function" then self.owner:_msuf2BeginColorInteraction() end
@@ -1288,13 +1263,14 @@ end
 
 function Picker.Ensure()
     if picker then return picker end
-    local parent = _G.UIParent or M.frame
+    local parent = UIParent or M.frame
     if not parent then return nil end
 
     local blocker = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     blocker:SetAllPoints(parent)
     blocker:EnableMouse(true)
-    blocker:SetScript("OnClick", function() if picker then picker:Finish(true) end end); blocker:Hide()
+    blocker:SetScript("OnClick", function() if picker then picker:Finish(true) end end)
+    blocker:Hide()
 
     local panel = T.Panel(parent, nil, T.colors.glassShell or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
     picker = panel

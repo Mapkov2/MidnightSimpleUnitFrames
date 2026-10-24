@@ -2,6 +2,7 @@ local _,MSUF=...
 local M=MSUF.MSUF2
 local W,T,AP=M.Widgets,M.Theme,M.AdvancedPage
 local Fields,Variants=MSUF.ProfileFields,MSUF.ProfileVariants
+local FILE="Shell/Menu2/Pages/MSUF_Menu2_ProfileVariants.lua"
 local P={}
 M.ProfileVariantPage=P
 local selected,fieldID,editorBar
@@ -73,22 +74,37 @@ function P.FieldLabel(path)
     return table.concat(parts," / ")
 end
 local function Put(ctx,schema) return P.Result(ctx,Variants.Replace(M.EnsureDB(),schema)) end
+local function SectionKey(path) return path:match("^sync%.") and "profiles_sync" or "profiles_variants" end
+-- Removes the first row match accepts; the editors delete one named row at a time.
+function P.RemoveFirst(list,match)
+    for i,item in ipairs(list) do
+        if match(item) then
+            table.remove(list,i)
+            return
+        end
+    end
+end
 function P.Button(state,section,label,path,x,y,fn,width)
     local button=state.ProfileButton(section,label,function()
         if state.ConfigLocked() then return end
         return fn()
     end,false,path,false,nil,nil,nil,width or 180)
     button:SetPoint("TOPLEFT",section,"TOPLEFT",x,y)
-    local sectionKey=path:match("^sync%.") and "profiles_sync" or "profiles_variants"
-    AP.RegisterControl(button,P.Meta(sectionKey,path),label,"button")
+    AP.RegisterControl(button,P.Meta(SectionKey(path),path),label,"button")
     M.ControlSchema.Owned(button,"profiles","menuState")
     return button
 end
 -- Pickers whose selected value is a name the user typed: search keeps the control name.
 local NAME_PICKERS={["variant.select"]=true,["sync.group.select"]=true}
+function P.Input(section,label,path,x,y,width)
+    local meta=P.Meta(SectionKey(path),path)
+    local input=AP.Row(nil, section, { "textinput", meta.controlId, nil, { label,width }, bind = AP.NativeInput })
+    W.MoveWidget(input,section,x,y,width)
+    AP.RegisterControl(input,meta,label,"editbox")
+    return input
+end
 function P.Drop(state,section,label,path,values,get,set,x,y,width)
-    local sectionKey=path:match("^sync%.") and "profiles_sync" or "profiles_variants"
-    local meta=P.Meta(sectionKey,path)
+    local meta=P.Meta(SectionKey(path),path)
     return AP.Row(state.ctx, section, { "dropdown", meta.controlId, nil,
         { label,values,width or 250 },
         bind=function(drop)
@@ -174,10 +190,7 @@ function P.Build(state,specs)
     end
     P.Drop(state,section,"Variant","variant.select",VariantValues,function() return selected or "" end,
         function(value) selected=value; fieldID=nil; P.Refresh(ctx) end,20,-98,width)
-    local input=AP.Row(nil, section, { "textinput", P.Meta("profiles_variants","variant.name").controlId, nil,
-        { "New variant name",width }, bind = AP.NativeInput })
-    W.MoveWidget(input,section,30+width,-98,width)
-    AP.RegisterControl(input,P.Meta("profiles_variants","variant.name"),"New variant name","editbox")
+    local input=P.Input(section,"New variant name","variant.name",30+width,-98,width)
     P.Button(state,section,"Create variant","variant.create",30+width,-168,function()
         local name=tostring(input:GetText() or ""):match("^%s*(.-)%s*$")
         local current,err=Schema()
@@ -196,12 +209,7 @@ function P.Build(state,specs)
     P.Button(state,section,"Delete variant","variant.delete",30+width,y,function()
         local current,err=Schema()
         if not current then return P.Result(ctx,false,err) end
-        for i,v in ipairs(current.entries) do
-            if v.name==selected then
-                table.remove(current.entries,i)
-                break
-            end
-        end
+        P.RemoveFirst(current.entries,function(v) return v.name==selected end)
         selected=nil
         return Put(ctx,current)
     end,width)
@@ -241,14 +249,7 @@ function P.Build(state,specs)
         local current,err=Schema()
         if not current then return P.Result(ctx,false,err) end
         local owner=Entry(current)
-        if owner then
-            for i,field in ipairs(owner.patch) do
-                if Fields.ID(field.path)==fieldID then
-                    table.remove(owner.patch,i)
-                    break
-                end
-            end
-        end
+        if owner then P.RemoveFirst(owner.patch,function(field) return Fields.ID(field.path)==fieldID end) end
         return Put(ctx,current)
     end,width)
 end
@@ -265,7 +266,7 @@ function P.Transport(state)
             { spec[1],20,-104-(i-1)*36,state.contentW-40 }, bind = function(toggle)
             P.BindBool(state.ctx,toggle,function() return M[spec[2]]~=false end,function(value)
                 M[spec[2]]=value==true
-                _G[spec[3]](value)
+                MSUF.Require(spec[3],FILE)(value)
             end,P.Meta("profiles_variant_transport",spec[2]))
         end })
     end

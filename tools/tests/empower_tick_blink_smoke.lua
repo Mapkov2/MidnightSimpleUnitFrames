@@ -55,7 +55,7 @@ _G.MSUF_Castbar_PlainNumber = function(value) return tonumber(value) end
 local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua"))("MidnightSimpleUnitFrames", ns)
 local blink = assert(_G.MSUF.Castbars.Empower.BlinkEmpowerTick, "MSUF_BlinkEmpowerTick missing")
-local blinkTime = assert(_G.MSUF_GetEmpowerStageBlinkTime, "MSUF_GetEmpowerStageBlinkTime missing")()
+local blinkTime = assert(ns.PublicGlobals.MSUF_GetEmpowerStageBlinkTime, "MSUF_GetEmpowerStageBlinkTime missing")()
 
 local tick = { width = 2, red = 1, green = 1, blue = 1, alpha = 0.9 }
 function tick:SetWidth(width) self.width = width end

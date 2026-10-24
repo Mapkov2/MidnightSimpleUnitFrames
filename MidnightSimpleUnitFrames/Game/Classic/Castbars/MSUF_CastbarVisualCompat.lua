@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Classic-only castbar geometry compatibility.
 ---
 --- The shared Castbars/ files keep Retail's geometry and reach the spark and
@@ -8,8 +7,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- surface instead of the outer frame.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarVisualCompat.lua").Castbars
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua")
+local Castbars = MSUF.Castbars
 local Visuals = Castbars.Visuals
 local Config = Castbars.Config
 local Core = Castbars.Core
@@ -18,7 +17,6 @@ local PublicAPI = Castbars.PublicAPI
 local Style = Castbars.Style
 local Utils = Castbars.Utils
 
-local G = _G
 local type = type
 local tonumber = tonumber
 local math_max = math.max
@@ -27,12 +25,6 @@ local unpack = unpack or table.unpack
 
 local CLASSIC_SPARK_TEXTURE = "Interface\\CastingBar\\UI-CastingBar-Spark"
 local MIN_INNER_HEIGHT = 2
-
-local Publish = PublicAPI.Publish or function(name, value)
-    G[name] = value
-    MSUF[name] = value
-    return value
-end
 
 local SharedGetOutlineInset = Style.GetCastbarOutlineInset
 

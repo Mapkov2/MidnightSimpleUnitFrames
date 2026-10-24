@@ -84,8 +84,16 @@ local UF = {
 }
 local MSUF = { UF = UF, ExportPublic = function(name, value) _G[name] = value end }
 _G.MSUF_NS = MSUF
-assert(loadfile(core .. "UnitFrames/Engine/MSUF_UF_Shared.lua"))("TapDeniedSmoke", MSUF)
-assert(loadfile(core .. "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua"))("TapDeniedSmoke", MSUF)
+-- The real Kernel API (the export stub keeps no registry, so it is replaced) and the
+-- providers these two files require at load, which this harness does not run.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, MSUF, nil, nil, true)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua", MSUF)
+-- MSUF_UF_Config.lua (not loaded here) owns the two colour readers; a session without a
+-- settings cache answers nothing, and the element's own colour defaults apply.
+MSUF.ExportPublic("MSUF_UFCore_GetClassBarColorFast", function() return nil end)
+MSUF.ExportPublic("MSUF_UFCore_GetNPCReactionColorFast", function() return nil end)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua", MSUF)
 local C = assert(MSUF.UFBarTextCommon, "bars common export table not found")
 local UnitTapDenied = assert(C.UnitTapDenied, "UnitTapDenied is not exported")
 local UnitNPCKind, NPCColor = assert(C.UnitNPCKind), assert(C.NPCColor)

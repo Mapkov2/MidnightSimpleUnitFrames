@@ -1,15 +1,15 @@
 --- EditMode/MSUF_EditMode_Layout_Nudge.lua - Edit Mode arrow-key nudging
 --- Moves the selected frame, castbar, resource bar or preview target by
 --- 1/5/10 px or one grid step through override bindings on secure buttons.
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua")
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua"
-local ExportPublic = (MSUF or _G.MSUF_NS or {}).ExportPublic
+local ExportPublic = MSUF.ExportPublic
 
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local floor = math.floor
@@ -29,7 +29,7 @@ EM2.Nudge = Nudge
 local owner
 
 local function GetPreviewNudgeTarget()
-    local target = _G.MSUF_EM2_ActivePreviewNudgeTarget
+    local target = MSUF.Optional("MSUF_EM2_ActivePreviewNudgeTarget")
     if type(target) ~= "table" or type(target.Nudge) ~= "function" then return nil end
     if type(target.IsActive) == "function" and not target:IsActive() then return nil end
     local frame = target.frame
@@ -60,9 +60,7 @@ local function GetCastbarOffsetKeys(unit)
     if not unit then return nil, nil end
     local fields = MSUF.Castbars.UNIT_CASTBAR[unit]
     if fields then return fields.x, fields.y end
-    local fn = _G.MSUF_GetCastbarPrefix
-    if type(fn) ~= "function" then return nil, nil end
-    local prefix = fn(unit)
+    local prefix = MSUF.Require("MSUF_GetCastbarPrefix", CALLER)(unit)
     if not prefix or prefix == "" then return nil, nil end
     return prefix .. "OffsetX", prefix .. "OffsetY"
 end
@@ -90,15 +88,10 @@ local function RoundNudgeOffset(value)
 end
 
 local function NudgeCastbarDefaultOffsets(unit)
-    local defaults = _G.MSUF_GetCastbarDefaultOffsets
-    if type(defaults) == "function" then
-        local x, y = defaults(unit)
-        x, y = tonumber(x), tonumber(y)
-        if IsFiniteNudgeNumber(x) and IsFiniteNudgeNumber(y) then return x, y end
-        return nil, nil
-    end
-    local fallback = CASTBAR_NUDGE_DEFAULTS[unit]
-    return fallback and fallback[1] or nil, fallback and fallback[2] or nil
+    local x, y = MSUF.Require("MSUF_GetCastbarDefaultOffsets", CALLER)(unit)
+    x, y = tonumber(x), tonumber(y)
+    if IsFiniteNudgeNumber(x) and IsFiniteNudgeNumber(y) then return x, y end
+    return nil, nil
 end
 
 local function ReadCastbarOffset(general, key, fallbackKey, defaultValue)
@@ -144,7 +137,7 @@ local function NudgeCastbar(unit, ndx, ndy)
     if BlockConfigCombatLocked() then return false end
     if not IsFiniteNudgeNumber(ndx) or not IsFiniteNudgeNumber(ndy) then return false end
 
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = db and db.general
     if type(general) ~= "table" then return false end
 
@@ -239,7 +232,7 @@ end
 local function NudgeDB()
     if not EM2.State or not EM2.State.IsActive() then return nil end
     if BlockConfigCombatLocked() then return nil end
-    return _G.MSUF_DB
+    return MSUF_DB
 end
 
 local GROUP_KEYS = {
@@ -257,9 +250,7 @@ local function NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
         local a2 = db.auras3
         if a2 then
             a2.perUnit = a2.perUnit or {}
-            if _G.MSUF_EM_UndoBeforeChange then
-                _G.MSUF_EM_UndoBeforeChange("aura", unitKey, true)
-            end
+            MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("aura", unitKey, true)
             local isBoss = type(unitKey) == "string" and unitKey:match("^boss%d+$")
             local isArena = type(unitKey) == "string" and unitKey:match("^arena%d+$")
             local applyKeys
@@ -267,7 +258,7 @@ local function NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
                 applyKeys = { "boss1","boss2","boss3","boss4","boss5" }
             elseif isArena and a2.shared and a2.shared.arenaEditTogether ~= false then
                 applyKeys = {}
-                for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+                for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do
                     applyKeys[i] = "arena" .. i
                 end
             else
@@ -325,8 +316,7 @@ local function NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
                 a3.RefreshEditPreview(unitKey)
             end
             if auraPopupOpen and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
-            local syncFn = _G.MSUF_SyncAuras3PositionPopup
-            if type(syncFn) == "function" then syncFn(unitKey) end
+            MSUF.Require("MSUF_SyncAuras3PositionPopup", CALLER)(unitKey)
             -- The unit preview belongs to the load-on-demand menu.
             local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
             if refreshPreview then refreshPreview("AURAS3_EDITMODE_NUDGE") end
@@ -345,14 +335,13 @@ local function NudgeTarget(dx, dy, exactDelta)
     -- An open aura popup is the selection the toolbar shows. Opening it from
     -- an aura group changes neither the unit key nor a preview target, so it
     -- comes before the routes those choose.
-    local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
+    local auraGroup = MSUF.PublicGlobals.MSUF_EM2_ActiveAuraGroup
     local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
-    local a2PopupOpen = false
-    do local ap = _G.MSUF_EM2_AuraPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
+    local auraPF = MSUF.Optional("MSUF_EM2_AuraPopup")
+    local a2PopupOpen = auraPF and auraPF.IsShown and auraPF:IsShown() or false
     if auraGroup and (auraPopupOpen or a2PopupOpen) then
-        local unitKey = _G.MSUF_EM2_ActiveAuraUnit
+        local unitKey = MSUF.PublicGlobals.MSUF_EM2_ActiveAuraUnit
         if not unitKey then
-            local auraPF = _G.MSUF_EM2_AuraPopup
             unitKey = auraPF and auraPF.unit
         end
         return NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
@@ -378,7 +367,7 @@ local function NudgeTarget(dx, dy, exactDelta)
     end
 
     if EM2.CastPopup and EM2.CastPopup.IsOpen() then
-        local castPF = _G.MSUF_EM2_CastPopup
+        local castPF = MSUF.Optional("MSUF_EM2_CastPopup")
         local unit = (EM2.CastPopup.GetUnit and EM2.CastPopup.GetUnit()) or (castPF and castPF.unit)
         return NudgeCastbar(unit, ndx, ndy)
     end
@@ -403,9 +392,7 @@ local function NudgeTarget(dx, dy, exactDelta)
 
     local conf = db[key]
     if not conf then return false end
-    if _G.MSUF_EM_UndoBeforeChange then
-        _G.MSUF_EM_UndoBeforeChange("unit", key, true)
-    end
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("unit", key, true)
     conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + ndx) + 0.5)
     conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + ndy) + 0.5)
     if not ApplySettingsForKeySafe(key) then

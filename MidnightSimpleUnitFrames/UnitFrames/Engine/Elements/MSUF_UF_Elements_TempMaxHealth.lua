@@ -1,14 +1,12 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_TempMaxHealth.lua")
 
 local C = MSUF.UFBarTextCommon
 local UF = C and C.UF or MSUF.UF
 if not UF then return end
 
 local CreateFrame = C and C.CreateFrame or CreateFrame
-local GetUnitTotalModifiedMaxHealthPercent = _G.GetUnitTotalModifiedMaxHealthPercent
+local GetUnitTotalModifiedMaxHealthPercent = GetUnitTotalModifiedMaxHealthPercent
 local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 
 local TempMaxHealth = {}

@@ -43,6 +43,9 @@ local WATCHED = {
     "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
 }
 local CHAIN = {
+    -- The real Util owns MSUF_GetGeneralDB and MSUF_PixelLayoutRegion, which the aura files
+    -- bind; it loads after the geometry owner it needs, as in the TOC.
+    "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
     "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
     "Game/Vanilla/Auras/MSUF_Auras3_DotData.lua", "Game/Vanilla/Auras/MSUF_Auras3_DefensiveData.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",

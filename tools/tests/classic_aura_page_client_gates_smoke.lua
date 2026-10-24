@@ -143,6 +143,8 @@ local Model = setmetatable({}, {
 local dispelPreviewShapes = {}
 local A3 = {
     MenuModel = Model,
+    -- The core's own DB accessor (Auras3 core); the icon skin default reads it.
+    EnsureDB = function() return DB.auras3, DB.auras3.shared end,
     ApplyIconStylePreview = Noop,
     ApplyAuraIconShape = function(_, shape) return shape or "RECTANGLE" end,
     PreviewDispelTypeForIndex = function() return "Magic" end,
@@ -195,12 +197,21 @@ local function Bind(kind)
         return control
     end
 end
+local M -- the Menu2 namespace below; the builder registers headers through it at call time
 local function Builder()
     local b = NewObj("Builder")
     rawset(b, "width", 720)
     rawset(b, "y", -20)
     rawset(b, "Section", function(_, title) sections[#sections + 1] = title; return NewObj("Section", title) end)
-    rawset(b, "CollapsibleSection", function(_, id, title) sections[#sections + 1] = title; return NewObj("Collapsible", id) end)
+    -- The aura page declares each section through the shared control schema (Schema.Section), which
+    -- reads the section's collapsible entry and its registered header, as the shipped widgets build them.
+    rawset(b, "CollapsibleSection", function(_, id, title)
+        sections[#sections + 1] = title
+        local section, header = NewObj("Collapsible", id), NewObj("Header", id)
+        M.RegisterSearchWidget(header, { controlId = "section." .. tostring(id), kind = "section", label = title })
+        rawset(section, "_msuf2CollapsibleEntry", { header = header })
+        return section
+    end)
     return b
 end
 local W = setmetatable({}, { __index = function(t, key)
@@ -235,7 +246,6 @@ local T = setmetatable({ colors = setmetatable({}, { __index = function() return
 T.FontSize = function() return 10 end
 T.Space = function(_, fallback) return fallback or 8 end
 
-local M
 M = setmetatable({
     Widgets = W, Theme = T,
     ValueTextList = ValueTextList, ValueTextPairs = ValueTextPairs,
@@ -258,6 +268,17 @@ M = setmetatable({
         local label = type(widget) == "table" and rawget(widget, "_label")
         if label then dropdowns[label] = { get = get, values = rawget(widget, "_values") } end
         return widget
+    end,
+    -- Recording search registration retains the owner consumed by the real Schema.Owned.
+    RegisterSearchWidget = function(widget, meta)
+        assert(widget and type(meta) == "table" and meta.controlId and meta.kind, "recording search control metadata missing")
+        widget._msuf2SearchMeta = meta
+        widget._msuf2RuntimeControlId = meta.controlId
+        widget._msuf2RuntimeControlRecord = {
+            controlId = meta.controlId, kind = meta.kind, label = meta.label,
+            pageKey = meta.pageKey, settingKey = meta.settingKey, actionKey = meta.actionKey,
+            classification = meta.classification, controlPath = meta.controlPath, widget = widget,
+        }
     end,
     TrackRefresh = function(_, fn) fn() end,
     RegisterPage = function(key, spec) M.pages = M.pages or {}; M.pages[key] = spec end,
@@ -296,15 +317,50 @@ local Client = {
     IsVanilla = flavor == "Vanilla", IsTBC = flavor == "TBC", IsMists = flavor == "Mists",
 }
 local MSUF = { MSUF2 = M, MSUF_Auras3 = A3, Client = Client, AddonName = "MidnightSimpleUnitFrames" }
--- Load the shared crop owner, as the shipped Core graph does before Options.
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", MSUF)
+-- Shipped files run through the shipped loader: the real Kernel API, and a provider a file requires
+-- that this harness does not load is a forwarder that raises when used.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+local function LoadShipped(relative, namespace)
+    return RequireFixture.LoadShipped(root, relative, namespace)
+end
+RequireFixture.InstallKernel(root, MSUF)
+-- The widgets are recording stubs that lay out no pixels: the region wrapper hands every frame back.
+MSUF.ExportPublic("MSUF_PixelLayoutRegion", function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end)
+-- Load the shared crop owner and the icon skins, as the shipped Core graph does before Options.
+LoadShipped("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua", MSUF)
+-- The mock painter binds the preview sample builders at load (the TOC loads the preview
+-- animation first); the page builds below never ask for a sample.
+do
+    local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua", "rb"))
+    RequireFixture.DeferRequired(MSUF, file:read("*a"), "Auras3/MSUF_Auras3_MockAuraPainter.lua")
+    file:close()
+end
 assert(loadfile(root .. "/tools/tests/aura_mock_painter_fixture.lua"))().Install(root, MSUF)
+-- The skins' combat snapshot subscribes through the shipped event bus.
+LoadShipped("MidnightSimpleUnitFrames/Kernel/MSUF_EventBus.lua", MSUF)
+LoadShipped("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconSkins.lua", MSUF)
+LoadShipped("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconSkins_Catalog.lua", MSUF)
 local pages = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
 -- The group page requires the shipped group aura filter table at load.
 assert(loadfile(root .. "/tools/tests/gf_aura_filter_fixture.lua"))().Install(root, _G, MSUF)
+-- The shipped Group page uses the shared row owner, with the same recording binders.
+MSUF.CPBuilders = { ExtraAuraDefaults = {} }
+W.SwitchAt = function(_, label)
+    local control = NewObj("W.SwitchAt", label)
+    rawset(control, "_label", label)
+    return control
+end
+M.BindBoolWidget = function(_, control, get, set, meta)
+    switches[rawget(control, "_label")] = { control = control, get = get, set = set, meta = meta }
+    return control
+end
+LoadShipped("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua", MSUF)
 for _, file in ipairs({ "MSUF_Menu2_AuraSettings.lua", "MSUF_Menu2_AuraControls.lua", "MSUF_Menu2_Auras.lua",
-    "MSUF_Menu2_Auras_Group.lua", "MSUF_Menu2_Auras_Preview.lua" }) do
-    assert(loadfile(pages .. file))("MidnightSimpleUnitFrames", MSUF)
+    "MSUF_Menu2_IconSkins.lua", "MSUF_Menu2_Auras_IconSkin.lua", "MSUF_Menu2_Auras_Group.lua", "MSUF_Menu2_Auras_Preview.lua" }) do
+    LoadShipped("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/" .. file, MSUF)
 end
 assert(M.CLASSIC_AURA_FILTERS_REDUCED == IS_CLASSIC,
     flavor .. ": the aura page did not derive its Classic gate from MSUF.Client.IsClassic")
@@ -425,11 +481,9 @@ assert(clicked > 0, flavor .. ": no group blacklist action queued a group apply"
 -- while the picked preset is not in the lane's list; Midnight and WoW Forever keep
 -- the Retail reader (the first row's value).
 local presetNS = {}
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Presets.lua"))(
-    "MidnightSimpleUnitFrames", presetNS)
+LoadShipped("MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Presets.lua", presetNS)
 -- The shipped spell label helper (MSUF_Auras3_Menu_Common.lua) names the rows.
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua"))(
-    "MidnightSimpleUnitFrames", presetNS)
+LoadShipped("MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua", presetNS)
 local shippedCommon = presetNS.Auras3MenuModelFactories.Common({})
 local presetModel = {}
 local Presets = presetNS.Auras3MenuModelFactories.Presets(presetModel, {

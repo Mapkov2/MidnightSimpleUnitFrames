@@ -2,7 +2,6 @@
 -- Native sort normalization and signatures. Both compiler and renderer consume these functions; they never inspect restricted aura data.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Sort = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local tostring = tostring
@@ -51,8 +50,8 @@ end
 
 AuraSortEnums = function(lane)
     local methodKey = NormalizeAuraSortMethod(lane and lane.sortMethod)
-    local methodEnums = _G.AuraContainerSortMethod
-    local directionEnums = _G.AuraContainerSortDirection
+    local methodEnums = AuraContainerSortMethod
+    local directionEnums = AuraContainerSortDirection
     local method = methodEnums and methodEnums[AURA_SORT_METHOD_FIELDS[methodKey]] or AURA_SORT_METHOD_FALLBACKS[methodKey]
     local reverse = lane and lane.sortReverse == true
     local direction = directionEnums and directionEnums[reverse and "Reverse" or "Normal"] or (reverse and 1 or 0)

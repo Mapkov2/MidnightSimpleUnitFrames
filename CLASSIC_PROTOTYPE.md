@@ -259,7 +259,10 @@ calculator would be less correct and more expensive.
   Defaults shells (`State/Defaults/MSUF_Defaults_Shell.lua`,
   `State/Defaults/MSUF_Defaults_Bars.lua`,
   `State/Defaults/MSUF_Defaults_Units.lua`),
-  `Auras3/MSUF_Auras3_IconShape.lua`, `Auras3/MSUF_Auras3_MockAuraPainter.lua` (the
+  `Auras3/MSUF_Auras3_IconShape.lua`, the aura icon skins
+  (`Auras3/MSUF_Auras3_IconSkins.lua` and its catalog
+  `Auras3/MSUF_Auras3_IconSkins_Catalog.lua`, which end the element prefix the
+  Classic and Mainline manifests share), `Auras3/MSUF_Auras3_MockAuraPainter.lua` (the
   shared mock aura painter of the preview surfaces), the Options files
   `Shell/Menu2/MSUF_Menu2_ColorPicker.lua` and
   `Shell/Menu2/MSUF_Menu2_Theme_Forever.lua` (Classic Glass and Midnight menu

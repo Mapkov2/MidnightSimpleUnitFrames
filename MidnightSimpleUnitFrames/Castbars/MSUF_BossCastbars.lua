@@ -21,10 +21,12 @@ local Publish = PublicAPI.Publish
 --- Boss units are a client fact: Classic Era and TBC have none. Read once at
 --- load, never per refresh.
 local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("boss"))
-local MAX_BOSS_FRAMES = tonumber(_G.MAX_BOSS_FRAMES) or 5
+local MAX_BOSS_FRAMES = tonumber(MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
     MAX_BOSS_FRAMES = 5
 end
+-- UF_Config loads first and exports the boss layout delta at file load.
+local GetBossLayoutDelta = MSUF.Require("MSUF_GetBossLayoutDelta", "Castbars/MSUF_BossCastbars.lua")
 
 local pool = Pools.Define({
     kind = "boss",
@@ -47,7 +49,7 @@ local pool = Pools.Define({
         width = "bossCastbarWidth",
         height = "bossCastbarHeight",
     },
-    GetLayoutDelta = function() return _G.MSUF_GetBossLayoutDelta end,
+    GetLayoutDelta = function() return GetBossLayoutDelta end,
     GetPreviewUpdate = function() return Previews.UpdateBossCastbarPreview end,
     scheduleKeys = { pass = "MSUF_BOSS_POOL_LIFECYCLE", prewarm = "MSUF_BOSS_POOL_PREWARM" },
     lifecycle = {

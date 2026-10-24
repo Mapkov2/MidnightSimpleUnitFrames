@@ -163,14 +163,18 @@ local function GroupFrame(unit, kind)
 end
 
 local function Load(client)
-    local chunk = assert(loadfile(root .. "/" .. MODULE))
-    setfenv(chunk, env)
     local namespace = { Client = client, GF = GF, UF = { Layers = { StatusLevel = function(_, layer, fallback)
         return 100 + (layer or fallback) * 32 + 8 end } } }
-    local policy = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua"))
-    setfenv(policy, env)
-    policy("MidnightSimpleUnitFrames", namespace)
-    chunk("MidnightSimpleUnitFrames", namespace)
+    -- The real Kernel API is installed into the namespace inside this client environment. The pixel
+    -- regions are the core's (Kernel/MSUF_Util.lua): these stub regions lay out no pixels, so the
+    -- shared stand-in serves.
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.InstallKernel(root, namespace, env, nil, true)
+    namespace.ExportPublic("MSUF_PixelLayoutRegion",
+        assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().STANDINS.MSUF_PixelLayoutRegion)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BlessingPriorities.lua",
+        namespace, env)
+    RequireFixture.LoadShipped(root, MODULE, namespace, env)
     return namespace
 end
 

@@ -53,7 +53,7 @@ local UNIT_KEYS = {
     arena = "arena",
 }
 
-local General = _G.MSUF_GetGeneralDB
+local General = MSUF.PublicGlobals.MSUF_GetGeneralDB
 
 local function UnitGroup(unit)
     if type(unit) == "string" and unit:match("^boss%d*$") then
@@ -105,7 +105,7 @@ end
 
 local function CastbarBackend(unit)
     unit = CastbarUnit(unit)
-    local fn = _G.MSUF_GetCastbarBackend
+    local fn = MSUF.Castbars.Backend and MSUF.Castbars.Backend.GetCastbarBackend
     if type(fn) == "function" then
         return fn(unit)
     end

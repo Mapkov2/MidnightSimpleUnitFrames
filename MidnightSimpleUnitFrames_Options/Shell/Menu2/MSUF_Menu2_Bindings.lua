@@ -1,12 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local KS = M.KeySet
-local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+local FILE = "Shell/Menu2/MSUF_Menu2_Bindings.lua"
+local ApplyService = M.ApplyService or MSUF.Require("MSUF_Menu2_ApplyService", FILE)
 if type(ApplyService) ~= "table" then error("MSUF Menu2 ApplyService missing") end
-
 
 local CLASSPOWER_FULL_RUNTIME = { full = true, cdm = true }
 -- The History and Reset siblings (MSUF_Menu2_Bindings_History.lua and
@@ -16,9 +15,9 @@ M.CLASSPOWER_FULL_RUNTIME = CLASSPOWER_FULL_RUNTIME
 
 function M.ApplyPlayerPowerSource(reason)
     reason = reason or "MSUF2_PLAYER_POWER_SOURCE"
-    _G.MSUF_ApplyModules()
-    _G.MSUF_ClassPower_Apply(CLASSPOWER_FULL_RUNTIME)
-    _G.MSUF_UFPreview_RequestRefresh(reason)
+    MSUF.Require("MSUF_ApplyModules", FILE)()
+    MSUF.Require("MSUF_ClassPower_Apply", FILE)(CLASSPOWER_FULL_RUNTIME)
+    MSUF.Require("MSUF_UFPreview_RequestRefresh", FILE)(reason)
     local preview = M._msuf2ClassPowerInlinePreview
     if preview and type(preview.Refresh) == "function" then preview.Refresh(preview) end
     return true
@@ -173,9 +172,7 @@ function M.BlockCombatAction(event)
 end
 function M.StageFactoryReset()
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
-    local fn = _G.MSUF_DoFullReset
-    if type(fn) ~= "function" then return false end
-    fn({ skipReload = true })
+    MSUF.Require("MSUF_DoFullReset", FILE)({ skipReload = true })
     M.SetFixedPreviewExpandedPreference(false)
     return true
 end
@@ -448,7 +445,7 @@ function M.BindToggle(ctx, widget, getValue, setValue, metadata)
 end
 local function SliderPointerDragActive(self)
     if self._msuf2SliderActive == true then return true end
-    local isMouseButtonDown = _G.IsMouseButtonDown
+    local isMouseButtonDown = IsMouseButtonDown
     return type(isMouseButtonDown) == "function"
         and self.IsMouseOver and self:IsMouseOver()
         and isMouseButtonDown("LeftButton") == true
@@ -459,6 +456,8 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
     local function BeginSliderHistory(self)
         if BlockCombatAndRefresh(ctx) then return end
         if self._msuf2Refreshing or self._msuf2HistoryTransaction then return end
+        -- The drag's history transaction opens here and is marked on the slider
+        -- until the interaction ends; inline, as every slider press runs it.
         if not M.BeginHistoryTransaction then return end
         local label = WidgetHistoryLabel(ctx, self)
         if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label), WidgetHistoryScope(self)) then

@@ -141,7 +141,7 @@ local function Load(classToken)
     target = { unit = "target", statusBar = CreateFrame("StatusBar"), MSUF_castActive = true,
         isNotInterruptible = false, MSUF_kickInterruptibleConfirmed = true }
     MSUF_TargetCastbar = target
-    return _G.MSUF_KickReady_GetSpellID()
+    return _G.MSUF.PublicGlobals.MSUF_KickReady_GetSpellID()
 end
 
 local function Ready()
@@ -157,7 +157,7 @@ end
 local function CastAndPaint(classToken, castID)
     local tracked = Load(classToken)
     now = now + 0.016
-    _G.MSUF_KickReady_RefreshFrame(target)
+    _G.MSUF.PublicGlobals.MSUF_KickReady_RefreshFrame(target)
     Check(Ready() == true, classToken .. ": the interrupt is painted as not ready before anything was cast")
     local spell = SPELLS[castID]
     if spell and spell[2] then categoryCD[spell[2]] = { start = now, duration = 10 } end
@@ -177,13 +177,13 @@ if ranked then
         local ready, tracked = CastAndPaint(case[1], case[2])
         Check(ready == false, case[3] .. " started the cooldown of tracked spell " .. tostring(tracked)
             .. ", but the indicator still shows ready")
-        Check(_G.MSUF_KickReady_IsReady() == false, case[3] .. ": the interrupt reports ready while on cooldown")
+        Check(_G.MSUF.PublicGlobals.MSUF_KickReady_IsReady() == false, case[3] .. ": the interrupt reports ready while on cooldown")
     end
 
     -- A spell outside the category neither repaints nor counts as a rank.
     Load("ROGUE")
     now = now + 0.016
-    _G.MSUF_KickReady_RefreshFrame(target)
+    _G.MSUF.PublicGlobals.MSUF_KickReady_RefreshFrame(target)
     categoryCD.kick = { start = now, duration = 10 } -- started by a cast the client has not reported yet
     Event(2098)
     Check(Ready() == true, "an unrelated spell (Eviscerate) repainted the indicator")
@@ -191,7 +191,7 @@ if ranked then
     -- Lazy-loaded names: an answer missing a name is not remembered as "no match".
     Load("ROGUE")
     now = now + 0.016
-    _G.MSUF_KickReady_RefreshFrame(target)
+    _G.MSUF.PublicGlobals.MSUF_KickReady_RefreshFrame(target)
     uncached[1766] = true
     categoryCD.kick = { start = now, duration = 10 }
     Event(1769)
@@ -217,7 +217,7 @@ else
     -- Mainline and Mists: one ID per spell, so the exact filter stays alone.
     local tracked = Load("ROGUE")
     now = now + 0.016
-    _G.MSUF_KickReady_RefreshFrame(target)
+    _G.MSUF.PublicGlobals.MSUF_KickReady_RefreshFrame(target)
     nameReads = 0
     Event(2098)
     Check(nameReads == 0, "an unrelated cooldown event looked up a spell name on a client without ranks")

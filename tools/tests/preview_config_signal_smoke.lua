@@ -73,6 +73,12 @@ local env, ns, widgets = world.env, world.core, world.widgets
 for _, unit in ipairs(ns.UF.unitOrder) do env[ns.UF.FrameName(unit)] = false end
 env.MSUF_EnsureDB(true)
 local Preview, M, bus = ns.UFPreview, ns.MSUF2, ns.EventBus
+-- A provider is a kept global or an export the namespace registry holds (namespace-only names).
+local function Provider(name)
+    local value = rawget(env, name)
+    if value == nil then value = ns.PublicGlobals[name] end
+    return value
+end
 local shown, wrapperShown, menuShown = true, true, true
 M.frame = { IsShown = function() return menuShown end }
 M.activeKey = "unit-test"
@@ -117,7 +123,7 @@ local providers = {
     "MSUF_RequestStatusIncomingResIndicatorRefresh", "MSUF_SyncAuras3PositionPopup", "MSUF_RefreshUnitTextureLayers",
 }
 for _, name in ipairs(providers) do
-    local provider = assert(env[name], "missing real provider " .. name)
+    local provider = assert(Provider(name), "missing real provider " .. name)
     local beforeSignals, beforeRequests = signals, #requested
     if name == "MSUF_ClassPower_Apply" then provider({})
     elseif name == "MSUF_ClassPower_Refresh" or name == "MSUF_UFCore_RefreshSettingsCache"
@@ -125,7 +131,7 @@ for _, name in ipairs(providers) do
     else provider("player") end
     assert(signals > beforeSignals, name .. " did not publish after its direct exported call")
     assert(#requested > beforeRequests, name .. " did not reach the active preview")
-    assert(env[name] == provider, name .. " was replaced during delivery")
+    assert(Provider(name) == provider, name .. " was replaced during delivery")
     Advance(0.06)
 end
 local function Publish(reason) bus:Publish("CONFIG_APPLIED", reason) end
@@ -146,7 +152,7 @@ Advance(0.002)
 assert(#refreshes == before + 1 and refreshes[#refreshes] == "third",
     "burst did not coalesce to its final reason: " .. #refreshes .. "/" .. before .. "/" .. tostring(refreshes[#refreshes]))
 before = #refreshes
-env.MSUF_RequestStatusTextRefresh("player", "MSUF2_CALLER_STATUS_REASON")
+Provider("MSUF_RequestStatusTextRefresh")("player", "MSUF2_CALLER_STATUS_REASON")
 Advance(0.001)
 assert(#refreshes == before, "caller status reason changed the original direct-call debounce")
 Advance(0.05)

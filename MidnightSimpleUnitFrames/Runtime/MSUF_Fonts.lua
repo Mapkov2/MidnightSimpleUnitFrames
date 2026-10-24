@@ -72,7 +72,7 @@ do
     end
 end
 
-ExportPublic("MSUF_FONT_LIST", _G.MSUF_FONT_LIST or FONT_LIST)
+ExportPublic("MSUF_FONT_LIST", Optional("MSUF_FONT_LIST") or FONT_LIST)
 Fonts.Catalog = FONT_LIST
 
 local MSUF_INTERNAL_LSM_FONT_KEYS = {
@@ -200,7 +200,7 @@ do
         path = FontAssetAllowed(path)
         if not path then return false end
         MSUF_ApplyFontScaleAnimationMode(fs, flags)
-        local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+        local epoch = tonumber(MSUF_FontApplyEpoch) or 0
         if fs._msufFontAppliedPath == path
             and fs._msufFontAppliedSize == size
             and fs._msufFontAppliedFlags == flags
@@ -224,7 +224,7 @@ do
         if size <= 0 then size = 12 end
         flags = NormalizeFlags(flags)
         local requested = ResolveFontPath(path, size, flags, fontKey)
-        local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+        local epoch = tonumber(MSUF_FontApplyEpoch) or 0
         if fs._msufFontRequestPath == requested
             and fs._msufFontRequestSize == size
             and fs._msufFontRequestFlags == flags
@@ -283,7 +283,7 @@ do
 
 
     local function MSUF_DebugFontProbe(key)
-        local db = key == nil and Optional("MSUF_DB")
+        local db = key == nil and MSUF_DB
         if db and db.general then
             key = db.general.fontKey
         end
@@ -347,11 +347,11 @@ Fonts.InternalPathForKey = MSUF_GetInternalFontPathByKey
 ExportPublic("MSUF_GetFontPathForKey", GetFontPathForKey)
 MSUF.MSUF_GetFontPathForKey = GetFontPathForKey
 
-local function EnsureDB()
-    local db = Optional("MSUF_DB")
+local function EnsureDB(db)
+    db = db or MSUF_DB
     if not db then
         Require("MSUF_EnsureDB", FILE)()
-        db = Require("MSUF_DB", FILE)
+        db = MSUF_DB
     end
     db.general = db.general or {}
     return db
@@ -386,12 +386,12 @@ end
 local function GetGlobalFontSettings()
     -- Before State seeds a profile, an empty general table has the exact
     -- default tuple. Avoid resolving its unchanged default for each aura text.
-    local source = _G.MSUF_DB
+    local source = MSUF_DB
     local empty = source and source.general
-    if empty and next(empty) == nil and not _G.MSUF_GetConfiguredFontColor then
+    if empty and next(empty) == nil and not MSUF.MSUF_GetConfiguredFontColor then
         return FONT_LIST[1].path, "OUTLINE", 1, 1, 1, 14, true
     end
-    local db = EnsureDB()
+    local db = EnsureDB(source)
     local general = db.general or {}
     local fontPath = GetFontPath()
     local fontFlags = GetGlobalFontFlags()

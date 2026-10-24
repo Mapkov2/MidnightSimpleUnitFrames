@@ -93,10 +93,19 @@ jobs:
       - name: Run the push-tier Classic gate (one shard)
         shell: pwsh
         run: |
-          & ./tools/run-classic-gate.ps1 -SelfContained -SkipTier nightly -Shard "${{ matrix.shard }}/6" -Jobs ([Environment]::ProcessorCount)
+          & ./tools/run-classic-gate.ps1 -SelfContained -SkipTier nightly -Shard "${{ matrix.shard }}/6" -Jobs ([Environment]::ProcessorCount) -TimingsOut "$env:RUNNER_TEMP/classic-gate-timings.tsv"
           if ($LASTEXITCODE -ne 0) {
             throw "Classic push-tier gate failed in shard ${{ matrix.shard }}/6."
           }
+
+      - name: Preserve measured gate weights
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: classic-gate-timings-push-${{ matrix.shard }}
+          path: ${{ runner.temp }}/classic-gate-timings.tsv
+          if-no-files-found: ignore
+          retention-days: 14
 
   source-audit:
     runs-on: ubuntu-latest

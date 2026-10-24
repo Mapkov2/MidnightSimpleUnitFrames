@@ -114,7 +114,7 @@ Check(bar.alpha == 0, "2: a second pass changed the concealed bar")
 -- 3. Blizzard owns the player castbar again: the Bridge gives the alpha back.
 general.castbarPlayerBackend = "BLIZZARD"
 _G.MSUF.Castbars.Config.Compile()
-_G.MSUF_SuppressBlizzardPlayerCastbars()
+world.ns.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars()
 Check(bar.alpha == 0.7 and bar.mouse == true, "3: the release did not restore the concealed bar: alpha "
     .. tostring(bar.alpha) .. ", mouse " .. tostring(bar.mouse))
 for _, method in ipairs(calls) do

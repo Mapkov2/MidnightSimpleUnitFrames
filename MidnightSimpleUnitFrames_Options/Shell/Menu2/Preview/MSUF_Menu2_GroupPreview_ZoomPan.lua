@@ -1,6 +1,6 @@
 --- Group frame preview zoom/pan helpers.
 
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M

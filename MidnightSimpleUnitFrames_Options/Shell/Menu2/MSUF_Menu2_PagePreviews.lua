@@ -5,7 +5,8 @@
 --- runtime previews without owning the preview renderers themselves.
 local _, MSUF = ...
 MSUF = MSUF or {}
-local Preview = MSUF.Require("MSUF", "Shell/Menu2/MSUF_Menu2_PagePreviews.lua").UF.Preview
+local FILE = "Shell/Menu2/MSUF_Menu2_PagePreviews.lua"
+local Preview = MSUF.UF.Preview
 local previewKind = type(Preview)
 assert(previewKind == "table",
   "MSUF: missing required dependency 'UF.Preview' required by Shell/Menu2/MSUF_Menu2_PagePreviews.lua")
@@ -18,33 +19,56 @@ local SetBossPage = Preview.SetBossPage
 local previewState = Preview.State
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
+local Optional = MSUF.Optional
+local PublicGlobals = MSUF.PublicGlobals
+local MAX_ARENA_FRAMES = MSUF.Client.MaxArenaOpponents
 local function BossPagePreviewInCombat()
-    return (_G.InCombatLockdown and _G.InCombatLockdown())
-        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+    return (InCombatLockdown and InCombatLockdown())
+        or (UnitAffectingCombat and UnitAffectingCombat("player"))
 end
-local function ClearBossPagePreviewForCombat()
-    local clear = _G.MSUF_ClearBossUnitframePreviewForCombat
-    return type(clear) == "function" and clear() == true
+-- The core publishes the preview entry points; a client without one skips that step.
+local function CallOptional(name, ...)
+    local fn = Optional(name)
+    if type(fn) == "function" then return fn(...) end
 end
-local function ApplyBossPagePreviewFallback(active, reason)
+-- Boss and Arena page previews drive the same core entry points under different names.
+local BOSS_FAMILY = {
+    setPage = SetBossPage,
+    reason = "MSUF2_BOSS_PAGE",
+    clear = "MSUF_ClearBossUnitframePreviewForCombat",
+    apply = "MSUF_ApplyBossUnitframePreviewState",
+    sync = "MSUF_SyncBossUnitframePreviewWithUnitEdit",
+}
+local ARENA_FAMILY = {
+    setPage = SetArenaPage,
+    reason = "MSUF2_ARENA_PAGE",
+    clear = "MSUF_ClearArenaUnitframePreviewForCombat",
+    apply = "MSUF_ApplyArenaUnitframePreviewState",
+    sync = "MSUF_SyncArenaUnitframePreviewWithUnitEdit",
+}
+local function ClearPagePreviewForCombat(family)
+    return CallOptional(family.clear) == true
+end
+local function ApplyPagePreviewFallback(family, active, reason)
     if BossPagePreviewInCombat() then
-        ClearBossPagePreviewForCombat()
-        SetBossPage(nil)
+        ClearPagePreviewForCombat(family)
+        family.setPage(nil)
         return
     end
-    SetBossPage(active and true or nil)
-    if type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
-        _G.MSUF_ApplyBossUnitframePreviewState(active and true or false, reason or "MSUF2_BOSS_PAGE")
+    family.setPage(active and true or nil)
+    local apply = Optional(family.apply)
+    if type(apply) == "function" then
+        apply(active and true or false, reason or family.reason)
         return
     end
-    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() end
+    CallOptional(family.sync)
 end
 local CoreFrame = MSUF.UF.GetFrame
-local function BossPreviewFramesVisible()
+local function PreviewFramesVisible(prefix, count)
     local sawFrame = false
-    for i = 1, 5 do
-        local unit = "boss" .. i
+    for i = 1, count do
+        local unit = prefix .. i
         local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
         if frame then
             sawFrame = true
@@ -53,10 +77,12 @@ local function BossPreviewFramesVisible()
     end
     return sawFrame
 end
+local function BossPreviewFramesVisible()
+    return PreviewFramesVisible("boss", 5)
+end
 local lastBossPreviewActive
 local lastBossPreviewFn
 local lastCastbarPagePreviewUnit
-local bossPreviewRequestSerial = 0
 
 -- Out-of-menu castbar preview target for the global castbar page: the page's
 -- unit segment picks which castbar runs a fake cast on the real frames.
@@ -69,87 +95,50 @@ local function CastbarPagePreviewUnitForKey(key)
 end
 
 local function SyncCastbarPagePreviewForKey(key, force)
-    local apply = _G.MSUF_ApplyCastbarPagePreviewState
-    if type(apply) ~= "function" then return end
+    local apply = MSUF.Require("MSUF_ApplyCastbarPagePreviewState", FILE)
     local unit = not BossPagePreviewInCombat() and CastbarPagePreviewUnitForKey(key) or nil
     if not force and lastCastbarPagePreviewUnit == unit then return end
     lastCastbarPagePreviewUnit = apply(unit) or nil
 end
 
--- Boss aura lanes render on the out-of-menu boss preview frames only while the
--- boss page itself owns the preview; Auras3 edit-mode reads this flag.
-local function SyncBossPageAuraPreviewFlag(auraActive)
+-- Boss and Arena aura lanes render on the out-of-menu preview frames only while
+-- their page owns the preview; Auras3 edit-mode reads these flags. The change
+-- test reads the live namespace flag, never a copy.
+local function SyncPageAuraPreviewFlag(unit, auraActive)
     auraActive = auraActive == true and not BossPagePreviewInCombat()
-    local current = _G.MSUF2_BossPageAuraPreviewActive == true
-    if current == auraActive then return end
-    _G.MSUF2_BossPageAuraPreviewActive = auraActive or nil
-    local a3 = (MSUF and MSUF.MSUF_Auras3)
-        or (_G.MSUF_NS and _G.MSUF_NS.MSUF_Auras3)
-        or _G.MSUF_Auras3
-    if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview("boss") end
+    if unit == "boss" then
+        if (PublicGlobals.MSUF2_BossPageAuraPreviewActive == true) == auraActive then return end
+        MSUF.ExportPublic("MSUF2_BossPageAuraPreviewActive", auraActive or nil)
+    else
+        if (PublicGlobals.MSUF2_ArenaPageAuraPreviewActive == true) == auraActive then return end
+        MSUF.ExportPublic("MSUF2_ArenaPageAuraPreviewActive", auraActive or nil)
+    end
+    local a3 = MSUF.MSUF_Auras3
+    if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview(unit) end
 end
 
 --- Arena page preview coordination: mirrors the boss lanes against the arena
 --- preview globals so the same Window call sites drive both stacks.
 local lastArenaPreviewActive
 local lastArenaPreviewFn
-local function ClearArenaPagePreviewForCombat()
-    local clear = _G.MSUF_ClearArenaUnitframePreviewForCombat
-    return type(clear) == "function" and clear() == true
-end
-local function ApplyArenaPagePreviewFallback(active, reason)
-    if BossPagePreviewInCombat() then
-        ClearArenaPagePreviewForCombat()
-        SetArenaPage(nil)
-        return
-    end
-    SetArenaPage(active and true or nil)
-    if type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function" then
-        _G.MSUF_ApplyArenaUnitframePreviewState(active and true or false, reason or "MSUF2_ARENA_PAGE")
-        return
-    end
-    if type(_G.MSUF_SyncArenaUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit() end
-end
-local function ArenaPreviewFramesVisible()
-    local sawFrame = false
-    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        local unit = "arena" .. i
-        local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
-        if frame then
-            sawFrame = true
-            if frame.IsShown and not frame:IsShown() then return false end
-        end
-    end
-    return sawFrame
-end
-local function SyncArenaPageAuraPreviewFlag(auraActive)
-    auraActive = auraActive == true and not BossPagePreviewInCombat()
-    local current = _G.MSUF2_ArenaPageAuraPreviewActive == true
-    if current == auraActive then return end
-    _G.MSUF2_ArenaPageAuraPreviewActive = auraActive or nil
-    local a3 = (MSUF and MSUF.MSUF_Auras3)
-        or (_G.MSUF_NS and _G.MSUF_NS.MSUF_Auras3)
-        or _G.MSUF_Auras3
-    if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview("arena") end
-end
 local function SyncArenaPagePreviewForKey(key, force)
     local frameShown = M.frame and M.frame.IsShown and M.frame:IsShown()
     local active = (key == "uf_arena") and frameShown
     if BossPagePreviewInCombat() then
-        ClearArenaPagePreviewForCombat()
+        ClearPagePreviewForCombat(ARENA_FAMILY)
         SetArenaPage(nil)
-        SyncArenaPageAuraPreviewFlag(false)
+        SyncPageAuraPreviewFlag("arena", false)
         lastArenaPreviewActive = nil
         return
     end
-    SyncArenaPageAuraPreviewFlag(active == true)
+    SyncPageAuraPreviewFlag("arena", active == true)
     -- The castbar page's arena segment borrows the Arena frame preview so its
     -- three castbar previews keep their live unit-frame-relative anchors.
     local castbarUnit = CastbarPagePreviewUnitForKey(key)
     local arenaActive = (active or castbarUnit == "arena") and true or false
     local fn = M.UnitPage and M.UnitPage.SetArenaPagePreviewActive
     local globalActive = (previewState.arenaPage == true)
-    local visible = (not arenaActive) or ArenaPreviewFramesVisible()
+    local visible = (not arenaActive) or PreviewFramesVisible("arena", MAX_ARENA_FRAMES)
     if not force and lastArenaPreviewActive == arenaActive and lastArenaPreviewFn == fn
         and globalActive == arenaActive and visible
         and lastCastbarPagePreviewUnit == castbarUnit then
@@ -159,9 +148,9 @@ local function SyncArenaPagePreviewForKey(key, force)
     lastArenaPreviewFn = fn
     if type(fn) == "function" then
         fn(arenaActive)
-        if arenaActive and type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then _G.MSUF_ApplyArenaUnitframePreviewState(true, "MSUF2_ARENA_PAGE_CORE") end
+        if arenaActive and not BossPagePreviewInCombat() then CallOptional(ARENA_FAMILY.apply, true, "MSUF2_ARENA_PAGE_CORE") end
     else
-        ApplyArenaPagePreviewFallback(arenaActive, "MSUF2_ARENA_PAGE_FALLBACK")
+        ApplyPagePreviewFallback(ARENA_FAMILY, arenaActive, "MSUF2_ARENA_PAGE_FALLBACK")
     end
 end
 local function SyncBossPagePreviewForKey(key, force)
@@ -170,14 +159,14 @@ local function SyncBossPagePreviewForKey(key, force)
     -- Keep the arena preview in step for every Window-driven page change.
     SyncArenaPagePreviewForKey(key, force)
     if BossPagePreviewInCombat() then
-        ClearBossPagePreviewForCombat()
+        ClearPagePreviewForCombat(BOSS_FAMILY)
         SetBossPage(nil)
-        SyncBossPageAuraPreviewFlag(false)
+        SyncPageAuraPreviewFlag("boss", false)
         lastBossPreviewActive = nil
         SyncCastbarPagePreviewForKey(key, false)
         return
     end
-    SyncBossPageAuraPreviewFlag(active == true)
+    SyncPageAuraPreviewFlag("boss", active == true)
     -- The castbar page's boss segment borrows the boss frame preview so its
     -- castbar previews anchor under visible boss frames, exactly like live.
     local castbarUnit = CastbarPagePreviewUnitForKey(key)
@@ -194,30 +183,30 @@ local function SyncBossPagePreviewForKey(key, force)
     lastBossPreviewFn = fn
     if type(fn) == "function" then
         fn(bossActive)
-        if bossActive and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function"
-            and not BossPagePreviewInCombat() then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE") end
+        if bossActive and not BossPagePreviewInCombat() then CallOptional(BOSS_FAMILY.apply, true, "MSUF2_BOSS_PAGE_CORE") end
     else
-        ApplyBossPagePreviewFallback(bossActive, "MSUF2_BOSS_PAGE_FALLBACK")
+        ApplyPagePreviewFallback(BOSS_FAMILY, bossActive, "MSUF2_BOSS_PAGE_FALLBACK")
     end
     SyncCastbarPagePreviewForKey(key, force)
 end
-local function RequestBossPagePreviewForKey(key, force)
-    bossPreviewRequestSerial = bossPreviewRequestSerial + 1
-    if force or (key ~= "uf_boss" and key ~= "uf_arena") then
-        SyncBossPagePreviewForKey(key, force)
-        return
-    end
+-- A newer request (or a cache reset) bumps its serial, which retires a still queued sync.
+local requestSerial = { boss = 0, group = 0 }
+local function RequestPagePreviewSync(which, delay, sync, key, force, immediate)
+    requestSerial[which] = requestSerial[which] + 1
     local timer = C_Timer
-    if not (timer and type(timer.After) == "function") then
-        SyncBossPagePreviewForKey(key, force)
+    if force or immediate or not (timer and type(timer.After) == "function") then
+        sync(key, force)
         return
     end
-    local serial = bossPreviewRequestSerial
-    timer.After(0.05, function()
-        if serial ~= bossPreviewRequestSerial then return end
+    local serial = requestSerial[which]
+    timer.After(delay, function()
+        if serial ~= requestSerial[which] then return end
         if M.activeKey ~= key then return end
-        SyncBossPagePreviewForKey(key, force)
+        sync(key, force)
     end)
+end
+local function RequestBossPagePreviewForKey(key, force)
+    RequestPagePreviewSync("boss", 0.05, SyncBossPagePreviewForKey, key, force, key ~= "uf_boss" and key ~= "uf_arena")
 end
 local function RequestArenaPagePreviewForKey(key, force)
     return RequestBossPagePreviewForKey(key, force)
@@ -228,7 +217,7 @@ local function ResetBossPagePreviewCache()
     lastArenaPreviewActive = nil
     lastArenaPreviewFn = nil
     lastCastbarPagePreviewUnit = nil
-    bossPreviewRequestSerial = bossPreviewRequestSerial + 1
+    requestSerial.boss = requestSerial.boss + 1
 end
 local GF_PAGE_KEYS = M.KeySetFromWords "gf_layout gf_bars gf_auras gf_indicators"
 local GF_BAR_MENU_PREVIEW_KEYS = M.KeySetFromWords "opt_bars"
@@ -354,14 +343,14 @@ local function LiveRaidKind(gf)
 end
 local function LiveGroupKind(gf)
     if gf and type(gf.GetLiveGroupKind) == "function" then return gf.GetLiveGroupKind() end
-    if _G.IsInRaid and _G.IsInRaid() then return LiveRaidKind(gf) end
-    if _G.IsInGroup and _G.IsInGroup() then return "party" end
+    if IsInRaid and IsInRaid() then return LiveRaidKind(gf) end
+    if IsInGroup and IsInGroup() then return "party" end
     return nil
 end
 local function GroupPreviewRosterState(gf)
-    local inGroup = _G.IsInGroup and _G.IsInGroup() and true or false
-    local inRaid = _G.IsInRaid and _G.IsInRaid() and true or false
-    local count = _G.GetNumGroupMembers and tonumber(_G.GetNumGroupMembers()) or 0
+    local inGroup = IsInGroup and IsInGroup() and true or false
+    local inRaid = IsInRaid and IsInRaid() and true or false
+    local count = GetNumGroupMembers and tonumber(GetNumGroupMembers()) or 0
     if count < 0 then count = 0 end
     return inGroup, inRaid, math.floor(count + 0.5), LiveGroupKind(gf)
 end
@@ -381,8 +370,9 @@ local function LiveGroupFramesCoverKind(gf, kind)
     end
     return false
 end
+local GF_KINDS = { "party", "raid", "mythicraid" }
 local function RestoreGFHeaders(gf)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+    if InCombatLockdown and InCombatLockdown() then return end
     if gf and type(gf.UpdateGroupVisibility) == "function" then gf.UpdateGroupVisibility() end
 end
 local function ShowGFPreviewWhenNoLiveFrames(gf, kind, count)
@@ -411,46 +401,41 @@ local function ShowGFBarMenuPreviews(gf)
     gf.HidePreview("mythicraid")
 end
 local function SetGFPagePreviewFlag(active)
-    _G.MSUF2_GFPagePreviewActive = active and true or nil
+    MSUF.ExportPublic("MSUF2_GFPagePreviewActive", active and true or nil)
 end
 local function GFPreviewRuntimeActive(gf)
-    if _G.MSUF2_GFPagePreviewActive == true then return true end
+    if PublicGlobals.MSUF2_GFPagePreviewActive == true then return true end
     local active = gf and gf._previewActive
     return active and (active.party or active.raid or active.mythicraid) and true or false
+end
+local function ClearGFPreviewAnchors(gf)
+    if not gf.SetPreviewAnchor then return end
+    for i = 1, #GF_KINDS do gf.SetPreviewAnchor(GF_KINDS[i], nil) end
 end
 local function HideGFRuntimePreviews(gf, restoreHeaders)
     if not (gf and type(gf.HidePreview) == "function") then return end
     SetGFPagePreviewFlag(false)
-    for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
-        gfScalingBreakpointPreview[kind] = nil
-        ApplyGFScalingBreakpointTransform(gf, kind)
+    for i = 1, #GF_KINDS do
+        gfScalingBreakpointPreview[GF_KINDS[i]] = nil
+        ApplyGFScalingBreakpointTransform(gf, GF_KINDS[i])
     end
-    gf.HidePreview("party")
-    gf.HidePreview("raid")
-    gf.HidePreview("mythicraid")
-    if gf.SetPreviewAnchor then
-        gf.SetPreviewAnchor("party", nil)
-        gf.SetPreviewAnchor("raid", nil)
-        gf.SetPreviewAnchor("mythicraid", nil)
-    end
+    for i = 1, #GF_KINDS do gf.HidePreview(GF_KINDS[i]) end
+    ClearGFPreviewAnchors(gf)
     if restoreHeaders ~= false then RestoreGFHeaders(gf) end
 end
-local lastGFPreviewActive
-local lastGFPreviewKind
-local lastGFPreviewEditMode
-local lastGFPreviewRuntime
-local lastGFPreviewInGroup
-local lastGFPreviewInRaid
-local lastGFPreviewRosterCount
-local lastGFPreviewLiveRaidKind
-local groupPreviewRequestSerial = 0
+-- The last synced inputs: active, kind, edit mode, runtime present, in group, in
+-- raid, roster count and live raid kind. The sync compares them field by field.
+local lastGFPreviewInputs = {}
+-- The group Edit Mode preview kind setter, a core export resolved once; every
+-- sync calls it.
+local SetActiveGFPreviewKind = MSUF.Require("MSUF_GF_EM2_SetActivePreviewKind", FILE)
 
 -- Page previews borrow runtime group headers only while the menu owns focus. This cache avoids
 -- repeatedly hiding/restoring secure headers when the selected page key has not changed.
 local function SyncGroupPagePreviewForKey(key, force)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
+    if InCombatLockdown and InCombatLockdown() then
         SetGFPagePreviewFlag(false)
-        if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(nil) end
+        SetActiveGFPreviewKind(nil)
         return
     end
     local frameVisible = M.frame and M.frame.IsShown and M.frame:IsShown()
@@ -461,32 +446,21 @@ local function SyncGroupPagePreviewForKey(key, force)
     local editMode = M.IsMSUFEditModeActive and M.IsMSUFEditModeActive() and true or false
     local hasRuntime = gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function"
     local inGroup, inRaid, rosterCount, liveRaidKind = GroupPreviewRosterState(gf)
-    if not force
-        and lastGFPreviewActive == active
-        and lastGFPreviewKind == kind
-        and lastGFPreviewEditMode == editMode
-        and lastGFPreviewRuntime == hasRuntime
-        and lastGFPreviewInGroup == inGroup
-        and lastGFPreviewInRaid == inRaid
-        and lastGFPreviewRosterCount == rosterCount
-        and lastGFPreviewLiveRaidKind == liveRaidKind
-    then
-        if active or not GFPreviewRuntimeActive(gf) then return end
+    local last = lastGFPreviewInputs
+    local unchanged = last.active == active and last.kind == kind and last.editMode == editMode
+        and last.runtime == hasRuntime and last.inGroup == inGroup and last.inRaid == inRaid
+        and last.rosterCount == rosterCount and last.liveRaidKind == liveRaidKind
+    if not unchanged then
+        last.active, last.kind, last.editMode, last.runtime = active, kind, editMode, hasRuntime
+        last.inGroup, last.inRaid, last.rosterCount, last.liveRaidKind = inGroup, inRaid, rosterCount, liveRaidKind
     end
-    lastGFPreviewActive = active
-    lastGFPreviewKind = kind
-    lastGFPreviewEditMode = editMode
-    lastGFPreviewRuntime = hasRuntime
-    lastGFPreviewInGroup = inGroup
-    lastGFPreviewInRaid = inRaid
-    lastGFPreviewRosterCount = rosterCount
-    lastGFPreviewLiveRaidKind = liveRaidKind
+    if not force and unchanged and (active or not GFPreviewRuntimeActive(gf)) then return end
     if editMode then
-        if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(nil) end
+        SetActiveGFPreviewKind(nil)
         SetGFPagePreviewFlag(false)
         return
     end
-    if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind((active and not dualMenuPreviews) and kind or nil) end
+    SetActiveGFPreviewKind((active and not dualMenuPreviews) and kind or nil)
     if not hasRuntime then
         SetGFPagePreviewFlag(active)
         return
@@ -497,37 +471,19 @@ local function SyncGroupPagePreviewForKey(key, force)
     end
     SetGFPagePreviewFlag(true)
     RestoreGFHeaders(gf)
-    if gf.SetPreviewAnchor then
-        gf.SetPreviewAnchor("party", nil)
-        gf.SetPreviewAnchor("raid", nil)
-        gf.SetPreviewAnchor("mythicraid", nil)
-    end
+    ClearGFPreviewAnchors(gf)
     if dualMenuPreviews then
         ShowGFBarMenuPreviews(gf)
         return
     end
-    if kind ~= "party" then gf.HidePreview("party") end
-    if kind ~= "raid" then gf.HidePreview("raid") end
-    if kind ~= "mythicraid" then gf.HidePreview("mythicraid") end
+    for i = 1, #GF_KINDS do
+        if kind ~= GF_KINDS[i] then gf.HidePreview(GF_KINDS[i]) end
+    end
     ShowGFPreviewWhenNoLiveFrames(gf, kind)
 end
 local function RequestGroupPagePreviewForKey(key, force)
-    groupPreviewRequestSerial = groupPreviewRequestSerial + 1
-    if force or not (IsGroupPageKey(key) or IsGFDualMenuPreviewKey(key)) then
-        SyncGroupPagePreviewForKey(key, force)
-        return
-    end
-    local timer = C_Timer
-    if not (timer and type(timer.After) == "function") then
-        SyncGroupPagePreviewForKey(key, force)
-        return
-    end
-    local serial = groupPreviewRequestSerial
-    timer.After(0.09, function()
-        if serial ~= groupPreviewRequestSerial then return end
-        if M.activeKey ~= key then return end
-        SyncGroupPagePreviewForKey(key, force)
-    end)
+    RequestPagePreviewSync("group", 0.09, SyncGroupPagePreviewForKey, key, force,
+        not (IsGroupPageKey(key) or IsGFDualMenuPreviewKey(key)))
 end
 function M.SetGFScalingBreakpointPreview(kind, count, scalePct)
     if kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid" then return false end

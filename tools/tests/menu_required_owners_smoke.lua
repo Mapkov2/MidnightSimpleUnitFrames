@@ -136,7 +136,8 @@ local function Note(name, path)
 end
 for _, path in ipairs(TrackedLua("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/")) do
     local text = Read(path)
-    for list in text:gmatch("M%.RequireGlobals%(%s*\"[^\"]+\"%s*,%s*(%b{})") do
+    -- The first argument is the page's file name, a string literal or its FILE/SELF constant.
+    for list in text:gmatch("M%.RequireGlobals%(%s*[^,%s]+%s*,%s*(%b{})") do
         for name in list:gmatch("\"(MSUF_[%w_]+)\"") do Note(name, path) end
     end
     for name in text:gmatch("MSUF%.Require%(%s*\"(MSUF_[%w_]+)\"") do Note(name, path) end
@@ -162,7 +163,8 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
         else
             local classic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists"
             for _, name in ipairs(names) do
-                local kind = type(rawget(world.env, name))
+                -- Resolved as MSUF.Require resolves it: a global, else the namespace's published export.
+                local kind = type(world.core.Optional(name))
                 local excused = (classic and MAINLINE_ONLY[name]) or (capabilitiesOff and CAPABILITY_GATED[name])
                 if not excused and kind ~= "function" and kind ~= "table" then
                     Fail(label .. ": " .. name .. " (required by " .. required[name] .. ") does not exist after load")

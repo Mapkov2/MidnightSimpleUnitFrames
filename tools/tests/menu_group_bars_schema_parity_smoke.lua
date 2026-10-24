@@ -117,6 +117,16 @@ local function Replay(source, candidate)
             end
         end })
     local M, env, core = mw.M, mw.env, mw.core
+    -- The actual parent page predates the namespace-only exports and reads them as globals. Its sandbox
+    -- answers those reads from the live namespace registry, so both pages observe the same client.
+    local meta = assert(getmetatable(env), "the client sandbox lost its global fallback")
+    local fallback, registry = meta.__index, core.PublicGlobals
+    meta.__index = function(table_, key)
+        local published = registry[key]
+        if published ~= nil then return published end
+        if type(fallback) == "function" then return fallback(table_, key) end
+        if fallback then return fallback[key] end
+    end
     local GP, F = M.GroupPage, core.ProfileFields
     -- Observe the real shared factory's exact native returns, without replacing its widgets.
     local nativeTextPreviews, sharedPreviewText = {}, M.UnitSectionsShared.PreviewText
@@ -147,7 +157,7 @@ local function Replay(source, candidate)
     local factory = F.CopySnapshot(env.MSUF_DB)
     core.MSUF_CreateFactoryDefaultProfile = function() return F.CopySnapshot(factory) end
     env.MSUF_SetDispelOverlayPreview = function(on, scope)
-        env.MSUF_DispelOverlayPreviewMode = on == true
+        core.ExportPublic("MSUF_DispelOverlayPreviewMode", on == true)
         previews[#previews + 1] = { on, scope }
     end
     local function Add(tag, ...) rows[#rows + 1] = tag .. "\t" .. Encode(Pack(...), ids) end

@@ -1,6 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-MSUF = MSUF or {}
+local FILE = "Features/Gameplay/MSUF_Feature_GameplayHelpers.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
+local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
 
 local Gameplay = MSUF.Gameplay or {}
 MSUF.Gameplay = Gameplay
@@ -30,7 +32,7 @@ local function MSUF_Gameplay_GetPlayerSpecID()
     return specID
 end
 
-local _MSUF_Clamp = _G._MSUF_Clamp
+local _MSUF_Clamp = Optional("_MSUF_Clamp")
 if not _MSUF_Clamp then
     _MSUF_Clamp = function(v, mn, mx)
         v = tonumber(v)
@@ -45,10 +47,10 @@ if not _MSUF_Clamp then
         end
         return v
     end
-    _G._MSUF_Clamp = _MSUF_Clamp
+    ExportPublic("_MSUF_Clamp", _MSUF_Clamp)
 end
 
-local _MSUF_RoundInt = _G._MSUF_RoundInt
+local _MSUF_RoundInt = Optional("_MSUF_RoundInt")
 if not _MSUF_RoundInt then
     _MSUF_RoundInt = function(v)
         v = tonumber(v)
@@ -60,7 +62,7 @@ if not _MSUF_RoundInt then
         end
         return math.ceil(v - 0.5)
     end
-    _G._MSUF_RoundInt = _MSUF_RoundInt
+    ExportPublic("_MSUF_RoundInt", _MSUF_RoundInt)
 end
 
 local gameplayNudgeSelection
@@ -78,15 +80,20 @@ local function MSUF_Gameplay_GetNudgeStep()
     return 1
 end
 
+-- The history owner: the namespace table, else the Menu2 table.
+local function HistoryOwner()
+    return MSUF.History or Optional("MSUF2")
+end
+
 local function MSUF_Gameplay_CheckpointHistory(label, source)
-    local h = MSUF.History or _G.MSUF2
+    local h = HistoryOwner()
     local checkpoint = h and h.CheckpointHistory
     if type(checkpoint) ~= "function" then return false end
     return checkpoint(label or "Gameplay position", source or "gameplay:position") or false
 end
 
 local function MSUF_Gameplay_BeginHistory(frame, label, source)
-    local h = MSUF.History or _G.MSUF2
+    local h = HistoryOwner()
     local begin = h and h.BeginHistoryTransaction
     if not (frame and type(begin) == "function") then return false end
     if begin(label or "Gameplay position", source or "gameplay:position") then
@@ -99,7 +106,7 @@ end
 local function MSUF_Gameplay_CommitHistory(frame)
     if not (frame and frame._msufGameplayHistoryTransaction) then return false end
     frame._msufGameplayHistoryTransaction = nil
-    local h = MSUF.History or _G.MSUF2
+    local h = HistoryOwner()
     local commit = h and h.CommitHistoryTransaction
     if type(commit) ~= "function" then return false end
     return commit() or false
@@ -130,7 +137,7 @@ end
 local function MSUF_Gameplay_IsCombatInputLocked()
     return ((InCombatLockdown and InCombatLockdown())
         or (UnitAffectingCombat and UnitAffectingCombat("player"))
-        or (_G.MSUF_InCombat == true)) and true or false
+        or (MSUF.PublicGlobals.MSUF_InCombat == true)) and true or false
 end
 
 local function MSUF_Gameplay_SetKeyboardNudgeEnabled(frame, enabled)

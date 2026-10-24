@@ -289,6 +289,20 @@ local germanDone = assert(Read("MidnightSimpleUnitFrames/Locales/deDE.lua"):matc
     "the German pack lacks Done")
 local MSUF = { Client = { IsForever = true }, GetEffectiveLocale = function() return "deDE" end,
     L = { ["Done"] = germanDone } }
+-- The shipped Kernel API (export policy, registry, Require) and the pixel layout
+-- provider the navigation file binds when it loads; this smoke lays out no pixels.
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, MSUF)
+MSUF.ExportPublic("MSUF_PixelLayoutRegion", function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end)
+-- Edit Mode's preview nudge target setter (Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua),
+-- which the Edit Mode pad code calls when it takes over selection; the same registry write.
+MSUF.ExportPublic("MSUF_EM2_SetPreviewNudgeTarget", function(target)
+    if target == nil or type(target) == "table" then
+        MSUF.ExportPublic("MSUF_EM2_ActivePreviewNudgeTarget", target)
+    end
+end)
 for index = 1, #MODULES do
     assert(loadfile(root .. "/" .. FOREVER .. MODULES[index]))("MidnightSimpleUnitFrames", MSUF)
 end

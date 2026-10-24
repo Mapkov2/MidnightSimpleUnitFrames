@@ -208,4 +208,12 @@ do
  local _,base=Navigate(cold[1].row)
  assert(F.Equal(beforeSizing,e.MSUF_DB),"warm sizing navigation changed settings")
 end
+-- The Icon Skins page answers the name players know from other addons.
+local masque=Search("masque")[1]
+assert(masque and masque.key=="icon_skins","searching masque must find the Icon Skins page")
+-- Every skin name is a result of its own, also where other pages use the word.
+for _,query in ipairs({"Shadow 1","Metal: Cobalt","Pixel","Orb","Frame Rounded","Glass"}) do
+ local row=Search(query)[1]
+ assert(row and row.key=="icon_skins" and row.label==query,"searching "..query.." must find that Icon Skins skin first")
+end
 print("search feature targets: "..flavor.." PASS (cold exact IDs, feature queries/client gates, profile identity/prepare, no mutation/fallback)")

@@ -21,7 +21,6 @@
 ---
 --- Every other client returns at once: no surnames, no resolver, no cost.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 
 local Client = MSUF.Client
 if not (Client and Client.HasCharacterSurnames == true) then return end
@@ -29,10 +28,10 @@ local Text = MSUF.UFText
 if not (Text and type(Text.SetDisplayNameResolver) == "function" and type(Text.UnitName) == "function") then return end
 
 local UnitName = Text.UnitName
-local UnitIsPlayer = Text.UnitIsPlayer or _G.UnitIsPlayer
+local UnitIsPlayer = Text.UnitIsPlayer or UnitIsPlayer
 local ReadUnitIsPlayerCached = MSUF.UF and MSUF.UF.ReadUnitIsPlayerCached
-local issecretvalue = _G.issecretvalue
-local stringUtil = _G.C_StringUtil
+local issecretvalue = issecretvalue
+local stringUtil = C_StringUtil
 local WrapString = type(stringUtil) == "table" and stringUtil.WrapString or nil
 local find, sub, type = string.find, string.sub, type
 
@@ -47,15 +46,16 @@ end
 local separator
 local function Separator()
     if separator then return separator end
-    local constants = _G.Constants
+    local constants = Constants
     local names = type(constants) == "table" and constants.CharacterNameSeparatorConsts
     local value = type(names) == "table" and names.CHARACTERNAME_SURNAME_SEPARATOR
     if type(value) == "string" and value ~= "" then separator = value end
     return separator
 end
 
+-- Read per name compose: the profile is read inline, not through a getter call.
 local function Mode()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general
     local mode = type(general) == "table" and general.characterNameParts
     if mode == "FIRST" or mode == "SURNAME" then return mode end
@@ -67,7 +67,7 @@ end
 local regionalUniqueNames = false
 local function RegionalUniqueNames()
     if regionalUniqueNames then return true end
-    local enabled = _G.RegionalUniqueNamesEnabled
+    local enabled = RegionalUniqueNamesEnabled
     if type(enabled) == "function" and enabled() == true then regionalUniqueNames = true end
     return regionalUniqueNames
 end
@@ -175,8 +175,7 @@ end
 --- Re-read every displayed name after the option changed. The menu is closed to
 --- changes in combat, so this only runs out of combat.
 function Names.Refresh()
-    local inCombat = _G.InCombatLockdown
-    if type(inCombat) == "function" and inCombat() then return false end
+    if InCombatLockdown() then return false end
     local UF, runtime, GF = MSUF.UF, MSUF.UFTextRuntime, MSUF.GF
     if UF and type(UF.ForEachFrame) == "function" and runtime then UF.ForEachFrame(RefreshFrameName, runtime) end
     if GF and type(GF.RefreshGroupNames) == "function" then GF.RefreshGroupNames() end

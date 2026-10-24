@@ -121,12 +121,7 @@ manifest.LoadSelected(repo, spec.toc, namespace, providers)
 Check(type(namespace.Client) == "table", "client detection did not run")
 Check(namespace.Client.IsForever == IS_FOREVER_RUN, "IsForever is " .. tostring(namespace.Client.IsForever))
 
-function namespace.ExportPublic(name, value)
-    _G[name] = value
-    namespace.Public = namespace.Public or {}
-    namespace.Public[name] = value
-    return value
-end
+-- The real Kernel API (installed by the first selection) keeps the client's export policy and registry.
 manifest.LoadSelected(repo, spec.toc, namespace, {
     "State/MSUF_FirstLoad.lua",
     "Kernel/MSUF_Require.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
@@ -134,9 +129,10 @@ manifest.LoadSelected(repo, spec.toc, namespace, {
     "State/MSUF_ProfileCodec.lua", "State/Defaults/MSUF_Defaults_Schema.lua",
 })
 function MSUF_EnsureDB() end
-function MSUF_CreateFactoryDefaultProfile() return { _msufProfileSchema = 600, general = {} } end
+-- The profile provider reads these two stand-ins from the namespace registry.
+namespace.ExportPublic("MSUF_CreateFactoryDefaultProfile", function() return { _msufProfileSchema = 600, general = {} } end)
 namespace.ProfileRuntime = { Apply = Noop }
-MSUF_GF_InvalidateConfCache = Noop
+namespace.ExportPublic("MSUF_GF_InvalidateConfCache", Noop)
 
 MSUF_GlobalDB = {
     profiles = {
@@ -153,7 +149,9 @@ MSUF_ActiveProfile = "Default"
 -- Profiles -----------------------------------------------------------------------
 manifest.LoadSelected(repo, spec.toc, namespace, { "State/MSUF_ProfileNormalize.lua", "State/MSUF_Profiles.lua" })
 Check(type(MSUF_GetPlayerSpecID) == "function", "MSUF_GetPlayerSpecID missing")
-local eventFrame = MSUF_SpecProfileEventFrame
+-- The two spec frames stay namespace-only (no global): read them from the registry.
+local PublicGlobals = namespace.PublicGlobals
+local eventFrame = PublicGlobals.MSUF_SpecProfileEventFrame
 Check(type(eventFrame) == "table" and type(eventFrame.onEvent) == "function", "spec profile event frame missing")
 Check(eventFrame.events.ACTIVE_TALENT_GROUP_CHANGED == true, "ACTIVE_TALENT_GROUP_CHANGED is not registered")
 
@@ -185,7 +183,7 @@ if IS_FOREVER_RUN then
     activeGroup = 1
     eventFrame.onEvent(eventFrame, "ACTIVE_TALENT_GROUP_CHANGED", 1, 2)
     Check(#switches == 2, "a talent group change switched profiles in combat")
-    local deferFrame = MSUF_SpecProfileDeferFrame
+    local deferFrame = PublicGlobals.MSUF_SpecProfileDeferFrame
     Check(type(deferFrame) == "table" and deferFrame.events.PLAYER_REGEN_ENABLED == true, "combat switch was not deferred")
     inCombat = false
     deferFrame.onEvent(deferFrame, "PLAYER_REGEN_ENABLED")
@@ -281,7 +279,12 @@ M.RegisterControlMetadata = function(widget, meta, label, kind)
     widget._msuf2RuntimeControlRecord = { controlId = meta.controlId or label, kind = kind, label = label }
     widget._msuf2SearchMeta = meta
 end
-M.Assign = function(target, values) for key, value in pairs(values) do target[key] = value end end
+-- The shared M.Assign (MSUF_Menu2_Support.lua): tolerates a missing source and returns its target.
+M.Assign = function(target, values)
+    if type(target) ~= "table" or type(values) ~= "table" then return target end
+    for key, value in pairs(values) do target[key] = value end
+    return target
+end
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))(
     "MidnightSimpleUnitFrames_Options", optionsNamespace)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Advanced.lua"))(

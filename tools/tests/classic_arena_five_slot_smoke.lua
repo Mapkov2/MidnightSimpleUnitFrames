@@ -91,20 +91,23 @@ end
 local function LoadDefaults(flavor, slots)
     _G.MSUF_MAX_ARENA_FRAMES = slots
     local ns = { Client = { Family = "Classic", IsClassic = true } }
-    ns.ExportPublic = function(name, value) _G[name] = value end
     _G.MSUF_NS = ns
-    _G.MSUF_MaterializeUnitAuraLaneOwners = nil
-    _G.MSUF_CreateCanonicalUnitAuras = nil
     local function load(path) assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. path))("MSUF", ns) end
-    load("State/MSUF_StateHelpers.lua")
-    load("State/MSUF_ProfileCodec.lua")
+    -- The real namespace API of every core TOC; the aura and profile builders
+    -- below are namespace-only exports, read from the registry.
+    load("Kernel/MSUF_Bootstrap.lua")
+    load("Kernel/MSUF_Require.lua")
+    -- The shipped Util (MSUF.Util.IsSecret, read by the defaults schema) loads
+    -- before the state files, after the geometry owner it needs.
     manifest.LoadSelected(root, flavor, ns, {
+        "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
+        "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
         "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
         "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
         "State/MSUF_Defaults.lua",
     })
-    return assert(_G.MSUF_MaterializeUnitAuraLaneOwners, "Materialize export missing"),
-        assert(_G.MSUF_CreateCanonicalUnitAuras, "canonical Unit Aura builder export missing")
+    return assert(ns.PublicGlobals.MSUF_MaterializeUnitAuraLaneOwners, "Materialize export missing"),
+        assert(ns.PublicGlobals.MSUF_CreateCanonicalUnitAuras, "canonical Unit Aura builder export missing")
 end
 
 local function ArenaOwner(offsetX)
@@ -256,20 +259,24 @@ end
 
 -- (7) Compile --------------------------------------------------------------
 
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+
 local function NewAuraNamespace()
     local namespace = {
         Client = { IsClassic = true },
         MSUF_Auras3 = {},
         MSUF_DeepCopy = DeepCopy,
         UF = { elements = {}, RegisterElement = function() end },
-        ExportPublic = function(name, value) _G[name] = value; return value end,
     }
     _G.MSUF_NS, _G.MSUF = namespace, namespace
+    -- The shipped Kernel API; the files below run through the shipped loader,
+    -- so a provider this harness does not load is a forwarder that raises when used.
+    RequireFixture.InstallKernel(root, namespace)
     return namespace, namespace.MSUF_Auras3
 end
 
 local function LoadAura(namespace, file)
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/" .. file))("MidnightSimpleUnitFrames", namespace)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Game/Classic/Auras/" .. file, namespace)
 end
 
 local function CompileWith(slots)
@@ -279,7 +286,7 @@ local function CompileWith(slots)
     -- managed units, arena slots included.
     namespace.MSUF_CreateCanonicalPlayerDefensiveAuraContainer = function() return {} end
     namespace.Client.MaxArenaOpponents = slots
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFrames", namespace)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua", namespace)
     -- MSUF_Auras3_UnitFrames.lua provides the NormalizeClassic* value helpers in
     -- game; lane compilation only needs them to pass values through here.
     setmetatable(A3, { __index = function(_, key)
@@ -289,7 +296,7 @@ local function CompileWith(slots)
     end })
     -- The core's profile adapter is replaced: EnsureDB returns the profile's tree.
     A3.EnsureDB = function() local auras = _G.MSUF_DB.auras3; return auras, auras.shared end
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua", namespace)
     for _, file in ipairs({ "MSUF_Auras3_DataShared.lua", "MSUF_Auras3_Visuals.lua", "MSUF_Auras3_Features.lua" }) do
         LoadAura(namespace, file)
     end
@@ -335,6 +342,8 @@ Check(A3._ClassicCompile.MANAGED_UNITS.arena4 == nil, "Compile manages arena4 at
 local function MenuCompatWith(slots)
     _G.MSUF_MAX_ARENA_FRAMES = slots
     local namespace, menuA3 = NewAuraNamespace()
+    -- The client fact the menu adapter reads at load (Game/Shared/Initialize.lua).
+    namespace.Client.MaxArenaOpponents = slots
     local auras = { shared = { blacklist = { spells = {} } }, perUnit = {} }
     menuA3.EnsureDB = function() return auras, auras.shared end
     menuA3._ClassicCompile = { ReadBlacklistHidePermanent = function() return false end }
@@ -366,15 +375,21 @@ local unitFrames = ""
 for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
     unitFrames = unitFrames .. Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_" .. module .. ".lua") .. "\n"
 end
-local _, requestLoops = unitFrames:gsub('for i = 1, math_max%(3, tonumber%(_G%.MSUF_MAX_ARENA_FRAMES%) or 3%) do\n%s*didWork = ApplyRuntimeUnit%("arena" %.%. i%)', "")
-Check(requestLoops == 2, "RequestUnitNow arena loops do not follow MSUF_MAX_ARENA_FRAMES")
+-- RequestUnitNow fans out through ApplyRuntimeUnits (prefix1..prefixN), and the arena
+-- count is the client's slot fact (Client.MaxArenaOpponents, published with
+-- MSUF_MAX_ARENA_FRAMES by Game/Shared/Initialize.lua), at least three.
+Check(unitFrames:find("local function ArenaSlots()\n    return math_max(3, tonumber(Client.MaxArenaOpponents) or 3)\nend", 1, true),
+    "the arena slot count no longer follows the client's MaxArenaOpponents fact")
+local _, requestLoops = unitFrames:gsub('didWork = ApplyRuntimeUnits%("arena", ArenaSlots%(%)%) or didWork', "")
+local _, requestReturns = unitFrames:gsub('return ApplyRuntimeUnits%("arena", ArenaSlots%(%)%)', "")
+Check(requestLoops == 1 and requestReturns == 1, "RequestUnitNow arena loops do not follow the client arena slot count")
 Check(not unitFrames:find('for i = 1, 3 do\n%s*didWork = ApplyRuntimeUnit%("arena"'),
     "a RequestUnitNow arena loop is still fixed at three")
 
 -- The element builds its event lists once at load from the client's arena
 -- slot count; the builder takes the count, so both client shapes run here.
-Check(unitFrames:find("local EVENTS = BuildAuraEvents(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)", 1, true),
-    "the identity event lists no longer follow MSUF_MAX_ARENA_FRAMES")
+Check(unitFrames:find("local EVENTS = BuildAuraEvents(tonumber(MSUF.Client.MaxArenaOpponents) or 3)", 1, true),
+    "the identity event lists no longer follow the client arena slot count")
 local buildEvents = assert(loadstring(Slice.Function(unitFrames, "local function BuildAuraEvents",
     "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua") .. "\nreturn BuildAuraEvents"))()
 

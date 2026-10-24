@@ -1,6 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-MSUF = MSUF or {}
+local FILE = "Features/Gameplay/MSUF_Feature_GameplayRuntime.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
 local ExportPublic = MSUF.ExportPublic
 
 -- Gameplay feature runtime.
@@ -24,15 +25,17 @@ local tonumber            = tonumber
 local EditModeAPI = MSUF.EditModeAPI
 local GameplayHelpers = MSUF.Gameplay or {}
 local GetPlayerSpecID = GameplayHelpers.GetPlayerSpecID
-local Clamp, RoundInt = GameplayHelpers.Clamp or _G._MSUF_Clamp, GameplayHelpers.RoundInt or _G._MSUF_RoundInt
+local Clamp, RoundInt = GameplayHelpers.Clamp or Optional("_MSUF_Clamp"), GameplayHelpers.RoundInt or Optional("_MSUF_RoundInt")
 local CheckpointHistory, BeginHistory, CommitHistory = GameplayHelpers.CheckpointHistory, GameplayHelpers.BeginHistory, GameplayHelpers.CommitHistory
 local SelectNudgeFrame, SetupArrowNudge = GameplayHelpers.SelectNudgeFrame, GameplayHelpers.SetupArrowNudge
 local RefreshKeyboardNudge, ReleaseKeyboardNudge = GameplayHelpers.RefreshKeyboardNudge, GameplayHelpers.ReleaseKeyboardNudge
 
-local ScheduleOnce = _G.MSUF_ScheduleOnce
-local BusRegister = _G.MSUF_EventBus_Register
-local BusUnregister = _G.MSUF_EventBus_Unregister
-local RegisterModule = MSUF.MSUF_RegisterModule
+local ScheduleOnce = Require("MSUF_ScheduleOnce", FILE)
+local BusRegister = Require("MSUF_EventBus_Register", FILE)
+local BusUnregister = Require("MSUF_EventBus_Unregister", FILE)
+local SetFontChecked = Require("MSUF_SetFontChecked", FILE)
+local ResolveFontShadowMetrics = Require("MSUF_ResolveFontShadowMetrics", FILE)
+local FontPathEquals = Require("MSUF_FontPathEquals", FILE)
 local ApplyGameplayNow
 local SyncGameplaySpecEvents
 
@@ -70,11 +73,7 @@ do
         if _applyPending then return end
         _applyPending = true
 
-        if type(ScheduleOnce) == "function" then
-            ScheduleOnce("MSUF_GAMEPLAY_APPLY", _DoGameplayApply)
-        else
-            C_Timer.After(0, _DoGameplayApply)
-        end
+        ScheduleOnce("MSUF_GAMEPLAY_APPLY", _DoGameplayApply)
     end
 end
 
@@ -90,7 +89,7 @@ local MSUF_GetCombatStateColors = MSUF.MSUF_GetCombatStateColors
 local ApplyCombatStateDynamicColor
 
 local function GlobalFontTextAlpha()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local g = MSUF_DB and MSUF_DB.general
     local a = tonumber(g and g.fontTextAlpha) or 1
     if a < 0.7 then return 0.7 end
     if a > 1 then return 1 end
@@ -98,8 +97,8 @@ local function GlobalFontTextAlpha()
 end
 
 local function GlobalFontShadowMetrics()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general
-    return _G.MSUF_ResolveFontShadowMetrics(g and g.fontShadowOpacity,
+    local g = MSUF_DB and MSUF_DB.general
+    return ResolveFontShadowMetrics(g and g.fontShadowOpacity,
         g and g.fontShadowDistance, g and g.fontShadowStrength)
 end
 
@@ -146,7 +145,7 @@ end
 local function SyncGameplayPanel()
     -- Menu2 replaced the legacy gameplay panel, so mover drags/nudges must repaint the visible
     -- X/Y offset sliders through the Menu2 sync path (same one Edit Mode position drags use).
-    local m2 = _G.MSUF2
+    local m2 = Optional("MSUF2")
     if m2 and type(m2.RefreshVisibleSliders) == "function" then m2.RefreshVisibleSliders("GAMEPLAY_MOVER_POSITION_CHANGED") end
 end
 
@@ -213,7 +212,8 @@ local function ResolveCrosshairRangeSpellID(g)
     spellID = tonumber(g.nameplateMeleeSpellID) or 0
     if spellID > 0 then return spellID end
 
-    return (MSUF_DB and type(MSUF_DB.general) == "table" and tonumber(MSUF_DB.general.meleeRangeSpellID)) or 0
+    local general = MSUF_DB and MSUF_DB.general
+    return (type(general) == "table" and tonumber(general.meleeRangeSpellID)) or 0
 end
 
 local function SyncCrosshairRangeCache(g)
@@ -402,7 +402,7 @@ local function ScheduleCombatStateClear(duration)
     MSUF.Scheduler.ScheduleAfter(COMBAT_STATE_CLEAR_KEY, duration, CombatStateClearTimerFired)
 end
 
-local GAMEPLAY_FALLBACK_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local GAMEPLAY_FALLBACK_FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local function GameplayFontApplied(fs, path, size, flags)
     if type(fs.GetFont) ~= "function" then return true end
@@ -411,9 +411,7 @@ local function GameplayFontApplied(fs, path, size, flags)
     if actualSize and actualSize ~= size then return false end
     if (actualFlags or "") ~= (flags or "") then return false end
     if actual == path then return true end
-    local matches = _G.MSUF_FontPathEquals
-    if type(matches) == "function" then return matches(path, actual) == true end
-    return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(path or ""):gsub("/", "\\"):lower()
+    return FontPathEquals(path, actual) == true
 end
 
 local function ApplyGameplayFont(fs, path, size, flags)
@@ -423,11 +421,11 @@ local function ApplyGameplayFont(fs, path, size, flags)
     if size <= 0 then size = 12 end
     if size < 6 then size = 6 elseif size > 128 then size = 128 end
     flags = flags or "OUTLINE"
-    if _G.MSUF_SetFontChecked(fs, path, size, flags) and GameplayFontApplied(fs, path, size, flags) then
+    if SetFontChecked(fs, path, size, flags) and GameplayFontApplied(fs, path, size, flags) then
         return true
     end
     if path ~= GAMEPLAY_FALLBACK_FONT then
-        return _G.MSUF_SetFontChecked(fs, GAMEPLAY_FALLBACK_FONT, size, flags)
+        return SetFontChecked(fs, GAMEPLAY_FALLBACK_FONT, size, flags)
     end
     return false
 end
@@ -587,7 +585,7 @@ local function ApplyCombatStatePosition(g)
 end
 
 local function PlayerNamePlate()
-    local api = _G.C_NamePlate
+    local api = C_NamePlate
     return api and api.GetNamePlateForUnit and api.GetNamePlateForUnit("player") or nil
 end
 
@@ -662,7 +660,7 @@ local function ScheduleCombatCrosshairAnchor()
 end
 
 local function InstallCombatCrosshairZoomHooks()
-    if crosshairZoomHooksInstalled or type(_G.hooksecurefunc) ~= "function" then return end
+    if crosshairZoomHooksInstalled or type(hooksecurefunc) ~= "function" then return end
     crosshairZoomHooksInstalled = true
     local function CameraZoomChanged()
         local g = GetGameplayDB()
@@ -670,9 +668,8 @@ local function InstallCombatCrosshairZoomHooks()
             ScheduleCombatCrosshairAnchor()
         end
     end
-    for _, name in ipairs({ "CameraZoomIn", "CameraZoomOut" }) do
-        if type(_G[name]) == "function" then _G.hooksecurefunc(name, CameraZoomChanged) end
-    end
+    if type(CameraZoomIn) == "function" then hooksecurefunc("CameraZoomIn", CameraZoomChanged) end
+    if type(CameraZoomOut) == "function" then hooksecurefunc("CameraZoomOut", CameraZoomChanged) end
 end
 
 local function EnsureCombatCrosshair()
@@ -715,7 +712,8 @@ local function EnsureCombatCrosshair()
                     RequestCrosshairRangeRefresh()
                 elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_LOGIN" then
                     AnchorCombatCrosshair()
-                    crosshairFrame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true))
+                    crosshairFrame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player"))
+                        or (MSUF.PublicGlobals.MSUF_InCombat == true))
                     RequestCrosshairRangeRefresh()
                 elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" or event == "DISPLAY_SIZE_CHANGED" then
                     ScheduleCombatCrosshairAnchor()
@@ -1079,7 +1077,7 @@ local function ApplyCombatCrosshair(g)
         crosshairEventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
         crosshairEventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 
-        frame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true))
+        frame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player")) or (MSUF.PublicGlobals.MSUF_InCombat == true))
         RequestCrosshairRangeRefresh()
     else
         if crosshairEventFrame then
@@ -1290,17 +1288,14 @@ local function IsGameplayModuleEnabled()
         or g.enablePlayerTotems == true) or false
 end
 
-local reg = RegisterModule or _G.MSUF_RegisterModule
-if type(reg) == "function" then
-    reg("Gameplay", {
-        order = 50,
-        IsEnabled = IsGameplayModuleEnabled,
-        Enable = MSUF.MSUF_RequestGameplayApply,
-        Disable = StopGameplayModule,
-        RefreshSettings = MSUF.MSUF_RequestGameplayApply,
-        Shutdown = StopGameplayModule,
-    })
-end
+Require("MSUF_RegisterModule", FILE)("Gameplay", {
+    order = 50,
+    IsEnabled = IsGameplayModuleEnabled,
+    Enable = MSUF.MSUF_RequestGameplayApply,
+    Disable = StopGameplayModule,
+    RefreshSettings = MSUF.MSUF_RequestGameplayApply,
+    Shutdown = StopGameplayModule,
+})
 
 -- Reuse the existing external drag bridge for native Gameplay frames; only
 -- their popup overrides the screen-edge readout with the menu's anchor offsets.

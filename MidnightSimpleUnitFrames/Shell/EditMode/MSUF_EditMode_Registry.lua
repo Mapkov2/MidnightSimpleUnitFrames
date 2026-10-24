@@ -1,7 +1,8 @@
 --- EditMode/MSUF_EditMode_Registry.lua - Edit Mode element registration
 --- Every moveable element (unit frame, castbar, aura group, class power)
 --- registers here. Edit Mode iterates the registry, never hardcoded lists.
-local EM2 = _G.MSUF_EM2
+local _, MSUF = ...
+local EM2 = MSUF.Require("MSUF_EM2", "Shell/EditMode/MSUF_EditMode_Registry.lua")
 
 local Registry = {}
 EM2.Registry = Registry

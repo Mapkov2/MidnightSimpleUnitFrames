@@ -2,8 +2,9 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors_Resources.lua"
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
+-- load, resolved at use time so a hook installed on one later still applies.
 M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors_Resources.lua", {
     "MSUF_GetDefaultPowerColor",
 })
@@ -15,6 +16,7 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors_Resources.lua", {
 -- loads after that page (and its Group sibling), picks the page helpers from
 -- M.ColorsPage and publishes its readers there for the context-color registry.
 local W = M.Widgets
+local Schema = M.ControlSchema
 local AP = M.AdvancedPage or {}
 local floor = math.floor
 local min = math.min
@@ -23,9 +25,10 @@ local WL, ColorRows, KeyLabelMap, ValueTextPairs = M.WordList, M.ColorRows, M.Ke
 local CP = M.ColorsPage or {}
 M.ColorsPage = CP
 local CurrentApplyService, RequestGeneral, ApplyColors, ApiRGB = CP.CurrentApplyService, CP.RequestGeneral, CP.ApplyColors, CP.ApiRGB
-local TableRGB, ColorValueAt, Meta = CP.TableRGB, CP.ColorValueAt, CP.Meta
+local TableRGB, ColorValueAt, Meta, Req, Opt = CP.TableRGB, CP.ColorValueAt, CP.Meta, CP.Req, CP.Opt
 local COLOR_DATA, COLOR_PAINTER_CATEGORIES, COLOR_POWER_TOKENS, COLOR_CP_TOKENS = CP.COLOR_DATA, CP.COLOR_PAINTER_CATEGORIES, CP.COLOR_POWER_TOKENS, CP.COLOR_CP_TOKENS
 local function ApplyClassPowerColors()
+    M.RequestRefresh(nil, "class-power-colors")
     -- The painter's Resources strip paints straight from these DB values and
     -- has no writer of its own, so both apply paths poke it. Kept inline in
     -- this apply path.
@@ -37,7 +40,7 @@ local function ApplyClassPowerColors()
             { preview = true, applyAll = false, colors = true, colorScope = "player" })
     end
     RequestGeneral("MSUF2_CLASSPOWER_COLORS", { preview = true, applyAll = false, colors = true, colorScope = "player" })
-    _G.MSUF_ClassPower_InvalidateColors()
+    Req.MSUF_ClassPower_InvalidateColors()
 end
 local COLOR_CP_SLOT_TOKENS = WL [[COMBO_POINTS_1 COMBO_POINTS_2 COMBO_POINTS_3 COMBO_POINTS_4 COMBO_POINTS_5 COMBO_POINTS_6 COMBO_POINTS_7]]
 local COLOR_CP_SLOT_DEFAULTS = {}
@@ -45,8 +48,8 @@ for _, row in ipairs(ColorRows [[COMBO_POINTS_1|1|0.00|0.95|1.00;COMBO_POINTS_2|
     COLOR_CP_SLOT_DEFAULTS[row.key] = { row.dr, row.dg, row.db }
 end
 local COLOR_CP_SLOT_MODES = ValueTextPairs "default=Resource color|ramp=Color ramp|custom=Custom slots"
-local COLOR_CP_SLOT_COUNTS = KeyLabelMap [[COMBO_POINTS=7|HOLY_POWER=5|SOUL_SHARDS=5|CHI=6|ARCANE_CHARGES=4|RUNES=6|ESSENCE=6|SOUL_FRAGMENTS_VENG=6|MAELSTROM=10|WHIRLWIND=4|TIP_OF_THE_SPEAR=3|ICICLES=5]]
-for token, count in pairs(COLOR_CP_SLOT_COUNTS) do COLOR_CP_SLOT_COUNTS[token] = tonumber(count) or 1 end
+local COLOR_CP_SLOT_COUNTS = {}
+for _, resource in ipairs(CP.CLASS_POWER_SLOT_RESOURCES) do COLOR_CP_SLOT_COUNTS[resource[1]] = resource[2] end
 if MSUF.Client and (MSUF.Client.IsClassic or MSUF.Client.IsForever) then
     COLOR_CP_SLOT_COUNTS.COMBO_POINTS = 5
     if MSUF.Client.IsMists then
@@ -59,10 +62,10 @@ COLOR_DATA.CP_SLOT_MODES = COLOR_CP_SLOT_MODES
 local function PowerDefaultRGB(token)
     --- MSUF's own class-resource defaults (runes, soul shards) come first.
     if token then
-        local r, g, b = _G.MSUF_GetDefaultPowerColor(token)
+        local r, g, b = Req.MSUF_GetDefaultPowerColor(token)
         if tonumber(r) and tonumber(g) and tonumber(b) then return tonumber(r), tonumber(g), tonumber(b) end
     end
-    local col = _G.PowerBarColor and token and _G.PowerBarColor[token]
+    local col = PowerBarColor and token and PowerBarColor[token]
     if type(col) == "table" then
         local r = tonumber(col.r or col[1])
         local g = tonumber(col.g or col[2])
@@ -87,8 +90,7 @@ local function SetPowerOverrideRGB(token, r, g, b)
     ApplyColors()
 end
 local function ResetPowerOverride(token)
-    local overrides = EnsurePowerOverrides()
-    overrides[token] = nil
+    EnsurePowerOverrides()[token] = nil
     ApplyColors()
 end
 local CLASS_POWER_STATIC_DEFAULTS = {}
@@ -193,21 +195,32 @@ local function GetClassPowerFullRGB(resourceToken)
     end
     return GetClassPowerRGB(resourceToken)
 end
+local function BindPowerColor(ctx, widget, kind, label, get, set, meta)
+    return Schema.Bind(ctx, widget, { id = meta.controlId, kind = kind, labelKey = label,
+        scope = "colors", applyDomain = "powerColors", get = get, set = set, meta = meta })
+end
+local CLASS_POWER_CONTROLS = {
+    Color = function(...) return Schema.Owned(ColorValueAt(...), "colors", "classPowerColors") end,
+    Button = function(CH, ...) return Schema.Owned(CH.ButtonAt(...), "colors", "classPowerColors") end,
+}
 local function BuildPowerAndClassPowerColors(ctx, b, CH)
     if M.ResourceExtrasPage then M.ResourceExtrasPage.BuildColors(ctx,b,Bars,ColorValueAt,function()
         local apply=CurrentApplyService()
         if apply and apply.RequestClassPowerDomains then
             apply.RequestClassPowerDomains("MSUF2_RESOURCE_EXTRAS_COLORS", { full = true }, { preview = true, applyAll = false })
-        elseif _G.MSUF_ClassPower_Refresh then _G.MSUF_ClassPower_Refresh() end
+        else
+            local refresh = Opt.MSUF_ClassPower_Refresh
+            if refresh then refresh() end
+        end
     end) end
-    local power = b:CollapsibleSection("colors_power", "Power Bar Colors", 150, false)
-    ValueToggleAt(ctx, power, "Power bar color by class", 12, -94,
+    local power = Schema.Section(b:CollapsibleSection("colors_power", "Power Bar Colors", 150, false), "colors")
+    AP.MoveWidget(BindPowerColor(ctx, W.Toggle(power, "Power bar color by class"), "toggle", "Power bar color by class",
         function() return M.PowerBarColorByClass.Get() end,
         function(v) M.PowerBarColorByClass.Set(v) end,
-        Meta("power.color_by_class"))
+        Meta("power.color_by_class")), power, 12, -94)
     M.colorsPowerToken = M.colorsPowerToken or "MANA"
     local powerColor
-    ValueDropdownAt(ctx, power, "Power type", 12, -10, COLOR_DATA.POWER_TOKENS, 260,
+    AP.MoveWidget(BindPowerColor(ctx, W.Dropdown(power, "Power type", COLOR_DATA.POWER_TOKENS, 260), "dropdown", "Power type",
         function() return M.colorsPowerToken or "MANA" end,
         function(v)
             M.SetMenuStateValue("colorsPowerToken", v or "MANA")
@@ -215,21 +228,21 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
             -- The painter's resources preview strip mirrors this selection.
             if M.RequestRefresh then M.RequestRefresh(ctx, "power-color-token") end
         end,
-        Meta("power.editor.resource_selector", "ephemeral"))
-    powerColor = ColorValueAt(ctx, power, "Color", 360, -10,
+        Meta("power.editor.resource_selector", "ephemeral")), power, 12, -10)
+    powerColor = CP.FinishColorRow(ctx, BindPowerColor(ctx, W.Color(power, "Color"), "color", "Color",
         function() return GetPowerOverrideRGB(M.colorsPowerToken or "MANA") end,
         function(r, g, c) SetPowerOverrideRGB(M.colorsPowerToken or "MANA", r, g, c) end,
-        nil, nil, Meta("power.editor.color"))
-    CH.ButtonAt(power, "Reset", 360, -54, 90, function()
+        Meta("power.editor.color")), power, 360, -10)
+    Schema.Owned(CH.ButtonAt(power, "Reset", 360, -54, 90, function()
         ResetPowerOverride(M.colorsPowerToken or "MANA")
         if powerColor then powerColor:SetRGB(GetPowerOverrideRGB(M.colorsPowerToken or "MANA")) end
-    end, "power.editor.reset")
-    local classPower = b:CollapsibleSection("colors_class_power", "Class Power Colors", 430, false)
+    end, "power.editor.reset"), "colors", "powerColors")
+    local classPower = Schema.Section(b:CollapsibleSection("colors_class_power", "Class Power Colors", 430, false), "colors")
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
     if MSUF.Client and MSUF.Client.SupportsClassResource and not MSUF.Client.SupportsClassResource(M.colorsCPToken) then
         M.colorsCPToken = "COMBO_POINTS"
     end
-    local cpColor, cpBg, slotMode, slotReset, fullToggle, fullColor, fullReset
+    local cpColor, cpBg, slotMode, slotReset, fullToggle, fullColor, fullReset, slotChrome
     local slotControls = {}
     local visibleSlotCount, slotControlsAvailable
     local function RequestClassPowerEditorRefresh(reason)
@@ -248,11 +261,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
             -- common slot-based resources; SetControlShown also refreshes the
             -- control layout and is intentionally reserved for real deltas.
             if slotControlsAvailable ~= nil or not hasSlots then
-                W.SetControlShown(slotMode, hasSlots)
-                W.SetControlShown(slotReset, hasSlots)
-                W.SetControlShown(fullToggle, hasSlots)
-                W.SetControlShown(fullColor, hasSlots)
-                W.SetControlShown(fullReset, hasSlots)
+                for i = 1, 5 do W.SetControlShown(slotChrome[i], hasSlots) end
             end
             slotControlsAvailable = hasSlots
         end
@@ -272,19 +281,19 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
             RequestClassPowerEditorRefresh("class-power-resource-selection")
         end,
         Meta("class_power.editor.resource_selector", "ephemeral"))
-    cpColor = ColorValueAt(ctx, classPower, "Color", 360, -10,
+    cpColor = CLASS_POWER_CONTROLS.Color(ctx, classPower, "Color", 360, -10,
         function() return GetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS") end,
         function(r, g, c) SetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", r, g, c) end,
         nil, nil, Meta("class_power.editor.foreground_color"))
-    cpBg = ColorValueAt(ctx, classPower, "Background", 360, -46,
+    cpBg = CLASS_POWER_CONTROLS.Color(ctx, classPower, "Background", 360, -46,
         function() return GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS") end,
         function(r, g, c) SetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS", r, g, c) end,
         nil, nil, Meta("class_power.editor.background_color"))
-    CH.ButtonAt(classPower, "Reset color", 360, -86, 110, function()
+    CLASS_POWER_CONTROLS.Button(CH, classPower, "Reset color", 360, -86, 110, function()
         ResetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", false)
         if cpColor then cpColor:SetRGB(GetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS")) end
     end, "class_power.editor.reset_foreground")
-    CH.ButtonAt(classPower, "Reset bg", 480, -86, 110, function()
+    CLASS_POWER_CONTROLS.Button(CH, classPower, "Reset bg", 480, -86, 110, function()
         ResetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", true)
         if cpBg then cpBg:SetRGB(GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS")) end
     end, "class_power.editor.reset_background")
@@ -302,7 +311,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
             SetClassPowerFullColorEnabled(M.colorsCPToken or "COMBO_POINTS", value)
         end,
         Meta("class_power.full_resource.enabled"))
-    fullColor = ColorValueAt(ctx, classPower, "Full", 540, -116,
+    fullColor = CLASS_POWER_CONTROLS.Color(ctx, classPower, "Full", 540, -116,
         function() return GetClassPowerFullRGB(M.colorsCPToken or "COMBO_POINTS") end,
         function(r, g, b)
             local resourceToken = M.colorsCPToken or "COMBO_POINTS"
@@ -313,7 +322,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         end, 36, 44, Meta("class_power.full_resource.color"))
     for i = 1, 10 do
         local slot = i
-        slotControls[i] = ColorValueAt(ctx, classPower, tostring(i), 12 + ((i - 1) % 4) * 160, -154 - floor((i - 1) / 4) * 38,
+        slotControls[i] = CLASS_POWER_CONTROLS.Color(ctx, classPower, tostring(i), 12 + ((i - 1) % 4) * 160, -154 - floor((i - 1) / 4) * 38,
             function() return GetClassPowerSlotRGB(M.colorsCPToken or "COMBO_POINTS", slot) end,
             function(r, g, c)
                 local resourceToken = M.colorsCPToken or "COMBO_POINTS"
@@ -323,7 +332,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
                 if not custom then RequestClassPowerEditorRefresh("class-power-slot-color") end
             end, 24, 44, Meta("class_power.resource_slots.slot." .. tostring(i)))
     end
-    slotReset = CH.ButtonAt(classPower, "Reset slots", 12, -284, 120, function()
+    slotReset = CLASS_POWER_CONTROLS.Button(CH, classPower, "Reset slots", 12, -284, 120, function()
         local resourceToken = M.colorsCPToken or "COMBO_POINTS"
         local g = EnsureClassPowerOverrides()
         for i = 1, ClassPowerSlotCount(resourceToken) do
@@ -332,12 +341,13 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         ApplyClassPowerColors()
         RequestClassPowerEditorRefresh("class-power-slots-reset")
     end, "class_power.resource_slots.reset")
-    fullReset = CH.ButtonAt(classPower, "Reset full", 142, -284, 110, function()
+    fullReset = CLASS_POWER_CONTROLS.Button(CH, classPower, "Reset full", 142, -284, 110, function()
         local resourceToken = M.colorsCPToken or "COMBO_POINTS"
         EnsureClassPowerOverrides().classPowerColorOverrides[ClassPowerFullColorToken(resourceToken)] = nil
         SetClassPowerFullColorEnabled(resourceToken, false)
         RequestClassPowerEditorRefresh("class-power-full-color-reset")
     end, "class_power.full_resource.reset")
+    slotChrome = { slotMode, slotReset, fullToggle, fullColor, fullReset }
     M.TrackRefresh(ctx, RefreshSlotControls)
 end
 local function TokenText(list, value)
@@ -370,6 +380,7 @@ COLOR_RESOURCES_CATEGORY.preview = {
 -- the page's lazy category builders.
 CP.GetPowerOverrideRGB = GetPowerOverrideRGB
 CP.SetPowerOverrideRGB = SetPowerOverrideRGB
+CP.ApplyClassPowerColors = ApplyClassPowerColors
 CP.GetClassPowerRGB = GetClassPowerRGB
 CP.SetClassPowerRGB = SetClassPowerRGB
 CP.GetClassPowerBgRGB = GetClassPowerBgRGB

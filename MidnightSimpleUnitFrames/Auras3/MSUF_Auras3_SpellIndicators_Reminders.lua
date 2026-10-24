@@ -1,8 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/SpellIndicator_Reminders: missing-aura surfaces and one lazy weapon-enchantment event owner.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_SpellIndicators_Reminders.lua")
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -13,8 +12,8 @@ A3.SpellIndicatorModules.Reminders = function(config, effects)
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local math_max = math.max
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
-local CreateFrame = _G.CreateFrame
-local GetTime = _G.GetTime
+local CreateFrame = CreateFrame
+local GetTime = GetTime
 local Runtime = A3.SpellIndicators
 local ClampNumber = config.ClampNumber
 local ResolveFrameStrata = config.ResolveFrameStrata
@@ -43,7 +42,7 @@ end
 --- so nothing here polls.
 local function ReminderEnchantInfo(slot)
     local invSlot = slot and slot.enchantInventorySlot
-    local api = _G.C_PaperDollInfo
+    local api = C_PaperDollInfo
     if not (invSlot and type(api) == "table"
         and type(api.GetTemporaryEnchantmentInfo) == "function") then return nil end
     return api.GetTemporaryEnchantmentInfo(invSlot)
@@ -58,7 +57,7 @@ local enchantPlaceholders, enchantDriver
 local function EnsureEnchantPlaceholderDuration(frame)
     local duration = frame and frame._msufA3EnchantDuration
     if duration then return duration end
-    local durationUtil = _G.C_DurationUtil
+    local durationUtil = C_DurationUtil
     local createDuration = durationUtil and durationUtil.CreateDuration
     if not (frame and type(createDuration) == "function") then return nil end
     duration = createDuration()

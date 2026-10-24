@@ -7,6 +7,7 @@ local CP_StampText = shared.CP_StampText
 local CP_SetPassthroughText = shared.CP_SetPassthroughText
 local PixelLayoutRegion = shared.PixelLayoutRegion
 local OverrideRGB = shared.OverrideRGB
+local Snap = MSUF.Require("MSUF_Snap", "ClassPower/MSUF_CP_Aura.lua")
 local IS_CLASSIC = shared.IS_CLASSIC
 local CP_StampMinMax = shared.CP_StampMinMax
 local CP_SetPowerValue = shared.CP_SetPowerValue
@@ -101,11 +102,8 @@ modeBuilders.AURA = function(E)
                 notchW = base + math_floor(((gap * (maxNotchW - base)) / MAX_PIP_GAP) + 0.5)
                 --- Crisp like every other separator, but a scale that snaps a
                 --- hairline below one pixel must not erase the division.
-                local snap = _G.MSUF_Snap
-                if type(snap) == "function" then
-                    local snapped = tonumber(snap(CP.container or bar, notchW))
-                    if snapped and snapped >= 1 then notchW = snapped end
-                end
+                local snapped = tonumber(Snap(CP.container or bar, notchW))
+                if snapped and snapped >= 1 then notchW = snapped end
                 if notchW > maxNotchW then notchW = maxNotchW end
             end
         end

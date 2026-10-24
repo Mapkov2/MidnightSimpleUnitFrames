@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets_PageBuilder.lua
 --- W.PageBuilder and everything private to it: menu focus requests, scrolling
 --- to and flashing a focused section, collapsible sections and their header
@@ -8,15 +7,14 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Split from MSUF_Menu2_Widgets.lua; loads right after it.
 
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Widgets_PageBuilder.lua")
 local M = MSUF.MSUF2
 local T = M.Theme
 local W = M.Widgets
 local Shared = W._Shared
 local ExportPublic = MSUF.ExportPublic
-local C_Timer = M.MenuTimer or _G.C_Timer
-local floor = math.floor
-local max = math.max
-local min = math.min
+local C_Timer = M.MenuTimer or C_Timer
+local floor, max, min = math.floor, math.max, math.min
 local Tr = M.TranslateText
 local ACCORDION_OPEN_CORNER_SIZE = Shared.ACCORDION_OPEN_CORNER_SIZE
 local ACCORDION_HEADER_RIGHT_INSET = Shared.ACCORDION_HEADER_RIGHT_INSET
@@ -29,8 +27,11 @@ local PlaceBackdropFrameBehindControls = Shared.PlaceBackdropFrameBehindControls
 local RegisterSearchObject = W.RegisterSearchObject
 local QueueDockedPreviewOwnershipRefresh = Shared.QueueDockedPreviewOwnershipRefresh
 
+local function CurrentMenuFocusRequest()
+    return MSUF.PublicGlobals.MSUF_EM2_MenuFocusRequest
+end
 local function MenuFocusRequestMatches(pageKey, sectionId)
-    local req = _G.MSUF_EM2_MenuFocusRequest
+    local req = CurrentMenuFocusRequest()
     if type(req) ~= "table" or not req.sectionId then return nil end
     if req.explicit ~= true then return nil end
     if req.consumed == true then return nil end
@@ -39,7 +40,7 @@ local function MenuFocusRequestMatches(pageKey, sectionId)
     return req
 end
 local function ConsumeMenuFocusRequest(req)
-    if type(req) == "table" and _G.MSUF_EM2_MenuFocusRequest == req then req.consumed = true end
+    if type(req) == "table" and CurrentMenuFocusRequest() == req then req.consumed = true end
 end
 -- Every collapsible section reads two state tables while it builds and
 -- refreshes. Once the persisted per-character state holds the bound table
@@ -207,7 +208,7 @@ function W.FocusCollapsibleSection(section, opts)
     return true
 end
 function M.FocusRequestedSection(pageKey, opts)
-    local req = _G.MSUF_EM2_MenuFocusRequest
+    local req = CurrentMenuFocusRequest()
     if type(req) ~= "table" or not req.sectionId then
         CloseAutoFocusedSections(pageKey or M.activeKey)
         return false
@@ -495,6 +496,11 @@ function PageBuilderStages.SetAccordionOpen(entry, value, animated)
     if driver then W.PlayLayoutMotion(driver) end
     return entry.open == wanted
 end
+-- A card inside a collapsible flow is laid out together with the accordions.
+local function AddSectionLayoutEntry(builder, section, height)
+    if not builder._collapsibleStartY then return end
+    builder.layoutEntries[#builder.layoutEntries + 1] = { kind = "section", frame = section, height = height, gap = 12 }
+end
 --- The builder's vertical-flow and relayout methods; installed once per build.
 function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
     function b:RequestRelayoutCollapsibles(opts)
@@ -602,14 +608,7 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
         section.title = fs
         self.y = self.y - (height or 120) - 12
         UpdateContentHeight(math.abs(self.y) + 28)
-        if self._collapsibleStartY then
-            self.layoutEntries[#self.layoutEntries + 1] = {
-                kind = "section",
-                frame = section,
-                height = height or 120,
-                gap = 12,
-            }
-        end
+        AddSectionLayoutEntry(self, section, height or 120)
         W.RegisterGuidedRegion(ctx, section, title)
         return section
     end
@@ -649,92 +648,192 @@ function PageBuilderStages.PaintOpenHighlight(entry, create)
     end
     return highlight
 end
+--- The frames of one accordion section: the empty wrapper, the header with its
+--- surface, open highlight, arrow, title and hint, and the content body. The
+--- returned table becomes the section's collapsible entry.
+function PageBuilderStages.CreateAccordionFrames(builder, title, height, open)
+    local headerH = 32
+    -- The wrapper must stay visually empty. A full card surface here sits
+    -- underneath the header and fills its transparent rounded corners.
+    local outer = PixelLayoutRegion(CreateFrame("Frame", nil, builder.parent))
+    outer._msuf2NoPanelNeon = true
+    SetSearchTitle(outer, title)
+    RegisterSearchObject(outer, title, "section")
+    outer:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
+    outer:SetSize(builder.width, headerH + (open and (height or 120) or 0))
+    local bodySurface = open and PageBuilderStages.CreateBodySurface(outer, headerH, true) or nil
+    local header = PixelLayoutRegion(CreateFrame("Button", nil, outer))
+    SetSearchTitle(header, title)
+    header:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, 0)
+    header:SetPoint("TOPRIGHT", outer, "TOPRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
+    header:SetHeight(headerH)
+    local headerBg = CreateAccordionRoundedRegions(header, "BACKGROUND", 0)
+    local headerSurface = ThemeColor("coreSurface", T.colors.panel2)
+    headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.58)
+    local headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
+    local headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
+    local headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
+    local headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
+    local headerOpenHighlight
+    if open then headerOpenHighlight = CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo) end
+    local arrow = PixelLayoutRegion(header:CreateTexture(nil, "OVERLAY"))
+    arrow:SetSize(10, 10)
+    arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
+    arrow:SetTexture(T.media.collapseArrow)
+    -- Keep the selected face for accordion titles. Expressway's automatic
+    -- Regular -> SemiBold face switch can cold-start blank until a relayout.
+    local label = T.Font(header, "GameFontNormal", title or "", T.colors.text, "accordion")
+    SetSearchText(label, title)
+    label:SetJustifyH("LEFT")
+    local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
+    hint:SetJustifyH("RIGHT")
+    local contentW = math.min(builder.width, M.formContentMaxWidth or 980)
+    local body = PixelLayoutRegion(CreateFrame("Frame", nil, outer))
+    SetSearchTitle(body, title)
+    body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -headerH)
+    body:SetSize(contentW, height or 120)
+    body._msuf2CursorY = -40
+    body._msuf2ContentX = 16
+    body._msuf2Width = contentW
+    body._msuf2ContextColorHost = true
+    body._msuf2ContextColorHostTitle = title
+    return {
+        outer = outer, header = header, headerBg = headerBg, headerOpenHighlight = headerOpenHighlight,
+        _msuf2HeaderActiveFrom = headerActiveFrom, _msuf2HeaderActiveTo = headerActiveTo,
+        body = body, bodySurface = bodySurface, arrow = arrow, label = label, hint = hint,
+        headerHeight = headerH,
+    }
+end
+--- Header surface and border tone of one accordion entry. Hover and open state
+--- repaint from the live tokens; returns the refresh function.
+function PageBuilderStages.InstallHeaderTone(entry)
+    local headerBg, arrow = entry.headerBg, entry.arrow
+    local function SetHeaderSolid(color, alpha)
+        headerBg._msuf2TextureMode = "solid"
+        headerBg:SetColorTexture(color[1], color[2], color[3], alpha)
+    end
+    local PaintHeaderBorder = W.CreateAccordionBorder(entry.header)
+    local headerHoverColor = { 0, 0, 0, 1 }
+    local function RefreshHeaderTone(hover)
+        PaintHeaderBorder(entry.open, hover)
+        -- SavedVariables may apply the selected accent after Options code
+        -- has loaded. Resolve live tokens on every interaction transition
+        -- instead of repainting a header from a stale Midnight snapshot.
+        local liveSurface = ThemeColor("coreSurface", T.colors.panel2)
+        local liveRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
+        local active = entry.open == true and entry.openHighlightEnabled == true
+        local headerOpenHighlight = PageBuilderStages.PaintOpenHighlight(entry, active)
+        if entry._msuf2OpenHighlightShown ~= active then
+            entry._msuf2OpenHighlightShown = active
+            if headerOpenHighlight then headerOpenHighlight:SetShown(active) end
+            headerBg:SetAlpha(active and 0 or 1)
+        end
+        if active then
+            arrow:SetVertexColor(1, 1, 1, 0.98)
+        elseif T.ApplyCollapseVisual then
+            T.ApplyCollapseVisual(arrow, nil, entry.open, not entry._msuf2MotionActive)
+        end
+        local base = entry._msuf2HeaderBaseColor or liveSurface
+        local baseAlpha = entry._msuf2HeaderBaseAlpha or (entry.open and 0.64 or 0.58)
+        if hover and entry._msuf2HeaderBaseColor then
+            headerHoverColor[1] = min((base[1] or 0) * 1.16, 1)
+            headerHoverColor[2] = min((base[2] or 0) * 1.16, 1)
+            headerHoverColor[3] = min((base[3] or 0) * 1.16, 1)
+            SetHeaderSolid(headerHoverColor, max(baseAlpha, 0.42))
+        elseif entry.open then
+            SetHeaderSolid(hover and liveRaised or base, baseAlpha)
+        elseif hover then
+            SetHeaderSolid(liveRaised, 0.78)
+        else
+            SetHeaderSolid(base, baseAlpha)
+        end
+    end
+    entry._msuf2RefreshHeaderTone = RefreshHeaderTone
+    return RefreshHeaderTone
+end
+--- Open and close entry points, the header click and hover scripts, and the
+--- search record of the section's expand toggle.
+function PageBuilderStages.WireAccordionHeader(entry, ctx, title, collapseHintClickState, RefreshHeaderLayout, RefreshHeaderTone)
+    local header, sectionId = entry.header, entry.sectionId
+    local function SetSectionOpenImmediate(value)
+        return PageBuilderStages.SetAccordionOpen(entry, value, false)
+    end
+    entry.SetOpenImmediate = SetSectionOpenImmediate
+    entry.SetOpenByUser = function(value)
+        entry._msuf2AutoOpened = nil
+        return PageBuilderStages.SetAccordionOpen(entry, value, true)
+    end
+    header:SetScript("OnClick", function()
+        local featureSwitch = entry.featureSwitch
+        if featureSwitch
+            and ((featureSwitch.IsMouseOver and featureSwitch:IsMouseOver())
+                or (entry._msuf2FeatureSwitchLabel and entry._msuf2FeatureSwitchLabel.IsMouseOver
+                    and entry._msuf2FeatureSwitchLabel:IsMouseOver()))
+        then
+            if featureSwitch.IsEnabled and featureSwitch:IsEnabled() then
+                featureSwitch:Click("LeftButton")
+            end
+            return
+        end
+        local nextOpen = not entry.open
+        local threshold = tonumber(T.collapseHintClickHideThreshold) or 8
+        collapseHintClickState.total = math.min((tonumber(collapseHintClickState.total) or 0) + 1, threshold)
+        RefreshCollapseHintSuppression(entry)
+        entry.SetOpenByUser(nextOpen)
+    end)
+    header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
+    header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)
+    header:HookScript("OnSizeChanged", RefreshHeaderLayout)
+    if type(M.RegisterSearchWidget) == "function" then
+        local pageToken = tostring(ctx.key or "page"):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
+        local sectionToken = sectionId:lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
+        if pageToken == "" then pageToken = "page" end
+        if sectionToken == "" then sectionToken = "section" end
+        local identity = pageToken .. ".section." .. sectionToken .. ".expanded"
+        M.RegisterSearchWidget(header, {
+            controlId = "menu2." .. identity,
+            identityKey = identity,
+            controlPath = identity:gsub("%.", "/"),
+            pageKey = pageToken,
+            label = M.Format("%s section", M.TranslateText(tostring(title or sectionId))),
+            kind = "toggle",
+            classification = "ephemeral",
+            ephemeral = true,
+            help = "Expands or collapses this options section.",
+            command = {
+                kind = "toggle",
+                historyMode = "none",
+                get = function() return entry.open == true end,
+                set = SetSectionOpenImmediate,
+            },
+        })
+    end
+end
 --- The accordion builder; installed once per build.
 function PageBuilderStages.InstallCollapsibleSection(b, ctx)
     function b:CollapsibleSection(id, title, height, defaultOpen)
         M.accordionState = MenuStateTable("accordionState")
         local collapseHintClickState = GetCollapseHintClickState()
         local sectionId = tostring(id or title or "section")
-        local openHighlightEnabled = true
         local stateKey = tostring(ctx.key or "page") .. ":" .. sectionId
         local saved = M.accordionState[stateKey]
         local open = (saved == nil) and (defaultOpen and true or false) or (saved and true or false)
-        local headerH = 32
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
-        -- The wrapper must stay visually empty. A full card surface here sits
-        -- underneath the header and fills its transparent rounded corners.
-        local outer = PixelLayoutRegion(CreateFrame("Frame", nil, self.parent))
-        outer._msuf2NoPanelNeon = true
-        SetSearchTitle(outer, title)
-        RegisterSearchObject(outer, title, "section")
-        outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
-        outer:SetSize(self.width, headerH + (open and (height or 120) or 0))
-        local bodySurface = open and PageBuilderStages.CreateBodySurface(outer, headerH, true) or nil
-        local header = PixelLayoutRegion(CreateFrame("Button", nil, outer))
-        SetSearchTitle(header, title)
-        header:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, 0)
-        header:SetPoint("TOPRIGHT", outer, "TOPRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
-        header:SetHeight(headerH)
-        local headerBg = CreateAccordionRoundedRegions(header, "BACKGROUND", 0)
-        local headerSurface = ThemeColor("coreSurface", T.colors.panel2)
-        headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.58)
-        local headerOpenHighlight
-        local headerActiveFrom, headerActiveTo
-        if openHighlightEnabled then
-            local headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
-            local headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
-            headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
-            headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
-            if open then headerOpenHighlight = CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo) end
-        end
-        local arrow = PixelLayoutRegion(header:CreateTexture(nil, "OVERLAY"))
-        arrow:SetSize(10, 10)
-        arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
-        arrow:SetTexture(T.media.collapseArrow)
-        -- Keep the selected face for accordion titles. Expressway's automatic
-        -- Regular -> SemiBold face switch can cold-start blank until a relayout.
-        local label = T.Font(header, "GameFontNormal", title or "", T.colors.text, "accordion")
-        SetSearchText(label, title)
-        label:SetJustifyH("LEFT")
-        local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
-        hint:SetJustifyH("RIGHT")
-        local contentW = math.min(self.width, M.formContentMaxWidth or 980)
-        local body = PixelLayoutRegion(CreateFrame("Frame", nil, outer))
-        SetSearchTitle(body, title)
-        body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -headerH)
-        body:SetSize(contentW, height or 120)
-        body._msuf2CursorY = -40
-        body._msuf2ContentX = 16
-        body._msuf2Width = contentW
-        body._msuf2ContextColorHost = true
-        body._msuf2ContextColorHostTitle = title
-        local entry = {
-            outer = outer,
-            header = header,
-            headerBg = headerBg,
-            headerOpenHighlight = headerOpenHighlight,
-            _msuf2HeaderActiveFrom = headerActiveFrom,
-            _msuf2HeaderActiveTo = headerActiveTo,
-            body = body,
-            bodySurface = bodySurface,
-            arrow = arrow,
-            label = label,
-            hint = hint,
-            open = open,
-            builder = self,
-            pageKey = tostring(ctx.key or ""),
-            sectionId = sectionId,
-            headerHeight = headerH,
-            contentHeight = height or 120,
-            stateKey = stateKey,
-            defaultOpen = defaultOpen == true,
-            openHighlightEnabled = openHighlightEnabled,
-            guidedOrder = NextGuidedTourOrder(ctx),
-            ancestorEntry = self.ancestorEntry,
-        }
+        local entry = PageBuilderStages.CreateAccordionFrames(self, title, height, open)
+        local outer, header, body = entry.outer, entry.header, entry.body
+        entry.open = open
+        entry.builder = self
+        entry.pageKey = tostring(ctx.key or "")
+        entry.sectionId = sectionId
+        entry.contentHeight = height or 120
+        entry.stateKey = stateKey
+        entry.defaultOpen = defaultOpen == true
+        entry.openHighlightEnabled = true
+        entry.guidedOrder = NextGuidedTourOrder(ctx)
+        entry.ancestorEntry = self.ancestorEntry
         RefreshCollapseHintSuppression(entry)
         local function RefreshHeaderLayout()
-            PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, label, arrow, self)
+            PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, entry.hint, entry.label, entry.arrow, self)
         end
         entry._msuf2RefreshLayout = RefreshHeaderLayout
         outer._msuf2CollapsibleEntry = entry
@@ -747,101 +846,9 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             ctx.entry._msuf2GuidedSortedSections = nil
         end
         self.collapsibles[#self.collapsibles + 1] = entry
-        local function SetHeaderSolid(color, alpha)
-            headerBg._msuf2TextureMode = "solid"
-            headerBg:SetColorTexture(color[1], color[2], color[3], alpha)
-        end
-        local PaintHeaderBorder = W.CreateAccordionBorder(header)
-        local headerHoverColor = { 0, 0, 0, 1 }
-        local function RefreshHeaderTone(hover)
-            PaintHeaderBorder(entry.open, hover)
-            -- SavedVariables may apply the selected accent after Options code
-            -- has loaded. Resolve live tokens on every interaction transition
-            -- instead of repainting a header from a stale Midnight snapshot.
-            local liveSurface = ThemeColor("coreSurface", T.colors.panel2)
-            local liveRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
-            local active = entry.open == true and entry.openHighlightEnabled == true
-            local headerOpenHighlight = PageBuilderStages.PaintOpenHighlight(entry, active)
-            if entry._msuf2OpenHighlightShown ~= active then
-                entry._msuf2OpenHighlightShown = active
-                if headerOpenHighlight then headerOpenHighlight:SetShown(active) end
-                headerBg:SetAlpha(active and 0 or 1)
-            end
-            if active then
-                arrow:SetVertexColor(1, 1, 1, 0.98)
-            elseif T.ApplyCollapseVisual then
-                T.ApplyCollapseVisual(arrow, nil, entry.open, not entry._msuf2MotionActive)
-            end
-            local base = entry._msuf2HeaderBaseColor or liveSurface
-            local baseAlpha = entry._msuf2HeaderBaseAlpha or (entry.open and 0.64 or 0.58)
-            if hover and entry._msuf2HeaderBaseColor then
-                headerHoverColor[1] = min((base[1] or 0) * 1.16, 1)
-                headerHoverColor[2] = min((base[2] or 0) * 1.16, 1)
-                headerHoverColor[3] = min((base[3] or 0) * 1.16, 1)
-                SetHeaderSolid(headerHoverColor, max(baseAlpha, 0.42))
-            elseif entry.open then
-                SetHeaderSolid(hover and liveRaised or base, baseAlpha)
-            elseif hover then
-                SetHeaderSolid(liveRaised, 0.78)
-            else
-                SetHeaderSolid(base, baseAlpha)
-            end
-        end
-        entry._msuf2RefreshHeaderTone = RefreshHeaderTone
+        local RefreshHeaderTone = PageBuilderStages.InstallHeaderTone(entry)
         entry.kind = "collapsible"
-        local function SetSectionOpenImmediate(value)
-            return PageBuilderStages.SetAccordionOpen(entry, value, false)
-        end
-        entry.SetOpenImmediate = SetSectionOpenImmediate
-        entry.SetOpenByUser = function(value)
-            entry._msuf2AutoOpened = nil
-            return PageBuilderStages.SetAccordionOpen(entry, value, true)
-        end
-        header:SetScript("OnClick", function()
-            local featureSwitch = entry.featureSwitch
-            if featureSwitch
-                and ((featureSwitch.IsMouseOver and featureSwitch:IsMouseOver())
-                    or (entry._msuf2FeatureSwitchLabel and entry._msuf2FeatureSwitchLabel.IsMouseOver
-                        and entry._msuf2FeatureSwitchLabel:IsMouseOver()))
-            then
-                if featureSwitch.IsEnabled and featureSwitch:IsEnabled() then
-                    featureSwitch:Click("LeftButton")
-                end
-                return
-            end
-            local nextOpen = not entry.open
-            local threshold = tonumber(T.collapseHintClickHideThreshold) or 8
-            collapseHintClickState.total = math.min((tonumber(collapseHintClickState.total) or 0) + 1, threshold)
-            RefreshCollapseHintSuppression(entry)
-            entry.SetOpenByUser(nextOpen)
-        end)
-        header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
-        header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)
-        header:HookScript("OnSizeChanged", RefreshHeaderLayout)
-        if type(M.RegisterSearchWidget) == "function" then
-            local pageToken = tostring(ctx.key or "page"):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
-            local sectionToken = sectionId:lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
-            if pageToken == "" then pageToken = "page" end
-            if sectionToken == "" then sectionToken = "section" end
-            local identity = pageToken .. ".section." .. sectionToken .. ".expanded"
-            M.RegisterSearchWidget(header, {
-                controlId = "menu2." .. identity,
-                identityKey = identity,
-                controlPath = identity:gsub("%.", "/"),
-                pageKey = pageToken,
-                label = M.Format("%s section", M.TranslateText(tostring(title or sectionId))),
-                kind = "toggle",
-                classification = "ephemeral",
-                ephemeral = true,
-                help = "Expands or collapses this options section.",
-                command = {
-                    kind = "toggle",
-                    historyMode = "none",
-                    get = function() return entry.open == true end,
-                    set = SetSectionOpenImmediate,
-                },
-            })
-        end
+        PageBuilderStages.WireAccordionHeader(entry, ctx, title, collapseHintClickState, RefreshHeaderLayout, RefreshHeaderTone)
         self.y = self.y - outer:GetHeight() - 8
         RefreshHeaderLayout()
         RefreshHeaderTone(false)
@@ -1025,14 +1032,7 @@ function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
         end
         self.y = self.y - (height or 78) - 12
         UpdateContentHeight(math.abs(self.y) + 28)
-        if self._collapsibleStartY then
-            self.layoutEntries[#self.layoutEntries + 1] = {
-                kind = "section",
-                frame = section,
-                height = height or 78,
-                gap = 12,
-            }
-        end
+        AddSectionLayoutEntry(self, section, height or 78)
         return section
     end
     function b:GlobalStyleHeader(title, subtitle, height)

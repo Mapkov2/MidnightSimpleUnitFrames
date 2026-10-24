@@ -63,9 +63,6 @@ _G.UnitPowerPercent = function() return mana * 100 / manaMax end
 _G.PowerBarColor = { MANA = { r = 0, g = 0, b = 1 } }
 
 local MSUF = {}
-MSUF.ExportPublic = function(name, value) _G[name] = value; return value end
-MSUF.Require = function() return function() end end
-MSUF.Optional = function() return nil end
 MSUF.Secrets = {
   IsSecret = function() return false end, IsNil = function(v) return v == nil end,
   SafeNumber = tonumber,
@@ -79,9 +76,22 @@ UF.Clamp01 = function(v, f)
 end
 UF.IsUnitToken = function(u) return type(u) == "string" end
 UF.RegisterElement = function(name, el) UF.Elements[name] = el end
+-- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry the Power apply calls; this
+-- harness has no boss frames.
+UF.Factory = { ApplyBossPhysicalBarGeometry = function() end }
 MSUF.UF = UF
 
-local function Load(rel) assert(loadfile(ROOT .. rel))("MidnightSimpleUnitFrames", MSUF) end
+-- The real Kernel API (ExportPublic, Require/Optional); providers a loaded file requires that this
+-- harness does not run are deferred and raise when used. The pixel regions are the core's
+-- (Kernel/MSUF_Util.lua): this strict widget model lays out no pixels, so the shared stand-in serves.
+local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(repo, MSUF, nil, nil, true)
+local Standins = assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().STANDINS
+MSUF.ExportPublic("MSUF_PixelLayoutRegion", Standins.MSUF_PixelLayoutRegion)
+-- State/MSUF_Defaults.lua owns the profile: a fresh session gets an empty one.
+MSUF.ExportPublic("MSUF_EnsureDB", Standins.MSUF_EnsureDB)
+local function Load(rel) RequireFixture.LoadShipped(repo, "MidnightSimpleUnitFrames/" .. rel, MSUF) end
+Load("Runtime/MSUF_Colors.lua") -- the resource colours the power bar resolves
 Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
 Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")
 local Power = assert(UF.Elements.Power, "Power element did not register")

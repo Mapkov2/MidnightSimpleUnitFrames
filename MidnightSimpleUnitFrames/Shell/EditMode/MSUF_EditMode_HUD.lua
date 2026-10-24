@@ -18,8 +18,8 @@ local previewState = Preview.State
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_HUD.lua"
-local ExportPublic = (MSUF or _G.MSUF_NS or {}).ExportPublic
-local EM2 = _G.MSUF_EM2
+local ExportPublic = MSUF.ExportPublic
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local HUD, DockUI, Kit, Selection = EM2.HUD, EM2.HUDDock, EM2.HUDKit, EM2.HUDSelection
@@ -58,9 +58,7 @@ local bgWidget, gridWidget
 
 local function RegisterPreviewAnimationRefreshOwner()
     if previewAnimRefreshRegistered or not previewAnimBtn then return end
-    local register = _G.MSUF_RegisterPreviewAnimationRefreshOwner
-    if type(register) ~= "function" then return end
-    register(previewAnimBtn, function(btn, active)
+    MSUF.Require("MSUF_RegisterPreviewAnimationRefreshOwner", CALLER)(previewAnimBtn, function(btn, active)
         SetActive(btn, active == true)
     end)
     previewAnimRefreshRegistered = true
@@ -392,7 +390,7 @@ local function BuildExitControls()
 
     cancelAllBtn = MakeBtn(hudFrame, "Discard", 88, BTN_H, "body", function()
         if not EM2.State or not EM2.State.CancelAll then return end
-        local cf = _G["MSUF_EM2_CancelConfirm"]
+        local cf = MSUF.Optional("MSUF_EM2_CancelConfirm")
         if cf then
             cf:Show()
             return
@@ -468,7 +466,7 @@ local function BuildPreviewCluster()
     local previewCluster, previewItems = AddCluster(DockUI.row1, DockUI.primaryContainer, "Preview", CLUSTER_H, true)
     previewBtn = AddRowButton(previewItems, previewCluster, "Preview", 72, CLUSTER_BTN_H, "caption", function()
         SetUnitPage(previewState.unitPage ~= true)
-        if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
+        MSUF.Require("MSUF_SyncAllUnitPreviews", CALLER)()
         SetActive(previewBtn, previewState.unitPage)
         HUD.SetStatus(HelpText(previewState.unitPage and "EM_PREVIEW_ON" or "EM_PREVIEW_OFF"), "info")
     end, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
@@ -478,12 +476,7 @@ local function BuildPreviewCluster()
     previewItems[#previewItems+1] = previewAddonSlot
 
     previewAnimBtn = AddRowButton(previewItems, previewCluster, "Motion", 64, CLUSTER_BTN_H, "caption", function()
-        local toggle = _G.MSUF_TogglePreviewAnimation
-        if type(toggle) ~= "function" then
-            HUD.SetStatus(HelpText("Preview animation unavailable"), "warn")
-            return
-        end
-        local ok, reason = toggle("edit_mode")
+        local ok, reason = MSUF.Require("MSUF_TogglePreviewAnimation", CALLER)("edit_mode")
         local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
         SetActive(previewAnimBtn, active)
         if previewBtn then SetActive(previewBtn, previewState.unitPage == true) end
@@ -496,7 +489,7 @@ local function BuildPreviewCluster()
     RegisterPreviewAnimationRefreshOwner()
 
     auraBtn = AddRowButton(previewItems, previewCluster, "Auras", 64, CLUSTER_BTN_H, "caption", function()
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         if not db then
             return
         end
@@ -526,7 +519,7 @@ local function BuildPreviewCluster()
 end
 
 local function RefreshPreviewCluster()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local advanced = db and db.general and db.general.hideAdvancedMenu == false or false
     if DockUI.advancedHUD == advanced then return end
     DockUI.advancedHUD = advanced
@@ -597,28 +590,22 @@ local function BuildToolsCluster()
 
     if HUD.CooldownAnchorSupported() then
         cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 116, CLUSTER_BTN_H, "caption", function()
-            local db = _G.MSUF_DB
+            local db = MSUF_DB
             if not db then
                 return
             end
             db.general = db.general or {}
             local enabled = not HUD.CooldownAnchorEnabled(db.general)
-            local setter = _G.MSUF_SetCooldownAnchorEnabled
             local undo = EM2.Undo
             local tracked = undo and undo.BeginChange and undo.BeginChange("general", "cooldown", "Toggle") == true
-            if type(setter) == "function" then
-                setter(enabled, true)
-            else
-                db.general.anchorToCooldown = enabled
-                MSUF.Castbars.Config.Invalidate()
-            end
+            MSUF.Require("MSUF_SetCooldownAnchorEnabled", CALLER)(enabled, true)
             if tracked then undo.CommitChange() end
             SetActive(cdmBtn, HUD.CooldownAnchorEnabled(db.general))
             ApplyAllSettingsSafe()
             HUD.SetStatus(HelpText(enabled and "EM_CDM_ON" or "EM_CDM_OFF"), "info")
             C_Timer.After(0.1, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-                if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
+                MSUF.Require("MSUF_EM2_ReforcePreviewFrames", CALLER)()
             end)
         end, "Anchor all unitframes to the\nEssential Cooldown Manager.")
     end
@@ -632,7 +619,7 @@ local function BuildToolsCluster()
                 or factory.IsAnchorCandidateAllowed(frame)
         end
         ov._onPick = function(frameName)
-            local db = _G.MSUF_DB
+            local db = MSUF_DB
             if not db then
                 return
             end
@@ -640,13 +627,7 @@ local function BuildToolsCluster()
             local undo = EM2.Undo
             local tracked = undo and undo.BeginChange and undo.BeginChange("general", "anchor", "Set") == true
             db.general.anchorName = frameName
-            local setter = _G.MSUF_SetCooldownAnchorEnabled
-            if type(setter) == "function" then
-                setter(false, true)
-            else
-                db.general.anchorToCooldown = false
-                MSUF.Castbars.Config.Invalidate()
-            end
+            MSUF.Require("MSUF_SetCooldownAnchorEnabled", CALLER)(false, true)
             if tracked then undo.CommitChange() end
             SetActive(cdmBtn, false)
             ApplyAllSettingsSafe()
@@ -729,8 +710,8 @@ local function BuildHistoryRow()
     undoBtn = AddRowButton(historyItems, DockUI.historyCluster, "", BTN_H, BTN_H2, "caption", function()
         if EM2.Undo and EM2.Undo.DoUndo then
             EM2.Undo.DoUndo()
-        elseif _G.MSUF_EM_UndoUndo then
-            _G.MSUF_EM_UndoUndo()
+        else
+            MSUF.Require("MSUF_EM_UndoUndo", CALLER)()
         end
         HUD.RefreshControls()
     end, "Undo the last MSUF change from Edit Mode or the in-game menu.")
@@ -740,8 +721,8 @@ local function BuildHistoryRow()
     redoBtn = AddRowButton(historyItems, DockUI.historyCluster, "", BTN_H, BTN_H2, "caption", function()
         if EM2.Undo and EM2.Undo.DoRedo then
             EM2.Undo.DoRedo()
-        elseif _G.MSUF_EM_UndoRedo then
-            _G.MSUF_EM_UndoRedo()
+        else
+            MSUF.Require("MSUF_EM_UndoRedo", CALLER)()
         end
         HUD.RefreshControls()
     end, "Redo the last MSUF change from Edit Mode or the in-game menu.")
@@ -904,11 +885,17 @@ function HUD.RefreshControls(force)
     RegisterPreviewAnimationRefreshOwner()
     if previewBtn then SetActive(previewBtn, HUD.UnitPageActive()) end
     if previewAnimBtn then
-        local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
+        -- 20 Hz during a drag: require the preview-animation getter once and keep it.
+        local isAnimationEnabled = HUD._previewAnimationEnabledGetter
+        if not isAnimationEnabled then
+            isAnimationEnabled = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)
+            HUD._previewAnimationEnabledGetter = isAnimationEnabled
+        end
+        local active = isAnimationEnabled() == true
         SetActive(previewAnimBtn, active)
     end
     if cdmBtn then
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         local general = db and db.general
         local providerId, providerLabel = HUD.AutomaticCooldownProvider()
         local detected = providerId ~= nil
@@ -930,7 +917,7 @@ function HUD.RefreshControls(force)
     end
     SetControlEnabled(anchorBtn, true)
     if auraBtn then
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         local a2 = db and db.auras3
         local sh = a2 and a2.shared
         SetActive(auraBtn, sh and sh.showInEditMode and HUD.UnitPageActive())
@@ -942,6 +929,8 @@ end
 
 function HUD.Show()
     if InCombatLockdown and InCombatLockdown() then return false end
+    -- A new HUD session re-resolves the optional cooldown getters (HUD_Selection).
+    HUD.ResolveCooldownGetters()
     EnsureHUD()
     --- Only a real entry animates.  The group-frame bridge wraps HUD.Show and
     --- calls it again while the toolbar is already on screen, which must not
@@ -965,7 +954,7 @@ end
 function HUD.Hide()
     if DockUI.tooltipRestoreLevel ~= nil then DockUI.ReleaseTooltip() end
     if DockUI.drag then StopDockDrag() end
-    local cf = _G["MSUF_EM2_CancelConfirm"]
+    local cf = MSUF.Optional("MSUF_EM2_CancelConfirm")
     if cf then
         cf:Hide()
     end

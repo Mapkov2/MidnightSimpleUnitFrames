@@ -3,7 +3,6 @@
 -- preview consumers.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.UnitConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local Runtime = A3.Runtime
@@ -30,15 +29,20 @@ local ReadRaw = dependencies.ConfigValues.ReadRaw
 local UnitSupportsTargetDots = dependencies.CustomConfig.UnitSupportsTargetDots
 local UnitAuraIconsEnabled = dependencies.ConfigValues.UnitAuraIconsEnabled
 
+-- The live unit frame: runtime owner, UF registry, then the frame's global name.
+local function RuntimeUnitFrame(unit)
+    return (A3._runtimeFrames and A3._runtimeFrames[unit])
+        or (UF and UF.GetFrame and UF.GetFrame(unit))
+        or (UF and UF.frames and UF.frames[unit])
+        or _G["MSUF_" .. unit]
+end
+
 local function InvalidateUnitRuntimeConfig(unit)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     local runtimeCache = A3._runtimeConfigCache
     if runtimeCache then runtimeCache[unit] = nil end
-    local frame = (A3._runtimeFrames and A3._runtimeFrames[unit])
-        or (UF and UF.GetFrame and UF.GetFrame(unit))
-        or (UF and UF.frames and UF.frames[unit])
-        or _G["MSUF_" .. unit]
+    local frame = RuntimeUnitFrame(unit)
     if frame then
         if frame.MSUFSpec then frame.MSUFSpec._msufA3UnitAuraConfigCache = nil end
         if frame.Auras then frame.Auras.needFullUpdate = true end
@@ -205,11 +209,7 @@ function A3.GetUnitFrameEffectDiagnostics(unit, frame)
     unit = NormalizeRuntimeUnit(unit or (frame and frame.MSUFUnitKey))
     if not unit then return nil end
 
-    frame = frame
-        or (A3._runtimeFrames and A3._runtimeFrames[unit])
-        or (UF and UF.GetFrame and UF.GetFrame(unit))
-        or (UF and UF.frames and UF.frames[unit])
-        or _G["MSUF_" .. unit]
+    frame = frame or RuntimeUnitFrame(unit)
     local root = frame and frame.Auras
     local appliedConfig = root and type(root._msufA3Config) == "table" and root._msufA3Config or nil
     local cfg = appliedConfig or A3.ResolveUnitFrameConfig(unit, frame and frame.MSUFSpec)

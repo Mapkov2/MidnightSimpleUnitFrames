@@ -154,11 +154,11 @@ end
 do -- (a) Forever: MSUF backend suppresses both player castbars, Blizzard restores both.
     backend = "MSUF"
     LoadBridge(true)
-    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == true, "(a) ownership apply must find the castbars")
+    Check(_G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars() == true, "(a) ownership apply must find the castbars")
     CheckSuppressed(_G.PlayerCastingBarFrame, "(a)")
     CheckSuppressed(_G.GamepadPlayerCastingBarFrame, "(a)")
     backend = "BLIZZARD"
-    _G.MSUF_SuppressBlizzardPlayerCastbars()
+    _G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars()
     CheckRestored(_G.PlayerCastingBarFrame, "(a)")
     CheckRestored(_G.GamepadPlayerCastingBarFrame, "(a)")
 end
@@ -166,7 +166,7 @@ end
 do -- (b) A client without the gamepad castbar keeps the single-frame path.
     backend = "MSUF"
     LoadBridge(false)
-    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == true, "(b) ownership apply must find PlayerCastingBarFrame")
+    Check(_G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars() == true, "(b) ownership apply must find PlayerCastingBarFrame")
     CheckSuppressed(_G.PlayerCastingBarFrame, "(b)")
 end
 
@@ -174,7 +174,7 @@ do -- (c) Combat defers ownership but still hides both bars.
     backend = "MSUF"
     LoadBridge(true)
     _G.InCombatLockdown = function() return true end
-    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == false, "(c) combat apply must defer")
+    Check(_G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars() == false, "(c) combat apply must defer")
     Check(Invisible(_G.GamepadPlayerCastingBarFrame) and Invisible(_G.PlayerCastingBarFrame),
         "(c) combat apply must make both player castbars invisible")
     Check(_G.GamepadPlayerCastingBarFrame.events.UNIT_SPELLCAST_START == true,
@@ -187,13 +187,13 @@ do -- (d) A managed bar shown at the takeover (a Blizzard cast in flight) is
     LoadBridge(false)
     local bar = _G.PlayerCastingBarFrame
     bar.shown, bar.alpha, bar.mouse = true, 0.6, true
-    Check(_G.MSUF_SuppressBlizzardPlayerCastbars() == true, "(d) ownership apply must find PlayerCastingBarFrame")
+    Check(_G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars() == true, "(d) ownership apply must find PlayerCastingBarFrame")
     Check(bar.shown and bar.alpha == 0 and bar.mouse == false and next(bar.events) == nil,
         "(d) a shown managed bar must be concealed (alpha 0, no mouse, no cast events)")
-    _G.MSUF_SuppressBlizzardPlayerCastbars()
+    _G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars()
     Check(bar.alpha == 0, "(d) a second apply must keep the concealed bar's recorded alpha")
     backend = "BLIZZARD"
-    _G.MSUF_SuppressBlizzardPlayerCastbars()
+    _G.MSUF.PublicGlobals.MSUF_SuppressBlizzardPlayerCastbars()
     Check(bar.alpha == 0.6 and bar.mouse == true, "(d) the release must restore the bar's alpha and mouse")
 end
 
@@ -217,7 +217,7 @@ local function ResolveInterrupt(client, classToken, knownSpell)
     -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(root .. "/" .. INTERRUPT_FILE))("MidnightSimpleUnitFrames", ns)
-    return _G.MSUF_KickReady_GetSpellID()
+    return _G.MSUF.PublicGlobals.MSUF_KickReady_GetSpellID()
 end
 
 local ERA_INTERRUPTS = { WARRIOR = 6552, ROGUE = 1766, PRIEST = 15487, SHAMAN = 8042, MAGE = 2139,
@@ -253,7 +253,7 @@ local function GCDRegistered(client, spellAPI)
     end
     Check(driver and driver.onEvent and driver.events.PLAYER_ENTERING_WORLD, "GCD driver frame not created")
     driver.onEvent(driver, "PLAYER_ENTERING_WORLD")
-    return driver.events.UNIT_SPELLCAST_SUCCEEDED == true, _G.MSUF_GCDBar_IsSupported(), driver
+    return driver.events.UNIT_SPELLCAST_SUCCEEDED == true, _G.MSUF.PublicGlobals.MSUF_GCDBar_IsSupported(), driver
 end
 
 local missingDummy = { DoesSpellExist = function(spellID) return spellID ~= 61304 end }
@@ -262,7 +262,7 @@ local knownDummy = { DoesSpellExist = function(spellID) return spellID == 61304 
 do
     local registered, supported, driver = GCDRegistered(FOREVER, missingDummy)
     Check(registered == false and supported == false, "(e) Forever without spell 61304 must not arm the GCD bar")
-    _G.MSUF_SetGCDBarEnabled(true)
+    _G.MSUF.PublicGlobals.MSUF_SetGCDBarEnabled(true)
     Check(driver.events.UNIT_SPELLCAST_SUCCEEDED == nil and _G.MSUF_DB.general.showGCDBar == true,
         "(e) enabling on Forever without spell 61304 must keep the setting and register nothing")
     registered, supported = GCDRegistered(FOREVER, {})

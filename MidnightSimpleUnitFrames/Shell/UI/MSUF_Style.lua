@@ -1,22 +1,20 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shared legacy style compatibility.
 --- Menu2 and EM2 now own their visual systems through MSUF.UI and Menu2 theme.
 --- This file intentionally stays small: it preserves the old public globals
 --- while delegating all actual chrome work to the central UI layer.
 local addonName, MSUF = ...
-if type(MSUF) ~= "table" then MSUF = {} end
-_G.MSUF = _G.MSUF or MSUF
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/UI/MSUF_Style.lua")
 
 local ExportPublic = MSUF.ExportPublic
 
 MSUF.Style = MSUF.Style or {}
 local Style = MSUF.Style
-local UI = MSUF.UI or _G.MSUF_UI or {}
+local UI = MSUF.UI or {}
 MSUF.UI = UI
 ExportPublic("MSUF_UI", UI)
 
 local WHITE8X8 = "Interface/Buttons/WHITE8X8"
-local THEME = _G.MSUF_THEME or {}
+local THEME = MSUF.Optional("MSUF_THEME") or {}
 ExportPublic("MSUF_THEME", THEME)
 THEME.tex = THEME.tex or WHITE8X8
 
@@ -41,13 +39,13 @@ for _, spec in pairs(LEGACY_COLORS) do
 end
 THEME.navHoverA, THEME.navSelectedA, THEME.navDownA = THEME.navHoverA or 0.14, THEME.navSelectedA or 0.24, THEME.navDownA or 0.20
 
-ExportPublic("MSUF_Style", _G.MSUF_Style or Style)
-ExportPublic("MSUF_STYLE", _G.MSUF_STYLE or Style)
-_G.__MSUF_STYLE_VERSION = 7
-_G.__MSUF_STYLE_TAG = "central-ui-compat-cold"
+ExportPublic("MSUF_Style", MSUF.Optional("MSUF_Style") or Style)
+ExportPublic("MSUF_STYLE", MSUF.Optional("MSUF_STYLE") or Style)
+ExportPublic("__MSUF_STYLE_VERSION", 7)
+ExportPublic("__MSUF_STYLE_TAG", "central-ui-compat-cold")
 
 local function GetDB()
-    local db = rawget(_G, "MSUF_DB")
+    local db = MSUF_DB
     if type(db) == "table" then return db end
     return type(MSUF.MSUF_DB) == "table" and MSUF.MSUF_DB or nil
 end
@@ -153,7 +151,7 @@ function Style.SkinEditModePopupFrame(frame)
 end
 function Style.ScanAndSkinEditMode()
     for _, name in ipairs({ "MSUF_EM2_UnitPopup", "MSUF_EM2_CastPopup", "MSUF_EM2_AuraPopup" }) do
-        local frame = rawget(_G, name)
+        local frame = MSUF.Optional(name)
         if frame then Style.SkinEditModePopupFrame(frame) end
     end
 end
@@ -174,10 +172,10 @@ function Style.RefreshDropdownSkinMode() return Style.ReskinDropdownLists() end
 function Style.QueueDropdownStyleMode() return "msuf" end
 Style.SetDropdownStyleMode = Style.QueueDropdownStyleMode
 Style.ApplyDropdownStyleModeImmediate = Style.QueueDropdownStyleMode
-function Style.ApplyOptionCheckmarks(root) return Style.ApplyToFrame(root or _G.UIParent) end
+function Style.ApplyOptionCheckmarks(root) return Style.ApplyToFrame(root or UIParent) end
 
 local function SkinStandaloneWindow()
-    local win = rawget(_G, "MSUF_StandaloneOptionsWindow")
+    local win = MSUF.Optional("MSUF_StandaloneOptionsWindow")
     if not win then return end
     Style.ApplyBackdrop(win, 1.0)
     if win._msufNavRail then Style.ApplyBackdrop(win._msufNavRail, 0.22) end

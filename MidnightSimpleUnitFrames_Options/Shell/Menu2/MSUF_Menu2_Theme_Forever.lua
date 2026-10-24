@@ -1,9 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- All three menu looks are selectable on every client. Only the fresh
 -- profile default is client-specific: Forever uses Classic Glass, others Midnight.
 -- Register before Menu2 tokens so renderers capture the selected palette.
 local _, MSUF = ...
 if not MSUF then return end
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Theme_Forever.lua")
 --- Menu palette rows are four-number arrays shared by every renderer.
 local function PaintColors(T, keys, hex, alpha)
     local r, green, b = tonumber(hex:sub(1, 2), 16) / 255,
@@ -94,7 +94,8 @@ local function InstallClassicGlassBackground(T, g)
         end
     end
     function T.RefreshMenuBackgroundOpacity()
-        shellAlpha = T.GetMenuBackgroundOpacity(_G.MSUF_DB and _G.MSUF_DB.general) / 100
+        local db = MSUF_DB
+        shellAlpha = T.GetMenuBackgroundOpacity(db and db.general) / 100
         T.colors.glassShell[4], T.colors.bg[4] = shellAlpha, shellAlpha
         for frame in pairs(shells) do T.ApplyMenuBackgroundOpacity(frame, "shell") end
     end
@@ -233,8 +234,9 @@ MSUF.ApplyClassicMenuTheme = function(T)
     end
     -- Bindings (and GetGeneralDB) load after tokens. Read the normalized saved
     -- profile directly at this early point in the Options load order.
-    _G.MSUF_EnsureDB()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    MSUF.Require("MSUF_EnsureDB", "Shell/Menu2/MSUF_Menu2_Theme_Forever.lua")()
+    local db = MSUF_DB
+    local g = db and db.general
     T.menuAppearancePreset = T.GetMenuAppearancePreset(g)
     -- The Midnight preset keeps the stock tokens: this return skips the whole
     -- atlas skin below, including T.PrepareMenuAccent and T.ApplyAtlasDecoration.

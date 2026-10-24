@@ -10,7 +10,6 @@
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
 assert(Backend, "Classic aura frame visuals require Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
@@ -20,8 +19,8 @@ local FrameVisuals = {}
 
 local UF = MSUF.UF
 local type, next, pairs = type, next, pairs
-local IsSecret = _G.issecretvalue or function() return false end
-local C_UnitAuras = _G.C_UnitAuras
+local IsSecret = issecretvalue or function() return false end
+local C_UnitAuras = C_UnitAuras
 local GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
@@ -377,7 +376,7 @@ end
 local function DispelBorderShowOnAllows(visual, unit)
     local showOn = visual and visual.borderShowOn
     if showOn == nil then return true end
-    local unitCanAssist = _G.UnitCanAssist
+    local unitCanAssist = UnitCanAssist
     if not (type(unitCanAssist) == "function" and IsUnitToken(unit)) then return false end
     local canAssist = unitCanAssist("player", unit)
     if IsSecret(canAssist) or type(canAssist) ~= "boolean" then return false end

@@ -1,17 +1,19 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 -- Core functions this page calls by their global names: required here at
 -- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua", {
+M.RequireGlobals(FILE, {
     "MSUF_EnsureAnchorPicker",
 })
 local W = M.Widgets or {}
 local T = M.Theme or {}
 local Shared = M.UnitSectionsShared or {}
 M.UnitSectionsShared = Shared
+local SELF = "Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua"
 
 local Schema = M.ControlSchema
 local ROW_OPTIONS = Schema.UnitOptions()
@@ -69,8 +71,8 @@ end
 local factoryProfile
 function Shared.FactoryProfile()
     if factoryProfile then return factoryProfile end
-    local create = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
-    local profile = type(create) == "function" and create() or nil
+    local create = MSUF.MSUF_CreateFactoryDefaultProfile or MSUF.Require("MSUF_CreateFactoryDefaultProfile", FILE)
+    local profile = create()
     if type(profile) == "table" then factoryProfile = profile end
     return factoryProfile
 end
@@ -114,7 +116,7 @@ local function OffTargetText(text)
 end
 
 local function CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices)
-    local popup = M.CreateMenuPopupPanel(_G.UIParent)
+    local popup = M.CreateMenuPopupPanel(UIParent)
     popup:SetClampedToScreen(true)
     popup:SetSize(288, 174)
     local title = Chrome(popup, "font", "section.popup.title", { "GameFontHighlight", "", T.colors.text })
@@ -273,7 +275,7 @@ end
 -- Shared helpers for Unit page sections.
 -- Provides common warning notices, name-anchor filtering, badges, and small UI adapters used
 -- by text/status/visual subpages without coupling them to each other's internals.
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
 local pairs = pairs
 local tostring = tostring
 local type = type
@@ -352,13 +354,6 @@ function Shared.SetSectionHeaderStatus(sec, opts)
     if W.SetCollapsibleHeaderBaseTone then
         local bg = opts.bg
         W.SetCollapsibleHeaderBaseTone(entry, bg, bg and (bg[4] or 0.48) or nil)
-    elseif entry.headerBg and entry.headerBg.SetColorTexture then
-        local c = (T.colors and T.colors.coreSurface) or { 0.014, 0.038, 0.072 }
-        entry.headerBg:SetColorTexture(c[1], c[2], c[3], entry.open and 0.40 or 0.34)
-        if opts.bg then
-            local bg = opts.bg
-            entry.headerBg:SetColorTexture(bg[1] or 0.035, bg[2] or 0.075, bg[3] or 0.157, bg[4] or 0.48)
-        end
     end
     if entry.label and entry.label.SetTextColor and T and T.colors and T.colors.text then
         local c = entry._msuf2HeaderDisabled and T.colors.disabled
@@ -664,7 +659,7 @@ end
 function Shared.MakeTabFrames(parent, topOffset, width, store, ...)
     local frames = {}
     for i = 1, select("#", ...) do frames[i] = Shared.MakeTabFrame(parent, select(i, ...), topOffset, width, store) end
-    return (table.unpack or _G.unpack)(frames)
+    return (table.unpack or unpack)(frames)
 end
 function Shared.PlaceDropdown(parent, control, x, y, width) return W.MoveWidget(control, parent, x, y, width or 200, "LEFT") end
 function Shared.PlaceSlider(parent, control, x, y, width) W.MoveWidget(control, parent, x, y, width, "CENTER") end
@@ -772,49 +767,37 @@ function Shared.TextSlotSummary(kind, slotsByKind, readValue, modeValues, option
     end
     return "No slot text"
 end
+-- Value-text control fields in hook order with the slot each one pins: a string
+-- pins that slot, true follows the kind's current slot, none leaves the focus open.
+local VALUE_TEXT_HOOKS = {
+    { "show" }, { "left", "left" }, { "center", "center" }, { "right", "right" },
+    { "leftHidePercent", "left" }, { "centerHidePercent", "center" }, { "rightHidePercent", "right" },
+    { "mode", true }, { "hidePercent", true }, { "absorb", true }, { "delimiter" }, { "moveTogether" },
+    { "slot", true }, { "slotSize", true }, { "size" }, { "layer" },
+}
+-- The same fields in the order the text controls are returned.
+local VALUE_TEXT_FIELDS = { "left", "center", "right", "leftHidePercent", "centerHidePercent", "rightHidePercent",
+    "mode", "hidePercent", "absorb", "slot", "delimiter", "size", "slotSize", "moveTogether", "layer" }
 function Shared.ValueTextControlSets(kind, controls, layer, hookControls, currentSlot)
     controls = controls or {}
     local delimiter = controls.delimiter or controls.separator
     local function CurrentSlotFocus() return currentSlot and currentSlot(kind) end
-    local hookSpecs = {}
-    local function AddHook(control, focus)
-        if control then hookSpecs[#hookSpecs + 1] = { control, focus } end
+    local function Control(field)
+        if field == "delimiter" then return delimiter end
+        if field == "layer" then return layer end
+        return controls[field]
     end
-    AddHook(controls.show)
-    AddHook(controls.left, "left")
-    AddHook(controls.center, "center")
-    AddHook(controls.right, "right")
-    AddHook(controls.leftHidePercent, "left")
-    AddHook(controls.centerHidePercent, "center")
-    AddHook(controls.rightHidePercent, "right")
-    AddHook(controls.mode, CurrentSlotFocus)
-    AddHook(controls.hidePercent, CurrentSlotFocus)
-    AddHook(controls.absorb, CurrentSlotFocus)
-    AddHook(delimiter)
-    AddHook(controls.moveTogether)
-    AddHook(controls.slot, CurrentSlotFocus)
-    AddHook(controls.slotSize, CurrentSlotFocus)
-    AddHook(controls.size)
-    AddHook(layer)
+    local hookSpecs = {}
+    for i = 1, #VALUE_TEXT_HOOKS do
+        local field, focus = VALUE_TEXT_HOOKS[i][1], VALUE_TEXT_HOOKS[i][2]
+        local control = Control(field)
+        if control then hookSpecs[#hookSpecs + 1] = { control, focus == true and CurrentSlotFocus or focus } end
+    end
     local textControls = {}
-    local function AddControl(control)
+    for i = 1, #VALUE_TEXT_FIELDS do
+        local control = Control(VALUE_TEXT_FIELDS[i])
         if control then textControls[#textControls + 1] = control end
     end
-    AddControl(controls.left)
-    AddControl(controls.center)
-    AddControl(controls.right)
-    AddControl(controls.leftHidePercent)
-    AddControl(controls.centerHidePercent)
-    AddControl(controls.rightHidePercent)
-    AddControl(controls.mode)
-    AddControl(controls.hidePercent)
-    AddControl(controls.absorb)
-    AddControl(controls.slot)
-    AddControl(delimiter)
-    AddControl(controls.size)
-    AddControl(controls.slotSize)
-    AddControl(controls.moveTogether)
-    AddControl(layer)
     if controls.reverse then
         hookSpecs[#hookSpecs + 1] = { controls.reverse }
         textControls[#textControls + 1] = controls.reverse
@@ -867,7 +850,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     end
     local pick = SmallButton(box, opts.pickLabel or "Pick", opts.pickWidth or 50, 6)
     pick:SetScript("OnClick", function()
-        local overlay = _G.MSUF_EnsureAnchorPicker()
+        local overlay = MSUF.Require("MSUF_EnsureAnchorPicker", SELF)()
         if not overlay then return end
         overlay._isCandidateAllowed = opts.isCandidateAllowed
         overlay._onPick = function(frameName)
@@ -932,10 +915,10 @@ function Shared.MakeDragSortRows(parent, defs, opts)
             local c = opts.hoverBorder or (T.colors and T.colors.coreBlue) or { 0.095, 0.360, 0.560, 0.95 }
             self:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
         end
-        if opts.tooltip and _G.GameTooltip then opts.tooltip(self, row, _G.GameTooltip) end
+        if opts.tooltip and GameTooltip then opts.tooltip(self, row, GameTooltip) end
     end
     local function OnLeave(self)
-        if _G.GameTooltip then _G.GameTooltip:Hide() end
+        if GameTooltip then GameTooltip:Hide() end
         if self.SetBackdropBorderColor then
             local c = opts.border or { 0.210, 0.230, 0.300, 0.78 }
             self:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
@@ -944,7 +927,7 @@ function Shared.MakeDragSortRows(parent, defs, opts)
     local function OnDragStart(self)
         local row = self._msuf2DragRow
         if not DragAllowed(row) then return end
-        if _G.GameTooltip then _G.GameTooltip:Hide() end
+        if GameTooltip then GameTooltip:Hide() end
         self._msuf2OldStrata = self.GetFrameStrata and self:GetFrameStrata() or nil
         if self.SetFrameStrata then self:SetFrameStrata("TOOLTIP") end
         self:StartMoving()

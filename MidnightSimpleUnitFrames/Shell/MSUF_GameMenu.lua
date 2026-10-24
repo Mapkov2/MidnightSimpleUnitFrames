@@ -1,9 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/MSUF_GameMenu.lua
 --- Adds a lightweight MSUF entry to Blizzard's Escape/Game Menu.
 
 local addonName, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/MSUF_GameMenu.lua")
 
 local _G = _G
 local CreateFrame = CreateFrame
@@ -11,7 +10,7 @@ local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
 
 local ExportPublic = MSUF.ExportPublic
-local UI = MSUF.UI or _G.MSUF_UI
+local UI = MSUF.UI
 local function Space(role, fallback)
     return UI and UI.Space and UI.Space(role, fallback) or fallback
 end
@@ -51,10 +50,10 @@ local function AddExitLabel(text)
 end
 
 local function RefreshExitLabels()
-    AddExitLabel(_G.LOGOUT)
-    AddExitLabel(_G.LOG_OUT)
-    AddExitLabel(_G.EXIT_GAME)
-    AddExitLabel(_G.RETURN_TO_GAME)
+    AddExitLabel(LOGOUT)
+    AddExitLabel(LOG_OUT)
+    AddExitLabel(EXIT_GAME)
+    AddExitLabel(RETURN_TO_GAME)
 end
 
 local function IsExitButtonText(text)
@@ -63,11 +62,11 @@ local function IsExitButtonText(text)
 end
 
 local function IsMacroButtonText(text)
-    return type(text) == "string" and type(_G.MACROS) == "string" and text == _G.MACROS
+    return type(text) == "string" and type(MACROS) == "string" and text == MACROS
 end
 
 local function GetGeneralDB()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then return nil end
     if type(db.general) ~= "table" then
         db.general = {}
@@ -151,51 +150,34 @@ local function ForeverGamepadUI()
 end
 
 local function OpenMSUFOptions()
-    local gameMenu = _G.GameMenuFrame
+    local gameMenu = GameMenuFrame
     if gameMenu and not ForeverGamepadUI() then
-        if type(_G.HideUIPanel) == "function" then
-            _G.HideUIPanel(gameMenu)
+        if type(HideUIPanel) == "function" then
+            HideUIPanel(gameMenu)
         else
             gameMenu:Hide()
         end
     end
 
-    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+    if type(MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")) == "function" then
         MSUF.OpenOptionsFromLauncher()
         return
     end
-    if type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
-        _G.MSUF_ShowStandaloneOptionsWindow()
-        return
-    end
-    if type(_G.MSUF_OpenOptionsMenu) == "function" then
-        _G.MSUF_OpenOptionsMenu()
-        return
-    end
-    if _G.SlashCmdList and type(_G.SlashCmdList["MSUF2OPTIONS"]) == "function" then
-        _G.SlashCmdList["MSUF2OPTIONS"]("")
-        return
-    end
-    if _G.SlashCmdList and type(_G.SlashCmdList["MSUFOPTIONS"]) == "function" then
-        _G.SlashCmdList["MSUFOPTIONS"]("")
-        return
-    end
-    if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
-        _G.SlashCmdList["MIDNIGHTSUF"]("")
-    end
+    -- Kernel/MSUF_OptionsLoader.lua forwards this entry point until the menu loads.
+    MSUF.Require("MSUF_ShowStandaloneOptionsWindow", "Shell/MSUF_GameMenu.lua")()
 end
 
 local function EnsureButton()
-    local gameMenu = _G.GameMenuFrame
+    local gameMenu = GameMenuFrame
     if not gameMenu or not CreateFrame then return nil end
 
-    local button = menuButton or _G[BUTTON_NAME]
+    local button = menuButton or MSUF.Optional(BUTTON_NAME)
     if button then
         menuButton = button
         return button
     end
 
-    local getTemplateInfo = _G.C_XMLUtil and _G.C_XMLUtil.GetTemplateInfo
+    local getTemplateInfo = C_XMLUtil and C_XMLUtil.GetTemplateInfo
     local buttonTemplate = gameMenu.buttonTemplate
     if not (getTemplateInfo and buttonTemplate and getTemplateInfo(buttonTemplate)) then
         buttonTemplate = "UIPanelButtonTemplate"
@@ -211,12 +193,19 @@ local function EnsureButton()
     return button
 end
 
-local ellesmere = _G.EllesmereUI
+local ellesmere = EllesmereUI
 if ellesmere and type(ellesmere.RegisterSkin) == "function" then
     ellesmere.RegisterSkin(tostring(addonName or "MidnightSimpleUnitFrames"), function(skin)
         ellesmereSkin = skin
-        ApplyEllesmereSkin(_G[BUTTON_NAME])
+        ApplyEllesmereSkin(MSUF.Optional(BUTTON_NAME))
     end)
+end
+
+--- Re-anchors a game menu button at a point snapshot, moved extraY.
+local function PlaceButtonAtSnapshot(button, snapshot, extraY)
+    button:ClearAllPoints()
+    button:SetPoint(snapshot.point, snapshot.relativeTo, snapshot.relativePoint,
+        snapshot.offsetX, snapshot.offsetY + extraY)
 end
 
 local function GetPointSnapshot(button)
@@ -254,19 +243,12 @@ local function ApplyButtonOffset(button, offsetY)
     end
 
     state.offsetY = offsetY
-    button:ClearAllPoints()
-    button:SetPoint(
-        original.point,
-        original.relativeTo,
-        original.relativePoint,
-        original.offsetX,
-        original.offsetY + offsetY
-    )
+    PlaceButtonAtSnapshot(button, original, offsetY)
     return true
 end
 
 local function ForEachGameMenuButton(callback)
-    local gameMenu = _G.GameMenuFrame
+    local gameMenu = GameMenuFrame
     if not gameMenu then return false end
 
     local pool = gameMenu.buttonPool
@@ -308,14 +290,7 @@ local function RestoreButtonOffset(button)
     local current = GetPointSnapshot(button)
     local lastOffset = state.offsetY or 0
     if current and IsSamePointWithOffset(current, original, lastOffset) then
-        button:ClearAllPoints()
-        button:SetPoint(
-            original.point,
-            original.relativeTo,
-            original.relativePoint,
-            original.offsetX,
-            original.offsetY
-        )
+        PlaceButtonAtSnapshot(button, original, 0)
     end
 
     buttonOffsets[button] = nil
@@ -342,7 +317,7 @@ local function DeferLockedGameMenuLayout(gameMenu)
 end
 
 local function RestoreGameMenuLayout()
-    local gameMenu = _G.GameMenuFrame
+    local gameMenu = GameMenuFrame
     if not gameMenu or DeferLockedGameMenuLayout(gameMenu) then return end
 
     local baseHeight = GetBaseGameMenuHeight(gameMenu)
@@ -361,7 +336,7 @@ local function RestoreGameMenuLayout()
 end
 
 local function PositionGameMenuButton()
-    local gameMenu = _G.GameMenuFrame
+    local gameMenu = GameMenuFrame
     if not gameMenu or DeferLockedGameMenuLayout(gameMenu) then return end
 
     if not IsGameMenuButtonEnabled() then
@@ -456,7 +431,7 @@ end
 
 HookGameMenu = function()
     if not runtimeEnabled then return false end
-    local gameMenu = _G.GameMenuFrame
+    local gameMenu = GameMenuFrame
     if not gameMenu then return false end
     if hookedGameMenu == gameMenu then return true end
 

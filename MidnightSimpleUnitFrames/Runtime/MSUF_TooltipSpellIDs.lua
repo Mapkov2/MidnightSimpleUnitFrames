@@ -15,9 +15,7 @@
 --- polls, and no protected or layout write is involved.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 
-local _G = _G
 local type = type
 
 local CVAR_NAME = "tooltipShowAuraSpellIDs"
@@ -29,16 +27,16 @@ local ExportPublic = MSUF.ExportPublic
 local spellIDsOwned, casterNamesOwned = false, false
 
 local function IsEnabled()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general
     if type(general) ~= "table" then return false end
     return general.tooltipShowAuraSpellIDs == true
 end
 
 local function WriteCVar(enabled)
-    local setCVar = (_G.C_CVar and _G.C_CVar.SetCVar) or _G.SetCVar
+    local setCVar = (C_CVar and C_CVar.SetCVar) or SetCVar
     if type(setCVar) ~= "function" then return false end
-    local getCVar = (_G.C_CVar and _G.C_CVar.GetCVar) or _G.GetCVar
+    local getCVar = (C_CVar and C_CVar.GetCVar) or GetCVar
     if type(getCVar) == "function" and getCVar(CVAR_NAME) == nil then return false end
     setCVar(CVAR_NAME, enabled and "1" or "0")
     spellIDsOwned = enabled == true
@@ -56,8 +54,8 @@ local function ApplySetting(value)
     return WriteCVar(value == true)
 end
 
-if type(_G.CreateFrame) == "function" then
-    local loginFrame = _G.CreateFrame("Frame")
+if type(CreateFrame) == "function" then
+    local loginFrame = CreateFrame("Frame")
     loginFrame:RegisterEvent("PLAYER_LOGIN")
     loginFrame:SetScript("OnEvent", function(self)
         self:UnregisterEvent("PLAYER_LOGIN")
@@ -65,10 +63,8 @@ if type(_G.CreateFrame) == "function" then
         --- Re-apply only the ON state. Never write "0" here: an off MSUF
         --- toggle must not disable spell IDs the user enabled elsewhere.
         if IsEnabled() then WriteCVar(true) end
-        local applyCasterNames = _G.MSUF_ApplyTooltipCasterNames
-        if type(applyCasterNames) == "function" and MSUF.TooltipSpellIDs
-            and MSUF.TooltipSpellIDs.IsCasterNamesEnabled() then
-            applyCasterNames(true)
+        if MSUF.TooltipSpellIDs and MSUF.TooltipSpellIDs.IsCasterNamesEnabled() then
+            MSUF.Require("MSUF_ApplyTooltipCasterNames", "Runtime/MSUF_TooltipSpellIDs.lua")(true)
         end
     end)
 end
@@ -82,16 +78,16 @@ end
 local CASTER_CVAR_NAME = "tooltipShowAuraCasterNames"
 
 local function IsCasterNamesEnabled()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general
     if type(general) ~= "table" then return false end
     return general.tooltipShowAuraCasterNames == true
 end
 
 local function WriteCasterCVar(enabled)
-    local setCVar = (_G.C_CVar and _G.C_CVar.SetCVar) or _G.SetCVar
+    local setCVar = (C_CVar and C_CVar.SetCVar) or SetCVar
     if type(setCVar) ~= "function" then return false end
-    local getCVar = (_G.C_CVar and _G.C_CVar.GetCVar) or _G.GetCVar
+    local getCVar = (C_CVar and C_CVar.GetCVar) or GetCVar
     if type(getCVar) == "function" and getCVar(CASTER_CVAR_NAME) == nil then return false end
     setCVar(CASTER_CVAR_NAME, enabled and "1" or "0")
     casterNamesOwned = enabled == true

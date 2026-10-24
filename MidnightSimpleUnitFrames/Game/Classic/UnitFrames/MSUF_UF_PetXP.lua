@@ -2,16 +2,15 @@
 --- Blizzard_CharacterFrame/Vanilla and TBC PetPaperDollFrame use the same
 --- GetPetExperience and UNIT_PET_EXPERIENCE contract.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local UF = MSUF.UF
-local GetPetExperience = _G.GetPetExperience
+local GetPetExperience = GetPetExperience
 if not (UF and type(UF.RegisterElement) == "function"
     and type(GetPetExperience) == "function") then return end
 
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region) return region end
-local CreateFrame = _G.CreateFrame
-local HasPetUI = _G.HasPetUI
-local IsSecret = _G.issecretvalue
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/UnitFrames/MSUF_UF_PetXP.lua")
+local CreateFrame = CreateFrame
+local HasPetUI = HasPetUI
+local IsSecret = issecretvalue or function() return false end
 local tonumber = tonumber
 local floor = math.floor
 local EMPTY = {}
@@ -88,7 +87,10 @@ local function Layout(frame, holder, cfg, status)
         holder._msufLevel = level
     end
     local alpha = tonumber(status and status.alpha) or 1
-    if holder._msufAlpha ~= alpha then holder:SetAlpha(alpha); holder._msufAlpha = alpha end
+    if holder._msufAlpha ~= alpha then
+        holder:SetAlpha(alpha)
+        holder._msufAlpha = alpha
+    end
 end
 
 function XP.IsEnabled(frame, spec)
@@ -129,13 +131,22 @@ function XP.Update(frame)
     else
         if type(HasPetUI) == "function" then
             local hasUI, isHunter = HasPetUI()
-            if hasUI == false or isHunter == false then HideBar(holder); return end
+            if hasUI == false or isHunter == false then
+                HideBar(holder)
+                return
+            end
         end
         current, maximum = GetPetExperience()
-        if IsSecret and (IsSecret(current) or IsSecret(maximum)) then HideBar(holder); return end
+        if IsSecret and (IsSecret(current) or IsSecret(maximum)) then
+            HideBar(holder)
+            return
+        end
         current, maximum = tonumber(current), tonumber(maximum)
     end
-    if not (current and maximum and maximum > 0) then HideBar(holder); return end
+    if not (current and maximum and maximum > 0) then
+        HideBar(holder)
+        return
+    end
     if current < 0 then current = 0 elseif current > maximum then current = maximum end
     if holder._msufMaximum ~= maximum then
         holder.fill:SetMinMaxValues(0, maximum)
@@ -157,9 +168,9 @@ UF.RegisterElement("PetXPBar", XP, {
     apply = true, events = true, defaultApply = true, forceUpdate = true,
 })
 
-_G.MSUF_RequestPetXPBarRefresh = function(unit, reason)
+MSUF.ExportPublic("MSUF_RequestPetXPBarRefresh", function(unit, reason)
     if type(UF.RefreshElements) == "function" then
         return UF.RefreshElements(unit or "pet", { "PetXPBar" }, reason or "MSUF_PET_XP")
     end
     return false
-end
+end)

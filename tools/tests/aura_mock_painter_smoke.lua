@@ -4,7 +4,22 @@ root=root:gsub("\\", "/"):gsub("/$", "")
 local World=assert(loadfile(root.."/tools/tests/client_world.lua"))()
 local w=World.New(root,flavor)
 w.env.MAX_BOSS_FRAMES=5
-w:Boot()
+-- Boot the two graphs by hand (as client_world's Boot does) so controllable stand-ins for the font
+-- providers can be published between them: the Aura Style preview binds both at load, so a late
+-- override of the global would never be seen. Each stand-in delegates to the real provider unless
+-- the case below installs its own override.
+do
+    local suffix=w.client.tocSuffix or w.flavor
+    local gameType=w.client.isForever and "camelot" or nil
+    w.corePaths=World.Graph(w.root,World.CoreTOC(suffix),w.env.GetLocale(),gameType)
+    w.optionsPaths=World.Graph(w.root,World.OptionsTOC(suffix),w.env.GetLocale(),gameType)
+    w:LoadGraph("MidnightSimpleUnitFrames",w.corePaths,w.core)
+end
+local realFontSettings,realSafePath=w.core.PublicGlobals.MSUF_GetGlobalFontSettings,w.core.PublicGlobals.MSUF_ResolveSafeFontPath
+local fontSettingsOverride,safePathOverride
+w.core.ExportPublic("MSUF_GetGlobalFontSettings",function(...) return (fontSettingsOverride or realFontSettings)(...) end)
+w.core.ExportPublic("MSUF_ResolveSafeFontPath",function(...) return (safePathOverride or realSafePath)(...) end)
+w:LoadGraph("MidnightSimpleUnitFrames_Options",w.optionsPaths,w.options)
 assert(not w:FirstFailure(),"original graph boot failed")
 w.env.MSUF_EnsureDB(true)
 local seen,found={},{}
@@ -250,16 +265,16 @@ end
 -- Re-resolving global font settings may replace general between the paired
 -- texts. Both the original renderer and replacement must use that new table.
 local cfg=found.ReadMiniAuraPreviewConfig("player","debuff",400,160)
-local original=w.env.MSUF_GetGlobalFontSettings
-local safe = w.env.MSUF_ResolveSafeFontPath
+local original=realFontSettings
+local safe = realSafePath
 local fontKeys = {}
-w.env.MSUF_ResolveSafeFontPath = function(path, size, flags, key)
+safePathOverride = function(path, size, flags, key)
     fontKeys[#fontKeys + 1] = key or false
     return safe(path, size, flags, key)
 end
 local general=w.env.MSUF_DB.general
 local calls=0
-w.env.MSUF_GetGlobalFontSettings=function(...)
+fontSettingsOverride=function(...)
  calls=calls+1
  if calls==2 then
   local replacement=Copy(general);replacement.fontKey="__painter_absent_font";w.env.MSUF_DB.general=replacement
@@ -271,8 +286,8 @@ found.RenderPreviewIcon(icon,1,cfg,false,true,{})
 assert(calls==2,"paired global font hooks changed")
 assert(fontKeys[2] == "__painter_absent_font", "font-context identity switch was ignored")
 Emit("style/font-context-switch",icon)
-w.env.MSUF_GetGlobalFontSettings=original;w.env.MSUF_DB.general=general
-w.env.MSUF_ResolveSafeFontPath = safe
+fontSettingsOverride=nil;w.env.MSUF_DB.general=general
+safePathOverride = nil
 
 for label in pairs(expected) do assert(checked[label], "missing case " .. label) end
 assert(cases == 89, "finite case inventory")

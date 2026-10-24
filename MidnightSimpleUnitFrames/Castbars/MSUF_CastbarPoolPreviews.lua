@@ -15,6 +15,8 @@ local Visuals = Castbars.Visuals
 local type = type
 local tonumber = tonumber
 local setmetatable = setmetatable
+-- Kernel/MSUF_Util.lua loads before every castbar file.
+local GetPhysicalPixelSize = MSUF.Require("MSUF_GetPhysicalPixelSize", "Castbars/MSUF_CastbarPoolPreviews.lua")
 
 -- The live pools' geometry (MSUF_CastbarPools.lua).
 local ROW_PITCH = Pools.ROW_PITCH
@@ -96,7 +98,7 @@ function Preview:ShownInEditMode(general)
     -- Edit-mode preview flags live in SavedVariables for legacy integrations.
     -- A logout can bypass the normal Edit Mode exit and leave that flag true,
     -- so the runtime session state must remain the authority for visibility.
-    if _G.MSUF_UnitEditModeActive ~= true or not general.castbarPlayerPreviewEnabled then
+    if MSUF_UnitEditModeActive ~= true or not general.castbarPlayerPreviewEnabled then
         return false
     end
     if KindDisabled(self.kind) then
@@ -113,7 +115,7 @@ function Preview:Enabled()
     -- The Menu2 castbar page's transient preview must survive texture and
     -- layout re-applies that funnel through Update, even while the persistent
     -- preview option is off.
-    if _G.MSUF2_CastbarPagePreviewUnit == self.kind then
+    if MSUF.PublicGlobals.MSUF2_CastbarPagePreviewUnit == self.kind then
         return not KindDisabled(self.kind)
     end
     return self:ShownInEditMode(general)
@@ -266,12 +268,7 @@ function Preview:Position(frame, index)
     local source = Anchors.GetCastbarUnitframeWidthSource(unit) or unitFrame
     local autoX = Anchors.GetCastbarAutoAnchorOffsetX(general, unit, frame)
     local bottomInset = Anchors.GetCastbarUnitframeBottomInset(unit, frame)
-    local gap
-    if type(_G.MSUF_GetPhysicalPixelSize) == "function" then
-        gap = _G.MSUF_GetPhysicalPixelSize(frame, UNITFRAME_GAP)
-    else
-        gap = Snap(frame, UNITFRAME_GAP)
-    end
+    local gap = GetPhysicalPixelSize(frame, UNITFRAME_GAP)
     frame:SetPoint("TOPLEFT", source, "BOTTOMLEFT", offsetX + autoX, offsetY - bottomInset - gap)
 end
 

@@ -3,7 +3,6 @@
 -- migrations and Copy To must preserve each destination product's controls.
 -- Style migration is defined before its reader, with no cross-module late bind.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}
@@ -131,6 +130,27 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
     local PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER =
         A3.PlayerDefensiveCoreDefaultMarker or "_msufA3PlayerDefensivesCoreDefault_v1"
 
+    -- Both fixed presets pin every native filter; only "only mine" differs.
+    local function PinPresetFilters(item, onlyMine)
+        local filters = type(item.filters) == "table" and item.filters or {}
+        item.filters = filters
+        filters.enabled = true
+        filters.onlyMine = onlyMine
+        filters.onlyImportant = false
+        filters.raid = false
+        filters.raidInCombat = false
+        filters.includeNameplateOnly = false
+        filters.includeDispellable = false
+        filters.dispellableAny = false
+        filters.cancelable = false
+        filters.notCancelable = false
+        filters.crowdControl = false
+        filters.externalDefensive = false
+        filters.bigDefensive = false
+        filters.exclusive = "none"
+        return filters
+    end
+
     local function EnforcePlayerDefensiveContainer(item, canonicalAuraModel)
         if type(item) ~= "table" then return item end
         -- Fallback for standalone menu-model consumers and old profiles that have
@@ -159,21 +179,7 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
         item.placed = type(item.placed) == "table" and item.placed or {}
         item.placed.iconShape = type(A3.NormalizeAuraIconShape) == "function"
             and A3.NormalizeAuraIconShape(item.placed.iconShape) or (item.placed.iconShape or "RECTANGLE")
-        item.filters = type(item.filters) == "table" and item.filters or {}
-        item.filters.enabled = true
-        item.filters.onlyMine = false
-        item.filters.onlyImportant = false
-        item.filters.raid = false
-        item.filters.raidInCombat = false
-        item.filters.includeNameplateOnly = false
-        item.filters.includeDispellable = false
-        item.filters.dispellableAny = false
-        item.filters.cancelable = false
-        item.filters.notCancelable = false
-        item.filters.crowdControl = false
-        item.filters.externalDefensive = false
-        item.filters.bigDefensive = false
-        item.filters.exclusive = "none"
+        PinPresetFilters(item, false)
         -- Pre-preset custom4 profiles may carry a DEBUFF-era duration ceiling;
         -- since 6.09 compiles maxDuration for every lane it would silently hide
         -- long or permanent defensives, so the pin clears it like other filters.
@@ -225,21 +231,7 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
             priority = 5, thickness = 2, layer = 0, strata = "AUTO",
         }
         item.frame.onlyInPandemicWindow = item.frame.onlyInPandemicWindow == true
-        item.filters = type(item.filters) == "table" and item.filters or {}
-        item.filters.enabled = true
-        item.filters.onlyMine = true
-        item.filters.onlyImportant = false
-        item.filters.raid = false
-        item.filters.raidInCombat = false
-        item.filters.includeNameplateOnly = false
-        item.filters.includeDispellable = false
-        item.filters.dispellableAny = false
-        item.filters.cancelable = false
-        item.filters.notCancelable = false
-        item.filters.crowdControl = false
-        item.filters.externalDefensive = false
-        item.filters.bigDefensive = false
-        item.filters.exclusive = "none"
+        PinPresetFilters(item, true)
         return item
     end
 
@@ -356,10 +348,18 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
         return CUSTOM_CONTAINER_MAX
     end
 
+    -- The pandemic controls belong to both style key sets below.
+    local PANDEMIC_STYLE_KEYS = { "pandemicEnabled", "pandemicStyle", "pandemicColor", "pandemicThickness",
+        "pandemicPadding", "pandemicBorderAlpha", "pandemicTintAlpha", "pandemicBlend" }
+    local function WithPandemicStyleKeys(keys)
+        for i = 1, #PANDEMIC_STYLE_KEYS do keys[PANDEMIC_STYLE_KEYS[i]] = true end
+        return keys
+    end
+
     --- Copies only the controls exposed by the UnitFrame Aura Style tools.
     --- Visibility, positioning, filters, whitelists and tracked spells stay owned
     --- by the destination. This is a cold-path Copy To operation.
-    Model.CustomContainerStylePlacedKeys = Model.CustomContainerStylePlacedKeys or {
+    Model.CustomContainerStylePlacedKeys = Model.CustomContainerStylePlacedKeys or WithPandemicStyleKeys({
         iconZoom = true,
         showTooltip = true,
         alpha = true,
@@ -383,36 +383,20 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
         durationBarDisplay = true,
         durationBarPosition = true,
         durationBarDirection = true,
-        pandemicEnabled = true,
-        pandemicStyle = true,
-        pandemicColor = true,
-        pandemicThickness = true,
-        pandemicPadding = true,
-        pandemicBorderAlpha = true,
-        pandemicTintAlpha = true,
-        pandemicBlend = true,
         sortMethod = true,
         sortReverse = true,
-    }
+    })
 
     --- Custom-4 represents two different products: Player Defensive buffs on
     --- Player and Target DoTs everywhere else. Their common presentation can be
     --- copied, but these destination-only controls have no compatible value on the
     --- opposite product. Preserve them instead of clearing them to defaults (or
     --- importing a sort method from the wrong helpful/harmful domain).
-    local INCOMPATIBLE_CUSTOM4_DESTINATION_STYLE_KEYS = {
+    local INCOMPATIBLE_CUSTOM4_DESTINATION_STYLE_KEYS = WithPandemicStyleKeys({
         debuffTypeBorderMode = true,
         sortMethod = true,
         sortReverse = true,
-        pandemicEnabled = true,
-        pandemicStyle = true,
-        pandemicColor = true,
-        pandemicThickness = true,
-        pandemicPadding = true,
-        pandemicBorderAlpha = true,
-        pandemicTintAlpha = true,
-        pandemicBlend = true,
-    }
+    })
 
     local function CustomContainerStyleProduct(unit, index)
         if index ~= PLAYER_DEFENSIVE_CONTAINER_INDEX then return nil end

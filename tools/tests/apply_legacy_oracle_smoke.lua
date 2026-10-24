@@ -12,7 +12,7 @@ local function Encode(value)
     end
     return "{" .. table.concat(out, ",") .. "}"
 end
-local checksum, cases = 0, 0
+local checksum, cases, materialPreviewCases = 0, 0, 0
 local function Trace(line)
     for i = 1, #line + 1 do
         local byte = i <= #line and line:byte(i) or 10
@@ -64,6 +64,13 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         trace = {}
         local result = request()
         service.Flush()
+        -- The material preview repair adds exactly one terminal UI refresh to
+        -- these three routes; retain every byte of the frozen runtime trace.
+        if name == "RequestBarGradients:shared" or name == "RequestBarGradients:party" or name == "RequestBarGradients:raid" then
+            assert(trace[#trace] == "Menu.RefreshGFNativePreviews(oracle)", "material preview refresh missing or reordered")
+            trace[#trace] = nil
+            materialPreviewCases = materialPreviewCases + 1
+        end
         Trace(flavor .. "|" .. name .. "|" .. tostring(result) .. "|" .. table.concat(trace, ";"))
     end
     for _, flag in ipairs(flags) do
@@ -159,5 +166,6 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     end)
 end
 
+assert(materialPreviewCases == 15, "material preview route inventory drift")
 assert(cases == 980 and checksum == 625020356, "legacy apply traces differ from a6bea101")
 print("PASS legacy apply oracle: " .. cases .. " exact baseline routing traces")

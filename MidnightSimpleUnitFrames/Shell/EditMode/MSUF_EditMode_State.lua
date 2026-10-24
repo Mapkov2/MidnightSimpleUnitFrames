@@ -2,7 +2,6 @@
 --- Manages: enter/exit lifecycle, combat lockdown, AnyEditMode listeners,
 --- boss preview, Blizzard EM sync, and keeps all legacy globals in sync.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local Preview = MSUF.Require("MSUF", "Shell/EditMode/MSUF_EditMode_State.lua").UF.Preview
 local previewKind = type(Preview)
 assert(previewKind == "table",
@@ -24,9 +23,12 @@ local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
 end
-local EM2 = _G.MSUF_EM2
+local CALLER = "Shell/EditMode/MSUF_EditMode_State.lua"
+local EM2 = MSUF.Require("MSUF_EM2", CALLER)
 local Util = EM2.Util
 
+--- Calls a collaborator that loads later or may be absent, resolved per call
+--- so a hook on its global still applies. Returns true when it ran.
 local ApplyGroupSettingsForKeySafe = Util.ApplyGroupSettingsForKeySafe
 local ProfileIdentity, IsCurrentProfile = Util.ProfileIdentity, Util.IsCurrentProfile
 local SharedHistoryService = Util.SharedHistoryService
@@ -56,7 +58,7 @@ local function SyncLegacy()
     local previewActive = active and not externalPreviewSuspended
     if previewActive then SetEditModeOn() else SetEditModeOff() end
     PublishCompat("MSUF_CurrentEditUnitKey", unitKey)
-    local st = _G.MSUF_EditState
+    local st = MSUF.Optional("MSUF_EditState")
     if st then
         st.active  = previewActive
         st.unitKey = unitKey
@@ -71,7 +73,7 @@ local function PublishState()
 end
 
 --- Ensure MSUF_EditState table exists (other files rawget it)
-local editState = _G.MSUF_EditState
+local editState = MSUF.Optional("MSUF_EditState")
 if type(editState) ~= "table" then
     editState = {
         active              = false,
@@ -84,13 +86,13 @@ end
 PublishCompat("MSUF_EditState", editState)
 
 --- AnyEditMode listener notifications
-local anyEditModeListeners = _G.MSUF_AnyEditModeListeners
+local anyEditModeListeners = MSUF.Optional("MSUF_AnyEditModeListeners")
 if type(anyEditModeListeners) ~= "table" then anyEditModeListeners = {} end
 PublishCompat("MSUF_AnyEditModeListeners", anyEditModeListeners)
 
 local function MSUF_RegisterAnyEditModeListener(fn)
     if type(fn) ~= "function" then return end
-    local t = _G.MSUF_AnyEditModeListeners
+    local t = MSUF.Require("MSUF_AnyEditModeListeners", CALLER)
     t[#t + 1] = fn
 end
 ExportPublic("MSUF_RegisterAnyEditModeListener", MSUF_RegisterAnyEditModeListener)
@@ -100,7 +102,7 @@ local function NotifyListeners()
     local previewActive = active and not externalPreviewSuspended
     if lastNotified == previewActive then return end
     lastNotified = previewActive
-    local t = _G.MSUF_AnyEditModeListeners
+    local t = MSUF.Optional("MSUF_AnyEditModeListeners")
     if not t then return end
     for i = 1, #t do
         local fn = t[i]
@@ -111,13 +113,16 @@ local function NotifyListeners()
 end
 
 local function EnsureDB()
-    if _G.MSUF_DB then return true end
-    local fn = _G.MSUF_EnsureDB
-    if type(fn) == "function" then fn(); return _G.MSUF_DB ~= nil end
-    local nsEnsureDB = MSUF and (MSUF.MSUF_EnsureDB or MSUF.EnsureDB)
+    if MSUF_DB then return true end
+    local fn = MSUF.Optional("MSUF_EnsureDB")
+    if type(fn) == "function" then
+        fn()
+        return MSUF_DB ~= nil
+    end
+    local nsEnsureDB = MSUF.MSUF_EnsureDB or MSUF.EnsureDB
     if type(nsEnsureDB) == "function" then
         nsEnsureDB()
-        return _G.MSUF_DB ~= nil
+        return MSUF_DB ~= nil
     end
     return false
 end
@@ -144,7 +149,7 @@ function State.SetUnitKey(key)
 end
 
 function State.SetPopupOpen(open)
-    local st = _G.MSUF_EditState
+    local st = MSUF.Optional("MSUF_EditState")
     if st then st.popupOpen = open and true or false end
 end
 
@@ -155,19 +160,14 @@ end
 local _snapshot = nil
 local _snapshotProfile = nil
 
-local function GetDeepCopy()
-    return _G.MSUF_DeepCopy
-end
-
 local function SnapshotDB()
-    local dc = GetDeepCopy()
-    local db = _G.MSUF_DB
-    if not db or not dc then
+    local db = MSUF_DB
+    if not db then
         _snapshot = nil
         _snapshotProfile = nil
         return
     end
-    _snapshot = dc(db)
+    _snapshot = MSUF.Require("MSUF_DeepCopy", CALLER)(db)
     _snapshotProfile = ProfileIdentity()
 end
 
@@ -203,29 +203,16 @@ local function HardHideEditModePreviews()
     SetArenaOff()
     SetArenaPageClear()
 
-    local hideCastbars = _G.MSUF_HideAllCastbarPreviews
-    if type(hideCastbars) == "function" then
-        hideCastbars()
-    end
-
-    local hideGroup = _G.MSUF_GF_EM2_HidePreview
-    if type(hideGroup) == "function" then
-        hideGroup()
-    end
+    MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)()
+    MSUF.Require("MSUF_GF_EM2_HidePreview", CALLER)()
 end
 
 local function PlayLogoIntro()
-    local play = _G.MSUF_PlayEditModeLogoIntro
-    if type(play) == "function" then
-        play()
-    end
+    MSUF.Require("MSUF_PlayEditModeLogoIntro", CALLER)()
 end
 
 local function StopLogoIntro()
-    local stop = _G.MSUF_StopEditModeLogoIntro
-    if type(stop) == "function" then
-        stop()
-    end
+    MSUF.Require("MSUF_StopEditModeLogoIntro", CALLER)()
 end
 
 local function RestoreGameplayAnchors()
@@ -240,20 +227,12 @@ local function RestoreRuntimeAfterEditModeExit()
     --- The arena preview writes synthetic opponent data into the real arena
     --- buttons; its owner strips that data (combat-safe) and re-applies the
     --- arena visibility, alpha, aura and castbar-preview lanes.
-    if _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
-        _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
-    end
-    if _G.MSUF_RefreshAllUnitVisibilityDrivers then
-        _G.MSUF_RefreshAllUnitVisibilityDrivers(false)
-    end
-    if _G.MSUF_UpdateBossCastbarPreview then
-        _G.MSUF_UpdateBossCastbarPreview()
-    end
+    MSUF.Require("MSUF_SyncArenaUnitframePreviewWithUnitEdit", CALLER)()
+    MSUF.Require("MSUF_RefreshAllUnitVisibilityDrivers", CALLER)(false)
+    MSUF.Require("MSUF_UpdateBossCastbarPreview", CALLER)()
     --- Inside an arena preparation room the preview replaced the prep
     --- opponent identity; re-seed it exactly as PLAYER_ENTERING_WORLD does.
-    if _G.MSUF_ArenaMatch_SyncPrepDisplay then
-        _G.MSUF_ArenaMatch_SyncPrepDisplay()
-    end
+    MSUF.Require("MSUF_ArenaMatch_SyncPrepDisplay", CALLER)()
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.RefreshEditPreview) == "function" then
         a3.RefreshEditPreview()
@@ -272,7 +251,7 @@ end
 
 local function RestoreDB()
     if type(_snapshot) ~= "table" then return false end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then
         return false
     end
@@ -294,7 +273,7 @@ local function DiscardFocusedPopupEdits()
 end
 
 local function ExternalEditModeAPI()
-    local api = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
+    local api = MSUF.EditModeAPI
     return type(api) == "table" and api or nil
 end
 
@@ -351,9 +330,7 @@ function State.Enter(key, opts)
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 
     --- Arrow key nudge
-    if ownsNativeShell and _G.MSUF_EnableArrowKeyNudge then
-        _G.MSUF_EnableArrowKeyNudge(true)
-    end
+    if ownsNativeShell then MSUF.Require("MSUF_EnableArrowKeyNudge", CALLER)(true) end
 
     --- Preview must be active before the apply pipeline queues its boss sync.
     SetUnitPageOn()
@@ -386,28 +363,16 @@ function State.Enter(key, opts)
         --- are normally hidden (e.g. target with no target) to appear, which is a
         --- visibility-driver refresh - far cheaper. The heavier per-frame preview
         --- pass runs deferred via MSUF_SyncAllUnitPreviews on the next frame.
-        if _G.MSUF_RefreshAllUnitVisibilityDrivers then
-            _G.MSUF_RefreshAllUnitVisibilityDrivers(true)
-        else
-            ApplyAllSettingsSafe()
-        end
+        MSUF.Require("MSUF_RefreshAllUnitVisibilityDrivers", CALLER)(true)
 
         local function SyncUnitPreviewsAfterEnter()
             if not EntryPreviewReady() then return end
-            if _G.MSUF_SyncAllUnitPreviewsAsync then
-                _G.MSUF_SyncAllUnitPreviewsAsync()
-            elseif _G.MSUF_SyncAllUnitPreviews then
-                _G.MSUF_SyncAllUnitPreviews()
-            end
+            MSUF.Require("MSUF_SyncAllUnitPreviewsAsync", CALLER)()
         end
 
         local function ReforceUnitPreviewsAfterEnter()
             if not EntryPreviewReady() then return end
-            if _G.MSUF_EM2_ReforcePreviewFrames then
-                _G.MSUF_EM2_ReforcePreviewFrames()
-            elseif _G.MSUF_SyncAllUnitPreviews then
-                _G.MSUF_SyncAllUnitPreviews()
-            end
+            MSUF.Require("MSUF_EM2_ReforcePreviewFrames", CALLER)()
             if ownsNativeShell then Util.SyncMovers() end
         end
 
@@ -491,9 +456,7 @@ function State.Exit(source)
     StopLogoIntro()
 
     --- Arrow keys off
-    if _G.MSUF_EnableArrowKeyNudge then
-        _G.MSUF_EnableArrowKeyNudge(false)
-    end
+    MSUF.Require("MSUF_EnableArrowKeyNudge", CALLER)(false)
 
     --- Preview state must be cleared exactly once. In combat, protected frames
     --- cannot be safely re-shown/re-anchored, so defer the full restore until
@@ -589,7 +552,7 @@ function State.CancelAll()
     SyncLegacy()
     StopLogoIntro()
 
-    if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(false) end
+    MSUF.Require("MSUF_EnableArrowKeyNudge", CALLER)(false)
 
     if restored then
         --- Apply synchronously - the async path can silently drop when a
@@ -598,9 +561,7 @@ function State.CancelAll()
 
         --- Belt-and-suspenders: force SetPoint on every unit frame with
         --- the restored offsetX/Y from the DB.
-        if _G.MSUF_ForceReanchorAllUnitFrames_Once then
-            _G.MSUF_ForceReanchorAllUnitFrames_Once()
-        end
+        MSUF.Require("MSUF_ForceReanchorAllUnitFrames_Once", CALLER)()
         -- Cancel replaces the top-level config tables. Force the dedicated
         -- Priority Frames owner to reacquire gf_priority and restore its secure
         -- header/anchor immediately, just like unit frames above.
@@ -632,7 +593,7 @@ end
 function State.SuspendExternalPreview()
     if not active or provider ~= "ellesmere" or externalPreviewSuspended then return false end
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
-    local suspendBridge = _G.MSUF_EllesmereEditMode_SuspendPreview
+    local suspendBridge = MSUF.Optional("MSUF_EllesmereEditMode_SuspendPreview")
     if type(suspendBridge) == "function" then
         suspendBridge()
     else
@@ -656,18 +617,10 @@ function State.ResumeExternalPreview()
     externalPreviewSuspended = false
     SyncLegacy()
     SetUnitPageOn()
-    if _G.MSUF_RefreshAllUnitVisibilityDrivers then
-        _G.MSUF_RefreshAllUnitVisibilityDrivers(true)
-    else
-        ApplyAllSettingsSafe()
-    end
-    if _G.MSUF_SyncAllUnitPreviewsAsync then
-        _G.MSUF_SyncAllUnitPreviewsAsync()
-    elseif _G.MSUF_SyncAllUnitPreviews then
-        _G.MSUF_SyncAllUnitPreviews()
-    end
+    MSUF.Require("MSUF_RefreshAllUnitVisibilityDrivers", CALLER)(true)
+    MSUF.Require("MSUF_SyncAllUnitPreviewsAsync", CALLER)()
     NotifyListeners()
-    local resumeBridge = _G.MSUF_EllesmereEditMode_ResumePreview
+    local resumeBridge = MSUF.Optional("MSUF_EllesmereEditMode_ResumePreview")
     if type(resumeBridge) == "function" then resumeBridge() end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
     PublishState()

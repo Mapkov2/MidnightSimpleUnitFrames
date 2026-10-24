@@ -67,7 +67,10 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
         end
     end
     for _, name in ipairs(exports) do
-        Check(rawget(world.env, name) ~= nil, flavor .. ": " .. name .. " is published as nil")
+        -- A compatibility global, or the namespace registry for a name that stays namespace-only.
+        local published = rawget(world.env, name)
+        if published == nil then published = world.core.PublicGlobals[name] end
+        Check(published ~= nil, flavor .. ": " .. name .. " is published as nil")
     end
 end
 

@@ -7,7 +7,6 @@
 --- frame, ticker, or OnUpdate: Group_Runtime already owns every relevant event.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -28,8 +27,8 @@ local GetRaidRosterInfo = GetRaidRosterInfo
 local UnitName = UnitName
 local UnitGUID = UnitGUID
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
-local issecretvalue = _G.issecretvalue
-local wipe = _G.wipe or table.wipe
+local issecretvalue = issecretvalue
+local wipe = wipe or table.wipe
 
 local ExportPublic = MSUF.ExportPublic
 local Translate = MSUF.Translate
@@ -106,7 +105,7 @@ local function CharacterKey()
 end
 
 local function CharacterPriorityState(create)
-  local root = _G.MSUF_GlobalDB
+  local root = MSUF_GlobalDB
   if type(root) ~= "table" then
     if not create then return nil end
     root = {}
@@ -550,7 +549,7 @@ end
 
 function GF.GetHoveredPriorityUnit()
   hoveredUnit = nil
-  local getFoci = _G.GetMouseFoci
+  local getFoci = GetMouseFoci
   if type(getFoci) == "function" then
     local foci = getFoci()
     if type(foci) == "table" then
@@ -600,12 +599,12 @@ local NOTIFY_SUCCESS = { ADDED = true, REMOVED = true, ADDED_AUTO_TANK = true, R
 local function Notify(code, name, limit)
   local subject = code == "FULL" and tostring(limit or MAX_PRIORITY_FRAMES) or tostring(name)
   local message = string_format(Translate(NOTIFY_FORMATS[code] or HOVER_HINT), subject)
-  local errors = _G.UIErrorsFrame
+  local errors = UIErrorsFrame
   if errors and type(errors.AddMessage) == "function" then
     local success = NOTIFY_SUCCESS[code] == true
     errors:AddMessage(message, success and 0.3 or 1, success and 1 or 0.82, 0.2, 1)
-  elseif _G.print then
-    _G.print("|cff60a5ffMSUF:|r " .. message)
+  elseif print then
+    print("|cff60a5ffMSUF:|r " .. message)
   end
 end
 

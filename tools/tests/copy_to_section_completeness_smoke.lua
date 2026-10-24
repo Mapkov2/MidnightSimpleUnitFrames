@@ -16,6 +16,8 @@
 --      old rules. Every per-slot key the runtime reads (BuildSlotKeys in
 --      UnitFrames/Effects/MSUF_UF_TextureLayer.lua) now arrives on the target
 --      for all three layers.
+--   3. Unit frames, "Castbar": the castbar icon's shape (the aura icon shapes,
+--      CASTBAR_COPY_SUFFIXES) arrives on the target like the icon's border.
 --
 -- Boots the real core and Options graph (menu_core_world.lua) and calls the
 -- real copy functions. Plain Lua 5.1, repo root and client flavor.
@@ -130,5 +132,15 @@ for _, enabled in ipairs({ true, false }) do
     Check(core.UF.Config.GetSpec("target").portrait.dragonArtwork == enabled, "copied artwork did not compile")
 end
 
+---------------------------------------------------------------------------
+-- 3. Unit Castbar icon shape
+---------------------------------------------------------------------------
+local general = db.general
+general.castbarPlayerIconShape, general.castbarTargetIconShape = "HEXAGON", nil
+general.castbarPlayerIconBorderStyle, general.castbarTargetIconBorderStyle = "CASTBAR", nil
+Check(copyUnit("player", "target", { castbar = true }, nil, true), "castbar Copy To did not run")
+Check(general.castbarTargetIconBorderStyle == "CASTBAR", "castbar Copy To left the icon border behind")
+Check(general.castbarTargetIconShape == "HEXAGON", "castbar Copy To left the icon shape behind")
+
 print("copy_to_section_completeness_smoke " .. flavor .. ": OK (group font override, "
-    .. #suffixes .. " texture layer keys x3)")
+    .. #suffixes .. " texture layer keys x3, castbar icon shape)")

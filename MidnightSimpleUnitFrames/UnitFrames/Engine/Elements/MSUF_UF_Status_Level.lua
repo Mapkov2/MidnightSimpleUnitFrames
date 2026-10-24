@@ -57,7 +57,7 @@ local IDENTITY_TEXT_FIELDS = { "levelText", "levelBackdrop", "levelBackdropRing"
 --- cold helpers here.
 function Runtime.BuildLevelTierMap()
   local map = {}
-  local difficulty = _G.Enum and _G.Enum.RelativeContentDifficulty
+  local difficulty = Enum and Enum.RelativeContentDifficulty
   if difficulty then
     if difficulty.Impossible ~= nil then map[difficulty.Impossible] = 1 end
     if difficulty.Difficult ~= nil then map[difficulty.Difficult] = 2 end
@@ -74,9 +74,9 @@ function Runtime.LevelDifficultyTier(unit, level)
   if level == -1 then return 1 end
   -- Blizzard only grades what the player can attack; everything else keeps the
   -- standard color.
-  local canAttack = _G.UnitCanAttack
+  local canAttack = UnitCanAttack
   if not (canAttack and BoolTrue(canAttack("player", unit))) then return 3 end
-  local playerInfo = _G.C_PlayerInfo
+  local playerInfo = C_PlayerInfo
   local getDifficulty = playerInfo and playerInfo.GetContentDifficultyCreatureForPlayer
   if getDifficulty then
     -- Server-side grading: correct under level scaling and Timewalking, where
@@ -90,14 +90,14 @@ function Runtime.LevelDifficultyTier(unit, level)
   end
   -- Clients without that API (Classic flavors) use GetRelativeDifficultyColor's
   -- level-gap bands.
-  local readPlayerLevel = _G.UnitEffectiveLevel or UnitLevel
+  local readPlayerLevel = UnitEffectiveLevel or UnitLevel
   local playerLevel = readPlayerLevel and SafeNumber(readPlayerLevel("player"))
   if not (level and playerLevel) then return 3 end
   local diff = level - playerLevel
   if diff >= 5 then return 1 end
   if diff >= 3 then return 2 end
   if diff >= -2 then return 3 end
-  local greenRange = _G.GetQuestGreenRange and SafeNumber(_G.GetQuestGreenRange()) or 8
+  local greenRange = GetQuestGreenRange and SafeNumber(GetQuestGreenRange()) or 8
   if -diff <= greenRange then return 4 end
   return 5
 end

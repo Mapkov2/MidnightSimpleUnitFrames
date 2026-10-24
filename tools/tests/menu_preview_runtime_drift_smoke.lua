@@ -63,9 +63,24 @@ for index, case in ipairs(CASES) do
     local bars = { classPowerHeight = 4 }
     for key, value in pairs(case.bars) do bars[key] = value end
     local ok, result = pcall(function()
-        local t = CPWorld.Start(root, flavor == "Forever" and "Mainline" or flavor, "ROGUE", 1, CPWorld.PT.ENERGY, bars)
+        -- The cooldown width mode requires the anchor integration's scaled-width provider (published by
+        -- Integrations/MSUF_Integration_ThirdPartyAnchors.lua, which this class resource world does not load).
+        -- No cooldown viewer exists here, so the provider is only ever asked about an absent frame and
+        -- answers nil; a case that models a viewer must load the real provider.
+        local hooks = { beforeLoad = function()
+            _G.MSUF_GetCooldownAnchorScaledWidth = function(frame)
+                if frame ~= nil then error("fixture: this class resource world models no cooldown viewer", 2) end
+                return nil
+            end
+        end }
+        local t = CPWorld.Start(root, flavor == "Forever" and "Mainline" or flavor, "ROGUE", 1, CPWorld.PT.ENERGY, bars, hooks)
         _G.MSUF_player:SetSize(PLAYER_W, 40)
-        assert(_G.MSUF_ClassPower_RefreshLayout() == true, "the live class resource layout did not run")
+        -- A namespace-only export: classpower_world.lua publishes its namespace as _G.MSUF_NS.
+        local namespace = rawget(_G, "MSUF_NS")
+        local refreshLayout = rawget(_G, "MSUF_ClassPower_RefreshLayout")
+            or (namespace and namespace.PublicGlobals and namespace.PublicGlobals.MSUF_ClassPower_RefreshLayout)
+        assert(type(refreshLayout) == "function", "the live class resource layout entry point is not published")
+        assert(refreshLayout() == true, "the live class resource layout did not run")
         local container = assert(t.CP.container, "the live class resource has no container")
         local _, _, _, x = container:GetPoint(1)
         return { width = container:GetWidth(), x = x }
@@ -233,8 +248,12 @@ Section("3 detached arena castbar", function()
     cast:SetSize(200, 20)
     cast.left, cast.bottom = 400, 120
     cast:SetScale(0.5)
-    local savedUnit, savedPool = env.MSUF_arena1, env.MSUF_ArenaCastbars
-    env.MSUF_arena1, env.MSUF_ArenaCastbars = unit, { cast }
+    -- The preview reads the live arena castbar from the castbar pool table (MSUF.Castbars.Pools), which the
+    -- MSUF_ArenaCastbars global only mirrors, so the one-bar pool is installed in both.
+    local Pools = core.Castbars.Pools
+    local savedUnit, savedPool, savedPoolTable = env.MSUF_arena1, env.MSUF_ArenaCastbars, Pools.ArenaCastbars
+    local livePool = { cast }
+    env.MSUF_arena1, env.MSUF_ArenaCastbars, Pools.ArenaCastbars = unit, livePool, livePool
     local target = env.CreateFrame("Frame", nil, env.UIParent)
     local problems = {}
     local ratio = Runtime.CastbarVisualScaleForPreviewKey("arena", target)
@@ -248,7 +267,7 @@ Section("3 detached arena castbar", function()
         problems[#problems + 1] = string.format("the detached arena offset is %s/%s instead of %s/%s",
             tostring(dx), tostring(dy), tostring(castX - unitX), tostring(castY - unitY))
     end
-    env.MSUF_arena1, env.MSUF_ArenaCastbars = savedUnit, savedPool
+    env.MSUF_arena1, env.MSUF_ArenaCastbars, Pools.ArenaCastbars = savedUnit, savedPool, savedPoolTable
     Check(#problems == 0, table.concat(problems, "; "))
 end)
 
@@ -377,7 +396,8 @@ Section("5 group preview names", function()
     end
     local conf = GF.GetConf("party")
     local saved = { conf.fontOverride, conf.nameShortenEnabled, conf.nameMaxChars, conf._msufLegacyNameAnchorToFrame }
-    env.MSUF2_GFPagePreviewActive = true
+    -- The group preview gate reads this flag from the namespace registry, so it is published there.
+    core.ExportPublic("MSUF2_GFPagePreviewActive", true)
     for _, legacy in ipairs({ false, true }) do
         for _, name in ipairs(names) do
             conf.enabled, conf.fontOverride, conf.nameShortenEnabled, conf.nameMaxChars = true, true, true, 4
@@ -403,7 +423,7 @@ Section("5 group preview names", function()
         saved[1], saved[2], saved[3], saved[4]
     previewPlayerName = nil
     GF.HidePreview("party")
-    env.MSUF2_GFPagePreviewActive = nil
+    core.ExportPublic("MSUF2_GFPagePreviewActive", nil)
     Check(#problems == 0, table.concat(problems, "; "))
 end)
 
@@ -481,14 +501,14 @@ Section("8 group cell ignores the out-of-combat fade", function()
     Check(plainFrame and plainFrame:GetAlpha() == 0.4, "harness: a scene frame without the request does not fade (" .. tostring(plainFrame and plainFrame:GetAlpha()) .. ")")
     plain:Release()
     local dummy
-    local wasPreviewing = env.MSUF2_GFPagePreviewActive
-    env.MSUF2_GFPagePreviewActive = true
+    local wasPreviewing = core.PublicGlobals.MSUF2_GFPagePreviewActive
+    core.ExportPublic("MSUF2_GFPagePreviewActive", true)
     core.GF.ShowPreview("party", 1, { immediate = true })
     mw.world.widgets:RunTimers()
     dummy = core.GF._previewFrames.party and core.GF._previewFrames.party[1]
     Check(dummy and dummy:GetAlpha() == 0.4, "harness: the on-screen dummy does not fade (" .. tostring(dummy and dummy:GetAlpha()) .. ")")
     core.GF.HidePreview("party")
-    env.MSUF2_GFPagePreviewActive = wasPreviewing
+    core.ExportPublic("MSUF2_GFPagePreviewActive", wasPreviewing)
     Check(cell:GetAlpha() == 1, "the Options preview cell is faded by the out-of-combat fade (" .. tostring(cell:GetAlpha()) .. ")")
     Check(cell.MSUFSpec.alpha.active == true and cell.MSUFSpec.alpha.hpAlpha == 0.6 and cell.MSUFSpec.alpha.oocFade == false,
         "the Options preview cell lost the health bar opacity with the fade")

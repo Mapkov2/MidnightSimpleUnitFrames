@@ -42,8 +42,10 @@ other:SetSize(200, 40); other.MSUFUnitKey = "player"
 env.MSUF_target = nil
 local getFrame, frameList = UF.GetFrame, UF.frameList
 UF.GetFrame, UF.frameList = function() return nil end, { other, target }
-Check(type(env.MSUF_HighlightDebug) == "function", "the highlight debug command is missing")
-env.MSUF_HighlightDebug()
+-- Namespace-only export (core.PublicGlobals), not a global.
+local HighlightDebug = core.PublicGlobals.MSUF_HighlightDebug
+Check(type(HighlightDebug) == "function", "the highlight debug command is missing")
+HighlightDebug()
 UF.GetFrame, UF.frameList = getFrame, frameList
 local found = false
 for _, line in ipairs(printed) do

@@ -52,11 +52,11 @@ local world = Corpus.NewWorld(root, flavor, "Tester-Realm")
 local env, ns = world.env, world.core
 local registered = 0
 ns.LSM = { Register = function() registered = registered + 1 end }
-env.MSUF_BUNDLED_FONTS_REGISTERED = false
+ns.ExportPublic("MSUF_BUNDLED_FONTS_REGISTERED", false)
 env.MSUF_DB = Profile("Midnight Smooth")
 local scheduled = {}
 env.C_Timer.After = function(_, callback) scheduled[#scheduled + 1] = callback end
-env.MSUF_RegisterBundledMediaWithLSM()
+ns.PublicGlobals.MSUF_RegisterBundledMediaWithLSM()
 assert(registered > 0, "media registration did not run")
 assert(#scheduled == 0, "media registration scheduled a profile migration")
 assert(env.MSUF_DB.general.barTexture == "Midnight Smooth", "media registration changed the profile")
@@ -67,9 +67,9 @@ local function LateMedia(world)
     local before = Literal(runtime.MSUF_GlobalDB)
     local registrations, callbacks = 0, {}
     namespace.LSM = { Register = function() registrations = registrations + 1 end }
-    runtime.MSUF_BUNDLED_FONTS_REGISTERED = false
+    namespace.ExportPublic("MSUF_BUNDLED_FONTS_REGISTERED", false)
     runtime.C_Timer.After = function(_, fn) callbacks[#callbacks + 1] = fn end
-    runtime.MSUF_RegisterBundledMediaWithLSM()
+    namespace.PublicGlobals.MSUF_RegisterBundledMediaWithLSM()
     assert(registrations > 0, "late registration lost its media work")
     assert(#callbacks == 0, "late registration retained the legacy profile timer")
     assert(Literal(runtime.MSUF_GlobalDB) == before, "late registration mutated bound or inactive profiles")
@@ -102,10 +102,10 @@ for index, row in ipairs(names) do
         else
             local text = Literal({ addon = "MSUF", fmt = 2, schema = 600, kind = "all", payload = donor })
             if path == "active" then
-                ok, why = runtime.MSUF_ImportFromString(text)
+                ok, why = current.core.PublicGlobals.MSUF_ImportFromString(text)
                 target = runtime.MSUF_DB
             elseif path == "new" then
-                ok, why = runtime.MSUF_ImportIntoNewProfile("Imported" .. index, text)
+                ok, why = current.core.PublicGlobals.MSUF_ImportIntoNewProfile("Imported" .. index, text)
                 target = runtime.MSUF_GlobalDB.profiles["Imported" .. index]
             else
                 local name = path == "externalActive" and runtime.MSUF_ActiveProfile or "Stored" .. index

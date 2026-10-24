@@ -4,11 +4,12 @@
 ---
 --- Split from MSUF_Menu2_Window.lua; it loads before the window shell and only
 --- touches shared M state, never window geometry.
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
+local IS_FOREVER = MSUF.Client.IsForever == true
 local AccessibleNumber = M.AccessibleNumber
 local SearchBridge = M.SearchBridge or {}
 local UpdateSearchPlaceholder = SearchBridge.UpdateSearchPlaceholder
@@ -42,8 +43,7 @@ end
 local function SetTitle(key)
     local frame = M.frame
     if not frame then return end
-    local title = (MSUF.Client and MSUF.Client.IsForever == true) and M.Tr("MSUF (Forever Version)")
-        or BreadcrumbTitle(key) or "MSUF"
+    local title = IS_FOREVER and M.Tr("MSUF (Forever Version)") or BreadcrumbTitle(key) or "MSUF"
     if frame._msuf2TitleKey ~= title then
         frame._msuf2TitleKey = title
         SetTranslatedText(frame.title, title)
@@ -184,35 +184,34 @@ function M.GetPageHistoryState()
         nextPage = forward[#forward],
     }
 end
-function M.GoBackPage()
-    if M.BlockCombatAction and M.BlockCombatAction() then return false, "Dashboard back navigation is blocked in combat." end
-    local back = EnsurePageHistoryStacks()
-    local page = table.remove(back)
-    if type(page) ~= "string" or page == "" then return false, "Dashboard back navigation has no previous native Menu2 page." end
+-- Pops the page to open from `source`; on success the page left behind goes
+-- onto `other`, on failure the popped page returns to `source`.
+local function StepPageHistory(source, other, blocked, missing, opened, failed)
+    if M.BlockCombatAction and M.BlockCombatAction() then return false, blocked end
+    EnsurePageHistoryStacks()
+    local page = table.remove(M[source])
+    if type(page) ~= "string" or page == "" then return false, missing end
     local current = M.activeKey
     if OpenHistoryPage(page) then
-        M.pageForwardStack = PushPageHistory(M.pageForwardStack, current)
+        M[other] = PushPageHistory(M[other], current)
         M.RefreshPageHistoryNav()
-        return true, "Opened previous page."
+        return true, opened
     end
-    M.pageBackStack = PushPageHistory(M.pageBackStack, page)
+    M[source] = PushPageHistory(M[source], page)
     M.RefreshPageHistoryNav()
-    return false, "Dashboard back navigation is not available right now."
+    return false, failed
+end
+function M.GoBackPage()
+    return StepPageHistory("pageBackStack", "pageForwardStack",
+        "Dashboard back navigation is blocked in combat.",
+        "Dashboard back navigation has no previous native Menu2 page.",
+        "Opened previous page.", "Dashboard back navigation is not available right now.")
 end
 function M.GoForwardPage()
-    if M.BlockCombatAction and M.BlockCombatAction() then return false, "Dashboard forward navigation is blocked in combat." end
-    local _, forward = EnsurePageHistoryStacks()
-    local page = table.remove(forward)
-    if type(page) ~= "string" or page == "" then return false, "Dashboard forward navigation has no next native Menu2 page." end
-    local current = M.activeKey
-    if OpenHistoryPage(page) then
-        M.pageBackStack = PushPageHistory(M.pageBackStack, current)
-        M.RefreshPageHistoryNav()
-        return true, "Opened next page."
-    end
-    M.pageForwardStack = PushPageHistory(M.pageForwardStack, page)
-    M.RefreshPageHistoryNav()
-    return false, "Dashboard forward navigation is not available right now."
+    return StepPageHistory("pageForwardStack", "pageBackStack",
+        "Dashboard forward navigation is blocked in combat.",
+        "Dashboard forward navigation has no next native Menu2 page.",
+        "Opened next page.", "Dashboard forward navigation is not available right now.")
 end
 --- Chrome hook: keeps the status-strip Back/Forward buttons in sync with the
 --- page history stacks. Cold path -- runs only on page navigation, and stays a

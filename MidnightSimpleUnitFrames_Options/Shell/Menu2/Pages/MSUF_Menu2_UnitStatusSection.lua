@@ -1,5 +1,4 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
@@ -14,7 +13,6 @@ local ROW_OPTIONS = Schema.UnitOptions()
 local UP = M.UnitPage or {}
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
-local CreateFrame = _G.CreateFrame
 local RestingFlipbook = MSUF.UFRestingFlipbook or {}
 local ApplyRestingFlipbook = RestingFlipbook.Apply
 local StopRestingFlipbook = RestingFlipbook.Stop
@@ -34,7 +32,7 @@ local SetControlEnabled, ControlMeta, RegisterControl = UP.SetControlEnabled, UP
 local SetControlsEnabled = W.SetControlsEnabled
 STATUS_ANCHORS = STATUS_ANCHORS or {}
 DEFAULT_SYMBOLS = DEFAULT_SYMBOLS or {}
-StatusIconPackValues = function() return {} end
+StatusIconPackValues = StatusIconPackValues or function() return {} end
 local SYMBOL_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\"
 local RAID_GROUP_NAME_STYLES = VT("PAREN", "(2)", "BRACKET", "[2]", "NONE", "2")
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
@@ -47,6 +45,43 @@ local IDENTITY_RESTRICTION_WARNING_COLOR = { 1.00, 0.64, 0.18, 1 }
 local IDENTITY_RESTRICTION_WARNING = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua"
+-- Core preview and refresh entry points, resolved on first use and kept. The toggle and
+-- dropdown value paths test these upvalues inline, so each change still makes one call.
+local SelectStatusIcon, RefreshStatusIcons
+local function SelectPreviewIcon(value)
+    SelectStatusIcon = SelectStatusIcon or MSUF.Require("MSUF_UFPreview_SelectStatusIcon", FILE)
+    SelectStatusIcon(value)
+end
+-- Preview entries per indicator: { icon kind, variant, symbol setting key, hover label }.
+local STATUS_PREVIEW_ENTRIES = {
+    leader = { { "leader" } },
+    assist = { { "assist" } },
+    raidmarker = { { "raidMarker", 8 } },
+    eliteicon = { { "elite", "ELITE" }, { "elite", "RAREELITE" }, { "elite", "RARE" }, { "elite", "BOSS" } },
+    statusCombat = { { "combat", "combat", "combatStateIndicatorSymbol" } },
+    statusResting = { { "resting", "resting", "restedStateIndicatorSymbol" } },
+    statusIncomingRes = { { "incomingRes", "resurrect", "incomingResIndicatorSymbol" } },
+    statusPvp = { { "pvp", "Alliance" }, { "pvp", "Horde" }, { "pvp", "FFA" } },
+    -- Unhappy (75% damage), Content (100%) and Happy (125%).
+    statusPetHappiness = IS_CLASSIC_FAMILY and {
+        { "petHappiness", 1, nil, "Unhappy - 75% damage" },
+        { "petHappiness", 2, nil, "Content - 100% damage" },
+        { "petHappiness", 3, nil, "Happy - 125% damage" },
+    } or { { "petHappiness", 1 }, { "petHappiness", 2 }, { "petHappiness", 3 } },
+}
+local function StatusPreviewEntries(spec)
+    return STATUS_PREVIEW_ENTRIES[spec and spec.value]
+end
+local function IsRoleStatusSpec(spec)
+    local value = spec and spec.value
+    return value == "leader" or value == "assist"
+end
+local function SetDropdownTitle(control, label)
+    if control and control._msuf2Title and control._msuf2Title.SetText then
+        control._msuf2Title:SetText(label)
+    end
+end
 -- The section is assembled by StatusSection.Build from one stage per card or
 -- helper group. Stages share one per-build `state` table and run in the order
 -- the controls used to be created inline; RefreshStatusSectionState is a
@@ -123,35 +158,8 @@ function StatusSection.OpenSection(state, ctx, builder, unit)
         placementCardX, placementCardW, placeLeftX, placeLeftW, placeRightX, placeRightW
     state.selectedControlW, state.previewControlW, state.PlaceButton = selectedControlW, previewControlW, PlaceButton
 end
-function StatusSection.PrepareBinders(state, ctx, unit)
-    local PlaceButton = state.PlaceButton
-    local function RefreshStatusMenu()
-        if M.RequestRefresh then
-            M.RequestRefresh(ctx, "unit-status-menu")
-        elseif M.Refresh then
-            M.Refresh(ctx)
-        elseif M.SelectPage then
-            M.SelectPage(ctx.key)
-        end
-    end
-    local function ReadStatusEnabled(spec)
-        if not spec then return false end
-        local conf = GetConf(unit)
-        local g = GetGeneral()
-        local value = conf and conf[spec.show]
-        if value == nil then value = g and g[spec.show] end
-        if value ~= nil then return value and true or false end
-        if spec.legacyShow and spec.legacyState then
-            local master = ReadStatusBool(unit, spec.legacyShow, true)
-            local states = g and type(g.statusIndicators) == "table" and g.statusIndicators or nil
-            local state = states and states[spec.legacyState]
-            if state == nil then state = spec.defaultShow end
-            return master and state and true or false
-        end
-        return spec.defaultShow and true or false
-    end
-    local unitLabel = UnitTopLabel(unit)
-    local unitLabelLower = string.lower(unitLabel or tostring(unit or "unit"))
+function StatusSection.PrepareSearch(state, ctx, unit)
+    local unitLabelLower = string.lower(UnitTopLabel(unit) or tostring(unit or "unit"))
     local statusSearchBase = {
         "status icons", "status icon", "status indicators", "status indicator", "indicator", "selected indicator",
         "level", "levels", "level text", "level indicator", "show level", "enable level", "disable level",
@@ -195,6 +203,37 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         M.RegisterSearchWidget(control, meta)
         Schema.Owned(control, unit, "unitStatus")
     end
+    state.StatusSearchKeywords, state.selectedStatusContract, state.RegisterStatusSearch =
+        StatusSearchKeywords, selectedStatusContract, RegisterStatusSearch
+end
+function StatusSection.PrepareBinders(state, ctx, unit)
+    local PlaceButton = state.PlaceButton
+    local function RefreshStatusMenu()
+        if M.RequestRefresh then
+            M.RequestRefresh(ctx, "unit-status-menu")
+        elseif M.Refresh then
+            M.Refresh(ctx)
+        elseif M.SelectPage then
+            M.SelectPage(ctx.key)
+        end
+    end
+    local function ReadStatusEnabled(spec)
+        if not spec then return false end
+        local conf = GetConf(unit)
+        local g = GetGeneral()
+        local value = conf and conf[spec.show]
+        if value == nil then value = g and g[spec.show] end
+        if value ~= nil then return value and true or false end
+        if spec.legacyShow and spec.legacyState then
+            local master = ReadStatusBool(unit, spec.legacyShow, true)
+            local states = g and type(g.statusIndicators) == "table" and g.statusIndicators or nil
+            local state = states and states[spec.legacyState]
+            if state == nil then state = spec.defaultShow end
+            return master and state and true or false
+        end
+        return spec.defaultShow and true or false
+    end
+    local RegisterStatusSearch, selectedStatusContract = state.RegisterStatusSearch, state.selectedStatusContract
     local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey, fallback, reason, searchLabel, keywords, normalize)
         local path = "status.placement." .. tostring(reason):lower()
         local control = Schema.Build(ctx, parent, {{ "slider", path, fallback, { label, minValue, maxValue, 1, 300 },
@@ -233,7 +272,8 @@ function StatusSection.PrepareBinders(state, ctx, unit)
                 function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
                 function(value)
                     SetBool(unit, "stateIconsTestMode", value, reason, { preview = true })
-                    _G.MSUF_RequestStatusIconsRefreshForCurrent(unit, reason or "MSUF2_STATUS_TEST")
+                    RefreshStatusIcons = RefreshStatusIcons or MSUF.Require("MSUF_RequestStatusIconsRefreshForCurrent", FILE)
+                    RefreshStatusIcons(unit, reason or "MSUF2_STATUS_TEST")
                 end)
         end }}, ROW_OPTIONS)[path]
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, path, "ephemeral")
@@ -243,10 +283,10 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         local control = W.Button(parent, label, width)
         PlaceButton(control, parent, xPos, yPos, width)
         control:SetScript("OnClick", function()
-            _G.MSUF_UFPreview_SetStatusPreviewMode(mode)
+            MSUF.Require("MSUF_UFPreview_SetStatusPreviewMode", FILE)(mode)
             if mode == "current" then
                 local spec = CurrentStatusSpec(unit)
-                if spec then _G.MSUF_UFPreview_SelectStatusIcon(spec.value) end
+                if spec then SelectPreviewIcon(spec.value) end
             end
         end)
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, semanticPath, "ephemeral")
@@ -286,12 +326,11 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         RegisterStatusSearch(control, searchLabel, keywords, searchValues or values, nil, path, nil, selectedStatusContract)
         return control
     end
-    state.RefreshStatusMenu, state.ReadStatusEnabled, state.StatusSearchKeywords, state.selectedStatusContract =
-        RefreshStatusMenu, ReadStatusEnabled, StatusSearchKeywords, selectedStatusContract
-    state.RegisterStatusSearch, state.BindStatusPlacementSlider, state.ClampSelectedStatusLayer, state.BindStatusTestToggle =
-        RegisterStatusSearch, BindStatusPlacementSlider, ClampSelectedStatusLayer, BindStatusTestToggle
-    state.StatusPreviewButton, state.SetPreviewCurrentVisual, state.RefreshStatusSectionState, state.BindStatusSpecDropdown =
-        StatusPreviewButton, SetPreviewCurrentVisual, RefreshStatusSectionState, BindStatusSpecDropdown
+    state.RefreshStatusMenu, state.ReadStatusEnabled, state.BindStatusPlacementSlider, state.ClampSelectedStatusLayer =
+        RefreshStatusMenu, ReadStatusEnabled, BindStatusPlacementSlider, ClampSelectedStatusLayer
+    state.BindStatusTestToggle, state.StatusPreviewButton, state.SetPreviewCurrentVisual, state.RefreshStatusSectionState =
+        BindStatusTestToggle, StatusPreviewButton, SetPreviewCurrentVisual, RefreshStatusSectionState
+    state.BindStatusSpecDropdown = BindStatusSpecDropdown
 end
 function StatusSection.VirtualIndicatorMeta(ctx, unit, path, spec, selector, refresh)
     local meta = ControlMeta(ctx, path, "setting")
@@ -305,11 +344,28 @@ function StatusSection.VirtualIndicatorMeta(ctx, unit, path, spec, selector, ref
     end
     return meta
 end
+-- One independent option toggle on the Selected card. Its hover tip repeats the search help
+-- text, and `exact` names the one indicator an option belongs to so an exact link selects it first.
+function StatusSection.OptionToggle(state, ctx, unit, option)
+    local control = Schema.Build(ctx, state.selectedCard, {{ "toggle", option.path, nil,
+        { option.label, 16, option.y, state.selectedControlW },
+        scope = unit, bind = function(widget)
+            M.BindBoolWidget(ctx, widget, option.get or function() return ReadStatusBool(unit, option.key, option.default) end,
+                function(value)
+                    SetBool(unit, option.key, value, option.reason, { preview = true })
+                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                end)
+        end }}, ROW_OPTIONS)[option.path]
+    if option.exact then state.AttachStatusExactTarget(control, nil, option.exact, option.key) end
+    state.RegisterStatusSearch(control, option.searchLabel, option.keywords, nil, option.help, option.path, nil,
+        { settingKey = tostring(unit) .. "." .. option.key })
+    if M.AddTooltip then M.AddTooltip(control, option.label, option.help, { hook = true }) end
+    return control
+end
 -- Threat % only, and only where that control exists (the target, focus and
 -- boss pages of Classic Era, TBC and WoW Forever). Both options show while
 -- Threat % is the selected indicator, so an exact link selects it first.
-function StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTarget)
-    local selectedCard, selectedControlW, RegisterStatusSearch = state.selectedCard, state.selectedControlW, state.RegisterStatusSearch
+function StatusSection.BuildThreatOptions(state, ctx, unit)
     -- Mirrors the compile default in MSUF_UF_Config: on, unless this frame
     -- already carries its own threat color.
     local function ThreatColorCurveEnabled()
@@ -321,49 +377,26 @@ function StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTar
     state.ThreatColorCurveEnabled = ThreatColorCurveEnabled
     local threatSpec = FindStatusSpec(unit, "statusThreat")
     if threatSpec and threatSpec.value == "statusThreat" then
-        local threatColorCurve = Schema.Build(ctx, selectedCard, {{ "toggle", "status.threat.color_curve", nil,
-            { "Color by threat", 16, -106, selectedControlW },
-        scope = unit, bind = function(threatColorCurve)
-            M.BindBoolWidget(ctx, threatColorCurve, ThreatColorCurveEnabled,
-                function(value)
-                    SetBool(unit, "threatIndicatorColorCurve", value, "MSUF2_STATUS_THREAT_COLOR_CURVE", { preview = true })
-                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-                end)
-        end }}, ROW_OPTIONS)["status.threat.color_curve"]
-        AttachStatusExactTarget(threatColorCurve, nil, "statusThreat", "threatIndicatorColorCurve")
-        RegisterStatusSearch(threatColorCurve, "Threat % Colors", {
-            "threat color", "threat colors", "color by threat", "threat color curve", "aggro color",
-        }, nil, "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.",
-            "status.threat.color_curve", nil, { settingKey = tostring(unit) .. ".threatIndicatorColorCurve" })
-        if M.AddTooltip then
-            M.AddTooltip(threatColorCurve, "Color by threat",
-                "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.", { hook = true })
-        end
-        state.threatColorCurve = threatColorCurve
+        state.threatColorCurve = StatusSection.OptionToggle(state, ctx, unit, {
+            path = "status.threat.color_curve", label = "Color by threat", y = -106, get = ThreatColorCurveEnabled,
+            key = "threatIndicatorColorCurve", reason = "MSUF2_STATUS_THREAT_COLOR_CURVE", exact = "statusThreat",
+            searchLabel = "Threat % Colors", keywords = {
+                "threat color", "threat colors", "color by threat", "threat color curve", "aggro color",
+            },
+            help = "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.",
+        })
         -- The dark plate behind the number. Mirrors the compile default: on.
-        local threatBackground = Schema.Build(ctx, selectedCard, {{ "toggle", "status.threat.background", nil, { "Background", 16, -136, selectedControlW },
-        scope = unit, bind = function(threatBackground)
-            M.BindBoolWidget(ctx, threatBackground, function() return ReadStatusBool(unit, "threatIndicatorBackground", true) end,
-                function(value)
-                    SetBool(unit, "threatIndicatorBackground", value, "MSUF2_STATUS_THREAT_BACKGROUND", { preview = true })
-                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-                end)
-        end }}, ROW_OPTIONS)["status.threat.background"]
-        AttachStatusExactTarget(threatBackground, nil, "statusThreat", "threatIndicatorBackground")
-        RegisterStatusSearch(threatBackground, "Threat % Background", {
-            "threat background", "threat plate", "threat backdrop", "threat readability",
-        }, nil, "A dark plate behind the number keeps it readable on any bar color, red enemy bars included.",
-            "status.threat.background", nil, { settingKey = tostring(unit) .. ".threatIndicatorBackground" })
-        if M.AddTooltip then
-            M.AddTooltip(threatBackground, "Background",
-                "A dark plate behind the number keeps it readable on any bar color, red enemy bars included.", { hook = true })
-        end
-        state.threatBackground = threatBackground
+        state.threatBackground = StatusSection.OptionToggle(state, ctx, unit, {
+            path = "status.threat.background", label = "Background", y = -136, default = true,
+            key = "threatIndicatorBackground", reason = "MSUF2_STATUS_THREAT_BACKGROUND", exact = "statusThreat",
+            searchLabel = "Threat % Background", keywords = {
+                "threat background", "threat plate", "threat backdrop", "threat readability",
+            },
+            help = "A dark plate behind the number keeps it readable on any bar color, red enemy bars included.",
+        })
     end
 end
 function StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
-    local selectedCard, selectedControlW, RegisterStatusSearch = state.selectedCard, state.selectedControlW, state.RegisterStatusSearch
-    local AttachStatusExactTarget = state.AttachStatusExactTarget
     -- Level Text only. Mirrors the compile default in MSUF_UF_Config: on, unless
     -- this frame already carries its own level text color.
     local function LevelDifficultyColorEnabled()
@@ -373,43 +406,23 @@ function StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
         return ReadStatusBool(unit, "levelIndicatorDifficultyColor", customR == nil)
     end
     state.LevelDifficultyColorEnabled = LevelDifficultyColorEnabled
-    local levelDifficultyColor = Schema.Build(ctx, selectedCard, {{ "toggle", "status.level.difficulty_color", nil, { "Color by level difficulty",
-        16, -106, selectedControlW },
-        scope = unit, bind = function(levelDifficultyColor)
-            M.BindBoolWidget(ctx, levelDifficultyColor, LevelDifficultyColorEnabled,
-                function(value)
-                    SetBool(unit, "levelIndicatorDifficultyColor", value, "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR", { preview = true })
-                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-                end)
-        end }}, ROW_OPTIONS)["status.level.difficulty_color"]
-    RegisterStatusSearch(levelDifficultyColor, "Level Difficulty Colors", {
-        "level color", "level colors", "level difficulty", "difficulty color", "level color curve",
-        "color level by difficulty", "red level", "gray level", "grey level", "skull level color",
-    }, nil, "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.",
-        "status.level.difficulty_color", nil, { settingKey = tostring(unit) .. ".levelIndicatorDifficultyColor" })
-    if M.AddTooltip then
-        M.AddTooltip(levelDifficultyColor, "Color by level difficulty",
-            "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
-    end
-    state.levelDifficultyColor = levelDifficultyColor
-    local levelForeverBadge = Schema.Build(ctx, selectedCard, {{ "toggle", "status.level.forever_badge", nil,
-        { "Round level badge", 16, -136, selectedControlW },
-        scope = unit, bind = function(levelForeverBadge)
-            M.BindBoolWidget(ctx, levelForeverBadge,
-                function() return ReadStatusBool(unit, "levelIndicatorForeverBadge", false) end,
-                function(value)
-                    SetBool(unit, "levelIndicatorForeverBadge", value, "MSUF2_STATUS_LEVEL_FOREVER_BADGE", { preview = true })
-                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-                end)
-        end }}, ROW_OPTIONS)["status.level.forever_badge"]
-    RegisterStatusSearch(levelForeverBadge, "Round Level Badge", {
-        "level badge", "level circle", "round level", "camelot level", "level medallion",
-    }, nil, "Centers the level on a dark round medallion with a gold rim on every supported WoW version.",
-        "status.level.forever_badge", nil, { settingKey = tostring(unit) .. ".levelIndicatorForeverBadge" })
-    if M.AddTooltip then
-        M.AddTooltip(levelForeverBadge, "Round level badge",
-            "Centers the level on a dark round medallion with a gold rim on every supported WoW version.", { hook = true })
-    end
+    state.levelDifficultyColor = StatusSection.OptionToggle(state, ctx, unit, {
+        path = "status.level.difficulty_color", label = "Color by level difficulty", y = -106, get = LevelDifficultyColorEnabled,
+        key = "levelIndicatorDifficultyColor", reason = "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR",
+        searchLabel = "Level Difficulty Colors", keywords = {
+            "level color", "level colors", "level difficulty", "difficulty color", "level color curve",
+            "color level by difficulty", "red level", "gray level", "grey level", "skull level color",
+        },
+        help = "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.",
+    })
+    local levelForeverBadge = StatusSection.OptionToggle(state, ctx, unit, {
+        path = "status.level.forever_badge", label = "Round level badge", y = -136, default = false,
+        key = "levelIndicatorForeverBadge", reason = "MSUF2_STATUS_LEVEL_FOREVER_BADGE",
+        searchLabel = "Round Level Badge", keywords = {
+            "level badge", "level circle", "round level", "camelot level", "level medallion",
+        },
+        help = "Centers the level on a dark round medallion with a gold rim on every supported WoW version.",
+    })
     -- The badge belongs to the Level editor. Exact feature links must select
     -- that indicator before focusing this otherwise hidden control.
     levelForeverBadge._msuf2ExactTargetKinds = { unitStatus = true }
@@ -427,7 +440,40 @@ function StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
         })
     end
     state.levelForeverBadge = levelForeverBadge
-    StatusSection.BuildThreatOptions(state, ctx, unit, AttachStatusExactTarget)
+    StatusSection.BuildThreatOptions(state, ctx, unit)
+end
+-- Pet Happiness, Pet XP and Threat % exist only where MSUF.Client supports them
+-- (SupportsPetHappiness, Classic pets, SupportsThreatText on the target, focus and
+-- boss pages), and the shared editor above re-targets to them, so they have no widget
+-- of their own. A virtual control gives each its own row in the static search index,
+-- which the search query ties to that capability (MSUF_Menu2_Search_IndexQuery.lua).
+local VIRTUAL_INDICATORS = {
+    { "statusPetHappiness", "status.indicator.pet_happiness" },
+    { "statusPetXP", "status.indicator.pet_xp", { "pet xp", "pet experience", "pet experience bar" } },
+    { "statusThreat", "status.indicator.threat", { "threat", "threat percent", "aggro", "aggro percent" } },
+}
+function StatusSection.RegisterVirtualIndicators(state, ctx, unit, selector)
+    if type(M.RegisterVirtualRuntimeControl) ~= "function" then return end
+    local Refresh = state.RefreshStatusSectionState
+    for _, item in ipairs(VIRTUAL_INDICATORS) do
+        local spec = FindStatusSpec(unit, item[1])
+        if spec and spec.value == item[1] then
+            local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, item[2], spec, selector, Refresh)
+            if item[3] then meta.keywords = item[3] end
+            meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(spec.show) }
+            meta.command = {
+                kind = "toggle",
+                get = function() return state.ReadStatusEnabled(spec) end,
+                set = function(value)
+                    SetBool(unit, spec.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
+                    RefreshStatusRuntime(unit, spec)
+                    if Refresh then Refresh() end
+                    return true
+                end,
+            }
+            M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
+        end
+    end
 end
 function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     local sec, selectedCard, previewCard, selectedControlW = state.sec, state.selectedCard, state.previewCard, state.selectedControlW
@@ -450,7 +496,8 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
                     if not spec then return end
                     M.unitStatusSelection = M.unitStatusSelection or {}
                     M.unitStatusSelection[unit] = spec.value
-                    _G.MSUF_UFPreview_SelectStatusIcon(spec.value)
+                    SelectStatusIcon = SelectStatusIcon or MSUF.Require("MSUF_UFPreview_SelectStatusIcon", FILE)
+                    SelectStatusIcon(spec.value)
                     RefreshStatusMenu()
                 end)
         end }}, ROW_OPTIONS)["status.selector"]
@@ -466,7 +513,8 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
                 function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
                 function(value)
                     SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false })
-                    _G.MSUF_RequestStatusIconsRefreshForCurrent()
+                    RefreshStatusIcons = RefreshStatusIcons or MSUF.Require("MSUF_RequestStatusIconsRefreshForCurrent", FILE)
+                    RefreshStatusIcons()
                 end)
         end }}, ROW_OPTIONS)["status.midnight_style"]
     RegisterStatusSearch(midnight, "Status indicator style", {
@@ -521,79 +569,28 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
             M.unitStatusSelection[unit] = spec.value
             if sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab("basic") == false then return false end
             if selector and selector.SetValue then selector:SetValue(spec.value) end
-            _G.MSUF_UFPreview_SelectStatusIcon(spec.value)
+            SelectPreviewIcon(spec.value)
             if RefreshStatusSectionState then RefreshStatusSectionState() end
             return CurrentStatusSpec(unit) == spec
         end
     end
     AttachStatusExactTarget(enabled, "show")
-    -- Pet Happiness exists only where MSUF.Client.SupportsPetHappiness is true, and the
-    -- shared editor above re-targets to it, so it has no widget of its own. A virtual
-    -- control gives it its own row in the static search index, which the search query
-    -- ties to that capability (MSUF_Menu2_Search_IndexQuery.lua).
-    local happiness = FindStatusSpec(unit, "statusPetHappiness")
-    if happiness and happiness.value == "statusPetHappiness" and type(M.RegisterVirtualRuntimeControl) == "function" then
-        local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, "status.indicator.pet_happiness", happiness, selector, RefreshStatusSectionState)
-        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(happiness.show) }
-        meta.command = {
-            kind = "toggle",
-            get = function() return ReadStatusEnabled(happiness) end,
-            set = function(value)
-                SetBool(unit, happiness.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
-                RefreshStatusRuntime(unit, happiness)
-                if RefreshStatusSectionState then RefreshStatusSectionState() end
-                return true
-            end,
-        }
-        M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
-    end
-    local petXP = FindStatusSpec(unit, "statusPetXP")
-    if petXP and petXP.value == "statusPetXP" and type(M.RegisterVirtualRuntimeControl) == "function" then
-        local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, "status.indicator.pet_xp", petXP, selector, RefreshStatusSectionState)
-        meta.keywords = { "pet xp", "pet experience", "pet experience bar" }
-        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(petXP.show) }
-        meta.command = {
-            kind = "toggle",
-            get = function() return ReadStatusEnabled(petXP) end,
-            set = function(value)
-                SetBool(unit, petXP.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
-                RefreshStatusRuntime(unit, petXP)
-                if RefreshStatusSectionState then RefreshStatusSectionState() end
-                return true
-            end,
-        }
-        M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
-    end
-    -- The threat percentage text exists only where MSUF.Client.SupportsThreatText is
-    -- true (target, focus and boss pages); like Pet Happiness it gets a virtual
-    -- control for its own static search row, tied to that capability.
-    local threat = FindStatusSpec(unit, "statusThreat")
-    if threat and threat.value == "statusThreat" and type(M.RegisterVirtualRuntimeControl) == "function" then
-        local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, "status.indicator.threat", threat, selector, RefreshStatusSectionState)
-        meta.keywords = { "threat", "threat percent", "aggro", "aggro percent" }
-        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(threat.show) }
-        meta.command = {
-            kind = "toggle",
-            get = function() return ReadStatusEnabled(threat) end,
-            set = function(value)
-                SetBool(unit, threat.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
-                RefreshStatusRuntime(unit, threat)
-                if RefreshStatusSectionState then RefreshStatusSectionState() end
-                return true
-            end,
-        }
-        M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
-    end
+    StatusSection.RegisterVirtualIndicators(state, ctx, unit, selector)
     local identityRestrictionWarning = Schema.Build(ctx, selectedCard, {{ "text", "status.identity_warning", nil,
         { IDENTITY_RESTRICTION_WARNING, 16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR },
         scope = unit }})["status.identity_warning"]
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
     state.AttachStatusExactTarget = AttachStatusExactTarget
     StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
-    state.selector, state.previewLabel, state.midnight, state.enabled, state.identityRestrictionWarning =
-        selector, previewLabel, midnight, enabled, identityRestrictionWarning
+    state.previewLabel, state.midnight, state.identityRestrictionWarning = previewLabel, midnight, identityRestrictionWarning
 end
 function StatusSection.PrepareIconResolvers(state, unit)
+    -- Core icon providers, resolved once per build because the resolvers below run on every
+    -- preview refresh. The pet happiness art exists only on clients that support it, so that
+    -- provider keeps its type check.
+    local supports = MSUF.Require("MSUF_StatusIconPackSupports", FILE)
+    local resolver = MSUF.Require("MSUF_GetStatusIconTexture", FILE)
+    local petHappinessIcon = MSUF.Optional("MSUF_GetPetHappinessIcon")
     local function CurrentStatusSymbolValues()
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
@@ -610,57 +607,11 @@ function StatusSection.PrepareIconResolvers(state, unit)
         end
         return SYMBOL_MEDIA .. folder .. "\\" .. symbolKey .. suffix
     end
-    local function StatusPreviewEntries(spec)
-        local value = spec and spec.value
-        if value == "leader" then return { { "leader" } } end
-        if value == "assist" then return { { "assist" } } end
-        if value == "raidmarker" then return { { "raidMarker", 8 } } end
-        if value == "eliteicon" then
-            return {
-                { "elite", "ELITE" },
-                { "elite", "RAREELITE" },
-                { "elite", "RARE" },
-                { "elite", "BOSS" },
-            }
-        end
-        if value == "statusCombat" then return { { "combat", "combat", "combatStateIndicatorSymbol" } } end
-        if value == "statusResting" then return { { "resting", "resting", "restedStateIndicatorSymbol" } } end
-        if value == "statusIncomingRes" then return { { "incomingRes", "resurrect", "incomingResIndicatorSymbol" } } end
-        if value == "statusPvp" then return { { "pvp", "Alliance" }, { "pvp", "Horde" }, { "pvp", "FFA" } } end
-        -- Unhappy (75% damage), Content (100%) and Happy (125%).
-        if value == "statusPetHappiness" then
-            if IS_CLASSIC_FAMILY then
-                return {
-                    { "petHappiness", 1, nil, "Unhappy - 75% damage" },
-                    { "petHappiness", 2, nil, "Content - 100% damage" },
-                    { "petHappiness", 3, nil, "Happy - 125% damage" },
-                }
-            end
-            return { { "petHappiness", 1 }, { "petHappiness", 2 }, { "petHappiness", 3 } }
-        end
-        return nil
-    end
-    local function IsRoleStatusSpec(spec)
-        local value = spec and spec.value
-        return value == "leader" or value == "assist"
-    end
-    local function StatusIconStyleLabel(spec)
-        return "Role icon style"
-    end
-    local function SpecificIconLabel(spec)
-        return "Custom icon"
-    end
-    local function SetDropdownTitle(control, label)
-        if control and control._msuf2Title and control._msuf2Title.SetText then
-            control._msuf2Title:SetText(label)
-        end
-    end
     local function IconPackValuesForCurrentStatus()
         local values = StatusIconPackValues()
         local spec = CurrentStatusSpec(unit)
         local entries = StatusPreviewEntries(spec)
-        local supports = _G.MSUF_StatusIconPackSupports
-        if type(supports) ~= "function" or type(entries) ~= "table" then return values end
+        if type(entries) ~= "table" then return values end
         local out = {}
         local useMidnight = ReadGeneralBool("statusIconsUseMidnightStyle", false)
         for i = 1, #values do
@@ -703,16 +654,12 @@ function StatusSection.PrepareIconResolvers(state, unit)
                 or "nameplates-icon-elite-gold"
             return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1, atlas
         end
-        local resolver = _G.MSUF_GetStatusIconTexture
         local style = "BLIZZARD"
-        if type(resolver) == "function" then
-            local path, l, r, t, b = resolver(style, entry[1], entry[2], ReadGeneralBool("statusIconsUseMidnightStyle", false))
-            if type(path) == "string" and path ~= "" then return path, l, r, t, b end
-        end
+        local path, l, r, t, b = resolver(style, entry[1], entry[2], ReadGeneralBool("statusIconsUseMidnightStyle", false))
+        if type(path) == "string" and path ~= "" then return path, l, r, t, b end
         if entry[1] == "leader" then return "Interface\\GroupFrame\\UI-Group-LeaderIcon", 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Group-LeaderIcon" end
         if entry[1] == "assist" then return "Interface\\GroupFrame\\UI-Group-AssistantIcon", 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Group-GuideIcon" end
         if entry[1] == "raidMarker" then return "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 0.75, 1, 0.25, 0.5 end
-        if entry[1] == "elite" then return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1 end
         if entry[1] == "combat" then return "Interface\\CharacterFrame\\UI-StateIcon", 0.5, 1, 0, 0.5, "UI-HUD-UnitFrame-Player-CombatIcon" end
         if entry[1] == "resting" then return "Interface\\CharacterFrame\\UI-StateIcon", 0, 0.5, 0, 0.5 end
         if entry[1] == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
@@ -720,16 +667,13 @@ function StatusSection.PrepareIconResolvers(state, unit)
             or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
         if entry[1] == "petHappiness" then
             -- The runtime element owns the per-client art (texture cells or atlases).
-            local petHappinessIcon = _G.MSUF_GetPetHappinessIcon
             if type(petHappinessIcon) == "function" then return petHappinessIcon(tonumber(entry[2])) end
             return nil
         end
         return nil
     end
-    state.CurrentStatusSymbolValues, state.StatusPreviewEntries, state.IsRoleStatusSpec, state.StatusIconStyleLabel, state.SpecificIconLabel =
-        CurrentStatusSymbolValues, StatusPreviewEntries, IsRoleStatusSpec, StatusIconStyleLabel, SpecificIconLabel
-    state.SetDropdownTitle, state.IconPackValuesForCurrentStatus, state.IconAssetValuesForCurrentStatus, state.ResolvePreviewStatusIcon =
-        SetDropdownTitle, IconPackValuesForCurrentStatus, IconAssetValuesForCurrentStatus, ResolvePreviewStatusIcon
+    state.CurrentStatusSymbolValues, state.IconPackValuesForCurrentStatus = CurrentStatusSymbolValues, IconPackValuesForCurrentStatus
+    state.IconAssetValuesForCurrentStatus, state.ResolvePreviewStatusIcon = IconAssetValuesForCurrentStatus, ResolvePreviewStatusIcon
 end
 function StatusSection.BuildIconStyleControls(state, ctx, unit)
     local selectedCard, selectedControlW, BindStatusSpecDropdown = state.selectedCard, state.selectedControlW, state.BindStatusSpecDropdown
@@ -936,8 +880,7 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
 end
 function StatusSection.BuildPreviewCard(state, unit)
     local previewCard, previewControlW, BindStatusTestToggle = state.previewCard, state.previewControlW, state.BindStatusTestToggle
-    local StatusPreviewButton, StatusPreviewEntries = state.StatusPreviewButton, state.StatusPreviewEntries
-    local ResolvePreviewStatusIcon = state.ResolvePreviewStatusIcon
+    local StatusPreviewButton, ResolvePreviewStatusIcon = state.StatusPreviewButton, state.ResolvePreviewStatusIcon
     local test = BindStatusTestToggle(previewCard, "Test mode", 16, -120, previewControlW, "MSUF2_STATUS_TEST", "Status indicator test mode", {
         "test mode", "preview level", "test level", "status preview",
     })
@@ -1051,7 +994,7 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     local selectedControlW = state.selectedControlW
     local placeLeftX, placeLeftW, placeRightX, placeRightW = state.placeLeftX, state.placeLeftW, state.placeRightX, state.placeRightW
     local PlaceButton = state.PlaceButton
-    local selector, previewLabel, midnight = state.selector, state.previewLabel, state.midnight
+    local previewLabel, midnight = state.previewLabel, state.midnight
     local identityRestrictionWarning, symbol, iconPack, customIcon = state.identityRestrictionWarning, state.symbol, state.iconPack, state.customIcon
     local selectedTextShortcut = state.selectedTextShortcut
     local levelDifficultyColor = state.levelDifficultyColor
@@ -1061,8 +1004,7 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     local raidGroupStyle, size, anchor, layer, reset, test = state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset, state.test
     local petXPWidth = state.petXPWidth
     local current, all, iconPreviewLabel, advanced = state.current, state.all, state.iconPreviewLabel, state.advanced
-    local ReadStatusEnabled, SetDropdownTitle, StatusIconStyleLabel = state.ReadStatusEnabled, state.SetDropdownTitle, state.StatusIconStyleLabel
-    local SpecificIconLabel, IsRoleStatusSpec = state.SpecificIconLabel, state.IsRoleStatusSpec
+    local ReadStatusEnabled = state.ReadStatusEnabled
     local SetPreviewCurrentVisual, RefreshIconPreviewStrip = state.SetPreviewCurrentVisual, state.RefreshIconPreviewStrip
     local RefreshStatusSectionState = state.RefreshStatusSectionState
     local statusEnabledControls = { size, anchor, layer, advanced.layer, petXPWidth }
@@ -1106,8 +1048,8 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     RefreshStatusSectionState = RefreshStatusSectionState(function()
         local spec = CurrentStatusSpec(unit)
         local inlineName = spec and spec.inlineName == true
-        SetDropdownTitle(iconPack, StatusIconStyleLabel(spec))
-        SetDropdownTitle(customIcon, SpecificIconLabel(spec))
+        SetDropdownTitle(iconPack, "Role icon style")
+        SetDropdownTitle(customIcon, "Custom icon")
         if iconPreviewLabel and iconPreviewLabel.SetText then
             iconPreviewLabel:SetText(spec and spec.value == "eliteicon" and "Elite / Rare Elite / Rare / Boss previews"
                 or (spec and spec.textIndicator and "Text preview"
@@ -1167,6 +1109,7 @@ end
 function StatusSection.Build(ctx, builder, unit)
     local state = { ctx = ctx, unit = unit }
     StatusSection.OpenSection(state, ctx, builder, unit)
+    StatusSection.PrepareSearch(state, ctx, unit)
     StatusSection.PrepareBinders(state, ctx, unit)
     StatusSection.BuildIndicatorSelector(state, ctx, unit)
     StatusSection.PrepareIconResolvers(state, unit)

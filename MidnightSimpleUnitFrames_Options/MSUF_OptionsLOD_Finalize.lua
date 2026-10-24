@@ -2,12 +2,15 @@
 --- proves that every Menu2 XML manifest and script was visited in TOC order.
 
 local _, private = ...
-local main = _G.MSUF_NS
+local main = _G.MSUF
 if type(main) ~= "table" then return end
 main.OptionsLODReady = nil
 if type(private) == "table" and private ~= main then private.OptionsLODReady = nil end
 
-local menu = main.MSUF2 or _G.MSUF2
+local menu = main.MSUF2 or main.Optional("MSUF2")
+local function Fail(message)
+    main.OptionsLODLoadError = message
+end
 local requiredFunctions = {
     "Open",
     "Toggle",
@@ -24,33 +27,21 @@ local requiredFunctions = {
     "OpenExactSettingControl",
     "ShowLocaleReloadRequired",
 }
-if type(menu) ~= "table" then
-    main.OptionsLODLoadError = "MSUF2 namespace missing"
-    return
-end
+if type(menu) ~= "table" then return Fail("MSUF2 namespace missing") end
 for i = 1, #requiredFunctions do
     local name = requiredFunctions[i]
     local stillStubbed = type(main.OptionsLODMenuStubs) == "table"
         and main.OptionsLODMenuStubs[name] == menu[name]
-    if type(menu[name]) ~= "function" or stillStubbed then
-        main.OptionsLODLoadError = "MSUF2." .. name .. " missing"
-        return
-    end
+    if type(menu[name]) ~= "function" or stillStubbed then return Fail("MSUF2." .. name .. " missing") end
 end
 for _, name in ipairs({ "Theme", "Widgets", "ApplyService", "SearchBridge", "pages" }) do
-    if type(menu[name]) ~= "table" then
-        main.OptionsLODLoadError = "MSUF2." .. name .. " missing"
-        return
-    end
+    if type(menu[name]) ~= "table" then return Fail("MSUF2." .. name .. " missing") end
 end
 
 local globalStubs = main.OptionsLODGlobalStubs
 if type(globalStubs) == "table" then
     for name, stub in pairs(globalStubs) do
-        if rawget(_G, name) == stub then
-            main.OptionsLODLoadError = name .. " still stubbed"
-            return
-        end
+        if rawget(_G, name) == stub then return Fail(name .. " still stubbed") end
     end
 end
 
@@ -63,8 +54,7 @@ then
         local name = commandSpecs[i].name
         local entry = commands.Get(name)
         if type(entry) == "table" and entry._msufOptionsLODDeferred == true then
-            main.OptionsLODLoadError = "slash command " .. tostring(name) .. " still deferred"
-            return
+            return Fail("slash command " .. tostring(name) .. " still deferred")
         end
     end
 end

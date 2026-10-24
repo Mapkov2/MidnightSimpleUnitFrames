@@ -3,7 +3,8 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 -- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
+-- load, resolved through MSUF.Require on first use (see Core below).
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua"
 M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", {
     "MSUF_Tooltip_ShowEditPreview",
     "MSUF_SetGameMenuButtonEnabled",
@@ -13,6 +14,13 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", {
     "MSUF_DandersEditMode_SetEnabled",
     "MSUF_SetMinimapIconEnabled",
 })
+-- Core functions resolve through MSUF.Require on their first use and are read from
+-- this table afterwards, so a value path (switch callback, dropdown write) never calls Require.
+local Core = setmetatable({}, { __index = function(core, name)
+    local fn = MSUF.Require(name, FILE)
+    core[name] = fn
+    return fn
+end })
 -- The Blizzard Edit Mode adapter exists only where the client has the Edit
 -- Mode system (MSUF.Client.SupportsBlizzardEditMode, Game/Shared/Initialize.lua);
 -- elsewhere Shell/EditMode/MSUF_EditMode_Blizzard.lua exports nothing, so the
@@ -20,7 +28,7 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", {
 -- disabled without it, as the profile and reset paths gate it.
 local SUPPORTS_BLIZZARD_EDIT_MODE = MSUF.Client ~= nil and MSUF.Client.SupportsBlizzardEditMode == true
 if SUPPORTS_BLIZZARD_EDIT_MODE then
-    MSUF.Require("MSUF_BlizzardEditMode_SetEnabled", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
+    MSUF.Require("MSUF_BlizzardEditMode_SetEnabled", FILE)
 end
 
 -- Menu2 global Misc page.
@@ -33,7 +41,7 @@ local T = M.Theme
 local GP = M.GlobalPage or {}
 local max = math.max
 local min = math.min
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues = GP.G, GP.ReadG, GP.SetG, GP.ReadGBool, GP.SetGBool, GP.MenuFontValues
 local MenuFontKeyGet, MenuFontKeySet, ControlMeta = GP.MenuFontKeyGet, GP.MenuFontKeySet, GP.ControlMeta
 local SETTING_KEY_BY_PATH = {
@@ -105,8 +113,7 @@ end
 local function RefreshTooltipPreview()
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.Refresh) == "function" then tooltips.Refresh() end
-    local editActive = (_G.MSUF_UnitEditModeActive == true)
-    if editActive then _G.MSUF_Tooltip_ShowEditPreview() end
+    if MSUF_UnitEditModeActive == true then Core.MSUF_Tooltip_ShowEditPreview() end
 end
 local function RefreshAuraTooltipSettings(reason)
     local a3 = MSUF and MSUF.MSUF_Auras3
@@ -131,6 +138,29 @@ local function WriteTooltipBehavior(mode, modifier)
     SetG("unitTooltipMode", mode, "MSUF2_TOOLTIP_MODE", { preview = false, applyAll = false, notify = false })
     SetG("unitTooltipModifier", modifier, "MSUF2_TOOLTIP_MODIFIER", { preview = false, applyAll = false, notify = false })
     RefreshTooltipPreview()
+end
+-- A muted, word-wrapped help line under a control.
+local function HelpText(ctx, parent, id, text, x, y, width)
+    local help = Schema.Build(ctx, parent, {
+        { "text", id, nil, { text, x, y, width, T.colors.muted } },
+    })[id]
+    if help.SetWordWrap then help:SetWordWrap(true) end
+end
+local function ShowReloadPrompt(key, text)
+    M.ShowPrompt(key, {
+        text = text,
+        accept = RELOADUI or M.Tr("Reload"),
+        cancel = CANCEL or M.Tr("Not now"),
+        onAccept = function() ReloadUI() end,
+    })
+end
+-- An integration switch (on by default, no preview refresh) that hands its value to the
+-- core function setter and carries its hover text. A nil setter leaves the switch disabled.
+local function BindIntegrationToggle(s, parent, label, key, reason, y, setter, tipTitle, tipText)
+    local toggle = s.BindMiscToggle(parent, label, key, true, reason, 14, y, 430, PREVIEW_FALSE,
+        function(value) if setter then Core[setter](value) end end)
+    if not setter then W.SetControlEnabled(toggle, false) end
+    M.AddTooltip(toggle, tipTitle, tipText, { hook = true })
 end
 -- The Miscellaneous page builds its sections in page order through these
 -- functions; s carries the page context, the builder, the binders and the
@@ -202,11 +232,8 @@ function MiscSection.Language(s)
             SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true })
         end,
         "language.selection")
-    local languageHelp = Schema.Build(ctx, language, {
-        { "text", "menu2.opt_misc.language.languageHelp", nil,
-            { "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted } },
-    })["menu2.opt_misc.language.languageHelp"]
-    if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
+    HelpText(ctx, language, "menu2.opt_misc.language.languageHelp",
+        "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70)
     -- Number abbreviation belongs here, not on the Fonts page: it is a locale
     -- formatting rule and it is global. The Fonts page is scope-aware, so a
     -- global control there would sit greyed out in 19 of 20 scopes and read as
@@ -251,12 +278,9 @@ function MiscSection.Language(s)
             W.MoveWidget(abbrevSegment, language, 30, -134, abbrevSegW, "LEFT")
         end },
     }, ROW_OPTIONS)["setting.numberAbbrevStyle"]
-    local abbrevHelp = Schema.Build(ctx, language, {
-        { "text", "menu2.opt_misc.language.abbrevHelp", nil,
-            { "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.",
-            30, -186, languageW - 70, T.colors.muted } },
-    })["menu2.opt_misc.language.abbrevHelp"]
-    if abbrevHelp.SetWordWrap then abbrevHelp:SetWordWrap(true) end
+    HelpText(ctx, language, "menu2.opt_misc.language.abbrevHelp",
+        "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.",
+        30, -186, languageW - 70)
     abbrevSample = Schema.Custom(W.Text(language, "", 30, -232, languageW - 70, T.colors.text),
         { id = "menu2.opt_misc.language.abbrevSample", kind = "preview", scope = ctx.key, applyDomain = "preview" })
     RefreshAbbrevSample()
@@ -277,21 +301,16 @@ function MiscSection.MenuBehavior(s)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil,
         nil, nil, MENU_WRITE_OPTS)
-    local menuSnapHelp = Schema.Build(ctx, menuBehavior, {
-        { "text", "menu2.opt_misc.menuBehavior.menuSnapHelp", nil,
-            { "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.",
-            30, -72, menuBehaviorW - 70, T.colors.muted } },
-    })["menu2.opt_misc.menuBehavior.menuSnapHelp"]
-    if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
+    HelpText(ctx, menuBehavior, "menu2.opt_misc.menuBehavior.menuSnapHelp",
+        "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.",
+        30, -72, menuBehaviorW - 70)
     BindMiscToggle(menuBehavior, "Hide Advanced menu section", "hideAdvancedMenu", true, "MSUF2_ADVANCED_MENU_VISIBILITY", 14, -118, 280, MENU_WRITE_OPTS,
         function() M.RefreshAdvancedNavVisibility() end)
     -- Defaults_Shell turns navigation icons on; an unset key reads the same.
     BindMiscToggle(menuBehavior, "Show navigation icons", "showNavigationIcons", true, "MSUF2_NAV_ICONS", 14, -148, 280, MENU_WRITE_OPTS,
         function() M.RefreshNavIconVisibility() end)
     BindMiscToggle(menuBehavior, "Show MSUF button in game menu", "showGameMenuButton", true, "MSUF2_GAME_MENU_BUTTON", 14, -178, 320, MENU_WRITE_OPTS,
-        function(v)
-            _G.MSUF_SetGameMenuButtonEnabled(v)
-        end)
+        function(v) Core.MSUF_SetGameMenuButtonEnabled(v) end)
     BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -208, 280, MENU_WRITE_OPTS)
     local menuFontRightX = max(350, floor(menuBehaviorW * 0.52))
     local menuFontW = max(250, min(340, menuBehaviorW - menuFontRightX - 30))
@@ -355,12 +374,8 @@ function MiscSection.MenuAccent(s)
             -- Re-showing an already-visible popup replays its open sound; guard
             -- so live color-picker painting cannot spam it.
             if not M.IsPromptShown("MSUF2_ACCENT_RELOAD_REQUIRED") then
-                M.ShowPrompt("MSUF2_ACCENT_RELOAD_REQUIRED", {
-                    text = M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"),
-                    accept = RELOADUI or M.Tr("Reload"),
-                    cancel = CANCEL or M.Tr("Not now"),
-                    onAccept = function() ReloadUI() end,
-                })
+                ShowReloadPrompt("MSUF2_ACCENT_RELOAD_REQUIRED",
+                    M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"))
             end
         else
             M.HidePrompt("MSUF2_ACCENT_RELOAD_REQUIRED")
@@ -424,13 +439,10 @@ function MiscSection.MenuAccent(s)
             or "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change.",
         { hook = true })
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
-    local accentHelp = Schema.Build(ctx, menuBehavior, {
-        { "text", "menu2.opt_misc.menuBehavior.accentHelp", nil, { hasAppearancePresets
+    HelpText(ctx, menuBehavior, "menu2.opt_misc.menuBehavior.accentHelp", hasAppearancePresets
         and "Background opacity changes the MSUF Forever background only; text stays fully opaque."
-        or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, hasAppearancePresets and -450
-            or -330, menuBehaviorW - 70, T.colors.muted } },
-    })["menu2.opt_misc.menuBehavior.accentHelp"]
-    if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
+        or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.",
+        30, hasAppearancePresets and -450 or -330, menuBehaviorW - 70)
     if hasAppearancePresets then
         BindMiscDropdown(menuBehavior, "Menu appearance preset",
             VT("classicGlass", "MSUF Forever", "midnight", "Midnight Blue",
@@ -446,7 +458,7 @@ function MiscSection.MenuAccent(s)
                     SetG("menuAppearancePreset", value, "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
                     SetG("menuAccent", "midnight", "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
                     SetG("menuAccentTintSurfaces", false, "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
-                    local skin = _G.MapkoSkin
+                    local skin = MapkoSkin
                     if skin and skin.addonName == "MSUF_Suite_Skin"
                         and skin.Theme and skin.Theme.ApplyLook then
                         local look = value == "classicGlass" and "foreverGlass" or value
@@ -459,12 +471,7 @@ function MiscSection.MenuAccent(s)
                     return
                 end
                 RefreshAccentSwatchEnabled()
-                M.ShowPrompt("MSUF2_APPEARANCE_RELOAD_REQUIRED", {
-                    text = M.Tr("Reload the UI to apply the menu appearance preset?"),
-                    accept = RELOADUI or M.Tr("Reload"),
-                    cancel = CANCEL or M.Tr("Not now"),
-                    onAccept = function() ReloadUI() end,
-                })
+                ShowReloadPrompt("MSUF2_APPEARANCE_RELOAD_REQUIRED", M.Tr("Reload the UI to apply the menu appearance preset?"))
             end,
             "setting.menuAppearancePreset")
         local opacity = Schema.Build(ctx, menuBehavior, {
@@ -496,89 +503,46 @@ function MiscSection.Integrations(s)
     local startup = Schema.Section(b:CollapsibleSection("misc_startup", "Startup", 124, true), ctx.key)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
     BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360, nil,
-        function()
-            _G.MSUF_ApplyModules()
-        end)
+        function() Core.MSUF_ApplyModules() end)
     local nicknameIntegration = Schema.Section(b:CollapsibleSection("misc_nickname_integration", "Nickname Integration", 124, true), ctx.key)
-    local nsrtNicknames = BindMiscToggle(nicknameIntegration, "Use NSRT nicknames on MSUF frames",
-        "nsrtNicknameIntegration", true, "MSUF2_NSRT_NICKNAMES", 14, -42, 430, PREVIEW_FALSE,
-        function()
-            _G.MSUF_NSRTNicknames_ApplySetting()
-        end)
-    M.AddTooltip(nsrtNicknames, "NSRT nickname integration",
-        "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified.",
-        { hook = true })
+    BindIntegrationToggle(s, nicknameIntegration, "Use NSRT nicknames on MSUF frames", "nsrtNicknameIntegration",
+        "MSUF2_NSRT_NICKNAMES", -42, "MSUF_NSRTNicknames_ApplySetting", "NSRT nickname integration",
+        "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified.")
     -- The EllesmereUI bridge loads on the Mainline TOC only (Midnight and WoW
     -- Forever); the section exists only where it does and EllesmereUI is loaded.
     local ellesmereAvailable = MSUF.Optional("MSUF_EllesmereEditMode_IsAvailable")
     if ellesmereAvailable and ellesmereAvailable() then
         local ellesmere = Schema.Section(b:CollapsibleSection("misc_ellesmere_ui", "EllesmereUI", 138, true), ctx.key)
-        local integration = BindMiscToggle(ellesmere, "Use EllesmereUI Unlock Mode for MSUF",
-            "ellesmereEditModeIntegration", true, "MSUF2_ELLESMERE_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
-            function(value)
-                MSUF.Require("MSUF_EllesmereEditMode_SetEnabled", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")(value)
-            end)
-        M.AddTooltip(integration, "EllesmereUI Unlock Mode",
-            "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth.",
-            { hook = true })
-        local ellesmereHelp = Schema.Build(ctx, ellesmere, {
-            { "text", "menu2.opt_misc.ellesmere.ellesmereHelp", nil,
-                { "This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode.",
-                30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70, T.colors.muted } },
-        })["menu2.opt_misc.ellesmere.ellesmereHelp"]
-        if ellesmereHelp.SetWordWrap then ellesmereHelp:SetWordWrap(true) end
+        BindIntegrationToggle(s, ellesmere, "Use EllesmereUI Unlock Mode for MSUF", "ellesmereEditModeIntegration",
+            "MSUF2_ELLESMERE_EDIT_MODE", -42, "MSUF_EllesmereEditMode_SetEnabled", "EllesmereUI Unlock Mode",
+            "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth.")
+        HelpText(ctx, ellesmere, "menu2.opt_misc.ellesmere.ellesmereHelp",
+            "This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode.",
+            30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70)
     end
 end
 function MiscSection.ExternalEditMode(s)
-    local ctx, b, BindMiscToggle = s.ctx, s.b, s.BindMiscToggle
+    local ctx, b = s.ctx, s.b
     local external = Schema.Section(b:CollapsibleSection("misc_external_edit_mode", "External Edit Mode", 298, true), ctx.key)
-    local grid2 = BindMiscToggle(external, "Show Grid2 in MSUF Edit Mode",
-        "grid2EditModeIntegration", true, "MSUF2_GRID2_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
-        function(value)
-            _G.MSUF_Grid2EditMode_SetEnabled(value)
-        end)
-    M.AddTooltip(grid2, "Grid2 Edit Mode integration",
-        "On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions.",
-        { hook = true })
-    local details = BindMiscToggle(external, "Show Details! in MSUF Edit Mode",
-        "detailsEditModeIntegration", true, "MSUF2_DETAILS_EDIT_MODE", 14, -78, 430, PREVIEW_FALSE,
-        function(value)
-            _G.MSUF_DetailsEditMode_SetEnabled(value)
-        end)
-    M.AddTooltip(details, "Details! Edit Mode integration",
-        "On (default): MSUF Edit Mode can move every active Details! window. Windows snapped together by Details! move as one native group.",
-        { hook = true })
-    local dominos = BindMiscToggle(external, "Show Dominos in MSUF Edit Mode",
-        "dominosEditModeIntegration", true, "MSUF2_DOMINOS_EDIT_MODE", 14, -114, 430, PREVIEW_FALSE,
-        function(value)
-            _G.MSUF_DominosEditMode_SetEnabled(value)
-        end)
-    M.AddTooltip(dominos, "Dominos Edit Mode integration",
-        "On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions.",
-        { hook = true })
-    local danders = BindMiscToggle(external, "Show DandersFrames in MSUF Edit Mode",
-        "dandersEditModeIntegration", true, "MSUF2_DANDERS_EDIT_MODE", 14, -150, 430, PREVIEW_FALSE,
-        function(value)
-            _G.MSUF_DandersEditMode_SetEnabled(value)
-        end)
-    M.AddTooltip(danders, "DandersFrames Edit Mode integration",
-        "On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions.",
-        { hook = true })
-    local blizzardEM = BindMiscToggle(external, "Show Blizzard frames in MSUF Edit Mode",
-        "blizzardEditModeIntegration", true, "MSUF2_BLIZZARD_EDIT_MODE", 14, -186, 430, PREVIEW_FALSE,
-        function(value)
-            if SUPPORTS_BLIZZARD_EDIT_MODE then _G.MSUF_BlizzardEditMode_SetEnabled(value) end
-        end)
-    if not SUPPORTS_BLIZZARD_EDIT_MODE then W.SetControlEnabled(blizzardEM, false) end
-    M.AddTooltip(blizzardEM, "Blizzard Edit Mode integration",
-        "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.",
-        { hook = true })
-    local externalHelp = Schema.Build(ctx, external, {
-        { "text", "menu2.opt_misc.external.externalHelp", nil,
-            { "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified.",
-            30, -232, (external._msuf2Width or ctx.width or 720) - 70, T.colors.muted } },
-    })["menu2.opt_misc.external.externalHelp"]
-    if externalHelp.SetWordWrap then externalHelp:SetWordWrap(true) end
+    BindIntegrationToggle(s, external, "Show Grid2 in MSUF Edit Mode", "grid2EditModeIntegration",
+        "MSUF2_GRID2_EDIT_MODE", -42, "MSUF_Grid2EditMode_SetEnabled", "Grid2 Edit Mode integration",
+        "On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions.")
+    BindIntegrationToggle(s, external, "Show Details! in MSUF Edit Mode", "detailsEditModeIntegration",
+        "MSUF2_DETAILS_EDIT_MODE", -78, "MSUF_DetailsEditMode_SetEnabled", "Details! Edit Mode integration",
+        "On (default): MSUF Edit Mode can move every active Details! window. Windows snapped together by Details! move as one native group.")
+    BindIntegrationToggle(s, external, "Show Dominos in MSUF Edit Mode", "dominosEditModeIntegration",
+        "MSUF2_DOMINOS_EDIT_MODE", -114, "MSUF_DominosEditMode_SetEnabled", "Dominos Edit Mode integration",
+        "On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions.")
+    BindIntegrationToggle(s, external, "Show DandersFrames in MSUF Edit Mode", "dandersEditModeIntegration",
+        "MSUF2_DANDERS_EDIT_MODE", -150, "MSUF_DandersEditMode_SetEnabled", "DandersFrames Edit Mode integration",
+        "On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions.")
+    BindIntegrationToggle(s, external, "Show Blizzard frames in MSUF Edit Mode", "blizzardEditModeIntegration",
+        "MSUF2_BLIZZARD_EDIT_MODE", -186, SUPPORTS_BLIZZARD_EDIT_MODE and "MSUF_BlizzardEditMode_SetEnabled" or nil,
+        "Blizzard Edit Mode integration",
+        "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.")
+    HelpText(ctx, external, "menu2.opt_misc.external.externalHelp",
+        "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified.",
+        30, -232, (external._msuf2Width or ctx.width or 720) - 70)
 end
 function MiscSection.FrameHighlights(s)
     local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
@@ -690,11 +654,9 @@ function MiscSection.Tooltips(s)
         function(v) WriteTooltipBehavior(ReadTooltipMode(), v) end,
         "tooltips.modifier")
     M.TrackRefresh(ctx, RefreshTooltipControls)
-    local tooltipHelp = Schema.Build(ctx, tooltips, {
-        { "text", "menu2.opt_misc.tooltips.tooltipHelp", nil,
-            { "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. Auras only reuse the selected Blizzard/MSUF look and cursor placement.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted } },
-    })["menu2.opt_misc.tooltips.tooltipHelp"]
-    if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end
+    HelpText(ctx, tooltips, "menu2.opt_misc.tooltips.tooltipHelp",
+        "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. Auras only reuse the selected Blizzard/MSUF look and cursor placement.",
+        tooltipLeftX, -174, tooltipW - 68)
     -- Both aura tooltip switches drive client options through
     -- Runtime/MSUF_TooltipSpellIDs.lua, and only the Mainline TOC loads that file.
     -- Classic clients would get switches that write settings and change nothing.
@@ -702,12 +664,12 @@ function MiscSection.Tooltips(s)
         local tooltipSpellIDs = BindMiscToggle(tooltips, "Show spell IDs in aura tooltips", "tooltipShowAuraSpellIDs", false,
             "MSUF2_TOOLTIP_SPELL_IDS", 14, -226, 360, PREVIEW_FALSE,
             function(v)
-                MSUF.Require("MSUF_ApplyTooltipSpellIDs", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")(v and true or false)
+                Core.MSUF_ApplyTooltipSpellIDs(v and true or false)
             end)
         local tooltipCasterNames = BindMiscToggle(tooltips, "Show caster names in aura tooltips", "tooltipShowAuraCasterNames", false,
             "MSUF2_TOOLTIP_CASTER_NAMES", 14, -252, 360, PREVIEW_FALSE,
             function(v)
-                MSUF.Require("MSUF_ApplyTooltipCasterNames", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")(v and true or false)
+                Core.MSUF_ApplyTooltipCasterNames(v and true or false)
             end)
         M.AddTooltip(tooltipCasterNames, "Aura tooltip caster names",
             "On: aura tooltips name who applied the aura, coloured by reaction or class, through the game's own 12.1.5 option, and MSUF re-enables it after every login. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
@@ -724,13 +686,11 @@ function MiscSection.BlizzardFrames(s)
     --- Blizzard-adjacent chrome toggles.
     local blizzard = Schema.Section(b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", IS_MAINLINE and 170 or 138, false), ctx.key)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
-        function(v)
-            _G.MSUF_SetMinimapIconEnabled(v)
-        end)
+        function(v) Core.MSUF_SetMinimapIconEnabled(v) end)
     BindMiscToggle(blizzard, "Play sound on Target/Target Lost", "playTargetSelectLostSounds", false, "MSUF2_TARGET_SOUNDS", nil, nil, nil, nil,
         function(v)
-            _G.MSUF_TargetSoundDriver_ResetState()
-            if v then _G.MSUF_TargetSoundDriver_Ensure() end
+            Core.MSUF_TargetSoundDriver_ResetState()
+            if v then Core.MSUF_TargetSoundDriver_Ensure() end
         end)
     -- Resource pings need the ping system (Blizzard_PingUI and the PingableType
     -- mixins), which ships on Midnight and WoW Forever only. Classic Era, TBC and
@@ -739,9 +699,7 @@ function MiscSection.BlizzardFrames(s)
     if not IS_MAINLINE then return end
     local resourcePing = BindMiscToggle(blizzard, "Enable native Player resource pings (12.1)",
         "playerResourcePingEnabled", true, "MSUF2_PLAYER_RESOURCE_PING", nil, nil, nil, PREVIEW_FALSE,
-        function()
-            _G.MSUF_RefreshPlayerResourcePing()
-        end)
+        function() Core.MSUF_RefreshPlayerResourcePing() end)
     M.AddTooltip(resourcePing, "Native Player resource pings",
         "Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel.",
         { hook = true })

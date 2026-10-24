@@ -27,38 +27,11 @@ M.RuntimeControlCatalog = Catalog
 
 Catalog.SCHEMA_VERSION = 2
 
-local CLASSIFICATION = {
-    setting = true,
-    action = true,
-    navigation = true,
-    ephemeral = true,
-    unknown = true,
-}
+local CLASSIFICATION = M.KeySetFromWords "setting action navigation ephemeral unknown"
 
-local STATIC_KINDS = {
-    faq = true,
-    section = true,
-    text = true,
-    title = true,
-    description = true,
-    spacer = true,
-}
+local STATIC_KINDS = M.KeySetFromWords "faq section text title description spacer"
 
-local VALID_ID_SOURCES = {
-    explicit = true,
-    fallback = true,
-    fallback_invalid_explicit = true,
-    collision = true,
-    explicit_collision = true,
-}
-
-local STABLE_IDENTITY_BASIS = {
-    identity_key = true,
-    control_path = true,
-    setting_key = true,
-    action_key = true,
-    navigation_key = true,
-}
+local STABLE_IDENTITY_BASIS = M.KeySetFromWords "identity_key control_path setting_key action_key navigation_key"
 
 local STATE = Catalog._state
 if type(STATE) ~= "table" then
@@ -120,13 +93,6 @@ local function CleanText(value)
         cleanTextCacheCount = cleanTextCacheCount + 1
     end
     return text
-end
-
-local function CopyStringList(value)
-    if type(value) == "string" then return { value } end
-    local out = {}
-    for i = 1, #(type(value) == "table" and value or {}) do out[i] = value[i] end
-    return out
 end
 
 -- Lua 5.1 pattern syntax without calling string.match, which raises on a
@@ -258,11 +224,6 @@ local function IsValidExplicitId(value)
     explicitIdCache[value] = valid
     explicitIdCacheCount = explicitIdCacheCount + 1
     return valid
-end
-
-local function IsValidRuntimeId(value)
-    if type(value) ~= "string" or #value < 3 or #value > 180 then return false end
-    return value:match("^[%w_%.:/%-%~]+$") ~= nil
 end
 
 --- Optional widget accessor: templates vary in which of GetName/GetObjectType/
@@ -559,6 +520,12 @@ function M.ShowTabOnExactOpen(widget, showTab)
     return widget
 end
 
+-- A declared source text replaces the record's field; otherwise the earlier
+-- cleaned value stays (or the empty string on a first registration).
+local function DeclaredText(current, declared)
+    return declared and CleanText(declared) or current or ""
+end
+
 function Catalog.Register(widget, meta, registrationSource)
     if not widget or type(meta) ~= "table" then return nil, "widget and metadata are required" end
     if widget._msuf2ControlPartOf ~= nil then return nil, "component controls are owned by their logical parent" end
@@ -654,12 +621,9 @@ function Catalog.Register(widget, meta, registrationSource)
     if command then record.command = command end
     -- Record fields always hold CleanText output from an earlier pass, so an
     -- unchanged field skips the re-clean; only newly declared sources pay it.
-    local declaredValue = meta.identityKey
-    record.identityKey = declaredValue and CleanText(declaredValue) or record.identityKey or ""
-    declaredValue = meta.controlPath
-    record.controlPath = declaredValue and CleanText(declaredValue) or record.controlPath or ""
-    declaredValue = meta.settingKey or (record.command and record.command.settingKey)
-    record.settingKey = declaredValue and CleanText(declaredValue) or record.settingKey or ""
+    record.identityKey = DeclaredText(record.identityKey, meta.identityKey)
+    record.controlPath = DeclaredText(record.controlPath, meta.controlPath)
+    record.settingKey = DeclaredText(record.settingKey, meta.settingKey or (record.command and record.command.settingKey))
     local declaredSearchSettingKeys = meta.searchSettingKeys or (command and command.searchSettingKeys)
     local declaredSearchSettingKeyPatterns = meta.searchSettingKeyPatterns or (command and command.searchSettingKeyPatterns)
     if declaredSearchSettingKeys ~= nil then
@@ -672,12 +636,10 @@ function Catalog.Register(widget, meta, registrationSource)
     else
         record.searchSettingKeyPatterns = record.searchSettingKeyPatterns or {}
     end
-    declaredValue = meta.actionKey or (record.command and record.command.actionKey)
-    record.actionKey = declaredValue and CleanText(declaredValue) or record.actionKey or ""
-    declaredValue = meta.navigationKey or (record.command and record.command.navigationKey)
-    record.navigationKey = declaredValue and CleanText(declaredValue) or record.navigationKey or ""
-    declaredValue = meta.help or meta.description
-    record.help = declaredValue and CleanText(declaredValue) or record.help or ""
+    record.actionKey = DeclaredText(record.actionKey, meta.actionKey or (record.command and record.command.actionKey))
+    record.navigationKey = DeclaredText(record.navigationKey,
+        meta.navigationKey or (record.command and record.command.navigationKey))
+    record.help = DeclaredText(record.help, meta.help or meta.description)
     record.virtual = meta.virtual == true
 
     local declaredClassification = meta.classification or meta.controlType
@@ -992,7 +954,7 @@ function M.RegisterMenuChromeControl(widget, path, label, classification, opts)
         identityKey = "menu-chrome." .. token,
         controlPath = "menu-chrome/" .. token,
         pageKey = "menu_chrome",
-        kind = opts.kind or (classification == "navigation" and "button" or "button"),
+        kind = opts.kind or "button",
         label = label or path,
         classification = classification or "action",
         settingKey = opts.settingKey,

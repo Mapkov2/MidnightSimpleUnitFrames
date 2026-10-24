@@ -3,11 +3,12 @@
 --- refresh to Auras3/Menu2 helpers. It should not run aura scans itself.
 
 local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
+local CALLER = "Shell/EditMode/MSUF_EditMode_AuraPopup.lua"
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local max, min = math.max, math.min
-local Style = _G.MSUF_EM2_Menu2Style or {}
+local Style = MSUF.Optional("MSUF_EM2_Menu2Style") or {}
 local Quick = EM2.QuickPopup or Style.QuickPopup
 if not Quick then return end
 
@@ -90,7 +91,7 @@ end
 local function LaneLabel(unit, kind, spec)
     if unit == "player" and kind == "custom4" then return "Defensive Buffs" end
     if spec and spec.customIndex and spec.customIndex < 4 then
-        local db = _G.MSUF_DB
+        local db = MSUF_DB
         local auras = db and db.auras3
         local scope = AuraScope(unit)
         local root = auras and auras.customContainers
@@ -102,13 +103,19 @@ local function LaneLabel(unit, kind, spec)
 end
 
 local function ActiveGroup()
-    local kind = _G.MSUF_EM2_ActiveAuraGroup
+    local kind = MSUF.PublicGlobals.MSUF_EM2_ActiveAuraGroup
     if not GROUP_SPECS[kind] then kind = "buff" end
     return kind, GROUP_SPECS[kind]
 end
 
+--- Undo snapshot before an aura edit; resolved per call because the
+--- external movement bridge hooks the global.
+local function UndoBeforeAuraChange(unit)
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("aura", unit)
+end
+
 local function AurasDB(create)
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then return nil end
     if create then db.auras3 = db.auras3 or {} end
     return db.auras3
@@ -145,7 +152,7 @@ local function AffectedUnits(unit, shared)
         return { "boss1", "boss2", "boss3", "boss4", "boss5" }
     elseif IsArena(unit) and (not shared or shared.arenaEditTogether ~= false) then
         local units = {}
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do units[i] = "arena" .. i end
+        for i = 1, tonumber(MSUF_MAX_ARENA_FRAMES) or 3 do units[i] = "arena" .. i end
         return units
     end
     return { unit }
@@ -279,7 +286,7 @@ local function ApplyBossTogether()
     if Quick.BlockConfigCombatLocked() or not (pf and IsBoss(pf.unit)) then return end
     local sh = Shared(true)
     if not sh then return end
-    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+    UndoBeforeAuraChange(pf.unit)
     sh.bossEditTogether = pf.bossTogetherBtn and pf.bossTogetherBtn._checked == true or false
     if pf and pf:IsShown() then Sync() end
 end
@@ -288,7 +295,7 @@ local function ApplyArenaTogether()
     if Quick.BlockConfigCombatLocked() or not (pf and IsArena(pf.unit)) then return end
     local sh = Shared(true)
     if not sh then return end
-    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+    UndoBeforeAuraChange(pf.unit)
     sh.arenaEditTogether = pf.arenaTogetherBtn and pf.arenaTogetherBtn._checked == true or false
     if pf and pf:IsShown() then Sync() end
 end
@@ -312,7 +319,7 @@ local function ApplyCustom(unit, activeGroup, spec, shared)
     end
     if not geometryChanged and not positionChanged then return end
 
-    _G.MSUF_EM_UndoBeforeChange("aura", unit)
+    UndoBeforeAuraChange(unit)
 
     if geometryChanged then
         for i = 1, #units do
@@ -352,7 +359,7 @@ local function Apply()
     local sh = Shared(true)
     if not (a2 and sh) then return end
 
-    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+    UndoBeforeAuraChange(pf.unit)
 
     local units = AffectedUnits(pf.unit, sh)
     local sourceLayout = RuntimeLayout(pf.unit)
@@ -453,7 +460,7 @@ local function ResetPosition()
         local currentX = ReadSpecValue(pf.unit, activeSpec, "x", shared)
         local currentY = ReadSpecValue(pf.unit, activeSpec, "y", shared)
         if currentX == activeSpec.defaultX and currentY == activeSpec.defaultY then return end
-        _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+        UndoBeforeAuraChange(pf.unit)
         local units = AffectedUnits(pf.unit, shared)
         for i = 1, #units do
             local placed = CustomPlaced(units[i], activeSpec, true)
@@ -468,7 +475,7 @@ local function ResetPosition()
     end
     local a2 = AurasDB(true)
     if not a2 then return end
-    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+    UndoBeforeAuraChange(pf.unit)
     local sh = Shared(true)
     local units = AffectedUnits(pf.unit, sh)
     local _, spec = ActiveGroup()
@@ -542,7 +549,7 @@ end
 
 local function SetActiveGroup(kind)
     if not GROUP_SPECS[kind] then return end
-    local current = _G.MSUF_EM2_ActiveAuraGroup
+    local current = MSUF.PublicGlobals.MSUF_EM2_ActiveAuraGroup
     if current ~= kind and pf and pf.unit and pf.xBox then
         Apply()
     end
@@ -643,7 +650,7 @@ local function Build()
     }, { height = 132, boxWidth = 64, peelSkin = true })
     pf.bossTogetherBtn = Quick.ToggleAt(pf, "Edit Boss 1-5 together", 160, -242, 240, 28, ApplyBossTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
-    local arenaTogetherLabel = (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) > 3 and "Edit Arena 1-5 together" or "Edit Arena 1-3 together"
+    local arenaTogetherLabel = (tonumber(MSUF_MAX_ARENA_FRAMES) or 3) > 3 and "Edit Arena 1-5 together" or "Edit Arena 1-3 together"
     pf.arenaTogetherBtn = Quick.ToggleAt(pf, arenaTogetherLabel, 160, -242, 240, 28, ApplyArenaTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
     pf.unitAurasBtn = WirePopupFocus(Quick.ButtonAt(pf, "Open detailed settings", 20, -244, 334, 34, OpenUnitAuras, {

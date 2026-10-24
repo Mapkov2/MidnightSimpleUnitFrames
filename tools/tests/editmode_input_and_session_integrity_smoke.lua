@@ -13,7 +13,11 @@ local function Load(env, ns, path)
     return chunk("MidnightSimpleUnitFrames", ns)
 end
 local function Namespace(env)
-    return { ExportPublic = function(name, value) env[name] = value return value end }
+    -- The shipped Kernel namespace API inside the sandbox: exports reach the registry and, for the kept
+    -- names, the sandbox's globals, as in the client.
+    local ns = {}
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, ns, env)
+    return ns
 end
 local function Environment()
     local env = setmetatable({}, { __index = _G })
@@ -35,7 +39,7 @@ local function Boot(flavor, options)
     for _, name in ipairs({ "MSUF_ApplyMsufScale", "MSUF_TargetSoundDriver_ApplySetting", "MSUF_NSRTNicknames_ApplySetting",
         "MSUF_UFCore_NotifyConfigChanged", "MSUF_ApplyModules", "MSUF_GF_RebuildAll", "MSUF_ClassPower_Apply",
         "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_Castbars_OnSettingsChanged", "MSUF_ApplyAllCastbarsAndSync",
-        "MSUF_UpdateAllFonts_Immediate", "MSUF_ForceReanchorAllUnitFrames_Once" }) do env[name] = function() end end
+        "MSUF_UpdateAllFonts_Immediate", "MSUF_ForceReanchorAllUnitFrames_Once" }) do world.core.ExportPublic(name, function() end) end
     for _, name in ipairs({ "EnableKeyboard", "SetPropagateKeyboardInput", "SetAutoFocus", "SetNumeric", "SetMaxLetters",
         "SetCursorPosition", "HighlightText", "SetTextInsets", "SetNormalTexture", "SetHighlightTexture",
         "SetPushedTexture", "SetDisabledTexture" }) do
@@ -93,7 +97,7 @@ function cases.coordinates()
     popup.wBox:SetText(tostring(db.player.width + 1))
     popup.wBox.scripts.OnEditFocusLost(popup.wBox)
     Check(db.player.offsetX == 3000, "unit width edit reset a legal 3000 offset")
-    env.MSUF_EM2_ShowGFPopup("priority")
+    world.core.PublicGlobals.MSUF_EM2_ShowGFPopup("priority")
     local group = assert(Named(world, "MSUF_EM2_GFPopup_priority"))
     local conf = assert(world.core.GF.GetPriorityConf())
     conf.offsetX, conf.offsetY = 3000, 0
@@ -305,7 +309,7 @@ function cases.escape()
     box.scripts.OnEditFocusLost(box)
     Check(committed == 1, "unchanged blur committed again")
     -- Group popups fill their boxes through Sync; Escape must restore that text too.
-    env.MSUF_EM2_ShowGFPopup("priority")
+    world.core.PublicGlobals.MSUF_EM2_ShowGFPopup("priority")
     local group = assert(Named(world, "MSUF_EM2_GFPopup_priority"))
     local conf = assert(world.core.GF.GetPriorityConf())
     conf.offsetX, conf.offsetY = 100, 0

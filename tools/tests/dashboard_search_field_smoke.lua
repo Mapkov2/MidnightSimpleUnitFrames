@@ -148,8 +148,20 @@ end
 _G.MSUFSuite = nil
 -- The core's Suite link (Kernel/MSUF_SuiteLink.lua), which the Suite card asks.
 local dashboardNamespace = { MSUF2 = M }
+-- The real Kernel namespace API (Bootstrap, Require), as the client loads it before any menu file.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, dashboardNamespace)
+-- The Dashboard requires the core's pixel layout provider, which this fake-widget fixture does not
+-- load: the stand-in the shared fixtures publish (they lay out no pixels), in the namespace registry only.
+local function PixelLayoutStandIn(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
+dashboardNamespace.ExportPublic("MSUF_PixelLayoutRegion", PixelLayoutStandIn)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", dashboardNamespace)
-assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", dashboardNamespace)
+-- The Options TOC loads the bundled changelog data first; the Dashboard requires it.
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua", dashboardNamespace)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua", dashboardNamespace)
 local buildHome = Check(M.pages.home and M.pages.home.build, "the Dashboard must register the home page")
 
 local lastCtx
@@ -267,7 +279,10 @@ Check(#editBoxes == 1 and (editBoxes[1]._width or 0) >= 120, "a narrow Dashboard
 -- 5. The real palette keeps the navigation hook
 ---------------------------------------------------------------------------
 local P = { Theme = T, TrimText = M.TrimText, Tr = M.Tr }
-assert(loadfile(arg[2] or (MENU .. "MSUF_Menu2_SearchPalette.lua")))("MidnightSimpleUnitFrames_Options", { MSUF2 = P })
+local paletteNamespace = { MSUF2 = P }
+RequireFixture.InstallKernel(root, paletteNamespace)
+paletteNamespace.ExportPublic("MSUF_PixelLayoutRegion", PixelLayoutStandIn)
+assert(loadfile(arg[2] or (MENU .. "MSUF_Menu2_SearchPalette.lua")))("MidnightSimpleUnitFrames_Options", paletteNamespace)
 local nav = Check(P.CreateNavSearchPalette({}, {}), "the navigation palette must build")
 local navHide = Check(P.HideNavSearchPalette, "the navigation palette must publish its hide hook")
 nav.visibleResults = { "stale" }

@@ -1,6 +1,4 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
-MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 local roundedSurfaceActive = false
 local RoundedDecorator = { Visuals = {} }
@@ -18,6 +16,7 @@ local Kit = MSUF.RoundedSurfaceKit
 -- colors runtime, the defaults, the unit-frame and group engines with their
 -- elements, and the class power controller.
 local ROUNDED_FILE = "UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", ROUNDED_FILE)
 local GetBarOutlineColor = MSUF.Require("MSUF_GetBarOutlineColor", ROUNDED_FILE)
 local RefreshSquareFrameBorderVisual = MSUF.Require("MSUF_RefreshSquareFrameBorderVisual", ROUNDED_FILE)
 local CurrentFrameBorderColor = MSUF.Require("MSUF_CurrentFrameBorderColor", ROUNDED_FILE)
@@ -50,7 +49,7 @@ local ApplyStyledEdgeRings, HideStyledEdgeRings = Kit.ApplyStyledEdgeRings, Kit.
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 
 local CreateFrame = CreateFrame
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0, 0, 0, 1
 local ACTIVE_BORDER_A = 1.00
@@ -60,6 +59,11 @@ local groupMouseoverHotEnabled = false
 local groupIndicatorHotEnabled = false
 local roundedGroupBlockHosts = setmetatable({}, { __mode = "k" })
 local SUPPRESS_NATIVE_OUTLINE = true
+
+local function GeneralDB()
+  local db = MSUF_DB
+  return db and db.general
+end
 
 local function ResolveBaseEdgeColor(f)
   local border = f and f.MSUFSpec and f.MSUFSpec.border
@@ -74,7 +78,9 @@ local function ResolveBaseEdgeColor(f)
   if type(r) == "number" and type(g) == "number" and type(b) == "number" then
     return r, g, b, BASE_BORDER_A
   end
-  local gen = _G.MSUF_DB and _G.MSUF_DB.general
+  -- Border visual changes reach this per event: read the profile inline.
+  local db = MSUF_DB
+  local gen = db and db.general
   if gen then
     return tonumber(gen.barOutlineColorR) or BASE_BORDER_R,
          tonumber(gen.barOutlineColorG) or BASE_BORDER_G,
@@ -91,7 +97,7 @@ end
 local _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = 1, 1, 1, 0.78
 local _mouseoverStyle, _mouseoverSize = "GRADIENT", 6
 local function UpdateMouseoverEdgeColor()
-  local gen = _G.MSUF_DB and _G.MSUF_DB.general
+  local gen = GeneralDB()
   _mouseoverStyle = gen and tostring(gen.highlightStyle or "GRADIENT"):upper() or "GRADIENT"
   if _mouseoverStyle ~= "BORDER" then _mouseoverStyle = "GRADIENT" end
   _mouseoverSize = math.floor((tonumber(gen and gen.highlightThickness) or 6) + 0.5)
@@ -105,7 +111,7 @@ local function UpdateMouseoverEdgeColor()
       return
     end
     if type(c) == "string" then
-      local colors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
+      local colors = MSUF.MSUF_FONT_COLORS or MSUF.Optional("MSUF_FONT_COLORS")
       local cc = colors and colors[c]
       if cc then
         _mouseoverR, _mouseoverG, _mouseoverB = cc[1], cc[2], cc[3]
@@ -956,7 +962,7 @@ local ApplyToGroupFrame
 local roundedBulkRestoreKinds
 
 local function ResolveGF()
-  return (MSUF and MSUF.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF) or nil
+  return MSUF.GF
 end
 
 local function IsGroupFrame(f)
@@ -1068,6 +1074,17 @@ local function MaskGradientTable(f, grads, anchor, group)
     if tex then
       if group then MaskGroupTexture(f, tex, anchor) else MaskTexture(f, tex, anchor) end
     end
+  end
+end
+
+local function MaskGlossTable(f, gloss, anchor, group)
+  if not gloss or (not group and FrameIsGroup(f)) then return end
+  if group then
+    MaskGroupTexture(f, gloss.upper, anchor)
+    MaskGroupTexture(f, gloss.lower, anchor)
+  else
+    MaskTexture(f, gloss.upper, anchor)
+    MaskTexture(f, gloss.lower, anchor)
   end
 end
 
@@ -1185,7 +1202,8 @@ local function ApplyDispelOverlayMask(f, region, enabled)
 end
 
 local function MaskGFGradientTable(f, bar, anchor)
-  MaskGradientTable(f, bar and bar._msufGFGrads, anchor or bar, true)
+  local grads = bar and bar._msufGFGrads
+  if grads then MaskGradientTable(f, grads, anchor or bar, true) end
 end
 
 local function SuppressGroupSquareBorders(f)
@@ -1296,6 +1314,7 @@ local function ApplyToUnitFrame(f)
   end
 
   MaskGradientTable(f, f.hpGradients, healthMaskAnchor)
+  if f.hpGloss then MaskGlossTable(f, f.hpGloss, healthMaskAnchor) end
 
   if f.tempMaxHealthBackground then
     MaskTexture(f, f.tempMaxHealthBackground, sharedFrameMaskAnchor or f.tempMaxHealthBar or f.hpBar)
@@ -1319,6 +1338,7 @@ local function ApplyToUnitFrame(f)
       MaskTexture(f, f.powerBarBG, powerMaskAnchor or f.powerBarBG)
     end
     if powerBar then MaskGradientTable(f, f.powerGradients, powerMaskAnchor) end
+    if f.powerGloss then MaskGlossTable(f, f.powerGloss, powerMaskAnchor) end
   end
 
   if f.portrait then
@@ -1423,7 +1443,9 @@ ApplyToGroupFrame = function(f, kind)
   end
 
   MaskGFGradientTable(f, f.health, sharedFrameMaskAnchor)
+  if f.hpGloss then MaskGlossTable(f, f.hpGloss, sharedFrameMaskAnchor or f.health, true) end
   if roundPower then MaskGFGradientTable(f, f.power, sharedFrameMaskAnchor) end
+  if roundPower and f.powerGloss then MaskGlossTable(f, f.powerGloss, sharedFrameMaskAnchor or f.power, true) end
   local clipRequests = f._msufRUF_ClipRequests
   if clipRequests then
     local clipAnchor = sharedFrameMaskAnchor or f.health or f.barGroup or f
@@ -1676,7 +1698,7 @@ local function SetRoundedCallbacksActive(enabled)
     HookOnce()
     for i = 1, #ROUNDED_CALLBACK_NAMES do
       local name = ROUNDED_CALLBACK_NAMES[i]
-      local fn = roundedCallbackFns[name] or _G[name]
+      local fn = roundedCallbackFns[name] or MSUF.Optional(name)
       if type(fn) == "function" then
         roundedCallbackFns[name] = fn
         RoundedDecorator.Visuals[name] = fn
@@ -1691,7 +1713,7 @@ local function SetRoundedCallbacksActive(enabled)
   UF.SetRoundedPowerBorderCallback(nil)
   for i = 1, #ROUNDED_CALLBACK_NAMES do
     local name = ROUNDED_CALLBACK_NAMES[i]
-    local fn = _G[name]
+    local fn = MSUF.Optional(name)
     if type(fn) == "function" then roundedCallbackFns[name] = fn end
     ExportPublic(name, nil)
   end
@@ -1730,6 +1752,15 @@ local Module = {
   end,
 }
 
+-- Register the module once: the registry (Kernel/MSUF_Modules.lua) loads first,
+-- so the file-load call registers and the ADDON_LOADED pass finds it done.
+local function RegisterRoundedModule()
+  if MSUF.__msufRoundedUF_Registered then return end
+  local reg = MSUF.MSUF_RegisterModule or MSUF.Require("MSUF_RegisterModule", ROUNDED_FILE)
+  reg("roundedUnitframes", Module)
+  MSUF.__msufRoundedUF_Registered = true
+end
+
 local function ApplyRoundedUnitframes()
   Kit.SetForceDisabled(false)
   UpdateSlantedBarState()
@@ -1755,13 +1786,7 @@ do
       if event == "ADDON_LOADED" then
         if arg1 == addonName or arg1 == "MidnightSimpleUnitFrames" then
           UpdateSlantedBarState()
-          if not MSUF.__msufRoundedUF_Registered then
-            local reg = (MSUF and MSUF.MSUF_RegisterModule) or _G.MSUF_RegisterModule
-            if type(reg) == "function" then
-              reg("roundedUnitframes", Module)
-              MSUF.__msufRoundedUF_Registered = true
-            end
-          end
+          RegisterRoundedModule()
           if IsEnabled() then
             -- Login must bind the Borders/Power callbacks as well as export
             -- the global hooks; the module registry is not initialized here.
@@ -1772,7 +1797,7 @@ do
         end
       elseif event == "PLAYER_LOGIN" then
         if f.UnregisterEvent then f:UnregisterEvent("PLAYER_LOGIN") end
-        _G.C_Timer.After(0, function()
+        C_Timer.After(0, function()
           UpdateSlantedBarState()
           if IsEnabled() or MSUF.__msufRoundedUF_Hooked then
             ApplyRoundedUnitframes()
@@ -1780,19 +1805,13 @@ do
         end)
       elseif event == "PLAYER_REGEN_ENABLED" then
         if MSUF.__msufRoundedPending then
-          _G.C_Timer.After(0, ApplyAll)
+          C_Timer.After(0, ApplyAll)
         end
       end
     end)
 end
 
-if not MSUF.__msufRoundedUF_Registered then
-  local reg = (MSUF and MSUF.MSUF_RegisterModule) or _G.MSUF_RegisterModule
-  if type(reg) == "function" then
-    reg("roundedUnitframes", Module)
-    MSUF.__msufRoundedUF_Registered = true
-  end
-end
+RegisterRoundedModule()
 
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)
 
@@ -1807,6 +1826,12 @@ RoundedDecorator.OnVisualChanged = function(frame, event, ...)
   local callback = RoundedDecorator.Visuals[event]
   if callback then return callback(frame, ...) end
   return false
+end
+RoundedDecorator.Visuals.barGloss = function(frame)
+  if not frame then return end
+  if IsCombatLocked() then DeferApply() return end
+  if IsGroupFrame(frame) then return ApplyToGroupFrame(frame) end
+  return ApplyToUnitFrame(frame)
 end
 RoundedDecorator.OwnsMask = function(frame, texture)
   if roundedSurfaceActive or (RoundedDecorator.active and IsEnabled()) then return true end

@@ -61,7 +61,16 @@ function Harness.Load(root, flavor)
     local providers = { "Game/Shared/Initialize.lua" }
     if classic then providers[2] = "Game/Classic/Initialize.lua" end
     manifest.LoadSelected(root, flavor, ns, providers)
-    function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return value end
+    -- Exports land where the client puts them (the real ExportPublic: namespace registry, plus a global
+    -- for the Kernel's kept names). Consumers of this harness call the State exports as bare globals and
+    -- read them off the namespace, so every export is also mirrored there.
+    local exportPublic = ns.ExportPublic
+    function ns.ExportPublic(name, value, publishGlobal)
+        exportPublic(name, value, publishGlobal)
+        _G[name] = value
+        ns[name] = value
+        return value
+    end
     _G.MSUF_NS, _G.MSUF = ns, ns
     manifest.LoadSelected(root, flavor, ns, {
         "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua",
@@ -73,7 +82,15 @@ function Harness.Load(root, flavor)
         "State/MSUF_ProfileFields.lua",
     })
     ns.ProfileRuntime = { Apply = function() end, BeforeMutation = function() end }
-    MSUF_GF_InvalidateConfCache = function() end
+    ns.ExportPublic("MSUF_GF_InvalidateConfCache", function() end)
+    -- Profiles answers imported font paths through the font registry's MSUF_IsAvailableFontPath; the font
+    -- stack (Libs, Fonts) is already loaded above, so the registry loads as its TOC does. The client has
+    -- LibSharedMedia by then; this pipeline has none, so the registry holds an empty media library only
+    -- while it loads (the Defaults keep reading no LSM).
+    local lsm = ns.LSM
+    ns.LSM = lsm or { Register = function() end }
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"))("MidnightSimpleUnitFrames", ns)
+    ns.LSM = lsm
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("MidnightSimpleUnitFrames", ns)
 
@@ -88,7 +105,7 @@ function Harness.Load(root, flavor)
     function h.Import(kind, payload, profileName)
         local quiet = print
         print = function() end
-        local ok, why = MSUF_ImportFromString(Literal({ addon = "MSUF", fmt = 2, schema = 600, kind = kind,
+        local ok, why = ns.PublicGlobals.MSUF_ImportFromString(Literal({ addon = "MSUF", fmt = 2, schema = 600, kind = kind,
             profile = profileName or "Friend", payload = payload }))
         print = quiet
         return ok, why
@@ -101,7 +118,7 @@ function Harness.Load(root, flavor)
             CompressString = function(text) return text end,
             EncodeBase64 = function(text) return text end,
         }
-        local text = MSUF_ExportSelectionToString(kind)
+        local text = ns.PublicGlobals.MSUF_ExportSelectionToString(kind)
         C_EncodingUtil = nil
         if type(text) ~= "string" then return nil end
         return captured and (captured.payload and captured or captured.snapshot) or nil

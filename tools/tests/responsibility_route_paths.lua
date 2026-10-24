@@ -1,11 +1,13 @@
 -- Public/event routes supplement the unchanged callable-boundary operations.
 local Routes = {}
-function Routes.New(World, root, flavor, harness)
+function Routes.New(World, root, flavor, harness, selectedName)
     local Base = dofile(harness .. "/tools/tests/callable_boundary_paths.lua")
     local w, _, _, _, Registry = Base.New(World, root, flavor, harness)
     local e, u = w.env, w.UF
     local cases = {}
     local function Add(name, run, prepare, iterations)
+        -- Keep discovery complete; selected worlds still execute every setup statement.
+        if selectedName ~= nil and name ~= selectedName then return end
         cases[#cases + 1] = { name = name, run = run, prepare = prepare or function() end,
             iterations = iterations or 10 }
     end
@@ -41,6 +43,7 @@ function Routes.New(World, root, flavor, harness)
         end, 1)
     end
     dofile(harness .. "/tools/tests/responsibility_route_branches.lua")(w, Add, root, harness, lateFrame, lateHandler)
+    if selectedName ~= nil then assert(#cases == 1, "route selection is not unique: " .. selectedName) end
     return w, cases, Registry
 end
 return Routes

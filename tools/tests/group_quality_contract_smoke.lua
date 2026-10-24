@@ -217,6 +217,8 @@ do
     local scope
     local context = {
         _G = { MSUF2 = menu }, EM2 = {}, KIND_TO_KEY = { raid = "gf_raid" },
+        -- The namespace the group file receives: the Options facade is its exported MSUF2.
+        MSUF = { MSUF2 = menu, Optional = function(name) if name == "MSUF2" then return menu end end },
         ExportPublic = function() end,
         GF_EM2_SetActivePreviewKind = function(mode) scope = mode end,
         GroupPopup = {

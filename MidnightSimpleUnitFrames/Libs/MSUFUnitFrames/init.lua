@@ -5,13 +5,13 @@ if type(ns) ~= "table" then
 end
 
 local function GetMetadata(key)
-  local addons = _G.C_AddOns
+  local addons = C_AddOns
   if addons and type(addons.GetAddOnMetadata) == "function" then
     local value = addons.GetAddOnMetadata(parent, key)
     if value ~= nil then return value end
   end
-  if type(_G.GetAddOnMetadata) == "function" then
-    return _G.GetAddOnMetadata(parent, key)
+  if type(GetAddOnMetadata) == "function" then
+    return GetAddOnMetadata(parent, key)
   end
 end
 

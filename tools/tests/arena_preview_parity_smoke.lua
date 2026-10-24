@@ -78,7 +78,7 @@ local function Load(client)
     _G.MSUF2_ArenaUnitframePreviewActive, _G.MSUF_ArenaTestMode = nil, nil
     _G.MSUF_PreviewTestMode, _G.MSUF_UnitEditModeActive, _G.MSUF_InCombat = nil, nil, nil
 
-    local refreshes = { range = 0, elements = 0 }
+    local refreshes = { range = 0, elements = 0, trinkets = 0 }
     local frames = {}
     for i = 1, client.slots do frames["arena" .. i] = NewArenaFrame(i) end
     local UF = {
@@ -93,6 +93,8 @@ local function Load(client)
     }
     local namespace = {
         UF = UF,
+        -- The client model publishes the fixed supported slot count before the elements load.
+        Client = { MaxArenaOpponents = client.slots },
         Translate = function(text) return text end,
         ExportPublic = function(name, value) _G[name] = value end,
         Secrets = { UnitExistsPlain = function() return false end },
@@ -104,12 +106,18 @@ local function Load(client)
     -- The castbar previews and the PvP trinket holders follow a unit preview;
     -- this harness has neither castbars nor trinkets.
     _G.MSUF_UpdateArenaCastbarPreview = function() end
-    _G.MSUF_ArenaTrinkets_SyncPreview = function() end
+    namespace.ArenaTrinkets = { SyncPreview = function() refreshes.trinkets = refreshes.trinkets + 1 end }
+    _G.MSUF_ArenaTrinkets_SyncPreview = function() error("legacy trinket preview lookup", 0) end
     _G.MSUF_UpdateBossCastbarPreview = function() end
+    -- The preview families bind the health element's colour refresh when they load; this harness has no health element.
+    _G.MSUF_UFCore_RefreshHealthBarColor = function() end
+    -- The load conditions bind the event bus when they load; this harness lifecycle needs no subscriptions.
+    _G.MSUF_EventBus_Register = function() return true end
+    _G.MSUF_EventBus_Unregister = function() end
     assert(loadfile(FILE))("MidnightSimpleUnitFrames", namespace)
     Check(type(UF.ApplyArenaPreviewState) == "function" and type(UF.ClearArenaPreviewFramesForCombat) == "function",
         "the arena preview owner is missing")
-    return UF, refreshes, frames
+    return UF, refreshes, frames, namespace
 end
 
 local CLIENTS = {
@@ -137,6 +145,7 @@ for _, client in ipairs(CLIENTS) do
     -- Preview on: synthetic opponents at the client's level, visible through the HP gate.
     UF.Preview.SetArenaPage(true)
     Check(UF.ApplyArenaPreviewState(true, "MSUF_ARENA_PREVIEW") == true, client.name .. ": the preview did not apply")
+    Check(refreshes.trinkets > 0, client.name .. ": the preview did not call its trinket namespace owner")
     for i = 1, client.slots do
         local frame = frames["arena" .. i]
         Check(frame._msufArenaPreviewForced == true, client.name .. ": arena" .. i .. " is not previewed")
@@ -171,6 +180,66 @@ for _, client in ipairs(CLIENTS) do
     Check(frames.arena1._msufArenaPreviewForced == nil, client.name .. ": combat left arena1 previewed")
     client.combat = false
 end
+
+-- Real lifecycle consumers resolve the current namespace member on both
+-- populated and unsupported (zero-slot) families, even with a valid registry.
+local function OwnedTrinketBoundary(slots)
+    local uf, refreshes, frames, ns = Load({ name = "owner boundary", slots = slots })
+    local owner = ns.ArenaTrinkets
+    local provider = owner.SyncPreview
+    local publicGlobals, compat = ns.PublicGlobals, ns.Compat
+    local legacyGlobals = compat.LegacyGlobals
+    local previousProvider = publicGlobals.MSUF_ArenaTrinkets_SyncPreview
+    local previousLegacy = legacyGlobals.MSUF_ArenaTrinkets_SyncPreview
+    publicGlobals.MSUF_ArenaTrinkets_SyncPreview = provider
+    legacyGlobals.MSUF_ArenaTrinkets_SyncPreview = nil
+    local function Mirrors(expected)
+        Check(ns.PublicGlobals == publicGlobals and ns.Compat == compat and compat.LegacyGlobals == legacyGlobals,
+            "owner boundary replaced a captured publication table")
+        Check(_G.MSUF2_ArenaUnitframePreviewActive == expected
+            and ns.Public.MSUF2_ArenaUnitframePreviewActive == expected
+            and publicGlobals.MSUF2_ArenaUnitframePreviewActive == expected,
+            "arena preview publication mirrors disagree")
+        Check(legacyGlobals.MSUF2_ArenaUnitframePreviewActive == true, "arena preview lost its legacy publication bit")
+    end
+    uf.Preview.SetArenaPage(true)
+    Mirrors(true)
+    local before = refreshes.trinkets
+    Check(uf.ApplyArenaPreviewState(true, "MSUF_ARENA_PREVIEW") == true, "owner boundary preview refused")
+    Check(refreshes.trinkets > before, "owner boundary skipped the current provider")
+    if slots == 0 then Check(next(frames) == nil, "unsupported preview created an arena frame") end
+    local replacements = 0
+    owner.SyncPreview = function() replacements = replacements + 1 end
+    uf.ApplyArenaPreviewState(true, "MSUF_ARENA_PREVIEW")
+    Check(replacements > 0, "preview cached its old trinket provider")
+    local function Missing()
+        local ok, message = pcall(uf.ApplyArenaPreviewState, true, "MSUF_ARENA_PREVIEW")
+        Check(not ok and tostring(message):find("missing required dependency 'SyncPreview'", 1, true),
+            "missing trinket owner used a legacy global or registry fallback")
+        Check(tostring(message):find("MSUF_UF_PreviewFamilies.lua", 1, true), "dependency lost its caller context")
+    end
+    owner.SyncPreview = nil
+    Missing()
+    for _, invalid in ipairs({ false, 0, "wrong" }) do
+        owner.SyncPreview = invalid
+        Missing()
+    end
+    owner.SyncPreview = provider
+    ns.ArenaTrinkets = nil
+    Missing()
+    ns.ArenaTrinkets = owner
+    before = refreshes.trinkets
+    Check(uf.ApplyArenaPreviewState(false, "MSUF_ARENA_PREVIEW_OFF") == true, "restored trinket owner did not recover")
+    Check(refreshes.trinkets > before, "restored owner was not called")
+    Mirrors(true)
+    uf.Preview.SetArenaPage(nil)
+    Mirrors(nil)
+    publicGlobals.MSUF_ArenaTrinkets_SyncPreview = previousProvider
+    legacyGlobals.MSUF_ArenaTrinkets_SyncPreview = previousLegacy
+    Mirrors(nil)
+end
+OwnedTrinketBoundary(3)
+OwnedTrinketBoundary(0)
 
 -- No level API at all: never a hard-coded expansion cap.
 local UF = Load({ name = "none", slots = 3 })

@@ -44,7 +44,7 @@ end
 local NORMAL_STATE = 1
 
 local function IconAtlas(key)
-    local util = _G.InputIconTextureSetUtility
+    local util = InputIconTextureSetUtility
     if type(util) ~= "table" or type(util.GetActiveInputIconButtonTextures) ~= "function" then return nil end
     local textures = util.GetActiveInputIconButtonTextures(key)
     local atlas = type(textures) == "table" and textures[NORMAL_STATE] or nil
@@ -54,7 +54,7 @@ end
 -- "large" or "plain" for an atlas the client has, nil for one it lacks (its
 -- button then shows as text instead of an empty gap).
 local function AtlasLayout(atlas)
-    local texture = _G.C_Texture
+    local texture = C_Texture
     if type(texture) ~= "table" or type(texture.GetAtlasInfo) ~= "function" then return "plain" end
     local info = texture.GetAtlasInfo(atlas)
     if type(info) ~= "table" then return nil end

@@ -6,9 +6,10 @@
 --- Runtime hides live headers while previews are active so both do not overlap.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
+-- UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua loads before the group files.
+local GetPreviewAnimationFrameState = MSUF.Require("MSUF_GetPreviewAnimationFrameState", "UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
 local Auras = MSUF.Require("MSUF_Auras3", "GroupFrames/Preview")
 local AuraPainter = assert(Auras.MockAuraPainter)
 
@@ -21,10 +22,10 @@ local InCombatLockdown = InCombatLockdown
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetNumGroupMembers = GetNumGroupMembers
 local UnitName = UnitName
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
-local C_Timer = _G.C_Timer
-local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local C_Timer = C_Timer
+local STANDARD_TEXT_FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
 local NormalizeKind
@@ -202,7 +203,8 @@ end
 
 
 
-local ClampPreviewOffsetOnScreen = _G.MSUF_UF_ClampAnchorOffsetOnScreen
+local ClampPreviewOffsetOnScreen = MSUF.Require("MSUF_UF_ClampAnchorOffsetOnScreen",
+  "UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
 
 local function ResolveAnchorFrame(conf, owner)
   if type(GF.ResolveAnchorFrame) == "function" then
@@ -987,18 +989,21 @@ local function RefreshSceneAuras(scene)
   return refreshed
 end
 
+-- A refresh without a kind fans out to every preview kind that is active.
+local function RefreshActivePreviewKinds(refresh, opts)
+  local any = false
+  for i = 1, #PREVIEW_KINDS do
+    local activeKind = PREVIEW_KINDS[i]
+    if GF._previewActive and GF._previewActive[activeKind] then
+      any = refresh(activeKind, opts) or any
+    end
+  end
+  return any
+end
+
 function GF.RefreshPreviewAuras(kind)
   if InCombat() then return false end
-  if kind == nil then
-    local any = false
-    for i = 1, #PREVIEW_KINDS do
-      local activeKind = PREVIEW_KINDS[i]
-      if GF._previewActive and GF._previewActive[activeKind] then
-        any = GF.RefreshPreviewAuras(activeKind) or any
-      end
-    end
-    return any
-  end
+  if kind == nil then return RefreshActivePreviewKinds(GF.RefreshPreviewAuras) end
   kind = NormalizeKind(kind)
   if not kind then return false end
   return RefreshSceneAuras(defaultScenes[kind])
@@ -1111,7 +1116,12 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   if glow then glow:Hide() end
   if durationBar then durationBar:Hide() end
   if visualType ~= "icon" and A3 and type(A3.ApplyIconStylePreview) == "function" then
-    A3.ApplyIconStylePreview(visual, nil)
+    -- A skinned Spell Icon painted earlier left its shape mask on the texture.
+    if visual._msufSkinShape then
+      visual._msufSkinShape = nil
+      A3.ApplyAuraIconShape(visual, "RECTANGLE", nil, texture, swipe)
+    end
+    A3.ApplyIconStyleSkinned(visual, nil)
   end
 
   local barOnly = slot.showDurationBar == true and slot.durationBarDisplay == "BAR_ONLY"
@@ -1154,12 +1164,20 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     texture:SetVertexColor(1, 1, 1, 1)
     texture:SetShown(not barOnly)
 
-    PaintIconLayers(visual, slot, size, barOnly, true, "12")
+    swipe = PaintIconLayers(visual, slot, size, barOnly, true, "12")
 
     if A3 and type(A3.ApplyIconStylePreview) == "function" then
       local selectedValue1
       if not (barOnly) then selectedValue1 = slot.iconStyle end
-      A3.ApplyIconStylePreview(visual, selectedValue1, size)
+      -- A skin draws on the Buff icon shape it was picked with (round, rounded
+      -- and hex skins set it), so a skinned Spell Icon shows that shape; an
+      -- unskinned one keeps the square preview.
+      local skinShape = selectedValue1 ~= nil and selectedValue1.skin ~= nil and slot.iconShape or nil
+      if skinShape or visual._msufSkinShape then
+        visual._msufSkinShape = skinShape
+        A3.ApplyAuraIconShape(visual, skinShape or "RECTANGLE", nil, texture, swipe)
+      end
+      A3.ApplyIconStyleSkinned(visual, selectedValue1, size, skinShape, height, width)
     end
   end
 
@@ -1237,16 +1255,7 @@ end
 
 function GF.RefreshPreviewSpellIndicators(kind)
   if InCombat() then return false end
-  if kind == nil then
-    local any = false
-    for i = 1, #PREVIEW_KINDS do
-      local activeKind = PREVIEW_KINDS[i]
-      if GF._previewActive and GF._previewActive[activeKind] then
-        any = GF.RefreshPreviewSpellIndicators(activeKind) or any
-      end
-    end
-    return any
-  end
+  if kind == nil then return RefreshActivePreviewKinds(GF.RefreshPreviewSpellIndicators) end
   kind = NormalizeKind(kind)
   if not kind then return false end
   return RefreshSceneSpellIndicators(defaultScenes[kind])
@@ -1402,8 +1411,11 @@ local function ApplyLeaderIcon(frame, kind, assist)
 end
 
 --- Every region this seeds belongs to the Status layer, so one gate at the top
---- is the whole chip: hiding them all is exactly what ClearPreviewData does.
-local function HidePreviewStatus(frame)
+--- is the whole chip: hiding them all is exactly what ClearPreviewData does,
+--- except that ClearPreviewData keeps the combat-state icon (keepCombatIcon),
+--- the one status chip only the layer gate hides. Kept inline: preview
+--- repaints run per animation tick.
+local function HidePreviewStatus(frame, keepCombatIcon)
   SetShown(frame.roleIcon, false)
   SetShown(frame.leaderIcon, false)
   SetShown(frame.assistIcon, false)
@@ -1414,7 +1426,7 @@ local function HidePreviewStatus(frame)
   SetShown(frame.phaseIcon, false)
   SetShown(frame.raidGroupNameText, false)
   SetShown(frame.levelText, false)
-  SetShown(frame.combatStateIndicatorIcon, false)
+  if not keepCombatIcon then SetShown(frame.combatStateIndicatorIcon, false) end
   SetShown(frame.statusIndicatorText, false)
   SetShown(frame.statusAFKTimerText, false)
 end
@@ -1478,7 +1490,7 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   --- band - the same color a real party member gets.
   local levelCfg = frame.MSUFSpec and frame.MSUFSpec.status and frame.MSUFSpec.status.level
   if frame.levelText and levelCfg and levelCfg.enabled == true then
-    local playerLevel = not activeScene and _G.UnitLevel and tonumber(_G.UnitLevel("player")) or nil
+    local playerLevel = not activeScene and UnitLevel and tonumber(UnitLevel("player")) or nil
     frame.levelText:SetText(tostring(playerLevel and playerLevel > 0 and playerLevel or 80))
     local statusRuntime = MSUF.UFStatusRuntime
     if levelCfg.difficultyColor == true and statusRuntime and statusRuntime.ApplyLevelDifficultyColor then
@@ -1570,8 +1582,8 @@ local function ApplyPreviewData(frame, slot, kind)
     if sceneElapsed then
       animState = Dep("MSUF_BuildPreviewAnimationFrameState")(frame, index, kind, frame._msufGFPreviewAnimState or {}, sceneElapsed)
     end
-  elseif PreviewAnimationActive() and _G.MSUF_GetPreviewAnimationFrameState then
-    animState = _G.MSUF_GetPreviewAnimationFrameState(frame, index, kind, frame._msufGFPreviewAnimState or {})
+  elseif PreviewAnimationActive() then
+    animState = GetPreviewAnimationFrameState(frame, index, kind, frame._msufGFPreviewAnimState or {})
   end
   if animState then
     frame._msufGFPreviewAnimState = animState
@@ -1697,18 +1709,7 @@ local function ClearPreviewData(frame)
   SetText(frame.powerTextLeft, "")
   SetText(frame.powerTextCenter, "")
   SetText(frame.powerTextRight, "")
-  SetShown(frame.roleIcon, false)
-  SetShown(frame.raidIcon, false)
-  SetShown(frame.leaderIcon, false)
-  SetShown(frame.assistIcon, false)
-  SetShown(frame.readyCheckIcon, false)
-  SetShown(frame.resurrectIcon or frame.incomingResIndicatorIcon, false)
-  SetShown(frame.pvpIcon or frame.pvpIndicatorIcon, false)
-  SetShown(frame.phaseIcon, false)
-  SetShown(frame.raidGroupNameText, false)
-  SetShown(frame.levelText, false)
-  SetShown(frame.statusIndicatorText, false)
-  SetShown(frame.statusAFKTimerText, false)
+  HidePreviewStatus(frame, true)
   if GF.HideSpellIndicators then GF.HideSpellIndicators(frame) end
   if GF.HideFrameAuras then GF.HideFrameAuras(frame) end
 end
@@ -1970,7 +1971,7 @@ local function ApplyPreviewFrame(scene, index, reason, layout, w, h, spacing, gr
   -- Menu dispel-overlay preview: only row 1 owns a native aura container, so
   -- the MSUF-drawn preview has to be re-stamped per row on every rebuild.
   -- One boolean read when no preview is active.
-  if _G.MSUF_DispelOverlayPreviewMode == true then
+  if MSUF.PublicGlobals.MSUF_DispelOverlayPreviewMode == true then
     Dep("MSUF_ApplyDispelOverlayPreviewToFrame")(frame)
   end
   return true
@@ -2163,16 +2164,7 @@ end
 
 function GF.RefreshPreviewLayout(kind, opts)
   if InCombat() then return false end
-  if kind == nil then
-    local any = false
-    for i = 1, #PREVIEW_KINDS do
-      local activeKind = PREVIEW_KINDS[i]
-      if GF._previewActive and GF._previewActive[activeKind] then
-        any = GF.RefreshPreviewLayout(activeKind, opts) or any
-      end
-    end
-    return any
-  end
+  if kind == nil then return RefreshActivePreviewKinds(GF.RefreshPreviewLayout, opts) end
   kind = NormalizeKind(kind) or "party"
   if not (GF._previewActive and GF._previewActive[kind]) then return false end
   local count = GF._previewShownCounts[kind] or DefaultPreviewCount(kind)
@@ -2551,15 +2543,15 @@ function Scene:IsActive() return self.t.active[self.kind] == true end
 function Scene:Count() return ActivePreviewCount(self) end
 
 PreviewsAllowed = function()
-  if _G.MSUF_UnitEditModeActive == true then return true end
-  return _G.MSUF2_GFPagePreviewActive == true
+  if MSUF_UnitEditModeActive == true then return true end
+  return MSUF.PublicGlobals.MSUF2_GFPagePreviewActive == true
 end
 
 ExportPublic("MSUF_GF_ShowPreview", function(kind, count) return GF.ShowPreview(kind, count) end)
 ExportPublic("MSUF_GF_HidePreview", function(kind) return GF.HidePreview(kind) end)
 ExportPublic("MSUF_GF_SetPreviewAnchor", function(kind, parent) return GF.SetPreviewAnchor(kind, parent) end)
 ExportPublic("MSUF_GF_RefreshPreviewLayout", function(kind, opts) return GF.RefreshPreviewLayout(kind, opts) end)
-ExportPublic("MSUF_GF_RefreshPreviewBox", _G.MSUF_GF_RefreshPreviewLayout)
+ExportPublic("MSUF_GF_RefreshPreviewBox", MSUF.Require("MSUF_GF_RefreshPreviewLayout", "UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua"))
 ExportPublic("MSUF_GF_RefreshPreviewAuras", function(kind) return GF.RefreshPreviewAuras(kind) end)
 ExportPublic("MSUF_GF_RefreshPreviewSpellIndicators", function(kind) return GF.RefreshPreviewSpellIndicators(kind) end)
 ExportPublic("MSUF_GF_RefreshPreviewAnimation", function() return GF.RefreshPreviewAnimation() end)

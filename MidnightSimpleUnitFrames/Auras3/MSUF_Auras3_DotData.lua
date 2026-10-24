@@ -9,7 +9,6 @@
 --- excluded; alongside target-visible periodic damage auras, the list may
 --- include explicitly tracked gameplay marks that share the same display.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then

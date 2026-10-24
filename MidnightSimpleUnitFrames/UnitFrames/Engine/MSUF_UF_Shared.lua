@@ -1,7 +1,7 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
+local Optional = MSUF.Optional
 
 --- UnitFrames/Engine/MSUF_UF_Shared.lua
 ---
@@ -20,7 +20,6 @@ local type = type
 local tostring = tostring
 local tonumber = tonumber
 local floor = math.floor
-local abs = math.abs
 
 -- The embedded UF metadata owner loads before this shared compiler module.
 local Number = UF.NumberWithFallback
@@ -28,6 +27,14 @@ local Clamp01 = UF.Clamp01
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 Shared.WHITE = WHITE
+
+-- Kernel, Libs, Scheduler and Defaults load before this file; the media
+-- registry loads later and is resolved where it is used.
+local NormalizeFrameStrata = MSUF.Require("MSUF_NormalizeFrameStrata", "UnitFrames/Engine/MSUF_UF_Shared.lua")
+local NormalizePortraitClassStyleValue = MSUF.Require("MSUF_NormalizePortraitClassStyleValue", "UnitFrames/Engine/MSUF_UF_Shared.lua")
+local FontApplicationMatches = MSUF.Require("MSUF_FontApplicationMatches", "UnitFrames/Engine/MSUF_UF_Shared.lua")
+local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", "UnitFrames/Engine/MSUF_UF_Shared.lua")
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", "UnitFrames/Engine/MSUF_UF_Shared.lua")
 
 --- Overlay anchor modes of the absorb, heal-absorb and heal prediction bars
 --- (general.absorbAnchorMode, healAbsorbAnchorMode, healPredAnchorMode; the
@@ -46,19 +53,14 @@ end
 
 --- Frame strata for bar outlines and dispel layers. AUTO follows the frame.
 function Shared.NormalizeFrameOutlineStrata(value)
-  local normalize = _G.MSUF_NormalizeFrameStrata
-  if type(normalize) == "function" then return normalize(value, "AUTO") end
-  if value == nil or value == "" then return "AUTO" end
-  value = tostring(value):upper()
-  local rank = _G.MSUF_FRAME_STRATA_RANK
-  return rank and rank[value] and value or "AUTO"
+  return NormalizeFrameStrata(value, "AUTO")
 end
 
 --- Resolves a statusbar texture key through the media registry. An unknown or
 --- empty key keeps the caller's fallback (or the plain white texture).
 function Shared.ResolveStatusbarTextureKey(key, fallback)
   if type(key) == "string" and key ~= "" then
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    local resolve = Optional("MSUF_ResolveStatusbarTextureKey")
     local texture = type(resolve) == "function" and resolve(key) or nil
     if type(texture) == "string" and texture ~= "" then
       return texture
@@ -186,18 +188,7 @@ function Shared.NormalizePortraitRender(mode)
 end
 
 function Shared.NormalizePortraitClassStyle(value)
-  local fn = _G.MSUF_NormalizePortraitClassStyleValue
-  if type(fn) == "function" then
-    return fn(value)
-  end
-  local PM = MSUF and MSUF.PortraitMedia
-  if PM and type(PM.NormalizeClassPack) == "function" then
-    return PM.NormalizeClassPack(value)
-  end
-  if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then
-    return value
-  end
-  return "BLIZZARD"
+  return NormalizePortraitClassStyleValue(value)
 end
 
 --- BLIZZARD is the stock player-frame dressing: the client's own circular
@@ -366,20 +357,9 @@ function Shared.ClampFontSize(size, default)
   return size
 end
 
---- Confirms a font request really landed: the Kernel matcher decides when it
---- exists, otherwise the FontString is re-read and the path (slash-normalized,
---- case-insensitive) and size (within 0.01) are compared.
+--- Confirms a font request really landed; the Kernel matcher decides.
 local function FontApplied(fs, requested, requestedSize)
-  local matches = _G.MSUF_FontApplicationMatches
-  if type(matches) == "function" then
-    return matches(fs, requested, requestedSize) == true
-  end
-  if type(fs.GetFont) ~= "function" then return true end
-  local actual, actualSize = fs:GetFont()
-  if not actual then return false end
-  local pathMatches = tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
-  actualSize, requestedSize = tonumber(actualSize), tonumber(requestedSize)
-  return pathMatches and actualSize ~= nil and requestedSize ~= nil and abs(actualSize - requestedSize) <= 0.01
+  return FontApplicationMatches(fs, requested, requestedSize) == true
 end
 Shared.FontApplied = FontApplied
 
@@ -390,7 +370,7 @@ Shared.FontApplied = FontApplied
 function Shared.ApplyFontChecked(fs, requested, size, flags, default)
   if not (fs and type(fs.SetFont) == "function" and requested) then return false end
   size = Shared.ClampFontSize(size, default)
-  return _G.MSUF_SetFontChecked(fs, requested, size, flags) and FontApplied(fs, requested, size)
+  return SetFontChecked(fs, requested, size, flags) and FontApplied(fs, requested, size)
 end
 
 -- UI anchor coordinates: shared by live group headers, edit mode and previews.
@@ -452,8 +432,9 @@ local function ClampAnchorOffsetOnScreen(point, relativePoint, parent, offsetX, 
   local bottom = py - boxH * fy
   local dx = ClampBoxAxis(left, left + boxW, screenW)
   local dy = ClampBoxAxis(bottom, bottom + boxH, screenH)
-  if dx == 0 and dy == 0 then return offsetX, offsetY end
-  return (offsetX or 0) + dx, (offsetY or 0) + dy
+  -- The third result tells anchor owners whether the box had to move at all.
+  if dx == 0 and dy == 0 then return offsetX, offsetY, false end
+  return (offsetX or 0) + dx, (offsetY or 0) + dy, true
 end
 Shared.ClampAnchorOffsetOnScreen = ClampAnchorOffsetOnScreen
 ExportPublic("MSUF_UF_ClampAnchorOffsetOnScreen", ClampAnchorOffsetOnScreen)
@@ -542,11 +523,7 @@ local function ScheduleApplyCommit()
     local UF = MSUF and MSUF.UF
     local commit = UF and UF.ApplyDirty
     if type(commit) ~= "function" then return end
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", ApplyDirtyCommit)
-    else
-        _G.C_Timer.After(0, ApplyDirtyCommit)
-    end
+    ScheduleOnce("UF_APPLY_COMMIT", ApplyDirtyCommit)
 end
 Shared.ScheduleApplyCommit = ScheduleApplyCommit
 ExportPublic("MSUF_UF_ScheduleApplyCommit", ScheduleApplyCommit)

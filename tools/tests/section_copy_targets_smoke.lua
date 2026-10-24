@@ -104,6 +104,21 @@ _G.UIParent = NewFrame()
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 local sharedNamespace = RequireFixture.Install(root, { MSUF2 = M }, M)
 RequireFixture.StubRequirements(root, { OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua", OPTIONS .. "MSUF_Menu2_Unit.lua" })
+-- The pages now pass their FILE constant (M.RequireGlobals(FILE, { ... })), which the shared helper's
+-- literal-name pattern does not see: give those lists the same strict stubs (a call the fixture does not
+-- model raises, naming the function).
+for _, path in ipairs({ OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua", OPTIONS .. "MSUF_Menu2_Unit.lua" }) do
+    for list in Read(path):gmatch("M%.RequireGlobals%(%s*[%a_][%w_]*%s*,%s*(%b{})") do
+        for name in list:gmatch("\"(MSUF_[%w_]+)\"") do
+            local kind = type(rawget(_G, name))
+            if kind ~= "function" and kind ~= "table" then
+                rawset(_G, name, function()
+                    error("fixture: " .. name .. " was called, but this fixture does not model it", 2)
+                end)
+            end
+        end
+    end
+end
 sharedNamespace.CPBuilders = { ExtraAuraDefaults = {} }
 assert(loadstring(Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"), "@MSUF_Menu2_ControlSchema.lua"))(
     "MidnightSimpleUnitFrames_Options", sharedNamespace)
@@ -238,12 +253,16 @@ for _, client in ipairs(CLIENTS) do
     local ns = {}
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"))("MidnightSimpleUnitFrames", ns)
     Check(ns.Client.IsForever == (client.forever == true), client.name .. ": client detection")
+    -- The real Kernel namespace API (Bootstrap, Require) comes before the Options bootstrap, as in the TOC order.
+    RequireFixture.InstallKernel(root, ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua"))("MidnightSimpleUnitFrames_Options", {})
     local menu = ns.MSUF2
     RequireFixture.Install(root, ns, menu)
     assert(loadfile(root .. "/tools/tests/preview_namespace_fixture.lua"))().Install(root, ns)
     local pageSource = Read(OPTIONS .. client.pages)
     pageSource = pageSource:sub(1, assert(pageSource:find("local POWER_UNITS", 1, true), client.pages) - 1) .. "\nreturn UNIT_PAGES"
+    -- The page requires core providers at load that this fixture does not load: strict forwarders (a use raises).
+    RequireFixture.DeferRequired(ns, pageSource, OPTIONS .. client.pages)
     local pages = assert(loadstring(pageSource, "@" .. client.pages))("MidnightSimpleUnitFrames_Options", ns)
     local pageForUnit = {}
     for key, page in pairs(pages) do pageForUnit[page.unit] = key end

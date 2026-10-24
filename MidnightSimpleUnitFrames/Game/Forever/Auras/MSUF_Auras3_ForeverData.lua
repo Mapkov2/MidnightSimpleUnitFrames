@@ -24,7 +24,6 @@
 ---     SkillLineAbility, plus Ice Block 11958 from the Era defensive list
 ---     (Retail's Ice Block ID 45438 does not exist on Forever).
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local Client = MSUF.Client
 local IS_FOREVER = Client ~= nil and Client.IsForever == true

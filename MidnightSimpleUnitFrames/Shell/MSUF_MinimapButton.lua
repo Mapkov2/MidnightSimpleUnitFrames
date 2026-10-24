@@ -1,9 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MidnightSimpleUnitFrames_MinimapButton.lua
 --- Minimal, robust minimap icon implementation (LibDataBroker + LibDBIcon, with safe fallback).
 
 local addonName, addonNS = ...
-local MSUF = (_G.MSUF_NS) or addonNS or {}
+local MSUF = addonNS
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/MSUF_MinimapButton.lua")
 
 local _G = _G
 local ExportPublic = MSUF.ExportPublic
@@ -15,8 +15,8 @@ local atan2 = math.atan2
 local Tr = MSUF.Translate
 
 local function EnsureGeneralDB()
-    if type(_G.MSUF_DB) ~= "table" then return nil end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
+    if type(db) ~= "table" then return nil end
     if type(db.general) ~= "table" then
         db.general = {}
     end
@@ -34,37 +34,22 @@ local function EnsureGeneralDB()
 end
 
 local function ToggleEditMode()
-    if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
-        local st = _G.MSUF_EditState
-        local nextActive = true
-        if st and st.active ~= nil then
-            nextActive = not st.active
-        end
-        _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
+    local st = MSUF.Optional("MSUF_EditState")
+    local nextActive = true
+    if st and st.active ~= nil then
+        nextActive = not st.active
     end
+    MSUF.Require("MSUF_SetMSUFEditModeDirect", "Shell/MSUF_MinimapButton.lua")(nextActive, nil)
 end
 
 local function ToggleOptionsWindow()
-    local openStandalone = _G.MSUF_OpenStandaloneOptionsWindow
+    local openStandalone = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
     if type(openStandalone) == "function" then
         openStandalone()
         return
     end
-    local showStandalone = _G.MSUF_ShowStandaloneOptionsWindow
-    if type(showStandalone) == "function" then
-        showStandalone()
-        return
-    end
-    local openOptions = _G.MSUF_OpenOptionsMenu
-    if type(openOptions) == "function" then
-        openOptions()
-        return
-    end
-    if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
-        _G.SlashCmdList["MIDNIGHTSUF"]("")
-    elseif type(print) == "function" then
-        print(Tr("|cffffd700MSUF:|r Use /msuf to open the menu."))
-    end
+    -- Kernel/MSUF_OptionsLoader.lua forwards this entry point until the menu loads.
+    MSUF.Require("MSUF_ShowStandaloneOptionsWindow", "Shell/MSUF_MinimapButton.lua")()
 end
 
 local function BuildTooltip(tt, owner, opts)
@@ -87,13 +72,13 @@ local function BuildTooltip(tt, owner, opts)
     if opts.blankAfterVersion ~= false then tt:AddLine(" ") end
 
     --- Active profile
-    local profile = _G.MSUF_ActiveProfile
+    local profile = MSUF_ActiveProfile
     if type(profile) == "string" and profile ~= "" then
         tt:AddLine(Tr("Profile:") .. " " .. profile, 0.62, 0.82, 0.62)
     end
 
     --- Edit Mode status
-    local st = _G.MSUF_EditState
+    local st = MSUF.Optional("MSUF_EditState")
     if st and st.active then
         tt:AddLine(Tr("Edit Mode: |cff00ff00Active|r"), 0.8, 0.8, 0.8)
     end
@@ -112,7 +97,7 @@ MSUF.MinimapButton.ToggleOptionsWindow = ToggleOptionsWindow
 MSUF.MinimapButton.BuildTooltip = BuildTooltip
 
 --- LDB/DBIcon path
-local LibStub = _G.LibStub
+local LibStub = LibStub
 local LDB = LibStub and LibStub("LibDataBroker-1.1", true) or nil
 local DBIcon = LibStub and LibStub("LibDBIcon-1.0", true) or nil
 
@@ -146,8 +131,9 @@ local HandleMinimapClick = function(_, button)
 if button == "RightButton" then
                 ToggleEditMode()
             elseif IsShiftKeyDown() then
-                if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-                    _G.MSUF_OpenStandaloneOptionsWindow("profiles")
+                local openStandalone = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
+                if type(openStandalone) == "function" then
+                    openStandalone("profiles")
                 end
             else
                 ToggleOptionsWindow()
@@ -156,9 +142,9 @@ end
 
 local function EnsureInitialized()
     if not loginReady then return false end
-    local root = _G.MSUF_GlobalDB
+    local root = MSUF_GlobalDB
     local profiles = root and root.profiles
-    if not profiles or profiles[_G.MSUF_ActiveProfile] ~= _G.MSUF_DB then return false end
+    if not profiles or profiles[MSUF_ActiveProfile] ~= MSUF_DB then return false end
     local g = EnsureGeneralDB()
     if not g or (not g.showMinimapIcon and not usingLDB and not fallbackBtn) then return false end
 
@@ -194,8 +180,8 @@ local function EnsureInitialized()
     end
 
     --- Fallback: simple minimap-attached button
-    if not fallbackBtn and _G.Minimap and type(_G.CreateFrame) == "function" then
-        local b = PixelLayoutRegion(CreateFrame("Button", "MSUF_MinimapButton", _G.Minimap))
+    if not fallbackBtn and Minimap and type(CreateFrame) == "function" then
+        local b = PixelLayoutRegion(CreateFrame("Button", "MSUF_MinimapButton", Minimap))
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:SetSize(32, 32)
         b:SetFrameStrata("MEDIUM")
@@ -213,14 +199,14 @@ local function EnsureInitialized()
         b:SetScript("OnClick", HandleMinimapClick)
 
         b:SetScript("OnEnter", function(self)
-            if _G.GameTooltip then
-                _G.GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-                BuildTooltip(_G.GameTooltip)
-                _G.GameTooltip:Show()
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                BuildTooltip(GameTooltip)
+                GameTooltip:Show()
             end
         end)
         b:SetScript("OnLeave", function()
-            if _G.GameTooltip then _G.GameTooltip:Hide() end
+            if GameTooltip then GameTooltip:Hide() end
         end)
 
         --- Position by minimapPos degrees (same semantics as LibDBIcon)
@@ -232,7 +218,7 @@ local function EnsureInitialized()
             local x = math.cos(rad) * r
             local y = math.sin(rad) * r
             b:ClearAllPoints()
-            b:SetPoint("CENTER", _G.Minimap, "CENTER", x, y)
+            b:SetPoint("CENTER", Minimap, "CENTER", x, y)
         end
         fallbackRepos = Repos
 
@@ -241,9 +227,9 @@ local function EnsureInitialized()
                 local gg = EnsureGeneralDB()
                 if not gg then return end
                 local mx, my = GetCursorPosition()
-                local scale = _G.Minimap:GetEffectiveScale() or 1
+                local scale = Minimap:GetEffectiveScale() or 1
                 mx, my = mx / scale, my / scale
-                local cx, cy = _G.Minimap:GetCenter()
+                local cx, cy = Minimap:GetCenter()
                 local dx, dy = mx - cx, my - cy
                 local angle = math.deg(atan2(dy, dx))
                 --- Convert to LibDBIcon-style degrees (0 on right)

@@ -1,8 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars_Preview.lua")
 
 -- Menu2 global Castbars page preview.
 -- Owns the page-local preview state (selected unit/type, replayed interrupt), the
@@ -22,7 +22,7 @@ local CastbarPreview = MSUF.UFPreviewCastbar or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
-local C_Timer = M.MenuTimer or _G.C_Timer
+local C_Timer = M.MenuTimer or C_Timer
 local G, ReadG, ReadGBool, ControlMeta, RegisterControl = GP.G, GP.ReadG, GP.ReadGBool, GP.ControlMeta, GP.RegisterControl
 local CASTBAR_ACTION_BY_PATH = {
     ["focus_kick.reset_position"] = "reset_focus_kick_position",
@@ -186,19 +186,17 @@ local EMPOWER_STAGES = { 0.75, 1.5, 2.25 }
 local KICK_RECOVERY = { 0.4 }
 -- The empower castbar module loads on the Mainline TOC only (Midnight and
 -- WoW Forever); the Classic clients read the stored settings directly.
+-- Both providers load with the core before this addon, so resolve them once:
+-- the empowered preview reads them on every animation tick.
+local IsEmpowerBlinkEnabled = MSUF.Optional("MSUF_IsEmpowerStageBlinkEnabled")
+local GetEmpowerBlinkTime = MSUF.Optional("MSUF_GetEmpowerStageBlinkTime")
 local function EmpowerBlinkEnabled()
-    local isEnabled = MSUF.Optional("MSUF_IsEmpowerStageBlinkEnabled")
-    if isEnabled then return isEnabled() and true or false end
+    if IsEmpowerBlinkEnabled then return IsEmpowerBlinkEnabled() and true or false end
     return ReadGBool("empowerStageBlink", true)
 end
 local function EmpowerBlinkTime()
-    local blinkTime = MSUF.Optional("MSUF_GetEmpowerStageBlinkTime")
-    if blinkTime then
-        local value = tonumber(blinkTime())
-        if value then return max(0.05, min(1.00, value)) end
-    end
-    local value = tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25
-    return max(0.05, min(1.00, value))
+    local value = GetEmpowerBlinkTime and tonumber(GetEmpowerBlinkTime())
+    return max(0.05, min(1.00, value or tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25))
 end
 --- The stage the progress just crossed and how far its blink has run (0..1), or nil.
 local function EmpowerBlink(self, empowered, progress, now)
@@ -219,7 +217,7 @@ local function EmpowerBlink(self, empowered, progress, now)
     return nil
 end
 local function PlayerClass()
-    local _, class = _G.UnitClass("player")
+    local _, class = UnitClass("player")
     return class or "MAGE"
 end
 --- The root and scenes are made on the first paint of a visible row, kept for the box and stopped when it hides.

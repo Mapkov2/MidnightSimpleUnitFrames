@@ -13,15 +13,15 @@ local addonName, MSUF = ...
 --     RefreshAnchoredText and the OnMouseUp script; each is type-checked and
 --     skipped when absent.
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local FILE = "Integrations/MSUF_Integration_EllesmereUnlock.lua"
+local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
 -- Integration commands run unprotected (no protected call): a failure reaches
 -- the client error handler with the throwing stack.
 local PROVIDER_ID = "ellesmere"
 local LISTENER_OWNER = addonName or "MidnightSimpleUnitFrames"
 
 local function EllesmereAPI()
-    local api = _G.EllesmereUI
+    local api = EllesmereUI
     if type(api) ~= "table"
         or type(api.RegisterUnlockElements) ~= "function"
         or type(api.UnregisterUnlockElement) ~= "function"
@@ -35,11 +35,11 @@ end
 
 --- Register the MSUF provider even when the optional addon is absent.
 --- The controller checks its API before activating any integration.
-local EM2 = _G.MSUF_EM2
-local External = EM2 and EM2.ExternalProviders
+local EM2 = Require("MSUF_EM2", FILE)
+local External = EM2.ExternalProviders
 assert(External and type(External.Register) == "function", "MSUF Ellesmere bridge requires ExternalProviders")
 
-local General = _G.MSUF_GetGeneralDB
+local General = Require("MSUF_GetGeneralDB", FILE)
 
 local spec = {
     id = PROVIDER_ID,
@@ -93,7 +93,7 @@ local spec = {
         api:UnregisterUnlockModeListener(owner)
     end,
 
-    GetRoot = function() return _G.EllesmereUnlockMode end,
+    GetRoot = function() return EllesmereUnlockMode end,
     GetMoverKey = function(mover) return mover and mover._barKey end,
     SyncMover = function(mover)
         if mover and type(mover.Sync) == "function" then mover:Sync() end

@@ -8,10 +8,10 @@
 --- or Lua timer fallback.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_EbonMight.lua")
+local FILE = "ClassPower/MSUF_CP_EbonMight.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local builders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 --- Bound once by EBON_MIGHT at controller load: the controller's state, the
 --- Ebon Might constants and the host, style and text-level resolvers.
@@ -20,6 +20,13 @@ local CreateFrame = CreateFrame
 --- Native option tables, resolved on first use in each build.
 local durationTextOptions
 local durationBarOptions
+
+--- The combat harnesses swap InCombatLockdown at runtime, so it is read on
+--- every call rather than captured.
+local function InCombat()
+    local inCombat = InCombatLockdown
+    return type(inCombat) == "function" and inCombat() == true
+end
 
 local function ResolveHost()
     if type(GetHost) == "function" then
@@ -42,6 +49,10 @@ local function CaptureStyle()
         barG = supplied and supplied.barG,
         barB = supplied and supplied.barB,
         barA = supplied and supplied.barA,
+        barGloss = supplied and supplied.barGloss and {
+            enabled = supplied.barGloss.enabled == true,
+            strength = tonumber(supplied.barGloss.strength) or 0.5,
+        },
         fontPath = supplied and supplied.fontPath,
         fontSize = supplied and supplied.fontSize,
         fontFlags = supplied and supplied.fontFlags,
@@ -86,9 +97,9 @@ end
 local function GetDurationTextOptions()
     if durationTextOptions ~= nil then return durationTextOptions or nil end
 
-    local stringUtil = _G.C_StringUtil
+    local stringUtil = C_StringUtil
     local createFormatter = stringUtil and stringUtil.CreateNumericRuleFormatter
-    local rounding = _G.Enum and _G.Enum.NumericRuleFormatRounding
+    local rounding = Enum and Enum.NumericRuleFormatRounding
     if type(createFormatter) ~= "function" or not (rounding and rounding.Nearest ~= nil) then
         durationTextOptions = false
         return nil
@@ -109,7 +120,7 @@ end
 local function GetDurationBarOptions()
     if durationBarOptions then return durationBarOptions end
     durationBarOptions = {}
-    local enum = _G.Enum
+    local enum = Enum
     local interpolation = enum and enum.StatusBarInterpolation
     local direction = enum and enum.StatusBarTimerDirection
     if interpolation and interpolation.Immediate ~= nil then
@@ -137,8 +148,7 @@ local function ApplyTextStyle()
         return true
     end
 
-    local inCombat = _G.InCombatLockdown
-    if type(inCombat) == "function" and inCombat() == true then
+    if InCombat() then
         CP.ebonTextLayerRetryPending = true
         return false
     end
@@ -165,9 +175,8 @@ local function Accessible(region)
 end
 
 local function SlotMutable(bar, text)
-    local inCombat = _G.InCombatLockdown
-    if type(inCombat) == "function" and inCombat() == true then return false end
-    local secrets = _G.C_Secrets
+    if InCombat() then return false end
+    local secrets = C_Secrets
     if secrets and type(secrets.ShouldAurasBeSecret) == "function" and secrets.ShouldAurasBeSecret() then
         return false
     end
@@ -180,6 +189,12 @@ end
 --- every media, colour, font and offset change would stay invisible until
 --- the next /reload, because the slot is created exactly once per session.
 --- A denied restyle waits for PLAYER_REGEN_ENABLED (ebonStyleRetryPending).
+local function ApplyGloss(bar, style)
+    if style.barGloss then
+        MSUF.UFBarTextCommon.ApplyBarGloss(CP, bar, style.barGloss, "ebonGloss", style.barA)
+    end
+end
+
 local function RefreshStyle()
     local bar, text = CP.ebonNativeBar, CP.ebonNativeText
     if not (bar or text) then return false end
@@ -192,6 +207,7 @@ local function RefreshStyle()
     if bar then
         bar:SetStatusBarTexture(style.texture)
         bar:SetStatusBarColor(style.barR, style.barG, style.barB, style.barA)
+        ApplyGloss(bar, style)
     end
     if text then
         if style.fontPath and style.fontSize then
@@ -227,8 +243,7 @@ local function SetActive(active)
     end
 
     if active and not CP.ebonSensor then
-        local A3 = _G.MSUF_Auras3
-        local createSensor = A3 and A3.CreateClassPowerAuraSensor
+        local createSensor = MSUF.Require("MSUF_Auras3", FILE).CreateClassPowerAuraSensor
         if type(createSensor) == "function" and EBON.SPELL_ID then
             local style = CaptureStyle()
             CP.ebonSensor = createSensor(host, "msuf_cp_ebon_might", { [EBON.SPELL_ID] = true }, function(button)
@@ -249,6 +264,7 @@ local function SetActive(active)
                 bar:SetValue(0)
                 bar:SetStatusBarColor(style.barR, style.barG, style.barB, style.barA)
                 CP.ebonNativeBar = bar
+                ApplyGloss(bar, style)
                 button:SetDurationBar(bar, GetDurationBarOptions())
 
                 local textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, button))
@@ -312,8 +328,7 @@ local function SetActive(active)
             ApplyTextStyle()
         end
     elseif active then
-        local inCombat = _G.InCombatLockdown
-        CP.ebonSensorRetryPending = type(inCombat) == "function" and inCombat() == true or nil
+        CP.ebonSensorRetryPending = InCombat() or nil
     end
     return sensor ~= nil
 end

@@ -68,34 +68,36 @@ local function BindAdditionalGate(ctx, section, key)
         M.ControlGates.Apply(section, gateKey, MSUF.GF.GetConf(GP.CurrentScope())[key])
     end)
 end
-local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
-    local height = prefix == "healerMana" and 520 or prefix == "friendlyBoss" and 536 or prefix == "pets" and 546 or 456
-    local section = b:CollapsibleSection(id, title, height, false)
+local SECTION_BY_ID = {}
+-- Shared shell of every master-switch section: the collapsible, its group scope and its master
+-- switch. Returns the section, its width, the two-column control width and the switch key.
+local function BeginSection(ctx, b, id)
+    local def = SECTION_BY_ID[id]
+    local section = b:CollapsibleSection(id, def.title, def.height, false)
     if section._msuf2CollapsibleEntry then Schema.Section(section, "group") end
     local width = section._msuf2Width or b.width or 720
-    local controlWidth = max(180, (width - 96) / 2)
-    PrepareAdditionalSwitch(ctx, section, prefix .. "Enabled", "Enable", "rebuild")
+    PrepareAdditionalSwitch(ctx, section, def.key, def.label, def.mode)
+    return section, width, max(180, (width - 96) / 2), def.key
+end
+-- Slider row of a two-column section (left column x = 32, right column x = controlWidth + 64).
+local function SliderRow(key, default, label, lo, hi, x, y, width)
+    return { "slider", key, default, { label, lo, hi, 1, width }, { x, y, width, "LEFT" }, domain = "rebuild", scope = "group" }
+end
+local function BuildAdditionalSection(ctx, b, id, prefix, extra)
+    local section, width, controlWidth, gateKey = BeginSection(ctx, b, id)
+    local right = controlWidth + 64
     local rows = {}
-    if extra then rows[1] = extra(controlWidth) end
-    local dimensions = {
-        { "slider", prefix .. "Width", 100, { "Width", 20, 500, 1, controlWidth }, { 32, -128, controlWidth, "LEFT" }, domain = "rebuild", scope = "group" },
-        { "slider", prefix .. "Height", 24, { "Height", 10, 200, 1, controlWidth }, { controlWidth + 64, -128, controlWidth, "LEFT" }, domain = "rebuild",
-            scope = "group" },
-        { "slider", prefix .. "X", 0, { "Horizontal position", -2000, 2000, 1, controlWidth }, { 32, -218, controlWidth, "LEFT" }, domain = "rebuild",
-            scope = "group" },
-        { "slider", prefix .. "Y", -220, { "Vertical position", -2000, 2000, 1, controlWidth }, { controlWidth + 64, -218, controlWidth,
-            "LEFT" }, domain = "rebuild", scope = "group" },
-    }
-    for _, row in ipairs(dimensions) do rows[#rows + 1] = row end
+    if extra then rows[1] = { "toggle", extra[1], extra[2], { extra[3], 32, -72, controlWidth }, domain = "rebuild" } end
+    rows[#rows + 1] = SliderRow(prefix .. "Width", 100, "Width", 20, 500, 32, -128, controlWidth)
+    rows[#rows + 1] = SliderRow(prefix .. "Height", 24, "Height", 10, 200, right, -128, controlWidth)
+    rows[#rows + 1] = SliderRow(prefix .. "X", 0, "Horizontal position", -2000, 2000, 32, -218, controlWidth)
+    rows[#rows + 1] = SliderRow(prefix .. "Y", -220, "Vertical position", -2000, 2000, right, -218, controlWidth)
     if prefix ~= "healerMana" then
-        rows[#rows + 1] = { "slider", prefix .. "Columns", 1, { "Frames per row", 1, 8, 1, controlWidth }, { 32, -308, controlWidth,
-            "LEFT" }, domain = "rebuild", scope = "group" }
+        rows[#rows + 1] = SliderRow(prefix .. "Columns", 1, "Frames per row", 1, 8, 32, -308, controlWidth)
     end
-    rows[#rows + 1] = { "slider", prefix .. "TextSize", 11, { "Text size", 7, 32, 1, controlWidth }, { controlWidth + 64, -308,
-        controlWidth, "LEFT" }, domain = "rebuild", scope = "group" }
+    rows[#rows + 1] = SliderRow(prefix .. "TextSize", 11, "Text size", 7, 32, right, -308, controlWidth)
     if prefix == "pets" then
-        rows[#rows + 1] = { "slider", prefix .. "MaxCount", 40, { "Pet limit", 1, 40, 1, controlWidth }, { 32, -398, controlWidth, "LEFT" },
-            domain = "rebuild", scope = "group" }
+        rows[#rows + 1] = SliderRow(prefix .. "MaxCount", 40, "Pet limit", 1, 40, 32, -398, controlWidth)
     end
     rows[#rows + 1] = { "text", "menu2.gf_layout." .. prefix .. ".position_help", nil,
             { "X and Y count from the middle of the screen. Secure frames take new settings once combat ends.",
@@ -119,20 +121,16 @@ local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
             historySource = "menu:group-healer-mana-text-color", maxTargets = 1,
         })
     end
-    BindAdditionalGate(ctx, section, prefix .. "Enabled")
+    BindAdditionalGate(ctx, section, gateKey)
 end
-local function BuildTargets(ctx, b)
-    BuildAdditionalSection(ctx, b, "party_targets", "Member targets", "targets", function(width)
-        return { "toggle", "targetsIncludePlayer", false, { "Include your own target", 32, -72, width }, domain = "rebuild" }
-    end)
+-- extra: { key, default, label } of the toggle above the sliders.
+local function UnitSection(id, prefix, extra)
+    return function(ctx, b) BuildAdditionalSection(ctx, b, id, prefix, extra) end
 end
-local function BuildPets(ctx, b) BuildAdditionalSection(ctx, b, "group_pets", "Pet frames", "pets") end
-local function BuildFriendlyBosses(ctx, b)
-    BuildAdditionalSection(ctx, b, "friendly_bosses", "Allied boss frames", "friendlyBoss", function(width)
-        return { "toggle", "friendlyBossHealerOnly", true, { "Only while you are a healer", 32, -72, width }, domain = "rebuild" }
-    end)
-end
-local function BuildHealerMana(ctx, b) BuildAdditionalSection(ctx, b, "healer_mana", "Healer mana bars", "healerMana") end
+local BuildTargets = UnitSection("party_targets", "targets", { "targetsIncludePlayer", false, "Include your own target" })
+local BuildPets = UnitSection("group_pets", "pets")
+local BuildFriendlyBosses = UnitSection("friendly_bosses", "friendlyBoss", { "friendlyBossHealerOnly", true, "Only while you are a healer" })
+local BuildHealerMana = UnitSection("healer_mana", "healerMana")
 
 -- Opacity is edited in percent and stored as 0-1: the scope slider binder saves
 -- whole numbers, so a 0-1 slider could only store fully clear or opaque.
@@ -150,13 +148,8 @@ local function PercentSlider(ctx, parent, label, key, default, width, x, y)
 end
 
 local function BuildNameBar(ctx, b)
-    local section = b:CollapsibleSection("name_bar", "Name strip", 300, false)
-    if section._msuf2CollapsibleEntry then Schema.Section(section, "group") end
-    local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
-    PrepareAdditionalSwitch(ctx, section, "nameBarEnabled", "Show names on a strip above the health bar", "rebuild")
-    Schema.Build(ctx, section, {
-        { "slider", "nameBarHeight", 14, { "Strip height", 4, 60, 1, width }, { 32, -128, width, "LEFT" }, domain = "rebuild", scope = "group" },
-    }, ROW_OPTIONS)
+    local section, _, width, gateKey = BeginSection(ctx, b, "name_bar")
+    Schema.Build(ctx, section, { SliderRow("nameBarHeight", 14, "Strip height", 4, 60, 32, -128, width) }, ROW_OPTIONS)
     PercentSlider(ctx, section, "Strip opacity", "nameBarAlpha", .95, width, width + 64, -128)
     Schema.Build(ctx, section, {
         { "color", "nameBarColor", nil, { "Strip color" }, { 32, -218, width, "LEFT" },
@@ -170,7 +163,7 @@ local function BuildNameBar(ctx, b)
             end,
             meta = GP.ResolveControlMeta(ctx, nil, "color.nameBar"), domain = "rebuild", scope = "group" },
     }, CUSTOM_OPTIONS)
-    BindAdditionalGate(ctx, section, "nameBarEnabled")
+    BindAdditionalGate(ctx, section, gateKey)
 end
 -- Buff coverage (WoW Forever). A toggle shows the client's own name for the
 -- buff's first spell when it can read one, so every language sees the name it
@@ -189,9 +182,9 @@ local ICON_ANCHORS = {
     {value="BOTTOMLEFT",text="Bottom left"}, {value="BOTTOM",text="Bottom"}, {value="BOTTOMRIGHT",text="Bottom right"},
 }
 local function BuffLabel(entry)
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     local name = entry.spell and spellAPI and type(spellAPI.GetSpellName) == "function" and spellAPI.GetSpellName(entry.spell)
-    local secret = _G.issecretvalue
+    local secret = issecretvalue
     if name ~= nil and not (secret and secret(name)) and type(name) == "string" and name ~= "" then return name end
     return entry.label
 end
@@ -202,10 +195,7 @@ local BLESSING_CHOICES = {
     { value = 5, text = "Blessing of Light" }, { value = 6, text = "Blessing of Sanctuary" },
 }
 local function BuildBlessingPriorities(ctx, b)
-    local section = b:CollapsibleSection("blessing_priorities", "Blessing priorities (Forever)", 1330, false)
-    if section._msuf2CollapsibleEntry then Schema.Section(section, "group") end
-    local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
-    PrepareAdditionalSwitch(ctx, section, "buffCoverageBlessingPriorities", "Use blessing priorities", "visual")
+    local section, _, width, gateKey = BeginSection(ctx, b, "blessing_priorities")
     local rows = {
         { "text", "menu2.gf_layout.blessingpriorities.help", nil, { [[Choose up to three blessings per role.
 Paladins use their first learned choice. Other classes use the first choice; unassigned members use DPS.]], 32, -82, width * 2 + 32, T.colors.muted },
@@ -236,13 +226,10 @@ Paladins use their first learned choice. Other classes use the first choice; una
     for _, row in ipairs(rows) do
         if row[1] == "dropdown" then WithExactGroupScope(controls[row[2]], row[2]) end
     end
-    BindAdditionalGate(ctx, section, "buffCoverageBlessingPriorities")
+    BindAdditionalGate(ctx, section, gateKey)
 end
 local function BuildBuffCoverage(ctx, b)
-    local section = b:CollapsibleSection("buff_coverage", "Buff coverage (Forever)", 656, false)
-    if section._msuf2CollapsibleEntry then Schema.Section(section, "group") end
-    local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
-    PrepareAdditionalSwitch(ctx, section, "buffCoverageEnabled", "Show buff coverage icons", "visual")
+    local section, _, width, gateKey = BeginSection(ctx, b, "buff_coverage")
     local rows = {}
     for i = 1, #BUFF_COVERAGE_TOGGLES do
         local entry = BUFF_COVERAGE_TOGGLES[i]
@@ -270,7 +257,7 @@ local function BuildBuffCoverage(ctx, b)
     local controls = Schema.Build(ctx, section, rows, ROW_OPTIONS)
     WithExactGroupScope(controls.buffCoverageGlow, "buffCoverageGlow")
     WithExactGroupScope(controls.buffCoverageCombat, "buffCoverageCombat")
-    BindAdditionalGate(ctx, section, "buffCoverageEnabled")
+    BindAdditionalGate(ctx, section, gateKey)
 end
 local TIER_GROWTH = { {value="INHERIT",text="Same as the base layout"}, {value="DOWN",text="Down"}, {value="UP",text="Up"}, {value="LEFT",text="Left"},
     {value="RIGHT",text="Right"} }
@@ -305,8 +292,44 @@ local function BuildSizingTier(ctx, parent, prefix, fullWidth, metadata)
     return controls
 end
 
+-- One entry per section this file builds, in Layout page order: collapsible id, title and height,
+-- the master switch (key, label, apply domain) and the gates the Layout page applies before it builds one.
+-- clientCapability: the MSUF.Client fact that must be true for the section to
+-- exist, the same capability names Search/MSUF_Menu2_Search_IndexQuery.lua
+-- ties client-only static search rows to. frameScope: the unit or group scope
+-- the section needs (M.SupportsFrameScope), e.g. boss units for allied bosses.
+local SECTION_DEFS = {
+    { sectionId = "buff_coverage", title = "Buff coverage (Forever)", height = 656, clientCapability = "IsForever", build = BuildBuffCoverage,
+        key = "buffCoverageEnabled", label = "Show buff coverage icons", mode = "visual" },
+    { sectionId = "blessing_priorities", title = "Blessing priorities (Forever)", height = 1330, clientCapability = "IsForever",
+        build = BuildBlessingPriorities, key = "buffCoverageBlessingPriorities", label = "Use blessing priorities", mode = "visual" },
+    { sectionId = "name_bar", title = "Name strip", height = 300, build = BuildNameBar,
+        key = "nameBarEnabled", label = "Show names on a strip above the health bar", mode = "rebuild" },
+    { sectionId = "party_targets", title = "Member targets", height = 456, groupScope = "party", build = BuildTargets,
+        key = "targetsEnabled", label = "Enable", mode = "rebuild" },
+    { sectionId = "group_pets", title = "Pet frames", height = 546, build = BuildPets, key = "petsEnabled", label = "Enable", mode = "rebuild" },
+    { sectionId = "friendly_bosses", title = "Allied boss frames", height = 536, frameScope = "boss", build = BuildFriendlyBosses,
+        key = "friendlyBossEnabled", label = "Enable", mode = "rebuild" },
+    { sectionId = "healer_mana", title = "Healer mana bars", height = 520, build = BuildHealerMana,
+        key = "healerManaEnabled", label = "Enable", mode = "rebuild" },
+}
+for _, def in ipairs(SECTION_DEFS) do SECTION_BY_ID[def.sectionId] = def end
+-- Fresh Layout page specs for these sections, ready for its lazy section builder.
+local function LayoutSpecs()
+    local specs = {}
+    for i, def in ipairs(SECTION_DEFS) do
+        specs[i] = {
+            sectionId = def.sectionId, title = def.title, height = def.height, build = def.build,
+            clientCapability = def.clientCapability, groupScope = def.groupScope, frameScope = def.frameScope,
+            prepareShell = function(ctx, section) PrepareAdditionalSwitch(ctx, section, def.key, def.label, def.mode) end,
+        }
+    end
+    return specs
+end
+
 M.GroupFrameAdditionalSections = {
     Targets = BuildTargets, Pets = BuildPets, FriendlyBosses = BuildFriendlyBosses, HealerMana = BuildHealerMana,
     NameBar = BuildNameBar, BuffCoverage = BuildBuffCoverage, BlessingPriorities = BuildBlessingPriorities,
     SizingTier = BuildSizingTier, ExactScope = WithExactGroupScope, PrepareSwitch = PrepareAdditionalSwitch,
+    LayoutSpecs = LayoutSpecs,
 }

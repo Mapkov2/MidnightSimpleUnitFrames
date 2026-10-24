@@ -7,13 +7,14 @@
 --- castbars, then schedules a UF apply commit when needed.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local FILE = "Runtime/MSUF_TextureRuntime.lua"
 MSUF.Textures = MSUF.Textures or {}
 
 local type, tonumber = type, tonumber
 local pairs = pairs
 
 local ExportPublic = MSUF.ExportPublic
+local Require, Optional = MSUF.Require, MSUF.Optional
 
 
 
@@ -62,7 +63,7 @@ end
 --- apply so multiple setters collapse into one engine commit.
 
 
-local ScheduleApplyCommit = _G.MSUF_UF_ScheduleApplyCommit
+local ScheduleApplyCommit = MSUF.Require("MSUF_UF_ScheduleApplyCommit", FILE)
 
 local _iterState = {}
 local PREDICTION_REFRESH_ELEMENTS = { "Prediction", "Alpha" }
@@ -72,6 +73,16 @@ local PREDICTION_REFRESH_ELEMENTS = { "Prediction", "Alpha" }
 -- addon has loaded, so they call the engine directly.
 local function RefreshPredictionElements(reason, scope, skipUnitFrames)
     return MSUF.UF.RefreshPredictionBars(scope, reason or "MSUF2_ABSORB_TEXTURE", skipUnitFrames) or false
+end
+
+-- Rounded unit frames repaint their bars after a global texture change.
+local function ApplyRoundedUnitframes(scope)
+    if not NormalizeScope(scope) and MSUF.PublicGlobals.MSUF_RoundedUF_Active == true then
+        local applyRounded = Optional("MSUF_RoundedUF_OnApplyAll")
+        if type(applyRounded) == "function" then
+            applyRounded()
+        end
+    end
 end
 
 local function RefreshGroupBarVisuals(scope)
@@ -106,7 +117,7 @@ local function _Iter_ApplyAllBarTex(f)
     local spec = f and f.MSUFSpec
     local hpTex = (spec and spec.health and spec.health.texture) or (spec and spec.texture) or S.texHP
     local healthTextureChanged = _ApplyTexCached(f.hpBar, hpTex)
-    if S.applyBg then S.applyBg(f) end
+    S.applyBg(f)
 
     -- The compiler owns the full power-texture precedence (global bars value ->
     -- Class Resources detached art -> per-unit override), so the finished spec
@@ -151,26 +162,19 @@ local function UpdateAllBarTextures(scope, skipUnitFrames, skipCastbars)
     end
 
     if skipUnitFrames ~= true then
-        local getBarTexture = _G.MSUF_GetBarTexture
-        if type(getBarTexture) ~= "function" then return end
-        local texHP = getBarTexture()
+        local texHP = Require("MSUF_GetBarTexture", FILE)()
         if not texHP then return end
 
         _iterState.texHP = texHP
-        _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
+        _iterState.applyBg = Require("MSUF_ApplyBarBackgroundVisual", FILE)
 
         ForEachUnitFrame(_Iter_ApplyAllBarTex, scope)
     end
-    if not NormalizeScope(scope) and _G.MSUF_RoundedUF_Active == true then
-        local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
-        if type(applyRounded) == "function" then
-            applyRounded()
-        end
-    end
+    ApplyRoundedUnitframes(scope)
 
     -- Castbars load after this file; a texture refresh during the core load
     -- leaves them to their own first apply.
-    local updateCastbars = _G.MSUF_UpdateCastbarTextures_Immediate or MSUF.Optional("MSUF_UpdateCastbarTextures")
+    local updateCastbars = Optional("MSUF_UpdateCastbarTextures_Immediate") or Optional("MSUF_UpdateCastbarTextures")
     if skipCastbars ~= true and not NormalizeScope(scope) and updateCastbars then
         updateCastbars()
     end
@@ -179,12 +183,7 @@ end
 
 local function UpdateAbsorbBarTextures(scope)
     local refreshed = RefreshPredictionElements("MSUF2_ABSORB_TEXTURE", scope)
-    if not NormalizeScope(scope) and _G.MSUF_RoundedUF_Active == true then
-        local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
-        if type(applyRounded) == "function" then
-            applyRounded()
-        end
-    end
+    ApplyRoundedUnitframes(scope)
     return refreshed
 end
 
@@ -211,7 +210,7 @@ end
 MSUF.MSUF_DetachedPowerBar_RefreshTextures = DetachedPowerBarRefreshTextures
 ExportPublic("MSUF_DetachedPowerBar_RefreshTextures", DetachedPowerBarRefreshTextures)
 
-if not _G.MSUF_UpdateAllBarTextures_Immediate then
+if not Optional("MSUF_UpdateAllBarTextures_Immediate") then
     ExportPublic("MSUF_UpdateAllBarTextures_Immediate", UpdateAllBarTextures)
     --- A unit scope marks its frames dirty for the next UF apply commit. A
     --- global or group scope has no dirty-frame route, so it repaints on the
@@ -250,7 +249,8 @@ end
 
 local function MSUF_UpdateAbsorbDisplayMode(mode)
     EnsureDBSafe()
-    local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local db = MSUF_DB
+    local g = db and db.general
     if not g then return end
     mode = tonumber(mode or g.absorbTextMode) or 2
     if mode == 1 or mode == 4 then

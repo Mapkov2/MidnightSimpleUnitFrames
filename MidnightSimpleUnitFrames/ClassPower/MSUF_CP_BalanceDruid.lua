@@ -9,13 +9,13 @@
 --- any trailing code added after this block would silently vanish).
 do
     local _, MSUF = ...
-    MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-    local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_BalanceDruid.lua")
+    local FILE = "ClassPower/MSUF_CP_BalanceDruid.lua"
+    local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
     local ExportPublic = MSUF.ExportPublic
 
     local CoreUnitFrame = MSUF.UF.GetFrame
 
-    local balanceBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
+    local CPConst = MSUF.Require("MSUF_CP_CONST", FILE)
 
     --- Class gate: Balance-specific runtime setup only applies to Druids.
     --- Everything inside this do-block is cold-dead code for other classes
@@ -40,7 +40,6 @@ do
     local UnitPowerMax = UnitPowerMax
     local GetTime = GetTime
     local CreateFrame = CreateFrame
-    local C_Timer = C_Timer
     local C_UnitAuras = C_UnitAuras
     local C_Spell = C_Spell
     local C_SpellBook = C_SpellBook
@@ -48,15 +47,16 @@ do
     local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
 
 
-    local CPConst = _G.MSUF_CP_CONST or {}
 local CPK = CPConst.CPK or { BAL = {}, SPELL = {} }
-local _issecretvalue = _G.issecretvalue
-local _canaccesstable = _G.canaccesstable
 local NotSecret = MSUF.Secrets.NotSecret
 
 local CanAccessTableValue = MSUF.Secrets.CanAccessTable
 
 local CanAccessOptionalTableValue = MSUF.Secrets.CanAccessOptionalTable
+
+local GetPowerBarColor = MSUF.Require("MSUF_GetPowerBarColor", FILE)
+local GetBarTexture = MSUF.Require("MSUF_GetBarTexture", FILE)
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", FILE)
 
 local LUNAR_POWER = (Enum and Enum.PowerType and Enum.PowerType.LunarPower) or 8
 local _active = false
@@ -72,7 +72,7 @@ local _colorOverrides = nil
 local _auraDeferred = false
 
 local function _refreshConfig()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local b = db and db.bars
     local g = db and db.general
     _featureOn = not (b and b.showClassPower == false)
@@ -99,7 +99,7 @@ local function _checkActive()
 end
 
 local function _getPowerBar()
-    local pf = CoreUnitFrame("player") or _G.MSUF_player
+    local pf = CoreUnitFrame("player")
     return pf and pf.targetPowerBar or nil
 end
 
@@ -176,6 +176,10 @@ local function _StoreTrackedAura(aura)
     return true
 end
 
+--- The controller's tracked-aura getter loads after this file; it is resolved
+--- on the first fetch and kept, so an aura event never pays the lookup again.
+local TrackedPlayerAura
+
 local function _FetchTrackedAura(spellID)
     spellID = _AuraID(spellID)
     if not spellID then return nil end
@@ -184,25 +188,21 @@ local function _FetchTrackedAura(spellID)
     --- GetPlayerAuraBySpellID, or GetUnitAuraBySpellID where the first is
     --- missing (MSUF_CP_Controller_Auras.lua CPAuras.Fetch). When it answers
     --- nothing usable, only the query it did not make is left to ask.
-    local shared = _G.MSUF_CP_GetTrackedPlayerAura
-    local askedPlayer = false
-    if type(shared) == "function" then
-        local aura = shared(spellID)
-        if CanAccessTableValue(aura) then
-            _StoreTrackedAura(aura)
-            return aura
-        end
-        askedPlayer = true
+    local shared = TrackedPlayerAura
+    if not shared then
+        shared = MSUF.Require("MSUF_CP_GetTrackedPlayerAura", FILE)
+        TrackedPlayerAura = shared
+    end
+    local aura = shared(spellID)
+    if CanAccessTableValue(aura) then
+        _StoreTrackedAura(aura)
+        return aura
     end
 
     if not C_UnitAuras then return nil end
-    local aura
-    local hasPlayerGetter = type(C_UnitAuras.GetPlayerAuraBySpellID) == "function"
-    if hasPlayerGetter and not askedPlayer then
-        aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
-    end
-    if (not CanAccessTableValue(aura)) and type(C_UnitAuras.GetUnitAuraBySpellID) == "function"
-        and (hasPlayerGetter or not askedPlayer) then
+    aura = nil
+    if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function"
+        and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
         aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
     end
     if CanAccessTableValue(aura) then
@@ -365,10 +365,8 @@ end
 local function _resolvePredColor()
     local pr, pg, pb = CPConst.OverrideRGB(GetColorOverrides(), "AP_PREDICTION")
     if pr then return pr, pg, pb end
-    if _G.MSUF_GetPowerBarColor then
-        local r, g, b = _G.MSUF_GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
-        if type(r) == "number" then return r, g, b end
-    end
+    local r, g, b = GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
+    if type(r) == "number" then return r, g, b end
     return 0.30, 0.52, 0.90
 end
 
@@ -412,8 +410,7 @@ local function _updateOverlay()
         tex:Hide()
         _predTex = tex
     end
-    local getBarTex = _G.MSUF_GetBarTexture
-    local texture = getBarTex and getBarTex() or "Interface\\Buttons\\WHITE8x8"
+    local texture = GetBarTexture() or"Interface\\Buttons\\WHITE8x8"
     if _predTex._msufTexture ~= texture then
         _predTex:SetTexture(texture)
         _predTex._msufTexture = texture
@@ -575,12 +572,7 @@ end
 local function _deferAuraRefresh()
     if _auraDeferred then return end
     _auraDeferred = true
-    local scheduleOnce = _G.MSUF_ScheduleOnce
-    if type(scheduleOnce) == "function" then
-        scheduleOnce("MSUF_BALANCE_AURA_REFRESH", _runDeferredAuraRefresh)
-    else
-        C_Timer.After(0, _runDeferredAuraRefresh)
-    end
+    ScheduleOnce("MSUF_BALANCE_AURA_REFRESH", _runDeferredAuraRefresh)
 end
 
     local function BalanceOnEvent(_, event, arg1, arg2, arg3)

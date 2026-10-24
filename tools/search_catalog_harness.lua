@@ -7,6 +7,9 @@ table.unpack = table.unpack or unpack
 package.path = ".github/scripts/?.lua;tools/?.lua;tools/MenuTest/?.lua;" .. package.path
 require("wow_stubs")
 
+-- The catalog world builds pages without most core collaborators; a required
+-- one that no provider here defines answers nil instead of raising.
+rawset(_G, "__MSUF_FIXTURE_ABSENT_ANSWERS_NIL", true)
 local Auras3Loader = require("auras3_test_loader")
 Auras3Loader.Install()
 local runtimePorts = assert(loadfile(".github/quality/service_ports.lua"))()
@@ -213,6 +216,11 @@ do
     -- Its Group Aura filter code reads State's stored-token check from
     -- MSUF.ProfileNormalize, which the shipped core loads long before it.
     assert(loadfile(Join(ROOT, "tools/tests/profile_normalize_loader.lua")))().Install(ROOT, MSUF)
+    -- Profiles publishes this real normalizer before Auras3's core loads.
+    local translateProfile = MSUF.ProfileNormalize.TranslateProfileToCurrent
+    assert(type(translateProfile) == "function", "current profile translator did not load")
+    MSUF.ExportPublic("MSUF_ProfileIO_TranslateProfileToCurrent", translateProfile)
+    MSUF.MSUF_ProfileIO_TranslateProfileToCurrent = translateProfile
     -- Preview consumers now share the shipped core mock painter. Load its
     -- actual namespace and shape owners before the menu, as every TOC does.
     for _, name in ipairs({"Core", "IconShape", "MockAuraPainter"}) do
@@ -240,6 +248,8 @@ do
     -- main addon loads with its shared UI primitives long before Menu2, over
     -- Blizzard's StaticPopup system (modelled by tools/tests/static_popup_stub.lua).
     assert(loadfile(Join(ROOT, "tools/tests/static_popup_stub.lua")))().Install(_G)
+    -- The TOC loads the real Style owner before Widgets binds its skin helpers.
+    assert(loadfile(Join(CORE, "Shell/UI/MSUF_Style.lua")))("MidnightSimpleUnitFrames", MSUF)
     local widgetsPath = Join(CORE, "Shell/UI/MSUF_Widgets.lua")
     local widgetsChunk, widgetsErr = loadfile(widgetsPath)
     assert(widgetsChunk, widgetsPath .. ": " .. tostring(widgetsErr))
@@ -288,7 +298,9 @@ do
         end
     end
     for _, path in ipairs(menuPaths) do
-        for list in Read(Join(ROOT, path)):gmatch("M%.RequireGlobals%(%s*\"[^\"]+\"%s*,%s*(%b{})") do
+        local source = Read(Join(ROOT, path))
+        -- The first argument is the file name, as a literal or a FILE local.
+        for list in source:gmatch("M%.RequireGlobals%(%s*[^,%)]+,%s*(%b{})") do
             for name in list:gmatch("\"(MSUF_[%w_]+)\"") do
                 local kind = type(rawget(_G, name))
                 if kind ~= "function" and kind ~= "table" then
@@ -296,6 +308,25 @@ do
                 end
             end
         end
+    end
+end
+
+-- The Castbars page first checks the client capability, then asks the runtime
+-- GCD bar whether it is supported; the catalog world has no GCD bar, so the
+-- client capability stands, as it did before the page required the probe.
+if type(rawget(_G, "MSUF_GCDBar_IsSupported")) ~= "function" then
+    rawset(_G, "MSUF_GCDBar_IsSupported", function() return true end)
+end
+
+-- Pages also bind core collaborators with MSUF.Require. The catalog world
+-- answers a collaborator it does not define the same way as above, but only
+-- at the moment of the call, so a provider the world defines later still wins.
+do
+    local Require, Optional = MSUF.Require, MSUF.Optional
+    local function Absent() return nil end
+    MSUF.Require = function(name, context, ...)
+        if select("#", ...) > 0 then return Require(name, context, ...) end
+        return Optional(name) or Absent
     end
 end
 

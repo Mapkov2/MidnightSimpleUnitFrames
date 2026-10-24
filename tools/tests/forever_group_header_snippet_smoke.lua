@@ -33,7 +33,7 @@ local raidCount = 0
 local rosterGroups = {}
 
 local function NewRegion(parent)
-    local frame = { parent = parent, attributes = {}, shown = false, width = 0, height = 0, hooks = {} }
+    local frame = { parent = parent, attributes = {}, shown = false, width = 0, height = 0, hooks = {}, events = {} }
     function frame:SetSize(width, height) self.width, self.height = width, height end
     function frame:SetWidth(width) self.width = width end
     function frame:SetHeight(height) self.height = height end
@@ -54,6 +54,8 @@ local function NewRegion(parent)
     function frame:SetRoundLayoutToNearestPixel(enabled) self.roundLayout = enabled end
     function frame:RegisterForClicks(clicks) self.clicks = clicks end
     function frame:GetAttribute(key) return self.attributes[key] end
+    function frame:GetScript(kind) return self[kind] end
+    function frame:SetScript(kind, callback) self[kind] = callback end
     function frame:SetAttribute(key, value) self.attributes[key] = value end
     function frame:HookScript(kind, callback)
         self.hooks[kind] = self.hooks[kind] or {}
@@ -67,8 +69,9 @@ local function NewRegion(parent)
     end
     function frame:Hide() self.shown = false end
     function frame:GetChildren() return unpack(self.children or {}) end
-    function frame:RegisterEvent() end
-    function frame:UnregisterAllEvents() end
+    function frame:RegisterEvent(event) self.events[event] = true end
+    function frame:UnregisterEvent(event) self.events[event] = nil end
+    function frame:UnregisterAllEvents() self.events = {} end
     return frame
 end
 
@@ -90,6 +93,7 @@ end
 -- reduced to button creation, SetupUnitButtonConfiguration and unit assignment.
 local function UpdateHeader(header)
     if not header:IsVisible() then return end
+    header.nativeUpdates = (header.nativeUpdates or 0) + 1
     local units = HeaderUnits(header)
     local unitCount = #units
     local unitsPerColumn = header.attributes.unitsPerColumn
@@ -133,7 +137,9 @@ local function NewGroupHeader(parent)
     header.OnShow = UpdateHeader
     function header:SetAttribute(key, value)
         self.attributes[key] = value
-        -- SecureGroupHeader_OnAttributeChanged; child refs are set without response.
+        -- SecureGroupHeader_OnAttributeChanged: _ignore and child refs do not
+        -- run layout, and changes inside the _ignore window stay suspended.
+        if key == "_ignore" or self.attributes._ignore then return end
         if not key:find("^child") and not key:find("^frameref") then UpdateHeader(self) end
     end
     return header
@@ -147,6 +153,22 @@ local function Load(isForever)
     _G.CreateFrame = function(_, _, parent, template)
         if template == "SecureGroupHeaderTemplate" then return NewGroupHeader(parent) end
         return NewRegion(parent)
+    end
+    -- SecureHandlers.lua's OnShow prebody: false suppresses the retained
+    -- native script. Full native layout coverage lives in the Blizzard smoke.
+    _G.SecureHandlerWrapScript = function(frame, script, owner, prebody, postbody)
+        Check(script == "OnShow" and owner == frame and postbody == nil, "unexpected header wrapper")
+        Check(not InCombatLockdown(), "header wrapper installed in combat")
+        local original = frame:GetScript(script)
+        Check(type(original) == "function", "native OnShow handler missing before wrap")
+        local pre = assert(loadstring(prebody, "=SecureHandlerWrapScript.OnShow"))
+        setfenv(pre, { self = frame })
+        local wrapper = function(self, ...)
+            if pre() == false then return end
+            return original(self, ...)
+        end
+        frame:SetScript(script, wrapper)
+        frame.fixtureWrapper = { original = original, wrapper = wrapper }
     end
     local conf = {
         party = {
@@ -190,6 +212,10 @@ local function Load(isForever)
     end
     dofile(repo .. "/tools/tests/group_dependencies.lua")(ns, repo)
     _G.MSUF_NS = ns
+    -- The shared unit-frame helpers the header code binds when it loads (anchor
+    -- clamp and point fractions); the real provider loads before the group files.
+    assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))().LoadShipped(repo,
+        "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua", ns)
     local controller = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))
     controller("MidnightSimpleUnitFrames", ns)
     assert(loadfile(headersPath))("MidnightSimpleUnitFrames", ns)
@@ -279,6 +305,18 @@ local function RunClient(isForever)
     inRaid, raidCount = true, 12
     local raid = assert(GF.SetupHeader("raid", "raid"), client .. ": raid header did not build")
     CheckSnippet(raid, 80, 32, client .. " raid header")
+    -- Verify the fixture actually executes the restricted predicate and
+    -- forwards the original native layout when its guard permits it.
+    if raid.fixtureWrapper then
+        raid:Show()
+        local updates = raid.nativeUpdates
+        raid:SetAttribute("_ignore", true)
+        raid:GetScript("OnShow")(raid)
+        Check(raid.nativeUpdates == updates, client .. ": wrapped OnShow ignored _ignore")
+        raid:SetAttribute("_ignore", nil)
+        raid:GetScript("OnShow")(raid)
+        Check(raid.nativeUpdates == updates + 1, client .. ": wrapped OnShow lost native layout")
+    end
     conf.raid.sortClassPriority, conf.raid.classOrder = true, "MAGE,PRIEST"
     raid = GF.SetupHeader("raid", "raid")
     -- Class priority is a native CLASS grouping: no frozen name list.

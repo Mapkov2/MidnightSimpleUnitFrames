@@ -22,19 +22,9 @@ local forcedUnits = {
 local Preview = { State = state, ForcedUnits = forcedUnits }
 UF.Preview = Preview
 
--- These fixed outputs use Bootstrap's exact stores with keys resolved once.
-local Public, PublicGlobals = MSUF.Public, MSUF.PublicGlobals
-local LegacyGlobals = MSUF.Compat and MSUF.Compat.LegacyGlobals
-assert(type(Public) == "table" and type(PublicGlobals) == "table" and type(LegacyGlobals) == "table",
-  "MSUF: missing required dependency 'Bootstrap public tables' required by UF.Preview")
-local PUBLIC_KEYS = {
-  MSUF_UnitEditModeActive = "UnitEditModeActive", MSUF_PreviewTestMode = "PreviewTestMode",
-  MSUF_BossTestMode = "BossTestMode", MSUF_ArenaTestMode = "ArenaTestMode",
-  MSUF2_BossUnitframePreviewActive = "MSUF2_BossUnitframePreviewActive",
-  MSUF2_ArenaUnitframePreviewActive = "MSUF2_ArenaUnitframePreviewActive", MSUF_UnitPreviewActive = "UnitPreviewActive",
-}
 -- Declare the seven initial nil outputs through the real Bootstrap publisher.
--- Subsequent commits use its resolved stores; no request is made at declaration.
+-- Subsequent commits publish through it too, so the namespace mirror and the
+-- global export policy stay in one place; no request is made at declaration.
 local ExportPublic, value = MSUF.ExportPublic, nil
 ExportPublic("MSUF_UnitEditModeActive", value)
 ExportPublic("MSUF_PreviewTestMode", value)
@@ -110,17 +100,14 @@ local DERIVED = { all = UpdateAllForce, boss = UpdateBossForce, bossPage = Updat
   arena = UpdateArenaForce, arenaPage = UpdateArenaForce }
 local function BuildRequestWriter(key, value)
   local name = MIRRORS[key]
-  local publicKey, updateDerived = PUBLIC_KEYS[name], DERIVED[key]
+  local updateDerived = DERIVED[key]
   if value == true and (key == "arena" or key == "arenaPage") then updateDerived = EnableArenaForce end
   return function()
     local state = state
     if state[key] == value then return false end
     state[key] = value
     if updateDerived then updateDerived() end
-    Public[publicKey] = value
-    PublicGlobals[name] = value
-    _G[name] = value
-    LegacyGlobals[name] = true
+    ExportPublic(name, value)
     return true
   end
 end

@@ -1,10 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: NativeApply.
 -- Container retirement/reuse and configuration application. Keep ownership changes atomic and preserve native handoff, geometry and protected-click
 -- retirement contracts.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua")
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 local tostring, type = tostring, type
 local function RebindCommittedOwners(A3, root, keys, oldUnit, unit)
@@ -298,7 +297,7 @@ local function ReviveNativeLane(root, key, current, signature, retire, parentFra
     if forceRecreate == true and root._msufA3ParkedLanes then root._msufA3ParkedLanes[key] = nil end
     if forceRecreate == true or (current and current._msufA3StructuralSignature == signature) then return current end
     local pool = root._msufA3ParkedLanes and root._msufA3ParkedLanes[key]
-    local parked = pool and Runtime.LatchGuard.TakeRevivableNativeOwner(pool, signature)
+    local parked = pool and pool[signature]
     if not parked then return current end
     pool[signature] = nil
     retire(root, key, current, parentFrame)
@@ -756,7 +755,7 @@ local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame
 end
 
 local exports = {
-    ApplyConfig = ApplyConfig, ApplyDispelSensorRoot = ApplyDispelSensorRoot,
+    ApplyConfig = ApplyConfig,
     ApplyLane = ApplyLane,
     CreateClassPowerAuraSensor = CreateClassPowerAuraSensor,
     HideState = HideState,

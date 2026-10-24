@@ -2,7 +2,6 @@
 -- Standard Unit and Group lane compilation from the shared schema. Layout and filter ownership are resolved before native creation.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.LaneConfig = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local math_max = math.max
@@ -225,7 +224,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         -- hide correct content while costing a second native owner per group
         -- unit plus the UNIT_FLAGS shard. Ungated lanes fold into the shared
         -- GroupSlots container. Older clients keep the fail-closed gate.
-        and type(_G.UnitIsPlayerControlledOrGroupMember) ~= "function" then
+        and type(UnitIsPlayerControlledOrGroupMember) ~= "function" then
         identityCandidateMode = "assist"
     elseif hasIncludeIDs and nativeFilter:find("HARMFUL", 1, true) ~= nil then
         identityCandidateMode = "hostile"
@@ -238,7 +237,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         -- of MSUF's assist state machine when that API contract is present;
         -- AuraContainer remains the sole per-aura filter owner. Older clients
         -- retain the conservative fail-closed gate.
-        and type(_G.UnitIsPlayerControlledOrGroupMember) ~= "function" then
+        and type(UnitIsPlayerControlledOrGroupMember) ~= "function" then
         identityCandidateMode = "assist"
     end
     return FinalizeLane({

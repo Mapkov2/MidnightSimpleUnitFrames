@@ -9,7 +9,6 @@
 --- when that backend loaded, as Requests.lua's installer call used to.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
 assert(Backend and Backend.Requests, "the Classic aura preview requires Game/Classic/Auras/MSUF_Auras3_Requests.lua")
@@ -19,6 +18,7 @@ local Preview = {}
 
 local UF = MSUF.UF
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
 local type, tostring, pairs = type, tostring, pairs
 
 local CompileFrameAuraVisual = Compile.CompileFrameAuraVisual
@@ -66,8 +66,8 @@ local function ForEachPreviewFrame(fn)
 end
 
 local function ApplyOverlayPreview(frame)
-    local active = _G.MSUF_DispelOverlayPreviewMode == true
-        and PreviewApplies(frame, _G.MSUF_DispelOverlayPreviewScope, true)
+    local active = PublicGlobals.MSUF_DispelOverlayPreviewMode == true
+        and PreviewApplies(frame, PublicGlobals.MSUF_DispelOverlayPreviewScope, true)
     local visual = active and frame and frame.MSUFSpec and CompileFrameAuraVisual(frame.MSUFSpec) or nil
     active = active and visual and visual.overlayEnabled == true or false
     return Visuals.UpdateDispelOverlayPreview(frame, visual, active)
@@ -89,8 +89,8 @@ function A3.SetDispelOverlayPreview(active, scope)
 end
 
 local function ApplySymbolPreview(frame)
-    local active = _G.MSUF_DispelSymbolPreviewMode == true
-        and PreviewApplies(frame, _G.MSUF_DispelSymbolPreviewScope, false)
+    local active = PublicGlobals.MSUF_DispelSymbolPreviewMode == true
+        and PreviewApplies(frame, PublicGlobals.MSUF_DispelSymbolPreviewScope, false)
     local visual = active and frame and frame.MSUFSpec and CompileFrameAuraVisual(frame.MSUFSpec) or nil
     active = active and visual and visual.symbol and visual.symbol.enabled == true or false
     return Visuals.UpdateDispelSymbolPreview(frame, visual, active)

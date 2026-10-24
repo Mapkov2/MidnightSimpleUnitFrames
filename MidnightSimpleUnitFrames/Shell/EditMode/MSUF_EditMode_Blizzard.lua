@@ -12,16 +12,14 @@
 --- (no visual jump) and activates it — the same step Blizzard's own UI forces
 --- before any edit. An existing "MSUF" layout is reactivated, never duplicated.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Blizzard.lua"
 
-local API = _G.MSUF_EditModeAPI
-if not (API and API.RegisterElement) then return end
+local API = MSUF.Require("MSUF_EditModeAPI", CALLER)
 
-local systemEnum = _G.Enum and _G.Enum.EditModeSystem
+local systemEnum = Enum and Enum.EditModeSystem
 if type(systemEnum) ~= "table" then return end
 
 --- WoW Forever anchors the protected MainActionBar stack to MicroMenuContainer
@@ -48,7 +46,7 @@ local active, tooltipContainerShown, sessionActive = false, false, false
 
 local Export = MSUF.ExportPublic
 
-local General = _G.MSUF_GetGeneralDB
+local General = MSUF.Require("MSUF_GetGeneralDB", CALLER)
 
 local function Enabled()
     local general = General()
@@ -56,11 +54,11 @@ local function Enabled()
 end
 
 local function InCombat()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return type(InCombatLockdown) == "function" and InCombatLockdown() == true
 end
 
 local function Blizzard()
-    local api = _G.C_EditMode
+    local api = C_EditMode
     if type(api) ~= "table" or type(api.GetLayouts) ~= "function"
         or type(api.SaveLayouts) ~= "function" then return nil end
     return api
@@ -70,7 +68,7 @@ end
 --- activeLayout indexes presets + saved layouts combined; Blizzard's own
 --- manager uses Enum.EditModePresetLayoutsMeta.NumValues for that offset.
 local function PresetCount()
-    local meta = _G.Enum and _G.Enum.EditModePresetLayoutsMeta
+    local meta = Enum and Enum.EditModePresetLayoutsMeta
     if type(meta) == "table" and tonumber(meta.NumValues) then return tonumber(meta.NumValues) end
     return 2
 end
@@ -106,7 +104,7 @@ local ownSavesPending, ownSaveExpiry = 0, 0
 local OWN_SAVE_ECHO_SECONDS = 3
 
 local function Now()
-    return type(_G.GetTime) == "function" and _G.GetTime() or 0
+    return type(GetTime) == "function" and GetTime() or 0
 end
 
 local function OwnSaveInFlight()
@@ -191,14 +189,14 @@ end
 --- does. Presets without the field return nil and the new layout stays as is.
 local function PresetSystems(info)
     local index = tonumber(info.activeLayout) or 1
-    local manager = _G.EditModePresetLayoutManager
+    local manager = EditModePresetLayoutManager
     local copies = type(manager) == "table" and type(manager.GetCopyOfPresetLayouts) == "function"
         and manager:GetCopyOfPresetLayouts() or nil
     local preset = type(copies) == "table" and copies[index] or nil
     if type(preset) == "table" and type(preset.systems) == "table" then
         return CopyTable(preset.systems, 0), preset.interfaceStyle
     end
-    local em = _G.EditModeManagerFrame
+    local em = EditModeManagerFrame
     local combined = type(em) == "table" and type(em.layoutInfo) == "table"
         and type(em.layoutInfo.layouts) == "table" and em.layoutInfo.layouts or nil
     local activePreset = combined and combined[index] or nil
@@ -236,13 +234,13 @@ local function EnsureEditableLayout(name)
             api.SetActiveLayout(presets + i)
             info.activeLayout = presets + i
             cachedLayoutInfo = info
-            if API.RefreshOwner then API.RefreshOwner(OWNER) end
+            API.RefreshOwner(OWNER)
             return true, "activated_existing"
         end
     end
     local systems, interfaceStyle = PresetSystems(info)
     if not systems then return false, "no_preset_source" end
-    local enumTypes = _G.Enum.EditModeLayoutType or {}
+    local enumTypes = Enum.EditModeLayoutType or {}
     local counts = {}
     for i = 1, #info.layouts do
         local layout = info.layouts[i]
@@ -268,14 +266,14 @@ local function EnsureEditableLayout(name)
     --- pre-creation state and hide the new layout from every reader.
     info.activeLayout = presets + #info.layouts
     cachedLayoutInfo = info
-    if API.RefreshOwner then API.RefreshOwner(OWNER) end
+    API.RefreshOwner(OWNER)
     return true, "created"
 end
 
 local function ReportLayoutFailure(reason)
-    if type(_G.print) == "function" then
+    if type(print) == "function" then
         local translate = MSUF.Translate or tostring
-        _G.print(string.format(translate("MSUF Edit Mode: Blizzard layout is not editable (%s)"), tostring(reason)))
+        print(string.format(translate("MSUF Edit Mode: Blizzard layout is not editable (%s)"), tostring(reason)))
     end
 end
 
@@ -316,7 +314,7 @@ local function CreateFromDialog()
 end
 
 local function OpenLayoutDialog()
-    local EM2 = _G.MSUF_EM2
+    local EM2 = MSUF.Optional("MSUF_EM2")
     local Quick = EM2 and EM2.QuickPopup
     if not (Quick and Quick.CreateShell and Quick.FS and Quick.Box and Quick.ButtonAt) then
         local ok, reason = EnsureEditableLayout()
@@ -380,7 +378,7 @@ local FRAME_NAMES = {
 --- Forever Micro Menu gate holds for any path that reaches a system id.
 local function SystemFrame(systemId)
     if IS_FOREVER and systemId == systemEnum.MicroMenu then return nil end
-    local manager = _G.EditModeManagerFrame
+    local manager = EditModeManagerFrame
     local frames = type(manager) == "table" and manager.registeredSystemFrames or nil
     if type(frames) == "table" then
         for i = 1, #frames do
@@ -409,11 +407,11 @@ local function EnsureSystemEntry(systemId)
     if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
     local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
     if not (left and right and top and bottom) then return nil end
-    local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
+    local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
     local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or uiScale
     local ratio = uiScale ~= 0 and frameScale / uiScale or 1
-    local screenW = _G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth() or 0
-    local screenH = _G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight() or 0
+    local screenW = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+    local screenH = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
     entry = {
         system = systemId,
         anchorInfo = {
@@ -458,7 +456,7 @@ local STAGED_KEYS = { [systemEnum.MicroMenu or -3] = "micromenu", [systemEnum.Ba
 local function StagedSystem(systemId)
     local key = STAGED_KEYS[systemId]
     if not key then return nil end
-    local enum = _G.Enum
+    local enum = Enum
     if key == "micromenu" then return key, (enum.EditModeMicroMenuSetting or {}).EyeSize end
     return key, (enum.EditModeBagsSetting or {}).Size or 2
 end
@@ -530,9 +528,9 @@ local function ApplyAnchorVisual(systemId, point, relativeTo, relativePoint, x, 
     if not (frame and frame.ClearAllPoints and frame.SetPoint) then return false end
     local scale = frame.GetScale and frame:GetScale() or 1
     if not scale or scale <= 0 then scale = 1 end
-    local relative = type(relativeTo) == "string" and _G[relativeTo] or _G.UIParent
+    local relative = type(relativeTo) == "string" and _G[relativeTo] or UIParent
     frame:ClearAllPoints()
-    frame:SetPoint(point, relative or _G.UIParent, relativePoint or point, x / scale, y / scale)
+    frame:SetPoint(point, relative or UIParent, relativePoint or point, x / scale, y / scale)
     return true
 end
 
@@ -545,7 +543,7 @@ end
 --- Width and height are the Damage Meter settings MSUF applies live; the
 --- fallbacks are the live and forever EditModeDamageMeterSetting values.
 local function DamageMeterSizeIds()
-    local setting = _G.Enum.EditModeDamageMeterSetting or {}
+    local setting = Enum.EditModeDamageMeterSetting or {}
     return setting.FrameWidth or 3, setting.FrameHeight or 4
 end
 
@@ -562,7 +560,7 @@ local function ApplyVisual(systemId, entry)
     if not frame then return end
     local map = EntrySettings(entry)
     if systemId == systemEnum.Minimap then
-        local setting = _G.Enum.EditModeMinimapSetting or {}
+        local setting = Enum.EditModeMinimapSetting or {}
         local rotate = map[setting.RotateMinimap or 1]
         if rotate ~= nil and type(frame.SetRotateMinimap) == "function" then
             frame:SetRotateMinimap(rotate == 1)
@@ -576,7 +574,7 @@ local function ApplyVisual(systemId, entry)
         end
         if type(frame.Layout) == "function" then frame:Layout() end
     elseif systemId == systemEnum.ChatFrame then
-        local setting = _G.Enum.EditModeChatFrameSetting or {}
+        local setting = Enum.EditModeChatFrameSetting or {}
         local widthHundreds = map[setting.WidthHundreds or 0]
         local widthTens = map[setting.WidthTensAndOnes or 1]
         local heightHundreds = map[setting.HeightHundreds or 2]
@@ -590,8 +588,8 @@ local function ApplyVisual(systemId, entry)
                 height or (frame.GetHeight and frame:GetHeight()) or 180)
         end
     elseif systemId == systemEnum.MicroMenu then
-        local setting = _G.Enum.EditModeMicroMenuSetting or {}
-        local micro = _G.MicroMenu
+        local setting = Enum.EditModeMicroMenuSetting or {}
+        local micro = MicroMenu
         if type(micro) == "table" then
             --- WoW Forever renamed the setting to DeprecatedEyeSize; the queue
             --- eye is its own Group Finder system there.
@@ -601,7 +599,7 @@ local function ApplyVisual(systemId, entry)
             end
         end
     elseif systemId == systemEnum.Bags then
-        local setting = _G.Enum.EditModeBagsSetting or {}
+        local setting = Enum.EditModeBagsSetting or {}
         local size = map[setting.Size or 2]
         if size ~= nil and type(frame.SetScale) == "function" then
             frame:SetScale((size * 5 + 75) / 100)
@@ -714,7 +712,7 @@ local function ReloadWithStaged()
         end
         if merged then SaveLayouts(api, info) end
     end
-    local reload = _G.ReloadUI
+    local reload = ReloadUI
     if reload then reload() end
     return true
 end
@@ -937,8 +935,8 @@ local function ApplyProfileSnapshot()
     local snapshot = general and general.blizzardEditModeSnapshot
     if type(snapshot) ~= "table" or not next(snapshot) then return false end
     if InCombat() then
-        if not snapshotRetry and type(_G.CreateFrame) == "function" then
-            snapshotRetry = _G.CreateFrame("Frame")
+        if not snapshotRetry and type(CreateFrame) == "function" then
+            snapshotRetry = CreateFrame("Frame")
             snapshotRetry:SetScript("OnEvent", function(self)
                 self:UnregisterAllEvents()
                 ApplyProfileSnapshot()
@@ -1006,15 +1004,15 @@ end
 --- open the registered Game Menu instead; its Edit Mode button is one secure
 --- click away.
 local function UIPanel(frame, name)
-    local windows = _G.UIPanelWindows
+    local windows = UIPanelWindows
     return frame and type(windows) == "table" and windows[name] ~= nil and frame or nil
 end
 
 local function OpenSettings()
-    local manager = _G.EditModeManagerFrame
+    local manager = EditModeManagerFrame
     if InCombat() or not manager or EditModeRuleBlocked() then return false end
-    if type(_G.ShowUIPanel) ~= "function" then return false end
-    local panel = UIPanel(manager, "EditModeManagerFrame") or UIPanel(_G.GameMenuFrame, "GameMenuFrame")
+    if type(ShowUIPanel) ~= "function" then return false end
+    local panel = UIPanel(manager, "EditModeManagerFrame") or UIPanel(GameMenuFrame, "GameMenuFrame")
     if not panel then return false end
     --- Blizzard's own manager can switch the active layout while the MSUF
     --- session stays open. The cached info predates that switch, so keeping
@@ -1022,10 +1020,10 @@ local function OpenSettings()
     --- the whole stale table back over the user's choice. Handing control
     --- over is a save-free moment, so dropping the cache is safe here.
     InvalidateLayoutCache()
-    _G.ShowUIPanel(panel)
+    ShowUIPanel(panel)
     if panel ~= manager then
         local translate = MSUF.Translate or tostring
-        local entry = type(_G.HUD_EDIT_MODE_MENU) == "string" and _G.HUD_EDIT_MODE_MENU or "Edit Mode"
+        local entry = type(HUD_EDIT_MODE_MENU) == "string" and HUD_EDIT_MODE_MENU or "Edit Mode"
         MSUF.Require("MSUF_EM2_SetHUDStatus", CALLER)(string.format(translate("Choose %s in the game menu"), entry), "info", 4)
     end
     return true
@@ -1134,11 +1132,9 @@ end
 --- Blizzard's own Edit Mode; mirror that for the MSUF session so its mover
 --- has a visible, highlighted target. MSUF unit tooltips using the default
 --- anchor follow the moved position automatically.
---- MSUF's tooltip module exports the control mode; without it (older
---- runtime) the Blizzard element stays available.
+--- MSUF's tooltip module (loaded after Edit Mode) exports the control mode.
 local function TooltipIsBlizzardControlled()
-    local check = _G.MSUF_Tooltip_IsBlizzardControlled
-    return type(check) ~= "function" or check() == true
+    return MSUF.Require("MSUF_Tooltip_IsBlizzardControlled", CALLER)() == true
 end
 
 local function SessionChanged(enabled)
@@ -1171,7 +1167,7 @@ local function SessionChanged(enabled)
     end
 end
 
-local Add = _G.MSUF_EM2.ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
+local Add = MSUF.Require("MSUF_EM2", CALLER).ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
 
 local layoutEvents
 local function SetLayoutEventsEnabled(enabled)
@@ -1179,8 +1175,8 @@ local function SetLayoutEventsEnabled(enabled)
     if type(client) == "table" and type(client.SupportsEvent) == "function"
         and not client.SupportsEvent("EDIT_MODE_LAYOUTS_UPDATED") then return end
     if not layoutEvents then
-        if not enabled or type(_G.CreateFrame) ~= "function" then return end
-        layoutEvents = _G.CreateFrame("Frame")
+        if not enabled or type(CreateFrame) ~= "function" then return end
+        layoutEvents = CreateFrame("Frame")
         layoutEvents:SetScript("OnEvent", OnLayoutsUpdated)
     end
     if enabled then
@@ -1196,9 +1192,9 @@ local function Activate()
     if not Blizzard() then return false end
     active = true
     SetLayoutEventsEnabled(true)
-    local minimapSetting = _G.Enum.EditModeMinimapSetting or {}
-    local chatSetting = _G.Enum.EditModeChatFrameSetting or {}
-    local microSetting = _G.Enum.EditModeMicroMenuSetting or {}
+    local minimapSetting = Enum.EditModeMinimapSetting or {}
+    local chatSetting = Enum.EditModeChatFrameSetting or {}
+    local microSetting = Enum.EditModeMicroMenuSetting or {}
     local minimapSize = minimapSetting.Size or 2
     local minimapRotate = minimapSetting.RotateMinimap or 1
     local minimapHeader = minimapSetting.HeaderUnderneath or 0
@@ -1232,7 +1228,7 @@ local function Activate()
     if not IS_FOREVER then
         local microOrientation = microSetting.Orientation or 0
         local microOrder = microSetting.Order or 1
-        local microDirections = _G.Enum.MicroMenuOrientation or {}
+        local microDirections = Enum.MicroMenuOrientation or {}
         local microControls = {
             SteppedSetting(systemEnum.MicroMenu, "size", "HUD_EDIT_MODE_SETTING_MICRO_MENU_SIZE",
                 "Size", 70, 200, 5, microSize),
@@ -1275,12 +1271,12 @@ local function Activate()
         Add(tooltipElement)
     end
     if systemEnum.Bags then
-        local bagsSetting = _G.Enum.EditModeBagsSetting or {}
+        local bagsSetting = Enum.EditModeBagsSetting or {}
         local bagsSize = bagsSetting.Size or 2
         local bagsPadding = bagsSetting.BagSlotPadding or 3
         local bagsOrientation = bagsSetting.Orientation or 0
         local bagsDirection = bagsSetting.Direction or 1
-        local bagDirections = _G.Enum.BagsOrientation or {}
+        local bagDirections = Enum.BagsOrientation or {}
         reloadLabels[systemEnum.Bags] = BlizzardLabel("HUD_EDIT_MODE_BAGS_LABEL", "Bags")
         Add(Element(systemEnum.Bags, "bags", reloadLabels[systemEnum.Bags], 864, {
                 SteppedSetting(systemEnum.Bags, "size", "HUD_EDIT_MODE_SETTING_BAGS_SIZE",
@@ -1298,7 +1294,7 @@ local function Activate()
             }, { bagsSize, bagsPadding, bagsOrientation, bagsDirection }))
     end
     if systemEnum.DamageMeter then
-        local meterSetting = _G.Enum.EditModeDamageMeterSetting or {}
+        local meterSetting = Enum.EditModeDamageMeterSetting or {}
         local meterWidth = meterSetting.FrameWidth or 3
         local meterHeight = meterSetting.FrameHeight or 4
         local meterBar = meterSetting.BarHeight or 10
@@ -1332,7 +1328,7 @@ local function Activate()
                 meterText, meterSpec, meterClass }))
     end
     API.RegisterSessionListener(OWNER, SessionChanged)
-    if API.RefreshOwner then API.RefreshOwner(OWNER) end
+    API.RefreshOwner(OWNER)
     --- First fill only — an imported snapshot must never be overwritten by
     --- the local layout at load.
     local general = General()
@@ -1351,7 +1347,7 @@ local function Deactivate()
     return true
 end
 
-local External = _G.MSUF_EM2.ExternalProviders
+local External = MSUF.Require("MSUF_EM2", CALLER).ExternalProviders
 local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_BlizzardEditMode_IsAvailable", function() return Blizzard() ~= nil end)
@@ -1372,9 +1368,9 @@ Export("MSUF_BlizzardEditMode_Debug", function()
             .. (entry and ("+rows" .. rows) or "+NOENTRY")
     end
     table.sort(parts)
-    local minimapCluster = _G.MinimapCluster
+    local minimapCluster = MinimapCluster
     parts[#parts + 1] = "scaleApi=" .. type(minimapCluster and minimapCluster.SetEditModeScale)
-    parts[#parts + 1] = "microApi=" .. type(_G.MicroMenu)
+    parts[#parts + 1] = "microApi=" .. type(MicroMenu)
     return table.concat(parts, " ")
 end)
 

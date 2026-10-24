@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua
 --- Group-only visual runtime elements.
 ---
@@ -8,28 +7,31 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- header creation, roster scanning, and DB compilation live elsewhere.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua")
 
 local UF = MSUF.UF
 local GF = MSUF.GF
 
 if not (UF and UF.RegisterElement) then return end
 
-local CreateFrame = _G.CreateFrame
+local CreateFrame = CreateFrame
+-- The rounded frames module publishes its group callbacks only while it is
+-- enabled; Public mirrors each export, so a read sees the live toggle.
+local Public = MSUF.Public
 
 local SetShown = (MSUF.Apply or {}).ShownPlain
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent
 local UnitGUID = UnitGUID
-local UnitIsConnected = _G.UnitIsConnected
-local UnitIsUnit = _G.UnitIsUnit
+local UnitIsConnected = UnitIsConnected
+local UnitIsUnit = UnitIsUnit
 local tonumber = tonumber
 local type = type
 local max = math.max
 local floor = math.floor
-local GetTime = _G.GetTime
-local issecretvalue = _G.issecretvalue
+local GetTime = GetTime
+local issecretvalue = issecretvalue
 local IsUnitToken = UF.IsUnitToken
 local ReadConnectedCached = UF.ReadConnectedCached
 local ReadDeadCached = UF.ReadDeadCached
@@ -225,7 +227,7 @@ local SECRET_SHOWN_KEYS = {
 }
 
 local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size, r, g, b, indicatorKind)
-  local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorPrepared
+  local rounded = Public.RoundedUF_OnGroupIndicatorPrepared
   if rounded and rounded(frame, indicatorKind, enabled == true, frame and frame[shownKey] == true, size, r, g, b, 1) then
     HideEdges(frame and frame[edgesKey])
     if frame and enabled ~= true then frame[shownKey] = false end
@@ -292,7 +294,7 @@ local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, sh
     if connectedKnown == true and connected == false then show, secretShow = false, false end
   end
   local secretKey = SECRET_SHOWN_KEYS[shownKey]
-  local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorChanged
+  local rounded = Public.RoundedUF_OnGroupIndicatorChanged
   if rounded and rounded(frame, indicatorKind, show) then
     if secretShow then
       frame[shownKey] = nil
@@ -395,7 +397,7 @@ local function EnsureAuraTexture(frame, key)
   tex:SetColorTexture(1, 1, 1, 1)
   tex:Hide()
   frame[key] = tex
-  local rounded = _G.MSUF_RoundedUF_OnGroupAuraVisualCreated
+  local rounded = Public.RoundedUF_OnGroupAuraVisualCreated
   if rounded then rounded(frame, tex) end
   return tex
 end
@@ -794,13 +796,7 @@ local function SetIndicatorRegistration(frame, target, focus)
   RefreshIndicatorDriver()
 end
 
-local function PercentFromValues(hp, maxHP)
-  if issecretvalue(hp) == true or hp == nil then
-    return nil
-  end
-  if issecretvalue(maxHP) == true or maxHP == nil then
-    return nil
-  end
+local function PercentFromPlainValues(hp, maxHP)
   if type(hp) ~= "number" then
     hp = tonumber(hp)
   end
@@ -813,7 +809,15 @@ local function PercentFromValues(hp, maxHP)
   return nil
 end
 
-local function PercentFromPlainValues(hp, maxHP)
+-- Secret or missing values never reach the arithmetic. Kept as its own body
+-- (not a call into PercentFromPlainValues): it runs per group health update.
+local function PercentFromValues(hp, maxHP)
+  if issecretvalue(hp) == true or hp == nil then
+    return nil
+  end
+  if issecretvalue(maxHP) == true or maxHP == nil then
+    return nil
+  end
   if type(hp) ~= "number" then
     hp = tonumber(hp)
   end

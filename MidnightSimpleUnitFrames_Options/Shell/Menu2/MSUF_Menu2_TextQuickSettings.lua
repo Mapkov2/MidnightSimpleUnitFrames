@@ -30,12 +30,15 @@ local function GlobalPage()
     return M.GlobalPage or {}
 end
 
+local function NormalizeScope(scope)
+    local GP = GlobalPage()
+    if type(GP.NormalizeScopeKey) == "function" then return GP.NormalizeScopeKey(scope) end
+    return scope
+end
+
 local function CurrentScope()
     local settings = activeSettings or {}
-    local scope = Resolve(settings.scope or settings.fontScope, "shared")
-    local GP = GlobalPage()
-    if type(GP.NormalizeScopeKey) == "function" then scope = GP.NormalizeScopeKey(scope) end
-    return scope or "shared"
+    return NormalizeScope(Resolve(settings.scope or settings.fontScope, "shared")) or "shared"
 end
 
 -- Some specialized text reuses the shared font renderer while its color mode
@@ -43,10 +46,7 @@ end
 -- those two persisted scopes explicit instead of pretending one controls both.
 local function CurrentModeScope()
     local settings = activeSettings or {}
-    local scope = Resolve(settings.modeScope or settings.colorScope, CurrentScope())
-    local GP = GlobalPage()
-    if type(GP.NormalizeScopeKey) == "function" then scope = GP.NormalizeScopeKey(scope) end
-    return scope or CurrentScope()
+    return NormalizeScope(Resolve(settings.modeScope or settings.colorScope, CurrentScope())) or CurrentScope()
 end
 
 local function IsGroupSettings(settings, scope)
@@ -106,19 +106,17 @@ local function CurrentModeKind()
     return data.isPlayer and "player_name" or "npc_name"
 end
 
+local MODE_LABELS = {
+    group_name = "Group Name Color", player_name = "Player Name Color", npc_name = "NPC / Boss Name Color",
+    hp = "HP Text Color", power = "Power Text Color",
+}
 local function CurrentColorModeLabel()
     local configured = Resolve(activeSettings and activeSettings.colorModeLabel, nil)
     if not configured and HasCustomColorMode() then
         configured = Resolve(activeSettings and activeSettings.colorTitle, nil)
     end
     if configured then return configured end
-    local modeKind = CurrentModeKind()
-    if modeKind == "group_name" then return "Group Name Color" end
-    if modeKind == "player_name" then return "Player Name Color" end
-    if modeKind == "npc_name" then return "NPC / Boss Name Color" end
-    if modeKind == "hp" then return "HP Text Color" end
-    if modeKind == "power" then return "Power Text Color" end
-    return "Color mode"
+    return MODE_LABELS[CurrentModeKind()] or "Color mode"
 end
 
 local function CurrentColorMode()
@@ -129,6 +127,14 @@ local function CurrentColorMode()
     return GP.FontTextColorModeGetFor(CurrentModeScope(), CurrentModeKind()) or "DEFAULT"
 end
 
+-- Built-in color modes per text kind: { value, label } rows, expanded to fresh choice tables.
+local MODE_CHOICES = {
+    group_name = { { "DEFAULT", "Default font color" }, { "CLASS", "Class color" }, { "CUSTOM", "Custom color" } },
+    npc_name = { { "DEFAULT", "Default font color" }, { "NPC", "NPC / reaction color" }, { "CLASS", "Class color" } },
+    hp = { { "DEFAULT", "Default font color" }, { "CLASS", "Class color" }, { "HEALTH", "Health gradient" } },
+    power = { { "DEFAULT", "Default font color" }, { "RESOURCE", "By power type" } },
+    fallback = { { "DEFAULT", "Default font color" }, { "CLASS", "Class color" } },
+}
 local function ColorModeValues()
     local settings = activeSettings or {}
     if HasCustomColorMode() then
@@ -141,34 +147,10 @@ local function ColorModeValues()
         local values = GP.FontTextColorValuesFor(CurrentModeScope(), modeKind)
         if type(values) == "table" and #values > 0 then return values end
     end
-    if modeKind == "group_name" then
-        return {
-            { value = "DEFAULT", text = "Default font color" },
-            { value = "CLASS", text = "Class color" },
-            { value = "CUSTOM", text = "Custom color" },
-        }
-    elseif modeKind == "npc_name" then
-        return {
-            { value = "DEFAULT", text = "Default font color" },
-            { value = "NPC", text = "NPC / reaction color" },
-            { value = "CLASS", text = "Class color" },
-        }
-    elseif modeKind == "hp" then
-        return {
-            { value = "DEFAULT", text = "Default font color" },
-            { value = "CLASS", text = "Class color" },
-            { value = "HEALTH", text = "Health gradient" },
-        }
-    elseif modeKind == "power" then
-        return {
-            { value = "DEFAULT", text = "Default font color" },
-            { value = "RESOURCE", text = "By power type" },
-        }
-    end
-    return {
-        { value = "DEFAULT", text = "Default font color" },
-        { value = "CLASS", text = "Class color" },
-    }
+    local rows = MODE_CHOICES[modeKind] or MODE_CHOICES.fallback
+    local values = {}
+    for i = 1, #rows do values[i] = { value = rows[i][1], text = rows[i][2] } end
+    return values
 end
 
 local function Blocked()
@@ -195,9 +177,19 @@ local function CopyColor(value)
     return { r = value.r, g = value.g, b = value.b, value[1], value[2], value[3] }
 end
 
-local function CaptureDBColorEntry(tableKey, key)
-    local db = EnsureDB()
-    local colors = db and db[tableKey]
+local function ColorsAPI()
+    return MSUF._colorsAPI or {}
+end
+
+-- The General settings table of the Fonts page (nil until that page module exists).
+local function GeneralDB()
+    local GP = GlobalPage()
+    return GP.G and GP.G()
+end
+
+-- An override entry (colors[key]) is restored to exactly the shape it had: a missing
+-- container stays missing and an emptied one is dropped again.
+local function CaptureColorEntry(colors, key)
     return {
         hadTable = type(colors) == "table",
         hadValue = type(colors) == "table" and colors[key] ~= nil,
@@ -205,37 +197,61 @@ local function CaptureDBColorEntry(tableKey, key)
     }
 end
 
+local function RestoreColorEntry(owner, tableKey, key, state)
+    if state.hadTable then
+        owner[tableKey] = type(owner[tableKey]) == "table" and owner[tableKey] or {}
+        owner[tableKey][key] = state.hadValue and CopyColor(state.value) or nil
+    elseif type(owner[tableKey]) == "table" then
+        owner[tableKey][key] = nil
+        if next(owner[tableKey]) == nil then owner[tableKey] = nil end
+    end
+    ApplyTextColors()
+end
+
+local function CaptureDBColorEntry(tableKey, key)
+    local db = EnsureDB()
+    return CaptureColorEntry(db and db[tableKey], key)
+end
+
 local function RestoreDBColorEntry(tableKey, key, state)
     local db = EnsureDB()
     if not (db and state) then return end
-    if state.hadTable then
-        db[tableKey] = type(db[tableKey]) == "table" and db[tableKey] or {}
-        db[tableKey][key] = state.hadValue and CopyColor(state.value) or nil
-    elseif type(db[tableKey]) == "table" then
-        db[tableKey][key] = nil
-        if next(db[tableKey]) == nil then db[tableKey] = nil end
+    RestoreColorEntry(db, tableKey, key, state)
+end
+
+-- Sets a class/NPC color through the colors API (`apiSetter`), else writes the
+-- { r, g, b } entry into db[tableKey][key] and creates the container.
+local function SetDBColor(apiSetter, tableKey, key, r, g, b)
+    local setter = ColorsAPI()[apiSetter]
+    if type(setter) == "function" then
+        setter(key, r, g, b)
+        return
     end
+    local db = MSUF_DB
+    if not db then return end
+    db[tableKey] = type(db[tableKey]) == "table" and db[tableKey] or {}
+    db[tableKey][key] = { r = r, g = g, b = b }
     ApplyTextColors()
 end
 
 local function GlobalFontTarget()
     local function GetRGB()
-        local configured = (MSUF and MSUF.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
+        local configured = MSUF.MSUF_GetConfiguredFontColor or MSUF.Optional("MSUF_GetConfiguredFontColor")
         if type(configured) == "function" then
             local r, g, b = configured()
             if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
         end
-        local api = (MSUF and MSUF._colorsAPI) or {}
+        local api = ColorsAPI()
         if type(api.GetGlobalFontColor) == "function" then return api.GetGlobalFontColor() end
         return 1, 1, 1
     end
     local function SetRGB(r, g, b)
-        local api = (MSUF and MSUF._colorsAPI) or {}
+        local api = ColorsAPI()
         if type(api.SetGlobalFontColor) == "function" then
             api.SetGlobalFontColor(r, g, b)
             return
         end
-        local general = GlobalPage().G and GlobalPage().G()
+        local general = GeneralDB()
         if not general then return end
         general.fontColorCustomR, general.fontColorCustomG, general.fontColorCustomB = r, g, b
         general.useCustomFontColor = true
@@ -244,14 +260,14 @@ local function GlobalFontTarget()
     return {
         label = "Global font color", getRGB = GetRGB, setRGB = SetRGB,
         captureState = function()
-            local general = GlobalPage().G and GlobalPage().G() or {}
+            local general = GeneralDB() or {}
             return {
                 useCustom = general.useCustomFontColor,
                 r = general.fontColorCustomR, g = general.fontColorCustomG, b = general.fontColorCustomB,
             }
         end,
         restoreState = function(state)
-            local general = GlobalPage().G and GlobalPage().G()
+            local general = GeneralDB()
             if not (general and state) then return end
             general.useCustomFontColor = state.useCustom
             general.fontColorCustomR, general.fontColorCustomG, general.fontColorCustomB = state.r, state.g, state.b
@@ -265,23 +281,12 @@ local function ClassColorTarget(token, label)
     return {
         label = label or M.Format("%s class color", token),
         getRGB = function()
-            local api = (MSUF and MSUF._colorsAPI) or {}
+            local api = ColorsAPI()
             if type(api.GetClassColor) == "function" then return api.GetClassColor(token) end
-            local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
+            local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[token]
             return color and color.r or 1, color and color.g or 1, color and color.b or 1
         end,
-        setRGB = function(r, g, b)
-            local api = (MSUF and MSUF._colorsAPI) or {}
-            if type(api.SetClassColor) == "function" then
-                api.SetClassColor(token, r, g, b)
-                return
-            end
-            local db = _G.MSUF_DB
-            if not db then return end
-            db.classColors = type(db.classColors) == "table" and db.classColors or {}
-            db.classColors[token] = { r = r, g = g, b = b }
-            ApplyTextColors()
-        end,
+        setRGB = function(r, g, b) SetDBColor("SetClassColor", "classColors", token, r, g, b) end,
         captureState = function() return CaptureDBColorEntry("classColors", token) end,
         restoreState = function(state) RestoreDBColorEntry("classColors", token, state) end,
     }
@@ -292,22 +297,11 @@ local function NPCColorTarget(kind)
     return {
         label = M.Format("%s NPC color", tostring(kind)),
         getRGB = function()
-            local api = (MSUF and MSUF._colorsAPI) or {}
+            local api = ColorsAPI()
             if type(api.GetNPCColor) == "function" then return api.GetNPCColor(kind) end
             return 0.85, 0.10, 0.10
         end,
-        setRGB = function(r, g, b)
-            local api = (MSUF and MSUF._colorsAPI) or {}
-            if type(api.SetNPCColor) == "function" then
-                api.SetNPCColor(kind, r, g, b)
-                return
-            end
-            local db = _G.MSUF_DB
-            if not db then return end
-            db.npcColors = type(db.npcColors) == "table" and db.npcColors or {}
-            db.npcColors[kind] = { r = r, g = g, b = b }
-            ApplyTextColors()
-        end,
+        setRGB = function(r, g, b) SetDBColor("SetNPCColor", "npcColors", kind, r, g, b) end,
         captureState = function() return CaptureDBColorEntry("npcColors", kind) end,
         restoreState = function(state) RestoreDBColorEntry("npcColors", kind, state) end,
     }
@@ -318,23 +312,23 @@ local function GeneralRGBTarget(label, prefix, defaultR, defaultG, defaultB)
     return {
         label = label,
         getRGB = function()
-            local general = GlobalPage().G and GlobalPage().G() or {}
+            local general = GeneralDB() or {}
             return tonumber(general[keys[1]]) or defaultR,
                 tonumber(general[keys[2]]) or defaultG,
                 tonumber(general[keys[3]]) or defaultB
         end,
         setRGB = function(r, g, b)
-            local general = GlobalPage().G and GlobalPage().G()
+            local general = GeneralDB()
             if not general then return end
             general[keys[1]], general[keys[2]], general[keys[3]] = r, g, b
             ApplyTextColors()
         end,
         captureState = function()
-            local general = GlobalPage().G and GlobalPage().G() or {}
+            local general = GeneralDB() or {}
             return { general[keys[1]], general[keys[2]], general[keys[3]] }
         end,
         restoreState = function(state)
-            local general = GlobalPage().G and GlobalPage().G()
+            local general = GeneralDB()
             if not (general and state) then return end
             general[keys[1]], general[keys[2]], general[keys[3]] = state[1], state[2], state[3]
             ApplyTextColors()
@@ -347,40 +341,28 @@ local function PowerColorTarget(token)
     return {
         label = tostring(token):gsub("_", " ") .. " power color",
         getRGB = function()
-            local general = GlobalPage().G and GlobalPage().G() or {}
+            local general = GeneralDB() or {}
             local color = type(general.powerColorOverrides) == "table" and general.powerColorOverrides[token]
-            if type(color) ~= "table" then color = _G.PowerBarColor and _G.PowerBarColor[token] end
+            if type(color) ~= "table" then color = PowerBarColor and PowerBarColor[token] end
             return tonumber(color and (color.r or color[1])) or 0.8,
                 tonumber(color and (color.g or color[2])) or 0.8,
                 tonumber(color and (color.b or color[3])) or 0.8
         end,
         setRGB = function(r, g, b)
-            local general = GlobalPage().G and GlobalPage().G()
+            local general = GeneralDB()
             if not general then return end
             general.powerColorOverrides = type(general.powerColorOverrides) == "table" and general.powerColorOverrides or {}
             general.powerColorOverrides[token] = { r, g, b }
             ApplyTextColors()
         end,
         captureState = function()
-            local general = GlobalPage().G and GlobalPage().G() or {}
-            local overrides = general.powerColorOverrides
-            return {
-                hadTable = type(overrides) == "table",
-                hadValue = type(overrides) == "table" and overrides[token] ~= nil,
-                value = type(overrides) == "table" and CopyColor(overrides[token]) or nil,
-            }
+            local general = GeneralDB() or {}
+            return CaptureColorEntry(general.powerColorOverrides, token)
         end,
         restoreState = function(state)
-            local general = GlobalPage().G and GlobalPage().G()
+            local general = GeneralDB()
             if not (general and state) then return end
-            if state.hadTable then
-                general.powerColorOverrides = type(general.powerColorOverrides) == "table" and general.powerColorOverrides or {}
-                general.powerColorOverrides[token] = state.hadValue and CopyColor(state.value) or nil
-            elseif type(general.powerColorOverrides) == "table" then
-                general.powerColorOverrides[token] = nil
-                if next(general.powerColorOverrides) == nil then general.powerColorOverrides = nil end
-            end
-            ApplyTextColors()
+            RestoreColorEntry(general, "powerColorOverrides", token, state)
         end,
     }
 end
@@ -476,6 +458,10 @@ local function ResolveNPCPreviewKind(unit, data)
     return kind or "enemy"
 end
 
+local function UnitClassTarget(data)
+    return ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color")
+end
+
 local function GroupClassTargets()
     local token = GROUP_PREVIEW_CLASS[CurrentScope()] or "HUNTER"
     return { ClassColorTarget(token, M.Format("%s group preview class", token)) }
@@ -503,8 +489,9 @@ local function ResolveTextColorTargets()
     end
     local group = IsGroupSettings(settings, scope)
     local mode = CurrentColorMode()
+    local targets
     if kind == "name" then
-        local targets = { DefaultFontTarget(scope, group) }
+        targets = { DefaultFontTarget(scope, group) }
         if group then
             AppendTargets(targets, GroupClassTargets())
             targets[#targets + 1] = ScopedRGBTarget(scope, "Custom group name", "nameColorR", "nameColorG", "nameColorB")
@@ -521,28 +508,19 @@ local function ResolveTextColorTargets()
         if CurrentModeKind() == "npc_name" then
             targets[#targets + 1] = NPCColorTarget(ResolveNPCPreviewKind(unit, data))
         end
-        targets[#targets + 1] = ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color")
+        targets[#targets + 1] = UnitClassTarget(data)
         return targets
     elseif kind == "hp" then
-        if mode == "HEALTH" then
-            local targets = {
-                GeneralRGBTarget("Low health", "healthGradientLow", 1, 0, 0),
-                GeneralRGBTarget("Mid health", "healthGradientMid", 1, 1, 0),
-                GeneralRGBTarget("High health", "healthGradientHigh", 0, 1, 0),
-            }
-            if group then return AppendTargets(targets, GroupClassTargets()) end
-            local _, data = PreviewUnitData(settings)
-            targets[#targets + 1] = ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color")
-            return targets
-        end
-        local targets = { DefaultFontTarget(scope, group) }
+        targets = mode == "HEALTH" and {
+            GeneralRGBTarget("Low health", "healthGradientLow", 1, 0, 0),
+            GeneralRGBTarget("Mid health", "healthGradientMid", 1, 1, 0),
+            GeneralRGBTarget("High health", "healthGradientHigh", 0, 1, 0),
+        } or { DefaultFontTarget(scope, group) }
         if group then return AppendTargets(targets, GroupClassTargets()) end
-        local _, data = PreviewUnitData(settings)
-        targets[#targets + 1] = ClassColorTarget(data.class, (data.className or data.class or "Unit") .. " class color")
+        targets[#targets + 1] = UnitClassTarget(select(2, PreviewUnitData(settings)))
         return targets
-    end
-    if kind == "power" then
-        local targets = { DefaultFontTarget(scope, group) }
+    elseif kind == "power" then
+        targets = { DefaultFontTarget(scope, group) }
         if group then return AppendTargets(targets, GroupPowerTargets()) end
         local _, data = PreviewUnitData(settings)
         targets[#targets + 1] = PowerColorTarget(data.powerToken or "MANA")
@@ -600,10 +578,56 @@ local function OpenResolvedTextColors(anchor, options, targets, onClosed)
     return W.OpenContextColors(anchor:GetParent(), TextColorPickerOptions(options, targets), targets, onClosed)
 end
 
+local function RefreshPopup(self)
+    local GP, scope = GlobalPage(), CurrentScope()
+    local label = SCOPE_LABELS[scope] or tostring(scope)
+    self.title:SetText(Tr("Text Colors") .. " · " .. Tr(label))
+    self.subtitle:SetText(Tr(Resolve(activeSettings and activeSettings.colorSubtitle,
+        "Synchronized with Text Colors in the Fonts menu for this scope.")))
+
+    local shared = scope == "shared"
+    local override = shared or (type(GP.FontOverrideGetFor) == "function" and GP.FontOverrideGetFor(scope) == true)
+    local showOverride = not shared and HasNativeColorMode() and HasCapability("override", true)
+    SetShown(self.override, showOverride)
+    self.override:SetChecked(override and true or false)
+
+    local colorsAllowed = HasCapability("colors", true)
+    local targetCount = colorsAllowed and #ResolveTextColorTargets() or 0
+    local colorsVisible = colorsAllowed and targetCount > 0
+    local modeVisible = ColorModeVisible()
+    SetShown(self.colorMode, modeVisible)
+    SetShown(self.colors, colorsVisible)
+    SetShown(self.colorNote, colorsVisible)
+    local modeTitle = self.colorMode._msuf2Title
+    if modeVisible then
+        self.colorMode:SetValues(ColorModeValues())
+        self.colorMode:SetValue(CurrentColorMode())
+        if modeTitle and modeTitle.SetText then modeTitle:SetText(Tr(CurrentColorModeLabel())) end
+    end
+
+    local y = showOverride and -102 or -76
+    if modeVisible then
+        W.MoveWidget(self.colorMode, self, 16, y, 398, "LEFT")
+        y = y - 54
+    end
+    self:SetHeight(-y + (colorsVisible and 40 or 16))
+
+    local modeScope = CurrentModeScope()
+    local modeOverride = modeScope == "shared"
+        or (type(GP.FontOverrideGetFor) == "function" and GP.FontOverrideGetFor(modeScope) == true)
+    SetEnabled(self.colorMode, modeVisible and (HasCustomColorMode() or modeOverride))
+    if modeVisible and modeTitle and modeTitle.SetTextColor then
+        modeTitle:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
+    end
+
+    SetEnabled(self.colors, targetCount > 0)
+    self.colorNote:SetText(M.Format(targetCount == 1 and "%d relevant color" or "%d relevant colors", targetCount))
+end
+
 local function EnsurePopup()
     if textQuickPopup then return textQuickPopup end
     if not (W and T and type(M.CreateMenuPopupPanel) == "function") then return nil end
-    local parent = _G.UIParent or M.frame
+    local parent = UIParent or M.frame
     if not parent then return nil end
 
     local popup = M.CreateMenuPopupPanel(parent)
@@ -639,7 +663,10 @@ local function EnsurePopup()
 
     popup.override = W.SwitchAt(popup, "Use custom settings for this frame", 16, -65, 330)
     popup.override:SetScript("OnClick", function(self)
-        if Blocked() then popup:Refresh(); return end
+        if Blocked() then
+            popup:Refresh()
+            return
+        end
         local GP, scope = GlobalPage(), CurrentScope()
         local enabled = self:GetChecked() and true or false
         RunChange("Font override", "menu:text-quick:override:" .. scope, function()
@@ -683,54 +710,7 @@ local function EnsurePopup()
         if not opened and anchor and anchor.IsVisible and anchor:IsVisible() then W.OpenTextQuickSettings(anchor, options) end
     end)
 
-    function popup:Refresh()
-        local GP, scope = GlobalPage(), CurrentScope()
-        local label = SCOPE_LABELS[scope] or tostring(scope)
-        self.title:SetText(Tr("Text Colors") .. " · " .. Tr(label))
-        self.subtitle:SetText(Tr(Resolve(activeSettings and activeSettings.colorSubtitle,
-            "Synchronized with Text Colors in the Fonts menu for this scope.")))
-
-        local shared = scope == "shared"
-        local override = shared or (type(GP.FontOverrideGetFor) == "function" and GP.FontOverrideGetFor(scope) == true)
-        local showOverride = not shared and HasNativeColorMode() and HasCapability("override", true)
-        SetShown(self.override, showOverride)
-        self.override:SetChecked(override and true or false)
-
-        local colorsAllowed = HasCapability("colors", true)
-        local targetCount = colorsAllowed and #ResolveTextColorTargets() or 0
-        local colorsVisible = colorsAllowed and targetCount > 0
-        local modeVisible = ColorModeVisible()
-        SetShown(self.colorMode, modeVisible)
-        SetShown(self.colors, colorsVisible)
-        SetShown(self.colorNote, colorsVisible)
-        if modeVisible then
-            self.colorMode:SetValues(ColorModeValues())
-            self.colorMode:SetValue(CurrentColorMode())
-            if self.colorMode._msuf2Title and self.colorMode._msuf2Title.SetText then
-                self.colorMode._msuf2Title:SetText(Tr(CurrentColorModeLabel()))
-            end
-        end
-
-        local y = showOverride and -102 or -76
-        if modeVisible then
-            W.MoveWidget(self.colorMode, self, 16, y, 398, "LEFT")
-            y = y - 54
-        end
-        self:SetHeight(-y + (colorsVisible and 40 or 16))
-
-        local modeScope = CurrentModeScope()
-        local modeOverride = modeScope == "shared"
-            or (type(GP.FontOverrideGetFor) == "function" and GP.FontOverrideGetFor(modeScope) == true)
-        local colorModeEnabled = modeVisible and (HasCustomColorMode() or modeOverride)
-        SetEnabled(self.colorMode, colorModeEnabled)
-        if modeVisible and self.colorMode._msuf2Title and self.colorMode._msuf2Title.SetTextColor then
-            self.colorMode._msuf2Title:SetTextColor(
-                T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
-        end
-
-        SetEnabled(self.colors, targetCount > 0)
-        self.colorNote:SetText(M.Format(targetCount == 1 and "%d relevant color" or "%d relevant colors", targetCount))
-    end
+    popup.Refresh = RefreshPopup
 
     popup:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then

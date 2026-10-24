@@ -38,7 +38,12 @@ local function NewButton()
 end
 
 local namespace = { MSUF_Auras3 = {} }
-assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
+-- The shipped Kernel API and the real pixel layout owner (Kernel/MSUF_Util.lua, after the
+-- geometry owner it needs) load before IconShape.lua, which binds MSUF_PixelLayoutRegion at
+-- load. This namespace has no Midnight client, so the region wrapper hands every frame back.
+assert(loadfile(root .. "/tools/tests/client_manifest.lua"))().LoadSelected(root, "Mainline", namespace, {
+    "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua", "Auras3/MSUF_Auras3_IconShape.lua",
+})
 local A3 = namespace.MSUF_Auras3
 local Shape = assert(A3.IconShape, "the shared icon shapes did not load")
 for _, name in ipairs({ "AtlasKnown", "EnsureMask", "ApplyCooldownShape", "SetTexture", "ApplyBorderRings" }) do

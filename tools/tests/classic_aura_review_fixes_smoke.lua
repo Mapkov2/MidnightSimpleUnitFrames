@@ -1216,7 +1216,9 @@ do
         "GroupBlacklistSummary", "GroupBlacklistCategorySummary" }) do
         assert(Model[name] == nil, "F14: the uncalled menu model export Model." .. name .. " is back")
     end
-    assert(type(_G.MSUF_SetDispelOverlayPreview) == "function" and type(_G.MSUF_SetDispelSymbolPreview) == "function",
+    -- The preview setters are namespace-only exports (Kernel/MSUF_Bootstrap.lua keep policy).
+    assert(type(namespace.PublicGlobals.MSUF_SetDispelOverlayPreview) == "function"
+        and type(namespace.PublicGlobals.MSUF_SetDispelSymbolPreview) == "function",
         "F14: precondition: the live Classic dispel previews are gone")
     -- The dispel previews are an ordinary module loaded after the backend, not an
     -- installer closure the backend calls.
@@ -1811,9 +1813,12 @@ do
     local refreshed = 0
     EM.RefreshAll = function() refreshed = refreshed + 1; return true end
     EM.HideAll = function() return true end
+    -- The page preview flags are read from the owned export registry (the page publishes them).
+    local function SetPageFlag(flag, value) namespace.ExportPublic(flag, value) end
     for _, flag in ipairs({ "MSUF2_BossPageAuraPreviewActive", "MSUF2_ArenaPageAuraPreviewActive" }) do
-        _G.MSUF2_BossPageAuraPreviewActive, _G.MSUF2_ArenaPageAuraPreviewActive = nil, nil
-        _G[flag] = true
+        SetPageFlag("MSUF2_BossPageAuraPreviewActive", nil)
+        SetPageFlag("MSUF2_ArenaPageAuraPreviewActive", nil)
+        SetPageFlag(flag, true)
         refreshed = 0
         listener(false)
         for i = 1, #queued do queued[i]() end
@@ -1821,13 +1826,14 @@ do
         assert(refreshed == 1, "F18: leaving Edit Mode removed the page aura preview kept by " .. flag)
     end
     -- F1: the global font follower refreshes a shown Edit Mode preview once.
-    _G.MSUF2_BossPageAuraPreviewActive = true
+    SetPageFlag("MSUF2_BossPageAuraPreviewActive", true)
     refreshed = 0
     A3.ApplyFontsFromGlobal()
     for i = 1, #queued do queued[i]() end
     for i = #queued, 1, -1 do queued[i] = nil end
     assert(refreshed == 1, "F1: a global font refresh rebuilt the Edit Mode aura preview " .. refreshed .. " times")
-    _G.MSUF2_BossPageAuraPreviewActive, _G.MSUF2_ArenaPageAuraPreviewActive = nil, nil
+    SetPageFlag("MSUF2_BossPageAuraPreviewActive", nil)
+    SetPageFlag("MSUF2_ArenaPageAuraPreviewActive", nil)
     _G.C_Timer.After = nil
 end
 

@@ -19,8 +19,9 @@ param(
 # -Shard k/n runs only the k-th of n slices of the smoke plan (what is left after -Only and
 # -SkipTier), so n CI jobs can share one push-tier run. Shard 1 also runs the static checks; the
 # other shards run smokes only. Every shard must be given the same -Only and -SkipTier.
-# -TimingsOut <file> writes the seconds each invocation took, the format of
-# tools/classic-gate-weights.tsv, which the shard split reads.
+# -TimingsOut <file> writes successful invocation seconds in the format of
+# tools/classic-gate-weights.tsv. By default ordinary runs write a unique file
+# under .checks/gate-timings; listings write nothing. No weights are updated automatically.
 $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "../.github/scripts/ClassicGate.Common.psm1") -Force
 # -SelfContained is the CI subset: everything except the Blizzard UI source audit, which
@@ -102,6 +103,27 @@ $gateSmokeScript = {
     $stopwatch.Stop()
     return [pscustomobject]@{ ExitCode = $exitCode; Output = [string[]]@($output); Seconds = $stopwatch.Elapsed.TotalSeconds }
 }
+function Select-UniqueGateSmokePlan {
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Plan)
+    # Every item uses the same working directory and inherited environment. Tier/label
+    # selection has already happened; only an identical executable and argument array
+    # can share a run. Timing names omit paths and are deliberately NOT identity keys.
+    $seen = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
+    $unique = [Collections.Generic.List[object]]::new()
+    foreach ($item in $Plan) {
+        $key = ConvertTo-Json -InputObject ([string[]]@([string]$item.Command) + [string[]]@($item.Arguments)) -Compress
+        if ($seen.ContainsKey($key)) {
+            $prior = $seen[$key]
+            if ($prior.Label -cne $item.Label) { $prior.Label += " / " + $item.Label }
+        } else {
+            $copy = $item.PSObject.Copy()
+            $seen.Add($key, $copy)
+            $unique.Add($copy)
+        }
+    }
+    return $unique.ToArray()
+}
+
 function Invoke-GateSmoke {
     <#
         Records every smoke file a planned invocation names, then runs the plan.
@@ -180,7 +202,7 @@ function Invoke-GateSmoke {
         $item = $Plan[$index]
         $result = $results[$index]
         foreach ($line in $result.Output) { Write-Host $line }
-        $gateSmokeTimings.Add([pscustomobject]@{ Name = $item.Name; Seconds = $result.Seconds })
+        $gateSmokeTimings.Add([pscustomobject]@{ Name = $item.Name; Seconds = $result.Seconds; ExitCode = $result.ExitCode })
         if ($result.ExitCode -ne 0) {
             if ($FailFast) { throw $item.Label }
             $gateSmokeFailures.Add([pscustomobject]@{
@@ -403,6 +425,14 @@ foreach ($tierName in @($SkipTier | Select-Object -Unique)) {
 }
 if ($smokePlan.Count -eq 0) { throw "-SkipTier leaves none of the $smokePlanTotal smoke invocations to run" }
 
+# Keep both tier registrations so a nightly-only or label-only run retains every case.
+# Collapse repeated executable inputs before assigning shards, never within each shard.
+$declaredCount = $smokePlan.Count
+$smokePlan = [Collections.Generic.List[object]]@(Select-UniqueGateSmokePlan -Plan @($smokePlan))
+if ($smokePlan.Count -lt $declaredCount) {
+    Write-Host "Classic gate plan: $($declaredCount - $smokePlan.Count) identical invocations combined; $($smokePlan.Count) remain"
+}
+
 # -Shard k/n splits what is left of the plan into n slices of about equal weight, longest first:
 # each invocation goes to the shard with the least weight so far. The weight is the seconds the
 # invocation took in an earlier run (tools/classic-gate-weights.tsv, written by -TimingsOut); one
@@ -484,6 +514,13 @@ if ($ListSmokes) {
     return
 }
 
+# Ordinary needed runs collect new weights automatically; listings above have no output side effect.
+# A unique path avoids overwriting another focused run's observations. CI supplies its artifact path.
+if ([string]::IsNullOrWhiteSpace($TimingsOut)) {
+    $stamp = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfff")
+    $TimingsOut = Join-Path $root ".checks/gate-timings/$stamp-$PID.tsv"
+}
+
 # The smoke phase, the inventory and the closing report are functions so a shard that only runs
 # smokes (shard 2 and up) can run them without the static checks between here and the original
 # call sites.
@@ -508,6 +545,7 @@ function Invoke-GateSmokePhase {
     if (-not [string]::IsNullOrWhiteSpace($TimingsOut)) {
         $slowestOf = @{}
         foreach ($timing in $gateSmokeTimings) {
+            if ($timing.ExitCode -ne 0) { continue } # Failed/short-circuited tests are not scheduling observations.
             if (-not $slowestOf.ContainsKey($timing.Name) -or $timing.Seconds -gt $slowestOf[$timing.Name]) {
                 $slowestOf[$timing.Name] = $timing.Seconds
             }
@@ -516,7 +554,9 @@ function Invoke-GateSmokePhase {
         [Array]::Sort($timingNames, [StringComparer]::Ordinal)
         $timingLines = @("Name`tSeconds") + @($timingNames | ForEach-Object { "$_`t" + ([double]$slowestOf[$_]).ToString("0.00", $invariant) })
         $timingsPath = if ([IO.Path]::IsPathRooted($TimingsOut)) { $TimingsOut } else { Join-Path $root $TimingsOut }
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($timingsPath))
         [IO.File]::WriteAllText($timingsPath, (($timingLines -join "`n") + "`n"), (New-Object Text.UTF8Encoding $false))
+        Write-Host "Gate timings: $timingsPath ($($timingNames.Count) successful invocation weights)"
     }
 }
 
@@ -861,9 +901,9 @@ foreach ($client in $clientMatrix) {
 $groupOwnershipRelative = "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"
 $groupOwnershipSource = Get-Content -LiteralPath (Join-Path $root $groupOwnershipRelative) -Raw
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative `
-    -Pattern 'HideFrame\(_G\.PartyFrame\)' -Requirement "hide the PartyFrame owner"
+    -Pattern 'HideFrame\(PartyFrame\)' -Requirement "hide the PartyFrame owner"
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative `
-    -Pattern 'HideFrame\(_G\.CompactRaidFrameContainer\)' -Requirement "hide the CompactRaidFrameContainer owner"
+    -Pattern 'HideFrame\(CompactRaidFrameContainer\)' -Requirement "hide the CompactRaidFrameContainer owner"
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative -Forbidden `
     -Pattern 'PartyMemberFramePool\s*,\s*function' -Requirement "hook the PartyMemberFramePool members; only their owner is hidden"
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative -Forbidden `
@@ -881,7 +921,8 @@ $elementsRoot = Join-Path $root "MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF
 $gameRoot = Join-Path $root "MidnightSimpleUnitFrames/Game"
 $classicSharedElementsPath = Join-Path $gameRoot "Classic/UnitFrames/MSUF_UFCore_Elements.xml"
 $mainlineSharedElementsPath = Join-Path $elementsRoot "MSUF_UFCore_Elements.xml"
-$auraCorePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))
+# The shared Auras3 icon definitions end with the icon skin catalog (shapes, then skins).
+$auraCorePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconSkins_Catalog.lua"))
 $mainlineSharedLoadOrder = @((Get-MsufLoadGraph -Path $mainlineSharedElementsPath -Duplicates Repeat).LuaPaths)
 $auraCoreIndex = [Array]::IndexOf($mainlineSharedLoadOrder, $auraCorePath)
 if ($auraCoreIndex -lt 0) {

@@ -5,9 +5,12 @@
 local root = arg[1]
 local loadfile = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))().Loader(loadfile)
 local World = assert(loadfile(root .. "/tools/tests/castbar_world.lua"))()
-local world = World.New(root, "timer", { flavor = arg[2] or "Mists" })
+-- The castbar files bind their text writer when they load, so the stand-in is
+-- installed before them.
+local world = World.New(root, "timer", { flavor = arg[2] or "Mists", setup = function()
+    _G.MSUF_SetTextIfChanged = function(fs, text) if fs then fs.text = text end end
+end })
 _G.INTERRUPTED = "Interrupted"
-_G.MSUF_SetTextIfChanged = function(fs, text) if fs then fs.text = text end end
 _G.GetNetStats = function() return 0, 0, 40, 40 end
 _G.MSUF_DB.player = {}
 

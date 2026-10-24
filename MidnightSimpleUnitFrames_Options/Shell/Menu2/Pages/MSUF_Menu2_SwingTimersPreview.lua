@@ -3,7 +3,7 @@ local _, MSUF = ...
 if not (MSUF.Client and MSUF.Client.IsForever) then return end
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua")
 local M, Swing = MSUF.MSUF2, MSUF.SwingTimer
-local W, AP = M.Widgets, M.AdvancedPage
+local W = M.Widgets
 local Preview = {}
 M.SwingTimerPreview = Preview
 local HANDS = { "main", "off", "ranged" }

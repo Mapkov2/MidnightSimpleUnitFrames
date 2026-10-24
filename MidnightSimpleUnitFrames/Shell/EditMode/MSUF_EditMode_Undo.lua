@@ -1,20 +1,20 @@
 --- EditMode/MSUF_EditMode_Undo.lua - Edit Mode undo and redo
 --- Captures DB snapshots before changes, restores on undo.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Undo.lua"
 local ExportPublic = MSUF.ExportPublic
-local EM2 = _G.MSUF_EM2
+local PublicGlobals = MSUF.PublicGlobals
+local EM2 = MSUF.Require("MSUF_EM2", CALLER)
 local Util = EM2.Util
 
 local ApplyAllSettingsSafe = Util.ApplyAllSettingsSafe
 local ApplySettingsForKeySafe = Util.ApplySettingsForKeySafe
 local ProfileIdentity, IsCurrentProfile = Util.ProfileIdentity, Util.IsCurrentProfile
 local SharedHistoryService = Util.SharedHistoryService
-local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
+local RequestGroupGeometryApply = MSUF.Require("MSUF_RequestGroupGeometryApply", CALLER)
 
 local Undo = {}
 EM2.Undo = Undo
@@ -231,7 +231,7 @@ local function CaptureState(category, key)
         return external and type(external.CaptureHistoryState) == "function"
             and external.CaptureHistoryState(key) or nil
     end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then return nil end
     local snap = { category = category, key = key, profile = ProfileIdentity() }
     if category == "units" then
@@ -279,7 +279,7 @@ local function RestoreState(snap)
         ExportPublic("MSUF__UndoRestoring", false)
         return
     end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then
         ExportPublic("MSUF__UndoRestoring", false)
         return
@@ -361,7 +361,7 @@ end
 -- whether an external apply succeeded after the DB write.  Failed applies do
 -- not consume undo capacity or destroy the redo stack.
 function Undo.PrepareChange(category, key, debounce)
-    if _G.MSUF__UndoRestoring then return nil end
+    if PublicGlobals.MSUF__UndoRestoring then return nil end
     local pending = preparedDebounce
     local history = SharedHistoryService()
     if debounce and pending and pending.category == category and pending.key == key
@@ -412,7 +412,7 @@ local function CommitNudgeSnapshot(snap)
 end
 
 function Undo.CommitPrepared(snap)
-    if _G.MSUF__UndoRestoring or type(snap) ~= "table" or type(snap.category) ~= "string" then return false end
+    if PublicGlobals.MSUF__UndoRestoring or type(snap) ~= "table" or type(snap.category) ~= "string" then return false end
     if snap.debounce then return CommitNudgeSnapshot(snap) end
     if snap.shared then
         local history = SharedHistoryService()
@@ -426,7 +426,7 @@ function Undo.CommitPrepared(snap)
 end
 
 function Undo.BeforeChange(category, key, debounce)
-    if _G.MSUF__UndoRestoring then return end
+    if PublicGlobals.MSUF__UndoRestoring then return end
     CommitPreparedDebounce()
     local history = SharedHistoryService()
     if history and type(history.BeginHistoryTransaction) == "function" then
@@ -493,7 +493,7 @@ function Undo.BeforeChange(category, key, debounce)
 end
 
 function Undo.BeginChange(category, key, action)
-    if _G.MSUF__UndoRestoring then return false end
+    if PublicGlobals.MSUF__UndoRestoring then return false end
     CommitSharedDebounce()
     local history = SharedHistoryService()
     if history and type(history.BeginHistoryTransaction) == "function" then

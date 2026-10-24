@@ -1,12 +1,11 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: DispelVisuals.
 -- Dispel/Purge sensor art and thickness on square and rounded frames. Build every region and mask before AddDispelTypeTexture transfers native ownership.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/Runtime/MSUF_Auras3_Runtime_DispelVisuals.lua")
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 local function SensorColorOptions(A3, options, inputs)
-    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    local styles = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
     options.style = styles and styles.PreserveAsset or nil
     return A3.ApplyHarmfulDispelColorOptions(options, inputs)
 end
@@ -158,7 +157,7 @@ end
 --- at the aura's dispel type. AddDispelTypeTexture securecopies the options
 --- table at bind time, so reusing this one table across buttons is safe.
 function DS.Options(style, inputs)
-    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    local styles = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
     local assets = DS.AssetMap(style, inputs)
     if assets then
         DS.options.style = styles and styles.CustomAsset or nil
@@ -184,7 +183,8 @@ end
 -- changes recreate the native sensor instead of touching a forbidden object.
 local function PrepareRoundedDispelOverlayRegion(parentFrame, region, owner)
     if not (parentFrame and region and owner) then return false end
-    local callback = _G.MSUF_RoundedUF_PrepareDispelOverlay
+    -- RoundedFrames publishes and clears its callbacks as the feature toggles.
+    local callback = MSUF.Public.RoundedUF_PrepareDispelOverlay
     if type(callback) ~= "function" then return false end
     return callback(parentFrame, region, owner) == true
 end
@@ -194,7 +194,7 @@ end
 -- Multiple textures share ONE AuraSlot: no extra aura selection or Lua scan.
 local function PrepareDispelSensorBorder(button, sensor, parentFrame, owner)
     local thickness = Round(ClampNumber(sensor.thickness, 3, 1, 30))
-    local prepare = _G.MSUF_RoundedUF_PrepareDispelBorder
+    local prepare = MSUF.Public.RoundedUF_PrepareDispelBorder
     local regions = type(prepare) == "function" and prepare(parentFrame, button, thickness) or nil
     if not regions then
         regions = {}
@@ -239,7 +239,7 @@ local function RegisterRoundedDispelOverlayPreviewRegion(parentFrame, region)
         parentFrame[key] = regions
     end
     regions[region] = true
-    local callback = _G.MSUF_RoundedUF_OnDispelOverlayChanged
+    local callback = MSUF.Public.RoundedUF_OnDispelOverlayChanged
     if type(callback) == "function" then
         callback(parentFrame, region)
     end

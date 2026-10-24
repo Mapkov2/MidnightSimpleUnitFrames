@@ -1,46 +1,34 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local FILE = "Shell/Menu2/MSUF_Menu2_Theme.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", FILE)
+-- Core font helpers, resolved once.
+local CoreFont = {
+    ResolveSafe = MSUF.Require("MSUF_ResolveSafeFontPath", FILE),
+    PathMatches = MSUF.Require("MSUF_FontPathEquals", FILE),
+    KeyPath = MSUF.Require("MSUF_ResolveFontKeyPath", FILE),
+}
+local canaccessvalue, issecretvalue = canaccessvalue, issecretvalue
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local T = M.Theme or {}
 M.Theme = T
 local WL = M.WordList
-local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+local SharedUI = MSUF.UI or MSUF.Require("MSUF_UI", FILE)
 local MenuSkin = MSUF.MenuSkin
 
-T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
-    micro = 9, caption = 11, supporting = 11, body = 13, control = 13,
-    card = 13, accordion = 15, section = 15, heading = 17, hero = 21,
-}
+T.fontSizes = SharedUI.fontSizes
 function T.FontSize(role, fallback)
     -- Menu-only readability floor; gameplay fonts keep their own sizing.
     if role == "micro" then return 11 end
     if role == "navigation" then return 14 end
     if role == "caption" or role == "supporting" then return 12 end
-    if SharedUI and type(SharedUI.FontSize) == "function" then return SharedUI.FontSize(role, fallback) end
-    return T.fontSizes[role] or tonumber(fallback) or T.fontSizes.body
+    return SharedUI.FontSize(role, fallback)
 end
-function T.NormalizeFontSize(size)
-    if SharedUI and type(SharedUI.NormalizeFontSize) == "function" then return SharedUI.NormalizeFontSize(size) end
-    local order, value = { 9, 11, 13, 15, 17, 21 }, tonumber(size) or T.fontSizes.body
-    local best, distance = order[1], math.huge
-    for i = 1, #order do
-        local nextDistance = math.abs(value - order[i])
-        if nextDistance < distance or (nextDistance == distance and order[i] > best) then
-            best, distance = order[i], nextDistance
-        end
-    end
-    return best
-end
-T.spacing = (SharedUI and SharedUI.spacing) or T.spacing or {
-    hairline = 1, optical = 2, xs = 4, sm = 8, md = 12, lg = 16, xl = 24, xxl = 32,
-}
-function T.Space(role, fallback)
-    if SharedUI and type(SharedUI.Space) == "function" then return SharedUI.Space(role, fallback) end
-    local value = type(role) == "string" and T.spacing[role] or tonumber(role)
-    return tonumber(value) or tonumber(fallback) or T.spacing.sm
-end
+T.NormalizeFontSize = SharedUI.NormalizeFontSize
+T.spacing = SharedUI.spacing
+T.Space = SharedUI.Space
 
 -- Menu2 theme and widget styling layer.
 -- Owns reusable visual primitives, locale-aware labels, and skin helpers for the options UI.
@@ -48,7 +36,7 @@ end
 local GLASS_VARIANTS = T.glassVariants or {}
 T.collapseHintClickHideThreshold = T.collapseHintClickHideThreshold or 8
 local function Template()
-    return _G.BackdropTemplateMixin and "BackdropTemplate" or nil
+    return BackdropTemplateMixin and "BackdropTemplate" or nil
 end
 local ENGLISH_LOCALES = { enUS = true, enGB = true }
 local LOCALE_ORDER = { "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
@@ -168,28 +156,25 @@ local function SmoothTexture(tex)
 end
 local DEFAULT_PANEL_COLOR = { 0.04, 0.05, 0.08, 1 }
 local gradientColorCache = {}
-local function GradientColor(r, g, b, a)
-    local byG = gradientColorCache[r]
-    if not byG then
-        byG = {}
-        gradientColorCache[r] = byG
+local GradientColor
+do
+    local function Sub(parent, key)
+        local child = parent[key]
+        if not child then
+            child = {}
+            parent[key] = child
+        end
+        return child
     end
-    local byB = byG[g]
-    if not byB then
-        byB = {}
-        byG[g] = byB
+    function GradientColor(r, g, b, a)
+        local byA = Sub(Sub(Sub(gradientColorCache, r), g), b)
+        local color = byA[a]
+        if not color then
+            color = CreateColor(r, g, b, a)
+            byA[a] = color
+        end
+        return color
     end
-    local byA = byB[b]
-    if not byA then
-        byA = {}
-        byB[b] = byA
-    end
-    local color = byA[a]
-    if not color then
-        color = _G.CreateColor(r, g, b, a)
-        byA[a] = color
-    end
-    return color
 end
 local function SetTextureColorCached(tex, r, g, b, a)
     if not tex then return end
@@ -263,20 +248,16 @@ local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preser
         tex:SetTexture(WHITE8)
         if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
     end
-    if tex.SetGradientAlpha then
+    if tex.SetGradientAlpha or (tex.SetGradient and CreateColor) then
         tex._msuf2TextureMode = "gradient"
         tex._msuf2GradientOrientation = orientation
         tex._msuf2GradientFR, tex._msuf2GradientFG, tex._msuf2GradientFB, tex._msuf2GradientFA = fr, fg, fb, fa
         tex._msuf2GradientTR, tex._msuf2GradientTG, tex._msuf2GradientTB, tex._msuf2GradientTA = tr, tg, tb, ta
-        tex:SetGradientAlpha(orientation, fr, fg, fb, fa, tr, tg, tb, ta)
-        return true
-    end
-    if tex.SetGradient and _G.CreateColor then
-        tex._msuf2TextureMode = "gradient"
-        tex._msuf2GradientOrientation = orientation
-        tex._msuf2GradientFR, tex._msuf2GradientFG, tex._msuf2GradientFB, tex._msuf2GradientFA = fr, fg, fb, fa
-        tex._msuf2GradientTR, tex._msuf2GradientTG, tex._msuf2GradientTB, tex._msuf2GradientTA = tr, tg, tb, ta
-        tex:SetGradient(orientation, GradientColor(fr, fg, fb, fa), GradientColor(tr, tg, tb, ta))
+        if tex.SetGradientAlpha then
+            tex:SetGradientAlpha(orientation, fr, fg, fb, fa, tr, tg, tb, ta)
+        else
+            tex:SetGradient(orientation, GradientColor(fr, fg, fb, fa), GradientColor(tr, tg, tb, ta))
+        end
         return true
     end
     if tex.SetVertexColor then
@@ -337,9 +318,9 @@ local NO_MENU_FONT = {}
 local menuFontCache = {}
 local function MenuGeneralDB()
     if type(M.GetGeneralDB) == "function" then return M.GetGeneralDB() end
-    local ensureDB = _G.MSUF_EnsureDB
+    local ensureDB = MSUF.Optional("MSUF_EnsureDB")
     if type(ensureDB) == "function" then ensureDB() end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then return nil end
     db.general = type(db.general) == "table" and db.general or {}
     return db.general
@@ -357,14 +338,10 @@ local function ResolveMenuFontPath(size, flags, role)
     if cached ~= nil then return cached ~= NO_MENU_FONT and cached or nil end
     local path = key
     if not (path:find("\\", 1, true) or path:find("/", 1, true)) then
-        local getPath = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
-        if type(getPath) == "function" then path = getPath(key, size, flags) or path end
+        path = CoreFont.KeyPath(key, size, flags) or path
     end
-    local resolveSafe = _G.MSUF_ResolveSafeFontPath
-    if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
-    if SharedUI and type(SharedUI.ResolveRoleFontPath) == "function" then
-        path = SharedUI.ResolveRoleFontPath(path, role == "navigation" and "card" or role)
-    end
+    path = CoreFont.ResolveSafe(path, size, flags, key)
+    path = SharedUI.ResolveRoleFontPath(path, role == "navigation" and "card" or role)
     if type(path) ~= "string" or path == "" then path = nil end
     menuFontCache[cacheKey] = path or NO_MENU_FONT
     return path
@@ -378,11 +355,7 @@ local function NormalizeAppliedFontPath(path)
 end
 local function FontPathMatches(expected, actual)
     if expected == actual then return true end
-    local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
-    if type(matches) == "function" then
-        local same = matches(expected, actual)
-        if same == true then return true end
-    end
+    if CoreFont.PathMatches(expected, actual) == true then return true end
     expected, actual = NormalizeAppliedFontPath(expected), NormalizeAppliedFontPath(actual)
     return expected ~= nil and actual ~= nil and expected == actual
 end
@@ -396,7 +369,7 @@ local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFl
 end
 local function TryApplyStyledFont(fs, font, size, flags)
     if type(font) ~= "string" or font == "" then return false end
-    return _G.MSUF_SetFontChecked(fs, font, size, flags) and FontApplicationMatches(fs, font, size, flags)
+    return SetFontChecked(fs, font, size, flags) and FontApplicationMatches(fs, font, size, flags)
 end
 local function ApplyStyledFont(fs, force)
     if not (fs and fs.GetFont and fs.SetFont) then return false end
@@ -711,10 +684,14 @@ local function ClampMotionDuration(value, fallback)
     if value > maxDur then return maxDur end
     return value
 end
-function T.ReducedMotionEnabled()
-    local db = _G.MSUF_DB
+-- Smooth scrolls ask this on every frame, so the profile is read inline.
+function T.ReducedMotionEnabled(scrolling)
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general or nil
-    return type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) or false
+    if type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) then return true end
+    if not MenuSkin then return false end
+    if scrolling then return MenuSkin.ScrollMotionReduced() end
+    return MenuSkin.MotionReduced()
 end
 function T.MotionDuration(name, fallback)
     if type(name) == "number" then return ClampMotionDuration(name, fallback) end
@@ -741,6 +718,14 @@ function T.StopAllMenuAnimations()
         end
     end
     return stopped
+end
+-- Sets an Alpha animation's range, duration and smoothing (and its order when given).
+local function ConfigureAlphaAnim(anim, fromAlpha, toAlpha, duration, smoothing, order)
+    if anim.SetFromAlpha then anim:SetFromAlpha(fromAlpha) end
+    if anim.SetToAlpha then anim:SetToAlpha(toAlpha) end
+    if anim.SetDuration then anim:SetDuration(duration) end
+    if anim.SetSmoothing then anim:SetSmoothing(smoothing) end
+    if order and anim.SetOrder then anim:SetOrder(order) end
 end
 local function StopAlphaMotion(frame)
     if not frame then return end
@@ -778,10 +763,8 @@ function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
         group:SetScript("OnFinished", nil)
         group:Stop()
     end
-    if anim.SetFromAlpha then anim:SetFromAlpha(fromAlpha or 0) end
-    if anim.SetToAlpha then anim:SetToAlpha(toAlpha or 1) end
-    if anim.SetDuration then anim:SetDuration(ClampMotionDuration(duration, T.motion.standard)) end
-    if anim.SetSmoothing then anim:SetSmoothing(smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
+    ConfigureAlphaAnim(anim, fromAlpha or 0, toAlpha or 1, ClampMotionDuration(duration, T.motion.standard),
+        smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN"))
     group:SetScript("OnFinished", function()
         if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
         if type(onFinished) == "function" then onFinished(frame) end
@@ -815,11 +798,10 @@ function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleT
     end
     local dur = ClampMotionDuration(duration, T.motion.standard)
     local ok = alpha and scale
-    if ok and alpha.SetFromAlpha then alpha:SetFromAlpha(fromAlpha or 0) end
-    if ok and alpha.SetToAlpha then alpha:SetToAlpha(toAlpha or 1) end
-    if ok and alpha.SetDuration then alpha:SetDuration(dur) end
-    if ok and alpha.SetOrder then alpha:SetOrder(1) end
-    if ok and alpha.SetSmoothing then alpha:SetSmoothing(smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
+    if ok then
+        ConfigureAlphaAnim(alpha, fromAlpha or 0, toAlpha or 1, dur,
+            smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN"), 1)
+    end
     if ok and scale.SetScaleFrom and scale.SetScaleTo then
         scale:SetScaleFrom(scaleFrom or 1, scaleFrom or 1)
         scale:SetScaleTo(scaleTo or 1, scaleTo or 1)
@@ -892,7 +874,7 @@ local function FocusVeilRoot(owner, opts)
 end
 local function EnsureFocusVeilFrame()
     if M._focusVeilFrame then return M._focusVeilFrame end
-    local overlay = PixelLayoutRegion(CreateFrame("Frame", "MSUF2FocusVeil", _G.UIParent))
+    local overlay = PixelLayoutRegion(CreateFrame("Frame", "MSUF2FocusVeil", UIParent))
     overlay:SetFrameStrata("TOOLTIP")
     overlay:SetToplevel(false)
     overlay:EnableMouse(false)
@@ -1087,15 +1069,7 @@ local function EnsurePanelAsset(frame)
         local h = (frame.GetHeight and frame:GetHeight()) or 80
         local c = math.max(6, math.min(16, math.floor(math.min(w, h) * 0.34 + 0.5)))
         local os = 2
-        art.TL:ClearAllPoints()
-        art.T:ClearAllPoints()
-        art.TR:ClearAllPoints()
-        art.L:ClearAllPoints()
-        art.C:ClearAllPoints()
-        art.R:ClearAllPoints()
-        art.BL:ClearAllPoints()
-        art.B:ClearAllPoints()
-        art.BR:ClearAllPoints()
+        for i = 1, #PANEL_SLICES do art[PANEL_SLICES[i][1]]:ClearAllPoints() end
         art.TL:SetPoint("TOPLEFT", frame, "TOPLEFT", -os, os)
         art.TL:SetSize(c, c)
         art.TR:SetPoint("TOPRIGHT", frame, "TOPRIGHT", os, os)
@@ -1193,18 +1167,16 @@ local function EnsurePanelAssetDepth(frame)
     local bottom = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -8))
     bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 6, 5)
     bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, 5)
-    local leftGlint = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 1))
-    leftGlint:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -4)
-    leftGlint:SetHeight(2)
-    leftGlint:SetTexture((T.media and T.media.gradH) or WHITE8)
-    if leftGlint.SetTexCoord then leftGlint:SetTexCoord(0, 1, 0, 1) end
-    if leftGlint.SetBlendMode then leftGlint:SetBlendMode("ADD") end
-    local rightGlint = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 1))
-    rightGlint:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -4)
-    rightGlint:SetHeight(2)
-    rightGlint:SetTexture((T.media and T.media.gradHRev) or WHITE8)
-    if rightGlint.SetTexCoord then rightGlint:SetTexCoord(0, 1, 0, 1) end
-    if rightGlint.SetBlendMode then rightGlint:SetBlendMode("ADD") end
+    local function Glint(point, x, mediaKey)
+        local glint = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 1))
+        glint:SetPoint(point, frame, point, x, -4)
+        glint:SetHeight(2)
+        glint:SetTexture((T.media and T.media[mediaKey]) or WHITE8)
+        if glint.SetTexCoord then glint:SetTexCoord(0, 1, 0, 1) end
+        if glint.SetBlendMode then glint:SetBlendMode("ADD") end
+        return glint
+    end
+    local leftGlint, rightGlint = Glint("TOPLEFT", 12, "gradH"), Glint("TOPRIGHT", -12, "gradHRev")
     local cornerGlow = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 0))
     cornerGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -4)
     cornerGlow:SetSize(76, 18)
@@ -1232,17 +1204,9 @@ local function CreatePanelNeonSweep(tex, duration, travelX, fromAlpha, toAlpha, 
     if travel.SetSmoothing then travel:SetSmoothing("NONE") end
     if travel.SetOrder then travel:SetOrder(1) end
     local fadeIn = group:CreateAnimation("Alpha")
-    if fadeIn.SetFromAlpha then fadeIn:SetFromAlpha(fromAlpha or 0.12) end
-    if fadeIn.SetToAlpha then fadeIn:SetToAlpha(toAlpha or 0.78) end
-    if fadeIn.SetDuration then fadeIn:SetDuration(1.10) end
-    if fadeIn.SetSmoothing then fadeIn:SetSmoothing("OUT") end
-    if fadeIn.SetOrder then fadeIn:SetOrder(1) end
+    ConfigureAlphaAnim(fadeIn, fromAlpha or 0.12, toAlpha or 0.78, 1.10, "OUT", 1)
     local fadeOut = group:CreateAnimation("Alpha")
-    if fadeOut.SetFromAlpha then fadeOut:SetFromAlpha(toAlpha or 0.78) end
-    if fadeOut.SetToAlpha then fadeOut:SetToAlpha(fromAlpha or 0.12) end
-    if fadeOut.SetDuration then fadeOut:SetDuration(1.20) end
-    if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN") end
-    if fadeOut.SetOrder then fadeOut:SetOrder(2) end
+    ConfigureAlphaAnim(fadeOut, toAlpha or 0.78, fromAlpha or 0.12, 1.20, "IN", 2)
     if delay and delay > 0 then
         if travel.SetStartDelay then travel:SetStartDelay(delay) end
         if fadeIn.SetStartDelay then fadeIn:SetStartDelay(delay) end
@@ -1390,11 +1354,7 @@ function T.PlayNeonFlash(frame, kind, opts)
     if flash.CreateAnimationGroup then
         local group = flash:CreateAnimationGroup()
         T.TrackMenuAnimationGroup(group)
-        local fade = group:CreateAnimation("Alpha")
-        if fade.SetFromAlpha then fade:SetFromAlpha(opts.alpha or 0.26) end
-        if fade.SetToAlpha then fade:SetToAlpha(0) end
-        if fade.SetDuration then fade:SetDuration(opts.duration or 0.70) end
-        if fade.SetSmoothing then fade:SetSmoothing("OUT") end
+        ConfigureAlphaAnim(group:CreateAnimation("Alpha"), opts.alpha or 0.26, 0, opts.duration or 0.70, "OUT")
         if group.SetScript then
             group:SetScript("OnFinished", function()
                 if flash.SetAlpha then flash:SetAlpha(0) end
@@ -1714,8 +1674,9 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     end
     T.SetNavIconVisible(btn, visible ~= false)
 end
-local function HideNativeSliderTexture(region, keep)
-    if not region or region == keep then return end
+-- Fades out and hides a native art region (nil is ignored).
+local function HideNativeArt(region)
+    if not region then return end
     if region.SetAlpha then region:SetAlpha(0) end
     if region.Hide then region:Hide() end
 end
@@ -1723,6 +1684,11 @@ local function IsTextureRegion(region)
     if not region then return false end
     if region.IsObjectType then return region:IsObjectType("Texture") and true or false end
     return region.GetObjectType and region:GetObjectType() == "Texture"
+end
+-- Blizzard templates name their parts <frameName><suffix>; the name is known only at run time.
+local function NamedPart(frame, suffix)
+    local name = frame.GetName and frame:GetName()
+    return name and _G[name .. suffix] or nil
 end
 local SLIDER_STYLED_TEXTURE_KEYS = { "_msufTrack", "_msufTrackTop", "_msufTrackBottom", "_msufFill", "_msufFillGlow", "_msuf2Thumb",
     "_msufPeelTrack", "_msufPeelTrackFill" }
@@ -1741,23 +1707,16 @@ local function HideNativeSliderParts(slider)
         local regions = { slider:GetRegions() }
         for i = 1, #regions do
             local region = regions[i]
-            if IsTextureRegion(region) and not keep[region] then HideNativeSliderTexture(region) end
+            if IsTextureRegion(region) and not keep[region] then HideNativeArt(region) end
         end
     end
-    local name = slider.GetName and slider:GetName()
-    if name and _G then
-        for _, suffix in ipairs(SLIDER_NATIVE_SUFFIXES) do
-            HideNativeSliderTexture(_G[name .. suffix])
-        end
-    end
+    for _, suffix in ipairs(SLIDER_NATIVE_SUFFIXES) do HideNativeArt(NamedPart(slider, suffix)) end
     slider._msuf2NativeSliderPartsHidden = true
 end
-local function SetSliderTextureColor(texture, r, g, b, a)
-    SetTextureColorCached(texture, r, g, b, a)
-end
--- Scratch colors for StyleSlider's gradients. ApplyTextureGradient copies the
--- components into the texture's cache fields and keeps no reference.
-local SLIDER_TRACK_BASE, SLIDER_GRADIENT_FROM, SLIDER_GRADIENT_TO = { 0, 0, 0, 1 }, { 0, 0, 0, 1 }, { 0, 0, 0, 1 }
+-- Scratch colors for StyleSlider's gradients (ApplyTextureGradient copies the
+-- components into the texture's cache fields and keeps no reference) and the
+-- visual-state signature compared against the last paint.
+local SLIDER_SCRATCH = { base = { 0, 0, 0, 1 }, from = { 0, 0, 0, 1 }, to = { 0, 0, 0, 1 }, signature = {} }
 local function SliderTexture(slider, key, layer, subLevel, height)
     local tex = PixelLayoutRegion(slider:CreateTexture(nil, layer, nil, subLevel))
     tex:SetHeight(height)
@@ -1774,13 +1733,20 @@ local function SliderValuePercent(slider)
     if pct > 1 then return 1 end
     return pct
 end
+-- Cursor-drag sliders own the whole press; collapse the native thumb so the
+-- engine's thumb-grab drag can't fight the cursor-follow OnUpdate.
+local function CollapseNativeThumb(slider, nativeThumb)
+    local hit = slider._msuf2CursorDrag and 1 or 18
+    if nativeThumb.SetSize then nativeThumb:SetSize(hit, hit) end
+    if nativeThumb.SetAlpha then nativeThumb:SetAlpha(0.001) end
+    if nativeThumb.Show then nativeThumb:Show() end
+end
 local function UpdateSliderThumb(slider)
     local thumb = slider and slider._msuf2Thumb
     if not thumb then return end
     local nativeThumb = slider.GetThumbTexture and slider:GetThumbTexture()
     if nativeThumb and nativeThumb ~= thumb then
-        -- Cursor-drag sliders own the whole press; collapse the native thumb so
-        -- the engine's thumb-grab drag can't fight the cursor-follow OnUpdate.
+        -- CollapseNativeThumb inline: this runs on every value change.
         local hit = slider._msuf2CursorDrag and 1 or 18
         if nativeThumb.SetSize then nativeThumb:SetSize(hit, hit) end
         if nativeThumb.SetAlpha then nativeThumb:SetAlpha(0.001) end
@@ -1846,31 +1812,28 @@ function T.StyleSlider(slider)
     local accent = T.colors.accent
     local edge = T.colors.border or T.colors.borderSoft
     local thumbMedia = T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8"
-    if slider._msuf2SliderVisualReady
-        and slider._msuf2SliderVisualEnabled == enabled
-        and slider._msuf2SliderVisualHovered == hovered
-        and slider._msuf2SliderVisualActive == active
-        and slider._msuf2SliderVisualAccentR == accent[1]
-        and slider._msuf2SliderVisualAccentG == accent[2]
-        and slider._msuf2SliderVisualAccentB == accent[3]
-        and slider._msuf2SliderVisualEdgeR == edge[1]
-        and slider._msuf2SliderVisualEdgeG == edge[2]
-        and slider._msuf2SliderVisualEdgeB == edge[3]
-        and slider._msuf2SliderVisualThumbMedia == thumbMedia
-    then
+    -- The visual state is skipped when it matches the last paint. Setting
+    -- _msuf2SliderVisualReady to nil (the skin does) forces a repaint.
+    local signature = SLIDER_SCRATCH.signature
+    signature[1], signature[2], signature[3] = enabled, hovered, active
+    signature[4], signature[5], signature[6] = accent[1], accent[2], accent[3]
+    signature[7], signature[8], signature[9], signature[10] = edge[1], edge[2], edge[3], thumbMedia
+    local painted = slider._msuf2SliderVisual
+    local unchanged = painted ~= nil and slider._msuf2SliderVisualReady
+    for i = 1, unchanged and 10 or 0 do
+        if painted[i] ~= signature[i] then unchanged = false end
+    end
+    if unchanged then
         UpdateSliderThumb(slider)
         return
     end
+    painted = painted or {}
+    slider._msuf2SliderVisual = painted
+    for i = 1, 10 do painted[i] = signature[i] end
     slider._msuf2SliderVisualReady = true
-    slider._msuf2SliderVisualEnabled = enabled
-    slider._msuf2SliderVisualHovered = hovered
-    slider._msuf2SliderVisualActive = active
-    slider._msuf2SliderVisualAccentR, slider._msuf2SliderVisualAccentG, slider._msuf2SliderVisualAccentB = accent[1], accent[2], accent[3]
-    slider._msuf2SliderVisualEdgeR, slider._msuf2SliderVisualEdgeG, slider._msuf2SliderVisualEdgeB = edge[1], edge[2], edge[3]
-    slider._msuf2SliderVisualThumbMedia = thumbMedia
     if slider._msufTrack then
         local surface = T.colors.coreSurface or { 0.014, 0.038, 0.072, 1 }
-        local trackBase = SLIDER_TRACK_BASE
+        local trackBase = SLIDER_SCRATCH.base
         trackBase[1] = surface[1] * (active and 1.45 or hovered and 1.30 or 1.18)
         trackBase[2] = surface[2] * (active and 1.42 or hovered and 1.28 or 1.16)
         trackBase[3] = surface[3] * (active and 1.36 or hovered and 1.22 or 1.12)
@@ -1878,21 +1841,21 @@ function T.StyleSlider(slider)
         -- The gradient replaces the whole texture, so no flat color goes first:
         -- it would also flip the texture cache between flat and gradient and
         -- repaint both on every hover change.
-        ApplyTextureGradient(slider._msufTrack, "VERTICAL", ShadeColorInto(SLIDER_GRADIENT_FROM, trackBase, 0.10, 1),
-            ShadeColorInto(SLIDER_GRADIENT_TO, trackBase, -0.18, 1), false)
+        ApplyTextureGradient(slider._msufTrack, "VERTICAL", ShadeColorInto(SLIDER_SCRATCH.from, trackBase, 0.10, 1),
+            ShadeColorInto(SLIDER_SCRATCH.to, trackBase, -0.18, 1), false)
         if slider._msufTrack.Show then slider._msufTrack:Show() end
     end
     if slider._msufTrackTop then
-        SetSliderTextureColor(slider._msufTrackTop, edge[1], edge[2], edge[3], (active and 1.00 or hovered and 0.94 or 0.74) * alpha)
+        SetTextureColorCached(slider._msufTrackTop, edge[1], edge[2], edge[3], (active and 1.00 or hovered and 0.94 or 0.74) * alpha)
         slider._msufTrackTop:Show()
     end
     if slider._msufTrackBottom then
-        SetSliderTextureColor(slider._msufTrackBottom, edge[1], edge[2], edge[3], (active and 0.62 or hovered and 0.46 or 0.40) * alpha)
+        SetTextureColorCached(slider._msufTrackBottom, edge[1], edge[2], edge[3], (active and 0.62 or hovered and 0.46 or 0.40) * alpha)
         slider._msufTrackBottom:Show()
     end
     if slider._msufFill then
         local fillAlpha = (active and 1.00 or hovered and 0.96 or 0.86) * alpha
-        local from, to = SLIDER_GRADIENT_FROM, SLIDER_GRADIENT_TO
+        local from, to = SLIDER_SCRATCH.from, SLIDER_SCRATCH.to
         from[1], from[2], from[3], from[4] = math.min(accent[1] * 1.24, 1), math.min(accent[2] * 1.14, 1),
             math.min(accent[3] * 1.10, 1), fillAlpha
         to[1], to[2], to[3], to[4] = accent[1] * 0.72, accent[2] * 0.82, accent[3] * 0.90, fillAlpha * 0.88
@@ -1900,16 +1863,11 @@ function T.StyleSlider(slider)
         if slider._msufFill.Show then slider._msufFill:Show() end
     end
     if slider._msufFillGlow then
-        SetSliderTextureColor(slider._msufFillGlow, accent[1], accent[2], accent[3], (active and 0.30 or hovered and 0.20 or 0.12) * alpha)
+        SetTextureColorCached(slider._msufFillGlow, accent[1], accent[2], accent[3], (active and 0.30 or hovered and 0.20 or 0.12) * alpha)
         slider._msufFillGlow:Show()
     end
     local nativeThumb = slider.GetThumbTexture and slider:GetThumbTexture()
-    if nativeThumb then
-        local hit = slider._msuf2CursorDrag and 1 or 18
-        if nativeThumb.SetSize then nativeThumb:SetSize(hit, hit) end
-        if nativeThumb.SetAlpha then nativeThumb:SetAlpha(0.001) end
-        if nativeThumb.Show then nativeThumb:Show() end
-    end
+    if nativeThumb then CollapseNativeThumb(slider, nativeThumb) end
     local thumb = slider._msuf2Thumb
     if thumb then
         thumb:SetTexture(thumbMedia)
@@ -1923,20 +1881,16 @@ function T.StyleSlider(slider)
         UpdateSliderThumb(slider)
     end
 end
+local CHECKBOX_NATIVE_GETTERS = WL "GetNormalTexture GetPushedTexture GetHighlightTexture GetDisabledTexture"
 function T.StyleCheckmark(checkButton)
     if not checkButton then return end
     if MenuSkin then MenuSkin.TrackPaint(checkButton, T.StyleCheckmark) end
-    local function HideQuietCheckboxTexture(texture)
-        if not texture then return end
-        if texture.SetAlpha then texture:SetAlpha(0) end
-        if texture.Hide then texture:Hide() end
-    end
     local function HideQuietCheckboxNative()
         if not checkButton._msuf2QuietCheckBox then return end
-        HideQuietCheckboxTexture(checkButton.GetNormalTexture and checkButton:GetNormalTexture())
-        HideQuietCheckboxTexture(checkButton.GetPushedTexture and checkButton:GetPushedTexture())
-        HideQuietCheckboxTexture(checkButton.GetHighlightTexture and checkButton:GetHighlightTexture())
-        HideQuietCheckboxTexture(checkButton.GetDisabledTexture and checkButton:GetDisabledTexture())
+        for _, getter in ipairs(CHECKBOX_NATIVE_GETTERS) do
+            local get = checkButton[getter]
+            HideNativeArt(get and get(checkButton))
+        end
     end
     if not checkButton._msuf2NativeCheckStyled then
         checkButton._msuf2NativeCheckStyled = true
@@ -1955,9 +1909,9 @@ function T.StyleCheckmark(checkButton)
         if checkButton.SetCheckedTexture then checkButton:SetCheckedTexture(tick) end
         if checkButton.SetDisabledCheckedTexture then checkButton:SetDisabledCheckedTexture(tick) end
         local check = checkButton.GetCheckedTexture and checkButton:GetCheckedTexture()
-        if not check and checkButton.GetName and checkButton:GetName() then check = _G[checkButton:GetName() .. "Check"] end
+        if not check then check = NamedPart(checkButton, "Check") end
         local disabledCheck = checkButton.GetDisabledCheckedTexture and checkButton:GetDisabledCheckedTexture()
-        if not disabledCheck and checkButton.GetName and checkButton:GetName() then disabledCheck = _G[checkButton:GetName() .. "DisabledCheck"] end
+        if not disabledCheck then disabledCheck = NamedPart(checkButton, "DisabledCheck") end
         local function StyleTexture(texture)
             if not (texture and texture.SetTexture) then return end
             local h = (checkButton.GetHeight and checkButton:GetHeight()) or 24
@@ -1992,17 +1946,13 @@ function T.Panel(parent, name, bg, border)
     if T.ApplyGradient then T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" }) end
     return f
 end
-local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 },
+-- Top, bottom, left and right edge lines: both anchor points, size setter and thickness.
+local RECT_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 },
     { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
 local EDIT_BOX_NATIVE_SUFFIXES = WL "Left Right Middle Mid"
 local function HideNativeEditBoxArt(editBox)
-    local name = editBox.GetName and editBox:GetName()
     for _, suffix in ipairs(EDIT_BOX_NATIVE_SUFFIXES) do
-        local tex = editBox[suffix] or (name and _G[name .. suffix])
-        if tex then
-            if tex.SetAlpha then tex:SetAlpha(0) end
-            if tex.Hide then tex:Hide() end
-        end
+        HideNativeArt(editBox[suffix] or NamedPart(editBox, suffix))
     end
 end
 function T.SkinEditBox(editBox)
@@ -2014,10 +1964,7 @@ function T.SkinEditBox(editBox)
         local regions = { editBox:GetRegions() }
         for i = 1, #regions do
             local region = regions[i]
-            if IsTextureRegion(region) and region ~= fontString then
-                if region.SetAlpha then region:SetAlpha(0) end
-                if region.Hide then region:Hide() end
-            end
+            if IsTextureRegion(region) and region ~= fontString then HideNativeArt(region) end
         end
     end
     local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
@@ -2029,8 +1976,8 @@ function T.SkinEditBox(editBox)
         bg:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
         editBox._msuf2EditBg = bg
         local edges = {}
-        for i = 1, #EDIT_BOX_EDGE_SPECS do
-            local spec = EDIT_BOX_EDGE_SPECS[i]
+        for i = 1, #RECT_EDGE_SPECS do
+            local spec = RECT_EDGE_SPECS[i]
             local edge = PixelLayoutRegion(editBox:CreateTexture(nil, "OVERLAY", nil, 1))
             edge:SetPoint(spec[1], editBox, spec[1], 0, 0)
             edge:SetPoint(spec[2], editBox, spec[2], 0, 0)
@@ -2046,17 +1993,17 @@ function T.SkinEditBox(editBox)
         local alpha = enabled and 1 or 0.60
         local roundedFill = self._msuf2RoundedEditFill
         local roundedEdge = self._msuf2RoundedEditEdge
+        local base = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+        local c = focused and T.colors.accent or T.colors.borderSoft
+        local a = (focused and 0.98 or 0.88) * alpha
+        local edges = self._msuf2EditEdges
         if roundedFill and roundedEdge then
-            local c = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
-            local bg = self._msuf2RoundedEditColor or { c[1], c[2], c[3], 0.98 }
+            local bg = self._msuf2RoundedEditColor or { base[1], base[2], base[3], 0.98 }
             SetFillGradient(roundedFill, { bg[1] or 0.018, bg[2] or 0.024, bg[3] or 0.050, (bg[4] or 0.98) * alpha }, 0.10, -0.16)
-            local c = focused and T.colors.accent or T.colors.borderSoft
-            local a = focused and 0.98 or 0.88
-            roundedEdge:SetVertexColor(c[1], c[2], c[3], a * alpha)
+            roundedEdge:SetVertexColor(c[1], c[2], c[3], a)
             if self.SetBackdropColor then self:SetBackdropColor(0, 0, 0, 0) end
             if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0, 0, 0, 0) end
             if self._msuf2EditBg and self._msuf2EditBg.Hide then self._msuf2EditBg:Hide() end
-            local edges = self._msuf2EditEdges
             if edges then
                 for i = 1, #edges do
                     if edges[i].Hide then edges[i]:Hide() end
@@ -2065,33 +2012,28 @@ function T.SkinEditBox(editBox)
             return
         end
         if self._msuf2EditBg then
-            local c = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
-            local bg = { c[1], c[2], c[3], 0.98 * alpha }
+            local bg = { base[1], base[2], base[3], 0.98 * alpha }
             ApplyTextureGradient(self._msuf2EditBg, "VERTICAL", ShadeColor(bg, 0.10, 1), ShadeColor(bg, -0.16, 1), false)
         end
-        local c = focused and T.colors.accent or T.colors.borderSoft
-        local a = focused and 0.98 or 0.88
-        local edges = self._msuf2EditEdges
         if edges then
             for i = 1, #edges do
-                edges[i]:SetColorTexture(c[1], c[2], c[3], a * alpha)
+                edges[i]:SetColorTexture(c[1], c[2], c[3], a)
             end
         end
     end
     editBox._msuf2PaintEditBox = PaintEditBox
     local fs = fontString
     T.StyleFontString(fs, T.colors.text, 1)
-    editBox:HookScript("OnEditFocusGained", function(self)
-        PaintEditBox(self, true)
+    local function OnFocusChange(self, focused)
+        PaintEditBox(self, focused)
         if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin
-            and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
-    end)
-    editBox:HookScript("OnEditFocusLost", function(self)
-        PaintEditBox(self, false)
-        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin
-            and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3],
-            T.colors.borderSoft[4] or 1) end
-    end)
+            and MenuSkin.Owns(self)) then
+            local border = focused and T.colors.accent or T.colors.borderSoft
+            self:SetBackdropBorderColor(border[1], border[2], border[3], focused and 0.95 or border[4] or 1)
+        end
+    end
+    editBox:HookScript("OnEditFocusGained", function(self) OnFocusChange(self, true) end)
+    editBox:HookScript("OnEditFocusLost", function(self) OnFocusChange(self, false) end)
     editBox:HookScript("OnEnable", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
     editBox:HookScript("OnDisable", function(self) PaintEditBox(self, false) end)
     editBox:HookScript("OnShow", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
@@ -2133,18 +2075,14 @@ function T.StyleFeatureLink(button, label)
         edge:SetColorTexture(base[1], base[2], base[3], 0.96)
         edges[index] = edge
     end
-    edges[1]:SetPoint("TOPLEFT", button, "TOPLEFT", -5, 3)
-    edges[1]:SetPoint("TOPRIGHT", button, "TOPRIGHT", 5, 3)
-    edges[1]:SetHeight(1)
-    edges[2]:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", -5, -3)
-    edges[2]:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 5, -3)
-    edges[2]:SetHeight(1)
-    edges[3]:SetPoint("TOPLEFT", button, "TOPLEFT", -5, 3)
-    edges[3]:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", -5, -3)
-    edges[3]:SetWidth(1)
-    edges[4]:SetPoint("TOPRIGHT", button, "TOPRIGHT", 5, 3)
-    edges[4]:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 5, -3)
-    edges[4]:SetWidth(1)
+    -- Top, bottom, left and right edges, each outset 5 wide and 3 high.
+    for index = 1, 4 do
+        local spec = RECT_EDGE_SPECS[index]
+        local edge, first, second = edges[index], spec[1], spec[2]
+        edge:SetPoint(first, button, first, first:find("LEFT") and -5 or 5, first:find("TOP") and 3 or -3)
+        edge:SetPoint(second, button, second, second:find("LEFT") and -5 or 5, second:find("TOP") and 3 or -3)
+        edge[spec[3]](edge, spec[4])
+    end
 
     local function Paint(hovered)
         local color = hovered and hot or base
@@ -2193,8 +2131,8 @@ local NAV_PILL_TEX = {
 -- Preserve those caps and stretch only the flat center so localized visual
 -- widths cannot turn the active/hover silhouette into an ellipse.
 local NAV_PILL_SLICE_MARGIN = 12
-local NAV_PILL_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
-    and _G.Enum.UITextureSliceMode.Stretched
+local NAV_PILL_SLICE_MODE = Enum and Enum.UITextureSliceMode
+    and Enum.UITextureSliceMode.Stretched
 local function ConfigureNavPillSlice(tex)
     if not tex then return end
     if tex.SetTextureSliceMargins then
@@ -2215,60 +2153,64 @@ local function LayoutNavPillTexture(btn, tex)
     tex:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
     tex:SetSize(w, h)
 end
+-- Nav pill art layers: field, draw layer, sub level, blend mode.
+local NAV_PILL_LAYERS = {
+    { "texture", "BORDER", 7, "BLEND" }, { "glow", "ARTWORK", 1, "ADD" },
+    { "hoverWash", "ARTWORK", 0, "ADD" }, { "sheen", "ARTWORK", 2, "ADD" },
+}
 local function LayoutNavPillArt(btn, art)
     if not art then return end
-    LayoutNavPillTexture(btn, art.texture)
-    LayoutNavPillTexture(btn, art.hoverWash)
-    LayoutNavPillTexture(btn, art.glow)
-    LayoutNavPillTexture(btn, art.sheen)
+    for i = 1, #NAV_PILL_LAYERS do LayoutNavPillTexture(btn, art[NAV_PILL_LAYERS[i][1]]) end
 end
 local function EnsureNavPillArt(btn)
     if not (btn and btn.CreateTexture) then return nil end
     if btn._msuf2NavPillArt then return btn._msuf2NavPillArt end
-    local tex = PixelLayoutRegion(btn:CreateTexture(nil, "BORDER", nil, 7))
-    if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
-    if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
-    ConfigureNavPillSlice(tex)
-    tex:Hide()
-    local glow = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 1))
-    if glow.SetTexCoord then glow:SetTexCoord(0, 1, 0, 1) end
-    if glow.SetBlendMode then glow:SetBlendMode("ADD") end
-    ConfigureNavPillSlice(glow)
-    glow:Hide()
-    local hoverWash = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 0))
-    if hoverWash.SetTexCoord then hoverWash:SetTexCoord(0, 1, 0, 1) end
-    if hoverWash.SetBlendMode then hoverWash:SetBlendMode("ADD") end
-    ConfigureNavPillSlice(hoverWash)
-    hoverWash:Hide()
-    local sheen = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 2))
-    if sheen.SetTexCoord then sheen:SetTexCoord(0, 1, 0, 1) end
-    if sheen.SetBlendMode then sheen:SetBlendMode("ADD") end
-    ConfigureNavPillSlice(sheen)
-    sheen:Hide()
-    local art = { texture = tex, hoverWash = hoverWash, glow = glow, sheen = sheen }
+    local art = {}
+    for i = 1, #NAV_PILL_LAYERS do
+        local spec = NAV_PILL_LAYERS[i]
+        local tex = PixelLayoutRegion(btn:CreateTexture(nil, spec[2], nil, spec[3]))
+        if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+        if tex.SetBlendMode then tex:SetBlendMode(spec[4]) end
+        ConfigureNavPillSlice(tex)
+        tex:Hide()
+        art[spec[1]] = tex
+    end
     LayoutNavPillArt(btn, art)
     btn._msuf2NavPillArt = art
     return art
 end
-local StopNavPillGlowPulse
-local function HideNavPillArt(btn)
-    local art = btn and btn._msuf2NavPillArt
-    if not art then return end
-    StopNavPillGlowPulse(art)
-    if art.texture then art.texture:Hide() end
-    if art.hoverWash then art.hoverWash:Hide() end
-    if art.glow then art.glow:Hide() end
-    if art.sheen then art.sheen:Hide() end
-    if art.L then art.L:Hide() end
-    if art.M then art.M:Hide() end
-    if art.R then art.R:Hide() end
-end
-StopNavPillGlowPulse = function(art)
+local function StopNavPillGlowPulse(art)
     if not art then return end
     local group = art._pulse
     if group and group.Stop then group:Stop() end
     if art.glow and art.glow.SetAlpha then art.glow:SetAlpha(1) end
     if art.sheen and art.sheen.SetAlpha then art.sheen:SetAlpha(1) end
+end
+local function HideNavPillArt(btn)
+    local art = btn and btn._msuf2NavPillArt
+    if not art then return end
+    StopNavPillGlowPulse(art)
+    for i = 1, #NAV_PILL_LAYERS do
+        local part = art[NAV_PILL_LAYERS[i][1]]
+        if part then part:Hide() end
+    end
+    if art.L then art.L:Hide() end
+    if art.M then art.M:Hide() end
+    if art.R then art.R:Hide() end
+end
+-- Swaps a layer's media when the path changed, then tints it with the nav accent.
+local function PaintNavPillLayer(art, key, pathKey, path, orientation, blue, fromAlpha, toAlpha, desaturate)
+    local part = art[key]
+    if art[pathKey] ~= path then
+        art[pathKey] = path
+        part:SetTexture(path)
+        if desaturate and part.SetDesaturated then part:SetDesaturated(true) end
+        part._msuf2TextureMode = nil
+        if part.SetTexCoord then part:SetTexCoord(0, 1, 0, 1) end
+    end
+    ApplyTextureGradient(part, orientation,
+        { blue[1], blue[2], blue[3], fromAlpha }, { blue[1], blue[2], blue[3], toAlpha }, true)
+    part:Show()
 end
 local function PaintNavPillGlowArt(art, path, state)
     if not art then return end
@@ -2286,49 +2228,19 @@ local function PaintNavPillGlowArt(art, path, state)
         or c.navPillEdgeActive or c.coreHot or c.accent or { 0.060, 0.250, 0.390, 1 }
     if art.hoverWash then
         if hover then
-            if art.hoverWashPath ~= path then
-                art.hoverWashPath = path
-                art.hoverWash:SetTexture(path)
-                art.hoverWash._msuf2TextureMode = nil
-                if art.hoverWash.SetTexCoord then art.hoverWash:SetTexCoord(0, 1, 0, 1) end
-            end
-            ApplyTextureGradient(art.hoverWash, "VERTICAL",
-                { blue[1], blue[2], blue[3], 0.165 },
-                { blue[1], blue[2], blue[3], 0.045 },
-                true)
-            art.hoverWash:Show()
+            PaintNavPillLayer(art, "hoverWash", "hoverWashPath", path, "VERTICAL", blue, 0.165, 0.045)
         else
             art.hoverWash:Hide()
         end
     end
+    -- The bitmap's bright rim supplies the outline: the glow layer removes its baked
+    -- blue before tinting so the accent is not multiplied twice.
     if art.glow then
-        if art.glowPath ~= path then
-            art.glowPath = path
-            art.glow:SetTexture(path)
-            -- The bitmap's bright rim supplies the outline. Remove its baked
-            -- blue before tinting so the accent is not multiplied twice.
-            if art.glow.SetDesaturated then art.glow:SetDesaturated(true) end
-            art.glow._msuf2TextureMode = nil
-            if art.glow.SetTexCoord then art.glow:SetTexCoord(0, 1, 0, 1) end
-        end
-        ApplyTextureGradient(art.glow, "VERTICAL",
-            { blue[1], blue[2], blue[3], active and 0.72 or 0.38 },
-            { blue[1], blue[2], blue[3], active and 0.56 or 0.28 },
-            true)
-        art.glow:Show()
+        PaintNavPillLayer(art, "glow", "glowPath", path, "VERTICAL", blue,
+            active and 0.72 or 0.38, active and 0.56 or 0.28, true)
     end
     if art.sheen then
-        if art.sheenPath ~= path then
-            art.sheenPath = path
-            art.sheen:SetTexture(path)
-            art.sheen._msuf2TextureMode = nil
-            if art.sheen.SetTexCoord then art.sheen:SetTexCoord(0, 1, 0, 1) end
-        end
-        ApplyTextureGradient(art.sheen, "HORIZONTAL",
-            { blue[1], blue[2], blue[3], 0.000 },
-            { blue[1], blue[2], blue[3], active and 0.090 or 0.040 },
-            true)
-        art.sheen:Show()
+        PaintNavPillLayer(art, "sheen", "sheenPath", path, "HORIZONTAL", blue, 0.000, active and 0.090 or 0.040)
     end
     -- Page selection is a direct state change. Keep the active treatment
     -- static so navigation never reads as an in-progress transition.
@@ -2442,6 +2354,37 @@ local function SetNavActiveFX(btn, active, hover)
     SetSuperellipsePartsShown(fx.sheenFill, true)
     SetSuperellipsePartsShown(fx.sheenEdge, false)
 end
+-- Role buttons (danger/primary/success) paint their fill and edge, then return the
+-- resting label color.
+local ROLE_PAINT = {
+    danger = function(c, lit, fill, edge)
+        local d = c.danger
+        if lit then
+            SetFillGradient(fill, { 0.180, 0.040, 0.065, 0.97 }, 0.18, -0.18)
+            edge:SetVertexColor(d[1], d[2], d[3], 0.95)
+        else
+            SetFillGradient(fill, { 0.140, 0.030, 0.050, 0.94 }, 0.14, -0.20)
+            edge:SetVertexColor(d[1], d[2], d[3], 0.82)
+        end
+        return c.text[1], c.text[2], c.text[3]
+    end,
+    primary = function(c, lit, fill, edge)
+        local blue, glow = c.coreBlue, c.coreGlow
+        SetFillGradient(fill, { blue[1], blue[2], blue[3], lit and 0.64 or 0.56 }, lit and 0.08 or 0.07, lit and -0.28 or -0.30)
+        edge:SetVertexColor(glow[1], glow[2], glow[3], lit and 0.46 or 0.38)
+        return 1, 1, 1
+    end,
+    success = function(_, lit, fill, edge)
+        if lit then
+            SetFillGradient(fill, { 0.060, 0.380, 0.180, 0.98 }, 0.18, -0.18)
+            edge:SetVertexColor(0.220, 0.860, 0.420, 0.90)
+        else
+            SetFillGradient(fill, { 0.040, 0.280, 0.130, 0.95 }, 0.14, -0.20)
+            edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
+        end
+        return 0.92, 1.00, 0.94
+    end,
+}
 local function SetSkinnedSelectionCue(btn, active)
     local cue = btn._msuf2SkinnedSelectionCue
     if not active or btn._msuf2SelectionMotion or btn._msuf2MotionSurface then
@@ -2518,54 +2461,17 @@ local function ButtonVisual(btn, active, hover)
         SetLabelColor(btn._msuf2Label, tx)
         return
     end
-    if btn._msuf2Danger then
+    local rolePaint = btn._msuf2Danger and ROLE_PAINT.danger or btn._msuf2Primary and ROLE_PAINT.primary
+        or btn._msuf2Success and ROLE_PAINT.success
+    if rolePaint then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
-        if roleLit then
-            SetFillGradient(fill, { 0.180, 0.040, 0.065, 0.97 }, 0.18, -0.18)
-            edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.95)
-        else
-            SetFillGradient(fill, { 0.140, 0.030, 0.050, 0.94 }, 0.14, -0.20)
-            edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.82)
-        end
+        local label = btn._msuf2Label
+        local tr, tg, tb = rolePaint(c, roleLit, fill, edge)
         if textOnlyHover then
-            SetLabelColor(btn._msuf2Label, c.navHeaderHover)
+            SetLabelColor(label, c.navHeaderHover)
         else
-            btn._msuf2Label:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
-        end
-        return
-    end
-    if btn._msuf2Primary then
-        HideNavPillArt(btn)
-        SetNavActiveFX(btn, false)
-        if roleLit then
-            SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.64 }, 0.08, -0.28)
-            edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.46)
-        else
-            SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.56 }, 0.07, -0.30)
-            edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.38)
-        end
-        if textOnlyHover then
-            SetLabelColor(btn._msuf2Label, c.navHeaderHover)
-        else
-            btn._msuf2Label:SetTextColor(1, 1, 1, 1)
-        end
-        return
-    end
-    if btn._msuf2Success then
-        HideNavPillArt(btn)
-        SetNavActiveFX(btn, false)
-        if roleLit then
-            SetFillGradient(fill, { 0.060, 0.380, 0.180, 0.98 }, 0.18, -0.18)
-            edge:SetVertexColor(0.220, 0.860, 0.420, 0.90)
-        else
-            SetFillGradient(fill, { 0.040, 0.280, 0.130, 0.95 }, 0.14, -0.20)
-            edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
-        end
-        if textOnlyHover then
-            SetLabelColor(btn._msuf2Label, c.navHeaderHover)
-        else
-            btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
+            label:SetTextColor(tr, tg, tb, 1)
         end
         return
     end
@@ -2683,7 +2589,7 @@ end
 -- Finalize the old field before a button changes the active page, bar or scope.
 -- Search boxes and inputs that require an explicit Enter are left alone.
 function T.CommitFocusedInput()
-    local focus = _G.GetCurrentKeyBoardFocus and _G.GetCurrentKeyBoardFocus()
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     if focus and (focus._msuf2CommitOnPointer == true
         or (focus._msuf2ControlKind == "textinput" and focus._msuf2CommitOnBlur == true)) then
         focus:ClearFocus()
@@ -2694,13 +2600,8 @@ local function ButtonClickProxy(self, ...)
         local blocked = false
         if M and type(M.BlockCombatAction) == "function" then
             blocked = M.BlockCombatAction() and true or false
-        elseif type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-            blocked = _G.MSUF_BlockConfigCombatLocked() and true or false
-        elseif (_G.InCombatLockdown and _G.InCombatLockdown())
-            or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
-        then
-            blocked = true
-            if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        else
+            blocked = MSUF.Require("MSUF_BlockConfigCombatLocked", FILE)() and true or false
         end
         if blocked then return end
     end
@@ -2900,29 +2801,264 @@ function T.CloseButton(parent)
 end
 local function AccessibleNumber(value, fallback)
     fallback = tonumber(fallback) or 0
-    local canaccessvalue = _G.canaccessvalue
     if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return fallback end
-    local issecretvalue = _G.issecretvalue
     if type(issecretvalue) == "function" and issecretvalue(value) == true then return fallback end
     return tonumber(value) or fallback
 end
 M.AccessibleNumber = AccessibleNumber
-local function ClampScrollValue(value, maxValue)
-    value = AccessibleNumber(value, 0)
-    maxValue = AccessibleNumber(maxValue, 0)
-    if value < 0 then return 0 end
-    if value > maxValue then return maxValue end
-    return value
-end
-local SMOOTH_SCROLL_SPEED = 14
-local SMOOTH_SCROLL_MAX_ELAPSED = 0.050
-local SMOOTH_SCROLL_EPSILON = 0.45
 local function PixelBarTexture(texture)
     if not texture then return texture end
     texture:SetTexture("Interface\\Buttons\\WHITE8X8")
     if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(true) end
     if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
     return texture
+end
+-- Styled ScrollFrame machinery. Each helper takes the ScrollFrame; the bar, its
+-- parts and the original SetVerticalScroll hang off the frame (scroll._msuf2ScrollBar,
+-- bar._msuf2Track/_msuf2TrackEdge/_msuf2Thumb, scroll._msuf2RawSetVerticalScroll).
+local Scroll = { SPEED = 14, MAX_ELAPSED = 0.050, EPSILON = 0.45 }
+function Scroll.Clamp(value, maxValue)
+    value = AccessibleNumber(value, 0)
+    maxValue = AccessibleNumber(maxValue, 0)
+    if value < 0 then return 0 end
+    if value > maxValue then return maxValue end
+    return value
+end
+-- The smooth-scroll frame, the drag and the refresh hooks run often, so the
+-- current offset and the maximum are read inline there instead of through a
+-- helper; each update makes the same calls as the closure-based original.
+function Scroll.CurrentMax(scroll)
+    local maxScroll = scroll._msuf2MaxScroll
+    if maxScroll == nil then
+        local child = scroll.GetScrollChild and scroll:GetScrollChild()
+        local childH = (child and child.GetHeight and child:GetHeight()) or 0
+        local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
+        maxScroll = math.max(0, childH - frameH)
+    end
+    return maxScroll
+end
+function Scroll.PaintTrack(track, alpha)
+    local surface, shadow = T.colors.coreSurface, T.colors.coreShadow
+    ApplyTextureGradient(track, "VERTICAL",
+        { surface[1], surface[2], surface[3], alpha }, { shadow[1], shadow[2], shadow[3], alpha }, true)
+end
+function Scroll.PaintBar(bar, hover)
+    local alpha = (bar.IsShown and bar:IsShown()) and 1 or 0
+    local surface, shadow = T.colors.coreSurface, T.colors.coreShadow
+    local trackAlpha = (hover and 0.98 or 0.82) * alpha
+    ApplyTextureGradient(bar._msuf2Track, "VERTICAL",
+        { surface[1], surface[2], surface[3], trackAlpha }, { shadow[1], shadow[2], shadow[3], trackAlpha }, true)
+    local soft = T.colors.borderSoft
+    bar._msuf2TrackEdge:SetColorTexture(soft[1], soft[2], soft[3], (hover and 0.62 or 0.38) * alpha)
+    local thumb = bar._msuf2Thumb
+    if thumb.SetColorTexture then
+        local c = hover and bar._msuf2ThumbHover or bar._msuf2ThumbBase
+        local a = (hover and 0.90 or 0.68) * alpha
+        ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
+    end
+end
+function Scroll.UpdateThumb(bar, offset, maxScroll)
+    local thumb = bar._msuf2Thumb
+    maxScroll = math.max(0, AccessibleNumber(maxScroll, 0))
+    offset = Scroll.Clamp(offset, maxScroll)
+    local barH = (bar.GetHeight and bar:GetHeight()) or 0
+    local thumbH = (thumb.GetHeight and thumb:GetHeight()) or 0
+    local travel = math.max(0, barH - thumbH)
+    local y = maxScroll > 0 and -(offset / maxScroll) * travel or 0
+    if thumb._msuf2LastY ~= y then
+        thumb._msuf2LastY = y
+        thumb:ClearAllPoints()
+        thumb:SetPoint("TOP", bar, "TOP", 0, y)
+    end
+end
+function Scroll.SetRaw(scroll, offset, current, maxScroll)
+    local bar = scroll._msuf2ScrollBar
+    local rawSet = scroll._msuf2RawSetVerticalScroll
+    if maxScroll == nil then maxScroll = Scroll.CurrentMax(scroll) end
+    offset = Scroll.Clamp(offset, maxScroll)
+    if current == nil then current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0 end
+    current = AccessibleNumber(current, 0)
+    if rawSet and math.abs(offset - current) > 0.01 then rawSet(scroll, offset) end
+    bar._msuf2LastScrollValue = offset
+    Scroll.UpdateThumb(bar, offset, maxScroll)
+    return offset
+end
+function Scroll.StopSmooth(scroll)
+    scroll._msuf2SmoothScrollTarget = nil
+    local driver = scroll._msuf2SmoothScrollDriver
+    if driver then driver:Hide() end
+end
+function Scroll.SmoothOnUpdate(driver, elapsed)
+    local scroll = driver._msuf2ScrollOwner
+    local target = scroll._msuf2SmoothScrollTarget
+    if target == nil then
+        Scroll.StopSmooth(scroll)
+        return
+    end
+    local maxScroll = Scroll.CurrentMax(scroll)
+    target = Scroll.Clamp(target, maxScroll)
+    scroll._msuf2SmoothScrollTarget = target
+    local current = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
+    local delta = target - current
+    if (T.ReducedMotionEnabled and T.ReducedMotionEnabled(true)) or math.abs(delta) <= Scroll.EPSILON then
+        Scroll.SetRaw(scroll, target, current, maxScroll)
+        Scroll.StopSmooth(scroll)
+        return
+    end
+    elapsed = tonumber(elapsed) or 0
+    if elapsed > Scroll.MAX_ELAPSED then elapsed = Scroll.MAX_ELAPSED end
+    local blend = math.min(1, elapsed * Scroll.SPEED)
+    if blend <= 0 then return end
+    Scroll.SetRaw(scroll, current + delta * blend, current, maxScroll)
+end
+function Scroll.EnsureDriver(scroll)
+    local driver = scroll._msuf2SmoothScrollDriver
+    if driver then return driver end
+    driver = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
+    driver:Hide()
+    driver._msuf2ScrollOwner = scroll
+    driver:SetScript("OnUpdate", Scroll.SmoothOnUpdate)
+    scroll._msuf2SmoothScrollDriver = driver
+    return driver
+end
+function Scroll.SmoothTo(scroll, offset)
+    local maxScroll = Scroll.CurrentMax(scroll)
+    local target = Scroll.Clamp(offset, maxScroll)
+    if T.ReducedMotionEnabled and T.ReducedMotionEnabled(true) then
+        Scroll.SetRaw(scroll, target, nil, maxScroll)
+        Scroll.StopSmooth(scroll)
+        return
+    end
+    local current = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
+    if math.abs(target - current) <= Scroll.EPSILON then
+        Scroll.SetRaw(scroll, target, current, maxScroll)
+        Scroll.StopSmooth(scroll)
+        return
+    end
+    scroll._msuf2SmoothScrollTarget = target
+    Scroll.EnsureDriver(scroll):Show()
+end
+function Scroll.Refresh(scroll)
+    local bar = scroll._msuf2ScrollBar
+    local thumb = bar._msuf2Thumb
+    local rawSet = scroll._msuf2RawSetVerticalScroll
+    if scroll.IsShown and not scroll:IsShown() then
+        Scroll.StopSmooth(scroll)
+        if bar.Hide and bar:IsShown() then bar:Hide() end
+        return
+    end
+    local child = scroll.GetScrollChild and scroll:GetScrollChild()
+    local childH = (child and child.GetHeight and child:GetHeight()) or 0
+    local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
+    local maxScroll = math.max(0, childH - frameH)
+    scroll._msuf2MaxScroll = maxScroll
+    if scroll._msuf2SmoothScrollTarget ~= nil then scroll._msuf2SmoothScrollTarget = Scroll.Clamp(scroll._msuf2SmoothScrollTarget, maxScroll) end
+    if maxScroll <= 1 or frameH <= 0 then
+        Scroll.StopSmooth(scroll)
+        local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
+        if rawSet and current ~= 0 then rawSet(scroll, 0) end
+        bar._msuf2LastScrollValue = 0
+        Scroll.UpdateThumb(bar, 0, 0)
+        if bar.Hide and bar:IsShown() then bar:Hide() end
+        return
+    end
+    if bar.Show and not bar:IsShown() then bar:Show() end
+    bar._msuf2LastMaxScroll = maxScroll
+    local visibleRatio = frameH / math.max(childH, 1)
+    local barH = (bar.GetHeight and bar:GetHeight()) or frameH
+    local thumbH = math.floor(math.max(34, math.min(barH, barH * visibleRatio)) + 0.5)
+    if thumb.SetHeight and thumb._msuf2LastHeight ~= thumbH then
+        thumb._msuf2LastHeight = thumbH
+        thumb:SetHeight(thumbH)
+        thumb._msuf2LastY = nil
+    end
+    local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
+    local offset = Scroll.Clamp(current, maxScroll)
+    if offset ~= current and rawSet then rawSet(scroll, offset) end
+    bar._msuf2LastScrollValue = offset
+    Scroll.UpdateThumb(bar, offset, maxScroll)
+    Scroll.PaintBar(bar, bar._msuf2Hover)
+end
+function Scroll.SetVerticalScroll(self, offset)
+    Scroll.StopSmooth(self)
+    local maxScroll = self._msuf2MaxScroll
+    if maxScroll == nil then
+        local child = self.GetScrollChild and self:GetScrollChild()
+        local childH = (child and child.GetHeight and child:GetHeight()) or 0
+        local frameH = (self.GetHeight and self:GetHeight()) or 0
+        maxScroll = math.max(0, childH - frameH)
+    end
+    local clamped = Scroll.Clamp(offset, maxScroll)
+    local current = AccessibleNumber((self.GetVerticalScroll and self:GetVerticalScroll()) or 0, 0)
+    if math.abs(clamped - current) > 0.01 then self._msuf2RawSetVerticalScroll(self, clamped) end
+    if self._msuf2RefreshScrollBar then self:_msuf2RefreshScrollBar() end
+end
+-- The wheel step of one styled ScrollFrame, built once when it is styled, so
+-- the wheel forwarder and the OnMouseWheel scripts reach it in a single hop.
+function Scroll.WheelStepper(scroll)
+    return function(delta)
+        if not delta or delta == 0 then return end
+        local step = 64
+        if IsShiftKeyDown and IsShiftKeyDown() then step = 180 end
+        if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
+        local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
+        Scroll.SmoothTo(scroll, (scroll._msuf2SmoothScrollTarget or current) - delta * step)
+    end
+end
+function Scroll.CursorY(bar)
+    if type(GetCursorPosition) ~= "function" then return nil end
+    local _, y = GetCursorPosition()
+    local scale = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
+    scale = AccessibleNumber(scale, 1)
+    if scale <= 0 then scale = 1 end
+    return AccessibleNumber(y, 0) / scale
+end
+function Scroll.StopDrag(bar)
+    bar._msuf2DragStartY = nil
+    bar._msuf2DragStartOffset = nil
+    bar:SetScript("OnUpdate", nil)
+end
+function Scroll.Drag(bar)
+    if type(IsMouseButtonDown) == "function" and not IsMouseButtonDown("LeftButton") then
+        Scroll.StopDrag(bar)
+        return
+    end
+    local startY = bar._msuf2DragStartY
+    local cursorY = Scroll.CursorY(bar)
+    if startY == nil or cursorY == nil then return end
+    local scroll = bar._msuf2ScrollOwner
+    local maxScroll = Scroll.CurrentMax(scroll)
+    local thumb = bar._msuf2Thumb
+    local barH = (bar.GetHeight and bar:GetHeight()) or 0
+    local thumbH = (thumb.GetHeight and thumb:GetHeight()) or 0
+    local travel = math.max(1, barH - thumbH)
+    local startOffset = Scroll.Clamp(bar._msuf2DragStartOffset, maxScroll)
+    Scroll.SetRaw(scroll, startOffset - (cursorY - startY) * (maxScroll / travel), nil, maxScroll)
+end
+function Scroll.BarMouseDown(bar, button)
+    if button and button ~= "LeftButton" then return end
+    local scroll = bar._msuf2ScrollOwner
+    Scroll.StopSmooth(scroll)
+    bar._msuf2DragStartY = Scroll.CursorY(bar)
+    bar._msuf2DragStartOffset = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
+    if bar._msuf2DragStartY ~= nil then bar:SetScript("OnUpdate", Scroll.Drag) end
+end
+function Scroll.BarEnter(bar)
+    bar._msuf2Hover = true
+    Scroll.PaintBar(bar, true)
+end
+function Scroll.BarLeave(bar)
+    bar._msuf2Hover = nil
+    Scroll.PaintBar(bar, false)
+end
+function Scroll.BarShow(bar)
+    Scroll.PaintBar(bar, bar._msuf2Hover)
+end
+function Scroll.OnHide(scroll)
+    local bar = scroll._msuf2ScrollBar
+    Scroll.StopSmooth(scroll)
+    Scroll.StopDrag(bar)
+    if bar.Hide then bar:Hide() end
 end
 function T.StyleScrollFrame(scroll, anchor)
     if not scroll or scroll._msuf2ScrollStyled then return scroll and scroll._msuf2ScrollBar end
@@ -2939,10 +3075,7 @@ function T.StyleScrollFrame(scroll, anchor)
     track:SetPoint("TOP", bar, "TOP", 0, 0)
     track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
     track:SetWidth(2)
-    ApplyTextureGradient(track, "VERTICAL",
-        { T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], 0.82 },
-        { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 0.82 },
-        true)
+    Scroll.PaintTrack(track, 0.82)
     bar._msuf2Track = track
     local trackEdge = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "BORDER")))
     trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
@@ -2951,256 +3084,48 @@ function T.StyleScrollFrame(scroll, anchor)
     trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.38)
     bar._msuf2TrackEdge = trackEdge
     local thumbBase = T.colors.coreRim
-    local thumbHover = T.colors.coreRaised
     local thumb = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY")))
     thumb:SetSize(5, 42)
     ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
     bar._msuf2Thumb = thumb
-    local function Paint(hover)
-        local shown = bar.IsShown and bar:IsShown()
-        local alpha = shown and 1 or 0
-        if track then
-            local a = (hover and 0.98 or 0.82) * alpha
-            ApplyTextureGradient(track, "VERTICAL",
-                { T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], a },
-                { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], a },
-                true)
-        end
-        if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], (hover and 0.62 or 0.38) * alpha) end
-        if thumb and thumb.SetColorTexture then
-            local c = hover and thumbHover or thumbBase
-            local a = (hover and 0.90 or 0.68) * alpha
-            ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
-        end
-    end
-    local rawSetVerticalScroll = scroll.SetVerticalScroll
-    local function UpdateThumbPosition(offset, maxScroll)
-        maxScroll = math.max(0, AccessibleNumber(maxScroll, 0))
-        offset = ClampScrollValue(offset, maxScroll)
-        local barH = (bar.GetHeight and bar:GetHeight()) or 0
-        local thumbH = (thumb.GetHeight and thumb:GetHeight()) or 0
-        local travel = math.max(0, barH - thumbH)
-        local y = maxScroll > 0 and -(offset / maxScroll) * travel or 0
-        if thumb._msuf2LastY ~= y then
-            thumb._msuf2LastY = y
-            thumb:ClearAllPoints()
-            thumb:SetPoint("TOP", bar, "TOP", 0, y)
-        end
-    end
-    local function CurrentMaxScroll()
-        local maxScroll = scroll._msuf2MaxScroll
-        if maxScroll == nil then
-            local child = scroll.GetScrollChild and scroll:GetScrollChild()
-            local childH = (child and child.GetHeight and child:GetHeight()) or 0
-            local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
-            maxScroll = math.max(0, childH - frameH)
-        end
-        return maxScroll
-    end
-    local function SetRawScroll(offset, current, maxScroll)
-        if maxScroll == nil then maxScroll = CurrentMaxScroll() end
-        offset = ClampScrollValue(offset, maxScroll)
-        if current == nil then current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0 end
-        current = AccessibleNumber(current, 0)
-        if rawSetVerticalScroll and math.abs(offset - current) > 0.01 then rawSetVerticalScroll(scroll, offset) end
-        if bar then
-            bar._msuf2LastScrollValue = offset
-            UpdateThumbPosition(offset, maxScroll)
-        end
-        return offset
-    end
-    local function StopSmoothScroll()
-        scroll._msuf2SmoothScrollTarget = nil
-        local driver = scroll._msuf2SmoothScrollDriver
-        if driver then driver:Hide() end
-    end
-    local function SmoothScrollOnUpdate(_, elapsed)
-        local target = scroll._msuf2SmoothScrollTarget
-        if target == nil then
-            StopSmoothScroll()
-            return
-        end
-        local maxScroll = CurrentMaxScroll()
-        target = ClampScrollValue(target, maxScroll)
-        scroll._msuf2SmoothScrollTarget = target
-        local current = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
-        local delta = target - current
-        if (T.ReducedMotionEnabled and T.ReducedMotionEnabled()) or math.abs(delta) <= SMOOTH_SCROLL_EPSILON then
-            SetRawScroll(target, current, maxScroll)
-            StopSmoothScroll()
-            return
-        end
-        elapsed = tonumber(elapsed) or 0
-        if elapsed > SMOOTH_SCROLL_MAX_ELAPSED then elapsed = SMOOTH_SCROLL_MAX_ELAPSED end
-        local blend = math.min(1, elapsed * SMOOTH_SCROLL_SPEED)
-        if blend <= 0 then return end
-        SetRawScroll(current + delta * blend, current, maxScroll)
-    end
-    local function EnsureSmoothScrollDriver()
-        local driver = scroll._msuf2SmoothScrollDriver
-        if driver then return driver end
-        driver = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
-        driver:Hide()
-        driver:SetScript("OnUpdate", SmoothScrollOnUpdate)
-        scroll._msuf2SmoothScrollDriver = driver
-        return driver
-    end
-    local function SmoothScrollTo(offset)
-        local maxScroll = CurrentMaxScroll()
-        local target = ClampScrollValue(offset, maxScroll)
-        if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
-            SetRawScroll(target, nil, maxScroll)
-            StopSmoothScroll()
-            return
-        end
-        local current = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
-        if math.abs(target - current) <= SMOOTH_SCROLL_EPSILON then
-            SetRawScroll(target, current, maxScroll)
-            StopSmoothScroll()
-            return
-        end
-        scroll._msuf2SmoothScrollTarget = target
-        EnsureSmoothScrollDriver():Show()
-    end
-    local function Refresh()
-        if scroll.IsShown and not scroll:IsShown() then
-            StopSmoothScroll()
-            if bar.Hide and bar:IsShown() then bar:Hide() end
-            return
-        end
-        local child = scroll.GetScrollChild and scroll:GetScrollChild()
-        local childH = (child and child.GetHeight and child:GetHeight()) or 0
-        local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
-        local maxScroll = math.max(0, childH - frameH)
-        scroll._msuf2MaxScroll = maxScroll
-        if scroll._msuf2SmoothScrollTarget ~= nil then scroll._msuf2SmoothScrollTarget = ClampScrollValue(scroll._msuf2SmoothScrollTarget, maxScroll) end
-        if maxScroll <= 1 or frameH <= 0 then
-            StopSmoothScroll()
-            local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
-            if rawSetVerticalScroll and current ~= 0 then rawSetVerticalScroll(scroll, 0) end
-            bar._msuf2LastScrollValue = 0
-            UpdateThumbPosition(0, 0)
-            if bar.Hide and bar:IsShown() then bar:Hide() end
-            return
-        end
-        if bar.Show and not bar:IsShown() then bar:Show() end
-        bar._msuf2LastMaxScroll = maxScroll
-        local visibleRatio = frameH / math.max(childH, 1)
-        local barH = (bar.GetHeight and bar:GetHeight()) or frameH
-        local thumbH = math.floor(math.max(34, math.min(barH, barH * visibleRatio)) + 0.5)
-        if thumb and thumb.SetHeight and thumb._msuf2LastHeight ~= thumbH then
-            thumb._msuf2LastHeight = thumbH
-            thumb:SetHeight(thumbH)
-            thumb._msuf2LastY = nil
-        end
-        local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
-        local offset = ClampScrollValue(current, maxScroll)
-        if offset ~= current and rawSetVerticalScroll then rawSetVerticalScroll(scroll, offset) end
-        bar._msuf2LastScrollValue = offset
-        UpdateThumbPosition(offset, maxScroll)
-        Paint(bar._msuf2Hover)
-    end
-    scroll._msuf2RefreshScrollBar = Refresh
-    scroll.SetVerticalScroll = function(self, offset)
-        StopSmoothScroll()
-        local maxScroll = self._msuf2MaxScroll
-        if maxScroll == nil then
-            local child = self.GetScrollChild and self:GetScrollChild()
-            local childH = (child and child.GetHeight and child:GetHeight()) or 0
-            local frameH = (self.GetHeight and self:GetHeight()) or 0
-            maxScroll = math.max(0, childH - frameH)
-        end
-        local clamped = ClampScrollValue(offset, maxScroll)
-        local current = AccessibleNumber((self.GetVerticalScroll and self:GetVerticalScroll()) or 0, 0)
-        if math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(self, clamped) end
-        if self._msuf2RefreshScrollBar then self:_msuf2RefreshScrollBar() end
-    end
-    local function ScrollBy(delta)
-        if not delta or delta == 0 then return end
-        local step = 64
-        if IsShiftKeyDown and IsShiftKeyDown() then step = 180 end
-        if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
-        local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
-        SmoothScrollTo((scroll._msuf2SmoothScrollTarget or current) - delta * step)
-    end
+    bar._msuf2ThumbBase, bar._msuf2ThumbHover = thumbBase, T.colors.coreRaised
+    bar._msuf2ScrollOwner = scroll
+    scroll._msuf2ScrollBar = bar
+    scroll._msuf2RawSetVerticalScroll = scroll.SetVerticalScroll
+    scroll._msuf2RefreshScrollBar = Scroll.Refresh
+    scroll.SetVerticalScroll = Scroll.SetVerticalScroll
     -- Fixed page headers are siblings of this ScrollFrame. Expose the exact
     -- styled wheel path so their chrome and interactive preview shells can
     -- forward ordinary wheel input without depending on frame propagation.
-    scroll._msuf2ScrollByWheel = ScrollBy
-    local function CursorYInBarSpace()
-        if type(GetCursorPosition) ~= "function" then return nil end
-        local _, y = GetCursorPosition()
-        local scale = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
-        scale = AccessibleNumber(scale, 1)
-        if scale <= 0 then scale = 1 end
-        return AccessibleNumber(y, 0) / scale
-    end
-    local function StopBarDrag()
-        bar._msuf2DragStartY = nil
-        bar._msuf2DragStartOffset = nil
-        bar:SetScript("OnUpdate", nil)
-    end
-    local function DragBar()
-        if type(IsMouseButtonDown) == "function" and not IsMouseButtonDown("LeftButton") then
-            StopBarDrag()
-            return
-        end
-        local startY = bar._msuf2DragStartY
-        local cursorY = CursorYInBarSpace()
-        if startY == nil or cursorY == nil then return end
-        local maxScroll = CurrentMaxScroll()
-        local barH = (bar.GetHeight and bar:GetHeight()) or 0
-        local thumbH = (thumb.GetHeight and thumb:GetHeight()) or 0
-        local travel = math.max(1, barH - thumbH)
-        local startOffset = ClampScrollValue(bar._msuf2DragStartOffset, maxScroll)
-        local target = startOffset - (cursorY - startY) * (maxScroll / travel)
-        SetRawScroll(target, nil, maxScroll)
-    end
+    local scrollBy = Scroll.WheelStepper(scroll)
+    scroll._msuf2ScrollByWheel = scrollBy
+    local onWheel = function(_, delta) scrollBy(delta) end
     scroll:EnableMouseWheel(true)
-    scroll:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
+    scroll:SetScript("OnMouseWheel", onWheel)
     local wheelChild = scroll.GetScrollChild and scroll:GetScrollChild()
     if wheelChild and wheelChild.EnableMouseWheel then
         wheelChild:EnableMouseWheel(true)
-        wheelChild:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
+        wheelChild:SetScript("OnMouseWheel", onWheel)
     end
     bar:EnableMouseWheel(true)
-    bar:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
-    bar:SetScript("OnEnter", function(self)
-        self._msuf2Hover = true
-        Paint(true)
-    end)
-    bar:SetScript("OnLeave", function(self)
-        self._msuf2Hover = nil
-        Paint(false)
-    end)
-    bar:SetScript("OnMouseDown", function(_, button)
-        if button and button ~= "LeftButton" then return end
-        StopSmoothScroll()
-        bar._msuf2DragStartY = CursorYInBarSpace()
-        bar._msuf2DragStartOffset = AccessibleNumber((scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0, 0)
-        if bar._msuf2DragStartY ~= nil then bar:SetScript("OnUpdate", DragBar) end
-    end)
-    bar:SetScript("OnMouseUp", StopBarDrag)
-    scroll:HookScript("OnScrollRangeChanged", Refresh)
-    scroll:HookScript("OnSizeChanged", Refresh)
-    scroll:HookScript("OnHide", function()
-        StopSmoothScroll()
-        StopBarDrag()
-        if bar.Hide then bar:Hide() end
-    end)
-    scroll:HookScript("OnShow", Refresh)
+    bar:SetScript("OnMouseWheel", onWheel)
+    bar:SetScript("OnEnter", Scroll.BarEnter)
+    bar:SetScript("OnLeave", Scroll.BarLeave)
+    bar:SetScript("OnMouseDown", Scroll.BarMouseDown)
+    bar:SetScript("OnMouseUp", Scroll.StopDrag)
+    scroll:HookScript("OnScrollRangeChanged", Scroll.Refresh)
+    scroll:HookScript("OnSizeChanged", Scroll.Refresh)
+    scroll:HookScript("OnHide", Scroll.OnHide)
+    scroll:HookScript("OnShow", Scroll.Refresh)
     if bar.HookScript then
-        bar:HookScript("OnHide", StopBarDrag)
-        bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end)
+        bar:HookScript("OnHide", Scroll.StopDrag)
+        bar:HookScript("OnShow", Scroll.BarShow)
     end
-    Refresh()
-    scroll._msuf2ScrollBar = bar
+    Scroll.Refresh(scroll)
     return bar
 end
-if MSUF and MSUF.UI and MSUF.UI.BindMenu2Theme then
-    MSUF.UI.BindMenu2Theme(T)
-    M.UI = MSUF.UI
-end
+SharedUI.BindMenu2Theme(T)
+M.UI = SharedUI
 
 -- Apply the saved menu accent as soon as SavedVariables are readable so every
 -- themed consumer (window shell, popups, edit-mode chrome) bakes the same
@@ -3215,10 +3140,10 @@ do
     local function ApplySavedAccent()
         T.ApplyMenuAccent()
     end
-    if type(_G.IsLoggedIn) == "function" and _G.IsLoggedIn() then
+    if type(IsLoggedIn) == "function" and IsLoggedIn() then
         ApplySavedAccent()
     else
-        local accentInit = _G.CreateFrame("Frame")
+        local accentInit = CreateFrame("Frame")
         accentInit:RegisterEvent("PLAYER_LOGIN")
         accentInit:SetScript("OnEvent", function(self)
             self:UnregisterAllEvents()

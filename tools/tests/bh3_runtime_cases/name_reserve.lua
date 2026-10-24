@@ -61,8 +61,13 @@ Text.UpdateHealthTextColor = function() end
 local MSUF = { UFText = Text }
 _G.issecretvalue = function() return false end
 
-local chunk = assert(loadfile(ROOT .. "UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua"))
-chunk("MidnightSimpleUnitFrames", MSUF)
+-- The real Kernel API is installed into the namespace; the file requires the core's pixel regions
+-- (the real Geometry and Util own them) and any other provider this probe does not load is deferred.
+local RequireFixture = assert(loadfile(arg[1] .. "/tools/tests/require_fixture.lua"))()
+for _, relative in ipairs({ "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua" }) do
+    RequireFixture.LoadShipped(arg[1], "MidnightSimpleUnitFrames/" .. relative, MSUF)
+end
 
 local frame = CreateFrame("Button", "MSUF_target")
 frame.MSUFUnitKey = "target"

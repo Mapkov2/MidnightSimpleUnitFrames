@@ -78,7 +78,16 @@ jobs:
       - name: Run the full Classic gate
         shell: pwsh
         run: |
-          & ./tools/run-classic-gate.ps1 -RequireNoSkippedSteps
+          & ./tools/run-classic-gate.ps1 -RequireNoSkippedSteps -TimingsOut "$env:RUNNER_TEMP/classic-gate-timings.tsv"
           if ($LASTEXITCODE -ne 0) {
             throw "Classic full gate failed."
           }
+
+      - name: Preserve measured gate weights
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: classic-gate-timings-full
+          path: ${{ runner.temp }}/classic-gate-timings.tsv
+          if-no-files-found: ignore
+          retention-days: 14

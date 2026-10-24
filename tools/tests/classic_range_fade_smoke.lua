@@ -132,16 +132,25 @@ local function Load(opts)
   }
   local ns = {
     UF = UF,
-    Client = { IsClassic = opts.classic },
+    -- Game/Shared/Initialize.lua publishes the arena slot fact on the client model as well as
+    -- _G.MSUF_MAX_ARENA_FRAMES; the range driver reads the model's.
+    Client = { IsClassic = opts.classic, MaxArenaOpponents = opts.maxArena },
     Secrets = { PlainBool = PlainBool },
     ExportPublic = function() end,
   }
+  -- The real Kernel API (Bootstrap's exports, Require/Optional) replaces the export stub: RangeFade
+  -- requires the scheduler's and the Alpha element's exports at load.
+  assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, ns, nil, nil, true)
+  ns.ExportPublic("MSUF_UF_ApplyRangeModifier", UF.ApplyRangeModifier)
   -- The real keyed scheduler (Kernel loads it first). Its own frame is not a
   -- range driver, and RangeFade's next-frame After(0, ...) stays a no-op.
   local createFrame = _G.CreateFrame
+  local capturedSchedule = _G.MSUF_ScheduleOnce
   _G.CreateFrame = function() return { SetScript = function() end } end
   assert(loadfile(SCHEDULER))("MidnightSimpleUnitFrames", ns)
   _G.CreateFrame = createFrame
+  -- A scenario that captures scheduled work keeps its capture in place of the scheduler's export.
+  if capturedSchedule then _G.MSUF_ScheduleOnce = capturedSchedule end
   _G.C_Timer.After = function() end
   assert(loadfile(DRIVER))("MidnightSimpleUnitFrames", ns)
   assert(loadfile(ELEMENT))("MidnightSimpleUnitFrames", ns)

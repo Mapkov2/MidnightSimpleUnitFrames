@@ -1,7 +1,5 @@
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or {}
-
 local UF = MSUF.UF
 if not UF then return end
 
@@ -27,7 +25,7 @@ local type = type
 local pairs = pairs
 local floor = math.floor
 
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 -- The status runtime shows and hides the timer text through the shared shown
 -- cache (region._msufShown); a hide here has to go through it too.
 local ApplyShown = MSUF.Apply.ShownPlain

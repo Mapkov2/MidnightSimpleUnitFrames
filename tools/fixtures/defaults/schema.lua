@@ -95553,6 +95553,7 @@ return {
     ["persistence"] = {
         [1] = {["certificate"]="all_profile_menu_fill",["context"]="repair",["field"]=3727},
         [2] = {["certificate"]="all_profile_menu_fill",["context"]="repair",["field"]=3763},
+        [3] = {["certificate"]="all_profile_preview_marker_fill",["context"]="repair",["field"]=3259},
     },
     ["stages"] = {
         ["bars_01"] = {

@@ -41,8 +41,16 @@ _G.GetUnitTotalModifiedMaxHealthPercent = function() return 0.25 end
 local UF = { elements = {} }
 UF.RegisterElement = function(name, element) UF.elements[name] = element end
 local MSUF = { UF = UF }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_TempMaxHealth.lua"))(
-  "MidnightSimpleUnitFrames", MSUF)
+-- The real Kernel API is installed into the namespace; providers the file requires that this
+-- harness does not load are deferred and raise when used.
+-- The pixel regions are the core's (Kernel/MSUF_Util.lua): this strict widget model lays out no
+-- pixels, so the shared stand-in serves.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(root, MSUF)
+MSUF.ExportPublic("MSUF_PixelLayoutRegion",
+  assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().STANDINS.MSUF_PixelLayoutRegion)
+RequireFixture.LoadShipped(
+  root, "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_TempMaxHealth.lua", MSUF)
 local TempMaxHealth = assert(UF.elements.TempMaxHealth, "TempMaxHealth did not register")
 
 local failures = 0

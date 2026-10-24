@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_LayerOverview.lua
 --- Cold-path, addon-wide overview for the unified numeric MSUF layer scale.
 --- Providers only read SavedVariables when the overview is requested; there are
@@ -7,6 +6,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_LayerOverview.lua")
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local T = M.Theme or {}
@@ -130,7 +130,7 @@ local FALLBACK_GROUP_STATUS_SPECS = {
 }
 
 local function DB()
-    return type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+    return type(MSUF_DB) == "table" and MSUF_DB or {}
 end
 
 local function Number(value, fallback)
@@ -220,50 +220,38 @@ function Overview.RegisterProvider(id, provider)
 end
 M.RegisterLayerOverviewProvider = Overview.RegisterProvider
 
-local function AddLayerRow(target, descriptor)
+--- Normalizes a provider descriptor into the "layer" or "strata" row stored under its id.
+local function AddRow(target, kind, descriptor)
     if type(descriptor) ~= "table" then return end
     local id = tostring(descriptor.id or "")
     if id == "" then return end
-    target[id] = {
+    local row = {
         id = id,
-        kind = "layer",
+        kind = kind,
         area = tostring(descriptor.area or "MSUF"),
         scope = tostring(descriptor.scope or "Shared"),
         label = tostring(descriptor.label or descriptor.settingKey or id),
-        layer = Layer(descriptor.value, descriptor.default),
-        enabled = descriptor.enabled ~= false,
-        inherited = descriptor.inherited == true,
-        automatic = descriptor.automatic == true,
-        settingKey = descriptor.settingKey,
-        edit = descriptor.edit,
-    }
-end
-
-local function AddStrataRow(target, descriptor)
-    if type(descriptor) ~= "table" then return end
-    local id = tostring(descriptor.id or "")
-    if id == "" then return end
-    target[id] = {
-        id = id,
-        kind = "strata",
-        area = tostring(descriptor.area or "MSUF"),
-        scope = tostring(descriptor.scope or "Shared"),
-        label = tostring(descriptor.label or descriptor.settingKey or id),
-        strata = Strata(descriptor.value, descriptor.default),
         enabled = descriptor.enabled ~= false,
         inherited = descriptor.inherited == true,
         settingKey = descriptor.settingKey,
         edit = descriptor.edit,
     }
+    if kind == "layer" then
+        row.layer = Layer(descriptor.value, descriptor.default)
+        row.automatic = descriptor.automatic == true
+    else
+        row.strata = Strata(descriptor.value, descriptor.default)
+    end
+    target[id] = row
 end
 
 local function CollectRows(includeLegacyStrata)
     local layerByID = {}
     local strataByID = includeLegacyStrata and {} or nil
     local sink = {
-        Layer = function(_, descriptor) AddLayerRow(layerByID, descriptor) end,
+        Layer = function(_, descriptor) AddRow(layerByID, "layer", descriptor) end,
         Strata = function(_, descriptor)
-            if includeLegacyStrata then AddStrataRow(strataByID, descriptor) end
+            if includeLegacyStrata then AddRow(strataByID, "strata", descriptor) end
         end,
     }
     local ids = SortedKeys(providers)
@@ -309,67 +297,47 @@ M.CollectFrameStrataRows = Overview.CollectFrameStrataRows
 ExportPublic("MSUF_CollectLayerOverviewRows", Overview.CollectLayerOverviewRows)
 ExportPublic("MSUF_CollectFrameStrataRows", Overview.CollectFrameStrataRows)
 
+-- Text rows of the unit frame provider: key, label, default layer, show flag, show default, alternate show flag.
+local UNIT_TEXT_ROWS = {
+    { key = "nameTextLayer", label = "Name Text", default = 5, show = "showName", defaultShow = true },
+    { key = "hpTextLayer", label = "Health Text", default = 5, show = "showHP", defaultShow = true },
+    { key = "powerTextLayer", label = "Power Text", default = 2, show = "showPowerText", defaultShow = false, alternateShow = "showPower" },
+}
+
+--- One unit frame layer row: the value and its inheritance come from the unit profile.
+local function UnitLayerRow(sink, db, scope, area, key, label, default, enabled, mode, legacyKey)
+    local value, inherited = ReadUnitValue(db, scope.key, key, default, legacyKey)
+    sink:Layer({
+        id = "unit." .. scope.key .. "." .. key,
+        area = area, scope = scope.label, label = label,
+        value = value, default = default, enabled = enabled, inherited = inherited,
+        settingKey = scope.key .. "." .. key,
+        edit = { kind = "unit", scope = scope.key, key = key, mode = mode },
+    })
+end
+
 Overview.RegisterProvider("unit-frames", function(sink)
     local db = DB()
-    local text = {
-        { key = "nameTextLayer", label = "Name Text", default = 5, show = "showName", defaultShow = true },
-        { key = "hpTextLayer", label = "Health Text", default = 5, show = "showHP", defaultShow = true },
-        { key = "powerTextLayer", label = "Power Text", default = 2, show = "showPowerText", defaultShow = false, alternateShow = "showPower" },
-    }
     for i = 1, #UNIT_SCOPES do
         local scope = UNIT_SCOPES[i]
-        for j = 1, #text do
-            local spec = text[j]
-            local value, inherited = ReadUnitValue(db, scope.key, spec.key, spec.default)
-            local shown = ReadUnitBool(db, scope.key, spec.show, spec.defaultShow)
-            if not shown and spec.alternateShow then shown = ReadUnitBool(db, scope.key, spec.alternateShow, false) end
-            sink:Layer({
-                id = "unit." .. scope.key .. "." .. spec.key,
-                area = "Unit Frames", scope = scope.label, label = spec.label,
-                value = value, default = spec.default, enabled = shown, inherited = inherited,
-                settingKey = scope.key .. "." .. spec.key,
-                edit = { kind = "unit", scope = scope.key, key = spec.key },
-            })
+        local key = scope.key
+        for j = 1, #UNIT_TEXT_ROWS do
+            local spec = UNIT_TEXT_ROWS[j]
+            local shown = ReadUnitBool(db, key, spec.show, spec.defaultShow)
+            if not shown and spec.alternateShow then shown = ReadUnitBool(db, key, spec.alternateShow, false) end
+            UnitLayerRow(sink, db, scope, "Unit Frames", spec.key, spec.label, spec.default, shown)
         end
-        local detached, inherited = ReadUnitValue(db, scope.key, "detachedPowerBarFrameLevelOffset", 6)
-        sink:Layer({
-            id = "unit." .. scope.key .. ".detachedPowerBarFrameLevelOffset",
-            area = "Unit Frames", scope = scope.label, label = "Detached Power Bar",
-            value = detached, default = 6,
-            enabled = ReadUnitBool(db, scope.key, "showPowerBar", true) and ReadUnitBool(db, scope.key, "powerBarDetached", false),
-            inherited = inherited, settingKey = scope.key .. ".detachedPowerBarFrameLevelOffset",
-            edit = { kind = "unit", scope = scope.key, key = "detachedPowerBarFrameLevelOffset", mode = "detached-power" },
-        })
-        local portrait, portraitInherited = ReadUnitValue(db, scope.key, "portraitLevelOffset", 7)
-        local portraitMode = tostring((type(db[scope.key]) == "table" and db[scope.key].portraitMode) or "OFF"):upper()
-        sink:Layer({
-            id = "unit." .. scope.key .. ".portraitLevelOffset",
-            area = "Unit Frames", scope = scope.label, label = "Portrait",
-            value = portrait, default = 7, enabled = portraitMode ~= "OFF",
-            inherited = portraitInherited, settingKey = scope.key .. ".portraitLevelOffset",
-            edit = { kind = "unit", scope = scope.key, key = "portraitLevelOffset", mode = "portrait" },
-        })
+        UnitLayerRow(sink, db, scope, "Unit Frames", "detachedPowerBarFrameLevelOffset", "Detached Power Bar", 6,
+            ReadUnitBool(db, key, "showPowerBar", true) and ReadUnitBool(db, key, "powerBarDetached", false), "detached-power")
+        local portraitMode = tostring((type(db[key]) == "table" and db[key].portraitMode) or "OFF"):upper()
+        UnitLayerRow(sink, db, scope, "Unit Frames", "portraitLevelOffset", "Portrait", 7, portraitMode ~= "OFF", "portrait")
         for slot = 1, 3 do
             local prefix = slot == 1 and "texLayer" or ("texLayer" .. slot)
-            local value, layerInherited = ReadUnitValue(db, scope.key, prefix .. "Level", 1)
-            sink:Layer({
-                id = "unit." .. scope.key .. "." .. prefix .. "Level",
-                area = "Unit Texture Layers", scope = scope.label, label = string.format(Tr("Texture Layer %s"), tostring(slot)),
-                value = value, default = 1,
-                enabled = ReadUnitBool(db, scope.key, prefix .. "Enabled", false),
-                inherited = layerInherited, settingKey = scope.key .. "." .. prefix .. "Level",
-                edit = { kind = "unit", scope = scope.key, key = prefix .. "Level", mode = "texture-layer" },
-            })
+            UnitLayerRow(sink, db, scope, "Unit Texture Layers", prefix .. "Level", string.format(Tr("Texture Layer %s"), tostring(slot)),
+                1, ReadUnitBool(db, key, prefix .. "Enabled", false), "texture-layer")
         end
-        local dispelLayer, dispelInherited = ReadUnitValue(db, scope.key, "unitDispelSymbolLayer", 8)
-        sink:Layer({
-            id = "unit." .. scope.key .. ".unitDispelSymbolLayer",
-            area = "Unit Status", scope = scope.label, label = "Dispel Symbol",
-            value = dispelLayer, default = 8,
-            enabled = ReadUnitBool(db, scope.key, "unitDispelSymbolEnabled", false),
-            inherited = dispelInherited, settingKey = scope.key .. ".unitDispelSymbolLayer",
-            edit = { kind = "unit", scope = scope.key, key = "unitDispelSymbolLayer", mode = "dispel-symbol" },
-        })
+        UnitLayerRow(sink, db, scope, "Unit Status", "unitDispelSymbolLayer", "Dispel Symbol", 8,
+            ReadUnitBool(db, key, "unitDispelSymbolEnabled", false), "dispel-symbol")
     end
 
     local specs = UnitStatusSpecs()
@@ -381,16 +349,8 @@ Overview.RegisterProvider("unit-frames", function(sink)
             local key = type(spec) == "table" and spec.layer or nil
             if type(key) == "string" and key ~= "" and not seen[key] and UnitStatusAllowed(spec, scope.key) then
                 seen[key] = true
-                local value, inherited = ReadUnitValue(db, scope.key, key, spec.defaultLayer or 7, spec.legacyLayer)
-                local label = key == "leaderIconLayer" and "Leader / Assist Icons" or (spec.text or key)
-                sink:Layer({
-                    id = "unit." .. scope.key .. "." .. key,
-                    area = "Unit Status", scope = scope.label, label = label,
-                    value = value, default = spec.defaultLayer or 7,
-                    enabled = ReadUnitBool(db, scope.key, spec.show, spec.defaultShow ~= false),
-                    inherited = inherited, settingKey = scope.key .. "." .. key,
-                    edit = { kind = "unit", scope = scope.key, key = key },
-                })
+                UnitLayerRow(sink, db, scope, "Unit Status", key, key == "leaderIconLayer" and "Leader / Assist Icons" or (spec.text or key),
+                    spec.defaultLayer or 7, ReadUnitBool(db, scope.key, spec.show, spec.defaultShow ~= false), nil, spec.legacyLayer)
             end
         end
     end
@@ -408,290 +368,212 @@ local function EffectiveAuraValue(auras, scope, key, fallback)
     return fallback, true
 end
 
-Overview.RegisterProvider("unit-auras", function(sink)
-    local db = DB()
-    local auras = type(db.auras3) == "table" and db.auras3 or {}
+local AURA_LANES = {
+    { key = "buff", label = "Buffs", layer = "buffLayer", strata = "buffStrata", defaultLayer = 5, show = "showBuffs", max = "maxBuffs", defaultMax = 8 },
+    { key = "debuff", label = "Debuffs", layer = "debuffLayer", strata = "debuffStrata", defaultLayer = 6, show = "showDebuffs",
+        max = "maxDebuffs", defaultMax = 12 },
+}
+
+--- The Buff / Debuff lane rows of one unit scope: layer and strata share one enabled state.
+local function AuraLaneRows(sink, auras, scope, unitEnabled)
     local shared = type(auras.shared) == "table" and auras.shared or {}
+    for j = 1, #AURA_LANES do
+        local lane = AURA_LANES[j]
+        local maxIcons = EffectiveAuraValue(auras, scope, lane.max, lane.defaultMax)
+        local enabled = unitEnabled and shared[lane.show] ~= false and Number(maxIcons, lane.defaultMax) > 0
+        local function Emit(kind, key, default)
+            local value, inherited = EffectiveAuraValue(auras, scope, key, default)
+            sink[kind](sink, {
+                id = "auras3." .. scope.key .. "." .. key,
+                area = "Unit Auras", scope = scope.label, label = lane.label,
+                value = value, default = default, enabled = enabled, inherited = inherited,
+                settingKey = "auras3." .. scope.key .. "." .. key,
+                edit = { kind = "aura-lane", scope = scope.key, lane = lane.key },
+            })
+        end
+        Emit("Layer", lane.layer, lane.defaultLayer)
+        Emit("Strata", lane.strata, "AUTO")
+    end
+end
+
+--- The four custom container slots of one unit scope, each with its full-frame effect block.
+local function AuraCustomRows(sink, auras, scope, unitEnabled)
+    local customRoot = type(auras.customContainers) == "table" and auras.customContainers or nil
+    local customPerUnit = customRoot and type(customRoot.perUnit) == "table" and customRoot.perUnit or nil
+    local record = customPerUnit and customPerUnit[scope.key]
+    local items = type(record) == "table" and type(record.items) == "table" and record.items or nil
+    for index = 1, 4 do
+        local item = items and items[index]
+        local present = type(item) == "table"
+        local token = tostring(present and item.id or index)
+        local fallback = index == 4
+            and (scope.key == "player" and "Defensive Buffs" or "Dots on target")
+            or M.Format("Custom %d", index)
+        local label = tostring(present and item.name or fallback)
+        local enabled = present and unitEnabled and item.enabled == true
+        local frame = present and type(item.frame) == "table" and item.frame or nil
+        local frameEnabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none"
+        local frameLabel = string.format(Tr("%s Full-Frame Effect"), Tr(label))
+        local function Emit(kind, suffix, rowLabel, value, default, rowEnabled, editKind)
+            sink[kind](sink, {
+                id = "auras3." .. scope.key .. ".custom." .. token .. "." .. suffix,
+                area = "Unit Auras", scope = scope.label, label = rowLabel,
+                value = value, default = default, enabled = rowEnabled,
+                settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. "." .. suffix,
+                edit = { kind = editKind, scope = scope.key, index = index },
+            })
+        end
+        Emit("Layer", "layer", label, present and item.layer or nil, 9, enabled, "aura-custom")
+        Emit("Strata", "strata", M.Format("%s Icons", Tr(label)), present and item.strata or nil, "AUTO", enabled, "aura-custom")
+        Emit("Layer", "frame.layer", frameLabel, frame and frame.layer, 0, frameEnabled, "aura-custom-frame")
+        Emit("Strata", "frame.strata", frameLabel, frame and frame.strata, "AUTO", frameEnabled, "aura-custom-frame")
+    end
+end
+
+Overview.RegisterProvider("unit-auras", function(sink)
+    local auras = DB().auras3
+    auras = type(auras) == "table" and auras or {}
     local rootEnabled = auras.enabled ~= false
-    local lanes = {
-        { key = "buff", label = "Buffs", layer = "buffLayer", strata = "buffStrata", defaultLayer = 5, show = "showBuffs", max = "maxBuffs", defaultMax = 8 },
-        { key = "debuff", label = "Debuffs", layer = "debuffLayer", strata = "debuffStrata", defaultLayer = 6, show = "showDebuffs",
-            max = "maxDebuffs", defaultMax = 12 },
-    }
     for i = 1, #UNIT_AURA_SCOPES do
         local scope = UNIT_AURA_SCOPES[i]
         local unitEnabled = rootEnabled and BoolValue(auras[scope.flag], scope.flagDefault)
-        for j = 1, #lanes do
-            local lane = lanes[j]
-            local value, inherited = EffectiveAuraValue(auras, scope, lane.layer, lane.defaultLayer)
-            local maxIcons = EffectiveAuraValue(auras, scope, lane.max, lane.defaultMax)
-            sink:Layer({
-                id = "auras3." .. scope.key .. "." .. lane.layer,
-                area = "Unit Auras", scope = scope.label, label = lane.label,
-                value = value, default = lane.defaultLayer,
-                enabled = unitEnabled and shared[lane.show] ~= false and Number(maxIcons, lane.defaultMax) > 0,
-                inherited = inherited, settingKey = "auras3." .. scope.key .. "." .. lane.layer,
-                edit = { kind = "aura-lane", scope = scope.key, lane = lane.key },
-            })
-            local strata, strataInherited = EffectiveAuraValue(auras, scope, lane.strata, "AUTO")
-            sink:Strata({
-                id = "auras3." .. scope.key .. "." .. lane.strata,
-                area = "Unit Auras", scope = scope.label, label = lane.label,
-                value = strata, default = "AUTO",
-                enabled = unitEnabled and shared[lane.show] ~= false and Number(maxIcons, lane.defaultMax) > 0,
-                inherited = strataInherited, settingKey = "auras3." .. scope.key .. "." .. lane.strata,
-                edit = { kind = "aura-lane", scope = scope.key, lane = lane.key },
-            })
-        end
-
-        local customRoot = type(auras.customContainers) == "table" and auras.customContainers or nil
-        local customPerUnit = customRoot and type(customRoot.perUnit) == "table" and customRoot.perUnit or nil
-        local record = customPerUnit and customPerUnit[scope.key]
-        local items = type(record) == "table" and type(record.items) == "table" and record.items or nil
-        for index = 1, 4 do
-            local item = items and items[index]
-            local present = type(item) == "table"
-            local token = tostring(present and item.id or index)
-            local fallback = index == 4
-                and (scope.key == "player" and "Defensive Buffs" or "Dots on target")
-                or M.Format("Custom %d", index)
-            local label = tostring(present and item.name or fallback)
-            local enabled = present and unitEnabled and item.enabled == true
-            sink:Layer({
-                id = "auras3." .. scope.key .. ".custom." .. token .. ".layer",
-                area = "Unit Auras", scope = scope.label, label = label,
-                value = present and item.layer or nil, default = 9, enabled = enabled,
-                settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".layer",
-                edit = { kind = "aura-custom", scope = scope.key, index = index },
-            })
-            sink:Strata({
-                id = "auras3." .. scope.key .. ".custom." .. token .. ".strata",
-                area = "Unit Auras", scope = scope.label, label = M.Format("%s Icons", Tr(label)),
-                value = present and item.strata or nil, default = "AUTO", enabled = enabled,
-                settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".strata",
-                edit = { kind = "aura-custom", scope = scope.key, index = index },
-            })
-            local frame = present and type(item.frame) == "table" and item.frame or nil
-            sink:Layer({
-                id = "auras3." .. scope.key .. ".custom." .. token .. ".frame.layer",
-                area = "Unit Auras", scope = scope.label, label = string.format(Tr("%s Full-Frame Effect"), Tr(label)),
-                value = frame and frame.layer, default = 0,
-                enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
-                settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".frame.layer",
-                edit = { kind = "aura-custom-frame", scope = scope.key, index = index },
-            })
-            sink:Strata({
-                id = "auras3." .. scope.key .. ".custom." .. token .. ".frame.strata",
-                area = "Unit Auras", scope = scope.label, label = string.format(Tr("%s Full-Frame Effect"), Tr(label)),
-                value = frame and frame.strata, default = "AUTO",
-                enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
-                settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".frame.strata",
-                edit = { kind = "aura-custom-frame", scope = scope.key, index = index },
-            })
-        end
+        AuraLaneRows(sink, auras, scope, unitEnabled)
+        AuraCustomRows(sink, auras, scope, unitEnabled)
     end
 end)
 
+local GROUP_TEXT_ROWS = {
+    { key = "nameTextLayer", label = "Name Text", default = 5, show = "showName", defaultShow = true },
+    { key = "textLayer", label = "Health Text", default = 5, show = "showHPText", defaultShow = true },
+    { key = "powerTextLayer", label = "Power Text", default = 2, show = "showPowerText", defaultShow = false, alternateShow = "showPower" },
+}
+local GROUP_AURA_LANES = {
+    { key = "buff", label = "Buffs", defaultLayer = 5 },
+    { key = "debuff", label = "Debuffs", defaultLayer = 6 },
+    { key = "externals", label = "External Defensives", defaultLayer = 7 },
+}
+local function CornerEnabled(conf) return BoolValue(conf.ciEnabled, true) end
+local function OverlayEnabled(conf) return conf.dispelOverlayEnabled == true end
+--- Group rows read straight from the group profile: { kind, area, key, label, default, enabled(conf) }.
+local GROUP_PROFILE_ROWS = {
+    { "Layer", "Group Status", "groupNumberLayer", "Group Number", 7, function(conf) return conf.showGroupNumber == true end },
+    { "Layer", "Group Frames", "detachedPowerBarFrameLevelOffset", "Detached Power Bar", 6,
+        function(conf) return conf.powerBarEnabled == true and conf.powerBarDetached == true end },
+    { "Layer", "Group Status", "dispelSymbolLayer", "Dispel Symbol", 8, function(conf) return conf.dispelSymbolEnabled == true end },
+    { "Layer", "Group Status", "ciLayer", "Corner Indicators", 7, CornerEnabled },
+    { "Strata", "Group Status", "ciStrata", "Corner Indicators", "AUTO", CornerEnabled },
+    { "Strata", "Group Bars", "dispelOverlayStrata", "Dispel Overlay", "AUTO", OverlayEnabled },
+    { "Layer", "Group Bars", "dispelOverlayLayer", "Dispel Overlay", 0, OverlayEnabled },
+}
+
+--- One group frame row. `key` is the id and setting suffix (and, split at the dots, the edit
+--- path); `extra` may carry a different `setting` suffix, `path`, `mode` and `inherited`.
+local function GroupRow(sink, g, kind, area, key, label, value, default, enabled, extra)
+    extra = extra or {}
+    local path = extra.path
+    if not path then
+        path = {}
+        for part in key:gmatch("[^.]+") do path[#path + 1] = part end
+    end
+    sink[kind](sink, {
+        id = "group." .. g.scope.key .. "." .. key,
+        area = area, scope = g.scope.label, label = label,
+        value = value, default = default, enabled = enabled, inherited = extra.inherited,
+        settingKey = g.scope.dbKey .. "." .. (extra.setting or key),
+        edit = { kind = "group", scope = g.scope.key, dbKey = g.scope.dbKey, path = path, mode = extra.mode },
+    })
+end
+
+local function GroupProfileRows(sink, g, statusSpecs)
+    local conf, on = g.conf, g.on
+    for j = 1, #GROUP_TEXT_ROWS do
+        local spec = GROUP_TEXT_ROWS[j]
+        local shown = BoolValue(conf[spec.show], spec.defaultShow)
+        if not shown and spec.alternateShow then shown = BoolValue(conf[spec.alternateShow], false) end
+        GroupRow(sink, g, "Layer", "Group Frames", spec.key, spec.label, conf[spec.key], spec.default, on and shown)
+    end
+    if g.scope.key == "party" then
+        local portraitMode = tostring(conf.portraitMode or "OFF"):upper()
+        GroupRow(sink, g, "Layer", "Group Frames", "portraitLevelOffset", "Portrait", conf.portraitLevelOffset, 7,
+            on and (portraitMode == "LEFT" or portraitMode == "RIGHT"), { mode = "config" })
+    end
+    for j = 1, #statusSpecs do
+        local spec = statusSpecs[j]
+        if type(spec) == "table" and type(spec.layer) == "string" and spec.layer ~= "" then
+            GroupRow(sink, g, "Layer", "Group Status", spec.layer, spec.text or spec.layer, conf[spec.layer],
+                spec.defaultLayer or 7, on and BoolValue(conf[spec.enabled], true))
+        end
+    end
+    for j = 1, #GROUP_PROFILE_ROWS do
+        local row = GROUP_PROFILE_ROWS[j]
+        GroupRow(sink, g, row[1], row[2], row[3], row[4], conf[row[3]], row[5], on and row[6](conf))
+    end
+end
+
+local function GroupAuraRows(sink, g)
+    local auraRoot = type(g.conf.auras) == "table" and g.conf.auras or {}
+    for j = 1, #GROUP_AURA_LANES do
+        local laneSpec = GROUP_AURA_LANES[j]
+        local lane = type(auraRoot[laneSpec.key]) == "table" and auraRoot[laneSpec.key] or {}
+        local enabled = g.on and auraRoot.enabled ~= false and lane.enabled ~= false
+        local prefix = "auras." .. laneSpec.key
+        GroupRow(sink, g, "Layer", "Group Auras", prefix .. ".layer", laneSpec.label, lane.layer, laneSpec.defaultLayer, enabled,
+            { mode = "auras" })
+        GroupRow(sink, g, "Strata", "Group Auras", prefix .. ".strata", laneSpec.label, lane.strata, "AUTO", enabled,
+            { mode = "auras" })
+    end
+end
+
+local function GroupSpellRows(sink, g)
+    local spell = type(g.conf.spellIndicators) == "table" and g.conf.spellIndicators or {}
+    local spellEnabled = g.on and spell.enabled == true
+    local baseLayer = Layer(spell.layer, 9)
+    GroupRow(sink, g, "Layer", "Spell Indicators", "spellIndicators.layer", "Default", baseLayer, 9, spellEnabled)
+    GroupRow(sink, g, "Strata", "Spell Indicators", "spellIndicators.strata", "Default Icons", spell.strata, "AUTO", spellEnabled)
+    local specs = type(spell.specs) == "table" and spell.specs or nil
+    local specKeys = SortedKeys(specs)
+    for specIndex = 1, #specKeys do
+        local specKey = specKeys[specIndex]
+        local specItems = type(specs[specKey]) == "table" and specs[specKey] or nil
+        local auraKeys = SortedKeys(specItems)
+        for auraIndex = 1, #auraKeys do
+            local auraKey = auraKeys[auraIndex]
+            local item = type(specItems[auraKey]) == "table" and specItems[auraKey] or nil
+            if item then
+                local token = tostring(specKey) .. "." .. tostring(auraKey)
+                local label = tostring(item.display or auraKey) .. " [" .. tostring(specKey) .. "]"
+                local enabled = spellEnabled and item.enabled ~= false
+                local frame = type(item.frame) == "table" and item.frame or nil
+                local frameEnabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none"
+                local frameLabel = string.format(Tr("%s Frame Effect"), Tr(label))
+                local function Emit(kind, tail, rowLabel, value, default, rowEnabled, path, inherited)
+                    GroupRow(sink, g, kind, "Spell Indicators", "spellIndicators." .. token .. "." .. tail, rowLabel, value, default, rowEnabled,
+                        { setting = "spellIndicators.specs." .. token .. "." .. tail, path = path, inherited = inherited })
+                end
+                Emit("Layer", "layer", label, item.layer, baseLayer, enabled,
+                    { "spellIndicators", "specs", specKey, auraKey, "layer" }, item.layer == nil)
+                Emit("Strata", "strata", M.Format("%s Icon", Tr(label)), item.strata, "AUTO", enabled,
+                    { "spellIndicators", "specs", specKey, auraKey, "strata" })
+                Emit("Layer", "frame.layer", frameLabel, frame and frame.layer, 0, frameEnabled,
+                    { "spellIndicators", "specs", specKey, auraKey, "frame", "layer" })
+                Emit("Strata", "frame.strata", frameLabel, frame and frame.strata, "AUTO", frameEnabled,
+                    { "spellIndicators", "specs", specKey, auraKey, "frame", "strata" })
+            end
+        end
+    end
+end
+
 Overview.RegisterProvider("group-frames", function(sink)
     local db = DB()
-    local text = {
-        { key = "nameTextLayer", label = "Name Text", default = 5, show = "showName", defaultShow = true },
-        { key = "textLayer", label = "Health Text", default = 5, show = "showHPText", defaultShow = true },
-        { key = "powerTextLayer", label = "Power Text", default = 2, show = "showPowerText", defaultShow = false, alternateShow = "showPower" },
-    }
     local statusSpecs = GroupStatusSpecs()
     for i = 1, #GROUP_SCOPES do
         local scope = GROUP_SCOPES[i]
         local conf = type(db[scope.dbKey]) == "table" and db[scope.dbKey] or {}
-        local frameEnabled = conf.enabled == true
-        for j = 1, #text do
-            local spec = text[j]
-            local shown = BoolValue(conf[spec.show], spec.defaultShow)
-            if not shown and spec.alternateShow then shown = BoolValue(conf[spec.alternateShow], false) end
-            sink:Layer({
-                id = "group." .. scope.key .. "." .. spec.key,
-                area = "Group Frames", scope = scope.label, label = spec.label,
-                value = conf[spec.key], default = spec.default, enabled = frameEnabled and shown,
-                settingKey = scope.dbKey .. "." .. spec.key,
-                edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { spec.key } },
-            })
-        end
-        if scope.key == "party" then
-            local portraitMode = tostring(conf.portraitMode or "OFF"):upper()
-            sink:Layer({
-                id = "group.party.portraitLevelOffset",
-                area = "Group Frames", scope = scope.label, label = "Portrait",
-                value = conf.portraitLevelOffset, default = 7,
-                enabled = frameEnabled and (portraitMode == "LEFT" or portraitMode == "RIGHT"),
-                settingKey = "gf_party.portraitLevelOffset",
-                edit = {
-                    kind = "group", scope = "party", dbKey = "gf_party",
-                    path = { "portraitLevelOffset" }, mode = "config",
-                },
-            })
-        end
-        for j = 1, #statusSpecs do
-            local spec = statusSpecs[j]
-            if type(spec) == "table" and type(spec.layer) == "string" and spec.layer ~= "" then
-                sink:Layer({
-                    id = "group." .. scope.key .. "." .. spec.layer,
-                    area = "Group Status", scope = scope.label, label = spec.text or spec.layer,
-                    value = conf[spec.layer], default = spec.defaultLayer or 7,
-                    enabled = frameEnabled and BoolValue(conf[spec.enabled], true),
-                    settingKey = scope.dbKey .. "." .. spec.layer,
-                    edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { spec.layer } },
-                })
-            end
-        end
-        sink:Layer({
-            id = "group." .. scope.key .. ".groupNumberLayer",
-            area = "Group Status", scope = scope.label, label = "Group Number",
-            value = conf.groupNumberLayer, default = 7,
-            enabled = frameEnabled and conf.showGroupNumber == true,
-            settingKey = scope.dbKey .. ".groupNumberLayer",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "groupNumberLayer" } },
-        })
-        sink:Layer({
-            id = "group." .. scope.key .. ".detachedPowerBarFrameLevelOffset",
-            area = "Group Frames", scope = scope.label, label = "Detached Power Bar",
-            value = conf.detachedPowerBarFrameLevelOffset, default = 6,
-            enabled = frameEnabled and conf.powerBarEnabled == true and conf.powerBarDetached == true,
-            settingKey = scope.dbKey .. ".detachedPowerBarFrameLevelOffset",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "detachedPowerBarFrameLevelOffset" } },
-        })
-        sink:Layer({
-            id = "group." .. scope.key .. ".dispelSymbolLayer",
-            area = "Group Status", scope = scope.label, label = "Dispel Symbol",
-            value = conf.dispelSymbolLayer, default = 8,
-            enabled = frameEnabled and conf.dispelSymbolEnabled == true,
-            settingKey = scope.dbKey .. ".dispelSymbolLayer",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "dispelSymbolLayer" } },
-        })
-        sink:Layer({
-            id = "group." .. scope.key .. ".ciLayer",
-            area = "Group Status", scope = scope.label, label = "Corner Indicators",
-            value = conf.ciLayer, default = 7,
-            enabled = frameEnabled and BoolValue(conf.ciEnabled, true),
-            settingKey = scope.dbKey .. ".ciLayer",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "ciLayer" } },
-        })
-        sink:Strata({
-            id = "group." .. scope.key .. ".ciStrata",
-            area = "Group Status", scope = scope.label, label = "Corner Indicators",
-            value = conf.ciStrata, default = "AUTO",
-            enabled = frameEnabled and BoolValue(conf.ciEnabled, true),
-            settingKey = scope.dbKey .. ".ciStrata",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "ciStrata" } },
-        })
-        sink:Strata({
-            id = "group." .. scope.key .. ".dispelOverlayStrata",
-            area = "Group Bars", scope = scope.label, label = "Dispel Overlay",
-            value = conf.dispelOverlayStrata, default = "AUTO",
-            enabled = frameEnabled and conf.dispelOverlayEnabled == true,
-            settingKey = scope.dbKey .. ".dispelOverlayStrata",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "dispelOverlayStrata" } },
-        })
-        sink:Layer({
-            id = "group." .. scope.key .. ".dispelOverlayLayer",
-            area = "Group Bars", scope = scope.label, label = "Dispel Overlay",
-            value = conf.dispelOverlayLayer, default = 0,
-            enabled = frameEnabled and conf.dispelOverlayEnabled == true,
-            settingKey = scope.dbKey .. ".dispelOverlayLayer",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "dispelOverlayLayer" } },
-        })
-
-        local auraRoot = type(conf.auras) == "table" and conf.auras or {}
-        local auraLanes = {
-            { key = "buff", label = "Buffs", defaultLayer = 5 },
-            { key = "debuff", label = "Debuffs", defaultLayer = 6 },
-            { key = "externals", label = "External Defensives", defaultLayer = 7 },
-        }
-        for j = 1, #auraLanes do
-            local laneSpec = auraLanes[j]
-            local lane = type(auraRoot[laneSpec.key]) == "table" and auraRoot[laneSpec.key] or {}
-            local enabled = frameEnabled and auraRoot.enabled ~= false and lane.enabled ~= false
-            sink:Layer({
-                id = "group." .. scope.key .. ".auras." .. laneSpec.key .. ".layer",
-                area = "Group Auras", scope = scope.label, label = laneSpec.label,
-                value = lane.layer, default = laneSpec.defaultLayer, enabled = enabled,
-                settingKey = scope.dbKey .. ".auras." .. laneSpec.key .. ".layer",
-                edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "auras", laneSpec.key, "layer" }, mode = "auras" },
-            })
-            sink:Strata({
-                id = "group." .. scope.key .. ".auras." .. laneSpec.key .. ".strata",
-                area = "Group Auras", scope = scope.label, label = laneSpec.label,
-                value = lane.strata, default = "AUTO", enabled = enabled,
-                settingKey = scope.dbKey .. ".auras." .. laneSpec.key .. ".strata",
-                edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "auras", laneSpec.key, "strata" }, mode = "auras" },
-            })
-        end
-
-        local spell = type(conf.spellIndicators) == "table" and conf.spellIndicators or {}
-        local spellEnabled = frameEnabled and spell.enabled == true
-        local baseLayer = Layer(spell.layer, 9)
-        sink:Layer({
-            id = "group." .. scope.key .. ".spellIndicators.layer",
-            area = "Spell Indicators", scope = scope.label, label = "Default",
-            value = baseLayer, default = 9, enabled = spellEnabled,
-            settingKey = scope.dbKey .. ".spellIndicators.layer",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "layer" } },
-        })
-        sink:Strata({
-            id = "group." .. scope.key .. ".spellIndicators.strata",
-            area = "Spell Indicators", scope = scope.label, label = "Default Icons",
-            value = spell.strata, default = "AUTO", enabled = spellEnabled,
-            settingKey = scope.dbKey .. ".spellIndicators.strata",
-            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "strata" } },
-        })
-        local specs = type(spell.specs) == "table" and spell.specs or nil
-        local specKeys = SortedKeys(specs)
-        for specIndex = 1, #specKeys do
-            local specKey = specKeys[specIndex]
-            local specItems = type(specs[specKey]) == "table" and specs[specKey] or nil
-            local auraKeys = SortedKeys(specItems)
-            for auraIndex = 1, #auraKeys do
-                local auraKey = auraKeys[auraIndex]
-                local item = type(specItems[auraKey]) == "table" and specItems[auraKey] or nil
-                if item then
-                    local token = tostring(specKey) .. "." .. tostring(auraKey)
-                    local label = tostring(item.display or auraKey) .. " [" .. tostring(specKey) .. "]"
-                    local enabled = spellEnabled and item.enabled ~= false
-                    sink:Layer({
-                        id = "group." .. scope.key .. ".spellIndicators." .. token .. ".layer",
-                        area = "Spell Indicators", scope = scope.label, label = label,
-                        value = item.layer, default = baseLayer, inherited = item.layer == nil, enabled = enabled,
-                        settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".layer",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "layer" } },
-                    })
-                    sink:Strata({
-                        id = "group." .. scope.key .. ".spellIndicators." .. token .. ".strata",
-                        area = "Spell Indicators", scope = scope.label, label = M.Format("%s Icon", Tr(label)),
-                        value = item.strata, default = "AUTO", enabled = enabled,
-                        settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".strata",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "strata" } },
-                    })
-                    local frame = type(item.frame) == "table" and item.frame or nil
-                    sink:Layer({
-                        id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.layer",
-                        area = "Spell Indicators", scope = scope.label, label = string.format(Tr("%s Frame Effect"), Tr(label)),
-                        value = frame and frame.layer, default = 0,
-                        enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
-                        settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.layer",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "layer" } },
-                    })
-                    sink:Strata({
-                        id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.strata",
-                        area = "Spell Indicators", scope = scope.label, label = string.format(Tr("%s Frame Effect"), Tr(label)),
-                        value = frame and frame.strata, default = "AUTO",
-                        enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
-                        settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.strata",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "strata" } },
-                    })
-                end
-            end
-        end
+        local g = { scope = scope, conf = conf, on = conf.enabled == true }
+        GroupProfileRows(sink, g, statusSpecs)
+        GroupAuraRows(sink, g)
+        GroupSpellRows(sink, g)
     end
-
 end)
 
 Overview.RegisterProvider("castbars", function(sink)
@@ -745,73 +627,52 @@ Overview.RegisterProvider("arena-trinket", function(sink)
     })
 end)
 
+local function ClassPowerShown(bars) return bars.showClassPower ~= false end
+--- Player class resource rows: { bars key, label, default layer, enabled(bars) }.
+local CLASS_RESOURCE_ROWS = {
+    { "classPowerFrameLevelOffset", "Class Resource Bar", 5, ClassPowerShown },
+    { "classPowerTextLayer", "Class Resource Text", 5, ClassPowerShown },
+    { "playerHPBarFrameLevelOffset", "Secondary Health Bar", 7, function(bars) return bars.playerHPBarEnabled == true end },
+}
+
+--- Outline value of a bar scope: its own override when set, else the shared bars value.
+local function BarOutlineValue(bars, scope, conf, key)
+    if scope.key == "shared" then return bars[key], false end
+    if conf and conf.hlOverride == true and conf[key] ~= nil then return conf[key], false end
+    return bars[key], true
+end
+
 Overview.RegisterProvider("class-resources", function(sink)
     local db = DB()
     local bars = type(db.bars) == "table" and db.bars or {}
-    sink:Layer({
-        id = "class-resources.classPowerFrameLevelOffset",
-        area = "Class Resources", scope = "Player", label = "Class Resource Bar",
-        value = bars.classPowerFrameLevelOffset, default = 5,
-        enabled = bars.showClassPower ~= false,
-        settingKey = "bars.classPowerFrameLevelOffset",
-        edit = { kind = "class-resources", key = "classPowerFrameLevelOffset" },
-    })
-    sink:Layer({
-        id = "class-resources.classPowerTextLayer",
-        area = "Class Resources", scope = "Player", label = "Class Resource Text",
-        value = bars.classPowerTextLayer, default = 5,
-        enabled = bars.showClassPower ~= false,
-        settingKey = "bars.classPowerTextLayer",
-        edit = { kind = "class-resources", key = "classPowerTextLayer" },
-    })
-    sink:Layer({
-        id = "class-resources.playerHPBarFrameLevelOffset",
-        area = "Class Resources", scope = "Player", label = "Secondary Health Bar",
-        value = bars.playerHPBarFrameLevelOffset, default = 7,
-        enabled = bars.playerHPBarEnabled == true,
-        settingKey = "bars.playerHPBarFrameLevelOffset",
-        edit = { kind = "class-resources", key = "playerHPBarFrameLevelOffset" },
-    })
+    for i = 1, #CLASS_RESOURCE_ROWS do
+        local row = CLASS_RESOURCE_ROWS[i]
+        sink:Layer({
+            id = "class-resources." .. row[1],
+            area = "Class Resources", scope = "Player", label = row[2],
+            value = bars[row[1]], default = row[3],
+            enabled = row[4](bars),
+            settingKey = "bars." .. row[1],
+            edit = { kind = "class-resources", key = row[1] },
+        })
+    end
 
     for i = 1, #BAR_SCOPES do
         local scope = BAR_SCOPES[i]
-        local value, layerValue, inherited, layerInherited
-        if scope.key == "shared" then
-            value = bars.barOutlineStrata
-            layerValue = bars.barOutlineLayer
-            inherited = false
-            layerInherited = false
-        else
-            local conf = type(db[scope.key]) == "table" and db[scope.key] or nil
-            if conf and conf.hlOverride == true and conf.barOutlineStrata ~= nil then
-                value = conf.barOutlineStrata
-                inherited = false
-            else
-                value = bars.barOutlineStrata
-                inherited = true
-            end
-            if conf and conf.hlOverride == true and conf.barOutlineLayer ~= nil then
-                layerValue = conf.barOutlineLayer
-                layerInherited = false
-            else
-                layerValue = bars.barOutlineLayer
-                layerInherited = true
-            end
+        local conf = type(db[scope.key]) == "table" and db[scope.key] or nil
+        local settingScope = scope.key == "shared" and "bars" or scope.key
+        local function Emit(kind, key, default, edit)
+            local value, inherited = BarOutlineValue(bars, scope, conf, key)
+            sink[kind](sink, {
+                id = "bars." .. scope.key .. "." .. key,
+                area = "Global Bars", scope = scope.label, label = "Frame Outline",
+                value = value, default = default, inherited = inherited,
+                settingKey = settingScope .. "." .. key,
+                edit = edit,
+            })
         end
-        sink:Layer({
-            id = "bars." .. scope.key .. ".barOutlineLayer",
-            area = "Global Bars", scope = scope.label, label = "Frame Outline",
-            value = layerValue, default = 0, inherited = layerInherited,
-            settingKey = (scope.key == "shared" and "bars" or scope.key) .. ".barOutlineLayer",
-            edit = { kind = "bar-outline", scope = scope.key, key = "barOutlineLayer" },
-        })
-        sink:Strata({
-            id = "bars." .. scope.key .. ".barOutlineStrata",
-            area = "Global Bars", scope = scope.label, label = "Frame Outline",
-            value = value, default = "AUTO", inherited = inherited,
-            settingKey = (scope.key == "shared" and "bars" or scope.key) .. ".barOutlineStrata",
-            edit = { kind = "bar-outline", scope = scope.key },
-        })
+        Emit("Layer", "barOutlineLayer", 0, { kind = "bar-outline", scope = scope.key, key = "barOutlineLayer" })
+        Emit("Strata", "barOutlineStrata", "AUTO", { kind = "bar-outline", scope = scope.key })
     end
 end)
 
@@ -885,10 +746,19 @@ local function RunLayerHistory(row, callback, fieldLabel)
     return callback()
 end
 
+local function RequestAuras(edit, reason)
+    local apply = M.ApplyService
+    if apply and type(apply.RequestAuras) == "function" then apply.RequestAuras(edit.scope, reason) end
+end
+
+local function AuraMenuModel()
+    return MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
+end
+
 --- Writes field on a custom aura container (or on its frame block) in one
 --- history step and queues the aura apply; false when nothing changed.
 local function WriteCustomContainerField(row, edit, field, value, reason, fieldLabel)
-    local model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
+    local model = AuraMenuModel()
     if type(model) ~= "table" or type(model.CustomContainer) ~= "function" then return false end
     return RunLayerHistory(row, function()
         local item = model.CustomContainer(edit.scope, edit.index, true)
@@ -896,8 +766,32 @@ local function WriteCustomContainerField(row, edit, field, value, reason, fieldL
         local target = edit.kind == "aura-custom-frame" and EnsureChild(item, "frame") or item
         if not target or target[field] == value then return false end
         target[field] = value
-        local apply = M.ApplyService
-        if apply and type(apply.RequestAuras) == "function" then apply.RequestAuras(edit.scope, reason) end
+        RequestAuras(edit, reason)
+        return true
+    end, fieldLabel) ~= false
+end
+
+--- Writes an aura lane layer or strata (model writer `writer`) in one history step.
+local function WriteAuraLane(row, edit, writer, value, reason, fieldLabel)
+    local model = AuraMenuModel()
+    if type(model) ~= "table" or type(model[writer]) ~= "function" then return false end
+    return RunLayerHistory(row, function()
+        model[writer](edit.scope, edit.lane, value)
+        RequestAuras(edit, reason)
+        return true
+    end, fieldLabel) ~= false
+end
+
+--- Writes a bar outline layer or strata for its scope and queues the bars apply.
+local function WriteBarOutline(row, edit, key, value, reason, fieldLabel)
+    return RunLayerHistory(row, function()
+        if not WriteBarOutlineScope(edit.scope, key, value) then return false end
+        if type(M.RequestGeneralDomains) == "function" then
+            M.RequestGeneralDomains(reason, {
+                preview = true, applyAll = false, bars = true,
+                barsScope = BarOutlineApplyScope(edit.scope),
+            })
+        end
         return true
     end, fieldLabel) ~= false
 end
@@ -972,24 +866,11 @@ function Overview.SetLayerValue(row, value)
         return true
     end
 
-    if edit.kind == "aura-lane" then
-        local model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
-        if type(model) ~= "table" or type(model.WriteLaneLayer) ~= "function" then return false end
-        return RunLayerHistory(row, function()
-            model.WriteLaneLayer(edit.scope, edit.lane, value)
-            local apply = M.ApplyService
-            if apply and type(apply.RequestAuras) == "function" then apply.RequestAuras(edit.scope, reason) end
-            return true
-        end) ~= false
-    end
-
+    if edit.kind == "aura-lane" then return WriteAuraLane(row, edit, "WriteLaneLayer", value, reason) end
     if edit.kind == "aura-custom" or edit.kind == "aura-custom-frame" then
         return WriteCustomContainerField(row, edit, "layer", value, reason)
     end
-
-    if edit.kind == "group" then
-        return WriteGroupField(row, edit, value, reason)
-    end
+    if edit.kind == "group" then return WriteGroupField(row, edit, value, reason) end
 
     if edit.kind == "class-resources" then
         return RunLayerHistory(row, function()
@@ -1005,18 +886,7 @@ function Overview.SetLayerValue(row, value)
         end) ~= false
     end
 
-    if edit.kind == "bar-outline" then
-        return RunLayerHistory(row, function()
-            if not WriteBarOutlineScope(edit.scope, "barOutlineLayer", value) then return false end
-            if type(M.RequestGeneralDomains) == "function" then
-                M.RequestGeneralDomains(reason, {
-                    preview = true, applyAll = false, bars = true,
-                    barsScope = BarOutlineApplyScope(edit.scope),
-                })
-            end
-            return true
-        end) ~= false
-    end
+    if edit.kind == "bar-outline" then return WriteBarOutline(row, edit, "barOutlineLayer", value, reason) end
     return false
 end
 
@@ -1029,45 +899,23 @@ function Overview.SetStrataValue(row, value)
     local edit = row.edit
     local reason = "MSUF2_STRATA_OVERVIEW_EDIT"
 
-    if edit.kind == "aura-lane" then
-        local model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
-        if type(model) ~= "table" or type(model.WriteLaneStrata) ~= "function" then return false end
-        return RunLayerHistory(row, function()
-            model.WriteLaneStrata(edit.scope, edit.lane, value)
-            local apply = M.ApplyService
-            if apply and type(apply.RequestAuras) == "function" then apply.RequestAuras(edit.scope, reason) end
-            return true
-        end, "FrameStrata") ~= false
-    end
-
+    if edit.kind == "aura-lane" then return WriteAuraLane(row, edit, "WriteLaneStrata", value, reason, "FrameStrata") end
     if edit.kind == "aura-custom" or edit.kind == "aura-custom-frame" then
         return WriteCustomContainerField(row, edit, "strata", value, reason, "FrameStrata")
     end
-
-    if edit.kind == "group" then
-        return WriteGroupField(row, edit, value, reason, "FrameStrata")
-    end
-
-    if edit.kind == "bar-outline" then
-        return RunLayerHistory(row, function()
-            if not WriteBarOutlineScope(edit.scope, "barOutlineStrata", value) then return false end
-            if type(M.RequestGeneralDomains) == "function" then
-                M.RequestGeneralDomains(reason, {
-                    preview = true, applyAll = false, bars = true,
-                    barsScope = BarOutlineApplyScope(edit.scope),
-                })
-            end
-            return true
-        end, "FrameStrata") ~= false
-    end
+    if edit.kind == "group" then return WriteGroupField(row, edit, value, reason, "FrameStrata") end
+    if edit.kind == "bar-outline" then return WriteBarOutline(row, edit, "barOutlineStrata", value, reason, "FrameStrata") end
     return false
 end
 
 ExportPublic("MSUF_SetStrataOverviewValue", Overview.SetStrataValue)
 
-local function Color(name, fallback)
-    local colors = T.colors or {}
-    return colors[name] or fallback
+local FALLBACK_COLORS = {
+    success = { 0.30, 1.00, 0.62, 1 }, accent = { 0.42, 0.78, 1.00, 1 },
+    muted = { 0.62, 0.72, 0.86, 1 }, text = { 0.88, 0.94, 1.00, 1 },
+}
+local function Color(name)
+    return (T.colors or {})[name] or FALLBACK_COLORS[name]
 end
 
 local function SetFontColor(fontString, color, alpha)
@@ -1077,14 +925,15 @@ local function SetFontColor(fontString, color, alpha)
 end
 
 local function Font(parent, template, text, color, role)
-    local fs
-    if T.Font then
-        fs = T.Font(parent, template, text or "", color, role)
-    else
-        fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template))
-        fs:SetText(text or "")
-        SetFontColor(fs, color)
-    end
+    if T.Font then return T.Font(parent, template, text or "", color, role) end
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template))
+    fs:SetText(text or "")
+    SetFontColor(fs, color)
+    return fs
+end
+local function LeftFont(parent, template, text, color, role)
+    local fs = Font(parent, template, text, color, role)
+    fs:SetJustifyH("LEFT")
     return fs
 end
 
@@ -1202,7 +1051,7 @@ local function AcquireVisualRow(popup, index)
     bg:SetAllPoints()
     bg:SetColorTexture(0.04, 0.09, 0.16, 0.24)
     row._bg = bg
-    row._value = Font(row, "GameFontHighlightSmall", "", Color("success", { 0.30, 1.00, 0.62, 1 }), "control")
+    row._value = Font(row, "GameFontHighlightSmall", "", Color("success"), "control")
     row._value:SetJustifyH("CENTER")
     local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, row, "InputBoxTemplate"))
     edit:SetSize(38, 18)
@@ -1226,8 +1075,7 @@ local function AcquireVisualRow(popup, index)
         self:ClearFocus()
     end)
     row._valueEdit = edit
-    row._editTag = Font(row, "GameFontDisableSmall", Tr("EDIT"), Color("success", { 0.30, 1.00, 0.62, 1 }), "caption")
-    row._editTag:SetJustifyH("LEFT")
+    row._editTag = LeftFont(row, "GameFontDisableSmall", Tr("EDIT"), Color("success"), "caption")
 
     local strataEdit = PixelLayoutRegion(CreateFrame("Button", nil, row))
     strataEdit:SetHeight(18)
@@ -1240,24 +1088,23 @@ local function AcquireVisualRow(popup, index)
     strataBg:SetPoint("BOTTOMRIGHT", strataEdit, "BOTTOMRIGHT", -1, 1)
     strataBg:SetColorTexture(0.025, 0.070, 0.125, 0.98)
     strataEdit._edge = strataEdge
-    strataEdit._label = Font(strataEdit, "GameFontHighlightSmall", "", Color("accent", { 0.42, 0.78, 1.00, 1 }), "control")
+    strataEdit._label = LeftFont(strataEdit, "GameFontHighlightSmall", "", Color("accent"), "control")
     strataEdit._label:SetPoint("LEFT", strataEdit, "LEFT", 7, 0)
     strataEdit._label:SetPoint("RIGHT", strataEdit, "RIGHT", -18, 0)
-    strataEdit._label:SetJustifyH("LEFT")
-    strataEdit._chevron = Font(strataEdit, "GameFontHighlightSmall", "v", Color("accent", { 0.42, 0.78, 1.00, 1 }), "control")
+    strataEdit._chevron = Font(strataEdit, "GameFontHighlightSmall", "v", Color("accent"), "control")
     strataEdit._chevron:SetPoint("RIGHT", strataEdit, "RIGHT", -6, 1)
     strataEdit:SetScript("OnEnter", function(self)
         self._edge:SetColorTexture(0.30, 0.82, 1.00, 1)
-        if _G.GameTooltip then
-            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            _G.GameTooltip:SetText(Tr("Edit FrameStrata"))
-            _G.GameTooltip:AddLine(Tr("Click and choose the Blizzard layer."), 0.78, 0.88, 1.00, true)
-            _G.GameTooltip:Show()
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(Tr("Edit FrameStrata"))
+            GameTooltip:AddLine(Tr("Click and choose the Blizzard layer."), 0.78, 0.88, 1.00, true)
+            GameTooltip:Show()
         end
     end)
     strataEdit:SetScript("OnLeave", function(self)
         self._edge:SetColorTexture(0.18, 0.58, 0.92, 0.78)
-        if _G.GameTooltip then _G.GameTooltip:Hide() end
+        if GameTooltip then GameTooltip:Hide() end
     end)
     strataEdit:SetScript("OnClick", function(self)
         local owner = self._ownerRow
@@ -1269,38 +1116,46 @@ local function AcquireVisualRow(popup, index)
         end)
     end)
     row._strataEdit = strataEdit
-    row._area = Font(row, "GameFontDisableSmall", "", Color("muted", { 0.62, 0.72, 0.86, 1 }), "caption")
-    row._area:SetJustifyH("LEFT")
-    row._label = Font(row, "GameFontHighlightSmall", "", Color("text", { 0.88, 0.94, 1.00, 1 }), "control")
-    row._label:SetJustifyH("LEFT")
+    row._area = LeftFont(row, "GameFontDisableSmall", "", Color("muted"), "caption")
+    row._label = LeftFont(row, "GameFontHighlightSmall", "", Color("text"), "control")
     if row._label.SetWordWrap then row._label:SetWordWrap(false) end
     popup._rows[index] = row
     return row
 end
 
-local function ConfigureSectionRow(row, text, y, width)
+--- Anchors a pooled row at offset y of its parent and tags its type.
+local function PlaceRow(row, y, width, height, rowType)
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 0, -y)
-    row:SetSize(width, 28)
-    row._rowType = "section"
+    row:SetSize(width, height)
+    row._rowType = rowType
+end
+
+--- Turns a pooled row into a one-label strip (section heading or "more" toggle).
+local function SetLabelOnlyRow(row, text, inset, justify, color)
     row._data = nil
-    row:EnableMouse(false)
-    row:SetScript("OnMouseDown", nil)
-    row:SetScript("OnEnter", nil)
-    row:SetScript("OnLeave", nil)
-    row._bg:SetColorTexture(0.05, 0.20, 0.32, 0.28)
     row._value:Hide()
     row._valueEdit:Hide()
     row._editTag:Hide()
     row._strataEdit:Hide()
     row._area:Hide()
     row._label:ClearAllPoints()
-    row._label:SetPoint("LEFT", row, "LEFT", 8, 0)
-    row._label:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    row._label:SetJustifyH("LEFT")
+    row._label:SetPoint("LEFT", row, "LEFT", inset, 0)
+    row._label:SetPoint("RIGHT", row, "RIGHT", -inset, 0)
+    row._label:SetJustifyH(justify)
     row._label:SetText(text)
-    SetFontColor(row._label, Color("accent", { 0.42, 0.78, 1.00, 1 }))
+    SetFontColor(row._label, color)
     row._label:Show()
+end
+
+local function ConfigureSectionRow(row, text, y, width)
+    PlaceRow(row, y, width, 28, "section")
+    row:EnableMouse(false)
+    row:SetScript("OnMouseDown", nil)
+    row:SetScript("OnEnter", nil)
+    row:SetScript("OnLeave", nil)
+    row._bg:SetColorTexture(0.05, 0.20, 0.32, 0.28)
+    SetLabelOnlyRow(row, text, 8, "LEFT", Color("accent"))
     row:Show()
 end
 
@@ -1337,10 +1192,7 @@ local function LayoutDataRow(row, width, strataMode)
 end
 
 local function ConfigureDataRow(row, data, y, width, alternate, strataMode)
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 0, -y)
-    row:SetSize(width, 22)
-    row._rowType = "data"
+    PlaceRow(row, y, width, 22, "data")
     row._strataMode = strataMode and true or false
     row._data = data
     row:EnableMouse(false)
@@ -1373,7 +1225,7 @@ local function ConfigureDataRow(row, data, y, width, alternate, strataMode)
             row._valueEdit:SetMaxLetters(data.edit.kind == "external" and 4 or 2)
             row._valueEdit:SetText(data.automatic and "Auto" or tostring(data.layer))
             if row._valueEdit.SetTextColor then
-                local c = Color("success", { 0.30, 1.00, 0.62, 1 })
+                local c = Color("success")
                 row._valueEdit:SetTextColor(c[1], c[2], c[3], data.enabled and 1 or 0.62)
             end
             row._valueEdit:Show()
@@ -1389,33 +1241,18 @@ local function ConfigureDataRow(row, data, y, width, alternate, strataMode)
     row._area:SetText(areaText)
     row._label:SetText(data.enabled and Tr(data.label) or M.Format("%s (off)", Tr(data.label)))
     local alpha = data.enabled and 1 or 0.48
-    SetFontColor(row._value, strataMode and Color("accent", { 0.42, 0.78, 1.00, 1 }) or Color("success", { 0.30, 1.00, 0.62, 1 }), alpha)
-    SetFontColor(row._area, Color("muted", { 0.62, 0.72, 0.86, 1 }), alpha)
-    SetFontColor(row._label, Color("text", { 0.88, 0.94, 1.00, 1 }), alpha)
+    SetFontColor(row._value, Color(strataMode and "accent" or "success"), alpha)
+    SetFontColor(row._area, Color("muted"), alpha)
+    SetFontColor(row._label, Color("text"), alpha)
     row._area:Show()
     row._label:Show()
     row:Show()
 end
 
 local function ConfigureMoreRow(row, text, y, width, popup)
-    row:ClearAllPoints()
-    row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 0, -y)
-    row:SetSize(width, 30)
-    row._rowType = "more"
-    row._data = nil
+    PlaceRow(row, y, width, 30, "more")
     row._bg:SetColorTexture(0.04, 0.24, 0.20, 0.34)
-    row._value:Hide()
-    row._valueEdit:Hide()
-    row._editTag:Hide()
-    row._strataEdit:Hide()
-    row._area:Hide()
-    row._label:ClearAllPoints()
-    row._label:SetPoint("LEFT", row, "LEFT", 10, 0)
-    row._label:SetPoint("RIGHT", row, "RIGHT", -10, 0)
-    row._label:SetJustifyH("CENTER")
-    row._label:SetText(text)
-    SetFontColor(row._label, Color("success", { 0.30, 1.00, 0.62, 1 }))
-    row._label:Show()
+    SetLabelOnlyRow(row, text, 10, "CENTER", Color("success"))
     row:EnableMouse(true)
     row:SetScript("OnMouseDown", function(_, button)
         if button ~= "LeftButton" then return end
@@ -1530,7 +1367,7 @@ local function CreatePopup()
     if type(M.CreateMenuPopupPanel) == "function" then
         popup = M.CreateMenuPopupPanel(UIParent, { name = "MSUF2LayerOverview", glass = "popup" })
     else
-        popup = PixelLayoutRegion(CreateFrame("Frame", "MSUF2LayerOverview", UIParent, _G.BackdropTemplateMixin and "BackdropTemplate" or nil))
+        popup = PixelLayoutRegion(CreateFrame("Frame", "MSUF2LayerOverview", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil))
         if popup.SetBackdrop then
             PixelLayoutRegion(popup, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
             popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
@@ -1547,9 +1384,8 @@ local function CreatePopup()
     ApplyPopupResizeBounds(popup)
     popup:Hide()
 
-    popup._title = Font(popup, "GameFontNormal", Tr("Layer Overview"), Color("accent", { 0.42, 0.78, 1.00, 1 }), "title")
+    popup._title = LeftFont(popup, "GameFontNormal", Tr("Layer Overview"), Color("accent"), "title")
     popup._title:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -12)
-    popup._title:SetJustifyH("LEFT")
 
     local search = PixelLayoutRegion(CreateFrame("EditBox", nil, popup, "InputBoxTemplate"))
     search:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -46, -10)
@@ -1568,25 +1404,23 @@ local function CreatePopup()
     placeholder:SetPoint("RIGHT", search, "RIGHT", -6, 0)
     placeholder:SetJustifyH("LEFT")
     placeholder:SetText(Tr("Search layers..."))
-    SetFontColor(placeholder, Color("muted", { 0.62, 0.72, 0.86, 1 }), 0.80)
+    SetFontColor(placeholder, Color("muted"), 0.80)
     popup._search = search
     popup._searchPlaceholder = placeholder
     popup._title:SetPoint("RIGHT", search, "LEFT", -10, 0)
 
-    popup._count = Font(popup, "GameFontDisableSmall", "", Color("muted", { 0.62, 0.72, 0.86, 1 }), "caption")
+    popup._count = LeftFont(popup, "GameFontDisableSmall", "", Color("muted"), "caption")
     popup._count:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -35)
     popup._count:SetPoint("RIGHT", popup, "RIGHT", -14, 0)
-    popup._count:SetJustifyH("LEFT")
     local hintBG = PixelLayoutRegion(popup:CreateTexture(nil, "BACKGROUND"))
     hintBG:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, -52)
     hintBG:SetPoint("BOTTOMRIGHT", popup, "TOPRIGHT", -10, -86)
     hintBG:SetColorTexture(0.025, 0.22, 0.16, 0.46)
     popup._hintBG = hintBG
-    popup._hint = Font(popup, "GameFontHighlightSmall", Tr("EDITABLE: click a green Layer number, type 0-30, press Enter."),
-        Color("success", { 0.30, 1.00, 0.62, 1 }), "control")
+    popup._hint = LeftFont(popup, "GameFontHighlightSmall", Tr("EDITABLE: click a green Layer number, type 0-30, press Enter."),
+        Color("success"), "control")
     popup._hint:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -58)
     popup._hint:SetPoint("RIGHT", popup, "RIGHT", -14, 0)
-    popup._hint:SetJustifyH("LEFT")
 
     local close = T.CloseButton and T.CloseButton(popup) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -8, -8)

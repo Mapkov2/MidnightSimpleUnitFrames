@@ -9,10 +9,14 @@ assert(validateKind == "function", "MSUF: missing required dependency 'UF.Previe
 Preview.Validate("UnitFrames/Engine/MSUF_UF_PreviewFamilies.lua")
 local state = Preview.State
 local ExportPublic = MSUF.ExportPublic
+local PublicGlobals = MSUF.PublicGlobals
 local UnitExistsPlain = MSUF.Secrets.UnitExistsPlain
-local InCombatLockdown, UnitAffectingCombat = _G.InCombatLockdown, _G.UnitAffectingCombat
+local InCombatLockdown, UnitAffectingCombat = InCombatLockdown, UnitAffectingCombat
 local type, tonumber = type, tonumber
 local FILE = "UnitFrames/Engine/MSUF_UF_PreviewFamilies.lua"
+-- The health element loads before this file; Edit Mode's controller loads before every element.
+local RefreshHealthBarColor = MSUF.Require("MSUF_UFCore_RefreshHealthBarColor", FILE)
+local EditModeController = MSUF.Optional("MSUF_EM2")
 local REFRESH_ELEMENTS = { "Health", "Power", "Prediction", "Text", "NameText", "HealthText", "PowerText", "Portrait", "Borders" }
 local ALPHA_ELEMENTS = { "Alpha" }
 local BOSS_PREVIEW_ABSORB = 125000
@@ -24,7 +28,7 @@ assert(refreshKind == "function", "MSUF: missing required dependency 'LoadCondit
 local function BossPreviewCombatLocked()
   return (InCombatLockdown and InCombatLockdown())
     or (UnitAffectingCombat and UnitAffectingCombat("player"))
-    or _G.MSUF_InCombat == true
+    or PublicGlobals.MSUF_InCombat == true
 end
 
 local function SetShown(frame, shown)
@@ -52,7 +56,7 @@ local ARENA_PREVIEW_CLASS_FALLBACK_COLORS = {
 local ARENA_PREVIEW_HP_PERCENT = { 65, 45, 80, 55, 90 }
 
 local function ArenaPreviewClassColor(classToken)
-  local getColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+  local getColor = C_ClassColor and C_ClassColor.GetClassColor
   if type(getColor) == "function" and classToken then
     local color = getColor(classToken)
     if color and color.r then
@@ -263,14 +267,10 @@ local function BuildClearFrame(forcedKey, handoffReason, boss)
       -- temporary in-range handoff so its next real boss result is never skipped.
       frame._msufRangeInRange = nil
       frame._msufRangeMulApplied = nil
-      local applyRange = UF.ApplyRangeModifier or _G.MSUF_UF_ApplyRangeModifier
-      if type(applyRange) == "function" then
-        applyRange(frame, 1, true)
-      end
-      local unit = frame.MSUFUnitKey
-      local refreshColor = _G.MSUF_UFCore_RefreshHealthBarColor
-      if UnitExistsPlain(unit) == true and type(refreshColor) == "function" then
-        refreshColor(frame, handoffReason)
+      local applyRange = UF.ApplyRangeModifier or MSUF.Require("MSUF_UF_ApplyRangeModifier", FILE)
+      applyRange(frame, 1, true)
+      if UnitExistsPlain(frame.MSUFUnitKey) == true then
+        RefreshHealthBarColor(frame, handoffReason)
       end
     end
     return true
@@ -280,10 +280,8 @@ local ClearBossPreviewFrameForRuntime = BuildClearFrame("_msufBossPreviewForced"
 local ClearArenaPreviewFrameForRuntime = BuildClearFrame("_msufArenaPreviewForced", "MSUF_ARENA_PREVIEW_HANDOFF", false)
 
 local function RequestBossRangeRefresh()
-  local refresh = (UF.Range and UF.Range.Refresh) or _G.MSUF_UF_RangeFade_Refresh
-  if type(refresh) == "function" then
-    refresh()
-  end
+  local refresh = (UF.Range and UF.Range.Refresh) or MSUF.Require("MSUF_UF_RangeFade_Refresh", FILE)
+  refresh()
 end
 
 local function ArenaPreviewPercent(unit)
@@ -307,7 +305,7 @@ local function ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classTok
     return
   end
   if frame.nameText then
-    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    local names = LOCALIZED_CLASS_NAMES_MALE
     local label = (type(names) == "table" and names[classToken]) or MSUF.Translate("Arena Preview")
     frame.nameText:SetText(label)
     SetShown(frame.nameText, true)
@@ -351,7 +349,7 @@ local function ApplyArenaPreviewFrameData(frame, index)
     state.isPlayer = true
     state.isPlayerKnown = true
     state.identityClassRead = true
-    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    local names = LOCALIZED_CLASS_NAMES_MALE
     state.className = (type(names) == "table" and names[classToken]) or classToken
     state.classToken = classToken
   end
@@ -368,7 +366,7 @@ end
 local function BuildFrameOperations(kind, forcedKey, paint, clear, trinkets)
   local units = { kind .. "1", kind .. "2", kind .. "3", kind .. "4", kind .. "5" }
   -- The client publishes its fixed supported slot count before elements load.
-  local count = kind == "boss" and 5 or (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)
+  local count = kind == "boss" and 5 or (tonumber(MSUF.Client.MaxArenaOpponents) or 3)
   local function ApplyFrames(active)
     local cleared = false
     local frames = UF.frames
@@ -385,7 +383,7 @@ local function BuildFrameOperations(kind, forcedKey, paint, clear, trinkets)
       end
     end
     if cleared then RequestBossRangeRefresh() end
-    if trinkets then MSUF.Require("MSUF_ArenaTrinkets_SyncPreview", FILE)() end
+    if trinkets then MSUF.Require("SyncPreview", FILE, MSUF.ArenaTrinkets)() end
   end
   local function ReapplyAlpha(reason)
     local frames = UF.frames
@@ -411,7 +409,7 @@ local function BuildFrameOperations(kind, forcedKey, paint, clear, trinkets)
   -- An unsupported family has no frame work. Keep its forward trinket
   -- collaborator and alpha refresh, without entering empty frame loops.
   if count == 0 then
-    ApplyFrames = function() MSUF.Require("MSUF_ArenaTrinkets_SyncPreview", FILE)() end
+    ApplyFrames = function() MSUF.Require("SyncPreview", FILE, MSUF.ArenaTrinkets)() end
     ReapplyAlpha = function(reason) return UF.RefreshElements(kind, ALPHA_ELEMENTS, reason) end
     FramesReady = function() return false end
   end
@@ -438,7 +436,7 @@ local function BuildLifecycle(kind, prefix, castbar, paint, clear, forcedKey)
     if cleared then
       cleanupPending = true
       RequestBossRangeRefresh()
-      if trinkets then MSUF.Require("MSUF_ArenaTrinkets_SyncPreview", FILE)() end
+      if trinkets then MSUF.Require("SyncPreview", FILE, MSUF.ArenaTrinkets)() end
     end
     return cleared
   end
@@ -466,7 +464,7 @@ local function BuildLifecycle(kind, prefix, castbar, paint, clear, forcedKey)
     reapplyAlpha(refreshReason)
     MSUF.MSUF_Auras3.RequestScope(kind, baseReason)
     MSUF.Require(castbar, FILE)()
-    local em2 = _G.MSUF_EM2
+    local em2 = EditModeController
     if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then em2.Movers.SyncAll() end
     appliedActive = active
     cleanupPending = nil

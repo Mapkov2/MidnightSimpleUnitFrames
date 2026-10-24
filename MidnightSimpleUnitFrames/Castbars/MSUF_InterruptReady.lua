@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Optional interrupt-readiness indicator for target, focus, and boss castbars.
 ---
 --- This module answers two questions: "is any of my interrupts ready?" and
@@ -22,16 +21,17 @@ local Publish = PublicAPI.Publish
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 local IS_CLASSIC = MSUF.Client ~= nil and MSUF.Client.IsClassic == true
 
-local SpellAPI = _G.C_Spell
-local GetTime = _G.GetTime
-local TimerAPI = _G.C_Timer
--- Kernel/MSUF_Scheduler.lua loads first in every TOC.
+local SpellAPI = C_Spell
+local GetTime = GetTime
+local TimerAPI = C_Timer
+-- Kernel/MSUF_Scheduler.lua and Kernel/MSUF_Util.lua load first in every TOC.
 local Scheduler = MSUF.Scheduler
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Castbars/MSUF_InterruptReady.lua")
 -- Castbars/MSUF_CastbarUtils.lua (loaded first) owns which castbar units the
 -- indicator covers and which setting shows it there.
 local KickReadyUnits = MSUF.Castbars.KickReadyUnits
 local KICK_READY_ROW, KICK_READY_SHOW_KEY = KickReadyUnits.Row, KickReadyUnits.ShowKey
-local CurveAPI = _G.C_CurveUtil
+local CurveAPI = C_CurveUtil
 local EvaluateColorValueFromBoolean = CurveAPI and CurveAPI.EvaluateColorValueFromBoolean
 local EvaluateColorFromBoolean = CurveAPI and CurveAPI.EvaluateColorFromBoolean
 
@@ -163,7 +163,7 @@ local function GeneralDB()
     return (db and db.general) or {}
 end
 
-local plainIsSecret = _G.issecretvalue
+local plainIsSecret = issecretvalue
 local plainHuge = math.huge
 
 local function HasKnownValue(value)
@@ -211,9 +211,9 @@ end
 
 -- Modern specialization APIs work even with deprecation shims disabled.
 local function ActiveSpecID()
-    local specInfo = _G.C_SpecializationInfo
-    local getSpecialization = (specInfo and specInfo.GetSpecialization) or _G.GetSpecialization
-    local getSpecializationInfo = (specInfo and specInfo.GetSpecializationInfo) or _G.GetSpecializationInfo
+    local specInfo = C_SpecializationInfo
+    local getSpecialization = (specInfo and specInfo.GetSpecialization) or GetSpecialization
+    local getSpecializationInfo = (specInfo and specInfo.GetSpecializationInfo) or GetSpecializationInfo
     if type(getSpecialization) ~= "function" or type(getSpecializationInfo) ~= "function" then
         return nil
     end
@@ -232,10 +232,10 @@ end
 -- for its spec-filtered interrupt list; the book also holds off-spec spells.
 local function KnowsInterrupt(spellID, pet, overrides)
     if not spellID then return false end
-    local book = _G.C_SpellBook
+    local book = C_SpellBook
     local known = book and (book.IsSpellKnown or book.IsSpellKnownOrInSpellBook)
     if known then
-        local enums = _G.Enum
+        local enums = Enum
         local banks = enums and enums.SpellBookSpellBank
         if pet and not (banks and banks.Pet) then return false end
         if known(spellID, pet and banks.Pet or nil) == true then return true end
@@ -245,9 +245,9 @@ local function KnowsInterrupt(spellID, pet, overrides)
         end
         return false
     end
-    local legacy = _G.IsSpellKnown
+    local legacy = IsSpellKnown
     if legacy then return legacy(spellID, pet == true) == true end
-    local playerSpell = _G.IsPlayerSpell
+    local playerSpell = IsPlayerSpell
     return not pet and playerSpell ~= nil and playerSpell(spellID) == true
 end
 
@@ -259,7 +259,7 @@ local function InterruptAvailable(spellID, classToken, specKeyed)
     -- action buttons do with IsSpellUsable's insufficientPower result.
     local formRestricted = spellID == 16979 or spellID == 106839
         or (SHARED_COOLDOWN_SPELLS and classToken == "WARRIOR")
-    local usable = SpellAPI and SpellAPI.IsSpellUsable or _G.IsUsableSpell
+    local usable = SpellAPI and SpellAPI.IsSpellUsable or IsUsableSpell
     if formRestricted and type(usable) == "function" then
         local canUse, insufficientPower = usable(spellID)
         if not plainIsSecret(canUse) and not plainIsSecret(insufficientPower) then
@@ -635,9 +635,9 @@ local function ReadyColors(general)
     state.readyR, state.readyG, state.readyB, state.readyA = readyR, readyG, readyB, readyA
     state.notReadyR, state.notReadyG, state.notReadyB, state.notReadyA = notReadyR, notReadyG, notReadyB, notReadyA
 
-    if _G.CreateColor then
-        state.readyColor = _G.CreateColor(readyR, readyG, readyB, readyA)
-        state.notReadyColor = _G.CreateColor(notReadyR, notReadyG, notReadyB, notReadyA)
+    if CreateColor then
+        state.readyColor = CreateColor(readyR, readyG, readyB, readyA)
+        state.notReadyColor = CreateColor(notReadyR, notReadyG, notReadyB, notReadyA)
         return state.readyColor, state.notReadyColor
     end
 
@@ -836,8 +836,8 @@ local function ResolveRawNotInterruptible(frame, castState)
 end
 
 local function NotInterruptibleColor()
-    if not state.notInterruptibleColor and _G.CreateColor then
-        state.notInterruptibleColor = _G.CreateColor(0.6, 0.6, 0.6, 1)
+    if not state.notInterruptibleColor and CreateColor then
+        state.notInterruptibleColor = CreateColor(0.6, 0.6, 0.6, 1)
     end
 
     return state.notInterruptibleColor
@@ -1025,7 +1025,7 @@ local function EnsureProjection(frame, list, index)
     if projection then return projection end
     local statusBar = frame.statusBar
     -- An invisible native bar locates the cooldown end on the cast interval.
-    projection = PixelLayoutRegion(_G.CreateFrame("StatusBar", nil, statusBar))
+    projection = PixelLayoutRegion(CreateFrame("StatusBar", nil, statusBar))
     projection:SetAllPoints(statusBar)
     projection:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
     projection:SetStatusBarColor(0, 0, 0, 0)
@@ -1466,7 +1466,7 @@ local function EnsureCooldownWakeFrame(slot)
         return slot.wakeFrame
     end
 
-    local frame = PixelLayoutRegion(_G.CreateFrame("Cooldown", nil, eventFrame or _G.UIParent))
+    local frame = PixelLayoutRegion(CreateFrame("Cooldown", nil, eventFrame or UIParent))
     if not (frame and frame.SetCooldownFromDurationObject and frame.SetScript) then
         cooldownWakeUnsupported = true
         return nil

@@ -99,7 +99,10 @@ function Frame:SetSize(width, height) self._w, self._h = width, height end
 function Frame:GetRect() return nil end
 function Frame:GetCenter() return 0, 0 end
 function Frame:GetEffectiveScale() return 1 end
-function Frame:SetScript(script, handler) self._scripts[script] = handler end
+function Frame:SetScript(script, handler)
+    self._scriptWrites = (self._scriptWrites or 0) + 1
+    self._scripts[script] = handler
+end
 function Frame:GetScript(script) return self._scripts[script] end
 function Frame:RegisterEvent(event) self._events[event] = true end
 function Frame:UnregisterEvent(event) self._events[event] = nil end
@@ -114,7 +117,7 @@ end
 local function NewWorld(sghSource, conf, liveKind, mythic)
     local env = setmetatable({}, { __index = _G })
     env._G = env
-    local world = { env = env, conf = conf, roster = {}, combat = false }
+    local world = { env = env, conf = conf, roster = {}, combat = false, frames = {}, wraps = {} }
     env.InCombatLockdown = function() return world.combat end
     env.issecretvalue = function() return false end
     env.scrub = function(...) return ... end
@@ -130,9 +133,24 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
     local function NewFrame(name, parent)
         local frame = setmetatable({ _attr = {}, _events = {}, _scripts = {}, _children = {}, _env = env, _shown = false,
             _name = name, _parent = parent, _w = 0, _h = 0 }, Frame)
+        world.frames[#world.frames + 1] = frame
         if parent then parent._children[#parent._children + 1] = frame end
         if name then env[name] = frame end
         return frame
+    end
+    -- Restricted prebody execution and retained original script only. No fake
+    -- "tainted" flag: a real WoW combat/taint test remains separate evidence.
+    env.SecureHandlerWrapScript = function(frame, script, owner, prebody, postbody)
+        Check(not world.combat and script == "OnShow" and postbody == nil, "unexpected secure wrapper")
+        local original = frame:GetScript(script)
+        local pre = assert(loadstring(prebody, "=SecureHandlerWrapScript.OnShow"))
+        setfenv(pre, { self = frame })
+        local wrapper = function(self, ...)
+            if pre() == false then return end
+            if original then return original(self, ...) end
+        end
+        frame._scripts[script] = wrapper
+        world.wraps[frame] = { original = original, wrapper = wrapper, owner = owner }
     end
     env.CreateFrame = function(frameType, name, parent, template)
         local frame = NewFrame(name, parent)
@@ -196,22 +214,30 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
     end
     MSUF.GF = GF
     MSUF.UF = { IsUnitToken = function(unit) return type(unit) == "string" and unit ~= "" end }
-    local provided = {
-        MSUF_PixelLayoutRegion = function(region) return region end,
-        MSUF_SetRoundLayoutToNearestPixel = Noop,
-    }
-    MSUF.Require = function(name) return provided[name] end
-    env.MSUF_UF_PointFraction = function() return 0, 1 end
-    env.MSUF_UF_ClampBoxAxis = function() return 0 end
+    -- The shipped Kernel API (export policy, registry, Require) in this client's globals.
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.InstallKernel(root, MSUF, env, loadfile)
+    MSUF.ExportPublic("MSUF_PixelLayoutRegion", function(region) return region end)
+    MSUF.ExportPublic("MSUF_SetRoundLayoutToNearestPixel", Noop)
+    -- The real shared anchor helpers (point fractions, on-screen clamp) the headers bind when they load.
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua", MSUF, env)
+    local function Defer(path)
+        local file = assert(io.open(path, "rb"))
+        RequireFixture.DeferRequired(MSUF, file:read("*a"), path, env)
+        file:close()
+    end
 
     if sghSource then
         local sgh = assert(loadstring(sghSource, "=SecureGroupHeaders.lua"))
         setfenv(sgh, env)
         sgh()
     end
-    local controller = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"))
+    local CONTROLLER = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_HeaderController.lua"
+    Defer(CONTROLLER)
+    local controller = assert(loadfile(CONTROLLER))
     setfenv(controller, env)
     controller("MidnightSimpleUnitFrames", MSUF)
+    Defer(HEADERS)
     local headers = assert(loadfile(HEADERS))
     setfenv(headers, env)
     headers("MidnightSimpleUnitFrames", MSUF)
@@ -224,10 +250,12 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
     end
     function world:Event(header, event, unit)
         -- Only roster changes use the absent Runtime event-frame input. Name
-        -- changes must reach the actual temporary header OnEvent and provider.
+        -- changes reach the real shared observer through ordinary dispatch.
         if self.combat and event == "GROUP_ROSTER_UPDATE" then GF.DeferGroupRuntime("roster", "raid") end
-        local onEvent = header:GetScript("OnEvent")
-        if header._events[event] and onEvent then onEvent(header, event, unit) end
+        for _, frame in ipairs(self.frames) do
+            local onEvent = frame:GetScript("OnEvent")
+            if frame._events[event] and onEvent then onEvent(frame, event, unit) end
+        end
     end
     -- Roster names with a shown frame on `header`.
     function world:Shown(header, out)
@@ -278,7 +306,14 @@ local function CombatJoin(label, sghSource, mode)
         Check(Missing(world, shown) == "", label .. ": out of combat, no frame for " .. Missing(world, shown))
     end
 
-    if sghSource then world.GF.SetRaidRosterFrozen(true) end
+    local nativeEvent, nativeShow, scriptWrites = header:GetScript("OnEvent"), header:GetScript("OnShow"), header._scriptWrites
+    if sghSource then
+        world.GF.SetRaidRosterFrozen(true)
+        Check(header._scriptWrites == scriptWrites and header:GetScript("OnEvent") == nativeEvent
+            and header:GetScript("OnShow") == nativeShow, label .. ": freeze replaced a native header handler")
+        Check(not header._events.UNIT_NAME_UPDATE and not header._events.GROUP_ROSTER_UPDATE,
+            label .. ": native combat events remain registered")
+    end
     -- Lockdown: native events must not birth, resize or reorder raid slots.
     world.combat = true
     Add(world.roster, "Joiner", 1, "HEALER", "PRIEST")
@@ -301,6 +336,8 @@ local function CombatJoin(label, sghSource, mode)
         world.GF.SetupHeader("raid", "raid")
         local shown = world:Shown(header)
         Check(Missing(world, shown) == "", label .. ": regen missed " .. Missing(world, shown))
+        Check(header._scriptWrites == scriptWrites and header:GetScript("OnEvent") == nativeEvent
+            and header:GetScript("OnShow") == nativeShow, label .. ": regen replaced a native header handler")
     end
 
     -- The configured cap still binds: two columns of five show ten of eleven.

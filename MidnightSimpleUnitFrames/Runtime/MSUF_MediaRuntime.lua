@@ -9,8 +9,8 @@ local EnsureDBProvider = MSUF.Require("MSUF_EnsureDB", FILE)
 local SharedMedia = MSUF.Require("MSUF_GetSharedMedia", FILE)
 local lsm = MSUF.LSM
 local function EnsureDB()
-    local db = MSUF.Optional("MSUF_DB")
-    if not db then EnsureDBProvider() db = MSUF.Require("MSUF_DB", FILE) end
+    local db = MSUF_DB
+    if not db then EnsureDBProvider() db = MSUF_DB end
     db.general = db.general or {}
     return db
 end

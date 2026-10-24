@@ -38,11 +38,6 @@ _G.CreateFrame = function(_, _, parent) local f = NewRegion("frame"); f._parent 
 local registeredModule
 local frames = {}
 local MSUF = {
-  ExportPublic = function(name, value) _G[name] = value end,
-  Require = function(name)
-    if name == "MSUF_GetBarOutlineColor" then return function() return 0, 0, 0 end end
-    return function() end
-  end,
   MSUF_RegisterModule = function(_, mod) registeredModule = mod end,
   UF = {
     ForEachFrame = function(fn) for _, f in ipairs(frames) do fn(f) end end,
@@ -55,9 +50,24 @@ local MSUF = {
 }
 _G.MSUF_DB = { bars = { roundedFramesEnabled = true }, target = {}, general = {} }
 
-assert(loadfile(ROOT .. "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)
-assert(loadfile(ROOT .. "UnitFrames/Effects/MSUF_UF_RoundedSurface.lua"))("MidnightSimpleUnitFrames", MSUF)
-assert(loadfile(ROOT .. "UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"))("MidnightSimpleUnitFrames", MSUF)
+-- The real Kernel API (Bootstrap's exports and registry, Require/Optional) is installed into the
+-- namespace; providers the files require that this probe does not load are deferred and raise when
+-- used. The outline colour is the bar styling's (Runtime/MSUF_BarBackgroundRuntime.lua); the pixel
+-- regions are the core's (Kernel/MSUF_Util.lua), and these stub regions lay out no pixels.
+local REPO = assert(arg[1])
+local RequireFixture = assert(loadfile(REPO .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.InstallKernel(REPO, MSUF)
+MSUF.ExportPublic("MSUF_GetBarOutlineColor", function() return 0, 0, 0 end)
+local Standins = assert(loadfile(REPO .. "/tools/tests/classpower_collaborators.lua"))().STANDINS
+MSUF.ExportPublic("MSUF_PixelLayoutRegion", Standins.MSUF_PixelLayoutRegion)
+-- State/MSUF_Defaults.lua owns the profile; this probe's MSUF_DB above is the session's profile.
+MSUF.ExportPublic("MSUF_EnsureDB", Standins.MSUF_EnsureDB)
+-- ClassPower (not loaded here) owns the rounded class resource surface; this probe has none.
+MSUF.ExportPublic("MSUF_ClassPower_ApplyRoundedSurface", function() end)
+for _, relative in ipairs({ "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua", "UnitFrames/Effects/MSUF_UF_RoundedSurface.lua",
+    "UnitFrames/Effects/MSUF_UF_RoundedFrames.lua" }) do
+  RequireFixture.LoadShipped(REPO, "MidnightSimpleUnitFrames/" .. relative, MSUF)
+end
 assert(registeredModule, "module not registered")
 registeredModule.Enable()
 

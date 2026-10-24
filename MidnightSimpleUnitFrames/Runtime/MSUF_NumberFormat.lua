@@ -19,7 +19,6 @@
 --- formatting never moves to the Lua side.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local NF = MSUF.NumberFormat or {}
 MSUF.NumberFormat = NF
@@ -72,7 +71,7 @@ local type = type
 local tostring = tostring
 
 local function Abbreviator()
-    local fn = _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
+    local fn = AbbreviateNumbers or AbbreviateLargeNumbers or ShortenNumber
     return type(fn) == "function" and fn or nil
 end
 
@@ -128,7 +127,7 @@ function NF.GetOptions()
 end
 
 local function StyleFromDB()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local general = type(db) == "table" and db.general or nil
     if type(general) ~= "table" then return STYLE_GAME end
     return general.numberAbbrevStyle == STYLE_COMPACT and STYLE_COMPACT or STYLE_GAME

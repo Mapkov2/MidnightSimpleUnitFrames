@@ -97,7 +97,7 @@ party.centerSolo = false
 ---------------------------------------------------------------------------
 inRaid, inGroup, members = false, false, 0
 GF.InvalidateLayoutRoster()
-env.MSUF2_GFPagePreviewActive = true
+world.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 GF.ShowPreview("raid", 40, { immediate = true })
 local container = assert(GF._previewContainer and GF._previewContainer.raid, "raid preview container missing")
 local _, _, _, px, py = container:GetPoint()
@@ -105,7 +105,7 @@ assert(px == -333 and py == 44, "a 40-member preview ignored the 26-40 tier posi
 local first = assert(GF._previewFrames.raid and GF._previewFrames.raid[1], "no preview frame")
 assert(first:GetWidth() == 60 and first:GetHeight() == 21, "a 40-member preview frame ignored the tier size")
 GF.HidePreview("raid")
-env.MSUF2_GFPagePreviewActive = nil
+world.core.ExportPublic("MSUF2_GFPagePreviewActive", nil)
 
 ---------------------------------------------------------------------------
 -- Edit Mode: nudges, resets and drags write the shown tier's own keys
@@ -139,7 +139,7 @@ for _, name in ipairs({ "EnableKeyboard", "SetAutoFocus", "SetNumeric", "SetMaxL
     "SetPushedTexture" }) do
     world.widgets.Methods[name] = world.widgets.Methods[name] or function() end
 end
-env.MSUF_EM2_ShowGFPopup("raid")
+world.core.PublicGlobals.MSUF_EM2_ShowGFPopup("raid")
 local popup
 for _, frame in ipairs(world.widgets.frames) do
     if frame:GetName() == "MSUF_EM2_GFPopup_raid" then popup = frame end
@@ -153,7 +153,7 @@ popup.wBox:SetText("70")
 popup.wBox:GetScript("OnEnterPressed")(popup.wBox)
 assert(raid.tier40Width == 70 and raid.width == baseWidth, "the popup wrote the base width behind the shown tier")
 assert(raid.offsetX == -500 and raid.offsetY == 0, "a popup apply moved the base offsets behind the shown tier")
-env.MSUF_EM2_HideGFPopup("raid")
+world.core.PublicGlobals.MSUF_EM2_HideGFPopup("raid")
 assert(env.MSUF_GF_EM2_ResetPosition("raid"), "raid reset rejected")
 assert(raid.offsetX == -500 and raid.offsetY == 0 and raid.tier40X ~= -330, "reset rewrote the base offsets")
 -- Unit-frame re-applies queued by the exit are outside this harness.

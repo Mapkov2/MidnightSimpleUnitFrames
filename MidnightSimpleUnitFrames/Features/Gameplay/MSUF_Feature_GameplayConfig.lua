@@ -1,5 +1,6 @@
 local _, MSUF = ...
-MSUF = MSUF or {}
+local FILE = "Features/Gameplay/MSUF_Feature_GameplayConfig.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
 
 -- Gameplay configuration defaults.
 -- Initializes and clamps DB fields for optional gameplay features. Runtime modules consume
@@ -7,7 +8,7 @@ MSUF = MSUF or {}
 local type, rawget, tonumber = type, rawget, tonumber
 local LibStub = LibStub
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-local ResolveFontPath = _G.MSUF_ResolveFontPath
+local ResolveFontPath = Require("MSUF_ResolveFontPath", FILE)
 
 local Tr = MSUF.Translate
 
@@ -46,20 +47,23 @@ local function EnsureGameplayDefaults()
     -- State/MSUF_Profiles.lua and State/MSUF_Defaults.lua load ahead of this
     -- file. The lifecycle already bound the real client at ADDON_LOADED;
     -- standalone fixtures resolve their State providers at use.
+    local db = MSUF_DB
     if (not MSUF.Lifecycle or not MSUF.Lifecycle.Bound)
-        and (type(MSUF_DB) ~= "table" or type(_G.MSUF_ActiveProfile) ~= "string") then
-        MSUF.Require("MSUF_InitProfiles", "Features/Gameplay/MSUF_Feature_GameplayConfig.lua")()
+        and (type(db) ~= "table" or type(MSUF_ActiveProfile) ~= "string") then
+        Require("MSUF_InitProfiles", FILE)()
+        db = MSUF_DB
     end
-    if type(MSUF_DB) ~= "table" then
+    if type(db) ~= "table" then
         -- Run the Defaults bootstrap instead of assigning a bare table here: a
         -- hand-rolled MSUF_DB would carry neither the defaults nor the profile binding.
-        MSUF.Require("MSUF_EnsureDB", "Features/Gameplay/MSUF_Feature_GameplayConfig.lua")()
+        Require("MSUF_EnsureDB", FILE)()
+        db = MSUF_DB
     end
-    if type(MSUF_DB.gameplay) ~= "table" then
-        MSUF_DB.gameplay = {}
+    if type(db.gameplay) ~= "table" then
+        db.gameplay = {}
     end
 
-    local g = MSUF_DB.gameplay
+    local g = db.gameplay
 
     Default(g, "nameplateMeleeSpellID", 0)
     Default(g, "combatOffsetX", 0)
@@ -118,7 +122,7 @@ local function EnsureGameplayDefaults()
 end
 
 local function GetGameplayDBFast()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     local activeGameplay = type(db) == "table" and db.gameplay or nil
     if type(gameplayDBCache) == "table" and gameplayDBCache == activeGameplay then
         return gameplayDBCache
@@ -141,18 +145,17 @@ end
 local function GetGameplayFontSettings(kind)
     local gGameplay = EnsureGameplayDefaults()
 
-    local general = (MSUF_DB and MSUF_DB.general) or {}
+    local db = MSUF_DB
+    local general = (db and db.general) or {}
 
     local fontPath
 
     local fontKey = general.fontKey
-    local pathForKey = _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
-    if type(pathForKey) == "function" and fontKey and fontKey ~= "" then
-        fontPath = pathForKey(fontKey)
+    if fontKey and fontKey ~= "" then
+        fontPath = Require("MSUF_GetFontPathForKey", FILE)(fontKey)
     end
     if (not fontPath or fontPath == "") and LSM and fontKey and fontKey ~= "" then
-        local raw = _G.MSUF_GetRawLSMFontPath
-        local fetched = type(raw) == "function" and raw(LSM, fontKey) or nil
+        local fetched = Require("MSUF_GetRawLSMFontPath", FILE)(LSM, fontKey)
         if not fetched and type(LSM.HashTable) == "function" then
             local fonts = LSM:HashTable("font")
             fetched = fonts and fonts[fontKey]
@@ -181,7 +184,8 @@ local function GetGameplayFontSettings(kind)
     end
 
     local colorKey = (general.fontColor or "white"):lower()
-    local colorTbl = (MSUF_FONT_COLORS and MSUF_FONT_COLORS[colorKey]) or (MSUF_FONT_COLORS and MSUF_FONT_COLORS.white) or {1, 1, 1}
+    local colors = Optional("MSUF_FONT_COLORS")
+    local colorTbl = (colors and colors[colorKey]) or (colors and colors.white) or {1, 1, 1}
     local fr, fg, fb = colorTbl[1], colorTbl[2], colorTbl[3]
 
     local baseSize  = general.fontSize or 14

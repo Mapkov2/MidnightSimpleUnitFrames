@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Player/vehicle GCD: native duration fill/text; keyed or OnCooldownDone teardown.
 --- Secret fallback reads only NeverSecret isActive. Disabled feature unregisters events.
 --- Settings and lifecycle details: Castbars/README.md.
@@ -15,7 +14,9 @@ local Player = Castbars.Player
 local PublicAPI = Castbars.PublicAPI
 local Utils = Castbars.Utils
 
-local _G = _G
+-- Kernel/MSUF_Util.lua and the Edit Mode public API load before this file.
+local PixelLayoutRegion = ns.Require("MSUF_PixelLayoutRegion", "Castbars/MSUF_CastbarGCD.lua")
+local EditModeAPI = ns.Require("MSUF_EditModeAPI", "Castbars/MSUF_CastbarGCD.lua")
 local CreateFrame = CreateFrame
 local IS_FOREVER = ns.Client ~= nil and ns.Client.IsForever == true
 -- Kernel/MSUF_Scheduler.lua loads first in every TOC: keyed deadlines that
@@ -57,7 +58,7 @@ end
 local function GCDBarSupported()
     if not IS_FOREVER then return true end
     if gcdBarSupported == nil then
-        local spellAPI = _G.C_Spell
+        local spellAPI = C_Spell
         local doesSpellExist = spellAPI and spellAPI.DoesSpellExist
         gcdBarSupported = type(doesSpellExist) == "function" and doesSpellExist(GCD_SPELL_ID) == true
     end
@@ -67,14 +68,14 @@ end
 --- PLAYER_REGEN_DISABLED is delivered before InCombatLockdown() turns true, so
 --- the combat-entry refresh also reads UnitAffectingCombat("player").
 local function PlayerInCombat()
-    return InCombatLockdown() or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) == true
+    return InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player")) == true
 end
 
 --- A client that cannot fill the bar (no Duration API, or Forever without the
 --- GCD spell) never shows the separate bar or its mover, even when an
 --- imported profile asks for it.
 local function DetachedWantedFromGeneral(g)
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     return g ~= nil and g.gcdBarDetached == true and GCDBarSupported()
         and type(spellAPI) == "table" and type(spellAPI.GetSpellCooldownDuration) == "function"
 end
@@ -125,7 +126,7 @@ local function LayoutDetached(frame, g)
     frame.icon:SetSize(height, height)
     -- The castbars' configured font; the size follows the bar height.
     -- Castbars/MSUF_Castbars_Core.lua (loads before this file) owns both.
-    local font = Core.GetFontPath() or _G.STANDARD_TEXT_FONT
+    local font = Core.GetFontPath() or STANDARD_TEXT_FONT
     local flags = Core.GetFontFlags() or "OUTLINE"
     local size = math.min(12, math.max(8, height - 2))
     frame.castText:SetFont(font, size, flags)
@@ -138,7 +139,7 @@ end
 --- Rebind an empty duration so the idle background shows an empty bar.
 local function BindIdleDuration(statusBar)
     if not idleDuration then
-        local durationUtil = _G.C_DurationUtil
+        local durationUtil = C_DurationUtil
         if not (durationUtil and durationUtil.CreateDuration) then return end
         idleDuration = durationUtil.CreateDuration()
     end
@@ -207,10 +208,9 @@ local function DimensionControl(id, label, key, default, min, max)
         end }
 end
 RegisterDetachedMover = function()
-    local api = _G.MSUF_EditModeAPI
-    if not api or not api.RegisterElement or not DetachedWanted() or detachedFrame and detachedFrame._moverRegistered then return end
+    if not DetachedWanted() or detachedFrame and detachedFrame._moverRegistered then return end
     EnsureDetached()
-    detachedFrame._moverRegistered = api.RegisterElement("MSUF.GCD", {
+    detachedFrame._moverRegistered = EditModeAPI.RegisterElement("MSUF.GCD", {
         id = "bar", label = Text("GCD Bar"), group = Text("Castbars"), order = 115,
         getFrame = function() return detachedFrame end,
         -- Placement stays editable while the master toggle or combat-only rule
@@ -247,7 +247,7 @@ local function ResolveInstantSpell(spellID)
     local name = spellNames[spellID]
     if name ~= nil then return name end
 
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     local getInfo = spellAPI and spellAPI.GetSpellInfo
     if type(getInfo) ~= "function" then return nil end
 
@@ -341,7 +341,7 @@ end
 --- SpellCooldownInfo table per call (about half a kilobyte), so readable
 --- GCDs use their duration object instead (GCDActive).
 local function GCDStillActive()
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     local getCooldown = spellAPI and spellAPI.GetSpellCooldown
     if type(getCooldown) ~= "function" then return false end
     local cooldown = getCooldown(GCD_SPELL_ID)
@@ -522,9 +522,8 @@ local succeededRegistered = false
 local function SyncRegistration()
     RefreshDetached(true)
     RegisterDetachedMover()
-    local api = _G.MSUF_EditModeAPI
-    if detachedFrame and detachedFrame._moverRegistered and api and api.RefreshElement then
-        api.RefreshElement("MSUF.GCD", "bar")
+    if detachedFrame and detachedFrame._moverRegistered then
+        EditModeAPI.RefreshElement("MSUF.GCD", "bar")
     end
     local want = IsGCDBarEnabled() and GCDBarSupported()
     local g = GeneralDB()
@@ -571,7 +570,7 @@ local function OnSucceeded(spellID)
     -- Instant cast confirmed. If no GCD is active at this synchronous event
     -- the spell is off-GCD (GCD-triggering instants always leave the GCD
     -- running here) - cache that verdict.
-    local spellAPI = _G.C_Spell
+    local spellAPI = C_Spell
     local getDuration = spellAPI and spellAPI.GetSpellCooldownDuration
     local durationObj = type(getDuration) == "function" and getDuration(GCD_SPELL_ID) or nil
     if not GCDActive(durationObj) then

@@ -3,7 +3,6 @@
 -- paths here. Content filters and custom spell lists remain separate owners.
 -- Blizzard-frame visibility still uses its existing deferred apply boundary.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local Factories = MSUF.Auras3MenuModelFactories
 if not Factories then
     Factories = {}
@@ -122,6 +121,7 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         value = tostring(value or "RECTANGLE")
         if type(A3.NormalizeAuraIconShape) == "function" then value = A3.NormalizeAuraIconShape(value) end
         if shared.appearanceIconShapes[kind] == value then return false end
+        if A3.IconSkins then A3.IconSkins.BeforeWrite(kind, shared.appearanceIconShapes[kind], true) end
         shared.appearanceIconShapes[kind] = value
         return true
     end
@@ -145,10 +145,9 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         shared.appearanceIconStyles = type(shared.appearanceIconStyles) == "table"
             and shared.appearanceIconStyles or {}
         local style = shared.appearanceIconStyles[kind]
-        if type(style) ~= "table" then
-            style = {}
-            shared.appearanceIconStyles[kind] = style
-        end
+        if type(style) == "table" and style[key] == value then return false end
+        if A3.IconSkins then A3.IconSkins.BeforeWrite(kind, style) end -- combat snapshot
+        if type(style) ~= "table" then style = {} shared.appearanceIconStyles[kind] = style end
         if style[key] == value then return false end
         style[key] = value
         return true

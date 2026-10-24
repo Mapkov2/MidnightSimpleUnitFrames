@@ -24,7 +24,7 @@ local UnitHealth, UnitHealthMax, UnitPower, UnitPowerMax = UnitHealth, UnitHealt
 -- Names read like the engine frames' (UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua):
 -- WoW Forever character names and nickname providers apply here too.
 local ReadDisplayName = MSUF.UFText.ReadDisplayName
-local issecretvalue = _G.issecretvalue or function() return false end
+local issecretvalue = issecretvalue or function() return false end
 local holders, targetButtons, bossButtons, manaRows = {}, {}, {}, {}
 local previewPools = setmetatable({}, {__mode = "k"})
 local screenPreviews, previewRequests = {}, {}
@@ -105,8 +105,8 @@ local function PaintColors(button, kind, prefix, class, pct, unit, hp, maxHP, ev
         end
         button.bg:SetVertexColor(br, bgc, bb, bg.a or .95)
     else button.bg:SetColorTexture(br, bgc, bb, bg.a or .95) end
-    if unit and type(_G.UnitClass) == "function" then
-        local _, token = _G.UnitClass(colorUnit)
+    if unit and type(UnitClass) == "function" then
+        local _, token = UnitClass(colorUnit)
         if type(token) == "string" and not issecretvalue(token) then class = token end
     end
     if prefix ~= "healerMana" and GF.ResolveNameColor then button.Name:SetTextColor(GF.ResolveNameColor(kind, class)) end
@@ -243,7 +243,7 @@ function GF.GetAdditionalPreviewSpec(kind, prefix, count, options)
     local conf = GF.GetConf(kind)
     if not conf then return nil end
     if prefix == "targets" then count = conf.targetsIncludePlayer == true and 5 or 4
-    elseif prefix == "friendlyBoss" then count = _G.MAX_BOSS_FRAMES or 5
+    elseif prefix == "friendlyBoss" then count = MAX_BOSS_FRAMES or 5
     elseif prefix == "healerMana" then count = kind == "party" and 2 or 3
     else count = kind == "party" and 5 or floor(max(1, min(40, tonumber(count) or 20))) end
     local cap, split
@@ -333,9 +333,9 @@ function GF.RenderAdditionalPreview(parent, kind, prefix, count, options)
             button.Value:SetTextColor(r, g, b)
             button.Value:SetText(8000 - i * 1000)
             button.Value:SetShown(conf.healerManaShowValue ~= false)
-            button.Name:SetText((_G.HEALER or "Healer") .. " " .. i)
+            button.Name:SetText((HEALER or "Healer") .. " " .. i)
         else
-            button.Name:SetText((prefix == "pets" and (_G.PET or "Pet") or prefix == "friendlyBoss" and (_G.BOSS or "Boss") or (_G.TARGET
+            button.Name:SetText((prefix == "pets" and (PET or "Pet") or prefix == "friendlyBoss" and (BOSS or "Boss") or (TARGET
                 or "Target")) .. " " .. i)
         end
         button:Show()
@@ -592,7 +592,7 @@ local function ApplyBosses(kind, conf, enabled)
         return
     end
     ListenBossIdentity(holder, true)
-    local count = min(5, _G.MAX_BOSS_FRAMES or 5)
+    local count = min(5, MAX_BOSS_FRAMES or 5)
     local width, height, columns, totalW, totalH = Geometry(conf, "friendlyBoss", count)
     Place(holder, conf, "friendlyBoss", totalW, totalH)
     for i = 1, count do
@@ -773,7 +773,7 @@ local function RequestRefresh(refreshIdentity)
     if refreshIdentity then rosterRefreshQueued = true end
     if refreshQueued then return end
     refreshQueued = true
-    local timer = _G.C_Timer
+    local timer = C_Timer
     if timer and timer.After then timer.After(0, RunQueuedRefresh) else RunQueuedRefresh() end
 end
 GF.RequestAdditionalGroupsRefresh = RequestRefresh

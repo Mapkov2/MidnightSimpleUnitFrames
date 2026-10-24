@@ -52,16 +52,21 @@ IdentityTopology.GroupAuraAssistFlagBucket = function(unit)
     return nil
 end
 
+-- A released shard keeps its frame but drops every unit registration.
+local function ResetAssistFlagShard(shard)
+    shard:UnregisterAllEvents()
+    shard._msufA3Units = nil
+    shard._msufA3UnitSet = nil
+    shard._msufA3AssistUnits = nil
+    shard._msufA3AssistUnitSet = nil
+    shard._msufA3Signature = nil
+end
+
 IdentityTopology.ClearGroupAuraAssistFlagShards = function()
     local shards = A3._groupAuraAssistFlagShards
     if not shards then return false end
     for _, shard in pairs(shards) do
-        shard:UnregisterAllEvents()
-        shard._msufA3Units = nil
-        shard._msufA3UnitSet = nil
-        shard._msufA3AssistUnits = nil
-        shard._msufA3AssistUnitSet = nil
-        shard._msufA3Signature = nil
+        ResetAssistFlagShard(shard)
     end
     return true
 end
@@ -177,7 +182,7 @@ IdentityTopology.SyncGroupAuraAssistFlagShards = function()
                     local registered = shard:RegisterUnitEvent(event, eventUnits)
                     if registered == false then
                         shard:UnregisterEvent(event)
-                        local unpackUnits = _G.unpack or table.unpack
+                        local unpackUnits = unpack or table.unpack
                         registered = unpackUnits and shard:RegisterUnitEvent(
                             event, unpackUnits(eventUnits, 1, #eventUnits)) or false
                         if registered == false then
@@ -192,12 +197,7 @@ IdentityTopology.SyncGroupAuraAssistFlagShards = function()
     end
     for bucket, shard in pairs(shards) do
         if desired[bucket] == nil then
-            shard:UnregisterAllEvents()
-            shard._msufA3Units = nil
-            shard._msufA3UnitSet = nil
-            shard._msufA3AssistUnits = nil
-            shard._msufA3AssistUnitSet = nil
-            shard._msufA3Signature = nil
+            ResetAssistFlagShard(shard)
         end
     end
     return next(desired) ~= nil

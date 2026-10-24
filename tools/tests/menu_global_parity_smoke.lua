@@ -72,7 +72,9 @@ local function Run(prior)
             if prior then
                 local load = world.LoadFile
                 world.LoadFile = function(self, path, ...)
-                    path = sources[path:match("([^/\\]+)$")] or path
+                    local parentSource = sources[path:match("([^/\\]+)$")]
+                    -- The pinned parent predates namespace-only exports.
+                    if parentSource then return World.LoadHistorical(self, parentSource, ...) end
                     return load(self, path, ...)
                 end
             end

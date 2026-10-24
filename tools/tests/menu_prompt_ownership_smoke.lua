@@ -287,7 +287,7 @@ do
     reloads = 0
 end
 do
-    local quick = e.MSUF2_ClassPowerQuickSetup
+    local quick = n.PublicGlobals.MSUF2_ClassPowerQuickSetup -- namespace-only export
     if Check(type(quick) == "function", "the Class Resources quick setup is not published") then
         local function Bars() return M.EnsureDB().bars end
         Bars().showClassPower = false
@@ -331,7 +331,8 @@ end
 -- The core prompts.
 do
     -- The client-version warning: one Okay button, Escape closes it.
-    local frame = e.MSUF_ShowClientVersionWarning()
+    -- Namespace-only export: not a global any more.
+    local frame = Fatal(n.PublicGlobals.MSUF_ShowClientVersionWarning, "the client-version warning is not published")()
     Check(frame == true and n.UI.IsPromptShown("MSUF_CLIENT_VERSION_WARNING"), "the client-version warning did not show")
     local warning
     for _, candidate in ipairs(world.widgets.frames) do

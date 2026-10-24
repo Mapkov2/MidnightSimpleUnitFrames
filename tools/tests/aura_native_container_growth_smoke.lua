@@ -189,8 +189,18 @@ assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFram
 assert(loadfile(ADDON .. "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_SpellIndicators.lua"))("MidnightSimpleUnitFrames", MSUF)
 local SpellIndicators = assert(A3.SpellIndicators, "Spell Indicator runtime did not load")
-for _, name in ipairs({ "DurationText", "Signatures", "OwnerConfig", "NativeContract", "ButtonVisuals", "Containers", "NativeApply",
-    "LatchGuard" }) do
+-- The duration-text module binds the global font reader once, when it loads
+-- (MSUF.Require): the stand-in is a closure over the font inputs the font cases change.
+local path, red, flags, shadow = "FontA", 1, "OUTLINE", true
+_G.MSUF_GetGlobalFontSettings = function() return path, flags, red, 1, 1, 14, shadow end
+-- The module binds the font applier at load as well: a forwarder the late-font case points
+-- at a recorder (the real applier, a namespace-only Fonts export, answers otherwise).
+local resolvedFontSink
+_G.MSUF_ApplyResolvedFont = function(...)
+    if resolvedFontSink then return resolvedFontSink(...) end
+    return MSUF.PublicGlobals.MSUF_ApplyResolvedFont(...)
+end
+for _, name in ipairs({ "DurationText", "Signatures", "OwnerConfig", "NativeContract", "ButtonVisuals", "Containers", "NativeApply" }) do
     assert(loadfile(ADDON .. "Auras3/Runtime/MSUF_Auras3_Runtime_" .. name .. ".lua"))("MidnightSimpleUnitFrames", MSUF)
 end
 local Factories = MSUF.Auras3RuntimeFactories
@@ -252,9 +262,6 @@ dependencies.ButtonVisuals = {
 }
 local Containers = Build("Containers")
 local NativeApply = Build("NativeApply")
--- Revive checks the guard; these counting stubs never freeze.
-Build("LatchGuard").Bind({ ApplyLane = NativeApply.ApplyLane, ApplyDispelSensorRoot = NativeApply.ApplyDispelSensorRoot,
-    RecreateGroupSlots = NativeApply.RecreateGroupSlots })
 Containers.Bind({ RegisterNativeContainer = NativeApply.RegisterNativeContainer })
 Contract.Bind({ RefreshAppliedNativeRoot = NativeApply.RefreshAppliedNativeRoot })
 NativeApply.Initialize()
@@ -513,8 +520,7 @@ do
         assert(loadfile(ADDON.."Auras3/Runtime/MSUF_Auras3_Runtime_"..name..".lua"))("MSUF",MSUF)
         Build(name)
     end
-    local path,red,flags,shadow="FontA",1,"OUTLINE",true
-    _G.MSUF_GetGlobalFontSettings=function()return path,flags,red,1,1,14,shadow end
+    path,red,flags,shadow="FontA",1,"OUTLINE",true
     local function ApplyOwners()
         ApplyTarget({size=20,spell=1})
         ApplyParty({flowSize=20,spell=1})
@@ -529,7 +535,9 @@ do
     A3._EnsureDeferredAuraRuntimeDriver=function()return nil end
     local timers={}
     dependencies.Platform.C_Timer={After=function(_,callback)timers[#timers+1]=callback end}
-    -- Facade captured C_Timer at construction; rebuild against the timer model.
+    -- The next-frame scheduler the Platform owns (Kernel MSUF_RunNextFrame) runs on the same queue.
+    dependencies.Platform.RunNextFrame=function(callback)timers[#timers+1]=callback end
+    -- Facade captured RunNextFrame at construction; rebuild against the timer model.
     Build("Facade")
     A3._RequestUnitNow=ApplyOwners
     A3.RenderFrame=function(frame)assert(frame==targetFrame);ApplyOwners();return true end
@@ -702,7 +710,7 @@ do
     assert(duration.BuildAuraDurationStyle(late._bakedWith)==committedStyle,"late initializer baked preview timer colours")
     assert(duration.BuildAuraDurationStyle({cooldownDecimalSeconds=3})~=committedStyle,"preview timer colours did not update live")
     local appliedPath
-    _G.MSUF_ApplyResolvedFont=function(_,fontPath)appliedPath=fontPath end
+    resolvedFontSink=function(_,fontPath)appliedPath=fontPath end
     duration.ApplyFont(NewRegion("FontString"),14,late._bakedWith)
     assert(appliedPath=="FontA","late initializer baked the preview font")
     general.aurasCooldownTextSafeColor={1,1,1};path="FontA";Push()

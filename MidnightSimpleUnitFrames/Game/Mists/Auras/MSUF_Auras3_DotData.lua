@@ -1,9 +1,11 @@
 --- Mists Classic target DoT aura IDs.
 --- Baseline: WeakAuras Mists templates and ElvUI Mists filters, 2026-08-02.
 local _, MSUF = ...
-MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then A3 = {}; MSUF.MSUF_Auras3 = A3 end
+if type(A3) ~= "table" then
+    A3 = {}
+    MSUF.MSUF_Auras3 = A3
+end
 
 A3.TargetDotDataVersion = "Mists-5.5.4.68806"
 A3.TargetDotData = {

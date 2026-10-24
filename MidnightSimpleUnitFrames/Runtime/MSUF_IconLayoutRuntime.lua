@@ -7,7 +7,6 @@
 --- applies those values consistently across unit frames.
 
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Icons = MSUF.Icons or {}
 MSUF.Icons._layout = MSUF.Icons._layout or {}
 local ExportPublic = MSUF.ExportPublic
@@ -21,7 +20,7 @@ local EnsureDBSafe = MSUF.Util.EnsureDBSafe
 --- before this file and exports the boss-token helper at its top level, the
 --- same file this module already reads MSUF.Util.EnsureDBSafe from. A nil here
 --- is a broken export or load order, never a client difference.
-local GetBossIndexFromToken = MSUF.Require("MSUF_GetBossIndexFromToken", "Runtime/MSUF_IconLayoutRuntime.lua")
+local GetBossIndexFromToken = MSUF.Require("GetBossIndexFromToken", "Runtime/MSUF_IconLayoutRuntime.lua", MSUF.Public)
 
 local function GetConfigKeyForUnitSafe(unit)
     local UF = MSUF and MSUF.UF
@@ -39,7 +38,7 @@ end
 
 function MSUF.Icons._layout.GetConf(f)
     EnsureDBSafe()
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if not db then return nil, nil, nil end
     local g = db.general or {}
     local unit = f and (f.MSUFUnitKey or f.unit)

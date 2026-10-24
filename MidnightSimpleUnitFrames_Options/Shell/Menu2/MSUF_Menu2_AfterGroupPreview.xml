@@ -38,6 +38,8 @@
     <Script file="Pages\MSUF_Menu2_AuraSettings.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraControls.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras.lua"/>
+    <Script file="Pages\MSUF_Menu2_IconSkins.lua"/>
+    <Script file="Pages\MSUF_Menu2_Auras_IconSkin.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras_Group.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras_Preview.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras_CustomWorkspace.lua"/>

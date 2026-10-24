@@ -11,6 +11,14 @@ end
 
 local MSUF = { MSUF_Auras3 = {} }
 _G.MSUF_NS = MSUF
+-- Shared Retail catalog/contract smoke: compute placement through the real initializer.
+local clientWorld = assert(loadfile("tools/tests/client_world.lua"))().New(assert(arg[1], "repository root argument missing"), "Mainline")
+local initializeClient = assert(loadstring(readFile("MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"),
+    "@MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"))
+setfenv(initializeClient, clientWorld.env)("MidnightSimpleUnitFrames", MSUF)
+assert(clientWorld.env.MSUF == MSUF and MSUF.Client.Flavor == "Mainline"
+    and MSUF.Client.IsRetail == true and MSUF.Client.IsClassic == false,
+    "real Mainline client facts missing before Aura menu model")
 -- The model's Group Aura filter code reads State's stored-token check.
 assert(loadfile("tools/tests/profile_normalize_loader.lua"))().Install(".", MSUF)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua"))("MidnightSimpleUnitFrames", MSUF)

@@ -66,7 +66,11 @@ for _, context in ipairs({ "factory", "repair" }) do
     for i, policy in ipairs(source.persistence) do
         local row, runtime = source.fields[policy.field], schema.PersistenceEntries[i]
         local expected = source.clients[flavor][policy.context][policy.field] or row[policy.context]
-        assert(policy.certificate == "all_profile_menu_fill", "uncertified persistence entry")
+        local normalizerOnly = policy.certificate == "all_profile_preview_marker_fill"
+        assert(policy.certificate == "all_profile_menu_fill" or normalizerOnly, "uncertified persistence entry")
+        assert(runtime.normalizerOnly == (normalizerOnly or nil), "persistence fill boundary differs")
+        assert(not normalizerOnly or row.scope == "general" and row.path[2] == "_msufPreviewDragHintExperienced"
+            and expected[1] == "boolean" and expected[2] == true, "invalid preview marker certificate")
         assert(#row.path == 2 and runtime.scope == row.scope and runtime.key == row.path[2], "persistence path differs")
         assert(runtime.kind == expected[1] and runtime.default == expected[2], "persistence default/type differs")
     end

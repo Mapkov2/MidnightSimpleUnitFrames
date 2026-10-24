@@ -50,11 +50,15 @@ do
     MSUF.UF = UF
     MSUF.Secrets = { IsNil = function(v) return v == nil end, NotSecret = function() return true end }
     local function Load(rel) assert(loadfile(CORE .. rel))("MidnightSimpleUnitFrames", MSUF) end
+    Load("Kernel/MSUF_Bootstrap.lua")
     Load("Kernel/MSUF_Require.lua")
     Load("Shell/EditMode/MSUF_EditMode_Geometry.lua")
 Load("Kernel/MSUF_Util.lua")
     Load("UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua")
-    Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")
+    -- The alpha element requires the unit-frame runtime and scheduler providers at load;
+    -- this range-alpha check never reaches them, so they are deferred (they raise if used).
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().LoadShipped(root,
+      "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua", MSUF)
 
     local function Frame(unit)
         local frame = NewRegion(unit)
@@ -108,7 +112,9 @@ do
     _G.MSUF_ShowConfigCombatLockMessage = function() end
     _G.MSUF_EnsureDB = function() _G.MSUF_DB = _G.MSUF_DB or { general = {} } end
     _G.MSUF_InstallGlobalScaleGate = function() end
-    assert(loadfile(CORE .. "Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", MSUF)
+    -- The real Kernel API (Bootstrap's registry, Require): the scale runtime reads its
+    -- namespace-only state from MSUF.PublicGlobals.
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, MSUF, nil, nil, true)
     assert(loadfile(CORE .. "Castbars/MSUF_Castbars_PublicAPI.lua"))("MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(CORE .. "Runtime/MSUF_UIScaleRuntime.lua"))("MidnightSimpleUnitFrames", MSUF)
 

@@ -330,20 +330,20 @@ do
     -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
     LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", interruptNamespace)
     LoadAddonFile("Castbars/MSUF_InterruptReady.lua", interruptNamespace)
-    Equal(_G.MSUF_KickReady_Init(), 2139, "mage interrupt spell resolution")
-    Check(_G.MSUF_KickReady_IsReady() == false, "cooldown unexpectedly ready")
-    Check(_G.MSUF_KickReady_IsReady() == false, "cached cooldown unexpectedly ready")
+    Equal(interruptNamespace.PublicGlobals.MSUF_KickReady_Init(), 2139, "mage interrupt spell resolution")
+    Check(interruptNamespace.PublicGlobals.MSUF_KickReady_IsReady() == false, "cooldown unexpectedly ready")
+    Check(interruptNamespace.PublicGlobals.MSUF_KickReady_IsReady() == false, "cached cooldown unexpectedly ready")
     Equal(cooldownAPICalls, 1, "same-frame readiness calls allocated multiple DurationObjects")
 
     now = 101
-    _G.MSUF_KickReady_GetReadyBoolForTint()
+    interruptNamespace.PublicGlobals.MSUF_KickReady_GetReadyBoolForTint()
     Equal(cooldownAPICalls, 2, "new frame reused stale cooldown snapshot")
 
     local onEvent = interruptEventFrame and interruptEventFrame.scripts.OnEvent
     Check(type(onEvent) == "function", "interrupt event handler missing")
     onEvent(interruptEventFrame, "SPELL_UPDATE_COOLDOWN", 2139, 2139, nil, 0)
     Equal(cooldownAPICalls, 3, "relevant cooldown event did not invalidate snapshot")
-    _G.MSUF_KickReady_IsReady()
+    interruptNamespace.PublicGlobals.MSUF_KickReady_IsReady()
     Equal(cooldownAPICalls, 3, "event refresh object was not shared with same-frame consumers")
 
     onEvent(interruptEventFrame, "SPELL_UPDATE_COOLDOWN", 999999, 999999, nil, 0)
@@ -355,7 +355,7 @@ do
     _G.MSUF_DB.general.kickReadyShowTarget = false
     _G.MSUF_KickReady_RefreshAll()
     Check(next(interruptEventFrame.events) == nil, "disabled interrupt-ready retained lifecycle events")
-    Check(_G.MSUF_KickReady_GetSpellID() == nil, "disabled interrupt-ready resolved a spell")
+    Check(interruptNamespace.PublicGlobals.MSUF_KickReady_GetSpellID() == nil, "disabled interrupt-ready resolved a spell")
 end
 
 -- Low-frequency register/reclassify initializes only the affected frame. High-

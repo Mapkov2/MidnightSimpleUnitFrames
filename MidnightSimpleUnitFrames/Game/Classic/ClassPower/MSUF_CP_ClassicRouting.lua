@@ -12,10 +12,9 @@
 --- Classic TOCs load it, after the flavor provider and before the controller.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local provider = assert(MSUF.CPClient, "Classic ClassPower provider must load first")
-local K = _G.MSUF_CP_CONST or {}
+local K = MSUF.Require("MSUF_CP_CONST", "Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua")
 local PT = K.PT or {}
 local NotSecret = MSUF.Secrets.NotSecret
 local type, assert = type, assert

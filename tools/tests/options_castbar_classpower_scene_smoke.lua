@@ -35,7 +35,17 @@ local function Walk(frame, visit, shown)
     for _, child in ipairs(frame.children or {}) do Walk(child, visit, visible) end
 end
 
-local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = function(world)
+-- The unit preview model binds the core's config-changed export when it loads, so the
+-- drag step's no-op stand-in goes in before it (beforeOptions) behind this switch.
+local silenceConfigNotify = false
+local mw = MenuWorld.Open(root, flavor, { page = "home", beforeOptions = function(world)
+    local env = world.env
+    local notify = env.MSUF_UFCore_NotifyConfigChanged
+    env.MSUF_UFCore_NotifyConfigChanged = function(...)
+        if silenceConfigNotify then return end
+        return notify(...)
+    end
+end, beforeCore = function(world)
     local env = world.env
     env.INTERRUPTED = "Interrupted"
     env.Constants = { UnitPowerSpellIDs = {} }
@@ -477,7 +487,7 @@ do
         env.GetCursorPosition = function() return cx, cy end
         env.IsMouseButtonDown = function() return true end
         env.IsControlKeyDown = function() return false end
-        env.MSUF_UFCore_NotifyConfigChanged = function() end
+        silenceConfigNotify = true
         local _, _, _, startX = slot:GetPoint(1)
         handle:GetScript("OnMouseDown")(handle, "LeftButton")
         cx, cy = cx + 30, cy + 18

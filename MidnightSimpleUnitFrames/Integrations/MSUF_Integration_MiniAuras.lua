@@ -10,7 +10,6 @@ local addonName, MSUF = ...
 --   The refresh callback MiniAuras hands to provider.RegisterRefreshFrames:
 --     isolated on every frame-registry change; errors retain the callback stack.
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local GF = MSUF.GF
 if not (GF and type(GF.ForEachFrame) == "function"
     and type(GF.RegisterFrameRegistryObserver) == "function") then return end
@@ -23,7 +22,7 @@ local observerRegistered = false
 local registered = false
 local loadWatcher
 
-local IsGroupUnit = _G.MSUF_IsGroupUnitToken
+local IsGroupUnit = MSUF.Require("MSUF_IsGroupUnitToken", "Integrations/MSUF_Integration_MiniAuras.lua")
 
 local function CollectFrame(frame, unit)
     if frame and frame._msufGFIsPreviewFrame ~= true and IsGroupUnit(unit) then
@@ -65,7 +64,7 @@ end
 
 local function TryRegister()
     if registered then return true end
-    local apiRoot = _G.MiniAurasApi or _G.MiniCCApi
+    local apiRoot = MiniAurasApi or MiniCCApi
     local api = type(apiRoot) == "table" and apiRoot.v1
     if type(api) ~= "table" or type(api.RegisterFrameProvider) ~= "function" then return false end
     api:RegisterFrameProvider(provider)
@@ -74,9 +73,9 @@ local function TryRegister()
     return true
 end
 
-if TryRegister() or type(_G.CreateFrame) ~= "function" then return end
+if TryRegister() or type(CreateFrame) ~= "function" then return end
 
-loadWatcher = _G.CreateFrame("Frame")
+loadWatcher = CreateFrame("Frame")
 loadWatcher:RegisterEvent("ADDON_LOADED")
 loadWatcher:RegisterEvent("PLAYER_LOGIN")
 loadWatcher:SetScript("OnEvent", function(_, event, loadedAddon)

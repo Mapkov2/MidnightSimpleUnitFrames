@@ -1,12 +1,17 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua
 --- Heal/absorb prediction element for unitframes.
 
 local _, MSUF = ...
-
-MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Prediction.lua")
 
 local UF = MSUF.UF
+-- Cold lifecycle and texture providers, kept in one table (main-chunk local ceiling).
+local Providers = {
+  EventBusRegister = MSUF.Require("MSUF_EventBus_Register", "MSUF_UF_Elements_Prediction.lua"),
+  EventBusUnregister = MSUF.Require("MSUF_EventBus_Unregister", "MSUF_UF_Elements_Prediction.lua"),
+  ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", "MSUF_UF_Elements_Prediction.lua"),
+  ResolveStatusbarTextureKey = MSUF.Optional("MSUF_ResolveStatusbarTextureKey"),
+}
 
 -- Bind mandatory factories once; report both the consumer and received shape.
 local function RequireFactory(key)
@@ -23,16 +28,15 @@ local UnitIsConnected = UnitIsConnected
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent
-local UnitGetIncomingHeals = _G.UnitGetIncomingHeals
-local UnitGetTotalAbsorbs = _G.UnitGetTotalAbsorbs
-local UnitGetTotalHealAbsorbs = _G.UnitGetTotalHealAbsorbs
-local CreateUnitHealPredictionCalculator = _G.CreateUnitHealPredictionCalculator
-local UnitGetDetailedHealPrediction = _G.UnitGetDetailedHealPrediction
-local InCombatLockdown = _G.InCombatLockdown
+local UnitGetIncomingHeals = UnitGetIncomingHeals
+local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
+local UnitGetTotalHealAbsorbs = UnitGetTotalHealAbsorbs
+local CreateUnitHealPredictionCalculator = CreateUnitHealPredictionCalculator
+local UnitGetDetailedHealPrediction = UnitGetDetailedHealPrediction
+local InCombatLockdown = InCombatLockdown
 local tonumber = tonumber
 local type = type
-local Enum = _G.Enum
-local CurveAPI = _G.C_CurveUtil
+local CurveAPI = C_CurveUtil
 local LuaCurveType = Enum and Enum.LuaCurveType
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
 -- The saved overlay anchor modes (MSUF_UF_Shared.lua). The layout, clip and update
@@ -41,7 +45,7 @@ local ABSORB_ANCHOR = UF.Shared.ABSORB_ANCHOR
 local FOLLOW_HP, FOLLOW_HP_OVERFLOW = ABSORB_ANCHOR.FOLLOW_HP, ABSORB_ANCHOR.FOLLOW_HP_OVERFLOW
 local UnitMissing
 do
-  local issv = _G.issecretvalue
+  local issv = issecretvalue
   UnitMissing = function(frame, unit, unitSecret)
     if unitSecret == true then
       return false
@@ -66,7 +70,7 @@ do
     return exists == false or exists == 0
   end
 end
-local issecretvalue = _G.issecretvalue
+local issecretvalue = issecretvalue
 
 -- Heal/absorb prediction element.
 local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -434,7 +438,7 @@ end
 
 local function ResolveTexture(key, fallback)
   if type(key) == "string" and key ~= "" then
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    local resolve = Providers.ResolveStatusbarTextureKey
     if type(resolve) == "function" then
       return resolve(key) or fallback
     end
@@ -1856,7 +1860,7 @@ local function QueuePredictionDataEvent(frame, event)
     frame._msufPredictionDirtyMask = mask + bit
   end
   -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
-  if _G.MSUF_GF_PredictionSync == true then
+  if MSUF.PublicGlobals.MSUF_GF_PredictionSync == true then
     frame._msufPredictionQueued = nil
     local syncMask = frame._msufPredictionDirtyMask
     frame._msufPredictionDirtyMask = nil
@@ -2635,6 +2639,7 @@ function Prediction.RefreshVisible(reason)
   if type(frames) ~= "table" then return false end
 
   local did = false
+  local PublicGlobals = MSUF.PublicGlobals
   reason = reason or "MSUF_PREDICTION_WORLD_ENTRY"
   for i = 1, #frames do
     local frame = frames[i]
@@ -2647,9 +2652,9 @@ function Prediction.RefreshVisible(reason)
       and active and active.Prediction == true
       and type(update) == "function"
       and (visible == true
-        or _G.MSUF_PreviewTestMode == true
-        or _G.MSUF_BossTestMode == true
-        or _G.MSUF2_BossUnitframePreviewActive == true
+        or PublicGlobals.MSUF_PreviewTestMode == true
+        or PublicGlobals.MSUF_BossTestMode == true
+        or PublicGlobals.MSUF2_BossUnitframePreviewActive == true
         or (visible == nil and (not frame.IsVisible or frame:IsVisible()))) then
       -- Direct element refreshes do not pass through BeginFrameEvent. Invalidate
       -- a possibly pre-world UnitExists snapshot so UnitMissing reads live state.
@@ -2671,12 +2676,7 @@ end
 local function OnPredictionWorldEntry()
   if not ActivatePredictionLifecycle or not Prediction._msufActiveLifecycleCount
     or Prediction._msufActiveLifecycleCount <= 0 then return end
-  local schedule = _G.MSUF_ScheduleOnce
-  if type(schedule) == "function" then
-    schedule("UF_PREDICTION_WORLD_ENTRY", FlushWorldEntryPredictionSeed)
-  else
-    FlushWorldEntryPredictionSeed()
-  end
+  Providers.ScheduleOnce("UF_PREDICTION_WORLD_ENTRY", FlushWorldEntryPredictionSeed)
 end
 
 local predictionWorldEventRegistered
@@ -2686,14 +2686,13 @@ local function SyncPredictionWorldEvent()
   local shouldRegister = (Prediction._msufActiveLifecycleCount or 0) > 0
   if shouldRegister then
     if predictionWorldEventRegistered == true then return end
-    local registerEvent = _G.MSUF_EventBus_Register
-    if registerEvent("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY, OnPredictionWorldEntry) ~= false then
+    if Providers.EventBusRegister("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY, OnPredictionWorldEntry) ~= false then
       predictionWorldEventRegistered = true
     end
     return
   end
   if predictionWorldEventRegistered == true then
-    _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY)
+    Providers.EventBusUnregister("PLAYER_ENTERING_WORLD", PREDICTION_WORLD_EVENT_KEY)
     predictionWorldEventRegistered = nil
   end
 end

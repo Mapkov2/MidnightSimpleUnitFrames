@@ -220,4 +220,39 @@ for _, checked in ipairs({ true, false }) do
     MenuWorld.FireScript(label, "OnLeave")
 end
 Check(W.SectionSwitch(section, "Enable") == master, "lazy section rebuilt its master switch")
+-- Exact visible-label oracle for the regular SwitchAt factory and real binding.
+-- Keep the native no-hover event distinct from the pointer Enter/Leave sequence.
+local function VisibleLabelColor(expected, tag)
+    local fs = ordinary._msuf2Label
+    Check(ordinary:IsShown() and fs:IsShown(), tag .. ": regular factory label is hidden")
+    Check(fs:GetObjectType() == "FontString", tag .. ": native label kind changed")
+    local actual = { fs:GetTextColor() }
+    for channel = 1, 4 do
+        Check(actual[channel] == expected[channel], "visible switch label color drift:" .. tag
+            .. ":channel=" .. channel .. ":expected=" .. tostring(expected[channel]) .. ":actual=" .. tostring(actual[channel]))
+    end
+end
+MenuWorld.FireScript(ordinary, "OnLeave")
+Check(ordinary._msuf2SwitchHovered == nil and ordinary._msuf2SwitchPressed == nil, "no-hover case retained pointer state")
+VisibleLabelColor(M.Theme.colors.text, "before-no-hover-click")
+for _, checked in ipairs({ true, false }) do
+    ordinary._msuf2RawSetChecked(ordinary, not ordinary:GetChecked())
+    MenuWorld.FireScript(ordinary, "OnClick", "LeftButton", false)
+    Check(ordinaryState.value == checked and ordinary:GetChecked() == checked, "no-hover native click missed real binding")
+    Check(ordinary._msuf2SwitchHovered == nil, "native Click invented stored hover")
+    VisibleLabelColor(M.Theme.colors.text, "native-click-no-hover:" .. tostring(checked))
+end
+for _, checked in ipairs({ true, false }) do
+    NativeClick(ordinary)
+    Check(ordinaryState.value == checked and ordinary:GetChecked() == checked, "hovered native click missed real binding")
+    Check(ordinary._msuf2SwitchHovered == true, "real Enter did not set stored hover")
+    VisibleLabelColor(M.Theme.colors.title, "native-click-real-hover:" .. tostring(checked))
+    MenuWorld.FireScript(ordinary, "OnLeave")
+    Check(ordinary._msuf2SwitchHovered == nil, "real Leave retained hover")
+    VisibleLabelColor(M.Theme.colors.text, "native-real-leave:" .. tostring(checked))
+end
+ordinary:Disable() MenuWorld.FireScript(ordinary, "OnDisable")
+VisibleLabelColor(M.Theme.colors.disabled or M.Theme.colors.dim, "native-disabled")
+ordinary:Enable() MenuWorld.FireScript(ordinary, "OnEnable")
+VisibleLabelColor(M.Theme.colors.text, "native-enabled-no-hover")
 print("menu_switch_live_paint_smoke " .. flavor .. ": " .. checks .. " checks passed")

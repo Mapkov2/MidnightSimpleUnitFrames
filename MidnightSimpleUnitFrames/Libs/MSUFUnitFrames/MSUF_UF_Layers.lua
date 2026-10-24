@@ -2,7 +2,6 @@
 --- Shared frame-level contract for live unit frames and menu previews.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 local UF = MSUF.UF or {}
 MSUF.UF = UF
 
@@ -154,7 +153,7 @@ function Layers.AuraEffectLevel(layer, priority, targetOwner)
     return level
   end
   local targetLevel = targetOwner:GetFrameLevel()
-  local issecretvalue = _G and _G.issecretvalue
+  local issecretvalue = issecretvalue
   if type(issecretvalue) == "function" and issecretvalue(targetLevel) == true then
     return level
   end
@@ -164,7 +163,7 @@ function Layers.AuraEffectLevel(layer, priority, targetOwner)
 end
 
 function Layers.ParentStrata(frame)
-  local issecretvalue = _G.issecretvalue
+  local issecretvalue = issecretvalue
   local strata = frame and frame.GetFrameStrata and frame:GetFrameStrata() or nil
   if issecretvalue and issecretvalue(strata) == true then return nil end
   return strata

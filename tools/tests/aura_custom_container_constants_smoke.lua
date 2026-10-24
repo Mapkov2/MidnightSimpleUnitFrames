@@ -12,16 +12,18 @@ local ADDON = root .. "/MidnightSimpleUnitFrames/"
 
 -- 1. The values, and the menu schema's slot names derive from them.
 local namespace = {
-    ExportPublic = function(name, value) _G[name] = value; return value end,
     MSUF_CreateCanonicalPlayerDefensiveAuraContainer = function() return {} end,
 }
 _G.MSUF_NS = namespace
-assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFrames", namespace)
+-- Files run through the shipped loader: the real Kernel API, and a provider this smoke does not
+-- load is a forwarder that raises when used.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua", namespace)
 local A3 = namespace.MSUF_Auras3
 assert(A3.CUSTOM_CONTAINER_COUNT == 4 and A3.PRESET_CUSTOM_CONTAINER_INDEX == 4,
     "the Custom Aura container count or the preset slot changed")
 A3.CUSTOM_CONTAINER_COUNT, A3.PRESET_CUSTOM_CONTAINER_INDEX = 7, 6
-assert(loadfile(ADDON .. "Auras3/MenuModel/MSUF_Auras3_Menu_Schema.lua"))("MidnightSimpleUnitFrames", namespace)
+RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Schema.lua", namespace)
 local Schema = namespace.Auras3MenuModelFactories.Schema(A3)
 assert(Schema.CUSTOM_CONTAINER_MAX == 7 and Schema.TARGET_DOT_CONTAINER_INDEX == 6
     and Schema.PLAYER_DEFENSIVE_CONTAINER_INDEX == 6, "the menu schema does not take the core's container constants")

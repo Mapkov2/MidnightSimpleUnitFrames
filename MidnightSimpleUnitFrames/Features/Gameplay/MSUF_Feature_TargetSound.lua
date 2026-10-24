@@ -1,18 +1,19 @@
 local _, MSUF = ...
-MSUF = MSUF or {}
+local FILE = "Features/Gameplay/MSUF_Feature_TargetSound.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
 local ExportPublic = MSUF.ExportPublic
 
 local CachedAPI = (MSUF.Cache and MSUF.Cache.F) or {}
-local UnitExists = type(CachedAPI.UnitExists) == "function" and CachedAPI.UnitExists or _G.UnitExists
-local UnitIsEnemy = _G.UnitIsEnemy
-local UnitIsFriend = _G.UnitIsFriend
-local PlaySound = _G.PlaySound
-local IsTargetLoose = _G.IsTargetLoose
-local interactionManager = _G.C_PlayerInteractionManager
+local UnitExists = type(CachedAPI.UnitExists) == "function" and CachedAPI.UnitExists or UnitExists
+local UnitIsEnemy = UnitIsEnemy
+local UnitIsFriend = UnitIsFriend
+local PlaySound = PlaySound
+local IsTargetLoose = IsTargetLoose
+local interactionManager = C_PlayerInteractionManager
 local IsReplacingUnit = interactionManager and interactionManager.IsReplacingUnit
-local EventBusRegister = _G.MSUF_EventBus_Register
-local EventBusUnregister = _G.MSUF_EventBus_Unregister
-local soundKit = _G.SOUNDKIT
+local EventBusRegister = Require("MSUF_EventBus_Register", FILE)
+local EventBusUnregister = Require("MSUF_EventBus_Unregister", FILE)
+local soundKit = SOUNDKIT
 local LOST_TARGET_SOUND = soundKit and soundKit.INTERFACE_SOUND_LOST_TARGET_UNIT
 local HOSTILE_TARGET_SOUND = soundKit and soundKit.IG_CREATURE_AGGRO_SELECT
 local FRIENDLY_TARGET_SOUND = soundKit and soundKit.IG_CHARACTER_NPC_SELECT
@@ -24,10 +25,15 @@ do
     local hadTarget = false
 
     local function TargetSoundsEnabled()
-        if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-            _G.MSUF_EnsureDB()
+        local db = MSUF_DB
+        if not db then
+            local ensureDB = Optional("MSUF_EnsureDB")
+            if type(ensureDB) == "function" then
+                ensureDB()
+                db = MSUF_DB
+            end
         end
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local general = db and db.general
         return general and general.playTargetSelectLostSounds == true
     end
 

@@ -53,84 +53,57 @@ local T = M.Theme
 local rawget, tonumber, type = rawget, tonumber, type
 M.HOST_API_VERSION = 2
 
+-- Each accessor is one private field behind a public name. The generated
+-- functions are built once at load and allocate nothing per call.
+local function Getter(field)
+    return function(object) return object[field] end
+end
+local function Setter(field)
+    return function(object, value) object[field] = value end
+end
+-- A setter that hands the widget back so calls chain.
+local function ChainSetter(field)
+    return function(object, value)
+        object[field] = value
+        return object
+    end
+end
+local function Flag(field, chain)
+    return function(object)
+        object[field] = true
+        if chain then return object end
+    end
+end
+
 ------------------------------------------------------------------ controls
-function M.SkipHistoryCheckpoint(widget)
-    widget._msuf2SkipHistoryCheckpoint = true
-    return widget
-end
-
-function M.AllowCombatClick(widget)
-    widget._msuf2AllowCombatClick = true
-    return widget
-end
-
-function M.SetSearchTargetPrepare(widget, prepare)
-    widget._msuf2PrepareExactSearchTarget = prepare
-    return widget
-end
-
-function M.GetSearchTargetPrepare(widget)
-    return widget._msuf2PrepareExactSearchTarget
-end
-
-function M.SetCommandAction(widget, action)
-    widget._msuf2CommandAction = action
-    return widget
-end
-
-function M.GetControlTitle(widget)
-    return widget._msuf2Title
-end
+M.SkipHistoryCheckpoint = Flag("_msuf2SkipHistoryCheckpoint", true)
+M.AllowCombatClick = Flag("_msuf2AllowCombatClick", true)
+M.SetSearchTargetPrepare = ChainSetter("_msuf2PrepareExactSearchTarget")
+M.GetSearchTargetPrepare = Getter("_msuf2PrepareExactSearchTarget")
+M.SetCommandAction = ChainSetter("_msuf2CommandAction")
+M.GetControlTitle = Getter("_msuf2Title")
 
 -- Raw: a widget's label is its own field, never a method of its frame type.
 function M.GetControlLabel(widget)
     return rawget(widget, "_msuf2Label")
 end
 
-function M.GetControlSearchMeta(widget)
-    return widget._msuf2SearchMeta
-end
-
-function M.GetRawSetText(fontString)
-    return fontString._msuf2RawSetText
-end
+M.GetControlSearchMeta = Getter("_msuf2SearchMeta")
+M.GetRawSetText = Getter("_msuf2RawSetText")
 
 function M.ReleaseColorShortcut(shortcut)
     shortcut._msuf2BoundColorShortcut = nil
 end
 
 ------------------------------------------------------------------ sections
-function M.GetSectionEntry(frame)
-    return frame._msuf2CollapsibleEntry
-end
-
-function M.SetSectionEntry(frame, entry)
-    frame._msuf2CollapsibleEntry = entry
-end
-
-function M.GetSectionWidth(frame)
-    return frame._msuf2Width
-end
-
-function M.SetSectionWidth(frame, width)
-    frame._msuf2Width = width
-end
-
-function M.GetSectionCursor(frame)
-    return frame._msuf2CursorY
-end
-
-function M.SetSectionCursor(frame, y)
-    frame._msuf2CursorY = y
-end
-
-function M.MarkContextColorHost(frame)
-    frame._msuf2ContextColorHost = true
-end
-
-function M.SetFixedPreviewHeight(frame, height)
-    frame._msuf2FixedPreviewActiveHeight = height
-end
+M.GetSectionEntry = Getter("_msuf2CollapsibleEntry")
+M.SetSectionEntry = Setter("_msuf2CollapsibleEntry")
+M.GetSectionWidth = Getter("_msuf2Width")
+M.SetSectionWidth = Setter("_msuf2Width")
+M.GetSectionCursor = Getter("_msuf2CursorY")
+M.SetSectionCursor = Setter("_msuf2CursorY")
+M.MarkContextColorHost = Flag("_msuf2ContextColorHost")
+M.SetFixedPreviewHeight = Setter("_msuf2FixedPreviewActiveHeight")
 
 function M.SetBuilderInsets(ctx, contentX, topInset)
     ctx._msuf2ContentX, ctx._msuf2TopInset = contentX, topInset
@@ -138,29 +111,12 @@ function M.SetBuilderInsets(ctx, contentX, topInset)
 end
 
 ------------------------------------------------------------------ section entries
-function M.SetSectionEnsureVisible(entry, ensure)
-    entry._msuf2EnsureVisible = ensure
-end
-
-function M.GetSectionEnsureVisible(entry)
-    return entry._msuf2EnsureVisible
-end
-
-function M.SetSectionRefreshState(entry, refresh)
-    entry._msuf2RefreshState = refresh
-end
-
-function M.GetSectionRefreshState(entry)
-    return entry._msuf2RefreshState
-end
-
-function M.SetMissingSectionResolver(entry, resolve)
-    entry._msuf2ResolveMissingSection = resolve
-end
-
-function M.GetMissingSectionResolver(entry)
-    return entry._msuf2ResolveMissingSection
-end
+M.SetSectionEnsureVisible = Setter("_msuf2EnsureVisible")
+M.GetSectionEnsureVisible = Getter("_msuf2EnsureVisible")
+M.SetSectionRefreshState = Setter("_msuf2RefreshState")
+M.GetSectionRefreshState = Getter("_msuf2RefreshState")
+M.SetMissingSectionResolver = Setter("_msuf2ResolveMissingSection")
+M.GetMissingSectionResolver = Getter("_msuf2ResolveMissingSection")
 
 -- The header layout (RefreshCollapsibleHeaderLayout) keeps width px right of
 -- the feature switch for the button. A header without a summary row places
@@ -178,9 +134,7 @@ function M.RefreshSectionLayout(entry)
     if refresh then refresh() end
 end
 
-function M.SetSectionPopupGetter(button, getPopup)
-    button._msuf2GetSectionPopup = getPopup
-end
+M.SetSectionPopupGetter = Setter("_msuf2GetSectionPopup")
 
 ------------------------------------------------------------------ navigation
 function M.AddNavIcon(pageKey, spec)

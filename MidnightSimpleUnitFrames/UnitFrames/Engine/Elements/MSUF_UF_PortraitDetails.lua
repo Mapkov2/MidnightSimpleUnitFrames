@@ -1,13 +1,13 @@
 local _, MSUF = ...
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_PortraitDetails.lua")
 local D = {}
 MSUF.PortraitDetails = D
 
 -- Client functions read once: every portrait refresh passes through here.
-local CreateFrame = _G.CreateFrame
-local issecretvalue = _G.issecretvalue
-local UnitCanAttack = _G.UnitCanAttack
-local IsInInstance = _G.IsInInstance
+local CreateFrame = CreateFrame
+local issecretvalue = issecretvalue
+local UnitCanAttack = UnitCanAttack
+local IsInInstance = IsInInstance
 
 local function Number(value, fallback, low, high)
     if issecretvalue and issecretvalue(value) then return fallback end
@@ -98,7 +98,10 @@ end
 function D.ApplyShadow(holder, p)
     local shadow = holder.innerShadow
     local enabled = p.innerShadow and p.innerShadow > 0 and p.shape == "SQUARE"
-    if not enabled then if shadow then shadow:Hide() end; return end
+    if not enabled then
+        if shadow then shadow:Hide() end
+        return
+    end
     if not shadow then
         local layer = PixelLayoutRegion(CreateFrame("Frame", nil, holder))
         layer:SetAllPoints(holder)

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Target/focus events, delayed stop confirmation and death/unit-change cleanup.
 -- Hands Engine cast state to Runtime; frame layout belongs to Frames/Visuals.
 
@@ -29,31 +28,32 @@ local GetCastbarCountsDown = Utils.GetCastbarCountsDown
 local RefreshCastbarSpellNameText = Utils.RefreshCastbarSpellNameText
 local GetInterruptUnavailableTintArgs = Utils.Castbar_GetInterruptUnavailableTintArgs
 local ApplyNonInterruptibleTint = Utils.Castbar_ApplyNonInterruptibleTint
--- Kernel/MSUF_Util.lua loads before every castbar file. Resolved on the first
--- cast target text write (castbar harnesses without that text skip it).
-local setTextIfChanged
-local function SetTextIfChanged(fontString, text)
-    setTextIfChanged = setTextIfChanged or Require("MSUF_SetTextIfChanged", FILE)
-    setTextIfChanged(fontString, text)
-end
 
 local Publish = PublicAPI.Publish
 
-local C_Timer = _G.C_Timer
-local RunNextFrame = _G.MSUF_RunNextFrame
-local ScheduleAfter = _G.MSUF_ScheduleAfter
-local CancelScheduled = _G.MSUF_CancelScheduled
-local GetTime = _G.GetTime
-local GetCVar = _G.GetCVar
-local UnitExists = _G.UnitExists
-local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
-local UnitIsConnected = _G.UnitIsConnected
-local UnitShouldDisplaySpellTargetName = _G.UnitShouldDisplaySpellTargetName
-local UnitSpellTargetName = _G.UnitSpellTargetName
-local UnitSpellTargetClass = _G.UnitSpellTargetClass
-local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
-local CreateFrame = _G.CreateFrame
-local UIParent = _G.UIParent
+-- Kernel/MSUF_Util.lua loads before every castbar file; the text writers are
+-- resolved once here so every cast-time and target-text write is one call.
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local SetTextIfChanged = Require("MSUF_SetTextIfChanged", FILE)
+local SetCastTimeText = Require("MSUF_SetCastTimeText", FILE)
+local RunNextFrame = Require("MSUF_RunNextFrame", FILE)
+local ScheduleAfter = Require("MSUF_ScheduleAfter", FILE)
+local CancelScheduled = Require("MSUF_CancelScheduled", FILE)
+-- Runtime/MSUF_Colors.lua loads before every castbar file.
+local GetCastbarDetailTextColor = Require("MSUF_GetCastbarDetailTextColor", FILE)
+local GetCastbarTargetNameColor = Require("MSUF_GetCastbarTargetNameColor", FILE)
+
+local GetTime = GetTime
+local GetCVar = GetCVar
+local UnitExists = UnitExists
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local UnitIsConnected = UnitIsConnected
+local UnitShouldDisplaySpellTargetName = UnitShouldDisplaySpellTargetName
+local UnitSpellTargetName = UnitSpellTargetName
+local UnitSpellTargetClass = UnitSpellTargetClass
+local C_ClassColor_GetClassColor = C_ClassColor and C_ClassColor.GetClassColor
+local CreateFrame = CreateFrame
+local UIParent = UIParent
 local type = type
 local tonumber = tonumber
 local tostring = tostring
@@ -62,15 +62,11 @@ local castbarRuntime = Castbars.Runtime
 local ApplyInterruptValues = castbarRuntime and castbarRuntime.ApplyInterruptValues
 
 local function ScheduleDelayed(callback, delay)
-    if type(ScheduleAfter) == "function" then
-        return ScheduleAfter(callback, delay, callback)
-    end
-    C_Timer.After(delay, callback)
-    return true
+    return ScheduleAfter(callback, delay, callback)
 end
 
 local function CancelDelayed(callback)
-    if callback and type(CancelScheduled) == "function" then
+    if callback then
         CancelScheduled(callback)
     end
 end
@@ -249,7 +245,7 @@ local function AnchorDriverFrameToUnitFrame(frame, unit)
     end
 end
 
-local toPlainIsSecret = _G.issecretvalue
+local toPlainIsSecret = issecretvalue
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
 -- harnesses that load the driver standalone load Utils first.
@@ -347,13 +343,13 @@ local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
     if frame._msufNativeTimeBound == true then return end
 
     if not Manager.IsCastTimeEnabled(frame) then
-        _G.MSUF_SetTextIfChanged(frame.timeText, "")
+        SetTextIfChanged(frame.timeText, "")
         return
     end
 
     local remaining = GetRemainingFromStatusBar(frame)
     if type(remaining) ~= "number" then
-        _G.MSUF_SetTextIfChanged(frame.timeText, "")
+        SetTextIfChanged(frame.timeText, "")
         return
     end
 
@@ -367,7 +363,7 @@ local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
         end
     end
 
-    _G.MSUF_SetCastTimeText(frame, remaining, total)
+    SetCastTimeText(frame, remaining, total)
 end
 
 local ClearEmpowerState = Utils.ClearEmpowerState
@@ -863,17 +859,15 @@ local function ApplyCastTargetTextColor(frame, classFilename, sequenceID, genera
     -- make, so it wins over the shared custom color and over the class-color
     -- fallback below. Checked here because this path recolors on every cast and
     -- would otherwise overwrite what the castbar font pass applied.
-    local getDetailColor = _G.MSUF_GetCastbarDetailTextColor
-    if type(getDetailColor) == "function" and frame.unit then
-        local r, g, b, custom = getDetailColor(frame.unit, "TargetName")
+    if frame.unit then
+        local r, g, b, custom = GetCastbarDetailTextColor(frame.unit, "TargetName")
         if custom == true then
             SetCastTargetTextPlainColorIfChanged(fs, r, g, b)
             return
         end
     end
-    local getCustomColor = _G.MSUF_GetCastbarTargetNameColor
-    if type(getCustomColor) == "function" then
-        local r, g, b, custom = getCustomColor()
+    do
+        local r, g, b, custom = GetCastbarTargetNameColor()
         if custom == true then
             SetCastTargetTextPlainColorIfChanged(fs, r, g, b)
             return
@@ -987,15 +981,8 @@ local function RefreshAllCastTargetTextColors()
 
     -- Boss, then arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
     local pools = MSUF.Castbars and MSUF.Castbars.Pools
-    local order = pools and pools.order
-    for poolIndex = 1, order and #order or 0 do
-        local pool = order[poolIndex]
-        local preview = pool.preview
-        for index = 1, pool.maxFrames do
-            RefreshLive(pool.Bar(index))
-            if preview then RefreshPreview(preview:Frame(index)) end
-        end
-    end
+    local forEachFrame = pools and pools.ForEachFrame
+    if forEachFrame then forEachFrame(RefreshLive, RefreshPreview) end
 end
 Driver.RefreshAllCastTargetTextColors = RefreshAllCastTargetTextColors
 Publish("MSUF_RefreshAllCastTargetTextColors", Driver.RefreshAllCastTargetTextColors)
@@ -1127,8 +1114,8 @@ end
 --- per-unit toggle is off or identity is restricted (secret GUID/name), so a
 --- PvP-restricted interrupter can never raise.
 function Driver.Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
-    fallback = fallback or _G.INTERRUPTED
-    local issecret = _G.issecretvalue
+    fallback = fallback or INTERRUPTED
+    local issecret = issecretvalue
     if (issecret and issecret(interruptedBy) == true) or interruptedBy == nil then
         return fallback
     end
@@ -1138,27 +1125,27 @@ function Driver.Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
     if not (unitDB and unitDB.showInterruptSource == true) then
         return fallback
     end
-    local nameFromGUID = _G.UnitNameFromGUID
+    local nameFromGUID = UnitNameFromGUID
     if type(nameFromGUID) ~= "function" then return fallback end
     local name = nameFromGUID(interruptedBy)
     if (issecret and issecret(name) == true) or type(name) ~= "string" or name == "" then
         return fallback
     end
-    local classFromGUID = _G.UnitClassFromGUID
+    local classFromGUID = UnitClassFromGUID
     if type(classFromGUID) == "function" then
         local _, classFilename = classFromGUID(interruptedBy)
         if not (issecret and issecret(classFilename) == true)
             and type(classFilename) == "string" and classFilename ~= "" then
             -- Class color through the secret-safe C API, never a Lua table
             -- keyed by class (castbar_target_name_color contract).
-            local getClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+            local getClassColor = C_ClassColor and C_ClassColor.GetClassColor
             local classColor = type(getClassColor) == "function" and getClassColor(classFilename) or nil
             if classColor and classColor.WrapTextInColorCode then
                 name = classColor:WrapTextInColorCode(name)
             end
         end
     end
-    local fmt = _G.SPELL_INTERRUPTED_BY
+    local fmt = SPELL_INTERRUPTED_BY
     if type(fmt) == "string" and fmt:find("%%s") ~= nil then
         return fmt:format(name)
     end
@@ -1512,11 +1499,7 @@ local function ShowNoCast(frame)
     frame._msufInactiveRecheckToken = frame._msufHideToken
     if not frame._msufInactiveRecheckPending then
         frame._msufInactiveRecheckPending = true
-        if type(RunNextFrame) == "function" then
-            RunNextFrame(frame._msufInactiveRecheckCB)
-        else
-            C_Timer.After(0, frame._msufInactiveRecheckCB)
-        end
+        RunNextFrame(frame._msufInactiveRecheckCB)
     end
 end
 
@@ -1584,7 +1567,7 @@ local function InstallDriverCastMethods(frame)
         end
 
         local reverseFill = Utils.GetReverseFillSafe(self, false)
-        local interruptLabel = Driver.Castbar_ResolveInterruptLabel(interruptedBy, self.unit, _G.INTERRUPTED)
+        local interruptLabel = Driver.Castbar_ResolveInterruptLabel(interruptedBy, self.unit, INTERRUPTED)
         if ApplyInterruptValues then
             ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
         else

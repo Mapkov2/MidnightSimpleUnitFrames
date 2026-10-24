@@ -68,8 +68,10 @@ local ns = { UF = {
         element = value
     end,
 } }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_PetXP.lua"))(
-    "MidnightSimpleUnitFrames", ns)
+-- The real Kernel API (Require/Optional) is installed into the namespace; the pixel-region
+-- provider the file requires is this smoke's _G.MSUF_PixelLayoutRegion stand-in above.
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().LoadShipped(
+    root, "MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_PetXP.lua", ns)
 Check(element ~= nil, "Pet XP element was not registered")
 
 local cfg = { enabled = true, width = 80, size = 8, anchor = "BOTTOM", x = 0, y = -5, layer = 7 }

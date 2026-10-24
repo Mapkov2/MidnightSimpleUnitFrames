@@ -142,7 +142,7 @@ end
 --- Applies (or clears) the provider theme. Returns true when a provider theme
 --- is active afterwards.
 local function ApplyProviderTheme()
-    local getTheme = rawget(_G, "MSUF_GetUITheme")
+    local getTheme = MSUF.Optional("MSUF_GetUITheme")
     local theme = type(getTheme) == "function" and getTheme() or nil
     local palette = theme and theme.palette
     if type(palette) == "table" then
@@ -194,7 +194,7 @@ end
 -- any widget factory or page builds, so a login-time provider paints the very
 -- first build. Late provider changes re-enter through the bridge listener.
 ApplyProviderTheme()
-local addListener = rawget(_G, "MSUF_AddUIThemeListener")
+local addListener = MSUF.Optional("MSUF_AddUIThemeListener")
 if type(addListener) == "function" then
     addListener(ReapplyAndRefresh)
 end

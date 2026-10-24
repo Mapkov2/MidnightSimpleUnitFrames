@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2 navigation rail builder.
 ---
 --- Builds the left rail search field, collapsible page groups, and undo/redo
@@ -9,7 +8,8 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_NavRail.lua")
+local C_Timer = M.MenuTimer or C_Timer
 local T = M.Theme
 local NAV = M.navItems or {}
 local SearchBridge = M.SearchBridge or {}
@@ -29,6 +29,12 @@ local NAV_PILL_MIN_W = 152
 local NAV_PILL_MAX_W = 164
 local NAV_TEXT_BUMP = 3
 local NAV_SEARCH_TEXT_BUMP = 2
+--- Rail font string styled with the shared navigation text bump.
+local function NavFont(parent, template, text, color)
+    local fs = T.Font(parent, template, text, color)
+    T.StyleFontString(fs, color, NAV_TEXT_BUMP)
+    return fs
+end
 local UpdateSearchPlaceholder = SearchBridge.UpdateSearchPlaceholder
 local ScheduleSearchInputQuery = SearchBridge.ScheduleSearchInputQuery
 local RunSearchInputQuery = SearchBridge.RunSearchInputQuery
@@ -286,8 +292,8 @@ local function FinalizeNavMotion(parent, list, rows)
 end
 local function CreateNavButton(parent, key, label, indent, availability)
     local btn = T.Button(parent, label, NavItemWidth(indent), NAV_BUTTON_H)
-    if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontHighlight then
-        btn._msuf2Label:SetFontObject(_G.GameFontHighlight)
+    if btn._msuf2Label and btn._msuf2Label.SetFontObject and GameFontHighlight then
+        btn._msuf2Label:SetFontObject(GameFontHighlight)
     end
     T.StyleFontString(btn._msuf2Label, T.colors.text, 0, "navigation")
     btn:SetScript("OnClick", function(self)
@@ -396,19 +402,20 @@ local function AttachHistoryTooltip(btn, getTitle, getText)
     M.AddTooltip(btn, getTitle, getText, { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.78, 0.92 } })
 end
 M.AttachHistoryTooltip = AttachHistoryTooltip
+-- The history state is read inline at each use: every slider commit refreshes
+-- the controls and every hover rebuilds the tooltip.
 local function HistoryTooltipText(kind)
     local s = M.GetHistoryState and M.GetHistoryState() or {}
     local label = (kind == "undo") and s.undoLabel or s.redoLabel
     local canUse = (kind == "undo") and s.canUndo or s.canRedo
+    local undoCount, redoCount = tonumber(s.undoCount) or 0, tonumber(s.redoCount) or 0
+    local text
     if canUse and label then
-        local text = M.Format("%s\nUndo: %d   Redo: %d", ShortLabel(label, 36), tonumber(s.undoCount) or 0, tonumber(s.redoCount) or 0)
-        if kind == "undo" and s.canResetAll then text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.") end
-        return text
+        text = M.Format("%s\nUndo: %d   Redo: %d", ShortLabel(label, 36), undoCount, redoCount)
+    else
+        text = M.Format("No %s action in this MSUF2 menu session.\nUndo: %d   Redo: %d",
+            kind == "undo" and "undo" or "redo", undoCount, redoCount)
     end
-    local text = M.Format("No %s action in this MSUF2 menu session.\nUndo: %d   Redo: %d",
-        kind == "undo" and "undo" or "redo",
-        tonumber(s.undoCount) or 0,
-        tonumber(s.redoCount) or 0)
     if kind == "undo" and s.canResetAll then text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.") end
     return text
 end
@@ -491,50 +498,48 @@ local function InstallHistoryFeedback(row, feedback, feedbackIcon)
         if not fade and controls == row then ClearHistoryFeedback() end
     end
 end
+local function CreateHistoryButton(row, kind, label, texture, buttonW, relativeTo, relativePoint, dx, set, onClick)
+    local btn = T.Button(row, "", buttonW, 22)
+    btn._msuf2SkipHistoryCheckpoint = true
+    btn._msuf2HistorySource = "history:" .. kind
+    btn._msuf2HistoryLabel = label
+    btn:SetPoint("TOPLEFT", relativeTo, relativePoint, dx, 0)
+    StyleHistoryButton(btn, label, texture)
+    btn:SetScript("OnClick", onClick)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(btn, "history." .. kind, label, "action", {
+            actionKey = "menu_history_" .. kind,
+            historyMode = "none", command = { kind = "button", historyMode = "none", set = set },
+        })
+    end
+    return btn
+end
+local function CreateHistorySummary(row, x, width)
+    local summary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    summary:SetPoint("TOPLEFT", row, "TOPLEFT", x, -27)
+    summary:SetSize(width, 13)
+    summary:SetJustifyH("LEFT")
+    if summary.SetWordWrap then summary:SetWordWrap(false) end
+    return summary
+end
 local function CreateHistoryControls(parent)
     local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     local rowW = NavItemWidth(0)
     row:SetSize(rowW, 60)
     local buttonGap = 8
     local buttonW = floor((rowW - buttonGap) * 0.5)
-    local undo = T.Button(row, "", buttonW, 22)
-    undo._msuf2SkipHistoryCheckpoint = true
-    undo._msuf2HistorySource = "history:undo"
-    undo._msuf2HistoryLabel = "Undo"
-    undo:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
-    StyleHistoryButton(undo, "Undo", T.media.historyUndo)
-    undo:SetScript("OnClick", function()
-        if _G.IsShiftKeyDown and _G.IsShiftKeyDown() and M.ResetHistorySession then
-            M.ResetHistorySession()
-        elseif M.Undo then
-            M.Undo()
-        end
-    end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(undo, "history.undo", "Undo", "action", {
-            actionKey = "menu_history_undo",
-            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
-                return M.Undo and M.Undo() or false
-            end },
-        })
-    end
-    local redo = T.Button(row, "", buttonW, 22)
-    redo._msuf2SkipHistoryCheckpoint = true
-    redo._msuf2HistorySource = "history:redo"
-    redo._msuf2HistoryLabel = "Redo"
-    redo:SetPoint("TOPLEFT", undo, "TOPRIGHT", buttonGap, 0)
-    StyleHistoryButton(redo, "Redo", T.media.historyRedo)
-    redo:SetScript("OnClick", function()
-        M.Redo()
-    end)
-    if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(redo, "history.redo", "Redo", "action", {
-            actionKey = "menu_history_redo",
-            historyMode = "none", command = { kind = "button", historyMode = "none", set = function()
-                return M.Redo and M.Redo() or false
-            end },
-        })
-    end
+    local undo = CreateHistoryButton(row, "undo", "Undo", T.media.historyUndo, buttonW, row, "TOPLEFT", 0,
+        function() return M.Undo and M.Undo() or false end,
+        function()
+            if IsShiftKeyDown and IsShiftKeyDown() and M.ResetHistorySession then
+                M.ResetHistorySession()
+            elseif M.Undo then
+                M.Undo()
+            end
+        end)
+    local redo = CreateHistoryButton(row, "redo", "Redo", T.media.historyRedo, buttonW, undo, "TOPRIGHT", buttonGap,
+        function() return M.Redo and M.Redo() or false end,
+        function() M.Redo() end)
     AttachHistoryTooltip(undo, function()
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         return s.undoLabel and M.Format("Undo: %s", ShortLabel(s.undoLabel, 28)) or "Undo"
@@ -543,16 +548,8 @@ local function CreateHistoryControls(parent)
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         return s.redoLabel and M.Format("Redo: %s", ShortLabel(s.redoLabel, 28)) or "Redo"
     end, function() return HistoryTooltipText("redo") end)
-    local undoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-    undoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -27)
-    undoSummary:SetSize(buttonW - 6, 13)
-    undoSummary:SetJustifyH("LEFT")
-    if undoSummary.SetWordWrap then undoSummary:SetWordWrap(false) end
-    local redoSummary = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-    redoSummary:SetPoint("TOPLEFT", row, "TOPLEFT", buttonW + buttonGap + 3, -27)
-    redoSummary:SetSize(buttonW - 6, 13)
-    redoSummary:SetJustifyH("LEFT")
-    if redoSummary.SetWordWrap then redoSummary:SetWordWrap(false) end
+    local undoSummary = CreateHistorySummary(row, 3, buttonW - 6)
+    local redoSummary = CreateHistorySummary(row, buttonW + buttonGap + 3, buttonW - 6)
     local feedbackIcon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK", nil, 5))
     feedbackIcon:SetTexture(T.media.checkTickMedium)
     feedbackIcon:SetSize(9, 9)
@@ -573,6 +570,8 @@ local function CreateHistoryControls(parent)
     row.feedbackIcon = feedbackIcon
     M.historyControls = row
     InstallHistoryFeedback(row, feedback, feedbackIcon)
+    -- Repaints both sides (undo and redo): summary line, enabled state and icon
+    -- tint. Every slider commit lands here, so both sides are written out inline.
     function M.RefreshHistoryControls()
         local controls = M.historyControls
         if not controls then return end
@@ -580,33 +579,35 @@ local function CreateHistoryControls(parent)
         local canUndo = s.canUndo and true or false
         local canRedo = s.canRedo and true or false
         local canResetAll = s.canResetAll and true or false
-        if controls.undoSummary then
-            T.SetTranslatedText(controls.undoSummary, HistorySummaryText(s.undoLabel, s.undoCount))
-            local color = canUndo and T.colors.muted or T.colors.dim
-            controls.undoSummary:SetTextColor(color[1], color[2], color[3], canUndo and 0.96 or 0.52)
+        local colors = T.colors
+        local undoSummary, redoSummary, undoButton, redoButton = controls.undoSummary, controls.redoSummary, controls.undo, controls.redo
+        if undoSummary then
+            T.SetTranslatedText(undoSummary, HistorySummaryText(s.undoLabel, s.undoCount))
+            local color = canUndo and colors.muted or colors.dim
+            undoSummary:SetTextColor(color[1], color[2], color[3], canUndo and 0.96 or 0.52)
         end
-        if controls.redoSummary then
-            T.SetTranslatedText(controls.redoSummary, HistorySummaryText(s.redoLabel, s.redoCount))
-            local color = canRedo and T.colors.muted or T.colors.dim
-            controls.redoSummary:SetTextColor(color[1], color[2], color[3], canRedo and 0.96 or 0.52)
+        if redoSummary then
+            T.SetTranslatedText(redoSummary, HistorySummaryText(s.redoLabel, s.redoCount))
+            local color = canRedo and colors.muted or colors.dim
+            redoSummary:SetTextColor(color[1], color[2], color[3], canRedo and 0.96 or 0.52)
         end
-        if controls.undo and controls.undo.SetEnabled then controls.undo:SetEnabled(canUndo or canResetAll) end
-        if controls.redo and controls.redo.SetEnabled then controls.redo:SetEnabled(canRedo) end
-        if controls.undo and controls.undo._msuf2HistoryIcon then
+        if undoButton and undoButton.SetEnabled then undoButton:SetEnabled(canUndo or canResetAll) end
+        if redoButton and redoButton.SetEnabled then redoButton:SetEnabled(canRedo) end
+        local undoIcon = undoButton and undoButton._msuf2HistoryIcon
+        if undoIcon then
+            local color, alpha = colors.dim, 0.42
             if canUndo then
-                controls.undo._msuf2HistoryIcon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.96)
+                color, alpha = colors.accent, 0.96
             elseif canResetAll then
-                controls.undo._msuf2HistoryIcon:SetVertexColor(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.88)
-            else
-                controls.undo._msuf2HistoryIcon:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.42)
+                color, alpha = colors.muted, 0.88
             end
+            undoIcon:SetVertexColor(color[1], color[2], color[3], alpha)
         end
-        if controls.redo and controls.redo._msuf2HistoryIcon then
-            if canRedo then
-                controls.redo._msuf2HistoryIcon:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.96)
-            else
-                controls.redo._msuf2HistoryIcon:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.42)
-            end
+        local redoIcon = redoButton and redoButton._msuf2HistoryIcon
+        if redoIcon then
+            local color, alpha = colors.dim, 0.42
+            if canRedo then color, alpha = colors.accent, 0.96 end
+            redoIcon:SetVertexColor(color[1], color[2], color[3], alpha)
         end
     end
     M.RefreshHistoryControls()
@@ -677,8 +678,7 @@ local function CreateNavBrand(parent)
         brandIcon:AddMaskTexture(mask)
         brandIconFrame._msuf2BrandIconMask = mask
     end
-    local brand = T.Font(parent, "GameFontHighlightSmall", "MSUF", T.colors.title or T.colors.text)
-    T.StyleFontString(brand, T.colors.title or T.colors.text, NAV_TEXT_BUMP)
+    local brand = NavFont(parent, "GameFontHighlightSmall", "MSUF", T.colors.title or T.colors.text)
     brand:SetPoint("LEFT", brandIconFrame, "RIGHT", 8, 0)
     brand:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
     brand:SetJustifyH("LEFT")
@@ -690,7 +690,7 @@ local function CreateNavSearchBox(parent)
     -- The visual template supplies a bright native search atlas that covers the
     -- dark MSUF input surface. Keep its keyboard scripts without its artwork.
     local search = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxScriptTemplate"))
-    search:SetFontObject(_G.ChatFontNormal or _G.GameFontHighlightSmall)
+    search:SetFontObject(ChatFontNormal or GameFontHighlightSmall)
     search:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -40)
     search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -40)
     search:SetHeight(28)
@@ -742,27 +742,23 @@ local function InstallNavSearchIntro(parent, search)
         intro:SetFrameLevel(search:GetFrameLevel() + 6)
         intro:EnableMouse(true)
         intro:Hide()
-        local title = T.Font(intro, "GameFontNormalSmall", "Search or ask a question", T.colors.text)
-        T.StyleFontString(title, T.colors.text, NAV_TEXT_BUMP)
+        local title = NavFont(intro, "GameFontNormalSmall", "Search or ask a question", T.colors.text)
         title:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -12)
         title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -28, -12)
         title:SetJustifyH("LEFT")
-        local body = T.Font(intro, "GameFontDisableSmall", "Try \"raid auras\" or \"how do I make text bigger?\"", T.colors.muted)
-        T.StyleFontString(body, T.colors.muted, NAV_TEXT_BUMP)
+        local body = NavFont(intro, "GameFontDisableSmall", "Try \"raid auras\" or \"how do I make text bigger?\"", T.colors.muted)
         body:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -32)
         body:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -12, -32)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
-        local foot = T.Font(intro, "GameFontDisableSmall", "Matches appear while you type. Enter opens the selected result.", T.colors.dim)
-        T.StyleFontString(foot, T.colors.dim, NAV_TEXT_BUMP)
+        local foot = NavFont(intro, "GameFontDisableSmall", "Matches appear while you type. Enter opens the selected result.", T.colors.dim)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 12, 12)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -12, 12)
         foot:SetJustifyH("LEFT")
         local close = PixelLayoutRegion(CreateFrame("Button", nil, intro))
         close:SetSize(20, 20)
         close:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -4, -4)
-        local closeText = T.Font(close, "GameFontDisableSmall", "x", T.colors.dim)
-        T.StyleFontString(closeText, T.colors.dim, NAV_TEXT_BUMP)
+        local closeText = NavFont(close, "GameFontDisableSmall", "x", T.colors.dim)
         closeText:SetPoint("CENTER", close, "CENTER", 0, 0)
         close:SetScript("OnEnter", function() closeText:SetTextColor(1, 1, 1, 0.95) end)
         close:SetScript("OnLeave", function() T.StyleFontString(closeText, T.colors.dim, NAV_TEXT_BUMP) end)
@@ -869,8 +865,7 @@ local function InstallNavSearchClear(parent, search, searchPalette, HideSearchIn
     clear:SetSize(16, 16)
     clear:SetFrameLevel(search:GetFrameLevel() + 1)
     clear:SetPoint("RIGHT", search, "RIGHT", -3, 0)
-    local clearText = T.Font(clear, "GameFontDisableSmall", "x", T.colors.dim)
-    T.StyleFontString(clearText, T.colors.dim, NAV_TEXT_BUMP)
+    local clearText = NavFont(clear, "GameFontDisableSmall", "x", T.colors.dim)
     clearText:SetPoint("CENTER", clear, "CENTER", 0, 0)
     clear:Hide()
     local function ClearSearchInput()
@@ -980,8 +975,7 @@ local function CreateNavList(parent)
             -- right so the title keeps its alignment above the page rows.
             local row = PixelLayoutRegion(CreateFrame("Button", nil, list))
             row:SetSize(NavItemWidth(0) - 2, 18)
-            local title = T.Font(row, "GameFontNormalSmall", item.title, T.colors.navHeaderText or T.colors.muted)
-            T.StyleFontString(title, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
+            local title = NavFont(row, "GameFontNormalSmall", item.title, T.colors.navHeaderText or T.colors.muted)
             title:SetJustifyH("LEFT")
             title:SetSize(NavItemWidth(0) - 20, 18)
             title:SetPoint("LEFT", row, "LEFT", 0, 0)
@@ -1010,8 +1004,8 @@ local function CreateNavList(parent)
             btn._msuf2NavHeader = true
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header
-            if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontNormal then
-                btn._msuf2Label:SetFontObject(_G.GameFontNormal)
+            if btn._msuf2Label and btn._msuf2Label.SetFontObject and GameFontNormal then
+                btn._msuf2Label:SetFontObject(GameFontNormal)
             end
             T.StyleFontString(btn._msuf2Label, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
             btn._msuf2Label:ClearAllPoints()

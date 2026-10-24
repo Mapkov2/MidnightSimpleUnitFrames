@@ -160,6 +160,12 @@ local function Marker(pageKey)
         local expected = Read(factory, path) or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE")
         return path, expected == "RECTANGLE" and "FOLLOW_PORTRAIT" or "RECTANGLE", expected
     end
+    -- The Icon Skins page (Pages/MSUF_Menu2_IconSkins.lua, a reset provider) sets
+    -- the default skin back to No skin, an explicit value rather than the
+    -- factory's unset one.
+    if pageKey == "icon_skins" then
+        return { "auras3", "shared", "iconSkinDefault", "styleSkin" }, "SHADOW1", "CUSTOM"
+    end
     -- Booleans the page's key list names; unused keys where it resets by pattern.
     local paths = {
         opt_bars = { "general", "enableGradient" },

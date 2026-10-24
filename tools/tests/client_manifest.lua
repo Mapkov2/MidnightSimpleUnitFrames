@@ -93,15 +93,29 @@ end
 function Manifest.Paths(repo, flavor, locale, gameType, addon)
     return Manifest.Walk(repo, flavor, locale, gameType, addon).lua
 end
+-- A selection without Kernel/MSUF_Bootstrap.lua runs after the real Kernel API
+-- (tools/tests/require_fixture.lua InstallKernel; it replaces an export stub that
+-- keeps no PublicGlobals registry), and providers a selected file
+-- requires but the selection does not load are deferred (DeferRequired).
 function Manifest.LoadSelected(repo, flavor, namespace, required, loadChunk)
     loadChunk = loadChunk or loadfile
-    local remaining = {}
-    for _, relative in ipairs(required) do remaining[normalize(repo .. "/MidnightSimpleUnitFrames/" .. relative)] = true end
+    local remaining, kernel = {}, true
+    for _, relative in ipairs(required) do
+        remaining[normalize(repo .. "/MidnightSimpleUnitFrames/" .. relative)] = true
+        if relative:match("Kernel/MSUF_Bootstrap%.lua$") then kernel = false end
+    end
+    local RequireFixture = kernel and assert(loadChunk(repo .. "/tools/tests/require_fixture.lua"))()
     for _, path in ipairs(Manifest.Paths(repo, flavor)) do
         if remaining[path] then
             if path:match("/State/MSUF_Defaults%.lua$") and not namespace.Fonts then
                 local fixture = assert(loadChunk(repo .. "/tools/tests/runtime_media_fixture.lua"))()
                 fixture.LoadFonts(repo, namespace, loadChunk)
+            end
+            if RequireFixture then
+                RequireFixture.InstallKernel(repo, namespace, nil, loadChunk, true)
+                local file = assert(io.open(path, "rb"))
+                RequireFixture.DeferRequired(namespace, file:read("*a"), path)
+                file:close()
             end
             assert(loadChunk(path))("MidnightSimpleUnitFrames", namespace)
             remaining[path] = nil

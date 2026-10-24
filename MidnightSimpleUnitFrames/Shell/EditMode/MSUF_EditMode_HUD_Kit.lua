@@ -5,14 +5,14 @@
 --- Picker, then the toolbar in MSUF_EditMode_HUD.lua). It creates EM2.HUD
 --- and the dock view EM2.HUDDock that the others extend.
 local _, MSUF = ...
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 EM2.HUD = {}
 local Kit = {}
 EM2.HUDKit = Kit
 
-local L     = (MSUF and MSUF.L) or _G.MSUF_L or setmetatable({}, { __index = function(_, k) return k end })
+local L     = MSUF.L or setmetatable({}, { __index = function(_, k) return k end })
 local FONT  = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local W8    = "Interface/Buttons/WHITE8X8"
 local max = math.max
@@ -23,8 +23,7 @@ local function Space(role, fallback)
     return ui and ui.Space and ui.Space(role, fallback) or fallback
 end
 
-local DockUI = { PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region,
-    ...) end return region end }
+local DockUI = { PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_HUD_Kit.lua") }
 EM2.HUDDock = DockUI
 
 local function HelpText(key)
@@ -248,7 +247,7 @@ end
 local function MakeBtn(parent, text, w, h, fontRole, onClick)
     w = w or (#text * 8 + 18)
     h = h or BTN_H
-    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local ui = MSUF.UI
     local btn = ui and ui.Button and ui.Button(parent, HelpText(text), w, h, {
         align = "CENTER",
         skipHistory = true,

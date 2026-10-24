@@ -114,10 +114,12 @@ env.MSUF_DB = { general = {}, player = { width = 157 } }
 env.MSUF_GlobalDB = { profiles = {}, char = {} }
 env.MSUF_InitProfiles()
 local exported, source
-env.MSUF_EncodeCompactTableMSUF3 = function(value) exported = Copy(value); return "MSUF3:migration" end
-env.MSUF_EncodeCompactTable = env.MSUF_EncodeCompactTableMSUF3
-env.MSUF_TryDecodeCompactString = function(text) if text == "MSUF3:migration" then return Copy(source) end end
-Check(env.MSUF_ExportSelectionToString("all") ~= nil, "baseline export failed")
+-- Stand-ins for the codec owners: published through the namespace, as the profile code resolves them.
+local function EncodeStandIn(value) exported = Copy(value); return "MSUF3:migration" end
+ns.ExportPublic("MSUF_EncodeCompactTableMSUF3", EncodeStandIn)
+ns.ExportPublic("MSUF_EncodeCompactTable", EncodeStandIn)
+ns.ExportPublic("MSUF_TryDecodeCompactString", function(text) if text == "MSUF3:migration" then return Copy(source) end end)
+Check(ns.PublicGlobals.MSUF_ExportSelectionToString("all") ~= nil, "baseline export failed")
 local base = Copy(exported)
 -- Imports never ask about group selections any more.
 local prompts = {}
@@ -150,7 +152,7 @@ for _, kind in ipairs({ "plain", "native", "portable", "groupframe" }) do
         source = Old(kind, LEGACY, stamp and 1 or nil)
         local untouched = Copy(source)
         prompts = {}
-        Check(env.MSUF_ImportFromString("MSUF3:migration") == true, label .. ": import refused")
+        Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == true, label .. ": import refused")
         Check(#prompts == 0, label .. ": the import asked " .. tostring(prompts[1]))
         for _, key in ipairs(scopes) do
             Imported(env.MSUF_DB[key], LEGACY, label .. " " .. key)
@@ -163,24 +165,24 @@ end
 -- Explicit selections keep what they say.
 for _, filter in ipairs(keep) do
     source = Old("native", filter)
-    Check(env.MSUF_ImportFromString("MSUF3:migration") == true, "explicit filter import refused")
+    Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == true, "explicit filter import refused")
     Check(F.Equal(env.MSUF_DB.gf_raid.groupFilter, filter), "the import changed an explicit filter")
 end
 local function Shows(group) return GF.GroupFilterAllowsSubgroup(env.MSUF_DB.gf_raid.groupFilter, group) end
 for _, filter in ipairs({ "1,2,3,4", { true, true, true, true, false, false, false, false } }) do
     source = Old("native", filter)
-    Check(env.MSUF_ImportFromString("MSUF3:migration") == true and Shows(4) and not Shows(5),
+    Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == true and Shows(4) and not Shows(5),
         "an explicit four-group selection changed")
 end
 source = Old("native", { [4] = false })
-Check(env.MSUF_ImportFromString("MSUF3:migration") == true and not Shows(4) and Shows(5), "an explicit exclusion changed")
+Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == true and not Shows(4) and Shows(5), "an explicit exclusion changed")
 -- New-profile and external imports take the same path.
 local activeName = env.MSUF_ActiveProfile
 local current = Copy(env.MSUF_DB)
 ns.MSUF_CreateFactoryDefaultProfile = function() return Copy(current) end
 source = Old("native", LEGACY, 1)
 prompts = {}
-Check(env.MSUF_ImportIntoNewProfile("LegacyImport", "MSUF3:migration") == true, "new-profile import refused")
+Check(ns.PublicGlobals.MSUF_ImportIntoNewProfile("LegacyImport", "MSUF3:migration") == true, "new-profile import refused")
 Imported(env.MSUF_DB.gf_raid, LEGACY, "new-profile import")
 Check(#prompts == 0, "the new-profile import asked " .. tostring(prompts[1]))
 Check(env.MSUF_SwitchProfile(activeName) == true, "original profile switch refused")
@@ -203,7 +205,7 @@ for _, renderer in ipairs({ "missing", "NATIVE_12_1", "CUSTOM" }) do
         payload = { gf_raid = { auras = { profileModelRevision = 1, buff = { size = 31 } } } } }
     if renderer ~= "missing" then source.payload.gf_raid.auras.renderer = renderer end
     local untouched = Copy(source)
-    Check(env.MSUF_ImportFromString("MSUF3:migration") == true, "partial aura import refused")
+    Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == true, "partial aura import refused")
     Check(env.MSUF_DB.gf_raid.auras.renderer == (renderer == "missing" and "CUSTOM" or renderer),
         "partial aura import lost its backend choice: " .. renderer .. " / " .. tostring(env.MSUF_DB.gf_raid.auras.renderer))
     Check(env.MSUF_DB.gf_raid.auras.buff.size == 31 and F.Equal(source, untouched), "partial aura import changed input or setting")
@@ -221,7 +223,7 @@ for _, index in ipairs({ 4, "4" }) do
         } },
     } }
     local variants = Copy(source.payload.profileVariants)
-    Check(env.MSUF_ImportFromString("MSUF3:migration") == true, "variant import refused")
+    Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == true, "variant import refused")
     Check(env.MSUF_DB.player.width == 444 and not Shows(4), "an intentional variant exclusion was lost")
     Check(Shows(5), "a variant alias hid unrelated groups")
     Check(F.Equal(env.MSUF_DB.profileVariants, V.Validate(variants)), "variant settings changed")
@@ -239,13 +241,13 @@ source.payload.profileVariants = { version = 1, entries = {
         { path = { "gf_raid", "groupFilter" }, value = { true, true, true, false } },
     } },
 } }
-Check(env.MSUF_ImportFromString("MSUF3:migration") == true, "whole-filter variant import refused")
+Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == true, "whole-filter variant import refused")
 Check(not Shows(4) and Shows(5), "the whole-filter variant was not applied")
 env.MSUF_EnsureDB(true)
 Check(F.Equal(env.MSUF_DB.gf_raid.groupFilter, { true, true, true, false }), "forced defaults changed the variant")
 local baseSnapshot = assert(V.BaseSnapshot(env.MSUF_DB, true))
 Check(F.Equal(baseSnapshot.gf_raid.groupFilter, LEGACY), "the variant leaked into the saved base")
-Check(env.MSUF_ExportSelectionToString("all") ~= nil, "variant export failed")
+Check(ns.PublicGlobals.MSUF_ExportSelectionToString("all") ~= nil, "variant export failed")
 Check(F.Equal(Payload(exported).profileVariants.entries[1].patch[1].value, { true, true, true, false }),
     "the export changed the variant filter")
 env.IsInInstance = function() return true, "party" end
@@ -281,13 +283,13 @@ source = Old("native", LEGACY)
 source.payload.profileVariants = { version = 1, entries = {
     { name = "WholeRoot", patch = { { path = { "gf_raid" }, value = { groupFilter = Copy(LEGACY) } } } },
 } }
-Check(env.MSUF_ImportFromString("MSUF3:migration") == false, "invalid whole-root patch accepted")
+Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == false, "invalid whole-root patch accepted")
 Check(F.Equal(env.MSUF_GlobalDB, wholeBefore), "invalid whole-root patch changed profiles")
 -- Rejected imports leave every stored profile untouched.
 local before = Copy(env.MSUF_GlobalDB)
 source = Old("native", LEGACY)
 source.payload.profileVariants = { version = 2, entries = {} }
-Check(env.MSUF_ImportFromString("MSUF3:migration") == false, "invalid import accepted")
+Check(ns.PublicGlobals.MSUF_ImportFromString("MSUF3:migration") == false, "invalid import accepted")
 Check(F.Equal(env.MSUF_GlobalDB, before), "rejected import changed stored profiles")
 -- Startup keeps saved selections and drops every stamp an earlier build wrote:
 -- the 7.0 line at its current normalization revision (ambiguous scopes only, so
@@ -318,7 +320,7 @@ for _, case in ipairs(STORED) do
             "startup changed a saved selection (" .. case.label .. " " .. key .. ")")
         Check(stored._msufGroupFilterVersion == nil, "startup kept the stamp (" .. case.label .. " " .. key .. ")")
     end
-    Check(env.MSUF_ExportSelectionToString("all") ~= nil, "export after startup failed")
+    Check(ns.PublicGlobals.MSUF_ExportSelectionToString("all") ~= nil, "export after startup failed")
     for _, payload in ipairs({ exported.payload, exported.msuf6 and exported.msuf6.payload }) do
         Check(F.Equal(payload.gf_raid.groupFilter, LEGACY) and payload.gf_raid._msufGroupFilterVersion == nil,
             "an export after startup changed the selection or kept the stamp (" .. case.label .. ")")

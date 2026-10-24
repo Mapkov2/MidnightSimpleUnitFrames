@@ -52,6 +52,7 @@ P|classpower|Class Resources|frames
 T|Combat|combat
 T|Interface|interface
 T|Style|style
+P|icon_skins|Icon Skins|style
 P|opt_colors|Colors|style
 P|opt_fonts|Fonts|style
 T|General|general
@@ -67,37 +68,34 @@ if MSUF.Client and MSUF.Client.IsForever then
         end
     end
 end
-M.navPrimaryForKey = {
-    home = "home",
-    uf_player = "uf_player",
-    uf_target = "uf_player",
-    uf_boss = "uf_player",
-    uf_arena = "uf_player",
-    uf_focus = "uf_player",
-    uf_pet = "uf_player",
-    uf_pettarget = "uf_player",
-    uf_targettarget = "uf_player",
-    uf_focustarget = "uf_player",
-    gf_layout = "gf_layout",
-    gf_bars = "gf_layout",
-    gf_indicators = "gf_layout",
-    gf_auras = "gf_layout",
-    gf_priority = "gf_layout",
-    auras3_styling = "auras3_styling",
-    auras3_filters = "auras3_styling",
-    auras3_buffs = "auras3_styling",
-    auras3_debuffs = "auras3_styling",
-    auras3_custom = "auras3_styling",
-    opt_bars = "opt_bars",
-    opt_castbar = "opt_castbar",
-    opt_colors = "opt_colors",
-    opt_fonts = "opt_fonts",
-    opt_misc = "opt_misc",
-    classpower = "classpower",
-    gameplay = "gameplay",
-    profiles = "profiles",
-    modules = "profiles",
-}
+-- Rows read `target=key|key|...`: every key maps to its target.
+local function AliasRows(rows)
+    local aliases = {}
+    for line in Lines(rows) do
+        local target, keys = line:match("^([^=]+)=(.+)$")
+        if target and keys then
+            for key in keys:gmatch("[^|]+") do
+                aliases[key == "<empty>" and "" or key] = target
+            end
+        end
+    end
+    return aliases
+end
+M.navPrimaryForKey = AliasRows [[
+home=home
+uf_player=uf_player|uf_target|uf_boss|uf_arena|uf_focus|uf_pet|uf_pettarget|uf_targettarget|uf_focustarget
+gf_layout=gf_layout|gf_bars|gf_indicators|gf_auras|gf_priority
+auras3_styling=auras3_styling|auras3_filters|auras3_buffs|auras3_debuffs|auras3_custom
+opt_bars=opt_bars
+opt_castbar=opt_castbar
+icon_skins=icon_skins
+opt_colors=opt_colors
+opt_fonts=opt_fonts
+opt_misc=opt_misc
+classpower=classpower
+gameplay=gameplay
+profiles=profiles|modules
+]]
 
 -- Canonical labels for pages reached through a visible primary page and then
 -- a workspace tab. Search directions consume this same navigation
@@ -199,18 +197,6 @@ function M.NavPath(pageKey, subLabel)
     if type(subLabel) == "string" and subLabel ~= "" then parts[#parts + 1] = subLabel end
     for i = 1, #parts do parts[i] = Tr(parts[i]) end
     return table.concat(parts, " > ")
-end
-local function AliasRows(rows)
-    local aliases = {}
-    for line in Lines(rows) do
-        local target, keys = line:match("^([^=]+)=(.+)$")
-        if target and keys then
-            for key in keys:gmatch("[^|]+") do
-                aliases[key == "<empty>" and "" or key] = target
-            end
-        end
-    end
-    return aliases
 end
 M.ALIASES = AliasRows [[
 home=<empty>|home|menu|main|options|opt

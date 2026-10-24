@@ -1,6 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
   <Script file="..\..\Engine\Elements\MSUF_UF_Visuals_Common.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_BarsCommon.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_BarGloss.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Health.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_TempMaxHealth.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Power.lua"/>
@@ -34,11 +35,14 @@
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_MockAuraPainter.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_IconShape.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_IconSkins.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_IconSkins_Catalog.lua"/>
   <Script file="..\..\..\Game\Shared\UnitFrames\MSUF_UF_PetHappiness.lua"/>
   <Script file="..\..\..\Game\Shared\UnitFrames\MSUF_UF_ThreatText.lua"/>
   <Script file="..\..\..\Game\Forever\UnitFrames\MSUF_UF_CharacterNames.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_DotData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_DefensiveData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_GroupHighlightsData.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_IconSkins_Host.lua"/>
   <Script file="..\..\..\Game\Forever\Auras\MSUF_Auras3_ForeverData.lua"/>
 </Ui>

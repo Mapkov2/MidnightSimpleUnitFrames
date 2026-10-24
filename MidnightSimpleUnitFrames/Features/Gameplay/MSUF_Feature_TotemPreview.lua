@@ -1,6 +1,8 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
-MSUF = MSUF or {}
+local FILE = "Features/Gameplay/MSUF_Feature_TotemPreview.lua"
+local Require, Optional = MSUF.Require, MSUF.Optional
+local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local ResolveIconTexturePath = Require("MSUF_ResolveIconTexturePath", FILE)
 local ExportPublic = MSUF.ExportPublic
 local IsSecret = MSUF.Util.IsSecret
 local GameplayShared = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
@@ -17,7 +19,6 @@ local GetCursorPosition = GetCursorPosition
 local GameTooltip = GameTooltip
 local type, tonumber, pairs = type, tonumber, pairs
 local math_floor = math.floor
-local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- driver disabled and silently kills the drag OnUpdate.
@@ -44,7 +45,7 @@ local _SelectNudgeFrame = GameplayShared.SelectNudgeFrame
 local function _SyncTotemOffsetSliders()
     -- Menu2 owns the offset sliders. RequestRefresh coalesces through a queued flag, so calling
     -- this once per drag pixel collapses into one page resync per MENU_REFRESH_DELAY.
-    local menu = _G.MSUF2
+    local menu = Optional("MSUF2")
     if not (menu and menu.RequestRefresh) then return end
     local frame = menu.frame
     if not (frame and frame.IsShown and frame:IsShown()) then return end
@@ -92,7 +93,7 @@ do
     -- Knight ghoul, Paladin Consecration, Monk statues) gets a frame. Availability is therefore
     -- only about Blizzard's frame existing.
     local function _PlayerHasBlizzardTotemFrame()
-        return _G.TotemFrame ~= nil
+        return TotemFrame ~= nil
     end
 
     local function _CanMoveBlizzardTotemFrame()
@@ -123,7 +124,7 @@ do
         if spellID and C_Spell and C_Spell.GetSpellTexture then
             local icon = C_Spell.GetSpellTexture(spellID)
             if icon then
-                return MSUF.Require("MSUF_ResolveIconTexturePath", "Features/Gameplay/MSUF_Feature_TotemPreview.lua")(icon)
+                return ResolveIconTexturePath(icon)
             end
         end
 
@@ -135,7 +136,7 @@ do
         -- Preview and live override use the same anchor resolver so saved offsets match what
         -- the user drags in EditMode.
 
-        local playerFrame = _G.MSUF_player
+        local playerFrame = MSUF.UF.frames.player
         local anchorFrom = _AnchorValue(g and g.playerTotemsAnchorFrom, "TOPLEFT")
         local anchorTo = _AnchorValue(g and g.playerTotemsAnchorTo, "BOTTOMLEFT")
         local x = (type(offX) == "number") and offX or (tonumber(g and g.playerTotemsOffsetX) or 0)
@@ -161,12 +162,12 @@ do
     local function _ForEachTotemManagedContainer(frame, method)
         local a = _InvokeManagedContainer(frame and frame.layoutParent, frame, method)
         local b
-        local getter = _G.GetPlayerBottomManagedFrameContainer
+        local getter = GetPlayerBottomManagedFrameContainer
         if type(getter) == "function" then
             b = _InvokeManagedContainer(getter(), frame, method, a)
         end
-        local c = _InvokeManagedContainer(_G.PlayerBottomManagedFrameContainer, frame, method, a, b)
-        _InvokeManagedContainer(_G.PlayerFrameBottomManagedFramesContainer, frame, method, a, b, c)
+        local c = _InvokeManagedContainer(PlayerBottomManagedFrameContainer, frame, method, a, b)
+        _InvokeManagedContainer(PlayerFrameBottomManagedFramesContainer, frame, method, a, b, c)
     end
 
     local function _RemoveFromTotemManagedContainers(frame)
@@ -231,7 +232,7 @@ do
     local function _RestoreBlizzardTotemFrame()
         if not managed then return true end
 
-        local frame = _G.TotemFrame
+        local frame = TotemFrame
         if not frame then
             managed = false
             originalLayout = nil
@@ -294,15 +295,15 @@ do
     end
 
     local function _ApplyBlizzardTotemFrame(g)
-        local frame = _G.TotemFrame
+        local frame = TotemFrame
         if not frame then return false end
 
         if not _CanMoveBlizzardTotemFrame() then
             return false
         end
 
-        local playerFrame = _G.MSUF_player
-        local db = _G.MSUF_DB
+        local playerFrame = MSUF.UF.frames.player
+        local db = MSUF_DB
         local playerConf = db and db.player
         if playerConf and playerConf.enabled == false then return _RestoreBlizzardTotemFrame() end
         _StoreOriginalLayout(frame)
@@ -635,7 +636,7 @@ do
 
         eventFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerTotemsBlizzardEventFrame", UIParent))
         eventFrame:SetScript("OnEvent", function(self, event)
-            if event == "ADDON_LOADED" and not _G.TotemFrame then
+            if event == "ADDON_LOADED" and not TotemFrame then
                 return
             end
 

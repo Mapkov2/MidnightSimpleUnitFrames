@@ -2,15 +2,13 @@
 -- Shared configuration readers, native filter composition and lane finalization. Compile once per configuration generation, never per UNIT_AURA.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.ConfigValues = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local ConfigValues = A3.Runtime.ConfigValues
 local math_floor, math_max = math.floor, math.max
 local math_min, next = math.min, next
 local pairs, table_concat = pairs, table.concat
-local table_sort = table.sort
-local tonumber, tostring = tonumber, tostring
+local tostring = tostring
 local type = type
 local AURA_BORDER_OPTIONS = dependencies.Appearance.AURA_BORDER_OPTIONS
 local AURA_ICON_BASE_OFFSET = dependencies.Platform.AURA_ICON_BASE_OFFSET
@@ -26,6 +24,8 @@ local MAX_FINITE_AURA_DURATION = dependencies.Platform.MAX_FINITE_AURA_DURATION
 local Round = dependencies.Platform.Round
 local STYLE_SHARED_LAYOUT_KEYS = dependencies.Schema.STYLE_SHARED_LAYOUT_KEYS
 local Shape = dependencies.Appearance.Shape
+-- Auras3/MSUF_Auras3_IconSkins.lua loads before the runtime factories run (nil only in partial test loads).
+local IconSkins = A3.IconSkins
 local UNIT_AURA_BASE_OFFSET = dependencies.Platform.UNIT_AURA_BASE_OFFSET
 local UNIT_FLAG = dependencies.Schema.UNIT_FLAG
 local issecretvalue = dependencies.Platform.issecretvalue
@@ -42,7 +42,7 @@ local function ReadBool(primary, secondary, key, fallback)
     return value == true
 end
 
-local NormalizeDebuffTypeBorderMode = _G.MSUF_NormalizeAuraDebuffTypeBorderMode
+local NormalizeDebuffTypeBorderMode = MSUF.Require("MSUF_NormalizeAuraDebuffTypeBorderMode", "Auras3/Runtime/MSUF_Auras3_Runtime_ConfigValues.lua")
 
 local function ReadDebuffTypeBorderMode(primary, secondary)
     local mode
@@ -85,7 +85,7 @@ end
 local function GetAuraBorderOptions(showIcon, preserveAsset, inputs)
     -- Border/BorderWithIcon let Blizzard supply its dispel border atlas, which
     -- is the intended art for the lane debuff-type border feature.
-    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    local styles = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
     AURA_BORDER_OPTIONS.style = styles and (preserveAsset == true and styles.PreserveAsset
         or (showIcon == true and styles.BorderWithIcon or styles.Border)) or nil
     return A3.ApplyHarmfulDispelColorOptions(AURA_BORDER_OPTIONS, inputs)
@@ -187,7 +187,7 @@ local function EnsureDB()
             return auras, auras.shared
         end
     end
-    local db = _G.MSUF_DB
+    local db = MSUF_DB
     if type(db) ~= "table" then return {}, {} end
     db.auras3 = type(db.auras3) == "table" and db.auras3 or {}
     db.auras3.shared = type(db.auras3.shared) == "table" and db.auras3.shared or {}
@@ -196,7 +196,10 @@ end
 
 function Shape.SharedValue(shared, kind)
     local appearanceShapes = type(shared) == "table" and shared.appearanceIconShapes or nil
-    if type(appearanceShapes) == "table" and appearanceShapes[kind] ~= nil then
+    if IconSkins and IconSkins.frozen then
+        local value = IconSkins.CommittedShape(kind, type(appearanceShapes) == "table" and appearanceShapes[kind] or nil)
+        if value ~= nil then return value end
+    elseif type(appearanceShapes) == "table" and appearanceShapes[kind] ~= nil then
         return appearanceShapes[kind]
     end
     return kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"
@@ -240,54 +243,9 @@ local function EffectiveUnitBlacklist(auras, unit)
     return unitCfg and type(unitCfg.blacklist) == "table" and unitCfg.blacklist or nil
 end
 
-local function AuraSpellIDFromKey(value)
-    -- Saved hashes and compiled catalogs normally already contain numeric IDs.
-    -- Positive integers below Lua 5.1's scientific-notation boundary need no string or
-    -- pattern work. Keep the legacy parser for links, tokens and all other values.
-    if type(value) == "number" and value > 0 and value < 100000000000000 and value % 1 == 0 then
-        return value
-    end
-    value = tostring(value or "")
-    local id = tonumber(value:match("spell:(%d+)") or value:match("#(%d+)") or value:match("^(%d+)$"))
-    return id and math_floor(id + 0.5) or nil
-end
-
-local function NormalizeCandidateSpellIDs(spellIDs, fieldName)
-    if type(spellIDs) ~= "table" then return nil, nil end
-    local addAliases = A3.AddAuraSpellIDAndAliases
-    if type(addAliases) ~= "function" then addAliases = nil end
-    local out
-    for key, enabled in pairs(spellIDs) do
-        local spellID
-        if enabled == true or enabled == nil then
-            spellID = AuraSpellIDFromKey(key)
-        elseif enabled ~= false then
-            local valueType = type(enabled)
-            if valueType == "number" or valueType == "string" then
-                spellID = AuraSpellIDFromKey(enabled) or AuraSpellIDFromKey(key)
-            elseif valueType == "table" and enabled.enabled ~= false then
-                spellID = AuraSpellIDFromKey(enabled.spellID or enabled.spellId or enabled.id or enabled[1]) or AuraSpellIDFromKey(key)
-            end
-        end
-        if spellID then
-            if not out then out = {} end
-            if addAliases then
-                addAliases(out, spellID)
-            else
-                out[spellID] = true
-            end
-        end
-    end
-    if not out then return nil, nil end
-    local parts, count = {}, 0
-    for spellID in pairs(out) do
-        count = count + 1
-        parts[count] = tostring(spellID)
-    end
-    if count == 0 then return nil, nil end
-    table_sort(parts)
-    return out, fieldName .. ":" .. table_concat(parts, ",")
-end
+-- Owned by the Spell Indicator config module, which loads before this factory.
+local NormalizeCandidateSpellIDs = assert(A3.SpellIndicators.NormalizeCandidateSpellIDs,
+    "Auras3 spell-indicator config must load before the aura runtime")
 
 local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
     fieldName = fieldName or "excludeSpellIDs"
@@ -498,7 +456,8 @@ local function SharedIconStyle(kind)
     local _, shared = EnsureDB()
     local styles = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
     local source = type(styles) == "table" and styles[kind] or nil
-    source = type(source) == "table" and source or nil
+    if IconSkins and IconSkins.frozen then source = IconSkins.CommittedSource(kind, source)
+    elseif type(source) ~= "table" then source = nil end
     local function Read(key, fallback)
         if source and source[key] ~= nil then return source[key] end
         return fallback
@@ -538,8 +497,8 @@ local function SharedIconStyle(kind)
         style.shadowEnabled and "S" or "s", style.shadowSize,
         style.shadowR, style.shadowG, style.shadowB, style.shadowA,
     }, ":")
-    _iconStyleCompiled[kind] = style
-    return style
+    _iconStyleCompiled[kind] = IconSkins and IconSkins.Attach(style, source, IconSkins.CommittedDefault(shared)) or style
+    return _iconStyleCompiled[kind]
 end
 
 local function AddNonPlayerCandidateFilter(candidateFilters, candidateFilterSignature, enabled)
@@ -581,9 +540,9 @@ local function ConfigureCuratedBigDefensiveLane(lane)
 end
 
 local function UnitCanAssistForAuraIdentity(unit)
-    local unitCanAssist = _G.UnitCanAssist
+    local unitCanAssist = UnitCanAssist
     if type(unitCanAssist) ~= "function" then return nil end
-    if type(_G.UnitIsPlayerControlledOrGroupMember) == "function" then
+    if type(UnitIsPlayerControlledOrGroupMember) == "function" then
         -- Retail 12.1 added the same two identity flags AuraContainerUtil uses.
         return unitCanAssist("player", unit, true, true)
     end
@@ -624,7 +583,7 @@ local function FinalizeLane(lane, appearanceKind, sharedSignatures)
         -- (Always/OOC/Modifier/Never) owns unit/group-frame mouseover only;
         -- native AuraButtons reuse just the compatible cursor placement and
         -- the shared Blizzard/MSUF look applied by ApplyAuraTooltipStyle().
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local general = MSUF_DB and MSUF_DB.general
         lane.auraTooltipAnchor = (general and general.unitTooltipAnchor == "CURSOR")
             and "ANCHOR_CURSOR" or "ANCHOR_BOTTOMRIGHT"
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
@@ -660,7 +619,7 @@ local function NativeFilter(baseFilter, filters)
     -- Blizzard's validator is the final authority. A token Blizzard rejects
     -- would hard-assert inside AddAuraGroup and kill the lane, so fall back to
     -- the plain base filter instead and surface the reason.
-    local auraUtil = _G.AuraUtil
+    local auraUtil = AuraUtil
     if auraUtil and type(auraUtil.IsValidFilterString) == "function"
         and auraUtil.IsValidFilterString(normalized) ~= true then
         A3._RecordNativeAuraRuntimeError("invalid native filter: " .. tostring(normalized))

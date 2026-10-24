@@ -163,7 +163,8 @@ function World.Open(root, flavor, state)
     h.env.C_StringUtil = { CreateNumericRuleFormatter = function()
       return { SetBreakpoints = function(self, points) self.format = points[1].format end }
     end }
-    h.env.MSUF_Auras3.CreateClassPowerAuraSensor = function(host, _, _, initialize)
+    -- The Auras3 table is exported to the namespace registry only.
+    h.core.PublicGlobals.MSUF_Auras3.CreateClassPowerAuraSensor = function(host, _, _, initialize)
       Record("CreateClassPowerAuraSensor")
       local button = h.env.CreateFrame("Button", nil, host)
       button.SetApplicationBar = function(_, bar, config)

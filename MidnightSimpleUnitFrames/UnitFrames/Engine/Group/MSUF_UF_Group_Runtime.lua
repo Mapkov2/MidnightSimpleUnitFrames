@@ -1,7 +1,5 @@
 local _, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-
 local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}
@@ -349,7 +347,7 @@ local function WantRaid()
 end
 
 local function PreviewSuppressesHeader(key)
-  if _G.MSUF_UnitEditModeActive == true then return false end
+  if MSUF_UnitEditModeActive == true then return false end
   local active = GF._previewActive
   if not active then return false end
   if key == "party" then return active.party == true end
@@ -490,7 +488,7 @@ local function ApplyRefreshFrame(frame, _, frameKind, kind, mask, applyMask)
   return ApplyFrameDirty(frame, frameKind, mask, "MSUF_GF_REFRESH_VISUALS", applyMask)
 end
 
-local MaskHas = _G.MSUF_UF_MaskHas
+local MaskHas = MSUF.Require("MSUF_UF_MaskHas", "UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua")
 
 local function AddDirty(mask, flag)
   if not flag then return mask end

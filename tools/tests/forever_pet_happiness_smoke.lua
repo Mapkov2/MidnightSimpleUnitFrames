@@ -25,6 +25,9 @@ local function Read(relative)
     return text
 end
 
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+local Collaborators = assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))()
+
 ---------------------------------------------------------------------------
 -- Client fact
 ---------------------------------------------------------------------------
@@ -62,6 +65,13 @@ local function Texture(parent)
     return tex
 end
 
+local happinessNamespace
+-- The menu icon export is namespace-only (MSUF.PublicGlobals): read it from the namespace
+-- the last LoadElement built.
+local function HappinessIcon(...)
+    return happinessNamespace.PublicGlobals.MSUF_GetPetHappinessIcon(...)
+end
+
 local function LoadElement(client)
     local registered
     _G.CreateFrame = function(_, _, parent)
@@ -81,7 +91,12 @@ local function LoadElement(client)
             RefreshElements = function() return true end,
         },
     }
-    assert(loadfile(core .. "Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua"))("MidnightSimpleUnitFrames", namespace)
+    happinessNamespace = namespace
+    -- The module requires the core's pixel region at load: the real Geometry and Util own it.
+    for _, path in ipairs({ "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
+        "Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua" }) do
+        RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. path, namespace)
+    end
     return registered and registered.element, registered and registered.name
 end
 
@@ -179,10 +194,10 @@ do
     Check(lifecycle[1] == "UNIT_HAPPINESS", "Forever: UNIT_HAPPINESS must stay on the unitless route")
 
     -- The menu preview and icon strip draw the same art through one export.
-    local path, left, right, top, bottom, atlas = _G.MSUF_GetPetHappinessIcon(1)
+    local path, left, right, top, bottom, atlas = HappinessIcon(1)
     Check(path == "Interface\\PetPaperDollFrame\\UI-PetHappiness" and left == COORDS[1] and right == 0.5625
         and top == 0 and bottom == 0.359375 and atlas == ATLASES[1], "Forever: the menu icon export drifted from the live art")
-    Check(select(6, _G.MSUF_GetPetHappinessIcon(nil)) == ATLASES[3], "Forever: an unknown state must draw the happy icon")
+    Check(select(6, HappinessIcon(nil)) == ATLASES[3], "Forever: an unknown state must draw the happy icon")
 
     -- A Forever build without the atlases keeps Blizzard's older texture cells.
     AtlasClient(false)
@@ -194,7 +209,7 @@ do
     tex = frame.petHappinessIndicatorIcon
     Check(tex.texture == "Interface\\PetPaperDollFrame\\UI-PetHappiness" and tex.coords[1] == COORDS[1] and tex.atlas == nil,
         "Forever without the atlases must fall back to the texture cells")
-    Check(select(6, _G.MSUF_GetPetHappinessIcon(1)) == nil, "Forever without the atlases must not offer an atlas to the menu")
+    Check(select(6, HappinessIcon(1)) == nil, "Forever without the atlases must not offer an atlas to the menu")
 end
 
 do
@@ -211,7 +226,7 @@ do
     Check(frame.petHappinessIndicatorIcon.shown == true and frame.petHappinessIndicatorIcon.coords[1] == COORDS[2],
         "Classic: the global GetPetHappiness is no longer read")
     Check(frame.petHappinessIndicatorIcon.atlas == nil, "Classic must keep Blizzard's texture cells, not the Forever atlases")
-    Check(select(6, _G.MSUF_GetPetHappinessIcon(2)) == nil, "Classic must not offer an atlas to the menu")
+    Check(select(6, HappinessIcon(2)) == nil, "Classic must not offer an atlas to the menu")
 end
 
 do
@@ -233,14 +248,12 @@ local function LoadDefaults(isForever, petConf)
     _G.UnitName = function() return "Tester" end
     _G.GetRealmName = function() return "TestRealm" end
     _G.InCombatLockdown = function() return false end
-    local function load(path) assert(loadfile(core .. path))("MidnightSimpleUnitFrames", namespace) end
-    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
-    load("Kernel/MSUF_Require.lua")
-    load("State/MSUF_StateHelpers.lua")
-    load("State/MSUF_ProfileCodec.lua")
+    -- The real Kernel API (Require/Optional), Geometry and Util (MSUF.Util.IsSecret), then the
+    -- defaults chain, in the Mainline TOC order.
     local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
     manifest.LoadSelected(root, "Mainline", namespace, {
-        "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+        "Kernel/MSUF_Require.lua", "Shell/EditMode/MSUF_EditMode_Geometry.lua", "Kernel/MSUF_Util.lua",
+        "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua", "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Schema.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
         "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
         "State/MSUF_Defaults.lua",
     })
@@ -277,11 +290,10 @@ local function CompilePetStatus(isForever)
     _G.MSUF_ResolveFontShadowMetrics = function() return 0, 0, 0 end
     _G.MSUF_CooldownAnchorSupported = function() return false end
     _G.MSUF_GlobalCooldownAnchorEnabled = function() return false end
-    local function load(path) assert(loadfile(core .. path))("MidnightSimpleUnitFrames", namespace) end
-    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
-    load("Kernel/MSUF_Require.lua")
-    load("Kernel/MSUF_EventBus.lua")
-    load("Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
+    -- The real Kernel API replaces the export stub, and the compile resolves its textures, colours,
+    -- fonts and pixel regions through their real owners.
+    Collaborators.InstallConfigProviders(root, namespace)
+    local function load(path) RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/" .. path, namespace) end
     load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
     load("UnitFrames/Engine/MSUF_UF_Shared.lua")
     load("UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua")
@@ -312,9 +324,10 @@ end
 do
     local module = "MSUF_UF_PetHappiness.lua"
     -- The gate compares the Classic shared element manifest with the Mainline manifest up to the
-    -- Auras3 icon definitions, so the module loads right behind that prefix, as on Vanilla and TBC.
+    -- Auras3 icon definitions (ending with the icon skin catalog), so the module loads right behind
+    -- that prefix, as on Vanilla and TBC.
     Check(Read("MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Elements.xml")
-        :find('Auras3\\MSUF_Auras3_IconShape.lua"/>\n  <Script file="..\\..\\..\\Game\\Shared\\UnitFrames\\' .. module, 1, true),
+        :find('Auras3\\MSUF_Auras3_IconSkins_Catalog.lua"/>\n  <Script file="..\\..\\..\\Game\\Shared\\UnitFrames\\' .. module, 1, true),
         "the Mainline manifest must load the shared happiness module right after the Auras3 icon definitions")
     for _, flavor in ipairs({ "Vanilla", "TBC" }) do
         Check(Read("MidnightSimpleUnitFrames/Game/" .. flavor .. "/UnitFrames.xml")
@@ -339,8 +352,12 @@ do
     end
     local function HappinessSpec(isForever)
         local main = { Client = LoadClient(isForever), MSUF2 = { PipeRows = PipeRows } }
+        -- The preview family reads the namespace through the client's _G.MSUF alias.
+        local clientAlias = rawget(_G, "MSUF")
+        _G.MSUF = main
         assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua"))(
             "MidnightSimpleUnitFrames_Options", main)
+        _G.MSUF = clientAlias
         local rows = main.UFPreviewSpecs.StatusPreview
         for index, spec in ipairs(rows) do
             if spec.id == "statusPetHappiness" then return spec, index, #rows, rows[#rows].id end

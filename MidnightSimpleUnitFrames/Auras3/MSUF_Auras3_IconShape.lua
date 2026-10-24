@@ -1,7 +1,7 @@
 -- Shared aura icon assets, shape normalization and the shape painters both
 -- aura backends use; no client rendering policy.
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_IconShape.lua")
 local type, select = type, select
 local math_floor, math_max, math_min = math.floor, math.max, math.min
 local A3 = assert(MSUF.MSUF_Auras3)
@@ -123,7 +123,7 @@ function Shape.AtlasKnown(name)
     if type(name) ~= "string" or name == "" then return false end
     local known = atlasKnown[name]
     if known == nil then
-        local api = _G.C_Texture
+        local api = C_Texture
         if api and type(api.GetAtlasInfo) == "function" then
             known = api.GetAtlasInfo(name) ~= nil
         else
@@ -223,6 +223,14 @@ function Shape.ApplyBorderRings(button, style, shape)
         ring:Show()
     end
     for i = count + 1, #rings do rings[i]:Hide() end
+end
+
+--- Recolours the rings Shape.ApplyBorderRings drew on `button`, for a border
+--- whose colour changes while it shows (the Focus Kick ready colour). No rings:
+--- nothing to do.
+function Shape.TintBorderRings(button, r, g, b, a)
+    local rings = button._msufA3ShapedStyleBorders
+    for i = 1, rings and #rings or 0 do rings[i]:SetVertexColor(r, g, b, a) end
 end
 
 --- Stamps `shape` on an aura icon: the shape mask on `owner` over every texture
@@ -389,9 +397,54 @@ end
 --- painters live buttons use, so Edit Mode lanes and menu mocks stay
 --- pixel-identical to the runtime on both backends. Cold path only; passing nil
 --- (opted-out scope, bar-only lane) hides any pieces a previous stamp created.
-function A3.ApplyIconStylePreview(button, style, size, shape)
+local function ApplyPlain(button, style, size, shape)
     if not button then return end
     shape = Shape.Normalize(shape)
     Shape.ApplyIconShadow(button, style, size, shape)
     Shape.ApplyIconBorder(button, style, size, shape)
+end
+
+--- The same with skins: a style carrying a skin
+--- (Auras3/MSUF_Auras3_IconSkins.lua) draws the skin instead of the user's
+--- border and shadow; shaped icons always keep those. `height` and `width`
+--- (optional) are the icon's real sides: a skin sizes its layers from the
+--- width, keeps bands inside a flat icon and scales ring quads per axis with
+--- the mask. A caller that sized the button first (the Classic layout) passes
+--- none, and the button's own size is used. The user's border and shadow keep
+--- `size`. A repaint of an unchanged skin writes nothing at all. Returns true
+--- while a skin draws the look (previews lift their swipe and text over it).
+local function ApplySkinned(button, style, size, shape, height, width)
+    if not button then return false end
+    shape = Shape.Normalize(shape)
+    local skins, owned, unchanged = A3.IconSkins, false, false
+    -- A style without a skin on a button that never drew one leaves at once.
+    if skins and (style and style.skin or skins.states[button]) then
+        owned, unchanged = skins.Paint(button, style, size, shape, height, width)
+    end
+    if owned and unchanged then return true end
+    if owned then style = nil end
+    Shape.ApplyIconShadow(button, style, size, shape)
+    Shape.ApplyIconBorder(button, style, size, shape)
+    return owned
+end
+
+-- Live buttons look the painter up on A3 at call time. Until a runtime compile
+-- produces the first style that carries a skin (Shape.MarkSkinsLive), no live
+-- icon can show or hide one, so profiles without skins keep the plain painter
+-- and pay nothing for them; owners with their own fast path register a switch
+-- (Shape.OnSkinsLive). The switch lasts for the session: a skin removed later
+-- must still be hidden on every button it was drawn on, including Retail
+-- containers that are parked and revived without a repaint, so a session that
+-- used a skin keeps the skin-aware painters until the next reload. Previews
+-- always paint with the skin-aware painter.
+A3.ApplyIconStylePreview = ApplyPlain
+A3.ApplyIconStyleSkinned = ApplySkinned
+local liveSwitches = {}
+function Shape.OnSkinsLive(switch)
+    liveSwitches[#liveSwitches + 1] = switch
+    if A3.ApplyIconStylePreview == ApplySkinned then switch() end
+end
+function Shape.MarkSkinsLive()
+    A3.ApplyIconStylePreview = ApplySkinned
+    for i = 1, #liveSwitches do liveSwitches[i]() end
 end

@@ -4,8 +4,9 @@
 -- the whole core and Options TOC of the flavor, in TOC order.
 --
 --   * MSUF_HostAPI is published by the core at load, and Menu2 carries
---     HOST_API_VERSION 2 (the v1 page-reset registry, empty, and every v2
---     widget protocol entry point) and the core its Suite link;
+--     HOST_API_VERSION 2 (the v1 page-reset registry, holding only the Icon
+--     Skins page's own provider, and every v2 widget protocol entry point) and
+--     the core its Suite link;
 --   * the first setter calls resolve the real owners of this flavor (the
 --     resource appliers through MSUF.Require) and run them: ApplyUIScaleProfile
 --     and SetResourceStack leave the same MSUF_DB and make the same applier
@@ -114,7 +115,13 @@ end
 Check(type(world.core.SuiteLink) == "table" and world.core.SuiteLink.GetOverview() == nil
     and world.core.SuiteLink.NotifyProfileLifecycle("delete", "A") == true,
     "the core did not load its Suite link, or it answers for an absent Suite")
-Check(type(M.PageResetProviders) == "table" and next(M.PageResetProviders) == nil, "the page-reset registry is not empty")
+-- MSUF's own Icon Skins page (Pages/MSUF_Menu2_IconSkins.lua) resets through
+-- the provider API; no other page has a provider before a module registers one.
+Check(type(M.PageResetProviders) == "table", "Menu2 has no page-reset registry")
+local bootProviders = {}
+for key, record in pairs(M.PageResetProviders) do bootProviders[#bootProviders + 1] = key .. "=" .. tostring(record.id) end
+Check(#bootProviders == 1 and bootProviders[1] == "icon_skins=msuf_icon_skins",
+    "the page-reset registry holds more than the Icon Skins page at boot: " .. table.concat(bootProviders, ", "))
 
 -- 2. The real owners, recorded and called through.
 local log, recording, raiseOwner = {}, false, nil

@@ -1,16 +1,20 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Popups.lua - popup router and unit frame popup.
 -- Owns popup composition only; protected frame edits route through EditMode apply helpers.
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_Popups.lua")
 -- Functions other modules publish are resolved where they are called
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Popups.lua"
 local ExportPublic = MSUF.ExportPublic
-local function DB() return _G.MSUF_DB end
+local function DB() return MSUF_DB end
+--- Undo snapshot before an edit; resolved per call because the external
+--- movement bridge hooks the global.
+local function UndoBeforeChange(category, key)
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)(category, key)
+end
 
-local EM2 = _G.MSUF_EM2
+local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
 
 local U = EM2.Util or {}
@@ -21,7 +25,7 @@ local function ApplySettingsForKeySafe(key)
     if type(fn) == "function" then return fn(key) end
     return false
 end
-local Menu2Style = _G.MSUF_EM2_Menu2Style or {}
+local Menu2Style = MSUF.Optional("MSUF_EM2_Menu2Style") or {}
 local Factory = EM2.PopupFactory or {}
 local Quick = EM2.QuickPopup or Menu2Style.QuickPopup or {}
 local C = Factory.Colors or {}
@@ -35,14 +39,14 @@ local RefreshUFPreview = Factory.RefreshUFPreview or U.RefreshUFPreview
 --- width/height write below clamps against this table; the options unit
 --- preview clamps its mock to the same table, so popup writes and preview
 --- geometry cannot drift apart.
-local SizeBounds = _G.MSUF_UnitFrameSizeBounds or { minW = 40, maxW = 800, minH = 8, maxH = 200 }
+local SizeBounds = MSUF.Require("MSUF_UnitFrameSizeBounds", CALLER)
 
 --- Popup router. All popups are Midnight-native (EM2).
 local Popups = {}
 EM2.Popups = Popups
 
 local function NotifyGuidedPopupOpened(key)
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local menu = MSUF.MSUF2
     if menu and type(menu.NotifyGuidedEditModePopupOpened) == "function" then
         return menu.NotifyGuidedEditModePopupOpened(key)
     end
@@ -56,11 +60,10 @@ function Popups.CloseAll()
     if EM2.UnitPopup then EM2.UnitPopup.Close() end
     if EM2.CastPopup then EM2.CastPopup.Close() end
     if EM2.AuraPopup then EM2.AuraPopup.Close() end
-    if _G.MSUF_EM2_HideGFPopup then
-        _G.MSUF_EM2_HideGFPopup("party")
-        _G.MSUF_EM2_HideGFPopup("raid")
-        _G.MSUF_EM2_HideGFPopup("mythicraid")
-    end
+    local hideGroupPopup = MSUF.Require("MSUF_EM2_HideGFPopup", CALLER)
+    hideGroupPopup("party")
+    hideGroupPopup("raid")
+    hideGroupPopup("mythicraid")
     if EM2.State then EM2.State.SetPopupOpen(false) end
     if EM2.Focus and EM2.Focus.ClearPopupFocus then EM2.Focus.ClearPopupFocus() end
 end
@@ -127,10 +130,8 @@ function Popups.Open(key, anchorFrame)
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
         local mode = (pType == "gf_raid") and "raid" or ((pType == "gf_mythicraid") and "mythicraid" or "party")
-        if _G.MSUF_EM2_ShowGFPopup then
-            _G.MSUF_EM2_ShowGFPopup(mode)
-            if EM2.State then EM2.State.SetPopupOpen(true) end
-        end
+        MSUF.Require("MSUF_EM2_ShowGFPopup", CALLER)(mode)
+        if EM2.State then EM2.State.SetPopupOpen(true) end
     elseif pType == "gf_priority" then
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
@@ -291,11 +292,9 @@ do
     end
 end
 local San = Quick.San
-local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
-local CanonPowerBarUnitKey = _G.MSUF_CanonPowerBarUnitKey
+local CanDetachUnitPowerBar = MSUF.Require("MSUF_CanDetachUnitPowerBar", CALLER)
 local function CanDetachPower(key)
-    if type(CanDetachUnitPowerBar) == "function" then return CanDetachUnitPowerBar(key) == true end
-    return type(CanonPowerBarUnitKey) == "function" and CanonPowerBarUnitKey(key) ~= nil
+    return CanDetachUnitPowerBar(key) == true
 end
 local pf
 local Sync
@@ -311,8 +310,8 @@ local function FrameForUnitKey(key)
         local frame = uf.GetFrame(key)
         if frame then return frame end
     end
-    local frames = uf and uf.frames or _G.MSUF_UnitFrames
-    return key and frames and frames[key] or nil
+    local frames = uf and uf.frames or MSUF.Require("MSUF_UnitFrames", CALLER)
+    return key and frames[key] or nil
 end
 
 local function ApplyPowerLayoutForUnitKey(key, detached)
@@ -384,7 +383,7 @@ local function Apply()
     if not conf then
         return
     end
-    _G.MSUF_EM_UndoBeforeChange("unit", key)
+    UndoBeforeChange("unit", key)
     local frame = FrameForUnitKey(key) or pf.parent
     local currentX, currentY = San(conf.offsetX, 0), San(conf.offsetY, 0)
     local displayX = pf.xBox and tonumber(pf.xBox:GetText())
@@ -414,7 +413,8 @@ local function Apply()
             local original = tonumber(pf._msufDetachedWidthOriginal)
             manualDetachedWidthSelected = original ~= nil and dw ~= original
             if manualDetachedWidthSelected then
-                local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+                local liveDB = DB()
+                local bars = liveDB and liveDB.bars
                 sharedDetachedWidthSourceChanged = bars and bars.detachedPowerBarWidthMode ~= nil or false
                 if bars then bars.detachedPowerBarWidthMode = nil end
                 conf.detachedPowerBarWidth = dw
@@ -462,7 +462,7 @@ local function Apply()
     MSUF.Require("MSUF_ForceTextLayoutForUnitKey", CALLER)(key)
     --- Clear PBEmbedLayout stamp so width/height changes are re-applied
     if frame then
-        local cs=_G.MSUF_NS and _G.MSUF_NS.Cache
+        local cs=MSUF.Cache
         if cs and cs.ClearStamp then
             cs.ClearStamp(frame, "PBEmbedLayout")
         end
@@ -566,7 +566,7 @@ local function ApplyMenu2UnitSelection(component, slot)
         source = "unit-popup",
     }) end
 
-    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    local M = MSUF.MSUF2
     if M and (component == "name" or component == "hp" or component == "power") then
         U.SyncUnitTextMenuState(M, key, component, slot)
     end
@@ -605,7 +605,7 @@ local function ApplyDetachPower(checked)
     if not CanDetachPower(key) then return end
     local conf = key and Conf(key)
     if not conf then return end
-    _G.MSUF_EM_UndoBeforeChange("unit", key)
+    UndoBeforeChange("unit", key)
     conf.powerBarDetached = checked and true or false
     if conf.powerBarDetached then
         conf.detachedPowerBarOffsetX = tonumber(conf.detachedPowerBarOffsetX) or 0
@@ -630,7 +630,7 @@ local function ResetPosition()
     local key = CK(pf.unit)
     local conf = key and Conf(key)
     if not conf then return end
-    _G.MSUF_EM_UndoBeforeChange("unit", key)
+    UndoBeforeChange("unit", key)
     local dx, dy = MSUF.Require("MSUF_GetDefaultUnitOffsets", CALLER)(key)
     conf.offsetX, conf.offsetY = dx, dy
     if not ApplySettingsForKeySafe(key) then ApplyAllSettingsSafe() end
@@ -654,7 +654,7 @@ local function CopySizeTo(targetKey, skipHistory)
     local srcKey = CK(pf.unit)
     local src = srcKey and db[srcKey]
     if not src or targetKey == srcKey then return end
-    if not skipHistory then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
+    if not skipHistory then UndoBeforeChange("unit", targetKey) end
     local dst = db[targetKey]
     if not dst then
         db[targetKey] = {}
@@ -675,18 +675,7 @@ end
 
 
 local function ApplySize(changed)
-    if pf and pf._lockRatio then
-        local ratio = tonumber(pf._sizeRatio)
-        local w = pf.wBox and tonumber(pf.wBox:GetText())
-        local h = pf.hBox and tonumber(pf.hBox:GetText())
-        if ratio and ratio > 0 then
-            if changed == "width" and w then
-                Quick.SetBoxText(pf.hBox, floor(max(SizeBounds.minH, min(SizeBounds.maxH, w / ratio)) + 0.5))
-            elseif changed == "height" and h then
-                Quick.SetBoxText(pf.wBox, floor(max(SizeBounds.minW, min(SizeBounds.maxW, h * ratio)) + 0.5))
-            end
-        end
-    end
+    Quick.EnforceSizeRatio(pf, changed, SizeBounds.minW, SizeBounds.maxW, SizeBounds.minH, SizeBounds.maxH)
     Apply()
 end
 
@@ -800,7 +789,7 @@ local function Build()
     pf.dpbWHRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -126, "Width", "dpbWBox", Apply, "Height", "dpbHBox", Apply)
     pf.dpbLayerRow = Quick.SingleValueAt(pf, pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox", Apply)
     do
-        local ui = (MSUF and MSUF.UI) or _G.MSUF_UI
+        local ui = MSUF.UI
         local info
         if ui and type(ui.Button) == "function" then
             info = ui.Button(pf.dpbLayerRow, "I", 20, 20, {
@@ -808,13 +797,13 @@ local function Build()
                 skipHistory = true,
                 align = "CENTER",
                 onClick = function(self)
-                    local show = _G.MSUF_ShowLayerOverview
+                    local show = MSUF.Optional("MSUF_ShowLayerOverview")
                     if type(show) == "function" then show(self) end
                 end,
             })
         elseif type(Quick.Button) == "function" then
             info = Quick.Button(pf.dpbLayerRow, "I", 20, 20, function(self)
-                local show = _G.MSUF_ShowLayerOverview
+                local show = MSUF.Optional("MSUF_ShowLayerOverview")
                 if type(show) == "function" then show(self) end
             end)
         end
@@ -824,15 +813,15 @@ local function Build()
             info._msuf2LayerOverviewButton = true
             if info.HookScript then
                 info:HookScript("OnEnter", function(self)
-                    if not _G.GameTooltip then return end
+                    if not GameTooltip then return end
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                     GameTooltip:SetText(Tr("Layer overview"), 0.35, 1.00, 0.62)
                     GameTooltip:AddLine(Tr("Shows all configurable MSUF layers on the unified 0-30 scale."), 0.78, 0.86, 0.96, true)
                     GameTooltip:Show()
                 end)
-                info:HookScript("OnLeave", function() if _G.GameTooltip then GameTooltip:Hide() end end)
+                info:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
                 info:HookScript("OnHide", function(self)
-                    local hide = _G.MSUF_HideLayerOverviewForAnchor
+                    local hide = MSUF.Optional("MSUF_HideLayerOverviewForAnchor")
                     if type(hide) == "function" then hide(self) end
                 end)
             end
@@ -933,7 +922,7 @@ local function ApplyResource()
             or anchor ~= (conf.detachedPowerBarAnchorToClassPower == true)
     end
     if not changed then return end
-    _G.MSUF_EM_UndoBeforeChange(cfg.historyCategory, cfg.historyKey)
+    UndoBeforeChange(cfg.historyCategory, cfg.historyKey)
     conf[xKey], conf[yKey], conf[heightKey] = x, y, height
     if kind == "classpower" and y ~= oldY then
         -- An explicit Edit Mode Y value uses the current cooldown-top offset,
@@ -945,7 +934,7 @@ local function ApplyResource()
         if kind == "classpower" then
             conf.classPowerWidthMode = "custom"
         else
-            local db = _G.MSUF_DB
+            local db = DB()
             if db and db.bars then db.bars.detachedPowerBarWidthMode = nil end
             if cfg.resourceUnit == "player" then sync = false end
         end
@@ -960,7 +949,7 @@ local function ApplyResource()
         conf.detachedPowerBarAnchorToClassPower = anchor
     end
     if kind == "classpower" then
-        local refresh = _G.MSUF_ClassPower_RefreshLayout
+        local refresh = MSUF.Optional("MSUF_ClassPower_RefreshLayout")
         if type(refresh) == "function" then refresh() end
         ApplyPowerLayoutForUnitKey("player", true)
     else

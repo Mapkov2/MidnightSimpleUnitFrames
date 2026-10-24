@@ -87,10 +87,13 @@ Check(clientReads == 1, "MSUF_Menu2_Search_IndexQuery.lua must read MSUF.Client 
 ---------------------------------------------------------------------------
 for _, file in ipairs({ "MSUF_Menu2_UnitStatusSection.lua" }) do
     local source = Read(PAGES .. file)
-    Check(source:find('\n    local happiness = FindStatusSpec(unit, "statusPetHappiness")\n'
-        .. '    if happiness and happiness.value == "statusPetHappiness" and type(M.RegisterVirtualRuntimeControl) == "function" then\n'
-        .. '        local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, "status.indicator.pet_happiness", happiness,'
-        .. ' selector, RefreshStatusSectionState)\n', 1, true),
+    -- The virtual indicators (Pet Happiness, Pet XP, Threat %) register from one table-driven loop.
+    Check(source:find('\n    { "statusPetHappiness", "status.indicator.pet_happiness" },\n', 1, true)
+        and source:find('\nfunction StatusSection.RegisterVirtualIndicators(state, ctx, unit, selector)\n'
+        .. '    if type(M.RegisterVirtualRuntimeControl) ~= "function" then return end\n', 1, true)
+        and source:find('\n        local spec = FindStatusSpec(unit, item[1])\n'
+        .. '        if spec and spec.value == item[1] then\n'
+        .. '            local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, item[2], spec, selector, Refresh)\n', 1, true),
         file .. " no longer registers the Pet Happiness control only where the status spec exists")
     Check(source:find('M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")', 1, true),
         file .. " no longer registers the Pet Happiness virtual control")

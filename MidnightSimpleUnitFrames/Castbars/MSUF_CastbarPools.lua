@@ -26,9 +26,21 @@ local type = type
 local tonumber = tonumber
 local math_floor = math.floor
 local math_abs = math.abs
-local UnitExists = _G.UnitExists
-local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
-local UnitIsUnconscious = _G.UnitIsUnconscious
+local UnitExists = UnitExists
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local UnitIsUnconscious = UnitIsUnconscious
+local PublicGlobals = MSUF.PublicGlobals
+
+-- Kernel (EventBus, Scheduler, Util, Libs) and State/MSUF_Defaults.lua load
+-- before every castbar file.
+local FILE = "Castbars/MSUF_CastbarPools.lua"
+local EventBusRegister = MSUF.Require("MSUF_EventBus_Register", FILE)
+local EventBusUnregister = MSUF.Require("MSUF_EventBus_Unregister", FILE)
+local ensureDB = MSUF.Optional("MSUF_EnsureDB")
+local SnapToPixel = MSUF.Require("MSUF_Snap", FILE)
+local GetPhysicalPixelSize = MSUF.Require("MSUF_GetPhysicalPixelSize", FILE)
+local ClearFontStringApplyCaches = MSUF.Require("MSUF_ClearFontStringApplyCaches", FILE)
+local ScheduleOnce = MSUF.Require("MSUF_ScheduleOnce", FILE)
 
 -- Shared geometry of every pool. Kinds differ only in the fallback y offset
 -- (descriptor.fallbackY) and their frame level band (descriptor.frameLevelBase).
@@ -49,15 +61,15 @@ Pools.UNITFRAME_GAP = UNITFRAME_GAP
 local FONT_REGIONS = { "castText", "timeText", "castTargetText" }
 
 local function EnsureDB()
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
+    if type(ensureDB) == "function" then
+        ensureDB()
     end
 end
 
 local function InCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
-        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
+    return PublicGlobals.MSUF_InCombat == true
+        or ((InCombatLockdown and InCombatLockdown()) and true or false)
+        or ((UnitAffectingCombat and UnitAffectingCombat("player")) and true or false)
 end
 Pools.InCombat = InCombat
 
@@ -117,21 +129,16 @@ local function SetHeightIfChanged(frame, height)
 end
 
 local function Snap(frame, value)
-    value = tonumber(value) or 0
-    if type(_G.MSUF_Snap) == "function" then
-        return _G.MSUF_Snap(frame, value)
-    end
-    return math_floor(value + 0.5)
+    return SnapToPixel(frame, tonumber(value) or 0)
 end
 Pools.Snap = Snap
 
 local function ClearFontAttempt(frame)
     if not frame then return end
-    local clear = _G.MSUF_ClearFontStringApplyCaches
     for index = 1, #FONT_REGIONS do
         local fontString = frame[FONT_REGIONS[index]]
         if fontString then
-            if type(clear) == "function" then clear(fontString) end
+            ClearFontStringApplyCaches(fontString)
             fontString._msufCastbarFontKey = nil
             fontString._msufCastbarFontEpoch = nil
             fontString._msufCastbarFontReady = nil
@@ -249,6 +256,19 @@ Pools.kinds = kinds
 local order = Pools.order or {}
 Pools.order = order
 
+--- Cold walk over every slot of every pool, boss then arena: visitBar gets
+--- each live bar and visitPreview each preview slot of a pool with previews.
+function Pools.ForEachFrame(visitBar, visitPreview)
+    for poolIndex = 1, #order do
+        local pool = order[poolIndex]
+        local preview = pool.preview
+        for index = 1, pool.maxFrames do
+            visitBar(pool.Bar(index))
+            if preview then visitPreview(preview:Frame(index)) end
+        end
+    end
+end
+
 --- Pools.Define stage 1: the anchor/size pass of one bar.
 local function DefinePoolAnchorBase(desc)
     local ReadGeometry = Config.Geometry
@@ -329,12 +349,7 @@ local function DefinePoolAnchorBase(desc)
                 if type(Anchors.GetCastbarUnitframeBottomInset) == "function" then
                     bottomInset = Anchors.GetCastbarUnitframeBottomInset(unit, frame)
                 end
-                local gap
-                if type(_G.MSUF_GetPhysicalPixelSize) == "function" then
-                    gap = _G.MSUF_GetPhysicalPixelSize(frame, UNITFRAME_GAP)
-                else
-                    gap = Snap(frame, UNITFRAME_GAP)
-                end
+                local gap = GetPhysicalPixelSize(frame, UNITFRAME_GAP)
                 changed = SetPointIfChanged(frame, "TOPLEFT", source, "BOTTOMLEFT",
                     offsetX + autoX, offsetY - bottomInset - gap, true) or changed
 
@@ -415,7 +430,7 @@ local function DefinePoolLayout(desc, UpdateAnchorBase)
     --- comparison-only; a full layout runs only for stale state.
     local function PrepareForCast(frame)
         if not frame then return false end
-        local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+        local fontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
         local visualRevision = tonumber(Config.styleRevision) or 1
         local sizeChanged = false
         if frame._msufPoolAnchorValidationRev ~= visualRevision then
@@ -597,23 +612,9 @@ local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
     local FlushPrewarm
 
     local function SchedulePrewarmStep()
-        if prewarmQueued then return true end
-        local scheduleOnce = _G.MSUF_ScheduleOnce
-        if type(scheduleOnce) == "function" then
-            prewarmQueued = true
-            scheduleOnce(SCHEDULE_PREWARM, FlushPrewarm)
-            return true
-        end
-        local timer = _G.C_Timer
-        if timer and timer.After then
-            prewarmQueued = true
-            timer.After(0, FlushPrewarm)
-            return true
-        end
-        -- The prewarm is optional; without a real frame boundary, leave the
-        -- authoritative PrepareForCast validation in charge instead of moving
-        -- all hidden-bar layout work into one synchronous burst.
-        return false
+        if prewarmQueued then return end
+        prewarmQueued = true
+        ScheduleOnce(SCHEDULE_PREWARM, FlushPrewarm)
     end
 
     FlushPrewarm = function()
@@ -638,7 +639,8 @@ local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
         index = index + 1
         if castbars and index <= #castbars then
             prewarmIndex = index
-            if SchedulePrewarmStep() then return end
+            SchedulePrewarmStep()
+            return
         end
         prewarmPendingGeneration = nil
         prewarmIndex = nil
@@ -648,10 +650,7 @@ local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
         prewarmGeneration = prewarmGeneration + 1
         prewarmPendingGeneration = prewarmGeneration
         prewarmIndex = 1
-        if not SchedulePrewarmStep() then
-            prewarmPendingGeneration = nil
-            prewarmIndex = nil
-        end
+        SchedulePrewarmStep()
     end
 
     local function FlushPass()
@@ -671,16 +670,7 @@ local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
         passPendingGeneration = passGeneration
         if passQueued then return end
         passQueued = true
-
-        local scheduleOnce = _G.MSUF_ScheduleOnce
-        local timer = _G.C_Timer
-        if type(scheduleOnce) == "function" then
-            scheduleOnce(SCHEDULE_PASS, FlushPass)
-        elseif timer and timer.After then
-            timer.After(0, FlushPass)
-        else
-            FlushPass()
-        end
+        ScheduleOnce(SCHEDULE_PASS, FlushPass)
     end
 
     local function CancelLifecycle()
@@ -721,7 +711,7 @@ local function DefinePoolLifecycle(desc, pool, EnsureCastbars, RefreshFromUnit, 
         lifecycleUnits[index] = UNIT_PREFIX .. index
     end
 
-    local issecret = _G.issecretvalue
+    local issecret = issecretvalue
     local UNIT_PATTERN = "^" .. UNIT_PREFIX .. "(%d+)$"
 
     local function HandleLifecycle(event, eventUnit)
@@ -776,10 +766,9 @@ local function DefinePoolLifecycle(desc, pool, EnsureCastbars, RefreshFromUnit, 
     local lifecycleFrame
 
     local function UnregisterLifecycleBus()
-        local unregister = _G.MSUF_EventBus_Unregister
         for index = 1, #supportedRows do
             local row = supportedRows[index]
-            unregister(row.event, row.key)
+            EventBusUnregister(row.event, row.key)
         end
     end
 
@@ -804,14 +793,13 @@ local function DefinePoolLifecycle(desc, pool, EnsureCastbars, RefreshFromUnit, 
             CancelLifecycle()
             return false
         end
-        local register = _G.MSUF_EventBus_Register
         -- The bus answers false when it declines a subscription. Every call
         -- runs before the verdict is read, so one refusal cannot skip the
         -- others.
         local wired = true
         for index = 1, #supportedRows do
             local row = supportedRows[index]
-            wired = register(row.event, row.key, HandleLifecycle, row.units and lifecycleUnits or nil,
+            wired = EventBusRegister(row.event, row.key, HandleLifecycle, row.units and lifecycleUnits or nil,
                 row.once or nil) ~= false and wired
         end
         if wired then return true end
