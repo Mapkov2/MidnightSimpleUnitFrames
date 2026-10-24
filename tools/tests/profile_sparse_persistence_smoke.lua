@@ -197,6 +197,9 @@ end
 local minimum = math.huge
 for _ = 1, 2 do
     collectgarbage("collect")
+    -- A full collect turns the cleared keys of the reused walk scratch into dead
+    -- keys; the first walk after it re-seats them once. Measure the steady state.
+    ns.DefaultsSchema.Persist(measured)
     collectgarbage("stop")
     local memory = collectgarbage("count")
     for _ = 1, 100 do
