@@ -6,8 +6,6 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local FILE = "Menu2/GroupPreview_Render"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
-local AuraPainter = assert(MSUF.Require("MSUF_Auras3", FILE).MockAuraPainter, "MSUF: missing core mock aura painter")
-local PaintSwipe, PaintDurationBar = AuraPainter.Swipe, AuraPainter.DurationBar
 -- Core exports the refresh path reads, resolved once (their providers load with the
 -- core): the preview animation frame state and the status icon texture resolver.
 local CoreExports = {
@@ -226,7 +224,7 @@ local GROUP_RENDER_FALLBACKS = {
     { "CurrentSpellPlaced", Fallbacks.Nil }, { "CurrentSpellTexture", Fallbacks.QuestionIcon },
     { "CurrentSpellColor", Fallbacks.WhiteRGB }, { "MockSpellTexture", Fallbacks.QuestionIcon }, { "Round", Fallbacks.Round },
     { "ResolveDefaultZoomLock", Fallbacks.Noop }, { "UpdateZoomControls", Fallbacks.Noop }, { "SelectHandle", Fallbacks.Noop },
-    { "NudgeHandlePosition", Fallbacks.Noop }, { "AddIconPool", Fallbacks.Noop }, { "RefreshHandleSelection", Fallbacks.Noop },
+    { "NudgeHandlePosition", Fallbacks.Noop }, { "RefreshHandleSelection", Fallbacks.Noop },
     { "ClampZoom", function(value) return tonumber(value) or 1 end },
     { "ClampLayer", function(value, fallback) return tonumber(value) or fallback or 0 end },
     { "ClassColor", function(_, r, g, b) return r or 1, g or 1, b or 1 end },
@@ -313,16 +311,6 @@ end
 local function SceneLayerAlpha(scene, key)
     if scene.layerAvailable[key] == false then return 0 end
     return scene.soloLayer and scene.soloLayer ~= key and 0.15 or 1
-end
-
-local function ApplyPreviewIconZoom(texture, zoom, baseInset)
-    if not (texture and texture.SetTexCoord) then return end
-    zoom = tonumber(zoom) or 100
-    if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
-    baseInset = tonumber(baseInset) or 0
-    local visible = (1 - (baseInset * 2)) * (100 / zoom)
-    local inset = math.max(MSUF.MSUF_Auras3.IconShape.IconZoomInset(zoom), (1 - visible) * 0.5)
-    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 
 local AURA_PREVIEW_RAW_FIELDS = {
@@ -978,27 +966,6 @@ end
 local Stage = {}
 
 -- A group lane icon is size x size; the swipe and duration bar painters are the shared core ones.
-local function GroupAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
-    if not (swipe and icon) then return end
-    size = tonumber(size) or 1
-    PaintSwipe(swipe, icon, size, size, remainingFrac, reverse)
-end
-local function GroupAuraDurationBar(bar, icon, cfg, size, auraState)
-    if not (bar and icon and cfg and cfg.showDurationBar == true) then
-        if bar then bar:Hide() end
-        return
-    end
-    size = math.max(1, tonumber(size) or 1)
-    PaintDurationBar(bar, icon, cfg, size, size, auraState)
-end
-local TEXT_ANCHORS = {
-    TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true,
-    RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
-}
-local function RuntimeAuraTextAnchor(anchor, fallback)
-    if TEXT_ANCHORS[anchor] then return anchor end
-    return fallback or "CENTER"
-end
 local function BuildAuraLaneHelpers(st, RenderState)
     local mock = RenderState.mock
     local GF_PREVIEW_ANCHOR_FRAC = RenderState.GF_PREVIEW_ANCHOR_FRAC
@@ -1024,16 +991,6 @@ function Stage.PrepareAuraLanes(st)
     end
     st.previewScale = scene.previewScale
     st.LayoutHandle = helpers.LayoutHandle
-end
-
--- Auras3 icon shape and style on a preview owner; the style is dropped while only the duration bar shows.
-local function ApplyPreviewIconLook(a3, owner, shape, style, barOnly, size, tex, swipe)
-    if not a3 then return end
-    if a3.ApplyAuraIconShape then a3.ApplyAuraIconShape(owner, shape, nil, tex, swipe) end
-    if a3.ApplyIconStylePreview then
-        if barOnly then style = nil end
-        a3.ApplyIconStylePreview(owner, style, size, shape)
-    end
 end
 
 -- Layout preparation and visual adoption are separate cold options stages. The old
@@ -1399,6 +1356,7 @@ end
 
 local function SuspendSpellPreviewRoot(root)
     if not root then return end
+    if root._msufMenuSpellSampleOwner then return MSUF.GF.HidePreviewSpellSample(root._msufMenuSpellSampleOwner) end
     StopPreviewAnimation(root._msufSpellPreviewPulse)
     HidePreviewGlow(root)
     root:Hide()
@@ -1543,7 +1501,8 @@ function Stage.Animate(env, self)
     local scene = st.scene
     if scene.kind ~= scene.H.CurrentScope() then return false end
     if self._dragFrame and self._dragFrame._handle then return true end
-    M.PreviewHelpers.RestoreGroupSceneHandles(self)
+    M.PreviewHelpers.RestoreGroupSceneHandles(self, false, true)
+    st.animatingSamples = true
     -- The scene's own clock: the engine repaints bars, texts and prediction at this elapsed time.
     if self._scene then self._scene:SetClock(self._animationElapsed) end
     PlaceTextHandles(scene)
@@ -1554,6 +1513,7 @@ function Stage.Animate(env, self)
     Stage.ConfigureStatusHandles(st, env)
     if scene.engineConfig and scene.engineConfig.spellIndicators then Stage.RenderSpellIndicators(st, env)
     else FinalizeScene(scene) end
+    st.animatingSamples = nil
     return true
 end
 
@@ -2082,33 +2042,6 @@ local WHITE_RGBA = { 1, 1, 1, 1 }
 local EMPTY_APPEARANCE = {}
 -- The selected spell's placement before the editor stored one.
 local SELECTED_SPELL_PLACED_DEFAULT = { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 }
--- The spell handle's region lists, in the order of SpellPreviewRegions.
-local SPELL_REGION_LISTS = { "_icons", "_iconSwipes", "_iconStacks", "_iconTimers", "_iconDurationBars" }
-local function SpellPreviewRegions(handle)
-    local swipes, stacks, timers, bars = handle._iconSwipes, handle._iconStacks, handle._iconTimers, handle._iconDurationBars
-    return handle._icons[1], swipes and swipes[1], stacks and stacks[1], timers and timers[1], bars and bars[1]
-end
--- Hides the first region of the handle's lists `first` to `last` of SPELL_REGION_LISTS.
-local function HideSpellRegions(handle, first, last)
-    for i = first, last do
-        local list = handle[SPELL_REGION_LISTS[i]]
-        local region = list and list[1]
-        if region then region:Hide() end
-    end
-end
--- Solid fill of a spell indicator bar, square or duration bar region.
-local function FillSpellRegion(region, white, r, g, b, a)
-    region:SetTexture(white)
-    region:SetTexCoord(0, 1, 0, 1)
-    region:SetVertexColor(r, g, b, a)
-    region:ClearAllPoints()
-end
--- Font, colour and anchor of one spell indicator text.
-local function PlaceSpellText(st, fs, size, owner, anchor, x, y)
-    st.SetPreviewFont(fs, size)
-    fs:SetTextColor(1, 1, 1, 1)
-    PlaceAuraPreviewText(fs, owner, anchor, x, y)
-end
 -- Appearance flag, else the placement's own flag (on unless it is explicitly false).
 local function SpellShowFlag(appearance, placed, key)
     local value = appearance[key]
@@ -2119,186 +2052,96 @@ end
 local function HideSpellIconEffectPreview(handle)
     local root = handle and handle._msufSpellPreviewIconEffectRoot
     if not root then return end
-    HidePreviewGlow(root)
-    root:Hide()
-end
-local function ApplySpellIconEffectPreview(st, handle, placed, spellSize)
-    local visual = placed and (placed.visual or placed.type)
-    if not (handle and placed and visual == "icon" and placed.iconEffect == "glow") then
-        HideSpellIconEffectPreview(handle)
-        return
+    if root._msufMenuSpellSampleOwner then
+        MSUF.GF.HidePreviewSpellSample(root._msufMenuSpellSampleOwner)
+    else
+        HidePreviewGlow(root)
+        root:Hide()
     end
-    local root = handle._msufSpellPreviewIconEffectRoot
-    if not root then
-        root = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
-        root:EnableMouse(false)
+end
+-- Translate the editor placement into the engine scene's indicator contract.
+-- The retained visual is adopted by its drag handle exactly like a configured
+-- spell slot; all art, fonts, masks, timer/bar and icon-style rendering is shared.
+local function ConfigureSpellPreviewHandle(st, handle, item, placed, appearance, fallbackTexture, fallbackColor)
+    -- Insertion samples are static. Their native animation owns the glow;
+    -- geometry and slot translation run only on settings refreshes.
+    if st.animatingSamples then return handle and handle._msufEngineVisual ~= nil end
+    if not (handle and placed and st.mock._cell) then return false end
+    appearance = appearance or EMPTY_APPEARANCE
+    local exact = placed.spellIndicatorSlot == true
+    local slot = handle._msufSpellSampleSlot
+    if not slot then
+        slot = {}
+        handle._msufSpellSampleSlot = slot
+    end
+    wipe(slot)
+    for key, value in pairs(appearance) do slot[key] = value end
+    local scale = (exact or placed._msufIconScaleApplied == true) and 1 or st.scene.spellIconScale
+    slot.visual = exact and (placed.visual or "none") or (placed.type or "icon")
+    slot.size = max(1, (tonumber(placed.size) or 20) * scale)
+    local barWidth = tonumber(exact and placed.width or placed.barWidth)
+    slot.width = slot.visual == "bar" and max(slot.size * 2, barWidth and barWidth * scale or slot.size * 3) or slot.size
+    slot.height = slot.size
+    if slot.visual == "number" then slot.width, slot.height = max(18, slot.size), max(18, slot.size) end
+    slot.anchor, slot.x, slot.y = placed.anchor or "TOPLEFT", placed.x or 0, placed.y or 0
+    slot.icon = item and item.icon or fallbackTexture or st.env.CurrentSpellTexture(st.kind)
+    slot.color = item and item.color or fallbackColor
+    slot.iconZoom = exact and placed.iconZoom or st.scene.spellIconZoom
+    slot.iconShape = appearance.iconShape or "RECTANGLE"
+    slot.iconEffect = placed.iconEffect
+    slot.showCooldownText = appearance.showCooldownText
+    if slot.showCooldownText == nil then slot.showCooldownText = SpellShowFlag(appearance, placed, "showCooldown") end
+    slot.showCooldownSwipe = SpellShowFlag(appearance, placed, "showCooldownSwipe")
+    slot.showStacks = SpellShowFlag(appearance, placed, "showStacks")
+    if slot.visual == "bar" then
+        slot.durationBarReverseFill = exact and placed.durationBarReverseFill == true
+            or (not exact and tostring(placed.growth or "RIGHTDOWN"):upper():sub(1, 4) == "LEFT")
+        slot.showCooldownText = exact and placed.showCooldownText == true or (not exact and placed.barShowTimer == true)
+        slot.cooldownAnchor = (exact and placed.cooldownAnchor or placed.barTimerAnchor) or "CENTER"
+        slot.cooldownX = (exact and placed.cooldownX or placed.barTimerX) or 0
+        slot.cooldownY = (exact and placed.cooldownY or placed.barTimerY) or 0
+    end
+    -- Frame effects retain their separate runtime-owned surface below.
+    slot.frameEffect = nil
+    local color = handle._msufSpellIndicatorColor or {}
+    handle._msufSpellIndicatorColor, handle._color = color, color
+    local source = slot.color or EMPTY_APPEARANCE
+    color[1], color[2], color[3], color[4] = source[1] or 0.69, source[2] or 0.50, source[3] or 0.88, source[4] or 1
+    slot.color = color
+    local visual = MSUF.GF.PreviewSpellSample(st.mock._cell, handle, slot)
+    if not visual then return false end
+    visual:SetAlpha(tonumber(appearance.alpha) or 1)
+    if visual._timer then st.SetPreviewFont(visual._timer, tonumber(slot.cooldownSize or placed.cooldownSize) or 8) end
+    if visual._stack then
+        st.SetPreviewFont(visual._stack, slot.visual == "number" and max(8, slot.size * 0.72) or tonumber(slot.stackSize) or 10)
+        if slot.visual == "number" then visual._stack:SetText(slot.showStacks and "9" or "") end
+    end
+    if visual._glow then visual._glow:Hide() end
+    if slot.visual == "icon" and slot.iconEffect == "glow" then
+        local effects, root = MSUF.MSUF_Auras3.SpellIndicators
+        if effects and effects.ApplyPreviewIconEffect then
+            root = effects.ApplyPreviewIconEffect(visual, slot)
+        else
+            root = visual._msufClassicPreviewIconGlow
+            if not root then
+                root = PixelLayoutRegion(CreateFrame("Frame", nil, visual))
+                root:EnableMouse(false)
+                root._msufMenuSpellSampleOwner = visual
+                visual._msufClassicPreviewIconGlow = root
+            end
+            root:SetAllPoints(visual)
+            ShowPreviewGlow(st.env, root, root, color[1], color[2], color[3], color[4], max(2, slot.size * 0.15))
+            root:Show()
+        end
         handle._msufSpellPreviewIconEffectRoot = root
     end
-    root:ClearAllPoints()
-    root:SetAllPoints(handle)
-    local color = handle._msufSpellIndicatorColor or WHITE_RGBA
-    ShowPreviewGlow(st.env, root, root, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1,
-        max(2, spellSize * 0.15))
-    root:Show()
-end
-
--- A bar indicator: tinted track, one representative native-fill duration bar and the optional timer.
-function Stage.PaintSpellBar(st, handle, placed, appearance, placedScale, spellBaseSize, spellSize)
-    local env, previewScale = st.env, st.previewScale
-    local ScaleValue, ConfigToOffset = env.ScaleValue, env.ConfigToOffset
-    local color = handle._msufSpellIndicatorColor
-    local r, g, b, a = color[1], color[2], color[3], color[4]
-    local exactSlot = placed.spellIndicatorSlot == true
-    local spellTex, _, _, spellTimer, spellDurationBar = SpellPreviewRegions(handle)
-    local barWidth = tonumber(exactSlot and placed.width or placed.barWidth)
-    if barWidth then barWidth = barWidth * placedScale end
-    local barW = max(spellSize * 2, ScaleValue(barWidth or (spellBaseSize * 3), previewScale, 16))
-    handle:SetSize(barW, spellSize)
-    if spellTex then
-        FillSpellRegion(spellTex, env.WHITE8X8, r * 0.18, g * 0.18, b * 0.18, a * 0.55)
-        spellTex:SetAllPoints(handle)
-        spellTex:Show()
-    end
-    if spellDurationBar then
-        -- Menu previews have no live AuraDurationObject. Show one
-        -- representative native-fill state without adding preview
-        -- animation or recurring work.
-        FillSpellRegion(spellDurationBar, env.WHITE8X8, r, g, b, a)
-        local reverseFill = exactSlot and placed.durationBarReverseFill == true
-            or (not exactSlot and tostring(placed.growth or "RIGHTDOWN"):upper():sub(1, 4) == "LEFT")
-        local edge = reverseFill and "RIGHT" or "LEFT"
-        spellDurationBar:SetPoint("TOP" .. edge, handle, "TOP" .. edge, 0, 0)
-        spellDurationBar:SetPoint("BOTTOM" .. edge, handle, "BOTTOM" .. edge, 0, 0)
-        spellDurationBar:SetWidth(max(1, barW * 0.68))
-        spellDurationBar:Show()
-    end
-    local showTimer = exactSlot and placed.showCooldownText == true
-        or (not exactSlot and placed.barShowTimer == true)
-    if spellTimer and showTimer then
-        PlaceSpellText(st, spellTimer, max(6, ScaleValue(appearance.cooldownSize or placed.cooldownSize or 8, previewScale, 6)), handle,
-            RuntimeAuraTextAnchor(exactSlot and placed.cooldownAnchor or placed.barTimerAnchor, "CENTER"),
-            ConfigToOffset(exactSlot and placed.cooldownX or placed.barTimerX or 0, previewScale),
-            ConfigToOffset(exactSlot and placed.cooldownY or placed.barTimerY or 0, previewScale))
-        spellTimer:SetText("12")
-        spellTimer:Show()
-    end
-end
-
--- An icon indicator: spell texture, timer, swipe, duration bar, stack count and the Auras3 icon look.
-function Stage.PaintSpellIcon(st, handle, item, placed, appearance, fallbackTexture, spellSize)
-    local env, scene, previewScale = st.env, st.scene, st.previewScale
-    local ScaleValue, ConfigToOffset = env.ScaleValue, env.ConfigToOffset
-    local exactSlot = placed.spellIndicatorSlot == true
-    local spellTex, spellSwipe, spellStack, spellTimer, spellDurationBar = SpellPreviewRegions(handle)
-    handle:SetSize(spellSize, spellSize)
-    if spellTex then
-        spellTex:SetTexture((item and item.icon) or fallbackTexture or env.CurrentSpellTexture(st.kind))
-        ApplyPreviewIconZoom(spellTex, exactSlot and placed.iconZoom or scene.spellIconZoom, 0)
-        spellTex:SetVertexColor(1, 1, 1, 1)
-        spellTex:ClearAllPoints()
-        spellTex:SetAllPoints(handle)
-        spellTex:Show()
-    end
-    local showCooldown = appearance.showCooldownText
-    if showCooldown == nil then showCooldown = SpellShowFlag(appearance, placed, "showCooldown") end
-    local showSwipe = SpellShowFlag(appearance, placed, "showCooldownSwipe")
-    local showStacks = SpellShowFlag(appearance, placed, "showStacks")
-    local barOnly = appearance.showDurationBar == true and (appearance.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
-    if spellTex and spellTex.SetAlpha then spellTex:SetAlpha(barOnly and 0 or 1) end
-    local owner = spellTex or handle
-    if spellTimer then
-        PlaceSpellText(st, spellTimer, max(6, ScaleValue(appearance.cooldownSize or placed.cooldownSize or 8, previewScale, 6)), owner,
-            RuntimeAuraTextAnchor(appearance.cooldownAnchor, "CENTER"),
-            ConfigToOffset(appearance.cooldownX or 0, previewScale), ConfigToOffset(appearance.cooldownY or 0, previewScale))
-        spellTimer:SetText(showCooldown and "12" or "")
-        spellTimer:SetShown(showCooldown)
-    end
-    if spellSwipe and showSwipe and not barOnly then
-        GroupAuraPreviewSwipe(spellSwipe, owner, spellSize, 0.48, appearance.cooldownSwipeReverse == true)
-        spellSwipe:SetVertexColor(0, 0, 0, 0.58)
-        spellSwipe:Show()
-    end
-    GroupAuraDurationBar(spellDurationBar, owner, appearance, spellSize, nil)
-    if spellStack and showStacks then
-        PlaceSpellText(st, spellStack, max(6, ScaleValue(appearance.stackSize or 10, previewScale, 6)), owner,
-            RuntimeAuraTextAnchor(appearance.stackAnchor, "BOTTOMRIGHT"),
-            ConfigToOffset(appearance.stackX or 0, previewScale), ConfigToOffset(appearance.stackY or 0, previewScale))
-        spellStack:SetText("2")
-        spellStack:Show()
-    end
-    local a3 = env.MSUF.MSUF_Auras3
-    local previewShape = appearance.iconShape or "RECTANGLE"
-    if a3 and a3.ResolveAuraIconShape then
-        previewShape = a3.ResolveAuraIconShape(previewShape, st.conf.portraitShape or (st.conf.portrait and st.conf.portrait.shape))
-    end
-    ApplyPreviewIconLook(a3, handle, previewShape, appearance.iconStyle, barOnly, spellSize, spellTex, spellSwipe)
-end
-
-local function ConfigureSpellPreviewHandle(st, handle, item, placed, appearance, fallbackTexture, fallbackColor)
-    if not (handle and placed) then return false end
-    local env = st.env
-    local ScaleValue = env.ScaleValue
-    appearance = appearance or EMPTY_APPEARANCE
-    local exactSlot = placed.spellIndicatorSlot == true
-    local spellType = exactSlot and (placed.visual or "none") or (placed.type or "icon")
-    local placedScale = (exactSlot or placed._msufIconScaleApplied == true) and 1 or st.scene.spellIconScale
-    local spellBaseSize = (tonumber(placed.size) or 20) * placedScale
-    local spellSize = max(1, ScaleValue(spellBaseSize, st.previewScale, 1))
-    if handle.SetAlpha then handle:SetAlpha(tonumber(appearance.alpha) or 1) end
-    local color = item and item.color or fallbackColor
-    local spellR, spellG, spellB = (color and color[1]) or 0.69, (color and color[2]) or 0.50, (color and color[3]) or 0.88
-    if handle.SetBackdropColor then handle:SetBackdropColor(spellR * 0.12, spellG * 0.12, spellB * 0.12, 0.42) end
-    if handle.SetBackdropBorderColor then handle:SetBackdropBorderColor(spellR, spellG, spellB, 0.95) end
-    handle._icons = handle._icons or {}
-    local spellTex, spellSwipe, spellStack = SpellPreviewRegions(handle)
-    local handleColor = handle._msufSpellIndicatorColor
-    if not handleColor then
-        handleColor = {}
-        handle._msufSpellIndicatorColor = handleColor
-    end
-    handleColor[1], handleColor[2], handleColor[3], handleColor[4] = spellR, spellG, spellB, (color and color[4]) or 1
-    handle._color = handleColor
-    if handle._label and handle._label.SetText then
+    handle._msufSpellIndicatorLayer = item and item.layer
+    handle._msufSpellIndicatorStrata = item and item.strata
+    if handle._label then
         handle._label:SetText(item and (item.display or item.auraName) or "SPELL")
         handle._label:Show()
     end
-    HideSpellRegions(handle, 2, 5)
-    if spellType == "bar" then
-        Stage.PaintSpellBar(st, handle, placed, appearance, placedScale, spellBaseSize, spellSize)
-    elseif spellType == "square" then
-        handle:SetSize(spellSize, spellSize)
-        if spellTex then
-            FillSpellRegion(spellTex, env.WHITE8X8, spellR, spellG, spellB, 1)
-            spellTex:SetAllPoints(handle)
-            spellTex:Show()
-        end
-    elseif spellType == "number" then
-        handle:SetSize(max(18, spellSize), max(18, spellSize))
-        if spellTex then spellTex:Hide() end
-        if spellStack then
-            st.SetPreviewFont(spellStack, max(8, spellSize * 0.72))
-            spellStack:SetTextColor(spellR, spellG, spellB, 1)
-            spellStack:ClearAllPoints()
-            spellStack:SetPoint("CENTER", handle, "CENTER", 0, 0)
-            local showStacks = SpellShowFlag(appearance, placed, "showStacks")
-            spellStack:SetText(showStacks and "9" or "")
-            spellStack:SetShown(showStacks)
-        end
-    else
-        Stage.PaintSpellIcon(st, handle, item, placed, appearance, fallbackTexture, spellSize)
-    end
-    if spellType ~= "icon" then
-        local a3 = env.MSUF.MSUF_Auras3
-        if a3 then
-            if a3.ApplyAuraIconShape then a3.ApplyAuraIconShape(handle, "RECTANGLE", nil, spellTex, spellSwipe) end
-            if a3.ApplyIconStylePreview then a3.ApplyIconStylePreview(handle, nil) end
-        end
-    end
-    handle._msufSpellIndicatorLayer = item and item.layer or nil
-    handle._msufSpellIndicatorStrata = item and item.strata or nil
-    st.LayoutHandle(handle, placed.anchor, placed.x, placed.y, "TOPLEFT")
-    ApplySpellIconEffectPreview(st, handle, placed, spellSize)
-    return true
+    return M.PreviewHelpers.BindGroupSceneHandle(handle, st.mock, visual, st.previewScale, slot.anchor, slot.x, slot.y)
 end
 
 -- The selected spell's fallback handle (no runtime slot drew it): the stored placement, or the default one.
@@ -2351,7 +2194,6 @@ function Stage.RenderLegacySpellItem(st, box, item, index, dynamicSpellHandlesAc
     local effect = (exactSlot and item.frameEffect) or item.frame
         or (selectedItem and scene.selectedSpellEffect) or nil
     local handle = box:EnsureSpellIndicatorHandle(item, index)
-    if handle and not handle._icons then env.AddIconPool(handle, 1) end
     local placedType = placed and (exactSlot and placed.visual or placed.type) or "none"
     local placedShown = placed and placedType ~= "none" and item.hiddenVisual ~= true
     local selectedDrawn = false
@@ -2362,7 +2204,6 @@ function Stage.RenderLegacySpellItem(st, box, item, index, dynamicSpellHandlesAc
         if handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
         if handle.SetBackdropBorderColor then handle:SetBackdropBorderColor(0, 0, 0, 0) end
         if handle._label then handle._label:Hide() end
-        HideSpellRegions(handle, 1, 4)
         handle._msufSpellIndicatorLayer = item.layer
         handle._msufSpellIndicatorStrata = item.strata
         st.LayoutHandle(handle, "CENTER", 0, 0, "CENTER")

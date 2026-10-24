@@ -1194,6 +1194,39 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   return not hiddenVisual or effectShown
 end
 
+-- An editor's selected or not-yet-placed indicator uses the scene's own
+-- painter and a separate retained pool. It never joins the live aura registry.
+function GF.PreviewSpellSample(frame, owner, slot)
+  if InCombat() or not frame then return nil end
+  local visual = EnsureAuraPreview(owner, 1, "_msufSpellSamplePool")
+  visual:SetParent(frame)
+  visual:SetScale(1)
+  visual._msufMenuSpellSample = true
+  if visual._msufSampleShape and slot.visual ~= "icon" then
+    Auras.ApplyAuraIconShape(visual, "RECTANGLE", nil, visual._texture, visual._swipe)
+    visual._msufSampleShape = nil
+  end
+  ApplySpellIndicatorPreview(frame, "group", visual, slot)
+  if slot.visual == "icon" and not (slot.iconStyle and slot.iconStyle.skin) then
+    local portrait = frame.MSUFSpec and frame.MSUFSpec.portrait
+    local shape = Auras.ResolveAuraIconShape(slot.iconShape, portrait and portrait.shape)
+    Auras.ApplyAuraIconShape(visual, shape, nil, visual._texture, visual._swipe)
+    visual._msufSampleShape = true
+  end
+  return visual
+end
+
+function GF.HidePreviewSpellSample(visual)
+  if not visual then return end
+  local effects = Auras.SpellIndicators
+  if effects and effects.HidePreviewIconEffect then effects.HidePreviewIconEffect(visual) end
+  local root = visual._msufClassicPreviewIconGlow
+  local glow = root and root._msufSpellPreviewGlow
+  if glow and glow.animation:IsPlaying() then glow.animation:Stop() end
+  if root then root:Hide() end
+  visual:Hide()
+end
+
 function GF.HideSpellIndicators(frame)
   local pool = frame and frame._msufGFSpellIndicatorPreviews
   if not pool then return false end

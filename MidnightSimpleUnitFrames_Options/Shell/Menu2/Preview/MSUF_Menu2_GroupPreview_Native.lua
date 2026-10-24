@@ -1504,7 +1504,7 @@ end
 -- What Handles.Install returns that the renderer consumes (statusHandles is defaulted separately).
 local RENDER_HANDLE_FIELDS = {
     "buffHandle", "trackedBuffHandle", "debuffHandle", "externalHandle", "powerBarHandle", "portraitHandle",
-    "dispelSymbolHandle", "spellHandle", "SelectHandle", "NudgeHandlePosition", "AddIconPool",
+    "dispelSymbolHandle", "spellHandle", "SelectHandle", "NudgeHandlePosition",
 }
 function NativeBuild.Render(state)
     local box, handles = state.box, state.handles

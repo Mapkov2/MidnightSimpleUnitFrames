@@ -869,6 +869,32 @@ function Runtime.HidePreviewFrameEffect(owner)
     return true
 end
 
+-- The editor owns this synthetic surface; it never enters the live button registry.
+function Runtime.ApplyPreviewIconEffect(owner, slot)
+    if not (owner and slot and slot.visual == "icon" and slot.iconEffect == "glow") then return nil end
+    local root = owner._msufA3PreviewIconEffectRoot
+    if not root then
+        root = PixelLayoutRegion(CreateFrame("Frame", nil, owner))
+        root:EnableMouse(false)
+        root._msufMenuSpellSampleOwner = owner
+        owner._msufA3PreviewIconEffectRoot = root
+    end
+    root:SetAllPoints(owner)
+    root:SetFrameLevel(owner:GetFrameLevel() + 4)
+    local color = slot.color or {}
+    StartAnimatedGlow(root, root,
+        Clamp01(color[1], 1), Clamp01(color[2], 1), Clamp01(color[3], 1), Clamp01(color[4], 1),
+        math_max(2, ClampNumber(slot.size, 18, 1, 128) * 0.15))
+    root:Show()
+    return root
+end
+function Runtime.HidePreviewIconEffect(owner)
+    local root = owner and owner._msufA3PreviewIconEffectRoot
+    if not root then return end
+    StopAnimatedGlow(root)
+    root:Hide()
+end
+
 local function ApplyAlwaysButtonFrameEffect(button, slot, parentFrame)
     if not (button and slot and parentFrame and type(slot.frameEffect) == "table") then
         HideButtonFrameEffect(button)

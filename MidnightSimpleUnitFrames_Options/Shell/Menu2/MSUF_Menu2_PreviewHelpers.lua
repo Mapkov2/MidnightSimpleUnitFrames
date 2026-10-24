@@ -3286,14 +3286,6 @@ function H.SetRoundedEdgeStackShown(mock, shown, opts)
         ForEachPreviewStyledRing(mock, opts, function(ring) ring:SetShown(shown) end)
     end
 end
-function H.SetRoundedEdgeStackAlpha(mock, alpha, opts)
-    local clamp = opts and opts.clamp01
-    alpha = type(clamp) == "function" and clamp(alpha, 1) or math.max(0, math.min(1, tonumber(alpha) or 1))
-    H.ForEachRoundedEdge(mock, opts, function(edge)
-        if edge and edge.SetAlpha then edge:SetAlpha(alpha) end
-    end)
-    ForEachPreviewStyledRing(mock, opts or {}, function(ring) ring:SetAlpha(alpha) end)
-end
 local function ApplyPreviewStyledRings(mock, count, opts, anchor, r, g, b, a)
     local styledKey = PreviewStyledKey(opts)
     local style = opts.outlineStyle and opts.outlineStyle(mock) or nil
@@ -3428,40 +3420,6 @@ H.ReadPreviewBarsBool = ReadPreviewBarsBool
 
 --- The rectangular power bar border of a unit or group preview: a mouse-free
 --- host frame on the mock with four edge textures, kept in mock[field].
-function H.EnsurePowerBorderHost(mock, field)
-    local host = mock[field]
-    if host then return host end
-    host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-    if host.EnableMouse then host:EnableMouse(false) end
-    host.edges = {}
-    for i = 1, 4 do
-        local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
-        line:SetTexture("Interface\\Buttons\\WHITE8X8")
-        host.edges[i] = line
-    end
-    mock[field] = host
-    return host
-end
-
---- Lays the border edges out edge pixels thick: the top edge only over a
---- rounded power bar, all four otherwise; then shows the host.
-function H.LayoutPowerBorderEdges(host, edge, roundedPower)
-    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
-    PlaceEdgeLine(top, host, "top", edge)
-    top:Show()
-    if not roundedPower then
-        PlaceEdgeLine(bottom, host, "bottom", edge)
-        PlaceEdgeLine(left, host, "left", edge)
-        PlaceEdgeLine(right, host, "right", edge)
-        bottom:Show()
-        left:Show()
-        right:Show()
-    end
-    host:Show()
-end
-
---- The header shade and separator line a pinned (docked) unit or group
---- preview draws over its title row; built on first use.
 function H.EnsurePinnedHeader(box)
     local shade = box._msuf2PinnedHeaderShade
     if not shade and box.CreateTexture then
@@ -3708,11 +3666,12 @@ end
 
 -- Reattach before engine layout/teardown so native caches and pooling retain their
 -- own parents/anchors. No listener, ticker or hook runs outside an open menu preview.
-function H.RestoreGroupSceneHandles(box, force)
+function H.RestoreGroupSceneHandles(box, force, keepSpellSamples)
     for region, alpha in pairs(box._msufMenuAlphaRegions or {}) do region:SetAlpha(alpha) end
     for _, handle in ipairs(box._handleList or {}) do
         local visual, geometry = handle._msufEngineVisual, handle._msufEngineGeometry
-        if visual and geometry and geometry.active and (force or not handle._dragging) then
+        if visual and geometry and geometry.active and (force or not handle._dragging)
+            and not (keepSpellSamples and visual._msufMenuSpellSample) then
             visual:SetParent(geometry.parent)
             if geometry.scale then visual:SetScale(geometry.scale) end
             if geometry.level then visual:SetFrameLevel(geometry.level) end
@@ -3722,6 +3681,9 @@ function H.RestoreGroupSceneHandles(box, force)
                 visual:SetPoint(point[1], point[2], point[3], point[4], point[5])
             end
             geometry.active = false
+            -- A selection sample is repainted only if it is still needed. The
+            -- configured-slot pool is refreshed separately by the engine scene.
+            if visual._msufMenuSpellSample then MSUF.GF.HidePreviewSpellSample(visual) end
         end
     end
 end

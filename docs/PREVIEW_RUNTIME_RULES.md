@@ -351,3 +351,14 @@ This is offline contract evidence; live WoW pixels, combat/taint and GPU renderi
 still require in-client verification.
 
 Unit scenes also hide native aura sensors, spell indicators and frame-effect registrations on deactivation. Dispel handles and footprint geometry remain locally bound Options chrome; all visible sample effect painting belongs to the engine.
+
+Selected group spell samples use `GF.PreviewSpellSample(frame, owner, slot)`.
+The engine owns the retained icon/bar/square/number visual; Options translates
+the editor placement into slot fields and adopts the visual into its handle.
+`GF.HidePreviewSpellSample` retires the sample and its native glow when a
+refresh restores the scene parent. Configured slots use their separate scene
+pool, so placing or disabling a selection cannot leave the insertion sample
+visible. Native icon glows reuse `SpellIndicators.ApplyPreviewIconEffect` and
+its paired hide without joining the live icon-effect registry. Classic keeps
+its existing halo fallback when that native renderer is absent. No new event
+listener, ticker or live update call is installed by these sample APIs.

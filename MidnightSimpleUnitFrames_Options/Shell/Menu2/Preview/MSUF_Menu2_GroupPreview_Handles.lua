@@ -59,7 +59,6 @@ local DRAG_STATE_KEYS = {
     "_dragEndpointBiasX", "_dragEndpointBiasY", "_dragCursorX", "_dragCursorY", "_dragScale", "_suppressSettingsOnRelease", "_didDragMove",
 }
 -- Region pools every aura handle keeps, one entry per pooled icon.
-local ICON_POOL_KEYS = { "_icons", "_iconSwipes", "_iconBorders", "_iconStacks", "_iconTimers", "_iconDurationBars" }
 -- Preview font strings that paint a text handle when H.TextRegions has no answer: the slot picks one, no slot takes all three.
 local TEXT_REGION_KEYS = {
     name = { "_nameFS" },
@@ -115,7 +114,7 @@ local SPELL_HANDLE = { slot = "spellHandle", key = "si", section = "si", color =
 -- What Handles.Install returns for the group preview render layer.
 local HANDLE_BUNDLE_KEYS = {
     "buffHandle", "trackedBuffHandle", "debuffHandle", "externalHandle", "powerBarHandle", "portraitHandle", "dispelSymbolHandle",
-    "statusHandles", "spellHandle", "SelectHandle", "NudgeHandlePosition", "AddIconPool", "StopHandleDrag",
+    "statusHandles", "spellHandle", "SelectHandle", "NudgeHandlePosition", "StopHandleDrag",
 }
 
 local function InteractionLevel(ns, mock, extra)
@@ -191,40 +190,7 @@ local function AuraLaneConf(conf, group)
     conf.auras[group] = conf.auras[group] or {}
     return conf.auras[group]
 end
--- The pooled region at index i, created from parent[method](parent, nil, layer) the first time.
-local function PooledRegion(pool, i, parent, method, layer)
-    local region = pool[i]
-    if not region then
-        region = PixelLayoutRegion(parent[method](parent, nil, layer))
-        pool[i] = region
-    end
-    return region
-end
--- Pooled aura texts get the preview font once and stay hidden until a render shows them.
-local function PreparePreviewText(T, fs, drawLayer)
-    if fs.SetFont and fs._msufGFPreviewFont ~= true then
-        fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
-        fs._msufGFPreviewFont = true
-    end
-    if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", drawLayer) end
-    fs:Hide()
-end
--- Runtime AuraButtons keep the duration bar, cooldown swipe and text on
--- separate child frames inside the selected universal Layer slot.  The
--- preview used to create every region directly on the handle, which
--- made all of them inherit the icon's base level and let overlapping
--- text lie about the real runtime ordering.
-local function EnsureIconDetailLayer(handle, key)
-    local layer = handle[key]
-    if not layer then
-        layer = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
-        layer:SetAllPoints(handle)
-        layer:EnableMouse(false)
-        if layer.SetMouseMotionEnabled then layer:SetMouseMotionEnabled(false) end
-        handle[key] = layer
-    end
-    return layer
-end
+
 -- A preview gear is a search action on the Group Frames pages only; inside
 -- another page (each Colors category) it stays navigation, as on units.
 local function GroupGearClassification()
@@ -317,7 +283,6 @@ function Handles.Install(box, deps)
     Stage.BindDrag(st)
     Stage.BindDragStart(st)
     Stage.BindHandleFactory(st)
-    Stage.BindIconPool(st)
     Stage.CreateLayerHandles(st)
     Stage.BindSpellDrop(st)
     Stage.CreateTextHandles(st)
@@ -1134,47 +1099,16 @@ function Stage.BindHandleFactory(st)
     st.CreatePreviewHandle = CreatePreviewHandle
 end
 
---- Pooled aura icon regions (icon, swipe, border, stack, timer, duration bar)
---- of a handle.
-function Stage.BindIconPool(st)
-    local T, WHITE8X8, AuraDurationBarColor = st.T, st.WHITE8X8, st.AuraDurationBarColor
-    local function AddIconPool(handle, count)
-        for i = 1, #ICON_POOL_KEYS do
-            handle[ICON_POOL_KEYS[i]] = handle[ICON_POOL_KEYS[i]] or {}
-        end
-        local durationLayer = EnsureIconDetailLayer(handle, "_iconDurationLayer")
-        local swipeLayer = EnsureIconDetailLayer(handle, "_iconSwipeLayer")
-        local textLayer = EnsureIconDetailLayer(handle, "_iconTextLayer")
-        for i = 1, count do
-            PooledRegion(handle._icons, i, handle, "CreateTexture", "ARTWORK"):SetTexCoord(0.08, 0.92, 0.08, 0.92)
-            local swipe = PooledRegion(handle._iconSwipes, i, swipeLayer, "CreateTexture", "ARTWORK")
-            swipe:SetTexture(WHITE8X8)
-            swipe:SetVertexColor(0, 0, 0, 0.58)
-            swipe:Hide()
-            PooledRegion(handle._iconBorders, i, handle, "CreateTexture", "OVERLAY"):Hide()
-            PreparePreviewText(T, PooledRegion(handle._iconStacks, i, textLayer, "CreateFontString", "OVERLAY"), 6)
-            PreparePreviewText(T, PooledRegion(handle._iconTimers, i, textLayer, "CreateFontString", "OVERLAY"), 7)
-            local durationBar = PooledRegion(handle._iconDurationBars, i, durationLayer, "CreateTexture", "OVERLAY")
-            durationBar:SetTexture(WHITE8X8)
-            local durationR, durationG, durationB = AuraDurationBarColor()
-            durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
-            durationBar:Hide()
-        end
-    end
-    st.AddIconPool = AddIconPool
-end
-
 --- Creates the aura, power, portrait, dispel, status and spell indicator
 --- handles plus the dynamic per-spell handle pool.
 function Stage.CreateLayerHandles(st)
-    local AddIconPool, CreatePreviewHandle, H, StatusLabel, T, box = st.AddIconPool, st.CreatePreviewHandle, st.H, st.StatusLabel, st.T, st.box
+    local CreatePreviewHandle, H, StatusLabel, T, box = st.CreatePreviewHandle, st.H, st.StatusLabel, st.T, st.box
     local function CreateLayerHandle(row)
         local handle = CreatePreviewHandle(row.key, row.section, row.color, row.label, row.w or 86, row.h or 34, false,
             row.stage and st.dragParent or nil)
         for field, value in pairs(row.fields) do
             handle[field] = value
         end
-        if row.slot == "spellHandle" then AddIconPool(handle, row.pool) end
         st[row.slot] = handle
     end
     for i = 1, #LAYER_HANDLES do
