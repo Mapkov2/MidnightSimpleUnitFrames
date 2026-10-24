@@ -433,13 +433,6 @@ MSUF.Compat.GlobalKeep = {
 
 -- Generated compatibility names are the only ExportPublic aliases in _G.
 local GlobalExports = MSUF.Compat.GlobalKeep
--- TEMPORARY: remove after the page lanes replace their remaining readers.
-local PendingPageGlobals = {
-    MSUF_ClassPowerContainer = true, -- Pages/MSUF_Menu2_AdvancedClassPower.lua:563
-    MSUF_MAX_ARENA_FRAMES = true, -- Pages/MSUF_Menu2_Unit.lua:436
-}
-MSUF.Compat.PendingPageGlobals = PendingPageGlobals
-
 function MSUF.MSUF_ExportPublic(name, value, publishGlobal)
     local key = PublicKey(name)
     if key then
@@ -447,8 +440,7 @@ function MSUF.MSUF_ExportPublic(name, value, publishGlobal)
         MSUF.PublicGlobals[name] = value
     end
     if publishGlobal ~= false and type(name) == "string" and name ~= "" then
-        local allowed = GlobalExports[name] or PendingPageGlobals[name]
-        if allowed then
+        if GlobalExports[name] then
             _G[name] = value
             MSUF.Compat.LegacyGlobals[name] = true
         end

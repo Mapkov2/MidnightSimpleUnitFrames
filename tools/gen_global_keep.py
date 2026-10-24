@@ -56,6 +56,9 @@ def generated_names(text):
 
 
 def pending_page_names(text):
+    """Temporary page globals awaiting their readers; none remain since 2026-10-24."""
+    if "local PendingPageGlobals = {" not in text:
+        return set()
     block = text.split("local PendingPageGlobals = {", 1)[1].split("\n}", 1)[0]
     return set(re.findall(r"^\s*([A-Za-z_]\w*)\s*=\s*true", block, re.M))
 
