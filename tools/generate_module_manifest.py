@@ -365,13 +365,33 @@ def locale_entries(source):
     return entries
 
 
-def render_locale_report(root):
+def locale_work_keys(source):
+    """Literal translation calls and command help; ignore comments and prose."""
+    tokens = list(lua_tokens(source))
+    for index in range(len(tokens) - 2):
+        kind, name = tokens[index]
+        following = tokens[index + 1:index + 3]
+        if kind != "name":
+            continue
+        call = name in {"Tr", "Translate", "translate"} and following[0][0] == "("
+        help_text = name == "help" and following[0][0] == "="
+        if (call or help_text) and following[1][0] == "string":
+            yield following[1][1]
+
+
+def render_locale_report(root, work_sources=()):
     packs = {p.stem: locale_entries(p.read_text(encoding="utf-8-sig"))
              for p in sorted((root / LOCALE_DIR).glob("????.lua"))}
     require("enUS" in packs, "English locale source is missing")
     english = packs.pop("enUS")
+    for path in work_sources:
+        source = (root / clean_path(path)).read_text(encoding="utf-8-sig")
+        for key in locale_work_keys(source):
+            english.setdefault(key, key)
     report = {"source": LOCALE_DIR + "/enUS.lua", "runtime_fallback": "key itself (existing localization metatable)",
               "note": "Generated translation work; stubs are suggestions, never loaded or counted as translations.", "locales": {}}
+    if work_sources:
+        report["additional_key_sources"] = list(work_sources)
     for locale, entries in packs.items():
         missing = [{"key": key, "stub": "L[" + json.dumps(key, ensure_ascii=False) + "] = "
                     + json.dumps(value, ensure_ascii=False)} for key, value in sorted(english.items()) if key not in entries]
@@ -404,7 +424,7 @@ def generate(root, manifest):
         outputs[path] = encoded(text, spec)
     for path, text in lists.items():
         outputs[path] = encoded(text, manifest["formats"][path])
-    outputs[LOCALE_REPORT] = render_locale_report(root).replace("\n", "\r\n").encode("utf-8")
+    outputs[LOCALE_REPORT] = render_locale_report(root, manifest.get("locale_work_sources", [])).replace("\n", "\r\n").encode("utf-8")
     return outputs
 
 

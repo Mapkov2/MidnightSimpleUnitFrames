@@ -75,7 +75,8 @@ local providers = { "Game/Shared/Initialize.lua" }
 if spec.classic then providers[#providers + 1] = "Game/Classic/Initialize.lua" end
 manifest.LoadSelected(repo, flavor, ns, providers)
 Check(ns.Client.Flavor == flavor, "client detection reported " .. tostring(ns.Client.Flavor))
-function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return value end
+-- The first load installed the real Kernel API (client_manifest.LoadSelected):
+-- exports follow Bootstrap's keep policy and land in ns.PublicGlobals.
 _G.MSUF_NS, _G.MSUF = ns, ns
 manifest.LoadSelected(repo, flavor, ns, {
     -- Kernel/MSUF_Util.lua publishes MSUF_PixelLayoutRegion, which the group DB files require.
@@ -88,7 +89,7 @@ manifest.LoadSelected(repo, flavor, ns, {
     -- The general key owner registry every partial export asks.
     "State/MSUF_ProfileFields.lua",
 })
-Check(_G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT == factory, "the loaded defaults publish a different factory string")
+Check(ns.PublicGlobals.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT == factory, "the loaded defaults publish a different factory string")
 
 -- WoW's C_EncodingUtil does not exist here. The shared decoder is replaced by one that
 -- accepts only the embedded string and returns a small snapshot with marker values.
@@ -112,7 +113,7 @@ MSUF_TryDecodeCompactString = function(str)
     }
 end
 ns.ProfileRuntime = { Apply = function() end }
-MSUF_GF_InvalidateConfCache = function() end
+ns.ExportPublic("MSUF_GF_InvalidateConfCache", function() end)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("MidnightSimpleUnitFrames", ns)
 

@@ -512,7 +512,7 @@ PRELUDE_LINE = re.compile(
 def clone_source_lines(plain):
     kept, prelude = [], True
     for number, line in enumerate(plain.split("\n"), 1):
-        text = WHITESPACE.sub(" ", line.strip())
+        text = " ".join(line.split())
         if not text:
             continue
         if prelude and (PRELUDE_LINE.fullmatch(text) or re.fullmatch(

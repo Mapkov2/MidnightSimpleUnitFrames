@@ -343,12 +343,19 @@ end
 -- Cooldown -------------------------------------------------------------
 function Methods:SetCooldown(start, duration)
     self.cooldownStart, self.cooldownDuration = start, duration
+    self.cooldownDurationObject = nil
+end
+function Methods:SetCooldownFromDurationObject(durationObject)
+    self.cooldownStart, self.cooldownDuration = nil, nil
+    self.cooldownDurationObject = durationObject
 end
 function Methods:GetCooldownTimes()
     return (self.cooldownStart or 0) * 1000, (self.cooldownDuration or 0) * 1000
 end
 function Methods:GetCooldownDuration() return (self.cooldownDuration or 0) * 1000 end
-function Methods:Clear() self.cooldownStart, self.cooldownDuration = nil, nil end
+function Methods:Clear()
+    self.cooldownStart, self.cooldownDuration, self.cooldownDurationObject = nil, nil, nil
+end
 function Methods:SetDrawEdge(draw) self.drawEdge = draw end
 function Methods:SetDrawSwipe(draw) self.drawSwipe = draw end
 function Methods:SetSwipeColor(r, g, b, a) self.swipeColor = { r, g, b, a } end

@@ -1,51 +1,21 @@
 -- Real shipped graph and the existing schema projection capture, without
 -- slicing or matching product source. Build every registered page and section.
 local root, flavor = assert(arg[1]), assert(arg[2])
-local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
-local capture = assert(loadfile(root .. "/tools/menu_schema_capture.lua"))()
-local watched = false
-local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true,
-    beforeOptions = function(world)
-        local load = world.LoadFile
-        function world:LoadFile(path, ...)
-            local ok, message = load(self, path, ...)
-            if ok and not watched and self.core.MSUF2 and self.core.MSUF2.ControlSchema then
-                __MSUF_WatchSchema(self.core.MSUF2)
-                watched = true
-            end
-            return ok, message
-        end
-    end })
-local M = mw.M
-local pages = {}
-for key in pairs(M.pages) do pages[#pages + 1] = key end
-table.sort(pages)
-local failures = {}
-for _, key in ipairs(pages) do
-    local ok, err = pcall(function()
-        assert(mw:Select(key), "selection refused")
-        local entry = assert(M.cache[key], "selected page built no entry")
-        -- Expanding one section may create more nested lazy sections.
-        for _ = 1, 3 do
-            for _, section in pairs(entry.sections or {}) do
-                local disclosure = section._msuf2CollapsibleEntry
-                if disclosure then disclosure.SetOpenImmediate(true) end
-            end
-            mw:RunTimers()
-        end
-        assert(not entry._msuf2BuildIncomplete, "page did not finish")
-    end)
-    if not ok then failures[#failures + 1] = key .. ": " .. tostring(err) end
-end
-assert(#pages > 20, "page registry unexpectedly small")
-capture.Start(M, M.RuntimeControlCatalog)
-local projected = 0
-for _ in pairs(capture.Data()) do projected = projected + 1 end
-assert(projected > 200, "schema projection missed the built controls")
+local initial = assert(loadfile(root .. "/tools/menu_schema_initial.lua"))()(root, flavor)
+local mw, M = initial.world, initial.menu
+local pages, failures, projected = initial.pages, initial.failures, initial.count
+local expected = assert(tonumber(arg[3]), "exact schema projection count required")
+assert(projected == expected, string.format("schema projection count: expected %d, built %d", expected, projected))
 
 -- Query and navigate the exact result, as a real search result click does.
 local hit
-for _, row in ipairs(M.Search._CoreAPI.SearchPages("player power bar height")) do
+M.Search._CoreAPI.OpenSearchResults("player power bar height")
+for _ = 1, 30 do
+    if #mw.world.widgets.timers == 0 then break end
+    mw:RunTimers(1000)
+end
+assert(not M.searchResultsPending, "search did not finish its deferred build")
+for _, row in ipairs(M.searchResults or {}) do
     if row.exactTarget and row.exactTarget.settingKey == "player.powerBarHeight" then hit = row break end
 end
 assert(hit, "player power bar height query found no setting row")

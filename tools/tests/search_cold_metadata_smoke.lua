@@ -3,7 +3,17 @@ local root, flavor = assert(arg[1]), arg[2] or "Mainline"
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local mw = MenuWorld.Open(root, flavor, { page = "home" })
 local M = mw.M
+local function Ready()
+    M.Search._CoreAPI.GetSearchRecords()
+    for _ = 1, 30 do
+        if #mw.world.widgets.timers == 0 then return end
+        mw:RunTimers(1000)
+    end
+    error("search metadata timers did not drain")
+end
 assert(not M.cache.uf_player, "target page was already warm")
+Ready()
+assert(not M.cache.uf_player, "metadata decode built the target page")
 local cases = { { "camelot", "Round Level Badge" }, { "medallion", "Round Level Badge" } }
 for _, case in ipairs(cases) do
     local found
@@ -23,6 +33,7 @@ for _, row in ipairs(records) do
 end
 assert(choice, "cold dropdown rows omitted their anchor choices")
 assert(mw:Select("uf_player"))
+Ready()
 for _, case in ipairs(cases) do
     local found
     for _, row in ipairs(M.Search._CoreAPI.SearchPages(case[1])) do

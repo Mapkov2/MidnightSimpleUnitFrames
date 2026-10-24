@@ -44,6 +44,7 @@ write targets only; no in-game rendering or setter-execution proof is claimed.
 import argparse
 import bisect
 import collections
+from contextlib import contextmanager
 import csv
 import hashlib
 import json
@@ -61,6 +62,86 @@ HOT = "-- hot path: kept whole (perf rule)"
 BLOCKS = re.compile(r"\b(function|if|for|while|do|repeat|end|until)\b")
 SETTING_KINDS = {"toggle", "checkbox", "slider", "dropdown", "segment", "color", "textinput", "editbox", "input"}
 CLASSIC_SECRET_FALLBACK = re.compile(r"^local IsSecret = issecretvalue or function\(\) return false end$")
+
+
+@contextmanager
+def run_cache():
+    """One run, content-addressed source facts; never reuse stale disk metadata."""
+    saved = keep.read, ledger.read_text, schema_coverage.read, ratchet.strip_source, ratchet.clone_source_lines, ledger.strip_and_mask
+    texts, clones, views = {}, {}, {}
+
+    def read(path, ledger_text=False):
+        data = Path(path).read_bytes()
+        key = data, ledger_text
+        if key not in texts:
+            text = data.decode("utf-8" if ledger_text else "utf-8-sig", errors="replace" if ledger_text else "strict")
+            texts[key] = text.replace("\r\n", "\n") if ledger_text else text.replace("\r\n", "\n").replace("\r", "\n")
+        return texts[key]
+
+    def source_views(text):
+        if text in views:
+            return views[text]
+        code, plain, exported, masked = [], [], [], []
+        position = 0
+        for match in ratchet.SCAN.finditer(text):
+            start, end = match.span()
+            if start < position:
+                continue
+            gap = text[position:start]
+            for parts in (code, plain, exported, masked):
+                parts.append(gap)
+            token = match.group(0)
+            long_comment = token.startswith("--") and match.group(1) is not None
+            long_string = match.group(2) is not None
+            if long_comment or long_string:
+                equals = match.group(1) if long_comment else match.group(2)
+                close = text.find("]" + equals + "]", end)
+                if close < 0:
+                    # Keep both original scanners' malformed-source semantics.
+                    result = saved[3](text), saved[5](text)
+                    views[text] = result
+                    return result
+                end = close + len(equals) + 2
+                token = text[start:end]
+            if token.startswith("--"):
+                blank = ledger.fill(token, " ")
+                exported.append(blank)
+                masked.append(blank)
+                if long_comment:
+                    breaks = "\n" * token.count("\n")
+                    code.append(breaks)
+                    plain.append(breaks)
+            else:
+                plain.append(token)
+                code.append(('""' + "\n" * token.count("\n")) if long_string else
+                            ('"function"' if token[1:-1] == "function" else '""'))
+                exported.append(token)
+                masked.append(token[0] + ledger.fill(token[1:-1], "x") + token[-1])
+            position = end
+        for parts in (code, plain, exported, masked):
+            parts.append(text[position:])
+        result = ("".join(code), "".join(plain)), ("".join(exported), "".join(masked))
+        views[text] = result
+        return result
+
+    def strip(text):
+        return source_views(text)[0]
+
+
+    def clone_lines(plain):
+        key = plain
+        if key not in clones:
+            clones[key] = saved[4](plain)
+        return clones[key]
+
+    keep.read = schema_coverage.read = read
+    ledger.read_text = lambda path: read(path, True)
+    ratchet.strip_source, ratchet.clone_source_lines = strip, clone_lines
+    ledger.strip_and_mask = lambda text: source_views(text)[1]
+    try:
+        yield
+    finally:
+        keep.read, ledger.read_text, schema_coverage.read, ratchet.strip_source, ratchet.clone_source_lines, ledger.strip_and_mask = saved
 
 
 def source_functions(code):
@@ -315,7 +396,9 @@ def global_counts(root):
     target = keep.generated_names(text)
     pending = keep.pending_page_names(text)
     native_families = keep.native_dynamic_names(root)
-    exports, dynamic = ledger.static_inventory(str(root))
+    # Namespace fields are not global publications. The ledger's default still
+    # audits them; this scorecard needs the same global sites and dynamic families.
+    exports, dynamic = ledger.static_inventory(str(root), include_namespace=False, classify_values=False)
     keep.augment_inventory(root, exports, dynamic)
     active = keep.active_exports(exports, names, prefixes)
     native_frames = {name for name, entry in exports.items()
@@ -382,7 +465,7 @@ def menu_coverage(root):
     return proven, total, [], proven, issues
 
 
-def main():
+def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--details", action="store_true")
@@ -425,14 +508,19 @@ def main():
         print("%s\t%s\t%s\t%s" % (name, current, target, "PASS" if passed else "FAIL"))
     elapsed = time.perf_counter() - started
     failed = sum(not row[3] for row in rows)
-    if elapsed >= 10:
-        failed += 1
-        print("static runtime\t%.3f s\t< 10 s\tFAIL" % elapsed)
+    runtime_passed = elapsed < 10
+    failed += not runtime_passed
+    print("static runtime\t%.3f s\t< 10 s\t%s" % (elapsed, "PASS" if runtime_passed else "FAIL"))
     print("scorecard: %d failed, %.3f s (static source only)" % (failed, elapsed))
     if args.details:
         for detail in details:
             print(detail)
     return 1 if failed else 0
+
+
+def main():
+    with run_cache():
+        return run()
 
 
 if __name__ == "__main__":

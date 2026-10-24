@@ -64,6 +64,9 @@ local CORE = Join(ROOT, "MidnightSimpleUnitFrames")
 local OPTIONS = Join(ROOT, "MidnightSimpleUnitFrames_Options")
 local MSUF = assert(_G.MSUF_NS, "WoW stubs did not create MSUF_NS")
 local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")
+-- Reproduce the real locale namespace before any Options module captures it.
+local localePath = Join(CORE, "Locales/MSUF_Localization.lua")
+assert(loadfile(localePath))("MidnightSimpleUnitFrames", MSUF)
 -- The shipped core loads its dependency resolver (MSUF.Require/Optional) before
 -- any defaults or engine file that resolves a provider through it.
 if not MSUF.Require then
@@ -250,6 +253,7 @@ do
     assert(loadfile(Join(ROOT, "tools/tests/static_popup_stub.lua")))().Install(_G)
     -- The TOC loads the real Style owner before Widgets binds its skin helpers.
     assert(loadfile(Join(CORE, "Shell/UI/MSUF_Style.lua")))("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(Join(CORE, "Shell/UI/MSUF_MapkoSkin.lua")))("MidnightSimpleUnitFrames", MSUF)
     local widgetsPath = Join(CORE, "Shell/UI/MSUF_Widgets.lua")
     local widgetsChunk, widgetsErr = loadfile(widgetsPath)
     assert(widgetsChunk, widgetsPath .. ": " .. tostring(widgetsErr))

@@ -51,7 +51,7 @@ if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs() end
 GF.RefreshHeaderLayout()
 h:RunTimers()
 
-env.MSUF2_GFPagePreviewActive = true
+h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 Check(GF.ShowPreview("raid", 20, { immediate = true }) ~= false, "the raid preview did not open")
 h:RunTimers()
 local frames = GF._previewFrames.raid or {}
@@ -101,7 +101,7 @@ end
 
 -- Live frames are untouched: a real raid never reaches the preview resolver.
 GF.HidePreview("raid")
-env.MSUF2_GFPagePreviewActive = nil
+h.core.ExportPublic("MSUF2_GFPagePreviewActive", nil)
 h:SetRaid(20)
 h:Event("GROUP_ROSTER_UPDATE")
 h:RunTimers()

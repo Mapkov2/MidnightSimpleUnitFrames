@@ -12,7 +12,15 @@ local function Read(path)
     return text
 end
 local path = root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua"
-local source = Read(path)
+local pieces = {}
+local directory = root .. "/MidnightSimpleUnitFrames/State/Defaults/"
+for _, name in ipairs({ "Schema", "StorageData", "StorageCommon", "StorageV3", "Storage", "Recovery" }) do
+    -- Each shipped shard retains its own chunk scope; mutation probes still
+    -- inspect and edit the exact source body across the complete codec.
+    pieces[#pieces + 1] = "do local function Part(...)\n" .. Read(directory .. "MSUF_Defaults_" .. name .. ".lua")
+        .. "\nend Part(...) end\n"
+end
+local source = table.concat(pieces)
 local function Codec(text, secretCheck)
     local ns = { Util = { IsSecret = secretCheck or function() return false end } }
     assert(loadstring(text))(nil, ns)

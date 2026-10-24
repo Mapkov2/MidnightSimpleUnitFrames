@@ -1088,6 +1088,8 @@ if ROWS_ONLY then
 end
 for _, target in ipairs(BUILD_FLAVORS) do
     for _, line in ipairs(BuildFlavorInChild(target)) do rows[#rows + 1] = line end
+    -- Only encoded rows survive a client; release the child pipe/merge temporaries.
+    collectgarbage("collect")
 end
 
 local count, text = Render(rows)

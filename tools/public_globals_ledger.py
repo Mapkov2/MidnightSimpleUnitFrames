@@ -380,7 +380,7 @@ class Facts:
         return self.found["tables"]
 
 
-def scan_lua(rel, text, exports, dynamic):
+def scan_lua(rel, text, exports, dynamic, include_namespace=True, classify_values=True):
     stripped, masked = strip_and_mask(text)
     facts = Facts(masked)
 
@@ -393,7 +393,7 @@ def scan_lua(rel, text, exports, dynamic):
         entry = exports.get(name)
         if entry is None:
             entry = exports[name] = Entry(name)
-        entry.add(RANK[via], rel, line_of(offset), via, kind or (guess_kind(masked, tail, facts) if tail else None))
+        entry.add(RANK[via], rel, line_of(offset), via, kind or (guess_kind(masked, tail, facts) if tail and classify_values else None))
 
     def quoted(match):
         """The string a QUOTED group matched, from the text with its contents intact."""
@@ -505,7 +505,7 @@ def scan_lua(rel, text, exports, dynamic):
             family(match, "builder")
         for match in re.finditer(r"(?<![\w.])%s[ \t]*=(?!=)[ \t]*" % NAME + PREFIXED, masked):
             family(match, "builder")
-    if "MSUF_" in masked:
+    if include_namespace and "MSUF_" in masked:
         for base in NS_BASES:
             for match in NS_FIELD[base].finditer(masked):
                 if not field_before(masked, match.start()):
@@ -628,7 +628,7 @@ def finish_contracts(exports):
                                    site[2] if site else 0, site[1] if site else ""))
 
 
-def static_inventory(root=ROOT):
+def static_inventory(root=ROOT, include_namespace=True, classify_values=True):
     """(name -> Entry for every name the source writes into _G, file -> lines of dynamic sites)."""
     exports, dynamic = {}, {}
     for rel in addon_files(root):
@@ -636,7 +636,7 @@ def static_inventory(root=ROOT):
             continue
         text = read_text(os.path.join(root, rel))
         if rel.endswith(".lua"):
-            scan_lua(rel, text, exports, dynamic)
+            scan_lua(rel, text, exports, dynamic, include_namespace=include_namespace, classify_values=classify_values)
         elif rel.endswith(".xml"):
             scan_xml(rel, text, exports)
         elif rel.endswith(".toc"):

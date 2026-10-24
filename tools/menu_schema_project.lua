@@ -1,3 +1,17 @@
+-- The full core world has additional declaration contexts absent from the
+-- headless search world. Project its initial pages as a separate exact inventory.
+if arg[1] == "--release-menu" then
+    local root, flavor = assert(arg[2]), assert(arg[3])
+    local directory = os.getenv("MSUF_SCHEMA_INITIAL_CAPTURE_DIR")
+    local initial = assert(loadfile(root .. "/tools/menu_schema_initial.lua"))()(root, flavor, directory)
+    assert(#initial.failures == 0, table.concat(initial.failures, "\n"))
+    if directory then
+        initial.capture.Save(directory, flavor .. "-initial")
+    else
+        io.write(initial.capture.Json(initial.capture.Data()), "\n")
+    end
+    return
+end
 -- Standalone schema projection; uses the same live bootstrap and workspace states as search.
 local function Read(path)
     local file = assert(io.open(path, "rb"))

@@ -1,10 +1,10 @@
 """Fail on new unresolved MSUF globals after the namespace migration.
 
-Derived from the local flip checker. This is a namespace audit, not a source
-pin: bytecode supplies bare reads/writes; literal global table accesses, named
-frames, XML names, SavedVariables and the generated export policy add providers.
-Only the six reviewed legacy read occurrences below are exempt. Line numbers
-are diagnostic only; an additional occurrence of an exempt name still fails.
+Bytecode and literal table accesses supply readers on each client's real graph.
+The executed core/login and Options boundaries supply actual global providers;
+namespace-only registry entries and keep names never supply a global provider.
+Reviewed deferred flags/frames require their real publishers on that graph.
+The six legacy read occurrences below remain bounded per client and phase.
 """
 import argparse
 from collections import Counter
@@ -27,7 +27,7 @@ KNOWN = {
     ("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua", "MSUF_UFPreview_ActiveNudgeBox", "GETGLOBAL"):
         (1, "Legacy optional nudge-box mirror; the namespace preview owner is the fallback."),
 }
-DEFAULT_LUAC = r"C:\Users\Marco\AppData\Local\Temp\msuf-lua51\portable\luac.exe"
+
 # These belong to the optional, separately shipped Suite addon. SuiteLink
 # deliberately probes their absence; they are not MSUF-owned missing exports.
 EXTERNAL_PROVIDERS = {
@@ -103,43 +103,141 @@ def scan_lua(path, relative, luac):
     return writers, readers
 
 
-def audit(repo, luac):
-    roots = [repo / "MidnightSimpleUnitFrames", repo / "MidnightSimpleUnitFrames_Options"]
-    boot = (roots[0] / "Kernel/MSUF_Bootstrap.lua").read_text(encoding="utf-8-sig")
-    generated = boot.split("BEGIN GENERATED GLOBAL KEEP", 1)[1].split("END GENERATED GLOBAL KEEP", 1)[0]
-    writers = set(EXTERNAL_PROVIDERS)
-    writers.update(a or b for a, b in re.findall(r'\[\s*"([^"]+)"\s*\]\s*=\s*true|(\w+)\s*=\s*true', generated))
-    readers = []
-    for root in roots:
-        for toc in sorted(root.glob("*.toc")):
-            for line in toc.read_text(encoding="utf-8-sig").splitlines():
-                if line.startswith("## SavedVariables"):
-                    writers.update(re.findall(r"\w+", line.split(":", 1)[1]))
-        for xml in sorted(root.rglob("*.xml")):
-            writers.update(re.findall(r'name=[\"\'](MSUF\w*)[\"\']', xml.read_text(encoding="utf-8-sig")))
-        for path in sorted(root.rglob("*.lua")):
-            found, reads = scan_lua(path, path.relative_to(repo).as_posix(), luac)
-            writers.update(found)
-            readers.extend(reads)
-    unresolved = sorted(read for read in readers if read[2] != "MSUF" and read[2] not in writers)
-    counts, failures = Counter(), []
-    for file, line, name, kind in unresolved:
-        key = file, name, kind
-        counts[key] += 1
-        allowed, reason = KNOWN.get(key, (0, "new unresolved read"))
-        if counts[key] > allowed:
-            failures.append((file, line, name, kind))
-        print(f"{'KNOWN' if counts[key] <= allowed else 'NEW'} {file}:{line}: {name} ({kind}) - {reason}")
-    print(f"namespace: {len(writers)} providers, {len(readers)} reads, {len(unresolved)} unresolved, {len(failures)} new")
-    return len(failures)
+def observe(repo, lua, flavor):
+    run = subprocess.run([lua, str(repo / "tools/tests/flip_check_exports.lua"), str(repo), flavor],
+                         capture_output=True, text=True, errors="replace")
+    if run.returncode:
+        raise RuntimeError(f"{flavor}: export observation failed: {run.stderr.strip()}")
+    phases = {phase: [] for phase in ("core", "Options")}
+    exports = {phase: set() for phase in phases}
+    capabilities = {}
+    for line in run.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) == 3 and fields[0] == "FILE":
+            phases[fields[1]].append(fields[2])
+        elif len(fields) == 3 and fields[0] == "PROVIDER":
+            exports[fields[1]].add(fields[2])
+        elif len(fields) == 3 and fields[0] == "CAP":
+            capabilities[fields[1]] = fields[2] == 'true'
+    if any(not paths for paths in phases.values()):
+        raise RuntimeError(f"{flavor}: incomplete export observation")
+    return phases, exports, capabilities
+
+
+def delayed_providers(repo, phases):
+    """Reviewed delayed exports: require executable owners AND publication policy.
+
+    These flags are nil until changed by Edit Mode / border-test commands, and
+    named unit frames are created at login. No keep name alone is a provider.
+    Source fragments pin the actual declaration-to-writer relationship; removing
+    an owning module or the publisher invalidates the contract on that client.
+    """
+    rules = [
+        ({"MSUF_ClassPowerContainer"}, {
+            "ClassPower/MSUF_CP_Build.lua": ['CreateFrame("Frame", "MSUF_ClassPowerContainer",']}),
+        ({"MSUF_UnitEditModeActive"}, {
+            "UnitFrames/Engine/MSUF_UF_Preview.lua": [
+                'editMode = "MSUF_UnitEditModeActive"', 'local name = MIRRORS[key]', 'ExportPublic(name, value)']}),
+        ({"MSUF_InCombat"}, {
+            "UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua": ['ExportPublic("MSUF_InCombat", inCombat)']}),
+        ({"MSUF_player"}, {
+            "UnitFrames/Engine/MSUF_UF_Factory_Spawn.lua": ['ExportPublic(UF.FrameName(unit), frame)'],
+            "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua": ['function UF.FrameName(unit)', 'local prefix = UF.frameNamePrefix or "MSUF"',
+                'tostring(prefix) .. "_" .. tostring(unit or "unknown")', '"player", "target"']}),
+    ]
+    border = "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua"
+    for flag in ("Aggro", "Dispel", "Purge"):
+        names = {f"MSUF_{flag}BorderTestMode", f"MSUF_{flag}BorderTestScope"}
+        rules.append((names, {border: ['ExportPublic(flag, active == true)',
+            'ExportPublic(scopeFlag, scope or "shared")',
+            f'SetBorderTestMode("MSUF_{flag}BorderTestMode", "MSUF_{flag}BorderTestScope", active, scope)']}))
+    rules.append(({"MSUF_BossTargetBorderTestMode"}, {border: [
+        'ExportPublic(flag, active == true)', 'SetBorderTestMode("MSUF_BossTargetBorderTestMode", nil, active, "boss")']}))
+    bootstrap = (repo / 'MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua').read_text(encoding='utf-8-sig')
+    policy = bootstrap.split('BEGIN GENERATED GLOBAL KEEP', 1)[1].split('END GENERATED GLOBAL KEEP', 1)[0]
+    policy_names = {a or b for a, b in re.findall(r'\[\s*"([^"\n]+)"\s*\]\s*=\s*true|(\w+)\s*=\s*true', policy)}
+    result = {}
+    def contains_code(path, fragment):
+        source_tokens = [(value, literal) for value, literal, _ in tokens(path.read_text(encoding='utf-8-sig'))]
+        required = [(value, literal) for value, literal, _ in tokens(fragment)]
+        return any(source_tokens[i:i + len(required)] == required for i in range(len(source_tokens) - len(required) + 1))
+    for phase, paths in phases.items():
+        result[phase] = set()
+        for names, owners in rules:
+            if all('MidnightSimpleUnitFrames/' + path in paths and
+                   all(contains_code(repo / 'MidnightSimpleUnitFrames' / path, fragment) for fragment in fragments)
+                   for path, fragments in owners.items()):
+                result[phase].update(names if names == {"MSUF_ClassPowerContainer"} else names & policy_names)
+    return result
+
+
+def audit_client(flavor, phases, exports, scanned, saved=None, delayed=None, unreachable=None):
+    """Core readers cannot borrow an Options provider or another client's file."""
+    providers = set(EXTERNAL_PROVIDERS) | {"MSUF"}
+    failures = 0
+    for phase, paths in phases.items():
+        providers.update(exports[phase])
+        providers.update((saved or {}).get(phase, ()))
+        providers.update((delayed or {}).get(phase, ()))
+        counts = Counter()
+        unresolved = []
+        for path in paths:
+            for read in scanned[path][1]:
+                if (read[0], read[1]) in (unreachable or set()):
+                    continue
+                if read[2] not in providers:
+                    unresolved.append(read)
+        for file, line, name, kind in sorted(unresolved):
+            key = file, name, kind
+            counts[key] += 1
+            allowed, reason = KNOWN.get(key, (0, "new unresolved read"))
+            known = counts[key] <= allowed
+            failures += not known
+            print(f"{'KNOWN' if known else 'NEW'} {flavor}/{phase} {file}:{line}: {name} ({kind}) - {reason}")
+        print(f"namespace {flavor}/{phase}: {len(providers)} actual providers, {len(unresolved)} unresolved")
+    return failures
+
+
+def audit(repo, luac, lua):
+    scanned, failures = {}, 0
+    for flavor in ("Mainline", "Vanilla", "TBC", "Mists", "Forever"):
+        phases, exports, capabilities = observe(repo, lua, flavor)
+        suffix = "Mainline" if flavor == "Forever" else flavor
+        saved = {}
+        for phase, paths in phases.items():
+            addon = "MidnightSimpleUnitFrames" + ("_Options" if phase == "Options" else "")
+            text = (repo / addon / f"{addon}_{suffix}.toc").read_text(encoding="utf-8-sig")
+            saved[phase] = {name for line in text.splitlines() if line.startswith("## SavedVariables")
+                            for name in re.findall(r"\w+", line.split(":", 1)[1])}
+            for path in paths:
+                if path not in scanned:
+                    scanned[path] = scan_lua(repo / path, path, luac)
+        delayed = delayed_providers(repo, phases)
+        unreachable = set()
+        # A literal boolean capability guard can make a reader unreachable on
+        # this client. The actual client facts, not a flavor-name guess, decide.
+        for paths in phases.values():
+            for path in paths:
+                source = (repo / path).read_text(encoding='utf-8-sig')
+                for block in re.finditer(r'^(?P<indent>[ \t]*)if MSUF\.Client\.(?P<cap>\w+) then[ \t]*\n.*?^(?P=indent)end\b', source, re.M | re.S):
+                    if capabilities.get(block['cap']) is False and not re.search(r'^\s*(else|elseif)\b', block[0], re.M):
+                        first = source.count('\n', 0, block.start()) + 1
+                        last = source.count('\n', 0, block.end()) + 1
+                        unreachable.update((path, line) for line in range(first, last + 1))
+        failures += audit_client(flavor, phases, exports, scanned, saved, delayed, unreachable)
+    print(f"namespace: five clients / core + Options, {failures} new unresolved reads")
+    return failures
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repo", nargs="?", type=Path, default=Path(__file__).resolve().parent.parent)
-    parser.add_argument("--luac", default=os.environ.get("MSUF_LUAC") or shutil.which("luac") or DEFAULT_LUAC)
+    parser.add_argument("--luac", default=os.environ.get("MSUF_LUAC") or shutil.which("luac5.1") or shutil.which("luac"))
+    parser.add_argument("--lua", default=os.environ.get("MSUF_LUA") or shutil.which("lua5.1") or shutil.which("lua"))
     args = parser.parse_args()
-    return int(audit(args.repo.resolve(), args.luac) != 0)
+    if not args.luac or not args.lua:
+        parser.error("Lua 5.1 tools required: pass --lua/--luac or set MSUF_LUA/MSUF_LUAC")
+    return int(audit(args.repo.resolve(), args.luac, args.lua) != 0)
 
 
 if __name__ == "__main__":

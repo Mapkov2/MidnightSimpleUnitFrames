@@ -85,9 +85,13 @@ for encoded = 0, 80 do
                 Step(kind, "apply", true, kind == "boss" and "MSUF_BOSS_PREVIEW" or "MSUF_ARENA_PREVIEW")
                 Step(kind, "apply", true, kind == "boss" and "MSUF_BOSS_PREVIEW_SYNC" or "MSUF_ARENA_PREVIEW_SYNC")
                 -- Event-derived combat is true while the native lockdown API is still false.
-                old.env.MSUF_InCombat, new.env.MSUF_InCombat = true, true
+                -- The shipped graph keeps MSUF_InCombat namespace-only (export policy);
+                -- the frozen original graph still reads the global.
+                old.env.MSUF_InCombat = true
+                new.core.ExportPublic("MSUF_InCombat", true)
                 Step(kind, "sync")
-                old.env.MSUF_InCombat, new.env.MSUF_InCombat = false, false
+                old.env.MSUF_InCombat = false
+                new.core.ExportPublic("MSUF_InCombat", false)
                 Step(kind, "sync")
                 Step(kind, "page", false, "DENSE_SEQUENCE_OFF")
                 Step(kind, "clear")

@@ -143,8 +143,11 @@ local function PathProof(flavor)
 
     -- Imports: a full profile and the unit frame kind, planted with former names after the export.
     local exported
-    env.MSUF_EncodeCompactTableMSUF3 = function(value) exported = value; return "MSUF3:captured" end
-    env.MSUF_EncodeCompactTable = env.MSUF_EncodeCompactTableMSUF3
+    -- The encoder is namespace-only (Kernel/MSUF_Bootstrap.lua keep policy); the
+    -- stand-ins are published the way the codec owner publishes them.
+    local function Capture(value) exported = value; return "MSUF3:captured" end
+    ns.ExportPublic("MSUF_EncodeCompactTableMSUF3", Capture)
+    ns.ExportPublic("MSUF_EncodeCompactTable", Capture)
     local source
     local decodeCompact = env.MSUF_TryDecodeCompactString
     env.MSUF_TryDecodeCompactString = function(text)
@@ -153,7 +156,7 @@ local function PathProof(flavor)
     end
     local function Payload(snapshot) return snapshot.msuf6 and snapshot.msuf6.payload or snapshot.payload end
     local function Source(kind)
-        Check(env.MSUF_ExportSelectionToString(kind), label .. ": the " .. kind .. " export failed")
+        Check(ns.PublicGlobals.MSUF_ExportSelectionToString(kind), label .. ": the " .. kind .. " export failed")
         source = Copy(exported)
         Check(type(Payload(source).bars) == "table", label .. ": the " .. kind .. " export carries no bars")
         PlantFormer(Payload(source))

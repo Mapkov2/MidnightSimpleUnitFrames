@@ -20,7 +20,7 @@ local conf = GF.GetConf("party")
 conf.enabled, conf.nameShortenMax = true, 3
 local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua"
 local stop = Secrets.Watch(path)
-h.env.MSUF2_GFPagePreviewActive = true
+h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 assert(GF.ShowPreview("party", 2))
 h:RunTimers()
 local name = GF._previewFrames.party[1]._msufPreviewNameText

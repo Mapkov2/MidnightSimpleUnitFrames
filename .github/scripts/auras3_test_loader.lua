@@ -85,6 +85,20 @@ function Loader.Group(path)
         if not file then return nil end
         file:close()
     end
+    if entry == "MSUF_Defaults.lua" then
+        local root = assert(path:match("^(.-)MidnightSimpleUnitFrames/State/"))
+        local toc = Read(root .. "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc")
+        local group = {}
+        for line in toc:gmatch("[^\r\n]+") do
+            local relative = line:gsub("\\", "/"):match("^%s*(State/[^%s]+%.lua)")
+            if relative and (relative == "State/MSUF_Defaults.lua" or relative == "State/MSUF_AuraDefaults.lua"
+                or relative:match("^State/Defaults/")) then
+                group[#group + 1] = root .. "MidnightSimpleUnitFrames/" .. relative
+            end
+        end
+        assert(#group > 0, "defaults group absent from core TOC")
+        return group
+    end
     if entry == "MSUF_Profiles.lua" then
         return { directory .. "/MSUF_ProfileRuntime.lua", directory .. "/MSUF_ProfileNormalize.lua", path }
     elseif entry == "MSUF_Menu2_Window.lua" then
@@ -747,7 +761,8 @@ function Loader.LoadFile(path, ...)
     if not group or #group == 1 then return DependencyChunk(path, ...) end
     local chunks = {}
     for i = 1, #group do
-        local chunk, message = DependencyChunk(group[i], ...)
+        local loader = path:match("MSUF_Defaults%.lua$") and originalLoadfile or DependencyChunk
+        local chunk, message = loader(group[i], ...)
         if not chunk then return nil, message end
         chunks[i] = chunk
     end
@@ -758,6 +773,9 @@ function Loader.LoadFile(path, ...)
                 local root = assert(Normalize(path):match("^(.-)MidnightSimpleUnitFrames/Auras3/")):gsub("/$", "")
                 Loader.LoadAliasCatalog(root ~= "" and root or ".", namespace)
             end
+        end
+        if path:match("MSUF_Defaults%.lua$") then
+            for i = 1, #chunks do setfenv(chunks[i], getfenv(1)) end
         end
         for i = 1, #chunks - 1 do chunks[i](...) end
         return chunks[#chunks](...)
@@ -956,6 +974,11 @@ function Loader.Install()
         { "Kernel/MSUF_Util.lua", "NormalizeFrameStrata", "MSUF_NormalizeFrameStrata", "local function IsSecretValue(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },
     }) do
         local owner = "MidnightSimpleUnitFrames/" .. rule[1]
+        if rule[2] == "MSUF_ResolveFontShadowMetrics" then
+            local moved = "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Migrations.lua"
+            local file = originalOpen(moved, "rb")
+            if file then file:close(); owner = moved end
+        end
         local body = Slice.Function(Read(SourcePath(owner)), "local function " .. rule[2], owner)
         _G[rule[3]] = assert(compileSource((rule[4] or "") .. body .. "\nreturn " .. rule[2]))()
     end
@@ -966,7 +989,7 @@ function Loader.Install()
     io.open = function(path, mode)
         if mode == nil or mode == "r" or mode == "rb" then
             path = SourcePath(path)
-            local group = Loader.Group(path)
+            local group = not path:match("MSUF_Defaults%.lua$") and Loader.Group(path)
             if group and #group > 1 then return SourceFile(Loader.ReadGroup(path)) end
         end
         return originalOpen(path, mode)

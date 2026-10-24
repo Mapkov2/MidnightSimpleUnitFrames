@@ -15,9 +15,10 @@
 
 local Fixture = {}
 
+-- Shipped files run after the real Kernel API; providers they require and this
+-- fixture does not load are deferred (tools/tests/require_fixture.lua).
 local function Load(root, path, ns)
-    local chunk = assert(loadfile(root .. "/" .. path))
-    return chunk("MidnightSimpleUnitFrames", ns)
+    return assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().LoadShipped(root, path, ns)
 end
 
 -- The menu schema reads the unit lane-key schema the Auras3 core builds
@@ -59,7 +60,8 @@ function Fixture.Install(root, env, ns)
     local function ExportPublic(name, value) env[name] = value end
     assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().Install(root, ns)
     if type(env.MSUF_GF_AuraFilter) ~= "table" then
-        local private = { ExportPublic = ExportPublic }
+        local private = {}
+        assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().InstallKernel(root, private)
         local tokenCheck = StoredFilterTokenCheck(root)
         if tokenCheck then private.ProfileNormalize = { NormalizeGFAuraFilterToken = tokenCheck } end
         for _, file in ipairs({ "Schema", "Common", "Presets", "GroupFilters" }) do

@@ -358,7 +358,7 @@ CheckEqualsFullRebuild(frame9, "shown raid10 -> raid9")
 
 -- With suspension switched off (the /msufgp A/B switch) only the range event
 -- is dropped while hidden; the retarget keeps that exact state.
-env.MSUF_GF_SuspendHidden = false
+h.core.ExportPublic("MSUF_GF_SuspendHidden", false)
 frame9.shown = false
 onHide(frame9)
 Check(frame9._msufCoreEventsSuspended ~= true and UnitFilter(frame9, "UNIT_HEALTH") == "raid9",
@@ -368,7 +368,7 @@ Check(UnitFilter(frame9, "UNIT_HEALTH") == "raid10" and UnitFilter(frame9, "UNIT
     "the unsuspended hidden shift kept the old unit or the range event")
 CheckEqualsFullRebuild(frame9, "unsuspended hidden raid9 -> raid10")
 UF.OnUnitChanged(frame9, "raid10", "raid9")
-env.MSUF_GF_SuspendHidden = nil
+h.core.ExportPublic("MSUF_GF_SuspendHidden", nil)
 frame9.shown = true
 onShow(frame9)
 CheckEqualsFullRebuild(frame9, "restored raid9")

@@ -11,9 +11,7 @@
 -- Second contract: the set of globals the harness does not model, read at load,
 -- is diffed against tools/client-boot-globals.tsv. A file that starts reading a
 -- global nobody reviewed fails here instead of silently taking a nil path in
--- the client. (That baseline already carries one real defect, marked Kind
--- "defect": Features/Telemetry/MSUF_Analytics.lua reads the bare global
--- "global" where it means gdb.global.)
+-- the client. Every entry must describe the current source and client scope.
 --
 -- Flavors: one per tools/classic-client-matrix.tsv row, plus "Forever", which
 -- runs the Mainline TOC with Blizzard_Game's camelot marker present.

@@ -1,0 +1,71 @@
+name: Compact release contracts
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: ""
+permissions:
+  contents: read
+jobs:
+  release-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12.7"
+      - name: Prepare pinned Lua and PowerShell
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          pins = json.load(open('tools/check-pins.json'))
+          temp = pathlib.Path(os.environ['RUNNER_TEMP'])
+          archive = temp / 'lua.tar.gz'
+          urllib.request.urlretrieve('https://www.lua.org/ftp/lua-' + pins['lua'] + '.tar.gz', archive)
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == pins['luaSourceSha256']
+          version = pins['powershell']
+          urllib.request.urlretrieve('https://github.com/PowerShell/PowerShell/releases/download/v' + version + '/powershell-' + version + '-linux-x64.tar.gz', temp / 'pwsh.tar.gz')
+          PY
+          tar -xzf "$RUNNER_TEMP/lua.tar.gz" -C "$RUNNER_TEMP"
+          make -C "$RUNNER_TEMP/lua-5.1.5" linux
+          mkdir "$RUNNER_TEMP/pinned-pwsh"
+          tar -xzf "$RUNNER_TEMP/pwsh.tar.gz" -C "$RUNNER_TEMP/pinned-pwsh"
+          chmod +x "$RUNNER_TEMP/pinned-pwsh/pwsh"
+          echo "MSUF_LUA=$RUNNER_TEMP/lua-5.1.5/src/lua" >> "$GITHUB_ENV"
+          echo "MSUF_LUAC=$RUNNER_TEMP/lua-5.1.5/src/luac" >> "$GITHUB_ENV"
+      - name: Prepare immutable Blizzard source refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib, subprocess
+          mirror = pathlib.Path('_local_workflows/references/wow-ui-source')
+          mirror.mkdir(parents=True)
+          def git(*args):
+              subprocess.run(['git', '-C', str(mirror), *args], check=True)
+          git('init', '-q')
+          git('remote', 'add', 'upstream', 'https://github.com/Gethe/wow-ui-source.git')
+          for ref, sha in json.load(open('tools/check-pins.json'))['blizzard'].items():
+              git('fetch', '--depth=1', '--no-tags', 'upstream', sha)
+              git('update-ref', 'refs/remotes/' + ref, sha)
+          PY
+      - name: Run the sole release inventory
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/pinned-pwsh/pwsh" -NoProfile -File tools/release-check.ps1 -Reproducible
+      - name: Preserve check output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-check-${{ github.run_id }}
+          path: dist/checks/
+          retention-days: 14
