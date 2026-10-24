@@ -183,6 +183,10 @@ local function DecodeLine(decoder, line)
         exactSectionId, exactTargetKinds, exactTargetContracts, haystack =
         line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
     if pageKey and pageKey ~= "" then
+        -- The compact extension keeps the twelve TSV columns and accepts older
+        -- blobs too. Both pieces are already normalized by the generator.
+        local base, metadataNorm = haystack:match("^(.-)|(.*)$")
+        if base then haystack = metadataNorm ~= "" and (base .. " " .. metadataNorm) or base end
         local encodedPage, encodedControl = searchIdentity:match("^id\031([^\031]+)\031([^\031]+)$")
         local controlId = DecodeIdentityPart(encodedControl)
         if DecodeIdentityPart(encodedPage) ~= pageKey or not controlId

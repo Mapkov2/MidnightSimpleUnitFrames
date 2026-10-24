@@ -926,6 +926,8 @@ function Build.Aura(ctx, b)
     local rightX = 24 + colW + 18
     local cooldown = Card(auras, "Cooldown Timer Colors", nil, 24, -42, colW, 380)
     local markers = Card(auras, "Timer Thresholds", nil, rightX, -42, colW, 380)
+    cooldown._msuf2ResizeColumn = { left = 24, right = 16, gap = 18, count = 2, index = 1, y = -42, min = 310 }
+    markers._msuf2ResizeColumn = { left = 24, right = 16, gap = 18, count = 2, index = 2, y = -42, min = 310 }
 
     local preview = T.Panel(cooldown, nil, T.colors.glassPopup or { 0.006, 0.016, 0.032, 0.82 }, T.colors.borderSoft)
     preview:SetPoint("TOPLEFT", cooldown, "TOPLEFT", 16, -60)

@@ -360,6 +360,17 @@ local function TextureLayerActions(ctx, unit, s)
     s.RefreshLayer, s.ApplyPreset, s.SetHighlightTextureEnabled = RefreshLayer, ApplyPreset, SetHighlightTextureEnabled
     s.CurrentPackValue, s.ApplyPackTexture, s.KeepManualSize = CurrentPackValue, ApplyPackTexture, KeepManualSize
 end
+local function LayoutQuickPresets(setupCard, presetButtons)
+    local colW = floor((setupCard._msuf2Width - 48) / 2)
+    local quickX = 16
+    for _, preset in ipairs(presetButtons) do
+        local width = colW < 402 and floor(preset[4] * (colW - 16) / 386) or preset[4]
+        preset[1]:SetWidth(width)
+        preset[1]:ClearAllPoints()
+        preset[1]:SetPoint("TOPLEFT", setupCard, "TOPLEFT", colW < 402 and quickX or preset[5], -108)
+        quickX = quickX + width + 8
+    end
+end
 local function TextureLayerShell(ctx, builder, s)
     local unit, boundSlot, Key, GetConf = s.unit, s.boundSlot, s.Key, s.GetConf
     local sec = Schema.Section(builder:CollapsibleSection("texture_layer", "Texture Layer", TEXLAYER_SECTION_H, false), unit)
@@ -377,6 +388,7 @@ local function TextureLayerShell(ctx, builder, s)
     local advancedCard = Schema.Build(ctx, sec, {{ "card", "texture_layer.advanced", nil, { "Advanced texture options", nil, leftX,
         TEXLAYER_CARD_Y, innerW, TEXLAYER_CARD_H }, scope = unit, domain = "layout" }})["texture_layer.advanced"]
     local cardsByTab = { setup = setupCard, rules = rulesCard, advanced = advancedCard }
+    for _, card in pairs(cardsByTab) do card._msuf2ResizeGrid = { count = 2, gap = 16 } end
 
     if W.AttachContextColorReferences then
         local function TextureLayerColorRefs()
@@ -525,7 +537,7 @@ local function TextureLayerSetupCard(ctx, s)
         button:SetPoint("TOPLEFT", setupCard, "TOPLEFT", x, -108)
         button._msuf2HistoryLabel = label
         button:SetScript("OnClick", onClick)
-        presetButtons[#presetButtons + 1] = { button, id, label }
+        presetButtons[#presetButtons + 1] = { button, id, label, width, x }
         return button
     end
     local textBackgroundPreset = PresetButton("texture_layer.preset.text_background", "Text background", 142, 16, function()
@@ -549,18 +561,8 @@ local function TextureLayerSetupCard(ctx, s)
     if texturePackPreset._msuf2Label then
         texturePackPreset._msuf2Label:SetPoint("RIGHT", texturePackPreset, "RIGHT", -22, 0)
     end
-    if colW < 402 then
-        -- A narrow menu shrinks the three quick setups together so the row
-        -- stays inside the left column.
-        local quickX = 16
-        local quickWidths = { 142, 112, 132 }
-        for i, preset in ipairs(presetButtons) do
-            local width = floor(quickWidths[i] * (colW - 16) / 386)
-            preset[1]:SetWidth(width)
-            preset[1]:SetPoint("TOPLEFT", setupCard, "TOPLEFT", quickX, -108)
-            quickX = quickX + width + 8
-        end
-    end
+    LayoutQuickPresets(setupCard, presetButtons)
+    ctx:AddResizeCallback(function() LayoutQuickPresets(setupCard, presetButtons) end)
     if UP.RegisterControl then
         for _, preset in ipairs(presetButtons) do UP.RegisterControl(preset[1], ctx, preset[2], preset[3], "button", "ephemeral") end
         for _, preset in ipairs(presetButtons) do Schema.Owned(preset[1], unit, "textureLayer") end

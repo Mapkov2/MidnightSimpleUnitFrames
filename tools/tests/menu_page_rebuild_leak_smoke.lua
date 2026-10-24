@@ -15,7 +15,7 @@
 --      were built once creates nothing.
 -- Pass "report" to print the frame counts per trigger, including the search
 -- results (built once, then repainted in place: search_results_repaint_smoke)
--- and the resize rebuild, which still builds a new tree each time.
+-- and repeated resize commits, which must reuse their frame trees.
 --
 -- Boots the real core and Options graph of one client (menu_core_world.lua).
 -- Plain Lua 5.1, repo root and client flavor.
@@ -30,7 +30,26 @@ local function Check(condition, message)
     return condition
 end
 
-local mw = MenuWorld.Open(root, flavor, { page = "home" })
+-- The base widget stub stores explicit sizes only. Colors category containers
+-- have TOPLEFT/TOPRIGHT anchors instead: native WoW resolves their width from
+-- their parent. Model that relation so retained-page reflow sees the same width
+-- a rebuild's builder receives, rather than the stub's default 100 pixels.
+local function InstallAnchoredWidths(world)
+    local methods = world.widgets.Methods
+    local explicitWidth = methods.GetWidth
+    function methods:GetWidth()
+        local left, right
+        for _, point in ipairs(self.points or {}) do
+            if point.point == "TOPLEFT" and point.relativePoint == "TOPLEFT" then left = point end
+            if point.point == "TOPRIGHT" and point.relativePoint == "TOPRIGHT" then right = point end
+        end
+        if left and right and left.relativeTo == right.relativeTo and left.relativeTo ~= self then
+            return left.relativeTo:GetWidth() + right.x - left.x
+        end
+        return explicitWidth(self)
+    end
+end
+local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = InstallAnchoredWidths })
 local M, env, core = mw.M, mw.env, mw.core
 local widgets = mw.world.widgets
 env.StaticPopup_Show = function() return nil end
@@ -381,24 +400,139 @@ do
 end
 
 ---------------------------------------------------------------------------
--- Report only: the triggers that still build a new tree
+-- 5. Resize commits reuse an already built page (including same-size commits).
 ---------------------------------------------------------------------------
-if report then
-    if M.SearchBridge and M.SearchBridge.RunSearchQuery then
-        local before = WidgetCount()
-        for i = 1, 4 do
-            M.SearchBridge.RunSearchQuery(i % 2 == 0 and "castbar" or "health")
-            Settle()
-        end
-        Note("search submit x4", (WidgetCount() - before) .. " widgets")
+do
+    local entry = Select("opt_misc")
+    local originalW, originalH = M.GetContentMetrics()
+    local getMetrics = M.GetContentMetrics
+    local width, height = originalW, originalH
+    M.GetContentMetrics = function() return width, height end
+    local first = WidgetCount()
+    for i = 1, 12 do
+        width, height = originalW - (i % 3) * 17, originalH - (i % 4) * 11
+        M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
+        M.activeKey = nil
+        Check(M.SelectPage("opt_misc"), "resize selection failed")
+        Settle()
+        Check(M.cache.opt_misc == entry, "resize replaced the existing page tree")
+        Check(entry.wrapper:GetWidth() == width - 12, "retained wrapper did not follow the new width")
+        Check(entry.layoutWidth == width and entry.layoutHeight == height, "retained layout metrics are stale")
+        Check(#BoundToggles(entry) > 0, "resize lost interactive controls")
+        Check(WidgetCount() == first, "resize created " .. (WidgetCount() - first) .. " widgets")
     end
-    Select("opt_misc")
-    local before = WidgetCount()
-    M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
+    width, height = originalW, originalH
     M.activeKey = nil
-    M.SelectPage("opt_misc")
+    Check(M.SelectPage("opt_misc"), "returning to the original layout failed")
     Settle()
-    Note("opt_misc same-size relayout select", (WidgetCount() - before) .. " widgets")
+    Check(M.cache.opt_misc == entry and WidgetCount() == first, "return to original size grew the tree")
+    -- Cross the form-width cap in both directions on a real two-column section.
+    width, height = 932, originalH
+    local colors = Select("opt_colors")
+    M.ColorsSetPainterCategory("auras")
+    Settle()
+    local auraSection = Check(colors.sections.colors_auras, "Colors has no Aura section")
+    auraSection._msuf2CollapsibleEntry.SetOpenImmediate(true)
+    Settle()
+    local cards = Check(auraSection._msuf2ControlCards, "Aura colors cards did not build")
+    local left, right
+    for _, card in ipairs(cards) do
+        if card._msuf2ControlCardTitle == "Cooldown Timer Colors" then left = card end
+        if card._msuf2ControlCardTitle == "Timer Thresholds" then right = card end
+    end
+    Check(left and right, "Aura colors columns did not build")
+    local count = WidgetCount()
+    for _, nextWidth in ipairs({ 1232, 832, 1232, 932 }) do
+        width = nextWidth
+        M.activeKey = nil
+        Select("opt_colors")
+        local expected = math.min(width - 32, M.formContentMaxWidth or 980)
+        Check(auraSection._msuf2Width == expected, "accordion body lost its width cap")
+        local colW = math.max(310, math.floor((expected - 58) / 2))
+        Check(left:GetWidth() == colW and right:GetWidth() == colW, "retained Aura columns have stale widths")
+        local _, _, _, x = right:GetPoint()
+        Check(x == 42 + colW, "retained right Aura column has a stale position")
+        Check(WidgetCount() == count, "Aura columns rebuilt while resizing")
+    end
+    -- A dropdown's requested width survives a temporary parent clamp.
+    local dropdown
+    for _, widget in ipairs(colors.searchWidgets) do
+        if widget._msuf2ControlKind == "dropdown" and widget._msuf2ContextLayoutParent then dropdown = widget break end
+    end
+    Check(dropdown, "Colors has no placed dropdown")
+    local parent = dropdown._msuf2ContextLayoutParent
+    local parentWidth, requested = parent._msuf2Width, dropdown._msuf2RequestedWidth
+    Check(requested and requested > 0, "dropdown did not retain its requested width")
+    local x, y = dropdown._msuf2ContextLayoutX, dropdown._msuf2ContextLayoutY
+    parent._msuf2Width = x + requested - 22
+    M.Widgets.MoveWidget(dropdown, parent, x, y)
+    Check(dropdown:GetWidth() < requested, "dropdown clamp was not exercised")
+    parent._msuf2Width = x + requested + 100
+    M.Widgets.MoveWidget(dropdown, parent, x, y)
+    Check(dropdown:GetWidth() == requested, "dropdown stayed narrow after regrowing")
+    parent._msuf2Width = parentWidth
+    M.Widgets.MoveWidget(dropdown, parent, x, y)
+    -- Resource Bar retains its ratio columns and the detached slider cap.
+    width = 920
+    local groupBars = Select("gf_layout")
+    local power = Check(groupBars.sections.power, "group bars has no Resource Bar section")
+    power._msuf2CollapsibleEntry.SetOpenImmediate(true)
+    Settle()
+    local detachedWidth
+    for _, widget in ipairs(groupBars.searchWidgets) do
+        local meta = widget._msuf2SearchMeta
+        if meta and meta.label == "Detached width" then detachedWidth = widget break end
+    end
+    Check(detachedWidth, "group detached width slider did not build")
+    local groupCount = WidgetCount()
+    for _, nextWidth in ipairs({ 1012, 920, 1012, 920 }) do
+        width = nextWidth
+        M.activeKey = nil
+        Select("gf_layout")
+        Check(detachedWidth._msuf2RequestedWidth <= 340, "group detached slider exceeded its source cap")
+        local parentW = detachedWidth._msuf2ContextLayoutParent._msuf2Width
+        local expected = math.max(160, math.min(340, math.floor((parentW - 48) / 2) - 40))
+        Check(detachedWidth._msuf2RequestedWidth == expected, "group detached slider lost its source geometry")
+        Check(WidgetCount() == groupCount, "group Resource Bar grew during resize")
+    end
+    -- Texture Layer's narrow quick-setup row restores its normal widths too.
+    width = 832
+    local target = Select("uf_target")
+    local texture = Check(target.sections.texture_layer, "target has no Texture Layer section")
+    texture._msuf2CollapsibleEntry.SetOpenImmediate(true)
+    Settle()
+    local presets = {}
+    for _, widget in ipairs(target.searchWidgets) do
+        local label = widget._msuf2HistoryLabel
+        if label == "Text background" or label == "Highlight" or label == "MSUF textures" then presets[label] = widget end
+    end
+    Check(presets["Text background"] and presets.Highlight and presets["MSUF textures"], "quick setups did not build")
+    local textureCount = WidgetCount()
+    for _, nextWidth in ipairs({ 1012, 832, 1012 }) do
+        width = nextWidth
+        M.activeKey = nil
+        Select("uf_target")
+        if nextWidth == 1012 then
+            Check(presets["Text background"]:GetWidth() == 142 and presets.Highlight:GetWidth() == 112
+                and presets["MSUF textures"]:GetWidth() == 132, "quick setups kept their narrow widths")
+            local _, _, _, x = presets.Highlight:GetPoint()
+            Check(x == 166, "quick setups kept their narrow positions")
+        end
+        Check(WidgetCount() == textureCount, "Texture Layer grew during resize")
+    end
+    -- Lazy class-power construction must read the retained page's current width.
+    width = 932
+    local cp = Select("classpower")
+    width = 1232
+    M.activeKey = nil
+    Select("classpower")
+    Check(cp.context.resizeWidthOwner.width == width - 32, "lazy class-power owner kept its original width")
+    width, height = originalW, originalH
+    M.GetContentMetrics = getMetrics
+    Select("opt_misc")
+    Note("resize commits x12 + original layout", "0 widgets")
+end
+if report then
     print("menu_page_rebuild_leak_smoke " .. flavor .. ":")
     for i = 1, #lines do print(lines[i]) end
 end

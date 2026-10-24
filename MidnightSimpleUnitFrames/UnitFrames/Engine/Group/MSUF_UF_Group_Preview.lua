@@ -1023,7 +1023,9 @@ end
 local function HideSpellIndicatorPreview(visual)
   if not visual then return end
   visual:Hide()
-  if visual._glow then visual._glow:Hide() end
+  local effects = Auras.SpellIndicators
+  if effects and effects.HidePreviewIconEffect then effects.HidePreviewIconEffect(visual) end
+  if visual._msufA3ClassicIconGlow then visual._msufA3ClassicIconGlow:Hide() end
   if visual._texture then visual._texture:Hide() end
   if visual._swipe then visual._swipe:Hide() end
   if visual._timer then visual._timer:Hide() end
@@ -1105,15 +1107,14 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   local b = tonumber(color and color[3]) or 0.88
   local a = tonumber(color and color[4]) or 1
   local texture = visual._texture
-  local swipe, timer, stack, glow, durationBar = visual._swipe, visual._timer,
-    visual._stack, visual._glow, visual._durationBar
+  local swipe, timer, stack, durationBar = visual._swipe, visual._timer,
+    visual._stack, visual._durationBar
   local A3 = MSUF and MSUF.MSUF_Auras3
   texture:ClearAllPoints()
   texture:SetAllPoints(visual)
   if swipe then swipe:Hide() end
   if timer then timer:Hide() end
   if stack then stack:Hide() end
-  if glow then glow:Hide() end
   if durationBar then durationBar:Hide() end
   if visualType ~= "icon" and A3 and type(A3.ApplyIconStylePreview) == "function" then
     -- A skinned Spell Icon painted earlier left its shape mask on the texture.
@@ -1181,14 +1182,19 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     end
   end
 
-  if slot.iconEffect == "glow" and visualType == "icon" and not barOnly then
-    glow = EnsurePreviewTexture(visual, "_glow", "BACKGROUND", -1)
-    glow:ClearAllPoints()
-    glow:SetPoint("TOPLEFT", visual, "TOPLEFT", -2, 2)
-    glow:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 2, -2)
-    glow:SetTexture(PREVIEW_WHITE)
-    glow:SetVertexColor(r, g, b, min(0.55, a))
-    glow:Show()
+  local effects = Auras.SpellIndicators
+  if effects and effects.ApplyPreviewIconEffect then
+    if slot.iconEffect == "glow" and visualType == "icon" and not barOnly and not hiddenVisual then
+      effects.ApplyPreviewIconEffect(visual, slot)
+    else
+      effects.HidePreviewIconEffect(visual)
+    end
+  elseif visualType == "icon" and Auras.ClassicVisuals then
+    visual._msufA3IndicatorConfig = nil
+    Auras.ClassicVisuals.ApplyIndicatorVisual(visual, slot)
+    if (barOnly or hiddenVisual) and visual._msufA3ClassicIconGlow then visual._msufA3ClassicIconGlow:Hide() end
+  elseif visual._msufA3ClassicIconGlow then
+    visual._msufA3ClassicIconGlow:Hide()
   end
   visual:SetShown(not hiddenVisual)
   return not hiddenVisual or effectShown

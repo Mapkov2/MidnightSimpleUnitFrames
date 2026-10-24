@@ -187,7 +187,7 @@ local function SectionGeometry(ctx, section, requested)
     return {
         width = section._msuf2Width or ctx.width or 900, cardW = cardW,
         controlW = min(requested, max(120, sectionW - 60)),
-        left = 32, right = 32 + colW + gap, colW = min(requested, colW),
+        left = 32, right = 32 + colW + gap, colW = min(requested, colW), requested = requested,
     }
 end
 -- Stacked layouts put every control at x = 30 with the control width; wide layouts use two columns.
@@ -207,19 +207,35 @@ end
 local function AddRow(env, list, section, key, x, y, width, apply)
     local spec = GameplayRow(env.declarations, key, { x = x, y = y, width = width }, apply, env.apply)
     if spec[1] == "slider" then spec.roundStep = true end
-    list[#list + 1] = AP.Row(env.ctx, section, spec)
+    local widget = AP.Row(env.ctx, section, spec)
+    list[#list + 1] = widget
+    return widget
 end
 -- Rows are { key, wide column, stacked y, wide y, stacked width cap, wide width cap, apply }.
 local function PlaceRows(env, list, section, stacked, g, rows)
+    local placed = {}
     for i = 1, #rows do
         local r = rows[i]
         if stacked then
-            AddRow(env, list, section, r[1], 30, r[3], r[5] and min(r[5], g.controlW) or g.controlW, r[7])
+            placed[i] = AddRow(env, list, section, r[1], 30, r[3], r[5] and min(r[5], g.controlW) or g.controlW, r[7])
         else
-            AddRow(env, list, section, r[1], r[2] == 2 and g.right or g.left, r[4],
+            placed[i] = AddRow(env, list, section, r[1], r[2] == 2 and g.right or g.left, r[4],
                 r[6] and min(r[6], g.colW) or g.colW, r[7])
         end
     end
+    env.ctx:AddResizeCallback(function()
+        local geometry = SectionGeometry(env.ctx, section, g.requested)
+        for i = 1, #rows do
+            local r = rows[i]
+            if placed[i] then
+                local x = stacked and 30 or (r[2] == 2 and geometry.right or geometry.left)
+                local y = stacked and r[3] or r[4]
+                local cap = stacked and r[5] or r[6]
+                local available = stacked and geometry.controlW or geometry.colW
+                W.MoveWidget(placed[i], section, x, y, cap and min(cap, available) or available)
+            end
+        end
+    end)
 end
 local function AttachTextShortcut(section, title, historyLabel, historySource, kind, references, colorTitle, subtitle)
     if not W.AttachContextColorShortcut then return end

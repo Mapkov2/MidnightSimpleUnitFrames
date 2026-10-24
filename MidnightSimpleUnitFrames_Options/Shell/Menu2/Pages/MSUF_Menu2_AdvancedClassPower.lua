@@ -838,6 +838,7 @@ function Page.New(ctx)
     for _, key in ipairs({ "cp", "cpText", "detached", "detachedPlayer", "detachedText", "detachedSlot", "hp", "hpText", "hpCustomText", "hpTextPosition",
         "hpManual", "hpOrb", "hpTexture", "altMana" }) do groups[key] = {} end
     local self = setmetatable({ ctx = ctx, b = W.PageBuilder(ctx), width = ctx.width or 900, groups = groups, refresh = M.RefreshProxy() }, Page)
+    ctx.resizeWidthOwner = self
     self.workspace = M.ClassPowerWorkspace.Attach(self, CLASSPOWER_SETTING_KEY_BY_PATH)
     Schema.Custom(self.workspace, { id = "menu2.classpower.workspace", kind = "workspace",
         scope = "classpower", applyDomain = "workspace", owner = self.workspace })
@@ -1127,8 +1128,21 @@ function Page:BuildClassBehavior()
         "ele ebon shadow ironfur ironfurHashes prediction smooth")
     local rows = twoColumns and max(leftRows, rightRows) or leftRows + rightRows
     local cardH = 22 + rows * 32
-    W.ControlCardBackdrop(section, 18, -38, cardW, cardH)
-    if twoColumns then W.ControlCardBackdrop(section, rightX - 14, -38, cardW, cardH) end
+    local leftCard = W.ControlCardBackdrop(section, 18, -38, cardW, cardH)
+    local rightCard = twoColumns and W.ControlCardBackdrop(section, rightX - 14, -38, cardW, cardH)
+    self.ctx:AddResizeCallback(function()
+        cardW = twoColumns and floor((self.width - 56) / 2) or self.width - 36
+        rightX = 52 + cardW
+        PlaceSupported(32, -52, "anchor charged text rune reverse sweeping")
+        PlaceSupported(twoColumns and rightX or 32, twoColumns and -52 or -52 - leftRows * 32,
+            "ele ebon shadow ironfur ironfurHashes prediction smooth")
+        leftCard:SetWidth(cardW)
+        if rightCard then
+            rightCard:SetWidth(cardW)
+            rightCard:ClearAllPoints()
+            rightCard:SetPoint("TOPLEFT", section, "TOPLEFT", rightX - 14, -38)
+        end
+    end)
     section._msuf2CursorY = -38 - cardH
     self.b:FinishSection(section, 18)
     self.ironfurHashes = fields.ironfurHashes

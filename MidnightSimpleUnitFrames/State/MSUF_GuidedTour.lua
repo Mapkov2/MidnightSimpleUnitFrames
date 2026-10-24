@@ -12,6 +12,7 @@ local type, tostring, pairs = type, tostring, pairs
 local time = time
 
 local REVISION = 1
+local RESTORE_POINT_MAX_AGE = 30 * 86400
 local DEFAULT_STAGE = "menu_basics"
 local EDIT_MODE_STAGE = "edit_mode"
 local GROUP_EDIT_MODE_STAGE = "group_edit_mode"
@@ -59,6 +60,16 @@ local function NewState()
 end
 
 local function Normalize(target)
+    -- SavedVariables binding can replace the bootstrap state later. Only a
+    -- recent active tour keeps its undo snapshot when that state is loaded.
+    local createdAt = tonumber(target.restorePointCreatedAt)
+    local now = Now()
+    if target.status ~= "active" or not createdAt or createdAt > now
+        or now - createdAt > RESTORE_POINT_MAX_AGE then
+        target.restorePoint = nil
+        target.restorePointCreatedAt = nil
+        target.restorePointUsedAt = nil
+    end
     target.schema = 1
     if not VALID_STATUS[target.status] then target.status = "inactive" end
     if type(target.currentStageId) ~= "string" or target.currentStageId == "" then
@@ -392,6 +403,9 @@ function Tour:Dismiss()
     SyncLiveState()
     state.status = "dismissed"
     state.dismissedAt = Now()
+    state.restorePoint = nil
+    state.restorePointCreatedAt = nil
+    state.restorePointUsedAt = nil
     Touch()
     return true
 end

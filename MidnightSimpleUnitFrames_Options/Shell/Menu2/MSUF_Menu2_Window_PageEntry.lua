@@ -48,7 +48,9 @@ local function CreateContext(key, wrapper, entry)
         fullWidth = CONTENT_W - 32,
         hiddenBuild = entry.hiddenBuild == true,
     }
+    entry.context = ctx
     function ctx:SetContentHeight(height)
+        entry.contentHeight = tonumber(height)
         local _, CONTENT_H = M.GetContentMetrics()
         height = math.max(CONTENT_H, tonumber(height) or CONTENT_H)
         if ctx._msuf2DeferContentHeight then
@@ -60,6 +62,10 @@ local function CreateContext(key, wrapper, entry)
     end
     function ctx:AddRefresher(fn)
         M.AddRefresher(ctx, fn)
+    end
+    function ctx:AddResizeCallback(fn)
+        entry.resizeCallbacks = entry.resizeCallbacks or {}
+        entry.resizeCallbacks[#entry.resizeCallbacks + 1] = fn
     end
     return ctx
 end
@@ -176,8 +182,31 @@ end
 -- building a new frame tree. The composite slot strings are memoized: a page
 -- selection allocates nothing for them.
 local VARIANT_SLOTS = { normal = {}, maximized = {} }
+-- Only discrete changes in page structure need another tree. Size commits
+-- within a structure reflow its existing native frames instead of retiring them.
+local function ResponsiveLayoutClass(key)
+    local width = M.GetContentMetrics()
+    if key == "home" then
+        local cardWidth = width - 44
+        return (width < 744 and "intro-small" or "intro-large")
+            .. (cardWidth < 520 and "/plain" or "/pill")
+            .. (cardWidth < 590 and "/wrapped" or "/row")
+            .. (cardWidth < 680 and "/one" or cardWidth < 960 and "/two" or "/three")
+    elseif key == "classpower" then
+        return width < 712 and "compact" or "columns"
+    elseif key == "gameplay" then
+        return width < 652 and "compact" or "columns"
+    elseif key == "swingtimers" then
+        return width < 692 and "compact" or "columns"
+    elseif key == "gf_bars" or key:match("^uf_") then
+        return width < 832 and "compact" or "columns"
+    end
+    return "fixed"
+end
 local function CurrentPageLayoutSlot(key)
     local slot = M.frame and M.frame._msuf2WindowState == "maximized" and "maximized" or "normal"
+    slot = slot .. ":" .. ResponsiveLayoutClass(key or "")
+    if not VARIANT_SLOTS[slot] then VARIANT_SLOTS[slot] = {} end
     local spec = key and M.pages and M.pages[key]
     local variantKey = spec and spec.variantKey
     if not variantKey then return slot end
@@ -191,12 +220,131 @@ local function CurrentPageLayoutSlot(key)
     end
     return composite
 end
+-- Native anchors resize the decoration, headers and preview hosts. Explicit
+-- full-width surfaces/text follow the same gutter; compact controls keep their
+-- requested width and are clamped again by MoveWidget below. This runs only
+-- at a committed selection/resize, never on the window animation's ticks.
+local ResizePageSurface
+local function ResizeGridItem(parent, item, oldWidth, width, grid)
+    local kind = item:GetObjectType()
+    if kind == "Texture" then return end
+    local point, relative, relativePoint, x, y = item:GetPoint()
+    if relative ~= parent or point ~= relativePoint or (point ~= "TOPLEFT" and point ~= "LEFT") then return end
+    local basis = grid.owner and grid.owner.width or width
+    local previous = grid.basis or oldWidth
+    local inset = grid.inset or 32
+    local oldColumn = math.floor((previous - inset - grid.gap * (grid.count - 1)) / grid.count)
+    local column = math.floor((basis - inset - grid.gap * (grid.count - 1)) / grid.count)
+    local index = math.max(0, math.min(grid.count - 1,
+        math.floor((x - (grid.left or 16)) / (oldColumn + grid.gap) + 0.2)))
+    local itemWidth = item._msuf2RequestedWidth or item._msuf2RowWidth or item:GetWidth()
+    if itemWidth >= oldWidth - 64 then return end
+    local newX = x + index * (column - oldColumn)
+    item:ClearAllPoints()
+    item:SetPoint(point, parent, relativePoint, newX, y)
+    if item._msuf2ContextLayoutParent == parent then item._msuf2ContextLayoutX = newX end
+    if itemWidth >= oldColumn - 64 then
+        local newWidth = math.max(1, itemWidth + column - oldColumn)
+        if kind == "FontString" then
+            item:SetWidth(newWidth)
+        else
+            item._msuf2RequestedWidth = newWidth
+            if item._msuf2SetLayoutWidth then
+                item:_msuf2SetLayoutWidth(newWidth)
+                if item._msuf2HideValueBox then
+                    if item.editBox then item.editBox:Hide() end
+                    for _, button in ipairs(item._msuf2StepButtons or {}) do button:Hide() end
+                end
+            elseif item._msuf2ControlKind == "toggle" then
+                if item._msuf2Label then item._msuf2Label:SetWidth(newWidth) end
+            else
+                ResizePageSurface(item, newWidth)
+            end
+        end
+    end
+end
+ResizePageSurface = function(frame, width)
+    local oldWidth = frame:GetWidth()
+    local delta = width - oldWidth
+    local ownGrid = frame._msuf2ResizeGrid
+    if delta == 0 and not (ownGrid and ownGrid.owner and ownGrid.basis ~= ownGrid.owner.width) then return end
+    local children = { frame:GetChildren() }
+    local grid = frame._msuf2ResizeGrid
+    if grid then
+        for i = 1, #children do ResizeGridItem(frame, children[i], oldWidth, width, grid) end
+    end
+    for i = 1, #children do
+        local child = children[i]
+        local childWidth = child:GetWidth()
+        local accordion = child._msuf2CollapsibleEntry
+        local column = child._msuf2ResizeColumn
+        if accordion and accordion.body == child then
+            ResizePageSurface(child, math.min(width, M.formContentMaxWidth or 980))
+        elseif column then
+            local columnWidth = math.max(column.min or 1,
+                math.floor((width - column.left - column.right - column.gap * (column.count - 1)) / column.count))
+            ResizePageSurface(child, columnWidth)
+            child:ClearAllPoints()
+            child:SetPoint("TOPLEFT", frame, "TOPLEFT", column.left + (column.index - 1) * (columnWidth + column.gap), column.y)
+            child._msuf2ContextColorLeft = column.left + (column.index - 1) * (columnWidth + column.gap)
+            child._msuf2ContextColorWidth = columnWidth
+        elseif childWidth >= oldWidth - 64 then
+            ResizePageSurface(child, math.max(1, childWidth + delta))
+        end
+    end
+    local regions = { frame:GetRegions() }
+    if grid then
+        for i = 1, #regions do ResizeGridItem(frame, regions[i], oldWidth, width, grid) end
+    end
+    for i = 1, #regions do
+        local region = regions[i]
+        if region:GetObjectType() == "FontString" and region:GetWidth() >= oldWidth - 64 then
+            region:SetWidth(math.max(1, region:GetWidth() + delta))
+        end
+    end
+    if grid then grid.basis = grid.owner and grid.owner.width or width end
+    if frame._msuf2Width then frame._msuf2Width = width end
+    frame:SetWidth(width)
+end
+local function ResizePageEntry(entry, width, height)
+    local ctx = entry.context
+    if not ctx then return end
+    local builders = ctx._msuf2PageBuilders or {}
+    for i = 1, #builders do
+        local builder = builders[i]
+        builder._msuf2ResizeWidthOffset = builder.parent:GetWidth() - builder.width
+    end
+    ctx.width, ctx.fullWidth = width - 32, width - 32
+    if ctx.resizeWidthOwner then ctx.resizeWidthOwner.width = ctx.width end
+    ResizePageSurface(entry.wrapper, width - 12)
+    for i = #builders, 1, -1 do
+        local builder = builders[i]
+        builder.width = math.max(1, builder.parent:GetWidth() - builder._msuf2ResizeWidthOffset)
+        if builder.ctx ~= ctx then builder.ctx.width = builder.width end
+        builder._msuf2LastContentHeight = nil
+        builder:RelayoutCollapsibles()
+    end
+    for i = 1, #(entry.searchWidgets or {}) do
+        local widget = entry.searchWidgets[i]
+        local parent = widget._msuf2ContextLayoutParent
+        if parent then
+            W.MoveWidget(widget, parent, widget._msuf2ContextLayoutX, widget._msuf2ContextLayoutY,
+                widget._msuf2RequestedWidth)
+            if widget._msuf2HideValueBox then
+                if widget.editBox then widget.editBox:Hide() end
+                for _, button in ipairs(widget._msuf2StepButtons or {}) do button:Hide() end
+            end
+        end
+    end
+    for i = 1, #(entry.resizeCallbacks or {}) do entry.resizeCallbacks[i]() end
+    entry.layoutWidth, entry.layoutHeight = width, height
+    ApplyContextContentHeight(entry, entry.wrapper, entry.contentHeight or entry.height)
+end
 local function PageEntryMatchesLayout(entry, slot)
-    local CONTENT_W, CONTENT_H = M.GetContentMetrics()
-    return type(entry) == "table"
-        and entry.layoutSlot == slot
-        and entry.layoutWidth == CONTENT_W
-        and entry.layoutHeight == CONTENT_H
+    if type(entry) ~= "table" or entry.layoutSlot ~= slot then return false end
+    local width, height = M.GetContentMetrics()
+    if entry.layoutWidth ~= width or entry.layoutHeight ~= height then ResizePageEntry(entry, width, height) end
+    return true
 end
 local function RehydratePageAccordion(entry)
     for _, section in pairs(entry.sections or {}) do
@@ -242,6 +390,7 @@ local function RememberPageLayoutVariant(key, entry)
 end
 M.Assign(M, {
     SetFrameHeightIfChanged = SetFrameHeightIfChanged, CreateContext = CreateContext,
+    ResizePageSurface = ResizePageSurface,
     BuildSecondaryPageNav = BuildSecondaryPageNav, BuildPlaceholderPage = BuildPlaceholderPage,
     CurrentPageLayoutSlot = CurrentPageLayoutSlot, PageEntryMatchesLayout = PageEntryMatchesLayout,
     RehydratePageAccordion = RehydratePageAccordion,

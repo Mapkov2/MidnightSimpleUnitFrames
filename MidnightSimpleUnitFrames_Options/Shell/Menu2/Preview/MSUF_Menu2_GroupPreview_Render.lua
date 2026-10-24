@@ -2117,6 +2117,7 @@ local function ConfigureSpellPreviewHandle(st, handle, item, placed, appearance,
         if slot.visual == "number" then visual._stack:SetText(slot.showStacks and "9" or "") end
     end
     if visual._glow then visual._glow:Hide() end
+    if visual._msufA3ClassicIconGlow then visual._msufA3ClassicIconGlow:Hide() end
     if slot.visual == "icon" and slot.iconEffect == "glow" then
         local effects, root = MSUF.MSUF_Auras3.SpellIndicators
         if effects and effects.ApplyPreviewIconEffect then

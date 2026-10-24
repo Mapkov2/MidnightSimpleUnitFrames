@@ -666,6 +666,8 @@ RebuildActivePageForResize = function(frame, options)
     local autoCompactIfNoFit = restoreExpanded
         and options.allowAutoCompact == true and options.shrinking == true
     SaveWindowSize(frame)
+    -- Page selection reflows the retained entry for the new metrics. Its
+    -- discrete layout slot changes only when the page needs another structure.
     M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
     M.SetActivePageHeader(nil)
     M.activeKey = nil

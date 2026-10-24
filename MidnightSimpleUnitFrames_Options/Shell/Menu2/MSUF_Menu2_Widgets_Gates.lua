@@ -342,7 +342,11 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     widget._msuf2ContextLayoutX = x
     widget._msuf2ContextLayoutY = y
     width = tonumber(width)
+    if not width and (kind == "dropdown" or kind == "textinput") then
+        width = widget._msuf2RequestedWidth or widget:GetWidth()
+    end
     if width then
+        widget._msuf2RequestedWidth = width
         if kind == "slider" and widget._msuf2SetLayoutWidth then
             widget._msuf2RequestedWidth = width
             widget:_msuf2SetLayoutWidth(width)

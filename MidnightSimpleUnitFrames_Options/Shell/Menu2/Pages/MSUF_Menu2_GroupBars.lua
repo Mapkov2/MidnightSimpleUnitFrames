@@ -421,6 +421,33 @@ local function BuildGFResourceBarSection(ctx, b)
     local c = {}
     local s = PowerCardsAndSize(ctx, b, c)
     PowerBorderRolesDetached(ctx, s, c)
+    ctx:AddResizeCallback(function()
+        local leftX, leftW, rightX, rightW, innerW = Schema.Columns(s.power, b.width or 720, 20, 16, 0.54)
+        for _, card in ipairs({ s.main, s.border, s.roles, s.detached }) do
+            local cardW = card == s.detached and innerW or (card == s.border and rightW or leftW)
+            M.ResizePageSurface(card, cardW)
+            card:ClearAllPoints()
+            card:SetPoint("TOPLEFT", s.power, "TOPLEFT", card == s.border and rightX or leftX, card._msuf2ContextColorTop)
+            card._msuf2ContextColorLeft = card == s.border and rightX or leftX
+            card._msuf2ContextColorWidth = cardW
+        end
+        W.MoveWidget(c.powerHeight, s.main, 16, -76, max(180, min(360, leftW - 64)), "LEFT")
+        W.MoveWidget(c.embedPowerBarIntoHealth, s.main, 16, -138, leftW - 32)
+        W.MoveWidget(c.detachPower, s.main, 16, -166, leftW - 32)
+        W.MoveWidget(c.powerBorder, s.border, 16, -62, rightW - 32)
+        W.MoveWidget(c.powerBarBorderThickness, s.border, 16, -108, rightW - 72, "CENTER")
+        W.MoveWidget(c.powerSmoothFill, s.border, 16, -158, rightW - 32)
+        W.MoveWidget(c.powerChunkedFill, s.border, 16, -188, rightW - 32)
+        W.MoveWidget(c.powerShowTank, s.roles, 16, -66, leftW - 32)
+        W.MoveWidget(c.powerShowHealer, s.roles, 16, -100, leftW - 32)
+        W.MoveWidget(c.powerShowDamager, s.roles, 16, -134, leftW - 32)
+        local column = floor((innerW - 48) / 2)
+        local slider = max(160, min(340, column - 40))
+        W.MoveWidget(c.detachedPowerBarTextOnBar, s.detached, 16, -62, column)
+        W.MoveWidget(c.detachedPowerBarWidth, s.detached, 16, -116, slider, "CENTER")
+        W.MoveWidget(c.detachedPowerBarHeight, s.detached, 32 + column, -116, slider, "CENTER")
+        W.MoveWidget(c.detachedPowerBarFrameLevelOffset, s.detached, 16, -182, slider, "CENTER")
+    end)
     local power, powerEnabled, roleLabel = s.power, s.enabled, s.roleLabel
     local powerControls = {
         c.powerHeight, c.powerSmoothFill, c.powerChunkedFill, c.powerShowTank, c.powerShowHealer, c.powerShowDamager,

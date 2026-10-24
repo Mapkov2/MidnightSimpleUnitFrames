@@ -539,6 +539,7 @@ local function SetSliderValueSafe(slider, value)
     slider._msuf2Refreshing = nil
 end
 local function HideSliderValueBox(slider)
+    if slider then slider._msuf2HideValueBox = true end
     if slider and slider.editBox then slider.editBox:Hide() end
     if slider and slider._msuf2StepButtons then
         for i = 1, #slider._msuf2StepButtons do
@@ -1039,6 +1040,7 @@ local function BuildScaleColumn(scaling, colW, spec)
 end
 function Dashboard.BuildScalingColumns(state, ctx, scaling)
     local recoveryW, scalingColumns = state.recoveryW, state.scalingColumns
+    scaling._msuf2ResizeGrid = { count = scalingColumns, gap = 24 }
     W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active " ..
         "value.", 16, -60, recoveryW - 32, T.colors.muted)
     -- The selections not applied yet: globalEnabled, global, msuf and menu.

@@ -93,6 +93,16 @@ try {
             (LuaRun "release_menu_smoke.lua" "Mists"),
             (LuaRun "release_menu_smoke.lua" "Forever")
         )
+        Contract "C12 regressions" @(
+            (LuaRun "menu_page_rebuild_leak_smoke.lua" "Mainline"),
+            (LuaRun "menu_page_rebuild_leak_smoke.lua" "Vanilla"),
+            (LuaRun "search_cold_metadata_smoke.lua" "Mainline"),
+            (LuaRun "search_cold_metadata_smoke.lua" "Vanilla"),
+            (LuaRun "guided_tour_restore_retention_smoke.lua" "Mainline"),
+            (LuaRun "group_preview_configured_glow_smoke.lua" "Mainline"),
+            (LuaRun "group_preview_configured_glow_smoke.lua" "Vanilla"),
+            (LuaRun "group_preview_configured_glow_smoke.lua" "Forever")
+        )
         Contract "namespace" @(
             @{ Label = "mutation-proof"; Exe = $Python; Args = @("tools/tests/flip_check_smoke.py", "--luac", $luaCompiler) },
             @{ Label = "flip"; Exe = $Python; Args = @("tools/flip_check.py", $root, "--luac", $luaCompiler) }

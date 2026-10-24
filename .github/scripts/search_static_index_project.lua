@@ -690,6 +690,57 @@ local function VisitWorkspaceStates(M, capture)
     return visited
 end
 
+-- One compact normalized column. Deduplicate whole text, preserving phrase order.
+-- Search registration owns the values/aliases; the catalog owns navigation.
+local function SearchMetadata(M, Catalog, record)
+    local raw = Catalog.Get(tostring(record.controlId or ""))
+    local widget = raw and raw.widget
+    local meta = widget and widget._msuf2SearchMeta or {}
+    local parts, seen = {}, {}
+    local function Add(text)
+        if text == nil then return end
+        local variants = {}
+        M.Search.Text.AddSearchText(variants, text)
+        for i = 1, #variants do
+            local normalized = M.Search.Text.NormalizeSearchText(variants[i])
+            if normalized ~= "" and not seen[normalized] then
+                seen[normalized] = true
+                parts[#parts + 1] = normalized
+            end
+        end
+    end
+    local function Value(item)
+        if type(item) == "table" then
+            Add(item.text or item.label or item.name or item.title or item.value or item.key)
+            Add(item.tooltip)
+            Add(item.desc or item.description)
+        else
+            Add(item)
+        end
+    end
+    local values = meta.values or (widget and widget.values)
+    if type(values) == "function" then values = values() end
+    if type(values) == "table" then
+        for i = 1, math.min(#values, 32) do Value(values[i]) end
+        local keys = {}
+        for key in pairs(values) do
+            if type(key) ~= "number" or key < 1 or key > #values then keys[#keys + 1] = key end
+        end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        for i = 1, math.min(#keys, 12) do
+            Add(keys[i])
+            Value(values[keys[i]])
+        end
+    end
+    if type(meta.keywords) == "table" then
+        for i = 1, #meta.keywords do Add(meta.keywords[i]) end
+    elseif type(meta.keywords) == "string" then
+        Add(meta.keywords)
+    end
+    Add(meta.help or meta.description or record.help)
+    return table.concat(parts, " ")
+end
+
 --- Called from inside the crosswalk harness, where every page has been built with the
 --- real product builders and the real search text utilities are loaded. Returns this
 --- flavor's encoded rows; the caller merges and writes them.
@@ -700,13 +751,14 @@ local function Collect(M, Catalog, buildFailures)
     -- Where a record came from decides which client wins a shared row below: only the
     -- runtime catalog knows the collapsible section a control actually sits in, so a
     -- client that builds the page beats one that exposes only a workspace view.
-    local sources, origin, built = {}, {}, {}
+    local sources, origin, built, metadata = {}, {}, {}, {}
     local function BuiltKey(record)
         return tostring(record.pageKey or "") .. "\031" .. tostring(record.controlId or "")
     end
     for _, record in ipairs(Catalog.GetRecords()) do
         record.exactSectionId, record.exactTargetKinds, record.exactTargetContracts = RuntimeExactContract(M, Catalog, record)
         sources[#sources + 1] = record
+        metadata[record] = SearchMetadata(M, Catalog, record)
         origin[record] = ORIGIN_RUNTIME
         built[BuiltKey(record)] = true
     end
@@ -720,6 +772,7 @@ local function Collect(M, Catalog, buildFailures)
                 record.exactSectionId, record.exactTargetKinds, record.exactTargetContracts = RuntimeExactContract(M, Catalog, record)
                 built[key] = true
                 sources[#sources + 1] = record
+                metadata[record] = SearchMetadata(M, Catalog, record)
                 origin[record] = ORIGIN_STATE
             end
         end
@@ -761,7 +814,7 @@ local function Collect(M, Catalog, buildFailures)
                             tostring(record.exactTargetContracts or ""),
                             Normalize(table.concat({
                                 label, hint, controlPath, pageKey, kind, settingKey, actionKey,
-                            }, " ")),
+                            }, " ")) .. "|" .. metadata[record],
                         }
                     end
                 end
@@ -800,7 +853,13 @@ local function MergeSelectorContracts(first, second)
     for field in (second .. "\t"):gmatch("(.-)\t") do b[#b + 1] = field end
     if #a ~= 12 or #b ~= 12 then return nil end
     for i = 1, 12 do
-        if i ~= 10 and i ~= 11 and a[i] ~= b[i] then return nil end
+        if i ~= 10 and i ~= 11 and i ~= 12 and a[i] ~= b[i] then return nil end
+    end
+    local baseA, extraA = a[12]:match("^(.-)|(.*)$")
+    local baseB, extraB = b[12]:match("^(.-)|(.*)$")
+    if baseA ~= baseB then return nil end
+    if extraA ~= extraB and not extraA:find(extraB, 1, true) then
+        a[12] = baseA .. "|" .. (extraA == "" and extraB or (extraA .. " " .. extraB))
     end
     for _, column in ipairs({ 10, 11 }) do
         local separator = column == 10 and "," or "|"
@@ -827,11 +886,15 @@ local function Render(lines)
         if not identity then Fail("row is not a 12-field record: " .. line:sub(1, 120)) end
         local previous = byIdentity[identity]
         if previous == nil then
-            byIdentity[identity] = { origin = origin, line = rest }
+            byIdentity[identity] = { origin = origin, line = rest, metadata = rest:match("|([^|]*)$") or "" }
             order[#order + 1] = identity
         elseif previous.line ~= rest then
+            local extra = rest:match("|([^|]*)$") or ""
+            if extra ~= "" and not previous.metadata:find(extra, 1, true) then
+                previous.metadata = previous.metadata == "" and extra or (previous.metadata .. " " .. extra)
+            end
             if ORIGIN_RANK[origin] > ORIGIN_RANK[previous.origin] then
-                byIdentity[identity] = { origin = origin, line = rest }
+                previous.origin, previous.line = origin, rest
             elseif previous.origin == origin then
                 local merged = MergeSelectorContracts(previous.line, rest)
                 if merged then
@@ -851,7 +914,10 @@ local function Render(lines)
             conflicts))
     end
     local unique = {}
-    for _, identity in ipairs(order) do unique[#unique + 1] = byIdentity[identity].line end
+    for _, identity in ipairs(order) do
+        local row = byIdentity[identity]
+        unique[#unique + 1] = row.line:match("^(.*)|[^|]*$") .. "|" .. row.metadata
+    end
     table.sort(unique)
     local blob = table.concat(unique, "\n")
     if blob:find("]==]", 1, true) then Fail("blob would terminate its own long string") end
@@ -862,7 +928,7 @@ local function Render(lines)
         "-- Complete Menu2 control inventory for search. One string constant, so login\n",
         "-- pays only the parse of a literal; it is split into records the first time a\n",
         "-- player actually uses search (see MSUF_Menu2_Search_StaticIndex.lua).\n",
-        "-- Columns: pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity, exactSectionId, exactTargetKinds, exactTargetContracts, haystack\n",
+        "-- Columns: pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity, exactSectionId, exactTargetKinds, exactTargetContracts, haystack (base + pipe + metadataNorm)\n",
         "local _, MSUF = ...\n",
         "MSUF = MSUF or _G.MSUF_NS or {}\n",
         "local M = MSUF.MSUF2 or {}\n",
@@ -895,7 +961,14 @@ local function BuildFlavor(target)
     local profileHook = 'local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")'
     local profileAt = harness:find(profileHook, 1, true)
     if not profileAt then Fail("profile data bootstrap hook moved") end
-    local profileBootstrap = "\n"
+    local profileBootstrap = [[
+MSUF.LOCALE = "enUS"
+local charKeySource = require("msuf_source_slice").Function(
+    Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"),
+    "function MSUF.PublicGlobals.MSUF_GetCharKey", "State/MSUF_Profiles.lua")
+assert(loadstring("local MSUF = _G.MSUF_NS\n" .. charKeySource))()
+_G.MSUF_GetCharKey = MSUF.PublicGlobals.MSUF_GetCharKey
+]]
     for _, name in ipairs({"ProfileFields", "ProfileVariants", "ProfileVariantEditor", "ProfileSync"}) do
         local path = "MidnightSimpleUnitFrames/State/MSUF_" .. name .. ".lua"
         profileBootstrap = profileBootstrap .. 'assert(loadfile("' .. path .. '"))("MidnightSimpleUnitFrames", MSUF)\n'

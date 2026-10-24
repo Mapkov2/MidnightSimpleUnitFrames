@@ -757,6 +757,9 @@ local function ApplyIndicatorVisual(button, cfg)
     return visual
 end
 
+-- Preview setup reuses this painter; the live update keeps its existing call.
+V.ApplyIndicatorVisual = ApplyIndicatorVisual
+
 local function EnsureStealableTexture(button, key, subLevel)
     local texture = button[key]
     if texture then return texture end
