@@ -11,10 +11,6 @@
 local _, MSUF = ...
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 A3.TargetDotDataVersion = "12.0.7.68453+12.1.0.68745"
 A3.TargetDotData = {

@@ -4,10 +4,6 @@
 -- Style migration is defined before its reader, with no cross-module late bind.
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 function Factories.Containers(A3, Model, Schema, Common, Storage)
     local type = type
@@ -177,8 +173,7 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
         item.disabledPredefinedSpellIDs = type(item.disabledPredefinedSpellIDs) == "table"
             and item.disabledPredefinedSpellIDs or {}
         item.placed = type(item.placed) == "table" and item.placed or {}
-        item.placed.iconShape = type(A3.NormalizeAuraIconShape) == "function"
-            and A3.NormalizeAuraIconShape(item.placed.iconShape) or (item.placed.iconShape or "RECTANGLE")
+        item.placed.iconShape = A3.NormalizeAuraIconShape(item.placed.iconShape)
         PinPresetFilters(item, false)
         -- Pre-preset custom4 profiles may carry a DEBUFF-era duration ceiling;
         -- since 6.09 compiles maxDuration for every lane it would silently hide
@@ -204,8 +199,7 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
         item.autoBlacklistPlayerBuffs = nil
         item.disabledPredefinedSpellIDs = nil
         item.placed = type(item.placed) == "table" and item.placed or {}
-        item.placed.iconShape = type(A3.NormalizeAuraIconShape) == "function"
-            and A3.NormalizeAuraIconShape(item.placed.iconShape) or (item.placed.iconShape or "RECTANGLE")
+        item.placed.iconShape = A3.NormalizeAuraIconShape(item.placed.iconShape)
         item.placed.pandemicEnabled = item.placed.pandemicEnabled == true
         if type(A3.NormalizePandemicStyle) == "function" then
             item.placed.pandemicStyle = A3.NormalizePandemicStyle(item.placed.pandemicStyle)

@@ -23,7 +23,7 @@ if not select(2, ...).Client.IsClassic then return end
 --- Each file imports the earlier ones from A3._ClassicBackend at load time.
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
-local Backend = type(A3) == "table" and A3._ClassicBackend
+local Backend = A3._ClassicBackend
 assert(Backend and Backend.Lanes, "the Classic aura element requires Game/Classic/Auras/MSUF_Auras3_Lanes.lua")
 if Backend.Element then return end
 local Compile = A3._ClassicCompile

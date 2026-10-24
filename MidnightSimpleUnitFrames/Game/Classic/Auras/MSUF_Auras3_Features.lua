@@ -9,7 +9,6 @@ if not select(2, ...).Client.IsClassic then return end
 
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then return end
 
 local Features = A3.ClassicFeatures or {}
 A3.ClassicFeatures = Features

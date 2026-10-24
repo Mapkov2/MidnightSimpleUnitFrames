@@ -4,10 +4,6 @@
 -- Spell queries remain lazy because item/spell data can arrive after login.
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 -- Cold menu mutation shared by unit and group blacklist editors.
 local function AddBlacklistSpellToList(list, key, preset)
@@ -192,12 +188,10 @@ function Factories.Common(Schema, A3)
         return nil
     end
 
-    --- The text in the menu language. The localization core loads before this
-    --- file; a harness without it keeps the English key.
+    --- The text in the menu language, supplied by the earlier localization core.
     local function Translate(text)
         local translate = MSUF.Translate
-        if type(translate) == "function" then return translate(text) end
-        return text
+        return translate(text)
     end
 
     --- "Name (#id)". The client already names a spell in its own language, so

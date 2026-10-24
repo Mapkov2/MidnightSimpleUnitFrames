@@ -6,10 +6,6 @@
 local _, MSUF = ...
 local IS_CLASSIC = MSUF.Client.IsClassic == true
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
     local type = type

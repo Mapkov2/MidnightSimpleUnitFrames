@@ -2,10 +2,6 @@
 --- Baseline: ElvUI Classic TurtleBuffs and Blizzard upstream/classic_era, 2026-08-03.
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 A3.PlayerDefensiveDataVersion = "Vanilla-1.15.9.68940"
 A3.PlayerDefensiveData = {

@@ -341,45 +341,29 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local trackingSignature = lane._msufA3TrackingSignature or LaneTrackingSignature(lane)
     local structuralSignature = lane._msufA3StructuralSignature or LaneStructuralSignature(lane)
     local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
-    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
     local current = ReviveNativeLane(root, key, root[key], structuralSignature, RetireNativeLane, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         NativeApply.RebindNativeContainerUnit(current, lane.unit)
         if current._msufA3StandaloneAuraSlot == true then
             UpdateGroupLaneSlot(current, lane)
-            SyncContainerGeometry(current, lane, parentFrame)
-            current:Show()
-            if not RegisterNativeContainer(current) then return nil end
-            current._msufA3TrackingSignature = trackingSignature
-            current._msufA3StructuralSignature = structuralSignature
-            current._msufA3LayoutSignature = layoutSignature
-            current._msufA3MaxFrameCount = 1
-            return current
-        end
-        if current._msufA3PriorityAuraGroups == true then
+        elseif current._msufA3PriorityAuraGroups == true then
             UpdatePriorityGroupFilters(current, lane.nativeFilter)
-            SyncContainerGeometry(current, lane, parentFrame)
-            current:Show()
-            if not RegisterNativeContainer(current) then return nil end
-            current._msufA3TrackingSignature = trackingSignature
-            current._msufA3StructuralSignature = structuralSignature
-            current._msufA3LayoutSignature = layoutSignature
-            return current
-        end
-        local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
-        UpdateAuraGroupEffectiveFilters(current, lane)
-        if current._msufA3MaxFrameCount ~= lane.max then
-            current:SetAuraGroupMaxFrameCount(current._msufA3ManagedGroupKey, lane.max)
-            current._msufA3MaxFrameCount = lane.max
-        end
-        local sortSignature = AuraSortSignature(lane)
-        if current._msufA3SortSignature ~= sortSignature then
-            local sortMethod, sortDirection = AuraSortEnums(lane)
-            current:SetAuraGroupSortMethod(current._msufA3ManagedGroupKey, sortMethod, sortDirection)
-            current._msufA3SortSignature = sortSignature
-        end
-        if layoutChanged then
-            ApplyManagedAuraGroupLayout(current, current._msufA3ManagedGroupKey, lane)
+        else
+            local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
+            UpdateAuraGroupEffectiveFilters(current, lane)
+            if current._msufA3MaxFrameCount ~= lane.max then
+                current:SetAuraGroupMaxFrameCount(current._msufA3ManagedGroupKey, lane.max)
+                current._msufA3MaxFrameCount = lane.max
+            end
+            local sortSignature = AuraSortSignature(lane)
+            if current._msufA3SortSignature ~= sortSignature then
+                local sortMethod, sortDirection = AuraSortEnums(lane)
+                current:SetAuraGroupSortMethod(current._msufA3ManagedGroupKey, sortMethod, sortDirection)
+                current._msufA3SortSignature = sortSignature
+            end
+            if layoutChanged then
+                ApplyManagedAuraGroupLayout(current, current._msufA3ManagedGroupKey, lane)
+            end
         end
         SyncContainerGeometry(current, lane, parentFrame)
         current:Show()
@@ -387,8 +371,10 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
+        if current._msufA3StandaloneAuraSlot == true then current._msufA3MaxFrameCount = 1 end
         return current
     end
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
     RetireNativeLane(root, key, current, parentFrame, forceRecreate == true)
     current = NativeApply.CreateNativeLane(root, lane, parentFrame)
     if current then

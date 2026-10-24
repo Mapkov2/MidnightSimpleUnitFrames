@@ -12,7 +12,7 @@ if not select(2, ...).Client.IsClassic then return end
 local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua")
 local A3 = MSUF.MSUF_Auras3
-local Backend = type(A3) == "table" and A3._ClassicBackend
+local Backend = A3._ClassicBackend
 assert(Backend, "Classic aura lanes require Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
 if Backend.Lanes then return end
 local Compile = A3._ClassicCompile

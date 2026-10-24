@@ -4,10 +4,6 @@
 -- This owner builds menu choices; it never scans live aura containers.
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 function Factories.Presets(Model, Common)
     local type = type

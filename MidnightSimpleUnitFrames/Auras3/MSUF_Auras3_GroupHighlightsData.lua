@@ -14,10 +14,6 @@
 local _, MSUF = ...
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 --- The one key of the fail-closed hash below. Aura spell IDs are positive
 --- integers, so a negative sentinel can never match a scanned aura while it

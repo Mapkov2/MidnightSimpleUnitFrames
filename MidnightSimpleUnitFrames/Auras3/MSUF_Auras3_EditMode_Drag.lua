@@ -3,11 +3,6 @@
 local addonName, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_EditMode_Drag.lua")
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
-A3.EditModeModules = A3.EditModeModules or {}
 local function RestoreCombatAuraAlpha(element, unit, hidden, queueMouseRestore)
     if not hidden and element._msufA3EditModeAlpha ~= nil then
         element:SetAlpha(element._msufA3EditModeAlpha)
@@ -84,7 +79,7 @@ local function ApplyDragUnit(auras, unit, moverKind, x, y)
     local frame = other and GetFrame(unit)
     if other and frame then
         local cfg = ReadGroupConfig(unit, moverKind)
-        local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(unit, moverKind) or nil
+        local metrics = A3.BuildAuraLaneMetrics(unit, moverKind)
         metrics = metrics or FallbackMetrics(cfg)
         local laneW = metrics.width or cfg.size
         local laneH = metrics.height or cfg.size

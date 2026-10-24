@@ -10,10 +10,6 @@ local _, MSUF = ...
 local ExportPublic = MSUF.ExportPublic
 local type, tostring = type, tostring
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 local Model = A3.MenuModel
 if type(Model) ~= "table" then
     Model = {}
@@ -66,8 +62,8 @@ function Model.ReadPreviewConfig(unit)
     unit = NormalizeUnit(unit)
     local auras, shared = Model.EnsureDB()
     if type(auras) ~= "table" or type(shared) ~= "table" then return nil end
-    local runtimeCfg = type(A3.ResolveUnitFrameConfig) == "function" and A3.ResolveUnitFrameConfig(RuntimeUnit(unit)) or nil
-    local buildMetrics = runtimeCfg and type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics or nil
+    local runtimeCfg = A3.ResolveUnitFrameConfig(RuntimeUnit(unit))
+    local buildMetrics = runtimeCfg and A3.BuildAuraLaneMetrics or nil
     local buffMetrics = buildMetrics and buildMetrics(runtimeCfg, "buff") or nil
     local debuffMetrics = buildMetrics and buildMetrics(runtimeCfg, "debuff") or nil
     local customMetrics = {}
@@ -210,10 +206,7 @@ function Model.Apply(unit, reason)
     local normalizedScope = unit and NormalizeScope(unit) or "shared"
     local globalScope = (not unit) or normalizedScope == "shared" or IsGroupApplyScope(unit)
     if type(InCombatLockdown) == "function" and InCombatLockdown() == true then
-        if type(A3._QueueDeferredAuraRuntime) == "function" then
-            return A3._QueueDeferredAuraRuntime(unit or "shared", reason, false)
-        end
-        return false
+        return A3._QueueDeferredAuraRuntime(unit or "shared", reason, false)
     end
     if globalScope then
         -- A group edit must not discard unrelated Unit configuration caches.
@@ -221,38 +214,19 @@ function Model.Apply(unit, reason)
         local scopedGroup = unit and IsGroupApplyScope(unit)
             and type(A3.InvalidateGroupRuntimeConfig) == "function"
             and A3.InvalidateGroupRuntimeConfig(unit)
-        if not scopedGroup and A3.BumpRuntimeConfig then A3.BumpRuntimeConfig() end
+        if not scopedGroup then A3.BumpRuntimeConfig() end
         -- Icon skins painted outside the aura runtime follow an edit, undo or
         -- reset of the default skin (Auras3/MSUF_Auras3_IconSkins_Host.lua).
         if not scopedGroup and A3.IconSkins then A3.IconSkins.NotifyChanged("apply") end
     end
     local function RefreshGroup(scope)
-        if A3.RequestUnit then
-            return A3.RequestUnit(scope)
-        end
-        local gf = MSUF and MSUF.GF
-        if gf and type(gf.RefreshVisuals) == "function" then
-            if scope == "party" or scope == "gf_party" then
-                return gf.RefreshVisuals("party", gf.DIRTY_AURAS)
-            elseif scope == "mythicraid" or scope == "gf_mythicraid" then
-                return gf.RefreshVisuals("mythicraid", gf.DIRTY_AURAS)
-            elseif scope == "raid" or scope == "gf_raid" then
-                local didWork = gf.RefreshVisuals("raid", gf.DIRTY_AURAS)
-                return gf.RefreshVisuals("mythicraid", gf.DIRTY_AURAS) or didWork
-            end
-            return gf.RefreshVisuals(nil, gf.DIRTY_AURAS)
-        end
-        return false
+        return A3.RequestUnit(scope)
     end
     local function Refresh(runtimeUnit)
         -- RefreshUnit owns both the runtime lane and its Edit Mode follower.
         -- UpdateUnitAnchor is only the preview half of the same operation and
         -- calling both repaints every dummy twice.
-        if type(A3.RefreshUnit) == "function" then
-            A3.RefreshUnit(runtimeUnit)
-        elseif type(A3.UpdateUnitAnchor) == "function" then
-            A3.UpdateUnitAnchor(runtimeUnit)
-        end
+        A3.RefreshUnit(runtimeUnit)
         return "OFF"
     end
     if unit and IsGroupApplyScope(unit) then
@@ -263,10 +237,5 @@ function Model.Apply(unit, reason)
         A3.ForEachRuntimeUnit("shared", Refresh)
         RefreshGroup("group")
     end
-    if type(A3.NotifyPreview) == "function" then
-        A3.NotifyPreview(reason, unit or normalizedScope)
-    else
-        local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
-        if refreshPreview then refreshPreview(reason) end
-    end
+    A3.NotifyPreview(reason, unit or normalizedScope)
 end

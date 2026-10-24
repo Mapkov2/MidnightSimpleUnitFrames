@@ -709,7 +709,7 @@ if RESTRICTION then
     end
 end
 local restrictionEvents = RESTRICTION_STATE ~= nil and RESTRICTION_STATE.Inactive ~= nil and next(AURA_RESTRICTIONS) ~= nil
-    and (type(Client.SupportsEvent) ~= "function" or Client.SupportsEvent("ADDON_RESTRICTION_STATE_CHANGED"))
+    and Client.SupportsEvent("ADDON_RESTRICTION_STATE_CHANGED")
 local activeRestrictions = {}
 
 local function RestrictedNow()

@@ -2,10 +2,6 @@
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 A3.EditModeModules = A3.EditModeModules or {}
 A3.EditModeModules.Config = function()
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
@@ -178,7 +174,7 @@ local function NormalizeKind(kind)
 end
 
 local function CustomItem(unit, index, create)
-    local model = A3 and A3.MenuModel
+    local model = A3.MenuModel
     if not (model and type(model.CustomContainer) == "function") then return nil end
     return model.CustomContainer(unit, index, create == true)
 end
@@ -191,7 +187,7 @@ local function CustomPreviewEntries(unit, kind)
     local spec = GROUPS[kind]
     local customIndex = spec and spec.customIndex
     if not customIndex then return nil end
-    local model = A3 and A3.MenuModel
+    local model = A3.MenuModel
     local fetch = model and (model.CustomContainerPreviewEntries or model.CustomContainerSpellEntries)
     if type(fetch) ~= "function" then return nil end
     local entries = fetch(unit, customIndex)
@@ -212,8 +208,7 @@ end
 --- Text in the menu language; the localization core loads before Edit Mode.
 local function Translate(text)
     local translate = MSUF.Translate
-    if type(translate) == "function" then return translate(text) end
-    return text
+    return translate(text)
 end
 
 local UNIT_LABELS = { player = "Player", pet = "Pet", target = "Target", focus = "Focus" }

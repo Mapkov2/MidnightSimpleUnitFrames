@@ -4,10 +4,6 @@
 -- choices when normalizing the curated Player Defensive and Target DoT lists.
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 local function CustomContainerReminderItems(item, create)
     local map = type(item) == "table" and item.reminderItems or nil
@@ -264,7 +260,6 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
         end
         if unit == "player" and index == PLAYER_DEFENSIVE_CONTAINER_INDEX
             and Model.IsPlayerDefensiveSpell(spellID)
-            and type(Model.SetPlayerDefensiveSpellEnabled) == "function"
         then
             return Model.SetPlayerDefensiveSpellEnabled(unit, spellID, true)
         end
@@ -448,8 +443,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
         entries = AppendReminderEnchantPreviewEntries(unit, index, entries)
         if unit == "player" and index == PLAYER_DEFENSIVE_CONTAINER_INDEX then
             local out, seen = {}, {}
-            local builtins = type(Model.PlayerDefensivePreviewEntries) == "function"
-                and Model.PlayerDefensivePreviewEntries() or {}
+            local builtins = Model.PlayerDefensivePreviewEntries()
             for i = 1, #builtins do
                 local entry = builtins[i]
                 if entry and entry.spellID then

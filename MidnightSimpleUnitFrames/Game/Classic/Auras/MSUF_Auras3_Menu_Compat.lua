@@ -10,7 +10,7 @@ if Client.IsClassic ~= true then return end
 
 local type, tostring = type, tostring
 local A3 = MSUF.MSUF_Auras3
-local Model = type(A3) == "table" and A3.MenuModel or nil
+local Model = A3.MenuModel
 if type(Model) ~= "table" or A3.__classicAuraMenuCompatLoaded == true then return end
 --- The Classic aura compiler and the shared menu model both load before this
 --- adapter (Game/<Flavor>/Auras.xml).

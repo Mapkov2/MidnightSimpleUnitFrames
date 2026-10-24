@@ -10,7 +10,7 @@
 if not select(2, ...).Client.IsClassic then return end
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
-local Backend = type(A3) == "table" and A3._ClassicBackend
+local Backend = A3._ClassicBackend
 assert(Backend and Backend.Requests, "the Classic aura preview requires Game/Classic/Auras/MSUF_Auras3_Requests.lua")
 if Backend.Preview then return end
 local Compile, Visuals = A3._ClassicCompile, A3.ClassicVisuals

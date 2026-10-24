@@ -4,11 +4,6 @@ local addonName, MSUF = ...
 local Require = MSUF.Require
 local FILE = "Auras3/MSUF_Auras3_EditMode_Layout.lua"
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
-A3.EditModeModules = A3.EditModeModules or {}
 A3.EditModeModules.Layout = function(config)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_min, math_max, math_ceil = math.min, math.max, math.ceil
@@ -17,7 +12,7 @@ local Clamp = config.Clamp
 local Round = config.Round
 local function GetFrame(unit)
     if not unit then return nil end
-    local uf = MSUF and MSUF.UF
+    local uf = MSUF.UF
     return (A3._runtimeFrames and A3._runtimeFrames[unit])
         or (A3._unitFrameOwners and A3._unitFrameOwners[unit])
         or (uf and type(uf.GetFrame) == "function" and uf.GetFrame(unit))

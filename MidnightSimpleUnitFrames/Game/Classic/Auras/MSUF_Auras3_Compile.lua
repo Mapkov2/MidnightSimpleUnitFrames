@@ -13,10 +13,6 @@ local PublicGlobals = MSUF.PublicGlobals
 local GetGeneralDB = MSUF.Require("MSUF_GetGeneralDB", "Game/Classic/Auras/MSUF_Auras3_Compile.lua")
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 if not (MSUF.UF and MSUF.UF.RegisterElement) then return end
 if A3.__unitFrameBackendLoaded or A3._ClassicCompile then return end

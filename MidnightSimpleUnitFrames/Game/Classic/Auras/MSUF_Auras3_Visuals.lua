@@ -10,8 +10,7 @@ local GetGeneralDB = MSUF.Require("MSUF_GetGeneralDB", FILE)
 local A3 = MSUF.MSUF_Auras3
 -- Auras3/MSUF_Auras3_IconSkins.lua loads with the shared icon definitions, before
 -- this backend (nil only in partial test loads).
-local Skins = A3 and A3.IconSkins
-if type(A3) ~= "table" then return end
+local Skins = A3.IconSkins
 
 local V = A3.ClassicVisuals or {}
 A3.ClassicVisuals = V

@@ -41,8 +41,7 @@ Provider.Client = { NeedsTargetChanged = TargetCombo.NeedsTargetChanged }
 
 --- Combo points can move to a new target without a target swap.
 local supportsEvent = Client.SupportsEvent
-Provider.comboTargetEvent = type(supportsEvent) == "function"
-    and supportsEvent("COMBO_TARGET_CHANGED") == true
+Provider.comboTargetEvent = supportsEvent("COMBO_TARGET_CHANGED") == true
 
 local function CreateClassPowerType(PLAYER_CLASS, UnitPowerType, GetShapeshiftFormID)
     return function()

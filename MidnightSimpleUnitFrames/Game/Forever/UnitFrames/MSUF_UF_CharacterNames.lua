@@ -25,7 +25,6 @@ local _, MSUF = ...
 local Client = MSUF.Client
 if Client.HasCharacterSurnames ~= true then return end
 local Text = MSUF.UFText
-if not (Text and type(Text.SetDisplayNameResolver) == "function" and type(Text.UnitName) == "function") then return end
 
 local UnitName = Text.UnitName
 local UnitIsPlayer = Text.UnitIsPlayer or UnitIsPlayer

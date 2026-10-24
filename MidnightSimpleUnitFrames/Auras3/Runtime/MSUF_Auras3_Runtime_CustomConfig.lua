@@ -303,7 +303,7 @@ end
 --- The name of an unnamed Custom Aura display, in the menu language.
 local function CustomAuraFallbackName(index)
     local translate = MSUF.Translate
-    local format = type(translate) == "function" and translate("Custom Aura %d") or "Custom Aura %d"
+    local format = translate("Custom Aura %d")
     return string.format(format, index)
 end
 

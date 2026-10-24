@@ -10,10 +10,6 @@ local addonName, MSUF = ...
 local ExportPublic = MSUF.ExportPublic
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 ExportPublic("MSUF_Auras3", A3)
 local SpellIndicatorsRuntime = A3.SpellIndicators or {}
 A3.SpellIndicators = SpellIndicatorsRuntime

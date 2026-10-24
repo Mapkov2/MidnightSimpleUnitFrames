@@ -16,10 +16,6 @@ local ExportPublic = MSUF.ExportPublic
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 ExportPublic("MSUF_Auras3", A3)
 

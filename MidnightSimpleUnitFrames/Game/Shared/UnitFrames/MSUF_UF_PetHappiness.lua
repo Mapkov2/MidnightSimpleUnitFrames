@@ -12,7 +12,6 @@ local _, MSUF = ...
 -- still gets the element.
 if MSUF.Client.SupportsPetHappiness == false then return end
 local UF = MSUF.UF
-if not (UF and type(UF.RegisterElement) == "function") then return end
 
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua")
 local CreateFrame = CreateFrame
@@ -223,10 +222,7 @@ UF.RegisterElement("PetHappinessIndicator", Happiness, {
 })
 
 MSUF.ExportPublic("MSUF_RequestPetHappinessIndicatorRefresh", function(unit, reason)
-    if type(UF.RefreshElements) == "function" then
-        return UF.RefreshElements(unit or "pet", { "PetHappinessIndicator" }, reason or "MSUF_PET_HAPPINESS")
-    end
-    return false
+    return UF.RefreshElements(unit or "pet", { "PetHappinessIndicator" }, reason or "MSUF_PET_HAPPINESS")
 end)
 
 --- The art of one state (1 unhappy, 2 content, 3 happy; anything else draws

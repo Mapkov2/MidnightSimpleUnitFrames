@@ -3,11 +3,6 @@
 local addonName, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_EditMode_Preview.lua")
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
-A3.EditModeModules = A3.EditModeModules or {}
 local AuraPainter = assert(MSUF.Require("MSUF_Auras3", "Auras3/EditMode_Preview").MockAuraPainter, "MSUF: missing core mock aura painter")
 local GetGlobalFontSettings = MSUF.Require("MSUF_GetGlobalFontSettings", "Auras3/MSUF_Auras3_EditMode_Preview.lua")
 local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", "Auras3/MSUF_Auras3_EditMode_Preview.lua")
@@ -330,7 +325,7 @@ end
 --- Share the live renderer for matching Glow, Pulse, alpha and effect layers.
 --- The dragged preview uses the same Layers.AuraEffectLevel as live frames.
 local function ApplyEditModeCustomEffect(group, frame, item)
-    local runtime = A3 and A3.SpellIndicators
+    local runtime = A3.SpellIndicators
     local owner = group and group._msufA3CustomEffectPreview
     local normalize = runtime and runtime.NormalizeFrameEffect
     local effect = type(normalize) == "function" and normalize(item and item.frame) or nil
@@ -367,7 +362,7 @@ local function FrameRefreshSignature(frame)
 end
 
 local function EditModeThemeRevision()
-    local menu = MSUF and MSUF.MSUF2
+    local menu = MSUF.MSUF2
     return tostring((menu and (menu._msuf2MenuDataRevision or menu._msuf2LayoutVersion)) or 0)
 end
 
@@ -603,8 +598,7 @@ end
 --- advances the animation state.
 local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeConfig)
     local cfg = ReadGroupConfig(unit, kind)
-    local metrics = type(A3.BuildAuraLaneMetrics) == "function"
-        and A3.BuildAuraLaneMetrics(runtimeConfig or unit, kind) or nil
+    local metrics = A3.BuildAuraLaneMetrics(runtimeConfig or unit, kind)
     local group = CreateGroup(unit, kind)
     SyncPreviewGroupStrata(group)
     local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
@@ -674,7 +668,7 @@ function EM.RefreshUnit(unit)
     local frameSig = FrameRefreshSignature(frame)
 
     local chrome = EditPreviewActive()
-    local runtimeConfig = type(A3.ResolveUnitFrameConfig) == "function" and A3.ResolveUnitFrameConfig(unit) or nil
+    local runtimeConfig = A3.ResolveUnitFrameConfig(unit)
     for kind, spec in pairs(GROUPS) do
         RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeConfig)
     end

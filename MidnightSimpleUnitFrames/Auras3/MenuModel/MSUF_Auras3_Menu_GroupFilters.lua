@@ -4,10 +4,6 @@
 -- The public MSUF_GF_AuraFilter table retains its identity and legacy aliases.
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 local function EnsureBlacklistSpells(group, create)
     if type(group.blacklist) ~= "table" then
@@ -307,7 +303,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
             af.InvalidateBlacklistHash(GroupAuraGroup(a, groupKey))
             if b then af.InvalidateBlacklistHash(GroupAuraGroup(b, groupKey)) end
         end
-        local gf = MSUF and MSUF.GF
+        local gf = MSUF.GF
         if gf and type(gf.InvalidateCompiledSpecs) == "function" then
             gf.InvalidateCompiledSpecs(a)
             if b then gf.InvalidateCompiledSpecs(b) end

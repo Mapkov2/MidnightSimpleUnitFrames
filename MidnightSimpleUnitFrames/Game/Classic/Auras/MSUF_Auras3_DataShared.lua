@@ -3,10 +3,6 @@
 local _, MSUF = ...
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 --- Explicit aliases only, for a configured ID whose aura carries a different
 --- ID *and* a different name. Same-name drift needs no entry: Classic aura

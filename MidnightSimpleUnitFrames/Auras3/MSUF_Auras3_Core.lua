@@ -169,10 +169,8 @@ local function NativeAuraRuntimeExpected()
     end
     -- The Mainline family owns the 12.1 aura runtime, and WoW Forever runs the
     -- Mainline build whatever project ID it reports, so the code family is the
-    -- honest question. A harness that loads this file without the client model
-    -- keeps the Mainline answer, the build this file belongs to.
+    -- honest question.
     local client = MSUF.Client
-    if type(client) ~= "table" then return true end
     return client.Family == "Mainline"
 end
 function A3._RecordNativeAuraRuntimeError(message)
@@ -686,7 +684,7 @@ function A3.RefreshAll()
 end
 
 function A3.RequestApply(scopeOrReason, reason)
-    if A3._LooksLikeApplyScope(scopeOrReason) and type(A3.RequestScope) == "function" then
+    if A3._LooksLikeApplyScope(scopeOrReason) then
         return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
     end
     return A3.RefreshAll()

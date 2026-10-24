@@ -22,10 +22,6 @@ local C_Timer = C_Timer
 -- driver disabled and silently kills the drag OnUpdate.
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 ExportPublic("MSUF_Auras3", A3)
 if A3.__editModeLoaded then return end
 A3.__editModeLoaded = true
@@ -212,10 +208,7 @@ end
 function A3.UpdateUnitAnchor(unit)
     if not unit then return end
     if IsConfigBlocked() then
-        if type(A3._QueueDeferredAuraRuntime) == "function" then
-            return A3._QueueDeferredAuraRuntime(unit, "AURAS3_UPDATE_ANCHOR")
-        end
-        return false
+        return A3._QueueDeferredAuraRuntime(unit, "AURAS3_UPDATE_ANCHOR")
     end
     if IsBossScope(unit) then
         if IsEditModeActive() then ForEachBossUnit(PromoteActiveLayout) end

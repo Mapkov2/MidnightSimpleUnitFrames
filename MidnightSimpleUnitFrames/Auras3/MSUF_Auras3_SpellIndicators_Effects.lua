@@ -5,11 +5,6 @@ local FILE = "Auras3/MSUF_Auras3_SpellIndicators_Effects.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local ApplyResolvedFont = MSUF.Require("MSUF_ApplyResolvedFont", FILE)
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
-A3.SpellIndicatorModules = A3.SpellIndicatorModules or {}
 
 --- PTR 7 seals a native AuraButton and everything below it right after
 --- initializeFrame returns. Writing to such a descendant is refused outright,

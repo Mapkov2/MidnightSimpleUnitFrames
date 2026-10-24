@@ -30,10 +30,6 @@ local IS_FOREVER = Client.IsForever == true
 if not IS_FOREVER then return end
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 local math_floor = math.floor
 local pairs = pairs

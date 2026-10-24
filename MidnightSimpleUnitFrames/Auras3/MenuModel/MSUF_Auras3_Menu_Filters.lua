@@ -4,10 +4,6 @@
 -- Live menu inspection keeps the existing secret-value and access guards.
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 local function ClearBlacklistList(list)
     if type(list) ~= "table" then return end

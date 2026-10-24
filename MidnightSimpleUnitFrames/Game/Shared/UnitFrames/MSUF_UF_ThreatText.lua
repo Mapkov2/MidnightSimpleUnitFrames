@@ -23,7 +23,6 @@ local addonName, MSUF = ...
 -- still gets the element.
 if MSUF.Client.SupportsThreatText == false then return end
 local UF = MSUF.UF
-if not (UF and type(UF.RegisterElement) == "function") then return end
 
 local FILE = "Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
@@ -711,10 +710,7 @@ UF.RegisterElement("ThreatIndicator", Threat, {
 })
 
 MSUF.ExportPublic("MSUF_RequestThreatIndicatorRefresh", function(unit, reason)
-    if type(UF.RefreshElements) == "function" then
-        return UF.RefreshElements(unit, { "ThreatIndicator" }, reason or "MSUF_THREAT_INDICATOR")
-    end
-    return false
+    return UF.RefreshElements(unit, { "ThreatIndicator" }, reason or "MSUF_THREAT_INDICATOR")
 end)
 
 -- Group frames apply elements by name: the base mask of MSUF_UF_Group_Adapter.lua

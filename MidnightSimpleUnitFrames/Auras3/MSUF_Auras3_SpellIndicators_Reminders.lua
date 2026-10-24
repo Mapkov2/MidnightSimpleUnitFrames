@@ -3,11 +3,6 @@
 local addonName, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_SpellIndicators_Reminders.lua")
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
-A3.SpellIndicatorModules = A3.SpellIndicatorModules or {}
 A3.SpellIndicatorModules.Reminders = function(config, effects)
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local math_max = math.max

@@ -4,8 +4,7 @@
 local _, MSUF = ...
 local UF = MSUF.UF
 local GetPetExperience = GetPetExperience
-if not (UF and type(UF.RegisterElement) == "function"
-    and type(GetPetExperience) == "function") then return end
+if type(GetPetExperience) ~= "function" then return end
 
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Classic/UnitFrames/MSUF_UF_PetXP.lua")
 local CreateFrame = CreateFrame
@@ -169,8 +168,5 @@ UF.RegisterElement("PetXPBar", XP, {
 })
 
 MSUF.ExportPublic("MSUF_RequestPetXPBarRefresh", function(unit, reason)
-    if type(UF.RefreshElements) == "function" then
-        return UF.RefreshElements(unit or "pet", { "PetXPBar" }, reason or "MSUF_PET_XP")
-    end
-    return false
+    return UF.RefreshElements(unit or "pet", { "PetXPBar" }, reason or "MSUF_PET_XP")
 end)

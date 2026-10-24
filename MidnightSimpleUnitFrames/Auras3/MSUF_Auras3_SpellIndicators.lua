@@ -4,10 +4,6 @@ local addonName, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MSUF_Auras3_SpellIndicators.lua")
 
 local A3 = MSUF.MSUF_Auras3
-if type(A3) ~= "table" then
-    A3 = {}
-    MSUF.MSUF_Auras3 = A3
-end
 
 local Runtime = A3.SpellIndicators or {}
 A3.SpellIndicators = Runtime

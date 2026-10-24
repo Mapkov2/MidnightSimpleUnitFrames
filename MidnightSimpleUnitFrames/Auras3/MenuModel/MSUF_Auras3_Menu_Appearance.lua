@@ -4,10 +4,6 @@
 -- Blizzard-frame visibility still uses its existing deferred apply boundary.
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
-if not Factories then
-    Factories = {}
-    MSUF.Auras3MenuModelFactories = Factories
-end
 
 function Factories.Appearance(A3, Model, Schema, Common, Storage)
     local type = type
@@ -76,9 +72,6 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
     --- while a dropdown is opening.
     function Model.BorderStyleValues()
         local B = MSUF.BorderStyles
-        if not (B and type(B.List) == "function") then
-            return { { value = "SOLID", text = "Solid" } }
-        end
         return B.List()
     end
 
@@ -103,7 +96,7 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         local shapes = type(shared) == "table" and shared.appearanceIconShapes or nil
         local value = type(shapes) == "table" and shapes[kind] or nil
         value = tostring(value or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"))
-        return type(A3.NormalizeAuraIconShape) == "function" and A3.NormalizeAuraIconShape(value) or value
+        return A3.NormalizeAuraIconShape(value)
     end
 
     function Model.ReadSharedAppearanceIconShape(kind)
@@ -119,7 +112,7 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         shared.appearanceIconShapes = type(shared.appearanceIconShapes) == "table"
             and shared.appearanceIconShapes or {}
         value = tostring(value or "RECTANGLE")
-        if type(A3.NormalizeAuraIconShape) == "function" then value = A3.NormalizeAuraIconShape(value) end
+        value = A3.NormalizeAuraIconShape(value)
         if shared.appearanceIconShapes[kind] == value then return false end
         if A3.IconSkins then A3.IconSkins.BeforeWrite(kind, shared.appearanceIconShapes[kind], true) end
         shared.appearanceIconShapes[kind] = value
@@ -191,7 +184,7 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         value = value == true
         local changed = shared[key] ~= value
         shared[key] = value
-        local UF = MSUF and MSUF.UF
+        local UF = MSUF.UF
         if UF and type(UF.ApplyBlizzardAuraVisibility) == "function" then
             UF.ApplyBlizzardAuraVisibility()
         end
@@ -227,13 +220,12 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
     function Model.ReadSharedAppearanceBorderStyle(kind)
         local B = MSUF.BorderStyles
         local value = Model.ReadSharedAppearanceValue(kind, "styleBorderStyle", "SOLID")
-        if B and type(B.Normalize) == "function" then return B.Normalize(value) end
-        return type(value) == "string" and value ~= "" and value or "SOLID"
+        return B.Normalize(value)
     end
 
     function Model.WriteSharedAppearanceBorderStyle(kind, value)
         local B = MSUF.BorderStyles
-        if B and type(B.Normalize) == "function" then value = B.Normalize(value) end
+        value = B.Normalize(value)
         return Model.WriteSharedAppearanceValue(kind, "styleBorderStyle", value)
     end
 
