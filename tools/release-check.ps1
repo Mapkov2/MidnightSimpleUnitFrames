@@ -93,6 +93,14 @@ try {
             (LuaRun "release_menu_smoke.lua" "Mists"),
             (LuaRun "release_menu_smoke.lua" "Forever")
         )
+        Contract "review fixes" @(
+            (LuaRun "profile_newer_revision_backup_smoke.lua" "Mainline"),
+            (LuaRun "profile_newer_revision_backup_smoke.lua" "Vanilla"),
+            (LuaRun "profile_newer_revision_backup_smoke.lua" "TBC"),
+            (LuaRun "profile_newer_revision_backup_smoke.lua" "Mists"),
+            (LuaRun "profile_newer_revision_backup_smoke.lua" "Forever"),
+            (LuaRun "text_drain_writer_recovery_smoke.lua" "Mainline")
+        )
         Contract "C12 regressions" @(
             (LuaRun "menu_page_rebuild_leak_smoke.lua" "Mainline"),
             (LuaRun "menu_page_rebuild_leak_smoke.lua" "Vanilla"),
