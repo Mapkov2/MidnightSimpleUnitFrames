@@ -15,21 +15,27 @@ local GP = M.GlobalPage or {}
 local max = math.max
 local min = math.min
 local DB, G, Bars, Gameplay = AP.DB, AP.G, AP.Bars, AP.Gameplay
-local CurrentBarsScope, NormalizeScopeKey, GradientScopeGet, GradientScopeSet = GP.CurrentBarsScope, GP.NormalizeScopeKey, GP.GradientScopeGet, GP.GradientScopeSet
+local CurrentBarsScope, NormalizeScopeKey, GradientScopeGet, GradientScopeSet =
+    GP.CurrentBarsScope, GP.NormalizeScopeKey, GP.GradientScopeGet, GP.GradientScopeSet
 local CP = M.ColorsPage or {}
 M.ColorsPage = CP
-local ApplyColors, ApplyUnitframeColorWithReload, ApplyCastbarColors, ApplyBossTargetHighlightColor = CP.ApplyColors, CP.ApplyUnitframeColorWithReload, CP.ApplyCastbarColors, CP.ApplyBossTargetHighlightColor
-local ApplyGameplayColors, ApplyAuraColors, ApplyScopedBarGradientColors, ApplyGlobalOutlineColor = CP.ApplyGameplayColors, CP.ApplyAuraColors, CP.ApplyScopedBarGradientColors, CP.ApplyGlobalOutlineColor
+local ApplyColors, ApplyUnitframeColorWithReload, ApplyCastbarColors, ApplyBossTargetHighlightColor =
+    CP.ApplyColors, CP.ApplyUnitframeColorWithReload, CP.ApplyCastbarColors, CP.ApplyBossTargetHighlightColor
+local ApplyGameplayColors, ApplyAuraColors, ApplyScopedBarGradientColors, ApplyGlobalOutlineColor =
+    CP.ApplyGameplayColors, CP.ApplyAuraColors, CP.ApplyScopedBarGradientColors, CP.ApplyGlobalOutlineColor
 local ColorAPI, ApiCall, ApiRGB, ApiSetRGB = CP.ColorAPI, CP.ApiCall, CP.ApiRGB, CP.ApiSetRGB
 local GeneralRGB, SetGeneralRGB, GeneralRGBAlias, SetGeneralRGBAlias = CP.GeneralRGB, CP.SetGeneralRGB, CP.GeneralRGBAlias, CP.SetGeneralRGBAlias
 local TableRGB, SetTableRGB, HighlightRGB, SetHighlightRGB = CP.TableRGB, CP.SetTableRGB, CP.HighlightRGB, CP.SetHighlightRGB
 local COLOR_DATA, ClassColorRGB, SetAllPortraitRGB = CP.COLOR_DATA, CP.ClassColorRGB, CP.SetAllPortraitRGB
 local GROUP_COLOR_DB_KEYS, GroupNum, GroupRGB, SetGroupRGB = CP.GROUP_COLOR_DB_KEYS, CP.GroupNum, CP.GroupRGB, CP.SetGroupRGB
 local SetGroupRGBA, GroupHealthBarRGB, SetGroupHealthBarRGB = CP.SetGroupRGBA, CP.GroupHealthBarRGB, CP.SetGroupHealthBarRGB
-local GetPowerOverrideRGB, SetPowerOverrideRGB, GetClassPowerRGB, SetClassPowerRGB = CP.GetPowerOverrideRGB, CP.SetPowerOverrideRGB, CP.GetClassPowerRGB, CP.SetClassPowerRGB
-local GetClassPowerBgRGB, SetClassPowerBgRGB, ClassPowerSlotToken, ClassPowerSlotCount = CP.GetClassPowerBgRGB, CP.SetClassPowerBgRGB, CP.ClassPowerSlotToken, CP.ClassPowerSlotCount
+local GetPowerOverrideRGB, SetPowerOverrideRGB, GetClassPowerRGB, SetClassPowerRGB =
+    CP.GetPowerOverrideRGB, CP.SetPowerOverrideRGB, CP.GetClassPowerRGB, CP.SetClassPowerRGB
+local GetClassPowerBgRGB, SetClassPowerBgRGB, ClassPowerSlotToken, ClassPowerSlotCount =
+    CP.GetClassPowerBgRGB, CP.SetClassPowerBgRGB, CP.ClassPowerSlotToken, CP.ClassPowerSlotCount
 local GetClassPowerSlotMode, SetClassPowerSlotMode, GetClassPowerSlotRGB = CP.GetClassPowerSlotMode, CP.SetClassPowerSlotMode, CP.GetClassPowerSlotRGB
-local ClassPowerFullColorToken, ClassPowerFullColorEnabled, SetClassPowerFullColorEnabled, GetClassPowerFullRGB = CP.ClassPowerFullColorToken, CP.ClassPowerFullColorEnabled, CP.SetClassPowerFullColorEnabled, CP.GetClassPowerFullRGB
+local ClassPowerFullColorToken, ClassPowerFullColorEnabled, SetClassPowerFullColorEnabled, GetClassPowerFullRGB =
+    CP.ClassPowerFullColorToken, CP.ClassPowerFullColorEnabled, CP.SetClassPowerFullColorEnabled, CP.GetClassPowerFullRGB
 
 -- Feature pages reference these semantic ids instead of duplicating Colors
 -- storage or apply logic.  Resolution is click-only (see
@@ -601,7 +607,10 @@ local function RegisterUnitContextFactories()
             ContextApi("unit.pet", "Pet frame", "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0, ApplyUnitframeColorWithReload),
             ContextStoredState(G, { "petFrameColorR", "petFrameColorG", "petFrameColorB" }, ApplyUnitframeColorWithReload))
         local setRGB = target.setRGB
-        target.setRGB = function(r, g, b) setRGB(r, g, b); ApplyUnitframeColorWithReload() end
+        target.setRGB = function(r, g, b)
+            setRGB(r, g, b)
+            ApplyUnitframeColorWithReload()
+        end
         return target
     end)
     FixedContextFactory("highlight.mouseover", function()

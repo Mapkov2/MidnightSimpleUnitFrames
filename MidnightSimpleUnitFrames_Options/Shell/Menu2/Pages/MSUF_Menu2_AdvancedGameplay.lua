@@ -286,9 +286,11 @@ local function BuildGameplayTimer(env, controls)
     PlaceRows(env, controls, timer, stacked, geo, TIMER_ROWS)
     LabelAt(timer, "Timer position (offset)", 30, stacked and -284 or -186, 260, "GameFontHighlightSmall", T.colors.muted)
     PlaceRows(env, controls, timer, stacked, geo, TIMER_OFFSET_ROWS)
-    LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, stacked and -492 or -312, min(520, geo.width - 60), "GameFontDisableSmall", T.colors.muted)
+    LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, stacked and -492 or -312, min(520, geo.width - 60), "GameFontDisableSmall",
+        T.colors.muted)
     -- controls[3] is the timer's "Lock position" toggle in both layouts above.
-    AddLockTooltip(controls[3], "While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position.")
+    AddLockTooltip(controls[3], "While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge "
+        .. "it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position.")
     return enable
 end
 
@@ -313,7 +315,8 @@ local function BuildGameplayState(env, controls)
     local leaveInput = MoveWidget(W.TextInput(state, "Leave text", inputW), state, x2, stacked and -174 or -86)
     PlaceRows(env, controls, state, stacked, geo, STATE_ROWS)
     -- controls[1] is the "Lock position" toggle in both layouts above.
-    AddLockTooltip(controls[1], "While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat.")
+    AddLockTooltip(controls[1], "While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it "
+        .. "with the arrow keys. Lock it so the text only appears when entering or leaving combat.")
     AddGameplayTextInput(env, controls, enterInput, "combatStateEnterText")
     AddGameplayTextInput(env, controls, leaveInput, "combatStateLeaveText")
     return enable
@@ -439,7 +442,8 @@ local function BuildGameplayCrosshair(env, controls, meleeControls)
         local g = Gameplay()
         local id = CurrentMeleeSpellID()
         local name = SpellName(id)
-        if selectedSpellText then T.SetTranslatedText(selectedSpellText, (id > 0 and M.Format("Selected: %s (%d)", name or M.Tr("Spell"), id)) or M.Tr("Selected: none")) end
+        if selectedSpellText then T.SetTranslatedText(selectedSpellText,
+            (id > 0 and M.Format("Selected: %s (%d)", name or M.Tr("Spell"), id)) or M.Tr("Selected: none")) end
         if noSpellWarn then noSpellWarn:SetShown((g.enableCombatCrosshairMeleeRangeColor == true) and id <= 0) end
         local size = math.max(20, tonumber(g.crosshairSize) or Schema.Default("gameplay","crosshairSize"))
         local thick = math.max(1, tonumber(g.crosshairThickness) or Schema.Default("gameplay","crosshairThickness"))
@@ -485,7 +489,8 @@ local function BuildGameplay(ctx)
     -- Only frames this client has (Classic Era has no Focus); a stored one stays listed, read-only.
     local anchorItems = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
     local function anchorValues() return M.AnchorTargetValues(anchorItems, Gameplay().combatTimerAnchor) end
-    local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
+    local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT",
+        "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
     local env = { ctx = ctx, b = b, apply = ApplyGameplayUI,
         declarations = GameplayDeclarations(anchorValues, frameAnchors) }
     local timerControls, stateControls, totemControls = {}, {}, {}

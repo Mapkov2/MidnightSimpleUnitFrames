@@ -493,6 +493,7 @@ function PainterBuild.Selector(state)
     RegisterControl(categoryBar,
         ControlMeta("opt_colors", "advanced", "preview.scope.selector", "ephemeral"),
         "Editing", "segment", selectorValues)
+    if categoryBar and categoryBar._msuf2RuntimeControlRecord then M.ControlSchema.ScopeOwner(categoryBar, "colors") end
     if categoryBar and categoryBar.buttons and M.AddTooltip then
         for i = 1, #categories do
             local category = categories[i]
@@ -501,14 +502,9 @@ function PainterBuild.Selector(state)
         end
     end
     if W.AttachStickyPageHeader then
-        W.AttachStickyPageHeader(selector, {
-            pageKey = ctx and ctx.key,
-            wrapper = ctx and ctx.wrapper,
-            gap = 4,
-            builder = builder,
-            ctx = ctx,
-            flowGap = 8,
-        })
+        local sticky = { gap = 4, flowGap = 8, builder = builder, ctx = ctx }
+        sticky.pageKey, sticky.wrapper = ctx and ctx.key, ctx and ctx.wrapper
+        W.AttachStickyPageHeader(selector, sticky)
     end
     state.valid, state.Current, state.categoryBar = valid, Current, categoryBar
 end
@@ -858,6 +854,7 @@ function PainterBuild.Palette(state)
         RegisterControl(slot,
             ControlMeta("opt_colors", "advanced", "preview.palette.slot." .. tostring(i), "ephemeral"),
             "Palette color", "button")
+        if slot._msuf2RuntimeControlRecord then M.ControlSchema.Owned(slot, "colors", "menuState") end
         slot:Hide()
         paletteSlots[i] = slot
     end

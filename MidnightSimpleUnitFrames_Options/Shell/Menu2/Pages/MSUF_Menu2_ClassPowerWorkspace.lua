@@ -242,7 +242,8 @@ function Workspace.BuildSelector(ui, head, width)
     local metrics = W.MeasureScopeOverrideBar(values, opts)
     local selector = W.ScopeOverrideBar(ui.page.ctx, head, opts)
     local meta = M.ControlMeta("classpower", "advanced", "workspace", "ephemeral")
-    M.BindSegment(ui.page.ctx, selector, opts.getValue, opts.setValue, meta)
+    M.ControlSchema.Bind(ui.page.ctx, selector, { id = meta.controlId, kind = "segment", labelKey = "Editing",
+        scope = "classpower", applyDomain = "workspace", meta = meta, get = opts.getValue, set = opts.setValue })
     AP.RegisterControl(selector, meta, "Editing", "segment", values)
     ui.selector = selector
     selector:Refresh()

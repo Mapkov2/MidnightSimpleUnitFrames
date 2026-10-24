@@ -37,11 +37,14 @@ local AuraCatalogToken, AuraControlMeta = M.AuraControls.AuraCatalogToken, M.Aur
 local AuraControlMetaAtVisiblePath, AuraSortMethodValues = M.AuraControls.AuraControlMetaAtVisiblePath, M.AuraSettings.AuraSortMethodValues
 local BuildLaneTabs, COOLDOWN_SWIPE_DIRECTION_VALUES, Card = M.AuraControls.BuildLaneTabs, M.AuraSettings.COOLDOWN_SWIPE_DIRECTION_VALUES, M.AuraControls.Card
 local ChoiceLabel, ConfigureMaxDurationSlider, CurrentLane = M.AuraSettings.ChoiceLabel, M.AuraControls.ConfigureMaxDurationSlider, M.AuraSettings.CurrentLane
-local DEBUFF_TYPE_BORDER_MODE_VALUES, DURATION_BAR_DIRECTION_VALUES = M.AuraSettings.DEBUFF_TYPE_BORDER_MODE_VALUES, M.AuraSettings.DURATION_BAR_DIRECTION_VALUES
+local DEBUFF_TYPE_BORDER_MODE_VALUES, DURATION_BAR_DIRECTION_VALUES =
+    M.AuraSettings.DEBUFF_TYPE_BORDER_MODE_VALUES, M.AuraSettings.DURATION_BAR_DIRECTION_VALUES
 local DURATION_BAR_DISPLAY_VALUES, DURATION_BAR_POSITION_VALUES = M.AuraSettings.DURATION_BAR_DISPLAY_VALUES, M.AuraSettings.DURATION_BAR_POSITION_VALUES
-local GFAnchorValues, LanePlural, LaneTitle, MatchSuffix = M.AuraSettings.GFAnchorValues, M.AuraSettings.LanePlural, M.AuraSettings.LaneTitle, M.AuraSettings.MatchSuffix
+local GFAnchorValues, LanePlural, LaneTitle, MatchSuffix =
+    M.AuraSettings.GFAnchorValues, M.AuraSettings.LanePlural, M.AuraSettings.LaneTitle, M.AuraSettings.MatchSuffix
 local NATIVE_EXACT_AURA_FILTERS_ENABLED = M.AuraSettings.NATIVE_EXACT_AURA_FILTERS_ENABLED
-local NATIVE_EXACT_AURA_FILTERS_TEXT, NormalizeAuraSortMethodForLane = M.AuraSettings.NATIVE_EXACT_AURA_FILTERS_TEXT, M.AuraSettings.NormalizeAuraSortMethodForLane
+local NATIVE_EXACT_AURA_FILTERS_TEXT, NormalizeAuraSortMethodForLane =
+    M.AuraSettings.NATIVE_EXACT_AURA_FILTERS_TEXT, M.AuraSettings.NormalizeAuraSortMethodForLane
 local NormalizeDebuffTypeBorderMode, QueueAurasPageRefresh = M.AuraSettings.NormalizeDebuffTypeBorderMode, M.AuraControls.QueueAurasPageRefresh
 -- Blacklist edits repaint the page in place: the refreshers repaint pooled rows.
 local Repaint, RegisterAuraControl, RegisterAuraTextAction = M.AuraControls.Repaint, M.AuraControls.RegisterAuraControl, M.AuraControls.RegisterAuraTextAction
@@ -437,10 +440,12 @@ local function BuildGroupStyleCooldown(G)
     -- drops the cache (issue #64). "auras" invalidates the compiled spec and
     -- re-applies only the aura element.
     BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -56, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "auras", RefreshStylePreview)
-    BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "auras", RefreshStylePreview)
+    BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "auras",
+        RefreshStylePreview)
     local cooldownSmallW = max(120, floor((cw - 72) / 2))
     BindGroupSlider(ctx, cooldown, "Cooldown X", 24, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownX", 0, "auras", RefreshStylePreview)
-    BindGroupSlider(ctx, cooldown, "Cooldown Y", 32 + cooldownSmallW, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownY", 0, "auras", RefreshStylePreview)
+    BindGroupSlider(ctx, cooldown, "Cooldown Y", 32 + cooldownSmallW, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownY", 0, "auras",
+        RefreshStylePreview)
     local groupSwipeDirection = BoundAura(ctx, cooldown, { "dropdown", nil, nil,
         { "Swipe Direction", COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48 }, { 24, -230, cw - 48 },
         get = function()
@@ -453,8 +458,10 @@ local function BuildGroupStyleCooldown(G)
         end,
         meta = AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".cooldown-swipe-direction") })
     AddTooltip(groupSwipeDirection, "Cooldown swipe direction", "Reverses only the swipe overlay. Icon size and position stay unchanged.")
-    local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
-    AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
+    local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual",
+        RefreshStylePreview)
+    AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and "
+        .. "localized minutes above it. Set 0 for whole seconds only.")
     return cooldown
 end
 local function BuildGroupStyleDurationBar(G)
@@ -472,7 +479,8 @@ local function BuildGroupStyleDurationBar(G)
         local display = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
         local position = group.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
         W.SetCollapsibleBadges(durationBar, {{
-            text = enabled and (M.Format("%d px / %s / %s", Round(tonumber(group.durationBarHeight) or 2), ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, display, "Bar Only"), ChoiceLabel(DURATION_BAR_POSITION_VALUES, position, "Bottom"))) or "Off",
+            text = enabled and (M.Format("%d px / %s / %s", Round(tonumber(group.durationBarHeight) or 2),
+                ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, display, "Bar Only"), ChoiceLabel(DURATION_BAR_POSITION_VALUES, position, "Bottom"))) or "Off",
             kind = enabled and "accent" or "muted", showWhenClosed = true,
         }})
     end
@@ -480,13 +488,18 @@ local function BuildGroupStyleDurationBar(G)
         RefreshStylePreview()
         refreshDurationBarSummary()
     end
-    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshDurationBarPreviewAndSummary)
-    BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual", RefreshDurationBarPreviewAndSummary)
-    AddTooltip(BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, durationChoiceWidth, scope, lane, "durationBarDisplay", "BAR_ONLY", "visual", RefreshDurationBarPreviewAndSummary),
+    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual",
+        RefreshDurationBarPreviewAndSummary)
+    BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual",
+        RefreshDurationBarPreviewAndSummary)
+    AddTooltip(BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, durationChoiceWidth, scope, lane, "durationBarDisplay",
+        "BAR_ONLY", "visual", RefreshDurationBarPreviewAndSummary),
         "Duration bar display", "Bar Only hides the aura icon. Icon + Bar keeps the icon and draws the duration bar on it.")
-    AddTooltip(BindGroupDropdown(ctx, durationBar, "Position", durationInline and (34 + durationChoiceWidth) or 24, durationInline and -162 or -220, DURATION_BAR_POSITION_VALUES, durationChoiceWidth, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshDurationBarPreviewAndSummary),
+    AddTooltip(BindGroupDropdown(ctx, durationBar, "Position", durationInline and (34 + durationChoiceWidth) or 24, durationInline and -162 or -220,
+        DURATION_BAR_POSITION_VALUES, durationChoiceWidth, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshDurationBarPreviewAndSummary),
         "Duration bar position", "Places the duration bar at the top or bottom edge of the aura slot.")
-    AddTooltip(BindGroupDropdown(ctx, durationBar, "Fill Mode", durationInline and (44 + (durationChoiceWidth * 2)) or 24, durationInline and -162 or -278, DURATION_BAR_DIRECTION_VALUES, durationChoiceWidth, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshDurationBarPreviewAndSummary),
+    AddTooltip(BindGroupDropdown(ctx, durationBar, "Fill Mode", durationInline and (44 + (durationChoiceWidth * 2)) or 24, durationInline and -162 or -278,
+        DURATION_BAR_DIRECTION_VALUES, durationChoiceWidth, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshDurationBarPreviewAndSummary),
         "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
     return durationBar, refreshDurationBarSummary
 end
@@ -550,7 +563,9 @@ local function TrackGroupStyleBadges(G, frameBasics, cooldown, refreshDurationBa
 
         local decimal = Round(tonumber(group.cooldownDecimalSeconds) or 3)
         W.SetCollapsibleBadges(cooldown, {
-            { text = cooldownEnabled and (M.Format("%d px / %s / %s", Round(tonumber(group.cooldownSize) or 8), AnchorLabel(group.cooldownAnchor or "CENTER"), Tr(group.cooldownSwipeReverse == true and "Reverse" or "Normal"))) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
+            { text = cooldownEnabled and (M.Format("%d px / %s / %s", Round(tonumber(group.cooldownSize) or 8), AnchorLabel(group.cooldownAnchor or "CENTER"),
+                Tr(group.cooldownSwipeReverse == true and "Reverse" or "Normal"))) or "Off", kind = cooldownEnabled and "accent" or "muted",
+                showWhenClosed = true },
             { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
         })
 
@@ -691,11 +706,14 @@ local function BuildGroupNativeFilterCard(F, fixedLane, originY)
     local ctx, scope, lane, section, w = F.ctx, F.scope, F.lane, F.section, F.w
     local laneText = lane == "buff" and "Buff" or "Debuff"
     local filterW = w - 48
-    local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, 296)
-    W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
+    local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)),
+        M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, 296)
+    W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall",
+        T.colors.accent)
     if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180), "groups") end
     local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
-    BindGroupDropdown(ctx, filter, M.Format("%s Filter", Tr(laneText)), 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
+    BindGroupDropdown(ctx, filter, M.Format("%s Filter", Tr(laneText)), 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL",
+        "visual")
     W.Text(filter, "Choose which auras Blizzard provides for this lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
     local hidePermanent = BoundAura(ctx, filter, { "switch", nil, nil, { "Hide permanent auras", 16, -192, dropdownW },
         get = CreateHidePermanentReader(scope, lane),
@@ -866,7 +884,8 @@ local function BuildGroupBlacklistRows(F, direct, directPresetY)
 end
 local function BuildGroupDirectBlacklist(F, directY, categoryControls)
     local lane = F.lane
-    local direct = Card(F.section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, directY, F.w - 48, lane == "debuff" and 246 or 300)
+    local direct = Card(F.section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, directY, F.w - 48,
+        lane == "debuff" and 246 or 300)
     local directInput, directAdd, directRemove
     if lane ~= "debuff" then directInput, directAdd, directRemove = BuildGroupManualBlacklist(F, direct) end
     local directPresetY = lane == "debuff" and -72 or -126
@@ -897,7 +916,8 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local blacklistY = showFilter and (originY - 362) or (originY - 42)
     local directY = blacklistY - categoryHeight - 24
     local standaloneHeight = max(930, abs(directY) + (laneKey == "debuff" and 270 or 324))
-    local section = opts.parent or GroupSection(b, "group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
+    local section = opts.parent or GroupSection(b, "group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists",
+        standaloneHeight, false)
     local w = section._msuf2Width or b.width or 720
     local lane = laneKey
     local F = { ctx = ctx, scope = scope, lane = lane, section = section, w = w,

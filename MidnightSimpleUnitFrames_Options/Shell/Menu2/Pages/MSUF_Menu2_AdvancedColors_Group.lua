@@ -113,6 +113,21 @@ end
 local function PercentLabel(label, value)
     return M.Format("%s: %s", M.Tr(tostring(label or "")), tostring(floor(Clamp01(value, 0) * 100 + 0.5)) .. "%")
 end
+-- Each Party / Raid / Mythic Raid scope stores its own copy of a key: the control names the Party
+-- copy and keeps the other scopes reachable through search. One write fans out over three profile
+-- roots, so these rows keep whole-profile undo (historyScope = false). The Health bar color row
+-- stores under a prefix that follows the bar mode; its patterns come from the Colors Meta tables.
+local function GroupExact(key, kind, row)
+    local exact = { historyScope = false }
+    if kind == "color" and row.get then return exact end
+    local suffixes = kind == "color" and { "R", "G", "B" } or { "" }
+    local keys = {}
+    for i = 1, #GROUP_COLOR_DB_KEYS do
+        for j = 1, #suffixes do keys[#keys + 1] = GROUP_COLOR_DB_KEYS[i] .. "." .. key .. suffixes[j] end
+    end
+    exact.settingKey, exact.searchSettingKeys = keys[1], keys
+    return exact
+end
 -- Rows keep the first-present/all-three group policy. The shared typed binders
 -- still own input, history, combat refusal and metadata; color completion stays
 -- with the canonical Colors owner instead of duplicating its reset/layout path.
@@ -134,9 +149,9 @@ local GroupRows = { bind = function(ctx, control, row, kind)
         SetGroupValue(key, value, row.reason or "MSUF2_GROUP_COLORS", "visual")
         if row.after then row.after() end
     end
-    local meta = row.meta or Meta(row.path or "group_frame.color." .. key)
+    local meta = row.meta or Meta(row.path or "group_frame.color." .. key, nil, GroupExact(key, kind, row))
     local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row.label or row[4][1],
-        scope = "colors", applyDomain = "groupColors", meta = meta, get = get, set = set }
+        scope = "colors", applyDomain = "groupColors", meta = meta, settingPath = meta.settingKey, get = get, set = set }
     if kind == "slider" then
         -- The live label names the slider on screen; search needs it as the label.
         meta.label = row.label

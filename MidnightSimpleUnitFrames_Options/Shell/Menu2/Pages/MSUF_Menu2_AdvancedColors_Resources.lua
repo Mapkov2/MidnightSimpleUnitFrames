@@ -26,7 +26,8 @@ local CP = M.ColorsPage or {}
 M.ColorsPage = CP
 local CurrentApplyService, RequestGeneral, ApplyColors, ApiRGB = CP.CurrentApplyService, CP.RequestGeneral, CP.ApplyColors, CP.ApiRGB
 local TableRGB, ColorValueAt, Meta, Req, Opt = CP.TableRGB, CP.ColorValueAt, CP.Meta, CP.Req, CP.Opt
-local COLOR_DATA, COLOR_PAINTER_CATEGORIES, COLOR_POWER_TOKENS, COLOR_CP_TOKENS = CP.COLOR_DATA, CP.COLOR_PAINTER_CATEGORIES, CP.COLOR_POWER_TOKENS, CP.COLOR_CP_TOKENS
+local COLOR_DATA, COLOR_PAINTER_CATEGORIES, COLOR_POWER_TOKENS, COLOR_CP_TOKENS =
+    CP.COLOR_DATA, CP.COLOR_PAINTER_CATEGORIES, CP.COLOR_POWER_TOKENS, CP.COLOR_CP_TOKENS
 local function ApplyClassPowerColors()
     M.RequestRefresh(nil, "class-power-colors")
     -- The painter's Resources strip paints straight from these DB values and
@@ -44,13 +45,14 @@ local function ApplyClassPowerColors()
 end
 local COLOR_CP_SLOT_TOKENS = WL [[COMBO_POINTS_1 COMBO_POINTS_2 COMBO_POINTS_3 COMBO_POINTS_4 COMBO_POINTS_5 COMBO_POINTS_6 COMBO_POINTS_7]]
 local COLOR_CP_SLOT_DEFAULTS = {}
-for _, row in ipairs(ColorRows [[COMBO_POINTS_1|1|0.00|0.95|1.00;COMBO_POINTS_2|2|0.00|0.95|1.00;COMBO_POINTS_3|3|1.00|1.00|0.00;COMBO_POINTS_4|4|1.00|1.00|0.00;COMBO_POINTS_5|5|1.00|1.00|0.00;COMBO_POINTS_6|6|1.00|0.05|0.05;COMBO_POINTS_7|7|1.00|0.05|0.05]]) do
+for _, row in ipairs(ColorRows("COMBO_POINTS_1|1|0.00|0.95|1.00;COMBO_POINTS_2|2|0.00|0.95|1.00;COMBO_POINTS_3|3|1.00|1.00|0.00;"
+    .. "COMBO_POINTS_4|4|1.00|1.00|0.00;COMBO_POINTS_5|5|1.00|1.00|0.00;COMBO_POINTS_6|6|1.00|0.05|0.05;COMBO_POINTS_7|7|1.00|0.05|0.05")) do
     COLOR_CP_SLOT_DEFAULTS[row.key] = { row.dr, row.dg, row.db }
 end
 local COLOR_CP_SLOT_MODES = ValueTextPairs "default=Resource color|ramp=Color ramp|custom=Custom slots"
 local COLOR_CP_SLOT_COUNTS = {}
 for _, resource in ipairs(CP.CLASS_POWER_SLOT_RESOURCES) do COLOR_CP_SLOT_COUNTS[resource[1]] = resource[2] end
-if MSUF.Client and (MSUF.Client.IsClassic or MSUF.Client.IsForever) then
+if MSUF.Client.IsClassic or MSUF.Client.IsForever then
     COLOR_CP_SLOT_COUNTS.COMBO_POINTS = 5
     if MSUF.Client.IsMists then
         COLOR_CP_SLOT_COUNTS.CHI, COLOR_CP_SLOT_COUNTS.SOUL_SHARDS = 5, 4
@@ -94,10 +96,16 @@ local function ResetPowerOverride(token)
     ApplyColors()
 end
 local CLASS_POWER_STATIC_DEFAULTS = {}
-for _, row in ipairs(ColorRows [[CHARGED|Charged|0.60|0.20|0.80;SOUL_FRAGMENTS|Soul Fragments|0.00|0.80|0.00;SOUL_FRAGMENTS_META|Soul Fragments Meta|0.60|0.20|0.93;MAELSTROM_ABOVE_5|Maelstrom Above 5|1.00|0.50|0.00;ECLIPSE_SOLAR|Eclipse Solar|0.82|0.56|0.25;ECLIPSE_LUNAR|Eclipse Lunar|0.41|0.49|0.82;ECLIPSE_CA|Eclipse CA|0.30|1.00|0.43;STAGGER_GREEN|Stagger Green|0.52|1.00|0.52;STAGGER_YELLOW|Stagger Yellow|1.00|0.98|0.72;STAGGER_RED|Stagger Red|1.00|0.42|0.42;SOUL_FRAGMENTS_VENG|Soul Fragments Veng|0.34|0.06|0.46;WHIRLWIND|Whirlwind|0.20|0.80|0.20;TIP_OF_THE_SPEAR|Tip of the Spear|0.60|0.80|0.20;ICICLES|Icicles|0.50|0.80|1.00;EBON_MIGHT|Ebon Might|0.40|0.80|0.60]]) do
+for _, row in ipairs(ColorRows("CHARGED|Charged|0.60|0.20|0.80;SOUL_FRAGMENTS|Soul Fragments|0.00|0.80|0.00;"
+    .. "SOUL_FRAGMENTS_META|Soul Fragments Meta|0.60|0.20|0.93;MAELSTROM_ABOVE_5|Maelstrom Above 5|1.00|0.50|0.00;"
+    .. "ECLIPSE_SOLAR|Eclipse Solar|0.82|0.56|0.25;ECLIPSE_LUNAR|Eclipse Lunar|0.41|0.49|0.82;ECLIPSE_CA|Eclipse CA|0.30|1.00|0.43;"
+    .. "STAGGER_GREEN|Stagger Green|0.52|1.00|0.52;STAGGER_YELLOW|Stagger Yellow|1.00|0.98|0.72;STAGGER_RED|Stagger Red|1.00|0.42|0.42;"
+    .. "SOUL_FRAGMENTS_VENG|Soul Fragments Veng|0.34|0.06|0.46;WHIRLWIND|Whirlwind|0.20|0.80|0.20;TIP_OF_THE_SPEAR|Tip of the Spear|0.60|0.80|0.20;"
+    .. "ICICLES|Icicles|0.50|0.80|1.00;EBON_MIGHT|Ebon Might|0.40|0.80|0.60")) do
     CLASS_POWER_STATIC_DEFAULTS[row.key] = { row.dr, row.dg, row.db }
 end
-local CLASS_POWER_POWER_DEFAULTS = KeyLabelMap [[MAELSTROM=MAELSTROM|MAELSTROM_POWER=MAELSTROM|ASTRAL_POWER=LUNAR_POWER|AP_PREDICTION=LUNAR_POWER|INSANITY=INSANITY]]
+local CLASS_POWER_POWER_DEFAULTS = KeyLabelMap("MAELSTROM=MAELSTROM|MAELSTROM_POWER=MAELSTROM|ASTRAL_POWER=LUNAR_POWER|AP_PREDICTION=LUNAR_POWER|"
+    .. "INSANITY=INSANITY")
 local function ClassPowerDefaultRGB(token)
     local slot = COLOR_CP_SLOT_DEFAULTS[token]
     if slot then return slot[1], slot[2], slot[3] end
@@ -239,7 +247,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     end, "power.editor.reset"), "colors", "powerColors")
     local classPower = Schema.Section(b:CollapsibleSection("colors_class_power", "Class Power Colors", 430, false), "colors")
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
-    if MSUF.Client and MSUF.Client.SupportsClassResource and not MSUF.Client.SupportsClassResource(M.colorsCPToken) then
+    if MSUF.Client.SupportsClassResource and not MSUF.Client.SupportsClassResource(M.colorsCPToken) then
         M.colorsCPToken = "COMBO_POINTS"
     end
     local cpColor, cpBg, slotMode, slotReset, fullToggle, fullColor, fullReset, slotChrome

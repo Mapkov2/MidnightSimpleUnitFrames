@@ -78,22 +78,18 @@ local function SetValue(...)
     return MSUF.History.SetAdvancedValue(...)
 end
 local DeepCopyTable = M.DeepCopy
-local BindToggleControl, BindDropdownControl = M.BindBoolWidget, M.BindDropdownWidget
-local function BindSliderControl(ctx, slider, getValue, setValue, fallback, step, metadata)
-    local opts = {}
-    if type(metadata) == "table" then
-        for key, value in pairs(metadata) do opts[key] = value end
-    end
-    opts.step = step
-    opts.roundStep = true
-    return M.BindNumberWidget(ctx, slider, getValue, setValue, fallback, opts)
-end
+-- Every bound row declares through Schema.Bind: the row metadata names the stable ID and the setting key,
+-- the get/set pair keeps the page's own writer and apply route.
 local function BoundRow(ctx, parent, kind, key, default, args, metadata, get, set)
+    local id = type(metadata) == "table" and metadata.controlId
+    assert(id, "advanced bound row needs a stable control ID: " .. tostring(key))
     return Row(ctx, parent, { kind, key, default, args, bind = function(widget)
-        if kind == "slider" then
-            BindSliderControl(ctx, widget, get, set, default, args[4], metadata)
-        elseif kind == "dropdown" then BindDropdownControl(ctx, widget, get, set, metadata)
-        else BindToggleControl(ctx, widget, get, set, metadata) end
+        local spec = { id = id, kind = (kind == "slider" or kind == "dropdown") and kind or "toggle",
+            labelKey = args[1], settingPath = metadata.settingKey, scope = ctx and ctx.key or "shared",
+            applyDomain = "advanced", meta = metadata, get = get, set = set,
+            defaultSource = function() return default end }
+        if kind == "slider" then spec.range, spec.roundStep = { args[2], args[3], args[4] }, true end
+        Schema.Bind(ctx, widget, spec)
     end })
 end
 -- Getter/setter pair over one DB sub-table key, shared by the toggle and switch rows.

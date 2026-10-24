@@ -27,9 +27,11 @@ local min = math.min
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local DB, G, Gameplay = AP.DB, AP.G, AP.Gameplay
 local ApplyAuras, MoveWidget, LabelAt, SwitchAt = AP.ApplyAuras, AP.MoveWidget, AP.LabelAt, AP.SwitchAt
-local ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt = AP.ValueToggleAt, AP.ValueSwitchAt, AP.SliderAt, AP.ValueSliderAt, AP.ValueDropdownAt
+local ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt =
+    AP.ValueToggleAt, AP.ValueSwitchAt, AP.SliderAt, AP.ValueSliderAt, AP.ValueDropdownAt
 local SetControlEnabled, RegisterControl = AP.SetControlEnabled, AP.RegisterControl
-local CurrentBarsScope, NormalizeScopeKey, ScopeHasOverride, GradientScopeGet, GradientScopeSet = GP.CurrentBarsScope, GP.NormalizeScopeKey, GP.ScopeHasOverride, GP.GradientScopeGet, GP.GradientScopeSet
+local CurrentBarsScope, NormalizeScopeKey, ScopeHasOverride, GradientScopeGet, GradientScopeSet =
+    GP.CurrentBarsScope, GP.NormalizeScopeKey, GP.ScopeHasOverride, GP.GradientScopeGet, GP.GradientScopeSet
 local function ReadNameColor()
     local g = G()
     return tonumber(g.nameColorR) or 1, tonumber(g.nameColorG) or 1, tonumber(g.nameColorB) or 1
@@ -229,11 +231,21 @@ local function ClientResourceTokens(tokens)
 end
 local COLOR_DATA = {
     CLASS_TOKENS = M.WordList [[WARRIOR PALADIN HUNTER ROGUE PRIEST DEATHKNIGHT SHAMAN MAGE WARLOCK MONK DRUID DEMONHUNTER EVOKER]],
-    CLASS_LABELS = KeyLabelMap [[WARRIOR=Warrior|PALADIN=Paladin|HUNTER=Hunter|ROGUE=Rogue|PRIEST=Priest|DEATHKNIGHT=Death Knight|SHAMAN=Shaman|MAGE=Mage|WARLOCK=Warlock|MONK=Monk|DRUID=Druid|DEMONHUNTER=Demon Hunter|EVOKER=Evoker]],
-    NPC_ROWS = ColorRows "friendly|Friendly NPC Color|0|1|0;neutral|Neutral NPC Color|1|1|0;enemy|Enemy NPC Color|0.85|0.10|0.10;dead|Dead NPC Color|0.40|0.40|0.40",
-    NPC_TYPE_ROWS = ColorRows "npcBoss|Boss|0.74|0.11|0;npcMiniboss|Miniboss / Lieutenant|0.56|0|0.74;npcCaster|Caster|0|0.45|0.74;npcMelee|Melee|0.99|0.99|0.99;npcRegular|Regular|0.70|0.56|0.33",
-    POWER_TOKENS = ValueTextPairs [[MANA=Mana|RAGE=Rage|ENERGY=Energy|FOCUS=Focus|RUNIC_POWER=Runic Power|INSANITY=Insanity|FURY=Fury|PAIN=Pain|ESSENCE=Essence|LUNAR_POWER=Astral Power|MAELSTROM=Maelstrom]],
-    CP_TOKENS = ClientResourceTokens(ValueTextPairs [[COMBO_POINTS=Combo Points|HOLY_POWER=Holy Power|SOUL_SHARDS=Soul Shards|CHI=Chi|ARCANE_CHARGES=Arcane Charges|RUNES=Runes|ESSENCE=Essence|MANA=Alternative Mana|CHARGED=Empowered / Charged|SOUL_FRAGMENTS=Soul Fragments|SOUL_FRAGMENTS_META=Soul Fragments (Void Meta)|MAELSTROM=Maelstrom Weapon|MAELSTROM_ABOVE_5=Maelstrom Weapon 5+|ASTRAL_POWER=Astral Power|AP_PREDICTION=Astral Prediction|ECLIPSE_SOLAR=Eclipse Solar|ECLIPSE_LUNAR=Eclipse Lunar|ECLIPSE_CA=Celestial Alignment|STAGGER_GREEN=Stagger Light|STAGGER_YELLOW=Stagger Moderate|STAGGER_RED=Stagger Heavy|SOUL_FRAGMENTS_VENG=Soul Fragments (Vengeance)|INSANITY=Insanity|MAELSTROM_POWER=Maelstrom Power|WHIRLWIND=Whirlwind|TIP_OF_THE_SPEAR=Tip of the Spear|ICICLES=Icicles|EBON_MIGHT=Ebon Might|RESOURCE_TEXT=Resource Text]]),
+    CLASS_LABELS = KeyLabelMap("WARRIOR=Warrior|PALADIN=Paladin|HUNTER=Hunter|ROGUE=Rogue|PRIEST=Priest|DEATHKNIGHT=Death Knight|SHAMAN=Shaman|MAGE=Mage|"
+        .. "WARLOCK=Warlock|MONK=Monk|DRUID=Druid|DEMONHUNTER=Demon Hunter|EVOKER=Evoker"),
+    NPC_ROWS = ColorRows("friendly|Friendly NPC Color|0|1|0;neutral|Neutral NPC Color|1|1|0;enemy|Enemy NPC Color|0.85|0.10|0.10;"
+        .. "dead|Dead NPC Color|0.40|0.40|0.40"),
+    NPC_TYPE_ROWS = ColorRows("npcBoss|Boss|0.74|0.11|0;npcMiniboss|Miniboss / Lieutenant|0.56|0|0.74;npcCaster|Caster|0|0.45|0.74;"
+        .. "npcMelee|Melee|0.99|0.99|0.99;npcRegular|Regular|0.70|0.56|0.33"),
+    POWER_TOKENS = ValueTextPairs("MANA=Mana|RAGE=Rage|ENERGY=Energy|FOCUS=Focus|RUNIC_POWER=Runic Power|INSANITY=Insanity|FURY=Fury|PAIN=Pain|"
+        .. "ESSENCE=Essence|LUNAR_POWER=Astral Power|MAELSTROM=Maelstrom"),
+    CP_TOKENS = ClientResourceTokens(ValueTextPairs("COMBO_POINTS=Combo Points|HOLY_POWER=Holy Power|SOUL_SHARDS=Soul Shards|CHI=Chi|"
+        .. "ARCANE_CHARGES=Arcane Charges|RUNES=Runes|ESSENCE=Essence|MANA=Alternative Mana|CHARGED=Empowered / Charged|SOUL_FRAGMENTS=Soul Fragments|"
+        .. "SOUL_FRAGMENTS_META=Soul Fragments (Void Meta)|MAELSTROM=Maelstrom Weapon|MAELSTROM_ABOVE_5=Maelstrom Weapon 5+|ASTRAL_POWER=Astral Power|"
+        .. "AP_PREDICTION=Astral Prediction|ECLIPSE_SOLAR=Eclipse Solar|ECLIPSE_LUNAR=Eclipse Lunar|ECLIPSE_CA=Celestial Alignment|"
+        .. "STAGGER_GREEN=Stagger Light|STAGGER_YELLOW=Stagger Moderate|STAGGER_RED=Stagger Heavy|SOUL_FRAGMENTS_VENG=Soul Fragments (Vengeance)|"
+        .. "INSANITY=Insanity|MAELSTROM_POWER=Maelstrom Power|WHIRLWIND=Whirlwind|TIP_OF_THE_SPEAR=Tip of the Spear|ICICLES=Icicles|EBON_MIGHT=Ebon Might|"
+        .. "RESOURCE_TEXT=Resource Text")),
 }
 local function ColorAPI()
     return (MSUF and MSUF._colorsAPI) or {}
@@ -291,32 +303,10 @@ function M.ColorsBackgroundMode.SetColor(value)
         ApplyUnitframeColorWithReload()
     end
 end
-function M.RefreshHealthBackgroundInlinePreview(preview)
-    if type(preview) ~= "table" then return false end
-    local bar, backgroundBar, background = preview.bar, preview.backgroundBar, preview.background
-    if not (bar and backgroundBar and background) then return false end
-
-    local pct = tonumber(preview.healthFraction) or 0.62
-    pct = max(0, min(1, pct))
-    local db = EnsureDB()
-    local general = type(db.general) == "table" and db.general or {}
-    local bars = type(db.bars) == "table" and db.bars or {}
-    local player = type(db.player) == "table" and db.player or {}
-    local model = MSUF.UFPreview and MSUF.UFPreview.Model or {}
-    local classToken
-    if type(UnitClass) == "function" then
-        local _, token = UnitClass("player")
-        classToken = token
-    end
-    local classTokenSecret = type(issecretvalue) == "function" and issecretvalue(classToken) == true
-    if classTokenSecret or type(classToken) ~= "string" or classToken == "" then classToken = nil end
-    local data = preview.data or {}
-    data.hp, data.isPlayer, data.class = pct, true, classToken
-    preview.data = data
-
-    -- Resolve the fixed Player sample from the just-edited DB/API values. The
-    -- compiled settings cache intentionally trails picker writes by one
-    -- coalesced apply and would make this inline preview appear stuck.
+-- Resolves the fixed Player sample class color from the just-edited DB/API values. The compiled
+-- settings cache intentionally trails picker writes by one coalesced apply and would make the inline
+-- preview appear stuck.
+local function PreviewClassRGB(db, classToken)
     local classR, classG, classB
     local colorsAPI = ColorAPI()
     if classToken and type(colorsAPI.GetClassColor) == "function" then
@@ -332,17 +322,11 @@ function M.RefreshHealthBackgroundInlinePreview(preview)
         classR, classG, classB = classColor and classColor.r or 0.12, classColor and classColor.g or 0.62,
             classColor and classColor.b or 0.95
     end
-
-    local colorMode = M.ColorsBackgroundMode.GetColor()
-    local healthMode = type(player.healthColorMode) == "string" and player.healthColorMode:lower() or nil
-    if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
-        healthMode = type(general.barMode) == "string" and general.barMode:lower() or nil
-        if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
-            healthMode = general.useClassColors == true and "class" or "dark"
-        end
-        if healthMode == "gradient" and general.enableHealthGradient == false then healthMode = "class" end
-    end
-
+    return classR, classG, classB
+end
+-- The health foreground color of the sample under the resolved mode, plus the gradient color the
+-- background tint may reuse (nil unless the health or background mode is a gradient).
+local function PreviewHealthRGB(preview, general, healthMode, colorMode, pct, classR, classG, classB)
     local gradientR, gradientG, gradientB
     if healthMode == "gradient" or colorMode == "health_gradient" then
         local gradientHealth = preview.gradientHealth or {}
@@ -357,13 +341,13 @@ function M.RefreshHealthBackgroundInlinePreview(preview)
         gradientHealth.gradientHighB = tonumber(general.healthGradientHighB) or 0
         preview.gradientHealth = gradientHealth
         local common = MSUF.UFBarTextCommon
+        local model = MSUF.UFPreview and MSUF.UFPreview.Model or {}
         if common and type(common.PreviewHealthGradientColor) == "function" then
             gradientR, gradientG, gradientB = common.PreviewHealthGradientColor(gradientHealth, pct)
         elseif type(model.GradientPreviewColor) == "function" then
             gradientR, gradientG, gradientB = model.GradientPreviewColor(pct, gradientHealth)
         end
     end
-
     local hr, hg, hb
     if healthMode == "class" then
         hr, hg, hb = classR, classG, classB
@@ -380,6 +364,43 @@ function M.RefreshHealthBackgroundInlinePreview(preview)
         hr, hg, hb = tonumber(general.darkBarR) or gray, tonumber(general.darkBarG) or gray,
             tonumber(general.darkBarB) or gray
     end
+    return hr, hg, hb, gradientR, gradientG, gradientB
+end
+function M.RefreshHealthBackgroundInlinePreview(preview)
+    if type(preview) ~= "table" then return false end
+    local bar, backgroundBar, background = preview.bar, preview.backgroundBar, preview.background
+    if not (bar and backgroundBar and background) then return false end
+
+    local pct = tonumber(preview.healthFraction) or 0.62
+    pct = max(0, min(1, pct))
+    local db = EnsureDB()
+    local general = type(db.general) == "table" and db.general or {}
+    local bars = type(db.bars) == "table" and db.bars or {}
+    local player = type(db.player) == "table" and db.player or {}
+    local classToken
+    if type(UnitClass) == "function" then
+        local _, token = UnitClass("player")
+        classToken = token
+    end
+    local classTokenSecret = type(issecretvalue) == "function" and issecretvalue(classToken) == true
+    if classTokenSecret or type(classToken) ~= "string" or classToken == "" then classToken = nil end
+    local data = preview.data or {}
+    data.hp, data.isPlayer, data.class = pct, true, classToken
+    preview.data = data
+
+    local classR, classG, classB = PreviewClassRGB(db, classToken)
+    local colorMode = M.ColorsBackgroundMode.GetColor()
+    local healthMode = type(player.healthColorMode) == "string" and player.healthColorMode:lower() or nil
+    if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
+        healthMode = type(general.barMode) == "string" and general.barMode:lower() or nil
+        if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
+            healthMode = general.useClassColors == true and "class" or "dark"
+        end
+        if healthMode == "gradient" and general.enableHealthGradient == false then healthMode = "class" end
+    end
+
+    local hr, hg, hb, gradientR, gradientG, gradientB =
+        PreviewHealthRGB(preview, general, healthMode, colorMode, pct, classR, classG, classB)
 
     local br, bg, bb, tintAlpha
     local getTint = Opt.MSUF_GetBarBackgroundTintRGBA
@@ -507,7 +528,11 @@ local function ClearRGB(tbl, prefix)
     if tbl then tbl[prefix .. "R"], tbl[prefix .. "G"], tbl[prefix .. "B"] = nil, nil, nil end
 end
 local function ClearRGBs(tbl, ...) for i = 1, select("#", ...) do ClearRGB(tbl, select(i, ...)) end end
-local function ClearRGBAs(tbl, ...) for i = 1, select("#", ...) do local prefix = select(i, ...); ClearRGB(tbl, prefix); tbl[prefix .. "A"] = nil end end
+local function ClearRGBAs(tbl, ...) for i = 1, select("#", ...) do
+    local prefix = select(i, ...)
+    ClearRGB(tbl, prefix)
+    tbl[prefix .. "A"] = nil end
+end
 local function HighlightRGB()
     local g = G()
     if type(g.highlightColor) == "table" then return TableRGB(g, "highlightColor", 1, 1, 1) end
@@ -634,13 +659,12 @@ end
 function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth, metadata,
     defaultRGB, declaration)
     local color = W.Color(section, label)
-    if declaration then
-        declaration.kind, declaration.id, declaration.meta = "color", metadata.controlId, metadata
-        declaration.get, declaration.set = getRGB, setRGB
-        Schema.Bind(ctx, color, declaration)
-    else
-        M.BindColor(ctx, color, getRGB, setRGB, metadata)
-    end
+    -- Callers that re-declare the swatch through Owned() afterwards pass no declaration.
+    declaration = declaration or { scope = "colors", applyDomain = "unitColors", labelKey = label }
+    declaration.kind, declaration.id, declaration.meta = "color", metadata.controlId, metadata
+    declaration.settingPath = metadata.settingKey
+    declaration.get, declaration.set = getRGB, setRGB
+    Schema.Bind(ctx, color, declaration)
     CP.AttachNativeCastColorState(color, metadata)
     return CP.FinishColorRow(ctx, color, section, x, y, labelWidthOverride, swatchWidth, defaultRGB)
 end
@@ -858,7 +882,8 @@ local function ResetAuraColorSettings()
     g.dispelTypeColorOverrides = nil
     ApplyAuraColors()
 end
-local function SetAllPortraitRGB(prefix, r, g, b)
+-- Writes one color prefix to the general baseline and to every unit frame copy.
+local function SetGeneralAndUnitRGB(prefix, r, g, b)
     local db = DB()
     db.general = db.general or {}
     db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
@@ -866,6 +891,9 @@ local function SetAllPortraitRGB(prefix, r, g, b)
         db[key] = db[key] or {}
         db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
     end
+end
+local function SetAllPortraitRGB(prefix, r, g, b)
+    SetGeneralAndUnitRGB(prefix, r, g, b)
     ApplyPortraitColors(prefix)
 end
 --- Texture layer colors mirror the portrait pattern: the Colors page writes the
@@ -877,13 +905,7 @@ function M._ApplyTextureLayerColors()
     Req.MSUF_UFPreview_RequestRefresh("MSUF2_TEXLAYER")
 end
 function M._SetAllTextureLayerRGB(prefix, r, g, b)
-    local db = DB()
-    db.general = db.general or {}
-    db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss" }) do
-        db[key] = db[key] or {}
-        db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
-    end
+    SetGeneralAndUnitRGB(prefix, r, g, b)
     M._ApplyTextureLayerColors()
 end
 M.PowerBarColorByClass = {
@@ -971,9 +993,12 @@ function Build.Aura(ctx, b)
     SecondsSlider("Urgent <= sec", -212, 30, "aurasCooldownTextUrgentSeconds", 5, "auras.cooldown.urgent_seconds")
     W.Text(markers, "Thresholds choose when Warning and Urgent replace the Safe timer color.", 16, -276, colW - 32, T.colors.muted)
     local dispel = Card(auras, "Dispel Type Colors", nil, 24, -448, w - 48, 310)
-    W.Text(dispel, "Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview.", 16, -52, w - 80, T.colors.muted)
+    W.Text(dispel, "Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last "
+        .. "edited type is shown first in every aura preview.", 16, -52, w - 80, T.colors.muted)
     CP.BuildDispelColorControls(ctx, dispel)
-    W.Text(auras, M.Format("Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in %s, scoped by Aura type.", M.NavPath("auras3_styling")), 24, -786, w - 48, T.colors.muted)
+    local sharedNote = "Timer and Dispel colors are shared by live unit/group auras and every preview. "
+        .. "Icon border and shadow colors live in %s, scoped by Aura type."
+    W.Text(auras, M.Format(sharedNote, M.NavPath("auras3_styling")), 24, -786, w - 48, T.colors.muted)
     Owned(ButtonAt(auras, "Reset aura colors", 24, -838, 150, ResetAuraColorSettings, "auras.reset"), "auras")
     M.TrackRefresh(ctx, RefreshColorSamples)
 end
@@ -1048,7 +1073,7 @@ M._levelDifficultyColor = {
 -- Threat % color curve, low to high threat, in the same row shape. Keys and
 -- defaults mirror CURVE_STOPS in Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua
 -- (threat_text_smoke.lua pins both). Only the clients offering the text list it.
-if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+if MSUF.Client.SupportsThreatText == true then
     M._threatCurveColor = {
         { "threatColorLow", "Low threat", 0.30, 0.85, 0.30, "threat.curve.low" },
         { "threatColorMid", "Medium threat", 1.00, 0.82, 0.10, "threat.curve.mid" },
@@ -1056,8 +1081,10 @@ if MSUF.Client and MSUF.Client.SupportsThreatText == true then
     }
 end
 M._statusTextColor = {
-    units = (M.FilterSupportedUnitValues or function(values) return values end)(ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|pettarget=Pet Target|boss=Boss Frames|arena=Arena Frames"),
-    indicators = ValueTextPairs "levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text",
+    units = M.FilterSupportedUnitValues(ValueTextPairs("player=Player|target=Target|focus=Focus|"
+        .. "targettarget=Target of Target|focustarget=Focus Target|pet=Pet|pettarget=Pet Target|boss=Boss Frames|arena=Arena Frames")),
+    indicators = ValueTextPairs("levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|"
+        .. "statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text"),
     unitKeys = {},
     prefixKeys = {},
 }
@@ -1232,7 +1259,10 @@ function Build.StatusText(ctx, b)
         local db = DB()
         local key = StatusTextUnit()
         local conf = db[key]
-        if type(conf) ~= "table" then conf = {}; db[key] = conf end
+        if type(conf) ~= "table" then
+            conf = {}
+            db[key] = conf
+        end
         return conf
     end
     local function ApplyStatusTextColors()
@@ -1408,8 +1438,10 @@ end
 
 function Build.Background(ctx, b)
     local background = ColorsSection(b, "colors_background", "Bar Background Tint", 332, false)
-    LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
-    LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660,
+        "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660, "GameFontHighlightSmall",
+        T.colors.muted)
     local refreshBackgroundPreview
     -- A mode setter of ColorsBackgroundMode (looked up when it runs) that repaints the preview afterwards.
     local function ThenRefresh(name)
@@ -1487,7 +1519,10 @@ function Build.Background(ctx, b)
         nil, nil, Meta("general.classBarBg"), { 0, 0, 0 }), "unitColors")
     ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -228,
         function() return G().darkBgCustomColor == true end,
-        function(v) G().darkBgCustomColor = v and true or false; ApplyBackgroundColorPreview() end,
+        function(v)
+            G().darkBgCustomColor = v and true or false
+            ApplyBackgroundColorPreview()
+        end,
         Meta("background.dark_mode_custom_color"))
     Owned(ButtonAt(background, "Reset to black", 12, -274, 140, function()
         if not ApiCall("ResetClassBarBgColor") then
@@ -1533,7 +1568,10 @@ function Build.Appearance(ctx, b)
     end
     local modeRow = W.Segment(appearance, "Bar mode", modeValues, modeRowW)
     MoveWidget(modeRow, appearance, 12, -10, modeRowW)
-    M.BindSegment(ctx, modeRow, CurrentBarMode, SetBarMode, Meta("appearance.bar_mode"))
+    local modeMeta = Meta("appearance.bar_mode")
+    Schema.Bind(ctx, modeRow, { id = modeMeta.controlId, kind = "segment", labelKey = "Bar mode", scope = "colors",
+        applyDomain = "unitColors", settingPath = modeMeta.settingKey, meta = modeMeta,
+        get = CurrentBarMode, set = SetBarMode })
     for i = 1, #BAR_MODE_CARDS do
         local btn = modeRow.buttons[i]
         if btn and M.AddTooltip then M.AddTooltip(btn, TrText(BAR_MODE_CARDS[i].title), TrText(BAR_MODE_CARDS[i].desc), { hook = true }) end
@@ -1553,7 +1591,8 @@ function Build.Appearance(ctx, b)
             ApplyUnitframeColorWithReload()
         end,
         Meta("appearance.dark_mode_tone"))
-    local gradientStrength = SliderAt(ctx, appearance, "Health strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
+    local gradientStrength = SliderAt(ctx, appearance, "Health strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45,
+        ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
     local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -142, 230, G, "enableHealthGradient", true, function()
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
@@ -1629,7 +1668,7 @@ function Build.Unit(ctx, b)
         get = function() return ApiValue("GetNPCClassColorBar", function() return G().npcClassColorBar == true end) end,
         apiSet = "SetNPCClassColorBar" })
     -- Tagged colors read their own stored kind: the general getter falls back to enemy red.
-    if MSUF.Client and MSUF.Client.SupportsTapDenied == true then
+    if MSUF.Client.SupportsTapDenied == true then
         local tappedColor = UnitRow(unit, { "color", "tapped", { 0.5, 0.5, 0.5 }, { "Tagged by others" }, position = { 12, -154 },
             path = "npc.color.tapped",
             get = function()

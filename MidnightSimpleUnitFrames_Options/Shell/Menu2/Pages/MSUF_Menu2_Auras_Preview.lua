@@ -32,10 +32,13 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = TEX_W8, color = function() return 1, 1, 1, 0.95 end }
 local floor, ceil, max, min = math.floor, math.ceil, math.max, math.min
 local tonumber, tostring, type, pairs = tonumber, tostring, type, pairs
-local AURA_SCOPE_VALID, AccessibleNumber, AurasMenuCombatLocked = M.AuraSettings.AURA_SCOPE_VALID, M.AuraSettings.AccessibleNumber, M.AuraSettings.AurasMenuCombatLocked
-local IsGroupScope, LaneDefaultMax, LaneMaxKey, LanePlural = M.AuraSettings.IsGroupScope, M.AuraSettings.LaneDefaultMax, M.AuraSettings.LaneMaxKey, M.AuraSettings.LanePlural
+local AURA_SCOPE_VALID, AccessibleNumber, AurasMenuCombatLocked =
+    M.AuraSettings.AURA_SCOPE_VALID, M.AuraSettings.AccessibleNumber, M.AuraSettings.AurasMenuCombatLocked
+local IsGroupScope, LaneDefaultMax, LaneMaxKey, LanePlural =
+    M.AuraSettings.IsGroupScope, M.AuraSettings.LaneDefaultMax, M.AuraSettings.LaneMaxKey, M.AuraSettings.LanePlural
 local LaneSizeKey, Round, ScopeLabel, Tr = M.AuraSettings.LaneSizeKey, M.AuraSettings.Round, M.AuraSettings.ScopeLabel, M.AuraSettings.Tr
-local GroupScopeKinds, GroupConf, GFReadRoot, GFReadGroup = M.AuraGroupSettings.GroupScopeKinds, M.AuraGroupSettings.GroupConf, M.AuraGroupSettings.GFReadRoot, M.AuraGroupSettings.GFReadGroup
+local GroupScopeKinds, GroupConf, GFReadRoot, GFReadGroup =
+    M.AuraGroupSettings.GroupScopeKinds, M.AuraGroupSettings.GroupConf, M.AuraGroupSettings.GFReadRoot, M.AuraGroupSettings.GFReadGroup
 local ReadGroupDebuffTypeBorderMode = M.AuraGroupSettings.ReadGroupDebuffTypeBorderMode
 local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
@@ -265,11 +268,16 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.cooldownSwipeReverse = Model.ReadBool(readScope, "cooldownSwipeReverse", false)
             cfg.showDurationBar = Model.ReadBool(readScope, "showDurationBar", false)
         end
-        cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
-        cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane) or Model.ReadStackAnchor(readScope)
-        cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetX", -1, -2000, 2000)
-        cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetY", 1, -2000, 2000)
-        cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)
+        cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "stackTextSize", 14, 6,
+            40)
+        cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope,
+            lane) or Model.ReadStackAnchor(readScope)
+        cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000) or Model.ReadNumber(readScope,
+            "stackTextOffsetX", -1, -2000, 2000)
+        cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000) or Model.ReadNumber(readScope,
+            "stackTextOffsetY", 1, -2000, 2000)
+        cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40) or Model.ReadNumber(readScope,
+            "cooldownTextSize", 14, 6, 40)
         if lane and type(Model.ReadLaneCooldownAnchor) == "function" then
             cfg.cooldownAnchor = Model.ReadLaneCooldownAnchor(readScope, lane)
         elseif type(Model.ReadCooldownAnchor) == "function" then
@@ -277,10 +285,14 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         elseif runtimePreview and runtimePreview.cooldownAnchor then
             cfg.cooldownAnchor = runtimePreview.cooldownAnchor
         end
-        cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
-        cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
-        cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30) or Model.ReadNumber(readScope, "cooldownDecimalSeconds", 3, 0, 30)
-        cfg.durationBarHeight = lane and Model.ReadLaneStyleNumber(readScope, lane, "durationBarHeight", 2, 1, 16) or Model.ReadNumber(readScope, "durationBarHeight", 2, 1, 16)
+        cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000) or Model.ReadNumber(readScope,
+            "cooldownTextOffsetX", 0, -2000, 2000)
+        cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000) or Model.ReadNumber(readScope,
+            "cooldownTextOffsetY", 0, -2000, 2000)
+        cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30) or Model.ReadNumber(readScope,
+            "cooldownDecimalSeconds", 3, 0, 30)
+        cfg.durationBarHeight = lane and Model.ReadLaneStyleNumber(readScope, lane, "durationBarHeight", 2, 1, 16) or Model.ReadNumber(readScope,
+            "durationBarHeight", 2, 1, 16)
         if lane and type(Model.ReadLaneDurationBarDisplay) == "function" then
             cfg.durationBarDisplay = Model.ReadLaneDurationBarDisplay(readScope, lane)
         else

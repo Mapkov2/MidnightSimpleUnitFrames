@@ -123,10 +123,10 @@ local function AddCasterFilterTooltip(widget, lane)
         or "Only auras applied by the player.")
 end
 
+local AURA_TOOLTIP_HELP = "Controls this aura lane independently. Always / Out of Combat / Modifier / Never under %s affect only unit and group frames. "
+    .. "Auras only reuse the selected Blizzard/MSUF look and cursor placement."
 local function AddAuraTooltipHelp(widget)
-    return AddTooltip(widget, "Aura tooltip",
-        M.Format("Controls this aura lane independently. Always / Out of Combat / Modifier / Never under %s affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement.",
-            M.NavPath("opt_misc", "Unitframe tooltips")))
+    return AddTooltip(widget, "Aura tooltip", M.Format(AURA_TOOLTIP_HELP, M.NavPath("opt_misc", "Unitframe tooltips")))
 end
 
 local function ActionButton(parent, label, width, role)

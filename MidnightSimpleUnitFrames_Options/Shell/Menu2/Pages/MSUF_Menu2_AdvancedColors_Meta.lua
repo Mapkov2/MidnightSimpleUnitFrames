@@ -92,6 +92,14 @@ for i = 1, #M.DISPEL_COLOR_SPECS do
     local spec = M.DISPEL_COLOR_SPECS[i]
     COLOR_SETTING_KEY_BY_PATH["auras.dispel." .. spec.path .. ".color"] = "general.dispelTypeColorOverrides." .. spec.key
 end
+-- The "custom" switch of a dispel type adds or removes the same override entry its swatch edits, so it
+-- names that entry with an .enabled suffix and keeps whole-profile undo.
+local COLOR_WHOLE_PROFILE_KEY_BY_PATH = {}
+for i = 1, #M.DISPEL_COLOR_SPECS do
+    local spec = M.DISPEL_COLOR_SPECS[i]
+    COLOR_WHOLE_PROFILE_KEY_BY_PATH["auras.dispel." .. spec.path .. ".enabled"] =
+        "general.dispelTypeColorOverrides." .. spec.key .. ".enabled"
+end
 -- Reset buttons: path -> { action key, input arg name, fixed args }.
 local COLOR_ACTION_BY_PATH = {
     ["appearance.gradient.reset"] = { "reset_health_gradient_colors" },
@@ -141,6 +149,13 @@ local COLOR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["threat.curve.low"] = PrefixedSettingKeys("general.threatColorLow", "R G B"),
     ["threat.curve.mid"] = PrefixedSettingKeys("general.threatColorMid", "R G B"),
     ["threat.curve.high"] = PrefixedSettingKeys("general.threatColorHigh", "R G B"),
+    ["font.name_custom.color"] = PrefixedSettingKeys("general.nameColor", "R G B"),
+    ["texture_layer.color"] = PrefixedSettingKeys("general.texLayerColor", "R G B"),
+    ["texture_layer.gradient_color"] = PrefixedSettingKeys("general.texLayerGradient2", "R G B"),
+    ["texture_layer2.color"] = PrefixedSettingKeys("general.texLayer2Color", "R G B"),
+    ["texture_layer2.gradient_color"] = PrefixedSettingKeys("general.texLayer2Gradient2", "R G B"),
+    ["texture_layer3.color"] = PrefixedSettingKeys("general.texLayer3Color", "R G B"),
+    ["texture_layer3.gradient_color"] = PrefixedSettingKeys("general.texLayer3Gradient2", "R G B"),
     ["power.editor.color"] = PrefixedSettingKeys("general.powerColorOverrides.",
         "MANA RAGE ENERGY FOCUS RUNIC_POWER INSANITY FURY PAIN ESSENCE LUNAR_POWER MAELSTROM"),
     ["class_power.editor.foreground_color"] = PrefixedSettingKeys("general.classPowerColorOverrides.",
@@ -170,6 +185,7 @@ local COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
     ["bar_gradient.health.color"] = { "^barScope%.[%w_]+%.healthBarGradientColor[RGB]$" },
     ["bar_gradient.power.color"] = { "^barScope%.[%w_]+%.powerBarGradientColor[RGB]$" },
     ["class_power.editor.background_color"] = { "^general%.classPowerBgColorOverrides%.[A-Z0-9_]+$" },
+    ["group_frame.health.color"] = { "^gf_%a+%.gfDark[RGB]$", "^gf_%a+%.gfUnified[RGB]$", "^gf_%a+%.healthCustom[RGB]$" },
     ["class_power.full_resource.color"] = { "^general%.classPowerColorOverrides%.[A-Z_]+_FULL$" },
     ["class_power.full_resource.enabled"] = { "^bars%.classPowerFullColorEnabled%.[A-Z_]+$" },
     ["class_power.resource_slots.mode"] = { "^bars%.classPowerSlotColorModes%.[A-Z_]+$" },
@@ -181,12 +197,26 @@ local COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
         "^[%a]+%.statusDNDTextColor$",
     },
 }
+-- Colors stored under one fixed prefix: the red channel names the control and the three channel keys
+-- stay reachable through the alias list. Their setters also write every unit frame copy or other
+-- profile roots, so they keep whole-profile undo.
+local COLOR_CHANNEL_PATHS = M.KeySetFromWords [[font.name_custom.color prediction.heal_color bar.health_loss_color
+    bar.power_loss_color level_difficulty.impossible level_difficulty.very_difficult level_difficulty.standard
+    level_difficulty.easy level_difficulty.trivial threat.curve.low threat.curve.mid threat.curve.high
+    texture_layer.color texture_layer.gradient_color texture_layer2.color texture_layer2.gradient_color
+    texture_layer3.color texture_layer3.gradient_color]]
 local function Meta(path, classification, exact)
     exact = type(exact) == "table" and exact or {}
     if exact.settingKey == nil then
         exact.settingKey = COLOR_SETTING_KEY_BY_PATH[path]
         local classToken = path:match("^class_bar%.token%.([A-Z]+)$")
         if classToken then exact.settingKey = "classColors." .. classToken end
+    end
+    if exact.settingKey == nil then
+        local channels = COLOR_CHANNEL_PATHS[path] and COLOR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        exact.settingKey = COLOR_WHOLE_PROFILE_KEY_BY_PATH[path] or channels and channels[1]
+        if exact.settingKey ~= nil and exact.historyScope == nil then exact.historyScope = false end
+        if channels then exact.searchSettingKeys = channels end
     end
     local action = COLOR_ACTION_BY_PATH[path]
     if action then
