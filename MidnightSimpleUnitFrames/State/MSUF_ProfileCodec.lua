@@ -35,12 +35,7 @@ local MSUF_PROFILE_IMPORT_LIMITS = {
 --- compiling or executing user input. Supported values are tables, finite
 --- numbers, quoted strings, booleans, and nil. Functions, expressions,
 --- metatables, long strings, and arbitrary identifiers are rejected.
-local function MSUF_ProfileIO_ParseTableLiteral(str)
-    if type(str) ~= "string" then return nil, "profile import must be text" end
-    if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil, "profile import is too large" end
-
-    local state = { text = str, pos = 1, len = #str, nodes = 0, stringBytes = 0 }
-    local parseValue
+local function NewProfileLiteralTokens(state)
     local function Fail(message)
         return nil, tostring(message or "invalid profile table") .. " at byte " .. tostring(state.pos)
     end
@@ -139,6 +134,16 @@ local function MSUF_ProfileIO_ParseTableLiteral(str)
         state.pos = state.pos + #token
         return value
     end
+    return Fail, SkipSpace, CountNode, ParseIdentifier, ParseString, ParseNumber
+end
+
+local function MSUF_ProfileIO_ParseTableLiteral(str)
+    if type(str) ~= "string" then return nil, "profile import must be text" end
+    if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil, "profile import is too large" end
+
+    local state = { text = str, pos = 1, len = #str, nodes = 0, stringBytes = 0 }
+    local parseValue
+    local Fail, SkipSpace, CountNode, ParseIdentifier, ParseString, ParseNumber = NewProfileLiteralTokens(state)
     local function ParseTable(depth)
         if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then return nil, "profile table is too deep" end
         state.pos = state.pos + 1

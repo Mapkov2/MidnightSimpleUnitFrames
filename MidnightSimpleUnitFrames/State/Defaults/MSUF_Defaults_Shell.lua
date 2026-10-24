@@ -68,42 +68,28 @@ local function MSUF_Defaults_Stage_SeedShellDefaults(profileDB, g)
     --- (Do NOT seed a default globalUiScaleValue on fresh installs.)
     MSUF.DefaultsSchema.SeedGeneral(g, "shell_03")
     --- Minimap icon (LibDBIcon) defaults
-    if g.showMinimapIcon == nil then
-        g.showMinimapIcon = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellShowMinimapIcon)
     --- WoW 12.1 can turn contextual pings on the MSUF Player frame into native
     --- player-resource callouts. Match Blizzard's PlayerFrame by default while
     --- retaining an explicit opt-out; the client still chooses health or supported
     --- mana contexts and does not expose energy pings.
-    if g.playerResourcePingEnabled == nil then
-        g.playerResourcePingEnabled = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellPlayerResourcePingEnabled)
     --- Login greeting in chat (Runtime/MSUF_WelcomeMessage.lua)
-    if g.showWelcomeMessage == nil then
-        g.showWelcomeMessage = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellShowWelcomeMessage)
     --- Native 12.1 "spell IDs in aura tooltips" CVar, re-applied at login because
     --- the client resets it every session (Runtime/MSUF_TooltipSpellIDs.lua).
     --- Off by default: MSUF must not touch the CVar unless the user opts in here.
-    if g.tooltipShowAuraSpellIDs == nil then
-        g.tooltipShowAuraSpellIDs = false
-end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellTooltipShowAuraSpellIDs)
 --- 12.1.5 caster names in aura tooltips (Runtime/MSUF_TooltipSpellIDs.lua).
 --- Off by default for the same reason: MSUF must not claim the CVar unopted.
-    if g.tooltipShowAuraCasterNames == nil then
-        g.tooltipShowAuraCasterNames = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellTooltipShowAuraCasterNames)
     --- EllesmereUI may own the visible Unlock Mode shell while MSUF keeps its own
     --- profile geometry and preview transaction. Users can opt out only when the
     --- EllesmereUI integration is actually available.
-    if g.ellesmereEditModeIntegration == nil then
-        g.ellesmereEditModeIntegration = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellEllesmereEditModeIntegration)
     --- Northern Sky Raid Tools nicknames are enabled for MSUF by default to
     --- preserve the established integration behavior, with a profile-local opt-out.
-    if g.nsrtNicknameIntegration == nil then
-        g.nsrtNicknameIntegration = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellNsrtNicknameIntegration)
     --- Optional native Edit Mode adapters. The third-party addons remain the sole
     --- owners of their frames and saved positions; these switches only control
     --- whether MSUF registers movers for them.
@@ -119,20 +105,14 @@ end
     if type(g.minimapIconDB) ~= "table" then
         g.minimapIconDB = { hide = false, minimapPos = 220, radius = 80 }
     else
-        if g.minimapIconDB.hide == nil then g.minimapIconDB.hide = false end
-        if g.minimapIconDB.minimapPos == nil then g.minimapIconDB.minimapPos = 220 end
-        if g.minimapIconDB.radius == nil then g.minimapIconDB.radius = 80 end
+        MSUF.DefaultsSchema.Fill(g.minimapIconDB, MSUF.DefaultsSchema.Values.ShellHide)
     end
     --- Target select / target lost sounds (opt-in; matches default Blizzard UI behavior)
     --- Default OFF to avoid changing behavior for existing users.
-    if g.playTargetSelectLostSounds == nil then
-        g.playTargetSelectLostSounds = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellPlayTargetSelectLostSounds)
     --- Fonts: color the compact power text by the unit's current power type
     --- (mana/rage/energy/etc.) so it stays identifiable without a larger label.
-    if g.colorPowerTextByType == nil then
-        g.colorPowerTextByType = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellColorPowerTextByType)
     --- Fonts: optionally color the *health text* by current health percentage.
     --- Default OFF to preserve existing behavior.
     MSUF.DefaultsSchema.SeedGeneral(g, "shell_05")
@@ -149,9 +129,7 @@ end
     if g.menuFontKey == nil then
         g.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
     end
-    if g.editModeSnapToGrid == nil then
-        g.editModeSnapToGrid = false --- Default: Snap OFF
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellEditModeSnapToGrid)
     MSUF.DefaultsSchema.SeedGeneral(g, "shell_07")
 end
 
@@ -160,27 +138,14 @@ local function MSUF_Defaults_Stage_SeedFontDefaults(profileDB, g)
     if type(g.fontColor) ~= "string" then
         g.fontColor = "white"
     end
-    if g.shortenNameMaxChars == nil then
-        g.shortenNameMaxChars = 6
-    end
-    if g.shortenNameClipSide == nil then
-        g.shortenNameClipSide = "LEFT" --- default: clip LEFT, keep name end (R41z0r-style)
-    end
-    if g.shortenNameFrontMaskPx == nil then
-        g.shortenNameFrontMaskPx = 8 --- px eaten from the clipped side (secret-safe, viewport inset)
-    end
-    if g.shortenNameShowDots == nil then
-        g.shortenNameShowDots = true --- show '...' on the clipped edge (secret-safe)
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellShortenNameMaxChars)
     --- GAME keeps Blizzard's locale-dependent abbreviation; COMPACT switches to
     --- MSUF's locale-independent breakpoints. Never default to COMPACT: CJK
     --- clients abbreviate on purpose differently.
     if g.numberAbbrevStyle ~= "COMPACT" then
         g.numberAbbrevStyle = "GAME"
     end
-    if g.useCustomFontColor == nil then
-        g.useCustomFontColor = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellUseCustomFontColor)
     if g.useCustomFontColor and (g.fontColorCustomR == nil or g.fontColorCustomG == nil or g.fontColorCustomB == nil) then
         g.useCustomFontColor = false
         g.fontColorCustomR = nil
@@ -222,9 +187,7 @@ local function MSUF_Defaults_Stage_SeedFontDefaults(profileDB, g)
 end
 
 local function MSUF_Defaults_Stage_SeedHighlightStatusTooltipDefaults(profileDB, g)
-    if g.highlightEnabled == nil then
-        g.highlightEnabled = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellHighlightEnabled)
     local highlightStyle = type(g.highlightStyle) == "string" and string.upper(g.highlightStyle) or "GRADIENT"
     g.highlightStyle = highlightStyle == "BORDER" and "BORDER" or "GRADIENT"
     local highlightThickness = math.floor((tonumber(g.highlightThickness) or 6) + 0.5)
@@ -260,9 +223,7 @@ local function MSUF_Defaults_Stage_SeedHighlightStatusTooltipDefaults(profileDB,
     end
 
     --- Boss Target Highlight: colored border on the boss unitframe you currently target
-    if g.bossTargetHighlightEnabled == nil then
-        g.bossTargetHighlightEnabled = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellBossTargetHighlightEnabled)
     if type(g.bossTargetHighlightColor) ~= "table" then
         g.bossTargetHighlightColor = { 1, 0.82, 0 }   --- gold
     end
@@ -279,10 +240,7 @@ local function MSUF_Defaults_Stage_SeedHighlightStatusTooltipDefaults(profileDB,
     -- not change any frame's appearance while future edits stay independent.
     MSUF_Defaults_MigrateUnitDispelOwnership(profileDB)
     local si = g.statusIndicators
-    if si.showAFK == nil then si.showAFK = false end
-    if si.showDND == nil then si.showDND = false end
-    if si.showDead == nil then si.showDead = true end
-    if si.showGhost == nil then si.showGhost = true end
+    MSUF.DefaultsSchema.Fill(si, MSUF.DefaultsSchema.Values.ShellShowAFK)
     --- Drop obsolete update tuning keys. The 6.0 runtime is event-driven and no
     --- longer reads these values.
     g.miscUpdatesPreset = nil
@@ -372,9 +330,7 @@ local function MSUF_Defaults_Stage_MigrateUnitTextModes(profileDB, g)
         end
     end
 
-    if g.powerTextMode == nil then
-        g.powerTextMode = "CURPERCENT"
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.ShellPowerTextMode)
 
     --- Unit Frame text is per-unit as of the Unit Frame UX refactor.
     --- Older profiles could inherit HP/Power pattern settings from general.* unless
@@ -463,29 +419,12 @@ local function MSUF_Defaults_Stage_SeedGameplayDefaults(profileDB)
         profileDB.gameplay = {}
     end
     local gp = profileDB.gameplay
-    if gp.enableCombatTimer == nil then gp.enableCombatTimer = false end
-    if gp.lockCombatTimer == nil then gp.lockCombatTimer = false end
-    if gp.combatFontSize == nil then gp.combatFontSize = 24 end
-    if gp.combatOffsetX == nil then gp.combatOffsetX = 0 end
-    if gp.combatOffsetY == nil then gp.combatOffsetY = -200 end
-    if gp.enableCombatStateText == nil then gp.enableCombatStateText = false end
-    if gp.lockCombatState == nil then gp.lockCombatState = false end
-    if gp.combatStateFontSize == nil then gp.combatStateFontSize = 24 end
-    if gp.combatStateOffsetX == nil then gp.combatStateOffsetX = 0 end
-    if gp.combatStateOffsetY == nil then gp.combatStateOffsetY = 80 end
-    if gp.combatStateDuration == nil then gp.combatStateDuration = 1.5 end
-    if gp.enableCombatCrosshair == nil then gp.enableCombatCrosshair = false end
-    if gp.enableCombatCrosshairMeleeRangeColor == nil then gp.enableCombatCrosshairMeleeRangeColor = false end
-    if gp.crosshairSize == nil then gp.crosshairSize = 40 end
-    if gp.crosshairThickness == nil then gp.crosshairThickness = 2 end
-    if gp.cooldownIcons == nil then gp.cooldownIcons = false end
-    if gp.nameplateMeleeSpellID == nil then gp.nameplateMeleeSpellID = 0 end
+    MSUF.DefaultsSchema.Fill(gp, MSUF.DefaultsSchema.Values.ShellEnableCombatTimer)
     --- Unitframe range-fade defaults are assigned with the unitframe defaults below.
     --- Gameplay: Crosshair melee range spell can optionally be stored per class.
     --- This lets users run a single profile across multiple characters without
     --- having to swap the spell whenever they change class.
-    if gp.meleeSpellPerClass == nil then gp.meleeSpellPerClass = false end
-    if gp.meleeSpellPerSpec == nil then gp.meleeSpellPerSpec = false end
+    MSUF.DefaultsSchema.Fill(gp, MSUF.DefaultsSchema.Values.ShellMeleeSpellPerClass)
     if gp.nameplateMeleeSpellIDByClass == nil then gp.nameplateMeleeSpellIDByClass = {} end
     if gp.nameplateMeleeSpellIDBySpec == nil then gp.nameplateMeleeSpellIDBySpec = {} end
 end

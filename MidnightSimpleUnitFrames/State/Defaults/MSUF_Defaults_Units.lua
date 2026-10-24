@@ -2,10 +2,6 @@
 local _, MSUF = ...
 MSUF.DefaultsStageFactories = MSUF.DefaultsStageFactories or {}
 MSUF.DefaultsStageFactories.Units = function(dependencies)
-local MSUF_DEFAULT_ARENA_OFFSET_X = dependencies.MSUF_DEFAULT_ARENA_OFFSET_X
-local MSUF_DEFAULT_ARENA_OFFSET_Y = dependencies.MSUF_DEFAULT_ARENA_OFFSET_Y
-local MSUF_DEFAULT_BOSS_OFFSET_X = dependencies.MSUF_DEFAULT_BOSS_OFFSET_X
-local MSUF_DEFAULT_BOSS_OFFSET_Y = dependencies.MSUF_DEFAULT_BOSS_OFFSET_Y
 local MSUF_Defaults_NormalizePortraitClassStyleValue = dependencies.MSUF_Defaults_NormalizePortraitClassStyleValue
 local MSUF_Defaults_NormalizePortraitRenderValue = dependencies.MSUF_Defaults_NormalizePortraitRenderValue
 local function MSUF_Defaults_Stage_SeedPortraitBaselineDefaults(profileDB, g)
@@ -25,7 +21,7 @@ local function MSUF_Defaults_Stage_SeedPortraitBaselineDefaults(profileDB, g)
     g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
     MSUF.DefaultsSchema.SeedGeneral(g, "units_03")
     --- Retired Portrait panel UI state / old shared render value. Kept for imports only.
-    if g._portraitScopeKey == nil then g._portraitScopeKey = "shared" end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.Units_portraitScopeKey)
     --- Initialize _portraitSharedRender from player's actual render type (migration from old layout)
     if g._portraitSharedRender == nil then
         local pConf = profileDB.player
@@ -42,325 +38,21 @@ local function MSUF_Defaults_Stage_SeedPortraitBaselineDefaults(profileDB, g)
 end
 
 local function MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
-    local function fill(key, defaults)
+    local values = MSUF.DefaultsSchema.Values
+    for key, defaults in pairs(values.UnitFrames) do
         profileDB[key] = profileDB[key] or {}
-        local t = profileDB[key]
-        for k, v in pairs(defaults) do
-            if t[k] == nil then
-                t[k] = v
-            end
-        end
+        MSUF.DefaultsSchema.Fill(profileDB[key], defaults)
+        MSUF.DefaultsSchema.Fill(profileDB[key], values.UnitText)
     end
-    local textDefaults = {
-        nameTextMouseover = false,
-        hpTextMouseover = false,
-        powerTextMouseover = false,
-        nameTextMouseoverFadeIn = 0,
-        nameTextMouseoverFadeOut = 0,
-        hpTextMouseoverFadeIn = 0,
-        hpTextMouseoverFadeOut = 0,
-        powerTextMouseoverFadeIn = 0,
-        powerTextMouseoverFadeOut = 0,
-        nameTextAnchor = "TOPLEFT",
-        nameOffsetX   = 7,
-        nameOffsetY   = -4,
-        hpOffsetX     = -2,
-        hpOffsetY     = -18,
-        powerOffsetX  = -6,
-        powerOffsetY  = 2,
-        powerFontSize = 10,
-        textLeft      = "NONE",
-        textCenter    = "NONE",
-        textRight     = "CURPERCENT",
-        hpTextMode    = "CURPERCENT",
-        healthTextDecimals = false,
-        hpAbsorbIcon = false,
-        hpTextLeftOffsetX = 0,
-        hpTextLeftOffsetY = 0,
-        hpTextCenterOffsetX = 0,
-        hpTextCenterOffsetY = 0,
-        hpTextRightOffsetX = 0,
-        hpTextRightOffsetY = 0,
-        powerTextLeft   = "NONE",
-        powerTextCenter = "NONE",
-        powerTextRight  = "CURRENT",
-        powerTextLeftOffsetX = 0,
-        powerTextLeftOffsetY = 0,
-        powerTextCenterOffsetX = 0,
-        powerTextCenterOffsetY = 0,
-        powerTextRightOffsetX = 0,
-        powerTextRightOffsetY = 0,
-        nameTextLayer = 5,
-        hpTextLayer = 5,
-        powerTextLayer = 2,
-        showRaidGroupInName = false,
-        raidGroupNameAnchor = "NAMERIGHT",
-        raidGroupNameOffsetX = 3,
-        raidGroupNameOffsetY = 0,
-        raidGroupNameStyle = "PAREN",
-    }
-    fill("player", {
-        width     = 275,
-        height    = 40,
-        offsetX   = -256,
-        offsetY   = -180,
-        portraitMode = "LEFT",
-        portraitClassStyle = "BLIZZARD",
-        showName  = false,
-        showLevelIndicator = false,
-        showHP    = true,
-        showPower = true,
-        showPowerText = true,
-        powerFontSize = 12,
-        showInterrupt = true,
-        showInterruptSource = false,
-        --- Per-unitframe: reverse fill direction for HP + Power bars.
-        --- (false = normal left->right fill)
-        reverseFillBars = false,
-        --- Per-unitframe: vertical fill axis for HP + Power bars.
-        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
-        verticalFillBars = false,
-        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
-        --- which itself falls back to this frame's bar texture.
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.player[k] == nil then profileDB.player[k] = v end
-    end
-    --- Player castbar: custom channel tick markers (PLAYER ONLY)
-    --- Stored under MSUF_DB.player.castbar.* so it does not touch general castbar settings.
     if type(profileDB.player.castbar) ~= "table" then profileDB.player.castbar = {} end
-    do
-        local pc = profileDB.player.castbar
-        if pc.channelTickUseCustom == nil then pc.channelTickUseCustom = false end
-        if type(pc.channelTickCount) ~= "number" then pc.channelTickCount = 5 end
-        -- Retired preview-only keys are intentionally neither seeded nor
-        -- cleared: fresh profiles stay clean and existing profiles remain
-        -- losslessly compatible with older builds and exports.
-        if type(pc.channelTickPosPct) ~= "table" then pc.channelTickPosPct = {} end
-    end
-    fill("target", {
-        width     = 275,
-        height    = 40,
-        offsetX   = 320,
-        offsetY   = -180,
-        portraitMode = "RIGHT",
-        portraitClassStyle = "BLIZZARD",
-        showName  = true,
-        showLevelIndicator = false,
-        showHP    = true,
-        showPower = true,
-        showPowerText = true,
-        powerFontSize = 12,
-        showInterrupt = true,
-        showInterruptSource = false,
-        --- Per-unitframe: reverse fill direction for HP + Power bars.
-        reverseFillBars = false,
-        --- Per-unitframe: vertical fill axis for HP + Power bars.
-        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
-        verticalFillBars = false,
-        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
-        --- which itself falls back to this frame's bar texture.
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.target[k] == nil then profileDB.target[k] = v end
-    end
-    fill("focus", {
-        width     = 180,
-        height    = 30,
-        offsetX   = -260,
-        offsetY   = -300,
-        portraitMode = "OFF",
-        portraitClassStyle = "BLIZZARD",
-        showName  = true,
-        showLevelIndicator = false,
-        showHP    = true,
-        showPower = false,
-        showPowerText = false,
-        showInterrupt = true,
-        showInterruptSource = false,
-        --- Per-unitframe: reverse fill direction for HP + Power bars.
-        reverseFillBars = false,
-        --- Per-unitframe: vertical fill axis for HP + Power bars.
-        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
-        verticalFillBars = false,
-        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
-        --- which itself falls back to this frame's bar texture.
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-        --- Focus-only: optional relative anchor for positioning.
-        --- "GLOBAL" keeps the classic behavior (anchored to the MSUF global anchor).
-        --- Other supported values: "player", "target".
-        anchorToUnitframe = "GLOBAL",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.focus[k] == nil then profileDB.focus[k] = v end
-    end
-    fill("targettarget", {
-        width     = 180,
-        height    = 30,
-        offsetX   = 220,
-        offsetY   = -300,
-        showName  = false,
-        showLevelIndicator = false,
-        showHP    = true,
-        showPower = false,
-        showPowerText = false,
-        --- Per-unitframe: reverse fill direction for HP + Power bars.
-        reverseFillBars = false,
-        --- Per-unitframe: vertical fill axis for HP + Power bars.
-        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
-        verticalFillBars = false,
-        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
-        --- which itself falls back to this frame's bar texture.
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    if profileDB.targettarget.showToTInTargetName == nil then profileDB.targettarget.showToTInTargetName = false end
-    --- Target-of-Target inline-in-Target separator token (rendered with spaces around it).
-    --- Keep the default as the legacy behavior (" | ") by storing the token "|".
-    if profileDB.targettarget.totInlineSeparator == nil then profileDB.targettarget.totInlineSeparator = "|" end
-    if profileDB.targettarget.totInlineCustomSeparator == nil then profileDB.targettarget.totInlineCustomSeparator = "" end
-    if profileDB.targettarget.totInlineColorMode == nil then profileDB.targettarget.totInlineColorMode = "AUTO" end
-    for k, v in pairs(textDefaults) do
-        if profileDB.targettarget[k] == nil then profileDB.targettarget[k] = v end
-    end
-    fill("focustarget", {
-        enabled   = false,
-        width     = 180,
-        height    = 30,
-        offsetX   = 260,
-        offsetY   = 180,
-        showName  = true,
-        showLevelIndicator = false,
-        showHP    = true,
-        showPower = false,
-        showPowerText = false,
-        --- Focus Target is a lightweight child-style frame: no castbar or auras.
-        reverseFillBars = false,
-        --- Per-unitframe: vertical fill axis for HP + Power bars.
-        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
-        verticalFillBars = false,
-        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
-        --- which itself falls back to this frame's bar texture.
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.focustarget[k] == nil then profileDB.focustarget[k] = v end
-    end
-    fill("pettarget", {
-        enabled = false,
-        width = 180,
-        height = 30,
-        offsetX = -275,
-        offsetY = -290,
-        showName = true,
-        showLevelIndicator = false,
-        showHP = true,
-        showPower = false,
-        showPowerText = false,
-        reverseFillBars = false,
-        verticalFillBars = false,
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.pettarget[k] == nil then profileDB.pettarget[k] = v end
-    end
-    fill("pet", {
-        width     = 220,
-        height    = 30,
-        offsetX   = -275,
-        offsetY   = -250,
-        --- Pet-only: optional relative anchor for positioning.
-        --- "GLOBAL" keeps the classic behavior (anchored to the MSUF global anchor).
-        --- Other supported values: "player", "target".
-        anchorToUnitframe = "GLOBAL",
-        showName  = true,
-        showLevelIndicator = false,
-        showHP    = true,
-        showPower = true,
-        showPowerText = true,
-        --- Per-unitframe: reverse fill direction for HP + Power bars.
-        reverseFillBars = false,
-        --- Per-unitframe: vertical fill axis for HP + Power bars.
-        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
-        verticalFillBars = false,
-        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
-        --- which itself falls back to this frame's bar texture.
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.pet[k] == nil then profileDB.pet[k] = v end
-    end
-    fill("boss", {
-        width        = 180,
-        height       = 30,
-        offsetX      = MSUF_DEFAULT_BOSS_OFFSET_X,
-        offsetY      = MSUF_DEFAULT_BOSS_OFFSET_Y,
-        spacing      = -96,
-        --- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
-        --- Kept invertBossOrder for one-shot migration (see below).
-        bossLayoutMode = "VERTICAL_DOWN",
-        invertBossOrder = false,
-        showName     = true,
-        showLevelIndicator = false,
-        showHP       = true,
-        showPower    = false,
-        showPowerText = true,
-        showInterrupt = true,
-        showInterruptSource = false,
-        portraitMode = "OFF",
-        --- Per-unitframe: reverse fill direction for HP + Power bars.
-        reverseFillBars = false,
-        --- Per-unitframe: vertical fill axis for HP + Power bars.
-        --- (false = horizontal fill; true = vertical, combines with reverseFillBars)
-        verticalFillBars = false,
-        --- Per-unitframe power bar art. Empty = follow bars.powerBarTexture,
-        --- which itself falls back to this frame's bar texture.
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.boss[k] == nil then profileDB.boss[k] = v end
-    end
-    fill("arena", {
-        width        = 180,
-        height       = 30,
-        offsetX      = MSUF_DEFAULT_ARENA_OFFSET_X,
-        offsetY      = MSUF_DEFAULT_ARENA_OFFSET_Y,
-        spacing      = -96,
-        --- Arena reuses the boss stacked-container model and its exact key
-        --- names (spacing/bossLayoutMode), so the engine delta math, Edit Mode
-        --- drag path, and copy-coverage allowlists apply unchanged.
-        bossLayoutMode = "VERTICAL_DOWN",
-        showName     = true,
-        showLevelIndicator = false,
-        showHP       = true,
-        showPower    = true,
-        showPowerText = false,
-        showInterrupt = true,
-        showInterruptSource = false,
-        portraitMode = "OFF",
-        reverseFillBars = false,
-        verticalFillBars = false,
-        powerBarTexture = "",
-        powerBarBgTexture = "",
-    })
-    for k, v in pairs(textDefaults) do
-        if profileDB.arena[k] == nil then profileDB.arena[k] = v end
-    end
-    --- Range fade: castbar/aura follow-fade for arena opponents (off by default).
-    if profileDB.arena.rangeFadeCastbar == nil then profileDB.arena.rangeFadeCastbar = false end
-    if profileDB.arena.rangeFadeAuras   == nil then profileDB.arena.rangeFadeAuras   = false end
-    --- PvP trinket icon next to each arena frame (secret-safe swipe); its placement keeps the original look.
-    if profileDB.arena.showTrinket == nil then profileDB.arena.showTrinket = true end
-    fill("arena", { trinketSize = 20, trinketAnchor = "RIGHT", trinketOffsetX = 4, trinketOffsetY = 0, trinketLayer = 10 })
+    local pc = profileDB.player.castbar
+    MSUF.DefaultsSchema.Fill(pc, MSUF.DefaultsSchema.Values.UnitsChannelTickUseCustom)
+    if type(pc.channelTickCount) ~= "number" then pc.channelTickCount = 5 end
+    if type(pc.channelTickPosPct) ~= "table" then pc.channelTickPosPct = {} end
+    local tot = profileDB.targettarget
+    MSUF.DefaultsSchema.Fill(tot, MSUF.DefaultsSchema.Values.UnitsShowToTInTargetName)
+    local arena = profileDB.arena
+    MSUF.DefaultsSchema.Fill(arena, MSUF.DefaultsSchema.Values.UnitsRangeFadeCastbar004)
 end
 
 local function MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB)
@@ -373,14 +65,11 @@ local function MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB)
         profileDB.boss._bossLayoutMigrated = true
     end
     --- Range fade: also fade castbar / auras when boss is out of range (off by default).
-    if profileDB.boss.rangeFadeCastbar == nil then profileDB.boss.rangeFadeCastbar = false end
-    if profileDB.boss.rangeFadeAuras   == nil then profileDB.boss.rangeFadeAuras   = false end
-    if profileDB.general.rangeFadeEnabled == nil then profileDB.general.rangeFadeEnabled = true end
+    MSUF.DefaultsSchema.Fill(profileDB.boss, MSUF.DefaultsSchema.Values.UnitsRangeFadeCastbar)
+    MSUF.DefaultsSchema.Fill(profileDB.general, MSUF.DefaultsSchema.Values.UnitsRangeFadeEnabled006)
     for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
         profileDB[unitKey] = profileDB[unitKey] or {}
-        if profileDB[unitKey].rangeFadeEnabled == nil then profileDB[unitKey].rangeFadeEnabled = true end
-        if profileDB[unitKey].rangeFadeAlpha == nil then profileDB[unitKey].rangeFadeAlpha = 0.4 end
-        if profileDB[unitKey].rangeFadeLayerMode == nil then profileDB[unitKey].rangeFadeLayerMode = "frame" end
+        MSUF.DefaultsSchema.Fill(profileDB[unitKey], MSUF.DefaultsSchema.Values.UnitsRangeFadeEnabled)
     end
 end
 
@@ -509,9 +198,8 @@ local function MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacy
         else
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
         end
-        PortraitDefault("portraitClassStyle", "BLIZZARD")
-        if u.portraitClickable == nil then u.portraitClickable = false end
-        if u.portraitBlizzardElite == nil then u.portraitBlizzardElite = false end
+        PortraitDefault("portraitClassStyle", MSUF.DefaultsSchema.Values.UnitPortrait.portraitClassStyle)
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.UnitsPortraitClickable)
         u.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(u.portraitClassStyle)
         local inferredPortraitSizeMode
         if not useLegacyBaseline and u.portraitSizeMode == nil then
@@ -525,54 +213,54 @@ local function MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacy
         then
             u.portraitSizeMode = nil
         end
-        PortraitDefault("portraitShape", "SQUARE")
-        PortraitDefault("portraitSizeOverride", 0)
+        PortraitDefault("portraitShape", MSUF.DefaultsSchema.Values.UnitPortrait.portraitShape)
+        PortraitDefault("portraitSizeOverride", MSUF.DefaultsSchema.Values.UnitPortrait.portraitSizeOverride)
         --- 6.0: detached/overlay placement, free width+height, art pan and the
         --- per-unit frame level. All default to the pre-6.0 attached square, so
         --- an untouched profile keeps its exact old geometry.
-        PortraitDefault("portraitPlacement", "ATTACHED")
-        PortraitDefault("portraitWidth", 0)
-        PortraitDefault("portraitHeight", 0)
+        PortraitDefault("portraitPlacement", MSUF.DefaultsSchema.Values.UnitPortrait.portraitPlacement)
+        PortraitDefault("portraitWidth", MSUF.DefaultsSchema.Values.UnitPortrait.portraitWidth)
+        PortraitDefault("portraitHeight", MSUF.DefaultsSchema.Values.UnitPortrait.portraitHeight)
         if u.portraitSizeMode == nil and inferredPortraitSizeMode ~= nil then
             u.portraitSizeMode = inferredPortraitSizeMode
         end
-        PortraitDefault("portraitSizeMode", "UNIFORM")
-        PortraitDefault("portraitDetachedPoint", "RIGHT")
-        PortraitDefault("portraitDetachedTo", "LEFT")
-        PortraitDefault("portraitLevelOffset", 7)
-        PortraitDefault("portraitOverlayAlign", "LEFT")
-        PortraitDefault("portraitAlpha", 100)
-        PortraitDefault("portraitPanX", 0)
-        PortraitDefault("portraitPanY", 0)
-        PortraitDefault("portraitOffsetX", 0)
-        PortraitDefault("portraitOffsetY", 0)
-        PortraitDefault("portraitZoom", 100)
-        PortraitDefault("portraitFlip", false)
-        PortraitDefault("portraitBlizzardDirection", "AUTO")
-        PortraitDefault("portraitInnerShadow", 0)
-        PortraitDefault("portraitDragonArtwork", false)
-        PortraitDefault("portraitDragonScale", 100)
-        PortraitDefault("portraitDragonX", 0)
-        PortraitDefault("portraitDragonY", 0)
-        PortraitDefault("portraitDragonFlip", false)
-        PortraitDefault("portraitDragonInInstances", true)
-        PortraitDefault("portraitDragonLayer", "OVERLAY")
-        PortraitDefault("portraitDragonLevel", 1)
-        PortraitDefault("portraitBorderStyle", "NONE")
-        PortraitDefault("portraitEdgeSoftness", 0)
-        PortraitDefault("portraitBorderThickness", 2)
-        PortraitDefault("portraitBorderColorR", 1)
-        PortraitDefault("portraitBorderColorG", 1)
-        PortraitDefault("portraitBorderColorB", 1)
-        PortraitDefault("portraitBorderColorA", 1)
-        PortraitDefault("portraitBgEnabled", false)
-        PortraitDefault("portraitBgColorR", 0.05)
-        PortraitDefault("portraitBgColorG", 0.05)
-        PortraitDefault("portraitBgColorB", 0.05)
-        PortraitDefault("portraitBgColorA", 0.85)
-        PortraitDefault("portraitFillBorder", false)
-        PortraitDefault("portraitBorderArt", "FLAT")
-        PortraitDefault("portraitBorderDirection", "UP")
+        PortraitDefault("portraitSizeMode", MSUF.DefaultsSchema.Values.UnitPortrait.portraitSizeMode)
+        PortraitDefault("portraitDetachedPoint", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDetachedPoint)
+        PortraitDefault("portraitDetachedTo", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDetachedTo)
+        PortraitDefault("portraitLevelOffset", MSUF.DefaultsSchema.Values.UnitPortrait.portraitLevelOffset)
+        PortraitDefault("portraitOverlayAlign", MSUF.DefaultsSchema.Values.UnitPortrait.portraitOverlayAlign)
+        PortraitDefault("portraitAlpha", MSUF.DefaultsSchema.Values.UnitPortrait.portraitAlpha)
+        PortraitDefault("portraitPanX", MSUF.DefaultsSchema.Values.UnitPortrait.portraitPanX)
+        PortraitDefault("portraitPanY", MSUF.DefaultsSchema.Values.UnitPortrait.portraitPanY)
+        PortraitDefault("portraitOffsetX", MSUF.DefaultsSchema.Values.UnitPortrait.portraitOffsetX)
+        PortraitDefault("portraitOffsetY", MSUF.DefaultsSchema.Values.UnitPortrait.portraitOffsetY)
+        PortraitDefault("portraitZoom", MSUF.DefaultsSchema.Values.UnitPortrait.portraitZoom)
+        PortraitDefault("portraitFlip", MSUF.DefaultsSchema.Values.UnitPortrait.portraitFlip)
+        PortraitDefault("portraitBlizzardDirection", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBlizzardDirection)
+        PortraitDefault("portraitInnerShadow", MSUF.DefaultsSchema.Values.UnitPortrait.portraitInnerShadow)
+        PortraitDefault("portraitDragonArtwork", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonArtwork)
+        PortraitDefault("portraitDragonScale", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonScale)
+        PortraitDefault("portraitDragonX", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonX)
+        PortraitDefault("portraitDragonY", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonY)
+        PortraitDefault("portraitDragonFlip", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonFlip)
+        PortraitDefault("portraitDragonInInstances", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonInInstances)
+        PortraitDefault("portraitDragonLayer", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonLayer)
+        PortraitDefault("portraitDragonLevel", MSUF.DefaultsSchema.Values.UnitPortrait.portraitDragonLevel)
+        PortraitDefault("portraitBorderStyle", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderStyle)
+        PortraitDefault("portraitEdgeSoftness", MSUF.DefaultsSchema.Values.UnitPortrait.portraitEdgeSoftness)
+        PortraitDefault("portraitBorderThickness", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderThickness)
+        PortraitDefault("portraitBorderColorR", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderColorR)
+        PortraitDefault("portraitBorderColorG", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderColorG)
+        PortraitDefault("portraitBorderColorB", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderColorB)
+        PortraitDefault("portraitBorderColorA", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderColorA)
+        PortraitDefault("portraitBgEnabled", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBgEnabled)
+        PortraitDefault("portraitBgColorR", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBgColorR)
+        PortraitDefault("portraitBgColorG", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBgColorG)
+        PortraitDefault("portraitBgColorB", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBgColorB)
+        PortraitDefault("portraitBgColorA", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBgColorA)
+        PortraitDefault("portraitFillBorder", MSUF.DefaultsSchema.Values.UnitPortrait.portraitFillBorder)
+        PortraitDefault("portraitBorderArt", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderArt)
+        PortraitDefault("portraitBorderDirection", MSUF.DefaultsSchema.Values.UnitPortrait.portraitBorderDirection)
         u.portraitDecoOverride = nil
     end
     g._msufPortraitPerUnitMigrated_v4324 = true
@@ -601,11 +289,9 @@ local function MSUF_Defaults_Stage_MigrateUnifiedAlpha(profileDB, g)
                 for i = 1, #RETIRED_ALPHA_KEYS do
                     conf[RETIRED_ALPHA_KEYS[i]] = nil
                 end
-                if conf.hpBarAlpha == nil then conf.hpBarAlpha = 1 end
-                if conf.powerBarAlpha == nil then conf.powerBarAlpha = 1 end
-                if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
+                MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.UnitsHpBarAlpha)
                 if conf.powerBarBgAlpha == nil then conf.powerBarBgAlpha = conf.hpBgAlpha or 0.85 end
-                if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
+                MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.UnitsAlphaExcludeTextPortrait)
             end
         end
         g._msufAlphaUnified_v1 = true

@@ -4,9 +4,7 @@ MSUF.DefaultsStageFactories = MSUF.DefaultsStageFactories or {}
 MSUF.DefaultsStageFactories.Bars = function(dependencies)
 local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_01")
-    if g.playerCastbarOverrideMode == nil then
-        g.playerCastbarOverrideMode = "CLASS" --- "CLASS" or "CUSTOM"
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsPlayerCastbarOverrideMode)
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_02")
     if g.castbarUnifiedFillDirection ~= nil then
         if g.castbarUnifiedDirection == nil then
@@ -14,24 +12,16 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
         end
         g.castbarUnifiedFillDirection = nil
     end
-    if g.castbarUnifiedDirection == nil then
-        g.castbarUnifiedDirection = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarUnifiedDirection)
     --- Channeled casts: show spell-specific tick lines (five-line fallback)
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_03")
     --- Opposite fill-direction for enemy castbar
-    if g.castbarOpositeDirectionTarget == nil then
-        g.castbarOpositeDirectionTarget = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarOpositeDirectionTarget)
     --- Hide profession/tradeskill casts. isTradeskill is NeverSecret in 12.x, so
     --- this filter also holds for PvP-restricted units.
-    if g.castbarHideTradeSkills == nil then
-        g.castbarHideTradeSkills = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarHideTradeSkills)
     --- Append the pushback/delay of a cast to the spell text ("+0.4").
-    if g.castbarShowPushback == nil then
-        g.castbarShowPushback = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarShowPushback)
     --- GCD/instant-cast bar (12.1 native-duration rebuild in Castbars/MSUF_CastbarGCD.lua).
     --- Opt-in: the v32 factory profile pins showGCDBar = false, and removal-era
     --- profiles carry an explicit false from the old force-disable.
@@ -66,24 +56,11 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
     _InitCastbarBackend("boss", "bossCastbarBackend", "enableBossCastbar")
     _InitCastbarBackend("arena", "arenaCastbarBackend", "enableArenaCastbar")
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_06")
-if g.arenaCastTimeFormat == nil then
-    g.arenaCastTimeFormat = "CURRENT"
-end
+MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsArenaCastTimeFormat)
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_07")
 --- Arena castbars start on the boss physical edge-anchor model directly:
 --- castbar TOP anchors to the frame outline BOTTOM, no legacy conversion.
-if g.arenaCastbarOffsetX == nil then
-    g.arenaCastbarOffsetX = 2
-end
-if g.arenaCastbarOffsetY == nil then
-    g.arenaCastbarOffsetY = 0
-end
-if g.arenaCastbarWidth == nil then
-    g.arenaCastbarWidth = 176
-end
-if g.arenaCastbarHeight == nil then
-    g.arenaCastbarHeight = 12
-    end
+MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsArenaCastbarOffsetX)
     -- Attached boss castbars now use a stable edge-to-edge anchor: castbar TOP to
     -- the visible boss outline BOTTOM. Convert the legacy TOP-of-container /
     -- BOTTOM-of-castbar offset once, preserving the current on-screen position at
@@ -99,9 +76,7 @@ if g.arenaCastbarHeight == nil then
         g._msufBossCastbarPhysicalEdgeAnchor_v1 = true
     end
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_08")
-    if g.castbarShakeStrength == nil then
-        g.castbarShakeStrength = 8   --- pixels; 0 = no movement
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarShakeStrength)
     if type(g.castbarInterruptFeedbackDuration) ~= "number" then
         g.castbarInterruptFeedbackDuration = 0.5
     elseif g.castbarInterruptFeedbackDuration < 0 then
@@ -122,12 +97,7 @@ if g.arenaCastbarHeight == nil then
     if g.castbarTargetTimeOffsetY == nil then
         g.castbarTargetTimeOffsetY = g.castbarPlayerTimeOffsetY or 0
     end
-    if g.castbarGlobalWidth == nil then
-        g.castbarGlobalWidth = 200   --- Standardbreite
-    end
-    if g.castbarGlobalHeight == nil then
-        g.castbarGlobalHeight = 18   --- Standardhöhe
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarGlobalWidth)
     --- Per-castbar default sizes (match Edit Mode preview defaults)
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_10")
 end
@@ -142,21 +112,15 @@ local function MSUF_Defaults_Stage_PruneLegacyAuraKeysAndSeedFontSizes(g)
     g.targetAuraOffsetX = nil
     g.targetAuraOffsetY = nil
     g.targetAuraDisplay = nil
-    if g.fontSize == nil then
-        g.fontSize = 14
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsFontSize)
     --- Per-text font sizes (0 means "use global" in some menus, but these are explicit defaults)
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_11")
 end
 
 local function MSUF_Defaults_Stage_SeedCastbarDetailDefaults(g)
-    if g.castbarBackgroundTexture == nil then
-        g.castbarBackgroundTexture = "Solid"
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarBackgroundTexture)
     --- Textures (explicit defaults)
-    if g.castbarTexture == nil then
-        g.castbarTexture = "MSUF Lucent"
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsCastbarTexture)
     --- Castbar visuals
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_12")
     --- Unit castbar width matching:
@@ -185,15 +149,7 @@ local function MSUF_Defaults_Stage_SeedCastbarDetailDefaults(g)
     NormalizeCastbarWidthSourceKey("bossCastbarMatchWidth", "castbarBossMatchUnitWidth", "castbarBossMatchWidth")
 NormalizeCastbarWidthSourceKey("arenaCastbarMatchWidth", "castbarArenaMatchUnitWidth", "castbarArenaMatchWidth")
     --- Interrupt Ready Indicator
-    if g.kickReadyShowTarget == nil then g.kickReadyShowTarget = false end
-    if g.kickReadyShowFocus  == nil then g.kickReadyShowFocus  = false end
-    if g.kickReadyShowBoss   == nil then g.kickReadyShowBoss   = false end
-if g.kickReadyShowArena  == nil then g.kickReadyShowArena  = false end
-    if g.kickReadyStyle      == nil then g.kickReadyStyle      = "border" end
-    if g.kickReadySize       == nil then g.kickReadySize       = 8 end
-    if g.kickReadyAnchor     == nil then g.kickReadyAnchor     = "RIGHT" end
-    if g.kickReadyOffsetX    == nil then g.kickReadyOffsetX    = 4 end
-    if g.kickReadyOffsetY    == nil then g.kickReadyOffsetY    = 0 end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsKickReadyShowTarget)
     if g.kickReadyColor      == nil then g.kickReadyColor      = { ["1"] = 0, ["2"] = 1, ["3"] = 0 } end
     if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] = 0, ["3"] = 0 } end
     --- Per-castbar toggles + offsets
@@ -312,19 +268,13 @@ local function MSUF_Defaults_Stage_SeedBarTextureDefaults(g)
         g.powerTextSeparator = g.hpTextSeparator
     end
     --- Bar settings scope: always default to Shared so users edit globally first.
-    if g.hpPowerTextSelectedKey == nil then
-        g.hpPowerTextSelectedKey = "shared"
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsHpPowerTextSelectedKey)
 end
 
 local function MSUF_Defaults_Stage_SeedPredictionDefaults(g)
-    if g.enableAbsorbBar == nil then
-        g.enableAbsorbBar = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsEnableAbsorbBar)
     g.showTotalAbsorbAmount = false
-    if g.showSelfHealPrediction == nil then
-        g.showSelfHealPrediction = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsShowSelfHealPrediction)
     if g.healPredEnabled == nil then
         g.healPredEnabled = g.showSelfHealPrediction == true
     end
@@ -346,10 +296,7 @@ local function MSUF_Defaults_Stage_SeedPredictionDefaults(g)
             g.enableAbsorbBar = true
         end
     end
-    if g.absorbAnchorMode == nil then
-        --- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb; 3 = Follow HP; 5 = Reverse from max (default)
-        g.absorbAnchorMode = 5
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.BarsAbsorbAnchorMode)
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_24")
 
     --- v2 absorb-colour cleanup. Pre-v2 the colour picker (then in the retired
@@ -375,55 +322,18 @@ local function MSUF_Defaults_Stage_SeedBarsTableDefaults(profileDB)
     if profileDB.bars == nil then
         profileDB.bars = {}
     end
-    if profileDB.bars.showTargetPowerBar == nil then
-        profileDB.bars.showTargetPowerBar = true
-    end
-    if profileDB.bars.showBossPowerBar == nil then
-        profileDB.bars.showBossPowerBar = true
-    end
-    if profileDB.bars.showArenaPowerBar == nil then profileDB.bars.showArenaPowerBar = true end
-    if profileDB.bars.showFocusPowerBar == nil then
-        profileDB.bars.showFocusPowerBar = true
-    end
-    if profileDB.bars.showPlayerPowerBar == nil then
-        profileDB.bars.showPlayerPowerBar = true
-    end
-    if profileDB.bars.showBarBorder == nil then
-        profileDB.bars.showBarBorder = true
-    end
-    if profileDB.bars.powerBarHeight == nil then
-        profileDB.bars.powerBarHeight = 3
-    end
-    if profileDB.bars.smoothPowerBar == nil then
-        profileDB.bars.smoothPowerBar = false
-    end
-    if profileDB.bars.chunkedPowerBar == nil then
-        profileDB.bars.chunkedPowerBar = false
-    end
+    MSUF.DefaultsSchema.Fill(profileDB.bars, MSUF.DefaultsSchema.Values.BarsShowTargetPowerBar)
     if profileDB.bars.classPowerSmoothFill == nil then
         profileDB.bars.classPowerSmoothFill = profileDB.bars.smoothPowerBar == true
     end
     if profileDB.bars.altManaSmoothFill == nil then
         profileDB.bars.altManaSmoothFill = profileDB.bars.smoothPowerBar == true
     end
-    if profileDB.bars.classPowerComboPointColorMode == nil then
-        profileDB.bars.classPowerComboPointColorMode = "default"
-    end
-    if profileDB.bars.classPowerShape == nil then
-        profileDB.bars.classPowerShape = "BAR"
-    end
-    if profileDB.bars.classPowerShapeAlign == nil then
-        profileDB.bars.classPowerShapeAlign = "CENTER"
-    end
+    MSUF.DefaultsSchema.Fill(profileDB.bars, MSUF.DefaultsSchema.Values.BarsClassPowerComboPointColorMode)
     --- Shared power-bar art for every unit's power bar (detached or not).
     --- Empty = follow the unit's bar texture, which is the historical behavior.
     --- A per-unit powerBarTexture overrides this.
-    if profileDB.bars.powerBarTexture == nil then
-        profileDB.bars.powerBarTexture = ""
-    end
-    if profileDB.bars.powerBarBgTexture == nil then
-        profileDB.bars.powerBarBgTexture = ""
-    end
+    MSUF.DefaultsSchema.Fill(profileDB.bars, MSUF.DefaultsSchema.Values.BarsPowerBarTexture)
     --- The Class Resources detached texture keys are retired: the Bars/unit
     --- page power textures own the detached Player bar too. Carry a customized
     --- value over once so an existing detached bar keeps its art, then drop
@@ -445,142 +355,7 @@ local function MSUF_Defaults_Stage_SeedBarsTableDefaults(profileDB)
         profileDB.bars.detachedPowerBarTexture = nil
         profileDB.bars.detachedPowerBarBgTexture = nil
     end
-    if profileDB.bars.detachedPowerBarOutline == nil then
-        profileDB.bars.detachedPowerBarOutline = 1
-    end
-    if profileDB.bars.playerHPBarEnabled == nil then
-        profileDB.bars.playerHPBarEnabled = false
-    end
-    if profileDB.bars.playerHPBarAnchor == nil then
-        profileDB.bars.playerHPBarAnchor = "CLASS_TOP"
-    end
-    if profileDB.bars.playerHPBarWidthMode == nil then
-        profileDB.bars.playerHPBarWidthMode = "class"
-    end
-    if profileDB.bars.playerHPBarWidth == nil then
-        profileDB.bars.playerHPBarWidth = 0
-    end
-    if profileDB.bars.playerHPBarHeight == nil then
-        profileDB.bars.playerHPBarHeight = 6
-    end
-    if profileDB.bars.playerHPBarGap == nil then
-        profileDB.bars.playerHPBarGap = 2
-    end
-    if profileDB.bars.playerHPBarOffsetX == nil then
-        profileDB.bars.playerHPBarOffsetX = 0
-    end
-    if profileDB.bars.playerHPBarOffsetY == nil then
-        profileDB.bars.playerHPBarOffsetY = 0
-    end
-    if profileDB.bars.playerHPBarFrameLevelOffset == nil then
-        profileDB.bars.playerHPBarFrameLevelOffset = 7
-    end
-    if profileDB.bars.playerHPBarShape == nil then
-        profileDB.bars.playerHPBarShape = "BAR"
-    end
-    if profileDB.bars.playerHPBarOrbSize == nil then
-        profileDB.bars.playerHPBarOrbSize = 54
-    end
-    if profileDB.bars.playerHPBarTexture == nil then
-        profileDB.bars.playerHPBarTexture = ""
-    end
-    if profileDB.bars.playerHPBarBgTexture == nil then
-        profileDB.bars.playerHPBarBgTexture = ""
-    end
-    if profileDB.bars.playerHPBarBgAlpha == nil then
-        profileDB.bars.playerHPBarBgAlpha = 0.35
-    end
-    if profileDB.bars.playerHPBarOutline == nil then
-        profileDB.bars.playerHPBarOutline = 1
-    end
-    if profileDB.bars.playerHPBarColorMode == nil then
-        profileDB.bars.playerHPBarColorMode = "GLOBAL"
-    end
-    if profileDB.bars.playerHPBarSmoothFill == nil then
-        profileDB.bars.playerHPBarSmoothFill = false
-    end
-    if profileDB.bars.playerHPBarTextEnabled == nil then
-        profileDB.bars.playerHPBarTextEnabled = true
-    end
-    if profileDB.bars.playerHPBarUsePlayerText == nil then
-        profileDB.bars.playerHPBarUsePlayerText = true
-    end
-    if profileDB.bars.playerHPBarTextLeft == nil then
-        profileDB.bars.playerHPBarTextLeft = "NONE"
-    end
-    if profileDB.bars.playerHPBarTextCenter == nil then
-        profileDB.bars.playerHPBarTextCenter = "NONE"
-    end
-    if profileDB.bars.playerHPBarTextRight == nil then
-        profileDB.bars.playerHPBarTextRight = "CURPERCENT"
-    end
-    if profileDB.bars.playerHPBarTextSeparator == nil then
-        profileDB.bars.playerHPBarTextSeparator = ""
-    end
-    if profileDB.bars.playerHPBarTextReverse == nil then
-        profileDB.bars.playerHPBarTextReverse = false
-    end
-    if profileDB.bars.playerHPBarTextSize == nil then
-        profileDB.bars.playerHPBarTextSize = 14
-    end
-    if profileDB.bars.playerHPBarTextOffsetX == nil then
-        profileDB.bars.playerHPBarTextOffsetX = 0
-    end
-    if profileDB.bars.playerHPBarTextOffsetY == nil then
-        profileDB.bars.playerHPBarTextOffsetY = 0
-    end
-    if profileDB.bars.realtimePowerText == nil then
-        profileDB.bars.realtimePowerText = true
-    end
-    if profileDB.bars.roundedFramesEnabled == nil then
-        profileDB.bars.roundedFramesEnabled = false
-    end
-    if profileDB.bars.roundedUnitFrames == nil then
-        profileDB.bars.roundedUnitFrames = true
-    end
-    if profileDB.bars.roundedGroupFrames == nil then
-        profileDB.bars.roundedGroupFrames = true
-    end
-    if profileDB.bars.roundedPowerBars == nil then
-        profileDB.bars.roundedPowerBars = true
-    end
-    if profileDB.bars.roundedCastbars == nil then
-        profileDB.bars.roundedCastbars = false
-    end
-    if profileDB.bars.roundedClassResources == nil then
-        profileDB.bars.roundedClassResources = false
-    end
-    if profileDB.bars.roundedMouseover == nil then
-        profileDB.bars.roundedMouseover = true
-    end
-    if profileDB.bars.slantedUnitFrames == nil then
-        profileDB.bars.slantedUnitFrames = true
-    end
-    if profileDB.bars.slantedGroupFrames == nil then
-        profileDB.bars.slantedGroupFrames = true
-    end
-    if profileDB.bars.slantedPowerBars == nil then
-        profileDB.bars.slantedPowerBars = true
-    end
-    if profileDB.bars.slantedMouseover == nil then
-        profileDB.bars.slantedMouseover = true
-    end
-    if profileDB.bars.slantedCastbars == nil then
-        profileDB.bars.slantedCastbars = false
-    end
-    if profileDB.bars.slantedClassResources == nil then
-        profileDB.bars.slantedClassResources = false
-    end
-    if profileDB.bars.roundedCornerStrength == nil then
-        profileDB.bars.roundedCornerStrength = 3
-    end
-    if profileDB.bars.embedPowerBarIntoHealth == nil then
-        --- Pixel-perfect default: keep the power bar *inside* the unitframe bounds.
-        --- This prevents the power bar from extending below the frame and breaking
-        --- pixel-accurate layouts when toggling power bars on.
-        --- Users who want the legacy behavior can disable this in Bars.
-        profileDB.bars.embedPowerBarIntoHealth = true
-    end
+    MSUF.DefaultsSchema.Fill(profileDB.bars, MSUF.DefaultsSchema.Values.BarsDetachedPowerBarOutline)
     if profileDB.bars.barOutlineThickness == nil then
         --- New slider-based bar outline. Backwards compatible default:
         --- - If legacy border is off -> 0
@@ -600,19 +375,9 @@ local function MSUF_Defaults_Stage_SeedBarsTableDefaults(profileDB)
             profileDB.bars.barOutlineThickness = map[style] or 2
         end
     end
-    if profileDB.bars.barOutlineLayer == nil then
-        -- Additive 0..30 FrameLevel offset. Zero preserves legacy outline order.
-        profileDB.bars.barOutlineLayer = 0
-    end
-    if profileDB.bars.barOutlineTexture == nil then
-        -- Optional frame-outline edgeFile or statusbar texture. Empty keeps the
-        -- classic solid-color outline; rounded and slanted frames follow it.
-        profileDB.bars.barOutlineTexture = ""
-    end
+    MSUF.DefaultsSchema.Fill(profileDB.bars, MSUF.DefaultsSchema.Values.BarsBarOutlineLayer)
     --- Bar background alpha (0..100). Independent from unit alpha in/out of combat.
-    if profileDB.bars.barBackgroundAlpha == nil then
-        profileDB.bars.barBackgroundAlpha = 90
-    end
+    MSUF.DefaultsSchema.Fill(profileDB.bars, MSUF.DefaultsSchema.Values.BarsBarBackgroundAlpha)
 end
 return {
     MSUF_Defaults_Stage_SeedCastbarCoreDefaults = MSUF_Defaults_Stage_SeedCastbarCoreDefaults,

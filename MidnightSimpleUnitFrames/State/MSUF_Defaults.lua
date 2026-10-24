@@ -6,7 +6,7 @@ local ExportPublic = MSUF.ExportPublic
 --- the Classic flavors (Vanilla, TBC, Mists) differ from Mainline (Midnight and
 --- WoW Forever) only in the small hunks gated on these two locals. Nothing here
 --- reads WOW_PROJECT_ID: Game/Shared/Initialize.lua owns that.
-local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local IS_CLASSIC_FAMILY = MSUF.Client.Family == "Classic"
 --- Arena Aura owners this client keeps: three on Midnight, five on TBC and
 --- Mists. Classic Era and WoW Forever publish no arena slots at all
 --- (Game/Shared/Initialize.lua), so the floor holds them at the same three
@@ -67,7 +67,7 @@ end
 local MSUF_FACTORY_DEFAULT_PLAYER_DEFENSIVES_ENABLED = true
 --- Forever has its own authored factory export. Other clients retain the
 --- shared baseline from State/Defaults/MSUF_Defaults_Shell.lua.
-local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = MSUF.Client and MSUF.Client.IsForever
+local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = MSUF.Client.IsForever
     and MSUF.MSUF_FOREVER_FACTORY_DEFAULT_PROFILE_COMPACT
     or MSUF.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
 
@@ -497,28 +497,14 @@ local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
 end
 ExportPublic("MSUF_NormalizeProfileTo60Defaults", MSUF_Defaults_NormalizeProfileTo60Defaults)
 
-local MSUF_DEFAULT_BOSS_OFFSET_X = 360
-local MSUF_DEFAULT_BOSS_OFFSET_Y = 230
-local MSUF_DEFAULT_ARENA_OFFSET_X = 360
-local MSUF_DEFAULT_ARENA_OFFSET_Y = -40
+local MSUF_DEFAULT_BOSS_OFFSET_X = MSUF.DefaultsSchema.Values.UnitFrames.boss.offsetX
+local MSUF_DEFAULT_BOSS_OFFSET_Y = MSUF.DefaultsSchema.Values.UnitFrames.boss.offsetY
+local MSUF_DEFAULT_ARENA_OFFSET_X = MSUF.DefaultsSchema.Values.UnitFrames.arena.offsetX
+local MSUF_DEFAULT_ARENA_OFFSET_Y = MSUF.DefaultsSchema.Values.UnitFrames.arena.offsetY
 
---- Default position offsets per unit, mirrored from the fill() defaults below.
---- Exposed so Edit Mode popups can offer a "Reset position" action that only
---- touches the frame's position, not its size or other settings.
-local MSUF_DEFAULT_UNIT_OFFSETS = {
-    player       = { -256, -180 },
-    target       = { 320, -180 },
-    focus        = { -260, -300 },
-    targettarget = { 220, -300 },
-    focustarget  = { 260, 180 },
-    pettarget    = { -275, -290 },
-    pet          = { -275, -250 },
-    boss         = { MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y },
-    arena        = { MSUF_DEFAULT_ARENA_OFFSET_X, MSUF_DEFAULT_ARENA_OFFSET_Y },
-}
 local function MSUF_GetDefaultUnitOffsets(unit)
-    local o = unit and MSUF_DEFAULT_UNIT_OFFSETS[unit]
-    if o then return o[1], o[2] end
+    local defaults = unit and MSUF.DefaultsSchema.Values.UnitFrames[unit]
+    if defaults then return defaults.offsetX, defaults.offsetY end
     return 0, 0
 end
 ExportPublic("MSUF_GetDefaultUnitOffsets", MSUF_GetDefaultUnitOffsets)
@@ -588,36 +574,7 @@ local function MSUF_Defaults_GetMenuFontDefault()
     return ""
 end
 
-local MSUF_DEFAULT_PREDICTION_BAR_VALUES = {
-    tempMaxHealthEnabled = false,
-    tempMaxHealthTexture = "Solid",
-    tempMaxHealthColorR = 0.70,
-    tempMaxHealthColorG = 0.10,
-    tempMaxHealthColorB = 0.10,
-    tempMaxHealthOpacity = 1,
-    tempMaxHealthBackgroundOpacity = 0.65,
-    healPredEnabled = true,
-    healPredAllHealers = false,
-    healPredictionBarHeight = 0,
-    healPredictionBarOffsetY = 0,
-    healPredictionBarOpacity = 0.45,
-    healPredictionBarTexture = "",
-    enableAbsorbBar = true,
-    healAbsorbEnabled = true,
-    absorbTextMode = 2,
-    absorbAnchorMode = 5,
-    absorbBarHeight = 0,
-    absorbBarOffsetY = 0,
-    healPredAnchorMode = 3,
-    absorbBarOpacity = 1,
-    absorbBarTexture = "MSUF Smooth v2",
-    healAbsorbAnchorMode = 3,
-    healAbsorbBarHeight = 0,
-    healAbsorbBarOffsetY = 0,
-    healAbsorbBarOpacity = 1,
-    healAbsorbBarTexture = "Solid",
-    overAbsorbOverlay = true,
-}
+local MSUF_DEFAULT_PREDICTION_BAR_VALUES = MSUF.DefaultsSchema.Values.PredictionBars
 
 local function MSUF_Defaults_ApplyPredictionBarBaseline(db)
     if type(db) ~= "table" then return end
@@ -625,9 +582,7 @@ local function MSUF_Defaults_ApplyPredictionBarBaseline(db)
 
     local function Apply(conf)
         if type(conf) ~= "table" then return end
-        for key, value in pairs(MSUF_DEFAULT_PREDICTION_BAR_VALUES) do
-            conf[key] = value
-        end
+        MSUF.DefaultsSchema.Fill(conf, MSUF_DEFAULT_PREDICTION_BAR_VALUES, true)
     end
 
     Apply(db.general)
@@ -650,106 +605,157 @@ end
 --- Fresh-install completion (applied only when the factory profile payload is seeded).
 --- The compact factory export is the visual source of truth; this pass completes
 --- structural fields and locale/runtime-dependent product defaults.
-local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
-    if not db then  return end
-    local function SetDefault(tbl, key, value)
-        if type(tbl) == "table" and tbl[key] == nil then
-            tbl[key] = value
+local fresh = {}
+function fresh.EnsureUnitAlphaDefaults(conf)
+    if not conf then  return end
+    MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.CoreHpBarAlpha001)
+    if conf.powerBarBgAlpha == nil then conf.powerBarBgAlpha = conf.hpBgAlpha or 0.85 end
+    MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.CoreAlphaExcludeTextPortrait002)
+end
+function fresh.EnsureFreshUnitframeScreenPosition(conf, x, y)
+    if type(conf) ~= "table" then return end
+    if conf.anchorFrameName == nil and conf.anchorToUnitframe == nil then
+        MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.FactoryConfAnchorToUnitframe, true)
+    end
+    if conf.offsetX == nil then conf.offsetX = x end
+    if conf.offsetY == nil then conf.offsetY = y end
+end
+function fresh.EnsureFreshGroupAuraNativeRenderer(conf)
+    if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
+    local auras = conf.auras
+    MSUF.DefaultsSchema.Fill(auras, MSUF.DefaultsSchema.Values.FreshRenderer)
+    if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+    local types = auras.blizzardTypes
+    MSUF.DefaultsSchema.Fill(types, MSUF.DefaultsSchema.Values.FreshBuffs)
+    MSUF.DefaultsSchema.Fill(auras, MSUF.DefaultsSchema.Values.FreshBlizzardIconSize)
+    for _, key in ipairs({ "buff", "debuff", "externals" }) do
+        if type(auras[key]) ~= "table" then auras[key] = {} end
+        MSUF.DefaultsSchema.Fill(auras[key], MSUF.DefaultsSchema.Values.FreshStrata)
+        if key == "buff" then MSUF.DefaultsSchema.Fill(auras[key], MSUF.DefaultsSchema.Values.FreshTrackedStrata) end
+        MSUF.DefaultsSchema.Fill(auras[key], MSUF.DefaultsSchema.Values.FreshCooldownSwipeReverse)
+        if type(auras[key].blacklist) ~= "table" then auras[key].blacklist = {} end
+        if type(auras[key].blacklist.spells) ~= "table" then auras[key].blacklist.spells = {} end
+        MSUF.DefaultsSchema.Fill(auras[key].blacklist, MSUF.DefaultsSchema.Values.FreshHidePermanent)
+    end
+end
+
+function fresh.Bars(db)
+    db.bars = db.bars or {}
+    MSUF.DefaultsSchema.Fill(db.bars, MSUF.DefaultsSchema.Values.FreshShowAltMana)
+    -- Performance baseline: native interpolation is an
+    -- explicit visual option, never an implicit cost on a fresh profile.
+    MSUF.DefaultsSchema.Fill(db.bars, MSUF.DefaultsSchema.Values.FactoryDbbarsSmoothPowerBar, true)
+    --- Not adopted on Classic: its fresh profiles have never carried this key,
+    --- and the shared bars stage seeds it to false anyway when it is missing.
+    if not IS_CLASSIC_FAMILY then
+        MSUF.DefaultsSchema.Fill(db.bars, MSUF.DefaultsSchema.Values.FactoryDbbarsChunkedPowerBar, true)
+    end
+    MSUF.DefaultsSchema.Fill(db.bars, MSUF.DefaultsSchema.Values.FactoryDbbarsClassPowerSmoothFill, true)
+    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
+        if type(db[key]) == "table" then
+            MSUF.DefaultsSchema.Fill(db[key], MSUF.DefaultsSchema.Values.FactoryDbkeySmoothFill, true)
         end
     end
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+        if type(db[key]) == "table" then
+            MSUF.DefaultsSchema.Fill(db[key], MSUF.DefaultsSchema.Values.FactoryDbkeySmoothFill, true)
+            -- Secure headers enforce this cap after a page reset too.
+            if key == "gf_raid" then db[key].maxColumns = 8 end
+        end
+    end
+    if type(db.gf_party) ~= "table" then db.gf_party = {} end
+    MSUF.DefaultsSchema.Fill(db.gf_party, MSUF.DefaultsSchema.Values.FactoryDbgfpartyEnabled, true)
+    if type(db.focustarget) ~= "table" then db.focustarget = {} end
+    MSUF.DefaultsSchema.Fill(db.focustarget, MSUF.DefaultsSchema.Values.FactoryDbfocustargetEnabled, true)
+    MSUF.DefaultsSchema.Fill(db.bars, MSUF.DefaultsSchema.Values.FreshRoundedFramesEnabled)
+end
+
+function fresh.Shell(db)
+    --- Fresh-install defaults: status indicators (AFK/DND) off by default
+    local g = db.general
+    if type(g) == 'table' then
+        if type(g.statusIndicators) ~= "table" then g.statusIndicators = {} end
+        local si = g.statusIndicators
+        MSUF.DefaultsSchema.Fill(si, MSUF.DefaultsSchema.Values.FreshShowAFK)
+
+        --- Fresh-install scaling defaults:
+        --- Match Unhalted-style global UI scale: disabled until the user enables it.
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FreshAnchorToCooldown)
+        if type(g.UIScale) ~= "table" then
+            g.UIScale = { Enabled = false, Scale = 1.0 }
+        else
+            MSUF.DefaultsSchema.Fill(g.UIScale, MSUF.DefaultsSchema.Values.FreshEnabled)
+        end
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryGSlashMenuScale, true)
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FreshMsufUiScale)
+        --- English/German use MSUF's highly readable UI face. Other locales
+        --- retain Blizzard's locale-specific glyph coverage.
+        g.fontKey = MSUF_Defaults_GetGlobalFontDefault()
+        --- Fresh installs use MSUF's bundled, tint-neutral premium bar surface.
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryGBarTexture, true)
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FreshUnitTooltipProvider)
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryG_msufPreviewDragHintExperienced, true)
+        -- Start previews clean; the Guides layer is an explicit user choice.
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryGUnitPreviewGuidesEnabled, true)
+        --- Factory Edit Mode baseline: grid on at 36px with snap, backdrop
+        --- dimmed to 55%. The compact snapshot predates these tuned values,
+        --- so they are set unconditionally over its stale ones.
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryGEditModeGridEnabled, true)
+        --- Factory castbars fill left to right. The snapshot carries the
+        --- exporter's own choice, and the nil-key default stays RTL so
+        --- existing profiles keep their direction.
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryGCastbarFillDirection, true)
+        --- Factory cleanse border lights up for what the group can dispel,
+        --- not for every debuff that carries a dispel type.
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryGDispelBorderTrigger, true)
+        g.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
+        MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.FactoryG_msufFactoryNameShorteningFixed_v1, true)
+    end
+    MSUF_Defaults_NormalizePortraitRenderDB(db)
+end
+
+local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
+    if not db then  return end
+
 
     MSUF_Defaults_ApplyPredictionBarBaseline(db)
 
     --- Unified alpha defaults: HP fill opacity, power fill opacity, background
     --- texture opacity, plus opt-in exclusions for informational frame elements.
     --- Group frames still use the HP/background subset plus prediction exclusion.
-    local function EnsureUnitAlphaDefaults(conf)
-        if not conf then  return end
-        if conf.hpBarAlpha == nil then conf.hpBarAlpha = 1 end
-        if conf.powerBarAlpha == nil then conf.powerBarAlpha = 1 end
-        if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
-        if conf.powerBarBgAlpha == nil then conf.powerBarBgAlpha = conf.hpBgAlpha or 0.85 end
-        if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
-        if conf.alphaExcludePredictionBars == nil then conf.alphaExcludePredictionBars = false end
-        if conf.oocFadeEnabled == nil then conf.oocFadeEnabled = false end
-        if conf.oocFadeAlpha == nil then conf.oocFadeAlpha = 0.5 end
-    end
-    local function EnsureFreshUnitframeScreenPosition(conf, x, y)
-        if type(conf) ~= "table" then return end
-        if conf.anchorFrameName == nil and conf.anchorToUnitframe == nil then
-            conf.anchorToUnitframe = "GLOBAL"
-        end
-        SetDefault(conf, "offsetX", x)
-        SetDefault(conf, "offsetY", y)
-    end
-    local function EnsureFreshGroupAuraNativeRenderer(conf)
-        if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
-        local auras = conf.auras
-        SetDefault(auras, "renderer", "NATIVE_12_1")
-        if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
-        local types = auras.blizzardTypes
-        SetDefault(types, "buffs", true)
-        SetDefault(types, "debuffs", true)
-        SetDefault(types, "dispels", true)
-        SetDefault(types, "externals", true)
-        SetDefault(auras, "blizzardIconSize", 20)
-        SetDefault(auras, "blizzardShowCooldownText", true)
-        SetDefault(auras, "blizzardOrganizationType", "default")
-        SetDefault(auras, "blizzardDispelMode", "allDispellable")
-        SetDefault(auras, "blizzardDispelBorder", false)
-        SetDefault(auras, "blizzardContainerAnchor", "FRAME")
-        SetDefault(auras, "blizzardContainerX", 0)
-        SetDefault(auras, "blizzardContainerY", 0)
-        for _, key in ipairs({ "buff", "debuff", "externals" }) do
-            if type(auras[key]) ~= "table" then auras[key] = {} end
-            SetDefault(auras[key], "strata", "AUTO")
-            if key == "buff" then SetDefault(auras[key], "trackedStrata", "AUTO") end
-            SetDefault(auras[key], "cooldownSwipeReverse", false)
-            SetDefault(auras[key], "sortMethod", "DEFAULT")
-            SetDefault(auras[key], "sortReverse", false)
-            SetDefault(auras[key], "showDurationBar", false)
-            SetDefault(auras[key], "durationBarHeight", 2)
-            SetDefault(auras[key], "durationBarDisplay", "BAR_ONLY")
-            SetDefault(auras[key], "durationBarPosition", "BOTTOM")
-            SetDefault(auras[key], "durationBarDirection", "REMAINING")
-            if type(auras[key].blacklist) ~= "table" then auras[key].blacklist = {} end
-            if type(auras[key].blacklist.spells) ~= "table" then auras[key].blacklist.spells = {} end
-            SetDefault(auras[key].blacklist, "hidePermanent", false)
-        end
-    end
-    EnsureUnitAlphaDefaults(db.player)
+
+    fresh.EnsureUnitAlphaDefaults(db.player)
     --- Fresh-install default: player name hidden
     if type(db.player) == "table" then
-        SetDefault(db.player, "showName", false)
+        MSUF.DefaultsSchema.Fill(db.player, MSUF.DefaultsSchema.Values.FreshShowName)
     end
-    EnsureUnitAlphaDefaults(db.target)
-    EnsureUnitAlphaDefaults(db.focus)
-    EnsureUnitAlphaDefaults(db.focustarget)
-    EnsureUnitAlphaDefaults(db.pettarget)
-    EnsureUnitAlphaDefaults(db.pet)
-    EnsureUnitAlphaDefaults(db.boss)
-    EnsureUnitAlphaDefaults(db.targettarget)
-    EnsureUnitAlphaDefaults(db.tot)
+    fresh.EnsureUnitAlphaDefaults(db.target)
+    fresh.EnsureUnitAlphaDefaults(db.focus)
+    fresh.EnsureUnitAlphaDefaults(db.focustarget)
+    fresh.EnsureUnitAlphaDefaults(db.pettarget)
+    fresh.EnsureUnitAlphaDefaults(db.pet)
+    fresh.EnsureUnitAlphaDefaults(db.boss)
+    fresh.EnsureUnitAlphaDefaults(db.targettarget)
+    fresh.EnsureUnitAlphaDefaults(db.tot)
     for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
-        SetDefault(db[key], "alphaExcludePredictionBars", false)
+        MSUF.DefaultsSchema.Fill(db[key], MSUF.DefaultsSchema.Values.FreshAlphaExcludePredictionBars)
         --- Raid/Mythic-only sorting toggle, seeded on every group scope like the
         --- GroupFrames PARTY_DEFAULTS so the factory snapshot carries it explicitly.
-        SetDefault(db[key], "sortRolesAcrossRaid", false)
-        SetDefault(db[key], "sortAlphabeticalWithinRole", false)
+        MSUF.DefaultsSchema.Fill(db[key], MSUF.DefaultsSchema.Values.FreshSortRolesAcrossRaid)
     end
     --- Older exports may omit screen positions; in that case provide stable
     --- center anchors without touching positions included by the compact export.
-    EnsureFreshUnitframeScreenPosition(db.player, -260, 80)
-    EnsureFreshUnitframeScreenPosition(db.target, 260, 80)
-    EnsureFreshUnitframeScreenPosition(db.focus, 260, 135)
-    EnsureFreshUnitframeScreenPosition(db.focustarget, 260, 180)
-    EnsureFreshUnitframeScreenPosition(db.pettarget, -275, -290)
-    EnsureFreshUnitframeScreenPosition(db.pet, -260, 135)
-    EnsureFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
-    EnsureFreshUnitframeScreenPosition(db.boss, MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y)
-    EnsureFreshGroupAuraNativeRenderer(db.gf_party)
-    EnsureFreshGroupAuraNativeRenderer(db.gf_raid)
-    EnsureFreshGroupAuraNativeRenderer(db.gf_mythicraid)
+    fresh.EnsureFreshUnitframeScreenPosition(db.player, -260, 80)
+    fresh.EnsureFreshUnitframeScreenPosition(db.target, 260, 80)
+    fresh.EnsureFreshUnitframeScreenPosition(db.focus, 260, 135)
+    fresh.EnsureFreshUnitframeScreenPosition(db.focustarget, 260, 180)
+    fresh.EnsureFreshUnitframeScreenPosition(db.pettarget, -275, -290)
+    fresh.EnsureFreshUnitframeScreenPosition(db.pet, -260, 135)
+    fresh.EnsureFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
+    fresh.EnsureFreshUnitframeScreenPosition(db.boss, MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y)
+    fresh.EnsureFreshGroupAuraNativeRenderer(db.gf_party)
+    fresh.EnsureFreshGroupAuraNativeRenderer(db.gf_raid)
+    fresh.EnsureFreshGroupAuraNativeRenderer(db.gf_mythicraid)
     --- Factory profiles keep every frame's health coloring linked to the
     --- shared Global Style instead of carrying per-frame color overrides.
     for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
@@ -767,125 +773,20 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     --- every scope carried by the factory snapshot so a stale local value
     --- cannot mask the shared "Removable by me" baseline.
     if type(db.general) == "table" then
-        db.general.unitDispelSymbolTrigger = "BY_ME"
+        MSUF.DefaultsSchema.Fill(db.general, MSUF.DefaultsSchema.Values.FactoryDbgeneralUnitDispelSymbolTrigger, true)
     end
     for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
         if type(db[key]) == "table" then
-            db[key].unitDispelSymbolTrigger = "BY_ME"
+            MSUF.DefaultsSchema.Fill(db[key], MSUF.DefaultsSchema.Values.FactoryDbkeyUnitDispelSymbolTrigger, true)
         end
     end
     for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
         if type(db[key]) == "table" then
-            db[key].dispelSymbolTrigger = "BY_ME"
+            MSUF.DefaultsSchema.Fill(db[key], MSUF.DefaultsSchema.Values.FactoryDbkeyDispelSymbolTrigger, true)
         end
     end
-    db.bars = db.bars or {}
-    SetDefault(db.bars, "showAltMana", false)
-    SetDefault(db.bars, "altManaWidthMode", "player")
-    SetDefault(db.bars, "altManaWidth", 0)
-    SetDefault(db.bars, "altManaOffsetX", 0)
-    SetDefault(db.bars, "showGuardianIronfur", false)
-    SetDefault(db.bars, "showSweepingStrikes", false)
-    SetDefault(db.bars, "guardianIronfurShowHashLines", true)
-    -- Performance baseline: native interpolation is an
-    -- explicit visual option, never an implicit cost on a fresh profile.
-    db.bars.smoothPowerBar = false
-    --- Not adopted on Classic: its fresh profiles have never carried this key,
-    --- and the shared bars stage seeds it to false anyway when it is missing.
-    if not IS_CLASSIC_FAMILY then
-        db.bars.chunkedPowerBar = false
-    end
-    db.bars.classPowerSmoothFill = false
-    db.bars.altManaSmoothFill = false
-    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
-        if type(db[key]) == "table" then
-            db[key].smoothFill = false
-            db[key].chunkedFill = false
-            db[key].powerSmoothFill = false
-            db[key].powerChunkedFill = false
-        end
-    end
-    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
-        if type(db[key]) == "table" then
-            db[key].smoothFill = false
-            db[key].chunkedFill = false
-            db[key].powerSmoothFill = false
-            db[key].powerChunkedFill = false
-            -- Secure headers enforce this cap after a page reset too.
-            if key == "gf_raid" then db[key].maxColumns = 8 end
-        end
-    end
-    if type(db.gf_party) ~= "table" then db.gf_party = {} end
-    db.gf_party.enabled = true
-    if type(db.focustarget) ~= "table" then db.focustarget = {} end
-    db.focustarget.enabled = false
-    SetDefault(db.bars, "roundedFramesEnabled", false)
-    SetDefault(db.bars, "roundedUnitFrames", true)
-    SetDefault(db.bars, "roundedGroupFrames", true)
-    SetDefault(db.bars, "roundedPowerBars", true)
-    SetDefault(db.bars, "roundedCastbars", false)
-    SetDefault(db.bars, "roundedClassResources", false)
-    SetDefault(db.bars, "roundedMouseover", true)
-    SetDefault(db.bars, "roundedCornerStrength", 3)
-    --- Fresh-install defaults: status indicators (AFK/DND) off by default
-    local g = db.general
-    if type(g) == 'table' then
-        if type(g.statusIndicators) ~= "table" then g.statusIndicators = {} end
-        local si = g.statusIndicators
-        SetDefault(si, "showAFK", false)
-        SetDefault(si, "showDND", false)
-
-        --- Fresh-install scaling defaults:
-        --- Match Unhalted-style global UI scale: disabled until the user enables it.
-        SetDefault(g, "anchorToCooldown", false)
-        SetDefault(g, "anchorName", "UIParent")
-        SetDefault(g, "disableScaling", false)
-        SetDefault(g, "globalUiScalePreset", "auto")
-        if type(g.UIScale) ~= "table" then
-            g.UIScale = { Enabled = false, Scale = 1.0 }
-        else
-            SetDefault(g.UIScale, "Enabled", false)
-            SetDefault(g.UIScale, "Scale", 1.0)
-        end
-        g.slashMenuScale = 0.8
-        SetDefault(g, "msufUiScale", 1.0)
-        --- English/German use MSUF's highly readable UI face. Other locales
-        --- retain Blizzard's locale-specific glyph coverage.
-        g.fontKey = MSUF_Defaults_GetGlobalFontDefault()
-        --- Fresh installs use MSUF's bundled, tint-neutral premium bar surface.
-        g.barTexture = "MSUF Lucent"
-        g.castbarTexture = "MSUF Lucent"
-        SetDefault(g, "unitTooltipProvider", "GAME")
-        SetDefault(g, "unitTooltipAnchor", "EXTERNAL")
-        SetDefault(g, "unitTooltipMode", "ALWAYS")
-        SetDefault(g, "unitTooltipModifier", "ALT")
-        SetDefault(g, "disableUnitInfoTooltips", true)
-        SetDefault(g, "unitInfoTooltipStyle", "classic")
-        SetDefault(g, "showGameMenuButton", true)
-        SetDefault(g, "previewDragHintAnimationEnabled", true)
-        g._msufPreviewDragHintExperienced = false
-        -- Start previews clean; the Guides layer is an explicit user choice.
-        g.unitPreviewGuidesEnabled = false
-        g.classPowerPreviewGuidesEnabled = false
-        --- Factory Edit Mode baseline: grid on at 36px with snap, backdrop
-        --- dimmed to 55%. The compact snapshot predates these tuned values,
-        --- so they are set unconditionally over its stale ones.
-        g.editModeGridEnabled = true
-        g.editModeGridStep = 36
-        g.editModeSnapEnabled = true
-        g.editModeBgAlpha = 0.55
-        --- Factory castbars fill left to right. The snapshot carries the
-        --- exporter's own choice, and the nil-key default stays RTL so
-        --- existing profiles keep their direction.
-        g.castbarFillDirection = "LTR"
-        --- Factory cleanse border lights up for what the group can dispel,
-        --- not for every debuff that carries a dispel type.
-        g.dispelBorderTrigger = "BY_RAID"
-        g.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
-        g._msufFactoryNameShorteningFixed_v1 = true
-        g._msufFactoryScopedNameShorteningFixed_v1 = true
-    end
-    MSUF_Defaults_NormalizePortraitRenderDB(db)
+    fresh.Bars(db)
+    fresh.Shell(db)
 end
 
 --- Canonical Unit Aura baseline for the one-time 6.0 Aura reset and for the
@@ -1163,221 +1064,28 @@ if type(MSUF) == "table" then
 end
 
 local function MSUF_Defaults_CreateCanonicalUnitAuras()
-    local function Filters()
-        return {
-            enabled = true,
-            hidePermanent = false,
-            buffs = {
-                onlyMine = false,
-                onlyImportant = false,
-                includeDispellable = false,
-                dispellableAny = false,
-                raid = false,
-                raidInCombat = false,
-                includeNameplateOnly = false,
-                cancelable = false,
-                notCancelable = false,
-                externalDefensive = false,
-                bigDefensive = false,
-                exclusive = "none",
-            },
-            debuffs = {
-                onlyMine = false,
-                onlyImportant = false,
-                includeDispellable = false,
-                dispellableAny = false,
-                raid = false,
-                raidInCombat = false,
-                includeNameplateOnly = false,
-                crowdControl = false,
-                exclusive = "none",
-            },
-        }
+    local schema = MSUF.DefaultsSchema
+    local auras = schema.Fill({}, schema.Values.UnitAuras)
+    auras.profileModelRevision = MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION
+    auras.customContainers.perUnit.player.items[4] = MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer()
+    auras.shared.filters = schema.Fill({}, schema.Values.AuraFilters)
+    for _, owner in pairs(auras.perUnit) do
+        owner.filters = schema.Fill({}, schema.Values.AuraFilters)
     end
-    local auras = {
-        profileModelRevision = MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION,
-        enabled = true,
-        showPlayer = false,
-        showPet = true,
-        showTarget = true,
-        showFocus = false,
-        showBoss = true,
-        showArena = true,
-        customDisplays = {
-            serial = 0,
-            shared = { items = {} },
-            perUnit = {},
-        },
-        customContainers = {
-            perUnit = {
-                player = {
-                    items = {
-                        [4] = MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer(),
-                    },
-                },
-            },
-        },
-        shared = {
-            bossEditTogether = true,
-            arenaEditTogether = true,
-            hideBlizzardBuffFrame = false,
-            hideBlizzardDebuffFrame = false,
-            buffGroupOffsetX = 0,
-            buffGroupOffsetY = 36,
-            debuffGroupOffsetX = 0,
-            debuffGroupOffsetY = 6,
-            buffGroupIconSize = 26,
-            debuffGroupIconSize = 26,
-            cooldownTextSize = 14,
-            iconSize = 26,
-            iconZoom = 100,
-            buffIconZoom = 100,
-            debuffIconZoom = 100,
-            appearanceIconShapes = { playerDefensives = "FOLLOW_PORTRAIT" },
-            spacing = 2,
-            buffSpacing = 2,
-            debuffSpacing = 2,
-            stackTextSize = 14,
-            growth = "RIGHT",
-            buffGrowthX = "RIGHT",
-            buffGrowthY = "DOWN",
-            debuffGrowthX = "RIGHT",
-            debuffGrowthY = "DOWN",
-            perRow = 12,
-            maxBuffs = 12,
-            maxDebuffs = 12,
-            showBuffs = true,
-            showDebuffs = true,
-            showCooldownText = true,
-            showCooldownSwipe = true,
-            cooldownSwipeReverse = false,
-            buffShowStealable = false,
-            buffStealableStyle = "BORDER_ICON",
-            buffSortMethod = "DEFAULT",
-            buffSortReverse = false,
-            debuffSortMethod = "DEFAULT",
-            debuffSortReverse = false,
-            showDurationBar = false,
-            durationBarHeight = 2,
-            durationBarDisplay = "BAR_ONLY",
-            durationBarPosition = "BOTTOM",
-            durationBarDirection = "REMAINING",
-            showStackCount = true,
-            debuffTypeBorderMode = "OFF",
-            useDebuffTypeBorders = false,
-            showTooltip = true,
-            buffFrameEffectType = "none",
-            buffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
-            buffFrameEffectPriority = 5,
-            buffFrameEffectThickness = 2,
-            buffFrameEffectLayer = 0,
-            buffFrameEffectStrata = "AUTO",
-            debuffFrameEffectType = "none",
-            debuffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
-            debuffFrameEffectPriority = 5,
-            debuffFrameEffectThickness = 2,
-            debuffFrameEffectLayer = 0,
-            debuffFrameEffectStrata = "AUTO",
-            showInEditMode = true,
-            stackCountAnchor = "TOPRIGHT",
-            stackTextOffsetX = -1,
-            stackTextOffsetY = 1,
-            cooldownTextAnchor = "CENTER",
-            cooldownTextOffsetX = 0,
-            cooldownTextOffsetY = 0,
-            cooldownDecimalSeconds = 3,
-            buffAnchor = "BOTTOMRIGHT",
-            debuffAnchor = "TOPLEFT",
-            buffLayer = 5,
-            debuffLayer = 6,
-            filters = Filters(),
-        },
-        perUnit = {
-            target = {
-                overrideLayout = true,
-                overrideFilters = false,
-                layout = {
-                    buffGroupOffsetX = -3,
-                    buffGroupOffsetY = 0,
-                    debuffGroupOffsetX = 230,
-                    debuffGroupOffsetY = 2,
-                    buffGroupIconSize = 34,
-                    debuffGroupIconSize = 34,
-                    buffSpacing = 2,
-                    debuffSpacing = 2,
-                },
-                overrideSharedLayout = true,
-                layoutShared = {
-                    maxBuffs = 4,
-                    maxDebuffs = 3,
-                    perRow = 8,
-                    buffGrowthX = "RIGHT",
-                    buffGrowthY = "UP",
-                    debuffGrowthX = "UP",
-                    debuffGrowthY = "UP",
-                },
-                filters = Filters(),
-            },
-            focus = {
-                overrideLayout = true,
-                overrideFilters = false,
-                layout = {
-                    buffGroupOffsetX = -1,
-                    buffGroupOffsetY = 0,
-                    debuffGroupOffsetX = 125,
-                    debuffGroupOffsetY = 1,
-                    buffGroupIconSize = 30,
-                    debuffGroupIconSize = 26,
-                    buffSpacing = 2,
-                    debuffSpacing = 2,
-                },
-                filters = Filters(),
-            },
-        },
-    }
-
-    --- Boss per-unit defaults (1-5).
     for i = 1, 5 do
-        local key = "boss" .. i
-        auras.perUnit[key] = {
-            overrideLayout = true,
-            overrideFilters = false,
-            layout = {
-                buffGroupOffsetX = -1,
-                buffGroupOffsetY = -3,
-                debuffGroupOffsetX = 234,
-                debuffGroupOffsetY = -45,
-                buffGroupIconSize = 40,
-                debuffGroupIconSize = 26,
-                buffSpacing = 2,
-                debuffSpacing = 2,
-            },
-            filters = Filters(),
-        }
+        local owner = schema.Fill({}, schema.Values.BossAuraOwner)
+        owner.filters = schema.Fill({}, schema.Values.AuraFilters)
+        auras.perUnit["boss" .. i] = owner
     end
-    --- Arena per-unit defaults (1-3, 1-5 on TBC and Mists): debuffs matter
-    --- most on enemy players, keep the compact boss-style lane geometry.
     for i = 1, ARENA_AURA_SLOTS do
-        local key = "arena" .. i
-        auras.perUnit[key] = {
-            overrideLayout = true,
-            overrideFilters = false,
-            layout = {
-                buffGroupOffsetX = -1,
-                buffGroupOffsetY = -3,
-                debuffGroupOffsetX = 234,
-                debuffGroupOffsetY = -45,
-                buffGroupIconSize = 26,
-                debuffGroupIconSize = 26,
-                buffSpacing = 2,
-                debuffSpacing = 2,
-            },
-            filters = Filters(),
-        }
+        local owner = schema.Fill({}, schema.Values.ArenaAuraOwner)
+        owner.filters = schema.Fill({}, schema.Values.AuraFilters)
+        auras.perUnit["arena" .. i] = owner
     end
     MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     return auras
 end
+
 ExportPublic("MSUF_CreateCanonicalUnitAuras", MSUF_Defaults_CreateCanonicalUnitAuras)
 if type(MSUF) == "table" then
     MSUF.MSUF_CreateCanonicalUnitAuras = MSUF_Defaults_CreateCanonicalUnitAuras
@@ -1542,141 +1250,33 @@ end
 --- Spell Indicators start empty and are populated by the current live
 --- SpecDefaults seeder, so retired saved icons can never become factory data.
 local function MSUF_Defaults_CreateCanonicalGroupAuraState(preserveExistingFilterDefaults)
-    local function Lane(values)
-        return {
-            _filterMigV3 = true,
-            enabled = values.enabled ~= false,
-            anchor = values.anchor,
-            growth = values.growth,
-            x = values.x,
-            y = values.y,
-            size = values.size,
-            iconScale = 100,
-            iconZoom = 100,
-            spacing = values.spacing,
-            perRow = values.perRow,
-            max = values.max,
-            layer = values.layer,
-            strata = "AUTO",
-            filterToken = values.filterToken,
-            blacklistCats = {},
-            blacklist = { hidePermanent = false, spells = {} },
-            showTooltip = true,
-            showCooldownSwipe = true,
-            cooldownSwipeReverse = false,
-            sortMethod = "DEFAULT",
-            sortReverse = false,
-            showDurationBar = false,
-            durationBarHeight = 2,
-            durationBarDisplay = "BAR_ONLY",
-            durationBarPosition = "BOTTOM",
-            durationBarDirection = "REMAINING",
-            showCooldown = true,
-            showStacks = values.showStacks ~= false,
-            cooldownSize = values.cooldownSize or 10,
-            cooldownAnchor = "CENTER",
-            cooldownX = 0,
-            cooldownY = 0,
-            cooldownDecimalSeconds = 3,
-            stackSize = values.stackSize or 10,
-            stackAnchor = "BOTTOMRIGHT",
-            stackX = 0,
-            stackY = 0,
-        }
-    end
-
+    local schema = MSUF.DefaultsSchema
     local function Scope(isRaid)
-        -- Factory creation/reset opts into MSUF Highlights. Compatibility
-        -- callers repairing an already-saved profile explicitly request the
-        -- former defaults so a missing legacy field cannot change its display.
-        local buffFilterToken = preserveExistingFilterDefaults == true
-            and (isRaid and "Raid" or "RaidPlayer")
-            or "MSUF_GROUP_HIGHLIGHTS_V1"
-        local auras = {
-            profileModelRevision = MSUF_DEFAULTS_GROUP_AURA_PROFILE_MODEL_REVISION,
-            enabled = true,
-            renderer = "NATIVE_12_1",
-            dynamicScale = false,
-            iconZoom = 100,
-            showTooltip = true,
-            blizzardTypes = {
-                buffs = false,
-                debuffs = true,
-                dispels = true,
-                externals = true,
-                privateAuras = true,
-            },
-            blizzardIconSize = isRaid and 18 or 20,
-            blizzardShowCooldownText = true,
-            blizzardOrganizationType = "default",
-            blizzardDispelMode = "allDispellable",
-            blizzardDispelBorder = false,
-            blizzardContainerAnchor = "FRAME",
-            blizzardContainerX = 0,
-            blizzardContainerY = 0,
-        }
-        if isRaid then
-            auras.buff = Lane({
-                anchor = "TOPLEFT", growth = "RIGHTDOWN", x = 14, y = -2,
-                size = 12, spacing = 0, perRow = 1, max = 1, layer = 8,
-                filterToken = buffFilterToken, stackSize = 10,
-            })
-            auras.debuff = Lane({
-                anchor = "BOTTOMLEFT", growth = "RIGHTUP", x = 20, y = 2,
-                size = 18, spacing = 0, perRow = 1, max = 1, layer = 10,
-                filterToken = "ALL", stackSize = 10,
-            })
-            auras.externals = Lane({
-                anchor = "BOTTOMLEFT", growth = "RIGHTUP", x = 2, y = 2,
-                size = 16, spacing = 1, perRow = 1, max = 1, layer = 11,
-                filterToken = "RAID", stackSize = 10, showStacks = false,
-            })
-        else
-            auras.buff = Lane({
-                anchor = "TOPLEFT", growth = "RIGHTDOWN", x = 44, y = -2,
-                size = 14, spacing = 0, perRow = 1, max = 1, layer = 8,
-                filterToken = buffFilterToken, stackSize = 10,
-            })
-            auras.debuff = Lane({
-                anchor = "BOTTOMLEFT", growth = "RIGHTUP", x = 22, y = 2,
-                size = 20, spacing = 0, perRow = 1, max = 1, layer = 10,
-                filterToken = "ALL", stackSize = 12,
-            })
-            auras.externals = Lane({
-                anchor = "BOTTOMLEFT", growth = "RIGHTUP", x = 2, y = 2,
-                size = 18, spacing = 1, perRow = 1, max = 1, layer = 11,
-                filterToken = "RAID", stackSize = 11, showStacks = false,
-            })
+        local scope = schema.Fill({}, schema.Values.GroupAuraState)
+        local auras = schema.Fill({}, schema.Values.GroupAuras)
+        scope.auras = auras
+        local laneValues = isRaid and schema.Values.GroupRaidLanes or schema.Values.GroupPartyLanes
+        for key, defaults in pairs(laneValues) do
+            local lane = schema.Fill({}, defaults)
+            schema.Fill(lane, schema.Values.GroupAuraLane)
+            lane.enabled = lane.enabled ~= false
+            lane.showStacks = lane.showStacks ~= false
+            lane.cooldownSize = lane.cooldownSize or 10
+            lane.stackSize = lane.stackSize or 10
+            auras[key] = lane
         end
+        auras.profileModelRevision = MSUF_DEFAULTS_GROUP_AURA_PROFILE_MODEL_REVISION
+        auras.blizzardIconSize = isRaid and 18 or 20
+        scope.privateAuras.size = isRaid and 10 or 12
+        auras.buff.filterToken = preserveExistingFilterDefaults == true
+            and (isRaid and "Raid" or "RaidPlayer") or "MSUF_GROUP_HIGHLIGHTS_V1"
         auras.externals.autoBlacklistBuffs = true
         auras.debuff.dispelBorderMode = "OFF"
-
-        return {
-            auras = auras,
-            -- The retired custom Private-Aura host is kept explicitly off.
-            -- Blizzard-owned Private Auras remain governed by blizzardTypes.
-            privateAuras = {
-                enabled = false, max = 1, size = isRaid and 10 or 12,
-                anchor = "RIGHT", direction = "LEFT", spacing = 1,
-                x = -4, y = 0, layer = 12,
-                showCountdown = true, showNumbers = false,
-            },
-            -- Current spec defaults are seeded from executable 6.0 data after
-            -- profile initialization; no saved spell-icon snapshot is reused.
-            spellIndicators = {
-                enabled = false, spec = "auto", specs = {},
-                layer = 9, strata = "AUTO", iconZoom = 100, iconScale = 100,
-                _autoSeededSpecs = {},
-            },
-        }
+        return scope
     end
-
-    return {
-        gf_party = Scope(false),
-        gf_raid = Scope(true),
-        gf_mythicraid = Scope(true),
-    }
+    return { gf_party = Scope(false), gf_raid = Scope(true), gf_mythicraid = Scope(true) }
 end
+
 ExportPublic("MSUF_CreateCanonicalGroupAuraState", MSUF_Defaults_CreateCanonicalGroupAuraState)
 if type(MSUF) == "table" then
     MSUF.MSUF_CreateCanonicalGroupAuraState = MSUF_Defaults_CreateCanonicalGroupAuraState
@@ -1693,7 +1293,7 @@ local MSUF_FOREVER_HEALTH_UNITS = {
 }
 
 local function MSUF_Defaults_MuteForeverHealth(profileDB, freshFactory)
-    if not (MSUF.Client and MSUF.Client.IsForever) then return end
+    if not (MSUF.Client.IsForever) then return end
     local g = profileDB.general
     if type(g) ~= "table" or g._msufForeverMutedHealth_v1 then return end
     -- Unhalted's health fill starts at 80% opacity. Apply that to the Forever
@@ -1720,7 +1320,7 @@ local function MSUF_Defaults_CreateFactoryProfile()
     end
     local tbl = decode(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
     if not tbl then  return nil end
-    if MSUF.Client and MSUF.Client.IsForever then
+    if MSUF.Client.IsForever then
         if tbl.addon ~= "MSUF" or tonumber(tbl.fmt) ~= 2
             or type(tbl.msuf6) ~= "table" or tonumber(tbl.msuf6.schema) ~= 600 then
             return nil
@@ -1780,12 +1380,12 @@ local function MSUF_Defaults_CreateFactoryProfile()
         out.auras3.shared = auraShared
         local shapes = type(auraShared.appearanceIconShapes) == "table" and auraShared.appearanceIconShapes or {}
         auraShared.appearanceIconShapes = shapes
-        if shapes.playerDefensives == nil then shapes.playerDefensives = "FOLLOW_PORTRAIT" end
+        MSUF.DefaultsSchema.Fill(shapes, MSUF.DefaultsSchema.Values.CorePlayerDefensives003)
     end
     -- Classic factory policy runs only after the authored unit/group aura
     -- owners exist. New/reset profiles get it; saved layouts and the legacy
     -- sparse-owner repair keep their original geometry. Midnight is unchanged.
-    if IS_CLASSIC_FAMILY or (MSUF.Client and MSUF.Client.IsForever) then
+    if IS_CLASSIC_FAMILY or (MSUF.Client.IsForever) then
         out.bars.powerBarHeight = 7
         out.bars.classPowerHeight = 8
         out.bars.showAltMana = true
@@ -2333,16 +1933,13 @@ local MSUF_Defaults_Stage_SeedShellDefaults = sharedShellDefaults.MSUF_Defaults_
 
 --- Dark mode, bar background fill/colour modes, gradients, aggro border,
 --- bar mode legacy flags, NPC colour mode, unified bar colour, outline colour.
-local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
+local barColorStages = {}
+function barColorStages.Background(profileDB, g)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_01")
-    if g.darkBgBrightness == nil then
-        g.darkBgBrightness = 0.25      --- 25% Grau als Standard
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreDarkBgBrightness)
     --- When true, dark mode uses the bar-background tint color directly (no brightness dimming).
     --- Allows fully custom background colors (including white) in dark mode.
-    if g.darkBgCustomColor == nil then
-        g.darkBgCustomColor = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreDarkBgCustomColor)
     if g.classBarBgR == nil or g.classBarBgG == nil or g.classBarBgB == nil then
         g.classBarBgR = 0.0   --- default: black background
         g.classBarBgG = 0.0
@@ -2350,14 +1947,10 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     end
     --- If enabled, bar background tint color follows the current HP bar color (class/reaction/unified),
     --- instead of using the custom tint swatch.
-    if g.barBgMatchHPColor == nil then
-        g.barBgMatchHPColor = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreBarBgMatchHPColor)
     --- If enabled, the HP background uses the unit's class color while the HP
     --- foreground can stay in Dark/Unified/Gradient mode.
-    if g.barBgClassColor == nil then
-        g.barBgClassColor = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreBarBgClassColor)
     --- Background fill geometry and color source are independent. Migrate the
     --- two legacy booleans into the canonical mode without changing existing
     --- profiles; invalid imported values fail back to the current full/custom
@@ -2396,9 +1989,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
         g.healthGradientHighG = 1
         g.healthGradientHighB = 0
     end
-    if g.enablePowerGradient == nil then
-        g.enablePowerGradient = false
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreEnablePowerGradient)
     if g.healthBarGradientColorR == nil or g.healthBarGradientColorG == nil or g.healthBarGradientColorB == nil then
         g.healthBarGradientColorR, g.healthBarGradientColorG, g.healthBarGradientColorB = 0, 0, 0
     end
@@ -2411,6 +2002,9 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     if not IS_CLASSIC_FAMILY then
         MSUF.DefaultsSchema.SeedGeneral(g, "base_03")
     end
+end
+
+function barColorStages.Aggro(profileDB, g)
     --- Bars: Aggro highlight overlay (Target/Focus/Boss)
     --- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
     --- Bars offers "Aggro border" with dropdown default 1 (On), menu search
@@ -2441,9 +2035,10 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
         g.aggroIndicatorMode = "off"
     end
 
-    if g.gradientStrength == nil then
-        g.gradientStrength = 0.45
-    end
+end
+
+function barColorStages.Gradients(profileDB, g)
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreGradientStrength)
     if g.powerGradientStrength == nil then
         g.powerGradientStrength = g.gradientStrength
     end
@@ -2492,6 +2087,9 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
             g.powerGradientDirection = g.gradientDirection
         end
     end
+end
+
+function barColorStages.Modes(profileDB, g)
     if g.editModeBgAlpha == nil or type(g.editModeBgAlpha) ~= "number" then
         g.editModeBgAlpha = 0.75
     else
@@ -2501,9 +2099,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
             g.editModeBgAlpha = 0.8
         end
     end
-    if g.useClassColors == nil then
-        g.useClassColors = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreUseClassColors)
     if g.barMode == nil then
         if g.useClassColors then
             g.barMode = "class"
@@ -2535,24 +2131,20 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     end
     --- NPC Color Mode: "reaction" (classic friendly/neutral/enemy) or "type" (boss/miniboss/caster/melee/regular).
     --- When "type", enemy NPC health bars in barMode "class" show classification-based colors.
-    if g.npcColorMode == nil then
-        g.npcColorMode = "reaction"
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreNpcColorMode)
     if g.npcColorMode ~= "reaction" and g.npcColorMode ~= "type" then
         g.npcColorMode = "reaction"
     end
     MSUF.DefaultsSchema.SeedGeneral(g, "base_06")
     --- Per-unit NPC Type enable (nil/true = on, false = off)
-    if g.npcTypeTarget == nil then g.npcTypeTarget = true end
-    if g.npcTypeFocus  == nil then g.npcTypeFocus  = true end
-    if g.npcTypeBoss   == nil then g.npcTypeBoss   = true end
-    if g.npcTypeToT    == nil then g.npcTypeToT    = true end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreNpcTypeTarget)
     if type(g.unifiedBarR) ~= "number" then g.unifiedBarR = 0.10 end
     if type(g.unifiedBarG) ~= "number" then g.unifiedBarG = 0.60 end
     if type(g.unifiedBarB) ~= "number" then g.unifiedBarB = 0.90 end
-    if g.useBarBorder == nil then
-        g.useBarBorder = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreUseBarBorder)
+end
+
+function barColorStages.Outline(profileDB, g)
     local function NormalizeStaticOutlineColor(tbl)
         if type(tbl) ~= "table" then return end
         if tbl.barOutlineColorMode ~= nil then
@@ -2576,9 +2168,14 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     for _, key in ipairs({ "player", "target", "focus", "boss", "arena", "pet", "pettarget", "targettarget", "focustarget", "gf_party", "gf_raid", "gf_mythicraid" }) do
         NormalizeStaticOutlineColor(profileDB[key])
     end
-    if g.barBorderStyle == nil then
-        g.barBorderStyle = "THIN"
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreBarBorderStyle)end
+
+local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
+    barColorStages.Background(profileDB, g)
+    barColorStages.Aggro(profileDB, g)
+    barColorStages.Gradients(profileDB, g)
+    barColorStages.Modes(profileDB, g)
+    barColorStages.Outline(profileDB, g)
 end
 
 --- Text style flags, name shortening baseline, number abbreviation, custom
@@ -2632,17 +2229,11 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_07")
     --- Level indicator offset (global)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_08")
-    if g.levelIndicatorAnchor == nil then
-        g.levelIndicatorAnchor = 'NAMERIGHT'
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreLevelIndicatorAnchor)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_09")
-    if g.raidGroupNameAnchor == nil then
-        g.raidGroupNameAnchor = 'NAMERIGHT'
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreRaidGroupNameAnchor)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_10")
-    if g.raidGroupNameStyle == nil then
-        g.raidGroupNameStyle = 'PAREN'
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreRaidGroupNameStyle)
     --- Misc -> Indicators
     ---
     --- Combat/IncomingRes shipped their anchor as `...Pos` while every other
@@ -2669,22 +2260,13 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
             end
         end
     end
-    if g.showIncomingResIndicator == nil then
-        g.showIncomingResIndicator = true
-    end
-    if g.incomingResIndicatorPos == nil then
-        g.incomingResIndicatorPos = 'TOPRIGHT'
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreShowIncomingResIndicator)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_11")
-    if g.combatStateIndicatorPos == nil then
-        g.combatStateIndicatorPos = 'TOPLEFT'
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreCombatStateIndicatorPos)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_12")
     --- Status Icons (Summon / Resting)
     --- These are used by the Unitframe Status element (player/target) and can be overridden per-unit in the Frames menu.
-    if g.showRestingIndicator == nil then
-        g.showRestingIndicator = true
-    end
+    MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreShowRestingIndicator)
     --- Rested icon defaults (Blizzard animated Zzz)
     --- Requirement: default size 39 and centered above the attached Player portrait.
     --- Only apply when the profile does not already carry explicit values (no regression for users who moved it).
@@ -2707,9 +2289,7 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
         if profileDB[key].showRaidMarker == nil and legacyShowRaidMarker ~= nil then
             profileDB[key].showRaidMarker = legacyShowRaidMarker
         end
-        if profileDB[key].showRaidMarker == nil then
-            profileDB[key].showRaidMarker = true
-        end
+        MSUF.DefaultsSchema.Fill(profileDB[key], MSUF.DefaultsSchema.Values.CoreShowRaidMarker)
     end
     local legacyRaidMarkerOffsetX = g.raidMarkerOffsetX
     local legacyRaidMarkerOffsetY = g.raidMarkerOffsetY
@@ -2739,7 +2319,7 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
                 conf.raidMarkerOffsetX = 16
             end
         end
-        if conf.raidMarkerOffsetY == nil then conf.raidMarkerOffsetY = 3 end
+        MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.CoreRaidMarkerOffsetY)
         if conf.raidMarkerAnchor == nil then
             if key == "target" then
                 conf.raidMarkerAnchor = "TOPRIGHT"
@@ -2747,8 +2327,7 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
                 conf.raidMarkerAnchor = "TOPLEFT"
             end
         end
-        if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
-        if conf.raidMarkerLayer == nil then conf.raidMarkerLayer = 7 end
+        MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.CoreRaidMarkerSize)
     end
 --- Hunter Pet Happiness exists again on WoW Forever. Keep the native 24 px
 --- visual scale and familiar right-side placement, the same as on Classic Era
@@ -2756,24 +2335,13 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
 if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
     profileDB.pet = profileDB.pet or {}
     local pet = profileDB.pet
-    if pet.showPetHappinessIndicator == nil then pet.showPetHappinessIndicator = true end
-    if pet.petHappinessIndicatorSize == nil then pet.petHappinessIndicatorSize = 24 end
-    if pet.petHappinessIndicatorAnchor == nil then pet.petHappinessIndicatorAnchor = "RIGHT" end
-    if pet.petHappinessIndicatorOffsetX == nil then pet.petHappinessIndicatorOffsetX = -7 end
-    if pet.petHappinessIndicatorOffsetY == nil then pet.petHappinessIndicatorOffsetY = -4 end
-    if pet.petHappinessIndicatorLayer == nil then pet.petHappinessIndicatorLayer = 7 end
+    MSUF.DefaultsSchema.Fill(pet, MSUF.DefaultsSchema.Values.CoreShowPetHappinessIndicator)
 end
 
 if IS_CLASSIC_FAMILY then
     profileDB.pet = profileDB.pet or {}
     local pet = profileDB.pet
-    if pet.showPetXPBar == nil then pet.showPetXPBar = true end
-    if pet.petXPBarWidth == nil then pet.petXPBarWidth = 80 end
-    if pet.petXPBarSize == nil then pet.petXPBarSize = 8 end
-    if pet.petXPBarAnchor == nil then pet.petXPBarAnchor = "BOTTOM" end
-    if pet.petXPBarOffsetX == nil then pet.petXPBarOffsetX = 0 end
-    if pet.petXPBarOffsetY == nil then pet.petXPBarOffsetY = -5 end
-    if pet.petXPBarLayer == nil then pet.petXPBarLayer = 7 end
+    MSUF.DefaultsSchema.Fill(pet, MSUF.DefaultsSchema.Values.CoreShowPetXPBar)
 end
 
 --- PvP flag defaults (per-unit). Arena opponents are always PvP-flagged, so
@@ -2782,25 +2350,16 @@ for _, key in ipairs({"player","target","focus","targettarget","focustarget","ar
         profileDB[key] = profileDB[key] or {}
         local conf = profileDB[key]
     if conf.showPvpIndicator == nil then conf.showPvpIndicator = (key ~= "arena") end
-        if conf.pvpIndicatorSize == nil then conf.pvpIndicatorSize = 18 end
-        if conf.pvpIndicatorAnchor == nil then conf.pvpIndicatorAnchor = "TOPRIGHT" end
-        if conf.pvpIndicatorOffsetX == nil then conf.pvpIndicatorOffsetX = 0 end
-        if conf.pvpIndicatorOffsetY == nil then conf.pvpIndicatorOffsetY = 0 end
-        if conf.pvpIndicatorLayer == nil then conf.pvpIndicatorLayer = 7 end
+        MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.CorePvpIndicatorSize)
     end
     --- Elite / Rare icon defaults (per-unit)
     for _, key in ipairs({"target","focus","targettarget","focustarget","boss", "arena"}) do
         profileDB[key] = profileDB[key] or {}
         local u = profileDB[key]
-        if u.showEliteIcon    == nil then u.showEliteIcon    = true       end
-        if u.eliteIconSize    == nil then u.eliteIconSize    = 18         end
-        if u.eliteIconAnchor  == nil then u.eliteIconAnchor  = "TOPRIGHT" end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreShowEliteIcon)
         --- TOPRIGHT attaches matching corners. +18 places the 18 px icon flush
         --- outside the frame edge, clear of HP/power text and top aura rows.
-        if u.eliteIconOffsetX == nil then u.eliteIconOffsetX = 18         end
-        if u.eliteIconOffsetY == nil then u.eliteIconOffsetY = 0          end
-        if u.eliteIconLayer   == nil then u.eliteIconLayer   = 25         end
-        if u.eliteIconStyle   == nil then u.eliteIconStyle   = "BLIZZARD" end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreEliteIconOffsetX)
     end
 end
 
@@ -2896,7 +2455,7 @@ local function MSUF_Defaults_Stage_SeedAuraDefaults(profileDB)
             a3.shared._msufA3_factoryDefensiveShape_v1 = nil
             local shapes = type(a3.shared.appearanceIconShapes) == "table" and a3.shared.appearanceIconShapes or {}
             a3.shared.appearanceIconShapes = shapes
-            if shapes.playerDefensives == nil then shapes.playerDefensives = "FOLLOW_PORTRAIT" end
+            MSUF.DefaultsSchema.Fill(shapes, MSUF.DefaultsSchema.Values.CorePlayerDefensives)
         end
 
         local function EnsureImportantSplit(f)
@@ -2949,18 +2508,12 @@ local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
     for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena"}) do
         profileDB[unitKey] = profileDB[unitKey] or {}
         local u = profileDB[unitKey]
-        if u.enabled == nil then
-            u.enabled = true
-        end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreEnabled)
         -- Blizzard ownership is independent from the MSUF enabled state:
         -- both frames may coexist, or MSUF can be disabled while Blizzard stays.
-        if u.useBlizzardFrame == nil then
-            u.useBlizzardFrame = false
-        end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreUseBlizzardFrame)
         --- Per-unitframe: smooth health fill animation (matches Group Frames default).
-        if u.smoothFill == nil then
-            u.smoothFill = false
-        end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreSmoothFill)
         --- Not adopted on Classic: its profiles have never stored this key and
         --- the config compile reads a missing one as off.
         if not IS_CLASSIC_FAMILY and u.chunkedFill == nil then
@@ -2969,16 +2522,12 @@ local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
         --- Unified alpha: HP fill opacity + power fill opacity + background texture
         --- opacity + a toggle to keep text/portrait opaque. Legacy combat/layered keys
         --- are wiped once by the _msufAlphaUnified_v1 migration below.
-        if u.hpBarAlpha == nil then u.hpBarAlpha = 1 end
-        if u.powerBarAlpha == nil then u.powerBarAlpha = 1 end
-        if u.hpBgAlpha == nil then u.hpBgAlpha = 0.85 end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreHpBarAlpha)
         if u.powerBarBgAlpha == nil then u.powerBarBgAlpha = u.hpBgAlpha or 0.85 end
-        if u.alphaExcludeTextPortrait == nil then u.alphaExcludeTextPortrait = false end
-        if u.alphaExcludePredictionBars == nil then u.alphaExcludePredictionBars = false end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreAlphaExcludeTextPortrait)
         --- Out-of-combat fade: whole-frame alpha while out of combat (min-composed
         --- with range fade at runtime; strongest fade wins). Off by default.
-        if u.oocFadeEnabled == nil then u.oocFadeEnabled = false end
-        if u.oocFadeAlpha == nil then u.oocFadeAlpha = 0.5 end
+        MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreOocFadeEnabled)
         --- Decorative texture layers (3 slots, Blizzard name-bar style):
         --- SharedMedia texture per slot with own alpha, strata/level, anchor
         --- target, color/gradient modes, blend, mirroring, edge softness,
@@ -2987,8 +2536,7 @@ local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
         --- texture layer runtime resolves a missing one from the older rule,
         --- so Midnight and WoW Forever profiles keep the key set they have.
         if IS_CLASSIC_FAMILY then
-            if u.texLayerLinkGeometry == nil then u.texLayerLinkGeometry = false end
-            if u.texLayerLinkSize == nil then u.texLayerLinkSize = false end
+            MSUF.DefaultsSchema.Fill(u, MSUF.DefaultsSchema.Values.CoreTexLayerLinkGeometry)
         end
         for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
             if u[texP .. "Enabled"] == nil then u[texP .. "Enabled"] = false end
@@ -3091,25 +2639,13 @@ MSUF.ProfileMigrations = (function()
         end
         return changed
     end
-    local function Fill(scope, values)
-        if type(scope) ~= "table" then return end
-        for key, value in pairs(values) do if scope[key] == nil then scope[key] = value end end
-    end
+    local Fill = MSUF.DefaultsSchema.Fill
     -- These values materialize the existing runtime fallbacks, without replaying
     -- the broader defaults stages against a persisted revision-17 profile.
-    local dragon = {
-        portraitDragonArtwork = false, portraitDragonScale = 100, portraitDragonX = 0, portraitDragonY = 0,
-        portraitDragonFlip = false, portraitDragonInInstances = true, portraitDragonLayer = "OVERLAY", portraitDragonLevel = 1,
-    }
-    local gcd = {
-        gcdBarDetached = false, gcdBarIdle = false, gcdBarCombatOnly = false, gcdBarWidth = 180, gcdBarHeight = 12,
-        gcdBarX = 0, gcdBarY = -180, gcdBarOpacity = 100, kickReadyTimeMarker = false,
-    }
-    local trinket = { showTrinket = true, trinketSize = 20, trinketAnchor = "RIGHT", trinketOffsetX = 4, trinketOffsetY = 0, trinketLayer = 10 }
-    local happiness = {
-        showPetHappinessIndicator = true, petHappinessIndicatorSize = 24, petHappinessIndicatorAnchor = "RIGHT",
-        petHappinessIndicatorOffsetX = -7, petHappinessIndicatorOffsetY = -4, petHappinessIndicatorLayer = 7,
-    }
+    local dragon = MSUF.DefaultsSchema.Values.PortraitDragon
+    local gcd = MSUF.DefaultsSchema.Values.GCD
+    local trinket = MSUF.DefaultsSchema.Values.ArenaTrinket
+    local happiness = MSUF.DefaultsSchema.Values.PetHappiness
     local function SeedAdditions(profile)
         Fill(profile.general, gcd)
         Fill(profile.arena, trinket)
@@ -3139,35 +2675,29 @@ MSUF.ProfileMigrations = (function()
     -- Ordered ledger. Existing versioned repairs retain their own data-format
     -- decisions; the final stamp only records completion of these cold steps.
     Migrations.Ledger = {
-        { "legacy_bar_names", Migrations.RepairBarNames },
-        { "dispel_priority", MSUF_Defaults_MigrateDispelPriorityProfile },
-        { "classic_sparse_aura_owners", function(profile)
+        { revision = 700, replay = true, name = "legacy_bar_names", apply = Migrations.RepairBarNames },
+        { revision = 700, replay = true, name = "dispel_priority", apply = MSUF_Defaults_MigrateDispelPriorityProfile },
+        { revision = 700, replay = true, name = "classic_sparse_aura_owners", apply = function(profile)
             if IS_CLASSIC_FAMILY then MSUF_Defaults_RepairSparseFactoryAuraOwners(profile) end
         end },
-        { "retired_group_tooltips", StripGroupTooltips },
-        { "revision_17_additions", SeedAdditions },
-        { "group_buff_strata", SeedTrackedStrata },
-        { "sparse_persistence_defaults", MSUF.DefaultsSchema.FillMenuDefaults },
+        { revision = 700, name = "retired_group_tooltips", apply = StripGroupTooltips },
+        { revision = 700, replay = true, name = "revision_17_additions", apply = SeedAdditions },
+        { revision = 700, replay = true, name = "group_buff_strata", apply = SeedTrackedStrata },
+        { revision = 700, replay = true, name = "sparse_persistence_defaults", apply = MSUF.DefaultsSchema.FillMenuDefaults },
     }
     function Migrations.Apply(profile, skipMedia)
         if type(profile) ~= "table" or MSUF_Defaults_IsFreshInstallProfileDB(profile) then return profile end
-        if (tonumber(profile._msufStateSchema) or 0) >= Migrations.Schema then
-            if skipMedia ~= true then Migrations.RepairBarNames(profile) end
-            -- Older clients may save their own legacy migration versions again.
-            Migrations.Ledger[2][2](profile)
-            Migrations.Ledger[3][2](profile)
-            -- Capability-dependent nil fills are portable across client changes.
-            SeedAdditions(profile)
-            SeedTrackedStrata(profile)
-            MSUF.DefaultsSchema.FillMenuDefaults(profile)
-            return profile
-        end
+        local revision = tonumber(profile._msufStateSchema) or 0
         for _, step in ipairs(Migrations.Ledger) do
-            if step[1] ~= "legacy_bar_names" or skipMedia ~= true then step[2](profile) end
+            if (not (revision >= step.revision) or step.replay == true)
+                and (step.name ~= "legacy_bar_names" or skipMedia ~= true) then
+                step.apply(profile)
+            end
         end
-        profile._msufStateSchema = Migrations.Schema
+        if not (revision >= Migrations.Schema) then profile._msufStateSchema = Migrations.Schema end
         return profile
     end
+
     function Migrations.CompleteImportedGroupFontOwnership(profile)
         -- Group repair may create owners after the defaults translator ran.
         -- Finish only its font ownership decision, previously made by the
@@ -3245,9 +2775,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     --- 5.6 -> 6.0 shape repair for existing DBs and factory defaults.
     MSUF_Defaults_NormalizeProfileTo60Defaults(profileDB)
     --- Root toggle: Shorten unit names (Frames -> General)
-    if profileDB.shortenNames == nil then
-        profileDB.shortenNames = false
-    end
+    MSUF.DefaultsSchema.Fill(profileDB, MSUF.DefaultsSchema.Values.CoreShortenNames)
     MSUF_Defaults_Stage_SeedAuraDefaults(profileDB)
     MSUF_Defaults_Stage_FillUnitDefaults(profileDB, g, legacyPortraitOverrideState)
     MSUF_Defaults_Stage_MigrateUnifiedAlpha(profileDB, g)
@@ -3357,6 +2885,39 @@ end
 ExportPublic("MSUF_EnsureDB", MSUF_EnsureDB)
 --- Optional exports for other modules
 MSUF.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile
+
+do
+    local factory, factoryLocale
+    MSUF.Defaults = {}
+    -- Scope is a root profile owner ("general", "bars", "player", ...).
+    -- nil scope reads root keys. Table results are independent copies.
+    function MSUF.Defaults.Get(scope, key)
+        local schema = MSUF.DefaultsSchema
+        local read = schema.ReadDefaults[scope]
+        if read == nil and schema.Values.UnitFrames[scope] then read = schema.ReadDefaults.unit end
+        if read and read[key] ~= nil then return read[key] end
+        if scope == "bars" then
+            local extra = MSUF.CPBuilders.ExtraAuraDefaults[key]
+            if extra ~= nil then
+                if type(extra) == "table" then return schema.Fill({}, extra) end
+                return extra
+            end
+        end
+        local locale = MSUF_Defaults_GetEffectiveLocale()
+        if factory == nil or factoryLocale ~= locale then
+            factory = MSUF_Defaults_CreateFactoryProfile() or {}
+            MSUF_NormalizeProfileDefaults(factory, true)
+            factoryLocale = locale
+        end
+        local owner = factory
+        if scope ~= nil then owner = factory[scope] end
+        if type(owner) ~= "table" then return nil end
+        local value = owner[key]
+        if type(value) == "table" then return MSUF.DefaultsSchema.Fill({}, value) end
+        return value
+    end
+end
+
 MSUF.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy
 MSUF.MSUF_EnsureDB = MSUF_EnsureDB
 MSUF.EnsureDB = MSUF_EnsureDB
