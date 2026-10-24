@@ -14,7 +14,7 @@ local Providers = {
 }
 
 -- Bind mandatory factories once; report both the consumer and received shape.
-local function RequireFactory(key)
+function Providers.RequireFactory(key)
   local factories = MSUF.UFModuleFactories
   local factory = factories[key]
   local kind = type(factory)
@@ -504,7 +504,7 @@ local function FullHealthAlpha(unit)
   return UnitHealthPercent(unit, true, curve)
 end
 
-local PositionOverAbsorbGlow = RequireFactory("PredictionGlow")(
+local PositionOverAbsorbGlow = Providers.RequireFactory("PredictionGlow")(
   CreateFrame, PixelLayoutRegion, OVER_ABSORB_TEXTURE, OVER_ABSORB_GLOW_W, OVER_ABSORB_GLOW_OFFSET, issecretvalue
 )
 
@@ -1762,9 +1762,9 @@ local function UpdateMixedFollowHealthValue(frame, unit, cfg, seedHP, seedMaxHP)
 end
 
 -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
-local predictionQueueA, predictionQueueB = {}, {}
-local predictionWriteQueue = predictionQueueA
+local predictionWriteQueue, predictionReadQueue = {}, {}
 local predictionWriteCount = 0
+local predictionReadCount, predictionReadHead = 0, 1
 local predictionDriver
 local predictionDriverArmed
 local predictionDriverPersistent
@@ -1784,7 +1784,7 @@ CancelQueuedPrediction = function(frame)
   frame._msufPredictionDirtyMask = nil
   -- Every caller hides or re-renders the glow (Apply, Suspend, offline).
   frame._msufPredictionGlowDeferred = nil
-  if predictionWriteCount == 0 and predictionDriverArmed == true then
+  if predictionWriteCount == 0 and predictionReadHead > predictionReadCount and predictionDriverArmed == true then
     if predictionDriverPersistent == true then
       predictionDriver:Hide()
     elseif predictionDriver and predictionDriver.SetScript then
@@ -1796,17 +1796,19 @@ CancelQueuedPrediction = function(frame)
 end
 
 local function ArmPredictionDriver()
-  if predictionDriverArmed == true then return true end
-  if not predictionDriver and CreateFrame then
-    predictionDriver = CreateFrame("Frame")
-    if predictionDriver and predictionDriver.SetScript
-      and predictionDriver.Hide and predictionDriver.Show then
-      predictionDriver:SetScript("OnUpdate", FlushPredictionQueue)
-      predictionDriver:Hide()
+  -- The sole caller already checked the armed flag. Validate the native driver
+  -- once at creation instead of repeating the same capability reads per batch.
+  if not predictionDriver then
+    if not CreateFrame then return false end
+    local driver = CreateFrame("Frame")
+    if not (driver and driver.SetScript) then return false end
+    predictionDriver = driver
+    if driver.Hide and driver.Show then
+      driver:SetScript("OnUpdate", FlushPredictionQueue)
+      driver:Hide()
       predictionDriverPersistent = true
     end
   end
-  if not (predictionDriver and predictionDriver.SetScript) then return false end
   predictionDriverArmed = true
   if predictionDriverPersistent == true then
     predictionDriver:Show()
@@ -1831,8 +1833,10 @@ local function QueuePredictionDataEvent(frame, event)
     end
   end
 
-  local mask = frame._msufPredictionDirtyMask or 0
-  if (mask % (bit * 2)) < bit then
+  local mask = frame._msufPredictionDirtyMask
+  if not mask then
+    frame._msufPredictionDirtyMask = bit
+  elseif (mask % (bit * 2)) < bit then
     frame._msufPredictionDirtyMask = mask + bit
   end
   -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
@@ -1875,49 +1879,52 @@ end
 
 -- hot path: kept whole (perf rule)
 FlushPredictionQueue = function()
-  if predictionDriverPersistent == true then
-    predictionDriver:Hide()
-  elseif predictionDriver and predictionDriver.SetScript then
-    predictionDriver:SetScript("OnUpdate", nil)
+  if predictionReadHead > predictionReadCount then
+    predictionReadQueue, predictionWriteQueue = predictionWriteQueue, predictionReadQueue
+    predictionReadCount, predictionReadHead = predictionWriteCount, 1
+    predictionWriteCount = 0
   end
-  predictionDriverArmed = nil
+  local batch = predictionReadQueue
 
-  local batch = predictionWriteQueue
-  local count = predictionWriteCount
-  predictionWriteQueue = batch == predictionQueueA and predictionQueueB or predictionQueueA
-  predictionWriteCount = 0
-
-  for i = 1, count do
+  -- Enqueue/cancel keep the sealed batch dense; only this drain removes entries.
+  for i = predictionReadHead, predictionReadCount do
     local frame = batch[i]
     batch[i] = nil
-    if frame then
-      frame._msufPredictionQueued = nil
-      local mask = frame._msufPredictionDirtyMask
-      frame._msufPredictionDirtyMask = nil
-      if mask then
-        -- A transiently missing unit may have disabled and cleared the cached
-        -- runtime plan after this event was registered. Let UpdateFull validate
-        -- the current spec and rebuild that plan instead of stranding the bar
-        -- until an unrelated health/lifecycle event happens.
-        local flush = frame._msufPredictionFlushData
-        if flush then
-          flush(frame, mask)
-        else
-          UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey, nil, nil, true)
-        end
+    -- Commit before a writer can raise; the armed driver resumes the remaining
+    -- batch next tick without replaying the failed item.
+    predictionReadHead = i + 1
+    frame._msufPredictionQueued = nil
+    local mask = frame._msufPredictionDirtyMask
+    frame._msufPredictionDirtyMask = nil
+    if mask then
+      -- A transiently missing unit may have disabled and cleared the cached
+      -- runtime plan after this event was registered. Let UpdateFull validate
+      -- the current spec and rebuild that plan instead of stranding the bar
+      -- until an unrelated health/lifecycle event happens.
+      local flush = frame._msufPredictionFlushData
+      if flush then
+        flush(frame, mask)
+      else
+        UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey, nil, nil, true)
       end
-      -- A health tick left its glow to this drain (UpdateGlowHealthFast). A
-      -- drain that drew the glow consumed it; otherwise repeat the tick now.
-      if frame._msufPredictionGlowDeferred == true then
-        frame._msufPredictionGlowDeferred = nil
-        UpdateGlowHealthFast(frame, "UNIT_HEALTH", frame.MSUFUnitKey)
-      end
+    end
+    -- A health tick left its glow to this drain (UpdateGlowHealthFast). A
+    -- drain that drew the glow consumed it; otherwise repeat the tick now.
+    if frame._msufPredictionGlowDeferred == true then
+      frame._msufPredictionGlowDeferred = nil
+      UpdateGlowHealthFast(frame, "UNIT_HEALTH", frame.MSUFUnitKey)
     end
   end
 
-  -- A prediction API callback can synchronously queue more work. It belongs to
-  -- the following rendered frame, never to the batch currently being drained.
-  if predictionWriteCount > 0 then ArmPredictionDriver() end
+  -- Writer-enqueued work stays in the next batch and shares the armed driver.
+  if predictionWriteCount == 0 then
+    if predictionDriverPersistent == true then
+      predictionDriver:Hide()
+    elseif predictionDriver and predictionDriver.SetScript then
+      predictionDriver:SetScript("OnUpdate", nil)
+    end
+    predictionDriverArmed = nil
+  end
 end
 
 function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
