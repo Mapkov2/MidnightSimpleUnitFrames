@@ -610,6 +610,7 @@ function Stage.BindPositionWriters(st)
     local CurrentStatusSpec, HandleOffset, PointOffset = st.CurrentStatusSpec, st.HandleOffset, st.PointOffset
     local RefreshGroupIndicatorDragPreview = st.RefreshGroupIndicatorDragPreview
     -- Runs on every drag frame (previewOnly) and on release; no helper calls beyond the original path.
+    -- hot path: kept whole (perf rule)
     local function SaveHandlePosition(handle, action, previewOnly)
         if not (handle and box._mock) or handle._locked or ConfigCombatLocked() then return false end
         if handle._cfgText then return end
@@ -621,8 +622,8 @@ function Stage.BindPositionWriters(st)
                 local scale = handle._previewWriteScale or handle._previewScale or m._previewScale or 1
                 local conf = H.Conf(H.CurrentScope())
                 if not conf then return end
-                conf[kind[2]] = OffsetToConfig(offX or 0, scale)
-                conf[kind[3]] = OffsetToConfig(offY or 0, scale)
+                conf[kind[2]] = OffsetToConfig((offX or 0) - (handle._msufEngineOffsetX or 0), scale)
+                conf[kind[3]] = OffsetToConfig((offY or 0) - (handle._msufEngineOffsetY or 0), scale)
                 if not previewOnly then
                     RefreshGroupPreviewAfterMove(handle)
                     CheckpointHandleHistory(handle, action)
@@ -684,7 +685,8 @@ end
 function Stage.BindNudge(st)
     local H, Round = st.H, st.Round
     local CheckpointHandleHistory, RefreshGroupPreviewAfterMove = st.CheckpointHandleHistory, st.RefreshGroupPreviewAfterMove
-    local CurrentStatusSpec, HandleOffsets, SpellPlacedForHandle, WriteTextHandleOffsets = st.CurrentStatusSpec, st.HandleOffsets, st.SpellPlacedForHandle, st.WriteTextHandleOffsets
+    local CurrentStatusSpec, HandleOffsets = st.CurrentStatusSpec, st.HandleOffsets
+    local SpellPlacedForHandle, WriteTextHandleOffsets = st.SpellPlacedForHandle, st.WriteTextHandleOffsets
     local function NudgeHandlePosition(handle, dx, dy)
         if not handle then return false end
         if handle._cfgText then
@@ -741,7 +743,8 @@ end
 --- the transactional box:NudgeHandleExact API.
 function Stage.BindExactNudge(st)
     local H, M, Round, box = st.H, st.M, st.Round, st.box
-    local CurrentStatusSpec, SelectHandle, SpellPlacedForHandle, WriteTextHandleOffsets = st.CurrentStatusSpec, st.SelectHandle, st.SpellPlacedForHandle, st.WriteTextHandleOffsets
+    local CurrentStatusSpec, SelectHandle = st.CurrentStatusSpec, st.SelectHandle
+    local SpellPlacedForHandle, WriteTextHandleOffsets = st.SpellPlacedForHandle, st.WriteTextHandleOffsets
     local ExactPreviewDelta = MSUF.MSUF2.PreviewHelpers.ExactPreviewDelta
     -- Where a handle keeps its position: the table, its X/Y keys, the anchor key and the Y value used while unset.
     -- create makes the missing aura lane / spell entry (a nil table with keys means nothing is saved yet); nil keys
@@ -1171,7 +1174,7 @@ function Stage.CreateLayerHandles(st)
         for field, value in pairs(row.fields) do
             handle[field] = value
         end
-        if row.pool then AddIconPool(handle, row.pool) end
+        if row.slot == "spellHandle" then AddIconPool(handle, row.pool) end
         st[row.slot] = handle
     end
     for i = 1, #LAYER_HANDLES do
@@ -1184,12 +1187,6 @@ function Stage.CreateLayerHandles(st)
         local statusHandle = CreatePreviewHandle("status_" .. tostring(spec.value or i), "sicons", { 0.80, 0.67, 0.20 }, StatusLabel(spec), 78, 28, false)
         statusHandle._cfgStatus = true
         statusHandle._statusSpec = spec
-        statusHandle._statusTex = PixelLayoutRegion(statusHandle:CreateTexture(nil, "ARTWORK"))
-        statusHandle._statusTex:SetPoint("TOPLEFT", statusHandle, "TOPLEFT", 0, 0)
-        statusHandle._statusTex:SetPoint("BOTTOMRIGHT", statusHandle, "BOTTOMRIGHT", 0, 0)
-        statusHandle._statusTex:Hide()
-        statusHandle._statusText = T.Font(statusHandle, "GameFontHighlightLarge", "DEAD", { 1, 1, 1, 1 })
-        statusHandle._statusText:SetPoint("CENTER")
         statusHandles[#statusHandles + 1] = statusHandle
     end
     st.statusHandles = statusHandles
@@ -1211,13 +1208,11 @@ function Stage.CreateLayerHandles(st)
             handle = CreatePreviewHandle(key, "si", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 },
                 tostring(item.display or item.auraName or "SPELL"):upper(), 44, 44, false)
             handle._cfgSpell = true
-            AddIconPool(handle, 1)
             spellIndicatorHandles[key] = handle
         end
-        handle._cfgSpellItem = {
-            specKey = item.specKey,
-            auraName = item.auraName,
-        }
+        local identity = handle._cfgSpellItem or {}
+        identity.specKey, identity.auraName = item.specKey, item.auraName
+        handle._cfgSpellItem = identity
         handle._msufSpellIndicatorPlaced = item.spellIndicatorSlot == true and item or item.placed
         handle._previewText = item.display or item.auraName or "Spell"
         handle._msufSpellIndicatorPreviewKey = key

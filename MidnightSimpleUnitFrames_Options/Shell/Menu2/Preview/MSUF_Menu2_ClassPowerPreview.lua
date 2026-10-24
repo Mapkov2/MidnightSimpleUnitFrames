@@ -1385,7 +1385,7 @@ end
 -- workspace selects a client-supported example independently of the character.
 -- Both paths reuse these painters with the configured bar and text colours.
 local SAMPLE = {
-    LIVE_EXTRAS = MSUF.Client ~= nil and MSUF.Client.IsRetail == true and MSUF.Client.IsForever ~= true,
+    LIVE_EXTRAS = MSUF.Client.IsRetail == true and MSUF.Client.IsForever ~= true,
     BLUE = { .45, .7, 1 }, WHITE = { 1, 1, 1 },
     FIVE = { 1, .65, .2 }, TICK = { .3, 1, .7 }, COST = { .7, .7, 1 },
     ARCANE = { .66, .42, 1 }, ARCANE_WARN = { 1, .78, .25 },

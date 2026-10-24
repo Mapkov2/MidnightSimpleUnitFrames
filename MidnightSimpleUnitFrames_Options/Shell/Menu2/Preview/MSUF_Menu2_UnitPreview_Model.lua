@@ -5,15 +5,7 @@ local FILE = "Menu2/UnitPreview_Model"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local M = MSUF.MSUF2 or {}
 local ExportPublic = MSUF.ExportPublic
-MSUF.L = MSUF.L or {}
-local L = MSUF.L
-if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
-local isEn = MSUF.LOCALE == "enUS"
-local function TR(v)
-    if type(v) ~= "string" then return v end
-    if isEn then return v end
-    return L[v] or v
-end
+local TR = MSUF.MSUF2.PreviewHelpers.TranslateUnitPreview
 local max, min = math.max, math.min
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"

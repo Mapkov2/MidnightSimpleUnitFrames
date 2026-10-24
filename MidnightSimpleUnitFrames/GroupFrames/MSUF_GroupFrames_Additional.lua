@@ -42,7 +42,7 @@ local DEFAULT_Y = { targets = 150, pets = -150, friendlyBoss = 150, healerMana =
 GF.ADDITIONAL_DEFAULT_X, GF.ADDITIONAL_DEFAULT_Y = DEFAULT_X, DEFAULT_Y
 local TARGET_TICK = 0.2
 -- Allied boss frames need boss unit tokens, which Classic Era and TBC lack.
-local BOSS_UNITS = not (Client and type(Client.SupportsUnit) == "function") or Client.SupportsUnit("boss1") == true
+local BOSS_UNITS = Client.SupportsUnit("boss1") == true
 GF.ADDITIONAL_HAS_BOSS_UNITS = BOSS_UNITS
 local PARTY_UNITS, PARTY_TARGETS, BOSS_TOKENS, BOSS_DRIVERS = {}, {}, {}, {}
 for i = 1, 4 do PARTY_UNITS[i], PARTY_TARGETS[i] = "party" .. i, "party" .. i .. "target" end
@@ -574,8 +574,8 @@ local function ListenBossIdentity(holder, on)
         return
     end
     holder:SetScript("OnEvent", RepaintBosses)
-    -- No client facts (a harness) is a client with the events, as BOSS_UNITS.
-    local supports = Client and Client.SupportsEvent
+    -- The client bootstrap supplies the supported-event capability on every client.
+    local supports = Client.SupportsEvent
     for i = 1, #BOSS_IDENTITY_EVENTS do
         local event = BOSS_IDENTITY_EVENTS[i]
         if not supports or supports(event) then holder:RegisterEvent(event) end

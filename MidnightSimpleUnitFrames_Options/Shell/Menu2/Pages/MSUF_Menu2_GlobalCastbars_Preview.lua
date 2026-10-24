@@ -38,7 +38,7 @@ end
 local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss arena"
 -- Empowered casts are an Evoker mechanic, Midnight only: the same client gate as
 -- the castbar page's Empowered Casts section (MSUF.Client.HasEmpoweredCasts).
-local CASTBAR_PREVIEW_EMPOWERED = not MSUF.Client or (MSUF.Client.HasEmpoweredCasts ~= false and MSUF.Client.IsClassic ~= true)
+local CASTBAR_PREVIEW_EMPOWERED = MSUF.Client.HasEmpoweredCasts ~= false and MSUF.Client.IsClassic ~= true
 local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords(CASTBAR_PREVIEW_EMPOWERED and "normal channel empowered" or "normal channel")
 local CASTBAR_PAGE_WORK_DELAY = 0.04
 local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30

@@ -1,24 +1,21 @@
 --- Group preview render/composition.
 ---
 --- Native creates the preview host and interaction handles; this module owns
---- the hot refresh path that lays out the mock group frame and preview layers.
+--- the options composition path that binds engine regions to preview handles.
 local _, MSUF = ...
 MSUF = MSUF or {}
 local FILE = "Menu2/GroupPreview_Render"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local AuraPainter = assert(MSUF.Require("MSUF_Auras3", FILE).MockAuraPainter, "MSUF: missing core mock aura painter")
-local AuraState, PaintSwipe, PaintDurationBar = AuraPainter.AuraState, AuraPainter.Swipe, AuraPainter.DurationBar
+local PaintSwipe, PaintDurationBar = AuraPainter.Swipe, AuraPainter.DurationBar
 -- Core exports the refresh path reads, resolved once (their providers load with the
--- core): the preview animation frame state, the status icon texture resolver and the
--- dispel border mode normalizer. Every refresh and status icon used to look them up.
+-- core): the preview animation frame state and the status icon texture resolver.
 local CoreExports = {
     BuildAnimationFrameState = MSUF.Require("MSUF_BuildPreviewAnimationFrameState", FILE),
     GetStatusIconTexture = MSUF.Require("MSUF_GetStatusIconTexture", FILE),
-    NormalizeDispelBorderMode = MSUF.Require("MSUF_NormalizeLegacyDispelBorderMode", FILE),
 }
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local PublicGlobals = MSUF.PublicGlobals
 local EnsureDB = M.EnsureDB
 local Render = M.GroupPreviewRender or {}
 M.GroupPreviewRender = Render
@@ -41,7 +38,7 @@ function Render.MockBackdrop(file)
 end
 -- Friendly bosses need boss units, which Classic Era and TBC do not have: a
 -- client fact read once at load. A harness without MSUF.Client previews them.
-local PREVIEW_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1") == true
+local PREVIEW_BOSS_UNITS = MSUF.Client.SupportsUnit("boss1") == true
 local ADDITIONAL_PREVIEW_PREFIXES = PREVIEW_BOSS_UNITS and { "pets", "targets", "friendlyBoss", "healerMana" }
     or { "pets", "targets", "healerMana" }
 Render.ADDITIONAL_PREVIEW_PREFIXES = ADDITIONAL_PREVIEW_PREFIXES
@@ -146,351 +143,32 @@ local function SetRoundedSpellPreview(root, target, shown, thickness, r, g, b, a
 end
 local SetPreviewFrameLevel, PreviewElementLevel, PreviewInteractionLevel
 
-local function DisableGroupPreviewPortraitMouse(frame)
-    if not frame then return end
-    if frame.EnableMouse then frame:EnableMouse(false) end
-    if frame.SetMouseClickEnabled then frame:SetMouseClickEnabled(false) end
-    if frame.SetMouseMotionEnabled then frame:SetMouseMotionEnabled(false) end
-end
-
-local function EnsureGroupPreviewPortrait(mock, handle)
-    local holder = mock and mock._msufGroupPortrait
-    if handle and holder ~= handle then
-        if holder then holder:Hide() end
-        holder = handle
-        mock._msufGroupPortrait = holder
-    end
-    if holder and holder._msufGroupPortraitVisual == true then
-        DisableGroupPreviewPortraitMouse(holder.border)
-        return holder
-    end
-    if not mock then return nil end
-    holder = holder or handle or PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-    if holder ~= handle then
-        DisableGroupPreviewPortraitMouse(holder)
-    else
-        -- Match the working Unit Preview contract: the portrait Button itself
-        -- owns the visible texture and therefore remains the top mouse target.
-        if holder.EnableMouse then holder:EnableMouse(true) end
-        if holder.SetMouseClickEnabled then holder:SetMouseClickEnabled(true) end
-        if holder.SetMouseMotionEnabled then holder:SetMouseMotionEnabled(true) end
-    end
-    holder.bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND", nil, -1))
-    holder.bg:SetAllPoints(holder)
-    holder.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-    holder.tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
-    holder.tex:SetAllPoints(holder)
-    if holder.CreateMaskTexture and holder.tex.AddMaskTexture then
-        holder.mask = holder:CreateMaskTexture()
-        holder.mask:SetAllPoints(holder)
-        holder.tex:AddMaskTexture(holder.mask)
-        holder.bg:AddMaskTexture(holder.mask)
-    end
-    holder.border = PixelLayoutRegion(CreateFrame("Frame", nil, holder))
-    DisableGroupPreviewPortraitMouse(holder.border)
-    holder.border:SetAllPoints(holder)
-    holder.edges = {}
-    for i = 1, 4 do
-        local edge = PixelLayoutRegion(holder.border:CreateTexture(nil, "OVERLAY"))
-        edge:SetTexture("Interface\\Buttons\\WHITE8x8")
-        edge:Hide()
-        holder.edges[i] = edge
-    end
-    holder:Hide()
-    holder._msufGroupPortraitVisual = true
-    mock._msufGroupPortrait = holder
-    return holder
-end
-
-local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, ScaleValue, classToken)
-    local cfg = portrait.border
-    local p = holder._msufPreviewBorderSpec
-    if not p then
-        p = { border = {} }
-        holder._msufPreviewBorderSpec = p
-    end
-    p.shape = portrait.shape
-    p.border.thickness = ScaleValue(cfg and cfg.thickness or 2, previewScale, 1)
-    p.border.fill, p.border.art = cfg and cfg.fill, cfg and cfg.art
-    p.border.direction = cfg and cfg.direction
-    holder._msufLayoutWidth, holder._msufLayoutHeight = holder._msufPreviewWidth, holder._msufPreviewHeight
-    MSUF.UF.elements.Portrait.PaintBorder(holder, p, MSUF.UF.elements.Portrait.BorderColor(cfg, classToken, 5))
-end
-
---- Dispel-type symbol row.
----
---- The live symbol is a native AuraButton texture whose visibility and artwork
---- Blizzard owns, so it only ever appears with a real debuff on the unit. The
---- preview therefore draws stand-in art -- but it reads that art from the SAME
---- per-type tables Auras3 hands to Blizzard (MSUF.MSUF_Auras3.DispelSymbol), so
---- the preview cannot show a set the runtime would not.
----
---- "One per dispel type" is the default, so the row shows all five types side by
---- side along the configured growth axis; TOP mode shows only the first.
-local DISPEL_SYMBOL_PREVIEW_ORDER = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
-
-local function DispelSymbolPreviewArt(texture, DS, style, dispelType)
-    if DS and DS.PreviewArt then
-        DS.PreviewArt(texture, style, dispelType)
-        return
-    end
-    texture:SetTexCoord(0, 1, 0, 1)
-    local assets = DS and DS.AssetMap and DS.AssetMap(style)
-    if assets then
-        local asset = assets[dispelType]
-        texture:SetTexture(asset and asset.asset or nil)
-        return
-    end
-    local atlas = DS and ((style == "BLIZZARD_RING" and DS.rings)
-        or (style == "BLIZZARD_BORDER" and DS.borders)
-        or DS.icons)
-    atlas = atlas and atlas[dispelType]
-    if atlas and texture.SetAtlas then
-        texture:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
-    else
-        texture:SetTexture(nil)
-    end
-end
-
-local function PaintGroupPreviewDispelOverlay(scene)
-    local overlay = scene.runtimeSpec and scene.runtimeSpec.group
-    local mock = scene.mock
-    local host = mock and mock._msufGFPreviewDispelOverlayHost
-    local layerOn = overlay and overlay.dispelOverlayEnabled == true
-        and scene.layerAvailable.dispelOverlay ~= false
-        and scene.layerVisible.dispelOverlay ~= false
-    local health = mock and mock._health
-    if not (layerOn and health) then
-        if host then host:Hide() end
-        return
-    end
-    if not host then
-        host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-        host:EnableMouse(false)
-        host.Region = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
-        host.Region:SetTexture("Interface\\Buttons\\WHITE8X8")
-        mock._msufGFPreviewDispelOverlayHost = host
-        mock._msufGFPreviewDispelOverlayRegion = host.Region
-    end
-    host:ClearAllPoints()
-    host:SetAllPoints(health)
-    local level = scene.S.Layers and scene.S.Layers.ElementLevel
-        and PreviewElementLevel(mock, scene.S.Layers, overlay.dispelOverlayLayer, 0, 12)
-        or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
-            + (tonumber(overlay.dispelOverlayLayer) or 0) + 12)
-    SetPreviewFrameLevel(host, level)
-    local target = overlay.dispelOverlayOnHealth ~= false and health.GetStatusBarTexture
-        and health:GetStatusBarTexture() or health
-    if not target then
-        host:Hide()
-        return
-    end
-    local region = host.Region
-    local style = tostring(overlay.dispelOverlayStyle or "FULL"):upper()
-    local thickness = scene.S.ScaleValue(tonumber(scene.runtimeBorder.highlightThickness) or 3,
-        scene.previewScale, 1)
-    scene.MSUF.MSUF_Auras3.PaintDispelOverlayPreview(region, target, style, thickness,
-        scene.runtimeSpec and scene.runtimeSpec.dispel)
-    local alpha = math.max(0, math.min(1, tonumber(overlay.dispelOverlayAlpha) or 0.35))
-    local layerAlpha = scene.soloLayer and scene.soloLayer ~= "dispelOverlay" and 0.15 or 1
-    region:SetAlpha(alpha * layerAlpha)
-    region:Show()
-    host:Show()
-end
-
--- Symbol row growth -> anchor point and the x, y direction of each step.
-local DISPEL_SYMBOL_GROWTH = {
-    LEFT = { "TOPRIGHT", -1, 0 }, UP = { "BOTTOMLEFT", 0, 1 }, DOWN = { "TOPLEFT", 0, -1 }, RIGHT = { "TOPLEFT", 1, 0 },
-}
-local function PaintGroupPreviewDispelSymbol(scene)
-    local symbol = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
-    local handle = scene.S and scene.S.dispelSymbolHandle
-    if not handle then return end
-    local layerOn = symbol and symbol.enabled == true
-        and scene.layerAvailable and scene.layerAvailable.dispelSymbol ~= false
-        and scene.layerVisible and scene.layerVisible.dispelSymbol ~= false
-    if not layerOn then
-        handle:Hide()
-        return
-    end
-    local DS = scene.MSUF and scene.MSUF.MSUF_Auras3 and scene.MSUF.MSUF_Auras3.DispelSymbol
-    local scale, ScaleValue = scene.previewScale, scene.S.ScaleValue
-    local size = ScaleValue(tonumber(symbol.size) or 12, scale, 1)
-    local spacing = ScaleValue(tonumber(symbol.spacing) or 2, scale, 0)
-    local count = (tostring(symbol.mode or "ALL"):upper() ~= "TOP") and #DISPEL_SYMBOL_PREVIEW_ORDER or 1
-    -- Resolved through the runtime helper so the preview row and the live row
-    -- can never disagree about which way the symbols march.
-    local growth = (DS and DS.ResolveGrowth and DS.ResolveGrowth(symbol.growth, symbol.anchor))
-        or tostring(symbol.growth or "RIGHT"):upper()
-    local vertical = growth == "UP" or growth == "DOWN"
-    local step = size + spacing
-    local span = size + (count - 1) * step
-    -- The handle is the whole row so a single drag moves the set, exactly like
-    -- the live sensor keeps its per-type steps relative to one stored origin.
-    if not (handle._dragging == true) then
-        handle:ClearAllPoints()
-        handle:SetSize(vertical and size or span, vertical and span or size)
-        local anchor = tostring(symbol.anchor or "TOPRIGHT")
-        handle:SetPoint(anchor, scene.mock, anchor,
-            ScaleValue(tonumber(symbol.x) or 0, scale), ScaleValue(tonumber(symbol.y) or 0, scale))
-    end
-    -- Same solo-layer dimming SceneLayerAlpha applies; that helper is declared
-    -- further down the file, so the two lines are inlined here.
-    handle:SetAlpha(scene.soloLayer and scene.soloLayer ~= "dispelSymbol" and 0.15 or 1)
-    local icons = handle._icons or {}
-    local direction = DISPEL_SYMBOL_GROWTH[growth] or DISPEL_SYMBOL_GROWTH.RIGHT
-    local iconAlpha = tonumber(symbol.alpha) or 1
-    if iconAlpha < 0 then iconAlpha = 0 elseif iconAlpha > 1 then iconAlpha = 1 end
-    for i = 1, #icons do
-        local tex = icons[i]
-        if i > count then
-            tex:Hide()
-        else
-            local offset = (i - 1) * step
-            tex:ClearAllPoints()
-            tex:SetSize(size, size)
-            tex:SetPoint(direction[1], handle, direction[1], direction[2] * offset, direction[3] * offset)
-            tex:SetAlpha(iconAlpha)
-            DispelSymbolPreviewArt(tex, DS, symbol.style, DISPEL_SYMBOL_PREVIEW_ORDER[i])
-            tex:Show()
-        end
-    end
-    handle:Show()
-end
-
 local function PaintGroupPreviewPortrait(scene)
-    local portrait = scene.runtimeSpec and scene.runtimeSpec.portrait
-    local holder = scene.mock and scene.mock._msufGroupPortrait
-    local handle = scene.S and scene.S.portraitHandle
-    if scene.kind ~= "party" or not (portrait and portrait.enabled == true) then
-        if holder then
-            MSUF.UF.elements.Portrait.PaintBorder(holder)
-            holder:Hide()
-        end
-        if handle then handle:Hide() end
-        return
+    local frame, handle = scene.mock._cell, scene.S.portraitHandle
+    if not frame then return end
+    local portrait = frame.MSUFSpec and frame.MSUFSpec.portrait
+    local holder = frame.MSUFPortraitHolder
+    local shown = scene.kind == "party" and portrait and portrait.enabled == true
+    -- The engine owns mask, border, shadow, artwork, opacity and placement.
+    if holder then
+        holder:SetShown(shown and scene.layerVisible.portrait ~= false)
     end
-    holder = EnsureGroupPreviewPortrait(scene.mock, handle)
-    if not holder then return end
-    local layerAvailable = scene.layerAvailable and scene.layerAvailable.portrait ~= false
-    local layerOn = layerAvailable and scene.layerVisible.portrait ~= false
-    if not layerOn then
-        holder:Hide()
-        if handle then handle:Hide() end
-        return
-    end
-    local scale, ScaleValue = scene.previewScale, scene.S.ScaleValue
-    local width = ScaleValue(portrait.width or portrait.size or 36, scale, 1)
-    local height = ScaleValue(portrait.height or portrait.size or 36, scale, 1)
-    local x = ScaleValue(portrait.x or 0, scale)
-    local y = ScaleValue(portrait.y or 0, scale)
-    holder._msufPreviewWidth, holder._msufPreviewHeight = width, height
-    local owner = handle or holder
-    if not (handle and handle._dragging == true) then
-        owner:ClearAllPoints()
-        if portrait.placement == "DETACHED" then
-            owner:SetSize(width, height)
-            owner:SetPoint(portrait.point or "RIGHT", scene.mock, portrait.relPoint or "LEFT", x, y)
-        elseif portrait.placement == "OVERLAY" then
-            if portrait.overlayAlign == "FULL" then
-                local health = scene.mock._health or scene.mock
-                owner:SetPoint("TOPLEFT", health, "TOPLEFT", x, -y)
-                owner:SetPoint("BOTTOMRIGHT", health, "BOTTOMRIGHT", -x, y)
-                holder._msufPreviewWidth = math.max(1, (tonumber(health:GetWidth()) or width) - x * 2)
-                holder._msufPreviewHeight = math.max(1, (tonumber(health:GetHeight()) or height) - y * 2)
-            else
-                owner:SetSize(width, height)
-                local align = portrait.overlayAlign or "LEFT"
-                owner:SetPoint(align, scene.mock, align, x, y)
-            end
-        else
-            owner:SetSize(width, height)
-            if portrait.side == "RIGHT" then owner:SetPoint("LEFT", scene.mock, "RIGHT", x, y)
-            else owner:SetPoint("RIGHT", scene.mock, "LEFT", x, y) end
+    if shown and frame.portrait then
+        if portrait.castSpellIcon == true and scene.box._animationEnabled == true then
+            frame.portrait:SetTexture(scene.S.CurrentSpellTexture(scene.kind))
+            frame.portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        elseif portrait.render ~= "CLASS" and SetPortraitTexture then
+            SetPortraitTexture(frame.portrait, "player")
         end
     end
+    local helpers = M.PreviewHelpers
+    helpers.BindGroupSceneHandle(handle, scene.mock, holder, scene.previewScale, nil,
+        tonumber(portrait and portrait.x) or 0, tonumber(portrait and portrait.y) or 0)
     if handle then
-        handle._locked = portrait.placement == "OVERLAY" and portrait.overlayAlign == "FULL"
-        handle._previewScale, handle._previewWriteScale = scale, scale
-        if holder ~= handle then
-            holder:ClearAllPoints()
-            holder:SetAllPoints(handle)
-        end
+        handle._locked = portrait and portrait.placement == "OVERLAY" and portrait.overlayAlign == "FULL"
+        handle:SetAlpha((scene.soloLayer and scene.soloLayer ~= "portrait" and 0.15 or 1) * (scene.engineAlpha or 1))
     end
-    local level = math.max(0, math.min(30, tonumber(portrait.levelOffset) or 7))
-    if holder.SetFrameLevel and scene.mock.GetFrameLevel then
-        local layers = scene.S.Layers or {}
-        local handleLevel = layers.ElementLevel and PreviewElementLevel(scene.mock, layers, level, 7, 0)
-            or ((scene.mock:GetFrameLevel() or 1) + level)
-        if level == 0 and layers.PortraitLevel then
-            handleLevel = layers.PortraitLevel(scene.mock._health or scene.mock, 0, 7)
-        end
-        if handle then SetPreviewFrameLevel(handle, handleLevel) end
-        if holder ~= handle then SetPreviewFrameLevel(holder, handleLevel) end
-        SetPreviewFrameLevel(holder.border, (holder:GetFrameLevel() or 1) + 1)
-        if handle and handle._selectBorder then
-            SetPreviewFrameLevel(handle._selectBorder, (holder.border:GetFrameLevel() or 1) + 1)
-        end
-    end
-    local layerAlpha = scene.soloLayer and scene.soloLayer ~= "portrait" and 0.15 or 1
-    local configuredPortraitAlpha = tonumber(portrait.alpha) or 1
-    local frameAlpha = scene.runtimeSpec and scene.runtimeSpec.alpha
-    if frameAlpha and frameAlpha.excludeTextPortrait ~= true then
-        configuredPortraitAlpha = configuredPortraitAlpha * (tonumber(frameAlpha.hpAlpha) or 1)
-    end
-    if holder == handle then
-        -- Keep the Button/selection affordance interactive at full layer alpha;
-        -- only the portrait artwork follows the configured portrait opacity.
-        holder:SetAlpha(layerAlpha)
-        if holder.bg then holder.bg:SetAlpha(configuredPortraitAlpha) end
-        if holder.tex then holder.tex:SetAlpha(configuredPortraitAlpha) end
-        if holder.border then holder.border:SetAlpha(configuredPortraitAlpha) end
-        if holder.ring then holder.ring:SetAlpha(configuredPortraitAlpha) end
-    else
-        holder:SetAlpha(configuredPortraitAlpha * layerAlpha)
-    end
-    if handle and holder ~= handle then
-        handle:SetAlpha(layerAlpha)
-    end
-    if handle then handle:Show() end
-    MSUF.UF.elements.Portrait.PaintMask(holder, portrait)
-    local classToken = scene.sampleClass
-    local castTexture = portrait.castSpellIcon == true and scene.box._animationEnabled == true
-        and scene.S.CurrentSpellTexture(scene.kind) or nil
-    if castTexture then
-        holder.tex:SetTexture(castTexture)
-        holder.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    elseif portrait.render == "CLASS" then
-        local media = scene.MSUF and scene.MSUF.PortraitMedia
-        local visual = media and media.ResolveClassPortrait and media.ResolveClassPortrait(classToken, portrait.classStyle)
-        if not visual then
-            local coords = classToken and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classToken]
-            visual = {
-                texture = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES",
-                left = coords and coords[1] or 0, right = coords and coords[2] or 1,
-                top = coords and coords[3] or 0, bottom = coords and coords[4] or 1,
-            }
-        end
-        if visual.atlas and holder.tex.SetAtlas then holder.tex:SetAtlas(visual.atlas)
-        else
-            holder.tex:SetTexture(visual.texture or "Interface\\ICONS\\INV_Misc_QuestionMark")
-            holder.tex:SetTexCoord(visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
-        end
-    else
-        if SetPortraitTexture then SetPortraitTexture(holder.tex, "player")
-        else holder.tex:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark") end
-        holder.tex:SetTexCoord(portrait.texL or 0.08, portrait.texR or 0.92, portrait.texT or 0.08, portrait.texB or 0.92)
-    end
-    holder.tex:SetVertexColor(1, 1, 1, 1)
-    if portrait.bg and portrait.bg.enabled == true then
-        holder.bg:SetVertexColor(portrait.bg.r or 0.05, portrait.bg.g or 0.05, portrait.bg.b or 0.05, portrait.bg.a or 0.85)
-        holder.bg:Show()
-    else
-        holder.bg:Hide()
-    end
-    LayoutGroupPreviewPortraitBorder(holder, portrait, scale, ScaleValue, classToken)
-    if holder == handle and holder.ring then holder.ring:SetAlpha(configuredPortraitAlpha) end
-    holder:Show()
+    scene.mock._msufGroupPortrait = holder
 end
 
 -- Kept as a narrow module seam so the interaction smoke can exercise the
@@ -635,15 +313,6 @@ end
 local function SceneLayerAlpha(scene, key)
     if scene.layerAvailable[key] == false then return 0 end
     return scene.soloLayer and scene.soloLayer ~= key and 0.15 or 1
-end
-
-local function AuraPreviewAlpha(cfg)
-    if type(cfg) ~= "table" then return 1 end
-    if cfg.alpha ~= nil then return tonumber(cfg.alpha) or 1 end
-    if cfg.behindBar == true then
-        return math.max(0, math.min(1, (tonumber(cfg.behindBarAlpha) or 85) / 100))
-    end
-    return 1
 end
 
 local function ApplyPreviewIconZoom(texture, zoom, baseInset)
@@ -1154,7 +823,8 @@ local function FinalizeSpellLevels(scene, hostStrata)
     PlaceIconEffectRoot(scene, spellHandle._msufSpellPreviewIconEffectRoot, hostStrata, spellHandle)
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
         ApplyHandleStrata(scene, handle, hostStrata)
-        SetPreviewFrameLevel(handle, PreviewElementLevel(mock, layers, handle._msufSpellIndicatorLayer or spellLayer, 9, 1))
+        SetPreviewFrameLevel(handle, handle._msufEngineFrameLevel
+            or PreviewElementLevel(mock, layers, handle._msufSpellIndicatorLayer or spellLayer, 9, 1))
         SyncIconDetailLevels(layers, handle)
         local effectRoot = handle._msufSpellPreviewEffectRoot
         PlaceSpellEffectRoot(scene, effectRoot, hostStrata, effectRoot and effectRoot._msufSpellPreviewKind)
@@ -1172,14 +842,7 @@ local function FinalizeLevels(scene, hostStrata)
         if handle then
             ApplyHandleStrata(scene, handle, hostStrata)
             local level = SetPreviewFrameLevel(handle, PreviewElementLevel(mock, layers, scene[lane[3]].layer, lane[5], 0))
-            local owners = handle._auraStyleOwners
-            if owners then
-                for j = 1, #owners do
-                    local owner = owners[j]
-                    if owner and owner.SetFrameLevel then SetPreviewFrameLevel(owner, level) end
-                end
-            end
-            SyncIconDetailLevels(layers, handle)
+            if handle._msufEngineFrameLevel then SetPreviewFrameLevel(handle, handle._msufEngineFrameLevel) end
         end
     end
     for i = 1, #RenderState.statusHandles do
@@ -1187,7 +850,7 @@ local function FinalizeLevels(scene, hostStrata)
         local spec = handle and handle._statusSpec
         if handle then
             local cfg = RenderState.RuntimeStatusConfig(scene.runtimeStatus, spec)
-            SetPreviewFrameLevel(handle, PreviewElementLevel(mock, layers,
+            SetPreviewFrameLevel(handle, handle._msufEngineFrameLevel or PreviewElementLevel(mock, layers,
                 cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7, 8))
         end
     end
@@ -1200,7 +863,8 @@ local function FinalizeLevels(scene, hostStrata)
     if RenderState.dispelSymbolHandle then
         ApplyHandleStrata(scene, RenderState.dispelSymbolHandle, hostStrata)
         SetPreviewFrameLevel(RenderState.dispelSymbolHandle,
-            PreviewElementLevel(mock, layers, dispelSymbolCfg and dispelSymbolCfg.layer, 8, 8))
+            RenderState.dispelSymbolHandle._msufEngineFrameLevel
+                or PreviewElementLevel(mock, layers, dispelSymbolCfg and dispelSymbolCfg.layer, 8, 8))
     end
     FinalizeSpellLevels(scene, hostStrata)
     for i = 1, #TEXT_LEVEL_SPECS do
@@ -1210,6 +874,8 @@ local function FinalizeLevels(scene, hostStrata)
     end
 end
 
+local ENGINE_TEXT_FIELDS = { "nameText", "hpTextLeft", "hpTextCenter", "hpTextRight",
+    "powerTextLeft", "powerTextCenter", "powerTextRight" }
 -- Shown state and layer alpha of the handles that follow a settings layer.
 local function FinalizeVisibility(scene)
     local RenderState = scene.S
@@ -1218,7 +884,7 @@ local function FinalizeVisibility(scene)
         local handle, key = RenderState[lane[2]], lane[1]
         if handle then
             handle:SetShown(scene.layerAvailable[key] and SceneLayerOn(scene, key))
-            handle:SetAlpha(SceneLayerAlpha(scene, key) * AuraPreviewAlpha(scene[lane[3]]))
+            handle:SetAlpha(SceneLayerAlpha(scene, key) * (scene.engineAlpha or 1))
         end
     end
     for i = 1, #RenderState.statusHandles do
@@ -1227,7 +893,7 @@ local function FinalizeVisibility(scene)
         if handle then
             handle:SetShown(RenderState.StatusSpecInMode(spec, scene.statusSpec)
                 and SceneStatusAvailable(scene, spec) and SceneLayerOn(scene, "status"))
-            handle:SetAlpha(SceneLayerAlpha(scene, "status"))
+            handle:SetAlpha(SceneLayerAlpha(scene, "status") * (scene.engineAlpha or 1))
         end
     end
     local spellVisible = scene.layerAvailable.si and SceneLayerOn(scene, "si")
@@ -1244,6 +910,14 @@ local function FinalizeVisibility(scene)
         handle:SetAlpha(SceneLayerAlpha(scene, "si"))
     end
     for i = 1, #TEXT_HANDLE_KEYS do scene.textHandles[TEXT_HANDLE_KEYS[i]]:SetAlpha(SceneLayerAlpha(scene, "text")) end
+    local frame, helpers = scene.mock._cell, M.PreviewHelpers
+    if frame then
+        local textAlpha = SceneLayerAlpha(scene, "text")
+        for i = 1, #ENGINE_TEXT_FIELDS do
+            helpers.ApplyGroupSceneLayerAlpha(scene.box, frame[ENGINE_TEXT_FIELDS[i]], textAlpha)
+        end
+        helpers.ApplyGroupSceneLayerAlpha(scene.box, frame.targetPowerBar, SceneLayerAlpha(scene, "power"))
+    end
 end
 
 -- The out-of-range fade of the Options preview: whole frame, or the health bar and its prediction bars only.
@@ -1317,54 +991,6 @@ local function GroupAuraDurationBar(bar, icon, cfg, size, auraState)
     size = math.max(1, tonumber(size) or 1)
     PaintDurationBar(bar, icon, cfg, size, size, auraState)
 end
---- Animation tick for one aura lane at the box's animation time: timers,
---- stacks, swipes and duration bars of the icons the last layout placed
---- (Stage.LayoutAuraGroup records it). Each icon keeps its own sample scratch,
---- so a tick allocates nothing.
-local function AnimateGroupAuraLane(elapsed, handle)
-    local anim = handle and handle._msufGFAuraAnim
-    if not anim then return end
-    local icons, rects = handle._icons, handle._previewRects
-    for i = 1, anim.maxIcons do
-        local tex = icons and icons[i]
-        if tex and rects and rects[i] then
-            local auraState = AuraState(tex, anim.groupKey, i, anim.cfg, elapsed)
-            local swipe = handle._iconSwipes and handle._iconSwipes[i]
-            if swipe and anim.swipe then
-                GroupAuraPreviewSwipe(swipe, tex, anim.size, auraState and auraState.remainingFrac, anim.swipeReverse)
-            end
-            GroupAuraDurationBar(handle._iconDurationBars and handle._iconDurationBars[i], tex, anim.cfg, anim.size, auraState)
-            local stack = handle._iconStacks and handle._iconStacks[i]
-            if stack then stack:SetText(anim.showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "") end
-            local timer = handle._iconTimers and handle._iconTimers[i]
-            if timer then timer:SetText(anim.showCooldown and (auraState and auraState.text or (i % 2 == 0 and "12" or "")) or "") end
-        end
-    end
-end
--- The lane handle fields of the render state, in paint order (read by the animation tick).
-local GROUP_AURA_LANE_HANDLES = { "buffHandle", "trackedBuffHandle", "debuffHandle", "externalHandle" }
-
---- Aura lane helpers: icon pools, growth and anchor resolution, text, swipe,
---- border and duration bar painters shared by every lane. They read
---- install-time state, or this refresh's lane state at call time, so one set
---- is built per preview box and every refresh reuses it.
--- Growth -> x sign, y sign, vertical growth, initial anchor.
-local RUNTIME_AURA_GROWTH = {
-    LEFTUP = { -1, 1, false, "BOTTOMRIGHT" },
-    LEFTDOWN = { -1, -1, false, "TOPRIGHT" },
-    RIGHTUP = { 1, 1, false, "BOTTOMLEFT" },
-    UP = { 1, 1, true, "BOTTOMLEFT" },
-    UPRIGHT = { 1, 1, true, "BOTTOMLEFT" },
-    UPLEFT = { 1, 1, true, "BOTTOMLEFT" },
-    DOWN = { 1, -1, true, "TOPLEFT" },
-    DOWNRIGHT = { 1, -1, true, "TOPLEFT" },
-    DOWNLEFT = { 1, -1, true, "TOPLEFT" },
-}
-local DEFAULT_AURA_GROWTH = { 1, -1, false, "TOPLEFT" }
-local function RuntimeAuraGrowth(growth)
-    local g = RUNTIME_AURA_GROWTH[growth] or DEFAULT_AURA_GROWTH
-    return g[1], g[2], g[3], g[4]
-end
 local TEXT_ANCHORS = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true,
     RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
@@ -1373,7 +999,6 @@ local function RuntimeAuraTextAnchor(anchor, fallback)
     if TEXT_ANCHORS[anchor] then return anchor end
     return fallback or "CENTER"
 end
-local PlaceAuraPreviewText = AuraPainter.PlaceText
 local function BuildAuraLaneHelpers(st, RenderState)
     local mock = RenderState.mock
     local GF_PREVIEW_ANCHOR_FRAC = RenderState.GF_PREVIEW_ANCHOR_FRAC
@@ -1387,40 +1012,18 @@ local function BuildAuraLaneHelpers(st, RenderState)
         handle:ClearAllPoints()
         handle:SetPoint(anchor, mock, anchor, ConfigToOffset(x or 0, previewScale), ConfigToOffset(y or 0, previewScale))
     end
-    local function RuntimeAuraAnchor(anchor, fallback)
-        anchor = tostring(anchor or ""):upper()
-        if GF_PREVIEW_ANCHOR_FRAC[anchor] then return anchor end
-        fallback = tostring(fallback or "CENTER"):upper()
-        return GF_PREVIEW_ANCHOR_FRAC[fallback] and fallback or "CENTER"
-    end
-    local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
-        count = max(Round(count), 1)
-        perRow = max(Round(perRow), 1)
-        if verticalGrowth == true then
-            return 1, count
-        end
-        return min(count, perRow), ceil(count / perRow)
-    end
-    return {
-        st = st, S = RenderState, LayoutHandle = LayoutHandle, RuntimeAuraAnchor = RuntimeAuraAnchor,
-        RuntimeAuraGridShape = RuntimeAuraGridShape,
-    }
+    return { st = st, S = RenderState, LayoutHandle = LayoutHandle }
 end
 function Stage.PrepareAuraLanes(st)
     local scene = st.scene
     local RenderState, box = scene.S, scene.box
-    local gf, runtimeAuras = scene.gf, scene.runtimeAuras
     local helpers = box._msufGFAuraLaneHelpers
     if not helpers or helpers.st ~= st or helpers.S ~= RenderState then
         helpers = BuildAuraLaneHelpers(st, RenderState)
         box._msufGFAuraLaneHelpers = helpers
     end
     st.previewScale = scene.previewScale
-    st.auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale
-        and gf.GetPreviewDynamicScale(scene.conf, scene.kind)) or 1
-    st.NormalizeDispelBorderMode = CoreExports.NormalizeDispelBorderMode
-    st.LayoutHandle, st.RuntimeAuraAnchor = helpers.LayoutHandle, helpers.RuntimeAuraAnchor
-    st.RuntimeAuraGridShape = helpers.RuntimeAuraGridShape
+    st.LayoutHandle = helpers.LayoutHandle
 end
 
 -- Auras3 icon shape and style on a preview owner; the style is dropped while only the duration bar shows.
@@ -1433,253 +1036,45 @@ local function ApplyPreviewIconLook(a3, owner, shape, style, barOnly, size, tex,
     end
 end
 
-local AURA_ICON_REGION_LISTS = { "_icons", "_iconSwipes", "_iconBorders", "_iconStacks", "_iconTimers", "_iconDurationBars" }
-
---- Lays out one aura lane (buff, tracked buff, debuff or external): icon
---- count, size and grid, textures, timers, stacks, swipes, borders, duration
---- bars and the lane handle. Every refresh runs it for each lane, so the lane
---- rects, the per-icon style frame, look and texts and the surplus hide stay
---- inline: a helper here would add calls per icon on each refresh.
-function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
-    local scene = st.scene
-    local RenderState, mock = scene.S, scene.mock
-    local ScaleValue, ConfigToOffset, SetPreviewFont = RenderState.ScaleValue, RenderState.ConfigToOffset, scene.SetPreviewFont
-    local GF_PREVIEW_ANCHOR_FRAC, Round = RenderState.GF_PREVIEW_ANCHOR_FRAC, RenderState.Round
-    local previewScale, auraDynamicScale = st.previewScale, st.auraDynamicScale
-    cfg = cfg or {}
-    defaults = defaults or {}
-    local runtimeLane = IsRuntimeAuraLane(cfg)
-    local maxIcons = RenderState.Int(cfg.max, defaults.max or 6, 0, 40)
-    local perRow = RenderState.Int(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
-    local rawSize = cfg.size or defaults.size or 16
-    local compiledLane = runtimeLane or cfg._compiled == true
-    if not compiledLane then rawSize = rawSize * PreviewIconScale(cfg.iconScale) end
-    local minSize = (compiledLane or cfg.iconScale ~= nil) and 1 or (defaults.minSize or 8)
-    local laneScale = compiledLane and previewScale or (previewScale * auraDynamicScale)
-    local size = max(minSize, ScaleValue(rawSize, laneScale, minSize))
-    local spacing = max(0, ScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
-    local anchor = st.RuntimeAuraAnchor(cfg.anchor, defaults.anchor or "CENTER")
-    if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
-    if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
-    local textScale = compiledLane and previewScale or laneScale
-    -- CD/Stack is a layer chip of its own, so the icon texts have to follow
-    -- it exactly like the lane icons follow theirs. The texts hang off the
-    -- lane handle, and soloing CD/Stack dims that handle to 0.15 -- divide
-    -- that dimming back out, or the one soloed layer is the only thing on
-    -- the stage that cannot be read.
-    local auraTextOn = SceneLayerOn(scene, "auraText")
-    local laneAlpha = SceneLayerAlpha(scene, groupKey)
-    local auraTextAlpha = min(1, SceneLayerAlpha(scene, "auraText") / max(0.0001, laneAlpha))
-    local showCooldown
-    if runtimeLane then showCooldown = cfg.showCooldownText == true
-    else showCooldown = cfg.showCooldown ~= false end
-    showCooldown = showCooldown and auraTextOn
-    local showStacks = cfg.showStacks ~= false and auraTextOn
-    local showSwipe = cfg.showCooldownSwipe ~= false
-    local barOnly = cfg.showDurationBar == true and (cfg.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
-    local cooldownSwipeReverse = cfg.cooldownSwipeReverse == true
-    local cooldownSize = max(6, ScaleValue(cfg.cooldownSize or defaults.cooldownSize or 8, textScale, 6))
-    local stackSize = max(6, ScaleValue(cfg.stackSize or defaults.stackSize or 10, textScale, 6))
-    local cooldownAnchor = RuntimeAuraTextAnchor(cfg.cooldownAnchor, "CENTER")
-    local stackAnchor = RuntimeAuraTextAnchor(cfg.stackAnchor, "BOTTOMRIGHT")
-    local cooldownX = ConfigToOffset(cfg.cooldownX or 0, textScale)
-    local cooldownY = ConfigToOffset(cfg.cooldownY or 0, textScale)
-    local stackX = ConfigToOffset(cfg.stackX or 0, textScale)
-    local stackY = ConfigToOffset(cfg.stackY or 0, textScale)
-    local dispelMode = groupKey == "debuff"
-        and st.NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true or cfg.showDispelSymbol == true) or "OFF"
-    local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
-    local gv = RenderState.AuraGrowth(growth)
-    local centered = runtimeLane ~= true and gv.centered == true
-    local anchorFrac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
-    local ids = RenderState.GF_AURA_MOCK_ICON_IDS[groupKey] or RenderState.GF_AURA_MOCK_ICON_IDS.debuff
-    local step = size + spacing
-    RenderState.AddIconPool(handle, maxIcons)
-    local rects = handle._previewRects or {}
-    handle._previewRects = rects
-    local handleW, handleH, originX, originY
-    if centered then
-        -- Icon rects of a centred lane around the lane centre.
-        local halfOfs = (maxIcons * size + max(0, maxIcons - 1) * spacing) * 0.5
-        local minL, minB, maxR, maxT
-        for i = 1, maxIcons do
-            local left, bottom
-            local col = i - 1
-            if gv.px ~= 0 then
-                local cx = col * step - halfOfs + size * 0.5
-                left, bottom = cx - size * 0.5, -size * 0.5
-            else
-                local cy = -(col * step - halfOfs) - size * 0.5
-                left, bottom = -size * 0.5, cy - size * 0.5
-            end
-            local right, top = left + size, bottom + size
-            local rect = rects[i] or {}
-            rect[1], rect[2], rect.anchor = left, bottom, nil
-            rects[i] = rect
-            minL = minL and min(minL, left) or left
-            minB = minB and min(minB, bottom) or bottom
-            maxR = maxR and max(maxR, right) or right
-            maxT = maxT and max(maxT, top) or top
-        end
-        if not minL then minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5 end
-        handleW, handleH, originX, originY = max(1, Round(maxR - minL)), max(1, Round(maxT - minB)), -minL, -minB
-    else
-        -- Icon rects of a grid lane (compiled lanes bring their own signs, columns and rows).
-        local xSign, ySign, verticalGrowth, initialAnchor, cols, rows
-        if runtimeLane then
-            xSign = tonumber(cfg.xSign) or 1
-            ySign = tonumber(cfg.ySign) or -1
-            verticalGrowth = cfg.verticalGrowth == true
-            initialAnchor = cfg.initialAnchor
-            cols = max(1, tonumber(cfg.cols) or 1)
-            rows = max(1, tonumber(cfg.rows) or 1)
-        else
-            xSign, ySign, verticalGrowth, initialAnchor = RuntimeAuraGrowth(growth)
-            cols, rows = st.RuntimeAuraGridShape(maxIcons, perRow, verticalGrowth)
-        end
-        handleW = max(1, Round(cols * size + max(cols - 1, 0) * spacing))
-        handleH = max(1, Round(rows * size + max(rows - 1, 0) * spacing))
-        for i = 1, maxIcons do
-            local idx = i - 1
-            local col, row
-            if verticalGrowth == true then
-                col, row = 0, idx
-            else
-                col = idx % perRow
-                row = (idx - col) / perRow
-            end
-            local rect = rects[i] or {}
-            rect[1], rect[2], rect.anchor = col * step * xSign, row * step * ySign, initialAnchor
-            rects[i] = rect
-        end
-        originX, originY = Round(anchorFrac[1] * handleW), Round(anchorFrac[2] * handleH)
+-- Layout preparation and visual adoption are separate cold options stages. The old
+-- 233-line icon painter duplicated the engine's own lane/shape/font painters.
+function Stage.PrepareAuraHandle(st, handle, groupKey, cfg)
+    local scene, frame = st.scene, st.scene.mock._cell
+    local hosts = frame and frame._msufGFFrameAuraPreviewHosts
+    local host = hosts and hosts[groupKey]
+    if not host then handle:Hide() return nil end
+    -- Restore engine ownership before measuring the configured layout. A previous
+    -- drag may have parented the host to its interaction handle.
+    local scale = scene.previewScale
+    handle._previewWriteScale = scale * ((scene.runtimeAuras and scene.runtimeAuras.dynamicScaleValue) or 1)
+    return host, scale
+end
+function Stage.LayoutAuraGroup(st, handle, groupKey, cfg)
+    local host, scale = Stage.PrepareAuraHandle(st, handle, groupKey, cfg)
+    if not host then return end
+    local frame = st.scene.mock._cell
+    -- Engine aura visuals are pooled on the cell, with anchors in the lane host.
+    -- Adopt them into that host once; native parent motion then follows a drag.
+    for _, visual in ipairs(frame._msufGFFrameAuraPreviews or {}) do
+        if visual._sceneAuraLane == cfg and visual:GetParent() ~= host then visual:SetParent(host) end
     end
-    handle:SetSize(handleW, handleH)
-    handle._previewOriginX = originX
-    handle._previewOriginY = originY
-    handle._previewAnchorFrame = mock
-    handle._previewScale = previewScale
-    handle._previewWriteScale = compiledLane and (previewScale * max(0.0001, auraDynamicScale)) or previewScale
-    handle:ClearAllPoints()
-    if centered then
-        handle:SetPoint("BOTTOMLEFT", mock, "CENTER",
-            ConfigToOffset(cfg.x or 0, previewScale) - originX, ConfigToOffset(cfg.y or 0, previewScale) - originY)
-    else
-        handle:SetPoint(anchor, mock, anchor, ConfigToOffset(cfg.x or 0, previewScale), ConfigToOffset(cfg.y or 0, previewScale))
-    end
-    local a3 = MSUF.MSUF_Auras3
-    local iconStyle = cfg.iconStyle
-    if barOnly then iconStyle = nil end
-    for i = 1, maxIcons do
-        local tex = handle._icons and handle._icons[i]
-        local swipe = handle._iconSwipes and handle._iconSwipes[i]
-        local stack = handle._iconStacks and handle._iconStacks[i]
-        local timer = handle._iconTimers and handle._iconTimers[i]
-        local rect = rects[i]
-        if tex and rect then
-            -- The per-icon style frame of a runtime lane, created on first use.
-            local styleOwner
-            if runtimeLane then
-                local owners = handle._auraStyleOwners
-                if not owners then
-                    owners = {}
-                    handle._auraStyleOwners = owners
-                end
-                styleOwner = owners[i]
-                if not styleOwner then
-                    styleOwner = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
-                    styleOwner:EnableMouse(false)
-                    if styleOwner.SetMouseMotionEnabled then styleOwner:SetMouseMotionEnabled(false) end
-                    owners[i] = styleOwner
-                end
+    M.PreviewHelpers.BindGroupSceneHandle(handle, st.scene.mock, host, scale, cfg.anchor)
+    local textAlpha = min(1, SceneLayerAlpha(st.scene, "auraText") / max(0.0001, SceneLayerAlpha(st.scene, groupKey)))
+    for _, visual in ipairs(frame._msufGFFrameAuraPreviews or {}) do
+        if visual._sceneAuraLane == cfg then
+            if visual._timer then
+                st.scene.SetPreviewFont(visual._timer, tonumber(cfg.cooldownSize) or 8)
+                visual._timer:SetAlpha(textAlpha)
             end
-            local auraState = st.auraElapsed and AuraState(tex, groupKey, i, cfg, st.auraElapsed)
-            tex:SetTexture(ids[((i - 1) % #ids) + 1])
-            ApplyPreviewIconZoom(tex, cfg.iconZoom or scene.auraIconZoom, 0)
-            if tex.SetAlpha then tex:SetAlpha(barOnly and 0 or 1) end
-            tex:SetSize(size, size)
-            tex:ClearAllPoints()
-            if rect.anchor then
-                tex:SetPoint(rect.anchor, handle, rect.anchor, rect[1], rect[2])
-            else
-                tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
+            if visual._stack then
+                st.scene.SetPreviewFont(visual._stack, tonumber(cfg.stackSize) or 10)
+                visual._stack:SetAlpha(textAlpha)
             end
-            if styleOwner then
-                styleOwner:ClearAllPoints()
-                styleOwner:SetAllPoints(tex)
-                if styleOwner.SetFrameLevel and handle.GetFrameLevel then
-                    SetPreviewFrameLevel(styleOwner, handle:GetFrameLevel() or 0)
-                end
-                -- Auras3 icon shape and style; the style is dropped while only the duration bar shows.
-                if a3 then
-                    if a3.ApplyAuraIconShape then a3.ApplyAuraIconShape(styleOwner, cfg.iconShape, nil, tex, swipe) end
-                    if a3.ApplyIconStylePreview then a3.ApplyIconStylePreview(styleOwner, iconStyle, size, cfg.iconShape) end
-                end
-                styleOwner:Show()
-            end
-            if swipe then
-                if showSwipe and not barOnly then
-                    GroupAuraPreviewSwipe(swipe, tex, size, auraState and auraState.remainingFrac, cooldownSwipeReverse)
-                    swipe:Show()
-                else
-                    swipe:Hide()
-                end
-            end
-            AuraPainter.DispelBorder(handle._iconBorders and handle._iconBorders[i], tex, size,
-                barOnly and "OFF" or dispelMode, cfg.iconShape, i)
-            GroupAuraDurationBar(handle._iconDurationBars and handle._iconDurationBars[i], tex, cfg, size, auraState)
-            -- Font, colour, alpha, anchor and sample text of the stack count and the cooldown timer.
-            if stack then
-                SetPreviewFont(stack, stackSize)
-                stack:SetTextColor(1, 1, 1, 1)
-                stack:SetAlpha(auraTextAlpha)
-                PlaceAuraPreviewText(stack, tex, stackAnchor, stackX, stackY)
-                stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
-                stack:SetShown(showStacks)
-            end
-            if timer then
-                SetPreviewFont(timer, cooldownSize)
-                timer:SetTextColor(1, 1, 1, 1)
-                timer:SetAlpha(auraTextAlpha)
-                PlaceAuraPreviewText(timer, tex, cooldownAnchor, cooldownX, cooldownY)
-                timer:SetText(showCooldown and (auraState and auraState.text or (i % 2 == 0 and "12" or "")) or "")
-                timer:SetShown(showCooldown)
-            end
-            tex:Show()
         end
     end
-    local anim = handle._msufGFAuraAnim
-    if not anim then
-        anim = {}
-        handle._msufGFAuraAnim = anim
-    end
-    anim.groupKey, anim.maxIcons, anim.cfg, anim.size = groupKey, maxIcons, cfg, size
-    anim.swipe, anim.swipeReverse = showSwipe and not barOnly, cooldownSwipeReverse
-    anim.showStacks, anim.showCooldown = showStacks, showCooldown
-    -- Every icon region (and its style frame) past the lane's icon count is hidden.
-    local icons = handle._icons
-    for i = maxIcons + 1, icons and #icons or 0 do
-        for j = 1, #AURA_ICON_REGION_LISTS do
-            local list = handle[AURA_ICON_REGION_LISTS[j]]
-            local region = list and list[i]
-            if region then region:Hide() end
-        end
-        local owners = handle._auraStyleOwners
-        local owner = owners and owners[i]
-        if owner then
-            if a3 and a3.ApplyIconStylePreview then a3.ApplyIconStylePreview(owner, nil) end
-            owner:Hide()
-        end
-    end
-    return size
+    handle._previewWriteScale = scale * ((st.scene.runtimeAuras and st.scene.runtimeAuras.dynamicScaleValue) or 1)
 end
 
-local AURA_LANE_DEFAULTS = {
-    buff = { anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, minSize = 8 },
-    trackedBuff = { anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 22, perRow = 4, max = 4, spacing = 1, minSize = 8 },
-    debuff = { anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8 },
-    external = { anchor = "CENTER", growth = "RIGHTDOWN", size = 28, perRow = 3, max = 2, spacing = 1, minSize = 8 },
-}
 --- Lays out the buff, tracked buff, debuff and external lanes and publishes
 --- the lane helpers on the scene for the status and spell indicator stages.
 local function RenderAuras(scene)
@@ -1697,7 +1092,7 @@ local function RenderAuras(scene)
     for i = 1, #AURA_LANES do
         local lane = AURA_LANES[i]
         local handle = scene.S[lane[2]]
-        if handle then Stage.LayoutAuraGroup(st, handle, lane[1], scene[lane[3]], AURA_LANE_DEFAULTS[lane[1]]) end
+        if handle then Stage.LayoutAuraGroup(st, handle, lane[1], scene[lane[3]]) end
     end
     scene.LayoutHandle = st.LayoutHandle
 end
@@ -2101,7 +1496,7 @@ end
 --- Group preview refresh: the combat and text-drag guards, then every stage in
 --- the original order over one shared per-refresh state table.
 function Stage.Refresh(env, self, reason)
-    if (InCombatLockdown and InCombatLockdown()) or PublicGlobals.MSUF_InCombat == true then
+    if (InCombatLockdown and InCombatLockdown()) or MSUF_InCombat == true then
         self._msufGFRefreshAfterCombat = reason or self._msufGFRefreshAfterCombat or true
         return
     end
@@ -2117,6 +1512,7 @@ function Stage.Refresh(env, self, reason)
         self._msufGFRefreshState = st
     end
     st.env, st.self, st.reason = env, self, reason
+    M.PreviewHelpers.RestoreGroupSceneHandles(self)
     Stage.PrepareScene(st, env)
     Stage.LayoutMockFrame(st, env)
     Stage.RenderCell(st, env)
@@ -2141,19 +1537,23 @@ end
 function Stage.Animate(env, self)
     local st = self._msufGFScene
     if not (st and st.complete == true and st.animated == true and self._animationEnabled == true) then return false end
-    if (InCombatLockdown and InCombatLockdown()) or PublicGlobals.MSUF_InCombat == true or self._msufGFTextDragActive then
+    if (InCombatLockdown and InCombatLockdown()) or MSUF_InCombat == true or self._msufGFTextDragActive then
         return false
     end
     local scene = st.scene
     if scene.kind ~= scene.H.CurrentScope() then return false end
+    if self._dragFrame and self._dragFrame._handle then return true end
+    M.PreviewHelpers.RestoreGroupSceneHandles(self)
     -- The scene's own clock: the engine repaints bars, texts and prediction at this elapsed time.
     if self._scene then self._scene:SetClock(self._animationElapsed) end
     PlaceTextHandles(scene)
     local RenderState = scene.S
-    local auraElapsed = tonumber(self._animationElapsed) or 0
-    for i = 1, #GROUP_AURA_LANE_HANDLES do
-        AnimateGroupAuraLane(auraElapsed, RenderState[GROUP_AURA_LANE_HANDLES[i]])
-    end
+    scene.gf.AnimateUnitFrameAuras(st.mock._cell, tonumber(self._animationElapsed) or 0)
+    Stage.RenderChrome(st)
+    RenderAuras(scene)
+    Stage.ConfigureStatusHandles(st, env)
+    if scene.engineConfig and scene.engineConfig.spellIndicators then Stage.RenderSpellIndicators(st, env)
+    else FinalizeScene(scene) end
     return true
 end
 
@@ -2465,6 +1865,7 @@ function Stage.RenderCell(st, env)
         if not sample then
             sample = {}
             for key, value in pairs(CELL_SAMPLE) do sample[key] = value end
+            sample.powerColor = { CELL_SAMPLE.powerColor[1], CELL_SAMPLE.powerColor[2], CELL_SAMPLE.powerColor[3] }
             self._msufGFCellSample = sample
         end
         -- The live player when it can be read, the stylized sample for any missing field. The exact maxima and the
@@ -2481,23 +1882,62 @@ function Stage.RenderCell(st, env)
         scene.sampleClass = sample.class
         cell:Configure({
             scale = st.previewScale, level = mock._msufPreviewElementLevelBias, role = scene.previewRole,
-            sample = sample, bodyOnly = true, layerVisible = scene.layerVisible, layerSolo = scene.soloLayer or false,
+            sample = sample, bodyOnly = false, layerVisible = scene.layerVisible, layerSolo = false,
             ignoreOocFade = true, fit = true,
         })
         root:SetClock(self._animationEnabled == true and self._animationElapsed or nil, true)
         cell:Show(1, { immediate = true, reason = st.reason })
         local frames = cell:Frames()
-        AliasCell(mock, frames and frames[1])
+        local frame = frames and frames[1]
+        if frame then
+            scene.engineConfig = M.PreviewHelpers.PrepareGroupSceneSamples(frame, cell, scene)
+            cell:RefreshData()
+            -- Capture the live Power painter's configured colour once per settings refresh.
+            -- The scene then reuses it on animation ticks without another query or call.
+            local power = MSUF.UF.elements.Power
+            if frame.targetPowerBar then
+                power.PaintSample(frame, "player", floor(scene.powerPct * sample.powerMax + 0.5), sample.powerMax,
+                    live and live.powerType or 0, live and live.powerToken or "MANA")
+                local r, g, b, a = frame.targetPowerBar:GetStatusBarColor()
+                if not issecretvalue(r) and not issecretvalue(g) and not issecretvalue(b) and not issecretvalue(a) then
+                    local color = sample.powerColor
+                    color[1], color[2], color[3], color[4] = r, g, b, a
+                end
+            end
+            local lanes = scene.engineConfig and scene.engineConfig.lanes or {}
+            for i = 1, #AURA_LANES do
+                local lane = AURA_LANES[i]
+                if lanes[lane[1]] then scene[lane[3]] = lanes[lane[1]] end
+            end
+        end
+        scene.engineAlpha = frame and frame:GetAlpha() or 1
+        AliasCell(mock, frame)
 end
 
 --- Dispel overlay, portrait and dispel symbol: widgets of the preview's own (the portrait and the symbol row are
 --- handles). The frame border, rounded surface and text layers belong to the engine scene.
 function Stage.RenderChrome(st)
-        local scene = st.scene
-        scene.previewScale = st.previewScale
-        PaintGroupPreviewDispelOverlay(scene)
-        PaintGroupPreviewPortrait(scene)
-        PaintGroupPreviewDispelSymbol(scene)
+    local scene, frame = st.scene, st.mock._cell
+    if not frame then return end
+    scene.previewScale = st.previewScale
+    -- SceneApply uses the exact runtime portrait layout before handles adopt it.
+    MSUF.UF.elements.Portrait.SceneApply(frame, frame.MSUFSpec)
+    PaintGroupPreviewPortrait(scene)
+    M.PreviewHelpers.PaintGroupSceneDispel(frame, scene.engineConfig)
+    local overlay, symbol = frame._msufSceneDispelOverlay, frame._msufSceneDispelSymbol
+    if overlay then
+        overlay:SetShown(scene.layerAvailable.dispelOverlay and scene.layerVisible.dispelOverlay ~= false)
+        overlay:SetAlpha(scene.soloLayer and scene.soloLayer ~= "dispelOverlay" and 0.15 or 1)
+    end
+    if symbol then symbol:SetShown(scene.layerAvailable.dispelSymbol and scene.layerVisible.dispelSymbol ~= false) end
+    local cfg = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
+    M.PreviewHelpers.BindGroupSceneHandle(scene.S.dispelSymbolHandle, scene.mock, symbol,
+        scene.previewScale, cfg and cfg.anchor, tonumber(cfg and cfg.x) or 0, tonumber(cfg and cfg.y) or 0)
+    if scene.S.dispelSymbolHandle then
+        scene.S.dispelSymbolHandle:SetAlpha(SceneLayerAlpha(scene, "dispelSymbol") * (scene.engineAlpha or 1))
+    end
+    scene.mock._msufGFPreviewDispelOverlayHost = overlay
+    scene.mock._msufGFPreviewDispelOverlayRegion = overlay and overlay.Region
 end
 
 --- The aura lanes set their texts' fonts through the preview font: path, flags and shadow of the group's font.
@@ -2590,102 +2030,49 @@ function Stage.StatusIconTexture(scene, spec, runtimeCfg)
     if texture then return ResolveStatusPreviewTexture(scene, spec, runtimeCfg, texture[1], texture[2]) end
 end
 
--- A text status handle: sample text sized and coloured by the enabled state.
-function Stage.PaintStatusText(st, env, statusHandle, spec, runtimeCfg, enabled, statusSize)
-    local statusText = statusHandle._statusText
-    statusHandle:SetSize(max(42, statusSize * 4), max(18, statusSize + 8))
-    if statusText and statusText.SetFont then st.SetPreviewFont(statusText, max(12, statusSize)) end
-    if statusText then
-        statusText:SetText(env.StatusText(spec, runtimeCfg, st.conf))
-        statusText:SetTextColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.50, enabled and 1 or 0.60)
-        statusText:ClearAllPoints()
-        statusText:SetPoint("CENTER", statusHandle, "CENTER", 0, 0)
-        statusText:Show()
-    end
-    -- The live region is a bare FontString, so its own edges land on
-    -- the configured anchor. A fixed handle box with centred text
-    -- puts the glyph half a box away from where the frame draws it,
-    -- so shrink the handle onto the text and win the hit area back
-    -- through hit-rect insets instead.
-    if spec.fitTextBounds == true and statusText then
-        local textW = tonumber(statusText.GetStringWidth and statusText:GetStringWidth()) or 0
-        local textH = tonumber(statusText.GetStringHeight and statusText:GetStringHeight()) or 0
-        textW = max(4, textW)
-        textH = max(4, textH)
-        statusHandle:SetSize(textW, textH)
-        if statusHandle.SetHitRectInsets then
-            local padX = max(0, (24 - textW) * 0.5)
-            local padY = max(0, (20 - textH) * 0.5)
-            statusHandle:SetHitRectInsets(-padX, -padX, -max(padY, 14), -padY)
-        end
-    end
-    if statusHandle._statusTex then statusHandle._statusTex:Hide() end
-end
-
--- An icon status handle: the resolved texture stretched over the handle, dimmed while disabled.
-function Stage.PaintStatusIcon(st, statusHandle, spec, runtimeCfg, enabled, statusSize)
-    statusSize = max(8, statusSize)
-    statusHandle:SetSize(statusSize, statusSize)
-    if statusHandle._statusText then statusHandle._statusText:Hide() end
-    local tex = statusHandle._statusTex
-    if not tex then return end
-    local path, l, r, t, b = Stage.StatusIconTexture(st.scene, spec, runtimeCfg)
-    if not path then
-        tex:Hide()
-        return
-    end
-    tex:SetTexture(path)
-    tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
-    if enabled then
-        tex:SetVertexColor(1, 1, 1, 1)
-    else
-        tex:SetVertexColor(0.40, 0.40, 0.45, 0.55)
-    end
-    tex:ClearAllPoints()
-    tex:SetPoint("TOPLEFT", statusHandle, "TOPLEFT", 0, 0)
-    tex:SetPoint("BOTTOMRIGHT", statusHandle, "BOTTOMRIGHT", 0, 0)
-    tex:Show()
-end
-
---- Status icon handles: label, text or icon texture, size and placement.
---- One handle per call; the stage state carries this refresh's inputs, so
---- a repaint builds no closure for it.
-function Stage.ConfigureStatusHandle(st, env, statusHandle)
-        local spec = statusHandle and statusHandle._statusSpec
-        if not (statusHandle and spec) then return end
-        local scene = st.scene
-        local conf = st.conf
-        local runtimeCfg = env.RuntimeStatusConfig(scene.runtimeStatus, spec)
-        local enabled
-        if st.runtimeSpec then
-            enabled = runtimeCfg and runtimeCfg.enabled == true
+local ENGINE_STATUS_FIELDS = {
+    roleIcon = "roleIcon", leaderIcon = "leaderIcon", assistIcon = "assistIcon", raidMarker = "raidTargetIcon",
+    readyCheckIcon = "readyCheckIcon", summonIcon = "summonIcon", resurrectIcon = "incomingResIndicatorIcon",
+    pvpIcon = "pvpIndicatorIcon", phaseIcon = "phaseIcon", showGroupNumber = "raidGroupNameText", levelText = "levelText",
+    statusText = "_msufScene_statusText", statusGhostText = "_msufScene_statusGhostText",
+    statusAFKText = "_msufScene_statusAFKText", statusDNDText = "_msufScene_statusDNDText",
+    statusAFKTimer = "statusAFKTimerText", threatText = "threatIndicatorText",
+}
+function Stage.ConfigureStatusHandle(st, env, handle)
+    local spec, frame = handle._statusSpec, st.mock._cell
+    local cfg = env.RuntimeStatusConfig(st.scene.runtimeStatus, spec)
+    local region = frame and frame[ENGINE_STATUS_FIELDS[spec.value] or spec.value]
+    local shown = cfg and cfg.enabled == true and env.StatusSpecInMode(spec, st.scene.statusSpec)
+        and SceneLayerOn(st.scene, "status")
+    handle._previewText = spec.text or "Status"
+    if handle._label then handle._label:SetText(env.StatusLabel(spec)) end
+    if region then
+        if env.StatusSpecIsText(spec) then
+            region:SetText(env.StatusText(spec, cfg, st.conf))
         else
-            enabled = env.StatusSpecEnabled(conf, spec)
+            local texture, l, r, t, b = Stage.StatusIconTexture(st.scene, spec, cfg)
+            if texture then
+                region:SetTexture(texture)
+                region:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
+            end
         end
-        local statusIsText = env.StatusSpecIsText(spec)
-        local statusRawSize = tonumber(runtimeCfg and runtimeCfg.size) or tonumber(conf[spec.size]) or tonumber(spec.defaultSize) or 14
-        local statusSize = env.ScaleValue(statusRawSize, st.previewScale, statusIsText and 10 or 8)
-        statusHandle._previewText = spec.text or "Status"
-        if statusHandle._label and statusHandle._label.SetText then
-            statusHandle._label:SetText(env.StatusLabel(spec))
-            statusHandle._label:SetTextColor(0.80, 0.67, 0.20, enabled and 0.95 or 0.55)
-        end
-        if statusIsText then
-            Stage.PaintStatusText(st, env, statusHandle, spec, runtimeCfg, enabled, statusSize)
-        else
-            Stage.PaintStatusIcon(st, statusHandle, spec, runtimeCfg, enabled, statusSize)
-        end
-        st.LayoutHandle(statusHandle,
-            runtimeCfg and runtimeCfg.anchor or conf[spec.anchor],
-            runtimeCfg and runtimeCfg.x or conf[spec.x],
-            runtimeCfg and runtimeCfg.y or conf[spec.y],
-            spec.defaultAnchor or "CENTER")
+        region:SetShown(shown)
+        if region.SetAlpha then region:SetAlpha((region._msufStatusAlpha or 1) * (frame._msufAlphaLastFG or 1)) end
+    end
+    M.PreviewHelpers.BindGroupSceneHandle(handle, st.mock, region, st.previewScale, cfg and cfg.anchor)
 end
 function Stage.ConfigureStatusHandles(st, env)
-        local statusHandles = env.statusHandles
-        for i = 1, #statusHandles do
-            Stage.ConfigureStatusHandle(st, env, statusHandles[i])
-        end
+    local frame = st.mock._cell
+    if not frame then return end
+    local elements, runtime = MSUF.UF.elements, MSUF.UFStatusRuntime
+    elements.StatusIndicators.SceneApply(frame, frame.MSUFSpec)
+    local sample = st.self._msufGFCellSample
+    sample.player, sample.leader, sample.assist, sample.statusSelection = true, true, true, "all"
+    sample.raidTarget, sample.raidGroup, sample.incomingRes, sample.pvp, sample.level = 1, 3, true, "Alliance", 80
+    runtime.PaintSampleIdentityTexts(frame, frame.MSUFSpec.status, sample)
+    runtime.PaintSampleIndicators(frame, frame.MSUFSpec.status, sample)
+    runtime.PaintSceneStatus(frame, frame.MSUFSpec.status, "all", sample)
+    for i = 1, #env.statusHandles do Stage.ConfigureStatusHandle(st, env, env.statusHandles[i]) end
 end
 
 --- Spell indicator handle painters: icon glow effect and the per-visual
@@ -2955,7 +2342,7 @@ end
 
 -- One runtime spell item: its handle (placed visual and/or frame effect). Returns true when the
 -- selected spell's own handle drew it.
-function Stage.RenderRuntimeSpellItem(st, box, item, index, dynamicSpellHandlesActive)
+function Stage.RenderLegacySpellItem(st, box, item, index, dynamicSpellHandlesActive)
     local env, scene = st.env, st.scene
     local exactSlot = item and item.spellIndicatorSlot == true
     local placed = exactSlot and item or (item and item.placed)
@@ -2964,6 +2351,7 @@ function Stage.RenderRuntimeSpellItem(st, box, item, index, dynamicSpellHandlesA
     local effect = (exactSlot and item.frameEffect) or item.frame
         or (selectedItem and scene.selectedSpellEffect) or nil
     local handle = box:EnsureSpellIndicatorHandle(item, index)
+    if handle and not handle._icons then env.AddIconPool(handle, 1) end
     local placedType = placed and (exactSlot and placed.visual or placed.type) or "none"
     local placedShown = placed and placedType ~= "none" and item.hiddenVisual ~= true
     local selectedDrawn = false
@@ -2995,9 +2383,7 @@ function Stage.RenderRuntimeSpellItem(st, box, item, index, dynamicSpellHandlesA
     return selectedDrawn
 end
 
---- Runtime spell indicator handles, the selected spell's fallback handle and
---- frame effect, then FinalizeScene.
-function Stage.RenderSpellIndicators(st, env)
+function Stage.RenderLegacySpellIndicators(st, env)
         local scene, box, spellHandle = st.scene, env.box, env.spellHandle
         local runtimeSpellIndicators, runtimeSpellItems = scene.runtimeSpellIndicators, scene.previewSpellItems
         local selectedSpellEffectOwner, selectedSpellEffect = env.selectedSpellEffectOwner, scene.selectedSpellEffect
@@ -3009,7 +2395,7 @@ function Stage.RenderSpellIndicators(st, env)
         local selectedRuntimeSpellHandleUsed = false
         if runtimeSpellIndicators and runtimeSpellIndicators.enabled == true and type(runtimeSpellItems) == "table" and box.EnsureSpellIndicatorHandle then
             for i = 1, #runtimeSpellItems do
-                if Stage.RenderRuntimeSpellItem(st, box, runtimeSpellItems[i], i, dynamicSpellHandlesActive) then
+                if Stage.RenderLegacySpellItem(st, box, runtimeSpellItems[i], i, dynamicSpellHandlesActive) then
                     selectedRuntimeSpellHandleUsed = true
                 end
             end
@@ -3042,4 +2428,68 @@ function Stage.RenderSpellIndicators(st, env)
         end
         scene.dynamicSpellHandlesActive = dynamicSpellHandlesActive
         FinalizeScene(scene)
+end
+
+-- Configured indicators are painted by the engine. The editor's unplaced/disabled
+-- selected sample remains a handle-owned insertion preview until it has a live slot.
+function Stage.RenderSpellIndicators(st, env)
+    if not (st.scene.engineConfig and st.scene.engineConfig.spellIndicators) then
+        return Stage.RenderLegacySpellIndicators(st, env)
+    end
+    local scene, box, frame = st.scene, st.self, st.mock._cell
+    local active = box._msufGFSpellHandlesActiveScratch or {}
+    box._msufGFSpellHandlesActiveScratch = active
+    wipe(active)
+    local root = scene.engineConfig and scene.engineConfig.spellIndicators
+    local pool, used, selectedDrawn = frame and frame._msufGFSpellIndicatorPreviews, 0, false
+    local effects = MSUF.MSUF_Auras3.SpellIndicators
+    local engineEffects = effects and effects.ApplyPreviewFrameEffect
+    for i, item in ipairs(root and root.slots or {}) do
+        if item.enabled then
+            used = used + 1
+            local visual = pool and pool[used]
+            local handle = box:EnsureSpellIndicatorHandle(item, i)
+            local selected = item.specKey == scene.selectedSpellSpecKey and item.auraName == scene.selectedSpellAuraName
+            if visual and handle then
+                handle._msufSpellIndicatorLayer = item.layer
+                handle._msufSpellIndicatorStrata = item.strata
+                if handle._label then handle._label:SetText(item.display or item.auraName or "SPELL") end
+                if visual._timer then st.SetPreviewFont(visual._timer, tonumber(item.cooldownSize) or 8) end
+                if visual._stack then
+                    st.SetPreviewFont(visual._stack, item.visual == "number" and (tonumber(item.size) or 18) * 0.72
+                        or tonumber(item.stackSize) or 10)
+                end
+                local shown = M.PreviewHelpers.BindGroupSceneHandle(handle, st.mock, visual, st.previewScale, item.anchor)
+                local legacyEffect = not engineEffects and EffectShown(item.frameEffect)
+                if legacyEffect then ApplySpellEffectPreview(env, handle, item.frameEffect)
+                else HideSpellEffectPreview(env, handle) end
+                if not shown and (visual._frameEffectOwner or legacyEffect) then
+                    handle:SetSize(1, 1)
+                    if handle._label then handle._label:Hide() end
+                    st.LayoutHandle(handle, "CENTER", 0, 0, "CENTER")
+                end
+                if shown or visual._frameEffectOwner or legacyEffect then
+                    active[handle._msufSpellIndicatorPreviewKey] = handle
+                    selectedDrawn = selectedDrawn or selected
+                end
+            end
+        end
+    end
+    if box.HideUnusedSpellIndicatorHandles then box:HideUnusedSpellIndicatorHandles(active) end
+    local fallback = env.spellHandle
+    if not selectedDrawn and scene.selectedSpellCfg
+        and (scene.selectedSpellPlacedEnabled or scene.selectedSpellNeedsPlacementPreview) then
+        Stage.ConfigureSelectedSpellHandle(st, fallback)
+    else
+        HideSpellIconEffectPreview(fallback)
+        fallback:Hide()
+    end
+    local effectOwner = env.selectedSpellEffectOwner
+    if not selectedDrawn and scene.selectedSpellEffectAvailable then
+        ApplySpellEffectPreview(env, effectOwner, scene.selectedSpellEffect)
+    else
+        HideSpellEffectPreview(env, effectOwner)
+    end
+    scene.dynamicSpellHandlesActive = active
+    FinalizeScene(scene)
 end

@@ -9,8 +9,7 @@ local _, MSUF = ...
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
 -- Classic and WoW Forever groups may leave roles unassigned (client facts, read once).
-local USE_UNASSIGNED_POWER_FALLBACK = MSUF.Client ~= nil
-    and (MSUF.Client.IsForever == true or MSUF.Client.IsClassic == true)
+local USE_UNASSIGNED_POWER_FALLBACK = MSUF.Client.IsForever == true or MSUF.Client.IsClassic == true
 
 local math_max = math.max
 local math_min = math.min

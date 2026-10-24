@@ -10,15 +10,7 @@
 local MSUF = _G.MSUF
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2/UnitPreview_View_Chrome")
 local ExportPublic = MSUF.ExportPublic
-MSUF.L = MSUF.L or {}
-local L = MSUF.L
-if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
-local isEn = MSUF.LOCALE == "enUS"
-local function TR(v)
-    if type(v) ~= "string" then return v end
-    if isEn then return v end
-    return L[v] or v
-end
+local TR = MSUF.MSUF2.PreviewHelpers.TranslateUnitPreview
 local format = string.format
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local Preview = MSUF.UFPreview or {}
@@ -294,17 +286,8 @@ local function CreatePreviewAnimationButton(box)
     if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or { 1, 1, 1, 1 }, 0) end
     btn._preview = box
     if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
-    btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
-    btn._msuf2CommandAction = {
-        kind = "toggle",
-        historyMode = "none",
-        get = function() return PreviewAnimationActive(box) end,
-        set = function(enabled)
-            if enabled == true and PreviewAnimationInCombat() then return false end
-            SetPreviewAnimationEnabled(box, enabled == true, "UNIT_PREVIEW_SEARCH_ANIMATION")
-            return PreviewAnimationActive(box) == (enabled == true)
-        end,
-    }
+    PreviewHelpers.BindPreviewAnimationButton(btn, box, TogglePreviewAnimation, PreviewAnimationActive,
+        PreviewAnimationInCombat, SetPreviewAnimationEnabled, "UNIT_PREVIEW_SEARCH_ANIMATION")
     if M2.AddTooltip then
         M2.AddTooltip(btn, "Animate Preview",
             "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic window. Matching Edit Mode aura dummies use the same clock. Pauses during combat.",

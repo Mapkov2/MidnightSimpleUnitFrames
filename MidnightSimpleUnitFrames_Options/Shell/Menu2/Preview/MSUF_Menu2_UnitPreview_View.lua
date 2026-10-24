@@ -35,7 +35,7 @@ local STATUS_REFRESH = {}
 -- Boss units exist only where the client model says so: every Mainline client
 -- and Mists among the Classic ones. Render draws the boss target marker only
 -- when its handle exists, so a client without boss units never shows one.
-local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1")
+local HAS_BOSS_UNITS = MSUF.Client.SupportsUnit("boss1")
 
 local Fallbacks = M2.Fallbacks or {}
 local PreviewModel = Preview.Model or {}

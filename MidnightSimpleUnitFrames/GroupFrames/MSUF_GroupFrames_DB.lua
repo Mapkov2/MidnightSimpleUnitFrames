@@ -9,8 +9,9 @@ local _, MSUF = ...
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
 local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
--- WoW Forever client fact, read once. Harnesses without MSUF.Client are not Forever.
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+-- Client facts, read once after the shared bootstrap.
+local IS_FOREVER = MSUF.Client.IsForever == true
+local SUPPORTS_MYTHIC_RAID = MSUF.Client.SupportsGroupKind("mythicraid")
 
 --==========================================================================--
 -- GroupFrames API surface (MSUF.GF / _G.MSUF_*)
@@ -704,7 +705,7 @@ PARTY_DEFAULTS.portraitBgColorA = 0.85
 --- stay unchanged. Top centre is free of every status icon and of the name. On by
 --- default for Party only; a raid of 20 to 40 numbers is noise (owner decision
 --- 2026-09-19).
-if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+if MSUF.Client.SupportsThreatText == true then
     for _, defaults in ipairs({ PARTY_DEFAULTS, RAID_DEFAULTS, MYTHIC_RAID_DEFAULTS }) do
         defaults.threatText = false
         defaults.threatTextColorCurve = true
@@ -809,7 +810,7 @@ end
 local _confParty, _confRaid, _confMythicRaid, _confPriority
 
 function GF.IsMythicRaidContext()
-    if MSUF.Client and MSUF.Client.SupportsGroupKind and not MSUF.Client.SupportsGroupKind("mythicraid") then return false end
+    if not SUPPORTS_MYTHIC_RAID then return false end
     local inGroup = (IsInGroup and IsInGroup()) or false
     local inRaid = (IsInRaid and IsInRaid()) or false
     if not inGroup and not inRaid then return false end

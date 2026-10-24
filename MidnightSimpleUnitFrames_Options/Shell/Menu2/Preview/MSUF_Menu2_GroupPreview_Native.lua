@@ -274,18 +274,10 @@ local function CreatePreviewAnimationButton(box, registerControl)
         btn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -104, -34)
     end
     StylePreviewPill(btn, parent)
-    btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
-    btn._msuf2CommandAction = {
-        kind = "toggle",
-        historyMode = "none",
-        get = function() return PreviewAnimationActive(box) end,
-        set = function(enabled)
-            if enabled == true and PreviewAnimationInCombat() then return false end
-            SetPreviewAnimationEnabled(box, enabled == true, "GROUP_PREVIEW_SEARCH_ANIMATION")
-            return PreviewAnimationActive(box) == (enabled == true)
-        end,
-    }
-    (registerControl or RegisterGroupPreviewControl)(btn, "combat_animation", "Group Preview Animation", "button", "ephemeral")
+    PreviewHelpers.BindPreviewAnimationButton(btn, box, TogglePreviewAnimation, PreviewAnimationActive,
+        PreviewAnimationInCombat, SetPreviewAnimationEnabled, "GROUP_PREVIEW_SEARCH_ANIMATION")
+    local register = registerControl or RegisterGroupPreviewControl
+    register(btn, "combat_animation", "Group Preview Animation", "button", "ephemeral")
     if M.AddTooltip then
         M.AddTooltip(btn, "Animate Preview",
             "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.",
@@ -1366,7 +1358,7 @@ function NativeBuild.Mock(state)
         help = "Pans this exact Group preview canvas by an explicit X/Y delta.",
         command = box._msuf2PanCommand,
     })
-    -- The frame body is an engine frame: an isolated scene hangs on the mock and Render.RenderCell aliases its regions
+    -- The complete cell is an engine frame: an isolated scene hangs on the mock and Render.RenderCell aliases its regions
     -- (_health, _power, _nameFS, ...) onto the mock for the handles. The scene root is the kit host of this preview:
     -- Activate/Deactivate follow the box's visibility. It is built by the first paint (Render.RenderCell), not here:
     -- a preview that is never shown, or a host without the engine, never builds a scene.
@@ -1600,6 +1592,7 @@ function NativeBuild.Lifecycle(state)
         if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
         StopHandleDrag(self and self._selectedHandle)
         -- The cell is not on screen while the preview is suspended: the scene root goes quiet with it.
+        PreviewHelpers.RestoreGroupSceneHandles(self, true)
         if self._scene then self._scene:Deactivate() end
         -- This is the one place the runtime preview is suspended - page switches,
         -- the fixed-preview expander and window hides all funnel through here,
@@ -1631,6 +1624,7 @@ function NativeBuild.Lifecycle(state)
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
+            PreviewHelpers.RestoreGroupSceneHandles(self, true)
             KillPreviewAnimationForCombat(self)
             if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
             self._msufGFRefreshAfterCombat = self._msufGFRefreshReason or self._msufGFRefreshAfterCombat or true
