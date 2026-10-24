@@ -79,20 +79,11 @@ local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL"
 local PLAYER_POWER_SOURCE_VALUES = M.PlayerPowerSourceValues
 local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
 -- Portrait placement value lists. Kept in one table instead of one file local
--- per list.
-local PORTRAIT_PLACEMENT = {
-    dragonLayer = VT("BACKGROUND", "Background", "BORDER", "Border", "ARTWORK", "Artwork", "OVERLAY", "Overlay"),
-    classificationPreview = VT("OFF", "Off", "elite", "Elite (gold)", "rare", "Rare (silver)",
-        "rareelite", "Rare elite (silver)", "worldboss", "Boss (winged gold)"),
-    modes = VT("ATTACHED", "Attached to bar", "DETACHED", "Detached", "OVERLAY", "Overlay on bar"),
-    points = VT(
-        "TOPLEFT", "Top left", "TOP", "Top", "TOPRIGHT", "Top right",
-        "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
-        "BOTTOMLEFT", "Bottom left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom right"),
-    overlay = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "FULL", "Fill bar"),
-    borderArt = VT("FLAT", "Flat", "RELIEF", "Relief"),
-    borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
-}
+-- per list; the shared ones come from the section helpers the Group page also uses.
+local PORTRAIT_PLACEMENT = M.UnitSectionsShared.PortraitPlacementValues()
+PORTRAIT_PLACEMENT.dragonLayer = VT("BACKGROUND", "Background", "BORDER", "Border", "ARTWORK", "Artwork", "OVERLAY", "Overlay")
+PORTRAIT_PLACEMENT.classificationPreview = VT("OFF", "Off", "elite", "Elite (gold)", "rare", "Rare (silver)",
+    "rareelite", "Rare elite (silver)", "worldboss", "Boss (winged gold)")
 local PORTRAIT_SIZE_MODES = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height")
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus
@@ -329,11 +320,12 @@ local function BuildPortraitDirection(ctx, card, unit, width, metadata)
         W.SetControlGateEnabled(pad, "classic-round", false)
         W.SetControlDisabledReason(pad, note)
     end
-    M.BindSegment(ctx, pad,
-        function() return MSUF.PortraitDetails.NormalizeBlizzardDirection(GetConf(unit).portraitBlizzardDirection) end,
-        function(value) SetPortraitValue(unit, "portraitBlizzardDirection", value, "MSUF2_PORTRAIT_BLIZZARD_DIRECTION") end,
-        metadata)
-    Schema.Owned(pad, unit, "portrait")
+    Schema.Bind(ctx, pad, {
+        id = metadata.controlId, kind = "segment", labelKey = "Blizzard frame direction", settingPath = metadata.settingKey,
+        meta = metadata, scope = unit, applyDomain = "portrait",
+        get = function() return MSUF.PortraitDetails.NormalizeBlizzardDirection(GetConf(unit).portraitBlizzardDirection) end,
+        set = function(value) SetPortraitValue(unit, "portraitBlizzardDirection", value, "MSUF2_PORTRAIT_BLIZZARD_DIRECTION") end,
+    })
     return pad
 end
 -- The Portrait section builds in three stages that share one table `p`: the shell (tab frames, cards
@@ -565,7 +557,9 @@ function PortraitSection.MoreControls(p)
         M.AddTooltip(c.shadow, "Inset shadow strength", "Darkens the inner edges of square portraits.", { hook = true })
         M.AddTooltip(c.dragonArtwork, "Always show dragon artwork",
             "Always displays the gold dragon as decoration, independent of the unit's classification.", { hook = true })
-        M.AddTooltip(c.dragonControls[4], "Dragon draw order", "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring.", { hook = true })
+        M.AddTooltip(c.dragonControls[4], "Dragon draw order",
+            "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, "
+            .. "the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring.", { hook = true })
     end
 end
 function PortraitSection.Gates(p)
@@ -706,26 +700,6 @@ local function PreparePowerSwitch(ctx, sec, unit)
     return show
 end
 
-local function SetPowerFillMode(ctx, unit, key, peerKey, value, reason, historyLabel, opts)
-    value = value == true
-    local function Write()
-        local conf = GetConf(unit)
-        local changed = conf[key] ~= value
-        conf[key] = value
-        if value and conf[peerKey] ~= false then
-            conf[peerKey] = false
-            changed = true
-        end
-        if not changed then return false end
-        M.RequestUnitDomains(unit, reason, opts)
-        if M.RequestRefresh then M.RequestRefresh(ctx, "unit-power-fill-mode") end
-        return true
-    end
-    if type(M.RunWithHistory) == "function" then
-        return M.RunWithHistory(historyLabel, "unit:" .. tostring(unit) .. ":powerFillMode", Write)
-    end
-    return Write()
-end
 -- The Power Bar section builds in stages that share one table `pw`: the layout, the read/write helpers,
 -- the cards, the visibility and border controls, the detached controls and the gate group that enables them.
 local PowerSection = {}
@@ -753,8 +727,15 @@ function PowerSection.Helpers(pw)
     local ctx, unit, isPlayer = pw.ctx, pw.unit, pw.isPlayer
     local powerControls, detachedControls = {}, {}
     pw.powerControls, pw.detachedControls = powerControls, detachedControls
-    function pw.AddPowerControl(control) M.AppendValues(powerControls, control); W.AttachUnitEditFocus(control, unit, "powerbar"); return control end
-    function pw.AddDetachedControl(control) M.AppendValues(detachedControls, control); return pw.AddPowerControl(control) end
+    function pw.AddPowerControl(control)
+        M.AppendValues(powerControls, control)
+        W.AttachUnitEditFocus(control, unit, "powerbar")
+        return control
+    end
+    function pw.AddDetachedControl(control)
+        M.AppendValues(detachedControls, control)
+        return pw.AddPowerControl(control)
+    end
     local function ResolveDefault(value)
         if type(value) == "function" then return value() end
         return value
@@ -958,7 +939,7 @@ function PowerSection.Main(pw)
     local function FillToggle(id, key, peerKey, label, y, reason, historyLabel)
         ControlRow(ctx, borderCard, { "toggle", id, false, { label, 16, y, rightW - 32 },
             get = function() return ReadBool(unit, key, false) end,
-            set = function(v) SetPowerFillMode(ctx, unit, key, peerKey, v, reason, historyLabel, POWER_OPTS) end,
+            set = function(v) UnitSectionShared.SetFillMode(ctx, unit, "power", key, peerKey, v, reason, historyLabel, POWER_OPTS) end,
             scope = unit, meta = SettingMeta(ctx, "power." .. key, unit, key),
             beforeBind = AddPowerControl,
         })
@@ -1014,8 +995,8 @@ function PowerSection.Main(pw)
             pw.Refresh()
             RefreshClassPowerDetachedState()
         end,
-        scope = unit, meta = ReviewedMeta(ctx, "power.detached", "setting", "compound",
-            "Enabling detached power seeds its required geometry and Player synchronization defaults."),
+        -- Enabling detached power also seeds its geometry and Player sync defaults (same unit root).
+        scope = unit, meta = SettingMeta(ctx, "power.detached", unit, "powerBarDetached"),
         beforeBind = AddPowerControl,
     })
 end
@@ -1072,8 +1053,11 @@ function PowerSection.Detached(pw)
             scope = unit, meta = SettingMeta(ctx, "power.detached_shape", unit, "detachedPowerBarShape"),
             beforeBind = AddDetachedControl,
         })
-        if M.AddTooltip then M.AddTooltip(pw.detachedShape, "Independent Powerbar Shape",
-            "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.", { hook = true, owner = "ANCHOR_RIGHT" }) end
+        if M.AddTooltip then
+            M.AddTooltip(pw.detachedShape, "Independent Powerbar Shape",
+                "Changes only Player power. Class Resources keep their own shape setting. "
+                .. "Round and Crystal fill horizontally; Orb fills bottom-to-top.", { hook = true, owner = "ANCHOR_RIGHT" })
+        end
         pw.orbSize = pw.BuildPowerControls(detachedCard, AddDetachedControl, { { "slider", "detachedPowerOrbSize", 54, { "Orb size", 20, 160, 1, 300 },
             { 16, sliderTop - 132, detachedSliderW, "CENTER" }, reason = "MSUF2_POWER_DETACHED_ORB_SIZE",
             opts = DETACHED_POWER_OPTS } })["detachedPowerOrbSize"]
@@ -1093,7 +1077,7 @@ function PowerSection.Gates(pw)
     local function ClassManaged() return isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) and true or false end
     -- While Class Resources owns the Player power bar the section notice
     -- explains the lock, so these hover reasons stay silent then.
-    local turnOn = W.TurnOnReason or function() return nil end
+    local turnOn = W.TurnOnReason
     pw.Refresh = pw.Refresh(M.BindGateGroup(ctx, nil, {
         { enable = { show }, controls = powerControls, on = PowerOn,
             reason = turnOn("Show power bar", function() return PowerOn() or ClassManaged() end) },
@@ -1123,7 +1107,8 @@ function PowerSection.Gates(pw)
         also = function()
             if ClassManaged() then
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Class Resources") or "Class Resources") end
-                powerNotice:SetMessage(M.Tr("Player power bar is connected to Class Resources. Manage detached power and power text in Class Resources > Detached Power Bar."), "warning")
+                powerNotice:SetMessage(M.Tr("Player power bar is connected to Class Resources. "
+                    .. "Manage detached power and power text in Class Resources > Detached Power Bar."), "warning")
                 powerNotice:Show()
             elseif not PowerOn() then
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
@@ -1677,8 +1662,8 @@ function CastbarSection.Advanced(s)
             end
             RefreshCastbarEnabled()
         end,
-        scope = unit, meta = ReviewedMeta(ctx, "castbar.spell_text_width_mode", "setting", "compound",
-            "Selecting manual width can initialize the paired maximum-width value."),
+        -- Selecting manual width can also initialize the paired maximum width (same general root).
+        scope = unit, meta = SettingMeta(ctx, "castbar.spell_text_width_mode", "general", DetailKey("SpellNameTruncate")),
         beforeBind = function(widget)
             AddControl(spellControls, widget)
             W.AttachUnitEditFocus(widget, unit, "castbar")

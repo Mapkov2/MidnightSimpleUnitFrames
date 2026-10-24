@@ -1,6 +1,6 @@
 -- Embedded samples use the gameplay painter without native timers or DB writes.
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua")
 local M, Swing = MSUF.MSUF2, MSUF.SwingTimer
 local W = M.Widgets

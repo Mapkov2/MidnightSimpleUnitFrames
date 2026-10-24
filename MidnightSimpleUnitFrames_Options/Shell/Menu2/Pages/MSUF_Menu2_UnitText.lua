@@ -246,7 +246,8 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
                     RefreshTextControlState()
                 end,
                 meta = FixedSettingMeta("text." .. kind .. ".mouseover", key), scope = unit,
-                tip = { "Only show on mouseover", "Keeps this text hidden until your mouse is over the unit frame. Name, HP and power text each have their own switch.",
+                tip = { "Only show on mouseover", "Keeps this text hidden until your mouse is over the unit frame. Name, HP and power text each have " ..
+                    "their own switch.",
                     { hook = true, labelHit = true } } },
             { "text", "help", nil, { "Hover the unit frame to reveal this text. Preview stays visible. 0 seconds = instant.",
                 16, -82, rightW - 32, T.colors.dim }, scope = unit,
@@ -552,7 +553,8 @@ function TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, contro
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-move-together") elseif M.Refresh then M.Refresh(ctx) end
             end,
             meta = ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"), scope = unit,
-            tip = { "Move text as one group", "On: dragging this text in Preview moves all its slots together. Off: each visible slot gets its own handle so you can place it separately.",
+            tip = { "Move text as one group", "On: dragging this text in Preview moves all its slots together. Off: each visible slot gets its own " ..
+                "handle so you can place it separately.",
                 TIP_TOGGLE } },
         { "slider", "slotSize", 10, { "Selected slot size", 6, 48, 1, 260 }, { 16, -122, rightW - 58, "CENTER" },
             get = function()
@@ -645,7 +647,8 @@ function TextSection.BuildValueTextContent(state, ctx, unit, kind, tab, cfg, con
                 AfterModeChanged(mode)
             end,
             meta = SelectedSlotMeta("text." .. kind .. ".slot.mode"), scope = unit,
-            tip = { cfg.valueLabel or "Value", "What the selected slot shows. None leaves the slot empty; choices with several values are joined by the Delimiter.", TIP_HOOK } },
+            tip = { cfg.valueLabel or "Value", "What the selected slot shows. None leaves the slot empty; choices with several values are joined by " ..
+                "the Delimiter.", TIP_HOOK } },
     }, Schema.UnitOptions(), controls)
     if hasAbsorb then
         controls.absorb = Control(ctx, content, { "segment", "absorb", nil, { "Absorb", ABSORB_STYLE_VALUES, cardW - 32 }, { 16, -216, cardW - 32, "LEFT" },
@@ -676,7 +679,8 @@ function TextSection.BuildValueTextContent(state, ctx, unit, kind, tab, cfg, con
             RefreshTextHeader()
         end,
         meta = SelectedSlotMeta("text." .. kind .. ".slot.hide_percent"), scope = unit,
-        tip = { "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value includes a percent.",
+        tip = { "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value " ..
+            "includes a percent.",
             TIP_TOGGLE } })
     function controls.RefreshPercentToggles(enabled)
         SetControlEnabled(controls.hidePercent, enabled == true and TextModeHasPercent(CurrentMode()))
@@ -739,7 +743,8 @@ function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, c
         { "text", "formatting", nil, { "Formatting", 16, formattingY, cardW - 32, T.colors.text }, scope = unit,
             meta = ControlMeta(ctx, "text." .. kind .. ".formatting", "ephemeral") },
     })
-    controls.separator = Control(ctx, content, { "dropdown", "separator", nil, { "Delimiter", SEPARATORS, 160 }, { 16, formattingY - 28, halfDropdownW, "LEFT" },
+    controls.separator = Control(ctx, content, { "dropdown", "separator", nil, { "Delimiter", SEPARATORS, 160 },
+        { 16, formattingY - 28, halfDropdownW, "LEFT" },
         get = cfg.separatorGet,
         set = function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end,
         meta = FixedSettingMeta("text." .. kind .. ".separator", cfg.separatorKey), scope = unit,
@@ -749,7 +754,8 @@ function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, c
             get = function() return ReadText(unit, cfg.reverseKey, false) == true end,
             set = function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end,
             meta = FixedSettingMeta("text." .. kind .. ".reverse", cfg.reverseKey), scope = unit,
-            tip = { "Reverse order", "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent becomes Percent / Current.",
+            tip = { "Reverse order", "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent " ..
+                "becomes Percent / Current.",
             TIP_TOGGLE } })
     end
     if cfg.decimalsKey then
@@ -768,7 +774,8 @@ function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, c
                 if controls.RefreshPreview then controls.RefreshPreview() end
             end,
             meta = FixedSettingMeta("text." .. kind .. ".full_value_short", cfg.fullValueShortKey), scope = unit,
-            tip = { "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot shows a number.",
+            tip = { "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot " ..
+                "shows a number.",
             TIP_TOGGLE } })
         function controls.RefreshFullValueToggle(enabled)
             local hasNumericValue = false
@@ -791,10 +798,12 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
     TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, controls)
     if M.AddTooltip then
         for _, button in ipairs(controls.slot and controls.slot.buttons or {}) do
-            M.AddTooltip(button, "Text slots", "Each text has three slots: left, center and right. The slot picked here is the one the value, Hide % sign and slot size settings edit.", TIP_HOOK)
+            M.AddTooltip(button, "Text slots", "Each text has three slots: left, center and right. The slot picked here is the one the value, Hide % " ..
+                "sign and slot size settings edit.", TIP_HOOK)
         end
         for _, button in ipairs(controls.absorb and controls.absorb.buttons or {}) do
-            M.AddTooltip(button, "Absorb", "Adds the unit's absorb shield amount after this slot's HP value, with or without a shield icon. Shown only while a shield is active.", TIP_HOOK)
+            M.AddTooltip(button, "Absorb", "Adds the unit's absorb shield amount after this slot's HP value, with or without a shield icon. Shown " ..
+                "only while a shield is active.", TIP_HOOK)
         end
     end
     return controls
@@ -978,7 +987,8 @@ function TextSection.BindRefreshState(state, ctx, unit)
         SetControlsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         if powerManaged then
             if powerManagedNotice then
-                powerManagedNotice:SetMessage(M.Tr("Player power bar is connected to Class Resources. These Power Text settings still edit the active Player power text."), "warning")
+                powerManagedNotice:SetMessage(M.Tr("Player power bar is connected to Class Resources. These Power Text settings still edit the " ..
+                    "active Player power text."), "warning")
                 powerManagedNotice:Show()
             end
         elseif powerManagedNotice then

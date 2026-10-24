@@ -47,8 +47,8 @@ local UNIT_PAGES = { uf_player = { unit = "player", title = "MSUF Player", label
 -- clients lack some units too (Classic Era: focus, boss and arena; TBC: boss).
 -- There the pages, aura copy partners and copy targets of every unit
 -- MSUF.Client.SupportsUnit rejects are dropped. Midnight keeps every unit.
-local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
-local DROP_UNSUPPORTED_UNITS = MSUF.Client ~= nil and (MSUF.Client.IsForever == true or IS_CLASSIC_FAMILY)
+local IS_CLASSIC_FAMILY = MSUF.Client.Family == "Classic"
+local DROP_UNSUPPORTED_UNITS = (MSUF.Client.IsForever == true or IS_CLASSIC_FAMILY)
     and type(MSUF.Client.SupportsUnit) == "function"
 --- Load-time only. Takes a { value = unit } list and returns the kept rows, or
 --- a table keyed by unit (or holding { unit = ... } pages) and prunes it in place.
@@ -120,12 +120,18 @@ local CASTBAR_FIELDS = (function()
     end
     return fields
 end)()
-local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconShape IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
+local CASTBAR_COPY_SUFFIXES = WL [[
+    IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle
+    IconShape IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth
+    SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR
+    SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
 --- OffsetX/OffsetY mean two different things depending on the detach state: anchored
 --- to the unit frame they are a relative gap and safe to copy, detached they are an
 --- absolute UIParent position (see MSUF_CastbarAnchors) and copying them would stack
 --- both castbars on the same screen spot. Only the relative case travels.
-local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB]]
+local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[
+    TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR
+    TargetNameColorG TargetNameColorB]]
 local LOAD_CONDITIONS = KLR [[
 loadCondHideInHousing=Housing
 loadCondHideInCombat=In combat
@@ -140,7 +146,8 @@ loadCondHideResting=Resting
 loadCondHideSolo=Solo
 loadCondHideStealthed=Stealthed
 ]]
-local STATUS_ANCHORS = VTP "TOPLEFT=Top Left|TOPRIGHT=Top Right|BOTTOMLEFT=Bottom Left|BOTTOMRIGHT=Bottom Right|CENTER=Center|TOP=Top|BOTTOM=Bottom|LEFT=Left|RIGHT=Right"
+local STATUS_ANCHORS = VTP("TOPLEFT=Top Left|TOPRIGHT=Top Right|BOTTOMLEFT=Bottom Left|BOTTOMRIGHT=Bottom Right|CENTER=Center|TOP=Top|BOTTOM=Bottom|" ..
+    "LEFT=Left|RIGHT=Right")
 local STATUS_CORNER_ANCHORS = STATUS_ANCHORS
 local function WithNameAnchors(rightText, leftText)
     local out = VT("NAMERIGHT", rightText, "NAMELEFT", leftText)
@@ -149,8 +156,12 @@ local function WithNameAnchors(rightText, leftText)
 end
 local STATUS_LEVEL_ANCHORS = WithNameAnchors("Right to name", "Left to name")
 local RAID_GROUP_NAME_ANCHORS = WithNameAnchors("Right to name", "Left to name")
-local COMBAT_SYMBOLS = VTP "DEFAULT=Default|weapon_axes_crossed=Axes|weapon_bows_crossed=Bows|weapon_crossbows_crossed=Crossbows|weapon_daggers_crossed=Daggers|weapon_fishing_poles_crossed=Fishing|weapon_fist_crossed=Fist|weapon_guns_crossed=Guns|weapon_maces_crossed=Maces|weapon_polearms_crossed=Polearms|weapon_shuriken=Shuriken|weapon_staves_crossed=Staves|weapon_swords_crossed=Swords|weapon_thrown_crossed=Thorn|weapon_wands_crossed=Wands|weapon_warglaives_crossed=Warglaives"
-local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_blizzard_animated=Blizzard animated Zzz|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz"
+local COMBAT_SYMBOLS = VTP("DEFAULT=Default|weapon_axes_crossed=Axes|weapon_bows_crossed=Bows|weapon_crossbows_crossed=Crossbows|" ..
+    "weapon_daggers_crossed=Daggers|weapon_fishing_poles_crossed=Fishing|weapon_fist_crossed=Fist|weapon_guns_crossed=Guns|" ..
+    "weapon_maces_crossed=Maces|weapon_polearms_crossed=Polearms|weapon_shuriken=Shuriken|weapon_staves_crossed=Staves|weapon_swords_crossed=Swords|" ..
+    "weapon_thrown_crossed=Thorn|weapon_wands_crossed=Wands|weapon_warglaives_crossed=Warglaives")
+local RESTED_SYMBOLS = VTP("DEFAULT=Default|rested_blizzard_animated=Blizzard animated Zzz|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|" ..
+    "rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz")
 local RESS_SYMBOLS = VTP "DEFAULT=Default|resurrection_ankh=Ankh|resurrection_cross=Cross|resurrection_soul=Soul|resurrection_wings=Angelic Wings"
 local DEFAULT_SYMBOLS = VT("DEFAULT", "Default")
 local UnitPage = M.UnitPage or {}
@@ -248,12 +259,12 @@ local STATUS_CONTROLS = {
 -- Hunter pet happiness exists again on WoW Forever, Classic Era and TBC, which
 -- all load this page. Midnight and Mists have none, so the control is only
 -- added where the client supports it.
-if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
+if MSUF.Client.SupportsPetHappiness == true then
     STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetHappiness", "Pet Happiness", "showPetHappinessIndicator", true, "petHappinessIndicator",
         24, "RIGHT", STATUS_CORNER_ANCHORS, -7, -4, 7, "MSUF_RequestPetHappinessIndicatorRefresh",
         { allowed = function(unit) return unit == "pet" end, statusRuntime = true })
 end
-if MSUF.Client ~= nil and MSUF.Client.IsClassic == true then
+if MSUF.Client.IsClassic == true then
     STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetXP", "Pet XP Bar", "showPetXPBar", true, "petXPBar", 8, "BOTTOM", STATUS_CORNER_ANCHORS,
         0, -5, 7, "MSUF_RequestPetXPBarRefresh",
         { allowed = function(unit) return unit == "pet" end, statusRuntime = true, width = "petXPBarWidth", defaultWidth = 80 })
@@ -261,7 +272,7 @@ end
 -- The threat percentage text exists on WoW Forever, Classic Era and TBC, which
 -- all load this page; Midnight and Mists have none. statusTextState gives it the
 -- status text color shortcut without the name-font size fallback of textIndicator.
-if MSUF.Client ~= nil and MSUF.Client.SupportsThreatText == true then
+if MSUF.Client.SupportsThreatText == true then
     STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusThreat", "Threat %", "showThreatIndicator", true, "threatIndicator", 11, "BOTTOMLEFT",
         STATUS_CORNER_ANCHORS, 6, 2, 7, "MSUF_RequestThreatIndicatorRefresh",
         { allowed = function(unit) return unit == "target" or unit == "focus" or unit == "boss" end, statusRuntime = true, statusTextState = "THREAT",
@@ -271,9 +282,16 @@ end
 -- those values to TOPLEFT/TOP/TOPRIGHT; FRAME* keeps the new middle row
 -- unambiguous even when an old profile is imported later.
 local TEXT_ANCHORS = VTP "TOPLEFT=Top Left|TOP=Top Center|TOPRIGHT=Top Right|FRAMELEFT=Left|FRAMECENTER=Center|FRAMERIGHT=Right"
-local HP_MODES = VTP "ABSORB=Absorb|CURRENTABSORB=Current + Absorb|FULLVALUEABSORB=Full Value + Absorb|MAXABSORB=Max + Absorb|DEFICITABSORB=Deficit + Absorb|CURMAXABSORB=Current / Max + Absorb|PERCENTABSORB=Percent + Absorb|CURPERCENTABSORB=Current / Percent + Absorb|CURMAXPERCENTABSORB=Current / Max / Percent + Absorb|MAXPERCENTABSORB=Max / Percent + Absorb|PERCENTCURABSORB=Percent / Current + Absorb|PERCENTMAXABSORB=Percent / Max + Absorb|PERCENTCURMAXABSORB=Percent / Current / Max + Absorb|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max|NONE=None"
-local POWER_MODES = VTP "CURRENT=Current|MAX=Max|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|NONE=None"
-local BOSS_LAYOUT_OPTIONS = VTP "VERTICAL_DOWN=Vertical (top -> bottom)|VERTICAL_UP=Vertical (bottom -> top)|HORIZONTAL_RIGHT=Horizontal (left -> right)|HORIZONTAL_LEFT=Horizontal (right -> left)"
+local HP_MODES = VTP("ABSORB=Absorb|CURRENTABSORB=Current + Absorb|FULLVALUEABSORB=Full Value + Absorb|MAXABSORB=Max + Absorb|DEFICITABSORB=Deficit " ..
+    "+ Absorb|CURMAXABSORB=Current / Max + Absorb|PERCENTABSORB=Percent + Absorb|CURPERCENTABSORB=Current / Percent + Absorb|" ..
+    "CURMAXPERCENTABSORB=Current / Max / Percent + Absorb|MAXPERCENTABSORB=Max / Percent + Absorb|PERCENTCURABSORB=Percent / Current + Absorb|" ..
+    "PERCENTMAXABSORB=Percent / Max + Absorb|PERCENTCURMAXABSORB=Percent / Current / Max + Absorb|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full " ..
+    "Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|" ..
+    "PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max|NONE=None")
+local POWER_MODES = VTP("CURRENT=Current|MAX=Max|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / " ..
+    "Percent|NONE=None")
+local BOSS_LAYOUT_OPTIONS = VTP("VERTICAL_DOWN=Vertical (top -> bottom)|VERTICAL_UP=Vertical (bottom -> top)|HORIZONTAL_RIGHT=Horizontal (left -> " ..
+    "right)|HORIZONTAL_LEFT=Horizontal (right -> left)")
 local BOSS_LAYOUT_VALID = KSW("VERTICAL_DOWN VERTICAL_UP HORIZONTAL_RIGHT HORIZONTAL_LEFT")
 local PortableControlToken = M.PortableControlToken
 local function UnitControlMeta(ctx, semanticPath, classification)
@@ -334,13 +352,28 @@ function UnitPage.GetBars()
 end
 
 local DeepCopy = M.DeepCopy
-local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerBarBorderColorR powerBarBorderColorG powerBarBorderColorB powerSmoothFill powerChunkedFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
+local COPY_POWER_BAR_FIELDS = WL [[
+    showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness
+    powerBarBorderColorR powerBarBorderColorG powerBarBorderColorB powerSmoothFill powerChunkedFill
+    powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight
+    detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset
+    detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture
+    powerBarBgTexture]]
 --- Must cover every per-unit portrait key the engine reads (CompileUnitPortrait in
 --- MSUF_UF_Config.lua) and the Visuals page binds. Border/background COLORS are
 --- intentionally absent: those live in MSUF_DB.general and are shared by all units.
 --- unit_copy_semantics_smoke extracts the bound keys from the Visuals page source and
 --- fails when a new portrait control is missing here.
-local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitClickable portraitBlizzardElite portraitBlizzardCorner portraitBlizzardDirection portraitBlizzardStandaloneRing portraitShape portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitEdgeSoftness portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride portraitFlip portraitInnerShadow portraitDragonArtwork portraitDragonScale portraitDragonX portraitDragonY portraitDragonFlip portraitDragonInInstances portraitDragonLayer portraitDragonLevel]]
+local COPY_PORTRAIT_FIELDS = WL [[
+    portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitClickable portraitBlizzardElite
+    portraitBlizzardCorner portraitBlizzardDirection portraitBlizzardStandaloneRing portraitShape
+    portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY
+    portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo
+    portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitEdgeSoftness
+    portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder
+    portraitDecoOverride portraitFlip portraitInnerShadow portraitDragonArtwork portraitDragonScale
+    portraitDragonX portraitDragonY portraitDragonFlip portraitDragonInInstances portraitDragonLayer
+    portraitDragonLevel]]
 local COPY_TEXT_FIELDS = WL [[
     nameTextMouseover hpTextMouseover powerTextMouseover
     nameTextMouseoverFadeIn nameTextMouseoverFadeOut hpTextMouseoverFadeIn hpTextMouseoverFadeOut powerTextMouseoverFadeIn powerTextMouseoverFadeOut
@@ -383,7 +416,12 @@ AppendCombinedFields(COPY_TEXT_FIELDS, "direct", WL [[Name HealthLeft HealthCent
     WL [[Point RelativePoint OffsetX OffsetY Color]])
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil,
     "show iconStyle customIcon x y anchor size layer symbol")
-local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance", "stateIconsTestMode statusIconsTestMode stateIconsAlpha statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor levelIndicatorForeverBadge threatIndicatorColorCurve threatIndicatorBackground", "show iconStyle customIcon x y anchor size layer symbol")
+local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS,
+    "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat "
+        .. "statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance",
+    "stateIconsTestMode statusIconsTestMode stateIconsAlpha statusIconsAlpha statusTextEnabled "
+        .. "levelIndicatorDifficultyColor levelIndicatorForeverBadge threatIndicatorColorCurve threatIndicatorBackground",
+    "show iconStyle customIcon x y anchor size layer symbol")
 --- Most fields below "healthColorMode" are the per-unit Bars override scope (gated by
 --- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). UnitFrame Dispel Overlay/Symbol
 --- are the deliberate exception: they are copied with Frame settings but stay owned by
@@ -411,14 +449,24 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     healthBarGradientColorR healthBarGradientColorG healthBarGradientColorB
     powerBarGradientColorR powerBarGradientColorG powerBarGradientColorB
 ]]
-local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
+local COPY_TRANSPARENCY_FIELDS = WL [[
+    hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars
+    oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 -- Keep this as a WL literal (even though the shared prefix list is empty) so
 -- unit_copy_coverage_smoke.lua can audit the dynamically-prefixed suffix set.
 local COPY_TEXLAYER_FIELDS = WL [[]]
 AppendCombinedFields(COPY_TEXLAYER_FIELDS, "", { "texLayer", "texLayer2", "texLayer3" },
-    WL [[Enabled SourceMode Atlas Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorTreatment ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV CropMode EdgeSoftness Visibility RoundedClip
-        TargetOnly HealthCondition HealthThreshold HealthLowAlphaEnabled HealthLowAlpha HealthAboveMode]])
-local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInCombat loadCondHideInGroup loadCondHideInInstance loadCondHideInVehicle loadCondHideMounted loadCondHideNoTarget loadCondHideOutOfCombat loadCondHideOutOfCombatNoTarget loadCondHideResting loadCondHideSolo loadCondHideStealthed loadCondShowWhenInjured loadCondActive]]
+    WL [[
+        Enabled SourceMode Atlas Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget
+        Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorTreatment
+        ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight
+        GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV CropMode EdgeSoftness
+        Visibility RoundedClip TargetOnly HealthCondition HealthThreshold HealthLowAlphaEnabled
+        HealthLowAlpha HealthAboveMode]])
+local COPY_LOAD_CONDITION_FIELDS = WL [[
+    loadCondHideInHousing loadCondHideInCombat loadCondHideInGroup loadCondHideInInstance loadCondHideInVehicle
+    loadCondHideMounted loadCondHideNoTarget loadCondHideOutOfCombat loadCondHideOutOfCombatNoTarget
+    loadCondHideResting loadCondHideSolo loadCondHideStealthed loadCondShowWhenInjured loadCondActive]]
 --- Size only. Placement (offsetX/offsetY, point/relativePoint, anchorFrameName and
 --- anchorToUnitframe) must never travel through Copy To: two unit frames sharing a
 --- placement land exactly on top of each other, and the covered one is then
@@ -432,7 +480,7 @@ local AURA_COPY_FLAGS = { player = "showPlayer", pet = "showPet", target = "show
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 -- TBC and Mists field five arena opponents, Classic Era and WoW Forever none,
 -- Midnight three (MSUF.Client.MaxArenaOpponents, published as MSUF_MAX_ARENA_FRAMES).
-local ARENA_SLOTS = tonumber(MSUF.Client and MSUF.Client.MaxArenaOpponents)
+local ARENA_SLOTS = tonumber(MSUF.Client.MaxArenaOpponents)
     or (IS_CLASSIC_FAMILY and tonumber(MSUF_MAX_ARENA_FRAMES)) or 3
 local AURA_ARENA_RUNTIME_UNITS = (function()
     local units = WL("arena1 arena2 arena3")
@@ -440,12 +488,17 @@ local AURA_ARENA_RUNTIME_UNITS = (function()
     return units
 end)()
 local UF_COPY_CATEGORIES = {
-    { key = "basics",       label = "Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
-    { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
+    { key = "basics",       label = "Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus " ..
+        "this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
+    { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, " ..
+        "plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
     { key = "portrait",     label = "Portrait",         default = true },
     { key = "power",        label = "Power Bar",        default = true },
-    { key = "auras",        label = "Aura Options",     default = true, description = "Copies this UnitFrame's Aura visibility, layout, filters, blacklists, Custom Aura setup and tracked spells. Aura Style and the global Appearance theme remain unchanged." },
-    { key = "aurastyle",    label = "Aura Style",       default = true, description = "Copies this UnitFrame's Buff, Debuff, Custom Aura, Player Defensive and Dots on Target presentation, including text, swipe, icon zoom, duration bars, Pandemic and Full-Frame effects. Aura Options and the global Appearance theme remain unchanged." },
+    { key = "auras",        label = "Aura Options",     default = true, description = "Copies this UnitFrame's Aura visibility, layout, filters, " ..
+        "blacklists, Custom Aura setup and tracked spells. Aura Style and the global Appearance theme remain unchanged." },
+    { key = "aurastyle",    label = "Aura Style",       default = true, description = "Copies this UnitFrame's Buff, Debuff, Custom Aura, Player " ..
+        "Defensive and Dots on Target presentation, including text, swipe, icon zoom, duration bars, Pandemic and Full-Frame effects. Aura Options " ..
+        "and the global Appearance theme remain unchanged." },
     { key = "castbar",      label = "Castbar",          default = true },
     { key = "status",       label = "Status Icons",     default = true },
     { key = "load",         label = "Visibility",  default = true },
@@ -462,7 +515,8 @@ local function NewCopyScopeDefaults()
     end
     return t
 end
-local UNIT_COPY_TARGETS = DropUnsupportedUnits(VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|pettarget=Pet Target|boss=Boss Frames|arena=Arena Frames")
+local UNIT_COPY_TARGETS = DropUnsupportedUnits(VTP("player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|" ..
+    "pet=Pet|pettarget=Pet Target|boss=Boss Frames|arena=Arena Frames"))
 local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", pet = "Pet",
     pettarget = "Pet Target", boss = "Boss Frames", arena = "Arena Frames" }
 local UNIT_PILL_WIDTHS = { targettarget = 116, focustarget = 104, boss = 92, arena = 92, target = 62, focus = 58, pet = 46, pettarget = 104 }
@@ -529,17 +583,8 @@ local PB_SHOW_KEY_MAP = {
     boss = "showBossPowerBar",
     arena = "showArenaPowerBar",
 }
-local PB_SHOW_DEFAULTS = {
-    player = true,
-    target = true,
-    focus = true,
-    targettarget = false,
-    focustarget = false,
-    pet = true,
-    pettarget = false,
-    boss = true,
-    arena = true,
-}
+-- Frames whose power bar is off until a profile turns it on; every other unit shows it.
+local PB_HIDDEN_BY_DEFAULT = { targettarget = true, focustarget = true, pettarget = true }
 local function ConfBool(value) if value ~= nil then return true, value ~= false end end
 local function ConfTrue(value) if value ~= nil then return true, value == true end end
 local function ConfNumber(value) if type(value) == "number" then return true, value end end
@@ -550,7 +595,7 @@ local POWER_COPY_OVERRIDES = {
     { key = "showPowerBar", fn = "MSUF_ReadUnitPowerBarEnabled", read = ConfBool, fallback = function(unitKey)
         local b, bk = BarsDB(), PB_SHOW_KEY_MAP[unitKey]
         if b and bk and b[bk] ~= nil then return b[bk] ~= false end
-        return PB_SHOW_DEFAULTS[unitKey] ~= false
+        return PB_HIDDEN_BY_DEFAULT[unitKey] ~= true
     end },
     { key = "powerBarHeight", fn = "MSUF_ReadUnitPowerBarHeight", read = ConfNumber, fallback = function()
         local b = BarsDB()
@@ -762,7 +807,8 @@ end
 local function ConfirmCopyToAll(callback)
     if type(callback) ~= "function" then return end
     M.ShowPrompt("MSUF2_COPY_TO_ALL_CONFIRM", {
-        text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target/Arena/Pet Target."),
+        text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of " ..
+            "Target/Focus Target/Arena/Pet Target."),
         onAccept = callback,
     })
 end

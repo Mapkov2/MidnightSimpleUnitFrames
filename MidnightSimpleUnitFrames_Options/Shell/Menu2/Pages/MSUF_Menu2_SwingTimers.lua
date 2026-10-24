@@ -1,6 +1,6 @@
 -- Independent Forever Swing Timer module settings.
 local _, MSUF = ...
-if not (MSUF.Client and MSUF.Client.IsForever) then return end
+if not MSUF.Client.IsForever then return end
 local M = MSUF.MSUF2
 local W, AP = M.Widgets, M.AdvancedPage
 local Swing = MSUF.SwingTimer

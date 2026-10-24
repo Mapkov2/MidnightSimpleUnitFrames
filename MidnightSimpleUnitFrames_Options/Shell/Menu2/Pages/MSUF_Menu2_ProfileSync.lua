@@ -108,7 +108,12 @@ function M.ProfileSyncPageBuild(state)
             .. " Local variant settings and excluded fields stay independent.",
         20,-40,state.contentW-40,T.colors.muted } })
     VariantPage.Drop(state,section,"Sync group","sync.group.select",GroupValues,function() return selected or "" end,
-        function(value) selected=value; selectedField=nil; excludedField=nil; VariantPage.Refresh(ctx) end,20,-108,width)
+        function(value)
+            selected=value
+            selectedField=nil
+            excludedField=nil
+            VariantPage.Refresh(ctx)
+        end,20,-108,width)
     local input=VariantPage.Input(section,"New sync group name","sync.group.name",30+width,-108,width)
     VariantPage.Button(state,section,"Create sync group","sync.group.create",30+width,-178,function()
         local current=Sync.GetGroups() or {}
@@ -161,4 +166,8 @@ function M.ProfileSyncPageBuild(state)
 end
 M.ProfileSyncPage={Build=M.ProfileSyncPageBuild}
 
-M.ProfileSearch.RegisterSelector("sync",function(name) selected=name; selectedField=nil; excludedField=nil end)
+M.ProfileSearch.RegisterSelector("sync",function(name)
+    selected=name
+    selectedField=nil
+    excludedField=nil
+end)

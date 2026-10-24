@@ -1,9 +1,7 @@
-local addonName, MSUF = ...
-MSUF = MSUF or {}
-local M = MSUF.MSUF2 or {}
-MSUF.MSUF2 = M
-local W = M.Widgets or {}
-local UP = M.UnitPage or {}
+local _, MSUF = ...
+local M = MSUF.MSUF2
+local W = M.Widgets
+local UP = M.UnitPage
 local max = math.max
 local SettingMeta, ControlMeta = UP.SettingMeta, UP.ControlMeta
 local Schema = M.ControlSchema

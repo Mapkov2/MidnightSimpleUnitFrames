@@ -34,7 +34,10 @@ end
 function Shared.SectionFieldKeys(spec, conf, defaults)
     local keys, seen = {}, {}
     local function Add(key)
-        if not seen[key] then seen[key] = true; keys[#keys + 1] = key end
+        if not seen[key] then
+            seen[key] = true
+            keys[#keys + 1] = key
+        end
     end
     for key in tostring(spec.fields or ""):gmatch("%S+") do Add(key) end
     for prefix in tostring(spec.prefixes or ""):gmatch("%S+") do
@@ -254,7 +257,10 @@ function Shared.AttachSectionUX(ctx, opts)
                     return choices, first
                 end
                 more:SetScript("OnClick", function()
-                    if popup and popup:IsShown() then Close(); return end
+                    if popup and popup:IsShown() then
+                        Close()
+                        return
+                    end
                     popupSource = opts.scope()
                     if not popup then popup = CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices) end
                     popup.RefreshTargets()
@@ -632,7 +638,10 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
         if popup then popup:Hide() end
     end
     function api.Show(anchor)
-        if popup and popup:IsShown() then popup:Hide(); return end
+        if popup and popup:IsShown() then
+            popup:Hide()
+            return
+        end
         if not popup then
             local rowsPerColumn, categoryTopY, categoryRowHeight, popupHeight = CopyPopupCategoryLayout(opts, #categories)
             popup = M.CreateMenuPopupPanel(UIParent)
@@ -647,6 +656,72 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
         popup:Show()
     end
     return api
+end
+-- Smooth and chunked fill exclude each other: switching one on switches its peer off.
+-- family ("health" or "power") names the refresh reason and the history source.
+function Shared.SetFillMode(ctx, unit, family, key, peerKey, value, reason, historyLabel, opts)
+    value = value == true
+    local function Write()
+        local conf = M.GetUnitDB(unit)
+        local changed = conf[key] ~= value
+        conf[key] = value
+        if value and conf[peerKey] ~= false then
+            conf[peerKey] = false
+            changed = true
+        end
+        if not changed then return false end
+        M.RequestUnitDomains(unit, reason, opts)
+        if M.RequestRefresh then M.RequestRefresh(ctx, "unit-" .. family .. "-fill-mode") end
+        return true
+    end
+    return M.RunWithHistory(historyLabel, "unit:" .. tostring(unit) .. ":" .. family .. "FillMode", Write)
+end
+-- The page header stays pinned while a scope section scrolls.
+function Shared.AttachStickyHeader(ctx, builder, sec)
+    if not W.AttachStickyPageHeader then return end
+    W.AttachStickyPageHeader(sec, { pageKey = ctx and ctx.key, wrapper = ctx and ctx.wrapper, gap = 4,
+        builder = builder, ctx = ctx, flowGap = 8 })
+end
+-- One tile of a picker: a skinned button with a small label along the bottom edge.
+function Shared.TileButton(parent, tileW, tileH, x, y, labelText)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, T.Template and T.Template() or nil))
+    btn:SetSize(tileW, tileH)
+    btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    if btn.SetBackdrop then
+        PixelLayoutRegion(btn, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1 })
+    end
+    local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+    if text.SetFont then text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+    text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
+    text:SetText(M.Tr(labelText))
+    btn._label = text
+    return btn
+end
+-- The Dispel Symbol style choices the Unit and Group pages offer; each caller gets its own list.
+function Shared.DispelSymbolStyles()
+    return M.ValueTextList(
+        "BLIZZARD", "Blizzard symbol",
+        "BLIZZARD_RING", "Blizzard ring + symbol",
+        "BLIZZARD_BORDER", "Blizzard ring",
+        "MSUF_LETTERS", "MSUF Letters",
+        "MSUF_SHAPES", "MSUF Shapes",
+        "MSUF_GLYPHS", "MSUF Glyphs",
+        "MSUF_MINIMAL", "MSUF Minimal")
+end
+-- The portrait placement choices the Unit and Group pages offer; each caller gets its own lists.
+function Shared.PortraitPlacementValues()
+    local VT = M.ValueTextList
+    return {
+        modes = VT("ATTACHED", "Attached to bar", "DETACHED", "Detached", "OVERLAY", "Overlay on bar"),
+        points = VT(
+            "TOPLEFT", "Top left", "TOP", "Top", "TOPRIGHT", "Top right",
+            "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
+            "BOTTOMLEFT", "Bottom left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom right"),
+        overlay = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "FULL", "Fill bar"),
+        borderArt = VT("FLAT", "Flat", "RELIEF", "Relief"),
+        borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
+    }
 end
 function Shared.MakeTabFrame(parent, key, topOffset, width, store)
     local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
@@ -833,9 +908,14 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         WithHistory(opts.commitTitle or "Set Anchor", opts.commitKey, function() if opts.setValue then opts.setValue(value, "commit") end end)
         self:ClearFocus()
     end)
-    box:SetScript("OnEscapePressed", function(self) Refresh(); self:ClearFocus() end)
+    box:SetScript("OnEscapePressed", function(self)
+        Refresh()
+        self:ClearFocus()
+    end)
     box:SetScript("OnEditFocusLost", Refresh)
-    RegisterSharedControl(box, opts, "value", opts.label or "Custom Anchor Frame", "textinput", "setting")
+    -- Only the value box edits a setting; the Pick and Clear buttons never carry its key.
+    local valueOpts = setmetatable({ settingKey = opts.valueSettingKey }, { __index = opts })
+    RegisterSharedControl(box, valueOpts, "value", opts.label or "Custom Anchor Frame", "textinput", "setting")
     local function SmallButton(after, labelText, widthText, gap, danger)
         local btn = Schema.Build(ctx, parent, { { "button", "button", nil, { labelText, widthText, 24 } } }).button
         if danger and T.SkinDangerButton then
@@ -855,13 +935,19 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         overlay._isCandidateAllowed = opts.isCandidateAllowed
         overlay._onPick = function(frameName)
             WithHistory(opts.pickTitle or opts.commitTitle or "Pick Anchor", opts.pickKey or opts.commitKey,
-                function() if opts.setValue then opts.setValue(frameName or "", "pick") end; box:SetText(frameName or "") end)
+                function()
+                    if opts.setValue then opts.setValue(frameName or "", "pick") end
+                    box:SetText(frameName or "")
+                end)
         end
         overlay:Show()
     end)
     RegisterOwnedControl(pick, opts, "pick", opts.pickLabel or "Pick", "button", "action")
     local clear = SmallButton(pick, opts.clearLabel or "Clear", opts.clearWidth or 50, 4, true)
-    clear:SetScript("OnClick", function() if opts.clearValue then opts.clearValue() elseif opts.setValue then opts.setValue("", "clear") end; box:SetText("") end)
+    clear:SetScript("OnClick", function()
+        if opts.clearValue then opts.clearValue() elseif opts.setValue then opts.setValue("", "clear") end
+        box:SetText("")
+    end)
     RegisterOwnedControl(clear, opts, "clear", opts.clearLabel or "Clear", "button", "action")
     M.TrackRefresh(ctx, Refresh)
     Schema.Custom(box, { id = (box._msuf2RuntimeControlRecord or {}).controlId or "shared.customAnchor",

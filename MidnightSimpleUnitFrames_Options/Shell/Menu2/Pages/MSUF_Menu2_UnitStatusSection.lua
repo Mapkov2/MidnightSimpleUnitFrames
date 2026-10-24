@@ -21,7 +21,7 @@ local max = math.max
 local min = math.min
 -- Classic clients name each Pet Happiness preview icon in a tooltip and skip
 -- preview atlases their client does not ship (BuildPreviewCard).
-local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local IS_CLASSIC_FAMILY = MSUF.Client.Family == "Classic"
 local VT = M.ValueTextList
 local STATUS_ANCHORS, DEFAULT_SYMBOLS, StatusIconPackValues, GetConf = UP.STATUS_ANCHORS, UP.DEFAULT_SYMBOLS, UP.StatusIconPackValues, UP.GetConf
 local GetGeneral, UnitTopLabel, ReadBool, SetBool, SetNumber = UP.GetGeneral, UP.UnitTopLabel, UP.ReadBool, UP.SetBool, UP.SetNumber
@@ -42,7 +42,8 @@ local STATUS_SECTION_HEIGHT = 582
 local STATUS_PLACEMENT_CARD_HEIGHT = 242
 local STATUS_TEXT_COLOR_REFERENCES = { "status.text.current" }
 local IDENTITY_RESTRICTION_WARNING_COLOR = { 1.00, 0.64, 0.18, 1 }
-local IDENTITY_RESTRICTION_WARNING = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
+local IDENTITY_RESTRICTION_WARNING = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class " ..
+    "Text may therefore be unavailable or use fallback identifiers."
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus
 local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua"
@@ -234,7 +235,8 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         return spec.defaultShow and true or false
     end
     local RegisterStatusSearch, selectedStatusContract = state.RegisterStatusSearch, state.selectedStatusContract
-    local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey, fallback, reason, searchLabel, keywords, normalize)
+    local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey,
+        fallback, reason, searchLabel, keywords, normalize)
         local path = "status.placement." .. tostring(reason):lower()
         local control = Schema.Build(ctx, parent, {{ "slider", path, fallback, { label, minValue, maxValue, 1, 300 },
         scope = unit, beforeBind = function(control)
@@ -300,7 +302,8 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         return type(defaultValue) == "function" and defaultValue(spec) or defaultValue
     end
     local RefreshStatusSectionState = M.RefreshProxy()
-    local function BindStatusSpecDropdown(parent, label, values, width, xPos, yPos, moveWidth, specField, defaultValue, reason, searchLabel, keywords, searchValues, afterSet)
+    local function BindStatusSpecDropdown(parent, label, values, width, xPos, yPos, moveWidth, specField, defaultValue,
+        reason, searchLabel, keywords, searchValues, afterSet)
         local path = "status.selected." .. tostring(specField):lower()
         local control = Schema.Build(ctx, parent, {{ "dropdown", path, nil, { label, values, width },
         scope = unit, beforeBind = function(control)
@@ -686,7 +689,10 @@ function StatusSection.BuildIconStyleControls(state, ctx, unit)
     }, CurrentStatusSymbolValues, function() if RefreshStatusSectionState then RefreshStatusSectionState() end end)
     local iconPack = BindStatusSpecDropdown(selectedCard, "Role icon style", IconPackValuesForCurrentStatus, 260, 16, -106, selectedControlW,
         "iconStyle", function(spec) return spec and spec.defaultIconStyle or "BLIZZARD" end, "MSUF2_STATUS_ICON_PACK", "Visual style for this indicator", {
-        "indicator style", "icon style", "icon design", "icon pack", "leader indicator style", "leader icon design", "leader icon pack", "assist indicator style", "assist icon design", "assist icon pack", "role indicator style", "role icon design", "role icon pack", "status indicator style", "status icon design", "status icon pack",
+        "indicator style", "icon style", "icon design", "icon pack",
+        "leader indicator style", "leader icon design", "leader icon pack", "assist indicator style",
+        "assist icon design", "assist icon pack", "role indicator style", "role icon design",
+        "role icon pack", "status indicator style", "status icon design", "status icon pack",
     }, IconPackValuesForCurrentStatus, function() if RefreshStatusSectionState then RefreshStatusSectionState() end end)
     local customIcon = BindStatusSpecDropdown(selectedCard, "Custom icon", IconAssetValuesForCurrentStatus, 260, 16, -106, selectedControlW,
         "customIcon", "", "MSUF2_STATUS_CUSTOM_ICON", "Specific icon override", {

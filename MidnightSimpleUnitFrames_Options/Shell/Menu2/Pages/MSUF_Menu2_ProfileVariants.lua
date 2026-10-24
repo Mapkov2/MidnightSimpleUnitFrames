@@ -189,7 +189,11 @@ function P.Build(state,specs)
             M.Tr(schemaError)),20,-62,state.contentW-40,T.colors.danger or T.colors.muted } })
     end
     P.Drop(state,section,"Variant","variant.select",VariantValues,function() return selected or "" end,
-        function(value) selected=value; fieldID=nil; P.Refresh(ctx) end,20,-98,width)
+        function(value)
+            selected=value
+            fieldID=nil
+            P.Refresh(ctx)
+        end,20,-98,width)
     local input=P.Input(section,"New variant name","variant.name",30+width,-98,width)
     P.Button(state,section,"Create variant","variant.create",30+width,-168,function()
         local name=tostring(input:GetText() or ""):match("^%s*(.-)%s*$")
@@ -272,4 +276,7 @@ function P.Transport(state)
     end
 end
 
-M.ProfileSearch.RegisterSelector("variant",function(name) selected=name; fieldID=nil end)
+M.ProfileSearch.RegisterSelector("variant",function(name)
+    selected=name
+    fieldID=nil
+end)

@@ -41,7 +41,7 @@ local UnitTopPillWidth, NewCopyScopeDefaults, ConfirmCopyToAll = UP.UnitTopPillW
 local CopyUnitSettings, ReadBool = UP.CopyUnitSettings, UP.ReadBool
 local SetBool, ReadNumber = UP.SetBool, UP.ReadNumber
 local SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive = UP.SetControlEnabled, UP.NormalizeBossLayoutMode, UP.UpdateLoadActive
-local SettingMeta, ReviewedMeta, RegisterControl = UP.SettingMeta, UP.ReviewedMeta, UP.RegisterControl
+local SettingMeta, RegisterControl = UP.SettingMeta, UP.RegisterControl
 local Schema = M.ControlSchema
 local ROW_OPTIONS = Schema.UnitOptions()
 -- Lazy shells declare their header before the body builds, as the pilot sections do.
@@ -134,9 +134,8 @@ end
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "pettarget", "all" }
 -- The Copy To popup offers only frames the client can produce
 -- (MSUF.Client.SupportsUnit): WoW Forever has no arena, TBC no boss, and
--- Classic Era no focus, focus target, boss or arena frames. Without client
--- facts (Retail harnesses) every target stays.
-if MSUF.Client ~= nil and type(M.SupportsFrameScope) == "function" then
+-- Classic Era no focus, focus target, boss or arena frames.
+if type(M.SupportsFrameScope) == "function" then
     local kept = {}
     for i = 1, #UF_COPY_TARGET_ORDER do
         local target = UF_COPY_TARGET_ORDER[i]
@@ -801,16 +800,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     sec:SetScript("OnHide", function()
         if copyPopup then copyPopup.Hide() end
     end)
-    if W.AttachStickyPageHeader then
-        W.AttachStickyPageHeader(sec, {
-            pageKey = ctx and ctx.key,
-            wrapper = ctx and ctx.wrapper,
-            gap = 4,
-            builder = builder,
-            ctx = ctx,
-            flowGap = 8,
-        })
-    end
+    UnitSectionShared.AttachStickyHeader(ctx, builder, sec)
 end
 local function PrepareBasicsSwitch(ctx, sec, unit)
     Schema.Section(sec, unit)
@@ -953,27 +943,6 @@ local function AttachBasicsColorReferences(sec, unit)
         end,
     })
 end
--- Smooth fill and chunked health loss exclude each other: switching one on switches its peer off.
-local function SetHealthFillMode(ctx, unit, key, peerKey, value, reason, historyLabel)
-    value = value == true
-    local function Write()
-        local conf = GetConf(unit)
-        local changed = conf[key] ~= value
-        conf[key] = value
-        if value and conf[peerKey] ~= false then
-            conf[peerKey] = false
-            changed = true
-        end
-        if not changed then return false end
-        M.RequestUnitDomains(unit, reason, { preview = true })
-        if M.RequestRefresh then M.RequestRefresh(ctx, "unit-health-fill-mode") end
-        return true
-    end
-    if type(M.RunWithHistory) == "function" then
-        return M.RunWithHistory(historyLabel, "unit:" .. tostring(unit) .. ":healthFillMode", Write)
-    end
-    return Write()
-end
 local function BuildBasics(ctx, builder, unit, label)
     -- Default-open so the page greets users with real settings instead of a
     -- stack of closed headers; saved accordion state still wins afterwards.
@@ -997,12 +966,18 @@ local function BuildBasics(ctx, builder, unit, label)
     local basics = Schema.Build(ctx, sec, {
         { "toggle", "smoothFill", false, { "Smooth fill", x1, row1, labelW },
             get = function() return ReadBool(unit, "smoothFill", false) end,
-            set = function(v) SetHealthFillMode(ctx, unit, "smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL", "Smooth health fill") end,
+            set = function(v)
+                UnitSectionShared.SetFillMode(ctx, unit, "health", "smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL",
+                    "Smooth health fill", { preview = true })
+            end,
             meta = SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"), scope = unit,
         },
         { "toggle", "chunkedFill", false, { "Chunked health loss", x2, row1, labelW },
             get = function() return ReadBool(unit, "chunkedFill", false) end,
-            set = function(v) SetHealthFillMode(ctx, unit, "chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL", "Chunked health loss") end,
+            set = function(v)
+                UnitSectionShared.SetFillMode(ctx, unit, "health", "chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL",
+                    "Chunked health loss", { preview = true })
+            end,
             meta = SettingMeta(ctx, "basics.chunked_fill", unit, "chunkedFill"), scope = unit,
         },
         { "switch", "useBlizzardFrame", false, { "Force Blizzard frame on", x1, -76, math.max(196, colW + 24) },
@@ -1030,7 +1005,8 @@ local function BuildBasics(ctx, builder, unit, label)
     end
     Schema.Build(ctx, sec, { { "text", "unit.note.1", nil, { blizzardHint, x2, -80, math.max(190, sectionW - x2 - 14), T.colors.muted } } })
     if M.AddTooltip then
-        local tooltip = M.Format("Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required.")
+        local tooltip = M.Format("Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn " ..
+            "MSUF Enable off to use only Blizzard. A UI reload is required.")
         if unit == "targettarget" then
             tooltip = tooltip .. " " .. M.Format("Blizzard Target of Target is a child of Blizzard Target, so both native frames must remain active.")
         elseif unit == "focustarget" then
@@ -1069,7 +1045,9 @@ local function BuildBasics(ctx, builder, unit, label)
         unit ~= "focustarget" and "setting" or "action", enableShortcutMeta)
     notice:SetMessage(M.Format("%s frame is disabled and will not appear.", unitLabel), "warning")
     enableNow:SetScript("OnClick", function()
-        if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true }) end
+        if unit == "focustarget" and not ReadBool("focus", "enabled", true) then
+            SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true })
+        end
         SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
         M.RequestOrRefresh(ctx, "frame-basics-enable-now")
     end)
@@ -1099,9 +1077,14 @@ local function BuildBasics(ctx, builder, unit, label)
 end
 -- Anchor section sources and rules, per unit rather than per build.
 local UnitAnchor = {
-    choices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer", "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget", "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame"),
-    points = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT"),
-    standard = M.KeySetFromWords "GLOBAL global FREE EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer player target targettarget focustarget focus pet",
+    choices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer",
+        "UtilityCooldownViewer", "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer",
+        "player", "Player frame", "target", "Target frame", "targettarget", "Target of Target frame",
+        "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame"),
+    points = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER",
+        "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT"),
+    standard = M.KeySetFromWords("GLOBAL global FREE EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer player target targettarget " ..
+        "focustarget focus pet"),
     listed = M.KeySetFromWords "player target targettarget focustarget focus pet EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer",
 }
 function UnitAnchor.CustomName(conf)
@@ -1245,8 +1228,8 @@ local function BuildLayout(ctx, builder, unit)
                 conf.anchorFrameName = nil
                 UnitAnchor.Apply(unit)
             end,
-            meta = ReviewedMeta(ctx, "anchoring.anchor_to", "setting", "compound",
-                "Changing the anchor target also clears any custom anchor frame name."), scope = unit,
+            -- Changing the anchor target also clears any custom anchor frame name (same unit root).
+            meta = SettingMeta(ctx, "anchoring.anchor_to", unit, "anchorToUnitframe"), scope = unit,
         },
         { "dropdown", "point", "CENTER", { "Anchor Point", UnitAnchor.points, anchorControlW },
             beforeBind = function(widget)
@@ -1261,8 +1244,8 @@ local function BuildLayout(ctx, builder, unit)
                 conf.relativePoint = v
                 UnitAnchor.Apply(unit)
             end,
-            meta = ReviewedMeta(ctx, "anchoring.anchor_point", "setting", "compound",
-                "Changing the anchor point writes both point and relativePoint together."), scope = unit,
+            -- The anchor point writes point and relativePoint together (same unit root).
+            meta = SettingMeta(ctx, "anchoring.anchor_point", unit, "point"), scope = unit,
         },
     }, ROW_OPTIONS)
     local customAnchor = UnitSectionShared.CustomAnchorEditor(ctx, sec, {
@@ -1287,6 +1270,7 @@ local function BuildLayout(ctx, builder, unit)
         controlDomain = "unit",
         controlPageKey = ctx and ctx.key,
         controlPath = "anchoring.custom",
+        valueSettingKey = unit .. ".anchorFrameName",
     })
     customAnchor.clear:SetScript("OnClick", function()
         local conf = GetConf(unit)
@@ -1460,7 +1444,9 @@ local function BuildLoadConditions(ctx, builder, unit)
     local label = "Show only below 100% health"
     local injured = Row("loadCondShowWhenInjured", label, 14, -166, (ctx.width or 720) - 70)
     injured.tip = { label,
-        "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
+        "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the " ..
+            "Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible " ..
+            "for editing. The transparent frame can still receive mouse clicks.",
         TIP_OPTS }
     rows[#rows + 1] = injured
     Schema.Build(ctx, sec, rows, ROW_OPTIONS)
@@ -1561,22 +1547,8 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
 
     for i = 1, #BOSS_LAYOUT_TILE_VALUES do
         local info = BOSS_LAYOUT_TILE_VALUES[i]
-        local btn = PixelLayoutRegion(CreateFrame("Button", nil, control, T.Template and T.Template() or nil))
-        btn:SetSize(tileW, tileH)
-        btn:SetPoint("TOPLEFT", control, "TOPLEFT", (i - 1) * (tileW + gap), -20)
+        local btn = UnitSectionShared.TileButton(control, tileW, tileH, (i - 1) * (tileW + gap), -20, info.text or "")
         btn._msuf2Value = info.value
-        if btn.SetBackdrop then
-            PixelLayoutRegion(btn, "SetBackdrop", {
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-            })
-        end
-        local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-        if text.SetFont then text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
-        text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
-        text:SetText(M.Tr(info.text or ""))
-        btn._label = text
         btn:SetScript("OnEnter", function(self) SetTileVisual(self, control._msuf2Value == info.value, true) end)
         btn:SetScript("OnLeave", function(self) SetTileVisual(self, control._msuf2Value == info.value, false) end)
         M.AddTooltip(btn, function() return M.Format("Boss frame layout: %s", M.Tr(info.tooltip or info.text or "")) end,

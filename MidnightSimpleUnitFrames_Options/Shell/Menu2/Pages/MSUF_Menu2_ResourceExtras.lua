@@ -14,7 +14,7 @@ end
 -- Surge window) and their size sliders run on Midnight only (MSUF_CP_ExtraAuras.lua).
 -- Regeneration pause and return pulse run where the runtime draws them: Classic Era,
 -- TBC and WoW Forever with the native duration API (MSUF_CP_ManaExtras.lua).
-local CLIENT=MSUF.Client or {}
+local CLIENT=MSUF.Client
 local EXTRA_AURAS=CLIENT.IsRetail==true and not CLIENT.IsForever
 local function ExtraAuras() return EXTRA_AURAS end
 local function RegenTimers()

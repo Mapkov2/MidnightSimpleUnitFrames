@@ -19,7 +19,8 @@ local max = math.max
 -- control set. This file only reorganizes the existing profile keys; runtime
 -- interpretation remains owned by UnitFrames/Effects/MSUF_UF_TextureLayer.lua.
 local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
-local TEXLAYER_ANCHORS = VTP "TOPLEFT=Top Left|TOP=Top|TOPRIGHT=Top Right|LEFT=Left|CENTER=Center|RIGHT=Right|BOTTOMLEFT=Bottom Left|BOTTOM=Bottom|BOTTOMRIGHT=Bottom Right"
+local TEXLAYER_ANCHORS = VTP("TOPLEFT=Top Left|TOP=Top|TOPRIGHT=Top Right|LEFT=Left|CENTER=Center|RIGHT=Right|BOTTOMLEFT=Bottom Left|BOTTOM=Bottom|" ..
+    "BOTTOMRIGHT=Bottom Right")
 local TEXLAYER_ANCHOR_TARGETS = VTP "FRAME=Whole frame|HEALTH=Health bar|POWER=Power bar|PORTRAIT=Portrait"
 local TEXLAYER_COLOR_MODES = VTP "CUSTOM=Single color|CLASS=Class color|HEALTH=HP gradient"
 local TEXLAYER_ABOVE_THRESHOLD_MODES = VTP "HEALTH=Continue HP gradient|CLASS=Class color|CUSTOM=Single color (monochrome)"
@@ -405,9 +406,12 @@ local function TextureLayerBinders(ctx, s)
     local GetConf, ReviewedMeta = s.GetConf, s.ReviewedMeta
 
     local dependentControls = {}
+    -- A build is bound to one slot (a slot switch rebuilds the page), so the control names that slot's key;
+    -- the other slots' keys stay search aliases.
     local function LayerMeta(base, path, step)
         local meta = ReviewedMeta(ctx, "texture_layer." .. (path or base), "setting", "dynamic",
             "This control edits the texture-layer slot selected in the accordion's slot bar.")
+        meta.settingKey = tostring(unit) .. "." .. Key(base)
         local keys = {}
         for i = 1, #SLOT_PREFIXES do keys[i] = tostring(unit) .. "." .. SLOT_PREFIXES[i] .. base end
         meta.searchSettingKeys = keys

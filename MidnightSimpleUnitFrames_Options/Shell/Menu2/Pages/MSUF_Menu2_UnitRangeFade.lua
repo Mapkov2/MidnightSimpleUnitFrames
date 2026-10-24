@@ -1,4 +1,4 @@
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
@@ -29,7 +29,8 @@ local function MaybeShowBossUpdateRateWarning(rate)
     M._msuf2BossUpdateRateWarningSession = session
     -- One Okay button: a menu-owned prompt (M.ShowPrompt); Escape closes it.
     M.ShowPrompt(BOSS_UPDATE_RATE_WARNING, {
-        text = M.Tr("Performance warning\n\nCustom Boss update rates replace the adaptive default with continuous range checks for every visible Boss Frame. Higher values can increase CPU use during encounters.\n\nStandard keeps the performance-friendly adaptive rate."),
+        text = M.Tr("Performance warning\n\nCustom Boss update rates replace the adaptive default with continuous range checks for every visible " ..
+            "Boss Frame. Higher values can increase CPU use during encounters.\n\nStandard keeps the performance-friendly adaptive rate."),
         accept = OKAY or M.Tr("Okay"), single = true, showAlert = true,
     })
     return true
@@ -135,7 +136,8 @@ local function BuildRangeFade(ctx, builder, unit)
         W.MoveWidget(updateRate, updateCard, 16, -54, innerW - 58, "LEFT")
         if M.AddTooltip then
             M.AddTooltip(updateRate, "Boss range update rate",
-                "Standard keeps the adaptive 0.75 / 2 second checks. Higher values continuously check visible Boss Frames at the selected rate; 20 per second is a 50 ms interval.",
+                "Standard keeps the adaptive 0.75 / 2 second checks. Higher values continuously check visible Boss Frames at the selected rate; 20 " ..
+                    "per second is a 50 ms interval.",
                 { hook = true, owner = "ANCHOR_RIGHT" })
         end
     end

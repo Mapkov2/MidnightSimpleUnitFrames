@@ -20,7 +20,8 @@ local Schema = M.ControlSchema
 local ROW_OPTIONS = Schema.UnitOptions()
 
 local SUPPORTED_UNITS = { player = true, target = true, focus = true, boss = true, arena = true }
-local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need this UnitFrame's Aura sensor. Enable Buffs or Debuffs, or turn on this Dispel feature to enable the sensor automatically. Set both icon caps to 0 if you want no aura icons."
+local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need this UnitFrame's Aura sensor. Enable Buffs or Debuffs, or turn on " ..
+    "this Dispel feature to enable the sensor automatically. Set both icon caps to 0 if you want no aura icons."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNIT_APPLY_OPTS = { history = false, preview = true, auras = true, notify = false }
 local DISPEL_COLOR_REFERENCES = {
@@ -32,14 +33,7 @@ local UNIT_DISPEL_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", 
     "BY_RAID", "Dispellable by group", "DISPEL_TYPE", "Any dispel type")
 local UNIT_DISPEL_STYLES = VT("FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade",
     "LEFT", "Left Fade", "RIGHT", "Right Fade")
-local UNIT_DISPEL_SYMBOL_STYLES = VT(
-    "BLIZZARD", "Blizzard symbol",
-    "BLIZZARD_RING", "Blizzard ring + symbol",
-    "BLIZZARD_BORDER", "Blizzard ring",
-    "MSUF_LETTERS", "MSUF Letters",
-    "MSUF_SHAPES", "MSUF Shapes",
-    "MSUF_GLYPHS", "MSUF Glyphs",
-    "MSUF_MINIMAL", "MSUF Minimal")
+local UNIT_DISPEL_SYMBOL_STYLES = M.UnitSectionsShared.DispelSymbolStyles()
 local UNIT_DISPEL_SYMBOL_MODES = VT("TOP", "Highest priority only", "ALL", "One per dispel type")
 local UNIT_DISPEL_SYMBOL_GROWTH = VT("RIGHT", "Right", "LEFT", "Left", "UP", "Up", "DOWN", "Down")
 local UNIT_DISPEL_SYMBOL_STRATA = VT("AUTO", "Automatic", "BACKGROUND", "Background", "LOW", "Low",
@@ -123,6 +117,11 @@ local function UnitAuraEnabled(unit)
     return model.UnitEnabled(unit) == true
 end
 
+-- The pre-split Dispel Border switches: on unless a profile stores either one.
+local function LegacyDispelBorderOn(general)
+    if general and general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then return true end
+    return general and (general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true)
+end
 local function UnitDispelRequested(unit)
     if ReadValue(unit, "unitDispelOverlayEnabled", false) == true
         or ReadValue(unit, "unitDispelSymbolEnabled", false) == true then
@@ -132,9 +131,7 @@ local function UnitDispelRequested(unit)
     local mode
     if conf and conf.hlOverride == true then mode = conf.dispelOutlineMode end
     if mode == nil then mode = general and general.dispelOutlineMode end
-    local legacy = general and (general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true)
-    if general and general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then legacy = true end
-    return ModeEnabled(mode, legacy)
+    return ModeEnabled(mode, LegacyDispelBorderOn(general))
 end
 
 local function SetDispelMasterValue(unit, key, enabled, reason)
@@ -159,7 +156,8 @@ end
 local function Meta(ctx, unit, path, key, classification)
     local meta = UP.ControlMeta and UP.ControlMeta(ctx, "dispel." .. tostring(path), classification or "setting") or {}
     if key then
-        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(key), "general." .. tostring(key) }
+        meta.settingKey = tostring(unit) .. "." .. tostring(key)
+        meta.searchSettingKeys = { meta.settingKey, "general." .. tostring(key) }
     end
     return meta
 end
@@ -182,7 +180,8 @@ local KINDS = {
             end
         end,
         previewTip =
-            "Paints a stand-in tint on the live UnitFrame so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
+            "Paints a stand-in tint on the live UnitFrame so the overlay can be judged without a real dispellable debuff. Turns itself off when this " ..
+                "page closes.",
     },
     symbol = { id = "unit_dispel_symbol", title = "Dispel Symbol", order = 20, height = SymbolSectionHeight,
         key = "unitDispelSymbolEnabled", reason = "MSUF2_UF_DISPEL_SYMBOL",
@@ -201,6 +200,8 @@ local function PrepareSwitch(ctx, sec, unit, which)
     if entry and entry.featureSwitch then return entry.featureSwitch end
     local def = KINDS[which]
     local meta = Meta(ctx, unit, which .. ".enabled", def.key)
+    -- Turning the feature on can also enable the Aura sensor (another profile root): whole-profile undo steps.
+    meta.historyScope = false
     local master
     master = Schema.Build(ctx, sec, {{ "sectionSwitch", def.key, false, { def.title }, meta = meta,
         scope = unit, domain = "dispel",
@@ -413,6 +414,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
         local meta = UP.ControlMeta and UP.ControlMeta(ctx, path, "setting") or {}
         meta.kind = "textinput"
         meta.label = label
+        meta.settingKey = unitSettingKey
         meta.searchSettingKeys = { unitSettingKey, legacySettingKey }
         meta.command = {
             kind = "textinput",
