@@ -303,7 +303,7 @@ end
 function MenuWorld.Open(root, flavor, options)
     options = options or {}
     local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
-    local world = World.New(root, flavor, { locale = options.locale or "enUS" })
+    local world = options.world or World.New(root, flavor, { locale = options.locale or "enUS" })
     -- Opt-in (options.tocMetadata = true): a world whose smoke spawns real unit frames names them from the core
     -- TOC's X-MSUF-UnitFrames-Prefix (see ApplyCoreTocMetadata). It is off by default because every other menu
     -- world then keeps the units unspawned, which several smokes (bars_outline_override_smoke) count on.
@@ -362,7 +362,10 @@ function MenuWorld.Open(root, flavor, options)
     if options.clientScriptBindings == true then InstallClientScriptBindings(Methods, options.nativeButtonLifecycle) end
     -- Harness gap only: every client defines it, and the core reads it at load.
     world.env.MAX_BOSS_FRAMES = 5
-    if type(options.beforeOptions) == "function" then
+    if options.world then
+        -- Reuse an already booted secure-header world for menu-to-live applies.
+        assert(#world.loaded > 0, "menu_core_world: supplied world was not booted")
+    elseif type(options.beforeOptions) == "function" then
         -- Boot by hand so the caller can wrap core APIs the Options files
         -- capture as upvalues while they load.
         local suffix = world.client.tocSuffix or flavor
@@ -380,7 +383,7 @@ function MenuWorld.Open(root, flavor, options)
     local env, core = world.env, world.core
     assert(loadfile(root .. "/tools/tests/unit_scene_region_fixture.lua"))().Install(core)
     local M = assert(core.MSUF2, "menu_core_world: Menu2 did not load")
-    env.MSUF_EnsureDB(true)
+    core.Require("MSUF_EnsureDB", "tools/tests/menu_core_world.lua")(true)
     -- The queued unit-frame runtime apply reads APIs the harness only stubs.
     if options.keepFlush ~= true then M.ApplyService.Flush = function() return true end end
     local handle = setmetatable({ world = world, env = env, core = core, M = M }, Handle)

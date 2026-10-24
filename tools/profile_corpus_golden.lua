@@ -499,10 +499,26 @@ local function InstallFrameIsolation(world)
         local target = owner == nil and world.env or (owner == "" and world.core or world.core[owner])
         if type(target) == "table" then
             for _, name in ipairs(names) do
-                local fn = owner == nil and rawget(target, name) or target[name]
+                -- Bootstrap's ExportPublic semantics: every export lives in the
+                -- namespace registry (MSUF.PublicGlobals[name] and MSUF.Public[key],
+                -- which Require/Optional and direct readers use) and in the global
+                -- table only when its keep policy publishes it there. Wrap every
+                -- place that holds the same export.
+                local registry = owner == nil and world.core.PublicGlobals or nil
+                local public = owner == nil and world.core.Public or nil
+                local key = name:sub(1, 5) == "MSUF_" and name:sub(6) or name
+                local fn = owner == nil and (rawget(target, name) or (type(registry) == "table" and rawget(registry, name)))
+                    or target[name]
                 if type(fn) == "function" then
                     local label = (owner and owner ~= "" and owner .. "." or "") .. name
-                    if owner == nil then rawset(target, name, Isolated(label, fn)) else target[name] = Isolated(label, fn) end
+                    if owner == nil then
+                        local wrapped = Isolated(label, fn)
+                        if rawget(target, name) == fn then rawset(target, name, wrapped) end
+                        if type(registry) == "table" and rawget(registry, name) == fn then registry[name] = wrapped end
+                        if type(public) == "table" and rawget(public, key) == fn then public[key] = wrapped end
+                    else
+                        target[name] = Isolated(label, fn)
+                    end
                 end
             end
         end
@@ -580,7 +596,8 @@ local function RoundTrip(world, run, name)
     local env = world.env
     local source = env.MSUF_GlobalDB.profiles[name]
     local before = Flatten(Corpus.Effective(source, Defaults(world)))
-    local exported = Call(env.MSUF_ExportSelectionToString, "all")
+    -- Namespace-only exports (Kernel/MSUF_Bootstrap.lua keep policy): the registry.
+    local exported = Call(world.core.PublicGlobals.MSUF_ExportSelectionToString, "all")
     local result = {}
     if not exported[1] or type(exported[2]) ~= "string" then
         result.export = "failed: " .. tostring(exported[2])
@@ -592,7 +609,7 @@ local function RoundTrip(world, run, name)
     for path, literal in pairs(after) do if before[path] ~= literal then mutated = mutated + 1 end end
     for path in pairs(before) do if after[path] == nil then mutated = mutated + 1 end end
     if mutated > 0 then result.exportChangedSource = mutated end
-    local imported = Call(env.MSUF_ImportIntoNewProfile, "__roundtrip", exported[2])
+    local imported = Call(world.core.PublicGlobals.MSUF_ImportIntoNewProfile, "__roundtrip", exported[2])
     if not imported[1] or imported[2] ~= true then
         result.import = "failed: " .. tostring(imported[3] or imported[2])
         run.roundTripFailures[#run.roundTripFailures + 1] = name .. ": import " .. result.import
@@ -837,7 +854,7 @@ local function RunFactoryEntry(root, entry, flavor)
         local name = "Import " .. import.id
         payloads[name] = ImportPayload(text)
         digests[import.id] = PayloadDigest(payloads[name])
-        local results = Call(env.MSUF_ImportIntoNewProfile, name, text)
+        local results = Call(world.core.PublicGlobals.MSUF_ImportIntoNewProfile, name, text)
         local outcome = { ok = results[1] and results[2] == true }
         if not results[1] then
             outcome.error = tostring(results[2])
@@ -1244,6 +1261,7 @@ local function UnexpectedErrors(run, used)
     end
     return unexpected
 end
+Corpus.UnexpectedErrors = UnexpectedErrors
 
 local function Report(run, verbose)
     if not verbose then return end

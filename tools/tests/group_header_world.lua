@@ -57,6 +57,98 @@ end
 local Methods = {}
 Methods.__index = Methods
 
+-- Opt-in native geometry for release gestures. The permissive stubs store
+-- points but leave GetRect/GetCenter at (0, 0), even after a parent moves.
+local function InstallNativeGeometry(widgets)
+    local function Factor(point, axis)
+        local low, high = axis == "width" and "LEFT" or "BOTTOM", axis == "width" and "RIGHT" or "TOP"
+        if point:find(low, 1, true) then return 0 end
+        if point:find(high, 1, true) then return 1 end
+        return 0.5
+    end
+    -- The drag's frames have explicit dimensions; their anchors supply position.
+    -- Choose the anchor constraining each axis (TOP + LEFT is common for columns),
+    -- retaining the stub's explicit width/height queries; stretch sizing is outside this fixture.
+    local function Origin(frame, axis, depth)
+        assert((depth or 0) < 40, "cyclic native anchor graph")
+        local point, relative, to, x, y = frame:GetPoint()
+        for i = 1, frame:GetNumPoints() do
+            local p, r, t, dx, dy = frame:GetPoint(i)
+            if Factor(p, axis) ~= 0.5 then
+                point, relative, to, x, y = p, r, t, dx, dy
+                break
+            end
+        end
+        if type(frame.allPoints) == "table" then relative, point, to, x, y = frame.allPoints, "BOTTOMLEFT", "BOTTOMLEFT", 0, 0 end
+        if not point then return rawget(frame, axis == "width" and "left" or "bottom") or 0 end
+        relative = relative or frame.parent
+        local position, extent = 0, 0
+        if relative then
+            local ratio = relative:GetEffectiveScale() / frame:GetEffectiveScale()
+            position = Origin(relative, axis, (depth or 0) + 1) * ratio
+            extent = (axis == "width" and relative:GetWidth() or relative:GetHeight()) * ratio
+        end
+        local size = axis == "width" and frame:GetWidth() or frame:GetHeight()
+        return position + Factor(to, axis) * extent + (axis == "width" and x or y) - Factor(point, axis) * size
+    end
+    local M = widgets.Methods
+    local setPoint = M.SetPoint
+    function M:SetPoint(...)
+        setPoint(self, ...)
+        local count = #self.points
+        local newest = self.points[count]
+        for i = 1, count - 1 do
+            if self.points[i].point == newest.point then
+                self.points[i], self.points[count] = newest, nil
+                return
+            end
+        end
+    end
+    function M:GetLeft() return Origin(self, "width") end
+    function M:GetBottom() return Origin(self, "height") end
+    function M:GetRight() return self:GetLeft() + self:GetWidth() end
+    function M:GetTop() return self:GetBottom() + self:GetHeight() end
+    function M:GetCenter() return self:GetLeft() + self:GetWidth() / 2, self:GetBottom() + self:GetHeight() / 2 end
+    function M:GetRect() return self:GetLeft(), self:GetBottom(), self:GetWidth(), self:GetHeight() end
+end
+
+-- configureChildren's anchor and size lane, shared by live and classic_era
+-- Blizzard_RestrictedAddOnEnvironment/SecureGroupHeaders.lua. Roster selection
+-- stays in UpdateHeader; only the opt-in release fixture requests native layout.
+local function LayoutChildren(header, displayed)
+    local a = header.attributes
+    local opposite = { TOP = "BOTTOM", BOTTOM = "TOP", LEFT = "RIGHT", RIGHT = "LEFT",
+        TOPLEFT = "BOTTOMRIGHT", TOPRIGHT = "BOTTOMLEFT", BOTTOMLEFT = "TOPRIGHT", BOTTOMRIGHT = "TOPLEFT", CENTER = "CENTER" }
+    local point, perColumn = a.point or "TOP", math.min(a.unitsPerColumn or math.max(displayed, 1), math.max(displayed, 1))
+    local columns = math.ceil(displayed / perColumn)
+    local cross = columns > 1 and a.columnAnchorPoint or nil
+    local dx = point:find("LEFT", 1, true) and 1 or (point:find("RIGHT", 1, true) and -1 or 0)
+    local dy = point:find("BOTTOM", 1, true) and 1 or (point:find("TOP", 1, true) and -1 or 0)
+    local cx = cross and (cross:find("LEFT", 1, true) and 1 or (cross:find("RIGHT", 1, true) and -1 or 0)) or 0
+    local cy = cross and (cross:find("BOTTOM", 1, true) and 1 or (cross:find("TOP", 1, true) and -1 or 0)) or 0
+    for i = 1, displayed do
+        local child = a["child" .. i]
+        if i == 1 then
+            child:SetPoint(point, header, point, 0, 0)
+            if cross then child:SetPoint(cross, header, cross, 0, 0) end
+        elseif (i - 1) % perColumn == 0 then
+            child:SetPoint(cross, a["child" .. (i - perColumn)], opposite[cross], cx * (a.columnSpacing or 0), cy * (a.columnSpacing or 0))
+        else
+            child:SetPoint(point, a["child" .. (i - 1)], opposite[point], math.abs(dx) * (a.xOffset or 0), math.abs(dy) * (a.yOffset or 0))
+        end
+    end
+    local first = a.child1
+    if displayed == 0 then
+        header:SetSize(math.max(a.minWidth or math.abs(dy) * first:GetWidth(), 0.1),
+            math.max(a.minHeight or math.abs(dx) * first:GetHeight(), 0.1))
+        return
+    end
+    local w = (1 + math.abs(dx) * (perColumn - 1)) * first:GetWidth() + (perColumn - 1) * (a.xOffset or 0) * dx
+    local h = (1 + math.abs(dy) * (perColumn - 1)) * first:GetHeight() + (perColumn - 1) * (a.yOffset or 0) * dy
+    header:SetSize(w + (columns - 1) * math.abs(cx) * (w + (a.columnSpacing or 0)),
+        h + (columns - 1) * math.abs(cy) * (h + (a.columnSpacing or 0)))
+end
+
 function Harness.New(root, flavor, options)
     options = options or {}
     root = root:gsub("\\", "/"):gsub("/$", "")
@@ -64,6 +156,7 @@ function Harness.New(root, flavor, options)
     local world = World.New(root, flavor)
     local env, widgets = world.env, world.widgets
     local M = widgets.Methods
+    if options.nativeLayout then InstallNativeGeometry(widgets) end
     local h = setmetatable({
         root = root, flavor = flavor, world = world, env = env, widgets = widgets,
         units = { "player" }, secure = 0, violations = {}, headers = {}, born = {},
@@ -344,6 +437,7 @@ function Harness.New(root, flavor, options)
                     h.born[#h.born + 1] = { child = child, header = header, combat = env.InCombatLockdown() == true }
                 end
             end
+            if options.nativeLayout then LayoutChildren(header, displayed) end
             for index = 1, displayed do
                 local child = attributes["child" .. index]
                 child:SetAttribute("unit", units[index])
@@ -355,6 +449,7 @@ function Harness.New(root, flavor, options)
                 local child = attributes["child" .. index]
                 if child then
                     M.Hide(child)
+                    if options.nativeLayout then child:ClearAllPoints() end
                     child:SetAttribute("unit", nil)
                 end
             until not child

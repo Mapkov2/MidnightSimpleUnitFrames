@@ -31,7 +31,7 @@ GF.RefreshHeaderLayout()
 h:RunTimers()
 
 -- The Group page opens a preview while the player is solo (no live frames).
-env.MSUF2_GFPagePreviewActive = true
+h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 Check(GF.ShowPreview("party", 5) ~= false and GF._previewActive.party == true, "the party preview did not open")
 
 -- A party forms while the preview is up: the runtime keeps the header retired.
@@ -54,6 +54,6 @@ for index, child in ipairs(h:Children(header)) do
 end
 Check(#h.violations == 0, "protected write in lockdown:\n" .. tostring(h.violations[1]))
 h:LeaveCombat()
-env.MSUF2_GFPagePreviewActive = nil
+h.core.ExportPublic("MSUF2_GFPagePreviewActive", nil)
 
 print(string.format("group_preview_combat_restore_smoke: ok (%s: live header back at REGEN_DISABLED)", flavor))

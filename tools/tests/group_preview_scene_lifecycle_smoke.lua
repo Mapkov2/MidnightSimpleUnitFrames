@@ -112,14 +112,15 @@ end, afterFile = function(world, path)
     -- stand-in installed right after its owner and before the preview: it answers like the real one until a
     -- section sets `samplerOverride`.
     if path:find("UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua", 1, true) then
-        local real = world.env.MSUF_GetPreviewAnimationFrameState
-        world.env.MSUF_GetPreviewAnimationFrameState = function(...)
+        local view = assert(loadfile(root .. "/tools/tests/namespace_view.lua"))()(world.world)
+        local real = view.MSUF_GetPreviewAnimationFrameState
+        view.MSUF_GetPreviewAnimationFrameState = function(...)
             if samplerOverride then return samplerOverride(...) end
             return real(...)
         end
     end
 end })
-local GF, env = h.GF, h.env
+local GF, env = h.GF, assert(loadfile(root .. "/tools/tests/namespace_view.lua"))()(h.world)
 env.GetTime = function() return now end
 GF.EnsureDB()
 h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
@@ -182,6 +183,9 @@ local function CountPaints(rootObject)
     return paints
 end
 
+-- The release tier drives the native combat route; direct fixture DB writes
+-- must first refresh the runtime's event subscription as a real setter does.
+if arg[3] == "release" then GF.RefreshHeaderLayout() end
 h:RunTimers()
 Check(Queued() == 0, "the timer queue was not idle before the test")
 
@@ -335,6 +339,56 @@ Check(rootB:IsActive() and groupB:IsActive(), "deactivating one root touched ano
 rootA:Activate()
 h:RunTimers()
 Check(groupA:IsActive() and Shown(groupA) == 4, "re-activate did not bring the groups back")
+
+-- The compact release tier reuses the complete lifecycle above and adds the
+-- third supported scene plus engine ownership and close restoration.
+if arg[3] == "release" then
+    local function FrameVisible(frame)
+        while frame do
+            if not frame:IsShown() then return false end
+            frame = frame:GetParent()
+        end
+        return true
+    end
+    local function Visible(scene)
+        local count = 0
+        for _, frame in ipairs(scene:Frames()) do
+            if FrameVisible(frame) then count = count + 1 end
+        end
+        return count
+    end
+    local all = { groupA, groupRaid }
+    if h.core.Client.SupportsGroupKind("mythicraid") then
+        all[#all + 1] = rootA:Group("mythicraid", 20)
+        h:RunTimers()
+    end
+    local retained = {}
+    for _, scene in ipairs(all) do
+        for _, frame in ipairs(scene:Frames()) do
+            retained[#retained + 1] = frame
+            Check(frame._msufCreatedElements and frame._msufCreatedElements.Health,
+                "scene did not build the engine Health element")
+            Check(frame._msufActiveElements and frame._msufActiveElements.Health,
+                "scene engine Health element is not active")
+            Check(frame.MSUFSpec and HpOf(frame) ~= nil, "scene has no painted engine health")
+        end
+    end
+    h:EnterCombat()
+    h:RunTimers()
+    for _, scene in ipairs(all) do Check(Visible(scene) == 0, "scene remained visible in combat") end
+    h:LeaveCombat()
+    h:RunTimers()
+    for _, scene in ipairs(all) do Check(Visible(scene) > 0, "scene failed to restore after combat") end
+    rootA:Release()
+    h:RunTimers()
+    for _, scene in ipairs(all) do Check(Visible(scene) == 0, "released scene left frames shown") end
+    for _, frame in ipairs(retained) do Check(not FrameVisible(frame), "released engine frame remained visible") end
+    Check(rootB:IsActive(), "closing one owner retired another")
+    rootB:Release()
+    Check(#h.violations == 0, "protected frame write in preview lifecycle")
+    print("group preview: " .. flavor .. " engine scenes, combat and close passed")
+    return
+end
 
 ---------------------------------------------------------------------------
 -- 7. Layers, auras and spell indicators on a scene, then release: still no unit API.

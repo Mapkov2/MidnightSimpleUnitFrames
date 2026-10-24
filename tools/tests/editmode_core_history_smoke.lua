@@ -1,6 +1,7 @@
 -- The real core graph owns every Edit Mode gesture before Options is parsed.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+local NamespaceView = assert(loadfile(root .. "/tools/tests/namespace_view.lua"))()
 local checks = 0
 local function Check(ok, message)
     assert(ok, message)
@@ -203,7 +204,7 @@ if arg[3] == "positions" then
     print("PASS native position popup core: " .. flavor .. " / " .. checks .. " checks")
     return
 end
-for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+for _, flavor in ipairs(arg[2] and { arg[2] } or { "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local world = World.New(root, flavor)
     world.env.GetCursorPosition = function() return 300, 400 end
     local loadFile, parsedOptions = world.LoadFile, 0
@@ -215,7 +216,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local gameType = world.client.isForever and "camelot" or nil
     world:LoadGraph("MidnightSimpleUnitFrames", World.Graph(root, World.CoreTOC(suffix), "enUS", gameType), world.core)
     Check(world:FirstFailure() == nil, flavor .. ": core graph failed")
-    local ns, env = world.core, world.env
+    local ns, env = world.core, NamespaceView(world)
     local widgetMethods = getmetatable(env.UIParent).__index
     for _, name in ipairs({ "EnableKeyboard", "SetPropagateKeyboardInput", "SetNumeric", "SetTextInsets",
         "SetMaxLetters", "ClearFocus", "SetCursorPosition", "HighlightText", "SetAutoFocus" }) do
@@ -301,5 +302,6 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     Check(H.GetHistoryState().activeSurfaces == 1, "Cancel All closed the menu surface")
     M.EndHistorySession("menu")
     Check(H.GetHistoryState().activeSurfaces == 0 and loads == 0, "exit leaked a surface or loaded Options")
+
 end
-print("PASS core-only Edit Mode history and late Options bridge: " .. checks .. " checks across five clients")
+print("PASS core-only Edit Mode history and late Options bridge: " .. checks .. " checks; selected client set")
