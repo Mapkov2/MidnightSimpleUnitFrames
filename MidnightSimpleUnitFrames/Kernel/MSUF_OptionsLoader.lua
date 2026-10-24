@@ -6,9 +6,8 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 local OPTIONS_ADDON = "MidnightSimpleUnitFrames_Options"
 local ExportPublic = MSUF.ExportPublic
--- WoW Forever, read once from the client model. A harness without MSUF.Client
--- models a client that is not Forever.
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+-- WoW Forever, read once from the initialized client model.
+local IS_FOREVER = MSUF.Client.IsForever == true
 
 local menu = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = menu

@@ -6,8 +6,9 @@ MSUF.UF = MSUF.UF or {}
 local UF = MSUF.UF
 
 -- WoW Forever runs this Mainline file. The client fact is read once at load;
--- a harness without MSUF.Client counts as not Forever.
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+-- Initialize.lua has already placed this client.
+local IS_FOREVER = MSUF.Client.IsForever == true
+local IS_CLASSIC = MSUF.Client.IsClassic == true
 
 -- Blizzard unitframe ownership bridge.
 -- Hides or restores Blizzard unit/cast frames according to MSUF settings while respecting
@@ -495,7 +496,7 @@ local function DisableBlizzardFrames()
         --- hook; HandleFrame defers Hide/SetParent to regen if the frame ever
         --- reports protected in combat. Restore is /reload-only, as for
         --- TargetFrame.
-        if IS_FOREVER or (MSUF.Client and MSUF.Client.IsClassic == true) then
+        if IS_FOREVER or IS_CLASSIC then
             HandleFrame(_G.ComboFrame, nil, "target")
         end
     end

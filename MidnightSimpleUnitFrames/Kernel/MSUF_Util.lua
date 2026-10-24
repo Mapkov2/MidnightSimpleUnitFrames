@@ -970,7 +970,7 @@ do
     -- requested anchors, offsets and sizes: the engine rounds the rendered
     -- layout again on scale changes, without rewriting any profile coordinates.
     -- Never recurse into masks, rounded art or status-bar fill textures.
-    local mainlinePixelLayout = MSUF.Client and MSUF.Client.IsRetail == true
+    local mainlinePixelLayout = MSUF.Client.IsRetail == true
     function Util.EnablePixelPerfectLayout(region)
         if not mainlinePixelLayout or not region or region._msufPixelLayoutExcluded then return false end
         if region._msufPixelLayoutEnabled == true then return true end

@@ -13,7 +13,7 @@ local ExportPublic = MSUF.ExportPublic
 local type, select = type, select
 local CreateFrame = CreateFrame
 local InCombatLockdown, UIParent, RegisterAttributeDriver = InCombatLockdown, UIParent, RegisterAttributeDriver
-local PixelLayoutRegion = MSUF_PixelLayoutRegion or function(region) return region end
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Kernel/MSUF_Keybinds.lua")
 
 -- A hardware CLICK binding must reach a secure action directly. Calling Click
 -- or UnitPopup_OpenMenu from a Lua binding loses that secure input path; using
@@ -47,8 +47,11 @@ end
 --- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC).
 --- The menu language is known only once the saved locale is read at
 --- ADDON_LOADED, so the translated labels are set again then.
+local function UntranslatedLabel(text)
+    return text
+end
 local function ApplyBindingLabels()
-    local translate = type(MSUF.Translate) == "function" and MSUF.Translate or function(text) return text end
+    local translate = type(MSUF.Translate) == "function" and MSUF.Translate or UntranslatedLabel
     BINDING_HEADER_MSUF_HEADER = translate("Midnight Simple Unit Frames")
     BINDING_NAME_MSUF_TOGGLE_OPTIONS = translate("Toggle MSUF Options")
     BINDING_NAME_MSUF_TOGGLE_EDITMODE = translate("Toggle MSUF Edit Mode")

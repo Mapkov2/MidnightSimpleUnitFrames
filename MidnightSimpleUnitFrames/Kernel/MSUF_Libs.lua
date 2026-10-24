@@ -113,7 +113,7 @@ end
 --- value and immediate readback are no synchronous readiness guarantee on a
 --- cold client: success is reported and readiness stays with the caller and
 --- the font coordinator.
-local SETFONT_RESULT_IS_READY = MSUF.Client ~= nil and MSUF.Client.Family == "Mainline"
+local SETFONT_RESULT_IS_READY = MSUF.Client.Family == "Mainline"
 local function MSUF_SetFontChecked(fs, path, size, flags)
     local accepted = fs:SetFont(path, size, flags or "")
     if SETFONT_RESULT_IS_READY then return accepted ~= false end
@@ -332,7 +332,10 @@ end
 
 local function ScheduleMediaRefresh()
     if mediaRefreshQueued then return end
-    if IsCombatLocked() then FlushMediaRefresh(); return end
+    if IsCombatLocked() then
+        FlushMediaRefresh()
+        return
+    end
     mediaRefreshQueued = true
     if MSUF.PublicGlobals.MSUF_ScheduleOnce then
         MSUF.PublicGlobals.MSUF_ScheduleOnce("LSM_MEDIA_REFRESH", FlushMediaRefresh)

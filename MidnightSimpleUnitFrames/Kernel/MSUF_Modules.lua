@@ -132,7 +132,8 @@ function MSUF.MSUF_ApplyModules()
     --- UnitFrames/Effects/MSUF_UF_RoundedFrames.lua exports the callback while
     --- rounded frames are active; it re-applies masks after a profile apply.
     if MSUF.PublicGlobals.MSUF_RoundedUF_Active == true then
-        local fnR = MSUF.PublicGlobals.MSUF_RoundedUF_OnModulesApplied; if fnR then fnR() end
+        local fnR = MSUF.PublicGlobals.MSUF_RoundedUF_OnModulesApplied
+        if fnR then fnR() end
     end
 end
 
