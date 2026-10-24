@@ -53,12 +53,7 @@ SI.TrackableAuras = {
     Aura("Lifebloom", 0.56, 0.93, 0.56),
   },
   RestorationShaman = { Aura("EarthShield", 0.65, 0.47, 0.33, "Earth Shield") },
-  DisciplinePriest = {
-    Aura("PowerWordShield", 1.00, 0.84, 0.28, "PW: Shield"),
-    Aura("PrayerOfMending", 0.56, 0.93, 0.56, "Prayer of Mending"),
-    Aura("PainSuppression", 0.81, 0.58, 0.93, "Pain Suppression"),
-    Aura("PowerInfusion", 0.94, 0.82, 0.31, "Power Infusion"),
-  },
+  DisciplinePriest = ns.AuraConfig.DisciplineIndicatorAuras(Aura),
   HolyPriest = {
     Aura("PowerWordShield", 1.00, 0.84, 0.28, "PW: Shield"),
     Aura("Renew", 0.56, 0.93, 0.56),
@@ -70,24 +65,12 @@ SI.TrackableAuras = {
   RetributionPaladin = BLESSING_AURAS,
 }
 
-local BLESSING_DEFAULTS = {
-  BlessingOfProtection = Frame("border", 0.94, 0.82, 0.31, 1, 1),
-  BlessingOfSacrifice = Frame("border", 0.94, 0.50, 0.50, 1, 2),
-  BlessingOfFreedom = Frame("border", 0.47, 0.77, 1.00, 1, 3),
-}
+local BLESSING_DEFAULTS = ns.AuraConfig.BlessingIndicatorDefaults(Frame)
 SI.SpecDefaults = {
-  RestorationDruid = {
-    Rejuvenation = Placed("icon", "TOPLEFT", 1, -1, 22),
-    Regrowth = Placed("icon", "TOPRIGHT", -1, -1, 22),
-    Lifebloom = Placed("icon", "BOTTOMLEFT", 1, 1, 22),
-  },
+  RestorationDruid = ns.AuraConfig.SeedDruidIndicators({
+  }, Placed, false),
   RestorationShaman = { EarthShield = Placed("icon", "TOPRIGHT", -1, -1, 22) },
-  DisciplinePriest = {
-    PowerWordShield = Placed("icon", "TOPRIGHT", -1, -1, 22),
-    PrayerOfMending = Placed("icon", "BOTTOMLEFT", 1, 1, 20),
-    PainSuppression = Frame("border", 0.81, 0.58, 0.93, 1, 1),
-    PowerInfusion = Frame("glow", 0.94, 0.82, 0.31, 1, 2),
-  },
+  DisciplinePriest = ns.AuraConfig.DisciplineIndicatorDefaults(Placed, Frame),
   HolyPriest = {
     PowerWordShield = Placed("icon", "TOPRIGHT", -1, -1, 22),
     Renew = Placed("icon", "TOPLEFT", 1, -1, 22),

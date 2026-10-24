@@ -334,6 +334,7 @@ NativeApply.ApplyNormalLaneContainers = function(root, lanes, parentFrame, force
     return ok, any
 end
 
+-- hot path: kept whole (perf rule)
 ApplyLane = function(root, lane, parentFrame, forceRecreate)
     if not (root and lane and lane.enabled) then return nil end
     local key = lane.rootKey

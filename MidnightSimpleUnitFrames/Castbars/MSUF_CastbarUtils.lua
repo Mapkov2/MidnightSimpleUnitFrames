@@ -146,6 +146,7 @@ end
 Utils.GetAnchorFrame = GetAnchorFrame
 Publish("MSUF_GetAnchorFrame", Utils.GetAnchorFrame)
 
+-- hot path: kept whole (perf rule)
 local function SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha)
     if not (statusBar and statusBar.SetStatusBarColor) then return end
 
@@ -201,6 +202,7 @@ local function CanUseBooleanTintValue(value)
     return value ~= nil, false
 end
 
+-- hot path: kept whole (perf rule)
 local function ApplyNonInterruptibleTint(
     frame,
     apiNotInterruptibleRaw,
@@ -1119,6 +1121,7 @@ end
 Utils.CB_ApplyTexts = ApplyCastbarTexts
 Publish("MSUF_CB_ApplyTexts", Utils.CB_ApplyTexts)
 
+-- hot path: kept whole (perf rule)
 local function ClearEmpowerState(frame)
     if not frame then return end
 

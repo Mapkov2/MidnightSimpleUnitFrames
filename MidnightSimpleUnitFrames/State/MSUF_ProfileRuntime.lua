@@ -150,7 +150,8 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     end
     MSUF_ProfileIO_RebaseHistory()
     if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
-    if MSUF.ProfileSync then MSUF.ProfileSync.Activate(); MSUF.ProfileSync.RefreshEvents() end
+    if MSUF.ProfileSync then MSUF.ProfileSync.Activate()
+        MSUF.ProfileSync.RefreshEvents() end
     MSUF.UF.DisableBlizzardFrames()
     MSUF.Require("MSUF_ApplyCurrentProfileGlobalUiScale", "State/MSUF_ProfileRuntime.lua")()
     MSUF_ProfileIO_RunFrameScaleApply()

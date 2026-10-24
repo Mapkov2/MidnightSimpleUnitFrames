@@ -294,6 +294,7 @@ modeBuilders.SEGMENTED = function(E)
     end
 
     --- Main dispatcher
+    -- hot path: kept whole (perf rule)
     local function Update(powerType, maxPower)
         if powerType == PT.Essence then
             UpdateEssence(powerType, maxPower)

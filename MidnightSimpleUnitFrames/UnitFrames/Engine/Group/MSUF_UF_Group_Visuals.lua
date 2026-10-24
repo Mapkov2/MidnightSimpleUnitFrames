@@ -796,6 +796,7 @@ local function SetIndicatorRegistration(frame, target, focus)
   RefreshIndicatorDriver()
 end
 
+-- hot path: kept whole (perf rule)
 local function PercentFromPlainValues(hp, maxHP)
   if type(hp) ~= "number" then
     hp = tonumber(hp)
@@ -811,6 +812,7 @@ end
 
 -- Secret or missing values never reach the arithmetic. Kept as its own body
 -- (not a call into PercentFromPlainValues): it runs per group health update.
+-- hot path: kept whole (perf rule)
 local function PercentFromValues(hp, maxHP)
   if issecretvalue(hp) == true or hp == nil then
     return nil
@@ -1238,6 +1240,7 @@ UpdateBordersFromVisualState = function(frame)
   end
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
   local cfg = frame._msufGFVisualRuntimeGroup
   if not cfg then

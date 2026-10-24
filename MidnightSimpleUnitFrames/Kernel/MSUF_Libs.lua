@@ -20,7 +20,8 @@ end
 
 local _MSUF_KnownFileAssetCache = {}
 local _MSUF_LSMFontAssetPaths = {}
-local _MSUF_FontApplyFailureSerial = tonumber(_G.MSUF_FontApplyFailureSerial) or 0
+local _MSUF_FontApplyFailureSerial = tonumber(MSUF.PublicGlobals.MSUF_FontApplyFailureSerial) or 0
+MSUF.ExportPublic("MSUF_FontApplyFailureSerial", _MSUF_FontApplyFailureSerial)
 _G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
 
 local function MSUF_NormalizeFileAssetPath(asset)
@@ -150,7 +151,7 @@ end
 
 local function MSUF_MarkFontApplyFailed()
     _MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial + 1
-    _G.MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial
+    MSUF.PublicGlobals.MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial
     local notify = MSUF.PublicGlobals.MSUF_OnFontApplyFailed
     if type(notify) == "function" then notify(_MSUF_FontApplyFailureSerial) end
     return _MSUF_FontApplyFailureSerial

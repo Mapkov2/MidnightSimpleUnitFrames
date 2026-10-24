@@ -95,12 +95,7 @@ local function PanelText(panel, template, text, color, ...)
     return fs
 end
 local function PickerPlusInput(parent, width, numeric)
-    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
-    edit:SetSize(width, 22)
-    edit:SetAutoFocus(false)
-    edit:SetJustifyH("CENTER")
-    edit:SetMaxLetters(numeric and 3 or 7)
-    if edit.SetNumeric then edit:SetNumeric(numeric and true or false) end
+    local edit = M.Widgets.PickerInput(parent, width, numeric)
     if T and T.SkinEditBox then T.SkinEditBox(edit) end
     edit:SetScript("OnEscapePressed", function(self)
         self:ClearFocus()

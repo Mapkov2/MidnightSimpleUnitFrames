@@ -27,17 +27,7 @@ A3.AuraSpellIDAliases = {
     [382514] = { 386237 }, -- Fade to Nothing talent -> Fade to Nothing buff
 }
 
-function A3.AddAuraSpellIDAndAliases(out, spellID)
-    spellID = tonumber(spellID)
-    if not (out and spellID and spellID > 0) then return end
-    spellID = math.floor(spellID + 0.5)
-    out[spellID] = true
-    local aliases = A3.AuraSpellIDAliases[spellID]
-    for i = 1, type(aliases) == "table" and #aliases or 0 do
-        local auraSpellID = tonumber(aliases[i])
-        if auraSpellID and auraSpellID > 0 then out[math.floor(auraSpellID + 0.5)] = true end
-    end
-end
+A3.AddAuraSpellIDAndAliases = MSUF.AuraConfig.CreateAliasAdder(A3)
 
 --- Curated major-defensive aura IDs used by the normal Unit/Group "Big
 --- Defensive" filter. This is deliberately narrower than PlayerDefensiveData:

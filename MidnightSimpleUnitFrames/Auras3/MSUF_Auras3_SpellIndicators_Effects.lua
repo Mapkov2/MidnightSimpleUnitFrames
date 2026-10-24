@@ -435,16 +435,7 @@ local function StopPulse(root)
 end
 
 -- The 0.7 s alpha bounce behind both the Pulse effect and the pandemic pulse.
-local function NewAlphaPulse(root)
-    local pulse = root:CreateAnimationGroup()
-    local alpha = pulse:CreateAnimation("Alpha")
-    alpha:SetFromAlpha(0.45)
-    alpha:SetToAlpha(1)
-    alpha:SetDuration(0.7)
-    if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
-    pulse:SetLooping("BOUNCE")
-    return pulse
-end
+local NewAlphaPulse = MSUF.AuraConfig.NewAlphaPulse
 
 local function StartPulse(root)
     if not root then return end

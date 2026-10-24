@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- State/MSUF_Profiles.lua
 --- Profile storage, import/export, and active-profile state.
 ---
@@ -20,6 +19,7 @@ _G.MSUF = _G.MSUF or MSUF
 MSUF.Public = MSUF.Public or {}
 
 local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "State/MSUF_Profiles.lua")
 local GetCharKey, GetPlayerSpecID, IsSpecAutoSwitchEnabled, GetSpecProfile, ApplySpecProfileIfEnabled, InitProfiles
 
 --- Shared coldpath field helpers (State/MSUF_StateHelpers.lua) and the import
@@ -109,13 +109,14 @@ end
 --- Profile lifecycle API. These globals are used by Menu2, menu actions,
 --- slash handlers, and legacy callers, so the public surface stays global even
 --- though the implementation is isolated in this State module.
-function MSUF_GetCharKey()
+function MSUF.PublicGlobals.MSUF_GetCharKey()
     -- A client without realms may report no realm name. Coerce it to "" so the
     -- key stays stable and profile bootstrap never concatenates nil.
     local realm = GetRealmName()
     if type(realm) ~= "string" then realm = "" end
     return UnitName("player") .. "-" .. realm
 end
+ExportPublic("MSUF_GetCharKey", MSUF.PublicGlobals.MSUF_GetCharKey)
 local function MSUF_ProfileIO_EnsureProfileRoots()
     if type(MSUF_GlobalDB) ~= "table" then
         MSUF_GlobalDB = {}
@@ -179,7 +180,7 @@ local MSUF_ProfileIO_EnsureProfileMenuDefaults = Normalize.EnsureProfileMenuDefa
 local MSUF_ProfileIO_TranslateProfileToCurrent = Normalize.TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent = Normalize.TranslateProfilesToCurrent
 local MSUF_ProfileIO_NotifySuiteProfileChanged
-function MSUF_InitProfiles(startup)
+function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     if Variants and Variants.IsRecording() then return end
     -- A rebind to a different profile passes BeforeProfileSwitch below.
     PrepareProfileMutation(true)
@@ -265,13 +266,15 @@ function MSUF_InitProfiles(startup)
     if not startup then
         if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end
         if Variants then Variants.ResolveCurrent() end
-        if ProfileSync then ProfileSync.Activate(); ProfileSync.RefreshEvents() end
+        if ProfileSync then ProfileSync.Activate()
+            ProfileSync.RefreshEvents() end
     end
     if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
         ApplyProfileRuntime("PROFILE_INIT_REBIND", false)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_INIT_REBIND", active)
     end
  end
+ExportPublic("MSUF_InitProfiles", MSUF.PublicGlobals.MSUF_InitProfiles)
 local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
     return MSUF.SuiteLink.NotifyProfileLifecycle(kind, source, target)
 end
@@ -372,7 +375,8 @@ local function MSUF_ResetProfile(name)
     name = name or MSUF_ActiveProfile
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or not profiles[name] then return false, "unknown profile" end
-    if name == MSUF_ActiveProfile then local ok,why=BeforeProfileSwitch(); if not ok then return false,why end end
+    if name == MSUF_ActiveProfile then local ok,why=BeforeProfileSwitch()
+        if not ok then return false,why end end
     if name ~= MSUF_ActiveProfile then
         --- A stored profile needs its schema stamp (an unstamped table is
         --- archived as pre-6.0 at the next login), so it is seeded the way
@@ -435,7 +439,8 @@ local function DeleteProfile(name, quiet)
         ProfileChat("error", "Cannot delete the last remaining profile.")
         return false, "cannot delete last profile"
     end
-    if MSUF_ActiveProfile == name then local ok,why=BeforeProfileSwitch(); if not ok then return false,why end end
+    if MSUF_ActiveProfile == name then local ok,why=BeforeProfileSwitch()
+        if not ok then return false,why end end
     if chars then
         for _, char in pairs(chars) do
             if type(char) == "table" then
@@ -485,6 +490,19 @@ local function MSUF_DeleteProfiles(names)
     if deleted > 0 then ProfileChat("note", "Profiles deleted: %d", deleted) end
     return deleted
 end
+local function ProfileCopySource(profiles, sourceName, destName)
+    local src = profiles[sourceName]
+    if type(src) ~= "table" then
+        ProfileChat("error", "Source profile '%s' not found.", sourceName)
+        return nil
+    end
+    if profiles[destName] then
+        ProfileChat("error", "Profile '%s' already exists.", destName)
+        return nil
+    end
+    return src
+end
+
 local function MSUF_CopyProfile(sourceName, destName)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
@@ -497,15 +515,8 @@ local function MSUF_CopyProfile(sourceName, destName)
     end
     if ProfileNameTooLong(destName) then return false, "profile name too long" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
-    local src = profiles[sourceName]
-    if type(src) ~= "table" then
-        ProfileChat("error", "Source profile '%s' not found.", sourceName)
-        return false
-    end
-    if profiles[destName] then
-        ProfileChat("error", "Profile '%s' already exists.", destName)
-        return false
-    end
+    local src = ProfileCopySource(profiles, sourceName, destName)
+    if not src then return false end
     local copy,why
     if Variants then copy,why=Variants.BaseSnapshot(src,true) else copy=CopyTable(src) end
     if not copy then return false,why end
@@ -521,7 +532,8 @@ local function MSUF_CopyProfile(sourceName, destName)
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
     if MSUF.ProfileMigrations then MSUF.ProfileMigrations.Apply(profiles[destName]) end
     local ok,reason=MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
-    if ok==false then profiles[destName]=nil; return false,reason end
+    if ok==false then profiles[destName]=nil
+        return false,reason end
     ProfileChat("ok", "Copied '%s' -> '%s'.", sourceName, destName)
     return true
 end
@@ -550,15 +562,8 @@ local function MSUF_RenameProfile(sourceName, destName)
     end
 
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
-    local src = profiles[sourceName]
-    if type(src) ~= "table" then
-        ProfileChat("error", "Source profile '%s' not found.", sourceName)
-        return false
-    end
-    if profiles[destName] then
-        ProfileChat("error", "Profile '%s' already exists.", destName)
-        return false
-    end
+    local src = ProfileCopySource(profiles, sourceName, destName)
+    if not src then return false end
     --- The Suite renames its own and its skin's profile first. It refuses,
     --- with nothing changed, a name one of them already holds, a name it
     --- cannot store, and any rename in combat. Out of combat the variant
@@ -652,7 +657,7 @@ end
 --- the only source of the global GetSpecialization/GetSpecializationInfo, does
 --- not load there. On Forever the specProfileMap key is therefore the active
 --- talent group index (1 primary, 2 secondary); every other client keeps specID.
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+local IS_FOREVER = MSUF.Client.IsForever == true
 local function MSUF_GetCharMeta()
     local _, chars = MSUF_ProfileIO_EnsureProfileRoots()
     GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
@@ -670,20 +675,22 @@ local function MSUF_GetCharMeta()
     end
      return char
 end
-function MSUF_IsSpecAutoSwitchEnabled()
+function MSUF.PublicGlobals.MSUF_IsSpecAutoSwitchEnabled()
     local char = MSUF_GetCharMeta()
     return (char.specAutoSwitch == true)
 end
-function MSUF_SetSpecAutoSwitchEnabled(enabled)
+ExportPublic("MSUF_IsSpecAutoSwitchEnabled", MSUF.PublicGlobals.MSUF_IsSpecAutoSwitchEnabled)
+function MSUF.PublicGlobals.MSUF_SetSpecAutoSwitchEnabled(enabled)
     local char = MSUF_GetCharMeta()
     char.specAutoSwitch = (enabled == true)
     if char.specAutoSwitch then
-        if _G.MSUF_ApplySpecProfileIfEnabled then
-            _G.MSUF_ApplySpecProfileIfEnabled("TOGGLE_ON")
+        if MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled then
+            MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled("TOGGLE_ON")
         end
     end
  end
-function MSUF_GetSpecProfile(specID)
+ExportPublic("MSUF_SetSpecAutoSwitchEnabled", MSUF.PublicGlobals.MSUF_SetSpecAutoSwitchEnabled)
+function MSUF.PublicGlobals.MSUF_GetSpecProfile(specID)
     local char = MSUF_GetCharMeta()
     if type(specID) ~= "number" then  return nil end
     local v = char.specProfileMap[specID]
@@ -692,7 +699,8 @@ function MSUF_GetSpecProfile(specID)
     end
      return v
 end
-function MSUF_SetSpecProfile(specID, profileName)
+ExportPublic("MSUF_GetSpecProfile", MSUF.PublicGlobals.MSUF_GetSpecProfile)
+function MSUF.PublicGlobals.MSUF_SetSpecProfile(specID, profileName)
     local char = MSUF_GetCharMeta()
     if type(specID) ~= "number" then  return end
     --- "None" clears unless a real profile owns the name (the contract of
@@ -704,15 +712,16 @@ function MSUF_SetSpecProfile(specID, profileName)
         char.specProfileMap[specID] = profileName
     end
     if char.specAutoSwitch == true then
-        local cur = _G.MSUF_GetPlayerSpecID and _G.MSUF_GetPlayerSpecID() or nil
+        local cur = MSUF.PublicGlobals.MSUF_GetPlayerSpecID and MSUF.PublicGlobals.MSUF_GetPlayerSpecID() or nil
         if cur == specID then
-            if _G.MSUF_ApplySpecProfileIfEnabled then
-                _G.MSUF_ApplySpecProfileIfEnabled("MAP_CHANGED")
+            if MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled then
+                MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled("MAP_CHANGED")
             end
         end
     end
  end
-function MSUF_GetPlayerSpecID()
+ExportPublic("MSUF_SetSpecProfile", MSUF.PublicGlobals.MSUF_SetSpecProfile)
+function MSUF.PublicGlobals.MSUF_GetPlayerSpecID()
     if IS_FOREVER then
         local specInfo = _G.C_SpecializationInfo
         local getActiveGroup = type(specInfo) == "table" and specInfo.GetActiveSpecGroup or nil
@@ -731,6 +740,7 @@ function MSUF_GetPlayerSpecID()
     end
      return specID
 end
+ExportPublic("MSUF_GetPlayerSpecID", MSUF.PublicGlobals.MSUF_GetPlayerSpecID)
 --- Combat-safe deferrer (shared)
 local function MSUF_RunAfterCombat_SpecProfile(fn)
     if type(fn) ~= "function" then  return end
@@ -753,7 +763,7 @@ local function MSUF_RunAfterCombat_SpecProfile(fn)
     end
     fn()
  end
-function MSUF_ApplySpecProfileIfEnabled(reason)
+function MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled(reason)
     local char = MSUF_GetCharMeta()
     if char.specAutoSwitch ~= true then  return end
     GetPlayerSpecID = GetPlayerSpecID or MSUF.Require("MSUF_GetPlayerSpecID", "State/MSUF_Profiles.lua")
@@ -784,6 +794,7 @@ function MSUF_ApplySpecProfileIfEnabled(reason)
         end
      end)
  end
+ExportPublic("MSUF_ApplySpecProfileIfEnabled", MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled)
 --- Event driver (very small; only does work when enabled)
 do
     local f
@@ -928,15 +939,10 @@ local function MSUF_ProfileIO_GetLSM()
 end
 
 local function MSUF_ProfileIO_LooksLikeMediaPath(value)
+    if MSUF.Fonts.IsFontPath(value) then return true end
     if type(value) ~= "string" or value == "" then return false end
     local lower = value:lower()
-    return value:find("\\", 1, true) ~= nil
-        or value:find("/", 1, true) ~= nil
-        or lower:match("%.ttf$") ~= nil
-        or lower:match("%.otf$") ~= nil
-        or lower:match("%.tga$") ~= nil
-        or lower:match("%.blp$") ~= nil
-        or lower:match("%.png$") ~= nil
+    return lower:match("%.tga$") ~= nil or lower:match("%.blp$") ~= nil or lower:match("%.png$") ~= nil
 end
 
 local function MSUF_ProfileIO_FontPathAvailable(path)
@@ -1321,17 +1327,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if auras.renderer ~= "CUSTOM" and auras.renderer ~= "NATIVE_12_1" then
         auras.renderer = "NATIVE_12_1"
     end
-    if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
-    for key, value in pairs(MSUF_GF_BLIZZARD_TYPE_DEFAULTS) do
-        if auras.blizzardTypes[key] == nil then
-            auras.blizzardTypes[key] = value
-        end
-    end
-    if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
-    if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
-    if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
-    if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
-    if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
+    MSUF.StateHelpers.SeedBlizzardAuraTypes(auras, MSUF_GF_BLIZZARD_TYPE_DEFAULTS)
     MSUF_ProfileIO_EnsureBlizzardAuraPositionDefaults(auras)
 
     MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "buff", "ALL")
@@ -1527,17 +1523,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForWago(conf)
         auras.renderer = "BLIZZARD"
     end
     if auras.renderer == nil then auras.renderer = "BLIZZARD" end
-    if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
-    for key, value in pairs(MSUF_GF_BLIZZARD_TYPE_DEFAULTS) do
-        if auras.blizzardTypes[key] == nil then
-            auras.blizzardTypes[key] = value
-        end
-    end
-    if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
-    if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
-    if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
-    if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
-    if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
+    MSUF.StateHelpers.SeedBlizzardAuraTypes(auras, MSUF_GF_BLIZZARD_TYPE_DEFAULTS)
     auras.blizzardContainerAnchor = "FRAME"
     auras.blizzardContainerX = 0
     auras.blizzardContainerY = 0
@@ -1712,7 +1698,7 @@ local UnitSelection = {
 }
 function UnitSelection.Supported(unit)
     return UnitSelection.units[unit] == true
-        and (not MSUF.Client or not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(unit))
+        and MSUF.Client.SupportsUnit(unit)
 end
 function UnitSelection.GeneralOwner(key)
     if type(key) ~= "string" or UnitSelection.sharedGeneral[key] then return nil end
@@ -2524,7 +2510,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_ProfileIO_PostImportApply_Auras("all", payload)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", payload)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", payload)
-        if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
+        if MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
             and type(payload.general.blizzardEditModeSnapshot) == "table" then
             MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
         end
@@ -2536,7 +2522,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     MSUF_ProfileIO_PostImportApply_Auras(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
-    if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
+    if MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
         and type(payload.general.blizzardEditModeSnapshot) == "table" then
         MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
     end
@@ -2756,7 +2742,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
     MSUF.ProfileIOCompleteFirstLoadImport()
     return true
 end
-function MSUF_ExportExternal(profileKey)
+function MSUF.PublicGlobals.MSUF_ExportExternal(profileKey)
     if Variants and Variants.IsRecording() then return false,"finish editing the variant first" end
     local profileTbl = MSUF_ProfileIO_GetProfileTable(profileKey)
     if type(profileTbl) ~= "table" then
@@ -2794,7 +2780,8 @@ function MSUF_ExportExternal(profileKey)
     local exportSnap = MSUF_ProfileIO_MakeWagoSnapshot(snap)
     return true, MSUF.PublicGlobals.MSUF_EncodeCompactTableMSUF3(exportSnap)
 end
-function MSUF_ImportExternal(profileString, profileKey)
+ExportPublic("MSUF_ExportExternal", MSUF.PublicGlobals.MSUF_ExportExternal)
+function MSUF.PublicGlobals.MSUF_ImportExternal(profileString, profileKey)
     MSUF_ProfileIO_ResetImportWarnings()
     if type(profileString) ~= "string" or not profileString:match("%S") then
          return false, "empty profileString"
@@ -2808,6 +2795,7 @@ function MSUF_ImportExternal(profileString, profileKey)
     end
     return MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
 end
+ExportPublic("MSUF_ImportExternal", MSUF.PublicGlobals.MSUF_ImportExternal)
 --- Deprecated compatibility aliases (MSUF_Profiles_*) of the profile string API,
 --- once used by load-order proxies; MSUF itself calls the canonical names.
 ExportPublic("MSUF_Profiles_ExportExternal", MSUF.Require("MSUF_ExportExternal", "State/MSUF_Profiles.lua"))

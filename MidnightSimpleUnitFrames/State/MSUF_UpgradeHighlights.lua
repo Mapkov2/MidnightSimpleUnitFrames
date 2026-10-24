@@ -50,8 +50,11 @@ local DATA = {
                         accordion = "uf_player:auras",
                     },
                     title = "Custom Aura tracking on Unitframes",
-                    summary = "Build up to three frame-specific Custom lanes on Player, Target, Focus and Boss, whitelist exact buff or debuff SpellIDs, and track your own DoTs on the Target frame with a curated per-class lane.",
-                    impact = "Your MSUF frames can act as focused WeakAura-style trackers with icons, timers, duration bars and full-frame tint, border, glow or pulse effects.",
+                    summary = "Build up to three frame-specific Custom lanes on Player, Target, Focus and Boss, " ..
+                        "whitelist exact buff or debuff SpellIDs, and track your own DoTs on the Target frame with " ..
+                        "a curated per-class lane.",
+                    impact = "Your MSUF frames can act as focused WeakAura-style trackers with icons, timers, duration " ..
+                        "bars and full-frame tint, border, glow or pulse effects.",
                     missed = "three Custom Aura trackers per supported Unitframe, exact spell whitelists and full-frame effects",
                     action = "Build a Custom tracker",
                 },
@@ -60,7 +63,8 @@ local DATA = {
                     icon = "auras3_styling",
                     pageKey = "auras3_styling",
                     title = "Aura settings in the right place",
-                    summary = "Setup and individual styling now live in the matching Unitframe and Party/Raid menus. Frames > Auras holds the expanded shared styles.",
+                    summary = "Setup and individual styling now live in the matching Unitframe and Party/Raid menus. " ..
+                        "Frames > Auras holds the expanded shared styles.",
                     impact = "Configure each frame in context, then use Auras for shared icon shapes, borders, shadows, colors and spacing.",
                     missed = "per-frame Aura controls and expanded shared styling in Frames > Auras",
                     action = "Open shared Aura styles",
@@ -73,7 +77,8 @@ local DATA = {
                         accordion = "gf_priority:who_appears",
                     },
                     title = "Priority Frames for the units that matter",
-                    summary = "Pin up to five group members by hand, or let MSUF pick the tanks automatically, and give them their own strip that never reshuffles mid-fight.",
+                    summary = "Pin up to five group members by hand, or let MSUF pick the tanks automatically, and give " ..
+                        "them their own strip that never reshuffles mid-fight.",
                     impact = "The people you have to watch keep one fixed spot on screen, with the Party or Raid look and click-casting they already had.",
                     missed = "Priority Frames, manual and automatic pinning, and their own placement",
                     action = "Set up Priority Frames",
@@ -89,7 +94,9 @@ local DATA = {
                         accordion = "gf_layout:general",
                     },
                     title = "Adaptive Party and Raid layouts",
-                    summary = "Party, Raid and Mythic Raid gained adaptive layouts and scaling, per-lane aura filters and blacklists, a focused Dispel Overlay page, and per-group control over whether MSUF or Blizzard draws the frames.",
+                    summary = "Party, Raid and Mythic Raid gained adaptive layouts and scaling, per-lane aura filters " ..
+                        "and blacklists, a focused Dispel Overlay page, and per-group control over whether MSUF or " ..
+                        "Blizzard draws the frames.",
                     impact = "One group setup can follow you from a five-man into a raid, and you decide per lane which auras are allowed to show at all.",
                     missed = "adaptive group layouts and scaling, group aura filters and blacklists, the Dispel Overlay page and the group provider controls",
                     action = "Open Group Layout",
@@ -102,8 +109,10 @@ local DATA = {
                         accordion = "gf_indicators:si",
                     },
                     title = "Spell Indicators on Group Frames",
-                    summary = "Track chosen buffs on Party and Raid frames as icon, square, bar or number indicators, with custom spell lists and corner indicators.",
-                    impact = "You can see missing or expiring externals and key buffs directly on the frames, with expiring icon glows, health-bar highlights and full-frame effects.",
+                    summary = "Track chosen buffs on Party and Raid frames as icon, square, bar or number indicators, " ..
+                        "with custom spell lists and corner indicators.",
+                    impact = "You can see missing or expiring externals and key buffs directly on the frames, with " ..
+                        "expiring icon glows, health-bar highlights and full-frame effects.",
                     missed = "Spell Indicators with custom aura lists, corner indicators and expiring-effect warnings",
                     action = "Open Spell Indicators",
                 },
@@ -117,7 +126,8 @@ local DATA = {
                         accordion = "uf_player:text",
                     },
                     title = "New health values and text formats",
-                    summary = "Health text can show abbreviated or full values with more consistent formatting, and the new Maximum Health Loss overlay can mark lost maximum health on unit and group frames.",
+                    summary = "Health text can show abbreviated or full values with more consistent formatting, and the " ..
+                        "new Maximum Health Loss overlay can mark lost maximum health on unit and group frames.",
                     impact = "You can choose compact readability or exact numbers without giving up the layout you already use.",
                     missed = "the new health abbreviations, full values, text formats and the Maximum Health Loss overlay",
                     action = "Open HP Text Editor",
@@ -145,8 +155,10 @@ local DATA = {
                         accordion = "uf_player:portrait",
                     },
                     title = "Portraits: attached, detached or overlay",
-                    summary = "Portraits can stay attached, float freely or render as an overlay inside the health bar, with independent size, nine-point anchoring, opacity and pannable zoom.",
-                    impact = "Rectangular and watermark-style portraits become possible, and Relief rings plus shape-following borders frame Square, Circle, Rounded and Diamond portraits.",
+                    summary = "Portraits can stay attached, float freely or render as an overlay inside the health bar, " ..
+                        "with independent size, nine-point anchoring, opacity and pannable zoom.",
+                    impact = "Rectangular and watermark-style portraits become possible, and Relief rings plus " ..
+                        "shape-following borders frame Square, Circle, Rounded and Diamond portraits.",
                     missed = "the new portrait placement modes, Relief rings and shape-following portrait borders",
                     action = "Open Portrait settings",
                 },
@@ -183,8 +195,10 @@ local DATA = {
                     icon = "opt_colors",
                     pageKey = "opt_colors",
                     title = "One Colors page with click-to-paint",
-                    summary = "Every color moved onto one page, grouped into Player & Target, Party & Raid, Castbar, Aura, Power and Class Resource workspaces with their own live preview.",
-                    impact = "You can click the element in the preview to paint it instead of hunting for the matching swatch, and reuse any color from a recent or saved palette.",
+                    summary = "Every color moved onto one page, grouped into Player & Target, Party & Raid, Castbar, " ..
+                        "Aura, Power and Class Resource workspaces with their own live preview.",
+                    impact = "You can click the element in the preview to paint it instead of hunting for the matching " ..
+                        "swatch, and reuse any color from a recent or saved palette.",
                     missed = "the rebuilt Colors page, click-to-paint previews, palettes and the new color picker",
                     action = "Open the Colors page",
                 },
@@ -197,8 +211,10 @@ local DATA = {
                         accordion = "uf_player:status_icons",
                     },
                     title = "Status icon packs",
-                    summary = "Role, leader, raid marker, ready check and every other status icon can switch between twelve bundled styles or your own custom icons, per indicator.",
-                    impact = "Status icons can finally match your UI style instead of always using Blizzard art, and external packs can register through SharedMedia.",
+                    summary = "Role, leader, raid marker, ready check and every other status icon can switch between " ..
+                        "twelve bundled styles or your own custom icons, per indicator.",
+                    impact = "Status icons can finally match your UI style instead of always using Blizzard art, and " ..
+                        "external packs can register through SharedMedia.",
                     missed = "the twelve status icon styles and per-indicator custom icons",
                     action = "Pick an icon style",
                 },
@@ -210,7 +226,8 @@ local DATA = {
                     icon = "uf_player",
                     pageKey = "uf_player",
                     title = "One 0-30 layer scale for everything",
-                    summary = "Text, status icons, auras, borders, bar outlines, group indicators and class resources all order themselves on one shared 0-30 layer scale.",
+                    summary = "Text, status icons, auras, borders, bar outlines, group indicators and class resources " ..
+                        "all order themselves on one shared 0-30 layer scale.",
                     impact = "You decide exactly what draws in front of what, and the Layer Overview beside any layer slider shows the whole stack at once.",
                     missed = "the addon-wide 0-30 layer scale and the Layer Overview",
                 },
@@ -222,7 +239,8 @@ local DATA = {
                     icon = "modules",
                     pageKey = "home",
                     title = "MSUF Edit Mode, rebuilt",
-                    summary = "Edit Mode gained a dockable toolbar, redesigned quick popups on every frame, and Undo and Redo that behave the same there as in the menu.",
+                    summary = "Edit Mode gained a dockable toolbar, redesigned quick popups on every frame, and Undo and " ..
+                        "Redo that behave the same there as in the menu.",
                     impact = "You can move, size and copy frames directly on screen and step back out of any mistake without reopening the menu.",
                     missed = "the rebuilt Edit Mode toolbar, its quick popups and shared Undo and Redo",
                     action = "Start Edit Mode",
@@ -236,7 +254,8 @@ local DATA = {
                     },
                     title = "Menu accent colors",
                     summary = "The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color.",
-                    impact = "The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload.",
+                    impact = "The accent colors navigation, tabs and highlights; panels stay midnight unless you turn " ..
+                        "on Tint menu surfaces. Applied after a UI reload.",
                     missed = "class-color, preset and custom accent options for the MSUF menu",
                     action = "Pick a menu accent",
                 },
@@ -253,8 +272,11 @@ local DATA = {
                         accordion = "opt_bars:bars_rounded",
                     },
                     title = "Rounded frames, corner for corner",
-                    summary = "Rounded unit and group frames now share one clean corner style with five strength levels, used by Health, embedded or detached Power, frame outlines and the aggro, dispel and highlight borders.",
-                    impact = "Every rounded element follows the same geometry, so corners no longer disagree with each other or lose their mask after a reload.",
+                    summary = "Rounded unit and group frames now share one clean corner style with five strength levels, " ..
+                        "used by Health, embedded or detached Power, frame outlines and the aggro, dispel and " ..
+                        "highlight borders.",
+                    impact = "Every rounded element follows the same geometry, so corners no longer disagree with each " ..
+                        "other or lose their mask after a reload.",
                     missed = "the rebuilt rounded corner style and its five strength levels",
                     action = "Open Rounded Texture",
                 },
@@ -301,14 +323,8 @@ MSUF.UpgradeHighlights = Controller
 -- release tour then reopens on every single menu visit. Mirrors the
 -- SyncLiveState in MSUF_FirstLoad.lua, which fixed the identical defect there.
 local function SyncLiveState()
-    local liveDB = rawget(_G, "MSUF_GlobalDB")
-    if type(liveDB) ~= "table" then
-        _G.MSUF_GlobalDB = globalDB
-        return state
-    end
-    if type(liveDB.global) ~= "table" then
-        liveDB.global = {}
-    end
+    local liveDB, live = MSUF.FirstLoad6.ResolveLiveGlobalDB(globalDB)
+    if not live then return state end
     globalDB = liveDB
     local liveState = globalDB.global.upgradeHighlights
     if liveState ~= state then

@@ -269,16 +269,7 @@ AnchorWouldCreateCycle, AttachUnitExternalAnchorProxy, CanonicalAnchorFrameName,
 )
 
 local function MarkPending(unit)
-  if unit then
-    local units = UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
-    if units then
-      for i = 1, #units do UF.pendingApply[units[i]] = true end
-    else
-      UF.pendingApply[unit] = true
-    end
-  else
-    for i = 1, #UF.unitOrder do UF.pendingApply[UF.unitOrder[i]] = true end
-  end
+  UF.MarkDirty(unit)
   if UF.Config then UF.Config.dirty = true end
 end
 

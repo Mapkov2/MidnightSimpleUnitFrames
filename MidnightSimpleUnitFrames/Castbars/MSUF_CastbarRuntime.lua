@@ -650,6 +650,7 @@ end
 --- End active-duration ownership without changing interrupt/hold visuals.
 --- Terminal paths that intentionally keep the frame visible use this instead
 --- of Stop(), so cold settings refreshes cannot resurrect the finished cast.
+-- hot path: kept whole (perf rule)
 function Runtime:ReleaseActive(frame)
     if not frame then return end
 
@@ -1079,6 +1080,7 @@ end
 
 --- Stop cleanup must be centralized because casts can end through normal stop,
 --- fail, interrupt, hard hide, unit death, backend disable, or preview teardown.
+-- hot path: kept whole (perf rule)
 function Runtime:Stop(frame, reasonOrOptions)
     if not frame then
         return

@@ -620,12 +620,7 @@ local function AppendReminderEnchantItems(lane, entry, index, items, GridOffset,
                 castItem = clickCast and itemID and ("item:" .. tostring(itemID)) or nil,
                 castItemID = clickCast and itemID or nil,
                 castUnit = clickCast and itemID and lane.unit or nil,
-                placed = {
-                    type = "icon",
-                    anchor = lane.anchor,
-                    x = slotX,
-                    y = slotY,
-                    size = lane.size,
+                placed = MSUF.AuraConfig.StampSlot({
                     showTooltip = lane.showTooltip,
                     -- Enchant slots have no AuraButton, but their plain
                     -- remainingTimeMs feeds an MSUF-owned native Duration
@@ -640,6 +635,7 @@ local function AppendReminderEnchantItems(lane, entry, index, items, GridOffset,
                     cooldownDecimalSeconds = lane.cooldownDecimalSeconds,
                     showStacks = false,
                 },
+        lane.anchor, slotX, slotY, lane.size),
             }
         end
     end
@@ -734,12 +730,7 @@ function CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, fil
                 requestedIconShape = lane.requestedIconShape,
                 layer = lane.layer,
                 strata = lane.strata,
-                placed = {
-                    type = "icon",
-                    anchor = lane.anchor,
-                    x = slotX,
-                    y = slotY,
-                    size = lane.size,
+                placed = MSUF.AuraConfig.StampSlot({
                     showCooldown = lane.showCooldownText,
                     showCooldownSwipe = lane.showCooldownSwipe,
                     cooldownSwipeReverse = lane.cooldownSwipeReverse,
@@ -751,6 +742,7 @@ function CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, fil
                     cooldownY = lane.cooldownY,
                     cooldownDecimalSeconds = lane.cooldownDecimalSeconds,
                 },
+        lane.anchor, slotX, slotY, lane.size),
             }
         end
     end
@@ -890,7 +882,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         pandemicFrameEffect = type(normalizeFrameEffect) == "function"
             and normalizeFrameEffect(styleFrame) or styleFrame
     end
-    local lane = FinalizeLane({
+    local lane = FinalizeLane(MSUF.AuraConfig.StampLaneGeometry({
         kind = "custom" .. tostring(index),
         appearanceKind = appearanceKind,
         rootKey = "CustomAuras" .. tostring(index),
@@ -908,13 +900,6 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
-        iconShape = iconShape,
-        requestedIconShape = requestedIconShape,
-        spacing = spacing,
-        step = size + spacing,
-        perRow = Round(perRow),
-        cols = cols,
-        rows = rows,
         padding = lanePadding,
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
         height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
@@ -924,12 +909,6 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         layer = Round(ClampNumber(entry.layer, 9, 0, 30)),
         strata = NormalizeFrameStrata(entry.strata, "AUTO"),
         alpha = Clamp01(placed.alpha, 1),
-        growthX = growthX,
-        growthY = growthY,
-        xSign = xSign,
-        ySign = ySign,
-        verticalGrowth = verticalGrowth == true,
-        initialAnchor = ButtonAnchor(xSign, ySign),
         showCooldownText = placed.showCooldown ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
@@ -972,7 +951,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         pandemicBorderAlpha = Clamp01(placed.pandemicBorderAlpha, 1),
         pandemicTintAlpha = Clamp01(placed.pandemicTintAlpha, 0.22),
         pandemicBlend = tostring(placed.pandemicBlend or "ADD"):upper() == "BLEND" and "BLEND" or "ADD",
-    })
+    },
+        iconShape, requestedIconShape, spacing, size + spacing, Round(perRow), cols, rows,
+        growthX, growthY, xSign, ySign, verticalGrowth == true, ButtonAnchor(xSign, ySign)))
     return CompileCustomLanePresentations(lane, entry, index, frameSpec, placed, filters,
         playerDefensives, targetDots, portraitRequested, pandemicFrameEffect, styleFrame,
         includeSpellIDs, layoutPlaced, sourceUnit)

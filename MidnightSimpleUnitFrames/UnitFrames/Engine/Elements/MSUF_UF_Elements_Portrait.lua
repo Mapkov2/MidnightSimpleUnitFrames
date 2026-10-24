@@ -449,6 +449,7 @@ local function PortraitKeyPart(value)
   return tostring(value)
 end
 
+-- hot path: kept whole (perf rule)
 local function BuildUnitPortraitKey(unit, frame, p, guid)
   local exists = UnitExistsPlain(unit)
   local available = PortraitUnitAvailable(unit, exists)

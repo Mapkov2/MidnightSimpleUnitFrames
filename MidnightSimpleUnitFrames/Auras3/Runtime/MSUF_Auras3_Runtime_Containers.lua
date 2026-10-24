@@ -371,6 +371,7 @@ local function CreateManagedNativeSlotLane(container, lane, parentFrame)
     return PublishNativeContainer(container)
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateAuraGroupEffectiveFilters(container, lane)
     if not (container and lane and container._msufA3ManagedGroupKey) then return false end
     local groupKey = container._msufA3ManagedGroupKey
@@ -402,6 +403,7 @@ local function UpdateAuraGroupEffectiveFilters(container, lane)
     return true
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateAuraSlotEffectiveFilters(container, lane)
     if not (container and lane) then return false end
     local slotKey = GroupLaneSlotKey(lane)

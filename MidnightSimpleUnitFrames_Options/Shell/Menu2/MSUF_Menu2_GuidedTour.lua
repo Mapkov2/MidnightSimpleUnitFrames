@@ -633,14 +633,7 @@ end
 
 --- Paints a navigation-atlas icon (or the logo when the atlas is missing) in the icon's own color.
 function Gfx.NavIcon(icon, T, iconKey)
-    local grid = T.navIconGrid and T.navIconGrid[iconKey]
-    if grid and T.media and T.media.navIcons then
-        icon:SetTexture(T.media.navIcons)
-        icon:SetTexCoord(grid[1] / 8, (grid[1] + 1) / 8, grid[2] / 8, (grid[2] + 1) / 8)
-    elseif T.media and T.media.logo then
-        icon:SetTexture(T.media.logo)
-        icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
-    end
+    M.Widgets.PaintNavigationTexture(icon, T, iconKey)
     local color = T.navIconColors and T.navIconColors[iconKey] or T.colors.accent
     if color then icon:SetVertexColor(color[1], color[2], color[3], 1) end
 end

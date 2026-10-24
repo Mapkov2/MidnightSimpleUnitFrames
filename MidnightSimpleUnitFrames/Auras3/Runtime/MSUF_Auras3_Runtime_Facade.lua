@@ -526,11 +526,7 @@ function AurasElement.Enable(frame)
         -- lane geometry. Never attach a native player AuraContainer to a
         -- synthetic row: it would show the player's current auras instead of
         -- deterministic dummy data and allocate AuraButtons in batches.
-        if frame._msufGFIsPreviewFrame == true then
-            frame._msufA3GroupRuntime = nil
-            HideState(frame)
-            return false
-        end
+        if MSUF.AuraConfig.RefuseSyntheticGroupAura(frame, HideState) then return false end
         frame._msufA3GroupRuntime = true
         local cfg = ResolveGroupFrameConfig(frame, frame and frame.MSUFUnitKey)
         if not (cfg and cfg.enabled) then

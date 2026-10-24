@@ -309,8 +309,8 @@ ExportPublic("MSUF_SyncFrameLayerAbove", SyncFrameLayerAbove)
 --- Some call-sites use a global helper name; provide it here as a safe fallback
 --- so indicator modules can remain self-contained without load-order fragility.
 --- Returns true if something was applied.
-if type(_G._MSUF_SetAtlasOrFallback) ~= "function" then
-    function _G._MSUF_SetAtlasOrFallback(tex, atlasName, fallbackTexture)
+if type(MSUF.PublicGlobals._MSUF_SetAtlasOrFallback) ~= "function" then
+    function MSUF.PublicGlobals._MSUF_SetAtlasOrFallback(tex, atlasName, fallbackTexture)
         if not tex then
             return false
         end
@@ -328,6 +328,8 @@ if type(_G._MSUF_SetAtlasOrFallback) ~= "function" then
         return false
     end
 end
+
+ExportPublic("_MSUF_SetAtlasOrFallback", MSUF.PublicGlobals._MSUF_SetAtlasOrFallback)
 
 --- External icon-pack support:
 --- In Midnight, spell/aura APIs commonly return FileDataIDs. Passing those IDs
@@ -783,6 +785,8 @@ Util.EnsureDBSafe = EnsureDBSafe
 Util.InCombat = InCombat
 Util.DeepCopy = MSUF_DeepCopy
 Util.IsSecret = IsSecretValue
+-- Shared fallback for clients without the native secret-value API.
+function Util.NoSecret() return false end
 Util.Val = ScopedValue
 Util.Num = ScopedNumber
 
@@ -1209,7 +1213,7 @@ local function GetProfileScopedCache(rootKey)
     gdb[rootKey] = type(gdb[rootKey]) == "table" and gdb[rootKey] or {}
 
     local charKey = "global"
-    local charFn = _G.MSUF_GetCharKey
+    local charFn = MSUF.PublicGlobals.MSUF_GetCharKey
     if type(charFn) == "function" then
         local key = charFn()
         if type(key) == "string" and key ~= "" then
@@ -1324,3 +1328,33 @@ local function IsGroupUnitToken(unit)
 end
 U.IsGroupUnitToken = IsGroupUnitToken
 ExportPublic("MSUF_IsGroupUnitToken", IsGroupUnitToken)
+
+-- Bind once: header compilation reads fresh GUIDs; range identity checks cache
+-- the player's plain GUID. Both keep one Lua call and the original native calls.
+function Util.CreatePlayerUnitCheck(isUnitToken, isSecret, cachePlayer)
+    local cachedPlayerGUID
+    return function(unit)
+        if not isUnitToken(unit) then return false end
+        if unit == "player" then return true end
+        if not UnitGUID then return false end
+        local guid = UnitGUID(unit)
+        local playerGuid = cachePlayer and cachedPlayerGUID or nil
+        if not playerGuid then
+            playerGuid = UnitGUID("player")
+            if cachePlayer and isSecret(playerGuid) ~= true then cachedPlayerGUID = playerGuid end
+        end
+        if isSecret(guid) == true or isSecret(playerGuid) == true then return false end
+        return guid ~= nil and guid == playerGuid
+    end
+end
+
+-- Cold registration cleanup; live visual identity removal stays inline.
+function Util.RemoveIndexedItem(items, indexes, value)
+    local position = indexes[value]
+    local last = #items
+    local tail = items[last]
+    items[position] = tail
+    items[last] = nil
+    indexes[value] = nil
+    if tail and tail ~= value then indexes[tail] = position end
+end

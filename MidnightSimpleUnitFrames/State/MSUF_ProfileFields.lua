@@ -222,19 +222,22 @@ function Fields.Read(db, path)
 end
 
 function Fields.Write(db, path, value)
-    if #path==1 then db[path[1]]=value; return end
+    if #path==1 then db[path[1]]=value
+        return end
     local owner
     if Fields.ProfileRoot then owner=Fields.ProfileRoot(db,path[1],value~=nil)
     else
         owner=db[path[1]]
-        if type(owner)~="table" and value~=nil then owner={}; db[path[1]]=owner end
+        if type(owner)~="table" and value~=nil then owner={}
+            db[path[1]]=owner end
     end
     if type(owner)~="table" then return end
     for i = 2, #path - 1 do
         local child = owner[path[i]]
         if type(child) ~= "table" then
             if value == nil then return end
-            child = {}; owner[path[i]] = child
+            child = {}
+            owner[path[i]] = child
         end
         owner = child
     end
@@ -251,9 +254,11 @@ function Fields.Copy(value, depth, seen, budget)
     local out = {}
     for key, entry in pairs(value) do
         budget.count = budget.count + 1
-        if not Key(key) or budget.count > (budget.limit or 16384) then seen[value]=nil; return nil, false end
+        if not Key(key) or budget.count > (budget.limit or 16384) then seen[value]=nil
+            return nil, false end
         local copy, valid = Fields.Copy(entry, (depth or 0)+1, seen, budget)
-        if not valid then seen[value]=nil; return nil, false end
+        if not valid then seen[value]=nil
+            return nil, false end
         out[key] = copy
     end
     seen[value] = nil
@@ -272,24 +277,31 @@ function Fields.CopySnapshot(value, budget)
         local kind=type(entry)
         if kind=="string" then
             budget.bytes=budget.bytes+#entry
-            if budget.bytes>(budget.maxBytes or 8388608) then why="limits"; return nil,false end
+            if budget.bytes>(budget.maxBytes or 8388608) then why="limits"
+                return nil,false end
             return entry,true
         end
         if entry==nil or kind=="boolean" or kind=="number" and Scalar(entry) then return entry,true end
-        if kind=="number" then why="number"; return nil,false end
-        if kind~="table" or getmetatable(entry)~=nil then why="value"; return nil,false end
-        if seen[entry] then why="cycle"; return nil,false end
-        if depth>=(budget.maxDepth or 32) then why="limits"; return nil,false end
+        if kind=="number" then why="number"
+            return nil,false end
+        if kind~="table" or getmetatable(entry)~=nil then why="value"
+            return nil,false end
+        if seen[entry] then why="cycle"
+            return nil,false end
+        if depth>=(budget.maxDepth or 32) then why="limits"
+            return nil,false end
         seen[entry]=true
         local out={}
         for key,item in pairs(entry) do
             local keyKind=type(key)
             if keyKind~="string" and keyKind~="boolean" and not (keyKind=="number" and Scalar(key)) then
-                why=keyKind=="number" and "number" or "value"; return nil,false
+                why=keyKind=="number" and "number" or "value"
+                return nil,false
             end
             if keyKind=="string" then budget.bytes=budget.bytes+#key end
             budget.count=budget.count+1
-            if budget.count>(budget.limit or 131072) or budget.bytes>(budget.maxBytes or 8388608) then why="limits"; return nil,false end
+            if budget.count>(budget.limit or 131072) or budget.bytes>(budget.maxBytes or 8388608) then why="limits"
+                return nil,false end
             local copied,valid=Copy(item,depth+1,seen)
             if not valid then return nil,false end
             out[key]=copied
@@ -363,14 +375,17 @@ function Fields.Diff(before, after)
     local patch, path, failed, skipped = {}, {}, false, 0
     local function Visit(a,b,depth)
         if failed or Fields.Equal(a,b) then return end
-        if depth > 12 or #patch >= 512 then failed=true; return end
+        if depth > 12 or #patch >= 512 then failed=true
+            return end
         if type(a) == "table" and type(b) == "table" then
             local keys = {}
             for key in pairs(a) do keys[key]=true end
             for key in pairs(b) do keys[key]=true end
             for key in pairs(keys) do
                 if Key(key) and not (type(key)=="string" and key:match("^_")) then
-                    path[depth+1]=key; Visit(a[key],b[key],depth+1); path[depth+1]=nil
+                    path[depth+1]=key
+                    Visit(a[key],b[key],depth+1)
+                    path[depth+1]=nil
                 elseif not Key(key) and not Fields.Equal(a[key],b[key]) then
                     -- A change under a key a field path cannot name (an enum
                     -- zero, a long string) is counted, never dropped silently.
@@ -379,7 +394,8 @@ function Fields.Diff(before, after)
             end
         elseif depth >= 2 then
             local value, valid = Fields.Copy(b)
-            if not valid then failed=true; return end
+            if not valid then failed=true
+                return end
             patch[#patch+1] = { path=Fields.Copy(path), value=value, remove=b==nil }
         end
     end

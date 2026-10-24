@@ -665,6 +665,7 @@ end
 -- native-percent update. Both variants keep the public handoff contract.
 local UpdateSingle
 if UnitHealthPercent and SCALE_100 then
+  -- hot path: kept whole (perf rule)
   UpdateSingle = function(frame, event, unit, group)
     unit = unit or frame.MSUFUnitKey
     local rt = frame and frame._msufHealthSample
@@ -740,6 +741,7 @@ if UnitHealthPercent and SCALE_100 then
     return pct, nil, true
   end
 else
+  -- hot path: kept whole (perf rule)
   UpdateSingle = function(frame, event, unit, group)
     unit = unit or frame.MSUFUnitKey
     local rt = frame and frame._msufHealthSample
@@ -768,6 +770,7 @@ else
   end
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateSingleAbsolute(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufHealthSample
@@ -792,6 +795,7 @@ local function UpdateSingleAbsolute(frame, event, unit)
   return hp, maxHP, percentReady
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateSingleCurrent(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufHealthSample
@@ -828,6 +832,7 @@ end
 -- Fold the group percent write, runtime-color gate, and steady status update
 -- into one pass. Text-free/deferred routes use it directly; the immediate
 -- percent-text wrapper below publishes its result only to that consumer.
+-- hot path: kept whole (perf rule)
 local function UpdateGroupPercentLean(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
   local bar = frame and frame.hpBar
@@ -1185,6 +1190,7 @@ if UF.RouteCompiler then
     -- uses the same dispatch-free contract; single frames can avoid the token
     -- churn too while connection/max/visual routes keep coherent dispatch.
     if target then
+      -- hot path: kept whole (perf rule)
       return function(self, ev, _unit)
         local hp, hpMax, percentReady
         if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
@@ -1201,6 +1207,7 @@ if UF.RouteCompiler then
         end
       end
     end
+    -- hot path: kept whole (perf rule)
     return function(self, ev, unit)
       local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
       local hp, hpMax, percentReady
@@ -1219,8 +1226,10 @@ if UF.RouteCompiler then
     end
   end
 
+  -- hot path: kept whole (perf rule)
   local function BuildGatedRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
     if target then
+      -- hot path: kept whole (perf rule)
       return function(self, ev, _unit)
         BeginFrameEvent(self, ev)
         local hp, hpMax, percentReady
@@ -1240,6 +1249,7 @@ if UF.RouteCompiler then
         EndFrameEvent(self)
       end
     end
+    -- hot path: kept whole (perf rule)
     return function(self, ev, unit)
       BeginFrameEvent(self, ev)
       local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
@@ -1261,8 +1271,10 @@ if UF.RouteCompiler then
     end
   end
 
+  -- hot path: kept whole (perf rule)
   local function BuildPredictionGatedRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
     if target then
+      -- hot path: kept whole (perf rule)
       return function(self, ev, _unit)
         BeginFrameEvent(self, ev)
         local hp, hpMax, percentReady
@@ -1281,6 +1293,7 @@ if UF.RouteCompiler then
         EndFrameEvent(self)
       end
     end
+    -- hot path: kept whole (perf rule)
     return function(self, ev, unit)
       BeginFrameEvent(self, ev)
       local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
@@ -1301,6 +1314,7 @@ if UF.RouteCompiler then
     end
   end
 
+  -- hot path: kept whole (perf rule)
   local function BuildTextGatedRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
     if target then
       return function(self, ev, _unit)
@@ -1348,6 +1362,7 @@ if UF.RouteCompiler then
         EndFrameEvent(self)
       end
     end
+    -- hot path: kept whole (perf rule)
     return function(self, ev, _unit)
       BeginFrameEvent(self, ev)
       local hp, hpMax, percentReady
@@ -1365,6 +1380,7 @@ if UF.RouteCompiler then
     end
   end
 
+  -- hot path: kept whole (perf rule)
   local function BuildUnitRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless)
     if not predictionFn then
       return function(self, ev, unit)
@@ -1379,6 +1395,7 @@ if UF.RouteCompiler then
         EndFrameEvent(self)
       end
     end
+    -- hot path: kept whole (perf rule)
     return function(self, ev, unit)
       BeginFrameEvent(self, ev)
       local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
@@ -1460,6 +1477,7 @@ if UF.RouteCompiler then
     end
 
     if predictionGated == true then
+      -- hot path: kept whole (perf rule)
       return function(self, ev, unit)
         local u = unit or self.MSUFUnitKey
         local hp, hpMax, percentReady
@@ -1483,6 +1501,7 @@ if UF.RouteCompiler then
       end
     end
 
+    -- hot path: kept whole (perf rule)
     return function(self, ev, unit)
       local u = unit or self.MSUFUnitKey
       local hp, hpMax, percentReady

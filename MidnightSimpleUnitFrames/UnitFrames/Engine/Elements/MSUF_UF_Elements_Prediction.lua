@@ -1030,6 +1030,7 @@ local function OverflowParent(frame)
   return frame._msufPredictionOverflowClip or frame._msufHealthVisualRoot or frame
 end
 
+-- hot path: kept whole (perf rule)
 local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
   local hpBar = frame.hpBar or frame.Health
   if not (bar and hpBar) then
@@ -1161,6 +1162,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   end
 end
 
+-- hot path: kept whole (perf rule)
 local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
   local hpBar = frame and (frame.hpBar or frame.Health)
   if not (bar and hpBar) then
@@ -1842,6 +1844,7 @@ local function ArmPredictionDriver()
   return true
 end
 
+-- hot path: kept whole (perf rule)
 local function QueuePredictionDataEvent(frame, event)
   if not frame then return end
   local bit = PREDICTION_DATA_EVENT_BITS[event]
@@ -1898,6 +1901,7 @@ local function QueuePredictionDataEvent(frame, event)
   end
 end
 
+-- hot path: kept whole (perf rule)
 FlushPredictionQueue = function()
   if predictionDriverPersistent == true then
     predictionDriver:Hide()
@@ -1988,6 +1992,7 @@ end
 -- only for the non-mixed stripe archetype, so its UNIT_HEALTH path never pays
 -- the generic glow wrapper's feature tests or partial-overlay bucket branch.
 -- It consumes only the absorb payload cached by the data-event owner.
+-- hot path: kept whole (perf rule)
 UpdateFullHealthStripeFast = function(frame, event, unit, seedHP, seedMaxHP)
   if not frame then return end
   if frame._msufPredictionHealthVisualActive ~= true then return end
@@ -2075,6 +2080,7 @@ UpdateFullHealthStripeFast = function(frame, event, unit, seedHP, seedMaxHP)
   end
 end
 
+-- hot path: kept whole (perf rule)
 UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
   if not frame then return end
   -- The absorb-data event owns this gate. Most group members have no absorb,
@@ -2518,6 +2524,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedA
 end
 
 -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
+-- hot path: kept whole (perf rule)
 UpdateBoundPredictionData = function(frame, mask)
   local unit = frame.MSUFUnitKey
   local cfg = frame._msufPredictionRuntimeCfg
@@ -2542,6 +2549,7 @@ end
 
 -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 local function CreateAbsorbDataWriter(followAbsorb, withGlow, fullStripe)
+  -- hot path: kept whole (perf rule)
   return function(frame, mask)
     local unit = frame.MSUFUnitKey
     local cfg = frame._msufPredictionRuntimeCfg

@@ -25,26 +25,24 @@ local function NewFilterSection()
 end
 
 -- Build fresh dropdown domains for each menu schema instance.
+local function UnitDropdownChoices(shared)
+    local choices = {
+            { value = "player", text = "Player" },
+            { value = "pet", text = "Pet" },
+            { value = "target", text = "Target" },
+            { value = "focus", text = "Focus" },
+            { value = "boss", text = "Boss" },
+            { value = "arena", text = "Arena" },
+    }
+    if shared then table.insert(choices, 1, { value = "shared", text = "Shared" }) end
+    return choices
+end
+
 local function BuildDropdownDomains()
     return {
-        PUBLIC_UNITS = {
-            { value = "player", text = "Player" },
-            { value = "pet", text = "Pet" },
-            { value = "target", text = "Target" },
-            { value = "focus", text = "Focus" },
-            { value = "boss", text = "Boss" },
-            { value = "arena", text = "Arena" },
-        },
+        PUBLIC_UNITS = UnitDropdownChoices(false),
 
-        STYLE_SCOPES = {
-            { value = "shared", text = "Shared" },
-            { value = "player", text = "Player" },
-            { value = "pet", text = "Pet" },
-            { value = "target", text = "Target" },
-            { value = "focus", text = "Focus" },
-            { value = "boss", text = "Boss" },
-            { value = "arena", text = "Arena" },
-        },
+        STYLE_SCOPES = UnitDropdownChoices(true),
 
         GROWTH_VALUES = {
             { value = "RIGHT", text = "Right" },

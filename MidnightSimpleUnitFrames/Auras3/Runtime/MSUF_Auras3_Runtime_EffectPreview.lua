@@ -39,14 +39,7 @@ local Round = dependencies.Platform.Round
 --- meaning when there is no aura.
 EffectPreview.DISPEL_OVERLAY_PREVIEW_FIELD = "_msufA3DispelOverlayPreview"
 
-EffectPreview.NormalizeDispelOverlayPreviewScope = function(scope)
-    scope = tostring(scope or "shared"):lower()
-    if scope == "" or scope == "all" or scope == "global" then return "shared" end
-    if scope == "gf_party" then return "party" end
-    if scope == "gf_raid" then return "raid" end
-    if scope == "gf_mythicraid" then return "mythicraid" end
-    return scope
-end
+EffectPreview.NormalizeDispelOverlayPreviewScope = MSUF.AuraConfig.NormalizePreviewScope
 
 --- Scope match mirrors the border test modes: "shared" paints every frame, a
 --- group kind paints that kind, anything else matches a unit token.
@@ -116,15 +109,7 @@ EffectPreview.ForEachDispelOverlayPreviewFrame = function(fn)
     if type(gf.ForEachFrame) == "function" then gf.ForEachFrame(fn, true) end
     -- Group preview rows live outside GF.frameList; walk them explicitly so the
     -- menu preview covers the rows the user is actually looking at.
-    local previews = gf._previewFrames
-    if type(previews) ~= "table" then return end
-    for _, frames in pairs(previews) do
-        if type(frames) == "table" then
-            for _, frame in pairs(frames) do
-                if type(frame) == "table" then fn(frame) end
-            end
-        end
-    end
+    MSUF.AuraConfig.ForEachGroupPreviewFrame(gf, fn)
 end
 
 A3.RefreshDispelOverlayPreview = function()

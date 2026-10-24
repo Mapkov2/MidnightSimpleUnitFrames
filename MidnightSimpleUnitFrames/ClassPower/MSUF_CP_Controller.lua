@@ -23,10 +23,9 @@
 --- Stagger or a degraded non-Ebon API path.
 
 
-if _G.__MSUF_ClassPower_Loaded then return end
-_G.__MSUF_ClassPower_Loaded = true
-
 local MSUF = select(2, ...)
+if MSUF.PublicGlobals.__MSUF_ClassPower_Loaded then return end
+MSUF.ExportPublic("__MSUF_ClassPower_Loaded", true)
 local FILE = "ClassPower/MSUF_CP_Controller.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local ExportPublic = MSUF.ExportPublic

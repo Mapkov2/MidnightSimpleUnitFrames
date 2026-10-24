@@ -465,6 +465,7 @@ local function UpdateDispelTypeSymbol(button, cfg, data)
     return true
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateDispelTypeOverlay(button, lane, unit, data)
     local cfg = lane and lane.config
     if not (cfg and cfg.showDispelTypeBorder == true) then
@@ -520,6 +521,7 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
     UpdateDispelTypeSymbol(button, cfg, data)
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateOwnHighlight(button, cfg, mine)
     local active = cfg and cfg.ownHighlight == true and mine == true
     local tex = button._msufA3OwnHighlight

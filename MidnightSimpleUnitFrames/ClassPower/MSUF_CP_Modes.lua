@@ -416,6 +416,7 @@ modeBuilders.FRACTIONAL = function(E)
     local CPConst = E.CPConst
     local CPK = E.CPK
 
+    -- hot path: kept whole (perf rule)
     local function Update(powerType, maxPower)
         if maxPower <= 0 then return end
         local rawCur = UnitPower("player", powerType, true)
@@ -592,6 +593,7 @@ modeBuilders.CONTINUOUS = function(E)
     local NotSecret = E.NotSecret
     local CP_CheckAutoHide = E.CP_CheckAutoHide
 
+    -- hot path: kept whole (perf rule)
     local function Update(powerType, maxPower)
         local rawCur = UnitPower("player", powerType)
         local rawMx = UnitPowerMax("player", powerType)
@@ -656,6 +658,7 @@ modeBuilders.CONTINUOUS = function(E)
     --- lets the native StatusBar represent both directions.
     local UpdateSigned
     if IS_CLASSIC then
+        -- hot path: kept whole (perf rule)
         UpdateSigned = function(powerType, maxPower)
             local rawCur = UnitPower("player", powerType)
             local rawMx = UnitPowerMax("player", powerType)

@@ -248,17 +248,7 @@ local function NormalizeAuraRenderer(conf)
         auras.renderer = GF_NATIVE_AURA_RENDERER
     end
     if auras.renderer == GF_NATIVE_AURA_RENDERER then
-        if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
-        for key, value in pairs(GF_BLIZZARD_AURA_TYPE_DEFAULTS) do
-            if auras.blizzardTypes[key] == nil then
-                auras.blizzardTypes[key] = value
-            end
-        end
-        if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
-        if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
-        if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
-        if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
-        if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
+        MSUF.StateHelpers.SeedBlizzardAuraTypes(auras, GF_BLIZZARD_AURA_TYPE_DEFAULTS)
         if auras.blizzardContainerAnchor == nil then auras.blizzardContainerAnchor = "FRAME" end
         if auras.blizzardContainerX == nil then auras.blizzardContainerX = 0 end
         if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end

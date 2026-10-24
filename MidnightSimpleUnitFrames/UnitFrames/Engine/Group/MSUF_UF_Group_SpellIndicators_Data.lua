@@ -511,23 +511,15 @@ local function PlacedFrame(kind, anchor, x, y, size, frameKind, r, g, b, a, prio
   }
 end
 
-local PALADIN_BLESSING_DEFAULTS = {
-  BlessingOfProtection = Frame("border", 0.94, 0.82, 0.31, 1, 1),
-  BlessingOfSacrifice = Frame("border", 0.94, 0.50, 0.50, 1, 2),
-  BlessingOfFreedom = Frame("border", 0.47, 0.77, 1.00, 1, 3),
-}
+local PALADIN_BLESSING_DEFAULTS = ns.AuraConfig.BlessingIndicatorDefaults(Frame)
 
 SI.SpecDefaults = {
-  RestorationDruid = {
-    Rejuvenation = Placed("icon", "TOPLEFT", 1, -1, 22),
-    Regrowth = Placed("icon", "TOPRIGHT", -1, -1, 22),
-    Lifebloom = Placed("icon", "BOTTOMLEFT", 1, 1, 22),
-    WildGrowth = Placed("square", "BOTTOMRIGHT", -3, 3, 9),
+  RestorationDruid = ns.AuraConfig.SeedDruidIndicators({
     Germination = Placed("square", "BOTTOM", 0, 3, 9),
     SymbioticRelationship = Placed("square", "CENTER", -8, 0, 10),
     SymbioticBlooms = Placed("square", "CENTER", 8, 0, 10),
     IronBark = Frame("border", 0.65, 0.47, 0.33, 1, 1),
-  },
+  }, Placed, true),
   DisciplinePriest = {
     Atonement = PlacedFrame("square", "TOPLEFT", 2, -2, 11, "healthtint", 0.94, 0.82, 0.31, 0.20, 5),
     PowerWordShield = Placed("icon", "TOPRIGHT", -1, -1, 22),

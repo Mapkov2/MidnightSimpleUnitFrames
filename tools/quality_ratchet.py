@@ -493,13 +493,39 @@ OFFSETS = {"g_reads": g_read_offsets, "type_guards": type_guard_offsets,
            "fallback_lambdas": fallback_lambda_offsets, "client_guards": client_guard_offsets}
 
 
-def normalized_lines(plain):
-    kept = []
-    for line in plain.split("\n"):
+# PLAN-10 C5 (2026-10-24): cross-file module preludes are dependency wiring,
+# not copied feature logic. Exclude only a consecutive file prefix made of
+# namespace unpacking, simple aliases/constants, Require imports, and early
+# capability guards. A named MSUF.Auras3RuntimeFactories.<module> assignment
+# introduces a module body: skip its header and consecutive import aliases too.
+# Stop at any other function, nonempty table, or other call.
+# Both this ratchet and scorecard use this rule; no arbitrary line cutoff.
+PRELUDE_ATOM = r'(?:\(?[\w.]+\)?|\.\.\.|"[^"\n]*"|\{\})'
+PRELUDE_VALUE = PRELUDE_ATOM + r'(?:\s+(?:or|and)\s+' + PRELUDE_ATOM + r')*'
+PRELUDE_LINE = re.compile(
+    r'^(?:local\s+[\w, ]+\s*=\s*(?:' + PRELUDE_VALUE + r'(?:,\s*' + PRELUDE_VALUE + r')*'
+    + r'|select\(2,\s*\.\.\.\)|[\w.]+\.Require\([^\n]*\))'
+    + r'|[\w.]+\s*=\s*' + PRELUDE_VALUE
+    + r'|if\s+(?:not\s+)?[\w.]+\s+then\s+return\s+end)$')
+
+
+def clone_source_lines(plain):
+    kept, prelude = [], True
+    for number, line in enumerate(plain.split("\n"), 1):
         text = WHITESPACE.sub(" ", line.strip())
+        if not text:
+            continue
+        if prelude and (PRELUDE_LINE.fullmatch(text) or re.fullmatch(
+                r'MSUF\.Auras3RuntimeFactories\.\w+ = function\([\w, ]*\)', text)):
+            continue
+        prelude = False
         if len(text) > 3 and text not in TRIVIAL:
-            kept.append(text)
+            kept.append((number, text))
     return kept
+
+
+def normalized_lines(plain):
+    return [line for _, line in clone_source_lines(plain)]
 
 
 def window_hashes(kept):

@@ -164,6 +164,7 @@ modeBuilders.AURA = function(E)
         return 0.00, 0.80, 0.00
     end
 
+    -- hot path: kept whole (perf rule)
     local function UpdateSegmented(powerType, maxPower)
         if maxPower <= 0 then return end
         local visual = CP.visual

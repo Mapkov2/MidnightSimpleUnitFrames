@@ -79,7 +79,7 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         "cooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor)
     local rawStrata = ReadRaw(layout, nil, spec.strataKey)
     if issecretvalue(rawStrata) == true then rawStrata = nil end
-    return FinalizeLane({
+    return FinalizeLane(MSUF.AuraConfig.StampLaneGeometry({
         kind = kind,
         appearanceKind = kind,
         rootKey = spec.rootKey,
@@ -93,15 +93,8 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(zoomDefault, DEFAULT_SHARED.iconZoom, 100, 200),
-        iconShape = iconShape,
-        requestedIconShape = requestedIconShape,
-        spacing = spacing,
-        step = size + spacing,
         buttonWidth = size, buttonHeight = iconHeight,
         stepX = size + spacing, stepY = iconHeight + spacing,
-        perRow = Round(perRow),
-        cols = cols,
-        rows = rows,
         padding = lanePadding,
         weaponEnchants = kind == "buff" and unit == "player"
             and ReadBool(rootShared, nil, "showWeaponEnchants", false),
@@ -113,12 +106,6 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         layer = Round(ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 0, 30)),
         strata = NormalizeFrameStrata(rawStrata, "AUTO"),
         alpha = 1,
-        growthX = growthX,
-        growthY = growthY,
-        xSign = xSign,
-        ySign = ySign,
-        verticalGrowth = verticalGrowth == true,
-        initialAnchor = ButtonAnchor(xSign, ySign),
         showCooldownText = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.showTextKey, "showCooldownText", true),
         showCooldownSwipe = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
@@ -172,7 +159,9 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
             spec.stackXKey, "stackTextOffsetX", DEFAULT_SHARED.stackTextOffsetX, -2000, 2000),
         stackY = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.stackYKey, "stackTextOffsetY", DEFAULT_SHARED.stackTextOffsetY, -2000, 2000),
-    })
+    },
+        iconShape, requestedIconShape, spacing, size + spacing, Round(perRow), cols, rows,
+        growthX, growthY, xSign, ySign, verticalGrowth == true, ButtonAnchor(xSign, ySign)))
 end
 
 local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, shared, sharedSignatures)
@@ -240,7 +229,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         and type(UnitIsPlayerControlledOrGroupMember) ~= "function" then
         identityCandidateMode = "assist"
     end
-    return FinalizeLane({
+    return FinalizeLane(MSUF.AuraConfig.StampLaneGeometry({
         kind = kind,
         appearanceKind = sharedLane,
         rootKey = spec.rootKey,
@@ -254,13 +243,6 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(source[spec.iconZoomKey] or source.iconZoom, 100, 100, 200),
-        iconShape = iconShape,
-        requestedIconShape = requestedIconShape,
-        spacing = spacing,
-        step = size + spacing,
-        perRow = Round(perRow),
-        cols = cols,
-        rows = rows,
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
         height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing),
         x = Round(ClampNumber(source[spec.xKey], 0, -4096, 4096)),
@@ -269,12 +251,6 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         layer = Round(ClampNumber(source[spec.layerKey], spec.defaultLayer, 0, 30)),
         strata = NormalizeFrameStrata(rawStrata, "AUTO"),
         alpha = Clamp01(source[spec.alphaKey], 1),
-        growthX = growthX,
-        growthY = growthY,
-        xSign = xSign,
-        ySign = ySign,
-        verticalGrowth = verticalGrowth == true,
-        initialAnchor = ButtonAnchor(xSign, ySign),
         showCooldownText = source[spec.showTextKey] ~= false,
         showCooldownSwipe = source[spec.swipeKey] ~= false,
         cooldownSwipeReverse = cooldownSwipeReverse == true,
@@ -300,7 +276,9 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         stackSize = ClampNumber(source[spec.stackSizeKey] or source.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ClampNumber(source[spec.stackXKey] or source.stackX, 0, -2000, 2000),
         stackY = ClampNumber(source[spec.stackYKey] or source.stackY, 0, -2000, 2000),
-    }, sharedLane, sharedSignatures)
+    },
+        iconShape, requestedIconShape, spacing, size + spacing, Round(perRow), cols, rows,
+        growthX, growthY, xSign, ySign, verticalGrowth == true, ButtonAnchor(xSign, ySign)), sharedLane, sharedSignatures)
 end
 
 return {

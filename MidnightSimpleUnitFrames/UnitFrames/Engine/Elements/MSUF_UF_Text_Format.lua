@@ -804,6 +804,7 @@ local function CompileCurrentPercentWriter(slot)
       -- Bind the two frequent native formats without adding a dispatch/helper
       -- call per write. Only values and the live number style vary at runtime.
       if code == 6 then
+        -- hot path: kept whole (perf rule)
         return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
           if curSecret == nil then curSecret = issecretvalue(cur) == true end
           if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
@@ -813,6 +814,7 @@ local function CompileCurrentPercentWriter(slot)
           fs:SetFormattedText(pattern, cur, delimiter, pct)
         end
       end
+      -- hot path: kept whole (perf rule)
       return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
         if curSecret == nil then curSecret = issecretvalue(cur) == true end
         if pctSecret == nil then pctSecret = issecretvalue(pct) == true end

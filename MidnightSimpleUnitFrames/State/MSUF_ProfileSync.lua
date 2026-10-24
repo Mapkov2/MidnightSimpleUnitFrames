@@ -5,7 +5,8 @@ local Fields, Variants, Sync = MSUF.ProfileFields, MSUF.ProfileVariants, {}
 MSUF.ProfileSync = Sync
 local baseline, activeName, logoutFrame
 Sync.Modules = { "unitframes", "groupframes", "castbars", "colors", "auras", "resources", "gameplay" }
-local modules = {}; for _,id in ipairs(Sync.Modules) do modules[id]=true end
+local modules = {}
+for _,id in ipairs(Sync.Modules) do modules[id]=true end
 -- Root ownership is shared with the variants (State/MSUF_ProfileFields.lua).
 local roots = Fields.RootModules
 -- profile.bars holds the class resource settings next to the unit frame bar
@@ -49,7 +50,8 @@ local function BarsOwner(key)
     return roots.bars
 end
 function Sync.Owner(path)
-    if Fields.ExternalOwner then local owner=Fields.ExternalOwner(path); if owner then return owner end end
+    if Fields.ExternalOwner then local owner=Fields.ExternalOwner(path)
+        if owner then return owner end end
     if path[1]=="bars" then return BarsOwner(path[2]) end
     if path[1]~="general" then return roots[path[1]] end
     local key=path[2]
@@ -63,7 +65,7 @@ function Sync.Owner(path)
     return Fields.GeneralSyncOwner(key)
 end
 local function Report(message,detail)
-    local translate=type(MSUF.Translate)=="function" and MSUF.Translate or function(text) return text end
+    local translate = MSUF.Translate
     message=translate(message)
     if detail~=nil then message=string.format(message,translate(tostring(detail))) end
     print("|cffffd700MSUF:|r "..message)
@@ -146,7 +148,8 @@ function Sync.Validate(groups)
         local count=0
         for name,on in pairs(group.members) do
             if type(name)~="string" or #name<1 or #name>128 or on~=true then return nil,"invalid sync member" end
-            count=count+1; if count>64 then return nil,"too many sync members" end
+            count=count+1
+            if count>64 then return nil,"too many sync members" end
             out.members[name]=true
         end
         for module,on in pairs(group.modules) do
@@ -251,11 +254,13 @@ function Sync.Rebase() Sync.Activate(true) end
 function Sync.Flush(full)
     if Variants.IsRecording and Variants.IsRecording() then return false,"finish editing the variant first" end
     local groups=Groups()
-    if #groups==0 then baseline=nil; return true end
+    if #groups==0 then baseline=nil
+        return true end
     local source,why=Variants.BaseSnapshot(MSUF_DB,true)
     if not source then return false,why end
     local before=full and {} or (activeName==MSUF_ActiveProfile and baseline or nil)
-    if not before then baseline,activeName=source,MSUF_ActiveProfile; return true end
+    if not before then baseline,activeName=source,MSUF_ActiveProfile
+        return true end
     local changes,errorText=Changes(before,source)
     if not changes then return false,errorText end
     local profiles=MSUF_GlobalDB.profiles
@@ -280,7 +285,8 @@ function Sync.RegisterModule(id,label)
     if modules[id] then return end
     modules[id]=true
     Sync.Modules[#Sync.Modules+1]=id
-    Sync.Labels=Sync.Labels or {}; Sync.Labels[id]=label
+    Sync.Labels=Sync.Labels or {}
+    Sync.Labels[id]=label
 end
 function Sync.RebaseExternal(root)
     if baseline and baseline[root]==nil and activeName==MSUF_ActiveProfile then
@@ -310,13 +316,15 @@ function Sync.Replace(groups)
     MSUF_GlobalDB.global=MSUF_GlobalDB.global or {}
     MSUF_GlobalDB.global.profileSyncGroups=clean
     baseline,activeName=nil,nil
-    Sync.Activate(); Sync.RefreshEvents()
+    Sync.Activate()
+    Sync.RefreshEvents()
     return true
 end
 Sync.Report=Report
 function Sync.RenameOrDelete(name,replacement)
     for _,group in ipairs(Groups()) do
-        if group.members[name] then group.members[name]=nil; if replacement then group.members[replacement]=true end end
+        if group.members[name] then group.members[name]=nil
+            if replacement then group.members[replacement]=true end end
     end
     if activeName==name and replacement then activeName=replacement end
 end

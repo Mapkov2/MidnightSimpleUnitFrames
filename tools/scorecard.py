@@ -8,6 +8,27 @@ file, start, end, reason (inclusive source lines); every exempt occurrence must
 be wholly inside an annotated hot function. Missing/invalid data fails closed.
 Dynamic ExportPublic families are bounded by the closed generated keep policy.
 Native Nudge and Forever container names use gen_global_keep source domains.
+PLAN-10 C5 refinements (2026-10-24): named CreateFrame/XML objects are native
+WoW registrations, not optional function/value exports. Count and explain them
+separately; they cannot be suppressed by ExportPublic's policy. Only the exact
+Game/Classic `local IsSecret = issecretvalue or function() return false end`
+idiom is an accepted fallback: these clients can lack the native secret API.
+It is a safety dependency, not a missing provider silently replaced by a lambda.
+All other fallback lambdas retain the zero target.
+Cross-file module-prelude wiring is excluded using ratchet.clone_source_lines:
+only the consecutive alias/Require/namespace prefix, never feature logic.
+Named MSUF.Auras3RuntimeFactories.<module> factory headers introduce a module
+body and use the same consecutive import-alias prefix rule inside that body.
+The six-line clone hash is also a candidate detector, not a semantic proof:
+it can join the tail of one function to the head of a different function, or
+match part of independently versioned client spell-ID catalogs. C5 therefore
+reports exact reviewed non-code candidates separately in
+tools/scorecard_clone_noncode.tsv (inclusive lines, normalized source SHA256,
+category, reason). A splice must cross innermost function boundaries; a catalog
+window must be inside a known spell catalog constructor and contain no calls
+or control flow. Defaults/configuration tables and executable cold logic are
+never covered by this rule. Changed or unused reviews fail closed. Remaining
+executable clone occurrences retain the target: only listed hot-path copies.
 Other finite dynamic global families require reviewed tools/scorecard_global_families.tsv
 rows: file, line, prefix, suffix, source_sha256 (normalized LF source), names
 (a JSON array of exact names), reason. Source/family changes invalidate the row.
@@ -41,6 +62,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOT = "-- hot path: kept whole (perf rule)"
 BLOCKS = re.compile(r"\b(function|if|for|while|do|repeat|end|until)\b")
 SETTING_KINDS = {"toggle", "checkbox", "slider", "dropdown", "segment", "color", "textinput", "editbox", "input"}
+CLASSIC_SECRET_FALLBACK = re.compile(r"^local IsSecret = issecretvalue or function\(\) return false end$")
 
 
 def source_functions(code):
@@ -108,30 +130,128 @@ def covered(start, end, ranges):
     return any(first <= start and end <= last for first, last in ranges)
 
 
+def literal_catalog(text):
+    """Recognize Lua literal tables, including nested records and literal keys.
+
+    Identifiers are allowed as field names only. No variable value, operator,
+    function call or control flow is accepted anywhere in the complete table.
+    Input has already had strings/comments masked by ratchet.strip_source.
+    """
+    number = r"(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)"
+    tokens = re.findall(r'"[^"\n]*"|' + number + r"|[A-Za-z_]\w*|\S", text)
+
+    def value(index):
+        if index >= len(tokens):
+            raise ValueError("missing literal")
+        token = tokens[index]
+        if token == "{":
+            index += 1
+            while tokens[index] != "}":
+                if tokens[index] == "[":
+                    index = value(index + 1)
+                    if tokens[index:index + 2] != ["]", "="]:
+                        raise ValueError("nonliteral key")
+                    index += 2
+                elif (re.fullmatch(r"[A-Za-z_]\w*", tokens[index])
+                      and tokens[index + 1] == "="):
+                    index += 2
+                index = value(index)
+                if tokens[index] in (",", ";"):
+                    index += 1
+                elif tokens[index] != "}":
+                    raise ValueError("nonliteral expression")
+            return index + 1
+        if token == "-":
+            if not re.fullmatch(number, tokens[index + 1]):
+                raise ValueError("nonliteral minus")
+            return index + 2
+        if token.startswith('"') or token in ("true", "false", "nil") or re.fullmatch(number, token):
+            return index + 1
+        raise ValueError("nonliteral value")
+
+    try:
+        return value(0) == len(tokens)
+    except (ValueError, IndexError):
+        return False
+
+
+def noncode_clone_reviews(root, sources):
+    path = root / "tools/scorecard_clone_noncode.tsv"
+    reviews = {}
+    if not path.exists():
+        return reviews
+    catalog = re.compile(r"\b(?:A3\.(?:TargetDotData|PlayerDefensiveData)|groupHighlightSpellIDs|INTERRUPT_SPELLS)\s*=\s*\{")
+    for row in csv.DictReader(path.open(encoding="utf-8-sig", newline=""), delimiter="\t"):
+        rel, start, end = row["file"], int(row["start"]), int(row["end"])
+        key = rel, start, end
+        text, code, plain, funcs = sources[rel]
+        normalized = [(n, line) for n, line in ratchet.clone_source_lines(plain) if start <= n <= end]
+        digest = hashlib.sha256("\n".join(line for _, line in normalized).encode("utf-8")).hexdigest()
+        if (key in reviews or len(normalized) != ratchet.WINDOW or not row["reason"].strip()
+                or digest != row["source_sha256"]):
+            raise ValueError("invalid/stale non-code clone review: " + repr(key))
+        if row["category"] == "splice":
+            owners = set()
+            for number, _ in normalized:
+                owners.add(min(((fn.end - fn.start, fn.start, fn.end) for fn in funcs[1:]
+                                if fn.start <= number <= fn.end), default=(0, 0, 0))[1:])
+            if len(owners) < 2:
+                raise ValueError("clone splice does not cross function boundaries: " + repr(key))
+        elif row["category"] == "catalog":
+            # The complete table, not just its repeated rows, must be literal.
+            # This cannot exempt the Placed/Frame/Aura default factories.
+            valid = False
+            for match in catalog.finditer(code):
+                depth = 1
+                for offset in range(match.end(), len(code)):
+                    if code[offset] == "{":
+                        depth += 1
+                    elif code[offset] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            first, last = code.count("\n", 0, match.start()) + 1, code.count("\n", 0, offset) + 1
+                            body = code[match.end() - 1:offset + 1]
+                            if first <= start <= end <= last and literal_catalog(body):
+                                valid = True
+                            break
+            if not valid:
+                raise ValueError("clone catalog review is not literal spell data: " + repr(key))
+        else:
+            raise ValueError("unknown non-code clone category: " + repr(key))
+        reviews[key] = row["category"], row["reason"]
+    return reviews
+
+
 def measure(root):
     profile = ratchet.PROFILES["classic"]
     allowlist = ratchet.load_json(root / "tools" / ratchet.ALLOWLIST_NAME, {})
     rels, _ = ratchet.product_files(root, profile, ratchet.declared_data(root, "classic", allowlist))
     totals, locations, hot = collections.Counter(), collections.defaultdict(list), {}
-    function_ranges = {}
+    function_ranges, sources = {}, {}
     details, unexcepted_long, long_total = [], 0, 0
     for rel in rels:
         text = keep.read(root / rel)
         code, plain = ratchet.strip_source(text)
+        lines = text.splitlines()
+        fallbacks = ratchet.fallback_lambda_offsets(code)
+        mandatory = [offset for offset in fallbacks
+                     if rel.startswith("MidnightSimpleUnitFrames/Game/Classic/")
+                     and CLASSIC_SECRET_FALLBACK.fullmatch(lines[code.count("\n", 0, offset)])]
+        details.extend("mandatory Classic secret fallback %s:%d: native API can be absent" %
+                       (rel, code.count("\n", 0, offset) + 1) for offset in mandatory)
         metrics = {
             "lines": text.count("\n") + (0 if text.endswith("\n") or not text else 1),
             "client_guards": len(ratchet.client_guard_offsets(code)),
-            "fallback_lambdas": len(ratchet.fallback_lambda_offsets(code)),
+            "fallback_lambdas": len(fallbacks) - len(mandatory),
+            "mandatory_secret_fallbacks": len(mandatory),
             "semicolon_lines": ratchet.semicolon_lines(code),
             "long_lines": sum(len(line) > ratchet.LONG_LINE for line in text.split("\n")),
         }
-        normalized = [(number, ratchet.WHITESPACE.sub(" ", line.strip()))
-                      for number, line in enumerate(plain.split("\n"), 1)]
-        normalized = [(number, line) for number, line in normalized
-                      if len(line) > 3 and line not in ratchet.TRIVIAL]
+        normalized = ratchet.clone_source_lines(plain)
         hashes = ratchet.window_hashes([line for _, line in normalized])
         totals.update(metrics)
         funcs = source_functions(code)
+        sources[rel] = text, code, plain, funcs
         _, wrappers, _ = ratchet.function_shape(funcs, code, metrics["lines"], profile["function_limit"])
         hot[rel] = hot_ranges(text, funcs)
         function_ranges[rel] = [(fn.start, fn.end) for fn in funcs[1:]]
@@ -158,23 +278,34 @@ def measure(root):
         for index, digest in enumerate(hashes):
             locations[digest].append((rel, source_lines[index], source_lines[index + ratchet.WINDOW - 1]))
     exceptions = clone_exceptions(root)
-    clones = unexcepted_clones = 0
-    used = set()
+    reviews = noncode_clone_reviews(root, sources)
+    clones = unexcepted_clones = noncode = 0
+    used, used_reviews = set(), set()
     for places in locations.values():
         if len(places) < 2:
             continue
         for rel, start, end in places:
+            key = rel, start, end
+            if key in reviews:
+                used_reviews.add(key)
+                noncode += 1
+                details.append("reviewed clone %s %s:%d-%d: %s" % (reviews[key][0], rel, start, end, reviews[key][1]))
+                continue
             clones += 1
             containing = [(last - first, first, last) for first, last in function_ranges[rel]
                           if first <= start and end <= last]
             owner = min(containing)[1:] if containing else None
             if covered(start, end, exceptions.get(rel, ())) and owner in hot[rel]:
-                used.add(rel)
+                used.update((rel, a, b) for a, b in exceptions[rel] if a <= start <= end <= b)
             else:
                 unexcepted_clones += 1
+                details.append("unlisted clone %s:%d-%d" % (rel, start, end))
     for rel, ranges in exceptions.items():
-        if rel not in hot or rel not in used or any(not covered(a, b, hot[rel]) for a, b in ranges):
+        if rel not in hot or any((rel, a, b) not in used or not covered(a, b, hot[rel]) for a, b in ranges):
             raise ValueError("unused or non-hot clone exception: " + rel)
+    if set(reviews) != used_reviews:
+        raise ValueError("unused non-code clone review")
+    totals["noncode_clone_candidates"] = noncode
     return totals, long_total, unexcepted_long, clones, unexcepted_clones, details
 
 
@@ -189,6 +320,15 @@ def global_counts(root):
     exports, dynamic = ledger.static_inventory(str(root))
     keep.augment_inventory(root, exports, dynamic)
     active = keep.active_exports(exports, names, prefixes)
+    native_frames = {name for name, entry in exports.items()
+                     if any(site[3] == "frame" or (site[3] == "xml" and "frame" in entry.kinds)
+                            for site in entry.sites)}
+    frame_reasons = []
+    for name in sorted(native_frames):
+        sites = exports[name].sites
+        frame_reasons.append("native named frame %s: %s" % (name, "; ".join(
+            "%s:%d (%s registration)" % (path, line, via) for _, path, line, via in sorted(sites)
+            if via in ("frame", "xml"))))
     # A static scan cannot enumerate arbitrary runtime suffixes. Never present
     # these as an exact count or let an unresolved publication family pass.
     reviewed = {}
@@ -220,6 +360,8 @@ def global_counts(root):
             native = native_families.get((rel, family.prefix, family.expr))
             if native and family.via == "frame" and not family.suffix:
                 active.update(native[0])
+                native_frames.update(native[0])
+                frame_reasons.append("native named frame family %s: %s" % (family.prefix, native[1]))
                 continue
             key = rel, family.line, family.prefix, family.suffix
             if key not in reviewed:
@@ -230,7 +372,9 @@ def global_counts(root):
                               if family.via != "export" or keep.allowed(name, names, prefixes))
     if set(reviewed) != used:
         raise ValueError("unused dynamic global family review")
-    return len(active), len(target), len(pending), sorted(active - target - pending), unresolved
+    return (len(active - native_frames), len(target - native_frames), len(pending),
+            sorted(active - target - pending - native_frames), unresolved,
+            len(active & native_frames), frame_reasons)
 
 
 def menu_coverage(root):
@@ -315,19 +459,26 @@ def main():
     rows, details = [], []
     try:
         totals, long_total, long_open, clones, clones_open, details = measure(args.root)
-        active, keep_count, pending_count, extra, dynamic = global_counts(args.root)
+        active, keep_count, pending_count, extra, dynamic, frames, frame_reasons = global_counts(args.root)
         rows.append(("global export names in _G", "%d known; %d dynamic sites unenumerated" % (active, len(dynamic)),
                      "%d generated keep + %d pending page names; complete inventory" % (keep_count, pending_count),
                      not extra and not dynamic))
+        rows.append(("native named frames in _G", str(frames), "CreateFrame/XML registrations, separately explained", True))
         rows.append(("functions > 150 lines", "%d (%d unexcepted)" % (long_total, long_open), "0 unexcepted", long_open == 0))
         for metric in ("client_guards", "fallback_lambdas", "semicolon_lines", "long_lines"):
-            rows.append((metric, str(totals[metric]), "0", totals[metric] == 0))
-        rows.append(("clone_windows", "%d (%d unlisted)" % (clones, clones_open), "only listed hot-path copies", clones_open == 0))
+            current = str(totals[metric])
+            if metric == "fallback_lambdas":
+                current += " unexcepted; %d mandatory Classic secret fallbacks" % totals["mandatory_secret_fallbacks"]
+            rows.append((metric, current, "0 unexcepted" if metric == "fallback_lambdas" else "0", totals[metric] == 0))
+        rows.append(("clone_windows", "%d (%d unlisted); %d reviewed non-code candidates" %
+                     (clones, clones_open, totals["noncode_clone_candidates"]),
+                     "only listed hot-path copies", clones_open == 0))
         count, total, stale, declared, issues = menu_coverage(args.root)
         rows.append(("schema settingKey coverage of menu controls", "%d/%d proven; %d keyed (%.2f%%)%s" %
                      (declared, total, count, 100 * count / total, "; stale inventory" if stale else ""),
                      "100%, current schema projection", declared == total and not stale and not issues))
         details.extend("global outside generated keep: " + name for name in extra)
+        details.extend(frame_reasons)
         details.extend("dynamic global publication %s:%d: %s" % item for item in dynamic)
         details.extend("stale menu inventory: " + name for name in stale)
         details.extend(issues)

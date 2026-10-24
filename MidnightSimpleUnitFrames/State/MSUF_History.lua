@@ -50,7 +50,7 @@ function M.EnsureDB()
         return db
     end
     if ProfileSystemNeedsInit() then
-        _G.MSUF_InitProfiles()
+        MSUF.PublicGlobals.MSUF_InitProfiles()
     end
     local ensure = MSUF.PublicGlobals.MSUF_EnsureDB
     if type(ensure) == "function" then ensure() end
@@ -151,7 +151,7 @@ local function DeepReplace(dst, src, seen)
     end
 end
 local function HistoryCharacterKey()
-    local value = _G.MSUF_GetCharKey()
+    local value = MSUF.PublicGlobals.MSUF_GetCharKey()
     if type(value) == "string" and value ~= "" then return value end
     if type(_G.UnitName) == "function" and type(_G.GetRealmName) == "function" then
         local name = _G.UnitName("player")
@@ -769,6 +769,7 @@ local HISTORY_PAGE_RESET_UNITS = {
     uf_boss = "boss",
     uf_arena = "arena",
 }
+M.UnitByPage = HISTORY_PAGE_RESET_UNITS
 local HISTORY_PAGE_RESET_FEATURES = {
     opt_bars = "bars",
     opt_fonts = "fonts",
@@ -1139,7 +1140,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     end
     RequestHistoryGroupRuntime(reason or "MSUF2_HISTORY_GROUP")
     FlushApplyServiceNow()
-    _G.MSUF_ApplySpecProfileIfEnabled("MSUF2_HISTORY_PROFILE_ROUTING")
+    MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled("MSUF2_HISTORY_PROFILE_ROUTING")
     UI("ApplyLocaleSelection")
     M.MarkMenuDataDirty(reason or "history")
     RepaintActivePage(reason)

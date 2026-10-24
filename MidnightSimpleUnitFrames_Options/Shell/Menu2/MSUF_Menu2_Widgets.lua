@@ -622,3 +622,37 @@ local function SetTextLayout(fontString, width, justify)
     return fontString
 end
 W.SetTextLayout = SetTextLayout
+
+function W.PickerInput(parent, width, numeric)
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
+    edit:SetSize(width, 22)
+    edit:SetAutoFocus(false)
+    edit:SetJustifyH("CENTER")
+    edit:SetMaxLetters(numeric and 3 or 7)
+    if edit.SetNumeric then edit:SetNumeric(numeric and true or false) end
+    return edit
+end
+
+function W.PaintNavigationTexture(icon, theme, key)
+    local grid = theme.navIconGrid and theme.navIconGrid[key]
+    if grid and theme.media and theme.media.navIcons then
+        icon:SetTexture(theme.media.navIcons)
+        icon:SetTexCoord(grid[1] / 8, (grid[1] + 1) / 8, grid[2] / 8, (grid[2] + 1) / 8)
+    elseif theme.media and theme.media.logo then
+        icon:SetTexture(theme.media.logo)
+        icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
+    end
+end
+
+function W.OnboardingScene(parent, theme, x, top, width, washHeight)
+    local scene = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
+    scene:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top)
+    scene:SetWidth(width)
+    local wash = PixelLayoutRegion(scene:CreateTexture(nil, "BACKGROUND", nil, 0))
+    wash:SetPoint("TOPLEFT", scene, "TOPLEFT", 0, 0)
+    wash:SetPoint("TOPRIGHT", scene, "TOPRIGHT", 0, 0)
+    wash:SetHeight(washHeight)
+    wash:SetTexture((theme.media and theme.media.gradV) or "Interface\\Buttons\\WHITE8X8")
+    wash:SetVertexColor(theme.colors.coreBlue[1], theme.colors.coreBlue[2], theme.colors.coreBlue[3], 0.055)
+    return scene
+end

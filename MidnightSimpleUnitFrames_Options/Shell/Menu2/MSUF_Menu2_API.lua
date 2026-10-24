@@ -260,20 +260,16 @@ RegisterMenuCommand({
     end,
 })
 
-RegisterMenuCommand({
-    name = "locale",
-    aliases = { "locales", "loc" },
-    group = "diagnostics",
-    dev = true,
-    usage = "/msuf locale",
-    help = "Report how much of the current language is translated.",
-    run = function()
+do
+local localeCommand = M.LocaleCommandDescriptor()
+localeCommand.run = function()
         local total, missing = 0, 0
         total, missing = M.GetLocaleCoverage()
         local locale = MSUF.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
         print("|cff00b7ebMSUF|r " .. Fmt("Locale %s: %d keys seen, %d missing translations.", locale, total or 0, missing or 0))
-    end,
-})
+end
+RegisterMenuCommand(localeCommand)
+end
 
 RegisterMenuCommand({
     name = "versiontest",

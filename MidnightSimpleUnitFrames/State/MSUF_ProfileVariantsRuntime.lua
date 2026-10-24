@@ -50,7 +50,8 @@ end
 function Variants.RefreshEvents()
     local enabled=Enabled()
     if not enabled and not pending and not driver then return end
-    if not driver then driver=CreateFrame("Frame"); driver:SetScript("OnEvent",Event) end
+    if not driver then driver=CreateFrame("Frame")
+        driver:SetScript("OnEvent",Event) end
     driver:UnregisterAllEvents()
     if enabled then
         local location,spec=Variants.ConditionKinds(MSUF_DB)
@@ -62,7 +63,9 @@ function Variants.RefreshEvents()
 end
 function Variants.ResolveCurrent()
     if Variants.IsRecording and Variants.IsRecording() then return true end
-    if InCombatLockdown() then pending=true; Variants.RefreshEvents(); return false end
+    if InCombatLockdown() then pending=true
+        Variants.RefreshEvents()
+        return false end
     local db=MSUF_DB
     if type(db)~="table" then return false end
     Variants.Restore()

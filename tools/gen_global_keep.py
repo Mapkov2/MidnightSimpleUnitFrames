@@ -22,6 +22,12 @@ BOOTSTRAP = "MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua"
 BEGIN = "-- BEGIN GENERATED GLOBAL KEEP: tools/gen_global_keep.py"
 END = "-- END GENERATED GLOBAL KEEP"
 RUN_COMMANDS = ("MSUF_ShowWelcomeMessage", "MSUF_ShowClientVersionWarning")
+# Reviewed owner-facing contracts that must remain addressable in _G.
+REVIEWED_GLOBALS = {
+    "MSUF_MAX_ARENA_FRAMES": "pre-Kernel client fact; Unit page bare reader",
+    "MSUF_ExportExternal": "documented Wago profile API (State/MSUF_Profiles.lua)",
+    "MSUF_ImportExternal": "documented Wago profile API (State/MSUF_Profiles.lua)",
+}
 # These are live variables, not callable exports: PLAN-10 requires bare reads.
 RUNTIME_FLAGS = (
     "MSUF_InCombat",
@@ -244,6 +250,8 @@ def keep_inventory(root=ROOT, suite=Path(ledger.DEFAULT_SUITE_REPO)):
             keep(name, reason)
     for name in RUNTIME_FLAGS:
         keep(name, "bare runtime flag")
+    for name, reason in REVIEWED_GLOBALS.items():
+        keep(name, reason)
     return dict(sorted(reasons.items())), exports, dynamic
 
 

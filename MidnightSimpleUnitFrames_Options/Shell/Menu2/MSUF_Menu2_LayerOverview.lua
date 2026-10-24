@@ -57,17 +57,7 @@ if M.FilterSupportedUnitValues then
     M.FilterSupportedUnitValues(BAR_SCOPES)
 end
 
-local STRATA_RANK = {
-    AUTO = 0,
-    BACKGROUND = 1,
-    LOW = 2,
-    MEDIUM = 3,
-    HIGH = 4,
-    DIALOG = 5,
-    FULLSCREEN = 6,
-    FULLSCREEN_DIALOG = 7,
-    TOOLTIP = 8,
-}
+local STRATA_RANK = MSUF.Require("MSUF_FRAME_STRATA_RANK", "Menu2/LayerOverview")
 local FRAME_STRATA_CHOICES = {
     { value = "AUTO", text = "Auto (inherit)" },
     { value = "BACKGROUND", text = "Background" },

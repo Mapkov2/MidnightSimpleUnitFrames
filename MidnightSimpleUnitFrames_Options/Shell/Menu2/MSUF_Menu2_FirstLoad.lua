@@ -190,14 +190,7 @@ local function CreateIconWell(parent, T, navKey, size, x, y)
     local icon = PixelLayoutRegion(well:CreateTexture(nil, "ARTWORK", nil, 2))
     icon:SetSize(floor(size * 0.48), floor(size * 0.48))
     icon:SetPoint("CENTER", well, "CENTER", 0, 0)
-    local grid = T.navIconGrid and T.navIconGrid[navKey]
-    if grid and T.media and T.media.navIcons then
-        icon:SetTexture(T.media.navIcons)
-        icon:SetTexCoord(grid[1] / 8, (grid[1] + 1) / 8, grid[2] / 8, (grid[2] + 1) / 8)
-    elseif T.media and T.media.logo then
-        icon:SetTexture(T.media.logo)
-        icon:SetTexCoord(0.075, 0.925, 0.075, 0.925)
-    end
+    M.Widgets.PaintNavigationTexture(icon, T, navKey)
     local c = T.navIconColors and T.navIconColors[navKey] or T.colors.coreHot or T.colors.accent
     icon:SetVertexColor(c[1], c[2], c[3], 0.98)
     return well
@@ -509,16 +502,7 @@ function M.BuildFirstLoadDashboardScene(ctx)
     local sceneWidth = max(288, width - sceneX)
     local contentWidth = min(720, max(280, sceneWidth - 40))
     local compact = contentWidth < 660
-    local scene = PixelLayoutRegion(CreateFrame("Frame", nil, ctx.wrapper))
-    scene:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", sceneX, sceneTop)
-    scene:SetWidth(sceneWidth)
-
-    local wash = PixelLayoutRegion(scene:CreateTexture(nil, "BACKGROUND", nil, 0))
-    wash:SetPoint("TOPLEFT", scene, "TOPLEFT", 0, 0)
-    wash:SetPoint("TOPRIGHT", scene, "TOPRIGHT", 0, 0)
-    wash:SetHeight(compact and 290 or 340)
-    wash:SetTexture((T.media and T.media.gradV) or "Interface\\Buttons\\WHITE8X8")
-    wash:SetVertexColor(T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.055)
+    local scene = M.Widgets.OnboardingScene(ctx.wrapper, T, sceneX, sceneTop, sceneWidth, compact and 290 or 340)
 
     local markSize = compact and 60 or 72
     local markTop = compact and -24 or -34

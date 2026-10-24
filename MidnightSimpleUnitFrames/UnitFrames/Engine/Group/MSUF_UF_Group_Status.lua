@@ -485,14 +485,7 @@ local function RemoveUnitlessFrame(event, frame)
     return
   end
   local list = unitlessFramesByEvent[event]
-  local last = #list
-  local tail = list[last]
-  list[i] = tail
-  list[last] = nil
-  index[frame] = nil
-  if tail and tail ~= frame then
-    index[tail] = i
-  end
+  MSUF.Util.RemoveIndexedItem(list, index, frame)
   local count = (unitlessCountByEvent[event] or 1) - 1
   if count <= 0 then
     unitlessCountByEvent[event] = nil

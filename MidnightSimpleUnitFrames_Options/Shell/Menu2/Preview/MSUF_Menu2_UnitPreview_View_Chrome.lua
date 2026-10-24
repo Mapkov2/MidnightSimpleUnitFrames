@@ -290,7 +290,8 @@ local function CreatePreviewAnimationButton(box)
         PreviewAnimationInCombat, SetPreviewAnimationEnabled, "UNIT_PREVIEW_SEARCH_ANIMATION")
     if M2.AddTooltip then
         M2.AddTooltip(btn, "Animate Preview",
-            "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic window. Matching Edit Mode aura dummies use the same clock. Pauses during combat.",
+            "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic " ..
+                "window. Matching Edit Mode aura dummies use the same clock. Pauses during combat.",
             { hook = true })
     end
     box.animateCombatButton = btn

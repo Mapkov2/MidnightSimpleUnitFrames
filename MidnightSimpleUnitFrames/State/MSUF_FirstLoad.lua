@@ -361,16 +361,20 @@ FirstLoad.deferredThisSession = false
 -- after this early module has loaded. Always follow the currently exported
 -- root before reading or mutating onboarding state, otherwise the menu can
 -- render a stale `pending` table even though the saved state is completed.
+function FirstLoad.ResolveLiveGlobalDB(fallback)
+    local liveDB = MSUF_GlobalDB
+    if type(liveDB) ~= "table" then
+        MSUF_GlobalDB = fallback
+        return fallback, false
+    end
+    if type(liveDB.global) ~= "table" then liveDB.global = {} end
+    return liveDB, true
+end
+
 local function SyncLiveState()
     if not settled then SettleSavedVariables() end
-    local liveDB = rawget(_G, "MSUF_GlobalDB")
-    if type(liveDB) ~= "table" then
-        _G.MSUF_GlobalDB = globalDB
-        return state
-    end
-    if type(liveDB.global) ~= "table" then
-        liveDB.global = {}
-    end
+    local liveDB, live = MSUF.FirstLoad6.ResolveLiveGlobalDB(globalDB)
+    if not live then return state end
     globalDB = liveDB
     local liveState = globalDB.global.firstLoad6
     if liveState ~= state then

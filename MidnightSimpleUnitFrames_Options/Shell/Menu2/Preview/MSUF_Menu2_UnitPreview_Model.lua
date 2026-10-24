@@ -139,7 +139,7 @@ local function CanonKey(key)
     if UNIT_SET[key] then return key end
     return "player"
 end
-local IsSecretValue = issecretvalue or function() return false end
+local IsSecretValue = issecretvalue or MSUF.Util.NoSecret
 local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1",
     arena = "arena1", pet = "pet", pettarget = "pettarget" }
 local liveUnitDataCache = {}

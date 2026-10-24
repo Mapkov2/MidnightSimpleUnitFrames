@@ -29,10 +29,10 @@ do
     end
 
     --- One-time load guard (scoped ? only relevant once we know we're Druid).
-    if _G.__MSUF_CP_Balance_Loaded then
+    if MSUF.PublicGlobals.__MSUF_CP_Balance_Loaded then
         do return end
     end
-    _G.__MSUF_CP_Balance_Loaded = true
+    ExportPublic("__MSUF_CP_Balance_Loaded", true)
 
     local UnitClass = UnitClass
     local UnitPower = UnitPower

@@ -152,7 +152,8 @@ local function MSUF_ProfileIO_ParseTableLiteral(str)
             local ok, why = SkipSpace()
             if not ok then return nil, why end
             local ch = state.text:sub(state.pos, state.pos)
-            if ch == "}" then state.pos = state.pos + 1; return tbl end
+            if ch == "}" then state.pos = state.pos + 1
+                return tbl end
             if ch == "" then return nil, "unterminated table" end
 
             local key, value

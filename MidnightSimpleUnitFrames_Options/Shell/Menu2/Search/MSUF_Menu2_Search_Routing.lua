@@ -584,17 +584,7 @@ local function SearchAuraStyleContainer(normalized)
     if SearchRouteHasAny(normalized, "buff|buffs") then return "buff" end
 end
 
-local SEARCH_UNIT_BY_PAGE = {
-    uf_player = "player",
-    uf_target = "target",
-    uf_targettarget = "targettarget",
-    uf_focustarget = "focustarget",
-    uf_focus = "focus",
-    uf_pet = "pet",
-    uf_pettarget = "pettarget",
-    uf_boss = "boss",
-    uf_arena = "arena",
-}
+local SEARCH_UNIT_BY_PAGE = MSUF.History.UnitByPage
 
 -- Only the real global Appearance workspaces belong here.  The retired
 -- `auras3`/`auras3_rendering` routes no longer exist, while Custom and Filters

@@ -177,11 +177,7 @@ function NF.FormatWith(value, style)
     return tostring(value)
 end
 
-if MSUF.ExportPublic then
-    MSUF.ExportPublic("MSUF_NumberFormat", NF)
-else
-    _G.MSUF_NumberFormat = NF
-end
+MSUF.ExportPublic("MSUF_NumberFormat", NF)
 
 -- Kernel/MSUF_Lifecycle.lua refreshes after binding, then after login's spec
 -- selection and variants. File-load consumers keep the provisional GAME style.

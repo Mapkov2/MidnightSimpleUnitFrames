@@ -201,7 +201,7 @@ function MSUF.Translate(text)
 end
 
 --- Public global handle for external modules / debugging.
-_G.MSUF_L = L
+MSUF.ExportPublic("MSUF_L", L)
 
 function MSUF.AddLocale(locale, dict)
     if locale ~= MSUF.LOCALE or type(dict) ~= "table" then return end

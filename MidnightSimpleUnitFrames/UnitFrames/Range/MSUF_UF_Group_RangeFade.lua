@@ -212,30 +212,7 @@ local function StoreRange(frame, inRange)
   return true
 end
 
-local playerGUID
-local function UnitIsPlayer(unit)
-  if not IsUnitToken(unit) then
-    return false
-  end
-  if unit == "player" then
-    return true
-  end
-  if UnitGUID then
-    local guid = UnitGUID(unit)
-    local playerGuid = playerGUID
-    if not playerGuid then
-      playerGuid = UnitGUID("player")
-      if issecretvalue(playerGuid) ~= true then
-        playerGUID = playerGuid
-      end
-    end
-    if issecretvalue(guid) == true or issecretvalue(playerGuid) == true then
-      return false
-    end
-    return guid ~= nil and guid == playerGuid
-  end
-  return false
-end
+local UnitIsPlayer = MSUF.Util.CreatePlayerUnitCheck(IsUnitToken, issecretvalue, true)
 
 local function FrameIsPlayerUnit(frame)
   local unit = frame and frame.MSUFUnitKey

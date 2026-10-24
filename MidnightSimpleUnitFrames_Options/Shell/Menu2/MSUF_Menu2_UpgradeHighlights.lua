@@ -263,16 +263,7 @@ local function CreateScene(ctx, T)
     local sceneX, sceneTop = 12, -12
     local sceneWidth = max(288, width - sceneX)
     local contentWidth = min(720, max(280, sceneWidth - 40))
-    local scene = PixelLayoutRegion(CreateFrame("Frame", nil, ctx.wrapper))
-    scene:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", sceneX, sceneTop)
-    scene:SetWidth(sceneWidth)
-
-    local wash = PixelLayoutRegion(scene:CreateTexture(nil, "BACKGROUND", nil, 0))
-    wash:SetPoint("TOPLEFT", scene, "TOPLEFT", 0, 0)
-    wash:SetPoint("TOPRIGHT", scene, "TOPRIGHT", 0, 0)
-    wash:SetHeight(260)
-    wash:SetTexture((T.media and T.media.gradV) or "Interface\\Buttons\\WHITE8X8")
-    wash:SetVertexColor(T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.055)
+    local scene = M.Widgets.OnboardingScene(ctx.wrapper, T, sceneX, sceneTop, sceneWidth, 260)
     return scene, sceneWidth, contentWidth, contentWidth < 660, sceneTop
 end
 

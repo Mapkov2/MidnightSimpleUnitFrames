@@ -397,6 +397,7 @@ local function AppendWeaponEnchants(lane, unit, inlineRender, visible, maxVisibl
     return visible
 end
 
+-- hot path: kept whole (perf rule)
 local function FullScanLane(lane, unit, renderInline)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then return false end
@@ -502,6 +503,7 @@ local function FullScanLane(lane, unit, renderInline)
     return true, inlineRender
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateLaneFromDelta(lane, unit, updateInfo)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then return false end

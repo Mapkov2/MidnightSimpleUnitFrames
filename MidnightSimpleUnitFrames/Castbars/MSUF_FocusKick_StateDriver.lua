@@ -52,8 +52,8 @@ local function SetFocusCastbarSuppressed(suppressed)
 end
 
 local function EnsureFocusKickUI()
-    if G.__MSUF_FocusKickUIInit or type(FocusKick.InitFocusKickIcon) ~= "function" then return end
-    G.__MSUF_FocusKickUIInit = true
+    if ns.PublicGlobals.__MSUF_FocusKickUIInit or type(FocusKick.InitFocusKickIcon) ~= "function" then return end
+    ns.ExportPublic("__MSUF_FocusKickUIInit", true)
     FocusKick.InitFocusKickIcon()
 end
 

@@ -744,3 +744,27 @@ local function MigrateSplitStatusText(profile, scopeKeys)
     return changed
 end
 StateHelpers.MigrateSplitStatusText = MigrateSplitStatusText
+
+function StateHelpers.SeedBlizzardAuraTypes(auras, typeDefaults)
+    if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+    for key, value in pairs(typeDefaults) do
+        if auras.blizzardTypes[key] == nil then
+            auras.blizzardTypes[key] = value
+        end
+    end
+    if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
+    if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
+    if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
+    if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+    if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
+end
+
+local TEXT_OFFSET_KEYS = {
+    "hpTextLeftOffsetX", "hpTextLeftOffsetY", "hpTextCenterOffsetX", "hpTextCenterOffsetY",
+    "hpTextRightOffsetX", "hpTextRightOffsetY", "powerTextLeftOffsetX", "powerTextLeftOffsetY",
+    "powerTextCenterOffsetX", "powerTextCenterOffsetY", "powerTextRightOffsetX", "powerTextRightOffsetY",
+}
+function StateHelpers.SeedTextOffsets(defaults)
+    for i = 1, #TEXT_OFFSET_KEYS do defaults[TEXT_OFFSET_KEYS[i]] = 0 end
+    return defaults
+end

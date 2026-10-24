@@ -145,6 +145,7 @@ local function CleanDisplayName(displayName, fallback)
   return fallback
 end
 
+-- hot path: kept whole (perf rule)
 local function FullNameForUnit(unit)
   if not (UnitFullName and ValidUnitToken(unit)) then
     return nil

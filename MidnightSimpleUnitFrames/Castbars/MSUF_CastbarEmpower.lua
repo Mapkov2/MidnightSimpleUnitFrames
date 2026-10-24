@@ -616,6 +616,7 @@ local function PlayerCastbarEmpowerStart(frame)
 
 end
 
+-- hot path: kept whole (perf rule)
 local function PlayerCastbarClearEmpower(frame, hideFrame)
     if not frame then return end
 

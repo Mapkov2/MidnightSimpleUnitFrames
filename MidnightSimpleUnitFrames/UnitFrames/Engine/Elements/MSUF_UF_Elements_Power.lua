@@ -1157,6 +1157,7 @@ local function UpdateAbsolute(frame, event, unit, animate)
   return value, maxValue, powerType, token
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdatePercentPath(frame, event, unit, eventPowerToken)
   unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime
@@ -1191,6 +1192,7 @@ local POWER_PLAN_CURRENT = 2
 local POWER_PLAN_ABSOLUTE = 3
 local POWER_PLAN_CURRENT_PERCENT = 4
 
+-- hot path: kept whole (perf rule)
 local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
   unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime
@@ -1215,6 +1217,7 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
   return value, maxValue, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
 
+-- hot path: kept whole (perf rule)
 local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
   unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime
@@ -1245,6 +1248,7 @@ end
 -- Mixed CURRENT+PERCENT formats retain UnitPowerPercent because protected
 -- values cannot be divided in Lua. Keeping this as its own compiled route also
 -- leaves the overwhelmingly common CURRENT-only path free of format branches.
+-- hot path: kept whole (perf rule)
 local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
   unit = unit or (frame and frame.MSUFUnitKey)
   local rt = frame and frame._msufTextRuntime

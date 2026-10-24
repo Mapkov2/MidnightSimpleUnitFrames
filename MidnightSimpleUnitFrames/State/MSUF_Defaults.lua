@@ -194,7 +194,7 @@ local MSUF_DEFAULTS_SPEC = StateHelpers.DefaultsSpec
 --- shared spec untouched. Mists carries the prefix as well, as the Classic
 --- Defaults always did: the normalizers ignore a key that is not there, so it is
 --- inert on a client whose seeding below never writes one.
-if MSUF.Client and (MSUF.Client.SupportsPetHappiness == true or IS_CLASSIC_FAMILY) then
+if MSUF.Client.SupportsPetHappiness == true or IS_CLASSIC_FAMILY then
     local petHappinessSpec = {}
     for key, value in pairs(StateHelpers.DefaultsSpec) do petHappinessSpec[key] = value end
     petHappinessSpec.statusPrefixes = {}
@@ -267,7 +267,8 @@ local function MSUF_Defaults_ConvertLegacyAuras2Geometry(auras, profile)
             if type(unitCfg) == "table" then
                 local storedLayout = type(unitCfg.layout) == "table" and unitCfg.layout or nil
                 local layout = unitCfg.overrideLayout == true and storedLayout or {}
-                if unitCfg.layout ~= layout then unitCfg.layout = layout; changed = true end
+                if unitCfg.layout ~= layout then unitCfg.layout = layout
+                    changed = true end
                 if unitCfg.overrideSharedLayout ~= true and type(unitCfg.layoutShared) == "table" then
                     unitCfg.layoutShared = {}
                     changed = true
@@ -311,11 +312,15 @@ local function MSUF_Defaults_ConvertLegacyAuras2Geometry(auras, profile)
                         x = baseX + ReadLaneNumber(layout, shared, lane[1], lane[4], 0)
                         y = height + baseY + ReadLaneNumber(layout, shared, lane[2], lane[5], 0)
                     end
-                    if layout[lane[3]] ~= anchor then layout[lane[3]] = anchor; changed = true end
-                    if layout[lane[1]] ~= x then layout[lane[1]] = x; changed = true end
-                    if layout[lane[2]] ~= y then layout[lane[2]] = y; changed = true end
+                    if layout[lane[3]] ~= anchor then layout[lane[3]] = anchor
+                        changed = true end
+                    if layout[lane[1]] ~= x then layout[lane[1]] = x
+                        changed = true end
+                    if layout[lane[2]] ~= y then layout[lane[2]] = y
+                        changed = true end
                 end
-                if unitCfg.overrideLayout ~= true then unitCfg.overrideLayout = true; changed = true end
+                if unitCfg.overrideLayout ~= true then unitCfg.overrideLayout = true
+                    changed = true end
             end
         end
     end
@@ -799,7 +804,9 @@ end
 local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = IS_CLASSIC_FAMILY and 1 or 2
 local MSUF_DEFAULTS_GROUP_AURA_PROFILE_MODEL_REVISION = 1
 local MSUF_DEFAULTS_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
-local MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer = assert(MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer, "Aura defaults must load before profile defaults")
+local MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer = assert(
+    MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer,
+    "Aura defaults must load before profile defaults")
 
 -- Unit Aura lanes no longer inherit mutable values from auras3.shared.  This
 -- cold-path migration snapshots the profile's previously effective values
@@ -2165,7 +2172,8 @@ function barColorStages.Outline(profileDB, g)
         end
     end
     NormalizeStaticOutlineColor(g)
-    for _, key in ipairs({ "player", "target", "focus", "boss", "arena", "pet", "pettarget", "targettarget", "focustarget", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    for _, key in ipairs({ "player", "target", "focus", "boss", "arena",
+        "pet", "pettarget", "targettarget", "focustarget", "gf_party", "gf_raid", "gf_mythicraid" }) do
         NormalizeStaticOutlineColor(profileDB[key])
     end
     MSUF.DefaultsSchema.Fill(g, MSUF.DefaultsSchema.Values.CoreBarBorderStyle)end
@@ -2332,7 +2340,7 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
 --- Hunter Pet Happiness exists again on WoW Forever. Keep the native 24 px
 --- visual scale and familiar right-side placement, the same as on Classic Era
 --- and TBC, without adding dead fields to Midnight profiles.
-if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
+if MSUF.Client.SupportsPetHappiness == true then
     profileDB.pet = profileDB.pet or {}
     local pet = profileDB.pet
     MSUF.DefaultsSchema.Fill(pet, MSUF.DefaultsSchema.Values.CoreShowPetHappinessIndicator)

@@ -24,14 +24,7 @@ local type, tostring, pairs = type, tostring, pairs
 local CompileFrameAuraVisual = Compile.CompileFrameAuraVisual
 local CombatBlocked = Compile.AuraRuntimeCombatBlocked
 
-local function NormalizePreviewScope(scope)
-    scope = tostring(scope or "shared"):lower()
-    if scope == "" or scope == "all" or scope == "global" then return "shared" end
-    if scope == "gf_party" then return "party" end
-    if scope == "gf_raid" then return "raid" end
-    if scope == "gf_mythicraid" then return "mythicraid" end
-    return scope
-end
+local NormalizePreviewScope = MSUF.AuraConfig.NormalizePreviewScope
 
 local function PreviewApplies(frame, scope, includeGroup)
     if not frame then return false end
@@ -54,15 +47,7 @@ local function ForEachPreviewFrame(fn)
     UF.ForEachFrame(fn)
     local gf = MSUF.GF
     gf.ForEachFrame(fn, true)
-    local previews = gf._previewFrames
-    if type(previews) ~= "table" then return end
-    for _, frames in pairs(previews) do
-        if type(frames) == "table" then
-            for _, frame in pairs(frames) do
-                if type(frame) == "table" then fn(frame) end
-            end
-        end
-    end
+    MSUF.AuraConfig.ForEachGroupPreviewFrame(gf, fn)
 end
 
 local function ApplyOverlayPreview(frame)

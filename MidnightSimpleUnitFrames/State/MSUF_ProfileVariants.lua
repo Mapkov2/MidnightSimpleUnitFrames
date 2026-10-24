@@ -179,7 +179,8 @@ function Variants.Resolve(db, context)
                 local record = journal[id]
                 if not record then
                     local base,valid=Fields.CopySnapshot(Fields.Read(db,field.path))
-                    if not valid then Variants.Restore(false); return false,"setting base exceeds copy limits" end
+                    if not valid then Variants.Restore(false)
+                        return false,"setting base exceeds copy limits" end
                     record = { id=id, path=field.path, base=base, created={} }
                     local prefix={}
                     for i=1,#field.path-1 do
@@ -198,10 +199,12 @@ function Variants.Resolve(db, context)
                 if Fields.CheckExternal then
                     local valid
                     value,valid=Fields.CheckExternal(field.path,value,field.remove)
-                    if not valid then Variants.Restore(false); return false,"invalid setting value" end
+                    if not valid then Variants.Restore(false)
+                        return false,"invalid setting value" end
                 end
                 if record.base~=nil and value~=nil and type(record.base)~=type(value) then
-                    Variants.Restore(false); return false,"invalid setting value"
+                    Variants.Restore(false)
+                    return false,"invalid setting value"
                 end
                 Fields.Write(db,field.path,value)
                 record.applied, record.owner = Fields.Copy(value), entry.name

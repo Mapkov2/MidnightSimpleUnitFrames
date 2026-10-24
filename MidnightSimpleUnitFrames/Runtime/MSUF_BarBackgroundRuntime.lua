@@ -504,6 +504,7 @@ local function MSUF_RefreshHealthGradientBackground(frame, event, unit, hp, maxH
 end
 MSUF.Bars.RefreshHealthGradientBackground = MSUF_RefreshHealthGradientBackground
 
+-- hot path: kept whole (perf rule)
 RefreshHealthGradientBackgroundCompiled = function(frame, event, unit, hp, maxHP, calc, force, percentReady, percentSecret)
     local plan = frame._msufHealthBackgroundPlan
     local r, gg, b
@@ -538,6 +539,7 @@ end
 -- Bound by the same cold owner as the general painter. Health calls this only
 -- with its fresh percent sample; source selection is already settled. Keep the
 -- small native sink inline so the hot lane does not add another painter call.
+-- hot path: kept whole (perf rule)
 RefreshHealthGradientBackgroundValue = function(frame, event, unit, hp, maxHP, calc, force, percentReady, percentSecret)
     local plan = frame._msufHealthBackgroundPlan
     local read = percentSecret and plan.readOpaque or plan.readPercent

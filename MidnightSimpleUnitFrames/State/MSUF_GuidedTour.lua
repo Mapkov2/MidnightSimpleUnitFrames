@@ -85,7 +85,7 @@ end
 
 local Tour = MSUF.GuidedTour6 or {}
 MSUF.GuidedTour6 = Tour
-_G.MSUF_GuidedTour6 = Tour
+MSUF.ExportPublic("MSUF_GuidedTour6", Tour)
 
 -- This module loads before `MSUF_GlobalDB` is guaranteed to exist, and profile
 -- repair or a full reset can replace the root afterwards. Without re-resolving
@@ -93,14 +93,8 @@ _G.MSUF_GuidedTour6 = Tour
 -- menu keeps reading "inactive" from that same orphan, so the tour offers
 -- itself again on every visit. Mirrors MSUF_FirstLoad.lua's SyncLiveState.
 local function SyncLiveState()
-    local liveDB = rawget(_G, "MSUF_GlobalDB")
-    if type(liveDB) ~= "table" then
-        _G.MSUF_GlobalDB = globalDB
-        return state
-    end
-    if type(liveDB.global) ~= "table" then
-        liveDB.global = {}
-    end
+    local liveDB, live = MSUF.FirstLoad6.ResolveLiveGlobalDB(globalDB)
+    if not live then return state end
     globalDB = liveDB
     local liveState = globalDB.global.guidedTour6
     if liveState ~= state then

@@ -570,13 +570,7 @@ local function ApplyFrameEffectEdges(root, target, effect, kind, r, g, b, a)
     if kind == "pulse" and root.CreateAnimationGroup then
         local pulse = root._msufA3ClassicPulse
         if not pulse then
-            pulse = root:CreateAnimationGroup()
-            local alpha = pulse:CreateAnimation("Alpha")
-            alpha:SetFromAlpha(0.45)
-            alpha:SetToAlpha(1)
-            alpha:SetDuration(0.7)
-            if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
-            pulse:SetLooping("BOUNCE")
+            pulse = MSUF.AuraConfig.NewAlphaPulse(root)
             root._msufA3ClassicPulse = pulse
         end
         if pulse.IsPlaying and not pulse:IsPlaying() then pulse:Play() end

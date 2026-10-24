@@ -374,13 +374,7 @@ local function FillAuraSlots(out, ...)
     return out, count
 end
 
-local function ClampNumber(value, defaultValue, minValue, maxValue)
-    value = tonumber(value)
-    if value == nil then value = defaultValue end
-    if minValue and value < minValue then value = minValue end
-    if maxValue and value > maxValue then value = maxValue end
-    return value
-end
+local ClampNumber = MSUF.AuraConfig.ClampNumber
 
 local function Clamp01(value, defaultValue)
     value = tonumber(value)
@@ -1477,17 +1471,7 @@ end
 local groupConfigRevisions = { party = 0, raid = 0, mythicraid = 0, [false] = 0 }
 
 function A3.InvalidateGroupRuntimeConfig(scope)
-    if type(scope) ~= "string" then return false end
-    local party = scope == "party" or scope == "gf_party" or scope:match("^party%d+$") ~= nil
-    local raid = scope == "raid" or scope == "gf_raid" or scope:match("^raid%d+$") ~= nil
-    local mythic = raid or scope == "mythicraid" or scope == "gf_mythicraid"
-    if scope == "group" or scope == "groups" then party, raid, mythic = true, true, true end
-    if not (party or raid or mythic) then return false end
-    if party then groupConfigRevisions.party = groupConfigRevisions.party + 1 end
-    if raid then groupConfigRevisions.raid = groupConfigRevisions.raid + 1 end
-    if mythic then groupConfigRevisions.mythicraid = groupConfigRevisions.mythicraid + 1 end
-    groupConfigRevisions[false] = groupConfigRevisions[false] + 1
-    return true
+    return MSUF.AuraConfig.InvalidateGroupRuntimeConfig(groupConfigRevisions, scope)
 end
 
 --- Registers a compiled lane on a frame config under its kind, in config order;
@@ -1660,51 +1644,19 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local cfg = type(configOrUnit) == "table" and configOrUnit or A3.ResolveUnitFrameConfig(configOrUnit)
     local lane = cfg and cfg.lanes and cfg.lanes[kind]
     if not lane then return nil end
-    return A3.IconShape.PreviewGeometry({
-        enabled = lane.enabled == true,
-        num = lane.max,
-        size = lane.size,
-        spacing = lane.spacing,
-        step = lane.step,
-        perRow = lane.perRow,
-        cols = lane.cols,
-        rows = lane.rows,
-        width = lane.width,
-        height = lane.height,
-        padding = lane.padding,
-        alpha = lane.alpha,
-        iconZoom = lane.iconZoom,
-        iconShape = lane.iconShape,
-        growth = lane.growthX,
-        rowWrap = lane.growthY,
-        growthX = lane.xSign,
-        growthY = lane.ySign,
-        xSign = lane.xSign,
-        ySign = lane.ySign,
-        verticalGrowth = lane.verticalGrowth == true,
-        initialAnchor = lane.initialAnchor,
-        x = lane.x,
-        y = lane.y,
-        anchor = lane.anchor,
-        iconStyle = lane.iconStyle,
-        showDurationBar = lane.showDurationBar == true,
-        durationBarDisplay = lane.durationBarDisplay,
-        durationBarHeight = lane.durationBarHeight,
-        durationBarPosition = lane.durationBarPosition,
-        durationBarDirection = lane.durationBarDirection,
-    }, lane)
+    local metrics = MSUF.AuraConfig.LanePreviewFields(lane)
+    metrics.showDurationBar = lane.showDurationBar == true
+    metrics.durationBarDisplay = lane.durationBarDisplay
+    metrics.durationBarHeight = lane.durationBarHeight
+    metrics.durationBarPosition = lane.durationBarPosition
+    metrics.durationBarDirection = lane.durationBarDirection
+    return A3.IconShape.PreviewGeometry(metrics, lane)
 end
 
 function A3.ResolveAuraPreviewConfig(frame, unit, frameSpec)
     if AuraRuntimeCombatBlocked() then return nil end
     if frameSpec ~= nil and frame and IsGroupFrame(frame) and frameSpec ~= frame.MSUFSpec then
-        local proxy = frame._msufA3AuraPreviewConfigProxy or {}
-        frame._msufA3AuraPreviewConfigProxy = proxy
-        proxy._msufIsGroupFrame = true
-        proxy._msufGFIsPreviewFrame = true
-        proxy._msufGFKind = frame._msufGFKind
-        proxy.MSUFUnitKey = unit or frame.MSUFUnitKey
-        proxy.MSUFSpec = frameSpec
+        local proxy = MSUF.AuraConfig.PreviewProxy(frame, unit, frameSpec)
         return ResolveGroupFrameConfig(proxy, proxy.MSUFUnitKey)
     end
     return FrameAuraConfig(frame, unit or (frame and frame.MSUFUnitKey))

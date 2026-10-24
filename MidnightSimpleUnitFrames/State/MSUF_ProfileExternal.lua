@@ -12,7 +12,8 @@ function Fields.ProfileName(db)
     local name=names[db]
     if name and profiles[name]==db then return name end
     for key,profile in pairs(profiles) do
-        if profile==db then names[db]=key; return key end
+        if profile==db then names[db]=key
+            return key end
     end
 end
 function Fields.IsExternal(root) return roots[root]==true end

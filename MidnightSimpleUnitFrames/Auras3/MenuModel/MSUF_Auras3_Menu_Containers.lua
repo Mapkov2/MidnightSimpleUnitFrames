@@ -250,23 +250,7 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
             -- hour, and this user-adjustable total lets their swipe retain the
             -- correct progress after login/reload instead of restarting as full.
             reminderEnchantDurationMinutes = 60,
-            filters = {
-                enabled = true,
-                hidePermanent = false,
-                onlyMine = false,
-                onlyImportant = false,
-                raid = false,
-                raidInCombat = false,
-                includeNameplateOnly = false,
-                includeDispellable = false,
-                dispellableAny = false,
-                cancelable = false,
-                notCancelable = false,
-                crowdControl = false,
-                externalDefensive = false,
-                bigDefensive = false,
-                exclusive = "none",
-            },
+            filters = MSUF.AuraConfig.NewContainerFilters(),
             placed = {
                 type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
                 x = 0, y = 0, size = 24, barWidth = 54,

@@ -108,6 +108,7 @@ local function RebuildShortCache(nativeName)
   end
 end
 
+-- hot path: kept whole (perf rule)
 local function FullNameForUnit(unit, nativeName)
   if not UnitFullName or type(unit) ~= "string" or unit == "" then
     return nil

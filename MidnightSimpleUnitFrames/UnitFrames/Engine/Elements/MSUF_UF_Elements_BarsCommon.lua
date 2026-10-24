@@ -193,6 +193,7 @@ local function ApplyStatusColor(bar, r, g, b, a)
   end
 end
 
+-- hot path: kept whole (perf rule)
 local function SetBarMinMaxKnown(bar, maxValue, maxSecret)
   if maxSecret == nil then
     maxSecret = issecretvalue(maxValue) == true
@@ -214,6 +215,7 @@ local function SetBarMinMaxKnown(bar, maxValue, maxSecret)
 end
 local SetBarMinMaxPlain = SetBarMinMaxKnown
 
+-- hot path: kept whole (perf rule)
 local function SetBarMinMax(bar, maxValue, directValue)
   if directValue then
     -- Direct mode passes Blizzard values straight to StatusBar APIs. When a value is secret,
@@ -247,6 +249,7 @@ local function SetBarMinMax(bar, maxValue, directValue)
   return false
 end
 
+-- hot path: kept whole (perf rule)
 local function SetBarValueKnown(bar, value, valueSecret, animate)
   if valueSecret == nil then
     valueSecret = issecretvalue(value) == true
@@ -274,6 +277,7 @@ local function SetBarValueKnown(bar, value, valueSecret, animate)
   return true
 end
 
+-- hot path: kept whole (perf rule)
 local function SetBarValue(bar, value, directValue, animate)
   if directValue then
     -- Kept inline (not delegated to SetBarValueKnown): this runs per bar value write.
@@ -319,6 +323,7 @@ local function SetBarValue(bar, value, directValue, animate)
   return false
 end
 
+-- hot path: kept whole (perf rule)
 local function SetBarValuePlain(bar, value, animate)
   -- Kept inline (not delegated to SetBarValueKnown): this runs per bar value write.
   local valueSecret = issecretvalue(value) == true

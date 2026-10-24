@@ -677,6 +677,7 @@ local function EnsureDriverCallbacks(frame)
         return (frame._msufCastToken or 0) ~= (frame._msufStopExpToken or 0)
     end
 
+    -- hot path: kept whole (perf rule)
     frame._msufStopCB_chanT1 = function()
         if StopExpectationInvalid() then return end
 
@@ -701,6 +702,7 @@ local function EnsureDriverCallbacks(frame)
     -- the callback, and one shared key let the later deadline replace the
     -- earlier one (the 0.12 s cast re-check became the 0.40 s failsafe).
     local function NewConfirmStopOrSucceed()
+        -- hot path: kept whole (perf rule)
         return function()
             if StopExpectationInvalid() then return end
 
@@ -1338,6 +1340,7 @@ local function InstallDriverColorMethod(frame)
     -- Target/focus/boss tint. MSUF_PlayerCastbarRuntime.lua has a same-named
     -- player-only routine that also honours the player color override and the
     -- nameplate-derived interruptibility; the two are intentionally separate.
+    -- hot path: kept whole (perf rule)
     function frame:UpdateColorForInterruptible()
         if not (self and self.statusBar and self.statusBar.SetStatusBarColor) then
             return

@@ -147,6 +147,7 @@ do
             or lower:match("%.ttf$") ~= nil
             or lower:match("%.otf$") ~= nil
     end
+    Fonts.IsFontPath = IsPath
 
     local function NormalizeFlags(flags)
         if type(flags) ~= "string" then return "" end

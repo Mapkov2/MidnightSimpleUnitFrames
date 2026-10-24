@@ -443,6 +443,7 @@ Identity.RefreshGroupAuraAssistOwners = function(unit, canAssist)
     return any
 end
 
+-- hot path: kept whole (perf rule)
 Identity.FlushGroupAuraAssistReveal = function()
     A3._groupAuraAssistRevealPending = nil
     local units = A3._groupAuraAssistRevealUnits
@@ -474,6 +475,7 @@ Identity.ScheduleGroupAuraAssistReveal = function(unit, revision)
     return true
 end
 
+-- hot path: kept whole (perf rule)
 Identity.FlushScheduledGroupAuraAssistRefresh = function()
     A3._groupAuraAssistRefreshPending = nil
     if A3._directIdentityRefreshPending == true

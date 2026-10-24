@@ -413,20 +413,8 @@ local PARTY_DEFAULTS = {
     nameOffsetY       = 0,
     hpOffsetX         = 0,
     hpOffsetY         = 0,
-    hpTextLeftOffsetX = 0,
-    hpTextLeftOffsetY = 0,
-    hpTextCenterOffsetX = 0,
-    hpTextCenterOffsetY = 0,
-    hpTextRightOffsetX = 0,
-    hpTextRightOffsetY = 0,
     powerOffsetX      = 0,
     powerOffsetY      = 0,
-    powerTextLeftOffsetX = 0,
-    powerTextLeftOffsetY = 0,
-    powerTextCenterOffsetX = 0,
-    powerTextCenterOffsetY = 0,
-    powerTextRightOffsetX = 0,
-    powerTextRightOffsetY = 0,
     statusOffsetX     = 0,
     statusOffsetY     = 0,
     statusGhostOffsetX = 0,
@@ -617,6 +605,7 @@ local PARTY_DEFAULTS = {
     sortRolesAcrossRaid = false,
     sortAlphabeticalWithinRole = false,
 }
+MSUF.StateHelpers.SeedTextOffsets(PARTY_DEFAULTS)
 
 local RAID_DEFAULTS = {}
 do

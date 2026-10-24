@@ -697,23 +697,7 @@ local function UnitClassFile(unit)
   return fileName
 end
 
-local function IsPlayerUnit(unit)
-  if not IsUnitToken(unit) then
-    return false
-  end
-  if unit == "player" then
-    return true
-  end
-  if UnitGUID then
-    local guid = UnitGUID(unit)
-    local playerGuid = UnitGUID("player")
-    if issecretvalue(guid) == true or issecretvalue(playerGuid) == true then
-      return false
-    end
-    return guid ~= nil and guid == playerGuid
-  end
-  return false
-end
+local IsPlayerUnit = MSUF.Util.CreatePlayerUnitCheck(IsUnitToken, issecretvalue, false)
 
 local function AppendNameListEntry(entries, unit, index, conf, name, subgroup, classFile, role, ignoreGroupLimit)
   if issecretvalue(subgroup) == true then return false end

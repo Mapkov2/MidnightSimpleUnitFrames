@@ -29,17 +29,7 @@ local sharedConfigBySpec = setmetatable({}, { __mode = "k" })
 local groupConfigRevisions = { party = 0, raid = 0, mythicraid = 0, [false] = 0 }
 
 function A3.InvalidateGroupRuntimeConfig(scope)
-    if type(scope) ~= "string" then return false end
-    local party = scope == "party" or scope == "gf_party" or scope:match("^party%d+$") ~= nil
-    local raid = scope == "raid" or scope == "gf_raid" or scope:match("^raid%d+$") ~= nil
-    local mythic = raid or scope == "mythicraid" or scope == "gf_mythicraid"
-    if scope == "group" or scope == "groups" then party, raid, mythic = true, true, true end
-    if not (party or raid or mythic) then return false end
-    if party then groupConfigRevisions.party = groupConfigRevisions.party + 1 end
-    if raid then groupConfigRevisions.raid = groupConfigRevisions.raid + 1 end
-    if mythic then groupConfigRevisions.mythicraid = groupConfigRevisions.mythicraid + 1 end
-    groupConfigRevisions[false] = groupConfigRevisions[false] + 1
-    return true
+    return MSUF.AuraConfig.InvalidateGroupRuntimeConfig(groupConfigRevisions, scope)
 end
 
 local function FirstEnabledIndicatorItem(items)
@@ -125,6 +115,7 @@ local function SharedGroupButtonSignatures(cache, source, kind, shape, gen, visu
     return signatures
 end
 
+-- hot path: kept whole (perf rule)
 local function ResolveGroupFrameConfig(frame, unit)
     if not frame then return nil end
     unit = unit or frame.MSUFUnitKey
@@ -280,16 +271,7 @@ end
 function A3.ResolveAuraPreviewConfig(frame, unit, frameSpec)
     if (InCombatLockdown and InCombatLockdown()) or MSUF.PublicGlobals.MSUF_InCombat == true then return nil end
     if frameSpec ~= nil and frame and frameSpec ~= frame.MSUFSpec and IsGroupFrame(frame) then
-        local proxy = frame._msufA3AuraPreviewConfigProxy
-        if not proxy then
-            proxy = {}
-            frame._msufA3AuraPreviewConfigProxy = proxy
-        end
-        proxy._msufIsGroupFrame = true
-        proxy._msufGFIsPreviewFrame = true
-        proxy._msufGFKind = frame._msufGFKind
-        proxy.MSUFUnitKey = unit or frame.MSUFUnitKey
-        proxy.MSUFSpec = frameSpec
+        local proxy = MSUF.AuraConfig.PreviewProxy(frame, unit, frameSpec)
         return ResolveGroupFrameConfig(proxy, proxy.MSUFUnitKey)
     end
     return FrameAuraConfig(frame, unit or (frame and frame.MSUFUnitKey))
@@ -309,39 +291,13 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     if not lane then return nil end
     local debuffBorderMode = lane.showAuraSymbol == true and "SYMBOL"
         or lane.showAuraBorder == true and "BORDER" or "OFF"
-    return Shape.PreviewGeometry({
-        enabled = lane.enabled == true,
-        num = lane.max,
-        size = lane.size,
-        spacing = lane.spacing,
-        step = lane.step,
-        perRow = lane.perRow,
-        cols = lane.cols,
-        rows = lane.rows,
-        width = lane.width,
-        height = lane.height,
-        alpha = lane.alpha,
-        iconZoom = lane.iconZoom,
-        iconShape = lane.iconShape,
-        requestedIconShape = lane.requestedIconShape,
-        growth = lane.growthX,
-        rowWrap = lane.growthY,
-        growthX = lane.xSign,
-        growthY = lane.ySign,
-        xSign = lane.xSign,
-        ySign = lane.ySign,
-        verticalGrowth = lane.verticalGrowth == true,
-        initialAnchor = lane.initialAnchor,
-        x = lane.x,
-        y = lane.y,
-        anchor = lane.anchor,
-        layer = lane.layer,
-        padding = lane.padding,
-        iconStyle = lane.iconStyle,
+    local metrics = MSUF.AuraConfig.LanePreviewFields(lane)
+    metrics.requestedIconShape = lane.requestedIconShape
+    metrics.layer = lane.layer
         -- Edit Mode is a preview renderer for this already-compiled runtime
         -- lane. Hand it the finalized Style values instead of making it
         -- reinterpret layout/layoutShared ownership a second time.
-        textConfig = {
+    metrics.textConfig = {
             showStackCount = lane.showStacks == true,
             showCooldownText = lane.showCooldownText == true,
             showCooldownSwipe = lane.showCooldownSwipe == true,
@@ -361,8 +317,8 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
             stackAnchor = lane.stackAnchor,
             cooldownAnchor = lane.cooldownAnchor,
             debuffBorderMode = debuffBorderMode,
-        },
-    }, lane)
+    }
+    return Shape.PreviewGeometry(metrics, lane)
 end
 
 --- Compiled shared Appearance style for preview surfaces.

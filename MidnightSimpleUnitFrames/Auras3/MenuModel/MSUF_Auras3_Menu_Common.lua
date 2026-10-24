@@ -67,13 +67,7 @@ function Factories.Common(Schema, A3)
         end
     end
 
-    local function ClampNumber(value, defaultValue, minValue, maxValue)
-        value = tonumber(value)
-        if value == nil then value = defaultValue end
-        if minValue and value < minValue then value = minValue end
-        if maxValue and value > maxValue then value = maxValue end
-        return value
-    end
+    local ClampNumber = MSUF.AuraConfig.ClampNumber
 
     local function Round(value)
         value = tonumber(value) or 0

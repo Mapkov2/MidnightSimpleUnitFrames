@@ -605,11 +605,7 @@ function AurasElement.Enable(frame)
     EnsureClassicAuraOnShowRefresh(frame)
     local unit = BindFrameUnit(frame)
     if IsGroupFrame(frame) then
-        if frame._msufGFIsPreviewFrame == true then
-            frame._msufA3GroupRuntime = nil
-            HideState(frame)
-            return false
-        end
+        if MSUF.AuraConfig.RefuseSyntheticGroupAura(frame, HideState) then return false end
         frame._msufA3GroupRuntime = true
         frame._msufA3GroupConfig = nil
         local cfg = ResolveGroupFrameConfig(frame, unit)

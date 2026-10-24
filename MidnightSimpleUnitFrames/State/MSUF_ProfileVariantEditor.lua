@@ -31,7 +31,8 @@ function Variants.BeginRecording(name)
     local schema,why=Variants.ValidateForProfile(MSUF_DB,MSUF_DB.profileVariants)
     if not schema then return false,why end
     local entry
-    for _,candidate in ipairs(schema.entries) do if candidate.name==name then entry=candidate; break end end
+    for _,candidate in ipairs(schema.entries) do if candidate.name==name then entry=candidate
+        break end end
     if not entry then return false,"unknown profile variant" end
     local base,err=Variants.BaseSnapshot(MSUF_DB,true)
     if not base then return false,err end
@@ -42,7 +43,8 @@ function Variants.BeginRecording(name)
             if owner~=nil and type(owner)~="table" then return false,"setting parent is not a table" end
         end
     end
-    local ok,why=MSUF.ProfileSync.Flush(); if not ok then return false,why end
+    local ok,why=MSUF.ProfileSync.Flush()
+    if not ok then return false,why end
     Variants.Restore()
     recording={name=name,db=MSUF_DB,base=base,entry=entry}
     for _,field in ipairs(entry.patch) do
@@ -90,7 +92,7 @@ function Variants.SaveRecording()
     if not ok then return false,reason end
     db.profileVariants=clean
     if skipped and skipped>0 then
-        local translate=type(MSUF.Translate)=="function" and MSUF.Translate or function(text) return text end
+        local translate = MSUF.Translate
         print("|cffffd700MSUF:|r "..string.format(translate("%d change(s) could not be stored in the variant and were left out."),skipped))
     end
     MSUF.ProfileRuntime.Apply("PROFILE_VARIANT_EDIT_SAVE",false)

@@ -453,6 +453,7 @@ local function RegionShown(region)
   return region.IsShown and region:IsShown() or false
 end
 
+-- hot path: kept whole (perf rule)
 local function RefreshCachedPowerType(frame, unit)
   -- Power type changes less often than power values. Cache token/type per frame so frequent
   -- UNIT_POWER_UPDATE events do not repeatedly ask the client for display metadata.
@@ -497,6 +498,7 @@ local function RefreshCachedPowerType(frame, unit)
   return changed
 end
 
+-- hot path: kept whole (perf rule)
 local function SeedCachedPowerType(frame, unit, powerType, powerToken)
   if not frame then
     return false

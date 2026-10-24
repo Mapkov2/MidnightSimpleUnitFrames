@@ -24,7 +24,7 @@ local UnitHealth, UnitHealthMax, UnitPower, UnitPowerMax = UnitHealth, UnitHealt
 -- Names read like the engine frames' (UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua):
 -- WoW Forever character names and nickname providers apply here too.
 local ReadDisplayName = MSUF.UFText.ReadDisplayName
-local issecretvalue = issecretvalue or function() return false end
+local issecretvalue = issecretvalue or MSUF.Util.NoSecret
 local holders, targetButtons, bossButtons, manaRows = {}, {}, {}, {}
 local previewPools = setmetatable({}, {__mode = "k"})
 local screenPreviews, previewRequests = {}, {}

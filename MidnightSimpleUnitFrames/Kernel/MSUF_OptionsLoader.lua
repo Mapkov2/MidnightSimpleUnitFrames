@@ -171,6 +171,17 @@ end
 --- first help request happens in combat and the UI addon cannot be loaded.
 --- These entries are metadata plus demand-call closures only: no frames,
 --- events, hooks, timers, menu tables, or page code.
+function menu.LocaleCommandDescriptor()
+    return {
+            name = "locale",
+            aliases = { "locales", "loc" },
+            group = "diagnostics",
+            dev = true,
+            usage = "/msuf locale",
+            help = "Report how much of the current language is translated.",
+        }
+end
+
 local function RegisterDeferredOptionCommands()
     local commands = MSUF.SlashCommands
     if type(commands) ~= "table" or type(commands.Register) ~= "function" then return end
@@ -204,14 +215,7 @@ local function RegisterDeferredOptionCommands()
             usage = "/msuf tour",
             help = "Start or resume the guided setup.",
         },
-        {
-            name = "locale",
-            aliases = { "locales", "loc" },
-            group = "diagnostics",
-            dev = true,
-            usage = "/msuf locale",
-            help = "Report how much of the current language is translated.",
-        },
+        menu.LocaleCommandDescriptor(),
         {
             name = "versiontest",
             group = "diagnostics",

@@ -201,6 +201,8 @@ MSUF.Compat.GlobalKeep = {
     -- Suite reader
     -- reviewed suite
     MSUF_EnsureCooldownWidthObservers = true,
+    -- documented Wago profile API (State/MSUF_Profiles.lua)
+    MSUF_ExportExternal = true,
     -- Suite reader
     -- reviewed suite
     MSUF_FontApplyEpoch = true,
@@ -269,6 +271,8 @@ MSUF.Compat.GlobalKeep = {
     -- Suite reader
     -- reviewed suite
     MSUF_HostAPI = true,
+    -- documented Wago profile API (State/MSUF_Profiles.lua)
+    MSUF_ImportExternal = true,
     -- bare runtime flag
     MSUF_InCombat = true,
     -- reviewed integration
@@ -289,6 +293,8 @@ MSUF.Compat.GlobalKeep = {
     -- XML/TOC contract
     -- reviewed blizzard-contract
     MSUF_Keybind_TogglePriorityFrame = true,
+    -- pre-Kernel client fact; Unit page bare reader
+    MSUF_MAX_ARENA_FRAMES = true,
     -- Suite reader
     -- documented /run
     -- reviewed suite
