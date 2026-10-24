@@ -44,4 +44,8 @@
     <Script file="Pages\MSUF_Menu2_Auras_Preview.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras_CustomWorkspace.lua"/>
     <Script file="MSUF_Menu2_GuidedTour.lua"/>
+    <Script file="MSUF_Menu2_GuidedTour_Surface.lua"/>
+    <Script file="MSUF_Menu2_GuidedTour_Navigation.lua"/>
+    <Script file="MSUF_Menu2_GuidedTour_Chrome.lua"/>
+    <Script file="MSUF_Menu2_GuidedTour_Pages.lua"/>
 </Ui>

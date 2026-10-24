@@ -11,6 +11,10 @@
     <Script file="MSUF_Menu2_Search_StaticIndex_Data_Classic.lua"/>
     <Script file="MSUF_Menu2_Search_StaticIndex.lua"/>
     <Script file="MSUF_Menu2_Search_IndexQuery.lua"/>
+    <Script file="MSUF_Menu2_Search_Query.lua"/>
+    <Script file="MSUF_Menu2_Search_Registry.lua"/>
+    <Script file="MSUF_Menu2_Search_Catalog.lua"/>
+    <Script file="MSUF_Menu2_Search_IndexBuild.lua"/>
     <Script file="MSUF_Menu2_Search_Routing.lua"/>
     <Script file="MSUF_Menu2_Search_Render.lua"/>
     <Script file="MSUF_Menu2_Search_API.lua"/>

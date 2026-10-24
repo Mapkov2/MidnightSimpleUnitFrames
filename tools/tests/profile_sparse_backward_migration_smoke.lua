@@ -184,9 +184,15 @@ local function IsRaidLikeKind(kind) return kind == "raid" or kind == "mythicraid
 ]] .. positionSource .. "\nreturn GF.EnsureStableGridPosition"))()
 local ns = { Util = { IsSecret = function() return false end } }
 local schemaPath = root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua"
-assert(loadfile(schemaPath))("MidnightSimpleUnitFrames", ns)
+local schemaDir = root .. "/MidnightSimpleUnitFrames/State/Defaults/"
+for _, name in ipairs({
+    "MSUF_Defaults_Schema.lua", "MSUF_Defaults_StorageData.lua", "MSUF_Defaults_StorageCommon.lua",
+    "MSUF_Defaults_StorageV3.lua", "MSUF_Defaults_Storage.lua", "MSUF_Defaults_Recovery.lua",
+}) do
+    assert(loadfile(schemaDir .. name))("MidnightSimpleUnitFrames", ns)
+end
 local Schema = ns.DefaultsSchema
-local data = assert(Read(schemaPath):match("%-%- BEGIN FROZEN SPARSE V2 DATA(.-)%-%- END FROZEN SPARSE V2 DATA"))
+local data = assert(Read(schemaDir .. "MSUF_Defaults_StorageData.lua"):match("%-%- BEGIN FROZEN SPARSE V2 DATA(.-)%-%- END FROZEN SPARSE V2 DATA"))
 local fields, owners = assert(loadstring(data .. "\nreturn sparseV2Fields, sparseV2Owners"))()
 assert(#fields == 971 and #owners == 120, "V2 dictionary shape changed")
 local total = 0

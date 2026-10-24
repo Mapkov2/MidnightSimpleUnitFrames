@@ -1,0 +1,382 @@
+-- Profile quarantine, immutable backup histories and account rollback recovery.
+local _, MSUF = ...
+local Parts = MSUF.DefaultsSchemaParts
+local ClearScratch = Parts.ClearScratch
+local CountTables = Parts.CountTables
+local Plain = Parts.Plain
+local Schema = Parts.Schema
+local entries = Parts.entries
+local scratchLists = Parts.scratchLists
+local scratchPath = Parts.scratchPath
+local scratchRefs = Parts.scratchRefs
+local sparseToken = Parts.sparseToken
+local sparseV2Marker = Parts.sparseV2Marker
+local sparseV3 = Parts.sparseV3
+-- Capture stored newer data at the shared decoder entry, before either the
+-- profile translator or the defaults normalizer can change it. Private copies
+-- have no stored owner and must not overwrite the account's original backup.
+local function CopyNewerProfile(value, seen)
+    if MSUF.Util.IsSecret(value) or type(value) ~= "table" then return value end
+    if seen[value] then return seen[value] end
+    local copy = {}
+    seen[value] = copy
+    for key, child in pairs(value) do
+        copy[CopyNewerProfile(key, seen)] = CopyNewerProfile(child, seen)
+    end
+    return copy
+end
+
+do
+    local rejected, working = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+    local function Literal(value, path)
+        if MSUF.Util.IsSecret(value) then return nil end
+        local kind = type(value)
+        if kind == "string" then return string.format("%q", value) end
+        if kind == "boolean" then return tostring(value) end
+        if kind == "number" and value == value and value ~= math.huge and value ~= -math.huge then
+            return string.format("%.17g", value)
+        end
+        if not Plain(value) or path[value] then return nil end
+        path[value] = true
+        local keys, parts = {}, {}
+        for key in pairs(value) do
+            if MSUF.Util.IsSecret(key) or (type(key) ~= "string" and type(key) ~= "number") then return nil end
+            keys[#keys + 1] = key
+        end
+        table.sort(keys, function(a, b)
+            if type(a) ~= type(b) then return type(a) < type(b) end
+            return a < b
+        end)
+        for _, key in ipairs(keys) do
+            local name, child = Literal(key, path), Literal(value[key], path)
+            if not name or not child then return nil end
+            parts[#parts + 1] = "[" .. name .. "]=" .. child
+        end
+        path[value] = nil
+        return "{" .. table.concat(parts, ",") .. "}"
+    end
+    local function ContentHash(text)
+        local a, b = 5381, 0
+        for i = 1, #text do
+            local byte = text:byte(i)
+            a = (a * 33 + byte) % 4294967296
+            b = (b * 65599 + byte) % 4294967296
+        end
+        return string.format("%08x%08x", a, b)
+    end
+    local function Insert(bucket, profile, revision)
+        local literal = Literal(profile, {})
+        if not literal then return false end
+        local hash = ContentHash(literal)
+        local base = tostring(bucket.identity) .. ":" .. tostring(revision) .. ":" .. hash
+        local key, collision = base, 0
+        while bucket.entries[key] do
+            if Literal(bucket.entries[key].data, {}) == literal then return false end
+            collision = collision + 1
+            key = base .. ":" .. collision
+        end
+        local entry = { revision = revision, hash = hash, data = CopyNewerProfile(profile, {}) }
+        bucket.entries[key] = entry
+        bucket.order[#bucket.order + 1] = key
+        if #bucket.order > 3 then bucket.entries[table.remove(bucket.order, 1)] = nil end
+        -- Compatibility view of the latest snapshot; immutable entries own the data.
+        bucket.revision, bucket.data = entry.revision, entry.data
+        return true
+    end
+    local function Identity(store, name)
+        local ids = store._profileRecoveryIDs
+        if type(ids) ~= "table" then
+            ids = {}
+            store._profileRecoveryIDs = ids
+        end
+        if ids[name] == nil then
+            store._profileRecoveryIdentity = (tonumber(store._profileRecoveryIdentity) or 0) + 1
+            ids[name] = store._profileRecoveryIdentity
+        end
+        return ids[name]
+    end
+    local function RecoveryBucket(store, field, name)
+        local backups = store[field]
+        if type(backups) ~= "table" then
+            backups = {}
+            store[field] = backups
+        end
+        local bucket = backups[name]
+        if type(bucket) ~= "table" or type(bucket.entries) ~= "table" or type(bucket.order) ~= "table" or bucket.identity == nil then
+            local legacy = bucket
+            bucket = { identity = Identity(store, name), entries = {}, order = {} }
+            backups[name] = bucket
+            if type(legacy) == "table" and type(legacy.data) == "table" then Insert(bucket, legacy.data, legacy.revision) end
+        end
+        return bucket
+    end
+    local function Save(store, field, name, profile)
+        return Insert(RecoveryBucket(store, field, name), profile, profile._msufDefaultsRevision)
+    end
+    local function SaveOwned(profile, field, notice)
+        local store = MSUF_GlobalDB
+        if type(store) ~= "table" then return end
+        local found = false
+        if type(store.profiles) == "table" then
+            for name, stored in pairs(store.profiles) do
+                if stored == profile then
+                    if Save(store, field, name, profile) and notice then
+                        print("|cffffd700MSUF:|r " .. string.format(MSUF.Translate(
+                            "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved."),
+                            name, tostring(profile._msufDefaultsRevision)))
+                    end
+                    found = true
+                end
+            end
+        end
+        if found then return end
+        -- Startup may normalize a copy before adding its selected saved source.
+        local legacy = MSUF.FirstLoad6.GetLegacyProfileDB()
+        local charKey = MSUF.Require("MSUF_GetCharKey", "State/Defaults/MSUF_Defaults_Schema.lua")()
+        local name, source = MSUF.ResolveStartupProfile(store, legacy, charKey)
+        if not Plain(source) or MSUF.Util.IsSecret(source._msufDefaultsRevision) then return end
+        if field == "_rejectedProfileBackups" and Literal(source, {}) ~= Literal(profile, {}) then return end
+        local revision = tonumber(source._msufDefaultsRevision)
+        if field == "_newerRevisionBackups" and (not revision or revision <= 17 or revision == sparseToken) then return end
+        if Save(store, field, name, source) and notice then
+            print("|cffffd700MSUF:|r " .. string.format(MSUF.Translate(
+                "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved."), name, tostring(revision)))
+        end
+    end
+    function Schema.BackupNewerRevision(profile)
+        local revision = tonumber(profile._msufDefaultsRevision)
+        if revision and revision > 17 and revision ~= sparseToken then SaveOwned(profile, "_newerRevisionBackups", true) end
+    end
+    function Schema.IsQuarantinedProfile(profile)
+        if MSUF.Util.IsSecret(profile) then return false end
+        return rejected[profile] ~= nil or working[profile] == true
+    end
+    function Schema.ReleaseQuarantinedProfile(profile)
+        rejected[profile], working[profile] = nil, nil
+    end
+    local function FillWorking(copy, defaults)
+        for key, value in pairs(defaults) do
+            local current = copy[key]
+            if MSUF.Util.IsSecret(current) then
+                copy[key] = nil
+                current = nil
+            end
+            if type(value) == "table" then
+                if not Plain(current) then copy[key] = {} end
+                FillWorking(copy[key], value)
+            elseif current == nil then copy[key] = value end
+        end
+    end
+    function Schema.QuarantineProfile(profile)
+        if not Plain(profile) then return Schema.BuildRecoveryDefaults() end
+        if working[profile] then return profile end
+        if rejected[profile] then return rejected[profile] end
+        SaveOwned(profile, "_rejectedProfileBackups", false)
+        local copy = CopyNewerProfile(profile, {})
+        local defaults = Schema.BuildRecoveryDefaults()
+        FillWorking(copy, defaults)
+        copy[sparseV2Marker], copy[sparseV3.Marker] = nil, nil
+        copy._msufDefaultsRevision = defaults._msufDefaultsRevision
+        rejected[profile], working[copy] = copy, true
+        return copy
+    end
+    local function Archive(store, field, name)
+        local backups = store[field]
+        local bucket = type(backups) == "table" and backups[name]
+        if type(bucket) ~= "table" then return end
+        bucket = RecoveryBucket(store, field, name)
+        local archive = store._profileRecoveryArchive
+        if type(archive) ~= "table" then
+            archive = {}
+            store._profileRecoveryArchive = archive
+        end
+        if type(archive[field]) ~= "table" then archive[field] = {} end
+        archive[field][bucket.identity] = bucket
+        backups[name] = nil
+    end
+    function Schema.RenameProfileRecovery(source, target)
+        local store = MSUF_GlobalDB
+        if type(store) ~= "table" then return end
+        for _, field in ipairs({ "_newerRevisionBackups", "_rejectedProfileBackups" }) do
+            local backups = store[field]
+            if type(backups) == "table" then
+                if target then
+                    Archive(store, field, target)
+                    backups[target], backups[source] = backups[source], nil
+                else Archive(store, field, source) end
+            end
+        end
+        local ids = store._profileRecoveryIDs
+        if type(ids) == "table" then
+            if target then ids[target] = ids[source] end
+            ids[source] = nil
+        end
+    end
+    -- Restore is explicit and does not bind or normalize the recovered bytes.
+    function Schema.RestoreProfileBackup(name, key, kind)
+        local store = MSUF_GlobalDB
+        if type(store) ~= "table" or type(store.profiles) ~= "table" then return nil, "no profile store" end
+        local field = kind == "rejected" and "_rejectedProfileBackups" or "_newerRevisionBackups"
+        local backups = store[field]
+        local bucket = type(backups) == "table" and backups[name]
+        local entry
+        if type(bucket) == "table" then
+            bucket = RecoveryBucket(store, field, name)
+            entry = bucket.entries[key or bucket.order[#bucket.order]]
+        end
+        if type(entry) ~= "table" then
+            local archive = store._profileRecoveryArchive
+            archive = type(archive) == "table" and archive[field]
+            for _, saved in pairs(type(archive) == "table" and archive or {}) do
+                if type(saved.entries) == "table" and saved.entries[key] then entry = saved.entries[key] end
+            end
+        end
+        if type(entry) ~= "table" then return nil, "unknown profile backup" end
+        local copy = CopyNewerProfile(entry.data, {})
+        store.profiles[name] = copy
+        return copy
+    end
+end
+
+-- The first return retains the historical changed/restored boolean contract.
+-- Cold account recovery. One immutable snapshot, outside the compacted pool;
+-- never a per-profile history or a copy on each logout.
+do
+    local blockedStore
+    local snapshotLimit = 8 * 1024 * 1024
+
+    local function SnapshotCost(value, remaining)
+        local kind = type(value)
+        if kind == "string" then return #value * 4 + 2 end
+        if kind ~= "table" then return 32 end
+        local cost = 2
+        for key, child in pairs(value) do
+            cost = cost + SnapshotCost(key, remaining - cost) + 4
+            if cost > remaining then return cost end
+            cost = cost + SnapshotCost(child, remaining - cost)
+            if cost > remaining then return cost end
+        end
+        return cost
+    end
+
+    local function Safe(value)
+        local safe = CountTables(value, scratchRefs, scratchPath, 0, scratchLists)
+        ClearScratch()
+        return safe
+    end
+
+    local function CopySafe(value, bounded)
+        if not Safe(value) then return nil end
+        if bounded and SnapshotCost(value, snapshotLimit) > snapshotLimit then return nil end
+        return CopyNewerProfile(value, {})
+    end
+
+    local function IsFull(profile)
+        return Plain(profile) and Safe(profile) and profile._msufDefaultsRevision == 17
+            and profile[sparseV2Marker] == nil and profile[sparseV3.Marker] == nil
+            and Schema.IsCurrentProfile(profile)
+    end
+
+    function Schema.HasRollbackBackup(store)
+        local backup = Plain(store) and store._pre70ProfileBackup
+        return Plain(backup) and backup.version == 1 and Plain(backup.profiles) and Plain(backup.char)
+            and (backup.source == "full" or backup.source == "reconstructed")
+    end
+
+    function Schema.CaptureRollbackBackup(store, legacy)
+        if not Plain(store) then return false end
+        if store._pre70ProfileBackup ~= nil then return Schema.HasRollbackBackup(store) end
+        if store == blockedStore then return false end
+        local profiles = store.profiles
+        if not Plain(profiles) or next(profiles) == nil then
+            if not Plain(legacy) then return false end
+            profiles = { Default = legacy }
+        end
+        local snapshot = CopySafe({ profiles = profiles, char = Plain(store.char) and store.char or {}, legacy = legacy }, true)
+        if not snapshot then
+            blockedStore = store
+            return false
+        end
+        local source = "full"
+        for _, profile in pairs(snapshot.profiles) do
+            if not Plain(profile) then blockedStore = store return false end
+            if profile[sparseV2Marker] ~= nil or profile[sparseV3.Marker] ~= nil
+                or profile._msufDefaultsRevision == sparseToken or profile._msufDefaultsRevision == "MSUF_SPARSE_DEFAULTS_1" then
+                local _, status = Schema.RestorePersistence(profile)
+                if status == "rejected" then blockedStore = store return false end
+                source = "reconstructed"
+            end
+        end
+        if Plain(snapshot.legacy) and (snapshot.legacy[sparseV2Marker] ~= nil or snapshot.legacy[sparseV3.Marker] ~= nil
+            or snapshot.legacy._msufDefaultsRevision == sparseToken
+            or snapshot.legacy._msufDefaultsRevision == "MSUF_SPARSE_DEFAULTS_1") then
+            local _, status = Schema.RestorePersistence(snapshot.legacy)
+            if status == "rejected" then blockedStore = store return false end
+            source = "reconstructed"
+        end
+        snapshot.version, snapshot.source = 1, source
+        if SnapshotCost(snapshot, snapshotLimit) > snapshotLimit then blockedStore = store return false end
+        store._pre70ProfileBackup = snapshot
+        return true
+    end
+
+    -- Inspect the on-disk envelope before login has decoded or migrated it.
+    function Schema.BeginRollbackSession(store, legacy)
+        if not Plain(store) then return end
+        if store._compatSave == "saved" then
+            local full = Plain(store.profiles) and next(store.profiles) ~= nil
+            if full then
+                for _, profile in pairs(store.profiles) do
+                    if not IsFull(profile) then full = false break end
+                end
+            end
+            if full then store._compatSave = nil else store._compatSave = "armed" end
+        end
+        Schema.CaptureRollbackBackup(store, legacy)
+    end
+
+    function Schema.RestoreRollbackBackup(store)
+        if not Schema.HasRollbackBackup(store) then return false end
+        local restored = CopySafe(store._pre70ProfileBackup, true)
+        if not restored then return false end
+        store.profiles, store.char = restored.profiles, restored.char
+        store._compatSave = "armed"
+        return true, restored.legacy
+    end
+
+    function Schema.PersistCompat(store)
+        local profiles = Schema.PreparePersistence(store)
+        if not profiles then return false end
+        for _, profile in pairs(profiles) do
+            if not IsFull(profile) then
+                -- Preflight detached data: an unknown envelope must never be
+                -- stamped as revision 17 or silently presented as downgrade safe.
+                local candidate = CopySafe(profile)
+                if not Plain(candidate) then return false end
+                local _, status = Schema.RestorePersistence(candidate)
+                if status == "rejected" or (tonumber(candidate._msufDefaultsRevision) or 0) > 17 then return false end
+                MSUF.Require("MSUF_NormalizeProfileDefaults", "State/Defaults/MSUF_Defaults_Schema.lua")(candidate, false, true)
+                if not IsFull(candidate) then return false end
+            end
+        end
+        for _, profile in pairs(profiles) do
+            if not IsFull(profile) then
+                Schema.RestorePersistence(profile)
+                MSUF.Require("MSUF_NormalizeProfileDefaults", "State/Defaults/MSUF_Defaults_Schema.lua")(profile, false, true)
+            end
+        end
+        return true, 0
+    end
+
+    function Schema.SetCompatSave(store, enabled)
+        if not Plain(store) then return false end
+        store._compatSave = enabled and "armed" or nil
+        return true
+    end
+end
+
+
+
+-- Complete forward bindings once; gameplay closures keep direct local calls.
+Parts.Bind2()
+MSUF.DefaultsSchemaParts = nil

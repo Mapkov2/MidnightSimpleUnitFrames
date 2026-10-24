@@ -1,5 +1,11 @@
 {
   "version": 1,
+  "locale_work_sources": [
+    "MidnightSimpleUnitFrames/Runtime/MSUF_SlashCommands.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Storage.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Recovery.lua"
+  ],
   "documents": {
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_PlayerHP.xml": {
       "bom": false,
@@ -16212,6 +16218,270 @@
         "TBC"
       ],
       "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour_Surface.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour_Navigation.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour_Surface.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour_Chrome.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour_Navigation.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour_Pages.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour_Chrome.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Query.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Registry.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Query.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Catalog.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Registry.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexBuild.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Catalog.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Auras.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Factory.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Auras.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Migrations.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Factory.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Colors.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Migrations.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Stages.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Colors.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Ensure.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Stages.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Profiles/MSUF_ProfileMedia.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Profiles/MSUF_ProfileProjection.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Profiles/MSUF_ProfileMedia.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Profiles/MSUF_ProfileSnapshot.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Profiles/MSUF_ProfileProjection.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Profiles/MSUF_ProfileImport.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Profiles/MSUF_ProfileSnapshot.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageData.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageCommon.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageData.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageV3.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageCommon.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Storage.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageV3.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Recovery.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Storage.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_FactoryData.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Recovery.lua"
     }
   ],
   "reviewed_lists": {

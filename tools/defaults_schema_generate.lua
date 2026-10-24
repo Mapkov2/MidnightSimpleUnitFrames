@@ -1,15 +1,33 @@
+-- Use --write [--sparse-v2|--sparse-v3] to refresh the generated storage data file.
 -- Generate portable runtime data from the canonical typed defaults schema.
 local root, out = assert(arg[1]), assert(arg[2])
 local check = out == "--check" or arg[3] == "--check" or arg[4] == "--check"
-local sparse = out == "--check" or arg[3] == "--sparse-v2"
+local sparse = out == "--check" or out == "--write" or arg[3] == "--sparse-v2"
 local outputParts = {}
+local dataPath = root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageData.lua"
+local function ReadStorageData()
+    local source = assert(io.open(dataPath, "rb"))
+    local text = source:read("*a")
+    source:close()
+    return text
+end
 local function Output()
-    if not check then return assert(io.open(out, "wb")) end
+    if not check and out ~= "--write" then return assert(io.open(out, "wb")) end
     return {
         write = function(_, ...)
             for i = 1, select("#", ...) do outputParts[#outputParts + 1] = tostring(select(i, ...)) end
         end,
-        close = function() end,
+        close = function()
+            if out ~= "--write" then return end
+            local text, block = ReadStorageData(), table.concat(outputParts)
+            local marker = arg[3] == "--sparse-v3" and "SPARSE V3 INHERITED DEFAULTS" or "FROZEN SPARSE V2 DATA"
+            local pattern = "%-%- BEGIN " .. marker .. ".-%-%- END " .. marker .. "\r?\n"
+            local replaced, count = text:gsub(pattern, function() return block end)
+            assert(count == 1, "generated storage section missing or duplicated")
+            local file = assert(io.open(dataPath, "wb"))
+            file:write(replaced)
+            file:close()
+        end,
     }
 end
 local S = assert(loadfile(root .. "/tools/fixtures/defaults/schema.lua"))()
@@ -56,9 +74,7 @@ if arg[3] == "--sparse-v3" then
         end
     end
     table.sort(names)
-    local runtime = assert(io.open(root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua", "rb"))
-    local runtimeText = runtime:read("*a")
-    runtime:close()
+    local runtimeText = ReadStorageData()
     local old = assert(loadstring("return " .. assert(runtimeText:match("local sparseV2Fields = (%b{})"))))()
     local existing, pool, ids = {}, {}, {}
     for id, field in ipairs(old) do existing[H.Literal({ field[1], field[2] })] = id end
@@ -231,10 +247,7 @@ if sparse then
     file:write("}\r\n-- END FROZEN SPARSE V2 DATA\r\n")
     file:close()
     if check then
-        local path = root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua"
-        local source = assert(io.open(path, "rb"))
-        local text = source:read("*a")
-        source:close()
+        local text = ReadStorageData()
         local frozen = text:match("(%-%- BEGIN FROZEN SPARSE V2 DATA.-%-%- END FROZEN SPARSE V2 DATA\r?\n)")
         assert(frozen == table.concat(outputParts), "frozen Sparse V2 dictionary differs")
         print("defaults_schema_generate: frozen Sparse V2 dictionary identical")
