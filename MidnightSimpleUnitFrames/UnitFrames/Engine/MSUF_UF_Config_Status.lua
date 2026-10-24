@@ -242,7 +242,7 @@ if IS_CLASSIC_FAMILY then
     end)
     local supportsEvent = MSUF.Client.SupportsEvent
     local function RegisterClassicPVPContextEvent(event, unit)
-      if type(supportsEvent) == "function" and not supportsEvent(event) then return end
+      if not supportsEvent(event) then return end
       if unit then
         pvpDriver:RegisterUnitEvent(event, unit)
       else

@@ -284,7 +284,7 @@ end
 
 function GF.RefreshCornerThreatState(reason)
   local forEach = GF.ForEachFrame
-  if type(forEach) ~= "function" then return false end
+
   return forEach(RefreshCornerThreatFrame, false, reason or "PLAYER_REGEN_ENABLED")
 end
 

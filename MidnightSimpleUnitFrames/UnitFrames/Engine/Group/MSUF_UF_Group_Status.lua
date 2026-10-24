@@ -125,11 +125,7 @@ local raidGroupDeferred = false
 local function DeferRaidGroupForCombat()
   if raidGroupDeferred then return end
   raidGroupDeferred = true
-  if type(GF.DeferGroupRuntime) == "function" then
-    GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_VISUAL)
-  else
-    GF._pendingGroupRuntime = GF._pendingGroupRuntime or "refresh"
-  end
+  GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_VISUAL)
 end
 
 local function UpdateRaidGroupColdPath(frame, status)
@@ -395,13 +391,13 @@ local function EnsureUnitlessDriver()
       local registered = unitlessIndexByEvent[event]
       local duplicateBucket = GF and GF.priorityUnitFrames and GF.priorityUnitFrames[unitTarget]
       local forEach = GF and GF.ForEachFrameForUnit
-      if duplicateBucket and type(forEach) == "function" then
+      if duplicateBucket then
         if forEach(unitTarget, RunTargetedUnitlessStatus, event, registered, live) == true then
           return
         end
         -- A stale duplicate index falls through to the correctness broadcast.
       else
-        local frame = GF and type(GF.FrameForUnit) == "function" and GF.FrameForUnit(unitTarget)
+        local frame = GF and GF.FrameForUnit(unitTarget)
         if frame and (not live or live[frame] == true) then
           local active = frame._msufActiveElements
           if active and active.GroupStatusRuntime == true and registered and registered[frame] then

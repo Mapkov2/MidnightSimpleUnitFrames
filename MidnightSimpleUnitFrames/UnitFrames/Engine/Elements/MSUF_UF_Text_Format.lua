@@ -10,7 +10,6 @@ local Apply = MSUF.Apply or {}
 -- Bind mandatory factories once; report both the consumer and received shape.
 local function RequireFactory(key)
   local factories = MSUF.UFModuleFactories
-  assert(type(factories) == "table", "Elements/MSUF_UF_Text_Format.lua: required UF factory registry for " .. key)
   local factory = factories[key]
   local kind = type(factory)
   assert(kind == "function", "Elements/MSUF_UF_Text_Format.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")

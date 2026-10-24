@@ -823,13 +823,13 @@ local function UpdateAllBarGradients(unit, skipUnitFrames)
   local refreshed = false
   local kindA, kindB = GradientGroupKinds(unit)
   local unitScope = NormalizeGradientScope(unit)
-  if skipUnitFrames ~= true and UF and type(UF.RefreshElements) == "function" then
+  if skipUnitFrames ~= true and UF then
     if not kindA then
       refreshed = UF.RefreshElements(unitScope, BAR_GRADIENT_ELEMENTS, "MSUF2_GRADIENT") or refreshed
     end
   end
   local GF = MSUF and MSUF.GF
-  if GF and type(GF.RefreshVisuals) == "function" then
+  if GF then
     if kindA then
       refreshed = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL) or refreshed
       if kindB then refreshed = GF.RefreshVisuals(kindB, GF.DIRTY_VISUAL) or refreshed end

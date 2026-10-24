@@ -2,23 +2,23 @@ local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Health.lua")
 
 local C = MSUF.UFBarTextCommon
-local UF = C and C.UF or MSUF.UF
+local UF = C.UF
 if not UF then return end
 
-local CreateFrame = C and C.CreateFrame or CreateFrame
-local UnitHealth = C and C.UnitHealth or UnitHealth
-local UnitHealthMax = C and C.UnitHealthMax or UnitHealthMax
-local UnitHealthPercent = C and C.UnitHealthPercent or UnitHealthPercent
-local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
-local SCALE_100 = C and C.SCALE_100
+local CreateFrame = C.CreateFrame or CreateFrame
+local UnitHealth = C.UnitHealth or UnitHealth
+local UnitHealthMax = C.UnitHealthMax or UnitHealthMax
+local UnitHealthPercent = C.UnitHealthPercent or UnitHealthPercent
+local WHITE = C.WHITE or "Interface\\Buttons\\WHITE8X8"
+local SCALE_100 = C.SCALE_100
 local REVERSE_TO_100 = CurveConstants and CurveConstants.ReverseTo100
-local CreateLossTrail = C and C.CreateLossTrail
-local SnapBarInterpolation = C and C.SnapBarInterpolation
-local SetBarSmoothing = C and C.SetBarSmoothing
-local ApplyHealthStatusColor = C and C.ApplyHealthStatusColor
-local ApplyBackgrounds = C and C.ApplyBackgrounds
-local ApplyBarGradient = C and C.ApplyBarGradient
-local PrepareHealthGradientCurve = C and C.PrepareHealthGradientCurve
+local CreateLossTrail = C.CreateLossTrail
+local SnapBarInterpolation = C.SnapBarInterpolation
+local SetBarSmoothing = C.SetBarSmoothing
+local ApplyHealthStatusColor = C.ApplyHealthStatusColor
+local ApplyBackgrounds = C.ApplyBackgrounds
+local ApplyBarGradient = C.ApplyBarGradient
+local PrepareHealthGradientCurve = C.PrepareHealthGradientCurve
 local RefreshHealthBarBackgroundColor = MSUF.Require("MSUF_RefreshHealthBarBackgroundColor", "MSUF_UF_Elements_Health.lua")
 local RefreshHealthGradientBackground = MSUF.Bars and MSUF.Bars.RefreshHealthGradientBackground
 local issecretvalue = issecretvalue

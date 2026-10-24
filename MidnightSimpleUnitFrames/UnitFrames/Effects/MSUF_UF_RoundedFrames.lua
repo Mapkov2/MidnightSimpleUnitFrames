@@ -773,7 +773,6 @@ local function RefreshSpellIndicatorRoundedEdges(frame, enabled)
   end
 end
 
-
 -- Rings for a True Outline or Texture outline style; the solid stack above
 -- stays the renderer for the plain outline color.
 local STYLED_BORDER_POOL_KEY = "_msufRoundedBorderStyledRings"
@@ -1385,7 +1384,6 @@ ApplyToGroupFrame = function(f, kind)
 
     local GF = ResolveGF()
     if hadRounded and GF
-      and (roundedBulkRestoreKinds or type(GF.MarkDirty) == "function")
       and not f._msufRGFDisableRestoreQueued then
       f._msufRGFDisableRestoreQueued = true
       if roundedBulkRestoreKinds then
@@ -1823,7 +1821,6 @@ end
 RegisterRoundedModule()
 
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)
-
 
 RoundedDecorator.Apply = function(frame)
   -- The group adapter owns its apply edge, including the combat deferral.

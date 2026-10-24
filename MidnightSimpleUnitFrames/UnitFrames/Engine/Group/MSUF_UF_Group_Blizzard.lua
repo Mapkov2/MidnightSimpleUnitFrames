@@ -613,10 +613,7 @@ local function LiveRaidKind()
 end
 
 local function LiveGroupKind()
-  if type(GF.GetLiveGroupKind) == "function" then return GF.GetLiveGroupKind() end
-  if IsInRaid and IsInRaid() then return LiveRaidKind() end
-  if IsInGroup and IsInGroup() then return "party" end
-  return nil
+  return GF.GetLiveGroupKind()
 end
 
 local function PartyScopeActive()

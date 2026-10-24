@@ -1256,7 +1256,7 @@ local function FrameMatchesUnitScope(frame, unit)
   if unit == "boss" and unitKey:match("^boss%d+$") then return true end
   if unit == "arena" and unitKey:match("^arena%d+$") then return true end
   local UF = MSUF and MSUF.UF
-  local units = UF and type(UF.UnitsForConfigKey) == "function" and UF.UnitsForConfigKey(unit) or nil
+  local units = UF and UF.UnitsForConfigKey(unit) or nil
   for i = 1, #(units or {}) do
     if units[i] == unitKey then return true end
   end

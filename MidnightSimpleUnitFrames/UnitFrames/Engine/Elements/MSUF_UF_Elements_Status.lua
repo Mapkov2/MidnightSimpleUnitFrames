@@ -6,7 +6,6 @@ local UF = MSUF.UF
 -- Bind mandatory factories once; report both the consumer and received shape.
 local function RequireFactory(key)
   local factories = MSUF.UFModuleFactories
-  assert(type(factories) == "table", "Elements/MSUF_UF_Elements_Status.lua: required UF factory registry for " .. key)
   local factory = factories[key]
   local kind = type(factory)
   assert(kind == "function", "Elements/MSUF_UF_Elements_Status.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
@@ -378,7 +377,7 @@ local function StatusApplyRoleTexture(tex, cfg, status, role)
   end
   local gf = MSUF and MSUF.GF
   local kind = status and status.kind
-  if gf and kind and type(gf.GetRoleTexture) == "function" then
+  if gf and kind then
     local path, l, r, t, b = gf.GetRoleTexture(kind, role, cfg and cfg.style)
     if type(path) == "string" and path ~= "" then
       SetTexture(tex, path)
@@ -675,7 +674,6 @@ local function ApplyDefaultRaidMarkerTexture(tex, index)
   tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
 end
 
-
 local function UpdatePowerRoleVisibility(frame, status)
   local spec = frame and frame.MSUFSpec
   if not (frame and (frame._msufGFKind or (spec and spec.scope == "group"))) then
@@ -694,7 +692,7 @@ local function UpdatePowerRoleVisibility(frame, status)
   local role = status and status.roleValue
   if issecretvalue(role) == true then role = nil end
   if not role then
-    if gf and type(gf.GetUnitGroupRole) == "function" then
+    if gf then
       role = gf.GetUnitGroupRole(unit)
     else
       if UnitGroupRolesAssigned and unit then role = UnitGroupRolesAssigned(unit) end
@@ -703,14 +701,14 @@ local function UpdatePowerRoleVisibility(frame, status)
   if issecretvalue(role) == true then
     role = nil
   end
-  if gf and type(gf.NormalizeGroupRole) == "function" then
+  if gf then
     role = gf.NormalizeGroupRole(role)
   elseif role ~= "TANK" and role ~= "HEALER" and role ~= "DAMAGER" then
     role = "DAMAGER"
   end
 
   local hidden = false
-  if gf and type(gf.GetEffectivePowerHeight) == "function" then
+  if gf then
     hidden = gf.GetEffectivePowerHeight(frame._msufGFKind or status and status.kind or "party", unit, role) <= 0
   elseif c then
     hidden = (role == "TANK" and not c.powTank)
@@ -725,7 +723,7 @@ local function UpdatePowerRoleVisibility(frame, status)
   frame._msufGFPowRoleHidden = hidden
   if prev ~= nil and prev ~= hidden then
     -- Combat overlays update visuals now; MarkDirty applies OOC and defers layout in combat.
-    if gf and type(gf.MarkDirty) == "function" then
+    if gf then
       gf.MarkDirty(frame, (gf.DIRTY_GEOMETRY or 0x01) + (gf.DIRTY_LAYOUT or 0x20))
     end
   end
@@ -740,9 +738,6 @@ CancelReadyCheckTimer, RaidGroupText = RequireFactory("StatusGroupRuntime")(
     SafeNumber, SetShown, SetTexCoord, SetText, SetTexture, UnitExistsRuntime, UnitGroupRolesAssigned, UnitInRaid, UnitIsPlayerRuntime,
     UnitPhaseReason, issecretvalue, tostring, type
 )
-
-
-
 
 -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
 function Status.UpdateStanceText(frame, status)

@@ -9,7 +9,6 @@ if not (Text and UF) then return end
 -- Bind mandatory factories once; report both the consumer and received shape.
 local function RequireFactory(key)
   local factories = MSUF.UFModuleFactories
-  assert(type(factories) == "table", "Elements/MSUF_UF_Text_Runtime.lua: required UF factory registry for " .. key)
   local factory = factories[key]
   local kind = type(factory)
   assert(kind == "function", "Elements/MSUF_UF_Text_Runtime.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
@@ -132,15 +131,20 @@ local POWER_IDENTITY_EVENTS = {
   UNIT_POWER_BAR_HIDE = true,
 }
 
+local POWER_TEXT_COLOR_EVENTS = {
+  UNIT_DISPLAYPOWER = true,
+  MSUF_APPLY = true,
+  MSUF_FORCE_UPDATE = true,
+  MSUF_POWER_LAYOUT = true,
+  MSUF_POWER_TEXT_COLORS = true,
+}
+
 -- Match oUF's 250 ms text cadence with one shared, combat-window ticker. The
 -- queue retains frames only; restricted event payloads are always reread when
 -- the batch drains, while latest plain values already owned by a bar may be
 -- reused.
 local function DirtyTextFrameVisible(frame)
-  local visible = UF.FrameVisibleForEvent
-  if type(visible) == "function" then return visible(frame) end
-  if frame._msufCoreSpecEnabled == false or frame._msufCoreVisible == false then return false end
-  return true
+  return UF.FrameVisibleForEvent(frame)
 end
 
 local CancelDirtyTextFrame, DirtyTextFrameState, MarkGroupHealthTextDirty, MarkHealthTextDirty, MarkPowerTextDirty, TEXT_DIRTY_HEALTH,
@@ -155,7 +159,6 @@ CancelDirtyTextFrame, DirtyTextFrameState, MarkGroupHealthTextDirty, MarkHealthT
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
-
 
 local function MissingHealthFromValues(hp, hpMax, compatibility)
   -- Missing health is derived from API values that may become secret. Return nil in that case
@@ -910,91 +913,60 @@ end
 local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime
-  if not rt or not rt.healthSlotCount or rt.healthSlotCount <= 0 then
-    return
-  end
+  if not rt or not rt.healthSlotCount or rt.healthSlotCount <= 0 then return end
 
   local healthTick = event == "UNIT_HEALTH"
   local needsPercent = rt.healthNeedsPercent == true
-  local needsCurrent = rt.healthNeedsCurrent == true
-  local needsMax = rt.healthNeedsMax == true
-  local colorByHealth = rt.healthColorByHealth == true
-  local needHPValue = needsCurrent
-  local needMaxValue = needsMax
-  local hpSecret = issecretvalue(hp) == true
-  local hpMaxSecret = issecretvalue(hpMax) == true
-  local colorNeedsPercent = colorByHealth
+  local needHPValue, needMaxValue = rt.healthNeedsCurrent == true, rt.healthNeedsMax == true
+  local hpSecret, hpMaxSecret = issecretvalue(hp) == true, issecretvalue(hpMax) == true
+  local colorNeedsPercent = rt.healthColorByHealth == true
     and ((not hpSecret and hp == nil) or (not hpMaxSecret and hpMax == nil))
   local pctOverride, pctOverrideSet
   if needsPercent or colorNeedsPercent then
     pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
   end
   SeedCachedHealthMax(frame, unit, hpMax, event)
-
   if rt.healthPlain == true then
-    -- issecretvalue before every nil test. The dispatch values were asked
-    -- above (hpSecret, hpMaxSecret), so the UNIT_HEALTH path asks nothing
-    -- more; a value read here to fill a missing one is asked when it arrives.
+    -- Reclassify only values filled here; never nil-test an unchecked secret.
     local hpMissing = needHPValue and not hpSecret and hp == nil
     local maxMissing = needMaxValue and not hpMaxSecret and hpMax == nil
     if hpMissing or maxMissing then
       local cachedHP, cachedMax = ReadHealthValuesCached(frame, unit)
       if hpMissing then
         hp = cachedHP
-        hpMissing = issecretvalue(hp) ~= true and hp == nil
+        hpSecret = issecretvalue(hp) == true
+        hpMissing = not hpSecret and hp == nil
       end
       if maxMissing then
         hpMax = cachedMax
-        maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
+        hpMaxSecret = issecretvalue(hpMax) == true
+        maxMissing = not hpMaxSecret and hpMax == nil
       end
     end
     if hpMissing then
       hp = UnitHealth(unit)
-      hpMissing = issecretvalue(hp) ~= true and hp == nil
+      hpSecret = issecretvalue(hp) == true
+      hpMissing = not hpSecret and hp == nil
     end
     if maxMissing then
       hpMax = ReadHealthMaxCached(frame, unit, event)
-      maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
+      hpMaxSecret = issecretvalue(hpMax) == true
+      maxMissing = not hpMaxSecret and hpMax == nil
     end
-
     if rt.healthNeedsMissing == true then
       if healthTick and rt._dispatchHealthMissingReady == true then
         rt.healthMissing = rt._dispatchHealthMissing
-        rt._dispatchHealthMissingReady = nil
-        rt._dispatchHealthMissing = nil
       else
-        rt._dispatchHealthMissingReady = nil
-        rt._dispatchHealthMissing = nil
         rt.healthMissing = ReadMissingHealth(unit, hp, hpMax)
       end
     else
-      rt._dispatchHealthMissingReady = nil
-      rt._dispatchHealthMissing = nil
       rt.healthMissing = nil
     end
-
-    if hpMissing then
-      hp = 0
-    end
-    if maxMissing then
-      hpMax = 1
-    end
-
-    if nativeSecrets and (issecretvalue(hp) == true
-      or issecretvalue(hpMax) == true
-      or issecretvalue(rt.healthMissing) == true) then
-      rt._lastHealthTextHP = nil
-      rt._lastHealthTextMax = nil
-      rt._lastHealthTextMissing = nil
-      rt._dispatchHealthTextHP = nil
-      rt._dispatchHealthTextMax = nil
-      rt._dispatchHealthTextMissing = nil
-      UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent,
-        rt, pctOverride, pctOverrideSet)
-      return
-    end
-
-    if (needsPercent or colorNeedsPercent) and pctOverrideSet ~= true then
+    rt._dispatchHealthMissingReady, rt._dispatchHealthMissing = nil, nil
+    if hpMissing then hp = 0 end
+    if maxMissing then hpMax = 1 end
+    local secretValues = nativeSecrets and (hpSecret or hpMaxSecret or issecretvalue(rt.healthMissing) == true)
+    if not secretValues and (needsPercent or colorNeedsPercent) and pctOverrideSet ~= true then
       pctOverride = PercentFromValues(hp, hpMax)
       pctOverrideSet = pctOverride ~= nil
       if pctOverrideSet ~= true and HealthPercentAvailable then
@@ -1002,13 +974,9 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
         pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
       end
     end
-    if nativeSecrets and pctOverrideSet == true and issecretvalue(pctOverride) == true then
-      rt._lastHealthTextHP = nil
-      rt._lastHealthTextMax = nil
-      rt._lastHealthTextMissing = nil
-      rt._dispatchHealthTextHP = nil
-      rt._dispatchHealthTextMax = nil
-      rt._dispatchHealthTextMissing = nil
+    if secretValues or (nativeSecrets and pctOverrideSet == true and issecretvalue(pctOverride) == true) then
+      rt._lastHealthTextHP, rt._lastHealthTextMax, rt._lastHealthTextMissing = nil, nil, nil
+      rt._dispatchHealthTextHP, rt._dispatchHealthTextMax, rt._dispatchHealthTextMissing = nil, nil, nil
       UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent,
         rt, pctOverride, pctOverrideSet)
       return
@@ -1043,13 +1011,9 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       return
     end
     if canCompareText then
-      rt._lastHealthTextHP = keyHP
-      rt._lastHealthTextMax = keyMax
-      rt._lastHealthTextMissing = rt.healthMissing
+      rt._lastHealthTextHP, rt._lastHealthTextMax, rt._lastHealthTextMissing = keyHP, keyMax, rt.healthMissing
     else
-      rt._lastHealthTextHP = nil
-      rt._lastHealthTextMax = nil
-      rt._lastHealthTextMissing = nil
+      rt._lastHealthTextHP, rt._lastHealthTextMax, rt._lastHealthTextMissing = nil, nil, nil
     end
     UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
     UpdateTextSlotsPlain(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt,
@@ -1057,8 +1021,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     return
   end
 
-  -- Reclassify only after replacing a value below; the incoming pair was
-  -- already checked for the color/value decision above.
+  -- The incoming pair was already classified above; reclassify replacements.
   if (needHPValue and not hpSecret and hp == nil) or (needMaxValue and not hpMaxSecret and hpMax == nil) then
     local cachedHP, cachedMax = ReadHealthValuesCached(frame, unit)
     if needHPValue and not hpSecret and hp == nil then
@@ -1080,13 +1043,11 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   end
 
   rt._lastHpRaw, rt._lastHpMaxRaw = hp, hpMax
-
   if rt.healthNeedsMissing == true then
     rt.healthMissing = ReadMissingHealth(unit, hp, hpMax)
   else
     rt.healthMissing = nil
   end
-
   if (needsPercent or colorNeedsPercent) and pctOverrideSet ~= true then
     if not hpSecret and not hpMaxSecret then pctOverride = PercentFromValues(hp, hpMax) end
     pctOverrideSet = pctOverride ~= nil
@@ -1131,7 +1092,6 @@ local function UpdateAbsorbRuntime(frame, event, unit, skipCombinedRefresh)
     rt.healthAbsorb = nil
   end
 end
-
 
 -- Same delivery as Text.UpdateTextSlotsSecret for the power slots, inlined so each power event
 -- pays no extra call; keep both in step.
@@ -1205,18 +1165,13 @@ end
 
 -- hot path: kept whole (perf rule)
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-  -- Resolve identity and color before either retained slot-delivery route.
   unit = unit or frame.MSUFUnitKey
   local rt = frame._msufTextRuntime
-  if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
-    return
-  end
+  if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then return end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
-  local identityChanged = not animate and POWER_IDENTITY_EVENTS[event] == true
   local powerTypeReread = false
-  if identityChanged then
-    frame._msufTextPowerMax = nil
-    frame._msufTextPowerMaxUnit = nil
+  if not animate and POWER_IDENTITY_EVENTS[event] == true then
+    frame._msufTextPowerMax, frame._msufTextPowerMaxUnit = nil, nil
     if (powerType ~= nil or powerToken ~= nil)
       and issecretvalue(powerType) ~= true
       and issecretvalue(powerToken) ~= true then
@@ -1244,35 +1199,22 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     SeedCachedPowerType(frame, unit, powerType, powerToken)
   end
   local powerMaxSecret = issecretvalue(powerMax) == true
-  if powerMaxSecret or powerMax ~= nil then
-    SeedCachedPowerMax(frame, unit, powerMax, powerMaxSecret)
-  end
-  if rt.powerColorByType == true
-    and animate
-    and rt.powerRefreshTypeOnTick == true
-  then
-    local typeUnit = frame._msufTextPowerTypeUnit
-    local typeUnitMatches = typeUnit == unit
+  if powerMaxSecret or powerMax ~= nil then SeedCachedPowerMax(frame, unit, powerMax, powerMaxSecret) end
+  if rt.powerColorByType == true and animate and rt.powerRefreshTypeOnTick == true then
+    local typeUnitMatches = frame._msufTextPowerTypeUnit == unit
     if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
       RefreshCachedPowerType(frame, unit)
       powerTypeReread = true
     end
   end
-  local typeUnit = frame._msufTextPowerTypeUnit
-  local typeUnitMatches = typeUnit == unit
-  local powerTextColorEvent = not animate
-    and (event == "UNIT_DISPLAYPOWER"
-      or event == "MSUF_APPLY"
-      or event == "MSUF_FORCE_UPDATE"
-      or event == "MSUF_POWER_LAYOUT"
-      or event == "MSUF_POWER_TEXT_COLORS")
+  local typeUnitMatches = frame._msufTextPowerTypeUnit == unit
+  local powerTextColorEvent = not animate and (event == "UNIT_DISPLAYPOWER" or POWER_TEXT_COLOR_EVENTS[event] == true)
   local displayManaChanged = false
   if powerTextColorEvent and unit == "player" and ResolveDisplayedPowerIdentity then
     local _, _, displayMana = ResolveDisplayedPowerIdentity(unit)
     displayManaChanged = frame._msufTextPowerDisplayMana ~= (displayMana == true)
   end
-  if rt.powerColorByType == true
-    and (powerTextColorEvent
+  if rt.powerColorByType == true and (powerTextColorEvent
       or frame._msufPowerTextColorInitialized ~= true
       or not typeUnitMatches
       or displayManaChanged
@@ -1284,14 +1226,11 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
         or displayManaChanged
         or (frame._msufTextPowerType == nil and frame._msufTextPowerToken == nil)) then
       RefreshCachedPowerType(frame, unit)
-      typeUnit = frame._msufTextPowerTypeUnit
-      typeUnitMatches = typeUnit == unit
+      typeUnitMatches = frame._msufTextPowerTypeUnit == unit
     end
-    local cachedType = frame._msufTextPowerType
-    local cachedToken = frame._msufTextPowerToken
+    local cachedType, cachedToken = frame._msufTextPowerType, frame._msufTextPowerToken
     local metaKnown = frame._msufTextPowerTypeKnown == true
-      and typeUnitMatches
-      and (cachedType ~= nil or cachedToken ~= nil)
+      and typeUnitMatches and (cachedType ~= nil or cachedToken ~= nil)
     if metaKnown then
       local r, g, b = PowerColor(frame, unit, cachedType, cachedToken, true)
       SetPowerTextColor(frame, r, g, b, rt.textColorA or 1)
@@ -1299,47 +1238,30 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
     end
     frame._msufPowerTextColorInitialized = true
-    frame._msufPowerTextColorType = cachedType
-    frame._msufPowerTextColorToken = cachedToken
-  elseif rt.powerColorByType == false
-    and (powerTextColorEvent
+    frame._msufPowerTextColorType, frame._msufPowerTextColorToken = cachedType, cachedToken
+  elseif rt.powerColorByType == false and (powerTextColorEvent
       or frame._msufPowerTextColorInitialized ~= true
       or frame._msufPowerTextColorType ~= false) then
     SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
-    frame._msufPowerTextColorInitialized = true
-    frame._msufPowerTextColorType = false
-    frame._msufPowerTextColorToken = nil
+    frame._msufPowerTextColorInitialized, frame._msufPowerTextColorType, frame._msufPowerTextColorToken = true, false, nil
   end
-  local needsPercent = rt.powerNeedsPercent == true
-  local needsCurrent = rt.powerNeedsCurrent == true
-  local needsMax = rt.powerNeedsMax == true
-  local needPowerValue = needsCurrent
+  local needsPercent, needPowerValue, needsMax = rt.powerNeedsPercent == true, rt.powerNeedsCurrent == true, rt.powerNeedsMax == true
   if rt.powerPlain == true then
     if (needPowerValue and power == nil) or (needsMax and powerMax == nil) then
       local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needsMax and powerMax == nil, animate)
-      if needPowerValue and power == nil then
-        power = currentPower
-      end
-      if needsMax and powerMax == nil then
-        powerMax = currentMax
-      end
+      if needPowerValue and power == nil then power = currentPower end
+      if needsMax and powerMax == nil then powerMax = currentMax end
     end
     rt.healthMissing = nil
-    if needPowerValue and power == nil then
-      power = 0
-    end
-    if needsMax and powerMax == nil then
-      powerMax = 1
-    end
+    if needPowerValue and power == nil then power = 0 end
+    if needsMax and powerMax == nil then powerMax = 1 end
     local pctOverride, pctOverrideSet
     if needsPercent then
       pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
     end
     if nativeSecrets and (issecretvalue(power) == true or issecretvalue(powerMax) == true) then
-      rt._lastPowerTextPower = nil
-      rt._lastPowerTextMax = nil
-      rt._dispatchPowerTextPower = nil
-      rt._dispatchPowerTextMax = nil
+      rt._lastPowerTextPower, rt._lastPowerTextMax = nil, nil
+      rt._dispatchPowerTextPower, rt._dispatchPowerTextMax = nil, nil
       UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
       return
     end
@@ -1354,12 +1276,9 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     local keyPower, keyMax = false, false
     local canCompareText = true
     local mode = rt.powerDispatchKeyMode or DISPATCH_KEY.NONE
-    if mode == DISPATCH_KEY.CURRENT then
-      keyPower = power
-    elseif mode == DISPATCH_KEY.MAX then
-      keyMax = powerMax
-    elseif mode == DISPATCH_KEY.CURRENT_MAX then
-      keyPower, keyMax = power, powerMax
+    if mode == DISPATCH_KEY.CURRENT then keyPower = power
+    elseif mode == DISPATCH_KEY.MAX then keyMax = powerMax
+    elseif mode == DISPATCH_KEY.CURRENT_MAX then keyPower, keyMax = power, powerMax
     elseif mode == DISPATCH_KEY.PERCENT or mode == DISPATCH_KEY.PERCENT_MAX then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
         keyPower = PercentCacheKeyFromValue(pctOverride, 0)
@@ -1384,11 +1303,9 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       return
     end
     if canCompareText then
-      rt._lastPowerTextPower = keyPower
-      rt._lastPowerTextMax = keyMax
+      rt._lastPowerTextPower, rt._lastPowerTextMax = keyPower, keyMax
     else
-      rt._lastPowerTextPower = nil
-      rt._lastPowerTextMax = nil
+      rt._lastPowerTextPower, rt._lastPowerTextMax = nil, nil
     end
     UpdateTextSlotsPlain(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
     return
@@ -1493,7 +1410,6 @@ Text.RuntimeHotFunctions = {
 Text.UpdateHealth = UpdateHealthRuntime
 Text.UpdateAbsorb = UpdateAbsorbRuntime
 Text.UpdatePower = UpdatePowerRuntime
-
 
 local function NameNeedsNPCColorEvents(text)
   if not text then
@@ -2104,7 +2020,6 @@ function PowerText.Disable(frame)
   SetShownCached(frame and frame.powerTextCenter, false)
   SetShownCached(frame and frame.powerTextRight, false)
 end
-
 
 HealthText.MarkValueDirty = MarkHealthTextDirty
 HealthText.MarkGroupValueDirty = MarkGroupHealthTextDirty

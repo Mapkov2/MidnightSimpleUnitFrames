@@ -129,7 +129,7 @@ end
 local ClassPower = {}
 
 local function RefreshPlayerPowerBar()
-  if UF and type(UF.RefreshPowerLayout) == "function" then
+  if UF then
     return UF.RefreshPowerLayout("player")
   end
   return false

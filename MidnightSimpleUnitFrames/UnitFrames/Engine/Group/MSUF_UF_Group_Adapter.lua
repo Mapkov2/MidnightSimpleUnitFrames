@@ -559,7 +559,7 @@ local function ConfigureSecureClicks(frame)
   if secureClicksConfigured[frame] == true then return true end
   frame:SetAttribute("type1", nil)
   frame:SetAttribute("*type1", "target")
-  if UF and type(UF.AttachSecureUnitMenu) == "function" then
+  if UF then
     UF.AttachSecureUnitMenu(frame)
   else
     frame:SetAttribute("type2", nil)
@@ -936,7 +936,6 @@ function GF.ScanHeader(key, kind)
   if UF.EndEventRegistrationBatch then UF.EndEventRegistrationBatch() end
   return found
 end
-
 
 function GF.ForEachFrame(fn, includeHidden, a, b, c)
   if type(fn) ~= "function" then return false end

@@ -2,29 +2,29 @@ local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Power.lua")
 
 local C = MSUF.UFBarTextCommon
-local UF = C and C.UF or MSUF.UF
+local UF = C.UF
 if not UF then return end
 local Health = UF.Elements and UF.Elements.Health
 
-local CreateFrame = C and C.CreateFrame or CreateFrame
-local UnitPower = C and C.UnitPower or UnitPower
-local UnitPowerMax = C and C.UnitPowerMax or UnitPowerMax
-local UnitPowerType = C and C.UnitPowerType or UnitPowerType
-local UnitPowerPercent = C and C.UnitPowerPercent or UnitPowerPercent
-local ResolveDisplayedPowerIdentity = C and C.ResolveDisplayedPowerIdentity
-local PowerBarColor = C and C.PowerBarColor or PowerBarColor
-local ResolvePowerColor = C and C.PowerColor
-local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
-local SCALE_100 = C and C.SCALE_100
-local CreateLossTrail = C and C.CreateLossTrail
-local CreateLossTrailPool = C and C.CreateLossTrailPool
-local SetBarSmoothing = C and C.SetBarSmoothing
-local SnapBarInterpolation = C and C.SnapBarInterpolation
-local ApplyBackgrounds = C and C.ApplyBackgrounds
-local ApplyBarGradient = C and C.ApplyBarGradient
-local HideBarGradient = C and C.HideBarGradient
-local ExternalFrameWidth = C and C.ExternalFrameWidth
-local InCombatLockdown = C and C.InCombatLockdown or InCombatLockdown
+local CreateFrame = C.CreateFrame or CreateFrame
+local UnitPower = C.UnitPower or UnitPower
+local UnitPowerMax = C.UnitPowerMax or UnitPowerMax
+local UnitPowerType = C.UnitPowerType or UnitPowerType
+local UnitPowerPercent = C.UnitPowerPercent or UnitPowerPercent
+local ResolveDisplayedPowerIdentity = C.ResolveDisplayedPowerIdentity
+local PowerBarColor = C.PowerBarColor or PowerBarColor
+local ResolvePowerColor = C.PowerColor
+local WHITE = C.WHITE or "Interface\\Buttons\\WHITE8X8"
+local SCALE_100 = C.SCALE_100
+local CreateLossTrail = C.CreateLossTrail
+local CreateLossTrailPool = C.CreateLossTrailPool
+local SetBarSmoothing = C.SetBarSmoothing
+local SnapBarInterpolation = C.SnapBarInterpolation
+local ApplyBackgrounds = C.ApplyBackgrounds
+local ApplyBarGradient = C.ApplyBarGradient
+local HideBarGradient = C.HideBarGradient
+local ExternalFrameWidth = C.ExternalFrameWidth
+local InCombatLockdown = C.InCombatLockdown or InCombatLockdown
 local tonumber = tonumber
 local tostring = tostring
 local type = type
@@ -41,7 +41,7 @@ function UF.SetRoundedPowerBorderCallback(callback)
   roundedBorderCallback = type(callback) == "function" and callback or nil
 end
 
-local POWER_EVENTS = C and C.POWER_EVENTS
+local POWER_EVENTS = C.POWER_EVENTS
   or { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_EVENTS_FAST = {
   "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",

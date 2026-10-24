@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Highlight.lua")
 local ExportPublic = MSUF.ExportPublic
 
-
 -- Unitframe highlight overlay runtime.
 -- Owns the optional mouseover/target-style highlight frame layered above unitframes. Global
 -- DB changes update cached config, while per-frame calls only show/hide/recolor the overlay.
@@ -35,7 +34,7 @@ end
 
 local function ForEachHighlightFrame(fn)
   local uf = MSUF and MSUF.UF
-  if uf and type(uf.ForEachFrame) == "function" then
+  if uf then
     uf.ForEachFrame(fn)
   else
     local frames = uf and uf.frames
@@ -54,7 +53,7 @@ local function ForEachHighlightFrame(fn)
   end
 
   local gf = MSUF.GF
-  if gf and type(gf.ForEachFrame) == "function" then
+  if gf then
     gf.ForEachFrame(fn, true)
   elseif gf and type(gf.frameList) == "table" then
     for i = 1, #gf.frameList do

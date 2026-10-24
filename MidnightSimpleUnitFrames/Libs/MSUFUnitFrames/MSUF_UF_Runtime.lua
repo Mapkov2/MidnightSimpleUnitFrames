@@ -89,9 +89,7 @@ function UF.RefreshElements(unit, names, reason)
   if type(names) ~= "table" then return false end
   if InCombat() then return QueueDeferredElementRefresh(unit, names, reason) end
 
-  local applyElement = UF.ApplyElementToFrame
   local applyElements = UF.ApplyElementsToFrame
-  if type(applyElement) ~= "function" and type(applyElements) ~= "function" then return false end
 
   local config = UF.Config
   local refreshedAll = false
@@ -117,17 +115,7 @@ function UF.RefreshElements(unit, names, reason)
   local function refreshFrame(frame)
     if not frame then return end
     local spec = specFor(frame)
-    if type(applyElements) == "function" then
-      applyElements(frame, names, spec, reason or "MSUF_ELEMENT_REFRESH")
-      return
-    end
-    for i = 1, #names do
-      local name = names[i]
-      local allowed = UF.ApplyElementAllowed or UF.CoreElementAllowed
-      if not allowed or allowed(name) then
-        applyElement(frame, name, spec, reason or "MSUF_ELEMENT_REFRESH")
-      end
-    end
+    applyElements(frame, names, spec, reason or "MSUF_ELEMENT_REFRESH")
   end
 
   if unit then

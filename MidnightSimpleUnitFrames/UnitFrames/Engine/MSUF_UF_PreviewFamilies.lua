@@ -80,10 +80,8 @@ local function ResolvePreviewHealthColor(frame, pct, classToken)
   elseif mode == "gradient" then
     local common = MSUF and MSUF.UFBarTextCommon
     local resolveGradient = common and common.PreviewHealthGradientColor
-    if type(resolveGradient) == "function" then
-      local r, g, b = resolveGradient(health, pct)
-      if r ~= nil then return r, g, b, 1 end
-    end
+    local r, g, b = resolveGradient(health, pct)
+    if r ~= nil then return r, g, b, 1 end
   end
 
   if classToken ~= nil then
@@ -101,10 +99,8 @@ local function ResolvePreviewHealthColor(frame, pct, classToken)
   end
   local common = MSUF and MSUF.UFBarTextCommon
   local resolveNPC = common and common.NPCColor
-  if type(resolveNPC) == "function" then
-    local r, g, b = resolveNPC(kind)
-    if r ~= nil then return r, g, b, 1 end
-  end
+  local r, g, b = resolveNPC(kind)
+  if r ~= nil then return r, g, b, 1 end
   if kind == "npcBoss" then return 0.74, 0.11, 0, 1 end
   return 0.85, 0.10, 0.10, 1
 end

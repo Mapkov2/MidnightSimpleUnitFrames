@@ -46,18 +46,15 @@ end
 -- before SetupHeader scans its existing SecureGroupHeader children.
 local function SetupLiveHeader(key, kind)
   local setup = GF.SetupHeader
-  if type(setup) ~= "function" then return nil end
 
-  if type(GF.EnsureDB) == "function" then GF.EnsureDB() end
+  GF.EnsureDB()
   local resolve = GF.ResolveFrameScale
-  local desiredScale = type(resolve) == "function" and tonumber(resolve(kind)) or nil
+  local desiredScale = tonumber(resolve(kind)) or nil
   local width, height
   if GF.GetScaledFrameMetrics then width, height = GF.GetScaledFrameMetrics(kind) end
   if (desiredScale ~= nil and appliedLayoutScaleByKind[kind] ~= desiredScale)
     or (width ~= nil and (appliedLayoutWidthByKind[kind] ~= width or appliedLayoutHeightByKind[kind] ~= height)) then
-    if type(GF.InvalidateCompiledSpecs) == "function" then
-      GF.InvalidateCompiledSpecs(kind)
-    end
+    GF.InvalidateCompiledSpecs(kind)
   end
 
   local header, scanned = setup(key, kind)
@@ -74,7 +71,7 @@ local function RefreshRosterStateFrame(frame, _, kind, reason, refreshOverlay)
   -- current power-role ownership before the lifecycle consumes their spec.
   if refreshOverlay then GF.RefreshFrameRoleOverlay(frame) end
   local refresh = UF and UF.RefreshGroupFrameState
-  local did = type(refresh) == "function" and refresh(frame, reason) == true or false
+  local did = refresh(frame, reason) == true or false
   -- A roster slot can acquire another player without changing its unit token.
   -- Repaint from the current unit; no readable GUID is required.
   local active = frame._msufActiveElements
@@ -85,7 +82,7 @@ local function RefreshRosterStateFrame(frame, _, kind, reason, refreshOverlay)
 end
 
 local function RefreshVisibleRosterState(reason)
-  if type(GF.ForEachFrame) ~= "function" then return false end
+
   return GF.ForEachFrame(RefreshRosterStateFrame, false, reason, InCombat())
 end
 
@@ -141,7 +138,7 @@ end
 -- reused live frames up after header setup instead of adding role work to the
 -- shared combat/lifecycle hot path.
 local function RefreshVisibleRoleState(reason)
-  if type(GF.ForEachFrame) ~= "function" then return false end
+
   return GF.ForEachFrame(RefreshRoleStateFrame, false, reason or "PLAYER_ROLES_ASSIGNED")
 end
 
@@ -153,7 +150,7 @@ end
 local LiveGroupKind = GF.GetLiveGroupKind
 
 local function ArenaPartyContext()
-  return type(GF.IsArenaPartyContext) == "function" and GF.IsArenaPartyContext() == true
+  return GF.IsArenaPartyContext() == true
 end
 
 local function ArenaPartyHeaderActive()
@@ -161,10 +158,9 @@ local function ArenaPartyHeaderActive()
 end
 
 -- PVP_MATCH_STATE_CHANGED is Retail-only; Classic arena clients reject the
--- registration. Harnesses without MSUF.Client keep the Retail behaviour.
+-- registration. The client model is initialized before the group runtime.
 local function MatchStateEventSupported()
   local client = MSUF.Client
-  if not (client and type(client.SupportsEvent) == "function") then return true end
   return client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
 end
 
@@ -180,18 +176,14 @@ local function ArenaPartyNameListActive()
 end
 
 local function PriorityNameRefreshActive()
-  local kind = type(GF.GetPriorityBaseKind) == "function" and GF.GetPriorityBaseKind() or nil
+  local kind = GF.GetPriorityBaseKind() or nil
   if not kind then kind = LiveGroupKind() end
   return kind ~= nil and ConfEnabled(kind)
-    and type(GF.PriorityFramesConfigured) == "function"
     and GF.PriorityFramesConfigured() == true
 end
 
 local function AnyGroupFrameEnabled()
-  if type(GF.AnyMSUFGroupFrameEnabled) == "function" then
-    return GF.AnyMSUFGroupFrameEnabled() == true
-  end
-  return ConfEnabled("party") or ConfEnabled("raid") or ConfEnabled("mythicraid")
+  return GF.AnyMSUFGroupFrameEnabled() == true
 end
 
 --- UNIT_NAME_UPDATE has no unit filter (RegisterUnitEvent takes two units), and
@@ -357,8 +349,7 @@ local function PreviewSuppressesHeader(key)
 end
 
 local function LivePriorityKind()
-  if type(GF.GetPriorityBaseKind) == "function" then return GF.GetPriorityBaseKind() end
-  return LiveGroupKind()
+  return GF.GetPriorityBaseKind()
 end
 
 local function WantPriorityBase(kind)
@@ -392,24 +383,20 @@ local function SetupWantedPriority()
   local wanted = WantPriorityBase(priorityKind)
     and not PreviewSuppressesHeader("priority")
     and not HiddenByEnvironment(priorityKind)
-    and type(GF.PriorityFramesConfigured) == "function"
     and GF.PriorityFramesConfigured() == true
   if not wanted then
     return RetireHeader("priority")
   end
   local resolve = GF.ResolvePrioritySelection
   local setup = GF.SetupPriorityHeader
-  if type(resolve) ~= "function" or type(setup) ~= "function" then
-    return RetireHeader("priority")
-  end
   local nameList, count = resolve()
   if not nameList or not count or count < 1 then
-    if type(GF.NotifyPriorityListeners) == "function" then GF.NotifyPriorityListeners("runtime-empty", 0) end
+    GF.NotifyPriorityListeners("runtime-empty", 0)
     return RetireHeader("priority")
   end
   local header = setup(priorityKind, nameList, count)
   if header and header.Show then header:Show() end
-  if type(GF.NotifyPriorityListeners) == "function" then GF.NotifyPriorityListeners("runtime", count) end
+  GF.NotifyPriorityListeners("runtime", count)
   return header ~= nil
 end
 
@@ -417,7 +404,7 @@ local function FinishOwnershipHandoff()
   -- Group borders live on persistent, unprotected anchors rather than on the
   -- secure headers retired above. Reconcile both anchors after every scope
   -- transition so the inactive Party/Raid border cannot survive the switch.
-  if type(GF.ApplyGroupBorder) == "function" then GF.ApplyGroupBorder() end
+  GF.ApplyGroupBorder()
 
   if GF.ApplyBlizzardGroupFrameOwnership then
     GF.ApplyBlizzardGroupFrameOwnership("lean-runtime")
@@ -645,9 +632,7 @@ function GF.RefreshHeaderLayout(kind)
   end
   local result = SetupWantedHeaders(kind)
   SetRuntimeEventsEnabled(enabled)
-  if type(GF.RefreshSpellIndicatorSeedEvents) == "function" then
-    GF.RefreshSpellIndicatorSeedEvents()
-  end
+  GF.RefreshSpellIndicatorSeedEvents()
   return result
 end
 
@@ -780,7 +765,7 @@ end
 -- element apply can reach it. SetupHeader owns the cold path; without this hook
 -- the setting would only take effect on the next layout rebuild or /reload.
 local function RefreshGroupBorderForMask(kind, mask)
-  if type(GF.ApplyGroupBorder) ~= "function" then return end
+
   if mask ~= nil and mask ~= true
     and not (mask == GF.DIRTY_ALL or mask == GF.DIRTY_CONFIG
       or MaskHas(mask, GF.DIRTY_BORDER) or MaskHas(mask, GF.DIRTY_VISUAL)
@@ -860,14 +845,7 @@ local function RefreshGroupNameFrame(frame)
 end
 
 function GF.RefreshGroupNames(unit)
-  if not (UF and GF.ForEachFrame) then return false end
-  if unit then
-    if type(GF.ForEachFrameForUnit) == "function" then
-      return GF.ForEachFrameForUnit(unit, RefreshGroupNameFrame)
-    end
-    local frame = GF.FrameForUnit and GF.FrameForUnit(unit)
-    return frame and RefreshGroupNameFrame(frame) or false
-  end
+  if unit then return GF.ForEachFrameForUnit(unit, RefreshGroupNameFrame) end
   return GF.ForEachFrame(RefreshGroupNameFrame, true)
 end
 
@@ -909,7 +887,7 @@ local function FlushDeferred()
   end
 
   if reasons.rebuild then
-    if kind and type(GF.Rebuild) == "function" then return GF.Rebuild(kind) end
+    if kind then return GF.Rebuild(kind) end
     local result = RefreshAllNow()
     return NotifyRuntimeObservers("rebuildAll", nil, GF.DIRTY_ALL, result)
   end
@@ -938,8 +916,7 @@ local function FlushDeferred()
   --- with them, matching the previous per-reason behaviour.
   if reasons.refresh then
     did = GF.RefreshVisuals(kind, mask) or did
-  elseif mask and type(GF.RefreshVisuals) == "function"
-    and (reasons.layout or reasons.priority) then
+  elseif mask and (reasons.layout or reasons.priority) then
     did = GF.RefreshVisuals(kind, mask) or did
   end
   return did
@@ -974,9 +951,7 @@ local function RuntimeOnEvent(self, event, unit)
     -- Priority selection is orthogonal to the broader pending reason. Catch up
     -- once unless the broad flush already rebuilt the active Priority header.
     if GF._pendingPriorityRefresh then GF.RefreshPriorityFrames("deferred-priority") end
-    if type(GF.RefreshCornerThreatState) == "function" then
-      GF.RefreshCornerThreatState(event)
-    end
+    GF.RefreshCornerThreatState(event)
     if refreshEvents then SetRuntimeEventsEnabled(AnyGroupFrameEnabled()) end
     return
   elseif event == "PLAYER_REGEN_DISABLED" then
@@ -985,7 +960,7 @@ local function RuntimeOnEvent(self, event, unit)
     -- combat hides every preview. Hand the block back to the live header now:
     -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
     -- begins the header could not come back before regen.
-    if type(GF.HidePreviewsForCombat) == "function" and GF.HidePreviewsForCombat() == true then
+    if GF.HidePreviewsForCombat() == true then
       SetupWantedHeaders()
     end
     GF.SetRaidRosterFrozen(true)
@@ -993,7 +968,7 @@ local function RuntimeOnEvent(self, event, unit)
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
     local inCombat = InCombat()
-    if event == "GROUP_ROSTER_UPDATE" and type(GF.ApplyGroupBorder) == "function" then
+    if event == "GROUP_ROSTER_UPDATE" then
       GF.ApplyGroupBorder(inCombat and "party" or nil)
     end
     if inCombat then
@@ -1020,13 +995,7 @@ local function RuntimeOnEvent(self, event, unit)
       and (unit == "player" or unit:match("^party[1-4]$") ~= nil)
     local priorityUnit = false
     if PriorityNameRefreshActive() then
-      if type(GF.IsPriorityGroupUnit) == "function" then
-        priorityUnit = GF.IsPriorityGroupUnit(unit) == true
-      elseif LiveGroupKind() ~= "party" and IsInRaid and IsInRaid() then
-        priorityUnit = unit:match("^raid%d+$") ~= nil
-      else
-        priorityUnit = unit == "player" or unit:match("^party[1-4]$") ~= nil
-      end
+      priorityUnit = GF.IsPriorityGroupUnit(unit) == true
     end
     if partyNameListUnit ~= true and priorityUnit ~= true then return end
     if InCombat() then

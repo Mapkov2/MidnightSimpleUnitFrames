@@ -73,7 +73,7 @@ end
 -- The roster Priority Frames read. A small raid on the Party layout still has
 -- raidN tokens; its party1-4 tokens cover only the player's own subgroup.
 local function CurrentGroupType()
-  local kind = type(GF.GetLiveGroupKind) == "function" and GF.GetLiveGroupKind() or nil
+  local kind = GF.GetLiveGroupKind() or nil
   if kind == "party" and not (IsInRaid and IsInRaid()) then return "party" end
   if kind == "raid" or kind == "mythicraid" then return "raid" end
   if IsInRaid and IsInRaid() then return "raid" end
@@ -87,7 +87,7 @@ local function PriorityBaseKind(groupType)
   if groupType == "raid" then
     -- Its visuals follow the Party layout the small raid is shown with.
     if GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext() then return "party" end
-    local kind = type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
+    local kind = GF.GetLiveRaidKind() or "raid"
     return kind == "mythicraid" and "mythicraid" or "raid"
   end
   return nil
@@ -156,11 +156,7 @@ local function RequestRefresh(reason)
   for _, callback in pairs(priorityListeners) do
     callback(reason or "selection")
   end
-  if type(GF.RefreshPriorityFrames) == "function" then
-    return GF.RefreshPriorityFrames(reason or "selection")
-  end
-  GF._pendingPriorityRefresh = reason or true
-  return false
+  return GF.RefreshPriorityFrames(reason or "selection")
 end
 
 function GF.RegisterPriorityListener(owner, callback)
@@ -185,7 +181,7 @@ end
 
 local function BaseFramesEnabled(groupType)
   local kind = PriorityBaseKind(groupType)
-  local baseConf = kind and type(GF.GetConf) == "function" and GF.GetConf(kind) or nil
+  local baseConf = kind and GF.GetConf(kind) or nil
   return baseConf and baseConf.enabled == true or false, kind
 end
 
@@ -261,7 +257,6 @@ local function FillPriorityState(out, conf, selectedCount, names, groupType)
   out.names = names
   return out
 end
-
 
 function GF.GetPriorityState(out)
   local conf = PriorityConf() or {}
@@ -570,9 +565,7 @@ function GF.GetHoveredPriorityUnit()
       end
     end
   end
-  if type(GF.ForEachFrame) == "function" then
-    GF.ForEachFrame(FindHoveredFrame, false)
-  end
+  GF.ForEachFrame(FindHoveredFrame, false)
   local unit = hoveredUnit
   hoveredUnit = nil
   unit = PlainString(unit)

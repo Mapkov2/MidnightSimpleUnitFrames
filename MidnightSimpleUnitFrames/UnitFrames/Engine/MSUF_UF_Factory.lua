@@ -17,7 +17,6 @@ local ApplyBossPhysicalBarGeometry
 -- Bind mandatory factories once; report both the consumer and received shape.
 local function RequireFactory(key)
   local factories = MSUF.UFModuleFactories
-  assert(type(factories) == "table", "MSUF_UF_Factory.lua: required UF factory registry for " .. key)
   local factory = factories[key]
   local kind = type(factory)
   assert(kind == "function", "MSUF_UF_Factory.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
@@ -41,7 +40,6 @@ local function Dep(name)
 end
 local HasGroupLateAnchorConfig
 local GroupUsesExternalAnchor
-
 
 -- A frame that was fully detached for its disabled state must not be rebuilt
 -- live in the same session. Keep the detached zero-overhead state intact and
@@ -186,7 +184,6 @@ local function FinishAnchorDependencyCheck(state, region, result)
   return result
 end
 
-
 local function AnchorDependsOn(region, target, state, depth)
   if not (region and target) then return false end
   if region == target then return true end
@@ -303,11 +300,11 @@ end
 
 local function ResolveConfig(refresh)
   local config = UF.Config
-  if not (config and type(config.GetSpec) == "function") then
+  if not (config) then
     if config then config.dirty = true end
     return nil
   end
-  if refresh and type(config.Refresh) == "function" then
+  if refresh then
     config.Refresh()
   end
   return config
@@ -396,9 +393,7 @@ local function ApplyPosition(frame, spec)
     frame._msufLoadedFromScreenCache = nil
   end
   frame._msufExternalAnchorFrozen = nil
-  if type(ApplyBossPhysicalBarGeometry) == "function" then
-    ApplyBossPhysicalBarGeometry(frame)
-  end
+  ApplyBossPhysicalBarGeometry(frame)
   return true
 end
 
@@ -455,9 +450,7 @@ ApplyBossPhysicalBarGeometry = function(frame)
     local configuredHeight = tonumber(powerSpec.height)
       or (power.GetHeight and power:GetHeight()) or 0
     local snap = Snap
-    if type(snap) == "function" then
-      configuredHeight = snap(power, configuredHeight)
-    end
+    configuredHeight = snap(power, configuredHeight)
     local powerScale = (power.GetEffectiveScale and power:GetEffectiveScale()) or 1
     if powerScale == 0 then powerScale = 1 end
     powerScreenHeight = math.max(pixel, configuredHeight * powerScale)
@@ -815,7 +808,7 @@ local function ThawFrozenExternalAnchors()
     end
     local db = MSUF_DB
     local replayCoversGroup = false
-    if type(db) == "table" and type(GroupUsesExternalAnchor) == "function" then
+    if type(db) == "table" then
       for name in pairs(externalAnchorRefreshAfterCombat) do
         if GroupUsesExternalAnchor(db, name) then
           replayCoversGroup = true
@@ -823,7 +816,7 @@ local function ThawFrozenExternalAnchors()
         end
       end
     end
-    if not replayCoversGroup and GF and type(GF.RefreshHeaderLayout) == "function" then
+    if not replayCoversGroup and GF then
       GF.RefreshHeaderLayout()
       did = true
     end
@@ -999,21 +992,19 @@ local function FlushCooldownWidthRefresh()
   if visualRefreshMask ~= 0 then
     local powerElement = UF.Elements and UF.Elements.Power
     local refreshPowerWidth = powerElement and powerElement.RefreshDetachedExternalWidth
-    if type(refreshPowerWidth) == "function" then
-      for i = 1, #UF.unitOrder do
-        local frame = UF.frames and UF.frames[UF.unitOrder[i]]
-        local power = frame and frame.MSUFSpec and frame.MSUFSpec.power
-        -- The Detached mode is the primary source; the Class Resource mode only
-        -- gets a look-in when sync is on and the primary did not move. One
-        -- re-resolve per frame covers both either way.
-        local sourceName = power and power.detachedWidthFrameName
-        local sourceBit = COOLDOWN_WIDTH_SOURCE_BITS[sourceName]
-        if not MaskHas(visualRefreshMask, sourceBit) and power and power.detachedSyncClass == true then
-          sourceName = power.detachedClassWidthFrameName
-          sourceBit = COOLDOWN_WIDTH_SOURCE_BITS[sourceName]
-        end
-        if MaskHas(visualRefreshMask, sourceBit) then refreshPowerWidth(frame, sourceName, power) end
+    for i = 1, #UF.unitOrder do
+      local frame = UF.frames and UF.frames[UF.unitOrder[i]]
+      local power = frame and frame.MSUFSpec and frame.MSUFSpec.power
+      -- The Detached mode is the primary source; the Class Resource mode only
+      -- gets a look-in when sync is on and the primary did not move. One
+      -- re-resolve per frame covers both either way.
+      local sourceName = power and power.detachedWidthFrameName
+      local sourceBit = COOLDOWN_WIDTH_SOURCE_BITS[sourceName]
+      if not MaskHas(visualRefreshMask, sourceBit) and power and power.detachedSyncClass == true then
+        sourceName = power.detachedClassWidthFrameName
+        sourceBit = COOLDOWN_WIDTH_SOURCE_BITS[sourceName]
       end
+      if MaskHas(visualRefreshMask, sourceBit) then refreshPowerWidth(frame, sourceName, power) end
     end
   end
 
@@ -1194,8 +1185,8 @@ function Factory.RefreshExternalAnchor(frameName)
 
   local db = MSUF_DB
   local GF = MSUF.GF
-  if type(db) == "table" and type(GroupUsesExternalAnchor) == "function" and GroupUsesExternalAnchor(db, frameName)
-    and GF and type(GF.RefreshHeaderLayout) == "function" then
+  if type(db) == "table" and GroupUsesExternalAnchor(db, frameName)
+    and GF then
     GF.RefreshHeaderLayout()
     refreshed = true
   end
@@ -1309,7 +1300,7 @@ local function DeferLateAnchorReanchorForCombat(forcePosition)
   local GF = MSUF.GF
   local db = MSUF_DB
   if type(db) == "table" and HasGroupLateAnchorConfig(db)
-    and GF and type(GF.DeferGroupRuntime) == "function" then
+    and GF then
     GF.DeferGroupRuntime("layout")
   end
   return false
@@ -1321,8 +1312,7 @@ local function FlushLateAnchorReanchor(forcePosition)
     Factory.ForceReanchor()
     local applyElements = UF.ApplyElementsToFrame
     local config = UF.Config
-    if type(applyElements) == "function" and type(UF.ForEachFrame) == "function"
-      and config and type(config.GetSpec) == "function" then
+    if config then
       UF.ForEachFrame(function(frame)
         local spec = frame and config.GetSpec(frame.MSUFUnitKey)
         if spec then
@@ -1337,7 +1327,7 @@ local function FlushLateAnchorReanchor(forcePosition)
   local db = MSUF_DB
   local GF = MSUF.GF
   if type(db) == "table" and HasGroupLateAnchorConfig(db)
-    and GF and type(GF.RefreshHeaderLayout) == "function" then
+    and GF then
     GF.RefreshHeaderLayout()
   end
   return true
@@ -1465,14 +1455,12 @@ do
   bossPixelEvents:SetScript("OnEvent", function()
     Dep("MSUF_UpdatePixelPerfect")()
     Factory.ForceReanchor()
-    if MSUF.GF and type(MSUF.GF.RefreshHeaderLayout) == "function" then
+    if MSUF.GF then
       MSUF.GF.RefreshHeaderLayout()
     end
     RefreshBossPhysicalGeometry()
-    if type(UF.RefreshBorders) == "function" then
-      UF.RefreshBorders("boss")
-      UF.RefreshBorders("arena")
-    end
+    UF.RefreshBorders("boss")
+    UF.RefreshBorders("arena")
     Dep("MSUF_ApplyBossCastbarPositionSetting")(false)
     Dep("MSUF_ApplyArenaCastbarPositionSetting")(false)
   end)

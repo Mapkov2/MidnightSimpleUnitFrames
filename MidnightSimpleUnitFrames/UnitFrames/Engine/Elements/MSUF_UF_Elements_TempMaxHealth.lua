@@ -2,12 +2,12 @@ local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_TempMaxHealth.lua")
 
 local C = MSUF.UFBarTextCommon
-local UF = C and C.UF or MSUF.UF
+local UF = C.UF
 if not UF then return end
 
-local CreateFrame = C and C.CreateFrame or CreateFrame
+local CreateFrame = C.CreateFrame or CreateFrame
 local GetUnitTotalModifiedMaxHealthPercent = GetUnitTotalModifiedMaxHealthPercent
-local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
+local WHITE = C.WHITE or "Interface\\Buttons\\WHITE8X8"
 
 local TempMaxHealth = {}
 local EVENTS = { "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" }

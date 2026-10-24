@@ -747,7 +747,7 @@ end
 --- behavior; false means Arena scope without a readable fixed size, which must
 --- fail open to SecureGroupHeader's native roster path.
 local function ArenaPartyExpectedCompanionCount()
-  if type(GF.IsArenaPartyContext) ~= "function" or GF.IsArenaPartyContext() ~= true then
+  if GF.IsArenaPartyContext() ~= true then
     return nil
   end
 
@@ -1870,7 +1870,6 @@ function GF.SetupHeader(key, kind)
       reused = true
     end
   end
-
 
   if not header then
     header = CreateSecureHeader(HeaderName(key), anchor, key == "raid")

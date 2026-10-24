@@ -41,7 +41,7 @@ local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
 local ABSORB_DISPLAY = GF.ABSORB_DISPLAY_MODES
 
 local function PVPIndicatorContextActive()
-  return UF and type(UF.PVPIndicatorContextActive) == "function" and UF.PVPIndicatorContextActive() == true
+  return UF and UF.PVPIndicatorContextActive() == true
 end
 -- Classic's PvP context follows the player's own flag, which flips in combat:
 -- compile the icon whenever configured and let Runtime.UpdatePVP gate it on the
@@ -97,11 +97,9 @@ local function AuraIconScale(value)
 end
 
 local function ResolveTexture(resolver, kind)
-  if type(resolver) == "function" then
-    local texture = resolver(kind)
-    if type(texture) == "string" and texture ~= "" then
-      return texture
-    end
+  local texture = resolver(kind)
+  if type(texture) == "string" and texture ~= "" then
+    return texture
   end
   return WHITE
 end

@@ -16,7 +16,6 @@ local Providers = {
 -- Bind mandatory factories once; report both the consumer and received shape.
 local function RequireFactory(key)
   local factories = MSUF.UFModuleFactories
-  assert(type(factories) == "table", "Elements/MSUF_UF_Elements_Prediction.lua: required UF factory registry for " .. key)
   local factory = factories[key]
   local kind = type(factory)
   assert(kind == "function", "Elements/MSUF_UF_Elements_Prediction.lua: required UF provider " .. key .. " (expected function, got " .. kind .. ")")
@@ -505,7 +504,6 @@ local function FullHealthAlpha(unit)
   return UnitHealthPercent(unit, true, curve)
 end
 
-
 local PositionOverAbsorbGlow = RequireFactory("PredictionGlow")(
   CreateFrame, PixelLayoutRegion, OVER_ABSORB_TEXTURE, OVER_ABSORB_GLOW_W, OVER_ABSORB_GLOW_OFFSET, issecretvalue
 )
@@ -536,7 +534,6 @@ local function SetOverAbsorbAlpha(holder, alpha, secret)
     holder._msufOverAbsorbAlphaPlain = true
   end
 end
-
 
 local function ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
   local hpSecret = issecretvalue(hp) == true
@@ -626,13 +623,41 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   return true
 end
 
+-- Replaces the shortcut's existing ungate call, including its alpha cache and shown sink.
+local function ShowFullHealthStripe(frame, holder, unit)
+  if frame._msufPredictionFullHealthAlphaReady ~= true
+    or frame._msufPredictionFullHealthAlphaDirty == true
+    or frame._msufPredictionFullHealthAlphaUnit ~= unit then
+    -- Inline the reader too: its nil/error path never paid an ungate call.
+    local alpha
+    if UnitHealthPercent and unit then
+      local curve = overAbsorbFullHealthCurve
+      if not curve then curve = EnsureFullHealthCurve() end
+      if curve then alpha = UnitHealthPercent(unit, true, curve) end
+    end
+    local alphaSecret = issecretvalue(alpha) == true
+    if not alphaSecret and alpha == nil then HideOverAbsorbGlow(frame) return end
+    SetOverAbsorbAlpha(holder, alpha, alphaSecret)
+    frame._msufPredictionFullHealthAlphaReady = true
+    frame._msufPredictionFullHealthAlphaDirty = nil
+    frame._msufPredictionFullHealthAlphaUnit = unit
+  end
+  if holder._msufOverAbsorbGlowGated == true then
+    local glow = holder._msufOverAbsorbGlowTexture
+    if glow then glow:SetAlpha(1) end
+    holder._msufOverAbsorbGlowGated = nil
+  end
+  if holder._msufShown ~= true then
+    holder:SetShown(true)
+    holder._msufShown = true
+  end
+end
+
 -- Existing budget-sensitive painter: no extra phase dispatch on exported Update.
 -- hot path: kept whole (perf rule)
 local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refreshFullHealthAlpha,
   writeAbsorbValue, knownAbsorbSecret)
-  if frame and refreshFullHealthAlpha == true then
-    frame._msufPredictionFullHealthAlphaDirty = true
-  end
+  if frame and refreshFullHealthAlpha == true then frame._msufPredictionFullHealthAlphaDirty = true end
   local overAbsorbEnabled = frame and frame._msufPredictionOverAbsorbOverlay == true
   local fullHealthStripeEnabled = frame and frame._msufPredictionFullHealthStripe == true
   if not (frame and (overAbsorbEnabled or fullHealthStripeEnabled)) then
@@ -640,9 +665,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     return
   end
   local absorbSecret = knownAbsorbSecret
-  if absorbSecret == nil then
-    absorbSecret = issecretvalue(absorb) == true
-  end
+  if absorbSecret == nil then absorbSecret = issecretvalue(absorb) == true end
   local reverse = frame._msufPredictionHpReverse == true
   local hpBar = frame.hpBar or frame.Health
   local holder = frame.overAbsorbGlowBar
@@ -671,10 +694,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     end
   end
   if not fullHealthStripeEnabled then
-    if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
-      HideOverAbsorbGlow(frame)
-      return
-    end
+    if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then HideOverAbsorbGlow(frame) return end
     if absorbSecret or issecretvalue(hp) == true or issecretvalue(maxHP) == true then
       if not (holder and hpBar
           and holder._msufOverAbsorbReverse == reverse
@@ -696,10 +716,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       local gateValue = holder._msufOverAbsorbValue
       knownZero = type(gateValue) ~= "number" or gateValue <= 0
     end
-    if knownZero then
-      HideOverAbsorbGlow(frame)
-      return
-    end
+    if knownZero then HideOverAbsorbGlow(frame) return end
 
     if writeAbsorbValue == true
       and absorbSecret
@@ -719,42 +736,16 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     end
   end
 
-  if cfg and cfg.test ~= true
-    and fullHealthStripeEnabled
+  if fullHealthStripeEnabled and cfg and cfg.test ~= true
     and not overAbsorbEnabled
     and issecretvalue(unit) ~= true
     and (issecretvalue(hp) == true or issecretvalue(maxHP) == true)
     and holder and hpBar
     and holder._msufOverAbsorbReverse == reverse
     and holder._msufOverAbsorbAnchor == hpBar then
-    if writeAbsorbValue == true
-      and not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
-      HideOverAbsorbGlow(frame)
-      return
-    end
-    local alphaReady = frame._msufPredictionFullHealthAlphaReady == true
-      and frame._msufPredictionFullHealthAlphaDirty ~= true
-      and frame._msufPredictionFullHealthAlphaUnit == unit
-    if not alphaReady then
-      local alpha = FullHealthAlpha(unit)
-      local alphaSecret = issecretvalue(alpha) == true
-      if not alphaSecret and alpha == nil then
-        HideOverAbsorbGlow(frame)
-        return
-      end
-      SetOverAbsorbAlpha(holder, alpha, alphaSecret)
-      frame._msufPredictionFullHealthAlphaReady = true
-      frame._msufPredictionFullHealthAlphaDirty = nil
-      frame._msufPredictionFullHealthAlphaUnit = unit
-    end
-    UngateOverAbsorbGlow(holder)
-    if holder._msufShown ~= true then
-      holder:SetShown(true)
-      holder._msufShown = true
-    end
+    ShowFullHealthStripe(frame, holder, unit)
     return
   end
-
   local hpSecret, maxSecret
   hp, maxHP, hpSecret, maxSecret = ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
   if not (fullHealthStripeEnabled and writeAbsorbValue ~= true)
@@ -773,57 +764,38 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     if overAbsorbEnabled and ShowProtectedOverAbsorb(frame, holder, unit, fullHealthStripeEnabled) then
       return
     end
-    if fullHealthStripeEnabled then
-      local alphaReady = frame._msufPredictionFullHealthAlphaReady == true
-        and frame._msufPredictionFullHealthAlphaDirty ~= true
-        and issecretvalue(unit) ~= true
-        and frame._msufPredictionFullHealthAlphaUnit == unit
-      if not alphaReady then
-        local alpha, alphaSecret
-        if not hpSecret and not maxSecret and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
-          alpha = hp >= maxHP and 1 or 0
-          alphaSecret = false
-        else
-          alpha = FullHealthAlpha(unit)
-          alphaSecret = issecretvalue(alpha) == true
-        end
-        if not alphaSecret and alpha == nil then
-          HideOverAbsorbGlow(frame)
-          return
-        end
-        SetOverAbsorbAlpha(holder, alpha, alphaSecret)
-        frame._msufPredictionFullHealthAlphaReady = true
-        frame._msufPredictionFullHealthAlphaDirty = nil
-        frame._msufPredictionFullHealthAlphaUnit = issecretvalue(unit) ~= true and unit or nil
+    if not fullHealthStripeEnabled then HideOverAbsorbGlow(frame) return end
+    local alphaReady = frame._msufPredictionFullHealthAlphaReady == true
+      and frame._msufPredictionFullHealthAlphaDirty ~= true
+      and issecretvalue(unit) ~= true
+      and frame._msufPredictionFullHealthAlphaUnit == unit
+    if not alphaReady then
+      local alpha, alphaSecret
+      if not hpSecret and not maxSecret and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
+        alpha = hp >= maxHP and 1 or 0
+        alphaSecret = false
+      else
+        alpha = FullHealthAlpha(unit)
+        alphaSecret = issecretvalue(alpha) == true
       end
-      if frame._msufPredictionFullHealthAlphaReady == true then
-        UngateOverAbsorbGlow(holder)
-        if holder._msufShown ~= true then
-          holder:SetShown(true)
-          holder._msufShown = true
-        end
-        return
-      end
+      if not alphaSecret and alpha == nil then HideOverAbsorbGlow(frame) return end
+      SetOverAbsorbAlpha(holder, alpha, alphaSecret)
+      frame._msufPredictionFullHealthAlphaReady = true
+      frame._msufPredictionFullHealthAlphaDirty = nil
+      frame._msufPredictionFullHealthAlphaUnit = issecretvalue(unit) ~= true and unit or nil
     end
-    HideOverAbsorbGlow(frame)
-    return
+  else
+    if type(hp) ~= "number" or type(maxHP) ~= "number" or maxHP <= 0 then HideOverAbsorbGlow(frame) return end
+    local incoming = frame._msufPredictionIncoming
+    if issecretvalue(incoming) == true or type(incoming) ~= "number" or incoming < 0 then incoming = 0 end
+    local atFullHealth = hp >= maxHP
+    local show = fullHealthStripeEnabled and atFullHealth
+    if not show and not atFullHealth and overAbsorbEnabled then
+      show = (hp + incoming + absorb) >= maxHP or (hp + absorb) >= maxHP
+    end
+    if not show then HideOverAbsorbGlow(frame) return end
+    SetOverAbsorbAlpha(holder, 1, false)
   end
-  if type(hp) ~= "number" or type(maxHP) ~= "number" or maxHP <= 0 then
-    HideOverAbsorbGlow(frame)
-    return
-  end
-  local incoming = frame._msufPredictionIncoming
-  if issecretvalue(incoming) == true or type(incoming) ~= "number" or incoming < 0 then incoming = 0 end
-  local atFullHealth = hp >= maxHP
-  local show = fullHealthStripeEnabled and atFullHealth
-  if not show and not atFullHealth and overAbsorbEnabled then
-    show = (hp + incoming + absorb) >= maxHP or (hp + absorb) >= maxHP
-  end
-  if not show then
-    HideOverAbsorbGlow(frame)
-    return
-  end
-  SetOverAbsorbAlpha(holder, 1, false)
   UngateOverAbsorbGlow(holder)
   if holder._msufShown ~= true then
     holder:SetShown(true)
