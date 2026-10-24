@@ -1146,8 +1146,8 @@ do
         _lastConfigCombatMessage = now
 
         local msg = "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."
-        local tr = MSUF and MSUF.Translate
-        if type(tr) == "function" then msg = tr(msg) or msg end
+        local tr = MSUF.Translate
+        msg = tr(msg) or msg
         local shownInline = false
         local m2 = (MSUF and MSUF.MSUF2) or _G.MSUF2
         if m2 and type(m2.ShowStatusFeedback) == "function" then
@@ -1300,7 +1300,7 @@ local function CooldownAnchorSupported()
   local supported = _G.MSUF_IsCooldownAnchorSupported
   if type(supported) == "function" then return supported() == true end
   local client = MSUF.Client
-  return type(client) == "table" and client.HostsCooldownManager == true
+  return client.HostsCooldownManager == true
 end
 U.CooldownAnchorSupported = CooldownAnchorSupported
 ExportPublic("MSUF_CooldownAnchorSupported", CooldownAnchorSupported)

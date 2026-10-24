@@ -63,7 +63,7 @@ local function BuildTooltip(tt, owner, opts)
     --- Version, from the one shared accessor in Game/Shared/Initialize.lua: it
     --- is resolved once from the TOC this client loaded, never asked again.
     local getVersion = MSUF.GetAddonVersion
-    local version = type(getVersion) == "function" and getVersion() or nil
+    local version = getVersion()
     if type(version) == "string" and version ~= "" then
         local displayVersion = opts.versionLabel and (Tr("Version:") .. " " .. version) or (version:match("^%d") and ("v" .. version) or version)
         tt:AddLine(displayVersion, 0.6, 0.6, 0.6)
@@ -283,7 +283,7 @@ local function MSUF_SetMinimapIconPosition(value)
     g.minimapIconDB.minimapPos = value
     if usingLDB and DBIcon and type(DBIcon.Refresh) == "function" then
         DBIcon:Refresh(DATA_NAME, g.minimapIconDB)
-    elseif type(fallbackRepos) == "function" then
+    elseif fallbackRepos then
         fallbackRepos()
     end
     return true

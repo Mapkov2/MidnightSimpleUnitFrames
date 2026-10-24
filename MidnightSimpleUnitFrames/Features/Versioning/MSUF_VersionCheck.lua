@@ -83,7 +83,7 @@ local function ReadMyVersion()
     -- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
     -- the version is resolved once from the TOC this client loaded.
     local getVersion = MSUF.GetAddonVersion
-    local ver = type(getVersion) == "function" and getVersion() or nil
+    local ver = getVersion()
     if type(ver) == "string" and ver ~= "" then
         local number, normalized, parts = VersionToNumber(ver)
         myVersionStr   = normalized or ver

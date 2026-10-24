@@ -161,10 +161,7 @@ end
 local function DispatchSlashAfterLoad(msg)
     if not EnsureOptionsLoaded("slash:/msuf") then return false end
     local commands = MSUF.SlashCommands
-    if type(commands) == "table" and type(commands.Dispatch) == "function" then
-        return commands.Dispatch(msg)
-    end
-    return menu.Open()
+    return commands.Dispatch(msg)
 end
 
 --- Keep the established `/msuf help` surface complete even when the very
@@ -184,7 +181,6 @@ end
 
 local function RegisterDeferredOptionCommands()
     local commands = MSUF.SlashCommands
-    if type(commands) ~= "table" or type(commands.Register) ~= "function" then return end
 
     local specs = {
         {
@@ -240,7 +236,7 @@ local function RegisterDeferredOptionCommands()
         entry._msufOptionsLODDeferred = true
         entry.run = function(rest, fullMessage)
             if not EnsureOptionsLoaded("slash:/msuf " .. spec.name) then return false end
-            local implementation = type(commands.Get) == "function" and commands.Get(spec.name) or nil
+            local implementation = commands.Get(spec.name)
             if type(implementation) ~= "table"
                 or implementation._msufOptionsLODDeferred == true
                 or type(implementation.run) ~= "function"
@@ -260,18 +256,17 @@ local function DispatchSlash(msg)
     msg = tostring(msg or "")
     local word = msg:match("^%s*(%S+)")
     local commands = MSUF.SlashCommands
-    local entry = word and type(commands) == "table"
-        and type(commands.Get) == "function" and commands.Get(word) or nil
+    local entry = word and commands.Get(word) or nil
     --- Core-owned commands do not need the options UI. Keep them genuinely
     --- lightweight; `help` is the exception because its established output
     --- includes Menu2-owned commands after the Options module registers them.
-    if entry and tostring(word):lower() ~= "help" and type(commands.Dispatch) == "function" then
+    if entry and tostring(word):lower() ~= "help" then
         return commands.Dispatch(msg)
     end
     --- Preserve already-loaded core diagnostics in combat without attempting a
     --- new addon load. Menu/page/search/edit commands still use the established
     --- configuration-lock message.
-    if ConfigurationLocked() and entry and type(commands.Dispatch) == "function" then
+    if ConfigurationLocked() and entry then
         return commands.Dispatch(msg)
     end
     return DispatchSlashAfterLoad(msg)

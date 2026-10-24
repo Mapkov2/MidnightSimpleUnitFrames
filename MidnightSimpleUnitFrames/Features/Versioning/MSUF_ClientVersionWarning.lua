@@ -39,7 +39,7 @@ local Tr = MSUF.Translate
 local interfaceNumber
 do
     local client = MSUF.Client
-    local interface = type(client) == "table" and client.Interface or nil
+    local interface = client.Interface
     interfaceNumber = type(interface) == "number" and interface or nil
 end
 
@@ -52,7 +52,7 @@ do
     local client = MSUF.Client
     local addOns = C_AddOns
     local isAddOnLoaded = type(addOns) == "table" and addOns.IsAddOnLoaded or nil
-    hasNativeAuraRuntime = (type(client) == "table" and client.IsForever == true)
+    hasNativeAuraRuntime = (client.IsForever == true)
         or (type(isAddOnLoaded) == "function" and isAddOnLoaded("Blizzard_AuraContainer") == true)
 end
 local isLegacyClient = (interfaceNumber ~= nil) and (interfaceNumber < MIN_INTERFACE)

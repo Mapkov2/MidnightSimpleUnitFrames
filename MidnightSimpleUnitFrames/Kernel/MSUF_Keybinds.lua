@@ -47,11 +47,8 @@ end
 --- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC).
 --- The menu language is known only once the saved locale is read at
 --- ADDON_LOADED, so the translated labels are set again then.
-local function UntranslatedLabel(text)
-    return text
-end
 local function ApplyBindingLabels()
-    local translate = type(MSUF.Translate) == "function" and MSUF.Translate or UntranslatedLabel
+    local translate = MSUF.Translate
     BINDING_HEADER_MSUF_HEADER = translate("Midnight Simple Unit Frames")
     BINDING_NAME_MSUF_TOGGLE_OPTIONS = translate("Toggle MSUF Options")
     BINDING_NAME_MSUF_TOGGLE_EDITMODE = translate("Toggle MSUF Edit Mode")
@@ -69,9 +66,7 @@ local function ApplyBindingLabels()
     _G["BINDING_NAME_CLICK MSUF_UnitMenuPlayer:LeftButton"] = translate("Open player menu")
 end
 ApplyBindingLabels()
-if type(MSUF.RegisterLocaleCallback) == "function" then
-    MSUF.RegisterLocaleCallback("MSUF_Keybinds", ApplyBindingLabels)
-end
+MSUF.RegisterLocaleCallback("MSUF_Keybinds", ApplyBindingLabels)
 local MSUF_BINDING_COMMANDS = {
     "MSUF_TOGGLE_OPTIONS",
     "MSUF_TOGGLE_EDITMODE",

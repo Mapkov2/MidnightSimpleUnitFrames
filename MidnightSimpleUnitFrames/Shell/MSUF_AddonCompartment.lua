@@ -2,19 +2,19 @@
 --- Zero overhead: no events, no OnUpdate, only fires on user click/hover.
 
 local _, MSUF = ...
-local API = MSUF.MinimapButton or {}
+local API = MSUF.MinimapButton
 
 function MSUF_AddonCompartment_OnClick(_, btn)
     if btn == "RightButton" then
-        if type(API.ToggleEditMode) == "function" then API.ToggleEditMode() end
+        API.ToggleEditMode()
         return
     end
-    if type(API.ToggleOptionsWindow) == "function" then API.ToggleOptionsWindow() end
+    API.ToggleOptionsWindow()
 end
 
 function MSUF_AddonCompartment_OnEnter(_, menuButtonFrame)
     local tt = GameTooltip
-    if not (tt and type(API.BuildTooltip) == "function") then return end
+    if not tt then return end
     API.BuildTooltip(tt, menuButtonFrame, {
         versionLabel = true,
         blankAfterVersion = false,

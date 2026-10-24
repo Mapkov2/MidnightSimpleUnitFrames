@@ -35,8 +35,7 @@ local IS_FOREVER = MSUF.Client.IsForever == true
 --- client without the rule or the API answers nil, which counts as allowed.
 local function EditModeRuleBlocked()
     local client = MSUF.Client
-    return type(client) == "table" and type(client.IsGameRuleActive) == "function"
-        and client.IsGameRuleActive("EditModeDisabled") == true
+    return client.IsGameRuleActive("EditModeDisabled") == true
 end
 
 local OWNER, SETTING = "MSUF.Blizzard", "blizzardEditModeIntegration"
@@ -1172,8 +1171,7 @@ local Add = MSUF.Require("MSUF_EM2", CALLER).ExternalProviders.CreateElementRegi
 local layoutEvents
 local function SetLayoutEventsEnabled(enabled)
     local client = MSUF.Client
-    if type(client) == "table" and type(client.SupportsEvent) == "function"
-        and not client.SupportsEvent("EDIT_MODE_LAYOUTS_UPDATED") then return end
+    if not client.SupportsEvent("EDIT_MODE_LAYOUTS_UPDATED") then return end
     if not layoutEvents then
         if not enabled or type(CreateFrame) ~= "function" then return end
         layoutEvents = CreateFrame("Frame")

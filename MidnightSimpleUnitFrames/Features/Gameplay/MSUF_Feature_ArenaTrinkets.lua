@@ -643,7 +643,7 @@ end
 -- Defensive: Client.UnsupportedUnits marks arena absent on Classic Era, whose
 -- TOC still loads this module. The trinket export stays, but no arena event is
 -- subscribed and no relay is attached there.
-if not (type(Client.SupportsUnit) == "function" and Client.SupportsUnit("arena1") == false) then
+if Client.SupportsUnit("arena1") ~= false then
     WireEvents()
 end
 

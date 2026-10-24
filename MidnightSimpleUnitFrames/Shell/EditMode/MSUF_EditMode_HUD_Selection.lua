@@ -100,7 +100,7 @@ local COMPONENT_LABEL = {
 }
 
 local function CurrentSelectionKey()
-    local key = (EM2.State and EM2.State.GetUnitKey and EM2.State.GetUnitKey()) or PublicGlobals.MSUF_CurrentEditUnitKey
+    local key = EM2.State.GetUnitKey() or PublicGlobals.MSUF_CurrentEditUnitKey
     if not key and EM2.Focus and EM2.Focus.GetSelection then
         key = EM2.Focus.GetSelection()
     end
@@ -145,7 +145,7 @@ end
 
 local function SelectionValues(key, component, slot)
     if not key then return HelpText("No selection") end
-    local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
+    local cfg = EM2.Registry.Get(key)
     if cfg and cfg.externalPublicElement == true then
         local external = EM2.ExternalElements
         if external and type(external.GetInspectorValues) == "function" then
@@ -173,7 +173,7 @@ local function SelectionValues(key, component, slot)
 frame = resolved
 end
     end
-    if frame and type(U.FramePositionValues) == "function" then
+    if frame then
         local x, y, width, height = U.FramePositionValues(frame)
         if x ~= nil then return label, x, y, width, height end
     end
@@ -234,7 +234,7 @@ function HUD.ResetCurrentPosition()
         HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn")
         return
     end
-    local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
+    local cfg = EM2.Registry.Get(key)
     if cfg and cfg.externalPublicElement == true then
         local external = EM2.ExternalElements
         if external and type(external.Reset) == "function" and external.Reset(key) then

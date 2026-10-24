@@ -230,7 +230,7 @@ end
 
 local function ReadVisiblePosition(unit, kind, currentX, currentY)
     local frame = ActiveLaneFrame(unit, kind)
-    if frame and type(FramePositionValues) == "function" then
+    if frame then
         local x, y = FramePositionValues(frame)
         if x ~= nil and y ~= nil then return x, y end
     end
@@ -239,7 +239,7 @@ end
 
 local function TranslateVisiblePosition(unit, kind, currentX, currentY, displayX, displayY)
     local frame = ActiveLaneFrame(unit, kind)
-    if frame and type(TranslateFramePosition) == "function" then
+    if frame then
         return TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
     end
     local x, y = tonumber(displayX) or currentX, tonumber(displayY) or currentY
@@ -369,11 +369,8 @@ local function Apply()
     local currentSize = ReadValue(sourceLayout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize)
     local currentSpacing = ReadValue(sourceLayout, sh, spec.spacingKey, spec.spacingKey,
         ReadValue(sourceLayout, sh, "spacing", "spacing", 2))
-    local visibleX, visibleY
     local positionFrame = ActiveLaneFrame(pf.unit, activeGroup)
-    if type(FramePositionValues) == "function" then
-        visibleX, visibleY = FramePositionValues(positionFrame)
-    end
+    local visibleX, visibleY = FramePositionValues(positionFrame)
     local displayX = ReadBox(pf.xBox, visibleX ~= nil and visibleX or currentX)
     local displayY = ReadBox(pf.yBox, visibleY ~= nil and visibleY or currentY)
     local spacing = ReadBox(pf.spacingBox, currentSpacing, 0, 64)
@@ -430,7 +427,7 @@ local function Apply()
     end
 
     local x, y
-    if positionFrame and type(TranslateFramePosition) == "function" then
+    if positionFrame then
         x, y = TranslateFramePosition(positionFrame, currentX, currentY, displayX, displayY)
     else
         x, y = displayX, displayY
@@ -589,10 +586,7 @@ function Sync()
     else
         Quick.SetBoxText(pf.spacingBox,
             ReadValue(layout, sh, spec.spacingKey, spec.spacingKey, ReadValue(layout, sh, "spacing", "spacing", 2)))
-        local x, y
-        if type(FramePositionValues) == "function" then
-            x, y = FramePositionValues(ActiveLaneFrame(pf.unit, activeGroup))
-        end
+        local x, y = FramePositionValues(ActiveLaneFrame(pf.unit, activeGroup))
         Quick.SetBoxText(pf.xBox, x ~= nil and x or ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
         Quick.SetBoxText(pf.yBox, y ~= nil and y or ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
         Quick.SetBoxText(pf.sizeBox, ReadValue(layout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize))

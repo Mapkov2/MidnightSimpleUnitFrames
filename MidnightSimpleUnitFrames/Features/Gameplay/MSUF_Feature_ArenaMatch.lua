@@ -481,7 +481,7 @@ end
 -- TOC still loads this module. The helpers stay exported, but no arena event
 -- is subscribed there.
 local client = MSUF.Client
-if not (client and type(client.SupportsUnit) == "function" and client.SupportsUnit("arena1") == false) then
+if client.SupportsUnit("arena1") ~= false then
     WireEvents()
 end
 

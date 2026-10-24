@@ -217,8 +217,8 @@ local function Prepare(owner, element)
     local controls, controlsReason = PrepareControls(element.extraControls, owner)
     if controlsReason then return nil, controlsReason end
     local key = Key(owner, element.id)
-    if records[key] or (EM2.Registry.Get and EM2.Registry.Get(key)) then return nil, "element_already_registered" end
-    local collision = element.key and EM2.Registry.Get and EM2.Registry.Get(element.key)
+    if records[key] or EM2.Registry.Get(key) then return nil, "element_already_registered" end
+    local collision = element.key and EM2.Registry.Get(element.key)
     if collision and not collision.externalPublicElement then return nil, "element_already_registered" end
     local record = {}
     for field, value in pairs(element) do record[field] = value end
@@ -382,7 +382,7 @@ function API.Open(owner, id)
     if not record then return false, "not_registered" end
     if not IsActive() or InCombat() then return false, "edit_mode_inactive" end
     if not Frame(record) then return false, "frame_unavailable" end
-    if EM2.State and EM2.State.SetUnitKey then EM2.State.SetUnitKey(record.key) end
+    EM2.State.SetUnitKey(record.key)
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(record.key, nil, nil, { source = "public-api", menu = false })
     end
@@ -401,7 +401,6 @@ function API.EnterEditMode(owner, id)
     if InCombat() then return false, "combat_lockdown" end
     if not Frame(record) then return false, "frame_unavailable" end
     local state = EM2.State
-    if not (state and type(state.Enter) == "function") then return false, "edit_mode_unavailable" end
     if state.Enter(record.key, { provider = "msuf" }) ~= true then return false, "edit_mode_unavailable" end
     return API.Open(owner, id)
 end
@@ -606,7 +605,7 @@ function External.GetInspectorValues(key)
     local record = records[key]
     if not record then return nil end
     local frame = External.GetPositionFrame(key)
-    if frame and type(Util.FramePositionValues) == "function" then
+    if frame then
         local x, y, width, height = Util.FramePositionValues(frame)
         if x ~= nil then return record.label, x, y, width, height end
     end

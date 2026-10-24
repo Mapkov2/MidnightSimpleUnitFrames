@@ -167,18 +167,7 @@ function UI.GetMenu2Theme()
 end
 
 local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then
-        local translated = MSUF.Translate(text)
-        if translated ~= nil then return translated end
-    end
-    local locale = MSUF.L
-    if type(locale) == "table" and locale[text] ~= nil then return locale[text] end
-    if type(MSUF.TR) == "function" then
-        local translated = MSUF.TR(text)
-        if translated ~= nil then return translated end
-    end
-    return text
+    return MSUF.Translate(text)
 end
 UI.Tr = UI.Tr or Tr
 

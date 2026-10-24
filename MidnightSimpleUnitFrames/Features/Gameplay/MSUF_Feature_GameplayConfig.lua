@@ -17,9 +17,7 @@ local function RefreshLocaleText()
     L_GAMEPLAY_COLORS_TIP = Tr("Tip: Gameplay colors are in Colors > Gameplay")
 end
 RefreshLocaleText()
-if type(MSUF.RegisterLocaleCallback) == "function" then
-    MSUF.RegisterLocaleCallback("MSUF_GameplayConfig", RefreshLocaleText)
-end
+MSUF.RegisterLocaleCallback("MSUF_GameplayConfig", RefreshLocaleText)
 
 local function Default(g, key, value)
     if g[key] == nil then g[key] = value end

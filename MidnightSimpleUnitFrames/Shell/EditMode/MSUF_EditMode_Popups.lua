@@ -448,11 +448,7 @@ local function Apply()
     if frame and conf.width and conf.height then
         frame:SetSize(conf.width, conf.height)
     end
-    if type(TranslateFramePosition) == "function" then
-        conf.offsetX, conf.offsetY = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
-    else
-        conf.offsetX, conf.offsetY = San(displayX, currentX), San(displayY, currentY)
-    end
+    conf.offsetX, conf.offsetY = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
     if frame and frame.ForceUpdate then frame:ForceUpdate("EM2_UNIT_POPUP") end
     --- Full layout re-apply (power bar embed, text anchors, borders, etc.)
     if sharedDetachedWidthSourceChanged then
@@ -486,10 +482,7 @@ function Sync()
     end
     if pf._titleFS then pf._titleFS:SetText(string.format(Tr("%s Frame"), Tr(UnitLabel(key)))) end
     local frame = FrameForUnitKey(key) or pf.parent
-    local x, y, width, height
-    if type(FramePositionValues) == "function" then
-        x, y, width, height = FramePositionValues(frame)
-    end
+    local x, y, width, height = FramePositionValues(frame)
     Quick.SetBoxText(pf.xBox,x ~= nil and x or San(conf.offsetX,0))
     Quick.SetBoxText(pf.yBox,y ~= nil and y or San(conf.offsetY,0))
     Quick.SetBoxText(pf.wBox,conf.width or width or (frame and frame:GetWidth()) or 250)

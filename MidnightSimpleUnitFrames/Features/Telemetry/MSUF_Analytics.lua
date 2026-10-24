@@ -239,7 +239,7 @@ local function CollectSessionSnapshot(target)
     -- version sanitizes to the empty string and adds no switch, exactly as the
     -- old GetAddOnMetadata guard around this block did.
     local getVersion = MSUF.GetAddonVersion
-    local versionKey = SanitizeMetricPart(type(getVersion) == "function" and getVersion() or nil)
+    local versionKey = SanitizeMetricPart(getVersion())
     if versionKey ~= "" then
         ApplySwitch(target, "Version_" .. versionKey, true)
     end

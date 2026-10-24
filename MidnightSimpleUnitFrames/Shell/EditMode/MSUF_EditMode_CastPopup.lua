@@ -205,14 +205,9 @@ local function Apply(mode)
     --- new geometry first, then translate the displayed X/Y fields back into
     --- the provider's saved anchor offsets.
     if mode ~= "position" then ReapplyCastbar(unit) end
-    if type(TranslateFramePosition) == "function" then
-        local changed
-        g[xKey], g[yKey], changed = TranslateFramePosition(CastbarFrame(unit), currentX, currentY, displayX, displayY)
-        if mode == "position" or changed then ReapplyCastbar(unit) end
-    else
-        g[xKey], g[yKey] = Quick.San(displayX, currentX), Quick.San(displayY, currentY)
-        ReapplyCastbar(unit)
-    end
+    local changed
+    g[xKey], g[yKey], changed = TranslateFramePosition(CastbarFrame(unit), currentX, currentY, displayX, displayY)
+    if mode == "position" or changed then ReapplyCastbar(unit) end
     if mode ~= "position" then SyncMenuAfterSizeWrite() end
     if pf and pf:IsShown() then Sync() end
 end
@@ -300,10 +295,7 @@ function Sync()
     local xKey, yKey = OffsetKeys(unit)
     local dx, dy = DefaultOffsets(unit)
     local w, h = EffectiveSize(g, unit)
-    local x, y
-    if type(FramePositionValues) == "function" then
-        x, y = FramePositionValues(CastbarFrame(unit))
-    end
+    local x, y = FramePositionValues(CastbarFrame(unit))
 
     if pf._titleFS then pf._titleFS:SetText(string.format(Quick.Tr("%s Castbar"), Quick.Tr(UnitLabel(unit)))) end
     Quick.SetBoxText(pf.xBox, x ~= nil and x or Quick.San(xKey and g[xKey], dx))
