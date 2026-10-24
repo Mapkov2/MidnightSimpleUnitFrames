@@ -1051,68 +1051,82 @@ function PainterBuild.ResourcesStrip(state)
             return button
         end
 
-        -- A bar background with its inset fill texture.
-        local function StripBar(row, y)
-            local bg = PixelLayoutRegion(row:CreateTexture(nil, "BORDER"))
-            bg:SetPoint("TOPLEFT", row, "TOPLEFT", 12, y)
-            bg:SetSize(barW, 18)
-            local fill = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
-            fill:SetPoint("TOPLEFT", bg, "TOPLEFT", 1, -1)
-            fill:SetSize(floor(barW * 0.62), 16)
-            return bg, fill
-        end
-
         local powerRow = StripButton(-2, 50, "Power Bar Colors", "colors_power", "Color")
         local powerLabel = Label(powerRow, "", 12, -4, barW, T.colors.text)
-        local powerBg, powerFill = StripBar(powerRow, -24)
-
+        local powerHost = PixelLayoutRegion(CreateFrame("Frame", nil, powerRow))
+        powerHost:SetPoint("TOPLEFT", powerRow, "TOPLEFT", 12, -24)
+        powerHost:SetSize(barW, 18)
+        local powerSurface = M.PreviewHelpers.NewRuntimeUnitSurface(powerHost, "player", { power = .62 }, function(spec)
+            spec.width, spec.height = barW, 18
+            spec.power.enabled, spec.power.detached, spec.power.height = true, false, 18
+        end)
         local resourceRow = StripButton(-66, 56, "Class Power Colors", "colors_class_power", "Color")
         local resourceLabel = Label(resourceRow, "", 12, -4, barW, T.colors.text)
-        local slots = {}
-        for i = 1, 11 do
-            local pill = PixelLayoutRegion(resourceRow:CreateTexture(nil, "ARTWORK"))
-            pill:SetSize(26, 13)
-            pill:SetPoint("TOPLEFT", resourceRow, "TOPLEFT", 12 + (i - 1) * 31, -28)
-            pill:Hide()
-            slots[i] = pill
+        local resourceHost = PixelLayoutRegion(CreateFrame("Frame", nil, resourceRow))
+        resourceHost:SetPoint("TOPLEFT", resourceRow, "TOPLEFT", 12, -28)
+        resourceHost:SetSize(barW, 22)
+        local roots, samples = {}, { {}, {} }
+        local function ResourceScene(index, spec, full)
+            local root = roots[index]
+            if not root then root = MSUF.GF.NewPreviewScene(resourceHost) roots[index] = root end
+            root:Activate()
+            local sample = samples[index]
+            M.ClassPowerPreview.SceneStatic(sample, spec, M.ClassPowerPreview.ClassForSpec(spec))
+            M.ClassPowerPreview.SceneValues(sample, spec, full and spec.segments or spec.value)
+            local scene = root:ClassPower({ sample = sample, playerWidth = barW, playerHeight = 22 })
+            local function FitResource()
+                local container = scene.CP.container
+                local split = preview.fullEnabled() and .5 or 1
+                container:SetScale(min(1, barW * split / max(1, container:GetWidth()), 22 / max(1, container:GetHeight())))
+                container:ClearAllPoints()
+                container:SetPoint("CENTER", resourceHost, "CENTER",
+                    split == .5 and (index == 1 and -barW * .25 or barW * .25) or 0, 0)
+            end
+            if not scene._msufStripViewport then
+                local refresh = scene.Refresh
+                function scene:Refresh()
+                    local result = refresh(self)
+                    if self.frame then FitResource() end
+                    return result
+                end
+                scene._msufStripViewport = true
+            end
+            FitResource()
         end
-        local resourceBarBg, resourceBarFill = StripBar(resourceRow, -26)
-
+        strip:HookScript("OnHide", function()
+            powerSurface.root:Deactivate()
+            for _, root in pairs(roots) do root:Deactivate() end
+        end)
+        powerSurface.afterPaint = function(frame, scene)
+            frame.hpBar:Hide()
+            frame.healthBackgroundBar:Hide()
+            if frame.healthLossTrail then frame.healthLossTrail:Hide() end
+            scene:SetLayerFilter({ nameText = false, hpText = false, powerText = false, portrait = false,
+                status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
+        end
         function strip.Update()
-            local pr, pg, pb = preview.power()
-            local br, bgc, bb = preview.powerBg()
-            powerFill:SetColorTexture(pr, pg, pb, 1)
-            powerBg:SetColorTexture(br, bgc, bb, 0.9)
+            if not strip:IsVisible() then return end
             T.SetTranslatedText(powerLabel, Tr("Power") .. " - " .. Tr(preview.powerLabel() or ""))
             T.SetTranslatedText(resourceLabel, Tr("Class Resource") .. " - " .. Tr(preview.resourceLabel() or ""))
-            local count = tonumber(preview.slotCount()) or 0
-            local slotsShown = count > 0
-            if slotsShown then
-                local shown = min(count, 10)
-                for i = 1, shown do
-                    local sr, sg, sb = preview.slot(i)
-                    slots[i]:SetColorTexture(sr, sg, sb, 1)
-                    slots[i]:Show()
-                end
-                local nextIndex = shown + 1
-                if preview.fullEnabled() and nextIndex <= 11 then
-                    local fr, fg, fb = preview.full()
-                    slots[nextIndex]:SetColorTexture(fr, fg, fb, 1)
-                    slots[nextIndex]:Show()
-                    nextIndex = nextIndex + 1
-                end
-                for i = nextIndex, 11 do slots[i]:Hide() end
-            else
-                for i = 1, 11 do slots[i]:Hide() end
+            local powerToken = M.colorsPowerToken or "MANA"
+            local powerType = 0
+            for key, token in pairs(MSUF.Require("MSUF_CP_CONST", FILE).POWER_TYPE_TOKENS) do if token == powerToken then powerType = key break end end
+            local frame = powerSurface:Refresh({ power = .62, powerType = powerType, powerToken = powerToken })
+            if frame then
+                frame.hpBar:Hide()
+                frame.healthBackgroundBar:Hide()
+                powerSurface.scene:SetLayerFilter({ nameText = false, hpText = false, powerText = false, portrait = false,
+                    status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
             end
-            resourceBarBg:SetShown(not slotsShown)
-            resourceBarFill:SetShown(not slotsShown)
-            if not slotsShown then
-                local rr, rg, rb = preview.resource()
-                local rbr, rbg, rbb = preview.resourceBg()
-                resourceBarFill:SetColorTexture(rr, rg, rb, 1)
-                resourceBarBg:SetColorTexture(rbr, rbg, rbb, 0.9)
+            local selected = M.colorsCPToken or "COMBO_POINTS"
+            local spec
+            for _, candidate in pairs(M.ClassPowerPreviewSpecs) do
+                if candidate.token == selected and (not spec or candidate.key < spec.key) then spec = candidate end
             end
+            spec = spec or M.GetClassPowerPreviewSpec()
+            ResourceScene(1, spec, false)
+            if preview.fullEnabled() then ResourceScene(2, spec, true)
+            elseif roots[2] then roots[2]:Deactivate() end
         end
         strip:Hide()
         state.resourcesStrip = strip

@@ -87,41 +87,47 @@ local function DetachedVisible()
     return DetachedWanted() and ((detachedPreview and not InCombatLockdown())
         or (IsGCDBarEnabled() and (not g.gcdBarCombatOnly or PlayerInCombat())))
 end
+local function CreateDetachedSurface(parent, name)
+    local frame = PixelLayoutRegion(CreateFrame("Frame", name, parent))
+    frame.unit, frame._msufDetachedGCD = "player", true
+    local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
+    bar:SetAllPoints(frame)
+    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    bar:SetStatusBarColor(.2, .75, 1, 1)
+    bar:SetMinMaxValues(0, 1)
+    frame.statusBar = bar
+    local background = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
+    background:SetAllPoints(bar)
+    background:SetColorTexture(.05, .05, .05, .8)
+    frame.castText = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY"))
+    frame.castText:SetPoint("LEFT", bar, "LEFT", 3, 0)
+    frame.timeText = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY"))
+    frame.timeText:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
+    frame.icon = PixelLayoutRegion(bar:CreateTexture(nil, "ARTWORK"))
+    frame.icon:SetPoint("RIGHT", bar, "LEFT", -2, 0)
+    frame.icon:SetTexCoord(.07, .93, .07, .93)
+    frame:Hide()
+    return frame
+end
+
 local function EnsureDetached()
     if not detachedFrame then
-        local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_DetachedGCDBar", UIParent))
+        local frame = CreateDetachedSurface(UIParent, "MSUF_DetachedGCDBar")
         Frames.Register("gcd", nil, frame)
         frame.unit, frame._msufDetachedGCD = "player", true
         frame:SetFrameStrata("MEDIUM")
         frame:EnableMouse(false)
-        local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
-        bar:SetAllPoints(frame)
-        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-        bar:SetStatusBarColor(.2, .75, 1, 1)
-        bar:SetMinMaxValues(0, 1)
-        frame.statusBar = bar
-        local background = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
-        background:SetAllPoints(bar)
-        background:SetColorTexture(.05, .05, .05, .8)
-        frame.castText = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY"))
-        frame.castText:SetPoint("LEFT", bar, "LEFT", 3, 0)
-        frame.timeText = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY"))
-        frame.timeText:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
-        frame.icon = PixelLayoutRegion(bar:CreateTexture(nil, "ARTWORK"))
-        frame.icon:SetPoint("RIGHT", bar, "LEFT", -2, 0)
-        frame.icon:SetTexCoord(.07, .93, .07, .93)
-        frame:Hide()
         detachedFrame = frame
     end
     return detachedFrame
 end
 --- Geometry, opacity and fonts follow the settings, not the GCD: only the
 --- settings, profile and Edit Mode paths pass layout = true.
-local function LayoutDetached(frame, g)
+local function LayoutDetached(frame, g, parent)
     local height = math.max(4, math.min(50, tonumber(g.gcdBarHeight) or 12))
     frame:SetSize(math.max(40, math.min(600, tonumber(g.gcdBarWidth) or 180)), height)
     frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", tonumber(g.gcdBarX) or 0, tonumber(g.gcdBarY) or -180)
+    frame:SetPoint("CENTER", parent or UIParent, "CENTER", tonumber(g.gcdBarX) or 0, tonumber(g.gcdBarY) or -180)
     frame:SetAlpha((tonumber(g.gcdBarOpacity) or 100) / 100)
     frame.icon:SetSize(height, height)
     -- The castbars' configured font; the size follows the bar height.
@@ -621,6 +627,28 @@ driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- Public API (menu + castbar apply pipeline)
 local Publish = PublicAPI.Publish
 
+GCD.CreateSurface = function(parent, detached)
+    if detached then return CreateDetachedSurface(parent) end
+    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parent, "BackdropTemplate"))
+    frame.unit, frame._msufPreviewScope, frame._msufIsPreview = "player", true, true
+    Frames.BuildPlayerCastbarElements(frame)
+    return frame
+end
+GCD.LayoutSurface = LayoutDetached
+GCD.PaintSample = function(frame, g)
+    if not frame._msufDetachedGCD then
+        Castbars.Visuals.RefreshCastbarFrame(frame, "player", g)
+        Player.PlayerCastbar_UpdateColorForInterruptible(frame)
+        if frame.latencyBar then frame.latencyBar:Hide() end
+    end
+    frame.statusBar:SetReverseFill(Utils.GetReverseFillSafe(frame, false) == true)
+    frame.statusBar:SetMinMaxValues(0, 1)
+    frame.statusBar:SetValue(.65)
+    Utils.CB_ApplyTexts(frame, nil, g.showGCDBarSpell ~= false and "GCD" or "", g.showGCDBarTime ~= false and "0.8" or "")
+    frame.icon:SetTexture(136243)
+    if frame._msufDetachedGCD then frame.icon:SetShown(g.showGCDBarSpell ~= false) end
+    frame:Show()
+end
 GCD.GCDBar_IsSupported = GCDBarSupported
 Publish("MSUF_GCDBar_IsSupported", GCD.GCDBar_IsSupported)
 GCD.GCDBar_SyncRegistration = SyncRegistration

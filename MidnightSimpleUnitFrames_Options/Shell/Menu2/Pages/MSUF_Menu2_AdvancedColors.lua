@@ -303,167 +303,21 @@ function M.ColorsBackgroundMode.SetColor(value)
         ApplyUnitframeColorWithReload()
     end
 end
--- Resolves the fixed Player sample class color from the just-edited DB/API values. The compiled
--- settings cache intentionally trails picker writes by one coalesced apply and would make the inline
--- preview appear stuck.
-local function PreviewClassRGB(db, classToken)
-    local classR, classG, classB
-    local colorsAPI = ColorAPI()
-    if classToken and type(colorsAPI.GetClassColor) == "function" then
-        classR, classG, classB = colorsAPI.GetClassColor(classToken)
-    end
-    if type(classR) ~= "number" or type(classG) ~= "number" or type(classB) ~= "number" then
-        local override = classToken and type(db.classColors) == "table" and db.classColors[classToken] or nil
-        classR, classG, classB = tonumber(override and (override.r or override[1])),
-            tonumber(override and (override.g or override[2])), tonumber(override and (override.b or override[3]))
-    end
-    if type(classR) ~= "number" or type(classG) ~= "number" or type(classB) ~= "number" then
-        local classColor = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
-        classR, classG, classB = classColor and classColor.r or 0.12, classColor and classColor.g or 0.62,
-            classColor and classColor.b or 0.95
-    end
-    return classR, classG, classB
-end
--- The health foreground color of the sample under the resolved mode, plus the gradient color the
--- background tint may reuse (nil unless the health or background mode is a gradient).
-local function PreviewHealthRGB(preview, general, healthMode, colorMode, pct, classR, classG, classB)
-    local gradientR, gradientG, gradientB
-    if healthMode == "gradient" or colorMode == "health_gradient" then
-        local gradientHealth = preview.gradientHealth or {}
-        gradientHealth.gradientLowR = tonumber(general.healthGradientLowR) or 1
-        gradientHealth.gradientLowG = tonumber(general.healthGradientLowG) or 0
-        gradientHealth.gradientLowB = tonumber(general.healthGradientLowB) or 0
-        gradientHealth.gradientMidR = tonumber(general.healthGradientMidR) or 1
-        gradientHealth.gradientMidG = tonumber(general.healthGradientMidG) or 1
-        gradientHealth.gradientMidB = tonumber(general.healthGradientMidB) or 0
-        gradientHealth.gradientHighR = tonumber(general.healthGradientHighR) or 0
-        gradientHealth.gradientHighG = tonumber(general.healthGradientHighG) or 1
-        gradientHealth.gradientHighB = tonumber(general.healthGradientHighB) or 0
-        preview.gradientHealth = gradientHealth
-        local common = MSUF.UFBarTextCommon
-        local model = MSUF.UFPreview and MSUF.UFPreview.Model or {}
-        if common and type(common.PreviewHealthGradientColor) == "function" then
-            gradientR, gradientG, gradientB = common.PreviewHealthGradientColor(gradientHealth, pct)
-        elseif type(model.GradientPreviewColor) == "function" then
-            gradientR, gradientG, gradientB = model.GradientPreviewColor(pct, gradientHealth)
-        end
-    end
-    local hr, hg, hb
-    if healthMode == "class" then
-        hr, hg, hb = classR, classG, classB
-    elseif healthMode == "gradient" and type(gradientR) == "number"
-        and type(gradientG) == "number" and type(gradientB) == "number" then
-        hr, hg, hb = gradientR, gradientG, gradientB
-    elseif healthMode == "unified" then
-        hr, hg, hb = tonumber(general.unifiedBarR) or 0.10, tonumber(general.unifiedBarG) or 0.60,
-            tonumber(general.unifiedBarB) or 0.90
-    else
-        local gray = tonumber(general.darkBarGray or general.darkBgBrightness) or 0.07
-        if gray > 1 then gray = gray / 100 end
-        gray = max(0, min(1, gray))
-        hr, hg, hb = tonumber(general.darkBarR) or gray, tonumber(general.darkBarG) or gray,
-            tonumber(general.darkBarB) or gray
-    end
-    return hr, hg, hb, gradientR, gradientG, gradientB
-end
 function M.RefreshHealthBackgroundInlinePreview(preview)
-    if type(preview) ~= "table" then return false end
-    local bar, backgroundBar, background = preview.bar, preview.backgroundBar, preview.background
-    if not (bar and backgroundBar and background) then return false end
-
-    local pct = tonumber(preview.healthFraction) or 0.62
-    pct = max(0, min(1, pct))
-    local db = EnsureDB()
-    local general = type(db.general) == "table" and db.general or {}
-    local bars = type(db.bars) == "table" and db.bars or {}
-    local player = type(db.player) == "table" and db.player or {}
-    local classToken
-    if type(UnitClass) == "function" then
-        local _, token = UnitClass("player")
-        classToken = token
-    end
-    local classTokenSecret = type(issecretvalue) == "function" and issecretvalue(classToken) == true
-    if classTokenSecret or type(classToken) ~= "string" or classToken == "" then classToken = nil end
-    local data = preview.data or {}
-    data.hp, data.isPlayer, data.class = pct, true, classToken
-    preview.data = data
-
-    local classR, classG, classB = PreviewClassRGB(db, classToken)
-    local colorMode = M.ColorsBackgroundMode.GetColor()
-    local healthMode = type(player.healthColorMode) == "string" and player.healthColorMode:lower() or nil
-    if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
-        healthMode = type(general.barMode) == "string" and general.barMode:lower() or nil
-        if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
-            healthMode = general.useClassColors == true and "class" or "dark"
-        end
-        if healthMode == "gradient" and general.enableHealthGradient == false then healthMode = "class" end
-    end
-
-    local hr, hg, hb, gradientR, gradientG, gradientB =
-        PreviewHealthRGB(preview, general, healthMode, colorMode, pct, classR, classG, classB)
-
-    local br, bg, bb, tintAlpha
-    local getTint = Opt.MSUF_GetBarBackgroundTintRGBA
-    if type(getTint) == "function" then
-        br, bg, bb, tintAlpha = getTint()
-    else
-        br, bg, bb, tintAlpha = tonumber(general.classBarBgR) or 0, tonumber(general.classBarBgG) or 0,
-            tonumber(general.classBarBgB) or 0, tonumber(general.classBarBgA) or 1
-        local darkTint = MSUF.Bars and MSUF.Bars._DarkTint
-        if type(darkTint) == "function" then br, bg, bb = darkTint(general, br, bg, bb) end
-    end
-
-    if colorMode == "match_health" then
-        local darkTint = MSUF.Bars and MSUF.Bars._DarkTint
-        if type(darkTint) == "function" then br, bg, bb = darkTint(general, hr, hg, hb)
-        else br, bg, bb = hr, hg, hb end
-    elseif colorMode == "class" then
-        if classToken then br, bg, bb = classR, classG, classB end
-    elseif colorMode == "health_gradient" then
-        br, bg, bb = gradientR or br, gradientG or bg, gradientB or bb
-    end
-
-    local backgroundAlpha = tonumber(player.hpBgAlpha)
-    if backgroundAlpha == nil then
-        local percent = tonumber(bars.barBackgroundAlpha)
-        backgroundAlpha = percent and (percent / 100) or tonumber(general.barBackgroundAlpha) or 0.9
-    end
-    backgroundAlpha = max(0, min(1, backgroundAlpha)) * max(0, min(1, tonumber(tintAlpha) or 1))
-    local foregroundAlpha = max(0, min(1, tonumber(player.hpBarAlpha) or 1))
-    local foregroundTexture = Req.MSUF_GetBarTexture() or "Interface\\Buttons\\WHITE8X8"
-    local backgroundTexture = Req.MSUF_GetBarBackgroundTexture() or foregroundTexture
-
-    if bar.SetMinMaxValues then bar:SetMinMaxValues(0, 1) end
-    if bar.SetValue then bar:SetValue(pct) end
-    if bar.SetStatusBarTexture then bar:SetStatusBarTexture(foregroundTexture) end
-    if bar.SetStatusBarColor then bar:SetStatusBarColor(hr, hg, hb, 1) end
-    local fillTexture = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
-    if fillTexture and fillTexture.SetAlpha then fillTexture:SetAlpha(foregroundAlpha) end
-    if background.SetTexture then background:SetTexture(backgroundTexture) end
-    if background.SetVertexColor then background:SetVertexColor(br, bg, bb, backgroundAlpha) end
-
-    local fillMode = M.ColorsBackgroundMode.GetFill()
-    if backgroundBar.SetMinMaxValues then backgroundBar:SetMinMaxValues(0, 1) end
-    if backgroundBar.SetReverseFill then backgroundBar:SetReverseFill(fillMode == "missing") end
-    local missingValue = fillMode == "missing" and (1 - pct) or 1
-    if backgroundBar.SetValue then backgroundBar:SetValue(missingValue) end
-
-    if preview.percent and preview.percent.SetText then preview.percent:SetText(floor((pct * 100) + 0.5) .. "%") end
-    if preview.mode and preview.mode.SetText then
-        local fillLabel = fillMode == "missing" and "Missing health only" or "Full bar"
-        local colorLabel = colorMode == "match_health" and "Match health bar"
-            or colorMode == "class" and "Class color"
-            or colorMode == "health_gradient" and "Health gradient" or "Custom tint"
-        local translate = M.TranslateText or M.Tr
-        if type(translate) == "function" then fillLabel, colorLabel = translate(fillLabel), translate(colorLabel) end
-        T.SetTranslatedText(preview.mode, fillLabel .. "  |  " .. colorLabel)
-    end
-    preview.resolvedFillMode, preview.resolvedColorMode = fillMode, colorMode
-    local resolved = preview.resolvedBackground or {}
-    resolved[1], resolved[2], resolved[3], resolved[4] = br, bg, bb, backgroundAlpha
-    preview.resolvedBackground = resolved
+    if not preview or not preview.surface then return false end
+    local _, class = UnitClass("player")
+    local frame = preview.surface:Refresh({ hp = preview.healthFraction or .62, class = class })
+    if not frame then return false end
+    preview.bar, preview.backgroundBar, preview.background = frame.hpBar, frame.healthBackgroundBar, frame.hpBarBG
+    local fill, color = M.ColorsBackgroundMode.GetFill(), M.ColorsBackgroundMode.GetColor()
+    preview.resolvedFillMode, preview.resolvedColorMode = fill, color
+    local fillLabel = fill == "missing" and "Missing health only" or "Full bar"
+    local colorLabel = color == "match_health" and "Match health bar" or color == "class" and "Class color"
+        or color == "health_gradient" and "Health gradient" or "Custom tint"
+    T.SetTranslatedText(preview.mode, M.Tr(fillLabel) .. "  |  " .. M.Tr(colorLabel))
     return true
 end
+
 local function ApiRGB(name, dr, dg, db, ...)
     local fn = ColorAPI()[name]
     if type(fn) == "function" then
@@ -1471,33 +1325,9 @@ function Build.Background(ctx, b)
     previewTrack:SetPoint("TOPLEFT", previewPanel, "TOPLEFT", 12, -28)
     previewTrack:SetPoint("TOPRIGHT", previewPanel, "TOPRIGHT", -12, -28)
     previewTrack:SetHeight(22)
-    local function PreviewStatusBar(value)
-        local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, previewTrack))
-        bar:SetPoint("TOPLEFT", previewTrack, "TOPLEFT", 1, -1)
-        bar:SetPoint("BOTTOMRIGHT", previewTrack, "BOTTOMRIGHT", -1, 1)
-        bar:SetMinMaxValues(0, 1)
-        bar:SetValue(value)
-        return bar
-    end
-    local previewBackgroundBar = PreviewStatusBar(1)
-    previewBackgroundBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-    previewBackgroundBar:EnableMouse(false)
-    if previewBackgroundBar.SetFrameLevel and previewTrack.GetFrameLevel then
-        previewBackgroundBar:SetFrameLevel(previewTrack:GetFrameLevel() or 0)
-    end
-    local previewBackground = previewBackgroundBar:GetStatusBarTexture()
-    if previewBackground.SetDrawLayer then previewBackground:SetDrawLayer("BACKGROUND", -7) end
-    local previewBar = PreviewStatusBar(0.62)
-    previewBar:EnableMouse(false)
-    if previewBar.SetFrameLevel and previewBackgroundBar.GetFrameLevel then
-        previewBar:SetFrameLevel((previewBackgroundBar:GetFrameLevel() or 0) + 1)
-    end
-    local previewPercent = T.Font(previewBar, "GameFontHighlightSmall", "62%", { 1, 1, 1, 0.95 })
-    previewPercent:SetPoint("CENTER", previewBar, "CENTER", 0, 0)
-    local previewState = {
-        bar = previewBar, backgroundBar = previewBackgroundBar, background = previewBackground,
-        percent = previewPercent, mode = previewMode, healthFraction = 0.62,
-    }
+    local previewState = { mode = previewMode, healthFraction = .62 }
+    previewState.surface = M.PreviewHelpers.NewRuntimeUnitSurface(previewTrack, "player", { hp = .62 })
+
     refreshBackgroundPreview = function()
         if previewPanel.IsVisible and not previewPanel:IsVisible() then return false end
         return M.RefreshHealthBackgroundInlinePreview(previewState)

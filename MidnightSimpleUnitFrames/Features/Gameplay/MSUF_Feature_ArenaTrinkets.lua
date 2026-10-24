@@ -176,11 +176,8 @@ local function InArenaMatch()
     return InstanceType() == "arena"
 end
 
-local function EnsureHolder(index)
-    local holder = holders[index]
-    if holder then return holder end
-
-    holder = MSUF.ExportPublic("MSUF_ArenaTrinket" .. index, PixelLayoutRegion(CreateFrame("Frame", nil, UIParent)))
+local function CreateHolder(parent)
+    local holder = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     holder:SetSize(20, 20)
     holder:SetFrameStrata("MEDIUM")
     holder:Hide()
@@ -194,6 +191,14 @@ local function EnsureHolder(index)
     holder.cooldown:SetAllPoints(holder)
     holder.cooldown:SetDrawEdge(false)
 
+    return holder
+end
+
+local function EnsureHolder(index)
+    local holder = holders[index]
+    if holder then return holder end
+
+    holder = MSUF.ExportPublic("MSUF_ArenaTrinket" .. index, CreateHolder(UIParent))
     holders[index] = holder
     return holder
 end
@@ -657,6 +662,8 @@ ExportPublic("MSUF_ArenaTrinkets_RefreshLayout", RefreshTrinketLayout)
 --- Overview) and the Edit Mode mover: the resolver, the factory values the
 --- runtime itself uses and the holder of an arena slot.
 MSUF.ArenaTrinkets = {
+    CreateSurface = CreateHolder,
+    PaintSurface = ApplyHolderLayout,
     SyncPreview = SyncTrinketPreview,
     Layout = TrinketLayout,
     Shape = TrinketShape,

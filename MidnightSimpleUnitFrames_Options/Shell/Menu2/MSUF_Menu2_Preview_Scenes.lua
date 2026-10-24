@@ -258,3 +258,75 @@ function H.BindPreviewAnimationButton(button, box, toggle, active, inCombat, set
         end,
     }
 end
+
+-- Small examples retain engine scenes. Native frame scaling is only the
+-- viewport transform; every texture, layout and colour remains runtime-owned.
+function H.NewRuntimeUnitSurface(parent, unit, sample, configure)
+    local root = MSUF.GF.NewPreviewScene(parent)
+    local surface = { root = root, sample = sample, configure = configure, fit = true }
+    local function UnitScene(key)
+        local scene = root:Unit(key)
+        if not scene._msufMenuSurface then
+            scene._msufMenuSurface = surface
+            local compile, refresh = scene.Compile, scene.Refresh
+            function scene:Compile()
+                self.spec = nil
+                local spec = compile(self)
+                if surface.configure then surface.configure(spec, self) end
+                return spec
+            end
+            function scene:Refresh()
+                local result = refresh(self)
+                local frame = self.frame
+                if frame and surface.fit then
+                    frame:SetScale(math.min(1, parent:GetWidth() / math.max(1, frame:GetWidth()),
+                        parent:GetHeight() / math.max(1, frame:GetHeight())))
+                end
+                if frame and surface.afterPaint then surface.afterPaint(frame, self) end
+                return result
+            end
+        end
+        return scene
+    end
+    local function GroupScene(key)
+        local scene = root:Group(key)
+        if not scene._msufMenuSurface then
+            scene._msufMenuSurface = surface
+            local show = scene.Show
+            function scene:Show(...)
+                local result = show(self, ...)
+                local frame = self:Frames()[1]
+                if frame and surface.fit then
+                    self:SetScale(math.min(1, parent:GetWidth() / math.max(1, frame:GetWidth()),
+                        parent:GetHeight() / math.max(1, frame:GetHeight())))
+                end
+                return result
+            end
+        end
+        return scene
+    end
+    function surface:Refresh(nextSample)
+        if not parent:IsVisible() or M.IsConfigCombatLocked(true) then return nil end
+        if nextSample then self.sample = nextSample end
+        local key = type(unit) == "function" and unit() or unit or "player"
+        local group = key == "party" or key == "raid" or key == "mythicraid"
+        if self.key ~= key then
+            if self.scene then self.scene:Hide() end
+            self.key = key
+            self.scene = group and GroupScene(key) or UnitScene(MSUF.UF.UnitScene.Normalize(key) or "player")
+        end
+        local scene = self.scene
+        root:Activate()
+        if group then
+            scene:Configure({ fit = true, ignoreOocFade = true, sample = self.sample })
+            scene:Show(1)
+            return scene:Frames()[1]
+        end
+        scene:SetSample(self.sample, true)
+        scene:Show()
+        return scene:Frame()
+    end
+    parent:HookScript("OnHide", function() root:Deactivate() end)
+    parent:HookScript("OnShow", function() surface:Refresh() end)
+    return surface
+end

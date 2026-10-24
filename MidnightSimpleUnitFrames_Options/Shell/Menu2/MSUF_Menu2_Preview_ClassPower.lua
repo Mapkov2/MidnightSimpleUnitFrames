@@ -2,175 +2,29 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 local H = M.PreviewHelpers
 local FILE = "Shell/Menu2/MSUF_Menu2_Preview_ClassPower.lua"
-local Optional, CP, floor = MSUF.Optional, M.ClassPowerPreview, math.floor
-local addonName = MSUF.AddonName
+local CP, floor = M.ClassPowerPreview, math.floor
 
-CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
-CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
-function CP.ShapeTextures(prefix, axis)
-    local tex = { fill = CP.MEDIA .. prefix .. "_fill.tga", bg = CP.MEDIA .. prefix .. "_bg.tga", edge = CP.MEDIA .. prefix .. "_edge.tga" }
-    tex.axis = axis
-    return tex
-end
-CP.CLASS_SHAPES = CP.CLASS_SHAPES or {
-    CIRCLE = CP.ShapeTextures("pip_circle"),
-    DIAMOND = CP.ShapeTextures("pip_diamond"),
-    HEX = CP.ShapeTextures("pip_hex"),
-}
-CP.POWER_SHAPES = CP.POWER_SHAPES or {
-    ROUND = CP.ShapeTextures("power_round"),
-    CRYSTAL = CP.ShapeTextures("power_crystal"),
-    ORB = CP.ShapeTextures("pip_circle", "VERTICAL"),
-}
-function CP.NormalizeClassShape(value)
-    value = tostring(value or "BAR"):upper()
-    return (value == "CIRCLE" or value == "DIAMOND" or value == "HEX") and value or "BAR"
-end
-function CP.ResolvePowerShape(value, classShape)
-    value = tostring(value or "BAR"):upper()
-    if value == "ROUND" or value == "CRYSTAL" or value == "ORB" or value == "BAR" then return value end
-    if value == "FOLLOW_CLASS" then
-        classShape = CP.NormalizeClassShape(classShape)
-        if classShape == "CIRCLE" then return "ROUND" end
-        if classShape == "DIAMOND" or classShape == "HEX" then return "CRYSTAL" end
-    end
-    return "BAR"
-end
-local DETACHED_POWER_WIDTH_FRAMES = {
-    cooldown = "EssentialCooldownViewer",
-    utility = "UtilityCooldownViewer",
-    tracked_buffs = "BuffIconCooldownViewer",
-}
--- The class power constants table, a core load-time export the options load after.
-local CPConst = Optional("MSUF_CP_CONST")
-local function PreviewFrameWidth(frame)
-    if not (frame and frame.GetWidth) then return nil end
-    if frame._msufLegacyCooldownAnchor == true then return nil end
-    if frame.IsShown and not frame:IsShown() then return nil end
-    local width = frame:GetWidth()
-    if type(width) == "number" and width > 1 then return width end
-    return nil
-end
-local function PreviewExternalFrameWidth(frameName, relativeTo)
-    local common = MSUF.UFBarTextCommon
-    return common.ExternalFrameWidth(frameName, relativeTo)
-end
-local function ClampDetachedPowerWidth(value, fallback, minValue, maxValue)
-    value = tonumber(value) or tonumber(fallback) or 1
-    minValue, maxValue = minValue or 20, maxValue or 800
-    if value < minValue then value = minValue elseif value > maxValue then value = maxValue end
-    return floor(value + 0.5)
-end
+CP.NormalizeClassShape = MSUF.UF.Shared.NormalizeClassPowerShape
+CP.ResolvePowerShape = MSUF.ClassPowerShapes.ResolvePower
+
+local function SampleFrameWidth(self) return self.width end
 function CP.ResolveDetachedPowerWidth(opts)
-    opts = opts or {}
-    if tostring(opts.shape or "BAR"):upper() == "ORB" then
-        return ClampDetachedPowerWidth(opts.orbSize, 54, 20, 160)
-    end
-    local liveFrame, livePower = opts.liveFrame, opts.livePower
-    local powerElement = MSUF.UF.Elements.Power
-    local liveResolver = powerElement.ResolveDetachedWidth
-    if liveFrame and livePower then
-        -- Unit Preview must not maintain a second width policy. When the live
-        -- unit exists, consume the same resolver and its per-bar combat cache.
-        return liveResolver(liveFrame, livePower)
-    end
-    -- Mirrors the live resolver's precedence: the Detached width mode, then a
-    -- matched Class Resource bar, then a Detached width configured on this
-    -- frame, then the shared Class Resource width mode as the sync fallback.
-    local frameName = opts.widthFrameName
-    if type(frameName) ~= "string" or frameName == "" then
-        local cdmFrames = CPConst and CPConst.CDM_FRAMES or DETACHED_POWER_WIDTH_FRAMES
-        frameName = cdmFrames and cdmFrames[opts.widthMode]
-    end
-    if type(frameName) == "string" and frameName ~= "" then
-        local sourceWidth = PreviewExternalFrameWidth(frameName, opts.relativeTo)
-        if sourceWidth then return ClampDetachedPowerWidth(sourceWidth) end
-    end
-    if opts.syncClass == true then
-        local classWidth = tonumber(opts.classWidth)
-        if classWidth and classWidth > 1 then return ClampDetachedPowerWidth(classWidth) end
-    end
-    local explicitWidth = tonumber(opts.explicitWidth)
-    if explicitWidth then return ClampDetachedPowerWidth(explicitWidth) end
-    if opts.syncClass == true then
-        local classWidth = tonumber(opts.classFallbackWidth)
-        if classWidth and classWidth > 1 then return ClampDetachedPowerWidth(classWidth) end
-    end
-    return ClampDetachedPowerWidth(opts.manualWidth, opts.frameWidth)
+    local power = MSUF.UF.Elements.Power
+    if opts.liveFrame and opts.livePower then return power.ResolveDetachedWidth(opts.liveFrame, opts.livePower) end
+    local constants = MSUF.Require("MSUF_CP_CONST", FILE)
+    local matched = opts.syncClass and opts.classWidth or nil
+    local frame = { width = opts.frameWidth or 275, GetWidth = SampleFrameWidth, targetPowerBar = opts.relativeTo }
+    return power.ResolveDetachedWidth(frame, {
+        detachedWidthFrameName = opts.widthFrameName or constants.CDM_FRAMES[opts.widthMode],
+        detachedSyncClass = false,
+        detachedWidthExplicit = matched or opts.explicitWidth or opts.manualWidth,
+        detachedWidth = opts.syncClass and opts.classFallbackWidth or opts.manualWidth,
+    })
 end
-CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
-    ARCANE_CHARGES = { 0.45, 0.55, 1.00 },
-    CHARGED = { 0.60, 0.20, 0.80 },
-    CHI = { 0.70, 1.00, 0.86 },
-    COMBO_POINTS = { 1.00, 0.82, 0.10 },
-    EBON_MIGHT = { 0.40, 0.80, 0.60 },
-    ESSENCE = { 0.32, 0.74, 1.00 },
-    HOLY_POWER = { 0.95, 0.86, 0.20 },
-    IRONFUR = { 1.00, 0.49, 0.04 },
-    INSANITY = { 0.55, 0.32, 0.95 },
-    MAELSTROM = { 0.00, 0.55, 1.00 },
-    MAELSTROM_ABOVE_5 = { 1.00, 0.50, 0.00 },
-    RUNES = { 0.55, 0.85, 1.00 },
-    SOUL_FRAGMENTS = { 0.00, 0.80, 0.00 },
-    SOUL_FRAGMENTS_META = { 0.60, 0.20, 0.93 },
-    SOUL_FRAGMENTS_VENG = { 0.34, 0.06, 0.46 },
-    SOUL_SHARDS = { 0.58, 0.28, 0.92 },
-    STAGGER_GREEN = { 0.52, 1.00, 0.52 },
-    STAGGER_YELLOW = { 1.00, 0.98, 0.72 },
-    STAGGER_RED = { 1.00, 0.42, 0.42 },
-    TIP_OF_THE_SPEAR = { 0.60, 0.80, 0.20 },
-    WHIRLWIND = { 0.20, 0.80, 0.20 },
-}
-function CP.ColorOverride(tableName, token)
-    local db = MSUF_DB
-    local general = db and db.general
-    local overrides = general and general[tableName]
-    return MSUF.ClassPowerColors.OverrideRGB(overrides, token)
-end
--- The runtime power-color helpers, resolved once: the class power preview asks for every
--- segment color on each animation tick.
-local GetPowerBarColor = MSUF.Require("MSUF_GetPowerBarColor", FILE)
-local GetDefaultPowerColor = MSUF.Require("MSUF_GetDefaultPowerColor", FILE)
-function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
-    -- User overrides should show in preview, then fall back to runtime power-color helpers,
-    -- and finally to fixed preview colors when the real runtime is unavailable.
-    local r, g, b = CP.ColorOverride("classPowerColorOverrides", token)
-    if r then return r, g, b end
-    if token then
-        r, g, b = GetPowerBarColor(0, token)
-        if type(r) == "number" then return r, g, b end
-    end
-    if token then
-        r, g, b = GetDefaultPowerColor(token)
-        if type(r) == "number" then return r, g, b end
-    end
-    local pbc = PowerBarColor
-    local c = pbc and token and pbc[token]
-    if c then
-        r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
-        if type(r) == "number" then return r, g, b end
-    end
-    c = token and CP.FALLBACK_COLORS[token]
-    if c then return c[1], c[2], c[3] end
-    if type(powerColorFn) == "function" and token then
-        r, g, b = powerColorFn(token)
-        if type(r) == "number" then return r, g, b end
-    end
-    return fallbackR or 1, fallbackG or 1, fallbackB or 1
-end
-function CP.ResolveBaseColor(spec, bars, fallbackR, fallbackG, fallbackB, powerColorFn)
-    if bars and bars.classPowerColorByType == false then return 1, 1, 1 end
-    return CP.ResolveColor(spec and spec.token, fallbackR, fallbackG, fallbackB, powerColorFn)
-end
-function CP.ResolveTextColor(fallbackR, fallbackG, fallbackB, powerColorFn)
-    return CP.ResolveColor("RESOURCE_TEXT", fallbackR or 1, fallbackG or 1, fallbackB or 1, powerColorFn)
-end
---- Segments a class resource preview draws: the spec's count, at most ten,
---- or eighteen for Sweeping Strikes, whose live bar shows 18 stacks
---- (MSUF_CP_NativeAuras.lua).
---- The dark bar colour the engine draws: the settings cache's resolved
---- colour, else the saved dark colour, else the dark gray, else 0.07 (the
---- rule of UF_Config ResolveDarkColor and CP_PlayerHP DarkColor).
+
+-- The sample animation below produces public fixture values only. Native
+-- runtime mode painters own all colour, geometry, fill and text decisions.
+
 local darkBarColor = {}
 function H.DarkBarColor(cache)
     if cache and type(cache.darkBarR) == "number" and type(cache.darkBarG) == "number"
@@ -215,35 +69,26 @@ function CP.AnimatedValue(spec, elapsed)
     if step <= maxValue then return step end
     return steps - step
 end
-function CP.TextForValue(spec, value)
-    if not spec then return "" end
-    if value == nil then return spec.previewText or "" end
-    local mode = spec.mode or "segmented"
-    if mode == "continuous" then return tostring(floor((value * 100) + 0.5)) .. " / 100" end
-    if mode == "timer_bar" then return string.format("%.1f", floor((value * 20 * 10) + 0.5) / 10) end
-    if mode == "stagger" then return tostring(floor((value * 34) + 0.5)) .. "K" end
-    if mode == "aura_single" then return tostring(floor((value * (tonumber(spec.fragments) or 5)) + 0.5)) end
-    if mode == "fractional" then return string.format("%.1f", value) end
-    local rounded = CP.IsEssence(spec) and floor(value) or floor(value + 0.5)
-    if spec.token == "SOUL_FRAGMENTS_VENG" then return tostring(rounded) .. " / " .. tostring(tonumber(spec.segments) or 6) end
-    return tostring(rounded)
-end
+
+
 local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
 local RUNE_PREVIEW_OFFSET = { nil, 0.0, nil, 3.1, nil, 6.2 }
 local RUNE_PREVIEW_READY_HOLD = 1.2
 --- Scene samples of the previewed class resource (root:ClassPower). SceneStatic writes what a full paint needs
 --- once; SceneValues writes the count, partial and rune states a wave tick changes, without allocating after
---- its first call. The resource gates the picker ignores are forced on in the sample's bar overlay.
-local SCENE_GATES = { "showShadowMana", "showEleMaelstrom", "showGuardianIronfur", "showSweepingStrikes", "showStagger" }
+--- its first call. Runtime gates retain the saved settings in every sample.
+local SAMPLE_PRIMARY_POWER = { WARRIOR = 1, ROGUE = 3, DEATHKNIGHT = 6, MONK = 3, DEMONHUNTER = 17 }
+local HUNTER_USES_FOCUS = MSUF.Client.IsRetail and not MSUF.Client.IsForever
+function CP.PrimaryPower(spec, class)
+    if spec and spec.primaryPower ~= nil then return spec.primaryPower end
+    if class == "HUNTER" then return HUNTER_USES_FOCUS and 2 or 0 end
+    if class == "PRIEST" and spec and spec.token == "INSANITY" then return 13 end
+    if class == "SHAMAN" and spec and spec.mode == "continuous" then return 11 end
+    return SAMPLE_PRIMARY_POWER[class] or 0
+end
 function CP.SceneStatic(sample, spec, class)
-    sample.class, sample.spec, sample.primaryPower, sample.time = class, spec.specIndex or 1, spec.primaryPower, 100
+    sample.class, sample.spec, sample.primaryPower, sample.time = class, spec.specIndex or 1, CP.PrimaryPower(spec, class), 100
     sample.charged = spec.chargedSlots
-    local bars = sample.bars
-    if not bars then
-        bars = {}
-        sample.bars = bars
-    end
-    for i = 1, #SCENE_GATES do bars[SCENE_GATES[i]] = true end
     return sample
 end
 local function SceneRunes(out, spec, elapsed, animated)
@@ -300,15 +145,4 @@ function CP.SceneValues(out, spec, value, elapsed, animated)
     end
     return out
 end
-local ResolveStatusbarTextureKey = Optional("MSUF_ResolveStatusbarTextureKey")
-local GetBarTexture = MSUF.Require("MSUF_GetBarTexture", FILE)
-function CP.ResolveTexture(key, fallback)
-    if key and key ~= "" then
-        local path = type(ResolveStatusbarTextureKey) == "function" and ResolveStatusbarTextureKey(key) or nil
-        if path and path ~= "" then return path end
-    end
-    if fallback and fallback ~= "" then return fallback end
-    local path = GetBarTexture()
-    if path and path ~= "" then return path end
-    return CP.WHITE8
-end
+CP.ResolveTexture = MSUF.ClassPowerConfig.ResolveTexture

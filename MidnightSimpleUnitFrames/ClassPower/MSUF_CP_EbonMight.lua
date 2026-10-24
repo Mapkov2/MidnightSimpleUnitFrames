@@ -15,6 +15,8 @@ local builders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_CO
 
 --- Bound once by EBON_MIGHT at controller load: the controller's state, the
 --- Ebon Might constants and the host, style and text-level resolvers.
+builders.EBON_MIGHT = function(E)
+local CreateSensor
 local CP, EBON, GetHost, GetStyle, GetTextLevel
 local CreateFrame = CreateFrame
 --- Native option tables, resolved on first use in each build.
@@ -174,7 +176,8 @@ local function Accessible(region)
     return type(canAccess) ~= "function" or canAccess(region) == true
 end
 
-local function SlotMutable(bar, text)
+local SlotMutable
+local function NativeSlotMutable(bar, text)
     if InCombat() then return false end
     local secrets = C_Secrets
     if secrets and type(secrets.ShouldAurasBeSecret) == "function" and secrets.ShouldAurasBeSecret() then
@@ -182,6 +185,8 @@ local function SlotMutable(bar, text)
     end
     return Accessible(CP.ebonButton) and Accessible(bar) and Accessible(text)
 end
+
+local function SampleSlotMutable() return not InCombat() end
 
 --- The registered bar and FontString are plain addon-owned regions inside
 --- the restricted slot subtree, so re-styling them later is legal while the
@@ -243,7 +248,7 @@ local function SetActive(active)
     end
 
     if active and not CP.ebonSensor then
-        local createSensor = MSUF.Require("MSUF_Auras3", FILE).CreateClassPowerAuraSensor
+        local createSensor = CreateSensor
         if type(createSensor) == "function" and EBON.SPELL_ID then
             local style = CaptureStyle()
             CP.ebonSensor = createSensor(host, "msuf_cp_ebon_might", { [EBON.SPELL_ID] = true }, function(button)
@@ -333,7 +338,8 @@ local function SetActive(active)
     return sensor ~= nil
 end
 
-builders.EBON_MIGHT = function(E)
+    CreateSensor = E.CreateSensor or MSUF.Require("MSUF_Auras3", FILE).CreateClassPowerAuraSensor
+    SlotMutable = E.sample and SampleSlotMutable or NativeSlotMutable
     CP = E.CP
     EBON = E.EBON or {}
     CreateFrame = E.CreateFrame or CreateFrame

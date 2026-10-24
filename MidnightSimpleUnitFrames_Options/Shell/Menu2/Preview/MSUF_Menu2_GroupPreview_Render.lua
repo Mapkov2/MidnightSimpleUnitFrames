@@ -87,58 +87,8 @@ function Render.HideAdditionalPreview(box)
     end
 end
 local function DefaultCompiledAuraLane(_, _, fallback) return fallback or {} end
-local SPELL_PREVIEW_ROUNDED_OPTS = {
-    bgKey = "_msufSpellRoundedBg",
-    edgeKey = "_msufSpellRoundedEdge",
-    stackKey = "_msufSpellRoundedEdgeStack",
-    countKey = "_msufSpellRoundedEdgeCount",
-    whiteTexture = "Interface\\Buttons\\WHITE8X8",
-    edgeLayer = "OVERLAY",
-    edgeSubLevel = 1,
-    maxEdgeSize = 16,
-    baseEdgeColor = function(host)
-        return host._msufSpellRoundedR or 1, host._msufSpellRoundedG or 1,
-            host._msufSpellRoundedB or 1, host._msufSpellRoundedA or 1
-    end,
-}
-local function SetRoundedSpellPreview(root, target, shown, thickness, r, g, b, a, blendMode)
-    local helpers = M.PreviewHelpers or {}
-    local host = root and root._msufSpellRoundedHost
-    local bars = shown and EnsureDB().bars
-    if not (bars and bars.roundedFramesEnabled == true and bars.roundedGroupFrames ~= false)
-        or not (helpers.ResolveRoundedMedia and helpers.EnsureRoundedVisuals
-            and helpers.ApplyRoundedEdgeStack) then
-        if host and helpers.SetRoundedEdgeStackShown then
-            helpers.SetRoundedEdgeStackShown(host, false, SPELL_PREVIEW_ROUNDED_OPTS)
-        end
-        return false
-    end
-    if not host then
-        host = PixelLayoutRegion(CreateFrame("Frame", nil, root))
-        host:EnableMouse(false)
-        root._msufSpellRoundedHost = host
-    end
-    host:ClearAllPoints()
-    host:SetAllPoints(target)
-    host._msufSpellRoundedR, host._msufSpellRoundedG = r, g
-    host._msufSpellRoundedB, host._msufSpellRoundedA = b, a
-    local _, edgePath, strength = helpers.ResolveRoundedMedia()
-    SPELL_PREVIEW_ROUNDED_OPTS.edgeTexture = edgePath
-    SPELL_PREVIEW_ROUNDED_OPTS.mediaStrength = strength
-    SPELL_PREVIEW_ROUNDED_OPTS.snapOff = helpers.SnapOff
-    if not helpers.EnsureRoundedVisuals(host, SPELL_PREVIEW_ROUNDED_OPTS)
-        or not helpers.ApplyRoundedEdgeStack(host, thickness, SPELL_PREVIEW_ROUNDED_OPTS) then
-        return false
-    end
-    if host._msufSpellRoundedBg then host._msufSpellRoundedBg:Hide() end
-    if helpers.ForEachRoundedEdge then
-        helpers.ForEachRoundedEdge(host, SPELL_PREVIEW_ROUNDED_OPTS, function(edge)
-            if edge.SetBlendMode then edge:SetBlendMode(blendMode or "BLEND") end
-        end)
-    end
-    host:Show()
-    return true
-end
+
+
 local SetPreviewFrameLevel, PreviewElementLevel, PreviewInteractionLevel
 
 local function PaintGroupPreviewPortrait(scene)
@@ -1070,56 +1020,8 @@ local function HidePreviewGlow(root)
     glow.halo:Hide()
     glow.ants:Hide()
 end
-local function NewGlowTexture(root, subLevel, texture)
-    local region = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY", nil, subLevel))
-    region:SetTexture(texture)
-    region:SetBlendMode("ADD")
-    return region
-end
--- The glow ants sprite sheet: 5x5 cells, 22 frames of 48x48, one loop per 0.37 s.
-local GLOW_FLIPBOOK = {
-    { "SetFlipBookRows", 5 }, { "SetFlipBookColumns", 5 }, { "SetFlipBookFrames", 22 },
-    { "SetFlipBookFrameWidth", 48 }, { "SetFlipBookFrameHeight", 48 }, { "SetDuration", 0.37 },
-}
-local function EnsurePreviewGlow(env, root)
-    local glow = root and root._msufSpellPreviewGlow
-    if glow then return glow end
-    glow = {}
-    glow.halo = NewGlowTexture(root, 6, [[Interface\SpellActivationOverlay\IconAlert]])
-    glow.halo:SetTexCoord(0.0078125, 0.5078125, 0.27734375, 0.52734375)
-    glow.ants = NewGlowTexture(root, 7, [[Interface\SpellActivationOverlay\IconAlertAnts]])
-    glow.animation = glow.ants:CreateAnimationGroup()
-    if env.T.TrackMenuAnimationGroup then env.T.TrackMenuAnimationGroup(glow.animation) end
-    glow.animation:SetLooping("REPEAT")
-    local flipbook = glow.animation:CreateAnimation("FlipBook")
-    for i = 1, #GLOW_FLIPBOOK do flipbook[GLOW_FLIPBOOK[i][1]](flipbook, GLOW_FLIPBOOK[i][2]) end
-    root._msufSpellPreviewGlow = glow
-    return glow
-end
-local function PlaceGlowRegion(region, target, padding, r, g, b, a)
-    region:ClearAllPoints()
-    region:SetPoint("TOPLEFT", target, "TOPLEFT", -padding, padding)
-    region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", padding, -padding)
-    region:SetDesaturated(true)
-    region:SetVertexColor(r, g, b, a)
-    region:Show()
-end
-local function ShowPreviewGlow(env, root, target, r, g, b, a, padding)
-    local glow = EnsurePreviewGlow(env, root)
-    if not (glow and target) then return end
-    PlaceGlowRegion(glow.halo, target, padding * 1.55, r, g, b, a)
-    PlaceGlowRegion(glow.ants, target, padding, r, g, b, a)
-    if not glow.animation:IsPlaying() then glow.animation:Play() end
-end
-local function EnsureSpellEffectPreview(env, handle)
-    local root = handle and handle._msufSpellPreviewEffectRoot
-    if root then return root end
-    root = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
-    root:EnableMouse(false)
-    root:SetAllPoints(env.mock._health)
-    handle._msufSpellPreviewEffectRoot = root
-    return root
-end
+
+
 local function EnsureSpellEffectRuntimeOwner(env, handle)
     if not handle then return nil end
     local mock = env.mock
@@ -1138,7 +1040,7 @@ end
 -- Hides the Auras3 frame effect a handle's runtime owner currently shows.
 local function HideRuntimePreviewEffect(env, handle)
     local a3 = env.MSUF.MSUF_Auras3
-    local runtime = a3 and a3.SpellIndicators
+    local runtime = a3 and (a3.SpellIndicators or a3.ClassicVisuals)
     local owner = handle and handle._msufSpellPreviewRuntimeOwner
     if owner and runtime and runtime.HidePreviewFrameEffect then runtime.HidePreviewFrameEffect(owner) end
 end
@@ -1151,87 +1053,7 @@ local function HideSpellEffectPreview(env, handle)
     HidePreviewGlow(root)
     root:Hide()
 end
-local function EnsureSpellPreviewEdges(env, root)
-    if root._msufSpellPreviewEdges then return root._msufSpellPreviewEdges end
-    local edges = {}
-    for i = 1, 4 do
-        edges[i] = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
-        edges[i]:SetTexture(env.WHITE8X8)
-        edges[i]:Hide()
-    end
-    root._msufSpellPreviewEdges = edges
-    return edges
-end
-local function HideSpellPreviewRegions(root)
-    if root._msufSpellPreviewTint then root._msufSpellPreviewTint:Hide() end
-    if root._msufSpellPreviewName then root._msufSpellPreviewName:Hide() end
-    local edges = root._msufSpellPreviewEdges
-    for i = 1, type(edges) == "table" and #edges or 0 do edges[i]:Hide() end
-    SetRoundedSpellPreview(root, nil, false)
-    StopPreviewAnimation(root._msufSpellPreviewPulse)
-    root:SetAlpha(1)
-    HidePreviewGlow(root)
-end
--- Getter and setter pairs the name overlay copies from the name it recolors.
-local NAME_OVERLAY_COPIES = {
-    { "GetJustifyH", "SetJustifyH" }, { "GetJustifyV", "SetJustifyV" },
-    { "GetShadowColor", "SetShadowColor" }, { "GetShadowOffset", "SetShadowOffset" },
-}
-local function SyncSpellPreviewName(root, source, r, g, b, a)
-    if not source then return end
-    local overlay = root._msufSpellPreviewName
-    if not overlay then
-        overlay = PixelLayoutRegion(root:CreateFontString(nil, "OVERLAY"))
-        root._msufSpellPreviewName = overlay
-    end
-    local path, size, flags = source:GetFont()
-    if path and size then overlay:SetFont(path, size, flags) end
-    for i = 1, #NAME_OVERLAY_COPIES do
-        local copy = NAME_OVERLAY_COPIES[i]
-        if source[copy[1]] then overlay[copy[2]](overlay, source[copy[1]](source)) end
-    end
-    overlay:ClearAllPoints()
-    overlay:SetAllPoints(source)
-    overlay:SetText(source:GetText())
-    overlay:SetTextColor(r, g, b, a)
-    overlay:SetShown(source.IsShown == nil or source:IsShown())
-end
 
--- Spell effect edges: edge index, size setter and two anchors {point, relative edge or "target", relative point,
--- x and y in thickness units}. The side edges hang between the top and bottom ones.
-local SPELL_EDGE_LAYOUT = {
-    { 1, "SetHeight", { "TOPLEFT", "target", "TOPLEFT", -1, 1 }, { "TOPRIGHT", "target", "TOPRIGHT", 1, 1 } },
-    { 2, "SetHeight", { "BOTTOMLEFT", "target", "BOTTOMLEFT", -1, -1 }, { "BOTTOMRIGHT", "target", "BOTTOMRIGHT", 1, -1 } },
-    { 3, "SetWidth", { "TOPLEFT", 1, "BOTTOMLEFT", 0, 0 }, { "BOTTOMLEFT", 2, "TOPLEFT", 0, 0 } },
-    { 4, "SetWidth", { "TOPRIGHT", 1, "BOTTOMRIGHT", 0, 0 }, { "BOTTOMRIGHT", 2, "TOPRIGHT", 0, 0 } },
-}
-local function LayoutSpellPreviewEdges(env, root, target, effect, r, g, b, a)
-    local edges = EnsureSpellPreviewEdges(env, root)
-    local glowLike = effect.type == "glow" or effect.type == "pulse"
-    local rawThickness = tonumber(effect.thickness) or (effect.type == "glow" and 3 or 2)
-    local thickness = max(1, env.ScaleValue(glowLike and max(rawThickness, 3) or rawThickness, env.mock._previewScale or 1, 1))
-    if glowLike then a = min(1, a * 0.85) end
-    for i = 1, #SPELL_EDGE_LAYOUT do
-        local row = SPELL_EDGE_LAYOUT[i]
-        local edge = edges[row[1]]
-        edge:ClearAllPoints()
-        for j = 3, 4 do
-            local anchor = row[j]
-            edge:SetPoint(anchor[1], anchor[2] == "target" and target or edges[anchor[2]], anchor[3],
-                anchor[4] * thickness, anchor[5] * thickness)
-        end
-        edge[row[2]](edge, thickness)
-    end
-    for i = 1, 4 do
-        if edges[i].SetBlendMode then edges[i]:SetBlendMode(glowLike and "ADD" or "BLEND") end
-        edges[i]:SetVertexColor(r, g, b, a)
-        edges[i]:Show()
-    end
-    if (not glowLike and SetRoundedSpellPreview(root, target, true, thickness, r, g, b, a, "BLEND"))
-        or (effect.type == "pulse" and SetRoundedSpellPreview(root, target, true, thickness, r, g, b, a, "ADD")) then
-        for i = 1, 4 do edges[i]:Hide() end
-    end
-end
 
 -- The Auras3 renderer's own frame effect, shown through the group mock.
 local function ApplyRuntimeSpellEffect(env, runtime, handle, effect)
@@ -1277,81 +1099,12 @@ local function ApplyRuntimeSpellEffect(env, runtime, handle, effect)
     HideSpellEffectPreview(env, handle)
 end
 
--- The legacy edge/glow/tint/name fallback when no runtime renderer exists.
-local function ApplyLegacySpellEffect(env, handle, effect)
-    local mock = env.mock
-    local root = EnsureSpellEffectPreview(env, handle)
-    local healthBar = mock._health
-    local target = healthBar and healthBar.GetStatusBarTexture and healthBar:GetStatusBarTexture() or nil
-    if not (root and healthBar and target) then
-        HideSpellEffectPreview(env, handle)
-        return
-    end
-    HideSpellPreviewRegions(root)
-    root:ClearAllPoints()
-    root:SetAllPoints(healthBar)
-    root._msufSpellPreviewStrata = effect.strata or handle._msufSpellIndicatorStrata
-    root._msufSpellPreviewPriority = SpellEffectPriority(effect.priority)
-    root._msufSpellPreviewLayer = env.ClampLayer(effect.layer, 0)
-    local kind = EffectKind(effect)
-    root._msufSpellPreviewKind = kind
-    local color = effect.color or {}
-    local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1
-    if kind == "healthtint" then
-        local tint = root._msufSpellPreviewTint
-        if not tint then
-            tint = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
-            tint:SetTexture(env.WHITE8X8)
-            root._msufSpellPreviewTint = tint
-        end
-        tint:ClearAllPoints()
-        tint:SetAllPoints(target)
-        tint:SetBlendMode("BLEND")
-        local tintAlpha = tonumber(effect.tintAlpha or effect.alpha)
-        if tintAlpha == nil then tintAlpha = a > 0 and a or 0.20 end
-        tint:SetVertexColor(r, g, b, max(0, min(1, tintAlpha)))
-        tint:Show()
-    elseif kind == "namecolor" then
-        SyncSpellPreviewName(root, mock._nameFS, r, g, b, a)
-    elseif kind == "glow" then
-        local padding = max(1, env.ScaleValue((tonumber(effect.thickness) or 3) + 2, mock._previewScale or 1, 1))
-        ShowPreviewGlow(env, root, target, r, g, b, a, padding)
-    elseif kind == "border" or kind == "pulse" then
-        LayoutSpellPreviewEdges(env, root, target, effect, r, g, b, a)
-        if kind == "pulse" then
-            local pulse = root._msufSpellPreviewPulse
-            if not pulse then
-                pulse = root:CreateAnimationGroup()
-                if env.T.TrackMenuAnimationGroup then env.T.TrackMenuAnimationGroup(pulse) end
-                pulse:SetLooping("BOUNCE")
-                local alpha = pulse:CreateAnimation("Alpha")
-                alpha:SetDuration(0.7)
-                alpha:SetFromAlpha(0.45)
-                alpha:SetToAlpha(1)
-                if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
-                root._msufSpellPreviewPulse = pulse
-            end
-            if not pulse:IsPlaying() then pulse:Play() end
-        end
-    else
-        HideSpellEffectPreview(env, handle)
-        return
-    end
-    root:Show()
-end
-
---- Applies one spell frame effect (border, glow, pulse, health tint, name
---- color) to a handle: the live Auras3 renderer when present, else the legacy
---- edge/glow fallback.
 local function ApplySpellEffectPreview(env, handle, effect)
     if not (handle and type(effect) == "table") then return end
     local a3 = env.MSUF.MSUF_Auras3
-    local runtime = a3 and a3.SpellIndicators
-    if runtime and runtime.ApplyPreviewFrameEffect then
-        ApplyRuntimeSpellEffect(env, runtime, handle, effect)
-    else
-        ApplyLegacySpellEffect(env, handle, effect)
-    end
+    local runtime = assert(a3.SpellIndicators or a3.ClassicVisuals,
+        "MSUF: spell indicator runtime is required by the group preview")
+    ApplyRuntimeSpellEffect(env, runtime, handle, effect)
 end
 
 local function SuspendSpellPreviewRoot(root)
@@ -2038,7 +1791,6 @@ end
 --- Spell indicator handle painters: icon glow effect and the per-visual
 --- (icon, bar, square, number) handle configuration.
 -- Read-only fallbacks for a handle without its own color or appearance.
-local WHITE_RGBA = { 1, 1, 1, 1 }
 local EMPTY_APPEARANCE = {}
 -- The selected spell's placement before the editor stored one.
 local SELECTED_SPELL_PLACED_DEFAULT = { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 }

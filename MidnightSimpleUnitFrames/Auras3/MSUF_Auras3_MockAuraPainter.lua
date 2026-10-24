@@ -264,3 +264,154 @@ function Painter.AuraState(icon, kind, index, cfg, elapsed, duration, oneShot, p
     if elapsed ~= nil then return fn(kind, index, scratch, options, elapsed) end
     return fn(kind, index, scratch, options)
 end
+
+local SampleButton = {}
+local SAMPLE_BINDING_DEFAULTS = {}
+local function EmptySampleBinding() end
+function SampleButton:CanBeAccessedInContext() return true end
+function SampleButton:SetIcon(texture) texture:SetTexture(self.sample.icon) end
+function SampleButton:ClearIcon() if self.Icon then self.Icon:Hide() end end
+function SampleButton:SetDurationBar(bar, options)
+    options = options or SAMPLE_BINDING_DEFAULTS
+    self.sampleBar, self.sampleBarOptions = bar, options
+    bar:SetTimerDuration(self.duration, options.interpolation, options.direction)
+end
+function SampleButton:GetDurationTextBinding()
+    if not self.sampleTextBinding then self.sampleTextBinding = C_DurationUtil.CreateDurationTextBinding() end
+    return self.sampleTextBinding
+end
+function SampleButton:SetDurationText(text, options)
+    options = options or SAMPLE_BINDING_DEFAULTS
+    local binding = self:GetDurationTextBinding()
+    if options.binding then binding:Assign(options.binding) else binding:SetToDefaults() end
+    binding:SetFontString(text)
+    binding:SetDuration(self.duration)
+    local formatter = options.textFormatter or options.formatter
+    if formatter then binding:SetFormatter(formatter) end
+    if options.textColor then binding:SetTextColorCurve(options.textColor.curve, options.textColor.property) end
+    binding:SetEnabled(true)
+end
+function SampleButton:SetDurationCooldown(cooldown)
+    self.sampleCooldown = cooldown
+    cooldown:SetCooldownFromDurationObject(self.duration, true)
+end
+function SampleButton:SetApplicationCount(text)
+    local count = self.sample.applications
+    text:SetText(count and count > 1 and count or "")
+end
+function SampleButton:AddDispelTypeTexture(texture, options)
+    local dispel = self.sample.dispelName
+    local styles, style = Enum.CustomAuraButtonDispelTypeTextureStyle, options.style
+    if style == styles.Border or style == styles.BorderWithIcon then
+        AuraUtil.SetAuraBorderAtlas(texture, dispel, style == styles.BorderWithIcon)
+        texture:SetVertexColor(1, 1, 1, 1)
+    elseif style == styles.Icon then
+        AuraUtil.SetAuraDispelTypeIcon(texture, dispel)
+        texture:SetVertexColor(1, 1, 1, 1)
+    elseif style == styles.PreserveAsset then
+        AuraUtil.SetAuraBorderColor(texture, dispel)
+    end
+    local color = options.customDispelColorMap and options.customDispelColorMap[dispel]
+    if color then texture:SetVertexColor(color:GetRGBA()) end
+    texture:Show()
+end
+function SampleButton:SetDispelTypeText(text, options)
+    local custom = options.customDispelTextMap and options.customDispelTextMap[self.sample.dispelName]
+    if custom ~= nil then text:SetText(custom) text:Show()
+    else AuraUtil.SetAuraSymbol(text, self.sample.dispelName) end
+end
+SampleButton.ClearDurationCooldown, SampleButton.ClearDurationBar = EmptySampleBinding, EmptySampleBinding
+function SampleButton:ClearDurationText()
+    if self.sampleTextBinding then self.sampleTextBinding:SetEnabled(false) end
+end
+SampleButton.ClearApplicationCount = EmptySampleBinding
+SampleButton.ClearDispelTypeTextures, SampleButton.ClearDispelTypeText = EmptySampleBinding, EmptySampleBinding
+function SampleButton:SetSample(sample)
+    self.sample = sample
+    local now = GetTime()
+    self.duration:SetTimeSpan(now - sample.duration + sample.remaining, now + sample.remaining)
+    if self.sampleBar then self:SetDurationBar(self.sampleBar, self.sampleBarOptions) end
+    if self.sampleCooldown then self:SetDurationCooldown(self.sampleCooldown) end
+end
+function Painter.NewNativeSample(parent, sample)
+    local button = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
+    button:EnableMouse(false)
+    for key, method in pairs(SampleButton) do button[key] = method end
+    button.duration = C_DurationUtil.CreateDuration()
+    button:SetSample(sample)
+    return button
+end
+
+-- Workbench data is public and retained. Both backends use their own live
+-- button construction, placement, swipe, font, shape and duration painters.
+local Workbench = {}
+Workbench.__index = Workbench
+function Painter.NewWorkbench(parent)
+    local canvas = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
+    canvas:SetSize(1, 1)
+    canvas:SetPoint("CENTER", parent, "CENTER")
+    return setmetatable({ parent = parent, canvas = canvas, buttons = {}, samples = {}, mine = {} }, Workbench)
+end
+function Workbench:Paint(cfg, count, kind, style, textures)
+    local lane = {}
+    self.lane = lane
+    for key, value in pairs(cfg) do lane[key] = value end
+    lane.kind, lane.unit = kind or "buff", "player"
+    lane.size = cfg.actualSize or cfg.size
+    lane.buttonWidth, lane.buttonHeight = lane.size, lane.size * (cfg.heightPercent or 100) / 100
+    lane.stepX, lane.stepY = lane.buttonWidth + (cfg.spacing or 0), lane.buttonHeight + (cfg.spacing or 0)
+    lane.step, lane.perRow, lane.padding = lane.stepX, math.max(1, cfg.perRow or count), 0
+    local growth = tostring(cfg.growth or "RIGHTDOWN"):upper()
+    local left, up = growth:find("LEFT", 1, true), growth:find("UP", 1, true)
+    lane.xSign, lane.ySign = left and -1 or 1, up and 1 or -1
+    lane.initialAnchor = up and (left and "BOTTOMRIGHT" or "BOTTOMLEFT") or (left and "TOPRIGHT" or "TOPLEFT")
+    lane.anchor, lane.verticalGrowth = lane.initialAnchor, growth == "UP" or growth == "DOWN"
+    lane.showCooldownSwipe, lane.showCooldownText = cfg.showSwipe ~= false, cfg.showTimers == true
+    lane.showCooldown = lane.showCooldownSwipe or lane.showCooldownText
+    lane.showAuraBorder = kind == "debuff" and cfg.debuffBorderMode ~= "OFF"
+    lane.showAuraSymbol = lane.showAuraBorder and cfg.debuffBorderMode == "SYMBOL"
+    lane.showDispelTypeBorder, lane.showDispelTypeSymbol = lane.showAuraBorder, lane.showAuraSymbol
+    lane.showTooltip, lane.iconStyle = false, style
+    self.config, self.frame = lane, self.canvas
+    local native = A3.Runtime and A3.Runtime.ButtonVisuals
+    local classic = not native and A3._ClassicBackend.Buttons
+    for i = 1, count do
+        local sample = self.samples[i] or {}
+        self.samples[i] = sample
+        sample.index, sample.duration, sample.remaining = i, 20, i % 2 == 0 and 12 or 2.7
+        sample.expirationTime, sample.applications = GetTime() + sample.remaining, i % 3 == 1 and 2 or 0
+        sample.auraInstanceID, sample.dispelName = i, A3.PreviewDispelTypeForIndex(i)
+        sample.icon = textures[((i - 1) % #textures) + 1]
+        sample.pandemic = cfg.pandemicEnabled == true and i == 1
+        local button = self.buttons[i]
+        if native then
+            if not button then button = Painter.NewNativeSample(self.canvas, sample) self.buttons[i] = button end
+            native.LayoutSample(button, lane, i)
+            native.PaintSample(button, lane, i, sample)
+        else
+            button = classic.EnsureButton(self, i)
+            self.buttons[i] = button
+            classic.PaintSample(self, button, sample)
+        end
+    end
+    for i = count + 1, #self.buttons do
+        if classic then classic.HideButton(self.buttons[i]) else self.buttons[i]:Hide() end
+    end
+    self.canvas:SetScale(1)
+    local l, b, r, t
+    for i = 1, count do
+        local x, y, w, h = self.buttons[i]:GetRect()
+        if x then
+            l, b, r, t = math.min(l or x, x), math.min(b or y, y), math.max(r or x, x + w), math.max(t or y, y + h)
+        end
+    end
+    local x, y = self.canvas:GetCenter()
+    self.offsetX, self.offsetY = x and l and ((l + r) / 2 - x) or 0, y and b and ((b + t) / 2 - y) or 0
+    self.width, self.height = l and math.max(1, r - l) or 1, b and math.max(1, t - b) or 1
+    return self.width, self.height
+end
+function Workbench:Fit(scale)
+    self.canvas:SetScale(scale)
+    self.canvas:ClearAllPoints()
+    self.canvas:SetPoint("CENTER", self.parent, "CENTER", -self.offsetX * scale, -self.offsetY * scale)
+end

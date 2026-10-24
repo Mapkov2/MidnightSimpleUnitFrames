@@ -909,3 +909,14 @@ Buttons.HideTrailingButtons = HideTrailingButtons
 Buttons.UpdateButton = UpdateButton
 Buttons.BuildButtonUpdater = BuildButtonUpdater
 Buttons.ShowMissingIndicator = ShowMissingIndicator
+
+function Buttons.PaintSample(lane, button, sample)
+    local cfg = lane.config
+    ApplyButtonLayout(lane, button, sample.index)
+    SetIcon(button, sample.icon)
+    if cfg.showCooldown then UpdateCooldown(button, button.Cooldown, "player", sample)
+    else HideCooldown(button, button.Cooldown) end
+    SetCount(button, cfg.showStacks and sample.applications and sample.applications > 1 and sample.applications or "")
+    UpdateButtonVisual(lane, button, "player", sample)
+    ShowButton(button)
+end

@@ -14,6 +14,7 @@ function MSUF.CPBuilders.ManaRegenTimersSupported()
 end
 -- Bound by MSUF.CPBuilders.ManaExtras: its options table, state and event
 -- frame. The resource-extras lifecycle builds the one helper once per session.
+function MSUF.CPBuilders.ManaExtras(boundE)
 local E, state, events
 local Refresh
 local function Number(value) return E.NotSecret(value) and type(value)=="number" and value==value and value>-math.huge and value<math.huge end
@@ -60,75 +61,38 @@ end
 local function HideSamples()
     for _, bar in pairs(state.samples or {}) do bar:Hide() end
 end
-local function DetachSampleMasks()
-    local masks = state.sampleMasks
-    if not masks or #masks == 0 then return true end
-    local bar = state.samples and state.samples.cost
-    local fill = bar and bar:GetStatusBarTexture()
-    if not PublicRegion(fill) then return false end
-    for _, mask in ipairs(masks) do if not PublicRegion(mask) then return false end end
-    for _, mask in ipairs(masks) do fill:RemoveMaskTexture(mask) end
-    state.sampleMasks = nil
-    return true
-end
-local function SampleBar(key, host)
+-- Public sample values feed the same strips and masked cost surface as live
+-- observations. Edit Mode and menu previews retain no second set of regions.
+local function PaintSampleBars(host)
+    HideSamples()
+    if not Editing() or not PublicRegion(host) then return end
     state.samples = state.samples or {}
-    local bar = state.samples[key]
-    if not bar then
-        bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, host))
-        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-        bar:EnableMouse(false)
-        state.samples[key] = bar
+    state.samples.five, state.samples.tick, state.samples.cost = state.five, state.tick, state.prediction
+    Color(state.five, "manaRegenPauseColor", 1, .65, .2)
+    Color(state.tick, "manaGainPulseColor", .3, 1, .7)
+    state.five:SetMinMaxValues(0, 1)
+    state.tick:SetMinMaxValues(0, 1)
+    state.five:SetValue(.6)
+    state.tick:SetValue(.5)
+    state.five:SetShown(state.rule == true)
+    state.tick:SetShown(state.ticks == true)
+    if state.prediction then
+        Color(state.prediction, "manaCostColor", .7, .7, 1)
+        state.prediction:SetMinMaxValues(0, 1)
+        state.prediction:SetValue(.18)
+        state.prediction:SetShown(state.preview == true and state.predictionReady == true)
     end
-    return bar
 end
+-- Live Edit Mode owns an isolated instance of these same painters. Its
+-- sample values never replace a running timer on the live instance.
 local function Samples(host)
     HideSamples()
     if not Editing() or not PublicRegion(host) then return end
-    for _, key in ipairs({"five", "tick"}) do
-        if (key == "five" and state.rule) or (key == "tick" and state.ticks) then
-            local bar = SampleBar(key, host)
-            bar:SetParent(host)
-            bar:ClearAllPoints()
-            local point, relative, offset = key == "five" and "BOTTOM" or "TOP",
-                key == "five" and "TOP" or "BOTTOM", key == "five" and 1 or -1
-            bar:SetPoint(point .. "LEFT", host, relative .. "LEFT", 0, offset)
-            bar:SetPoint(point .. "RIGHT", host, relative .. "RIGHT", 0, offset)
-            bar:SetHeight(key == "five" and 3 or 2)
-            bar:SetFrameLevel(host:GetFrameLevel() + 2)
-            Color(bar, key == "five" and "manaRegenPauseColor" or "manaGainPulseColor",
-                key == "five" and 1 or .3, key == "five" and .65 or 1, key == "five" and .2 or .7)
-            bar:SetMinMaxValues(0, 1)
-            bar:SetValue(key == "five" and .6 or .5)
-            bar:Show()
-        end
+    if not state.samplePainter then
+        local sampleEnv = setmetatable({ sample = true }, { __index = E })
+        state.samplePainter = MSUF.CPBuilders.ManaExtras(sampleEnv)
     end
-    if not state.preview or not state.predictionReady then return end
-    local old = state.sampleMasks or {}
-    for _, mask in ipairs(old) do if not PublicRegion(mask) then return end end
-    local bar = SampleBar("cost", host)
-    local fill = bar:GetStatusBarTexture()
-    if not PublicRegion(fill) then return end
-    for _, mask in ipairs(old) do fill:RemoveMaskTexture(mask) end
-    state.sampleMasks = {}
-    bar:SetParent(host)
-    bar:ClearAllPoints()
-    bar:SetSize(state.width, state.height)
-    bar:SetFrameLevel(host:GetFrameLevel() + 2)
-    bar:SetOrientation(state.vertical and "VERTICAL" or "HORIZONTAL")
-    bar:SetReverseFill(not state.reverse)
-    local edge = state.vertical and (state.reverse and "BOTTOM" or "TOP") or (state.reverse and "LEFT" or "RIGHT")
-    bar:SetPoint(edge, state.fill, edge, 0, 0)
-    fill:SetDrawLayer("OVERLAY", 3)
-    local masks = state.sampleMasks
-    masks[#masks + 1] = state.predictionMask
-    if state.shapeMasked then masks[#masks + 1] = state.shapeMask end
-    for _, mask in ipairs(state.borrowedMasks or {}) do masks[#masks + 1] = mask end
-    for _, mask in ipairs(masks) do fill:AddMaskTexture(mask) end
-    Color(bar, "manaCostColor", .7, .7, 1)
-    bar:SetMinMaxValues(0, 1)
-    bar:SetValue(.18)
-    bar:Show()
+    state.samples = state.samplePainter.PaintSample(host)
 end
 --- The cast-cost preview surface: a native fill masked like the Mana bar's own,
 --- built only from public regions; any restricted or unexpected state hides it.
@@ -258,11 +222,6 @@ local function EnsurePrediction(host)
 end
 local function Ensure(host)
     HideSamples()
-    if not DetachSampleMasks() then
-        state.predictionReady=false
-        HidePrediction()
-        return
-    end
     if not state.five then
         state.five=PixelLayoutRegion(CreateFrame("StatusBar",nil,host))
         state.tick=PixelLayoutRegion(CreateFrame("StatusBar",nil,host))
@@ -411,7 +370,6 @@ local function OnEvent(self,event,unit,powerToken,spellID)
 end
 local function Disable()
     HideSamples()
-    if not (InCombatLockdown and InCombatLockdown()) then DetachSampleMasks() end
     if state.editListener and MSUF.EditModeAPI then
         MSUF.EditModeAPI.UnregisterSessionListener("MSUF.ManaExtras")
         state.editListener, state.editActive = nil, nil
@@ -527,10 +485,21 @@ Refresh = function()
     end
 end
 local function IsPending() return state.pending end
-function MSUF.CPBuilders.ManaExtras(boundE)
     E = boundE
     state = {}
     events = CreateFrame("Frame")
     events:SetScript("OnEvent", OnEvent)
-    return { Refresh = Refresh, Disable = Disable, PowerChanged = PowerChanged, IsPending = IsPending }
+    return { Refresh = Refresh, Disable = Disable, PowerChanged = PowerChanged, IsPending = IsPending,
+        PaintSample = function(host)
+            local b = E.db.bars
+            state.editActive = true
+            local supported = MSUF.CPBuilders.ManaRegenTimersSupported()
+            state.rule, state.ticks = supported and b.manaRegenPause == true, supported and b.manaGainPulse == true
+            state.preview = b.manaUpcomingCost == true
+            Ensure(host)
+            PaintSampleBars(host)
+            return state.samples
+        end,
+        HideSample = HideSamples,
+    }
 end

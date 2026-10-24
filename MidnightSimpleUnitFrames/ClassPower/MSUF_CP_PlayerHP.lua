@@ -27,6 +27,30 @@ do
     end
 end
 
+local function InjectedAPI(api, name)
+    if type(api) == "function" then return api end
+    -- Preserve callable-table injection in existing whole-client fixtures.
+    -- Missing and wrong-shaped providers still fail at binding readiness.
+    local mt = getmetatable(api)
+    if mt and type(mt.__call) == "function" then return api end
+    error("MSUF: missing required dependency '" .. name .. "' required by " .. FILE, 2)
+end
+builders.PLAYER_HP_API = InjectedAPI
+
+
+local NormalizeClassShape = MSUF.Require("MSUF_UF_NormalizeClassPowerShape", FILE)
+local function ResolvePowerShape(value, classShape)
+    value = tostring(value or "BAR"):upper()
+    if value == "ROUND" or value == "CRYSTAL" or value == "ORB" or value == "BAR" then return value end
+    classShape = NormalizeClassShape(classShape)
+    if classShape == "CIRCLE" then return "ROUND" end
+    if classShape == "DIAMOND" or classShape == "HEX" then return "CRYSTAL" end
+    return "BAR"
+end
+MSUF.ClassPowerShapes = { ResolvePower = ResolvePowerShape }
+
+builders.PLAYER_HP_VISUAL = function(E)
+local Common = E.Common or MSUF.UFBarTextCommon
 local PHP, CP, _cpDB
 local UnitHealth, UnitHealthMax, UnitClass, RAID_CLASS_COLORS
 local CreateFrame, GetPlayerFrame, ResolveTexture
@@ -68,10 +92,12 @@ local function UsePlayerText(b)
     return b and b.playerHPBarUsePlayerText ~= false
 end
 
-local function PlayerConfig()
+local function NativePlayerConfig()
     local db = MSUF_DB
     return db and db.player or nil, db and db.general or nil
 end
+
+local PlayerConfig = E.PlayerConfig or NativePlayerConfig
 
 local function PlayerHealthTextEnabled(player)
     if not player then return true end
@@ -109,13 +135,7 @@ local function ResolveFollowPowerShape(b)
     local db = MSUF_DB
     local player = db and db.player or nil
     if not (player and player.powerBarDetached == true) then return "BAR" end
-    local value = tostring(player.detachedPowerBarShape or "BAR"):upper()
-    if value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-    if value == "BAR" then return "BAR" end
-    local classShape = NormalizeClassPowerShape(b and b.classPowerShape)
-    if classShape == "CIRCLE" then return "ROUND" end
-    if classShape == "DIAMOND" or classShape == "HEX" then return "CRYSTAL" end
-    return "BAR"
+    return ResolvePowerShape(player.detachedPowerBarShape, b and b.classPowerShape)
 end
 
 local function ResolveHPShape(b)
@@ -804,7 +824,7 @@ local function ApplyLayout(playerFrame)
     local smooth = b.playerHPBarSmoothFill == true
     if PHP._smoothFill ~= smooth then
         PHP._smoothFill = smooth
-        local common = MSUF.UFBarTextCommon
+        local common = Common
         if common and type(common.SetBarSmoothing) == "function" then
             common.SetBarSmoothing(PHP.bar, smooth)
         elseif PHP.bar then
@@ -835,7 +855,7 @@ end
 local function ApplyColor(hp, maxHP, event)
     local bar = PHP.bar
     if not bar then return end
-    local common = MSUF.UFBarTextCommon
+    local common = Common
     local colorMode = PHP._colorMode or "GLOBAL"
     if colorMode == "CLASS" then
         local r, g, b
@@ -967,7 +987,7 @@ end
 
 local function Update(event)
     if not PHP.visible then return end
-    local common = MSUF.UFBarTextCommon
+    local common = Common
     local hp = UnitHealth("player")
     local hpSecret = IsSecretValue(hp) == true
     local maxHP, maxSecret = PHP._maxHP, false
@@ -1031,17 +1051,6 @@ local function ApplyResource(playerFrame)
     end
 end
 
-local function InjectedAPI(api, name)
-    if type(api) == "function" then return api end
-    -- Preserve callable-table injection in existing whole-client fixtures.
-    -- Missing and wrong-shaped providers still fail at binding readiness.
-    local mt = getmetatable(api)
-    if mt and type(mt.__call) == "function" then return api end
-    error("MSUF: missing required dependency '" .. name .. "' required by " .. FILE, 2)
-end
-builders.PLAYER_HP_API = InjectedAPI
-
-builders.PLAYER_HP_VISUAL = function(E)
     PHP = assert(E.PHP, "PlayerHP visual provider requires UF-owned state")
     CP, _cpDB = E.CP, E._cpDB
     UnitHealth, UnitHealthMax, UnitClass = E.UnitHealth, E.UnitHealthMax, E.UnitClass
@@ -1052,11 +1061,12 @@ builders.PLAYER_HP_VISUAL = function(E)
     tonumber, type, tostring, pairs = E.tonumber or tonumber, E.type or type, E.tostring or tostring, E.pairs or pairs
     math_floor, string_format = E.math_floor or math_floor, E.string_format or string_format
     IsSecretValue = issecretvalue
-    UnitHealthPercentAPI = UnitHealthPercent
+    UnitHealthPercentAPI = E.UnitHealthPercent or UnitHealthPercent
     SCALE_100 = CurveConstants and CurveConstants.ScaleTo100
     return {
         PHP = PHP,
         Apply = ApplyResource,
+        Layout = ApplyLayout,
         Create = Ensure,
         Update = Update,
         ApplyFont = ApplyFont,

@@ -563,6 +563,12 @@ builders.LAYOUT = function(E)
 
     local API = {
         CP_Layout = CP_Layout,
+        MeasureWidth = function(frame, count, height, power)
+            Layout.Gate(frame, count, height, power)
+            Layout.Prepare()
+            Layout.ResolveWidth()
+            return pass.userW
+        end,
     }
 
         CP, _cpDB, CPConst = E.CP, E._cpDB, E.CPConst

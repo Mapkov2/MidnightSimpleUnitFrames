@@ -645,141 +645,63 @@ local function SetDropdownIconTexture(texture, icon)
     texture:Show()
 end
 local function HideBarPreviewLane(lane)
-    lane.border:Hide()
-    lane.background:Hide()
-    lane.health:Hide()
-    lane.overlay:Hide()
-    lane.maxMarker:Hide()
-    lane.edgeGlow:Hide()
-    lane.direction:Hide()
+    if not lane then return end
+    lane.host:Hide()
+    lane.surface.root:Deactivate()
 end
+
 local function HideDropdownBarPreview(frame)
     local preview = frame and frame._msuf2BarPreview
     if not preview then return end
     for i = 1, #preview do HideBarPreviewLane(preview[i]) end
 end
 local function AddDropdownBarPreviewLane(frame)
-    local lane = {}
-    local border = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
-    border:SetSize(DROPDOWN_BAR_PREVIEW_W + 2, DROPDOWN_BAR_PREVIEW_H + 2)
-    border:SetColorTexture(0, 0, 0, 0.96)
-    border:Hide()
-    lane.border = border
-    local background = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
-    background:SetPoint("CENTER", border, "CENTER", 0, 0)
-    background:SetSize(DROPDOWN_BAR_PREVIEW_W, DROPDOWN_BAR_PREVIEW_H)
-    background:Hide()
-    lane.background = background
-    local health = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
-    health:Hide()
-    lane.health = health
-    local overlay = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
-    overlay:Hide()
-    lane.overlay = overlay
-    local maxMarker = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
-    maxMarker:SetSize(2, DROPDOWN_BAR_PREVIEW_H + 6)
-    maxMarker:Hide()
-    lane.maxMarker = maxMarker
-    local edgeGlow = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, 5))
-    edgeGlow:SetTexture(DROPDOWN_ABSORB_EDGE_TEXTURE)
-    if edgeGlow.SetBlendMode then edgeGlow:SetBlendMode("ADD") end
-    edgeGlow:SetWidth(16)
-    edgeGlow:Hide()
-    lane.edgeGlow = edgeGlow
-    local direction = T.Font(frame, "GameFontHighlightSmall", "", T.colors.muted)
-    direction:SetJustifyH("RIGHT")
-    direction:Hide()
-    lane.direction = direction
-    return lane
+    local host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
+    host:SetSize(DROPDOWN_BAR_PREVIEW_W, DROPDOWN_BAR_PREVIEW_H)
+    local surface = M.PreviewHelpers.NewRuntimeUnitSurface(host, "player", { hp = .68 })
+    surface.fit = false
+    return { host = host, surface = surface }
 end
 local function AddDropdownBarPreviewAssets(frame)
     local preview = frame._msuf2BarPreview
-    if preview then return preview end
-    preview = { AddDropdownBarPreviewLane(frame), AddDropdownBarPreviewLane(frame) }
-    frame._msuf2BarPreview = preview
+    if not preview then
+        preview = { AddDropdownBarPreviewLane(frame), AddDropdownBarPreviewLane(frame) }
+        frame._msuf2BarPreview = preview
+    end
     return preview
 end
-local function PreviewColor(color, fallbackR, fallbackG, fallbackB, fallbackA)
-    local r, g, b, a = DropdownColorTuple(color)
-    return r or fallbackR, g or fallbackG, b or fallbackB, a or fallbackA
-end
-local function PaintDropdownBarPreviewLane(frame, lane, config, hpReverse, yOffset)
-    local background, health, overlay = lane.background, lane.health, lane.overlay
-    local hpFraction = max(0.05, min(0.95, tonumber(config.healthFraction) or 0.68))
-    local overlayFraction = max(0.04, min(0.34, tonumber(config.overlayFraction) or 0.20))
-    local hpWidth = max(1, floor(DROPDOWN_BAR_PREVIEW_W * hpFraction + 0.5))
-    local overlayWidth = max(1, floor(DROPDOWN_BAR_PREVIEW_W * overlayFraction + 0.5))
-    local mode = tonumber(config.mode) or 3
-    if mode < 1 or mode > 5 then mode = 3 end
-
-    lane.border:ClearAllPoints()
-    lane.border:SetPoint("RIGHT", frame, "RIGHT", -DROPDOWN_BAR_PREVIEW_RIGHT, yOffset or 0)
-    background:SetTexture(config.backgroundTexture or "Interface\\Buttons\\WHITE8X8")
-    background:SetVertexColor(PreviewColor(config.backgroundColor, 0.035, 0.080, 0.055, 1))
-    background:Show()
-    health:SetTexture(config.healthTexture or "Interface\\Buttons\\WHITE8X8")
-    health:SetVertexColor(PreviewColor(config.healthColor, 0.12, 0.62, 0.25, 1))
-    health:ClearAllPoints()
-    health:SetWidth(hpWidth)
-    health:SetPoint("TOP", background, "TOP", 0, 0)
-    health:SetPoint("BOTTOM", background, "BOTTOM", 0, 0)
-    health:SetPoint(hpReverse and "RIGHT" or "LEFT", background, hpReverse and "RIGHT" or "LEFT", 0, 0)
-    health:Show()
-
-    overlay:SetTexture(config.overlayTexture or config.healthTexture or "Interface\\Buttons\\WHITE8X8")
-    overlay:SetVertexColor(PreviewColor(config.overlayColor, 1, 1, 1, 0.82))
-    overlay:ClearAllPoints()
-    overlay:SetPoint("TOP", background, "TOP", 0, 0)
-    overlay:SetPoint("BOTTOM", background, "BOTTOM", 0, 0)
-    if mode == 3 and config.followInsideHealth == true then
-        overlayWidth = min(overlayWidth, hpWidth)
-        overlay:SetWidth(overlayWidth)
-        if hpReverse then
-            overlay:SetPoint("LEFT", health, "LEFT", 0, 0)
-        else
-            overlay:SetPoint("RIGHT", health, "RIGHT", 0, 0)
-        end
-    elseif mode == 3 or mode == 4 then
-        if mode == 3 then
-            overlayWidth = min(overlayWidth, max(1, DROPDOWN_BAR_PREVIEW_W - hpWidth))
-        end
-        overlay:SetWidth(overlayWidth)
-        if hpReverse then
-            overlay:SetPoint("RIGHT", health, "LEFT", 0, 0)
-        else
-            overlay:SetPoint("LEFT", health, "RIGHT", 0, 0)
-        end
-    else
-        overlay:SetWidth(overlayWidth)
-        local anchorLeft = mode == 1 or (mode == 5 and hpReverse)
-        overlay:SetPoint(anchorLeft and "LEFT" or "RIGHT", background, anchorLeft and "LEFT" or "RIGHT", 0, 0)
+local function PaintDropdownBarPreviewLane(frame, lane, config, reverse, y)
+    local host = lane.host
+    host:ClearAllPoints()
+    host:SetPoint("RIGHT", frame, "RIGHT", -DROPDOWN_BAR_PREVIEW_RIGHT, y or 0)
+    host:Show()
+    lane.surface.configure = function(spec)
+        spec.width, spec.height = DROPDOWN_BAR_PREVIEW_W, DROPDOWN_BAR_PREVIEW_H
+        spec.health.reverse, spec.health.topInset = reverse, 0
+        spec.health.texture, spec.health.backgroundTexture = config.healthTexture, config.backgroundTexture
+        spec.power.enabled = false
+        local p, c = spec.prediction, config.overlayColor or { 1, 1, 1, .82 }
+        p.enabled, p.test = true, false
+        p.heal, p.absorb, p.healAbsorb = config.category == "heal", config.category == "absorb", config.category == "negative"
+        p.healAnchorMode, p.absorbAnchorMode, p.healAbsorbAnchorMode = config.mode, config.mode, config.mode
+        p.texture, p.absorbTexture, p.healAbsorbTexture = config.overlayTexture, config.overlayTexture, config.overlayTexture
+        p.healR, p.healG, p.healB, p.healA = c[1], c[2], c[3], c[4]
+        p.absorbR, p.absorbG, p.absorbB, p.absorbA = c[1], c[2], c[3], c[4]
+        p.healAbsorbR, p.healAbsorbG, p.healAbsorbB, p.healAbsorbA = c[1], c[2], c[3], c[4]
+        p.fullHealthAbsorbStripe = config.showAbsorbEdgeGlow == true
     end
-    overlay:Show()
-    lane.border:Show()
-
-    if config.showAbsorbEdgeGlow == true then
-        lane.maxMarker:Hide()
-        lane.edgeGlow:ClearAllPoints()
-        if hpReverse then
-            lane.edgeGlow:SetPoint("TOPRIGHT", background, "TOPLEFT", 7, 0)
-            lane.edgeGlow:SetPoint("BOTTOMRIGHT", background, "BOTTOMLEFT", 7, 0)
-        else
-            lane.edgeGlow:SetPoint("TOPLEFT", background, "TOPRIGHT", -7, 0)
-            lane.edgeGlow:SetPoint("BOTTOMLEFT", background, "BOTTOMRIGHT", -7, 0)
-        end
-        lane.edgeGlow:Show()
-    else
-        lane.edgeGlow:Hide()
-        lane.maxMarker:ClearAllPoints()
-        lane.maxMarker:SetPoint(hpReverse and "LEFT" or "RIGHT", background, hpReverse and "LEFT" or "RIGHT", 0, 0)
-        lane.maxMarker:SetColorTexture(1, 0.67, 0.10, 1)
-        lane.maxMarker:Show()
+    local amount = tonumber(config.overlayFraction) or .2
+    local sample = { hp = tonumber(config.healthFraction) or .68,
+        incoming = config.category == "heal" and amount or 0,
+        absorb = config.category == "absorb" and amount or 0,
+        healAbsorb = config.category == "negative" and amount or 0 }
+    local rendered = lane.surface:Refresh(sample)
+    if rendered then
+        lane.surface.scene:SetLayerFilter({ nameText = false, hpText = false, power = false, powerText = false,
+            portrait = false, status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
     end
-    lane.direction:ClearAllPoints()
-    lane.direction:SetPoint("RIGHT", lane.border, "LEFT", -4, 0)
-    lane.direction:SetText(hpReverse and "< HP" or "HP >")
-    lane.direction:Show()
 end
+
 local function PaintDropdownBarPreview(frame, config)
     if not (frame and type(config) == "table") then
         HideDropdownBarPreview(frame)

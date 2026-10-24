@@ -9,7 +9,6 @@ local _, MSUF = ...
 -- the unit page registry (Pages/MSUF_Menu2_UnitLazy.lua) loads before this file.
 local M = MSUF.MSUF2
 local UP, Schema = M.UnitPage, M.ControlSchema
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_UnitArenaTrinket.lua")
 local ROW_OPTIONS = Schema.UnitOptions()
 local floor = math.floor
 
@@ -25,8 +24,6 @@ local SIDE_CHOICES = {
     { value = "TOP", text = "Top" },
     { value = "BOTTOM", text = "Bottom" },
 }
--- Share of the sample icon the static swipe darkens: 78 of 120 seconds left.
-local SAMPLE_SWIPE_SHARE = 0.65
 
 --- Section fields for Reset section (Unit page section actions); the trinket is
 --- arena-only, so the section has nothing to copy to another frame.
@@ -144,42 +141,24 @@ function TrinketPreview.Footprint(minX, maxX, minY, maxY, frameW, frameH, expand
     return expandAnchoredRect(minX, maxX, minY, maxY, point, relativePoint, x, y, iconSize, iconSize, frameW, frameH)
 end
 
-local function EnsurePreviewIcon(mock)
-    local icon = mock._msufArenaTrinketPreview
-    if icon then return icon end
-    icon = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-    icon.art = PixelLayoutRegion(icon:CreateTexture(nil, "ARTWORK"))
-    icon.art:SetAllPoints(icon)
-    icon.art:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    icon.art:SetTexture(MSUF.ArenaTrinkets.FallbackTexture)
-    icon.dim = PixelLayoutRegion(icon:CreateTexture(nil, "OVERLAY"))
-    icon.dim:SetColorTexture(0, 0, 0, 0.6)
-    icon.dim:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
-    icon.dim:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-    mock._msufArenaTrinketPreview = icon
-    return icon
-end
 
---- Paints the icon on the arena mock. Returns whether the trinket exists on
---- this preview (the arena page with the switch on), so its legend entry stays
---- offered while the entry hides the icon, and the shown icon for the handle.
-function TrinketPreview.Paint(mock, key, wanted, scale)
+
+function TrinketPreview.Paint(mock, key, wanted, scale, rawScale)
     local runtime = MSUF.ArenaTrinkets
     local available = key == "arena" and runtime.Shown()
     local icon = mock._msufArenaTrinketPreview
     if not (available and wanted) then
-        if icon then icon:Hide() end
+        if icon then icon.cooldown:Clear() icon:Hide() end
         return available, nil
     end
-    icon = icon or EnsurePreviewIcon(mock)
-    local iconSize, point, relativePoint, x, y, layer = runtime.Layout()
-    local side = math.max(1, scale(iconSize))
-    icon:SetSize(side, side)
-    icon:ClearAllPoints()
-    icon:SetPoint(point, mock, relativePoint, scale(x), scale(y))
-    icon:SetFrameLevel(MSUF.UF.Layers.ElementLevel(layer, runtime.DEFAULTS.layer, 0))
-    icon.dim:SetWidth(math.max(1, floor(side * SAMPLE_SWIPE_SHARE + 0.5)))
-    runtime.ApplyShape(icon, nil, icon.art, icon.dim)
+    if not icon then
+        icon = runtime.CreateSurface(mock)
+        mock._msufArenaTrinketPreview = icon
+    end
+    runtime.PaintSurface(icon, mock)
+    -- Native scaling preserves the runtime geometry, masks and cooldown swipe.
+    icon:SetScale(rawScale or 1)
+    icon.cooldown:SetCooldown(GetTime() - 48, 120)
     icon:Show()
     return true, icon
 end

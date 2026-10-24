@@ -18,8 +18,9 @@ local T = M.Theme
 local CPPreview = M.ClassPowerPreview or {}
 local PreviewCore = MSUF.UFPreviewCore or {}
 local Helpers = M.PreviewHelpers or {}
-local function PlayerManaSourceActive(player)
-    return player and player._msufResourceExtraMana == true or Helpers.PlayerManaSourceActive(player)
+local function PlayerManaSourceActive(player, class)
+    return (player.playerPowerSource == "MANA" or player._msufResourceExtraMana == true)
+        and MSUF.CPBuilders.SampleHasMana(class)
 end
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- animation driver's OnUpdate disabled.
@@ -58,32 +59,18 @@ local min = math.min
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local PREVIEW_BORDER_COLOR = { 1.00, 0.02, 0.02, 1.00 }
 local CP_PREVIEW_ANIMATION_INTERVAL = 0.05
-local CP_SHAPES, POWER_SHAPES = CPPreview.CLASS_SHAPES, CPPreview.POWER_SHAPES
-local NormalizeClassShape, ResolvePowerShape = CPPreview.NormalizeClassShape, CPPreview.ResolvePowerShape
-local CP_OUTLINE_OPTS = {
-    linesKey = "_msufCPPreviewEdges",
-    maxEdgeSize = 8,
-    texture = WHITE8,
-    color = function() return PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], PREVIEW_BORDER_COLOR[4] end,
-}
-local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", MAXPERCENT = "PERCENTMAX",
-    PERCENTMAX = "MAXPERCENT", CURMAXPERCENT = "PERCENTCURMAX", PERCENTCURMAX = "CURMAXPERCENT", PERCENTMAXCUR = "CURMAXPERCENT" }
-local DELIMITERS = { [""] = " ", ["-"] = " - ", ["/"] = " / ", ["\\"] = " \\ ", ["|"] = " | ", ["<"] = " < ", [">"] = " > ", ["~"] = " ~ ", [":"] = " : " }
+local HAS_EXTRA_AURAS = MSUF.Client.IsRetail == true and MSUF.Client.IsForever ~= true
 local FALLBACK_FONT = "Fonts\\FRIZQT__.TTF"
 -- Core-addon providers (all load before the options addon), resolved once. Only the class power
 -- constants table is an optional collaborator.
 local Core = {
-    ShapeOutlineAlpha = MSUF.Require("MSUF_UF_ShapeOutlineAlpha", "Menu2/ClassPowerPreview"),
     SetFontChecked = MSUF.Require("MSUF_SetFontChecked", "Menu2/ClassPowerPreview"),
     GetFontPath = MSUF.Require("MSUF_GetFontPath", "Menu2/ClassPowerPreview"),
     GetFontFlags = MSUF.Require("MSUF_GetFontFlags", "Menu2/ClassPowerPreview"),
     ResolveSafeFontPath = MSUF.Require("MSUF_ResolveSafeFontPath", "Menu2/ClassPowerPreview"),
     GetGlobalFontSettings = MSUF.Require("MSUF_GetGlobalFontSettings", "Menu2/ClassPowerPreview"),
     ResolveFontShadowMetrics = MSUF.Require("MSUF_ResolveFontShadowMetrics", "Menu2/ClassPowerPreview"),
-    GetSettingsCache = MSUF.Require("MSUF_UFCore_GetSettingsCache", "Menu2/ClassPowerPreview"),
     GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", "Menu2/ClassPowerPreview"),
-    GetBarBackgroundTexture = MSUF.Require("MSUF_GetBarBackgroundTexture", "Menu2/ClassPowerPreview"),
-    CDMScaledWidth = MSUF.Require("MSUF_CDM_GetScaledWidth", "Menu2/ClassPowerPreview"),
     CPConst = MSUF.Optional("MSUF_CP_CONST"),
 }
 local function TR(text)
@@ -125,15 +112,6 @@ local function Clamp(value, fallback, minValue, maxValue)
     value = tonumber(value) or fallback
     if value < minValue then return minValue end
     if value > maxValue then return maxValue end
-    return value
-end
-local function Alpha(value, fallback)
-    value = tonumber(value)
-    if value == nil then value = fallback end
-    if value == nil then value = 1 end
-    if value > 1 then value = value / 100 end
-    if value < 0 then return 0 end
-    if value > 1 then return 1 end
     return value
 end
 local function EnsureDB()
@@ -200,12 +178,6 @@ local function RefreshLayerButtons(preview)
     end
 end
 
-local function ResolveHPShape(bars, player)
-    local value = tostring(bars and bars.playerHPBarShape or "BAR"):upper()
-    if value ~= "FOLLOW_POWER" then return ResolvePowerShape(value, bars and bars.classPowerShape) end
-    if not (player and player.powerBarDetached == true) then return "BAR" end
-    return ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars and bars.classPowerShape)
-end
 local function AnimationEnabled(preview)
     return preview and preview._animationEnabled == true
 end
@@ -221,10 +193,6 @@ local function AnimatedMeterFraction(preview, fallback, speed, low, high)
     local wave = phase <= 1 and phase or (2 - phase)
     return low + (wave * (high - low))
 end
-local function PreviewOutline(preview, value, fallback)
-    if not LayerOn(preview, "border") then return 0 end
-    return Clamp(value, fallback or 0, 0, 8)
-end
 local ResolveTexture = CPPreview.ResolveTexture
 local PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER",
     mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
@@ -236,98 +204,13 @@ end
 local function PreviewClassToken(spec)
     local token = SpecToken(spec)
     if token then return token end
-    if M.GetClassPowerPreviewClassToken then
-        local class = M.GetClassPowerPreviewClassToken()
-        if class then return tostring(class):upper() end
-    end
-    local key = tostring((spec and spec.key) or "")
-    local prefix = key:match("^([^_]+)")
-    return prefix and PREVIEW_CLASS_BY_PREFIX[prefix] or nil
+    local prefix = spec and tostring(spec.key or ""):match("^([^_]+)")
+    token = prefix and PREVIEW_CLASS_BY_PREFIX[prefix]
+    if token then return token end
+    return M.GetClassPowerPreviewClassToken()
 end
-local function ClassColor(spec)
-    local class = PreviewClassToken(spec)
-    if not class and UnitClass then class = select(2, UnitClass("player")) end
-    return MSUF.UF.Config.ClassColor(class)
-end
-local function PowerColor(player)
-    local explicitMana = PlayerManaSourceActive(player)
-    local sample = player and player._msufResourceExtraPower
-    local c = PowerBarColor and ((sample and PowerBarColor[sample]) or (explicitMana and PowerBarColor.MANA) or PowerBarColor.ENERGY or PowerBarColor.MANA)
-    if c then return c.r or c[1] or 1, c.g or c[2] or 0.82, c.b or c[3] or 0.10 end
-    return 1.00, 0.86, 0.12
-end
-local function CPTextAlpha()
-    local g = EnsureDB().general
-    local alpha = tonumber(g and g.fontTextAlpha) or 1
-    if alpha < 0.7 then alpha = 0.7 elseif alpha > 1 then alpha = 1 end
-    return alpha
-end
-local function HPColor(bars, spec)
-    local mode = tostring(bars and bars.playerHPBarColorMode or "GLOBAL"):upper()
-    if mode == "DARK" then
-        return Helpers.DarkBarColor(Core.GetSettingsCache())
-    end
-    if mode == "GRADIENT" then
-        local pct = 0.74
-        local r = pct > 0.5 and (1 - (pct - 0.5) * 2) or 1
-        local g = pct > 0.5 and 1 or (pct * 2)
-        return r, g, 0
-    end
-    return ClassColor(spec)
-end
-local function ShortValue(value)
-    value = tonumber(value) or 0
-    local abbrev = AbbreviateShortNumber or AbbreviateLargeNumbers
-    if abbrev then
-        local NumberFormat = MSUF.NumberFormat
-        local text = abbrev(value, NumberFormat and NumberFormat.GetOptions and NumberFormat.GetOptions() or nil)
-        if text ~= nil then return text end
-    end
-    local absValue = value < 0 and -value or value
-    local sign = value < 0 and "-" or ""
-    if absValue >= 1000000 then
-        local n = floor((absValue / 100000) + 0.5) / 10
-        return sign .. (n >= 10 and tostring(floor(n + 0.5)) or string.format("%.1f", n)) .. "M"
-    elseif absValue >= 1000 then
-        local n = floor((absValue / 100) + 0.5) / 10
-        return sign .. (n >= 10 and tostring(floor(n + 0.5)) or string.format("%.1f", n)) .. "K"
-    end
-    return tostring(floor(value + 0.5))
-end
-local function ModeText(mode, current, maxValue, delimiter, hidePercentSymbol)
-    mode = tostring(mode or "NONE"):upper()
-    if mode == "NONE" then return "" end
-    current = tonumber(current) or 0
-    maxValue = tonumber(maxValue) or 1
-    if maxValue < 1 then maxValue = 1 end
-    delimiter = DELIMITERS[delimiter] or delimiter or " "
-    local pct = floor((current / maxValue) * 100 + 0.5)
-    if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
-    local curText, maxText, pctText = ShortValue(current), ShortValue(maxValue), tostring(pct)
-    if hidePercentSymbol ~= true then pctText = pctText .. "%" end
-    if mode == "CURRENT" then return curText end
-    if mode == "MAX" then return maxText end
-    if mode == "DEFICIT" then
-        local missing = maxValue - current
-        return missing > 0 and ("-" .. ShortValue(missing)) or ""
-    end
-    if mode == "PERCENT" then return pctText end
-    if mode == "CURMAX" then return curText .. delimiter .. maxText end
-    if mode == "MAXCUR" then return maxText .. delimiter .. curText end
-    if mode == "CURPERCENT" then return curText .. delimiter .. pctText end
-    if mode == "PERCENTCUR" then return pctText .. delimiter .. curText end
-    if mode == "MAXPERCENT" then return maxText .. delimiter .. pctText end
-    if mode == "PERCENTMAX" then return pctText .. delimiter .. maxText end
-    if mode == "CURMAXPERCENT" then return curText .. delimiter .. maxText .. delimiter .. pctText end
-    if mode == "PERCENTCURMAX" then return pctText .. delimiter .. curText .. delimiter .. maxText end
-    if mode == "PERCENTMAXCUR" then return pctText .. delimiter .. maxText .. delimiter .. curText end
-    return curText
-end
-local function HidePercentValue(source, key)
-    if source and source[key] ~= nil then return source[key] == true end
-    local g = M.EnsureDB().general
-    return g and g.hidePercentSymbol == true
-end
+
+CPPreview.ClassForSpec = PreviewClassToken
 local function ApplyFont(region, size)
     if not (region and region.SetFont) then return end
     size = Clamp(size, 12, 6, 48)
@@ -351,98 +234,14 @@ local function ApplyFont(region, size)
         region:SetShadowOffset(0, 0)
     end
 end
-local function EnsureOutlineHost(frame)
-    local parent = frame and frame:GetParent()
-    if not parent then return nil end
-    local host = frame._msufCPPreviewOutlineHost
-    if not host then
-        host = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
-        host:EnableMouse(false)
-        frame._msufCPPreviewOutlineHost = host
-    end
-    if host:GetParent() ~= parent then host:SetParent(parent) end
-    return host
-end
-local function ApplyBarOutline(frame, outline)
-    local host = EnsureOutlineHost(frame)
-    if not host then return end
-    outline = floor((tonumber(outline) or 0) + 0.5)
-    if outline <= 0 then
-        Helpers.SetEdgeLinesShown(host, false, CP_OUTLINE_OPTS)
-        host:Hide()
-        return
-    end
-    if outline > 8 then outline = 8 end
-    host:ClearAllPoints()
-    host:SetPoint("TOPLEFT", frame, "TOPLEFT", -outline, outline)
-    host:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outline, -outline)
-    local parent = host:GetParent()
-    host:SetFrameLevel(((parent and parent.GetFrameLevel and parent:GetFrameLevel()) or 0) + 74)
-    host:Show()
-    Helpers.LayoutEdgeLines(host, outline, CP_OUTLINE_OPTS)
-end
 local function HideBarOutline(frame)
-    local host = frame and frame._msufCPPreviewOutlineHost
-    if not host then return end
-    Helpers.SetEdgeLinesShown(host, false, CP_OUTLINE_OPTS)
-    host:Hide()
+    if not frame then return end
+    local health = frame._msufRuntimeHealthState
+    local host = health and health.borderHost or frame.MSUFPowerBorderHost
+    if host then host:Hide() end
+    if health and health.shapeEdge then health.shapeEdge:Hide() end
 end
-local CP_POWER_ROUNDED_OPTS = {
-    bgKey = "_msufCPRoundedBg",
-    edgeKey = "_msufCPRoundedEdge",
-    stackKey = "_msufCPRoundedEdgeStack",
-    countKey = "_msufCPRoundedEdgeCount",
-    whiteTexture = WHITE8,
-    edgeLayer = "OVERLAY",
-    edgeSubLevel = 6,
-    snapOff = Helpers.SnapOff,
-    baseEdgeColor = function()
-        local spec = MSUF.UFPreviewRuntime.SpecForPreviewKey("player")
-        local power = spec and spec.power
-        if power then return power.borderR, power.borderG, power.borderB, power.borderA end
-        local player = EnsureDB().player or {}
-        local r, g, b, a = Helpers.BaseEdgeColor()
-        return tonumber(player.powerBarBorderColorR) or tonumber(player.barOutlineColorR) or r,
-            tonumber(player.powerBarBorderColorG) or tonumber(player.barOutlineColorG) or g,
-            tonumber(player.powerBarBorderColorB) or tonumber(player.barOutlineColorB) or b,
-            tonumber(player.powerBarBorderColorA) or a
-    end,
-}
-local function RoundedPowerPreviewEnabled()
-    local bars = EnsureDB().bars
-    return bars and bars.roundedFramesEnabled == true
-        and bars.roundedUnitFrames ~= false
-        and bars.roundedPowerBars ~= false
-end
-local function SetRoundedPowerPreview(frame, enabled, outline)
-    if not frame then return false end
-    if not enabled or not RoundedPowerPreviewEnabled() then
-        Helpers.ClearMasks(frame, "_msufCPRoundedMasked")
-        Helpers.SetRoundedEdgeStackShown(frame, false, CP_POWER_ROUNDED_OPTS)
-        if frame._msufCPRoundedBg then frame._msufCPRoundedBg:Hide() end
-        return false
-    end
-    local maskPath, edgePath, strength = Helpers.ResolveRoundedMedia()
-    CP_POWER_ROUNDED_OPTS.edgeTexture = edgePath
-    CP_POWER_ROUNDED_OPTS.mediaStrength = strength
-    local bgMask = Helpers.EnsureRoundedMask(frame, "background", frame, frame.bg,
-        "_msufCPRoundedMasks", maskPath, Helpers.SnapOff)
-    local fillMask = Helpers.EnsureRoundedMask(frame, "fill", frame, frame.fill,
-        "_msufCPRoundedMasks", maskPath, Helpers.SnapOff)
-    if not (bgMask and fillMask and Helpers.EnsureRoundedVisuals(frame, CP_POWER_ROUNDED_OPTS)) then return false end
-    Helpers.SetMask(frame, frame.bg, bgMask, "_msufCPRoundedMasked")
-    Helpers.SetMask(frame, frame.fill, fillMask, "_msufCPRoundedMasked")
-    HideBarOutline(frame)
-    outline = floor((tonumber(outline) or 0) + 0.5)
-    if outline > 8 then outline = 8 end
-    if outline > 0 then
-        Helpers.ApplyRoundedEdgeStack(frame, outline, CP_POWER_ROUNDED_OPTS)
-    else
-        Helpers.SetRoundedEdgeStackShown(frame, false, CP_POWER_ROUNDED_OPTS)
-    end
-    if frame._msufCPRoundedBg then frame._msufCPRoundedBg:Hide() end
-    return true
-end
+
 local function EnsureHandleGear(handle, shown)
     return Helpers.EnsurePreviewHandleGear(handle, {
         T = T,
@@ -659,119 +458,6 @@ local function MakeText(parent, layer, justify, subLevel)
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     return fs
 end
-local function MakeTexture(parent, layer, subLevel, allPoints, hidden)
-    local tex = PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel))
-    tex:SetTexture(WHITE8)
-    if allPoints then tex:SetAllPoints() end
-    if hidden then tex:Hide() end
-    return tex
-end
-local function EnsureMeter(preview, name, separateTextOwner)
-    if preview[name] then return preview[name] end
-    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate"))
-    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
-    frame:SetBackdropColor(0, 0, 0, 0)
-    frame:SetBackdropBorderColor(0, 0, 0, 0)
-    frame.bg = MakeTexture(frame, "BACKGROUND", nil, true)
-    frame.fill = MakeTexture(frame, "ARTWORK")
-    frame.edge = MakeTexture(frame, "OVERLAY", 7, true, true)
-    local textOwner = frame
-    if separateTextOwner then
-        textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
-        textOwner:SetAllPoints(frame)
-        if textOwner.EnableMouse then textOwner:EnableMouse(false) end
-        frame.textOwner = textOwner
-    end
-    frame.left = MakeText(textOwner, "OVERLAY", "LEFT")
-    frame.center = MakeText(textOwner, "OVERLAY", "CENTER")
-    frame.right = MakeText(textOwner, "OVERLAY", "RIGHT")
-    preview[name] = frame
-    return frame
-end
--- Fill length along one axis: at least one pixel, a rounded share of `size` while the fraction is positive.
-local function FillSpan(size, frac)
-    return frac > 0 and max(1, floor(size * frac + 0.5)) or 1
-end
--- Crops and sizes the fill texture to a fraction of the meter.
-local function SetFillExtent(frame, w, h, frac)
-    local fill = frame.fill
-    if frame._msufCPPreviewShapeAxis == "VERTICAL" then
-        fill:SetTexCoord(0, 1, frac > 0 and (1 - frac) or 1, 1)
-        fill:SetSize(w, FillSpan(h, frac))
-    else
-        fill:SetTexCoord(0, frame._msufCPPreviewHasShape and frac or 1, 0, 1)
-        fill:SetSize(FillSpan(w, frac), h)
-    end
-    if frac > 0 then fill:Show() else fill:Hide() end
-end
-local function RenderMeter(frame, shapeInfo, opts)
-    opts = opts or {}
-    local w = max(1, floor(tonumber(opts.width) or 1))
-    local h = max(1, floor(tonumber(opts.height) or 1))
-    local frac = Clamp(opts.fraction, 1, 0, 1)
-    frame._msufCPPreviewW = w
-    frame._msufCPPreviewH = h
-    frame._msufCPPreviewShapeAxis = shapeInfo and shapeInfo.axis or nil
-    frame._msufCPPreviewHasShape = shapeInfo ~= nil
-    frame:SetSize(w, h)
-    frame.bg:ClearAllPoints()
-    frame.bg:SetAllPoints(frame)
-    frame.fill:ClearAllPoints()
-    if shapeInfo then
-        HideBarOutline(frame)
-        frame.bg:SetTexture(shapeInfo.bg)
-        frame.bg:SetVertexColor(opts.bgR or opts.r or 1, opts.bgG or opts.g or 1, opts.bgB or opts.b or 1, opts.bgA or 0.28)
-        frame.fill:SetTexture(shapeInfo.fill)
-        frame.fill:SetVertexColor(opts.r or 1, opts.g or 1, opts.b or 1, frac > 0 and 1 or 0)
-        SetFillExtent(frame, w, h, frac)
-        if shapeInfo.axis == "VERTICAL" then
-            frame.fill:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-            frame.fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-        else
-            frame.fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-            frame.fill:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-        end
-        if frame.edge then
-            local outline = floor((tonumber(opts.outline) or 0) + 0.5)
-            if outline > 0 then
-                frame.edge:SetTexture(shapeInfo.edge)
-                frame.edge:SetVertexColor(PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], Core.ShapeOutlineAlpha(outline))
-                frame.edge:SetAllPoints(frame)
-                frame.edge:Show()
-            else
-                frame.edge:Hide()
-            end
-        end
-    else
-        if frame.edge then frame.edge:Hide() end
-        ApplyBarOutline(frame, opts.outline or 0)
-        frame.bg:SetTexture(opts.bgTexture or WHITE8)
-        frame.bg:SetVertexColor(opts.bgR or 0, opts.bgG or 0, opts.bgB or 0, opts.bgA or 0.35)
-        frame.fill:SetTexture(opts.texture or WHITE8)
-        frame.fill:SetVertexColor(opts.r or 1, opts.g or 1, opts.b or 1, 1)
-        SetFillExtent(frame, w, h, frac)
-        frame.fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        frame.fill:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-    end
-end
--- Per-tick fill update: the same crop and length as SetFillExtent, inline so a tick adds no Lua call.
-local function UpdateMeterFill(frame, fraction)
-    if not (frame and frame.fill) then return false end
-    local w = max(1, floor(tonumber(frame._msufCPPreviewW) or (frame.GetWidth and frame:GetWidth()) or 1))
-    local h = max(1, floor(tonumber(frame._msufCPPreviewH) or (frame.GetHeight and frame:GetHeight()) or 1))
-    local frac = tonumber(fraction) or 0
-    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-    local fill = frame.fill
-    if frame._msufCPPreviewShapeAxis == "VERTICAL" then
-        fill:SetTexCoord(0, 1, frac > 0 and (1 - frac) or 1, 1)
-        fill:SetHeight(frac > 0 and max(1, floor(h * frac + 0.5)) or 1)
-    else
-        fill:SetTexCoord(0, frame._msufCPPreviewHasShape and frac or 1, 0, 1)
-        fill:SetWidth(frac > 0 and max(1, floor(w * frac + 0.5)) or 1)
-    end
-    if frac > 0 then fill:Show() else fill:Hide() end
-    return true
-end
 --- A Cooldown Manager viewer by frame name: the effective (relocated) frame first, then the global.
 local function CooldownFrame(frameName)
     return Core.GetEffectiveCooldownFrame(frameName) or _G[frameName]
@@ -817,35 +503,19 @@ end
 --- this page each clamp for their own canvas. `nativeBar` is a Warrior-style
 --- bar that never takes a pip shape.
 function CPPreview.ContainerWidth(bars, frameW, height, segCount, nativeBar)
-    bars = bars or {}
-    local UFShared = MSUF.UF.Shared
-    local widthMode = bars.classPowerWidthMode or "player"
-    frameW = tonumber(frameW) or 275
-    local shape = not nativeBar and CP_SHAPES[NormalizeClassShape(bars.classPowerShape)] or nil
-    if shape and widthMode == "auto_pips" then
-        return UFShared.ClassPowerAutoFitWidth(segCount, height, bars.classPowerGap)
+    local scene = CPPreview._widthScene
+    if not scene then
+        local parent = PixelLayoutRegion(CreateFrame("Frame"))
+        parent:Hide()
+        scene = { opts = { sample = {} }, root = { parent = parent } }
+        scene.frame = MSUF.UF.PreviewSurfaces.ClassPower.Create(scene)
+        CPPreview._widthScene = scene
     end
-    local cdmFrames = Core.CPConst and Core.CPConst.CDM_FRAMES
-    local frameName = cdmFrames and cdmFrames[widthMode]
-    if frameName then
-        local source = CooldownFrame(frameName)
-        local width
-        if source and source.IsShown and source:IsShown() then
-            -- ClassPower builds its container lazily and keeps it; cached once it exists.
-            local container = Core.ClassPowerContainer
-            if not container then
-                container = MSUF.Optional("MSUF_ClassPowerContainer")
-                Core.ClassPowerContainer = container
-            end
-            width = Core.CDMScaledWidth(source, container)
-        end
-        if tonumber(width) and width >= 30 then return width end
-    elseif widthMode == "custom" then
-        local width = tonumber(bars.classPowerWidth) or 0
-        if width >= 30 then return width end
-    end
-    return frameW - UFShared.ClassPowerFrameInsets(widthMode)
+    scene.config.bars = bars
+    scene.frame:SetSize(frameW, 40)
+    return scene.layout.MeasureWidth(scene.frame, segCount, height, nativeBar and "WHIRLWIND" or nil)
 end
+
 --- Distance of the container's left edge from the player frame (ClassPower
 --- Layout.Position); the Offset X setting comes on top.
 function CPPreview.ContainerInsetX(bars)
@@ -853,19 +523,10 @@ function CPPreview.ContainerInsetX(bars)
     return insetX
 end
 
-local function IsAugCompositePreviewSpec(spec)
-    return spec and spec.key == "evoker_augmentation_ebon"
-        and type(spec.secondaryTimer) == "table"
-end
 
 --- True while the Player Power bar renders Ebon Might instead of Mana. Ordinary
 --- Power visibility still decides whether that bar exists at all, exactly as it
 --- does at runtime.
-local function PowerShowsEbonMight(bars, player, spec)
-    return IsAugCompositePreviewSpec(spec)
-        and not PlayerManaSourceActive(player)
-        and bars.showEbonMight ~= false
-end
 
 local function ClassPowerPreviewState(bars, spec)
     if bars and bars.showClassPower == false then return false, "settings" end
@@ -950,86 +611,12 @@ end
 local function DetachedPowerShown(player)
     return player.powerBarDetached == true and player.detachedPowerBarAnchorToClassPower == true
 end
-local function DetachedPowerWidth(preview, bars, player, classFrame)
-    local shape = ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars.classPowerShape)
-    return CPPreview.ResolveDetachedPowerWidth({
-        shape = shape,
-        orbSize = player.detachedPowerOrbSize,
-        syncClass = player.detachedPowerBarSyncClassPower ~= false,
-        classWidth = classFrame and classFrame.GetWidth and classFrame:GetWidth() or nil,
-        classFallbackWidth = (tonumber(preview.playerW) or 275) - 4,
-        widthMode = bars.detachedPowerBarWidthMode,
-        manualWidth = player.detachedPowerBarWidth,
-        frameWidth = preview.playerW,
-    }), shape
-end
--- Anchor, width share and layout keys of the three meter text slots.
-local METER_TEXT_SLOTS = {
-    { key = "left", point = "LEFT", inset = 4, share = 0.34, layoutX = "leftX", layoutY = "leftY" },
-    { key = "center", point = "CENTER", inset = 0, share = 1, layoutX = "centerX", layoutY = "centerY" },
-    { key = "right", point = "RIGHT", inset = -4, share = 0.34, layoutX = "rightX", layoutY = "rightY" },
-}
-local function ApplyMeterText(frame, size, x, y, layout, leftText, centerText, rightText)
-    x, y = x or 0, y or 0
-    local width = frame:GetWidth() or 100
-    local textH = max(14, (frame:GetHeight() or 8) + 8)
-    for i = 1, #METER_TEXT_SLOTS do
-        local slot = METER_TEXT_SLOTS[i]
-        local region = frame[slot.key]
-        local text = select(i, leftText, centerText, rightText) or ""
-        ApplyFont(region, size)
-        region:SetText(text)
-        region:SetTextColor(1, 1, 1, 1)
-        region:ClearAllPoints()
-        region:SetPoint(slot.point, frame, slot.point, slot.inset + (layout and layout[slot.layoutX] or x),
-            layout and layout[slot.layoutY] or y)
-        region:SetSize(max(20, width * slot.share), textH)
-        if text ~= "" then region:Show() else region:Hide() end
-    end
-end
-
-local function PowerTextSide(player, general, side, axis)
-    local key, legacy = "powerText" .. side .. "Offset" .. axis, "power" .. side .. "Offset" .. axis
-    return tonumber(player[key] or player[legacy] or general[key] or general[legacy]) or 0
-end
-local function ResolvePlayerPowerTextLayout(player)
-    player = player or {}
-    local general = Section("general")
-    local baseX = tonumber(player.powerOffsetX or player.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX) or -4
-    local baseY = tonumber(player.powerOffsetY or player.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY) or 4
-    local baseline = tonumber((player.fontOverride == true and player.fontBaselineOffset) or general.fontBaselineOffset) or 0
-    if baseline < -4 then baseline = -4 elseif baseline > 4 then baseline = 4 end
-    baseY = baseY + baseline
-    return {
-        leftX = baseX + PowerTextSide(player, general, "Left", "X"), leftY = baseY + PowerTextSide(player, general, "Left", "Y"),
-        centerX = baseX + PowerTextSide(player, general, "Center", "X"), centerY = baseY + PowerTextSide(player, general, "Center", "Y"),
-        rightX = baseX + PowerTextSide(player, general, "Right", "X"), rightY = baseY + PowerTextSide(player, general, "Right", "Y"),
-    }
-end
-
 local function PlayerPowerTextShown(player)
     player = player or {}
     if player.showPowerText ~= nil then return player.showPowerText ~= false end
     return player.showPower ~= false
 end
 -- Left, center and right text of the detached power bar at a preview fraction.
-local function DetachedPowerTexts(player, fraction)
-    local current = floor((fraction * 100) + 0.5)
-    local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
-    return ModeText(player.powerTextLeft, current, 100, delimiter, HidePercentValue(player, "powerTextLeftHidePercentSymbol")),
-        ModeText(player.powerTextCenter, current, 100, delimiter, HidePercentValue(player, "powerTextCenterHidePercentSymbol")),
-        ModeText(player.powerTextRight or player.powerTextMode or "CURPERCENT", current, 100, delimiter,
-            HidePercentValue(player, "powerTextRightHidePercentSymbol"))
-end
--- The player's own value, else the shared bars value, for a texture key.
-local function PlayerThenBars(player, bars, key)
-    local value = player[key]
-    if type(value) ~= "string" or value == "" then value = bars[key] end
-    return value
-end
-local function TimerText(spec, value)
-    return CPPreview.TextForValue(spec, value) or tostring(spec.previewText or "12.0")
-end
 -- Anchors the detached power bar under the class resource when it shows, else under the player stand-in.
 local function AnchorDetachedPower(preview, frame, player, classFrame, x, y)
     frame:ClearAllPoints()
@@ -1043,206 +630,109 @@ local function AnchorDetachedPower(preview, frame, player, classFrame, x, y)
 end
 -- The native duration binding always writes this text, independently of the
 -- ordinary power-text slots, which are dropped for this bar.
-local function PaintEbonPowerText(preview, frame, player, ebonSpec, ebonAnimated)
-    frame.left:Hide()
-    frame.right:Hide()
-    local showText = ebonSpec.nativeDurationText == true or PlayerPowerTextShown(player)
-    if showText then
-        local textR, textG, textB = CPPreview.ResolveTextColor(1, 1, 1)
-        ApplyFont(frame.center, Clamp(player.powerFontSize, 14, 6, 48))
-        frame.center:SetText(TimerText(ebonSpec, ebonAnimated))
-        frame.center:SetTextColor(textR, textG, textB, CPTextAlpha())
-        frame.center:ClearAllPoints()
-        frame.center:SetPoint("CENTER", frame, "CENTER",
-            tonumber(player.powerOffsetX) or 0,
-            tonumber(player.powerOffsetY) or 0)
-        frame.center:Show()
-        PlaceTextHandle(preview.handlePowerText, PreviewParent(preview), { frame.center })
-    else
-        frame.center:Hide()
-        preview.handlePowerText:Hide()
-    end
-    frame._msufCPPreviewTimerAnim = { spec = ebonSpec, showText = showText }
-end
 
 --- Detached power preview follows the same anchoring relationship as runtime:
 --- it can attach to ClassPower, but no live player power events are involved.
+local function EnsurePlayerRuntime(preview, bars, player, spec)
+    local surface = preview.playerRuntime
+    if not surface then
+        surface = Helpers.NewRuntimeUnitSurface(preview.playerRef, "player", {})
+        surface.fit = false
+        preview.playerRuntime = surface
+        surface.configure = function(config)
+            config.width, config.height = preview.playerW, preview.playerH
+            local power = config.power
+            local bars, player = preview._runtimeBars, preview._runtimePlayer
+            local class = preview.cpScene and preview.cpScene.CP.container
+            power.detachedWidthExplicit = CPPreview.ResolveDetachedPowerWidth({
+                frameWidth = preview.playerW, syncClass = player.detachedPowerBarSyncClassPower ~= false,
+                classWidth = class and class:GetWidth(), classFallbackWidth = power.detachedClassWidth,
+                widthFrameName = power.detachedWidthFrameName, widthMode = bars.detachedPowerBarWidthMode,
+                manualWidth = player.detachedPowerBarWidth, explicitWidth = power.detachedWidthExplicit,
+            })
+            power.detachedAnchorClass, power.detachedSyncClass = false, false
+            if not Wanted(preview, "border") then power.detachedOutline, power.borderThickness = 0, 0 end
+        end
+    end
+    preview._runtimeBars, preview._runtimePlayer = bars, player
+    local sample = surface.sample
+    sample.class = preview._resourceExtraExample == "pain" and "WARRIOR"
+        or preview._resourceExtraExample == "arcane" and "MAGE" or PreviewClassToken(spec)
+    sample.hp, sample.power, sample.powerType, sample.powerToken = .74, .72, CPPreview.PrimaryPower(spec, sample.class), nil
+    local cp = preview.cpScene and preview.cpScene.CP
+    if PlayerManaSourceActive(player, sample.class) or (cp and cp.visible and spec and spec.mode == "continuous"
+        and (spec.token == "INSANITY" or spec.token == "MAELSTROM")) then sample.powerType = 0 end
+    sample.powerToken = player._msufResourceExtraPower
+    if not sample.powerToken then sample.powerToken = Core.CPConst.POWER_TYPE_TOKENS[sample.powerType] end
+    for key, token in pairs(Core.CPConst.POWER_TYPE_TOKENS) do if token == sample.powerToken then sample.powerType = key break end end
+    local frame = surface:Refresh(sample)
+    if not frame then return nil end
+    if not surface.afterPaint then
+        surface.afterPaint = function(frame, scene)
+            frame.hpBar:Hide()
+            frame.healthBackgroundBar:Hide()
+            if frame.healthLossTrail then frame.healthLossTrail:Hide() end
+            if frame.border then frame.border:Hide() end
+            local player = preview._runtimePlayer
+            if frame.targetPowerBar and player then
+                if DetachedPowerShown(player) then
+                    AnchorDetachedPower(preview, frame.targetPowerBar, player, preview.cpScene and preview.cpScene.CP.container,
+                        tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4)
+                else frame.targetPowerBar:Hide() end
+            end
+            scene:SetLayerFilter({ nameText = false, hpText = false, portrait = false, status = false,
+                auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
+        end
+    end
+    surface.afterPaint(frame, surface.scene)
+    if not preview.auxiliary then preview.auxiliary = MSUF.CPBuilders.NewAuxiliarySurface(frame) end
+    local cp = preview.cpScene and preview.cpScene.CP
+    local count = preview.cpSample and preview.cpSample.count or 0
+    local maximum = preview.cpSample and preview.cpSample.maximum or 1
+    preview.auxiliary:Configure(frame, cp, bars, player, sample.class, spec and spec.specIndex or 1,
+        count, maximum, sample.powerType, sample.powerToken, Wanted(preview, "border"))
+    return frame
+end
 local function RenderDetachedPower(preview, bars, player, classFrame, spec)
-    local frame = EnsureMeter(preview, "detachedPower")
-    if not DetachedPowerShown(player) then
-        SetRoundedPowerPreview(frame, false)
-        frame:Hide()
-        HideBarOutline(frame)
+    local owner = EnsurePlayerRuntime(preview, bars, player, spec)
+    local frame = owner and owner.targetPowerBar
+    if not frame or not DetachedPowerShown(player) then
+        preview._sampleEbonEnabled = false
+        if preview.auxiliary then preview.auxiliary:PaintEbon(false) end
+        if frame then frame:Hide() end
         preview.handlePower:Hide()
         preview.handlePowerText:Hide()
         return nil
     end
-    -- Augmentation: this bar renders Ebon Might's remaining duration instead of
-    -- Mana. Geometry, media and outline stay the ordinary Player Power settings.
-    local ebonSpec = PowerShowsEbonMight(bars, player, spec) and spec.secondaryTimer or nil
-    if type(ebonSpec) ~= "table" then ebonSpec = nil end
-    local width, shape = DetachedPowerWidth(preview, bars, player, classFrame)
-    local shapeInfo = POWER_SHAPES[shape]
-    local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 80)
-    local x, y = tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4
-    local pr, pg, pb = PowerColor(player)
-    -- The detached bar follows the normal power-texture precedence (per-unit
-    -- Player value -> shared bars value -> global bar texture); there is no
-    -- separate Class Resources texture anymore (see UF config).
-    local fgTex = ResolveTexture(PlayerThenBars(player, bars, "powerBarTexture"))
-    -- An unset background follows the global bar background, not the
-    -- foreground, so detaching alone never repaints the bar.
-    local bgTex = ResolveTexture(PlayerThenBars(player, bars, "powerBarBgTexture"),
-        Core.GetBarBackgroundTexture() or fgTex)
-    -- Class Resources owns the detached Player outline for every shape,
-    -- including the rectangular bar.
-    local outline = PreviewOutline(preview, bars.detachedPowerBarOutline, 1)
-    local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
-    local ebonAnimated
-    if ebonSpec then
-        pr, pg, pb = CPPreview.ResolveBaseColor(ebonSpec, bars, 0.40, 0.80, 0.60)
-        ebonAnimated = AnimationEnabled(preview) and CPPreview.AnimatedValue(ebonSpec, PreviewElapsed(preview)) or nil
-        fraction = Clamp(tonumber(ebonAnimated) or ebonSpec.value, 0.6, 0, 1)
-    end
-    AnchorDetachedPower(preview, frame, player, classFrame, x, y)
-    RenderMeter(frame, shapeInfo, {
-        width = width, height = height, fraction = fraction,
-        r = pr, g = pg, b = pb, bgR = pr, bgG = pg, bgB = pb, bgA = 0.28,
-        texture = fgTex, bgTexture = bgTex, outline = outline,
-    })
-    SetRoundedPowerPreview(frame, shapeInfo == nil, outline)
-    frame:Show()
-    if ebonSpec then
-        PaintEbonPowerText(preview, frame, player, ebonSpec, ebonAnimated)
-        PlaceHandle(preview.handlePower, frame, 5)
-        return frame
-    end
-    frame._msufCPPreviewTimerAnim = nil
-    if PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true then
-        ApplyMeterText(frame, Clamp(player.powerFontSize, 14, 6, 48), nil, nil, ResolvePlayerPowerTextLayout(player),
-            DetachedPowerTexts(player, fraction))
-        PlaceTextHandle(preview.handlePowerText, PreviewParent(preview), { frame.left, frame.center, frame.right })
-    else
-        HideMeterText(frame)
-        preview.handlePowerText:Hide()
-    end
+    preview.detachedPower = frame
+    frame.fill = frame:GetStatusBarTexture()
+    frame.left, frame.center, frame.right = owner.powerTextLeft, owner.powerTextCenter, owner.powerText
+    local ebon = bars.showClassPower ~= false and spec and spec.key == "evoker_augmentation_ebon" and bars.showEbonMight ~= false
+        and not preview.auxiliary.ownership.playerManaOverride
+    local timer = spec and spec.secondaryTimer
+    local value = timer and (AnimationEnabled(preview) and CPPreview.AnimatedValue(timer, PreviewElapsed(preview)) or timer.value) or .6
+    preview._sampleEbonEnabled = ebon and true or false
+    local text = preview.auxiliary:PaintEbon(ebon, value * 20, 20)
+    if text then frame.center = text end
+    AnchorDetachedPower(preview, frame, player, classFrame, tonumber(player.detachedPowerBarOffsetX) or 0,
+        tonumber(player.detachedPowerBarOffsetY) or -4)
     PlaceHandle(preview.handlePower, frame, 5)
+    PlaceTextHandle(preview.handlePowerText, PreviewParent(preview), { frame.left, frame.center, frame.right })
     return frame
 end
-local function HPWidth(preview, bars, classFrame, powerFrame)
-    local mode = tostring(bars.playerHPBarWidthMode or "class"):lower()
-    local width
-    if mode == "custom" then
-        width = tonumber(bars.playerHPBarWidth)
-        if not width or width < 20 then width = preview.playerW end
-    elseif mode == "power" then
-        width = powerFrame and powerFrame.GetWidth and powerFrame:GetWidth()
-    elseif mode == "player" then
-        width = preview.playerW
-    else
-        width = classFrame and classFrame.GetWidth and classFrame:GetWidth()
-    end
-    width = tonumber(width) or preview.playerW
-    if width < 20 then width = 20 elseif width > 1200 then width = 1200 end
-    return floor(width + 0.5)
-end
-local function PlaceHP(frame, preview, bars, classFrame, powerFrame, classBottomFrame)
-    local mode = tostring(bars.playerHPBarAnchor or "CLASS_TOP"):upper()
-    local anchor = (mode == "POWER_TOP" or mode == "POWER_BOTTOM") and powerFrame or classFrame
-    if mode == "CLASS_BOTTOM" and classBottomFrame then anchor = classBottomFrame end
-    if not (anchor and anchor.IsShown and anchor:IsShown()) then
-        anchor = ((mode == "CLASS_BOTTOM" or mode == "POWER_BOTTOM") and classBottomFrame)
-            or classFrame or preview.playerRef
-    end
-    local x = tonumber(bars.playerHPBarOffsetX) or 0
-    local y = tonumber(bars.playerHPBarOffsetY) or 0
-    local gap = Clamp(bars.playerHPBarGap, 2, 0, 60)
-    frame:ClearAllPoints()
-    if mode == "CLASS_BOTTOM" or mode == "POWER_BOTTOM" then
-        frame:SetPoint("TOP", anchor, "BOTTOM", x, y - gap)
-    else
-        frame:SetPoint("BOTTOM", anchor, "TOP", x, y + gap)
-    end
-end
-local function HPTextConfig(bars, player)
-    local left, center, right, delimiter, reverse, hideLeft, hideCenter, hideRight
-    if bars.playerHPBarUsePlayerText ~= false then
-        left = tostring(player.textLeft or "NONE"):upper()
-        center = tostring(player.textCenter or "NONE"):upper()
-        right = tostring(player.textRight or player.hpTextMode or "CURPERCENT"):upper()
-        delimiter = player.hpTextSeparator or ""
-        reverse = player.hpTextReverse == true
-        hideLeft = HidePercentValue(player, "hpTextLeftHidePercentSymbol")
-        hideCenter = HidePercentValue(player, "hpTextCenterHidePercentSymbol")
-        hideRight = HidePercentValue(player, "hpTextRightHidePercentSymbol")
-    else
-        left = tostring(bars.playerHPBarTextLeft or "NONE"):upper()
-        center = tostring(bars.playerHPBarTextCenter or "NONE"):upper()
-        right = tostring(bars.playerHPBarTextRight or "CURPERCENT"):upper()
-        delimiter = bars.playerHPBarTextSeparator or ""
-        reverse = bars.playerHPBarTextReverse == true
-        hideLeft = HidePercentValue(bars, "playerHPBarTextLeftHidePercentSymbol")
-        hideCenter = HidePercentValue(bars, "playerHPBarTextCenterHidePercentSymbol")
-        hideRight = HidePercentValue(bars, "playerHPBarTextRightHidePercentSymbol")
-    end
-    if reverse then
-        left, right = HP_TEXT_REVERSE[right] or right, HP_TEXT_REVERSE[left] or left
-        center = HP_TEXT_REVERSE[center] or center
-        hideLeft, hideRight = hideRight, hideLeft
-    end
-    return left, center, right, delimiter, hideLeft, hideCenter, hideRight
-end
--- Left, center and right text of the extra HP bar at a preview fraction.
-local function HPTexts(bars, player, fraction)
-    local leftMode, centerMode, rightMode, delimiter, hideLeft, hideCenter, hideRight = HPTextConfig(bars, player)
-    local maxValue = 1000000
-    local current = floor((maxValue * fraction) + 0.5)
-    return ModeText(leftMode, current, maxValue, delimiter, hideLeft),
-        ModeText(centerMode, current, maxValue, delimiter, hideCenter),
-        ModeText(rightMode, current, maxValue, delimiter, hideRight)
+local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spec)
+    if not preview.auxiliary then return nil end
+    local frame, state = preview.auxiliary:PaintHP(AnimatedMeterFraction(preview, .74, .34, .18, 1))
+    preview.playerHP = frame
+    if not frame then preview.handleHP:Hide() preview.handleHPText:Hide() return nil end
+    frame.left, frame.center, frame.right = state.left, state.center, state.right
+    frame.fill = state.bar:GetStatusBarTexture()
+    frame._msufRuntimeHealthState = state
+    PlaceHandle(preview.handleHP, frame, 5)
+    PlaceTextHandle(preview.handleHPText, PreviewParent(preview), { state.left, state.center, state.right })
+    return frame
 end
 
---- Optional ClassPower-owned player HP preview. It mirrors runtime layout/text
---- rules without reading real UnitHealth.
-local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spec, classBottomFrame)
-    local frame = EnsureMeter(preview, "playerHP")
-    if bars.playerHPBarEnabled ~= true then
-        frame:Hide()
-        HideBarOutline(frame)
-        preview.handleHP:Hide()
-        preview.handleHPText:Hide()
-        return nil
-    end
-    local shape = ResolveHPShape(bars, player)
-    local shapeInfo = POWER_SHAPES[shape]
-    local followPower = tostring(bars.playerHPBarShape or "BAR"):upper() == "FOLLOW_POWER"
-    local orbSize = followPower and Clamp(player.detachedPowerOrbSize, 54, 20, 160) or Clamp(bars.playerHPBarOrbSize, 54, 20, 160)
-    local width = shape == "ORB" and orbSize or HPWidth(preview, bars, classFrame, powerFrame)
-    local height = shape == "ORB" and width or Clamp(bars.playerHPBarHeight, 6, 2, 80)
-    local hr, hg, hb = HPColor(bars, spec)
-    local fgTex = ResolveTexture(bars.playerHPBarTexture)
-    local bgTex = ResolveTexture(bars.playerHPBarBgTexture, fgTex)
-    local fraction = AnimatedMeterFraction(preview, 0.74, 0.34, 0.18, 1.00)
-    PlaceHP(frame, preview, bars, classFrame, powerFrame, classBottomFrame)
-    RenderMeter(frame, shapeInfo, {
-        width = width, height = height, fraction = fraction,
-        r = hr, g = hg, b = hb, bgR = 0, bgG = 0, bgB = 0, bgA = Alpha(bars.playerHPBarBgAlpha, 0.35),
-        texture = fgTex, bgTexture = bgTex, outline = PreviewOutline(preview, bars.playerHPBarOutline, 1),
-    })
-    frame:Show()
-    if bars.playerHPBarTextEnabled ~= false then
-        ApplyMeterText(frame, Clamp(bars.playerHPBarUsePlayerText ~= false and player.hpFontSize or bars.playerHPBarTextSize, 14, 6, 48),
-            tonumber(bars.playerHPBarTextOffsetX) or 0, tonumber(bars.playerHPBarTextOffsetY) or 0, nil,
-            HPTexts(bars, player, fraction))
-        PlaceTextHandle(preview.handleHPText, PreviewParent(preview), { frame.left, frame.center, frame.right })
-    else
-        HideMeterText(frame)
-        preview.handleHPText:Hide()
-    end
-    PlaceHandle(preview.handleHP, frame, 5)
-    return frame
-end
--- Per-tick repaint, kept as plain file-level functions with the text math inline (no extra Lua call per tick).
 local function UpdateClassPowerAnimation(preview)
     local scene, spec = preview.cpScene, preview.cpSpec
     if not (scene and spec) then return false end
@@ -1254,75 +744,35 @@ local function UpdateClassPowerAnimation(preview)
     PlaceClassTextHandle(preview, scene)
     return true
 end
---- Drives a native duration meter. Ebon Might now runs on the Player Power bar,
---- so its text follows the Power text layer rather than the Class Resource one.
-local function UpdateSecondaryClassTimerAnimation(preview, frame, textLayerKey)
-    local state = frame and frame._msufCPPreviewTimerAnim
-    local spec = state and state.spec
-    if not (preview and frame and spec) then return false end
-    if frame.IsShown and not frame:IsShown() then return true end
-    local value = CPPreview.AnimatedValue(spec, PreviewElapsed(preview)) or tonumber(spec.value) or 0.6
-    UpdateMeterFill(frame, value)
-    if state.showText and frame.center then
-        frame.center:SetText(CPPreview.TextForValue(spec, value) or tostring(spec.previewText or "12.0"))
-        if LayerOn(preview, textLayerKey or "classText") then frame.center:Show() end
-    end
-    return true
-end
-local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
-    if not (preview and frame and bars and player) then return false end
-    if frame.IsShown and not frame:IsShown() then return true end
-    -- Augmentation drives this bar from the Ebon Might duration instead of a
-    -- power fraction, and its native duration text replaces the power slots.
-    local ebonState = frame._msufCPPreviewTimerAnim
-    if ebonState and ebonState.spec then
-        return UpdateSecondaryClassTimerAnimation(preview, frame, "powerText")
-    end
-    local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
-    UpdateMeterFill(frame, fraction)
-    if PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true then
-        local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
-        local centerMode = tostring(player.powerTextCenter or "NONE"):upper()
-        local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
-        local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
-        local current = floor((fraction * 100) + 0.5)
-        if frame.left then frame.left:SetText(ModeText(leftMode, current, 100, delimiter, HidePercentValue(player, "powerTextLeftHidePercentSymbol"))) end
-        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter,
-            HidePercentValue(player, "powerTextCenterHidePercentSymbol"))) end
-        if frame.right then frame.right:SetText(ModeText(rightMode, current, 100, delimiter, HidePercentValue(player, "powerTextRightHidePercentSymbol"))) end
-    end
-    return true
-end
-local function UpdatePlayerHPAnimation(preview, frame, bars, player)
-    if not (preview and frame and bars and player) then return false end
-    if frame.IsShown and not frame:IsShown() then return true end
-    local fraction = AnimatedMeterFraction(preview, 0.74, 0.34, 0.18, 1.00)
-    UpdateMeterFill(frame, fraction)
-    if bars.playerHPBarTextEnabled ~= false then
-        local leftMode, centerMode, rightMode, delimiter, hideLeft, hideCenter, hideRight = HPTextConfig(bars, player)
-        local maxValue = 1000000
-        local current = floor((maxValue * fraction) + 0.5)
-        if frame.left then frame.left:SetText(ModeText(leftMode, current, maxValue, delimiter, hideLeft)) end
-        if frame.center then frame.center:SetText(ModeText(centerMode, current, maxValue, delimiter, hideCenter)) end
-        if frame.right then frame.right:SetText(ModeText(rightMode, current, maxValue, delimiter, hideRight)) end
-    end
-    return true
-end
+local ApplyLayerVisibility
 local function RefreshClassPowerAnimation(preview)
-    local state = preview and preview._msufCPPreviewAnim
+    local state = preview._msufCPPreviewAnim
     if not state then return false end
-    if state.classFrame and not UpdateClassPowerAnimation(preview) then return false end
-    if state.ebonFrame and state.ebonFrame._msufCPPreviewTimerAnim
-        and state.ebonFrame._msufCPPreviewTimerAnim.spec
-        and not UpdateSecondaryClassTimerAnimation(preview, state.ebonFrame) then return false end
-    if state.powerFrame and not UpdateDetachedPowerAnimation(preview, state.powerFrame, state.bars, state.player) then return false end
-    if state.hpFrame and not UpdatePlayerHPAnimation(preview, state.hpFrame, state.bars, state.player) then return false end
-    if preview.altMana and preview.altMana:IsShown() then
-        UpdateMeterFill(preview.altMana, AnimatedMeterFraction(preview, .68, .36, .15, .96))
+    if state.classFrame then UpdateClassPowerAnimation(preview) end
+    local surface, auxiliary = preview.playerRuntime, preview.auxiliary
+    if surface then
+        surface.sample.power = AnimatedMeterFraction(preview, .72, .46, .08, .96)
+        surface.sample.hp = AnimatedMeterFraction(preview, .74, .34, .18, 1)
+        surface.scene:SetSample(surface.sample, true)
+        surface.scene:RefreshData(false)
+        surface.scene:Frame().hpBar:Hide()
+        surface.scene:Frame().healthBackgroundBar:Hide()
     end
-    Preview.UpdateSampleThresholds(preview)
+    if auxiliary then
+        local spec, timer = state.spec, state.spec and state.spec.secondaryTimer
+        if preview._sampleEbonEnabled and timer then
+            local value = CPPreview.AnimatedValue(timer, PreviewElapsed(preview)) or timer.value or .6
+            auxiliary:PaintEbon(true, value * 20, 20)
+        end
+        auxiliary:TickHP(AnimatedMeterFraction(preview, .74, .34, .18, 1))
+        auxiliary:PaintMana(AnimatedMeterFraction(preview, .68, .36, .15, .96))
+        auxiliary.classCount = preview.cpTick and preview.cpTick.count or auxiliary.classCount
+        auxiliary.marks.PaintSample()
+    end
+    ApplyLayerVisibility(preview)
     return true
 end
+
 local function PaintPlayerReference(preview)
     local player = preview.playerRef
     player:SetSize(preview.playerW, preview.playerH)
@@ -1334,24 +784,14 @@ local function CreatePlayerReference(preview)
     preview.playerRef:EnableMouse(false)
 end
 function Preview.RenderAlternativeMana(preview, bars)
-    if bars.showAltMana ~= true then
-        SetShownSafe(preview.altMana, false)
-        return
-    end
-    local frame = EnsureMeter(preview, "altMana")
-    local width = bars.altManaWidthMode == "custom" and tonumber(bars.altManaWidth) or nil
-    if not width or width < 20 then width = preview.playerW - 4 end
-    local r, g, blue = CPPreview.ResolveColor("MANA", bars.altManaColorR or 0, bars.altManaColorG or 0, bars.altManaColorB or .8)
-    RenderMeter(frame, nil, { width = min(1200, width), height = Clamp(bars.altManaHeight, 4, 2, 30),
-        fraction = AnimatedMeterFraction(preview, .68, .36, .15, .96), texture = ResolveTexture(nil),
-        r = r, g = g, b = blue, bgR = 0, bgG = 0, bgB = 0, bgA = .4, outline = PreviewOutline(preview, 1, 1) })
-    frame:ClearAllPoints()
-    frame:SetPoint("TOP", preview.playerRef, "BOTTOM", Clamp(bars.altManaOffsetX, 0, -1000, 1000), tonumber(bars.altManaOffsetY) or -2)
-    HideMeterText(frame)
-    frame:Show()
+    if not preview.auxiliary then return end
+    local frame = preview.auxiliary:PaintMana(AnimatedMeterFraction(preview, .68, .36, .15, .96))
+    preview.altMana = frame
+    if not frame then return end
     if not preview.handleMana then preview.handleMana = MakeHandle(preview, HANDLE_DEFS.mana) end
     PlaceHandle(preview.handleMana, frame, 5)
 end
+
 local function EnsureBound(preview, key, label, color)
     preview.bounds = preview.bounds or {}
     local frame = preview.bounds[key]
@@ -1379,288 +819,22 @@ local function PlaceBound(preview, key, region, label, color, pad, layerKey)
     bound._layerKey = layerKey or key
     PlaceAround(bound, region, tonumber(pad) or 1)
 end
--- These are deterministic menu samples, never attached to real resource frames.
--- Reuse the menu meter painter and retain objects across configuration refreshes.
--- Context samples follow the live class/spec gates. The Additional resources
--- workspace selects a client-supported example independently of the character.
--- Both paths reuse these painters with the configured bar and text colours.
-local SAMPLE = {
-    LIVE_EXTRAS = MSUF.Client.IsRetail == true and MSUF.Client.IsForever ~= true,
-    BLUE = { .45, .7, 1 }, WHITE = { 1, 1, 1 },
-    FIVE = { 1, .65, .2 }, TICK = { .3, 1, .7 }, COST = { .7, .7, 1 },
-    ARCANE = { .66, .42, 1 }, ARCANE_WARN = { 1, .78, .25 },
-    SOUL = { .92, .4, .86 },
-    NO_MARKS = {}, METER_OPTS = {},
-}
-function SAMPLE.Color(bars, colorKey, fallback)
-    local color = bars[colorKey]
-    return type(color) == "table" and color or fallback
-end
-function SAMPLE.MeterOpts(width, height, fraction, texture, color)
-    local opts = SAMPLE.METER_OPTS
-    opts.width, opts.height, opts.fraction, opts.texture = width, height, fraction, texture
-    opts.r, opts.g, opts.b = color[1], color[2], color[3]
-    opts.bgR, opts.bgG, opts.bgB, opts.bgA, opts.bgTexture, opts.outline = nil, nil, nil, nil, nil, nil
-    return opts
-end
--- Explicit workspace examples already passed the client's choice gates.
--- Context samples still match the live class, specialization and activation.
-function SAMPLE.Eligible(preview, bars, class, spec)
-    if preview._resourceExtraExample then return M.ResourceExtrasPreview.Eligibility(preview) end
-    if not SAMPLE.LIVE_EXTRAS then return false, false end
-    local pain = class == "WARRIOR" and bars.showIgnorePain == true
-    local arcane = spec ~= nil and spec.key == "mage_arcane" and bars.showArcaneWindow == true
-    if not (pain or arcane) then return false, false end
-    local liveClass = select(2, UnitClass("player"))
-    local getSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
-    local liveSpec = getSpec and getSpec() or nil
-    return pain and liveClass == "WARRIOR" and liveSpec == 3, arcane and liveClass == "MAGE" and liveSpec == 1
-end
---- The retained sample meter of a key, anchored under the player stand-in or the power bar by the caller.
-function SAMPLE.Frame(preview, samples, key)
-    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key)
-    samples[key] = frame
-    frame:ClearAllPoints()
-    return frame
-end
-function SAMPLE.Activate(frame, layer)
-    frame._sampleLayer = layer
-    frame._sampleActive = true
-    frame:Show()
-    return frame
-end
-function SAMPLE.Meter(preview, samples, bars, key, row, colorKey, fallback, fraction, text, textColor)
-    local frame = SAMPLE.Frame(preview, samples, key)
-    frame:SetPoint("TOP", preview.playerRef, "BOTTOM", tonumber(bars.resourceExtraOffsetX) or 0,
-        (tonumber(bars.resourceExtraOffsetY) or -18) - row * ((tonumber(bars.resourceExtraHeight) or 8) + 6))
-    RenderMeter(frame, nil, SAMPLE.MeterOpts(tonumber(bars.resourceExtraWidth) or 220,
-        tonumber(bars.resourceExtraHeight) or 8, fraction, ResolveTexture(bars.classPowerTexture),
-        SAMPLE.Color(bars, colorKey, fallback)))
-    frame.center:SetFont(Core.GetFontPath() or STANDARD_TEXT_FONT,
-        tonumber(bars.classPowerFontSize) or 14, "OUTLINE")
-    frame.center:SetTextColor(textColor[1], textColor[2], textColor[3], 1)
-    frame.center:SetText(text)
-    frame.center:SetPoint("CENTER", frame, "CENTER")
-    frame.center:SetAlpha(1)
-    frame.center:Show()
-    return SAMPLE.Activate(frame, preview._resourceExtraExample and "extras" or "class")
-end
-function SAMPLE.Strip(preview, samples, bars, powerFrame, key, height, anchor, offset, colorKey, fallback, fraction)
-    local frame = SAMPLE.Frame(preview, samples, key)
-    frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
-    RenderMeter(frame, nil, SAMPLE.MeterOpts(powerFrame:GetWidth(), height, fraction, WHITE8,
-        SAMPLE.Color(bars, colorKey, fallback)))
-    return SAMPLE.Activate(frame, "power")
-end
--- The live power bar the marks sit on: the Mana display source, else the
--- player's real power type (MSUF_CP_ResourceMarks Target), and its maximum for
--- ABSOLUTE marks. Secret or missing values leave the maximum unknown.
-function SAMPLE.PowerTarget(mana)
-    local power, token
-    if mana then
-        power, token = 0, "MANA"
-    elseif UnitPowerType then
-        power, token = UnitPowerType("player")
+local function RenderExtraSamples(preview, bars, player, spec)
+    local auxiliary = preview.auxiliary
+    if not auxiliary then return end
+    local pain, arcane
+    if preview._resourceExtraExample then pain, arcane = M.ResourceExtrasPreview.Eligibility(preview)
+    else
+        local class = PreviewClassToken(spec)
+        pain = class == "WARRIOR" and bars.showIgnorePain == true
+        arcane = spec and spec.key == "mage_arcane" and bars.showArcaneWindow == true
     end
-    if type(power) ~= "number" or (issecretvalue and issecretvalue(power)) then return token, nil end
-    local maximum = UnitPowerMax and UnitPowerMax("player", power) or nil
-    if type(maximum) ~= "number" or (issecretvalue and issecretvalue(maximum)) then maximum = nil end
-    return token, maximum
-end
-function SAMPLE.PaintArcane(preview, samples, bars)
-    -- Reuse the duration bar sample painter for both phases of the live window.
-    local warn = tonumber(bars.arcaneWindowWarnSeconds)
-    if not warn or warn ~= warn then warn = 3 end
-    warn = max(0, min(10, warn))
-    if bars.arcaneWindowWarnLastGCD == true then warn = 1.5 end
-    local seconds, soul = M.ResourceExtrasPreview.ArcaneSample(preview, warn)
-    local mode, from = bars.arcaneWindowText, tonumber(bars.arcaneWindowTextFrom) or 0
-    local casts = math.ceil(seconds / 1.5)
-    local secondsFormat = seconds >= 10 and "%d" or "%.1f"
-    local text = mode == "gcds" and string.format("x%d", casts)
-        or mode == "both" and string.format(secondsFormat .. " (x%d)", seconds, casts) or string.format(secondsFormat, seconds)
-    if from > 0 and seconds >= from then text = "" end
-    local fraction = preview._resourceExtraExample and seconds / (soul and 10 or 15) or .25
-    local colorKey = soul and "arcaneWindowSoulColor" or "arcaneWindowColor"
-    SAMPLE.Meter(preview, samples, bars, "ARCANE", 0, colorKey, soul and SAMPLE.SOUL or SAMPLE.ARCANE, fraction, text,
-        (warn > 0 and seconds < warn) and SAMPLE.Color(bars, "arcaneWindowWarnColor", SAMPLE.ARCANE_WARN) or SAMPLE.WHITE)
-end
-function SAMPLE.PaintPain(preview, samples, bars)
-    local frame = SAMPLE.Meter(preview, samples, bars, "PAIN", 0, "ignorePainColor", SAMPLE.BLUE, .65, "7.8 s", SAMPLE.WHITE)
-    local marker = frame.marker or MakeTexture(frame, "OVERLAY")
-    frame.marker = marker
-    marker:SetColorTexture(1, 1, 1, 1)
-    marker:SetWidth(2)
-    marker:ClearAllPoints()
-    marker:SetPoint("TOP", frame.fill, "TOPRIGHT")
-    marker:SetPoint("BOTTOM", frame.fill, "BOTTOMRIGHT")
-    marker:SetShown(bars.ignorePainTimeMarker ~= false)
-end
---- The upcoming-cost strip: a share of the power bar's end, masked to the bar's shape.
-function SAMPLE.PaintCost(preview, samples, bars, powerFrame)
-    local frame = SAMPLE.Strip(preview, samples, bars, powerFrame, "COST", powerFrame:GetHeight(), "TOPLEFT", 0,
-        "manaCostColor", SAMPLE.COST, .18)
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPRIGHT", powerFrame.fill, "TOPRIGHT")
-    frame:SetWidth(max(1, powerFrame:GetWidth() * .18))
-    frame.fill:SetWidth(frame:GetWidth())
-    if powerFrame._msufCPPreviewShapeAxis == "VERTICAL" then
-        frame:ClearAllPoints()
-        frame:SetPoint("BOTTOMLEFT", powerFrame.fill, "TOPLEFT", 0, -powerFrame:GetHeight() * .18)
-        frame:SetSize(powerFrame:GetWidth(), max(1, powerFrame:GetHeight() * .18))
-        frame.fill:SetSize(frame:GetWidth(), frame:GetHeight())
-    end
-    frame.bg:Hide()
-    if powerFrame._msufCPPreviewHasShape then
-        local mask = frame.costMask
-        if not mask then
-            mask = PixelLayoutRegion(powerFrame:CreateMaskTexture(nil, "OVERLAY"))
-            frame.costMask = mask
-        end
-        if not frame.costMasked then
-            frame.fill:AddMaskTexture(mask)
-            frame.costMasked = true
-        end
-        mask:SetTexture(powerFrame.fill:GetTexture(), "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        mask:ClearAllPoints()
-        mask:SetAllPoints(powerFrame)
-        mask:Show()
-    elseif frame.costMasked then
-        frame.fill:RemoveMaskTexture(frame.costMask)
-        frame.costMasked = false
-        frame.costMask:Hide()
-    end
-end
-function SAMPLE.PaintManaStrips(preview, samples, bars, powerFrame)
-    local regenTimers = MSUF.CPBuilders and MSUF.CPBuilders.ManaRegenTimersSupported
-    regenTimers = regenTimers and regenTimers() or false
-    if regenTimers and bars.manaRegenPause == true then
-        SAMPLE.Strip(preview, samples, bars, powerFrame, "FIVE", 3, "BOTTOMLEFT", 1, "manaRegenPauseColor", SAMPLE.FIVE, .6)
-    end
-    if regenTimers and bars.manaGainPulse == true then
-        SAMPLE.Strip(preview, samples, bars, powerFrame, "TICK", 2, "TOPLEFT", -1, "manaGainPulseColor", SAMPLE.TICK, .5)
-    end
-    if bars.manaUpcomingCost == true then SAMPLE.PaintCost(preview, samples, bars, powerFrame) end
-end
---- The configured resource marks: one retained texture per mark on its host bar, and the
---- threshold rules the tint pass reads.
-function SAMPLE.PaintMarks(preview, bars, spec, classFrame, powerFrame, mana)
-    preview.resourceSampleMarks = preview.resourceSampleMarks or {}
-    for _, texture in ipairs(preview.resourceSampleMarks) do texture:Hide() end
-    local thresholds = preview.resourceSampleThresholds or {}
-    preview.resourceSampleThresholds = thresholds
-    local thresholdCount = 0
-    local count = 0
-    local marks = bars.resourceMarks or SAMPLE.NO_MARKS
-    -- The power bar's type and maximum are read only once a mark sits on it.
-    local powerToken, powerMaximum, powerResolved
-    for i = 1, min(#marks, 256) do
-        local rule = marks[i]
-        local host, token, maximum
-        if rule.target == "CLASS" and classFrame and spec and spec.mode ~= "aura_segmented" then
-            host, token, maximum = classFrame, spec.token, tonumber(spec.segments)
-        elseif rule.target ~= "CLASS" and rule.target ~= "ALTMANA" and powerFrame then
-            if not powerResolved then
-                powerToken, powerMaximum = SAMPLE.PowerTarget(mana)
-                powerResolved = true
-            end
-            host, token, maximum = powerFrame, powerToken, powerMaximum
-        end
-        local value = tonumber(rule.value)
-        local fraction = value and (rule.mode == "ABSOLUTE" and maximum and maximum > 0 and value / maximum
-            or rule.mode ~= "ABSOLUTE" and value / 100)
-        if host and rule.enabled ~= false and (not rule.resource or rule.resource == "ALL" or rule.resource == token)
-            and fraction and fraction >= 0 and fraction <= 1 then
-            count = count + 1
-            -- Live marks draw on OVERLAY sublevel 7, above the fill and its edge.
-            local texture = preview.resourceSampleMarks[count] or MakeTexture(host, "OVERLAY", 7)
-            preview.resourceSampleMarks[count] = texture
-            texture:SetParent(host)
-            texture:ClearAllPoints()
-            local color = rule.color or SAMPLE.WHITE
-            texture:SetColorTexture(color[1], color[2], color[3], 1)
-            texture:SetWidth(max(1, min(20, tonumber(rule.width) or 2)))
-            texture:SetPoint("TOP", host, "TOPLEFT", host:GetWidth() * fraction, 0)
-            texture:SetPoint("BOTTOM", host, "BOTTOMLEFT", host:GetWidth() * fraction, 0)
-            texture:SetShown(rule.mark ~= false)
-            if rule.threshold == true then
-                thresholdCount = thresholdCount + 1
-                local entry = thresholds[thresholdCount]
-                if not entry then
-                    entry = {}
-                    thresholds[thresholdCount] = entry
-                end
-                entry.host, entry.spec, entry.fraction = host, host == classFrame and spec or nil, fraction
-                entry.direction, entry.color, entry.maximum = rule.direction, color, maximum
-            end
-        end
-    end
-    preview.resourceSampleThresholdCount = thresholdCount
-end
---- Remembers the power bar's own fill colour: the threshold tint is undone from it on every paint.
-function SAMPLE.CapturePowerBase(preview, powerFrame)
-    local base = preview.resourceSamplePowerBaseState
-    preview.resourceSamplePowerBase = nil
-    if not powerFrame then return end
-    if not base then
-        base = {}
-        preview.resourceSamplePowerBaseState = base
-    end
-    local r, g, b, a = powerFrame.fill:GetVertexColor()
-    base.host, base.r, base.g, base.b, base.a = powerFrame, r or 1, g or 1, b or 1, a or 1
-    preview.resourceSamplePowerBase = base
-end
-local function RenderExtraSamples(preview, bars, player, spec, classFrame, powerFrame)
-    local samples = preview.resourceSamples or {}
-    preview.resourceSamples = samples
-    for _, frame in pairs(samples) do
-        frame:Hide()
-        frame._sampleActive = false
-    end
-    SAMPLE.CapturePowerBase(preview, powerFrame)
-    local pain, arcane = SAMPLE.Eligible(preview, bars, PreviewClassToken(spec), spec)
-    if pain then SAMPLE.PaintPain(preview, samples, bars) end
-    if arcane then SAMPLE.PaintArcane(preview, samples, bars) end
-    -- The existing detached mock uses Energy unless its configured source is Mana.
-    -- Alternate-mana has no mock host here and is therefore not misrepresented.
-    local mana = powerFrame and PlayerManaSourceActive(player) and not PowerShowsEbonMight(bars, player, spec)
-    if mana then SAMPLE.PaintManaStrips(preview, samples, bars, powerFrame) end
-    SAMPLE.PaintMarks(preview, bars, spec, classFrame, powerFrame, mana)
-    Preview.UpdateSampleThresholds(preview)
+    if not HAS_EXTRA_AURAS then pain, arcane = false, false end
+    local seconds, soul = M.ResourceExtrasPreview.ArcaneSample(preview, tonumber(bars.arcaneWindowWarnSeconds) or 3)
+    preview.resourceSamples = auxiliary:PaintExtras(pain, arcane, seconds, soul)
 end
 function Preview.UpdateSampleThresholds(preview)
-    local base = preview.resourceSamplePowerBase
-    if base then base.host.fill:SetVertexColor(base.r, base.g, base.b, base.a) end
-    local thresholds = preview.resourceSampleThresholds
-    for i = 1, tonumber(preview.resourceSampleThresholdCount) or 0 do
-        local rule = thresholds[i]
-        local host, spec = rule.host, rule.spec
-        local value
-        if spec then
-            value = AnimationEnabled(preview) and CPPreview.AnimatedValue(spec, PreviewElapsed(preview)) or spec.value
-            value = (tonumber(value) or 0) / (rule.maximum or 1)
-        else
-            value = host._msufCPPreviewShapeAxis == "VERTICAL" and host.fill:GetHeight() / max(1, host:GetHeight())
-                or host.fill:GetWidth() / max(1, host:GetWidth())
-        end
-        if (rule.direction == "BELOW" and value < rule.fraction) or (rule.direction ~= "BELOW" and value >= rule.fraction) then
-            local color = rule.color
-            if spec then
-                -- The class resource is the engine scene: tint its bars like the live threshold step does and
-                -- record the tint in the painters' colour stamp, so the next paint writes the base colour back.
-                local CP = preview.cpScene.CP
-                for s = 1, CP.currentMax do
-                    local bar = CP.bars[s]
-                    local _, _, _, alpha = bar:GetStatusBarColor()
-                    alpha = alpha or 1
-                    bar:SetStatusBarColor(color[1], color[2], color[3], alpha)
-                    bar._msufCPR, bar._msufCPG, bar._msufCPB, bar._msufCPA = color[1], color[2], color[3], alpha
-                end
-            else
-                host.fill:SetVertexColor(color[1], color[2], color[3], base and base.a or 1)
-            end
-        end
-    end
+    if preview.auxiliary then preview.auxiliary.marks.PaintSample() end
 end
 
 local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame)
@@ -1669,11 +843,11 @@ local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame
     PlaceBound(preview, "power", powerFrame, "Power", LAYER_COLORS.power, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", LAYER_COLORS.hp, 1)
     PlaceBound(preview, "mana", preview.altMana, "Alternative Mana", LAYER_COLORS.mana, 1)
-    local samples = preview.resourceSamples or SAMPLE.NO_MARKS
+    local samples = preview.resourceSamples or {}
     local pain, arcane = samples.PAIN, samples.ARCANE
-    PlaceBound(preview, "pain", pain and pain._sampleActive and pain, "Ignore Pain", SAMPLE.BLUE, 1,
+    PlaceBound(preview, "pain", pain and pain._sampleActive and pain, "Ignore Pain", { .45, .7, 1 }, 1,
         pain and pain._sampleLayer)
-    PlaceBound(preview, "arcane", arcane and arcane._sampleActive and arcane, "Arcane Window", SAMPLE.ARCANE, 1,
+    PlaceBound(preview, "arcane", arcane and arcane._sampleActive and arcane, "Arcane Window", { .66, .42, 1 }, 1,
         arcane and arcane._sampleLayer)
 end
 local function AddPreviewRegionBounds(preview, region, bounds)
@@ -1749,7 +923,7 @@ local function ApplyPreviewBorder(preview)
     local c = preview._canvasBorderColor or { 0.10, 0.13, 0.18, 0.65 }
     preview.canvas:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
 end
-local function ApplyLayerVisibility(preview)
+ApplyLayerVisibility = function(preview)
     if not preview then return end
     local classOn = LayerOn(preview, "class")
     local classTextOn = classOn and LayerOn(preview, "classText")
@@ -1761,7 +935,7 @@ local function ApplyLayerVisibility(preview)
     for _, frame in pairs(preview.resourceSamples or {}) do
         SetShownSafe(frame, frame._sampleActive == true and LayerOn(preview, frame._sampleLayer))
     end
-    SetShownSafe(preview.altMana, LayerOn(preview, "mana") and Section("bars").showAltMana == true)
+    SetShownSafe(preview.altMana, LayerOn(preview, "mana") and preview.auxiliary and preview.auxiliary.AM.visible == true)
     local ebonTimer = preview.ebonTimer
     local ebonActive = ebonTimer and ebonTimer._msufCPPreviewActive == true
     SetShownSafe(ebonTimer, classOn and ebonActive)
@@ -2089,7 +1263,6 @@ function Box.Refresh(box)
     local profileBars = bars
     bars, player, spec = M.ResourceExtrasPreview.Config(box, bars, player, spec)
     PaintPlayerReference(box)
-    Preview.RenderAlternativeMana(box, bars)
     local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
     local ebonFrame = RenderSecondaryClassTimer(box)
     if classFrame and classFrame.IsShown and classFrame:IsShown() then
@@ -2101,6 +1274,7 @@ function Box.Refresh(box)
         box.noResource:Show()
     end
     local powerFrame = RenderDetachedPower(box, bars, player, classFrame, spec)
+    Preview.RenderAlternativeMana(box, bars)
     local hpFrame = RenderPlayerHP(box, bars, player, classFrame, powerFrame, spec, ebonFrame)
     RenderExtraSamples(box, bars, player, spec, classFrame, powerFrame)
     box._msufCPPreviewAnim = {
@@ -2164,6 +1338,8 @@ function Box.OnHide(box)
     box._msufCPRefreshReason = nil
     Anim.Stop(box)
     if box.cpSceneRoot then box.cpSceneRoot:Deactivate() end
+    if box.playerRuntime then box.playerRuntime.root:Deactivate() end
+    if box.auxiliary then box.auxiliary:Hide() end
     box:ReleasePreviewInteraction()
     if Preview.active == box then Preview.active = nil end
     ActivateClassPowerSurface(nil)

@@ -187,68 +187,35 @@ local function CastbarShowTargetName(key, g)
         or (key == "arena" and g.showArenaCastTargetName == true)
 end
 -- The GCD strip: status bar, background, spell and time texts and the spell icon.
-local function BuildGcdSample(canvas)
-    local gcd = PixelLayoutRegion(CreateFrame("Frame", nil, canvas))
-    gcd.bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, gcd))
-    gcd.bar:SetAllPoints()
-    gcd.bar:SetStatusBarTexture(TEX_W8)
-    gcd.bar:SetStatusBarColor(.2, .75, 1, 1)
-    local bg = PixelLayoutRegion(gcd.bar:CreateTexture(nil, "BACKGROUND"))
-    bg:SetAllPoints()
-    bg:SetColorTexture(.05, .05, .05, .8)
-    gcd.text = PixelLayoutRegion(gcd.bar:CreateFontString(nil, "OVERLAY"))
-    gcd.text:SetPoint("LEFT", 3, 0)
-    gcd.time = PixelLayoutRegion(gcd.bar:CreateFontString(nil, "OVERLAY"))
-    gcd.time:SetPoint("RIGHT", -3, 0)
-    gcd.icon = PixelLayoutRegion(gcd.bar:CreateTexture(nil, "ARTWORK"))
-    gcd.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
-    gcd.icon:SetTexCoord(.07, .93, .07, .93)
-    return gcd
-end
---- The detached GCD bar sample (player, showGCDBar). The GCD bar is not part of the castbar, so it stays a small
---- Options-owned strip on the slot.
-local function ApplyGcdSample(mock, canvas, g, key, width, height, S, ApplyFont)
+-- The GCD owner supplies both the detached surface and the ordinary player
+-- castbar surface. Only placement/fitting belongs to this workbench.
+local function ApplyGcdSample(mock, canvas, g, key, width, height, S, scale)
     local samples = mock.cast._featureSamples
-    if not samples then
-        samples = {}
-        mock.cast._featureSamples = samples
+    if not samples then samples = {} mock.cast._featureSamples = samples end
+    if key ~= "player" or g.showGCDBar ~= true then
+        if samples.gcd then samples.gcd:Hide() end
+        return
     end
-    if key == "player" and g.showGCDBar == true then
-        local gcd = samples.gcd
-        if not gcd then
-            gcd = BuildGcdSample(canvas)
-            samples.gcd = gcd
-        end
-        local detached = g.gcdBarDetached == true
-        local showSpell = g.showGCDBarSpell ~= false
-        local w = detached and S(max(40, min(600, tonumber(g.gcdBarWidth) or 180))) or width
-        local h = detached and S(max(4, min(50, tonumber(g.gcdBarHeight) or 12))) or height
-        local cw, ch = canvas:GetWidth(), canvas:GetHeight()
-        h = min(h, max(4, ch - S(16)))
-        local minX = showSpell and max(S(12), h + S(2)) or S(12)
-        w = min(w, max(20, cw - minX - S(12)))
-        gcd:SetSize(w, h)
-        gcd:SetAlpha(detached and ((tonumber(g.gcdBarOpacity) or 100) / 100) or 1)
-        gcd:ClearAllPoints()
-        local x = detached and (cw * .5 + S(tonumber(g.gcdBarX) or 0) - w * .5) or S(12)
-        local y = detached and (ch * .5 + S(tonumber(g.gcdBarY) or -180) - h * .5) or S(8)
-        gcd:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", max(minX, min(cw - w - S(12), x)), max(S(8), min(ch - h - S(8), y)))
-        gcd.bar:SetMinMaxValues(0, 1)
-        gcd.bar:SetValue(.65)
-        local fontSize = max(7, min(S(12), h - S(2)))
-        ApplyFont(gcd.text, fontSize)
-        ApplyFont(gcd.time, fontSize)
-        gcd.text:SetText("GCD")
-        gcd.time:SetText("0.8")
-        gcd.text:SetShown(showSpell)
-        gcd.time:SetShown(g.showGCDBarTime ~= false)
-        gcd.icon:ClearAllPoints()
-        gcd.icon:SetPoint("TOPRIGHT", gcd, "TOPLEFT", -S(2), 0)
-        gcd.icon:SetSize(h, h)
-        gcd.icon:SetShown(showSpell)
-        gcd:Show()
-    elseif samples.gcd then samples.gcd:Hide() end
+    local runtime = MSUF.Castbars.GCD
+    local detached = g.gcdBarDetached == true
+    local field = detached and "gcdDetached" or "gcdAttached"
+    local gcd = samples[field]
+    if samples.gcd then samples.gcd:Hide() end
+    if not gcd then gcd = runtime.CreateSurface(canvas, detached) samples[field] = gcd end
+    samples.gcd = gcd
+    if detached then runtime.LayoutSurface(gcd, g, canvas)
+    else gcd:SetSize(width / scale, height / scale) end
+    gcd:SetScale(scale)
+    local cw, ch = canvas:GetWidth(), canvas:GetHeight()
+    local w, h = gcd:GetWidth() * scale, gcd:GetHeight() * scale
+    local x = detached and (cw * .5 + S(tonumber(g.gcdBarX) or 0) - w * .5) or S(12)
+    local y = detached and (ch * .5 + S(tonumber(g.gcdBarY) or -180) - h * .5) or S(8)
+    gcd:ClearAllPoints()
+    gcd:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", max(S(12), min(cw - w - S(12), x)) / scale,
+        max(S(8), min(ch - h - S(8), y)) / scale)
+    runtime.PaintSample(gcd, g)
 end
+
 -- Everything below that the 20 Hz animation tick reaches (the text handle placers) stays inline: no helper or
 -- wrapper call per tick beyond the region list and option getters.
 local function CastHandleOptions(box, scale)
@@ -1189,7 +1156,7 @@ function Stage.RenderCastbar(st)
         frame:SetFrameLevel(mock.cast:GetFrameLevel() + 1)
         PlaceCastbarHandles(st, frame)
         local bar = frame.statusBar
-        ApplyGcdSample(mock, st.canvas, g, key, bar:GetWidth() * st.scale, max(1, bar:GetHeight() * st.scale), S, st.ApplyPreviewFont)
+        ApplyGcdSample(mock, st.canvas, g, key, bar:GetWidth() * st.scale, max(1, bar:GetHeight() * st.scale), S, st.scale)
     end
     box.handleCastbar:SetSize(
         max(36, scw * (box._mockCastFrameScale or 1)),
@@ -1287,12 +1254,12 @@ function Stage.RenderArenaTrinket(st)
     local painter, box = MenuState.ArenaTrinketPreview, st.box
     st.trinketAvailable = false
     if not painter then return end
-    local available, icon = painter.Paint(st.mock, st.key, PreviewLayerWanted(box, "trinket"), st.S)
+    local available, icon = painter.Paint(st.mock, st.key, PreviewLayerWanted(box, "trinket"), st.S, st.scale)
     st.trinketAvailable = available == true
     local handle = box.handleArenaTrinket
     if not handle then return end
     if icon then
-        handle:SetSize(st.max(18, icon:GetWidth() + 8), st.max(18, icon:GetHeight() + 8))
+        handle:SetSize(st.max(18, icon:GetWidth() * st.scale + 8), st.max(18, icon:GetHeight() * st.scale + 8))
         st.PlaceHandle(handle, icon)
     else
         handle:Hide()

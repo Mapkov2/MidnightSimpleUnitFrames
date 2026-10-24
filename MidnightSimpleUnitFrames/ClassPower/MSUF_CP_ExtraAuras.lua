@@ -27,7 +27,9 @@ local DEFAULT_OFFSET_Y = DEFAULTS.resourceExtraOffsetY
 
 -- Bound by MSUF.CPBuilders.ExtraAuras: its options table and the state of
 -- the one helper the resource-extras lifecycle builds per session.
+function MSUF.CPBuilders.ExtraAuras(boundE)
 local E
+local Visibility
 local states, pending, publicHaste, arcaneGCD
 local Refresh, previewHost, previewShown, registered, editActive, disabled
 local previewBars, known
@@ -47,17 +49,20 @@ local function Known(spellID)
     end
     return answer
 end
-local function SensorAPI()
+local SensorAPI
+local function NativeSensorAPI()
     local A3 = MSUF.Require("MSUF_Auras3", FILE)
     return A3.CreateClassPowerAuraSensor and A3 or nil
 end
 local function PainSupported() return E.PLAYER_CLASS == "WARRIOR" and SensorAPI() ~= nil and Known(IGNORE_PAIN) end
 local function ArcaneSupported() return E.PLAYER_CLASS == "MAGE" and SensorAPI() ~= nil and Known(ARCANE_SURGE) end
-local function Mutable(state)
+local Mutable
+local function NativeMutable(state)
     return not (InCombatLockdown and InCombatLockdown())
         and not (C_Secrets and C_Secrets.ShouldAurasBeSecret and C_Secrets.ShouldAurasBeSecret())
         and (not state or not state.button or not state.button.CanBeAccessedInContext or state.button:CanBeAccessedInContext())
 end
+local function SampleMutable() return not (InCombatLockdown and InCombatLockdown()) end
 local function RGB(key, fallback)
     local color = E.db.bars[key]
     if type(color) ~= "table" then color = fallback end
@@ -225,8 +230,8 @@ local function Ensure(key, row)
         pending = true
         return
     end
-    if MSUF.ResourceVisibility then
-        MSUF.ResourceVisibility.BindExtra(state.host, E.GetPlayerFrame(), E.db.bars)
+    if Visibility then
+        Visibility.BindExtra(state.host, E.GetPlayerFrame(), E.db.bars)
     end
     if state.button then Initialize(state, state.button) end
     local A3 = SensorAPI()
@@ -408,11 +413,13 @@ local function Disable()
     pending = false
     for _, state in pairs(states) do Park(state) end
 end
-function MSUF.CPBuilders.ExtraAuras(boundE)
     E = boundE
+    SensorAPI = E.SensorAPI or NativeSensorAPI
+    Mutable = E.sample and SampleMutable or NativeMutable
+    if not E.sample then Visibility = MSUF.ResourceVisibility end
     states, pending, publicHaste, arcaneGCD = {}, false, 0, nil
     previewHost, previewShown, registered, editActive, disabled = nil, nil, nil, nil, nil
     previewBars, known = {}, {}
-    return { Refresh = Refresh, RefreshHaste = RefreshHaste, UsesHaste = UsesHaste,
+    return { Sample = Ensure, States = states, Refresh = Refresh, RefreshHaste = RefreshHaste, UsesHaste = UsesHaste,
         IsPending = IsPending, Disable = Disable }
 end

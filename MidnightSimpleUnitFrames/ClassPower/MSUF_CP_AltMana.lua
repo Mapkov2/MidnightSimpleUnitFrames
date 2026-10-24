@@ -10,7 +10,8 @@ local builders = MSUF.Require("MSUF_CP_CONST", FILE).BuilderRegistry("MSUF_CP_CO
 
 --- Bound once by ALT_MANA at controller load: the controller's AltMana state,
 --- its cached profile, the class facts and the APIs it injects.
-local AM, _cpDB, PT, PLAYER_CLASS, GetSpec, NotSecret
+builders.ALT_MANA = function(E)
+local AM, _cpDB, PT, PLAYER_CLASS, GetSpec, NotSecret, Ownership
 local UnitPowerType, UnitPower, UnitPowerMax
 local SMOOTH_INTERP
 local tonumber = tonumber
@@ -24,7 +25,7 @@ end
 
 local function NeedsAltManaBar()
     --- The Player surface already represents Mana -> no duplicate alt bar.
-    local ownership = MSUF.ClassPowerOwnership
+    local ownership = Ownership
     if ownership.playerManaOverride then return false end
     if ownership.eleMaelstrom then return false end
     if ownership.augEvoker then return true end
@@ -168,7 +169,7 @@ local function AM_RefreshTexture()
     ApplyRoundedSurface()
 end
 
-builders.ALT_MANA = function(E)
+    Ownership = E.Ownership or MSUF.ClassPowerOwnership
     AM, _cpDB, PT = E.AM, E._cpDB, E.PT
     PLAYER_CLASS, GetSpec, NotSecret = E.PLAYER_CLASS, E.GetSpec, E.NotSecret
     UnitPowerType, UnitPower, UnitPowerMax = E.UnitPowerType, E.UnitPower, E.UnitPowerMax

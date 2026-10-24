@@ -694,6 +694,20 @@ local function ApplyFrameEffect(lane, button, data)
     return true
 end
 
+function V.ApplyPreviewFrameEffect(owner, effect, frame)
+    local lane = owner._msufPreviewEffectLane
+    if not lane then lane = { config = {} } owner._msufPreviewEffectLane = lane end
+    lane.ownerFrame, lane.config.frameEffect = frame, effect
+    owner._msufA3ClassicFrameEffectStamp = nil
+    local sample = owner._msufPreviewEffectSample or {}
+    owner._msufPreviewEffectSample = sample
+    sample.duration, sample.expirationTime = 30, GetTime() + math_min(2, tonumber(effect.expireThreshold) or 5)
+    local applied = ApplyFrameEffect(lane, owner, sample)
+    owner._msufA3SpellIndicatorEffectRoot = owner._msufA3ClassicFrameEffectRoot
+    return applied
+end
+V.HidePreviewFrameEffect = HideFrameEffect
+
 -- Read-only stand-in for a lane without an indicator colour: this runs on
 -- every button update, and Color only reads the table before its defaults.
 local NO_INDICATOR_COLOR = {}

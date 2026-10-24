@@ -13,7 +13,14 @@ local OVERLAY_LEVEL = 4
 
 -- Bound by MSUF.CPBuilders.ResourceMarks: its options table and the state
 -- of the one helper the resource-extras lifecycle builds per session.
+function MSUF.CPBuilders.ResourceMarks(boundE)
 local E
+local UnitPower = boundE.UnitPower or UnitPower
+local UnitPowerMax = boundE.UnitPowerMax or UnitPowerMax
+local UnitPowerType = boundE.UnitPowerType or UnitPowerType
+local UnitPowerPercent = boundE.UnitPowerPercent or UnitPowerPercent
+local Visibility
+if not boundE.sample then Visibility = MSUF.ResourceVisibility end
 local views, active, overlays
 local events
 local SIGNED
@@ -43,7 +50,7 @@ local function EvaluatePlain(view, percent)
 end
 -- What a view's power reads: a plain fraction, or nil and whether the client
 -- restricts it (then only its native curve evaluation may see the value).
-local function Read(view)
+local function NativeRead(view)
     local unit, power = view.unit, view.power
     if view.classResource and E.ClassPowerReader then
         -- Client-owned resources (combo points on the target, vehicles)
@@ -63,6 +70,8 @@ local function Read(view)
     if Number(value) and Number(maximum) and maximum > 0 then return value / maximum end
     return nil, false
 end
+local Read = boundE.Read or NativeRead
+
 local function Write(view, r, g, b)
     view.writing = true
     view.bar:SetStatusBarColor(r, g, b, view.a)
@@ -220,7 +229,7 @@ local function Overlay(host)
             end)
         end
     end
-    if MSUF.ResourceVisibility then MSUF.ResourceVisibility.BindExtra(overlay, host, E.db.bars) end
+    if Visibility then Visibility.BindExtra(overlay, host, E.db.bars) end
     overlay:SetFrameLevel(host:GetFrameLevel() + OVERLAY_LEVEL)
     return overlay
 end
@@ -407,14 +416,18 @@ local function OnEvent(_, event, unit, token)
         end
 end
 local function IsPending() return pending end
-function MSUF.CPBuilders.ResourceMarks(boundE)
     E = boundE
     views, active, overlays = {}, {}, {}
-    events = CreateFrame("Frame")
+    events = E.events or CreateFrame("Frame")
     local constants = MSUF.Optional("MSUF_CP_CONST")
     local modes = constants and constants.CPK and constants.CPK.MODE
     SIGNED = modes and modes.SIGNED_CONTINUOUS
     pending = false
     events:SetScript("OnEvent", OnEvent)
-    return { Refresh = Refresh, Disable = Disable, PowerChanged = PowerChanged, IsPending = IsPending }
+    return { Refresh = Refresh, Disable = Disable, PowerChanged = PowerChanged, IsPending = IsPending,
+        PaintSample = function()
+            batchUnit, batchPower = nil, nil
+            for _, view in ipairs(active) do PaintBatched(view) end
+        end,
+    }
 end

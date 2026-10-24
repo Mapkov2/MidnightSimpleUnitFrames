@@ -30,8 +30,6 @@ local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need e
     "UnitFrame, or turn on its Dispel feature to enable the sensor automatically. Both icon caps may stay at 0."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
-local ROUNDED_PREVIEW_DEFAULT_MASK = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
-    .. "\\Media\\Masks\\rounded_clean_mask_s3.png"
 local ROUNDED_STRENGTH_APPLY_DELAY = 0.12
 local ROUNDED_SECTION_HEIGHT = 310
 local SLANTED_PRESET_UNITS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget", "boss", "arena" }
@@ -619,89 +617,20 @@ local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, 
     M.RegisterSearchWidget(control, payload)
 end
 
--- This page preview intentionally remains lightweight; live unit/group previews are
--- refreshed by ApplyService. Descriptors remove the former texture-by-texture boilerplate.
+local function ShapePreviewSurface(card, width, height)
+    local host = PixelLayoutRegion(CreateFrame("Frame", nil, card))
+    host:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -40)
+    host:SetSize(width, height)
+    local surface = M.PreviewHelpers.NewRuntimeUnitSurface(host, CurrentBarsScope, { hp = .78, power = .66, hpPct = .78, powerPct = .66 })
+    card._msuf2RoundedPreviewSample = surface
+    return surface
+end
 local function CreateRoundedTexturePreview(parent, x, y, width)
-    width = max(320, floor((tonumber(width) or 560) + 0.5))
-    -- The two-pixel rounded edge extends beyond the 46px sample. Keep a small
-    -- inset below it so the card boundary cannot clip the power-bar edge.
+    width = max(320, floor((tonumber(width) or 560) + .5))
     local card = W.ControlCard(parent, "Preview", nil, x, y, width, ROUNDED_PREVIEW_CARD_HEIGHT)
     if not card then return end
-    local sample, sampleW, sampleH, powerH = PixelLayoutRegion(CreateFrame("Frame", nil, card)), min(440, max(280, width - 44)), 46, 8
-    sample:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -40)
-    sample:SetSize(sampleW, sampleH)
-    card._msuf2RoundedPreviewSample = sample
-    local regions = {
-        { "bg", "BACKGROUND", -7, { 0.015, 0.020, 0.032, 0.96 }, function(t) t:SetAllPoints(sample) end },
-        { "healthBg", "BORDER", -1, { 0.060, 0.070, 0.075, 1 }, function(texture)
-            texture:SetPoint("TOPLEFT", sample)
-            texture:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerH)
-        end },
-        { "health", "ARTWORK", 1, { 0.70, 0.69, 0.30, 0.94 }, function(texture)
-            texture:SetPoint("TOPLEFT", sample)
-            texture:SetSize(floor(sampleW * 0.78 + 0.5), sampleH - powerH)
-        end },
-        { "powerBg", "ARTWORK", 2, { 0.090, 0.055, 0.115, 1 }, function(texture)
-            texture:SetPoint("BOTTOMLEFT", sample)
-            texture:SetPoint("BOTTOMRIGHT", sample)
-            texture:SetHeight(powerH)
-        end },
-        { "power", "ARTWORK", 3, { 0.62, 0.12, 0.78, 1 }, function(texture)
-            texture:SetPoint("BOTTOMLEFT", sample)
-            texture:SetSize(floor(sampleW * 0.66 + 0.5), powerH)
-        end },
-        { "gloss", "ARTWORK", 4, { 1, 1, 1, 0.045 }, function(texture)
-            texture:SetPoint("TOPLEFT", sample)
-            texture:SetPoint("BOTTOMRIGHT", sample, "RIGHT", 0, -1)
-        end },
-    }
-    local helpers = M.PreviewHelpers or {}
-    local roundedMedia = {}
-    -- The clean media family for the stored corner strength is the preview helpers' own.
-    -- A refresh resolves it once and hands it to every masked region and edge.
-    local function ApplyPreviewStrength(entry, maskPath, edgePath, strength)
-        local region = entry.region
-        local path = entry.edge and edgePath or maskPath
-        if region._msuf2RoundedPreviewStrength == strength and region._msuf2RoundedPreviewPath == path then return end
-        region._msuf2RoundedPreviewStrength = strength
-        region._msuf2RoundedPreviewPath = path
-        region:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        helpers.ApplyRoundedMediaSlice(region, strength)
-    end
-    for i = 1, #regions do
-        local spec = regions[i]
-        local tex = PixelLayoutRegion(sample:CreateTexture(nil, spec[2], nil, spec[3]))
-        spec[5](tex)
-        tex:SetColorTexture(unpack(spec[4]))
-        if helpers.SnapOff then helpers.SnapOff(tex) end
-        local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(
-            sample, spec[1], sample, tex, "_msuf2RoundedPreviewMasks", ROUNDED_PREVIEW_DEFAULT_MASK)
-        if helpers.SetMask then helpers.SetMask(sample, tex, mask, "_msuf2RoundedPreviewMasked") end
-        if mask then roundedMedia[#roundedMedia + 1] = { region = mask } end
-    end
-    for _, textSpec in ipairs({ { "Mapkotwo", "LEFT", 10, 0.42 }, { "404K - 100.0%", "RIGHT", -10, 0.50 } }) do
-        local label = T.Font(sample, "GameFontHighlightSmall", textSpec[1], T.colors.text)
-        label:SetPoint(textSpec[2], sample, textSpec[2], textSpec[3], 4)
-        label:SetWidth(floor(sampleW * textSpec[4]))
-        label:SetJustifyH(textSpec[2])
-        if label.SetShadowOffset then label:SetShadowOffset(1, -1) end
-    end
-    for i = 1, 2 do
-        local edge = PixelLayoutRegion(sample:CreateTexture(nil, "OVERLAY", nil, 6))
-        edge:SetPoint("TOPLEFT", sample, "TOPLEFT", -i, i)
-        edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
-        edge:SetVertexColor(0, 0, 0, 1)
-        if helpers.SnapOff then helpers.SnapOff(edge) end
-        roundedMedia[#roundedMedia + 1] = { region = edge, edge = true }
-    end
-    -- Every "Corner rounding" drag step lands here; the first call below paints
-    -- the media the regions were built without.
-    function card:RefreshRoundedPreview()
-        sample:SetAlpha(ReadB("roundedFramesEnabled", false) == true and 1 or 0.62)
-        if not helpers.ResolveRoundedMedia then return end
-        local maskPath, edgePath, strength = helpers.ResolveRoundedMedia()
-        for i = 1, #roundedMedia do ApplyPreviewStrength(roundedMedia[i], maskPath, edgePath, strength) end
-    end
+    local surface = ShapePreviewSurface(card, min(440, max(280, width - 44)), 46)
+    function card:RefreshRoundedPreview() surface:Refresh() end
     card:RefreshRoundedPreview()
     return card
 end
@@ -1860,75 +1789,8 @@ end
 local function CreateSlantedBarPreview(section, width)
     local card = W.ControlCard(section, "Slanted bar preview", nil, 30, -300, width - 60, 92)
     if not card then return end
-    local sample = PixelLayoutRegion(CreateFrame("Frame", nil, card))
-    local sampleW, sampleH, powerH = min(440, max(240, width - 110)), 43, 8
-    sample:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -39)
-    sample:SetSize(sampleW, sampleH)
-    sample._msufPreviewRoundedMediaStrength = 0
-    local helpers = M.PreviewHelpers or {}
-    local masked = {}
-    local regions = {
-        { "healthBg", "BACKGROUND", { 0.075, 0.075, 0.090, 1 }, 1, function(tex)
-            tex:SetPoint("TOPLEFT", sample)
-            tex:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerH + 2)
-        end },
-        { "health", "ARTWORK", { 0.82, 0.42, 0.52, 1 }, 2, function(tex)
-            tex:SetPoint("TOPLEFT", sample)
-            tex:SetSize(floor(sampleW * 0.77 + 0.5), sampleH - powerH - 2)
-        end },
-        { "powerBg", "ARTWORK", { 0.075, 0.075, 0.090, 1 }, 3, function(tex)
-            tex:SetPoint("BOTTOMLEFT", sample)
-            tex:SetPoint("BOTTOMRIGHT", sample)
-            tex:SetHeight(powerH)
-        end },
-        { "power", "ARTWORK", { 0.18, 0.43, 0.88, 1 }, 4, function(tex)
-            tex:SetPoint("BOTTOMLEFT", sample)
-            tex:SetSize(floor(sampleW * 0.64 + 0.5), powerH)
-        end },
-    }
-    for i = 1, #regions do
-        local spec = regions[i]
-        local tex = PixelLayoutRegion(sample:CreateTexture(nil, spec[2], nil, spec[4]))
-        spec[5](tex)
-        tex:SetColorTexture(unpack(spec[3]))
-        if helpers.SnapOff then helpers.SnapOff(tex) end
-        masked[#masked + 1] = { key = spec[1], texture = tex }
-    end
-    local edge = PixelLayoutRegion(sample:CreateTexture(nil, "OVERLAY", nil, 6))
-    edge:SetAllPoints(sample)
-    edge:SetVertexColor(0.02, 0.02, 0.03, 1)
-    if helpers.SnapOff then helpers.SnapOff(edge) end
-    local name = T.Font(sample, "GameFontHighlightSmall", "Daylight", T.colors.text)
-    name:SetPoint("LEFT", sample, "LEFT", 8, 4)
-    local value = T.Font(sample, "GameFontHighlightSmall", "382", T.colors.text)
-    value:SetPoint("RIGHT", sample, "RIGHT", -12, 4)
-    function card:RefreshSlantedPreview()
-        if helpers.ClearMasks then helpers.ClearMasks(sample, "_msuf2SlantedPreviewMasked") end
-        local healthOn = SlantedSwitchOn()
-            and (ReadB("slantedUnitFrames", true) ~= false or ReadB("slantedGroupFrames", true) ~= false)
-        if not healthOn then
-            edge:Hide()
-            return
-        end
-        local powerOn = ReadB("slantedPowerBars", true) ~= false
-        local resolve = helpers.ResolveFrameBarMedia
-        if type(resolve) ~= "function" then return end
-        local maskPath, edgePath = resolve("SLANTED", CurrentBarsScope())
-        for i = 1, #masked do
-            local entry = masked[i]
-            if powerOn or (entry.key ~= "power" and entry.key ~= "powerBg") then
-                local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(
-                    sample, entry.key, sample, entry.texture, "_msuf2SlantedPreviewMasks", maskPath)
-                if helpers.SetMask then helpers.SetMask(sample, entry.texture, mask, "_msuf2SlantedPreviewMasked") end
-            end
-        end
-        edge:ClearAllPoints()
-        edge:SetPoint("TOPLEFT", sample, "TOPLEFT")
-        edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerOn and 0 or powerH + 2)
-        edge:SetTexture(edgePath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        if helpers.ApplyRoundedMediaSlice then helpers.ApplyRoundedMediaSlice(edge, 0) end
-        edge:Show()
-    end
+    local surface = ShapePreviewSurface(card, min(440, max(240, width - 110)), 43)
+    function card:RefreshSlantedPreview() surface:Refresh() end
     card:RefreshSlantedPreview()
     return card
 end

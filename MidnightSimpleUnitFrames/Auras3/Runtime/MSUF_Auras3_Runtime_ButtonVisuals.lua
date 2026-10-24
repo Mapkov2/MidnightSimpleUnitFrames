@@ -737,6 +737,26 @@ local function PrepareAuraButton(button, lane, index)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
 end
 
+function ButtonVisuals.PaintSample(button, lane, index, sample)
+    button:SetSample(sample)
+    lane._msufA3NativeVisualInputs = A3.GetNativeVisualInputs()
+    local visualOwner = PrepareStage.ResolveVisualOwner(button, lane)
+    local barOnly, spellBar, icon = PrepareStage.PrepareIcon(button, lane, index, visualOwner)
+    PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
+    local shape = PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
+    sample.shape = shape
+    PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellBar)
+    local overlay = PrepareStage.ResolveTextOverlay(button, lane)
+    PrepareStage.PrepareCooldownText(button, lane, overlay)
+    PrepareStage.PrepareStackText(button, lane, overlay)
+    local border = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, shape)
+    PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, border)
+    PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, shape)
+    if A3.ApplyPandemicVisual then A3.ApplyPandemicVisual(button, lane, sample.pandemic == true) end
+    button:Show()
+end
+ButtonVisuals.LayoutSample = LayoutButton
+
 local exports = {
     PrepareAuraButton = PrepareAuraButton,
     SyncContainerGeometry = SyncContainerGeometry,

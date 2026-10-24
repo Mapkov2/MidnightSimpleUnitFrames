@@ -97,7 +97,8 @@ local GetEbonTextLevel
 --- style come from the ordinary Player Power configuration. Only the fill colour
 --- still resolves through the EBON_MIGHT token, because that is where every
 --- other class-resource colour lives on the Colors page.
-local function CP_GetEbonStyle()
+local function CreateEbonStyle(CP, _cpDB, ResolveClassPowerColor)
+    return function()
     local playerFrame = CP._pf or CoreUnitFrame("player")
     local powerSpec = playerFrame and playerFrame.MSUFSpec and playerFrame.MSUFSpec.power or nil
     local p = MSUF_DB and MSUF_DB.player or nil
@@ -154,6 +155,10 @@ local function CP_GetEbonStyle()
             textOffsetY = tonumber(p and p.powerOffsetY) or 0,
     }
 end
+
+end
+local CP_GetEbonStyle
+builders.CREATE_EBON_STYLE = CreateEbonStyle
 
 --- The Power element calls this once its bar is laid out and skinned, which is
 --- also the only moment the host is guaranteed to exist. Creating the native
@@ -301,6 +306,7 @@ builders.CONTROLLER_SURFACE = function(E)
     CP, _cpDB, CPConst = E.CP, E._cpDB, E.CPConst
     ResolveClassPowerColor, CP_ResolveTexture = E.ResolveClassPowerColor, E.CP_ResolveTexture
     CP_Create, CP_EnsureBars, CP_Layout = E.CP_Create, E.CP_EnsureBars, E.CP_Layout
+    CP_GetEbonStyle = CreateEbonStyle(CP, _cpDB, ResolveClassPowerColor)
     CP.runeMap = { 1, 2, 3, 4, 5, 6 }
     _runeAppliedSortOrder = "natural"
     GetEbonTextLevel = MSUF.ClassPowerConfig.CreatePowerTextLevel(CP)
