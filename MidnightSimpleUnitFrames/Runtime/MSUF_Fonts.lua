@@ -131,7 +131,7 @@ do
         local registered = MSUF_GetRegisteredLSMFontPath(path)
         if registered then return registered end
         local isKnown = MSUF_IsKnownFileAsset
-        if type(isKnown) == "function" and isKnown(path) == false then return nil end
+        if isKnown(path) == false then return nil end
         local isAvailable = Optional("MSUF_IsAvailableFontPath")
         if type(isAvailable) == "function" and not isAvailable(path) then return nil end
         return path

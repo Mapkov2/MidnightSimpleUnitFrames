@@ -49,7 +49,7 @@ local RELEASE_SUMMARY = {
 --- asks a TOC again.
 local function AddonVersion()
     local getVersion = MSUF.GetAddonVersion
-    local version = type(getVersion) == "function" and getVersion() or nil
+    local version = getVersion()
     if type(version) == "string" and version ~= "" then return version end
     return nil
 end
@@ -87,7 +87,7 @@ end
 --- never a secret value.
 local function ClientInterface()
     local client = MSUF.Client
-    local interface = type(client) == "table" and client.Interface or nil
+    local interface = client.Interface
     return type(interface) == "number" and interface or nil
 end
 

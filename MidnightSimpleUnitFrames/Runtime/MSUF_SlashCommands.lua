@@ -330,7 +330,7 @@ end
 --- asks a TOC again.
 local function CommandsAddonVersion()
     local getVersion = MSUF.GetAddonVersion
-    local version = type(getVersion) == "function" and getVersion() or nil
+    local version = getVersion()
     if type(version) == "string" and version ~= "" then return version end
     return "unknown"
 end
@@ -428,11 +428,7 @@ Commands.Register({
     --- from Game/Shared/Initialize.lua, which every TOC loads first.
     run = function()
         local client = MSUF.Client
-        local describe = type(client) == "table" and client.DescribeLines or nil
-        if type(describe) ~= "function" then
-            print("|cff00b7ebMSUF|r client info is unavailable: client detection did not run.")
-            return
-        end
+        local describe = client.DescribeLines
         local lines = describe()
         print("|cff00b7ebMSUF|r client info")
         for i = 1, #lines do

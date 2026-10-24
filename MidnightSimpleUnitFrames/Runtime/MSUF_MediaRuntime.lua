@@ -25,7 +25,7 @@ local function IsKnownAsset(path)
     if type(path) ~= "string" or path == "" then return false end
 
     local validator = IsKnownFileAsset
-    if type(validator) == "function" and validator(path) == false then
+    if validator(path) == false then
         return false
     end
     return true

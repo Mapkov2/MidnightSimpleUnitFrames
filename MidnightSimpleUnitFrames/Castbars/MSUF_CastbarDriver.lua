@@ -57,7 +57,7 @@ local UIParent = UIParent
 local type = type
 local tonumber = tonumber
 local tostring = tostring
-local castbarEngine = MSUF.Castbars and MSUF.Castbars.Engine
+local castbarEngine = Castbars.Engine
 local castbarRuntime = Castbars.Runtime
 local ApplyInterruptValues = castbarRuntime and castbarRuntime.ApplyInterruptValues
 
@@ -72,9 +72,6 @@ local function CancelDelayed(callback)
 end
 
 local function CastbarEngine()
-    if castbarEngine then return castbarEngine end
-    local getter = Engine.GetCastbarEngine
-    castbarEngine = type(getter) == "function" and getter() or nil
     return castbarEngine
 end
 
@@ -223,9 +220,9 @@ local function SetDriverEventsRegistered(frame, unit, enabled)
 end
 
 local function AnchorDriverFrameToUnitFrame(frame, unit)
-    local uf = MSUF and MSUF.UF
-    local unitFrame = uf and type(uf.GetFrame) == "function" and uf.GetFrame(unit) or nil
-    unitFrame = unitFrame or (uf and uf.frames and uf.frames[unit]) or _G["MSUF_" .. unit]
+    local uf = MSUF.UF
+    local unitFrame = uf.GetFrame(unit)
+    unitFrame = unitFrame or (uf.frames and uf.frames[unit]) or _G["MSUF_" .. unit]
     if not unitFrame then return end
 
     frame:ClearAllPoints()
@@ -502,11 +499,7 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     local countsDown = GetCastbarCountsDown(frame, isChannel and true or false) == true
     frame._msufCountsDown = countsDown
     local resolvePushback = Utils.Castbar_ResolvePushbackMS
-    if type(resolvePushback) == "function" then
-        frame._msufPushbackMS = resolvePushback(frame, state)
-    else
-        frame._msufPushbackMS = ToPlainNumber(state.delayTimeMS)
-    end
+    frame._msufPushbackMS = resolvePushback(frame, state)
     -- The cast text above was written before the legacy delay was known, so a
     -- measured start shift repaints it once with the "+x.x" suffix.
     if state.delayTimeMS == nil
@@ -670,41 +663,13 @@ local function EnsureDriverCallbacks(frame)
     if frame._msufDriverCBReady then return end
     frame._msufDriverCBReady = true
 
-    local function StopExpectationInvalid()
-        if not frame or frame.interrupted then
-            return true
-        end
-        return (frame._msufCastToken or 0) ~= (frame._msufStopExpToken or 0)
-    end
-
-    -- hot path: kept whole (perf rule)
-    frame._msufStopCB_chanT1 = function()
-        if StopExpectationInvalid() then return end
-
-        local state = BuildState(frame)
-        if CastStateActive(state) then
-            ShowActiveState(frame, state)
-            return
-        end
-
-        if ActiveSequenceChanged(frame, frame._msufStopExpSeq) then
-            RefreshFromEngine(frame)
-            return
-        end
-
-        frame._msufStopTimer2 = true
-        ScheduleDelayed(frame._msufStopCB_chanT2, frame._msufStopT2 or CHANNEL_STOP_SECOND_DELAY_MIN)
-    end
-
-    -- The second channel re-check, the channel failsafe, and the plain-cast
-    -- re-check all confirm the same thing; only their delays differ. Each slot
-    -- still needs its own closure: ScheduleDelayed keys the Kernel scheduler by
-    -- the callback, and one shared key let the later deadline replace the
-    -- earlier one (the 0.12 s cast re-check became the 0.40 s failsafe).
-    local function NewConfirmStopOrSucceed()
+    -- Each deadline keeps its own callback identity for the keyed scheduler.
+    -- The first channel check schedules the second; the others confirm success.
+    local function NewConfirmStopOrSucceed(scheduleSecond)
         -- hot path: kept whole (perf rule)
         return function()
-            if StopExpectationInvalid() then return end
+            if not frame or frame.interrupted then return end
+            if (frame._msufCastToken or 0) ~= (frame._msufStopExpToken or 0) then return end
 
             local state = BuildState(frame)
             if CastStateActive(state) then
@@ -717,13 +682,19 @@ local function EnsureDriverCallbacks(frame)
                 return
             end
 
-            frame:SetSucceeded()
+            if scheduleSecond then
+                frame._msufStopTimer2 = true
+                ScheduleDelayed(frame._msufStopCB_chanT2, frame._msufStopT2 or CHANNEL_STOP_SECOND_DELAY_MIN)
+            else
+                frame:SetSucceeded()
+            end
         end
     end
 
-    frame._msufStopCB_chanT2 = NewConfirmStopOrSucceed()
-    frame._msufStopCB_failsafe = NewConfirmStopOrSucceed()
-    frame._msufStopCB_castT1 = NewConfirmStopOrSucceed()
+    frame._msufStopCB_chanT1 = NewConfirmStopOrSucceed(true)
+    frame._msufStopCB_chanT2 = NewConfirmStopOrSucceed(false)
+    frame._msufStopCB_failsafe = NewConfirmStopOrSucceed(false)
+    frame._msufStopCB_castT1 = NewConfirmStopOrSucceed(false)
 
     frame._msufStartRetryCB = function()
         frame._msufStartRetryPending = nil
@@ -907,26 +878,8 @@ local function AdvanceBuildStateGeneration(unit)
 end
 
 local function ResolveCastTargetInfo(state)
-    local engine = (Engine.GetCastbarEngine and Engine.GetCastbarEngine()) or nil
-    if engine and type(engine.ResolveTargetInfo) == "function" then
-        return engine:ResolveTargetInfo(state)
-    end
-
-    -- No-Engine fallback only. Engine:ResolveTargetInfo (MSUF_CastbarEngine.lua)
-    -- additionally gates on state.active and caches the answer on the state;
-    -- this path is stateless, so the two are deliberately not shared.
-    local unit = state and state.unit
-    if not (unit and UnitShouldDisplaySpellTargetName and UnitSpellTargetName) then
-        return nil
-    end
-    if not UnitShouldDisplaySpellTargetName(unit) then
-        return nil
-    end
-
-    local targetName = UnitSpellTargetName(unit)
-    local targetClass
-    if UnitSpellTargetClass then targetClass = UnitSpellTargetClass(unit) end
-    return targetName, targetClass, true
+    local engine = Engine.GetCastbarEngine()
+    return engine:ResolveTargetInfo(state)
 end
 
 function Driver.CreateTargetPainter(ResolveCastTargetInfo, CastStateHasSpell)
@@ -1760,7 +1713,7 @@ end
 --- so its old per-function fallbacks never ran; resolved at login (cold path).
 local function MSUF_CastbarDriver_OnLogin()
     local any = Bridge.AreAnyCastbarsEnabled
-    if type(any) == "function" and not any() then return end
+    if not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
     -- Castbars/MSUF_Castbars_Core.lua loads before this file.
@@ -1773,7 +1726,7 @@ end
 
 local function MSUF_CastbarDriver_OnEnteringWorld()
     local any = Bridge.AreAnyCastbarsEnabled
-    if type(any) == "function" and not any() then return end
+    if not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
 
@@ -1787,8 +1740,7 @@ local function SyncCastbarDriverLifecycle(runNow, atLoad)
     local register, unregister = Require("MSUF_EventBus_Register", FILE), Require("MSUF_EventBus_Unregister", FILE)
     unregister("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN")
     unregister("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD")
-    local any = atLoad ~= true and Bridge.AreAnyCastbarsEnabled
-    if type(any) == "function" and not any() then return false end
+    if atLoad ~= true and not Bridge.AreAnyCastbarsEnabled() then return false end
     register("PLAYER_LOGIN", "MSUF_CASTBAR_DRIVER_LOGIN", MSUF_CastbarDriver_OnLogin, nil, true)
     register("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD", MSUF_CastbarDriver_OnEnteringWorld)
     if runNow == true then MSUF_CastbarDriver_OnLogin() end

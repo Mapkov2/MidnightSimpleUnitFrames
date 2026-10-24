@@ -448,10 +448,8 @@ end
 --- Configured texture key -> media path (shared by build/presentation/HP).
 local function CP_ResolveTexture(key)
     if key and key ~= "" then
-        if type(ResolveStatusbarTextureKey) == "function" then
-            local p = ResolveStatusbarTextureKey(key)
-            if p then return p end
-        end
+        local p = ResolveStatusbarTextureKey(key)
+        if p then return p end
     end
     --- Fallback: global bar texture -> flat white
     return GetBarTexture() or "Interface\\Buttons\\WHITE8x8"

@@ -465,30 +465,28 @@ do
         ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
     }
     local segmented = CP_CallBuilder(CPModeBuilders.SEGMENTED, commonEnv)
-    if segmented and type(segmented.Update) == "function" then CP_UpdateValues = segmented.Update end
-    if segmented and type(segmented.StopEssenceOnUpdates) == "function" then CP_StopEssenceOnUpdates = segmented.StopEssenceOnUpdates end
-    if segmented and type(segmented.RuntimeTick) == "function" then _essenceRuntimeTick = segmented.RuntimeTick end
+    CP_UpdateValues = segmented.Update
+    CP_StopEssenceOnUpdates = segmented.StopEssenceOnUpdates
+    _essenceRuntimeTick = segmented.RuntimeTick
     local fractional = CP_CallBuilder(CPModeBuilders.FRACTIONAL, commonEnv)
-    if fractional and type(fractional.Update) == "function" then CP_UpdateValues_Fractional = fractional.Update end
+    CP_UpdateValues_Fractional = fractional.Update
     local aura = CP_CallBuilder(CPModeBuilders.AURA, commonEnv)
-    if aura then
-        if type(aura.UpdateSegmented) == "function" then CP_UpdateValues_AuraSegmented = aura.UpdateSegmented end
-        if type(aura.UpdateSingle) == "function" then CP_UpdateValues_AuraSingle = aura.UpdateSingle end
-    end
+    CP_UpdateValues_AuraSegmented = aura.UpdateSegmented
+    CP_UpdateValues_AuraSingle = aura.UpdateSingle
 
     commonEnv.UnitPower = UnitPower
     commonEnv.UnitPowerMax = UnitPowerMax
     commonEnv.TrackedPlayerAuras = CPAuras.bySpell
     local continuous = CP_CallBuilder(CPModeBuilders.CONTINUOUS, commonEnv)
-    if continuous and type(continuous.Update) == "function" then CP_UpdateValues_Continuous = continuous.Update end
-    if IS_CLASSIC then CP.UpdateSignedContinuous = continuous and continuous.UpdateSigned end
+    CP_UpdateValues_Continuous = continuous.Update
+    if IS_CLASSIC then CP.UpdateSignedContinuous = continuous.UpdateSigned end
 
     commonEnv.UnitStagger = UnitStagger
     commonEnv.UnitHealthMax = UnitHealthMax
     commonEnv.STAGGER_CONST = CPConst.STAGGER or {}
     local stagger = CP_CallBuilder(CPModeBuilders.STAGGER, commonEnv)
-    if stagger and type(stagger.Update) == "function" then CP_UpdateValues_Stagger = stagger.Update end
-    if stagger and type(stagger.RuntimeTick) == "function" then _staggerRuntimeTick = stagger.RuntimeTick end
+    CP_UpdateValues_Stagger = stagger.Update
+    _staggerRuntimeTick = stagger.RuntimeTick
     --- Ironfur is built lazily on the first enabled Guardian/Bear refresh so
     --- the default-off feature creates no frames and binds no events.
     CP.ironfur = nil
@@ -590,16 +588,12 @@ do
     }
 
     local rune = CP_CallBuilder(CPModeBuilders.RUNE, commonEnv)
-    if rune then
-        if type(rune.Update) == "function" then CP_UpdateValues_RuneCD = rune.Update end
-        if type(rune.StopOnUpdates) == "function" then CP_StopRuneOnUpdates = rune.StopOnUpdates end
-        if type(rune.RuntimeTick) == "function" then _runeRuntimeTick = rune.RuntimeTick end
-    end
+    CP_UpdateValues_RuneCD = rune.Update
+    CP_StopRuneOnUpdates = rune.StopOnUpdates
+    _runeRuntimeTick = rune.RuntimeTick
 
     local timer = CP_CallBuilder(CPModeBuilders.TIMER, commonEnv)
-    if timer then
-        if type(timer.Update) == "function" then CP_UpdateEbonHost = timer.Update end
-    end
+    CP_UpdateEbonHost = timer.Update
 end
 
 local CPTicker = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_TICKER, {

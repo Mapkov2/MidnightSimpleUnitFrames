@@ -1,8 +1,7 @@
 --- Group Frames DB: first-load Spell Indicator default seeding.
 -- Seeds cold profile data only; runtime indicator rendering lives in UF group modules.
 local _, MSUF = ...
-local GF = MSUF.GF or {}
-MSUF.GF = GF
+local GF = MSUF.GF
 local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
 
 local function IsDefaultsConf(kind, conf)
@@ -66,10 +65,8 @@ local function NormalizeSpellIndicatorConfig(conf)
         si.iconScale = 100
         changed = true
     end
-    if type(GF.EnsureSpellIndicatorStyle) == "function" then
-        local _, styleChanged = GF.EnsureSpellIndicatorStyle(conf)
-        changed = styleChanged or changed
-    end
+    local _, styleChanged = GF.EnsureSpellIndicatorStyle(conf)
+    changed = styleChanged or changed
     if type(si._autoSeededSpecs) ~= "table" then
         si._autoSeededSpecs = {}
         changed = true
@@ -83,10 +80,8 @@ end
 
 local function GetCurrentSpellIndicatorSpecKey()
     local SI = GetSpellIndicatorModule()
-    if type(SI.GetPlayerSpec) == "function" then
-        local specKey = SI.GetPlayerSpec()
-        if specKey then return specKey end
-    end
+    local specKey = SI.GetPlayerSpec()
+    if specKey then return specKey end
 
     local _, classToken
     if UnitClass then _, classToken = UnitClass("player") end
@@ -176,9 +171,7 @@ function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
 
     if changed then
         local siModule = GetSpellIndicatorModule()
-        if type(siModule.InvalidateRuntimeCaches) == "function" then
-            siModule.InvalidateRuntimeCaches()
-        end
+        siModule.InvalidateRuntimeCaches()
         local dirty = GF.DIRTY_AURAS or GF.DIRTY_ALL or 0x3F
         -- Seeding touches only spell-indicator/aura config. Keep the refresh
         -- masked so first-login spec defaults do not replay every group element.

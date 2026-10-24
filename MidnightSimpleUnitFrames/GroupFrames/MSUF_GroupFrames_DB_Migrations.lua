@@ -2,8 +2,7 @@
 --- After DB.lua: GF.EnsureDB calls GF.RepairGroupDB once per invalidation, never per frame/event.
 --- DB.lua owns the stable-cache fast path.
 local _, MSUF = ...
-local GF = MSUF.GF or {}
-MSUF.GF = GF
+local GF = MSUF.GF
 local ExportPublic, Require = MSUF.ExportPublic, MSUF.Require
 
 local tonumber = tonumber
@@ -13,15 +12,6 @@ local pairs = pairs
 local ipairs = ipairs
 
 --- DB.lua builds these defaults once and never replaces them; capture only after it loads.
---- Keep DB.lua first in every Group manifest; the guard below enforces this contract.
-if type(GF.PARTY_DEFAULTS) ~= "table"
-    or type(GF.RAID_DEFAULTS) ~= "table"
-    or type(GF.MYTHIC_RAID_DEFAULTS) ~= "table"
-    or type(GF.PRIORITY_DEFAULTS) ~= "table"
-    or type(GF.ResolveLegacyHealPredictionEnabled) ~= "function" then
-    error("MSUF_GroupFrames_DB_Migrations.lua loaded before MSUF_GroupFrames_DB.lua.", 2)
-end
-
 local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
 local PARTY_DEFAULTS = GF.PARTY_DEFAULTS
 local MIGRATIONS_FILE = "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua"
@@ -719,10 +709,8 @@ function GF.MigrateAuraConfig(conf, isRaid)
                 changed = true
             end
         end
-        if type(GF.EnsureSpellIndicatorStyle) == "function" then
-            local _, styleChanged = GF.EnsureSpellIndicatorStyle(conf)
-            changed = styleChanged or changed
-        end
+        local _, styleChanged = GF.EnsureSpellIndicatorStyle(conf)
+        changed = styleChanged or changed
         return changed
     end
     local hadFlatAuras = conf.aurasEnabled ~= nil and type(conf.auras) ~= "table"

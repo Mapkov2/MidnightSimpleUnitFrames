@@ -207,14 +207,9 @@ end
 local function BuildCastState(frame)
     local unit = frame and frame.unit
     local getEngine = Engine.GetCastbarEngine
-    local engine = type(getEngine) == "function" and getEngine() or nil
-    if engine and type(engine.Invalidate) == "function" then
-        engine:Invalidate(unit)
-    end
-    if engine and type(engine.BuildState) == "function" then
-        return engine:BuildState(unit, frame), true
-    end
-    return nil, false
+    local engine = getEngine()
+    engine:Invalidate(unit)
+    return engine:BuildState(unit, frame), true
 end
 
 --- Lifecycle teardown is terminal (encounter end, round end, opponent
@@ -228,11 +223,7 @@ local function StopCastbar(frame)
 
     frame.interrupted = nil
 
-    if type(Runtime.CB_ResetStateOnStop) == "function" then
-        Runtime.CB_ResetStateOnStop(frame, "STOPPED")
-    elseif frame.Hide then
-        frame:Hide()
-    end
+    Runtime.CB_ResetStateOnStop(frame, "STOPPED")
 end
 Pools.Stop = StopCastbar
 
@@ -296,15 +287,7 @@ local function DefinePoolAnchorBase(desc)
         local index = frame._msufPoolIndex or 1
         local unit = frame.unit or (UNIT_PREFIX .. index)
 
-        local desiredWidth
-        local desiredHeight
-        local preserveWidth
-        if type(Anchors.GetCastbarDesiredSize) == "function" then
-            desiredWidth, desiredHeight, preserveWidth = Anchors.GetCastbarDesiredSize(unit, general, frame, 240, 12)
-        else
-            desiredWidth = tonumber(general[DB_WIDTH])
-            desiredHeight = tonumber(general[DB_HEIGHT])
-        end
+        local desiredWidth, desiredHeight, preserveWidth = Anchors.GetCastbarDesiredSize(unit, general, frame, 240, 12)
 
         if desiredWidth and not preserveWidth then
             desiredWidth = Snap(frame, desiredWidth)
@@ -339,16 +322,9 @@ local function DefinePoolAnchorBase(desc)
         else
             local unitFrame = _G["MSUF_" .. unit]
             if unitFrame and unitFrame.GetWidth then
-                local source = (type(Anchors.GetCastbarUnitframeWidthSource) == "function"
-                    and Anchors.GetCastbarUnitframeWidthSource(unit)) or unitFrame
-                local autoX = 0
-                if type(Anchors.GetCastbarAutoAnchorOffsetX) == "function" then
-                    autoX = Anchors.GetCastbarAutoAnchorOffsetX(general, unit, frame)
-                end
-                local bottomInset = 0
-                if type(Anchors.GetCastbarUnitframeBottomInset) == "function" then
-                    bottomInset = Anchors.GetCastbarUnitframeBottomInset(unit, frame)
-                end
+                local source = Anchors.GetCastbarUnitframeWidthSource(unit) or unitFrame
+                local autoX = Anchors.GetCastbarAutoAnchorOffsetX(general, unit, frame)
+                local bottomInset = Anchors.GetCastbarUnitframeBottomInset(unit, frame)
                 local gap = GetPhysicalPixelSize(frame, UNITFRAME_GAP)
                 changed = SetPointIfChanged(frame, "TOPLEFT", source, "BOTTOMLEFT",
                     offsetX + autoX, offsetY - bottomInset - gap, true) or changed
@@ -405,14 +381,8 @@ local function DefinePoolLayout(desc, UpdateAnchorBase)
 
         local general = (Config.Read().general) or {}
         local refreshFrame = Visuals.RefreshCastbarFrame
-        if type(refreshFrame) == "function" then
-            refreshFrame(frame, KIND, general)
-        elseif type(Visuals.ApplyCastbarDetailLayout) == "function" then
-            Visuals.ApplyCastbarDetailLayout(frame, KIND, general)
-        end
-        if type(Core.ApplyCastbarSparkVisual) == "function" then
-            Core.ApplyCastbarSparkVisual(frame, general)
-        end
+        refreshFrame(frame, KIND, general)
+        Core.ApplyCastbarSparkVisual(frame, general)
     end
 
     local function UpdateAnchor(frame, forceLayout)
@@ -515,10 +485,6 @@ local function DefinePoolBars(desc, pool, ApplyLayout, UpdateAnchor, UpdateAncho
         local frame = Frames.Get(desc.kind, index)
         if not frame then
             local createCastbar = Driver.CreateCastBar
-            if type(createCastbar) ~= "function" then
-                return nil
-            end
-
             frame = createCastbar(name, unit)
         end
 
@@ -858,12 +824,7 @@ local function DefinePoolSettings(desc, Enabled, EnsureCastbars, SyncLifecycle)
         local general = Config.Source().general
         if general then
             local setBackend = Backend.SetCastbarBackend
-            if type(setBackend) == "function" then
-                setBackend(KIND, enabled and "MSUF" or "HIDE", general)
-            else
-                general[ENABLE_KEY] = enabled
-                Config.Invalidate()
-            end
+            setBackend(KIND, enabled and "MSUF" or "HIDE", general)
         end
 
         Config.Read()
@@ -888,16 +849,7 @@ local function DefinePoolSettings(desc, Enabled, EnsureCastbars, SyncLifecycle)
             end
         end
 
-        local refreshed
-        if type(Core.ApplyCastbarVisualsForUnit) == "function" then
-            Core.ApplyCastbarVisualsForUnit(KIND, nil, nil, true)
-            refreshed = true
-        elseif type(Core.UpdateCastbarVisuals) == "function" then
-            Core.UpdateCastbarVisuals(KIND, true)
-            refreshed = true
-        end
-
-        if not refreshed then RefreshPreviewIfAllowed() end
+        Core.ApplyCastbarVisualsForUnit(KIND, nil, nil, true)
     end
 
     --- Every castbar settings refresh lands here. On a client without the

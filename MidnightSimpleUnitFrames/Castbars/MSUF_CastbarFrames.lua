@@ -13,19 +13,7 @@ local FILE = "Castbars/MSUF_CastbarFrames.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", FILE)
 local GetCastbarBackgroundColor = MSUF.Require("MSUF_GetCastbarBackgroundColor", FILE)
--- Locales/MSUF_Localization.lua publishes the locale table before this file.
-local GlobalLocale = MSUF.Require("MSUF_L", FILE)
-
-local function Translate(text)
-    local ns = MSUF
-    local locale = (type(ns) == "table" and ns.L) or GlobalLocale
-
-    if type(ns) == "table" and type(ns.Translate) == "function" then
-        return ns.Translate(text)
-    end
-
-    return (type(locale) == "table" and rawget(locale, text)) or text
-end
+local Translate = MSUF.Translate
 
 -- Castbars/MSUF_Castbars_Core.lua (the texture) and Castbars/MSUF_CastbarUtils.lua
 -- (the fill direction) load before this file in every TOC.
@@ -36,11 +24,9 @@ end
 local function CastbarBackgroundTexture()
     local texture = CastbarTexture()
 
-    if type(Core.GetCastbarBackgroundTexture) == "function" then
-        local backgroundTexture = Core.GetCastbarBackgroundTexture()
-        if backgroundTexture and backgroundTexture ~= "" then
-            texture = backgroundTexture
-        end
+    local backgroundTexture = Core.GetCastbarBackgroundTexture()
+    if backgroundTexture and backgroundTexture ~= "" then
+        texture = backgroundTexture
     end
 
     return texture
@@ -109,15 +95,11 @@ function Frames.BuildCastbarFrameElements(frame)
         statusBar:GetStatusBarTexture():SetHorizTile(false)
     end
 
-    if type(Runtime.ApplyCastbarTimerDirection) == "function" then
-        Runtime.ApplyCastbarTimerDirection(
-            statusBar,
-            nil,
-            Utils.GetCastbarReverseFillForFrame(frame, false)
-        )
-    elseif statusBar.SetReverseFill then
-        statusBar:SetReverseFill(Utils.GetCastbarReverseFillForFrame(frame, false))
-    end
+    Runtime.ApplyCastbarTimerDirection(
+        statusBar,
+        nil,
+        Utils.GetCastbarReverseFillForFrame(frame, false)
+    )
 
     frame.statusBar = statusBar
 
@@ -154,9 +136,7 @@ function Frames.BuildCastbarFrameElements(frame)
 
     frame.spark = CreateSpark(statusBar, barHeight)
 
-    if type(Style.ApplyCastbarOutline) == "function" then
-        Style.ApplyCastbarOutline(frame, true)
-    end
+    Style.ApplyCastbarOutline(frame, true)
 end
 
 --- Preview frames are intentionally non-secure and self-contained. They mimic
@@ -262,9 +242,7 @@ function Frames.CreateCastbarPreviewFrame(unit, name, options)
 
     frame.spark = CreateSpark(statusBar, statusBarHeight)
 
-    if type(Style.ApplyCastbarOutline) == "function" then
-        Style.ApplyCastbarOutline(frame, true)
-    end
+    Style.ApplyCastbarOutline(frame, true)
 
     return frame
 end
