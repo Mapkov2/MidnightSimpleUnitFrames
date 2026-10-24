@@ -399,19 +399,7 @@ end
 -- _msufPushbackCastID/_msufPushbackStartMS are deliberately not cleared here:
 -- the legacy pushback delay is the start shift since the first sighting of the
 -- same cast, and every DELAYED re-read passes through this reset first.
-local function ResetFallbackTiming(frame)
-    frame.endTime = nil
-    frame._msufPlainEndTime = nil
-    frame._msufPlainTotal = nil
-    frame._msufRemaining = nil
-    frame._msufLastTimeDecimal = nil
-    frame._msufLastTimeTotalDecimal = nil
-    frame._msufTimerAssumeCountdown = nil
-    frame._msufCountsDown = nil
-    frame._msufPushbackMS = nil
-    frame._msufLastSBValue = nil
-    frame._msufZeroCount = nil
-end
+local ResetFallbackTiming = Utils.ResetTimingScalars
 
 local function CaptureFallbackTiming(frame, state)
     if not (frame and state) then return nil, nil end
@@ -471,6 +459,8 @@ end
 
 local function ApplyFallbackActiveDuration(frame, state, isChannel)
     ResetFallbackTiming(frame)
+    frame._msufLastTimeTotalDecimal = nil
+    frame._msufLastSBValue = nil
     local remaining, total = CaptureFallbackTiming(frame, state)
     if not (remaining and total) then
         return false

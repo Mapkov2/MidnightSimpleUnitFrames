@@ -446,24 +446,13 @@ end
 -- _msufPushbackCastID/_msufPushbackStartMS are deliberately not cleared here:
 -- the legacy pushback delay is the start shift since the first sighting of the
 -- same cast, and CaptureCastTimes runs this reset on every re-read.
-local function ResetTimingFields(frame)
-    if not frame then return end
-    frame.endTime = nil
-    frame._msufPlainEndTime = nil
-    frame._msufPlainTotal = nil
-    frame._msufRemaining = nil
-    frame._msufLastTimeDecimal = nil
-    frame._msufZeroCount = nil
-    frame._msufLastDurationObj = nil
-    frame._msufTimerAssumeCountdown = nil
-    frame._msufCountsDown = nil
-    frame._msufPushbackMS = nil
-end
+local ResetTimingFields = Utils.ResetTimingScalars
 
 local function CaptureCastTimes(frame, startMS, endMS)
     if not frame then return end
 
     ResetTimingFields(frame)
+    frame._msufLastDurationObj = nil
     startMS = PlainNumber(startMS)
     endMS = PlainNumber(endMS)
 
@@ -730,6 +719,7 @@ local function StopPlayerCastbar(frame)
     frame.MSUF_castDuration = nil
     frame.MSUF_channelTotal = nil
     ResetTimingFields(frame)
+    frame._msufLastDurationObj = nil
     ClearActiveCastIdentity(frame)
     frame._msufActiveCastUnit = nil
     HideChannelHasteMarkers(frame)

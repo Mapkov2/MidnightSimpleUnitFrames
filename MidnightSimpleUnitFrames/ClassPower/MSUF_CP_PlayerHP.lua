@@ -50,7 +50,13 @@ end
 MSUF.ClassPowerShapes = { ResolvePower = ResolvePowerShape }
 
 builders.PLAYER_HP_VISUAL = function(E)
-local Common = E.Common or MSUF.UFBarTextCommon
+local Common = assert(E.Common or MSUF.UFBarTextCommon, "PlayerHP visual provider requires UFBarTextCommon")
+local SetBarMinMaxKnown = InjectedAPI(Common.SetBarMinMaxKnown, "UFBarTextCommon.SetBarMinMaxKnown")
+local SetBarValueKnown = InjectedAPI(Common.SetBarValueKnown, "UFBarTextCommon.SetBarValueKnown")
+local SetBarSmoothing = InjectedAPI(Common.SetBarSmoothing, "UFBarTextCommon.SetBarSmoothing")
+local ClassColor = InjectedAPI(Common.ClassColor, "UFBarTextCommon.ClassColor")
+local HealthGradientColor = InjectedAPI(Common.GradientColor, "UFBarTextCommon.GradientColor")
+local ApplyHealthStatusColor = InjectedAPI(Common.ApplyHealthStatusColor, "UFBarTextCommon.ApplyHealthStatusColor")
 local PHP, CP, _cpDB
 local UnitHealth, UnitHealthMax, UnitClass, RAID_CLASS_COLORS
 local CreateFrame, GetPlayerFrame, ResolveTexture
@@ -275,12 +281,10 @@ local function DarkColor()
     return tonumber(g and g.darkBarR) or gray, tonumber(g and g.darkBarG) or gray, tonumber(g and g.darkBarB) or gray
 end
 
-local function GradientColor(hp, maxHP, common)
-    if common and type(common.GradientColor) == "function" then
-        local r, g, b = common.GradientColor("player", nil)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return r, g, b
-        end
+local function GradientColor(hp, maxHP)
+    local r, g, b = HealthGradientColor("player", nil)
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+        return r, g, b
     end
     local pct
     if IsSecretValue(hp) == true or IsSecretValue(maxHP) == true then
@@ -824,13 +828,7 @@ local function ApplyLayout(playerFrame)
     local smooth = b.playerHPBarSmoothFill == true
     if PHP._smoothFill ~= smooth then
         PHP._smoothFill = smooth
-        local common = Common
-        if common and type(common.SetBarSmoothing) == "function" then
-            common.SetBarSmoothing(PHP.bar, smooth)
-        elseif PHP.bar then
-            PHP.bar._msufSmoothInterp = nil
-            PHP.bar._msufInterpolating = nil
-        end
+        SetBarSmoothing(PHP.bar, smooth)
     end
 
     local colorMode = ColorMode(b)
@@ -855,13 +853,9 @@ end
 local function ApplyColor(hp, maxHP, event)
     local bar = PHP.bar
     if not bar then return end
-    local common = Common
     local colorMode = PHP._colorMode or "GLOBAL"
     if colorMode == "CLASS" then
-        local r, g, b
-        if common and type(common.ClassColor) == "function" then
-            r, g, b = common.ClassColor("player")
-        end
+        local r, g, b = ClassColor("player")
         if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number" then
             local _, class = UnitClass("player")
             local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
@@ -873,7 +867,7 @@ local function ApplyColor(hp, maxHP, event)
         ApplyCachedColor(bar, PHP._darkR or 0.07, PHP._darkG or 0.07, PHP._darkB or 0.07)
         return
     elseif colorMode == "GRADIENT" then
-        local r, g, b = GradientColor(hp, maxHP, common)
+        local r, g, b = GradientColor(hp, maxHP)
         --- The shared helper evaluates UnitHealthPercent with a colour curve, which is
         --- SecretReturns while health is secret: such a colour goes to the C sink unread
         --- and leaves no change stamp behind.
@@ -887,16 +881,9 @@ local function ApplyColor(hp, maxHP, event)
         return
     end
     local playerFrame = GetPlayerFrame()
-    if common and type(common.ApplyHealthStatusColor) == "function" then
-        PHP.frame.unit = "player"
-        PHP.frame.MSUFSpec = playerFrame and playerFrame.MSUFSpec or PHP.frame.MSUFSpec
-        common.ApplyHealthStatusColor(bar, PHP.frame, "player", hp, maxHP, nil, event or "UNIT_HEALTH")
-        return
-    end
-    local _, class = UnitClass("player")
-    local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-    local r, g, bl = c and c.r or 0.1, c and c.g or 0.8, c and c.b or 0.1
-    ApplyCachedColor(bar, r, g, bl)
+    PHP.frame.unit = "player"
+    PHP.frame.MSUFSpec = playerFrame and playerFrame.MSUFSpec or PHP.frame.MSUFSpec
+    ApplyHealthStatusColor(bar, PHP.frame, "player", hp, maxHP, nil, event or "UNIT_HEALTH")
 end
 
 local function UpdateText(hp, maxHP)
@@ -987,7 +974,6 @@ end
 
 local function Update(event)
     if not PHP.visible then return end
-    local common = Common
     local hp = UnitHealth("player")
     local hpSecret = IsSecretValue(hp) == true
     local maxHP, maxSecret = PHP._maxHP, false
@@ -1007,26 +993,11 @@ local function Update(event)
     local maxChanged = maxSecret or PHP._maxHP ~= maxHP
     local hpChanged = hpSecret or PHP._hp ~= hp
     if maxChanged then
-        if common and type(common.SetBarMinMaxKnown) == "function" then
-            common.SetBarMinMaxKnown(PHP.bar, maxHP, maxSecret)
-        else
-            PHP.bar:SetMinMaxValues(0, maxHP)
-        end
+        SetBarMinMaxKnown(PHP.bar, maxHP, maxSecret)
         if maxSecret then PHP._maxHP = nil else PHP._maxHP = maxHP end
     end
     if hpChanged then
-        if common and type(common.SetBarValueKnown) == "function" then
-            common.SetBarValueKnown(PHP.bar, hp, hpSecret, true)
-        else
-            local interp = PHP.bar._msufSmoothInterp
-            if interp then
-                PHP.bar:SetValue(hp, interp)
-                PHP.bar._msufInterpolating = true
-            else
-                PHP.bar:SetValue(hp)
-                PHP.bar._msufInterpolating = nil
-            end
-        end
+        SetBarValueKnown(PHP.bar, hp, hpSecret, true)
         if hpSecret then PHP._hp = nil else PHP._hp = hp end
         UpdateText(hp, maxHP)
     elseif maxSecret or PHP._textMaxHP ~= maxHP then

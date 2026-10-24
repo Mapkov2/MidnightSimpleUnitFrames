@@ -244,8 +244,8 @@ RegisterDetachedMover = function()
 end
 
 -- Static spell metadata cache (name/icon for instants, skip set)
---- Once a spellID is known to never produce a GCD bar (hard-cast or off-GCD)
---- it can not change mid-session: one table lookup replaces every API call.
+--- Only spell metadata classifies hard-casts and off-GCD spells. An inactive
+--- global window says nothing about the spell that just succeeded.
 local spellSkip = {}
 local spellNames = {}
 local spellIcons = {}
@@ -275,7 +275,26 @@ local function ResolveInstantSpell(spellID)
         return nil
     end
 
+    -- The second scalar describes this spell's own start-recovery (GCD),
+    -- independently of any window another spell left running. Missing/secret
+    -- metadata is not a verdict: the caller falls back to the live GCD window
+    -- for this cast, and nothing is cached so a readable value can still win.
+    local getBaseCooldown = GetSpellBaseCooldown
+    local gcdMS
+    if type(getBaseCooldown) == "function" then
+        local _, ms = getBaseCooldown(spellID)
+        gcdMS = PlainNumber(ms)
+    end
+    if gcdMS == 0 then
+        spellSkip[spellID] = true
+        return nil
+    end
+    if gcdMS and gcdMS < 0 then return nil end
+
     name = info.name or ""
+    spellIcons[spellID] = info.iconID
+    -- Unverified: OnSucceeded uses the live GCD window for this cast only.
+    if gcdMS == nil then return name end
     spellNames[spellID] = name
     spellIcons[spellID] = info.iconID
     return name
@@ -579,19 +598,14 @@ local function OnSucceeded(spellID)
 
     if ResolveInstantSpell(spellID) == nil then return end
 
-    -- Instant cast confirmed. If no GCD is active at this synchronous event
-    -- the spell is off-GCD (GCD-triggering instants always leave the GCD
-    -- running here) - cache that verdict.
+    -- Spell-specific metadata confirmed the trigger. The global duration
+    -- supplies only the window to paint, never a spell classification.
     local spellAPI = C_Spell
     local getDuration = spellAPI and spellAPI.GetSpellCooldownDuration
     local durationObj = type(getDuration) == "function" and getDuration(GCD_SPELL_ID) or nil
-    if not GCDActive(durationObj) then
-        spellSkip[spellID] = true
-        return
-    end
+    if not GCDActive(durationObj) then return end
 
-    local isCastbarEnabled = Bridge.IsCastbarEnabledForUnit
-    if not detached and type(isCastbarEnabled) == "function" and not isCastbarEnabled("player") then
+    if not detached and not Bridge.IsCastbarEnabledForUnit("player") then
         return
     end
 

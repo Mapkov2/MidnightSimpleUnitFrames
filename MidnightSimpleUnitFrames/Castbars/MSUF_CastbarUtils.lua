@@ -1176,6 +1176,21 @@ local function ClearEmpowerState(frame, hideFrame)
 end
 Utils.ClearEmpowerState = ClearEmpowerState
 
+-- Shared scalar timing state only. Duration ownership and stop/bridge policy
+-- stay with their callers; pushback identity survives delayed re-reads.
+local function ResetTimingScalars(frame)
+    frame.endTime = nil
+    frame._msufPlainEndTime = nil
+    frame._msufPlainTotal = nil
+    frame._msufRemaining = nil
+    frame._msufLastTimeDecimal = nil
+    frame._msufTimerAssumeCountdown = nil
+    frame._msufCountsDown = nil
+    frame._msufPushbackMS = nil
+    frame._msufZeroCount = nil
+end
+Utils.ResetTimingScalars = ResetTimingScalars
+
 local function EnsureGeneralDB()
     return Config.EnsureSource().general
 end

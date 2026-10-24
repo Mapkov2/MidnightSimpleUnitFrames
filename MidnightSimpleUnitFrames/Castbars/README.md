@@ -203,6 +203,11 @@ names as compatibility aliases.
 ```text
  Castbars/MSUF_CastbarGCD.lua - GCD bar (instant casts) on the Player castbar.
 
+ Instant metadata is resolved once per spell. Only a plain positive second
+ GetSpellBaseCooldown result establishes that spell's GCD trigger; zero
+ excludes it. Missing, invalid or secret metadata stays retryable. A missing
+ API declines attribution. An inactive global window never adds a skip entry.
+
  12.1 rebuild of the 5.x GCD bar. Everything time-driven runs C-side:
  UNIT_SPELLCAST_SUCCEEDED (player/vehicle only) resolves the active global
  cooldown as a native duration object (C_Spell.GetSpellCooldownDuration on
