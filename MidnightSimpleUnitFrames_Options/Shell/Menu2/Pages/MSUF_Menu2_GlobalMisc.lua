@@ -171,19 +171,17 @@ function MiscSection.Binders(s)
         local control = Schema.Build(ctx, parent, {
             { "flowToggle", key, default, { label },
             get = function() return ReadGBool(key, default) end,
-            set = function(v)
-                SetGBool(key, v, reason, opts or PREVIEW_FALSE)
-                if afterSet then afterSet(v) end
-            end,
+            write = { call = SetGBool, keyOnly = true, args = { reason, opts or PREVIEW_FALSE }, after = afterSet }, --[[schema setter: GlobalMisc.1]]
             meta = Meta("setting." .. key), domain = "global" },
         }, ROW_OPTIONS)[key]
         if x then W.MoveWidget(control, parent, x, y, width, "LEFT") end
         return control
     end
-    local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue, path)
+    local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue, path, writePolicy)
         local control = Schema.Build(ctx, parent, {
             { "dropdown", path, nil, { label, values, width },
-                get = getValue, set = setValue, meta = Meta(path), domain = "global" },
+                get = getValue, customSetReason = "Normalizes menu options or coordinates tooltip companion fields and runtime state.",
+                    set = setValue, write = writePolicy, meta = Meta(path), domain = "global" },
         }, ROW_OPTIONS)[path]
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return control
@@ -198,7 +196,7 @@ function MiscSection.Binders(s)
                 end
                 return true
             end,
-            set = function(value)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 local groupPage = M.GroupPage
                 if groupPage and type(groupPage.Set) == "function" then
                     groupPage.Set(kind, "targetIndicator", value and true or false, "visual")
@@ -218,6 +216,9 @@ function MiscSection.Language(s)
     local language = Schema.Section(b:CollapsibleSection("misc_language", "Language", 268, true), ctx.key)
     local languageW = language._msuf2Width or ctx.width or 720
     local languageDropW = max(260, min(360, languageW - 70))
+    local write = { call = SetG, keyOnly = true, fallback = "auto",
+        args = { "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true } } }
+        --[[schema setter: GlobalMisc.Language]]
     BindMiscDropdown(language, "Menu language", function()
         return (M.GetLocaleDropdownValues and M.GetLocaleDropdownValues()) or {
             { value = "auto", text = "Follow Blizzard" },
@@ -226,11 +227,8 @@ function MiscSection.Language(s)
         function()
             return (M.GetLocaleSelection and M.GetLocaleSelection()) or "auto"
         end,
-        function(value)
-            value = value or "auto"
-            SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true })
-        end,
-        "language.selection")
+        nil,
+        "language.selection", write)
     HelpText(ctx, language, "menu2.opt_misc.language.languageHelp",
         "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70)
     -- Number abbreviation belongs here, not on the Fonts page: it is a locale
@@ -260,7 +258,7 @@ function MiscSection.Language(s)
     local abbrevSegment = Schema.Build(ctx, language, {
         { "segment", "setting.numberAbbrevStyle", nil, { "Number abbreviation", ABBREV_STYLES, abbrevSegW },
         get = AbbrevStyle,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             value = (value == "COMPACT") and "COMPACT" or "GAME"
             -- Persist without a runtime apply, push the new style, then repaint
             -- once - so the refresh already formats with the new options instead of
@@ -416,7 +414,7 @@ function MiscSection.MenuAccent(s)
             if not r then r, g2, b2 = 0.231, 0.510, 0.965 end
             return r, g2, b2
         end,
-        set = function(r, g2, b2)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(r, g2, b2)
             SetG("menuAccentColor", T.MenuAccentRGBToHex(r, g2, b2), "MSUF2_MENU_ACCENT_COLOR", MENU_WRITE_OPTS)
             QueueAccentReloadCheck()
         end,
@@ -478,10 +476,8 @@ function MiscSection.MenuAccent(s)
         local opacity = Schema.Build(ctx, menuBehavior, {
             { "slider", "setting.menuBackgroundOpacity", nil, { "Background opacity", 80, 100, 1, 250 },
                 get = function() return T.GetMenuBackgroundOpacity(M.GetGeneralDB()) end,
-                set = function(value)
-                    SetG("menuBackgroundOpacity", value, "MSUF2_MENU_BACKGROUND", MENU_WRITE_OPTS)
-                    if T.RefreshMenuBackgroundOpacity then T.RefreshMenuBackgroundOpacity() end
-                end,
+                write = { call = SetG, keyOnly = true, args = { "MSUF2_MENU_BACKGROUND", MENU_WRITE_OPTS },
+                    after = function() if T.RefreshMenuBackgroundOpacity then T.RefreshMenuBackgroundOpacity() end end }, --[[schema setter: GlobalMisc.5]]
                 meta = Meta("setting.menuBackgroundOpacity"), domain = "global",
                 beforeBind = function(opacity)
                     if opacity.SetValueFormatter then opacity:SetValueFormatter(function(v) return M.Format("%d%%", v) end) end
@@ -583,10 +579,8 @@ function MiscSection.FrameHighlights(s)
     local size = Schema.Build(ctx, mouseover, {
         { "slider", "mouseover.size", 6, { "Effect size", 1, 16, 1, mouseoverRightW },
         get = function() return floor((tonumber(ReadG("highlightThickness", 6)) or 6) + 0.5) end,
-        set = function(value)
-            SetG("highlightThickness", floor((tonumber(value) or 6) + 0.5),
-                "MSUF2_MOUSEOVER_SIZE", MOUSEOVER_WRITE_OPTS)
-        end,
+        write = { call = SetG, keyOnly = true, numberDefault = 6, round = true,
+                args = { "MSUF2_MOUSEOVER_SIZE", MOUSEOVER_WRITE_OPTS } } --[[schema setter: GlobalMisc.6]],
         meta = Meta("mouseover.size", "setting", { min = 1, max = 16, step = 1, format = "%d px" }), domain = "global",
         beforeBind = function(size)
             if size.SetValueFormatter then

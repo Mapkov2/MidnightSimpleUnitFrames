@@ -116,7 +116,7 @@ local function HandRow(hand, key, kind, args, ui, placement)
             end
             return value
         end,
-        set = function(value) Swing.Set(hand, key, value) ui.Paint() end,
+        write = { call = Swing.Set, parent = true, after = ui.Paint } --[[schema setter: SwingTimers.1]],
     }
 end
 local function SettingRow(hand, spec, ui, layout, index)
@@ -184,9 +184,9 @@ local function BuildCue(ctx, b, ui, width)
             ui, { 28, -82 - (i - 1) * 58 })
         row.commitOnBlur = true
         -- Keep the Support text adapter's empty-string policy in the row's own accessors.
-        local get, set = row.get, row.set
+        local get = row.get
         row.get = function() return get() or "" end
-        row.set = function(value) set(value or "") end
+        row.write.fallback = ""
         rows[#rows + 1] = row
     end
     Schema.Build(ctx, cue, rows, ROW_OPTIONS)
@@ -276,11 +276,14 @@ local function Build(ctx)
     Schema.Build(ctx, module, {
         { "sectionSwitch", "enabled", nil, { "Enable Swing Timer module" },
             meta = Meta("enabled", "swingTimers.enabled"), scope = "swing", domain = "swingModule",
-            get = Swing.GetEnabled, set = function(value) Swing.SetEnabled(value) M.Refresh(ctx) end,
+            get = Swing.GetEnabled,
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+                set = function(value) Swing.SetEnabled(value) M.Refresh(ctx) end,
             tip = { "Swing Timers (Forever)",
                 "Replaces all Blizzard swing bars while enabled, even when only one hand is selected. Disabling restores Blizzard's previous visibility." } },
         { "flowToggle", "preview", nil, { "Preview and drag Swing Timers" }, { 28, -42 },
             meta = Meta("preview", nil, "ephemeral"), scope = "swing", domain = "preview",
+            customSetReason = "Changes temporary Swing Timer preview and drag state without writing a profile setting.",
             get = Swing.GetPreview, set = Swing.SetPreview,
             tip = { "Preview and drag Swing Timers",
                 "Enable the module, then drag the selected bars outside combat. "
@@ -315,6 +318,7 @@ local function Build(ctx)
             M.ValueTextList("main", "Main Hand", "off", "Off Hand", "ranged", "Ranged"), math.min(420, width - 150) },
             { 16, -14, math.min(420, width - 150), "LEFT" },
             meta = Meta("previewHand", nil, "ephemeral"), scope = "swing", domain = "navigation",
+            customSetReason = "Selects the hand editor and relayouts its preview sections without writing a profile setting.",
             get = function() return ui.selected end, set = SelectHand },
     }, ROW_OPTIONS).hand
     ui.selector._msuf2Title:Hide()

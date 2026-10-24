@@ -243,7 +243,8 @@ function Workspace.BuildSelector(ui, head, width)
     local selector = W.ScopeOverrideBar(ui.page.ctx, head, opts)
     local meta = M.ControlMeta("classpower", "advanced", "workspace", "ephemeral")
     M.ControlSchema.Bind(ui.page.ctx, selector, { id = meta.controlId, kind = "segment", labelKey = "Editing",
-        scope = "classpower", applyDomain = "workspace", meta = meta, get = opts.getValue, set = opts.setValue })
+        scope = "classpower", applyDomain = "workspace", meta = meta, get = opts.getValue, set = opts.setValue,
+        customSetReason = "Selects the active resource workspace and its visible sections; no profile field is written." })
     AP.RegisterControl(selector, meta, "Editing", "segment", values)
     ui.selector = selector
     selector:Refresh()

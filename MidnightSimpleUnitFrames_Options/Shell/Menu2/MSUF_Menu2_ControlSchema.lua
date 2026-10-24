@@ -1,4 +1,4 @@
--- Cold control declarations; existing bindings remain the only history/combat owners.
+-- Declarations derive profile setters; existing bindings own history and combat refusal.
 local _, MSUF = ...
 local M = MSUF.MSUF2
 local W = M.Widgets
@@ -58,8 +58,8 @@ function Schema.SetUnit(domain, unit, key, value, reason, kind)
     return owner.SetString(unit, key, value, reason, flags)
 end
 
--- A setting declaration is cold metadata only. It never becomes binding metadata:
--- history scopes, reads, writes and combat gates continue to belong to the binder.
+-- Physical setting declarations are shared by write accessors and reset targets.
+-- The existing binder retains history scopes, input bounds and combat refusal.
 function Schema.AuraLaneSchema() return MSUF.MSUF_Auras3.LaneKeySchema end
 function Schema.Family(keys, resolve, patterns)
     return { keys = keys, resolve = resolve, patterns = patterns }
@@ -327,7 +327,14 @@ local function ActionDeclaration(spec, meta)
         return Schema.ScopedFields({ "healthBarGradientColorR", "healthBarGradientColorG", "healthBarGradientColorB",
             "powerBarGradientColorR", "powerBarGradientColorG", "powerBarGradientColorB" }, "general", "hlOverride")
     end
+    if id:match("^menu2%.gf_auras%.group%.spell%.tile%.slot%.%d+$") then
+        paths = { "gf_party.spellIndicators", "gf_raid.spellIndicators", "gf_mythicraid.spellIndicators" }
+    end
     if paths then return Schema.Record(paths) end
+    if id:match("^menu2%.[^.]+%..*%.handle%..*%.open[_.]settings$")
+        or id:match("^menu2%.menu%-chrome%.search%-shortcut%-") then
+        spec.ephemeralReason = "Opens the named settings or search view; no profile setting is written."
+    end
     if NO_PROFILE_WRITE_ACTIONS[key] or id:match("^menu2%.home%.dashboard%.support%.link%.")
         or id:match("^menu2%.home%.dashboard%.guided%.setup%.")
         or id:match("^advancedprofiles%.hero") or id == "section.actions" then
@@ -366,38 +373,171 @@ local function Metadata(spec)
     if spec.roundStep then meta.step, meta.roundStep = spec.range[3], true end
     return meta
 end
--- Unit rows read and write through the UnitPage adapters, as the old section
--- binders did; `after` runs once the setter returns.
+-- A single declaration owns the physical target. Families resolve the active
+-- group at input time; selection-dependent families must provide their resolver.
+function Schema.ResolvePath(spec)
+    local setting = assert(spec.setting, "schema writer has no declared target: " .. spec.id)
+    if type(setting) == "string" then return setting end
+    if setting.resolve then
+        local path = assert(setting.resolve(), "schema target resolver returned no path: " .. spec.id)
+        assert(Schema.Matches(setting, path), "schema target resolver escaped its family: " .. spec.id)
+        return path
+    end
+    local primary = spec.settingPath or (spec.meta and spec.meta.settingKey)
+    if primary and Schema.Matches(setting, primary) then return primary end
+    local paths = setting.keys or setting.recordPaths
+    assert(paths and #paths > 0, "schema writer has no finite target: " .. spec.id)
+    if #paths == 1 then return paths[1] end
+    local root = spec.unit
+    if spec.scope == "group" then root = "gf_" .. M.GroupPage.CurrentScope() end
+    local result
+    for _, path in ipairs(paths) do
+        if root and path:sub(1, #root + 1) == root .. "." then
+            assert(not result, "schema writer needs a selected-target resolver: " .. spec.id)
+            result = path
+        end
+    end
+    return assert(result, "schema writer target is ambiguous: " .. spec.id)
+end
+-- The accessor walks the complete declared path. A source callback only keeps
+-- its existing record initialization; it cannot choose the destination record.
+function Schema.ProfileRecord(spec, initialize)
+    if initialize and spec.write.source then
+        local initialized = spec.write.source()
+        if not initialized and (spec.write.allowMissing or spec.write.requireRecord) then return nil end
+    end
+    local path = Schema.ResolvePath(spec)
+    assert(not path:find("{", 1, true), "selected record needs a physical resolver: " .. spec.id)
+    local record = M.EnsureDB()
+    local parent = path:match("^(.*)%.[^.]+$") or ""
+    for part in parent:gmatch("[^.]+") do
+        local key = tonumber(part) or part
+        if type(record[key]) ~= "table" then
+            if not initialize then return nil end
+            record[key] = {}
+        end
+        record = record[key]
+    end
+    return record
+end
+-- Section ownership decides which controls reset. Their destination is the
+-- accessor's declaration; unopened sections retain the existing field policy.
+local function RegisterResetTarget(widget, spec)
+    local path = Schema.ResolvePath(spec)
+    local root, key = path:match("^([^.]+)%.([^.]+)")
+    if not root then return end
+    local parent = widget:GetParent()
+    while parent do
+        local entry = parent._msuf2CollapsibleEntry
+        if entry then
+            local targets = entry._msuf2SchemaResetTargets
+            if not targets then
+                targets = {}
+                entry._msuf2SchemaResetTargets = targets
+            end
+            targets[widget] = { spec = spec, root = root, key = key,
+                nested = path:match("^[^.]+%.[^.]+%.") ~= nil }
+            return
+        end
+        parent = parent:GetParent()
+    end
+end
+function Schema.ResetSection(entry, keys, conf, defaults, factory, nested)
+    local eligible, claimed = {}, {}
+    for _, key in ipairs(keys) do eligible[key] = true end
+    for _, target in pairs(entry._msuf2SchemaResetTargets or {}) do
+        local root = target.root
+        if target.spec.scope == "group" then root = "gf_" .. M.GroupPage.CurrentScope() end
+        if (target.nested == true) == (nested == true) and eligible[target.key] and M.EnsureDB()[root] == conf then
+            local path = Schema.ResolvePath(target.spec)
+            local destination, field = Schema.ProfileRecord(target.spec, false), path:match("([^.]+)$")
+            if destination then
+                local source, defaultPath = factory, path
+                local destinationRoot = path:match("^([^.]+)")
+                if M.EnsureDB()[destinationRoot] == conf then
+                    source, defaultPath = defaults, path:match("^[^.]+%.(.*)$")
+                end
+                for part in defaultPath:gmatch("[^.]+") do
+                    if type(source) == "table" then source = source[tonumber(part) or part]
+                    else source = nil end
+                end
+                destination[field] = M.DeepCopy(source)
+                if not target.nested then claimed[target.key] = true end
+            end
+        end
+    end
+    return claimed
+end
+local function TargetParts(spec)
+    local path = Schema.ResolvePath(spec)
+    return path:match("^([^.]+)"), assert(path:match("([^.]+)$"), "schema field missing")
+end
+function Schema.Setter(spec)
+    local write = assert(spec.write, "schema write policy missing")
+    local args = write.args or {}
+    return function(value)
+        local root, key = TargetParts(spec)
+        if write.boolean then value = value and true or false
+        elseif write.strictBoolean then value = value == true
+        elseif write.defaultSource then value = tonumber(value) or write.defaultSource()
+        elseif write.numberDefault ~= nil then value = tonumber(value) or write.numberDefault
+        elseif write.fallback ~= nil then value = value or write.fallback
+        elseif spec.kind == "dropdown" and write.dropdownDefault ~= nil and not value then
+            value = write.dropdownDefault
+        end
+        if write.clamp then value = math.max(spec.range[1], math.min(spec.range[2], value)) end
+        if write.round then value = math.floor(value + 0.5) end
+        local result
+        if write.unitDomain then
+            result = Schema.SetUnit(write.unitDomain, root, key, value, write.reason, spec.kind)
+        elseif write.source then
+            local record = Schema.ProfileRecord(spec, true)
+            if not record and write.requireRecord then return end
+            if write.skipEqual and record[key] == value then return end
+            if write.call then result = write.call(record, key, value, unpack(args))
+            elseif record or not write.allowMissing then record[key] = value end
+        elseif write.context then result = write.call(write.context, key, value, unpack(args))
+        elseif write.keyOnly then result = write.call(key, value, unpack(args))
+        else
+            if write.group then root = root:match("^gf_(.+)$") end
+            if write.parent then root = Schema.ResolvePath(spec):match("([^.]+)%.[^.]+$") end
+            result = write.call(root, key, value, unpack(args))
+        end
+        if write.after then write.after(value) end
+        if write.returns then return result end
+    end
+end
+-- Existing readers retain their lazy defaults. The target is derived before a
+-- default writer is built, so a stale row key cannot redirect a profile write.
 local function UnitAccessors(spec)
-    local unit, key, owner = spec.unit, spec.key, M.UnitPage
+    local owner = M.UnitPage
     local function Get()
+        local unit, key = TargetParts(spec)
         if spec.kind == "toggle" then return owner.ReadBool(unit, key, spec.defaultSource()) end
         if spec.kind == "slider" then return owner.ReadNumber(unit, key, spec.defaultSource()) end
         return owner.GetConf(unit)[key] or spec.defaultSource()
     end
-    local function Set(value)
-        Schema.SetUnit(spec.applyDomain, unit, key, value, spec.reason, spec.kind)
-        if spec.after then spec.after(value) end
-    end
-    return Get, Set
+    spec.write = { unitDomain = spec.applyDomain, reason = spec.reason, after = spec.after } --[[schema setter: Schema.Unit]]
+    return Get, Schema.Setter(spec)
 end
 local function Accessors(spec)
-    if spec.get then return spec.get, assert(spec.set, "schema custom setter missing") end
+    if spec.write then return assert(spec.get, "schema writer getter missing"), Schema.Setter(spec) end
+    if spec.set then return assert(spec.get, "schema custom getter missing"), spec.set end
     if spec.unit then return UnitAccessors(spec) end
     local source = assert(spec.source, "schema setting source missing")
-    local key = assert(spec.key, "schema setting key missing")
     local function Get()
-        local value = source()[key]
+        local _, key = TargetParts(spec)
+        source()
+        local record = Schema.ProfileRecord(spec, false)
+        local value = record and record[key]
         if value == nil then return spec.defaultSource() end
         if spec.kind == "slider" then return tonumber(value) or spec.defaultSource() end
         if spec.kind == "toggle" then return value and true or false end
         return value
     end
-    local function Set(value)
-        if spec.kind == "dropdown" and not value then value = spec.defaultSource() end
-        return M.AdvancedPage.SetValue(source(), key, value, spec.apply)
-    end
-    return Get, Set
+    spec.write = { call = M.AdvancedPage.SetValue, source = source, args = { spec.apply },
+        dropdownDefault = spec.defaultSource(), returns = true } --[[schema setter: Schema.Source]]
+    return spec.get or Get, Schema.Setter(spec)
 end
 function Schema.Bind(ctx, widget, spec)
     assert(type(spec.id) == "string" and spec.id ~= "", "schema stable control ID missing")
@@ -405,6 +545,7 @@ function Schema.Bind(ctx, widget, spec)
     Declare(spec)
     local get, set = Accessors(spec)
     local meta = Metadata(spec)
+    if spec.write then RegisterResetTarget(widget, spec) end
     widget._msuf2ControlSchema = spec
     if spec.workspace == "classpower" then
         local fallback = spec.defaultSource and spec.defaultSource()
@@ -447,8 +588,10 @@ end
 -- button scripts. Callers name the actual widget; no catalog scan manufactures rows.
 function Schema.Owned(widget, scope, domain)
     local record = assert(widget._msuf2RuntimeControlRecord, "schema composite owner missing")
+    local previous = widget._msuf2ControlSchema
+    if previous and previous.id ~= record.controlId then previous = nil end
     local command = widget._msuf2CommandAction or record.command
-    return Schema.Custom(widget, {
+    local spec = {
         id = record.controlId, kind = record.kind, labelKey = record.label,
         settingPath = record.settingKey, scope = scope, applyDomain = domain,
         meta = widget._msuf2SearchMeta, actionKey = record.actionKey,
@@ -459,12 +602,23 @@ function Schema.Owned(widget, scope, domain)
         get = command and command.get and function(...)
             return (widget._msuf2CommandAction or record.command).get(...)
         end,
+        write = (previous and previous.write) or (command and command.write),
+        customSetReason = previous and previous.customSetReason or "Dispatches the composite widget's existing command owner.",
         set = command and command.set and function(...)
             return (widget._msuf2CommandAction or record.command).set(...)
         end,
         values = widget.GetValues and function() return widget:GetValues() end,
         action = widget.GetScript and widget:GetScript("OnClick") and Schema.ButtonAction(widget), owner = widget,
-    })
+    }
+    if command and command.write then
+        Declare(spec)
+        local set = Schema.Setter(spec)
+        command.set = function(...)
+            if M.BlockCombatAction() then return false end
+            return set(...)
+        end
+    end
+    return Schema.Custom(widget, spec)
 end
 function Schema.Section(section, scope)
     local header = assert(section._msuf2CollapsibleEntry).header
@@ -572,6 +726,7 @@ function Schema.ScopeOwner(widget, scope, domain)
     Schema.Owned(widget, scope, domain or "menuState")
     local spec = widget._msuf2ControlSchema
     spec.get = function() return widget:GetValue() end
+    spec.customSetReason = "Changes the scope selector's editor state through its native widget."
     spec.set = function(value) return widget:SetValue(value) end
     spec.values = widget.values
     return widget
@@ -604,7 +759,8 @@ function Schema.UnitBinding(ctx, widget, row, kind)
     local meta = assert(row.meta, "unit row metadata missing")
     local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
         meta = meta, scope = row.scope or ctx.key, applyDomain = row.domain or "unit",
-        settingPath = meta.settingKey, setting = row.setting, get = row.get, set = row.set, unit = row.unit,
+        settingPath = meta.settingKey, setting = row.setting, get = row.get, set = row.set, write = row.write,
+            customSetReason = row.customSetReason, unit = row.unit,
         reason = row.reason, commitOnBlur = row.commitOnBlur, textAdapter = row.textAdapter,
         defaultSource = function() return row[3] end, roundStep = row.roundStep }
     if kind == "slider" then spec.range = { row[4][2], row[4][3], row[4][4] } end
@@ -661,29 +817,40 @@ end
 function Schema.GroupBinding(ctx, widget, row, kind)
     local gp = M.GroupPage
     local key, default, domain = row[2], row[3], row.domain or "visual"
-    local meta = gp.ControlMeta(ctx, row.path or "field." .. tostring(key), row.classification)
+    local meta = row.meta or gp.ControlMeta(ctx, row.path or "field." .. tostring(key), row.classification)
     local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row[4][1],
-        scope = "group", applyDomain = domain, meta = meta, setting = row.setting or Schema.GroupKeys(key) }
-    local bind = kind == "toggle" and gp.BindScopeToggle or kind == "slider" and gp.BindScopeSlider
-        or kind == "dropdown" and gp.BindScopeDropdown
-    assert(bind, "unsupported group scope kind: " .. tostring(kind))(ctx, widget, key, default, domain, meta)
-    local command = widget._msuf2CommandAction
-    spec.get, spec.set = command and command.get, command and command.set
-    Schema.Custom(widget, spec)
+        scope = "group", applyDomain = domain, meta = meta, setting = row.setting or Schema.GroupKeys(key),
+        defaultSource = function() return default end }
+    if kind == "slider" then
+        spec.range, spec.numberFallback = { row[4][2], row[4][3], row[4][4] }, default
+        meta.step, meta.roundStep = 1, true
+    end
+    local read = kind == "toggle" and gp.Bool or kind == "slider" and gp.Num or gp.Val
+    spec.get = function()
+        local root, field = TargetParts(spec)
+        return read(root:match("^gf_(.+)$"), field, default)
+    end
+    spec.write = { call = gp.Set, group = true, args = { domain }, boolean = kind == "toggle",
+        numberDefault = kind == "slider" and (default or 0) or nil, round = kind == "slider",
+        fallback = kind == "dropdown" and default or nil,
+        after = kind == "toggle" and function() gp.RefreshContext(ctx) end or nil } --[[schema setter: Schema.Group]]
+    if kind == "dropdown" then spec.write.fallback = default end
+    return Schema.Bind(ctx, widget, spec)
 end
 
 -- Record rows retain the selected scope and nested-record owners at input time.
 -- A missing record differs from a missing toggle field; false subtypes disable it.
 local function CommandAccessors(owner, row, kind, widget, ctx)
-    if row.set then return assert(row.get, "command row getter missing"), row.set, row[3] end
+    if row.set or row.write then return assert(row.get, "command row getter missing"), row.set, row[3] end
     local command = row.lifecycle and row.lifecycle(widget, ctx, row) or owner.commands[row[2]]
     local fallback = command.default
     if fallback == nil then fallback = row[3] end
+    row.write, row.customSetReason = command.write, command.customSetReason
     return command.get, command.set, fallback, command.afterBind
 end
-local function RecordAccessors(owner, row, kind, widget, ctx)
+local function RecordAccessors(owner, row, kind, widget, ctx, spec)
     if row.lifecycle then return CommandAccessors(owner, row, kind, widget, ctx) end
-    if row.set then return assert(row.get, "record row getter missing"), row.set, row[3] end
+    if row.set or row.write then return assert(row.get, "record row getter missing"), row.set, row[3] end
     local config, scope, key, default = row.source or owner.config, owner.scope, row[2], row[3]
     local function Get()
         local record = config(scope(), false)
@@ -703,6 +870,24 @@ local function RecordAccessors(owner, row, kind, widget, ctx)
         if kind == "slider" then return tonumber(value) or default end
         return value or default
     end
+    if not row.accept and kind ~= "color" and not row.subtype and not row.convert
+        and not owner.recordPath:find("{", 1, true)
+        and not row.uncheckedNil and not row.afterWrite then
+        row.write = { source = function() return config(scope(), true) end,
+            allowMissing = not row.requireRecord, requireRecord = row.requireRecord,
+            boolean = kind == "toggle" and not owner.strictToggles,
+            strictBoolean = kind == "toggle" and owner.strictToggles,
+            numberDefault = kind == "slider" and default or nil, round = kind == "slider" and not owner.rawNumber,
+            fallback = kind ~= "toggle" and kind ~= "slider" and default or nil,
+            after = function()
+                owner.changed(scope())
+                local afterSet = row.afterSet or (kind == "toggle" and owner.afterToggle)
+                if afterSet then afterSet() end
+            end } --[[schema setter: Schema.Record]]
+        if kind ~= "toggle" and kind ~= "slider" then row.write.fallback = default end
+        return row.get or Get, nil, row[3]
+    end
+    row.customSetReason = row.customSetReason or "Edits a composite record with conversion, subtype defaults or dependent channels."
     local function Set(value, green, blue)
         if row.accept and not row.accept(value) then return end
         local record = config(scope(), true)
@@ -751,6 +936,7 @@ local function GroupBindingOptions(owner, accessors)
         local meta = kind == "slider" and owner.stepMeta(ctx, path, row[4][4]) or owner.meta(ctx, path, row.classification)
         local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
             scope = "group", applyDomain = row.domain or "visual", meta = meta, get = get, set = set,
+            write = row.write, customSetReason = row.customSetReason,
             commitOnBlur = row.commitOnBlur, setting = row.setting or (owner.setting and owner.setting(row)) }
         if kind == "slider" then
             spec.range, spec.defaultSource = { row[4][2], row[4][3], row[4][4] }, function() return fallback end
@@ -767,7 +953,11 @@ function Schema.GroupRecordOptions(owner)
         local prefix = "gf_{scope}." .. assert(owner.recordPath, "group record path missing")
         local paths = {}
         for _, field in ipairs(row.channels or { row[2] }) do paths[#paths + 1] = prefix .. field end
-        return Schema.Record(paths)
+        local setting = Schema.Record(paths)
+        if #paths == 1 then
+            setting.resolve = function() return paths[1]:gsub("{scope}", owner.scope()) end
+        end
+        return setting
     end
     return GroupBindingOptions(owner, RecordAccessors)
 end
@@ -775,6 +965,7 @@ end
 -- Selected-field rows use the existing scope readers and writes. The selected
 -- provider and callable default are resolved anew for every read and input.
 local function SelectedAccessors(owner, row, kind)
+    row.customSetReason = row.customSetReason or "Resolves the selected status-icon field and its per-record default at input time."
     local selected, scope, default = owner.selected, owner.scope, owner.default
     local field, valueDefault, domain = row[2], row[3], row.domain or "visual"
     local low, high = row[4][2], row[4][3]
@@ -850,6 +1041,14 @@ local function ScopeAccessors(owner, row, kind)
         if row.scale then return math.floor(value * row.scale + 0.5) end
         return value
     end
+    if not row.target and not row.scale and not row.select then
+        local fallback = row.writeDefault
+        if fallback == nil then fallback = default end
+        row.write = { call = gp.Set, group = true, args = { row.domain or "visual" },
+            fallback = fallback, after = row.afterSet } --[[schema setter: Schema.Scope]]
+        return Get, nil, row.fallback or default
+    end
+    row.customSetReason = "Resolves a selected field, applies a scale conversion or updates editor selection."
     local function Set(value)
         local field = Target()
         if row.select then M.SetMenuStateValue(row.select[1], row.select[2]) end

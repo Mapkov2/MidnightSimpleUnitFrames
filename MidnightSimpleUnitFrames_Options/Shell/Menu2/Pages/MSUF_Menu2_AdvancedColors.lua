@@ -517,6 +517,7 @@ function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverr
     declaration = declaration or { scope = "colors", applyDomain = "unitColors", labelKey = label }
     declaration.kind, declaration.id, declaration.meta = "color", metadata.controlId, metadata
     declaration.settingPath = metadata.settingKey
+    declaration.customSetReason = declaration.customSetReason or "Writes the RGB/opacity channels and dependent color-mode state together."
     declaration.get, declaration.set = getRGB, setRGB
     Schema.Bind(ctx, color, declaration)
     CP.AttachNativeCastColorState(color, metadata)
@@ -532,7 +533,7 @@ function CP.BuildDispelColorControls(ctx, dispel)
             kind = "toggle", view = "switch", labelKey = dispelType .. " custom",
             id = metadata.controlId, scope = "general", applyDomain = "auras", meta = metadata,
             get = function() return M._HasDispelTypeColorOverride(dispelType) end,
-            set = function(value)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 M._SetDispelTypeColorEnabled(dispelType, value)
                 if color then color:SetRGB(M._GetDispelTypeRGB(dispelType, true)) end
             end,
@@ -658,7 +659,9 @@ local UnitColorRows = { bind = function(ctx, control, row, kind)
     end
     local meta = Meta(row.path)
     Schema.Bind(ctx, control, { id = meta.controlId, kind = kind, key = key, labelKey = row[4][1],
-        scope = "colors", applyDomain = "unitColors", meta = meta, settingPath = meta.settingKey, get = Get, set = Set })
+        scope = "colors", applyDomain = "unitColors", meta = meta, settingPath = meta.settingKey,
+        get = Get, set = not row.write and Set or nil, write = row.write,
+        customSetReason = row.customSetReason or "Uses the color API or coordinates dependent color fields and runtime refresh." })
     if kind == "color" then
         local p = row.position
         CP.FinishColorRow(ctx, control, control:GetParent(), p[1], p[2], nil, nil, defaults)
@@ -686,13 +689,16 @@ local function SchemaRows(ctx, parent, rows)
         local meta = Meta(row.path or "general." .. key)
         local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row[4][1], meta = meta,
             settingPath = meta.settingKey, scope = "colors", applyDomain = row.domain or "unitColors",
-            get = row.get, set = row.set, source = row.source, apply = row.apply, defaultSource = function() return default end }
+            get = row.get, set = row.set, write = row.write,
+                customSetReason = row.customSetReason or "Writes color channels and coordinates dependent color modes and runtime state.",
+                    source = row.source, apply = row.apply, defaultSource = function() return default end }
         if kind == "color" then
             if not spec.get then spec.get = function()
                 if row.source then return TableRGB(row.source(), key, default[1], default[2], default[3]) end
                 return GeneralRGB(key, default[1], default[2], default[3])
             end end
-            if not spec.set then spec.set = function(r, g, b)
+            if not spec.set then spec.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
+    spec.set = function(r, g, b)
                 if row.source then SetTableRGB(row.source(), key, r, g, b) else SetGeneralRGB(key, r, g, b) end
                 if row.apply then row.apply() else ApplyColors() end
             end end
@@ -1064,7 +1070,7 @@ function Build.Font(ctx, b)
     end
     local nameCustomColor = SchemaRows(ctx, font, { { "color", "nameCustom", { 1, 1, 1 }, { "Custom name color" },
         path = "font.name_custom.color", domain = "fontColors", position = { 12, -166 }, get = ReadNameColor,
-        set = function(r, g2, b2)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(r, g2, b2)
             local g = G()
             g.nameColorR, g.nameColorG, g.nameColorB = r, g2, b2
             -- Choosing a color is the intent to use it, so the mode follows.
@@ -1150,7 +1156,7 @@ function Build.StatusText(ctx, b)
             if r and g and bcol then return r, g, bcol end
             return M._ContextConfiguredGlobalFontRGB()
         end,
-        set = function(r, g, bcol)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(r, g, bcol)
             local conf, prefix = StatusTextConf(), StatusTextPrefix()
             conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = r, g, bcol
             ApplyStatusTextColors()
@@ -1207,7 +1213,7 @@ function Build.Classes(ctx, b)
         rows[i] = { "color", token, { r, g, bcol }, { COLOR_DATA.CLASS_LABELS[token] or token },
             position = { 12 + ((i - 1) % 4) * classColW, -34 - floor((i - 1) / 4) * 36, classLabelW, 44 },
             path = "class_bar.token." .. tostring(token), get = function() return ClassColorRGB(token) end,
-            set = function(red, green, blue)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(red, green, blue)
                 if ApiCall("SetClassColor", token, red, green, blue) then M.RefreshActiveHealthBackgroundInlinePreview()
                 else ApplyUnitframeColorWithReload() end
             end }
@@ -1273,7 +1279,8 @@ function Build.BarGradients(ctx, b)
     local function GradientRow(key, label, prefix, reason, path, position)
         return { "color", key, { 0, 0, 0 }, { label }, domain = "barGradients", position = position, path = path,
             get = function() return GradientRGB(prefix) end,
-            set = function(r, g, bcol) SetGradientRGB(prefix, r, g, bcol, reason) end }
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(r, g,
+                bcol) SetGradientRGB(prefix, r, g, bcol, reason) end }
     end
     SchemaRows(ctx, section, {
         GradientRow("health", "Health gradient color", "healthBarGradientColor", "MSUF2_HP_GRADIENT_COLOR",
@@ -1403,7 +1410,8 @@ function Build.Appearance(ctx, b)
     local modeMeta = Meta("appearance.bar_mode")
     Schema.Bind(ctx, modeRow, { id = modeMeta.controlId, kind = "segment", labelKey = "Bar mode", scope = "colors",
         applyDomain = "unitColors", settingPath = modeMeta.settingKey, meta = modeMeta,
-        get = CurrentBarMode, set = SetBarMode })
+        get = CurrentBarMode,
+            customSetReason = "Writes color channels and coordinates dependent color modes and runtime state.", set = SetBarMode })
     for i = 1, #BAR_MODE_CARDS do
         local btn = modeRow.buttons[i]
         if btn and M.AddTooltip then M.AddTooltip(btn, TrText(BAR_MODE_CARDS[i].title), TrText(BAR_MODE_CARDS[i].desc), { hook = true }) end
@@ -1486,11 +1494,10 @@ function Build.Unit(ctx, b)
     local function RefreshPetColorControl() SetControlEnabled(petColor, G().petFrameUsePlayerClassColor ~= true) end
     local petPlayerClass = UnitRow(unit, { "flowToggle", "petPlayerClass", false, { "Use player's class color for Pet Frame" }, { 360, -54 },
         path = "unit.pet.use_player_class_color", get = function() return G().petFrameUsePlayerClassColor == true end,
-        set = function(v)
-            G().petFrameUsePlayerClassColor = v and true or false
-            M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
-            RefreshPetColorControl()
-        end })
+        write = { source = G, boolean = true, after = function()
+                M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
+                RefreshPetColorControl()
+            end } --[[schema setter: AdvancedColors.7]] })
     M.TrackRefresh(ctx, RefreshPetColorControl)
     RefreshPetColorControl()
     if M.AddTooltip then M.AddTooltip(petPlayerClass, "Use player's class color for Pet Frame",
@@ -1509,7 +1516,7 @@ function Build.Unit(ctx, b)
                 if type(stored) == "table" then return stored.r or 0.5, stored.g or 0.5, stored.b or 0.5 end
                 return 0.5, 0.5, 0.5
             end,
-            set = function(r, g, c)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(r, g, c)
                 if not ApiCall("SetNPCColor", "tapped", r, g, c) then
                     local db = DB()
                     db.npcColors = db.npcColors or {}
@@ -1519,11 +1526,9 @@ function Build.Unit(ctx, b)
             end })
         UnitRow(unit, { "flowToggle", "tappedGray", true, { "Gray out mobs tagged by others" }, { 360, -110 }, path = "npc.tap_denied_gray",
             get = function() return G().tapDeniedGray ~= false end,
-            set = function(v)
-                G().tapDeniedGray = v and true or false
-                ApplyUnitframeColorWithReload()
-                SetControlEnabled(tappedColor, v and true or false)
-            end, tip = { "Gray out mobs tagged by others",
+            write = { source = G, boolean = true, after = function(value)
+                    ApplyUnitframeColorWithReload() SetControlEnabled(tappedColor, value)
+                end } --[[schema setter: AdvancedColors.9]], tip = { "Gray out mobs tagged by others",
                 "A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame.",
                 { hook = true } } })
         M.TrackRefresh(ctx, function() SetControlEnabled(tappedColor, G().tapDeniedGray ~= false) end)
@@ -1544,7 +1549,7 @@ function Build.Unit(ctx, b)
     NPCTypeToggle("Color name text", 32, -62, "GetNPCTypeColorText", "SetNPCTypeColorText", "npcTypeColorText")
     npcMaster = UnitRow(npcType, { "switch", "master", false, { "NPC Type Colors", 12, -10, 260 }, path = "npc_type.enabled",
         get = function() return ApiValue("GetNPCColorMode", function() return G().npcColorMode end) == "type" end,
-        set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
             if not ApiCall("SetNPCColorMode", v and "type" or "reaction") then
                 G().npcColorMode = v and "type" or "reaction"
                 ApplyUnitframeColorWithReload()
@@ -1759,7 +1764,7 @@ function Build.Castbar(ctx, b)
         id = detailMeta.controlId, kind = "dropdown", labelKey = "Editing:", scope = "colors", applyDomain = "menuState", meta = detailMeta,
         values = M.FilterSupportedUnitValues(
             ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss|arena=Arena"),
-        get = DetailUnit, set = function(value)
+        get = DetailUnit, customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
             M._colorsCastbarDetailUnit = value
             if M.RequestRefresh then M.RequestRefresh(ctx, "castbar-text-color-unit") elseif M.Refresh then M.Refresh(ctx) end
         end }, { x = 12, y = -44, width = min(260, detailW - 32) })
@@ -1790,7 +1795,8 @@ function Build.Highlight(ctx, b)
     local highlight = ColorsSection(b, "colors_highlight", "Highlight Colors", 154, false)
     SchemaRows(ctx, highlight, {
         { "color", "highlight", { 1, 1, 1 }, { "Mouseover highlight color" }, position = { 12, -10 },
-            path = "highlight.mouseover.color", get = HighlightRGB, set = SetHighlightRGB },
+            path = "highlight.mouseover.color", get = HighlightRGB,
+                customSetReason = "Writes color channels and coordinates dependent color modes and runtime state.", set = SetHighlightRGB },
         { "color", "bossTargetHighlightColor", { 1, 0.82, 0 }, { "Boss target highlight color" }, position = { 12, -66 },
             path = "table.bossTargetHighlightColor", source = G, apply = ApplyBossTargetHighlightColor },
     })
@@ -1808,9 +1814,12 @@ function Build.Highlight(ctx, b)
         end
         SchemaRows(ctx, texLayer, {
             { "color", prefix .. "Color", { 1, 1, 1 }, { colorLabel }, position = { 12, rowY }, path = texSlot.id .. ".color",
-                set = function(r, g, c) M._SetAllTextureLayerRGB(prefix .. "Color", r, g, c) end },
+                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(r, g,
+                    c) M._SetAllTextureLayerRGB(prefix .. "Color", r, g, c) end },
             { "color", prefix .. "Gradient2", { 0, 0, 0 }, { gradientLabel }, position = { 12, rowY - 36 },
-                path = texSlot.id .. ".gradient_color", set = function(r, g, c) M._SetAllTextureLayerRGB(prefix .. "Gradient2", r, g, c) end },
+                path = texSlot.id .. ".gradient_color",
+                    customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                    set = function(r, g, c) M._SetAllTextureLayerRGB(prefix .. "Gradient2", r, g, c) end },
         })
     end
 end
@@ -1821,7 +1830,7 @@ function Build.Gameplay(ctx, b)
             path = "table.combatTimerColor", source = Gameplay, apply = ApplyGameplayColors },
         { "color", "combatStateEnterColor", { 1, 1, 1 }, { "Combat Enter text color" }, position = { 12, -46 },
             path = "gameplay.combat_enter_color", source = Gameplay,
-            set = function(r, g, c)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(r, g, c)
                 local gp = Gameplay()
                 SetTableRGB(gp, "combatStateEnterColor", r, g, c)
                 if gp.combatStateColorSync then SetTableRGB(gp, "combatStateLeaveColor", r, g, c) end

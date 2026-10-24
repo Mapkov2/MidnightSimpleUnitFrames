@@ -186,7 +186,8 @@ end
 local ROW_OPTIONS = { bind = function(ctx, widget, row, kind)
     local spec = { id=row.meta.controlId, kind=kind, key=row[2], labelKey=row[4][1], meta=row.meta,
         settingPath=row.meta.settingKey, scope=row.scope or "bars", applyDomain=row.domain or "resourceExtras",
-        source=row.source, apply=row.apply, get=row.get, set=row.set, workspace="classpower",
+        source=row.source, apply=row.apply, get=row.get, set = row.set, write = row.write,
+            customSetReason = row.customSetReason or "Resolves a resource mark and updates its dependent mode or threshold fields.", workspace="classpower",
         defaultSource=function() return row[3] end }
     if kind=="slider" then spec.range={row[4][2],row[4][3],row[4][4]} end
     if kind=="dropdown" then spec.values=row[4][2] end
@@ -207,7 +208,8 @@ local function Header(page,section,group,Bars,Apply)
     if master then
         local row=SettingRow(master,Bars,Apply)
         row.get=function() return Bars()[group.master]==true end
-        row.set=function(value)
+        row.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
+    row.set=function(value)
             Bars()[group.master]=value and true or false
             FocusExample(page,group)
             Apply()
@@ -408,7 +410,9 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     Schema.Build(ctx,section,{
         {"dropdown","select",nil,{"Resource mark",function() return MarkValues(Bars) end,280},{32,-92,controlW,"LEFT"},
             meta=Meta("marks.select",nil,"ephemeral"),scope="resourceMarks",domain="navigation",
-            get=function() return MarkIndex(Bars) end,set=function(value) selectedMark=value Refresh() end},
+            get=function() return MarkIndex(Bars) end,
+                customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
+                set=function(value) selectedMark=value Refresh() end},
     },ROW_OPTIONS)
 
     local function Button(label,x,path,callback)
@@ -419,7 +423,8 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         AP.RegisterControl(button,meta,label,"button")
         local action=Schema.ButtonAction(button)
         Schema.Custom(button,{id=meta.controlId,kind="button",labelKey=label,scope="resourceMarks",
-            applyDomain="resourceExtras",settingPath=meta.settingKey,meta=meta,owner=button,set=action,action=action})
+            applyDomain="resourceExtras",settingPath=meta.settingKey,meta=meta,owner=button,
+            customSetReason="Adds or removes a resource mark and maintains the selected list entry.",set=action,action=action})
     end
     Button("Add resource mark",32,"marks.add",function()
         local b=Bars()
@@ -467,7 +472,8 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
             end
             return rule and rule[key] or row[3]
         end
-        row.set=function(value) Write(key,value) end
+        row.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
+    row.set=function(value) Write(key,value) end
         if key=="value" then
             row.beforeBind=function(widget)
                 M.TrackRefresh(ctx,function()
@@ -493,7 +499,8 @@ local function BuildMarkColors(ctx,b,Bars,ColorValueAt,Apply)
     Schema.Build(ctx,section,{
         {"dropdown","select",nil,{"Resource mark",function() return MarkValues(Bars) end,260},{24,-42,260,"LEFT"},
             meta=ColorMeta("select","ephemeral"),scope="resourceMarks",domain="navigation",
-            get=function() return MarkIndex(Bars) end,set=function(value)
+            get=function() return MarkIndex(Bars) end,
+                customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set=function(value)
                 selectedMark=value
                 M.RequestRefresh(ctx,"resource-mark-color-selection")
             end},

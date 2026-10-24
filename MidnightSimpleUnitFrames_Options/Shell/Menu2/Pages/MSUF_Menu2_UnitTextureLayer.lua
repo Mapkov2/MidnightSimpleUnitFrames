@@ -498,7 +498,8 @@ local function TextureLayerBinders(ctx, s)
                         if value == nil or value == "" then value = default end
                         return value
                     end
-                    row.set = function(value)
+                    row.customSetReason = "Writes the texture-layer slot bound to this build and refreshes that selected layer."
+    row.set = function(value)
                         if kind == "toggle" then SetBool(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
                         elseif kind == "slider" then SetNumber(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
                         else SetString(unit, Key(base), value or default, "MSUF2_TEXLAYER", { preview = true }) end
@@ -571,7 +572,7 @@ local function TextureLayerSetupCard(ctx, s)
         R.Drop("Texture", "", "Texture (SharedMedia)", function() return M.StatusBarTextureItems("Use bar texture") end, 16, -164),
         { "textinput", "CustomTexturePath", "", { "Custom texture path", colW - 16 }, { 16, -240, colW - 16, "LEFT" }, commitOnBlur = true,
             get = function() return tostring(GetConf(unit)[Key("CustomTexturePath")] or "") end,
-            set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
                 local path = tostring(v or "")
                 -- The typed path is drawn; clearing it returns to the SharedMedia texture.
                 SetString(unit, Key("SourceMode"), path == "" and "SHAREDMEDIA" or (TEXLAYER_PACK_BY_PATH[path] and "PACK" or "CUSTOM"),
@@ -684,7 +685,7 @@ local function TextureLayerAdvancedCard(ctx, s)
     R.Build(advancedCard, {
         R.Toggle("BlendMode", false, "Additive glow", colX, -210, {
             get = function() return GetConf(unit)[Key("BlendMode")] == "ADD" end,
-            set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
                 SetString(unit, Key("BlendMode"), v and "ADD" or "BLEND", "MSUF2_TEXLAYER", { preview = true })
                 RefreshLayer()
             end }),
@@ -720,7 +721,7 @@ local function TextureLayerRulesCard(ctx, s)
                 if value ~= "COMBAT" and value ~= "OOC" then return "ALWAYS" end
                 return value
             end,
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 local conf = GetConf(unit)
                 if conf[Key("Visibility")] == "TARGET" and conf[Key("TargetOnly")] == nil then
                     SetBool(unit, Key("TargetOnly"), true, "MSUF2_TEXLAYER", { preview = true })
@@ -735,7 +736,7 @@ local function TextureLayerRulesCard(ctx, s)
                 local conf = GetConf(unit)
                 return conf[Key("TargetOnly")] == true or conf[Key("Visibility")] == "TARGET"
             end,
-            set = function(enabled)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(enabled)
                 local conf = GetConf(unit)
                 if conf[Key("Visibility")] == "TARGET" then
                     SetString(unit, Key("Visibility"), "ALWAYS", "MSUF2_TEXLAYER", { preview = true })

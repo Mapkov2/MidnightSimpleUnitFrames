@@ -92,3 +92,39 @@ for text in ('a.lua foo-bar.lua path/file.test.lua', '?foo.bar.lua ?foo.lua', '.
              'x.lua_suffix require("helper") .lua .a.lua'):
     expected = re.findall(r'\b[A-Za-z0-9_][A-Za-z0-9_.-]*\.lua\b', text)
     assert coverage.lua_references(text) == expected, 'helper dependency scanner changed token boundaries'
+
+# Reviewed preview counts cannot survive omitted files, source drift or nonzero residue.
+proof_path = root / "tools/preview_render_census.json"
+proof = json.loads(proof_path.read_text(encoding="utf-8-sig"))
+assert scorecard.preview_render_census(root)["remaining_code"] == 0
+with tempfile.TemporaryDirectory(prefix="preview-census-") as directory:
+    fixture = Path(directory)
+    (fixture / "tools").mkdir()
+    for row in proof["files"]:
+        path = fixture / coverage.MENU / row["file"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((root / coverage.MENU / row["file"]).read_bytes())
+    census = fixture / "tools/preview_render_census.json"
+    def WriteProof(value):
+        census.write_text(json.dumps(value), encoding="utf-8")
+    WriteProof(proof)
+    assert scorecard.preview_render_census(fixture)["before_code"] == proof["before_code"]
+    def Reject():
+        try:
+            scorecard.preview_render_census(fixture)
+        except ValueError:
+            return
+        raise AssertionError("preview scorecard accepted stale/incomplete evidence")
+    changed = fixture / coverage.MENU / proof["files"][0]["file"]
+    original_bytes = changed.read_bytes()
+    changed.write_bytes(original_bytes + b"\nlocal unrelated = true\n")
+    Reject()
+    changed.write_bytes(original_bytes)
+    for mutate in (lambda value: value["files"].pop(),
+                   lambda value: value["files"][0].update(remaining_code=1),
+                   lambda value: value.update(before_physical=0)):
+        invalid = copy.deepcopy(proof)
+        mutate(invalid)
+        WriteProof(invalid)
+        Reject()
+print("preview census: current review accepted; source drift, omitted scope, residue and invalid totals rejected")

@@ -657,7 +657,8 @@ function Catalog.Register(widget, meta, registrationSource)
     record.classification = classification
     record.classificationSource = reason
     if (classification == "ephemeral" or classification == "action" or meta.settingKey or meta.setting)
-        and M.ControlSchema and not widget._msuf2ControlSchema then
+        and M.ControlSchema and (not widget._msuf2ControlSchema
+            or widget._msuf2ControlSchema.id ~= record.controlId) then
         M.ControlSchema.Custom(widget, { id = record.controlId, kind = kind, scope = pageKey,
             applyDomain = classification == "ephemeral" and "menuState" or "menuAction", meta = meta,
             ephemeralReason = classification == "ephemeral" and (meta.ephemeralReason or meta.help

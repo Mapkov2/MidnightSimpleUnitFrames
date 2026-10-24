@@ -3,8 +3,81 @@
   "runtime_fallback": "key itself (existing localization metatable)",
   "note": "Generated translation work; stubs are suggestions, never loaded or counted as translations.",
   "locales": {
-    "deDE": [],
+    "deDE": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
     "enGB": [
+      {
+        "key": "  (then /reload OR MSUF Menu > Advanced > Factory Reset)",
+        "stub": "L[\"  (then /reload OR MSUF Menu > Advanced > Factory Reset)\"] = \"  (then /reload OR MSUF Menu > Advanced > Factory Reset)\""
+      },
       {
         "key": "Above threshold",
         "stub": "L[\"Above threshold\"] = \"Above threshold\""
@@ -54,8 +127,72 @@
         "stub": "L[\"Low HP opacity\"] = \"Low HP opacity\""
       },
       {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
         "key": "Out of combat",
         "stub": "L[\"Out of combat\"] = \"Out of combat\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
       },
       {
         "key": "Selected conditions are combined (AND).",
@@ -70,22 +207,717 @@
         "stub": "L[\"Single color (monochrome)\"] = \"Single color (monochrome)\""
       },
       {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      },
+      {
         "key": "Uses a separate texture opacity below the HP threshold. The normal Opacity remains active above it.",
         "stub": "L[\"Uses a separate texture opacity below the HP threshold. The normal Opacity remains active above it.\"] = \"Uses a separate texture opacity below the HP threshold. The normal Opacity remains active above it.\""
       },
       {
         "key": "When HP gradient is selected, choose the color used above the HP threshold. Single color uses this layer's tint and renders the source monochrome.",
         "stub": "L[\"When HP gradient is selected, choose the color used above the HP threshold. Single color uses this layer's tint and renders the source monochrome.\"] = \"When HP gradient is selected, choose the color used above the HP threshold. Single color uses this layer's tint and renders the source monochrome.\""
+      },
+      {
+        "key": "|cff00ff00MSUF:|r Absorb bars DISABLED.",
+        "stub": "L[\"|cff00ff00MSUF:|r Absorb bars DISABLED.\"] = \"|cff00ff00MSUF:|r Absorb bars DISABLED.\""
+      },
+      {
+        "key": "|cff00ff00MSUF:|r Absorb bars ENABLED.",
+        "stub": "L[\"|cff00ff00MSUF:|r Absorb bars ENABLED.\"] = \"|cff00ff00MSUF:|r Absorb bars ENABLED.\""
+      },
+      {
+        "key": "|cff00ff00MSUF:|r Positions and visibility reset to defaults.",
+        "stub": "L[\"|cff00ff00MSUF:|r Positions and visibility reset to defaults.\"] = \"|cff00ff00MSUF:|r Positions and visibility reset to defaults.\""
+      },
+      {
+        "key": "|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account.",
+        "stub": "L[\"|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account.\"] = \"|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account.\""
+      },
+      {
+        "key": "|cffff0000MSUF:|r Analytics module not loaded.",
+        "stub": "L[\"|cffff0000MSUF:|r Analytics module not loaded.\"] = \"|cffff0000MSUF:|r Analytics module not loaded.\""
+      },
+      {
+        "key": "|cffff0000MSUF:|r Cannot do FULL reset while in combat.",
+        "stub": "L[\"|cffff0000MSUF:|r Cannot do FULL reset while in combat.\"] = \"|cffff0000MSUF:|r Cannot do FULL reset while in combat.\""
+      },
+      {
+        "key": "|cffff0000MSUF:|r Cannot reset while in combat.",
+        "stub": "L[\"|cffff0000MSUF:|r Cannot reset while in combat.\"] = \"|cffff0000MSUF:|r Cannot reset while in combat.\""
+      },
+      {
+        "key": "|cffff0000MSUF:|r DB not initialized.",
+        "stub": "L[\"|cffff0000MSUF:|r DB not initialized.\"] = \"|cffff0000MSUF:|r DB not initialized.\""
+      },
+      {
+        "key": "|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account.",
+        "stub": "L[\"|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account.\"] = \"|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account.\""
+      },
+      {
+        "key": "|cffff0000MSUF:|r Factory defaults are not available; nothing was reset.",
+        "stub": "L[\"|cffff0000MSUF:|r Factory defaults are not available; nothing was reset.\"] = \"|cffff0000MSUF:|r Factory defaults are not available; nothing was reset.\""
+      },
+      {
+        "key": "|cffff0000MSUF:|r Usage: /msuf gfhoverdebug on|off|status",
+        "stub": "L[\"|cffff0000MSUF:|r Usage: /msuf gfhoverdebug on|off|status\"] = \"|cffff0000MSUF:|r Usage: /msuf gfhoverdebug on|off|status\""
+      },
+      {
+        "key": "|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:",
+        "stub": "L[\"|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:\"] = \"|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:\""
+      },
+      {
+        "key": "|cffffcc00MSUF:|r Then click: MSUF Menu > Advanced > Factory Reset (or type /reload).",
+        "stub": "L[\"|cffffcc00MSUF:|r Then click: MSUF Menu > Advanced > Factory Reset (or type /reload).\"] = \"|cffffcc00MSUF:|r Then click: MSUF Menu > Advanced > Factory Reset (or type /reload).\""
+      },
+      {
+        "key": "|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset.",
+        "stub": "L[\"|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset.\"] = \"|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset.\""
+      },
+      {
+        "key": "|cffffff00MSUF:|r Reloading UI to rebuild clean defaults...",
+        "stub": "L[\"|cffffff00MSUF:|r Reloading UI to rebuild clean defaults...\"] = \"|cffffff00MSUF:|r Reloading UI to rebuild clean defaults...\""
+      },
+      {
+        "key": "|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu > Advanced > Factory Reset.",
+        "stub": "L[\"|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu > Advanced > Factory Reset.\"] = \"|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu > Advanced > Factory Reset.\""
       }
     ],
-    "esES": [],
-    "esMX": [],
-    "frFR": [],
-    "itIT": [],
-    "koKR": [],
-    "ptBR": [],
-    "ruRU": [],
-    "zhCN": [],
-    "zhTW": []
-  }
+    "esES": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "esMX": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "frFR": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "itIT": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "koKR": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "ptBR": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "ruRU": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "zhCN": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ],
+    "zhTW": [
+      {
+        "key": "MSUF: Cannot restore the profile safety copy while in combat.",
+        "stub": "L[\"MSUF: Cannot restore the profile safety copy while in combat.\"] = \"MSUF: Cannot restore the profile safety copy while in combat.\""
+      },
+      {
+        "key": "MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.",
+        "stub": "L[\"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\"] = \"MSUF: Compatibility save armed: next logout/reload saves ALL profiles in full revision-17 format for unchanged 6.50x.\""
+      },
+      {
+        "key": "MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.",
+        "stub": "L[\"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\"] = \"MSUF: Compatibility save failed: a profile cannot be reconstructed. Keep 7.0 installed.\""
+      },
+      {
+        "key": "MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.",
+        "stub": "L[\"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\"] = \"MSUF: Compatibility save off. The next logout or reload uses normal sparse storage.\""
+      },
+      {
+        "key": "MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.",
+        "stub": "L[\"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\"] = \"MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full.\""
+      },
+      {
+        "key": "MSUF: No pre-7.0 profile safety copy is available.",
+        "stub": "L[\"MSUF: No pre-7.0 profile safety copy is available.\"] = \"MSUF: No pre-7.0 profile safety copy is available.\""
+      },
+      {
+        "key": "MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.",
+        "stub": "L[\"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\"] = \"MSUF: Profile safety copy restored. Compatibility save is armed for the next logout/reload; the safety copy is unchanged.\""
+      },
+      {
+        "key": "MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.",
+        "stub": "L[\"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\"] = \"MSUF: Restore replaces ALL account profiles and character profile bindings. Later edits and profiles will be lost.\""
+      },
+      {
+        "key": "MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.",
+        "stub": "L[\"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\"] = \"MSUF: Switch versions after that save. Your next 7.0 login resumes sparse saving; /msuf compatsave off cancels.\""
+      },
+      {
+        "key": "MSUF: The profile safety copy could not be restored; no backup data was changed.",
+        "stub": "L[\"MSUF: The profile safety copy could not be restored; no backup data was changed.\"] = \"MSUF: The profile safety copy could not be restored; no backup data was changed.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\"] = \"MSUF: Type /msuf restorebackup confirm to restore the one-time safety copy, or /msuf restorebackup cancel.\""
+      },
+      {
+        "key": "MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.",
+        "stub": "L[\"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\"] = \"MSUF: Type /msuf restorebackup first to review and confirm the account profile restore.\""
+      },
+      {
+        "key": "MSUF: Usage: /msuf compatsave [off].",
+        "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
+        "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
+      },
+      {
+        "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
+        "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
+      },
+      {
+        "key": "Save every profile in full 6.50-compatible format at the next logout or reload.",
+        "stub": "L[\"Save every profile in full 6.50-compatible format at the next logout or reload.\"] = \"Save every profile in full 6.50-compatible format at the next logout or reload.\""
+      },
+      {
+        "key": "Toggle player cast-event and interrupt-feedback diagnostics.",
+        "stub": "L[\"Toggle player cast-event and interrupt-feedback diagnostics.\"] = \"Toggle player cast-event and interrupt-feedback diagnostics.\""
+      }
+    ]
+  },
+  "additional_key_sources": [
+    "MidnightSimpleUnitFrames/Runtime/MSUF_SlashCommands.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Storage.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Recovery.lua"
+  ]
 }

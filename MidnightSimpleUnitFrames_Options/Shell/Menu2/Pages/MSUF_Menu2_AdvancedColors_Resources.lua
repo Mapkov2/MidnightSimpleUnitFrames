@@ -205,7 +205,8 @@ local function GetClassPowerFullRGB(resourceToken)
 end
 local function BindPowerColor(ctx, widget, kind, label, get, set, meta)
     return Schema.Bind(ctx, widget, { id = meta.controlId, kind = kind, labelKey = label,
-        scope = "colors", applyDomain = "powerColors", get = get, set = set, meta = meta })
+        scope = "colors", applyDomain = "powerColors", get = get,
+            customSetReason = "Writes the selected resource color mode, slot or color-channel record.", set = set, meta = meta })
 end
 local CLASS_POWER_CONTROLS = {
     Color = function(...) return Schema.Owned(ColorValueAt(...), "colors", "classPowerColors") end,

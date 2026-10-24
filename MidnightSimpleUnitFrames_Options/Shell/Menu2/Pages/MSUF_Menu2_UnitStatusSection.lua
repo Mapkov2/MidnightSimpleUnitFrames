@@ -110,7 +110,8 @@ function StatusSection.OpenSection(state, ctx, builder, unit)
         label = "", values = STATUS_ICON_TAB_VALUES, width = statusTabW,
         frames = tabFrames, defaultTab = "basic",
         get = CurrentStatusTab,
-        set = function(value) M.unitStatusTabSelection[unit] = value or "basic" end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
+            set = function(value) M.unitStatusTabSelection[unit] = value or "basic" end,
         x = 20, y = -12,
     })
     if statusTabs._msuf2Title then statusTabs._msuf2Title:Hide() end
@@ -495,7 +496,7 @@ function StatusSection.RegisterVirtualIndicators(state, ctx, unit, selector)
             meta.command = {
                 kind = "toggle",
                 get = function() return state.ReadStatusEnabled(spec) end,
-                set = function(value)
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                     SetBool(unit, spec.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
                     RefreshStatusRuntime(unit, spec)
                     if Refresh then Refresh() end

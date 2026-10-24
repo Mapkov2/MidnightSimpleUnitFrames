@@ -161,12 +161,12 @@ local function BuildAlpha(ctx, builder, unit)
                 meta = meta, scope = unit, domain = row.domain,
                 beforeBind = slider and M.UsePercentInput or nil,
                 get = function() return read(unit, row.key, Default()) end,
-                set = function(value)
-                    Schema.SetUnit(row.domain, unit, row.key, value, row.reason, row.kind)
-                    if row.key == "oocFadeEnabled" then
-                        UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, row.key, Default()))
-                    end
-                end },
+                write = { unitDomain = row.domain, reason = row.reason,
+                    after = function()
+                        if row.key == "oocFadeEnabled" then
+                            UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, row.key, Default()))
+                        end
+                    end } --[[schema setter: UnitAlpha.1]] },
         }, Schema.UnitOptions(), controls)
     end
     UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, "oocFadeEnabled", Schema.Default(unit, "oocFadeEnabled")))

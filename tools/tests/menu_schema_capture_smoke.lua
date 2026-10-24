@@ -123,3 +123,62 @@ local function DirtyStream(streamed)
 end
 assert(DirtyStream(false) == DirtyStream(true), "stream and in-memory evidence differ")
 print("PASS schema capture: dirty updates, nil clears, unions and client release are exact")
+
+-- Derived writers are observed through both command owners, with provenance only.
+local function DerivedSetters(initial)
+    local capture = assert(loadfile(root .. "/tools/menu_schema_capture.lua"))()
+    if initial then capture.InitialObservation() end
+    local menu = { activeKey = "page", ControlSchema = {} }
+    function menu.ControlSchema.Custom(control, spec) control._msuf2ControlSchema = spec; return control end
+    function menu.PageKeyForWidget() return "page" end
+    __MSUF_WatchSchema(menu)
+    local records, raw = {}, {}
+    local function Location(set)
+        local info = debug.getinfo(set, "S")
+        return info.source .. ":" .. info.linedefined
+    end
+    local first = function() error("capture must never invoke a setter") end
+    local second = function() error("capture must never invoke a command") end
+    local expected = {}
+    local reused = {}
+    for _, id in ipairs({ "widget", "record", "catalog", "explicit", "reused" }) do
+        local control = id == "reused" and reused or {}
+        local record = { controlId = id, pageKey = "page", kind = "slider", classification = "setting", widget = control }
+        local spec = { id = id, kind = "slider", scope = "player", applyDomain = "layout",
+            setting = "player.width", write = { source = function() return control end } }
+        if id == "record" or id == "catalog" then record.command = { set = second }
+        else control._msuf2CommandAction = { set = first } end
+        if id == "explicit" then spec.set = second end
+        if id ~= "catalog" then control._msuf2RuntimeControlRecord = record end
+        records[#records + 1], raw[id] = record, record
+        menu.ControlSchema.Custom(control, spec)
+        expected[id] = Location((id == "record" or id == "catalog" or id == "explicit") and second or first)
+    end
+    reused._msuf2CommandAction = { set = second }
+    menu.ControlSchema.Custom(reused, { id = "replacement", kind = "slider", scope = "player", applyDomain = "layout",
+        setting = "player.height", write = {} })
+    reused._msuf2RuntimeControlRecord = { controlId = "replacement" }
+    local catalog = { GetRecords = function() return records end, Get = function(id) return raw[id] end }
+    capture.Observe(menu, catalog)
+    for id, location in pairs(expected) do
+        assert(capture.Data()[id].setter == location, "missing/wrong derived setter provenance: " .. id)
+        assert(not capture.Json(capture.Data()[id]):find('"write"', 1, true), "write callback graph escaped into projection")
+    end
+    if not initial then
+        local weak = setmetatable({}, { __mode = "v" })
+        do
+            local control = {}
+            weak[1] = control
+            local set = (function(owner) return function() return owner end end)(control)
+            control._msuf2CommandAction = { set = set }
+            menu.ControlSchema.Custom(control, { id = "released-derived", kind = "slider", scope = "player",
+                applyDomain = "layout", setting = "player.width", write = { source = set } })
+        end
+        collectgarbage("collect")
+        collectgarbage("collect")
+        assert(not weak[1], "derived command snapshots retain released widget/callback cycles")
+    end
+end
+DerivedSetters(false)
+DerivedSetters(true)
+print("PASS schema capture: explicit/derived setters, reused bindings and released callback cycles")

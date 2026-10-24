@@ -52,6 +52,7 @@ function AurasPage.Section(builder, ...) return Schema.Section(builder:Collapsib
 -- existing writer, apply reason and refresh; the metadata names the stable ID.
 -- Ephemeral selectors and inputs declare menuState, settings the aura domain.
 local function PrepareRow(row, scope)
+    row.customSetReason = row.customSetReason or "Resolves the selected aura scope and lane, canonicalizes values and requests the aura runtime."
     local meta = row.meta
     row[2], row[3] = meta.controlId, meta.fallback
     row.scope = scope or "auras"
@@ -1595,7 +1596,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
                 get = function()
                     return type(Model.ReadLaneAnchor) == "function" and Model.ReadLaneAnchor(unit, kind) or defaultAnchor
                 end,
-                set = function(v)
+                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
                     if type(Model.WriteLaneAnchor) == "function" then
                         Model.WriteLaneAnchor(unit, kind, v)
                         ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR")
@@ -1610,7 +1611,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
                 get = function()
                     return type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind) or Model.ReadLaneGrowth(unit, kind)
                 end,
-                set = function(v)
+                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
                     if type(Model.WriteLaneGrowthPair) == "function" then Model.WriteLaneGrowthPair(unit, kind, v) else Model.WriteLaneGrowth(unit, kind, v) end
                     ApplyUnit(ctx, unit, "AURAS3_UNIT_GROWTH", true)
                 end,

@@ -698,7 +698,7 @@ local function BuildGlobalFont(ctx, b)
     local fontDrop = Schema.Build(ctx, font, {
         { "dropdown", "font.family", nil, { "Font (SharedMedia)", function() return FontValues(false) end, 340 },
         get = function() return FontKeyGet() end,
-        set = function(v)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
             FontKeySet(v)
             Core.MSUF_NormalizeStoredFontKeys()
             ApplyFonts("MSUF2_FONT_KEY")
@@ -793,7 +793,7 @@ local function BuildShadowOpacity(ctx, text, RefreshShadowPreview)
             local alpha = ShadowMetrics()
             return alpha
         end,
-        set = function(v)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
             SetShadowValueWithoutApply("fontShadowOpacity", NormalizeShadowOpacity(v))
             RefreshShadowPreview()
             QueueShadowOpacityApply()
@@ -813,7 +813,8 @@ local function BuildFontBaseline(ctx, text)
     return Schema.Build(ctx, text, {
         { "slider", "text_style.baseline", 0, { "Baseline", -4, 4, 1, 300 },
         get = function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
-        set = function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            set = function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
         meta = Meta("text_style.baseline", "setting", { step = 1, roundStep = true }), domain = "global",
         beforeBind = function(baseline)
             baseline:SetValueFormatter(function(v)
@@ -829,23 +830,27 @@ local function FontNameControls(ctx, parent, label, minChars, noticeFallbackY, g
     getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
     local rows = {
         { "flowToggle", "name_shortening.enabled", nil, { label },
-            get = getEnabled, set = setEnabled, meta = Meta("name_shortening.enabled"), domain = "global" },
+            get = getEnabled, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
+                set = setEnabled, meta = Meta("name_shortening.enabled"), domain = "global" },
         { "segment", "name_shortening.style", nil,
             { "Truncation style", VT("LEFT", "Keep end (last letters)", "RIGHT", "Keep start (first letters)"), 430 },
-            get = getSide, set = setSide, meta = Meta("name_shortening.style"), domain = "global" },
+            get = getSide, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.", set = setSide,
+                meta = Meta("name_shortening.style"), domain = "global" },
         { "slider", "name_shortening.max_length", minChars or 4, { "Max name length", minChars or 4, 30, 1, 300 },
-            get = getChars, set = setChars,
+            get = getChars, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.", set = setChars,
             meta = Meta("name_shortening.max_length", "setting", { step = 1, roundStep = true }), domain = "global",
             beforeBind = function(widget)
                 if formatChars then widget:SetValueFormatter(formatChars) end
             end },
         { "flowToggle", "name_shortening.no_ellipsis", nil, { "No Ellipsis (truncate without ..)" },
-            get = getNoEllipsis, set = setNoEllipsis, meta = Meta("name_shortening.no_ellipsis"), domain = "global" },
+            get = getNoEllipsis, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
+                set = setNoEllipsis, meta = Meta("name_shortening.no_ellipsis"), domain = "global" },
     }
     if CharacterNameParts then
         rows[#rows + 1] = { "segment", "name_shortening.character_name_parts", nil,
             { "Character names (all frames)", CharacterNameParts.values, 430 },
-            get = CharacterNameParts.Get, set = CharacterNameParts.Set,
+            get = CharacterNameParts.Get, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
+                set = CharacterNameParts.Set,
             meta = Meta("name_shortening.character_name_parts"), domain = "global" }
     end
     local built = Schema.Build(ctx, parent, rows, ROW_OPTIONS)
@@ -880,7 +885,7 @@ local function BuildFonts(ctx)
         return Schema.Build(ctx, text, {
             { "segment", path, nil, { label, values, width },
             get = getValue,
-            set = function(v)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
                 setValue(v)
                 RefreshFontPreview()
                 if afterSet then afterSet() end
@@ -891,7 +896,7 @@ local function BuildFonts(ctx)
     local outline = Schema.Build(ctx, text, {
         { "segment", "text_style.outline", nil, { "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420 },
         get = function() return FontOutlineGetFor(CurrentFontScope()) end,
-        set = function(v)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
             FontOutlineSetFor(CurrentFontScope(), v)
             RefreshFontPreview()
         end,
@@ -930,7 +935,8 @@ local function BuildFonts(ctx)
         return Schema.Build(ctx, parent, {
             { "dropdown", path, nil, { label, values, 280 },
             get = function() return FontTextColorModeGetFor(CurrentFontScope(), kind) end,
-            set = function(v) FontTextColorModeSetFor(CurrentFontScope(), kind, v) end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(v) FontTextColorModeSetFor(CurrentFontScope(), kind, v) end,
             meta = Meta(path), domain = "global" },
         }, ROW_OPTIONS)[path]
     end

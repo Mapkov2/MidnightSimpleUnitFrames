@@ -274,7 +274,7 @@ local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey,
             if value == nil then value = defaultValue end
             return value and true or false
         end,
-        set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             GFWriteGroupValue(scope, groupKey, key, v and true or false, mode or "visual")
             if afterSet then afterSet(v and true or false) end
         end,
@@ -288,7 +288,7 @@ local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, 
             if value == nil then value = defaultValue end
             return value and true or false
         end,
-        set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             GFWriteRootValue(scope, key, v and true or false, mode or "visual")
             if afterSet then afterSet(v and true or false) end
         end,
@@ -300,7 +300,7 @@ local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, w
             local group = GFReadGroup(scope, groupKey)
             return tonumber(group[key]) or defaultValue or 0
         end,
-        set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             v = Round(v)
             GFWriteGroupValue(scope, groupKey, key, v, mode or "visual")
             if afterSet then afterSet(v) end
@@ -316,7 +316,7 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
             if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
             return value
         end,
-        set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             local value = v or defaultValue
             if key == "filterToken" then value = CanonicalGroupFilterValue(value, groupKey) end
             if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
@@ -413,7 +413,7 @@ local function BuildGroupStyleBasics(G)
             type(Model.DebuffTypeBorderModeValues) == "function"
                 and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES, basicsCol }, { 24, -140, basicsCol },
             get = function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
-            set = function(v)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
                 WriteGroupDebuffTypeBorderMode(scope, lane, v)
                 RefreshStylePreview()
             end,
@@ -452,7 +452,7 @@ local function BuildGroupStyleCooldown(G)
             local group = GFReadGroup(scope, lane)
             return group.cooldownSwipeReverse == true and "REVERSE" or "NORMAL"
         end,
-        set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             GFWriteGroupValue(scope, lane, "cooldownSwipeReverse", v == "REVERSE", "visual")
             RefreshStylePreview()
         end,
@@ -635,7 +635,7 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
             local group = GFReadGroup(scope, lane)
             return group.sortReverse == true and "REVERSE" or "NORMAL"
         end,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             GFWriteGroupValue(scope, lane, "sortReverse", value == "REVERSE", "visual")
         end,
         meta = AuraControlMetaAtVisiblePath(ctx,
@@ -679,7 +679,7 @@ local function GroupManualInput(ctx, parent, label, x, y, width, metaPath)
     local state = { value = "" }
     local input = BoundAura(ctx, parent, { "textinput", nil, nil, { label, width }, { x, y, width },
         get = function() return state.value end,
-        set = function(value) state.value = value or "" end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value) state.value = value or "" end,
         meta = AuraControlMeta(ctx, metaPath, "ephemeral"), commitOnBlur = false, textAdapter = true })
     return input, state
 end
@@ -687,7 +687,7 @@ end
 local function GroupPresetDropdown(ctx, parent, x, y, width, PresetValues, CurrentPreset, metaPath)
     return BoundAura(ctx, parent, { "dropdown", nil, nil, { "Preset", PresetValues, width },
         { x, y, width }, get = CurrentPreset,
-        set = function(value)
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
             M.auraBlacklistPreset = value
             M.auraBlacklistSpell = nil
             QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
@@ -697,7 +697,7 @@ end
 local function GroupSpellDropdown(ctx, parent, x, y, width, PresetSpellValues, CurrentSpell, metaPath)
     return BoundAura(ctx, parent, { "dropdown", nil, nil, { "Spell", PresetSpellValues, width },
         { x, y, width }, get = CurrentSpell,
-        set = function(value) M.auraBlacklistSpell = value end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value) M.auraBlacklistSpell = value end,
         meta = AuraControlMeta(ctx, metaPath, "ephemeral") })
 end
 -- BuildGroupFilters' card builders share one record F: ctx, scope, lane,
@@ -747,7 +747,8 @@ local function BuildGroupCategoryBlacklist(F, meta, half, blacklistY, categoryHe
         local tx = col == 0 and 16 or x2
         local toggle = BoundAura(ctx, blacklist, { "toggle", nil, nil, { CategoryLabel(cat), tx, startY - row * 30, catColW },
             get = function() return GFReadBlacklistCat(scope, lane, cat.key) end,
-            set = function(v) GFWriteBlacklistCat(scope, lane, cat.key, v) end,
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+                set = function(v) GFWriteBlacklistCat(scope, lane, cat.key, v) end,
             meta = AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".category." .. AuraCatalogToken(cat.key)) })
         if cat.tooltip then AddTooltip(toggle, CategoryLabel(cat), cat.tooltip) end
         categoryControls[#categoryControls + 1] = toggle
@@ -946,7 +947,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 local group = GFReadGroup(scope, lane)
                 return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == "Player"
             end,
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "auras")
             end,
             meta = AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil, {
@@ -959,7 +960,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 get = function()
                     return CanonicalGroupFilterValue(GFReadGroup(scope, lane).filterToken, lane) == "NonPlayer"
                 end,
-                set = function(value)
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                     GFWriteGroupValue(scope, lane, "filterToken", value == true and "NonPlayer" or "ALL", "auras")
                 end,
                 meta = AuraControlMeta(ctx, "group-workspace.lane.debuff.filters.non-player", nil, {
@@ -968,7 +969,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
         end
         local hidePermanent = BoundAura(ctx, section, { "switch", nil, nil, { "Hide permanent", 24 + colW + gap, -42, colW },
             get = CreateHidePermanentReader(scope, lane),
-            set = function(value)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 if type(Model.WriteGroupBlacklistHidePermanent) == "function"
                     and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
                     QueueGroupScope(scope, "auras")
@@ -1014,7 +1015,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 local group = GFReadGroup(scope, lane)
                 return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == item.value
             end,
-            set = function(enabled)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(enabled)
                 local group = GFReadGroup(scope, lane)
                 local current = CanonicalGroupFilterValue(group.filterToken or "ALL", lane)
                 local value = enabled and item.value or (current == item.value and "ALL" or current)
@@ -1121,7 +1122,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local refreshList
     local searchInput = BoundAura(ctx, section, { "textinput", nil, nil, { "Search", inner }, { 24, -210 + curatedOffset, inner },
         get = function() return searchValue end,
-        set = function(value)
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
             searchValue = tostring(value or "")
             if refreshList then refreshList() end
         end,

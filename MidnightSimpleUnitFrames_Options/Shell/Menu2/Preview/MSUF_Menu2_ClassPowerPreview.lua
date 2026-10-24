@@ -564,7 +564,7 @@ local function RenderClassPower(preview, bars, player, spec)
     local root = preview.cpSceneRoot
     if not root then
         root = MSUF.GF.NewPreviewScene(PreviewParent(preview))
-        preview.cpSceneRoot, preview.cpSample, preview.cpTick, preview.cpCooldowns = root, {}, {}, {}
+        preview.cpSceneRoot, preview.cpSample, preview.cpTick, preview.cpCooldowns = root, { bars = {} }, {}, {}
         preview.cpOpts = { sample = preview.cpSample, point = "CENTER", x = 0, y = -34 }
     end
     root:Activate()

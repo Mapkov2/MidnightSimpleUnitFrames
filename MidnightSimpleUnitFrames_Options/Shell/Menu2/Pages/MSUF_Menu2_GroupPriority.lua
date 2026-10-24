@@ -154,10 +154,8 @@ end
 local function SliderRow(ctx, key, fallback, label, low, high, path, historyLabel, place, rounded)
     return { "slider", key, fallback, { label, low, high, 1, 300 }, place,
         get = function() return tonumber(PriorityConf()[key]) or fallback end,
-        set = function(value)
-            if rounded then value = floor((tonumber(value) or fallback) + 0.5) end
-            SetPriorityOption(ctx, key, value, historyLabel or label)
-        end,
+        write = { call = SetPriorityOption, context = ctx, numberDefault = rounded and fallback or nil,
+            round = rounded, args = { historyLabel or label } } --[[schema setter: GroupPriority.Sliders]],
         meta = M.Assign(PriorityMeta(ctx, path, "gf_priority." .. key), { step = 1, roundStep = true }),
         domain = "priority", scope = "profile" }
 end
@@ -370,11 +368,12 @@ local function BuildPriorityPlacement(ctx, b)
             24, -40, placementW - 48, T.colors.muted }, scope = "profile" },
         { "dropdown", "place", nil, { "Placement", PLACEMENT_VALUES, 300 }, { 24, -80, 300, "LEFT" }, get = function() return PriorityConf().anchorMode or
             "RAID_RIGHT" end,
-            set = function(value) SetPriorityOption(ctx, "anchorMode", value or "RAID_RIGHT", "Priority Frames placement") end,
+            write = { call = SetPriorityOption, context = ctx, fallback = "RAID_RIGHT",
+                args = { "Priority Frames placement" } } --[[schema setter: GroupPriority.2]],
             meta = PriorityMeta(ctx, "placement.mode", "gf_priority.anchorMode"), domain = "priority", scope = "profile" },
         { "segment", "growth", nil, { "Growth", GROWTH_VALUES, 318 }, { rightX, -80, 318, "LEFT" }, get = function() return
             PriorityConf().growth or "DOWN" end,
-            set = function(value) SetPriorityOption(ctx, "growth", value or "DOWN", "Priority Frames growth") end,
+            write = { call = SetPriorityOption, context = ctx, fallback = "DOWN", args = { "Priority Frames growth" } } --[[schema setter: GroupPriority.3]],
             meta = PriorityMeta(ctx, "placement.growth", "gf_priority.growth"), domain = "priority", scope = "profile" },
         SliderRow(ctx, "spacing", 2, "Frame spacing", 0, 40, "placement.spacing", "Priority Frames spacing",
             { 24, -156, 300, "LEFT" }, true),
@@ -448,7 +447,7 @@ local function BuildPriorityOverview(ctx, b, snap)
             { "Keep tanks and manually pinned group members in one stable strip without removing them from the normal Party or Raid frames.",
             24, -40, overviewW - 210, T.colors.muted }, scope = "profile" },
         { "switch", "enable", nil, { "Enable Priority Frames", 24, -88, 310 }, get = function() return PriorityConf().enabled == true end,
-            set = function(value) SetPriorityOption(ctx, "enabled", value == true, "Enable Priority Frames") end,
+            write = { call = SetPriorityOption, context = ctx, strictBoolean = true, args = { "Enable Priority Frames" } } --[[schema setter: GroupPriority.4]],
             meta = PriorityMeta(ctx, "overview.enabled", "gf_priority.enabled"), domain = "priority", scope = "profile" },
     }, CUSTOM_OPTIONS)
     local editMode = EditModeButton(ctx, overview, "Open Edit Mode", 146, "TOPRIGHT", -22, -40,
@@ -678,11 +677,13 @@ local function BuildPriorityWho(ctx, b, snap)
     local who, whoW = OpenSection(b, "who_appears", "Who Appears", 548, true)
     local selectionControls = Schema.Build(ctx, who, {
         { "switch", "autoTanks", nil, { "Include tanks automatically", 24, -52, 330 }, get = function() return PriorityConf().autoTanks == true end,
-            set = function(value) SetPriorityOption(ctx, "autoTanks", value == true, "Priority Frames automatic tanks") end,
+            write = { call = SetPriorityOption, context = ctx, strictBoolean = true,
+                args = { "Priority Frames automatic tanks" } } --[[schema setter: GroupPriority.5]],
             meta = PriorityMeta(ctx, "selection.auto_tanks", "gf_priority.autoTanks"), domain = "priority", scope = "profile" },
         { "segment", "slots", nil, { "Visible slots", SLOT_VALUES, 300 }, { max(380, whoW - 320), -30, 292, "LEFT" }, get = function() return
             floor((tonumber(PriorityConf().maxFrames) or 5) + 0.5) end,
-            set = function(value) SetPriorityOption(ctx, "maxFrames", tonumber(value) or 5, "Priority Frames visible slots") end,
+            write = { call = SetPriorityOption, context = ctx, numberDefault = 5,
+                args = { "Priority Frames visible slots" } } --[[schema setter: GroupPriority.6]],
             meta = PriorityMeta(ctx, "selection.max_frames", "gf_priority.maxFrames"), domain = "priority", scope = "profile" },
         { "card", "menu2.gf_priority.prioritypage.bindingCard", nil, { "Fast pinning", nil, 20, -106, whoW - 40, 112 }, domain = "layout", scope = "profile" },
     }, CUSTOM_OPTIONS)

@@ -50,10 +50,8 @@ local function PrepareAdditionalSwitch(ctx, section, key, label, mode)
     local function Enabled() return MSUF.GF.GetConf(GP.CurrentScope())[key] and true or false end
     local toggle = Schema.Build(ctx, section, {
         { "sectionSwitch", key, false, { label }, get = Enabled,
-            set = function(value)
-                GP.Set(GP.CurrentScope(), key, value, mode)
-                GP.RefreshContext(ctx)
-            end,
+            write = { call = GP.Set, group = true, args = { mode }, after = function() GP.RefreshContext(ctx) end },
+                --[[schema setter: GroupLayoutAdditional.1]]
             meta = GP.ResolveControlMeta(ctx, nil, "field." .. key), domain = mode, scope = "group" },
     }, CUSTOM_OPTIONS)[key]
     WithExactGroupScope(toggle, key)
@@ -140,7 +138,8 @@ local function PercentSlider(ctx, parent, label, key, default, width, x, y)
     local control = Schema.Build(ctx, parent, {
         { "slider", key, floor(default * 100 + 0.5), { label, 0, 100, 5, width }, get = function() return floor(GP.Num(GP.CurrentScope(),
             key, default) * 100 + 0.5) end,
-            set = function(v) GP.Set(GP.CurrentScope(), key, max(0, min(100, floor((tonumber(v) or 0) + 0.5))) / 100, "rebuild") end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(v) GP.Set(GP.CurrentScope(), key, max(0, min(100, floor((tonumber(v) or 0) + 0.5))) / 100, "rebuild") end,
             meta = metadata, domain = "rebuild", scope = "group" },
     }, CUSTOM_OPTIONS)[key]
     W.MoveWidget(control, parent, x, y, width, "LEFT")
@@ -157,7 +156,7 @@ local function BuildNameBar(ctx, b)
             get = function()
                 return GP.Num(GP.CurrentScope(), "nameBarR", .05), GP.Num(GP.CurrentScope(), "nameBarG", .05), GP.Num(GP.CurrentScope(), "nameBarB", .05)
             end,
-            set = function(r, g, b)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(r, g, b)
                 local conf = GP.Conf(GP.CurrentScope())
                 conf.nameBarR, conf.nameBarG, conf.nameBarB = r, g, b
                 GP.QueueGF(GP.CurrentScope(), "rebuild")

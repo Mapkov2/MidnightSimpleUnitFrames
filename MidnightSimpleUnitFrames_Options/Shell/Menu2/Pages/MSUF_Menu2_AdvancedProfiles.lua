@@ -86,7 +86,8 @@ end
 local function BindProfileControl(ctx, widget, kind, label, get, set, meta, scope, commitOnBlur)
     return M.ControlSchema.Bind(ctx, widget, { id = meta.controlId, kind = kind, labelKey = label,
         scope = scope or "profiles", applyDomain = "profiles", settingPath = meta.settingKey, meta = meta,
-        get = get, set = set, commitOnBlur = commitOnBlur })
+        get = get, customSetReason = "Operates profile/account storage or the draft, selection and import/export editor state.", set = set,
+            commitOnBlur = commitOnBlur })
 end
 local MoveWidget = W.MoveWidget or AP.MoveWidget
 local Tr = M.TranslateText or M.Tr
@@ -371,7 +372,7 @@ function ProfilesPage.Prepare(ctx)
                 valueKind = "text",
                 historyMode = "none",
                 confirmRequired = confirmRequired == true,
-                set = function(value)
+                customSetReason = "Runs a profile command with its own validation, history and refresh lifecycle.", set = function(value)
                     local prepared = prepareValue(value)
                     local result = onClick(btn, "LeftButton", false)
                     if type(validateValue) == "function" then return validateValue(prepared, result) end
@@ -747,7 +748,7 @@ local function BuildDangerRow(state)
         ProfilePrompts.ConfirmReset(ActiveProfileName(), function() RefreshAfterProfileChange(ctx) end)
     end, nil, "profile.reset_current", true, nil, nil, {
         kind = "button", historyMode = "none", confirmRequired = true,
-        set = function()
+        customSetReason = "Runs a profile command with its own validation, history and refresh lifecycle.", set = function()
             if BlockCombatAction() then return false end
             -- The Search already supplied the explicit destructive-action
             -- confirmation. Execute the same reset/apply/reload path used by
@@ -771,7 +772,7 @@ local function BuildDangerRow(state)
         ProfilePrompts.ConfirmDelete(name, function() RefreshAfterProfileChange(ctx) end)
     end, true, "profile.delete_current", true, nil, nil, {
         kind = "button", historyMode = "none", confirmRequired = true,
-        set = function()
+        customSetReason = "Runs a profile command with its own validation, history and refresh lifecycle.", set = function()
             if BlockCombatAction() then return false end
             local name = ActiveProfileName()
             if name == "Default" then return false end
@@ -1025,7 +1026,7 @@ function ProfilesPage.ImportExport(state)
             valueKind = "text",
             historyMode = "none",
             confirmRequired = true,
-            set = function(value)
+            customSetReason = "Runs a profile command with its own validation, history and refresh lifecycle.", set = function(value)
                 local payload, newName
                 if type(value) == "table" then
                     payload, newName = Trim(value.payload), Trim(value.profileName)

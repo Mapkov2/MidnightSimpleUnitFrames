@@ -39,6 +39,9 @@ projection captures declarations before search filtering, lists ephemeral reason
 and crosswalks the current indexes. Its source digest includes the page sources,
 core providers, reused build harness and projection tools. Metadata proves declared
 write targets only; no in-game rendering or setter-execution proof is claimed.
+The preview row verifies the reviewed F1 render census against normalized source
+hashes for all ten scoped files. Changed source requires a renewed review; this
+is a source census, not proof of visual equivalence in the game.
 """
 
 import argparse
@@ -60,6 +63,13 @@ import menu_schema_coverage as schema_coverage
 ROOT = Path(__file__).resolve().parents[1]
 HOT = "-- hot path: kept whole (perf rule)"
 BLOCKS = re.compile(r"\b(function|if|for|while|do|repeat|end|until)\b")
+PREVIEW_FILES = {
+    "MSUF_Menu2_Preview_ClassPower.lua", "Preview/MSUF_Menu2_ClassPowerPreview.lua",
+    "Preview/MSUF_Menu2_GroupPreview_Render.lua", "Pages/MSUF_Menu2_Auras_Preview.lua",
+    "Preview/MSUF_Menu2_UnitPreview_Render.lua", "Pages/MSUF_Menu2_UnitArenaTrinket.lua",
+    "Pages/MSUF_Menu2_GlobalBars.lua", "Pages/MSUF_Menu2_AdvancedColors.lua",
+    "Pages/MSUF_Menu2_ColorPainter.lua", "MSUF_Menu2_Dropdowns.lua",
+}
 SETTING_KINDS = {"toggle", "checkbox", "slider", "dropdown", "segment", "color", "textinput", "editbox", "input"}
 CLASSIC_SECRET_FALLBACK = re.compile(r"^local IsSecret = issecretvalue or function\(\) return false end$")
 
@@ -458,6 +468,31 @@ def global_counts(root):
             len(active & native_frames), frame_reasons)
 
 
+def preview_render_census(root):
+    """Fail closed if the reviewed scope, counts or exact product sources drift."""
+    evidence = json.loads(keep.read(root / "tools/preview_render_census.json"))
+    records = evidence["files"]
+    if (evidence.get("version") != 1 or len(records) != len(PREVIEW_FILES)
+            or {row["file"] for row in records} != PREVIEW_FILES):
+        raise ValueError("incomplete preview render census")
+    totals = collections.Counter()
+    for row in records:
+        path = root / schema_coverage.MENU / row["file"]
+        digest = hashlib.sha256(keep.read(path).encode("utf-8")).hexdigest()
+        if digest != row["source_sha256"] or not row["runtime_owner"].strip():
+            raise ValueError("stale/unreviewed preview source: " + row["file"])
+        physical = {n for first, last in row["reviewed_ranges"] for n in range(first, last + 1)}
+        if (len(physical) != row["before_physical"] or not physical or min(physical) < 1
+                or max(physical) > row["baseline_line_count"]
+                or not 0 < row["before_code"] <= row["before_physical"]
+                or row["remaining_physical"] != 0 or row["remaining_code"] != 0):
+            raise ValueError("unresolved/invalid preview render census: " + row["file"])
+        totals.update({key: row[key] for key in ("before_physical", "before_code", "remaining_physical", "remaining_code")})
+    if any(evidence[key] != value for key, value in totals.items()):
+        raise ValueError("preview render census totals differ")
+    return totals
+
+
 def menu_coverage(root):
     path = root / "tools/menu_schema_coverage.json"
     evidence = json.loads(keep.read(path)) if path.exists() else {}
@@ -488,6 +523,10 @@ def run():
         rows.append(("clone_windows", "%d (%d unlisted); %d reviewed non-code candidates" %
                      (clones, clones_open, totals["noncode_clone_candidates"]),
                      "only listed hot-path copies", clones_open == 0))
+        preview = preview_render_census(args.root)
+        rows.append(("preview-only render code", "%d/%d physical; %d/%d code; %d reviewed files" %
+                     (preview["remaining_physical"], preview["before_physical"], preview["remaining_code"],
+                      preview["before_code"], len(PREVIEW_FILES)), "0 remaining in current reviewed F1 census", True))
         count, total, stale, declared, issues = menu_coverage(args.root)
         rows.append(("schema settingKey coverage of menu controls", "%d/%d proven; %d keyed (%.2f%%)%s" %
                      (declared, total, count, 100 * count / total if total else 0, "; stale inventory" if stale else ""),
@@ -500,7 +539,7 @@ def run():
     except (ValueError, OSError, KeyError, ledger.LedgerError) as error:
         present = {row[0] for row in rows}
         required = ("global export names in _G", "functions > 150 lines", "client_guards", "fallback_lambdas",
-                    "semicolon_lines", "long_lines", "clone_windows", "schema settingKey coverage of menu controls")
+                    "semicolon_lines", "long_lines", "clone_windows", "preview-only render code", "schema settingKey coverage of menu controls")
         rows.extend((name, "unavailable", "complete inventory", False) for name in required if name not in present)
         rows.append(("source inventory", str(error), "complete", False))
     print("metric\tcurrent\ttarget\tresult")

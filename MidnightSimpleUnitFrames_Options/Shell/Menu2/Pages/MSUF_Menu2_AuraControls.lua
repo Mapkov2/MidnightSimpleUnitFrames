@@ -440,7 +440,7 @@ local function RegisterAuraTextAction(ctx, widget, input, label, path, routeCont
         widget._msuf2CommandAction = {
             kind = "button",
             valueKind = "text",
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 value = tostring(value or "")
                 if input and input.SetText then input:SetText(value) end
                 local handler = type(widget.GetScript) == "function" and widget:GetScript("OnClick") or nil

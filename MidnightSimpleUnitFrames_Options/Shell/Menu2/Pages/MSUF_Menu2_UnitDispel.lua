@@ -206,7 +206,7 @@ local function PrepareSwitch(ctx, sec, unit, which)
     master = Schema.Build(ctx, sec, {{ "sectionSwitch", def.key, false, { def.title }, meta = meta,
         scope = unit, domain = "dispel",
         get = function() return ReadValue(unit, def.key, false) == true end,
-        set = function(value)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             SetDispelMasterValue(unit, def.key, value, def.reason)
             if master.refreshDetails then master.refreshDetails() end
         end,
@@ -231,7 +231,7 @@ local function PreviewToggle(ctx, unit, card, which, x, y, width)
     local meta = Meta(ctx, unit, which .. ".preview", nil, "ephemeral")
     local preview = Schema.Build(ctx, card, {{ "toggle", "preview", false, { def.previewLabel, x, y, width }, meta = meta,
         scope = unit, domain = "dispelPreview", get = Active,
-        set = function(value)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
             local fn = def.setter
             if fn == nil then fn = PreviewSetter(def) end
             if fn then fn(value and true or false, unit) end
@@ -304,12 +304,20 @@ local function Row(ctx, unit, section, row, Sync, x, y, move, toggleWidth)
     else
         spec.get = function() return tonumber(ReadValue(unit, key, default)) or default end
     end
-    spec.set = function(value)
+    if normalize then
+        spec.customSetReason = "Canonicalizes client-specific dispel trigger values before the unit write."
+        spec.set = function(value)
         if row.kind == "dropdown" then value = normalize and normalize(value) or (value or default)
         elseif row.kind == "toggle" then value = value and true or false
         else value = tonumber(value) or default end
         SetValue(unit, key, value, row.reason)
         if row.sync then Sync() end
+    end
+    else
+        spec.write = { call = SetValue, args = { row.reason }, boolean = row.kind == "toggle",
+            numberDefault = row.kind ~= "dropdown" and row.kind ~= "toggle" and default or nil,
+            after = row.sync and Sync or nil } --[[schema setter: UnitDispel.Rows]]
+        if row.kind == "dropdown" then spec.write.fallback = default end
     end
     return spec
 end
@@ -427,7 +435,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
                 local x, y = UP.ReadDispelSymbolOffsets("player")
                 return axis == "x" and x or y
             end,
-            set = function(value)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 value = tonumber(value)
                 if value == nil then return false end
                 local x, y = UP.ReadDispelSymbolOffsets("player")

@@ -62,18 +62,13 @@ local function BuildRangeFade(ctx, builder, unit)
     local enabledRow = Row("range_fade.enabled", "rangeFadeEnabled", "flowToggle", { "Enable Range Fade" },
         { 16, -54, leftW - 32, "LEFT" })
     enabledRow.get = function() return ReadBool(unit, enabledRow[2], enabledRow[3]) end
-    enabledRow.set = function(value)
-        Schema.SetUnit("range", unit, enabledRow[2], value, "MSUF2_RANGE_FADE", "toggle")
-        RefreshRangeControls()
-    end
+    enabledRow.write = { unitDomain = "range", reason = "MSUF2_RANGE_FADE", after = function() RefreshRangeControls() end } --[[schema setter: UnitRangeFade.1]]
     Schema.Build(ctx, mainCard, { enabledRow }, ROW_OPTIONS)
     local alphaRow = Row("range_fade.alpha", "rangeFadeAlpha", "slider", { "", 0, 1, 0.05, rightW - 58 })
     alphaRow.meta.label = "Out of range"
     alphaRow.beforeBind = M.UsePercentInput
     alphaRow.get = function() return ReadNumber(unit, alphaRow[2], alphaRow[3]) end
-    alphaRow.set = function(value)
-        Schema.SetUnit("range", unit, alphaRow[2], value, "MSUF2_RANGE_FADE_ALPHA", "slider")
-    end
+    alphaRow.write = { unitDomain = "range", reason = "MSUF2_RANGE_FADE_ALPHA" } --[[schema setter: UnitRangeFade.2]]
     local slider = Schema.Build(ctx, alphaCard, { alphaRow }, ROW_OPTIONS).rangeFadeAlpha
     if M.BindSliderDragPreview and M.SetRangeFadePreviewState then
         M.BindSliderDragPreview(slider, function(active, value)
@@ -85,6 +80,7 @@ local function BuildRangeFade(ctx, builder, unit)
     local modeRow = Row("range_fade.layer_mode", "rangeFadeLayerMode", "segment",
         { "Affects", VT("frame", "Whole", "health", "HP"), rightW - 32 }, { 16, -104, rightW - 32, "LEFT" })
     modeRow.get = function() return GetConf(unit).rangeFadeLayerMode == "health" and "health" or modeRow[3] end
+    modeRow.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
     modeRow.set = function(value)
         Schema.SetUnit("range", unit, modeRow[2], value == "health" and "health" or modeRow[3], "MSUF2_RANGE_FADE_LAYER", "segment")
     end
@@ -98,7 +94,8 @@ local function BuildRangeFade(ctx, builder, unit)
         local rateRow = Row("range_fade.update_rate", "rangeFadeUpdateRate", "slider", { "Updates per second", 0, 20, 1, innerW - 58 })
         rateRow.meta.step, rateRow.meta.roundStep = 1, true
         rateRow.get = function() return ReadNumber(unit, rateRow[2], rateRow[3]) end
-        rateRow.set = function(value)
+        rateRow.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
+    rateRow.set = function(value)
             local rate = floor((tonumber(value) or 0) + 0.5)
             if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
             Schema.SetUnit("range", unit, rateRow[2], rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", "slider")

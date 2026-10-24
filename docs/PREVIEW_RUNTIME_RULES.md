@@ -362,3 +362,13 @@ visible. Native icon glows reuse `SpellIndicators.ApplyPreviewIconEffect` and
 its paired hide without joining the live icon-effect registry. Classic keeps
 its existing halo fallback when that native renderer is absent. No new event
 listener, ticker or live update call is installed by these sample APIs.
+
+The ClassPower workspace allocates its sample's `bars` overlay once with the scene
+root. Border and resource-text layer switches reuse that table; the scene overlays
+it on the saved configuration without changing the profile.
+
+`tools/scorecard.py` checks the reviewed F1 preview-render census in
+`tools/preview_render_census.json`: 2303 physical / 2176 code lines in the ten
+reviewed files have zero remaining preview-only render lines. Normalized source
+hashes pin that review; any file change requires reviewing and renewing its
+receipt. This source census does not establish in-game visual equivalence.

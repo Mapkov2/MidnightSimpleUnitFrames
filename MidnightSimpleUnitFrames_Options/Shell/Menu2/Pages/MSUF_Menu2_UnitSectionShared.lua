@@ -164,6 +164,14 @@ local function CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices)
     return popup
 end
 
+function Shared.RestoreSectionValues(entry, keys, dst, src, reset)
+    local claimed = reset and Schema.ResetSection(entry, keys, dst, src, Shared.FactoryProfile()) or {}
+    for _, key in ipairs(keys) do
+        if not claimed[key] then dst[key] = M.DeepCopy(src[key]) end
+    end
+    if reset then Schema.ResetSection(entry, keys, dst, src, Shared.FactoryProfile(), true) end
+end
+
 function Shared.AttachSectionUX(ctx, opts)
     if not (ctx and ctx.entry) then return end
     for id, spec in pairs(opts.sections) do
@@ -228,7 +236,7 @@ function Shared.AttachSectionUX(ctx, opts)
                             local dst = target and opts.conf(target) or conf
                             local keys = Shared.SectionFieldKeys(spec, conf, target and dst or defaults)
                             local src = target and conf or defaults
-                            for _, key in ipairs(keys) do dst[key] = M.DeepCopy(src[key]) end
+                            Shared.RestoreSectionValues(entry, keys, dst, src, not target)
                             opts.apply(target or source, id)
                             return true
                         end)

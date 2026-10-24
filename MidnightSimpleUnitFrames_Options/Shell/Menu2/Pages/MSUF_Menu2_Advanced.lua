@@ -20,7 +20,7 @@ local function NativeInput(widget)
             if widget._msuf2ControlKind == "toggle" then return widget:GetChecked() end
             return widget:GetText()
         end,
-        set = function(value)
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
             local command = widget._msuf2CommandAction
             if command and command.set then return command.set(value) end
             if widget._msuf2OnValueChanged then return widget._msuf2OnValueChanged(value) end
@@ -80,13 +80,14 @@ end
 local DeepCopyTable = M.DeepCopy
 -- Every bound row declares through Schema.Bind: the row metadata names the stable ID and the setting key,
 -- the get/set pair keeps the page's own writer and apply route.
-local function BoundRow(ctx, parent, kind, key, default, args, metadata, get, set)
+local function BoundRow(ctx, parent, kind, key, default, args, metadata, get, set, writePolicy)
     local id = type(metadata) == "table" and metadata.controlId
     assert(id, "advanced bound row needs a stable control ID: " .. tostring(key))
     return Row(ctx, parent, { kind, key, default, args, bind = function(widget)
         local spec = { id = id, kind = (kind == "slider" or kind == "dropdown") and kind or "toggle",
             labelKey = args[1], settingPath = metadata.settingKey, scope = ctx and ctx.key or "shared",
-            applyDomain = "advanced", meta = metadata, get = get, set = set,
+            applyDomain = "advanced", meta = metadata, get = get, set = set, write = writePolicy,
+            customSetReason = set and "Runs the supplied business command or selection-dependent writer.",
             defaultSource = function() return default end }
         if kind == "slider" then spec.range, spec.roundStep = { args[2], args[3], args[4] }, true end
         Schema.Bind(ctx, widget, spec)
@@ -94,8 +95,8 @@ local function BoundRow(ctx, parent, kind, key, default, args, metadata, get, se
 end
 -- Getter/setter pair over one DB sub-table key, shared by the toggle and switch rows.
 local function TableBool(getTable, key, default, apply)
-    return function() return BoolValue(getTable(), key, default) end,
-        function(v) SetValue(getTable(), key, v, apply) end
+    local write = { call = SetValue, source = getTable, args = { apply } } --[[schema setter: Advanced.TableBool]]
+    return function() return BoolValue(getTable(), key, default) end, nil, write
 end
 local function BindTableToggle(ctx, section, label, getTable, key, default, apply, metadata)
     return BoundRow(ctx, section, "flowToggle", key, default, { label }, metadata,
@@ -106,18 +107,19 @@ local function BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable
         TableBool(getTable, key, default, apply))
 end
 local function BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply, metadata)
+    local write = { call = SetValue, source = getTable, args = { apply } } --[[schema setter: Advanced.TableNumber]]
     return BoundRow(ctx, section, "slider", key, default, { label, minVal, maxVal, step, width or 300 }, metadata,
-        function() return NumValue(getTable(), key, default) end,
-        function(v) SetValue(getTable(), key, v, apply) end)
+        function() return NumValue(getTable(), key, default) end, nil, write)
 end
 local function BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply, metadata)
+    local write = { call = SetValue, source = getTable, fallback = default, args = { apply } } --[[schema setter: Advanced.TableChoice]]
     return BoundRow(ctx, section, "dropdown", key, default, { label, values, width or 220 }, metadata,
         function()
             local tbl = getTable()
             if tbl and tbl[key] ~= nil then return tbl[key] end
             return default
         end,
-        function(v) SetValue(getTable(), key, v or default, apply) end)
+        nil, write)
 end
 local function BindValueDropdown(ctx, section, label, values, width, getValue, setValue, metadata)
     return BoundRow(ctx, section, "dropdown", metadata and metadata.controlId or label, nil,

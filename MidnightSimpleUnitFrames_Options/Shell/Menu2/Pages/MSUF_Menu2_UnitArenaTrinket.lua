@@ -53,10 +53,8 @@ local function BuildArenaTrinket(ctx, builder, unit)
                 if kind == "slider" then return UP.ReadNumber(unit, key, fallback) end
                 return UP.GetConf(unit)[key] or fallback
             end
-            row.set = function(value)
-                Schema.SetUnit("arenaTrinket", unit, key, value, APPLY_REASON, kind)
-                if kind == "toggle" then RefreshGate() end
-            end
+            row.write = { unitDomain = "arenaTrinket", reason = APPLY_REASON,
+                after = function() if kind == "toggle" then RefreshGate() end end } --[[schema setter: UnitArenaTrinket.1]]
             -- The original trinket number binding commits invalid text as zero.
             if kind == "slider" then row[3] = 0 end
         end

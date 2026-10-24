@@ -318,7 +318,8 @@ function Rows.Options(read, write, changed, raw, direct)
         local meta = row.meta or Meta(row.path or row[2], row.classification, row.exact)
         local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
             scope = "bars", applyDomain = row.domain or "bars", meta = meta,
-            get = get or Get, set = row.set or Set }
+            get = get or Get, set = not row.write and (row.set or Set) or nil, write = row.write,
+            customSetReason = row.customSetReason or "Writes scoped bar ownership markers, companion fields or preview commands." }
         if kind == "slider" then
             spec.range, spec.defaultSource = { row[4][2], row[4][3], row[4][4] }, Default
         end
@@ -388,7 +389,7 @@ local HIGHLIGHT_ORDER_COMMAND = {
     valueKind = "enum",
     values = HIGHLIGHT_ORDER_VALUES,
     get = function() return table.concat(PriorityOrder(), ",") end,
-    set = function(value)
+    customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
         local order = ParseHighlightOrder(value)
         if not order then return false end
         BarScopeSet("hlPrioOrder", order, "MSUF2_HIGHLIGHT_PRIORITY_ORDER")
@@ -1051,10 +1052,12 @@ function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
     local refs = Rows.Schema.Build(ctx, textures, {
         { "dropdown", "foreground", "", { "Bar textures (SharedMedia)", function() return TextureValues(nil) end, leftW },
             { leftX, topY, leftW, "LEFT" }, path = "textures.foreground", get = BarTextureForScope,
-            set = function(v) if SetBarTextureForScope(v) then ApplyBars("MSUF2_BAR_TEXTURE") end end },
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(v) if SetBarTextureForScope(v) then ApplyBars("MSUF2_BAR_TEXTURE") end end },
         { "dropdown", "background", "", { "Background texture", function() return TextureValues("Use foreground texture") end, leftW },
             { leftX, topY - 54, leftW, "LEFT" }, path = "textures.background", get = BarBackgroundTextureForScope,
-            set = function(v) if SetBarBackgroundTextureForScope(v) then ApplyBars("MSUF2_BAR_BG_TEXTURE") end end },
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(v) if SetBarBackgroundTextureForScope(v) then ApplyBars("MSUF2_BAR_BG_TEXTURE") end end },
         { "dropdown", "powerBarTexture", "", { "Power bar texture", function() return TextureValues("Use bar texture") end, leftW },
             { leftX, topY - 108, leftW, "LEFT" }, path = "textures.power_foreground", skipEqual = true, reason = "MSUF2_POWER_BAR_TEXTURE",
             tip = { "Power Bar Texture",
@@ -1280,7 +1283,8 @@ local function BuildTempMaxHealthSection(ctx, b)
             { rightX, compact and -268 or -142, rightW, "LEFT" }, path = "temp_max_health.background_opacity", reason = "MSUF2_TEMP_MAX_HEALTH_BACKGROUND" },
         { "toggle", "preview", false, { "Preview effect", rightX, compact and -340 or -214, rightW },
             path = "temp_max_health.preview", classification = "ephemeral", get = function() return IsAbsorbTextureTestEnabled("tempMaxHealth") == true end,
-            set = function(value) SetAbsorbTextureTest(value and true or false, "tempMaxHealth") end },
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(value) SetAbsorbTextureTest(value and true or false, "tempMaxHealth") end },
     }, bindings, controls)
     local options = { controls.tempMaxHealthTexture, controls.tempMaxHealthOpacity, controls.tempMaxHealthBackgroundOpacity }
     M.TrackRefresh(ctx, SyncControls(function()
@@ -1349,7 +1353,8 @@ function GP.BuildAbsorbTabs(ctx, b)
     local tabs, _, _, SelectAbsorbTab = W.SegmentTabs(ctx, section, {
         label = "", values = tabValues, width = min(660, sectionW - 48),
         frames = tabFrames, defaultTab = "positive", get = CurrentTab,
-        set = function(value) M.globalBarsAbsorbTabSelection[CurrentBarsScope()] = value or "positive" end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
+            set = function(value) M.globalBarsAbsorbTabSelection[CurrentBarsScope()] = value or "positive" end,
         x = 20, y = -12,
     })
     if tabs._msuf2Title then tabs._msuf2Title:Hide() end
@@ -1382,7 +1387,8 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
         { "toggle", "positiveTest", false, { "Test prediction bars", rightX, -128, rightW }, path = "absorb.positive.preview.test",
             classification = "ephemeral",
             get = function() return IsAbsorbTextureTestEnabled("absorb") == true end,
-            set = function(value) SetAbsorbTextureTest(value and true or false, "absorb") end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(value) SetAbsorbTextureTest(value and true or false, "absorb") end,
             tip = "Shows sample bars on the frames of the selected scope, even while this bar " ..
                 "is turned off, so you can check its look. Cannot be turned on in combat." },
         { "toggle", "overAbsorbOverlay", false, { "Over-absorb overlay", rightX, -182, rightW },
@@ -1410,7 +1416,8 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
         { "toggle", "negativeTest", false, { "Test prediction bars", rightX, -128, rightW }, path = "absorb.negative.preview.test",
             classification = "ephemeral",
             get = function() return IsAbsorbTextureTestEnabled("healAbsorb") == true end,
-            set = function(value) SetAbsorbTextureTest(value and true or false, "healAbsorb") end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(value) SetAbsorbTextureTest(value and true or false, "healAbsorb") end,
             tip = "Shows sample bars on the frames of the selected scope, even while this bar " ..
                 "is turned off, so you can check its look. Cannot be turned on in combat." },
     }, options, refs)
@@ -1436,7 +1443,8 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
         { "toggle", "healTest", false, { "Test prediction bars", rightX, -128, rightW }, path = "absorb.heal_prediction.preview.test",
             classification = "ephemeral",
             get = function() return IsAbsorbTextureTestEnabled("heal") == true end,
-            set = function(value) SetAbsorbTextureTest(value and true or false, "heal") end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(value) SetAbsorbTextureTest(value and true or false, "heal") end,
             tip = "Shows sample bars on the frames of the selected scope, even while this bar " ..
                 "is turned off, so you can check its look. Cannot be turned on in combat." },
         { "toggle", "healPredAllHealers", false, { "Include healing from others", rightX, -182, rightW },
@@ -1599,7 +1607,7 @@ local function BuildOutlineSection(ctx, b)
             tip = "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", tipOpts = "plain" },
         { "dropdown", "texture", "", { "Outline style", OutlineTextureValues, 300 }, path = "outline.texture",
             get = function() return BorderStyles.NormalizeFrame(BarScopeGetBars("barOutlineTexture", "")) end,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             BarScopeSetBars("barOutlineTexture", value or "", "MSUF2_BAR_OUTLINE_TEXTURE", true)
             RequestOutlineRuntime()
         end },
@@ -1733,14 +1741,8 @@ local function BuildRoundedSection(ctx, b)
         { "slider", "rounding", 3, { "Corner rounding", 1, 5, 1, 300 },
             { roundRightX, -166, 300, "LEFT" }, path = "rounded.roundedCornerStrength", exact = { step = 1, roundStep = true },
             get = function() return tonumber(Bars().roundedCornerStrength) or 3 end,
-        set = function(value)
-            value = floor((tonumber(value) or 3) + 0.5)
-            if value < 1 then value = 1 elseif value > 5 then value = 5 end
-            local bars = Bars()
-            if bars.roundedCornerStrength == value then return end
-            bars.roundedCornerStrength = value
-            QueueRoundingRuntime()
-        end },
+        write = { source = Bars, numberDefault = 3, round = true, clamp = true, skipEqual = true,
+            after = QueueRoundingRuntime } --[[schema setter: GlobalBars.11]] },
     }, Rows.Commands).rounding
     roundingSlider:HookScript("OnMouseUp", ScheduleRoundingRelease)
     roundingSlider:HookScript("OnHide", FlushRoundingRuntime)
@@ -1879,7 +1881,7 @@ local function BuildSlantedSection(ctx, b)
         -- Turning it on restyles every unit and group frame: whole-profile undo.
         { "switch", "enabled", false, { "Enable slanted bars", 30, -78, min(340, width - 60) },
             path = "slanted.enabled", exact = { historyScope = false }, get = SlantedSwitchOn,
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             value = value == true
             local bars = Bars()
             local switchStyle = value and bars.roundedFramesEnabled == true
@@ -1918,7 +1920,7 @@ local function BuildSlantedSection(ctx, b)
             return CurrentBarsScope() == "shared" and SLANTED_DIRECTION_VALUES or SLANTED_SCOPED_DIRECTION_VALUES
         end, min(340, width - 60) }, { 30, -248, min(340, width - 60), "LEFT" },
             path = "slanted.direction", get = SlantedDirectionForScope,
-            set = function(value)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
             if not SetSlantedDirectionForScope(value) then return end
             if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end
             ApplyRoundedRuntime()
@@ -2058,7 +2060,7 @@ function GP.BuildHighlightModes(ctx, modesFrame, hlLeftX, hlLeftW)
         { "slider", "highlightBorderThickness", 2, { "Highlight border thickness", 1, 30, 1, hlLeftW },
             { hlLeftX, -70, hlLeftW, "LEFT" }, path = "highlight.border_thickness", exact = { step = 1, roundStep = true },
             get = function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             local n = floor((tonumber(v) or 2) + 0.5)
             BarScopeSet("highlightBorderThickness", n, "MSUF2_HIGHLIGHT_BORDER", true)
             BarScopeSet("hlAggroSize", n, "MSUF2_HIGHLIGHT_BORDER", true)
@@ -2080,7 +2082,7 @@ function GP.BuildHighlightModes(ctx, modesFrame, hlLeftX, hlLeftW)
             tipOpts = "plain" },
         { "dropdown", "dispelBorderTrigger", "DISPEL_TYPE", { "Dispel border detects", DISPEL_TRIGGERS, hlLeftW },
             { hlLeftX, -298, hlLeftW, "LEFT" }, path = "highlight.dispel.trigger", readValue = NormalizeDispelTrigger,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             local value = NormalizeDispelTrigger(v)
             local previous = NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE"))
             BarScopeSet("dispelBorderTrigger", value, "MSUF2_DISPEL_TRIGGER", true)
@@ -2102,7 +2104,7 @@ function GP.BuildHighlightModes(ctx, modesFrame, hlLeftX, hlLeftW)
             local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
             return tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback
         end,
-        set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
             local value = tonumber(v) or 1
             local general = G()
             general.bossTargetOutlineMode = value
@@ -2131,7 +2133,7 @@ function GP.BuildHighlightPriority(ctx, priorityCard, priorityCardW, HighlightPr
     local prio = Rows.Build(ctx, priorityCard, {
         { "switch", "priority", false, { "Custom highlight priority", 16, -54, priorityCardW - 32 },
             path = "highlight.priority.enabled", get = HighlightPriorityEnabled,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             local on = v and true or false
             BarScopeSet("hlPrioEnabled", on, "MSUF2_HIGHLIGHT_PRIORITY", true)
             if CurrentBarsScope() == "shared" then
@@ -2257,7 +2259,7 @@ local function BuildHighlightSection(ctx, b)
         local control = Rows.Schema.Build(ctx, previewFrame, {
             { "toggle", "test", false, { label, hlPreviewX, y, hlPreviewW }, path = path, classification = "ephemeral",
                 get = flag,
-            set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
                 if v and not enabledFn() then
                     if M.RequestRefresh then M.RequestRefresh(ctx, "bars-border-test-disabled") elseif M.Refresh then M.Refresh(ctx) end
                     return
@@ -2350,17 +2352,9 @@ local function BuildPowerSection(ctx, b)
                 "then fades; turns off Smooth power bar. Set per unit, like Smooth power bar.", tipOpts = "power" },
         { "flowToggle", "realtime", true, { "Realtime power text" }, path = "power.realtime_text",
             get = function() return ReadB("realtimePowerText", true) ~= false end,
-            set = function(v)
-            v = v and true or false
-            local bars = Bars()
-            if bars.realtimePowerText == v then return end
-            bars.realtimePowerText = v
-            -- Recompile Player and rebind both Power and PowerText events.
-            -- A generic Bars layout refresh leaves this event option dead.
-            M.RequestUnitDomains("player", "MSUF2_BARS_REALTIME_POWER", {
-                preview = true, power = true, text = true,
-            })
-        end,
+            write = { source = Bars, boolean = true, skipEqual = true, after = function()
+                M.RequestUnitDomains("player", "MSUF2_BARS_REALTIME_POWER", { preview = true, power = true, text = true })
+            end } --[[schema setter: GlobalBars.19]],
             tip = "Updates the Player power text on every power tick instead of the regular " ..
                 "update rate. Only the Player frame uses it; set it on the Shared scope.", tipOpts = "power" },
     }, Rows.Commands)

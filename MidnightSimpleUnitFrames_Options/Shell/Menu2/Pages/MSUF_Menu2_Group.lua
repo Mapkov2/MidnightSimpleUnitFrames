@@ -115,6 +115,7 @@ local function RegisterGroupControl(widget, ctx, semanticPath, label, kind, clas
         for key, value in pairs(extra) do meta[key] = value end
     end
     if type(M.RegisterSearchWidget) == "function" then M.RegisterSearchWidget(widget, meta) end
+    if meta.command and meta.command.write then M.RegisterRuntimeControl(widget, meta, "schema-command") end
     return widget
 end
 local function ResolveGroupControlMeta(ctx, semanticPath, fallbackPath)
@@ -995,14 +996,9 @@ M.Assign(GroupPage, {
     ResolveControlMeta = ResolveGroupControlMeta,
 })
 local function BindScopeToggle(ctx, widget, key, default, mode, semanticPath)
-    M.BindBoolWidget(ctx, widget,
-        function() return Bool(CurrentScope(), key, default) end,
-        function(v)
-            Set(CurrentScope(), key, v and true or false, mode or "visual")
-            RefreshContext(ctx)
-        end,
-        ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)))
-    return widget
+    local args = { "" }
+    return Schema.GroupBinding(ctx, widget, { "toggle", key, default, args,
+        domain = mode, meta = ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)) }, "toggle")
 end
 --- Binds one of two mutually exclusive fill toggles (smooth vs chunked):
 --- turning key on turns peerKey off, in one history step named historyField.
@@ -1031,20 +1027,15 @@ local function BindExclusiveScopeToggle(ctx, control, key, peerKey, historyLabel
     return control
 end
 local function BindScopeSlider(ctx, widget, key, default, mode, semanticPath)
-    local metadata = ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key))
-    metadata.step, metadata.roundStep = 1, true
-    M.BindNumberWidget(ctx, widget,
-        function() return Num(CurrentScope(), key, default) end,
-        function(v) Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), mode or "visual") end,
-        default, metadata)
-    return widget
+    local low, high = widget:GetMinMaxValues()
+    local args = { "", low, high, widget._msuf2Step or 1 }
+    return Schema.GroupBinding(ctx, widget, { "slider", key, default, args,
+        domain = mode, meta = ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)) }, "slider")
 end
 local function BindScopeDropdown(ctx, widget, key, default, mode, semanticPath)
-    M.BindDropdownWidget(ctx, widget,
-        function() return Val(CurrentScope(), key, default) end,
-        function(v) Set(CurrentScope(), key, v or default, mode or "visual") end,
-        ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)))
-    return widget
+    local args = { "" }
+    return Schema.GroupBinding(ctx, widget, { "dropdown", key, default, args,
+        domain = mode, meta = ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)) }, "dropdown")
 end
 local function ScopeDropdown(ctx, parent, label, values, width, key, default, mode, x, y, placeWidth, justify, semanticPath)
     local row = { "dropdown", key, default, { label, values, width },
@@ -1104,7 +1095,7 @@ local function PreparePartyPortraitSwitch(ctx, sec)
         { "sectionSwitch", "portraitMode", nil, { "Portrait" },
             meta = DeclarePartySetting(GroupControlMeta(ctx, "portrait.enabled"), "portraitMode"), scope = kind, domain = "config",
             get = function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 local mode = Val(kind, "portraitMode", "OFF")
                 if value then
                     SetValue("portraitMode", M._msuf2LastGroupPortraitSide)
@@ -1214,7 +1205,7 @@ function PortraitBuild.Binders(ctx, s)
             previewHandleKey = "portrait",
             previewScope = "party",
             get = function() return tonumber(Val(kind, key, 0)) or 0 end,
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 value = tonumber(value)
                 if value == nil then return false end
                 SetValue(key, value)
@@ -1247,16 +1238,26 @@ function PortraitBuild.Binders(ctx, s)
                 local value = read(kind, key, default)
                 return row.normalize and row.normalize(value) or value
             end
-            set = function(value)
+            if row.normalize then
+                row.customSetReason = "Normalizes the selected portrait mode before the fixed Party write."
+                set = function(value)
                 if controlKind == "toggle" then value = value and true or false
                 elseif controlKind == "slider" then value = tonumber(value) or default
                 else value = row.normalize and row.normalize(value or default) or (value or default) end
                 SetValue(key, value)
                 if row.afterSet then row.afterSet() end
             end
+            else
+                row.write = { call = SetValue, keyOnly = true, boolean = controlKind == "toggle",
+                    numberDefault = controlKind == "slider" and default or nil,
+                    after = row.afterSet } --[[schema setter: Group.Portrait]]
+                if controlKind ~= "toggle" and controlKind ~= "slider" then row.write.fallback = default end
+            end
         end
         Schema.UnitBinding(c, widget, { row[1], key, default, row[4], meta = meta,
-            scope = "party", domain = "config", get = get, set = set, roundStep = controlKind == "slider" }, controlKind)
+            scope = "party", domain = "config", get = get, set = set, write = row.write,
+            customSetReason = row.customSetReason or "Normalizes portrait values and coordinates the fixed Party editor.",
+                roundStep = controlKind == "slider" }, controlKind)
         AttachPortraitFocus(widget)
     end }
     s.AttachPortraitFocus, s.PortraitMeta, s.SetValue = AttachPortraitFocus, PortraitMeta, SetValue
@@ -1316,7 +1317,8 @@ function PortraitBuild.Tabs(ctx, s)
         frames = tabFrames,
         defaultTab = "general",
         get = function() return NormalizeTab(M.unitPortraitTabSelection[stateKey]) end,
-        set = function(value) M.unitPortraitTabSelection[stateKey] = NormalizeTab(value) end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
+            set = function(value) M.unitPortraitTabSelection[stateKey] = NormalizeTab(value) end,
         afterRefresh = function(tab) SetSectionHeight(tabH[NormalizeTab(tab)] or tabH.general) end,
         x = 20,
         y = -12,
@@ -1353,7 +1355,7 @@ function PortraitBuild.Controls(ctx, s)
             { 16, -62, min(220, cardW - 32) },
             meta = PortraitMeta("position", "portraitMode"),
             get = function() return Val(kind, "portraitMode", "OFF") == "RIGHT" and "RIGHT" or "LEFT" end,
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 value = value == "RIGHT" and "RIGHT" or "LEFT"
                 M._msuf2LastGroupPortraitSide = value
                 SetValue("portraitMode", value)
@@ -1376,7 +1378,7 @@ function PortraitBuild.Controls(ctx, s)
                 return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
                     and "SEPARATE" or "UNIFORM"
             end,
-            set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 SetValue("portraitSizeMode", value == "SEPARATE" and "SEPARATE" or "UNIFORM")
                 RefreshPortraitControls()
             end },
@@ -1653,19 +1655,15 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         end)
         M.AddTooltip(btn, function() return M.Format("Growth: %s", M.Tr(info.text or "")) end, "Click to set group frame growth direction.",
             { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
-        btn:SetScript("OnClick", function()
-            Set(CurrentScope(), "growth", info.value, "geometry")
-            RefreshGrowthTiles()
+        btn:SetScript("OnClick", function(self)
+            self._msuf2RuntimeControlRecord.command.set(info.value)
         end)
         RegisterGroupControl(btn, ctx, "field.growth.option." .. info.value, M.Format("Growth: %s", M.Tr(info.text)), "button", "setting", {
             searchSettingKeys = { "gf_party.growth", "gf_raid.growth", "gf_mythicraid.growth" },
             command = {
                 kind = "dropdown", valueKind = "enum", values = GROWTH_VALUES,
                 get = function() return Val(CurrentScope(), "growth", "DOWN") end,
-                set = function(value)
-                    Set(CurrentScope(), "growth", value, "geometry")
-                    RefreshGrowthTiles()
-                end,
+                write = { call = Set, group = true, args = { "geometry" }, after = RefreshGrowthTiles }, --[[schema setter: Group.8]]
             },
         })
         Schema.Owned(btn, "group", "geometry")
@@ -1793,7 +1791,7 @@ local function BuildRoleOrderRows(ctx, section, opts)
             valueKind = "enum",
             values = ROLE_SORT_VALUES,
             get = CurrentRoleOrder,
-            set = function(value)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 local changed = ApplyRoleOrder(value)
                 if changed and holder and holder.Refresh then holder.Refresh() end
                 return changed

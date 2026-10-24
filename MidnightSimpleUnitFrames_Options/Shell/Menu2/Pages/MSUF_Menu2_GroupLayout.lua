@@ -125,11 +125,8 @@ local function PrepareFrameEnable(ctx, section)
     if entry and entry.featureSwitch then return entry.featureSwitch end
     local enable = Schema.Build(ctx, section, {
         { "sectionSwitch", "enable", nil, { "Enable", "Enable" }, get = function() return Bool(CurrentScope(), "enabled", false) end,
-            set = function(value)
-                -- Keep the configured Blizzard fallback when toggling MSUF off.
-                Set(CurrentScope(), "enabled", value == true, "rebuild")
-                M.Refresh(ctx)
-            end,
+            write = { call = Set, group = true, strictBoolean = true, args = { "rebuild" }, after = function() M.Refresh(ctx) end },
+                --[[schema setter: GroupLayout.1]]
             meta = ControlMeta(ctx, "field.enabled"), domain = "rebuild",
             flagsBefore = { _msuf2GroupFrameGateAlwaysEnabled = true }, scope = "group" },
     }, CUSTOM_OPTIONS)["enable"]
@@ -180,7 +177,7 @@ local function BuildProviderControls(ctx, general, generalLeftX, generalLeftW, g
     local providerControls = Schema.Build(ctx, general, {
         { "dropdown", "frameProvider", nil, { "Frames used in this scope", GROUP_FRAME_PROVIDER_VALUES, min(300, generalLeftW) },
             get = function() return FrameProvider(CurrentScope()) end,
-            set = function(value)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 SetFrameProvider(CurrentScope(), value)
                 RefreshContext(ctx)
             end,
@@ -261,7 +258,8 @@ local function BuildGFGeneralSection(ctx, b)
     local managerControls = Schema.Build(ctx, general, {
         { "dropdown", "raidManager", nil, { "Blizzard Raid Manager", GROUP_RAID_MANAGER_VALUES, min(300, generalLeftW) },
             get = function() return RaidManagerMode() end,
-            set = function(value) SetRaidManagerMode(value) end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(value) SetRaidManagerMode(value) end,
             meta = ControlMeta(ctx, "basics.raid_manager"), domain = "visual",
             beforeBind = function(widget)
                 AttachGroupFocus(widget, "layout")
@@ -317,7 +315,8 @@ local function BuildGFGeneralSection(ctx, b)
             command = {
                 kind = "toggle", valueKind = "boolean",
                 get = function() return FrameProvider(CurrentScope()) == "MSUF" end,
-                set = function(value) SetFrameProvider(CurrentScope(), value == true and "MSUF" or "AUTO") end,
+                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                    set = function(value) SetFrameProvider(CurrentScope(), value == true and "MSUF" or "AUTO") end,
             },
         })
         generalNoticeButton:SetScript("OnClick", function()
@@ -405,7 +404,7 @@ local function BuildGFTransparencySection(ctx, b)
         local slider = Schema.Build(ctx, parent, {
             { "slider", spec.key, spec.default, { spec.label, 0, 1, 0.05, width },
                 get = function() return Num(CurrentScope(), spec.key, spec.default) end,
-                set = function(value) Set(CurrentScope(), spec.key, tonumber(value) or spec.default, "visual") end,
+                write = { call = Set, group = true, numberDefault = spec.default, args = { "visual" } }, --[[schema setter: GroupLayout.5]]
                 meta = ControlMeta(ctx, "field." .. tostring(spec.key)), domain = "visual",
                 beforeBind = function(widget)
                     M.UsePercentInput(widget)
@@ -621,7 +620,7 @@ local function BuildGFSortingSection(ctx, b)
             if conf.sortMode then return conf.sortMode end
             return conf.sortByRole and "ROLE" or "INDEX"
         end,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 local conf = Conf(CurrentScope())
                 conf.sortMode = v or "INDEX"
                 conf.sortByRole = (conf.sortMode == "ROLE")
@@ -643,7 +642,7 @@ local function BuildGFSortingSection(ctx, b)
             if conf.sortMode then return conf.sortMode == "ROLE" end
             return conf.sortByRole and true or false
         end,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 local conf = Conf(CurrentScope())
                 conf.sortByRole = v and true or false
                 conf.sortMode = v and "ROLE" or "INDEX"
@@ -804,7 +803,8 @@ local function BuildGFScalingSection(ctx, b)
         label = "", values = VT("general", "General", "tier10", "1–10", "tier20", "11–20", "tier25", "21–25", "tier40", "26+"),
         width = min(580, inner), frames = frames, defaultTab = "general", x = 20, y = -12,
         get = function() return M.gfSizingTabSelection[CurrentScope()] or "general" end,
-        set = function(value) M.gfSizingTabSelection[CurrentScope()] = value end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
+            set = function(value) M.gfSizingTabSelection[CurrentScope()] = value end,
     })
     if tabs._msuf2Title then tabs._msuf2Title:Hide() end
     RegisterControl(tabs, ctx, "scaling.workspace_tab", "Size area", "segment", "ephemeral")
@@ -941,7 +941,7 @@ local function BuildGFAnchorSection(ctx, b)
         { "dropdown", "anchorTo", nil, { "Anchor To", function()
         return M.AnchorTargetValues(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame)
     end, anchorControlW }, get = function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 local conf = Conf(CurrentScope())
                 local selectedValue1
                 if not ((v == "FREE")) then selectedValue1 = v end
@@ -1001,7 +1001,8 @@ local function BuildGFAnchorSection(ctx, b)
     })
     Schema.Custom(customAnchor, { id = "menu2.gf_layout.anchor.custom", kind = "anchorPicker",
         scope = "group", applyDomain = "rebuild", owner = customAnchor,
-        get = CurrentCustomAnchor, set = SetCustomAnchor })
+        get = CurrentCustomAnchor, set = SetCustomAnchor,
+        customSetReason = "Resolves and validates the selected custom anchor frame before rebuilding the group." })
     for _, widget in ipairs({ customAnchor.box, customAnchor.clear, customAnchor.pick }) do
         Schema.Owned(widget, "group", "rebuild")
     end

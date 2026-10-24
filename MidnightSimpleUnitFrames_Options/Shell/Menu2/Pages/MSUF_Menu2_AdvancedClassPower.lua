@@ -861,10 +861,11 @@ end
 -- Local policies keep the original saved-value semantics; the shared binder owns
 -- input refusal and history. Sources are resolved again for every input/read.
 function Page.BindRow(ctx, widget, row, kind)
+    row.customSetReason = row.customSetReason or "Applies class-resource value conversions or coupled layout and text settings."
     local meta = row.meta
     local spec = { id = meta.controlId, kind = kind, key = row.field or row[2],
         labelKey = row[4][1], scope = "classpower", applyDomain = "classpower",
-        meta = meta, get = row.get, set = row.set, source = row.source, apply = row.apply,
+        meta = meta, get = row.get, set = row.set, write = row.write, customSetReason = row.customSetReason, source = row.source, apply = row.apply,
         defaultSource = function() return row[3] end, workspace = row.workspace }
     if kind == "slider" then
         spec.range = { row[4][2], row[4][3], row[4][4] }
@@ -876,7 +877,7 @@ Page.RowOptions = { bind = Page.BindRow }
 local function SwitchAt(ctx, parent, label, x, y, width, source, key, default, apply, meta)
     local row = { "switch", key, default, { label, x, y, width and width - 22 }, meta = meta,
         get = function() return BoolValue(source(), key, default) end,
-        set = function(value) SetValue(source(), key, value, apply) end }
+        write = { call = SetValue, source = source, args = { apply } } --[[schema setter: AdvancedClassPower.1]] }
     local widget = Schema.Build(ctx, parent, { row }, Page.RowOptions)[row[2]]
     RegisterControl(widget, meta, label, "toggle")
     return widget
@@ -962,7 +963,7 @@ end
 function Page:SourceToggle(parent, label, source, key, apply, prefix)
     return Schema.Build(self.ctx, parent, { { "flowToggle", key, false, { label }, workspace = "classpower",
         meta = Meta(prefix .. "." .. key), get = function() return HidePercentValue(source(), key) end,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             value = value and true or false
             if source == Player then SetPlayerTextValue(key, value, apply) else SetValue(source(), key, value, apply) end
         end } }, Page.RowOptions)[key]
@@ -1044,7 +1045,7 @@ function Page:BuildClassLayout()
     self.cpEnable = Schema.Build(self.ctx, section, { { "sectionSwitch", "cpEnable", nil, { "Class Resource" },
         workspace = "classpower", meta = Meta("layout.enabled"),
         get = function() return BoolValue(Bars(), "showClassPower", true) end,
-        set = function(value) SetValue(Bars(), "showClassPower", value, applySourceRefresh) end } }, Page.RowOptions).cpEnable
+        write = { call = SetValue, source = Bars, args = { applySourceRefresh } } --[[schema setter: AdvancedClassPower.3]] } }, Page.RowOptions).cpEnable
     self.cp = self:Controls(section, Bars, ApplyClassPower, "layout", {
         { "dropdown", "shape", "BAR", { "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260 },
             field = "classPowerShape", apply = applyRefresh },
@@ -1061,7 +1062,7 @@ function Page:BuildClassLayout()
     local alignValues = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
     self.cpAlign = Schema.Build(self.ctx, section, { { "segment", "alignment", nil, { "Shape alignment", alignValues, 300 },
         meta = Meta("layout.shape_alignment"), get = function() return NormalizeClassPowerShapeAlign(Bars().classPowerShapeAlign) end,
-        set = function(value)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value)
             ApplyClassPower()
         end } }, Page.RowOptions).alignment
@@ -1315,7 +1316,7 @@ function Page:BuildDetachedPower()
     self.dpbUse = Schema.Build(self.ctx, layout, { { "sectionSwitch", "dpbUse", nil, { "Detached player power" },
         workspace = "classpower", meta = Meta("detached_power.enabled"),
         get = function() return Player().powerBarDetached == true end,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             local player = Player()
             player.powerBarDetached = value and true or false
             if value then
@@ -1339,7 +1340,7 @@ function Page:BuildDetachedPower()
     self.dpbSource = Schema.Build(self.ctx, layout, { { "dropdown", "resource_source", nil, { "Displayed resource", PLAYER_POWER_SOURCE_VALUES, 300 },
         workspace = "classpower", meta = sourceMeta, flagsBefore = { _msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel },
         get = function() return NormalizePlayerPowerSource(Player().playerPowerSource) end,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             local player = Player()
             value = NormalizePlayerPowerSource(value)
             if player.playerPowerSource == value then return end
@@ -1381,7 +1382,7 @@ function Page:BuildDetachedPower()
         "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300 },
         workspace = "classpower", meta = Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }),
         get = function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
             local player = Player()
             player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
             if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
@@ -1442,7 +1443,7 @@ function Page:BuildDetachedPowerText()
             return globalPage.FontOutlineGetFor("player")
         end
         return "OUTLINE"
-    end, set = function(value)
+    end, customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
         local globalPage = M.GlobalPage
         if globalPage and type(globalPage.FontOutlineSetFor) == "function" then
             globalPage.FontOutlineSetFor("player", value, "MSUF2_DETACHED_POWER_TEXT_OUTLINE")
@@ -1452,7 +1453,8 @@ function Page:BuildDetachedPowerText()
     RegisterSegment(fontOutline, "detached_power.text.outline", DETACHED_POWER_TEXT_OUTLINE_VALUES, "setting")
     M.classPowerDetachedPowerTextSlot = M.classPowerDetachedPowerTextSlot or "center"
     local slot = Schema.Build(self.ctx, text, { { "segment", "slot", nil, { "Slot", TEXT_SLOT_VALUES, controlW },
-        meta = Meta("detached_power.text.slot_selector", "ephemeral"), get = CurrentDetachedTextSlot, set = function(value)
+        meta = Meta("detached_power.text.slot_selector", "ephemeral"), get = CurrentDetachedTextSlot,
+            customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
         M.classPowerDetachedPowerTextSlot = value or "center"
         if M.RequestRefresh then M.RequestRefresh(self.ctx, "classpower-detached-power-text-slot") elseif M.Refresh then M.Refresh(self.ctx) end
     end } }, Page.RowOptions).slot
@@ -1465,7 +1467,7 @@ function Page:BuildDetachedPowerText()
                 local x, y = DetachedTextOffsetKeys()
                 return tonumber(Player()[index == 1 and x or y]) or 0
             end,
-            set = function(value)
+            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(value)
                 local x, y = DetachedTextOffsetKeys()
                 SetPlayerTextValue(index == 1 and x or y, value, ApplyDetachedPowerText)
             end } }, Page.RowOptions).slider
@@ -1529,7 +1531,7 @@ function Page:BuildPlayerHP()
     self.hpUse = Schema.Build(self.ctx, layout, { { "sectionSwitch", "hpUse", nil, { "Extra Health Bar" },
         workspace = "classpower", meta = Meta("player_hp.enabled"),
         get = function() return BoolValue(Bars(), "playerHPBarEnabled", false) end,
-        set = function(value) SetValue(Bars(), "playerHPBarEnabled", value, applyRefresh) end } }, Page.RowOptions).hpUse
+        write = { call = SetValue, source = Bars, args = { applyRefresh } } --[[schema setter: AdvancedClassPower.11]] } }, Page.RowOptions).hpUse
     self.hp = self:Controls(layout, Bars, ApplyPlayerHPBar, "player_hp.layout", {
         { "dropdown", "anchor", "CLASS_TOP", { "Anchor", PLAYER_HP_ANCHOR_VALUES, 300 }, field = "playerHPBarAnchor" },
         { "dropdown", "widthMode", "class", { "Width mode", PLAYER_HP_WIDTH_VALUES, 300 }, field = "playerHPBarWidthMode", apply = applyRefresh },
@@ -1693,7 +1695,7 @@ function Page:BuildAlternativeMana()
     self.altToggle = Schema.Build(self.ctx, section, { { "sectionSwitch", "altToggle", nil, { "Show mana bar (dual resource)" },
         workspace = "classpower", meta = Meta("alternative_mana.enabled"),
         get = function() return BoolValue(Bars(), "showAltMana", false) end,
-        set = function(value) SetValue(Bars(), "showAltMana", value, applyRefresh) end } }, Page.RowOptions).altToggle
+        write = { call = SetValue, source = Bars, args = { applyRefresh } } --[[schema setter: AdvancedClassPower.12]] } }, Page.RowOptions).altToggle
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
         { "dropdown", "widthMode", "player", { "Width mode", ALT_MANA_WIDTH_VALUES, 300 }, field = "altManaWidthMode", apply = applyRefresh },
         { "slider", "width", 0, { "Custom width", 20, 1200, 1, 300 }, field = "altManaWidth" },

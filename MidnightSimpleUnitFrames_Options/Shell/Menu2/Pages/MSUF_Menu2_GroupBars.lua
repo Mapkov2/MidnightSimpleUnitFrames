@@ -60,7 +60,7 @@ local function ScopeNumberCommand(_, ctx, row)
     local key, default, mode = row[2], row[3], row.domain or "visual"
     return {
         get = function() return Num(CurrentScope(), key, default) end,
-        set = function(value) Set(CurrentScope(), key, tonumber(value) or default, mode) end,
+        write = { call = Set, group = true, numberDefault = default, args = { mode } }, --[[schema setter: GroupBars.1]]
     }
 end
 local function NormalizeGFDispelOverlayTrigger(value)
@@ -75,7 +75,7 @@ end
 local function DispelTriggerCommand(_, ctx, row)
     return {
         get = function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), row[2], "BORDER")) end,
-        set = function(value)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             Set(CurrentScope(), row[2], NormalizeGFDispelOverlayTrigger(value), "visual")
             RequestGroupBarsRefresh(ctx, row.reason)
         end,
@@ -117,7 +117,7 @@ local function BuildDispelOverlaySection(ctx, b)
             lifecycle = function(widget)
                 return {
                     get = function() return MSUF.PublicGlobals.MSUF_DispelOverlayPreviewMode == true end,
-                    set = function(value)
+                    customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
                         dispelPreview = dispelPreview or MSUF.Require("MSUF_SetDispelOverlayPreview", FILE)
                         dispelPreview(value and true or false, CurrentScope())
                     end,
@@ -261,7 +261,7 @@ local function PreparePowerSwitch(ctx, power)
     local powerEnabled = Schema.Build(ctx, power, {
         { "sectionSwitch", "powerEnabled", nil, { "Show Power Bar" }, path = "field.powerBarEnabled", domain = "geometry",
             get = function() return IsPowerBarEnabled(CurrentScope()) end,
-            set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
                 local scope = CurrentScope()
                 Set(scope, "powerBarEnabled", v and true or false, "geometry")
                 if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
@@ -353,16 +353,14 @@ local function PowerCardsAndSize(ctx, b, c)
         { "slider", "powerHeight", DefaultPowerHeight(), { "Power height", 1, 30, 1, sliderW }, path = "field.powerHeight",
             domain = "geometry", roundStep = true,
             get = function() return CurrentPowerHeight(CurrentScope()) end,
-            set = function(v)
-                v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
-                Set(CurrentScope(), "powerHeight", v, "geometry")
-            end },
+            write = { call = Set, group = true, defaultSource = function() return CurrentPowerHeight(CurrentScope()) end,
+                clamp = true, round = true, args = { "geometry" } } --[[schema setter: GroupBars.5]] },
         -- Embed/detach change layout, so they take the geometry dirty class; the
         -- header can only re-lay out its rows outside combat.
         { "toggle", "embedPowerBarIntoHealth", true, { "Embed into health", 16, -138, leftW - 32 }, domain = "geometry" },
         { "toggle", "detachPower", nil, { "Detach from frame", 16, -166, leftW - 32 }, path = "field.powerBarDetached", domain = "geometry",
             get = function() return Bool(CurrentScope(), "powerBarDetached", false) end,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 local scope = CurrentScope()
                 local conf = Conf(scope)
                 if v and not ((tonumber(conf.detachedPowerBarWidth) or 0) > 0) then
@@ -383,10 +381,8 @@ local function PowerBorderRolesDetached(ctx, s, c)
     Schema.Build(ctx, s.border, {
         { "toggle", "powerBorder", nil, { "Power bar border", 16, -62, rightW - 32 }, path = "field.powerBarBorderEnabled", domain = "color",
             get = function() return Bool(CurrentScope(), "powerBarBorderEnabled", false) end,
-            set = function(v)
-                Set(CurrentScope(), "powerBarBorderEnabled", v and true or false, "color")
-                RequestGroupBarsRefresh(ctx, "gf-bars-power-border")
-            end },
+            write = { call = Set, group = true, boolean = true, args = { "color" },
+                after = function() RequestGroupBarsRefresh(ctx, "gf-bars-power-border") end } --[[schema setter: GroupBars.7]] },
         { "slider", "powerBarBorderThickness", 1, { "Border thickness", 0, 6, 1, rightW - 72 }, { 16, -108, rightW - 72, "CENTER" },
             domain = "color" },
         { "toggle", "powerSmoothFill", false, { "Smooth fill", 16, -158, rightW - 32 }, bind = BindExclusivePowerFill,
@@ -723,7 +719,8 @@ local function GFTextTabs(ctx, s)
         label = "", values = tabValues, width = min(520, textW - 48),
         frames = tabFrames, defaultTab = "name",
         get = CurrentTextTab,
-        set = function(v) M.gfTextTabSelection[CurrentScope()] = v or "name" end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
+            set = function(v) M.gfTextTabSelection[CurrentScope()] = v or "name" end,
         afterSet = function()
             FocusActiveGFPreviewText(s)
             if s.refresh then s.refresh() end
@@ -811,7 +808,8 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
     controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
     controls.show = Schema.Build(ctx, content, {
         { "switch", showKey, cfg.showDefault, { cfg.showLabel, 16, -24, 0, "HIDDEN" }, domain = cfg.showGet and "visual" or "font",
-            get = cfg.showGet, set = cfg.showSet, path = cfg.showGet and path .. "show" or nil },
+            get = cfg.showGet, customSetReason = "Updates the selected text layout and its dependent power/text visibility fields.",
+                set = cfg.showSet, path = cfg.showGet and path .. "show" or nil },
     }, ROW_OPTIONS)[showKey]
     local function SelectedSlotSpec()
         return cfg.slots[CurrentSlot(kind)] or cfg.slots.center
@@ -838,7 +836,7 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
             classification = "ephemeral", domain = "menuState",
             beforeBind = function(widget) W.MoveWidget(widget, content, 16, -92, textCardW - 32, "LEFT") end,
             get = function() return CurrentSlot(kind) end,
-            set = function(v)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
                 SetCurrentSlot(kind, v)
                 FocusGFPreviewText(kind, v, true)
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
@@ -849,7 +847,7 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
                 local mode = CurrentMode()
                 return hasAbsorb and M.UnitSectionsShared.HealthBaseMode(mode) or mode
             end,
-            set = function(value)
+            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(value)
                 local spec, oldMode = SelectedSlotSpec(), CurrentMode()
                 local mode = value or spec.default
                 if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(oldMode) and M.UnitSectionsShared.HealthModeSupportsAbsorb(mode) then
@@ -867,7 +865,7 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
                 local spec = SelectedSlotSpec()
                 return Bool(CurrentScope(), spec.absorbIconKey, Bool(CurrentScope(), cfg.absorbIconKey, false)) and "icon" or "value"
             end,
-            set = function(value)
+            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(value)
                 local spec = SelectedSlotSpec()
                 local mode = M.UnitSectionsShared.HealthModeWithAbsorb(CurrentMode(), value ~= "off")
                 Set(CurrentScope(), spec.key, mode, "visual")
@@ -880,7 +878,7 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
             local spec = SelectedSlotSpec()
             return spec.hidePercentKey and SlotHidePercentSymbol(CurrentScope(), spec.hidePercentKey) or false
         end,
-        set = function(value)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
             local spec = SelectedSlotSpec()
             if spec.hidePercentKey then Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual") end
             FocusGFPreviewText(kind, CurrentSlot(kind), true)
@@ -940,7 +938,7 @@ local function ValueTabFormatPosition(ctx, s, kind, tab, cfg, controls, content,
         { "toggle", "moveTogether", nil, { "Move text as one group", 16, -64, textRightW - 32 },
             path = path .. "move_together", classification = "ephemeral", domain = "menuState",
             get = function() return MoveTogether(kind) end,
-            set = function(v)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
                 SetMoveTogether(kind, v)
                 local selectedValue1
                 if not (v) then selectedValue1 = CurrentSlot(kind) end
@@ -954,7 +952,7 @@ local function ValueTabFormatPosition(ctx, s, kind, tab, cfg, controls, content,
                 local value = tonumber(Val(CurrentScope(), SlotFontSizeKey(kind), nil))
                 return value and value > 0 and value or tonumber(Val(CurrentScope(), cfg.sizeKey, cfg.sizeDefault)) or cfg.sizeDefault
             end,
-            set = function(v)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
                 Set(CurrentScope(), SlotFontSizeKey(kind), v, "font")
                 FocusGFPreviewText(kind, CurrentSlot(kind), true)
             end },
@@ -1154,13 +1152,8 @@ local function BuildGFRangeFadeSection(ctx, b)
         local control = Schema.Build(ctx, rangeAlphaCard, {
             { "slider", key, default, { "", 0, 1, 0.05, rangeRightWidth },
                 get = function() return Num(CurrentScope(), key, default) end,
-                set = function(v)
-                    local n = tonumber(v) or default or 0
-                    local conf = Conf(CurrentScope())
-                    if conf[key] == n then return end
-                    conf[key] = n
-                    QueueGF(CurrentScope(), "visual")
-                end },
+                write = { source = function() return Conf(CurrentScope()) end, numberDefault = default or 0, skipEqual = true,
+                    after = function() QueueGF(CurrentScope(), "visual") end } --[[schema setter: GroupBars.15]] },
         }, Schema.GroupCommands({}, LabelMeta, LabelMeta))[key]
         if key == "rangeFadeAlpha" and M.BindSliderDragPreview and M.SetRangeFadePreviewState then
             M.BindSliderDragPreview(control, function(active, value)
@@ -1180,7 +1173,7 @@ local function BuildGFRangeFadeSection(ctx, b)
         { "segment", "rangeMode", nil, { "Affects", VT("frame", "Frame", "health", "HP"), rangeModeW }, { 16, -70, rangeModeW, "LEFT" },
             path = "field.rangeFadeLayerMode",
             get = function() return Val(CurrentScope(), "rangeFadeLayerMode", "frame") end,
-            set = function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end },
+            write = { call = Set, group = true, fallback = "frame", args = { "visual" } } --[[schema setter: GroupBars.16]] },
         { "toggle", "offlineFadeEnabled", false, { "Fade offline members", 16, -122, rangeLeftWidth - 32 } },
         { "text", "offlineHint", nil, { "Hiding offline members in Basics takes precedence over this.", 16, -154, rangeLeftWidth - 32,
             T.colors.muted }, scope = "group" },

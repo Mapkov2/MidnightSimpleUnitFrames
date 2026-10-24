@@ -280,7 +280,8 @@ local function BindAuraWidget(ctx, widget, kind, get, set, fallback, meta)
     if kind == "slider" then low, high = widget:GetMinMaxValues() end
     Schema.Bind(ctx, widget, {
         id = meta.controlId, kind = kind, scope = "groups", applyDomain = "auras",
-        get = get, set = set, meta = meta, range = low and { low, high, 1 },
+        get = get, set = set, customSetReason = "Resolves the active group aura lane and updates its runtime and layout companions.",
+        meta = meta, range = low and { low, high, 1 },
         defaultSource = function() return fallback end,
     })
     widget._msuf2ControlSchema.labelKey = widget._msuf2RuntimeControlRecord.label
@@ -449,7 +450,7 @@ local function BuildExternalFilterSection(ctx, auraBuilder)
         { "Auto-blacklist from Buffs", 24, -50, filterWidth - 48 },
         meta = autoMeta, scope = "groups", domain = "auras", get = function()
             return AuraGroup(CurrentScope(), "externals").autoBlacklistBuffs ~= false
-        end, set = function(value)
+        end, customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             local activeScope = CurrentScope()
             AuraGroup(activeScope, "externals").autoBlacklistBuffs = value == true
             if QueueGF then QueueGF(activeScope, "auras") end

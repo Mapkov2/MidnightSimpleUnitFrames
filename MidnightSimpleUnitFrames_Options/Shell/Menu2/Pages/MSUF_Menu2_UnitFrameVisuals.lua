@@ -198,7 +198,7 @@ local function BuildSectionTabs(ctx, sec, unit, spec)
     local tabs, RefreshTabs, ReadTab, SetGuidedTab = W.SegmentTabs(ctx, sec, {
         label = "", values = spec.values, width = spec.width, frames = spec.frames, defaultTab = "general",
         get = function() return CurrentTab(stateKey, heights, unit) end,
-        set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
             M[stateKey] = M[stateKey] or {}
             M[stateKey][unit] = NormalizeTabKey(heights, v)
         end,
@@ -246,7 +246,7 @@ local function PreparePortraitSwitch(ctx, sec, unit)
     local portraitEnable
     portraitEnable = ControlRow(ctx, sec, { "sectionSwitch", "portraitEnable", false, { "Portrait" },
         get = function() return NormalizePortrait(unit) ~= "OFF" end,
-        set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
             if v then
                 SetPortraitValue(unit, "portraitMode", M._msuf2LastPortraitSide[unit] or "LEFT", "MSUF2_PORTRAIT_MODE")
             else
@@ -324,7 +324,7 @@ local function BuildPortraitDirection(ctx, card, unit, width, metadata)
         id = metadata.controlId, kind = "segment", labelKey = "Blizzard frame direction", settingPath = metadata.settingKey,
         meta = metadata, scope = unit, applyDomain = "portrait",
         get = function() return MSUF.PortraitDetails.NormalizeBlizzardDirection(GetConf(unit).portraitBlizzardDirection) end,
-        set = function(value) SetPortraitValue(unit, "portraitBlizzardDirection", value, "MSUF2_PORTRAIT_BLIZZARD_DIRECTION") end,
+        write = { call = SetPortraitValue, args = { "MSUF2_PORTRAIT_BLIZZARD_DIRECTION" } }, --[[schema setter: UnitFrameVisuals.3]]
     })
     return pad
 end
@@ -386,7 +386,9 @@ function PortraitSection.Factories(p)
             value = value == nil and fallback or value
             return row.normalize and row.normalize(value) or value
         end
-        row.set = function(value)
+        if row.normalize and kind ~= "slider" and kind ~= "toggle" then
+            row.customSetReason = "Canonicalizes the portrait shape or size mode before applying the portrait."
+            row.set = function(value)
             if kind == "slider" then SetNumber(unit, key, value, row.reason, { preview = true })
             else
                 if kind == "toggle" then value = value and true or false
@@ -394,6 +396,12 @@ function PortraitSection.Factories(p)
                 SetPortraitValue(unit, key, value, row.reason)
             end
             if row.afterSet then row.afterSet() end
+        end
+        else
+            row.write = { call = kind == "slider" and SetNumber or SetPortraitValue,
+                boolean = kind == "toggle", args = { row.reason, kind == "slider" and { preview = true } or nil },
+                after = row.afterSet and function() row.afterSet() end } --[[schema setter: UnitFrameVisuals.PortraitRows]]
+            if kind ~= "slider" and kind ~= "toggle" then row.write.fallback = fallback end
         end
         row.meta = p.Meta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key))
         row.scope, row.roundStep = unit, kind == "slider"
@@ -430,7 +438,7 @@ function PortraitSection.Controls(p)
             local mode = NormalizePortrait(unit)
             return mode == "RIGHT" and "RIGHT" or "LEFT"
         end,
-        set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
             M._msuf2LastPortraitSide[unit] = v == "RIGHT" and "RIGHT" or "LEFT"
             SetPortraitValue(unit, "portraitMode", v or "LEFT", "MSUF2_PORTRAIT_MODE")
             p.Refresh()
@@ -453,7 +461,7 @@ function PortraitSection.Controls(p)
         return ControlRow(ctx, card, { "dropdown", id, "OFF", { "Runtime Preview", PORTRAIT_PLACEMENT.classificationPreview, 220 },
             { 16, y, min(280, w - 32) },
             get = function() return portraitElement and portraitElement.GetClassificationPreview(unit) or "OFF" end,
-            set = function(value)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
                 if portraitElement then portraitElement.SetClassificationPreview(unit, value) end
                 if refreshReason then M.RequestRefresh(ctx, refreshReason) end
             end,
@@ -484,7 +492,7 @@ function PortraitSection.Controls(p)
             return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
                 and "SEPARATE" or "UNIFORM"
         end,
-        set = function(value)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             value = value == "SEPARATE" and "SEPARATE" or "UNIFORM"
             SetPortraitValue(unit, "portraitSizeMode", value, "MSUF2_PORTRAIT_SIZE_MODE")
             p.Refresh()
@@ -684,11 +692,9 @@ local function PreparePowerSwitch(ctx, sec, unit)
     local show
     show = ControlRow(ctx, sec, { "sectionSwitch", "show", true, { "Show power bar" },
         get = function() return ReadBool(unit, "showPowerBar", true) end,
-        set = function(v)
-            SetBool(unit, "showPowerBar", v, "MSUF2_POWER_SHOW", { power = true, preview = true })
-            EnsureCooldownWidthObservers()
-            if show.refreshDetails then show.refreshDetails() end
-        end,
+        write = { call = SetBool, args = { "MSUF2_POWER_SHOW", { power = true, preview = true } },
+            after = function() EnsureCooldownWidthObservers() if show.refreshDetails then show.refreshDetails() end end },
+                --[[schema setter: UnitFrameVisuals.8]]
         scope = unit, meta = SettingMeta(ctx, "power.show", unit, "showPowerBar"),
         beforeBind = function(widget)
             W.AttachUnitEditFocus(widget, unit, "powerbar")
@@ -804,13 +810,20 @@ function PowerSection.Helpers(pw)
                     if kind == "toggle" then return ReadBool(unit, key, fallback) end
                     return ReadNumber(unit, key, ResolveDefault(fallback))
                 end
-                row.set = function(value)
+                if kind ~= "toggle" and key == "detachedPowerBarWidth" then
+                    row.customSetReason = "Disables synchronized width sources before writing the manual detached width."
+                    row.set = function(value)
                     if kind == "toggle" then
                         SetBool(unit, key, value, row.reason, row.opts or POWER_OPTS)
                         if row.afterSet then row.afterSet() end
                     elseif key == "detachedPowerBarWidth" then
                         return SetManualDetachedPowerWidth(value, row.reason)
                     else return SetNumber(unit, key, value, row.reason, row.opts or POWER_OPTS) end
+                end
+                else
+                    row.write = { call = kind == "toggle" and SetBool or SetNumber,
+                        args = { row.reason, row.opts or POWER_OPTS }, returns = kind ~= "toggle",
+                        after = kind == "toggle" and row.afterSet or nil } --[[schema setter: UnitFrameVisuals.PowerRows]]
                 end
                 row.meta = SettingMeta(ctx, "power." .. tostring(key), unit, key)
                 row.scope, row.roundStep = unit, kind == "slider"
@@ -834,7 +847,8 @@ function PowerSection.Cards(pw)
                 command = {
                     kind = "toggle", valueKind = "boolean",
                     get = function() return ReadBool(unit, "showPowerBar", true) end,
-                    set = function(value) SetBool(unit, "showPowerBar", value == true, "MSUF2_POWER_SHOW", { power = true, preview = true }) end,
+                    customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+                        set = function(value) SetBool(unit, "showPowerBar", value == true, "MSUF2_POWER_SHOW", { power = true, preview = true }) end,
                 },
             }
         else
@@ -889,7 +903,7 @@ function PowerSection.Cards(pw)
         local playerPowerSource = ControlRow(ctx, mainCard, { "dropdown", "playerPowerSource", nil, { "Displayed resource",
             PLAYER_POWER_SOURCE_VALUES, pw.cardW - 72 }, { 16, -132, pw.cardW - 72 },
             get = function() return NormalizePlayerPowerSource(GetConf(unit).playerPowerSource) end,
-            set = function(value)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 GetConf(unit).playerPowerSource = NormalizePlayerPowerSource(value)
                 M.ApplyPlayerPowerSource("MSUF2_PLAYER_POWER_SOURCE")
             end,
@@ -919,7 +933,7 @@ function PowerSection.Main(pw)
     local SetSyncedPlayerPowerOutline = pw.SetSyncedPlayerPowerOutline
     ControlRow(ctx, borderCard, { "toggle", "powerBorder", false, { "Power bar border", 16, -62, rightW - 32 },
         get = ReadPowerBorderEnabled,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
         if isPlayer then
             local thickness = ReadPowerBorderThickness()
             if value and thickness <= 0 then
@@ -939,7 +953,8 @@ function PowerSection.Main(pw)
     local function FillToggle(id, key, peerKey, label, y, reason, historyLabel)
         ControlRow(ctx, borderCard, { "toggle", id, false, { label, 16, y, rightW - 32 },
             get = function() return ReadBool(unit, key, false) end,
-            set = function(v) UnitSectionShared.SetFillMode(ctx, unit, "power", key, peerKey, v, reason, historyLabel, POWER_OPTS) end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(v) UnitSectionShared.SetFillMode(ctx, unit, "power", key, peerKey, v, reason, historyLabel, POWER_OPTS) end,
             scope = unit, meta = SettingMeta(ctx, "power." .. key, unit, key),
             beforeBind = AddPowerControl,
         })
@@ -964,7 +979,7 @@ function PowerSection.Main(pw)
     pw.borderSize = ControlRow(ctx, borderCard, { "slider", "borderSize", 1, { "Border thickness", 0, isPlayer and 8 or 6, 1, 300 }, { 16, -108,
         rightW - 72, "CENTER" },
         get = ReadPowerBorderThickness,
-        set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
         if isPlayer then
             SetSyncedPlayerPowerOutline(value, "MSUF2_POWER_BORDER_SIZE")
         else
@@ -977,7 +992,7 @@ function PowerSection.Main(pw)
     })
     ControlRow(ctx, mainCard, { "toggle", "detached", false, { "Detach from frame", 16, isPlayer and -230 or -166, cardW - 32 },
         get = function() return ReadBool(unit, "powerBarDetached", false) end,
-        set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
             local conf = GetConf(unit)
             conf.powerBarDetached = v and true or false
             if conf.powerBarDetached then
@@ -1040,7 +1055,7 @@ function PowerSection.Detached(pw)
             get = function()
                 return NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape)
             end,
-            set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 v = NormalizeDetachedPowerShape(v)
                 local conf = GetConf(unit)
                 conf.detachedPowerBarShape = v
@@ -1196,7 +1211,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
     state.setEnabled = SetCastbarEnabled
     local enabled = ControlRow(ctx, sec, { "sectionSwitch", "enabled", true, { "Enable Castbar" },
         get = function() return ReadCastbarBackend() ~= "HIDE" end,
-        set = SetCastbarEnabled,
+        customSetReason = "Coordinates the selected castbar provider, enabled state and dependent backend settings.", set = SetCastbarEnabled,
         scope = unit, setting = Schema.Family({ "general." .. fields.backend, "general." .. fields.enable,
             "general." .. providerMemoryKey }), meta = ReviewedMeta(ctx, "castbar.enabled", "setting", "compound",
             "Castbar visibility coordinates backend, enable state, and remembered provider."),
@@ -1290,7 +1305,9 @@ function CastbarSection.Binders(s)
                 if kind == "slider" then return ReadGeneralNumber(key, fallback) end
                 return ReadGeneralValue(key, fallback)
             end
-            row.set = function(value)
+            if row.beforeSet and kind == "slider" then
+                row.customSetReason = "Adjusts coupled text-width or truncation settings before the numeric write."
+                row.set = function(value)
                 if kind == "slider" then
                     if row.beforeSet then row.beforeSet(value) end
                     SetGeneralNumber(key, value, row.reason)
@@ -1298,6 +1315,13 @@ function CastbarSection.Binders(s)
                     SetGeneralValue(key, value or fallback, row.reason)
                     if row.afterSet then row.afterSet() end
                 end
+            end
+            else
+                row.write = { call = kind == "slider" and SetGeneralNumber or SetGeneralValue,
+                    keyOnly = true, args = { row.reason },
+                    after = kind ~= "slider" and row.afterSet and function() row.afterSet() end or nil }
+                    --[[schema setter: UnitFrameVisuals.DetailRows]]
+                if kind ~= "slider" then row.write.fallback = fallback end
             end
             row.meta = SettingMeta(ctx, "castbar.detail." .. tostring(row.reason), "general", key)
             row.scope, row.roundStep = unit, kind == "slider"
@@ -1446,7 +1470,8 @@ function CastbarSection.General(s)
             command = {
                 kind = "toggle", valueKind = "boolean",
                 get = function() return ReadCastbarBackend() ~= "HIDE" end,
-                set = function(value) SetCastbarEnabled(value == true) end,
+                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                    set = function(value) SetCastbarEnabled(value == true) end,
             },
         })
         castbarNoticeButton:SetScript("OnClick", function()
@@ -1460,7 +1485,7 @@ function CastbarSection.General(s)
         provider = ControlRow(ctx, providerCard, { "dropdown", "provider", "MSUF", { "Castbar provider", CASTBAR_BACKEND_VALUES, min(260,
             controlWRight) }, { 16, -52, min(260, controlWRight) },
             get = ReadCastbarProvider,
-            set = SetCastbarProvider,
+            customSetReason = "Coordinates the selected castbar provider, enabled state and dependent backend settings.", set = SetCastbarProvider,
             scope = unit, meta = SettingMeta(ctx, "castbar.provider", "general", fields.backend),
             beforeBind = function(widget)
                 -- Player castbar ownership is independent from Player UnitFrame
@@ -1475,7 +1500,7 @@ function CastbarSection.General(s)
     end
     local interrupt = ControlRow(ctx, generalCard, { "toggle", "interrupt", true, { "Show interrupt", 16, -84, 240 },
         get = function() return ReadBool(unit, "showInterrupt", true) end,
-        set = function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end,
+        write = { call = SetBool, args = { "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true } } }, --[[schema setter: UnitFrameVisuals.19]]
         scope = unit, meta = SettingMeta(ctx, "castbar.show_interrupt", unit, "showInterrupt"),
         beforeBind = s.PrepareControl,
     })
@@ -1484,7 +1509,7 @@ function CastbarSection.General(s)
     -- falls back to the plain label against restricted identities.
     local interruptSource = ControlRow(ctx, generalCard, { "toggle", "interruptSource", false, { "Show interrupter name", 16, -116, 240 },
         get = function() return ReadBool(unit, "showInterruptSource", false) end,
-        set = function(v) SetBool(unit, "showInterruptSource", v, "MSUF2_CASTBAR_INTERRUPT_SOURCE", { castbar = true, preview = true }) end,
+        write = { call = SetBool, args = { "MSUF2_CASTBAR_INTERRUPT_SOURCE", { castbar = true, preview = true } } }, --[[schema setter: UnitFrameVisuals.20]]
         scope = unit, meta = SettingMeta(ctx, "castbar.show_interrupt_source", unit, "showInterruptSource"),
         beforeBind = s.PrepareControl,
     })
@@ -1496,7 +1521,7 @@ function CastbarSection.General(s)
     local widthMode = ControlRow(ctx, sizeCard, { "dropdown", "widthMode", "manual", { "Width mode", CASTBAR_WIDTH_SOURCE_VALUES,
         sizeControlWLeft }, { 16, -52, sizeControlWLeft },
         get = ReadWidthSource,
-        set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
             local key = CastbarWidthSourceKey()
             if not key then return end
             local nextValue = NormalizeWidthSource(v)
@@ -1512,10 +1537,7 @@ function CastbarSection.General(s)
     local function SizeSlider(id, key, default, label, lo, hi, y, reason, metaPath)
         return ControlRow(ctx, sizeCard, { "slider", id, default, { label, lo, hi, 1, sizeControlWRight }, { sizeRightX, y, sizeControlWRight },
             get = function() return ReadGeneralNumber(key, default) end,
-            set = function(v)
-                if not key then return end
-                SetGeneralNumber(key, v, reason)
-            end,
+            write = { call = SetGeneralNumber, keyOnly = true, args = { reason } }, --[[schema setter: UnitFrameVisuals.22]]
             scope = unit, meta = SettingMeta(ctx, metaPath, "general", key), roundStep = true,
             beforeBind = s.PrepareControl, castbarControl = true,
         })
@@ -1536,10 +1558,8 @@ function CastbarSection.IconAndText(s)
     local function BindCastbarFeatureToggle(parent, field, reason)
         local control = ControlRow(ctx, parent, { "switch", field, true, { "Enable", 16, -52, 160 },
             get = function() return ReadGeneralBool(field, true) end,
-            set = function(v)
-                SetGeneralBool(field, v, reason, { castbar = true, preview = true })
-                RefreshCastbarEnabled()
-            end,
+            write = { call = SetGeneralBool, keyOnly = true, args = { reason, { castbar = true, preview = true } },
+                after = RefreshCastbarEnabled }, --[[schema setter: UnitFrameVisuals.23]]
             scope = unit, meta = SettingMeta(ctx, "castbar.feature." .. tostring(reason), "general", field),
             beforeBind = s.PrepareControl,
         })
@@ -1579,10 +1599,8 @@ function CastbarSection.IconAndText(s)
     local portraitCastIcon = ControlRow(ctx, portraitIconCard, { "toggle", "portraitCastIcon", false, { "Show cast spell icon in portrait", 16, -52,
         rightW - 32 },
         get = function() return ReadBool(unit, "portraitCastSpellIcon", false) end,
-        set = function(v)
-            SetPortraitValue(unit, "portraitCastSpellIcon", v and true or false, "MSUF2_PORTRAIT_CAST_ICON")
-            M.RequestRefresh(ctx, "portrait-cast-icon-mirror")
-        end,
+        write = { call = SetPortraitValue, boolean = true, args = { "MSUF2_PORTRAIT_CAST_ICON" },
+            after = function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end }, --[[schema setter: UnitFrameVisuals.24]]
         scope = unit, setting = unit .. ".portraitCastSpellIcon", meta = ReviewedMeta(ctx, "castbar.portrait_cast_icon", "setting", "duplicate",
             "Second surface for the Portrait section cast-icon toggle; that control owns the Search target for portraitCastSpellIcon."),
         beforeBind = function(widget)
@@ -1607,10 +1625,8 @@ function CastbarSection.IconAndText(s)
     if fields.targetName and targetNameCard then
         targetNameToggle = ControlRow(ctx, targetNameCard, { "switch", "targetNameToggle", false, { "Enable", 16, -52, 160 },
             get = function() return ReadGeneralBool(fields.targetName, false) end,
-            set = function(v)
-                SetGeneralBool(fields.targetName, v, "MSUF2_CASTBAR_TARGET_NAME", { castbar = true, preview = true })
-                RefreshCastbarEnabled()
-            end,
+            write = { call = SetGeneralBool, keyOnly = true, args = { "MSUF2_CASTBAR_TARGET_NAME", { castbar = true, preview = true } },
+                after = RefreshCastbarEnabled }, --[[schema setter: UnitFrameVisuals.25]]
             scope = unit, meta = SettingMeta(ctx, "castbar.show_target_name", "general", fields.targetName),
             beforeBind = s.PrepareControl, castbarControl = true,
         })
@@ -1654,7 +1670,7 @@ function CastbarSection.Advanced(s)
     local spellTextWidthMode = ControlRow(ctx, textAdvancedCard, { "dropdown", "spellTextWidthMode", "AUTO", { "Width behavior",
         CASTBAR_TRUNCATE_VALUES, min(260, controlWLeft) }, { 16, -52, min(260, controlWLeft) },
         get = ReadSpellTextWidthMode,
-        set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
             local nextValue = tostring(v or "AUTO"):upper()
             if nextValue ~= "CLIP" and nextValue ~= "NONE" then nextValue = "AUTO" end
             SetGeneralValue(DetailKey("SpellNameTruncate"), nextValue, "MSUF2_CASTBAR_SPELL_TRUNCATE")
@@ -1673,7 +1689,7 @@ function CastbarSection.Advanced(s)
     local spellTextManualWidth = ControlRow(ctx, textAdvancedCard, { "slider", "spellTextManualWidth", 0, { "Manual text width", 20, 500, 1,
         controlWLeft }, { 16, -106, controlWLeft },
         get = function() return ReadGeneralNumber(DetailKey("SpellNameMaxWidth"), 0) end,
-        set = function(v) SetGeneralNumber(DetailKey("SpellNameMaxWidth"), v, "MSUF2_CASTBAR_SPELL_MAX_WIDTH") end,
+        write = { call = SetGeneralNumber, keyOnly = true, args = { "MSUF2_CASTBAR_SPELL_MAX_WIDTH" } }, --[[schema setter: UnitFrameVisuals.27]]
         scope = unit, meta = SettingMeta(ctx, "castbar.spell_text_manual_width", "general", DetailKey("SpellNameMaxWidth")), roundStep = true,
         beforeBind = s.PrepareControl, castbarControl = true,
     })
@@ -1688,7 +1704,7 @@ function CastbarSection.Advanced(s)
     local castbarLayer = ControlRow(ctx, layerAdvancedCard, { "slider", "castbarLayer", 6, { "Layer (0-30)", 0, 30, 1, controlWRight }, { 16, -52,
         controlWRight },
         get = function() return ReadGeneralNumber(DetailKey("FrameLevelOffset"), 6) end,
-        set = function(v) SetGeneralNumber(DetailKey("FrameLevelOffset"), v, "MSUF2_CASTBAR_LAYER") end,
+        write = { call = SetGeneralNumber, keyOnly = true, args = { "MSUF2_CASTBAR_LAYER" } }, --[[schema setter: UnitFrameVisuals.28]]
         scope = unit, meta = SettingMeta(ctx, "castbar.frame_layer", "general", DetailKey("FrameLevelOffset")), roundStep = true,
         beforeBind = s.PrepareControl, castbarControl = true,
     })

@@ -1215,7 +1215,8 @@ function W.SettingsRows(ctx, parent, spec)
         if widget then
             M.ControlSchema.Custom(widget, { id = row.controlId or row.id, kind = kind,
                 scope = ctx.key, applyDomain = "settingsRows", meta = row, setting = row.setting,
-                settingPath = row.settingKey, get = row.get, set = row.set })
+                settingPath = row.settingKey, get = row.get, set = row.set, write = row.write,
+                customSetReason = row.customSetReason or "Uses the selected aura lane model's compatibility and layout writer." })
             if row.id then controls[row.id] = widget end
             list[#list + 1] = widget
             if hasReset then

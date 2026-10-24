@@ -94,10 +94,8 @@ local function GameplayRow(declarations,key,layout,apply,defaultApply)
         if row[1] == "flowToggle" then return value and true or false end
         return value
     end
-    row.set = function(value)
-        if row[1] == "dropdown" and not value then value = fallback end
-        return AP.SetValue(Gameplay(), key, value, apply or defaultApply)
-    end
+    row.write = { call = AP.SetValue, source = Gameplay, args = { apply or defaultApply }, dropdownDefault = fallback,
+        returns = true } --[[schema setter: AdvancedGameplay.1]]
     return row
 end
 local function SwitchAt(ctx, section, label, x, y, width, key, apply, meta)
@@ -105,14 +103,15 @@ local function SwitchAt(ctx, section, label, x, y, width, key, apply, meta)
     return AP.Row(ctx, section, { "switch", key, fallback, { label, x, y, width },
         meta = meta, scope = "gameplay", domain = "gameplay",
         get = function() return AP.BoolValue(Gameplay(), key, fallback) end,
-        set = function(value) return AP.SetValue(Gameplay(), key, value, apply) end,
+        write = { call = AP.SetValue, source = Gameplay, args = { apply }, returns = true }, --[[schema setter: AdvancedGameplay.2]]
     })
 end
 local function BindGameplayText(ctx,list,input,getValue,setValue,metadata,apply,label)
     Schema.Bind(ctx, input, {
         id = metadata.controlId, kind = "textinput", labelKey = label, settingPath = metadata.settingKey,
         scope = "gameplay", applyDomain = "gameplay", meta = metadata, commitOnBlur = true,
-        get = getValue, set = function(value) setValue(value) apply() end,
+        get = getValue, customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            set = function(value) setValue(value) apply() end,
     })
     M.AppendValues(list, input)
 end
@@ -130,6 +129,7 @@ local function RegisterTotemButton(button, label, path, classification, domain, 
         id = meta.controlId, kind = "button", labelKey = label, meta = meta,
         scope = "gameplay", applyDomain = domain, gate = TotemFrameAvailable,
         get = getState, actionKey = meta.actionKey, set = action,
+        customSetReason = "Runs the totem preview command or resets the coupled totem layout fields.",
         action = action, owner = button,
     })
 end

@@ -39,9 +39,19 @@ local function Plain(value)
     for key, item in pairs(value) do out[key] = Plain(item) end
     return out
 end
-local function Setter(spec)
-    if type(spec.set) ~= "function" then return spec._setter end
-    local info = debug.getinfo(spec.set, "S")
+local function Setter(spec, widget, record)
+    local setter = spec.set
+    if type(setter) ~= "function" then
+        if spec._setter then return spec._setter end
+        local command = widget and widget._msuf2CommandAction
+        setter = command and command.set
+        if type(setter) ~= "function" then
+            record = record or (widget and widget._msuf2RuntimeControlRecord)
+            setter = record and record.command and record.command.set
+        end
+    end
+    if type(setter) ~= "function" then return nil end
+    local info = debug.getinfo(setter, "S")
     return info.source .. ":" .. info.linedefined
 end
 local function Changed(row, key, value)
@@ -69,13 +79,14 @@ local function Remember(widget, spec)
         -- The finite initial-page inventory observes declarations once, after
         -- every default page has built. Preserve its original weak-key lifetime.
         for key, value in pairs(spec) do snapshot[key] = value end
+        snapshot._setter = Setter(spec, widget)
         variants[spec.id] = snapshot
         return
     end
     for _, key in ipairs({ "id", "kind", "scope", "applyDomain", "settingPath", "ephemeralReason", "labelKey" }) do
         snapshot[key] = spec[key]
     end
-    snapshot.setting, snapshot._setter = Plain(spec.setting), Setter(spec)
+    snapshot.setting, snapshot._setter = Plain(spec.setting), Setter(spec, widget)
     if type(spec.setting) == "table" and type(spec.setting.resolve) == "function" then
         snapshot._resolvedPath = spec.setting.resolve()
     end
@@ -113,7 +124,7 @@ _G.__MSUF_ProjectSchema = function(M, Catalog)
         pets.settingKey = previous
         assert(widget == pets.widget and not invalid, "group key family exact-target contract failed")
     end
-    local function Project(public, widget)
+    local function Project(public, widget, record)
         local key = public.controlId
         -- A shared preview moves between page records. Read the declaration
         -- actually made for this ID; an undeclared context still fails below.
@@ -191,7 +202,7 @@ _G.__MSUF_ProjectSchema = function(M, Catalog)
                     row.resolvedPaths[path] = true
                 end
             end
-            local setter = Setter(spec)
+            local setter = Setter(spec, widget, record)
             if setter then Changed(row, "setter", setter) end
         end
     end
@@ -201,7 +212,7 @@ _G.__MSUF_ProjectSchema = function(M, Catalog)
             if previousPage and previousPage ~= public.pageKey then Flush() end
             previousPage = public.pageKey
             local raw = assert(Catalog.Get(public.controlId))
-            Project(public, raw.widget)
+            Project(public, raw.widget, raw)
         end
         -- Includes declarations never registered by search (short/noisy labels,
         -- widgetless composites and deliberately hidden controls).

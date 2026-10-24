@@ -405,3 +405,16 @@ menu_color_styles_schema_parity_smoke.lua compares all 29 inputs, three reset
 actions and the real scope bar against the reachable parent page, at normal and
 400px widths. Its push tier is representative; full five-client coverage belongs
 to nightly. Offline parity is not live rendering, clipping, taint or timing proof.
+
+The compact release contracts also replay the frozen derived-setter policies on
+Mainline, Vanilla, TBC, Mists and Forever. Schema capture resolves a direct
+`spec.set` or the bound widget/runtime-record command setter and stores only its
+source location. Workspace snapshots retain that scalar provenance across widget
+reuse, without retaining the derived policy or its callback graph.
+
+Each parity client runs in a supervised scheduler slot. The runner joins every
+client before its final freshness check; readiness and joins remain inside the
+unchanged 300-second contract budget. Whole-profile, history, apply, reset and
+combat comparisons remain active for every candidate and scope. Successful
+comparisons avoid failure-message allocation, and only the frozen outcome needs
+a profile snapshot before the corresponding live result is checked.

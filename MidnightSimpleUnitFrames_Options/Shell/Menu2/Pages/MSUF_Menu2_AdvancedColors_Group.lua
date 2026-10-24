@@ -151,7 +151,8 @@ local GroupRows = { bind = function(ctx, control, row, kind)
     end
     local meta = row.meta or Meta(row.path or "group_frame.color." .. key, nil, GroupExact(key, kind, row))
     local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row.label or row[4][1],
-        scope = "colors", applyDomain = "groupColors", meta = meta, settingPath = meta.settingKey, get = get, set = set }
+        scope = "colors", applyDomain = "groupColors", meta = meta, settingPath = meta.settingKey, get = get,
+            customSetReason = "Writes group color channels and the selected scope override together.", set = set }
     if kind == "slider" then
         -- The live label names the slider on screen; search needs it as the label.
         meta.label = row.label
@@ -216,7 +217,8 @@ local function BuildGroupFrameColors(ctx, b)
     }, GroupRows)
     local controls = Schema.Build(ctx, health, {
         { "dropdown", "gfBarMode", "GLOBAL", { "Bar Color Mode", GROUP_BAR_MODES, min(360, cardW - 32) },
-            position = { 12, -10 }, path = "group_frame.health.mode", get = GroupBarMode, set = function(value)
+            position = { 12, -10 }, path = "group_frame.health.mode", get = GroupBarMode,
+                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
                 value = value or "GLOBAL"
                 SetGroupValue("gfBarMode", value ~= "GLOBAL" and value or nil, "MSUF2_GROUP_HEALTH_MODE", "visual")
                 if value == "CLASS" or value == "GRADIENT" then
@@ -225,7 +227,7 @@ local function BuildGroupFrameColors(ctx, b)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "group-colors-mode") end
             end },
         { "color", "health", nil, { "Health bar color" }, position = { 12, -64 }, path = "group_frame.health.color",
-            get = GroupHealthBarRGB, set = SetGroupHealthBarRGB },
+            get = GroupHealthBarRGB, customSetReason = "Writes group color channels and the selected scope override together.", set = SetGroupHealthBarRGB },
     }, GroupRows)
     Schema.Build(ctx, background, {
         { "color", "bg", { 0.10, 0.10, 0.10 }, { "Background Color" }, position = { 12, -10 } },

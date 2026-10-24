@@ -492,7 +492,8 @@ function StatusIcons.Open(state, ctx, b, RefreshPage)
     local siconBasicTab, siconAdvancedTab = M.UnitSectionsShared.MakeTabFrames(sicons, -64, siconW, siconTabFrames, "basic", "advanced")
     local statusTabs, RefreshStatusTabs, ReadStatusTab, SetGuidedStatusTab = W.SegmentTabs(ctx, sicons, {
         get = StatusIcons.CurrentTab,
-        set = function(value) M.gfStatusIconTabSelection[CurrentScope()] = value or "basic" end,
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
+            set = function(value) M.gfStatusIconTabSelection[CurrentScope()] = value or "basic" end,
         label = "", values = STATUS_ICON_TAB_VALUES, width = min(420, siconInnerW),
         frames = siconTabFrames,
         defaultTab = "basic", x = siconLeftX, y = -12,
@@ -605,7 +606,7 @@ function StatusIcons.BuildSelectedCard(state, ctx)
     local RefreshStatusIconMenu = state.RefreshStatusIconMenu
     local selectionRows = Schema.GroupCommands({ selector = {
         get = function() return CurrentGFStatusSpec().value end,
-        set = function(value)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
             for i = 1, #GF_STATUS_ICON_SPECS do
                 if GF_STATUS_ICON_SPECS[i].value == value then
                     M.SetMenuStateValue("gfStatusIconSelection", value)
@@ -1405,7 +1406,7 @@ function SpellTileGrid:EnsureTile(index)
     tile._msuf2CommandAction = {
         kind = "button",
         valueKind = "text",
-        set = function(value)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             if tile._isAddTile then
                 return AddCustomBuff(self.refreshPage, CurrentScope(), tile._specKey, value)
             end
@@ -1524,7 +1525,7 @@ local function IconScaleLifecycle(iconScale)
     end
     return {
         get = function() return tonumber(SpellIndicators(CurrentScope()).iconScale) or 100 end,
-        set = function(value)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
             value = floor((tonumber(value) or 100) + 0.5)
             local scope = CurrentScope()
             if pendingApply and pendingScope ~= scope then FlushRuntime() end
@@ -1703,7 +1704,7 @@ function SpellSection.BuildSpecControls(state, ctx)
             if SPELL_INDICATORS_121_PTR_DISABLED then return false end
             return SpellIndicators(CurrentScope()).enabled == true
         end,
-        set = function(value)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             if SPELL_INDICATORS_121_PTR_DISABLED then
                 SpellIndicators(CurrentScope()).enabled = false
                 QueueSpellIndicators(CurrentScope())
@@ -1718,7 +1719,7 @@ function SpellSection.BuildSpecControls(state, ctx)
         },
         spec = {
         get = function() return SpellIndicators(CurrentScope()).spec or "auto" end,
-        set = function(value)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             local kind = CurrentScope()
             SpellIndicators(kind).spec = value or "auto"
             ChangedSpec(kind, "gf-spell-spec")
@@ -1726,7 +1727,7 @@ function SpellSection.BuildSpecControls(state, ctx)
         },
         multiSpec = {
         get = function() return CurrentSpellMultiSpec(CurrentScope()) end,
-        set = function(value)
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
             local kind = CurrentScope()
             M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
             M.gfSpellMultiSpecSelection[kind] = value or ""
@@ -1740,7 +1741,7 @@ function SpellSection.BuildSpecControls(state, ctx)
             if IsAllSpecsSpellSpec(specKey) then return true end
             return cfg.spec == "multi" and specKey ~= "" and cfg.multiSpecs and cfg.multiSpecs[specKey] == true
         end,
-        set = function(value)
+        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
             local kind = CurrentScope()
             local cfg = SpellIndicators(kind)
             local specKey = CurrentSpellMultiSpec(kind)
@@ -1837,7 +1838,7 @@ function SpellSection.BuildSelectedSpell(state, ctx)
         { "dropdown", "aura", nil, { "Choose spell", function() return SpellAuraValues(CurrentScope()) end, siRightW },
             { siRightX, -282, siRightW, "LEFT" }, path = "spell.selected_aura", classification = "ephemeral",
             get = function() return CurrentSpellAura(CurrentScope()) end,
-            set = function(value)
+            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
                 SetCurrentSpellAura(CurrentScope(), value)
                 RefreshGFPreview()
                 RefreshSpellIndicatorState()
@@ -1856,7 +1857,7 @@ function SpellSection.BuildSelectedSpell(state, ctx)
                 if cfg.custom == true and cfg._msufCustomOnlyOwnExplicit ~= true then return false end
                 return cfg.onlyOwn ~= false
             end,
-            set = function(value)
+            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(value)
                 local cfg = CurrentSpellConfig(CurrentScope(), true)
                 if cfg then
                     if cfg.custom == true then cfg._msufCustomOnlyOwnExplicit = true end
@@ -2241,7 +2242,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     W.Text(corners, "Pick a slot, set it to Custom Spell, then enter spell IDs. This edits one slot at a time and keeps the five slot assignments visible.",
         rightX, -64, rightW, T.colors.muted)
     local editorCommands = Schema.GroupCommands({
-        slot = { get = CurrentCISlot, set = function(value)
+        slot = { get = CurrentCISlot, customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
             M.SetMenuStateValue("gfCornerSlotSelection", value or "TL")
             RefreshPage()
         end },

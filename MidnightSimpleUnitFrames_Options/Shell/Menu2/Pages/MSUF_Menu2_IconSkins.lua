@@ -59,6 +59,7 @@ local function Meta(path, classification, settingKey)
 end
 -- Positional rows with the former binder signatures: Schema.Build creates, binds and places each one.
 local function Row(ctx, parent, row)
+    row.customSetReason = row.customSetReason or "Writes appearance choices and synchronizes the dependent product shapes or registered provider areas."
     local meta = row.meta
     row[2], row.domain = meta.controlId, meta.classification == "ephemeral" and "menuState" or "iconSkins"
     return Schema.Build(ctx, parent, { row }, ROW_OPTIONS)[row[2]]
@@ -488,7 +489,7 @@ local function BuildGallery(P, section, width, top)
     end
     Row(ctx, section, { "segment", nil, nil, { "Family", values, width - 48 }, { 24, top, width - 48 },
         get = function() return P.family end,
-        set = function(value)
+        customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
             P.family = value
             P.LayoutTiles()
         end,

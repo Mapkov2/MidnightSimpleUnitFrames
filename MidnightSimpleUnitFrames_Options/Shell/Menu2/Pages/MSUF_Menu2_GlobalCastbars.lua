@@ -90,7 +90,8 @@ local function BuildBehaviorSection(PageState, secBuilder)
             end,
             "How far the bar jolts, in pixels. 0 turns the shake off even while Shake on interrupt is enabled."),
         { "slider", "castbarInterruptFeedbackDuration", 0.5, { "Interrupt display duration (sec)", 0, 5, 0.1, 300 }, { leftX, -126, 320 },
-            reason = "MSUF2_CASTBAR_INTERRUPT_DURATION", precise = true, set = function(value)
+            reason = "MSUF2_CASTBAR_INTERRUPT_DURATION", precise = true,
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
                 local duration = max(0, min(5, tonumber(value) or 0.5))
                 SetG("castbarInterruptFeedbackDuration", duration, "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true })
                 MSUF.Castbars.Config.Refresh()
@@ -276,7 +277,8 @@ local function BuildNameShorteningSection(PageState, secBuilder)
     local function NameShorteningEnabled() return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1 end
     local textControls = BuildCastControlSpecs(text, {
         { "switch", "shorten", nil, { "Spell name shortening", textLeftX, -42, 260 },
-            name = "shorten", get = NameShorteningEnabled, settingKey = "general.castbarSpellNameShortening", set = function(v)
+            name = "shorten", get = NameShorteningEnabled, settingKey = "general.castbarSpellNameShortening",
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 SetG("castbarSpellNameShortening", v and 1 or 0, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
                 RequestCastPreviewRefresh()
                 if syncNameShortening then syncNameShortening() end
@@ -360,12 +362,13 @@ local function BuildFocusKickSection(PageState, secBuilder)
         { "flowToggle", "preview", nil, { "Show on-screen preview" }, { focusLeftX, -100 },
             labelWidth = 300, name = "preview", get = function()
                 return isPreviewEnabled() or false
-            end, set = function(v)
+            end, customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
                 setPreviewEnabled = setPreviewEnabled or MSUF.Require("MSUF_FocusKick_SetPreviewEnabled", FILE)
                 setPreviewEnabled(v and true or false)
             end, classification = "ephemeral" },
         { "flowToggle", "focusKickShowCastbar", false, { "Show castbar with Focus Kick icon" }, { focusLeftX, -126 },
-            labelWidth = 340, reason = "MSUF2_FOCUS_KICK_CASTBAR", name = "show_castbar", set = function(v)
+            labelWidth = 340, reason = "MSUF2_FOCUS_KICK_CASTBAR", name = "show_castbar",
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 if M.SetGeneralValue("focusKickShowCastbar", v and true or false, "MSUF2_FOCUS_KICK_CASTBAR",
                     { applyAll = false, preview = false, notify = false }) then
                     MSUF.Castbars.Config.Refresh()
@@ -382,7 +385,7 @@ local function BuildFocusKickSection(PageState, secBuilder)
                 local v = tonumber(ReadG("focusKickTextSize", nil))
                 if v then return v end
                 return (tonumber(ReadG("focusKickIconHeight", 40)) or 40) >= 48 and 14 or 12
-            end, set = function(v)
+            end, customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
                 SetG("focusKickTextSize", floor((tonumber(v) or 12) + 0.5), "MSUF2_FOCUS_KICK_TEXT", { castbar = true, preview = true })
                 RequestFocusKickTextFont()
                 ApplyFocusKickOptions()
@@ -591,17 +594,16 @@ local function CreateCastbarPageState(ctx, b)
                 if kind == "slider" then return tonumber(ReadG(key, default)) or default end
                 return ReadG(key, default)
             end
-            row.set = row.set or function(value)
-                local nextValue = value
-                if kind == "slider" then
-                    local fallback = row.writeDefault ~= nil and row.writeDefault or default
-                    nextValue = row.precise and (tonumber(value) or fallback) or floor((tonumber(value) or fallback) + 0.5)
-                elseif kind == "dropdown" then
-                    nextValue = value or default
-                end
-                if kind == "toggle" then SetGBool(key, nextValue, reason, { castbar = true, preview = true })
-                else SetG(key, nextValue, reason, { castbar = true, preview = true }) end
-                if row.afterWrite then row.afterWrite(reason, nextValue, true) end
+            if not row.set then
+                local fallback = row.writeDefault
+                if fallback == nil then fallback = default end
+                row.write = { call = kind == "toggle" and SetGBool or SetG, keyOnly = true,
+                    args = { reason, { castbar = true, preview = true } },
+                    numberDefault = kind == "slider" and fallback or nil,
+                    round = kind == "slider" and not row.precise,
+                    after = row.afterWrite and function(value) row.afterWrite(reason, value, true) end }
+                    --[[schema setter: GlobalCastbars.Rows]]
+                if kind == "dropdown" then row.write.fallback = default end
             end
             if row.writeDefault ~= nil then row[3] = row.writeDefault end
         end

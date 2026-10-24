@@ -1,0 +1,685 @@
+{
+  "version": 1,
+  "scope": "F1 owned G2 paths and their helpers; C10-reviewed engine adapters retained",
+  "method": "Extend C10's inclusive reviewed render-range census to every F1/G2 path.\nCount physical and stripped Lua lines; union overlaps. Map surviving baseline\nlines with SequenceMatcher. Exclude reviewed runtime adapters (inputs, surface\nadoption, viewport transform), fixtures, lifecycle and editor chrome. A new\nimplementation needs review; hashes pin this census, which is not visual proof.\n",
+  "range_policy": "Inclusive reviewed ranges clipped to baseline EOF, matching the measured F1 union.",
+  "diagram_exclusions": [
+    "Pages/Group growth layout",
+    "Pages/UnitSections boss layout",
+    "Pages/GroupIndicators status strip",
+    "Pages/UnitStatusSection status strip"
+  ],
+  "files": [
+    {
+      "file": "MSUF_Menu2_Preview_ClassPower.lua",
+      "runtime_owner": "UF.Shared; ClassPowerShapes; Power.ResolveDetachedWidth; ClassPowerConfig",
+      "before_sha256": "2f9d4c52c3c93371e1ecc3e30fb6719fe9c8eddce645f456dda7af80a4b01bf8",
+      "before_physical": 187,
+      "before_code": 171,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 314,
+      "original_reviewed_ranges": [
+        [
+          10,
+          173
+        ],
+        [
+          218,
+          230
+        ],
+        [
+          305,
+          330
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          10,
+          173
+        ],
+        [
+          218,
+          230
+        ],
+        [
+          305,
+          314
+        ]
+      ],
+      "source_sha256": "ea692c102a4deebd7d75e10a9d957599e7466248b9062402c441efc9766f77a6",
+      "adapter_exclusions": [
+        {
+          "name": "CP.ResolveDetachedPowerWidth",
+          "start": 11,
+          "end": 23,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": [
+        {
+          "line": 28,
+          "text": "local darkBarColor = {}",
+          "reason": "sample metadata / shared provider / editor chrome"
+        }
+      ]
+    },
+    {
+      "file": "Preview/MSUF_Menu2_ClassPowerPreview.lua",
+      "runtime_owner": "ClassPower scene; PlayerHP; AltMana; ExtraAuras; ManaExtras; ResourceMarks; EbonMight",
+      "before_sha256": "4a613282124f903fd207d2017cec26962e73e09e801621918afdf616288ad250",
+      "before_physical": 972,
+      "before_code": 922,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 2277,
+      "original_reviewed_ranges": [
+        [
+          63,
+          71
+        ],
+        [
+          158,
+          163
+        ],
+        [
+          203,
+          208
+        ],
+        [
+          224,
+          235
+        ],
+        [
+          247,
+          330
+        ],
+        [
+          354,
+          445
+        ],
+        [
+          662,
+          775
+        ],
+        [
+          819,
+          855
+        ],
+        [
+          953,
+          990
+        ],
+        [
+          995,
+          1009
+        ],
+        [
+          1016,
+          1033
+        ],
+        [
+          1046,
+          1244
+        ],
+        [
+          1259,
+          1310
+        ],
+        [
+          1336,
+          1354
+        ],
+        [
+          1395,
+          1665
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          63,
+          71
+        ],
+        [
+          158,
+          163
+        ],
+        [
+          203,
+          208
+        ],
+        [
+          224,
+          235
+        ],
+        [
+          247,
+          330
+        ],
+        [
+          354,
+          445
+        ],
+        [
+          662,
+          775
+        ],
+        [
+          819,
+          855
+        ],
+        [
+          953,
+          990
+        ],
+        [
+          995,
+          1009
+        ],
+        [
+          1016,
+          1033
+        ],
+        [
+          1046,
+          1244
+        ],
+        [
+          1259,
+          1310
+        ],
+        [
+          1336,
+          1354
+        ],
+        [
+          1395,
+          1665
+        ]
+      ],
+      "source_sha256": "19f13f0d6567b5e9634bda29dc1052533dd26bf9f949ab3440a1bef8f5f4d8fd",
+      "adapter_exclusions": [
+        {
+          "name": "HideMeterText",
+          "start": 136,
+          "end": 141,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "SpecToken",
+          "start": 200,
+          "end": 203,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "CPPreview.ContainerWidth",
+          "start": 505,
+          "end": 517,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "CPPreview.ContainerInsetX",
+          "start": 521,
+          "end": 524,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "HideBarOutline",
+          "start": 237,
+          "end": 243,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "RenderDetachedPower",
+          "start": 696,
+          "end": 722,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "RenderPlayerHP",
+          "start": 723,
+          "end": 734,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "RefreshClassPowerAnimation",
+          "start": 748,
+          "end": 774,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "Preview.RenderAlternativeMana",
+          "start": 786,
+          "end": 793,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "RenderExtraSamples",
+          "start": 822,
+          "end": 835,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "Preview.UpdateSampleThresholds",
+          "start": 836,
+          "end": 838,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": [
+        {
+          "line": 196,
+          "text": "local ResolveTexture = CPPreview.ResolveTexture",
+          "reason": "sample metadata / shared provider / editor chrome"
+        },
+        {
+          "line": 197,
+          "text": "local PREVIEW_CLASS_BY_PREFIX = { deathknight = \"DEATHKNIGHT\", demonhunter = \"DEMONHUNTER\", druid = \"DRUID\", evoker = \"EVOKER\", hunter = \"HUNTER\",",
+          "reason": "sample metadata / shared provider / editor chrome"
+        },
+        {
+          "line": 198,
+          "text": "    mage = \"MAGE\", monk = \"MONK\", paladin = \"PALADIN\", priest = \"PRIEST\", rogue = \"ROGUE\", shaman = \"SHAMAN\", warlock = \"WARLOCK\", warrior = \"WARRIOR\" }",
+          "reason": "sample metadata / shared provider / editor chrome"
+        }
+      ]
+    },
+    {
+      "file": "Preview/MSUF_Menu2_GroupPreview_Render.lua",
+      "runtime_owner": "SpellIndicators/ClassicVisuals.ApplyPreviewFrameEffect -> live ApplyFrameEffect",
+      "before_sha256": "e1c6d4032f192e19b210463cea5bfab66637a6c998b9987ec99a458680b4f003",
+      "before_physical": 248,
+      "before_code": 236,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 2337,
+      "original_reviewed_ranges": [
+        [
+          104,
+          143
+        ],
+        [
+          1073,
+          1122
+        ],
+        [
+          1154,
+          1236
+        ],
+        [
+          1281,
+          1355
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          104,
+          143
+        ],
+        [
+          1073,
+          1122
+        ],
+        [
+          1154,
+          1236
+        ],
+        [
+          1281,
+          1355
+        ]
+      ],
+      "source_sha256": "e76e7f138b20da1d3db1414ac9349c90507a67a8308367796f522c68c6e5f980",
+      "adapter_exclusions": [
+        {
+          "name": "ApplySpellEffectPreview",
+          "start": 1102,
+          "end": 1108,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": [
+        {
+          "line": 92,
+          "text": "local SetPreviewFrameLevel, PreviewElementLevel, PreviewInteractionLevel",
+          "reason": "sample metadata / shared provider / editor chrome"
+        }
+      ]
+    },
+    {
+      "file": "Pages/MSUF_Menu2_Auras_Preview.lua",
+      "runtime_owner": "MockAuraPainter.Workbench -> native ButtonVisuals / Classic Buttons live preparation",
+      "before_sha256": "9fe7de83c35850969037ab0fd6f283e908db91946bffc2e0a65a17f3866b70a5",
+      "before_physical": 270,
+      "before_code": 251,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 830,
+      "original_reviewed_ranges": [
+        [
+          51,
+          93
+        ],
+        [
+          350,
+          369
+        ],
+        [
+          401,
+          607
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          51,
+          93
+        ],
+        [
+          350,
+          369
+        ],
+        [
+          401,
+          607
+        ]
+      ],
+      "source_sha256": "1b5f8fb48b765d82f539f381d79c6179f8afb100c3a57be7d0a9cbbfe0238276",
+      "adapter_exclusions": [
+        {
+          "name": "WorkbenchRefresh",
+          "start": 327,
+          "end": 353,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": [
+        {
+          "line": 292,
+          "text": "local buffTex = { 135987, 136116, 135932, 136085, 132333, 135981, 136048 }",
+          "reason": "sample metadata / shared provider / editor chrome"
+        },
+        {
+          "line": 293,
+          "text": "local debuffTex = { 136118, 136139, 136197, 135817, 132851, 136188, 136170 }",
+          "reason": "sample metadata / shared provider / editor chrome"
+        }
+      ]
+    },
+    {
+      "file": "Preview/MSUF_Menu2_UnitPreview_Render.lua",
+      "runtime_owner": "Castbars.GCD live factories/layout/visuals",
+      "before_sha256": "22ff7c52a8673b66e302c3c72df27d00d4dda47f5b0a1d731b9983e55c40ff46",
+      "before_physical": 63,
+      "before_code": 60,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 1506,
+      "original_reviewed_ranges": [
+        [
+          190,
+          252
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          190,
+          252
+        ]
+      ],
+      "source_sha256": "0f3e3a5698e85008c5bc68e275d72288478d90016c21da7937fe1ad4de09c4bc",
+      "adapter_exclusions": [
+        {
+          "name": "ApplyGcdSample",
+          "start": 192,
+          "end": 217,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": []
+    },
+    {
+      "file": "Pages/MSUF_Menu2_UnitArenaTrinket.lua",
+      "runtime_owner": "ArenaTrinkets.CreateSurface/PaintSurface + native Cooldown",
+      "before_sha256": "7fff17f2e58af1e2c6376c8a3b3cb038146dfd96377e29bb6791ac91497b765b",
+      "before_physical": 39,
+      "before_code": 35,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 185,
+      "original_reviewed_ranges": [
+        [
+          147,
+          185
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          147,
+          185
+        ]
+      ],
+      "source_sha256": "9f938692da924121e106ba497ac5db7c5e9d1dac6a8c4e284c766adc3a37025d",
+      "adapter_exclusions": [
+        {
+          "name": "TrinketPreview.Paint",
+          "start": 144,
+          "end": 162,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": []
+    },
+    {
+      "file": "Pages/MSUF_Menu2_GlobalBars.lua",
+      "runtime_owner": "UF UnitScene / GF Scene",
+      "before_sha256": "8cf6cd9f6c8414910935905ab956a2a21b93b1f11aa8b94ef1b0fccc0001b610",
+      "before_physical": 159,
+      "before_code": 153,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 2562,
+      "original_reviewed_ranges": [
+        [
+          624,
+          707
+        ],
+        [
+          1860,
+          1934
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          624,
+          707
+        ],
+        [
+          1860,
+          1934
+        ]
+      ],
+      "source_sha256": "855fd0b924d251f04a493123fd66a10bbe46127ef18616efac54f66a0559a788",
+      "adapter_exclusions": [
+        {
+          "name": "CreateRoundedTexturePreview",
+          "start": 629,
+          "end": 637,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "CreateSlantedBarPreview",
+          "start": 1791,
+          "end": 1798,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": []
+    },
+    {
+      "file": "Pages/MSUF_Menu2_AdvancedColors.lua",
+      "runtime_owner": "UF UnitScene health/background painters",
+      "before_sha256": "97aa4d46fdece197f9eaa111269c55b522e44cfbd6a7d46685ee8adcaec31dd5",
+      "before_physical": 181,
+      "before_code": 170,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 2365,
+      "original_reviewed_ranges": [
+        [
+          309,
+          466
+        ],
+        [
+          1474,
+          1496
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          309,
+          466
+        ],
+        [
+          1474,
+          1496
+        ]
+      ],
+      "source_sha256": "1cf37dce9b15fd3d27e0e3bfb18e5d21a656f006a1c031240c6be68fb4aab4e5",
+      "adapter_exclusions": [
+        {
+          "name": "M.RefreshHealthBackgroundInlinePreview",
+          "start": 306,
+          "end": 319,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "Build.Background",
+          "start": 1302,
+          "end": 1376,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": []
+    },
+    {
+      "file": "Pages/MSUF_Menu2_ColorPainter.lua",
+      "runtime_owner": "UF UnitScene Power + ClassPower scene",
+      "before_sha256": "1ec9a27a2978957c6eee5f64de7372ea9e594175591dff324977fdce52676a51",
+      "before_physical": 51,
+      "before_code": 51,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 1302,
+      "original_reviewed_ranges": [
+        [
+          1055,
+          1063
+        ],
+        [
+          1067,
+          1067
+        ],
+        [
+          1071,
+          1079
+        ],
+        [
+          1082,
+          1085
+        ],
+        [
+          1088,
+          1115
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          1055,
+          1063
+        ],
+        [
+          1067,
+          1067
+        ],
+        [
+          1071,
+          1079
+        ],
+        [
+          1082,
+          1085
+        ],
+        [
+          1088,
+          1115
+        ]
+      ],
+      "source_sha256": "8a7a0c2bf729bcb19d5364a061fa9c6defbe7d6ae7f5a18e93339bb9926d77d5",
+      "adapter_exclusions": [
+        {
+          "name": "PainterBuild.ResourcesStrip",
+          "start": 1004,
+          "end": 1143,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": []
+    },
+    {
+      "file": "MSUF_Menu2_Dropdowns.lua",
+      "runtime_owner": "UF UnitScene Prediction",
+      "before_sha256": "fca02593294b00fb78c15019b7d59fef36b87a9133dcb6eda50f422219e870a4",
+      "before_physical": 133,
+      "before_code": 127,
+      "remaining_physical": 0,
+      "remaining_code": 0,
+      "baseline_line_count": 1225,
+      "original_reviewed_ranges": [
+        [
+          661,
+          694
+        ],
+        [
+          702,
+          800
+        ]
+      ],
+      "reviewed_ranges": [
+        [
+          661,
+          694
+        ],
+        [
+          702,
+          800
+        ]
+      ],
+      "source_sha256": "82d9cf1c38a3301c1380496b1fdf6b4d1e8a2c2a2ad5dab095a8443ef504d631",
+      "adapter_exclusions": [
+        {
+          "name": "AddDropdownBarPreviewLane",
+          "start": 658,
+          "end": 664,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "PaintDropdownBarPreviewLane",
+          "start": 673,
+          "end": 703,
+          "reason": "reviewed runtime adapter / editor chrome"
+        },
+        {
+          "name": "PaintDropdownBarPreview",
+          "start": 705,
+          "end": 719,
+          "reason": "reviewed runtime adapter / editor chrome"
+        }
+      ],
+      "declaration_exclusions": []
+    }
+  ],
+  "before_physical": 2303,
+  "before_code": 2176,
+  "remaining_physical": 0,
+  "remaining_code": 0
+}
