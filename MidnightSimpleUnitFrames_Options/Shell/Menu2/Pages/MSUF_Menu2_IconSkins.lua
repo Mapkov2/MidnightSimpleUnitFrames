@@ -19,7 +19,8 @@ local W, T = M.Widgets, M.Theme
 if not (Model and W and T and M.AuraControls) then return end
 
 local floor, ceil, max, min, tonumber = math.floor, math.ceil, math.max, math.min, tonumber
-local BindSwitch, BindSlider, BindDropdown = M.BindSwitchAt, M.BindSliderAt, M.BindDropdownAt
+local Schema = M.ControlSchema
+local ROW_OPTIONS = Schema.UnitOptions()
 local RequestAuraRuntime = M.AuraControls.RequestAuraRuntime
 
 local PAGE = "icon_skins"
@@ -40,16 +41,37 @@ local GLOSS_VALUES = { { value = "AUTO", text = "Skin default" }, { value = "ON"
     { value = "OFF", text = "Off" } }
 local SEARCH_KEYWORDS = { "masque", "skin", "skins", "icon skin", "icon skins", "icon border", "button skin" }
 
--- The path's middle segments name the search breadcrumb (the section title).
-local function Meta(path, classification)
+-- The path's middle segments name the search breadcrumb (the section title). A settingKey names the profile
+-- key the control writes; history stays whole-profile (historyScope = false) because one pick also moves
+-- the icon shapes of the icon types that follow the default.
+local function Meta(path, classification, settingKey)
     local identity = "icon_skins." .. path
-    return {
+    local meta = {
         controlId = "menu2." .. PAGE .. "." .. identity,
         pageKey = PAGE,
         identityKey = identity,
         controlPath = "icon_skins/" .. path:gsub("%.", "/"),
         classification = classification or "setting",
+        settingKey = settingKey,
     }
+    if settingKey then meta.historyScope = false end
+    return meta
+end
+-- Positional rows with the former binder signatures: Schema.Build creates, binds and places each one.
+local function Row(ctx, parent, row)
+    local meta = row.meta
+    row[2], row.domain = meta.controlId, meta.classification == "ephemeral" and "menuState" or "iconSkins"
+    return Schema.Build(ctx, parent, { row }, ROW_OPTIONS)[row[2]]
+end
+local function BindSwitch(ctx, parent, label, x, y, width, get, set, meta)
+    return Row(ctx, parent, { "switch", nil, nil, { label, x, y, width or 180 }, get = get, set = set, meta = meta })
+end
+local function BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, get, set, meta)
+    return Row(ctx, parent, { "slider", nil, nil, { label, minVal, maxVal, step, width }, { x, y, width },
+        get = get, set = set, meta = meta })
+end
+local function BindDropdown(ctx, parent, label, x, y, values, width, get, set, meta)
+    return Row(ctx, parent, { "dropdown", nil, nil, { label, values, width }, { x, y, width }, get = get, set = set, meta = meta })
 end
 
 -------------------------------------------------------------------------------
@@ -358,7 +380,7 @@ local function AlphaSlider(P, section, label, x, y, width, key, default, reason)
                 (tonumber(value) or 100) / 100 })
             P.Queue(slider, reason)
         end,
-        Meta("default-skin." .. key:lower() .. "-alpha"))
+        Meta("default-skin." .. key:lower() .. "-alpha", nil, "auras3.shared.iconSkinDefault." .. key))
     slider:HookScript("OnMouseUp", P.Flush)
     slider:HookScript("OnHide", P.Flush)
     return slider
@@ -394,7 +416,7 @@ local function BuildLook(P, section, width, top)
             Skins().WriteDefault("styleSkinGloss", gloss)
             Page.Apply("AURAS3_ICON_SKIN_GLOSS")
         end,
-        Meta("default-skin.gloss"))
+        Meta("default-skin.gloss", nil, "auras3.shared.iconSkinDefault.styleSkinGloss"))
     if M.AuraControls.AddTooltip then
         M.AuraControls.AddTooltip(gloss, "Skin gloss",
             "Draws the skin's highlight above the cooldown swipe. Strength sets how bright it is.")
@@ -409,7 +431,7 @@ local function BuildLook(P, section, width, top)
             Skins().WriteDefault("styleSkinColorOverride", value == true)
             Page.Apply("AURAS3_ICON_SKIN_COLOR")
         end,
-        Meta("default-skin.own-color"))
+        Meta("default-skin.own-color", nil, "auras3.shared.iconSkinDefault.styleSkinColorOverride"))
     if M.AuraControls.AddTooltip then
         M.AuraControls.AddTooltip(own, "Own skin color",
             "Paints the skin's frames, metal and rings in the Skin Color from the three dots instead of their own colours. Shadows keep theirs.")
@@ -451,7 +473,7 @@ local function BuildGallery(P, section, width, top)
     local ctx = P.ctx
     -- The gallery's keyboard route; search also finds every skin by its name.
     P.skinDropdown = BindDropdown(ctx, section, "Skin", 24, top, function() return Skins().List() end, width - 48,
-        Page.DefaultSkin, Page.SelectDefault, Meta("default-skin.skin"))
+        Page.DefaultSkin, Page.SelectDefault, Meta("default-skin.skin", nil, "auras3.shared.iconSkinDefault.styleSkin"))
     -- A tile picks through the dropdown: one undo entry, the combat block and
     -- the shown value, exactly as a pick from the list.
     function P.Pick(id)
@@ -464,12 +486,13 @@ local function BuildGallery(P, section, width, top)
         local family = FAMILIES[i]
         values[i] = { value = family, text = family == "ALL" and "All" or family }
     end
-    local filter = W.Segment(section, "Family", values, width - 48)
-    if W.MoveWidget then W.MoveWidget(filter, section, 24, top, width - 48) end
-    M.BindSegment(ctx, filter, function() return P.family end, function(value)
-        P.family = value
-        P.LayoutTiles()
-    end, Meta("default-skin.family", "ephemeral"))
+    Row(ctx, section, { "segment", nil, nil, { "Family", values, width - 48 }, { 24, top, width - 48 },
+        get = function() return P.family end,
+        set = function(value)
+            P.family = value
+            P.LayoutTiles()
+        end,
+        meta = Meta("default-skin.family", "ephemeral") })
     P.name = W.Text(section, "", 24, top - 54, width - 48, T.colors.text)
     local list = Skins().List()
     P.tiles, P.perRow = {}, max(6, floor((width - 56) / TILE_STEP))
@@ -550,7 +573,8 @@ local function BuildAreaRow(P, section, row, y, width)
     local key = row.key
     local dropdown = BindDropdown(P.ctx, section, row.label, 24, y, function() return Page.ProductValues(key) end,
         max(260, width - 220), function() return Page.ProductSkin(key) end,
-        function(value) Page.SelectProduct(key, value) end, Meta("where-it-applies." .. key:lower()))
+        function(value) Page.SelectProduct(key, value) end, Meta("where-it-applies." .. key:lower(), nil,
+            not areaByKey[key] and "auras3.shared.appearanceIconStyles." .. key .. ".styleSkin" or nil))
     if M.AuraControls.AddTooltip then
         M.AuraControls.AddTooltip(dropdown, "Icon skin",
             "Like default follows the Icon Skins page. No skin keeps your own border and shadow. Changes made in combat apply when combat ends.")

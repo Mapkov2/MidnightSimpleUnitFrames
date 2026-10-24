@@ -68,6 +68,13 @@ local function GroupSectionHeaderColor()
     return GROUP_SECTION_HEADER_BG
 end
 local PortableControlToken = M.PortableControlToken
+-- The Party portrait is fixed to the Party row (never CurrentScope), so its key is exact. Scope-resolved
+-- group controls declare none: the catalog rejects a release link whose key names another scope.
+-- History stays whole-profile (historyScope = false), as before the key existed.
+local function DeclarePartySetting(meta, field)
+    meta.settingKey, meta.historyScope = "gf_party." .. field, false
+    return meta
+end
 local function GroupControlMeta(ctx, semanticPath, classification)
     local pageKey = PortableControlToken(ctx and ctx.key or M.activeKey, "gf_unknown")
     local pageDomain = pageKey:gsub("^gf_", "")
@@ -109,7 +116,14 @@ for i = 1, #GF_STATUS_ICON_SPECS do
     GF_STATUS_ICON_COPY_VALUES[i] = GF_STATUS_ICON_SPECS[i].value
 end
 local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, table.concat(GF_STATUS_ICON_COPY_VALUES, " "),
-    [[showGroupNumber groupNumberStyle groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconShowTank roleIconShowHealer roleIconShowDPS roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon levelTextDifficultyColor threatTextColorCurve threatTextBackground]], "enabled iconStyle customIcon size anchor x y layer")
+    [[showGroupNumber groupNumberStyle groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer
+            groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA
+            iconStyle useMidnightIcons roleIconShowTank roleIconShowHealer roleIconShowDPS roleIconStyle
+            leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle
+            pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon
+            raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon
+            pvpIconCustomIcon phaseIconCustomIcon levelTextDifficultyColor threatTextColorCurve threatTextBackground]],
+    "enabled iconStyle customIcon size anchor x y layer")
 local function GF()
     return MSUF and MSUF.GF
 end
@@ -329,10 +343,53 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "Basics", keys = WL [[showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape slantedBarDirection hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings buffCoverageBlessingPriorities buffCoverageBlessingTank1 buffCoverageBlessingTank2 buffCoverageBlessingTank3 buffCoverageBlessingHealer1 buffCoverageBlessingHealer2 buffCoverageBlessingHealer3 buffCoverageBlessingDPS1 buffCoverageBlessingDPS2 buffCoverageBlessingDPS3 buffCoverageBlessingWARRIOR buffCoverageBlessingPALADIN buffCoverageBlessingHUNTER buffCoverageBlessingROGUE buffCoverageBlessingPRIEST buffCoverageBlessingSHAMAN buffCoverageBlessingMAGE buffCoverageBlessingWARLOCK buffCoverageBlessingDRUID buffCoverageStamina buffCoverageSpirit buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor buffCoverageX buffCoverageY buffCoverageLayer]] },
-    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
-    { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
-    { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
+    { key = "general", label = "Basics", keys = WL [[showPlayer showSolo clickCastEnabled width height spacing growth
+            groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole
+            sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill
+            smoothFill chunkedFill frameBarShape slantedBarDirection hideInClientScene hideInHousing
+            hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual
+            scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups
+            hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y
+            tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height
+            tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y
+            tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns
+            petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled
+            friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns
+            healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize
+            targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG
+            healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha
+            autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty
+            buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings
+            buffCoverageBlessingPriorities buffCoverageBlessingTank1 buffCoverageBlessingTank2
+            buffCoverageBlessingTank3 buffCoverageBlessingHealer1 buffCoverageBlessingHealer2
+            buffCoverageBlessingHealer3 buffCoverageBlessingDPS1 buffCoverageBlessingDPS2 buffCoverageBlessingDPS3
+            buffCoverageBlessingWARRIOR buffCoverageBlessingPALADIN buffCoverageBlessingHUNTER
+            buffCoverageBlessingROGUE buffCoverageBlessingPRIEST buffCoverageBlessingSHAMAN buffCoverageBlessingMAGE
+            buffCoverageBlessingWARLOCK buffCoverageBlessingDRUID buffCoverageStamina buffCoverageSpirit
+            buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor
+            buffCoverageX buffCoverageY buffCoverageLayer]] },
+    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG
+            healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture
+            barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars
+            powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight
+            powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol
+            powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill
+            powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled
+            powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha
+            healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB
+            deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX
+            powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX
+            powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
+    { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle
+            dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
+    { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor
+            nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled
+            nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight
+            hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol
+            hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse
+            healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer
+            hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY
+            hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
     -- Every key the group font override resolves (GroupFrames/MSUF_GroupFrames_DB_Text.lua).
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline fontMonochrome fontSlug fontTextAlpha fontBaselineOffset
         textBackdrop fontShadowOpacity fontShadowDistance fontShadowStrength useGlobalFontColor fontR fontG fontB
@@ -344,9 +401,13 @@ local GF_COPY_CATEGORIES = {
     --- Search only registers them for party). There is no second scope to copy them
     --- to, and pushing them into raid/mythicraid would plant exactly the stale imported
     --- keys the engine guards against.
-    { key = "auras", label = "Aura Options", description = "Copies Group Aura visibility, layout, filters, exact/category blacklists, Strata and dispel options. Aura Style and the global Appearance theme remain unchanged.", tables = WL [[auras]] },
-    { key = "aurastyle", label = "Aura Style", default = true, description = "Copies Buff, Debuff, External Defensive and Spell Icon presentation, including icon zoom, text, swipe, duration bars and ordering. Aura Options, tracked Spell Icons and the global Appearance theme remain unchanged." },
-    { key = "highlight", label = "Highlight & Aggro", keys = WL [[targetIndicator targetR targetG targetB aggroEnabled aggroMode dispelEnabled dispelOutlineMode dispelBorderEnabled dispelBorderMode dispelBorderTrigger dispelBorderShowOn dispelTrigger]], prefix = WL [[hl]] },
+    { key = "auras", label = "Aura Options", description = "Copies Group Aura visibility, layout, filters, exact/category blacklists, Strata " ..
+        "and dispel options. Aura Style and the global Appearance theme remain unchanged.", tables = WL [[auras]] },
+    { key = "aurastyle", label = "Aura Style", default = true, description = "Copies Buff, Debuff, External Defensive and Spell Icon presentation, " ..
+        "including icon zoom, text, swipe, duration bars and ordering. Aura Options, tracked Spell Icons and the global Appearance theme remain unchanged." },
+    { key = "highlight", label = "Highlight & Aggro", keys = WL [[targetIndicator targetR targetG targetB aggroEnabled
+            aggroMode dispelEnabled dispelOutlineMode dispelBorderEnabled dispelBorderMode dispelBorderTrigger
+            dispelBorderShowOn dispelTrigger]], prefix = WL [[hl]] },
     { key = "dstripe", label = "Debuff Stripe", prefix = WL [[debuffStripe]] },
     { key = "features", label = "Corner/Spell", keys = WL [[ciEnabled ciAlpha]], tables = WL [[spellIndicators]], prefix = WL [[ci]] },
 }
@@ -613,18 +674,22 @@ local function AttachGroupSectionUX(ctx)
         return M.Tr(text:sub(1, 1):upper() .. text:sub(2):lower())
     end
     local sections = {
-        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape slantedBarDirection hideInHousing hideInClientScene hideOfflineEnabled hideOfflineInCombat hideOfflineDelay",
+        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape slantedBarDirection hideInHousing " ..
+            "hideInClientScene hideOfflineEnabled hideOfflineInCombat hideOfflineDelay",
             summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
         portrait = { prefixes = "portrait", noCopy = true },
         text = { },
-        power = { fields = "powerBarEnabled powerHeight powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth", prefixes = "detachedPower" },
+        power = { fields = "powerBarEnabled powerHeight powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager " ..
+            "powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth", prefixes = "detachedPower" },
         range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled
             and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
-        transparency = { fields = "hpBarAlpha hpBgAlpha oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha alphaExcludeTextPortrait alphaExcludePredictionBars", summary = function(c) return Number((c.hpBarAlpha or 1) * 100) .. "%" end },
+        transparency = { fields = "hpBarAlpha hpBgAlpha oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha " ..
+            "alphaExcludeTextPortrait alphaExcludePredictionBars", summary = function(c) return Number((c.hpBarAlpha or 1) * 100) .. "%" end },
         dispel = { prefixes = "dispelOverlay" },
         dispelSymbol = { prefixes = "dispelSymbol" },
         dstripe = { prefixes = "debuffStripe" },
-        layout_advanced = { fields = "growth unitsPerColumn maxColumns preserveRaidGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo smallRaidAsParty" },
+        layout_advanced = { fields = "growth unitsPerColumn maxColumns preserveRaidGroups collapseEmptyGroups " ..
+            "hideMythicGroupsFiveToEight centerSolo smallRaidAsParty" },
         party_targets = { prefixes = "targets" },
         group_pets = { prefixes = "pets" },
         friendly_bosses = { prefixes = "friendlyBoss" },
@@ -640,8 +705,13 @@ local function AttachGroupSectionUX(ctx)
             buffCoverageBlessingDRUID
         ]] },
         name_bar = { prefixes = "nameBar" },
-        sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder autoTanks preserveRaidGroups", summary = function(c) return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "") end },
-        scaling = { prefixes = "frameScale tier10 tier20 tier25 tier40", fields = "width height spacing scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize" },
+        sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority " ..
+            "classOrder autoTanks preserveRaidGroups",
+            summary = function(c)
+                return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "")
+            end },
+        scaling = { prefixes = "frameScale tier10 tier20 tier25 tier40", fields = "width height spacing scaleAt10 scaleAt20 scaleAt25 scaleOver25 " ..
+            "layoutTiersEnabled excludeHiddenGroups autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize" },
         anchor = { fields = "anchorToFrame anchorPoint x y", noCopy = true },
         auras = { summary = function(c)
             local a = c.auras or {}
@@ -717,16 +787,7 @@ local function RefreshScopeContext(ctx, previousScope)
     end
 end
 local function AttachStickyScopeHeader(ctx, builder, sec)
-    if W.AttachStickyPageHeader then
-        W.AttachStickyPageHeader(sec, {
-            pageKey = ctx and ctx.key,
-            wrapper = ctx and ctx.wrapper,
-            gap = 4,
-            builder = builder,
-            ctx = ctx,
-            flowGap = 8,
-        })
-    end
+    Shared.AttachStickyHeader(ctx, builder, sec)
 end
 local function PriorityScopeNote(ctx, builder, sec, layout)
     local note = Schema.Build(ctx, sec, {
@@ -938,13 +999,10 @@ local function BindExclusiveScopeToggle(ctx, control, key, peerKey, historyLabel
             local scope = CurrentScope()
             local function Write()
                 local conf = Conf(scope)
-                local changed = conf[key] ~= value
+                local peerOn = value and conf[peerKey] ~= false
+                if conf[key] == value and not peerOn then return false end
                 conf[key] = value
-                if value and conf[peerKey] ~= false then
-                    conf[peerKey] = false
-                    changed = true
-                end
-                if not changed then return false end
+                if peerOn then conf[peerKey] = false end
                 QueueGF(scope, "visual")
                 refresh()
                 return true
@@ -1029,7 +1087,7 @@ local function PreparePartyPortraitSwitch(ctx, sec)
     local portraitEnable
     portraitEnable = Schema.Build(ctx, sec, {
         { "sectionSwitch", "portraitMode", nil, { "Portrait" },
-            meta = GroupControlMeta(ctx, "portrait.enabled"), scope = kind, domain = "config",
+            meta = DeclarePartySetting(GroupControlMeta(ctx, "portrait.enabled"), "portraitMode"), scope = kind, domain = "config",
             get = function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
             set = function(value)
                 local mode = Val(kind, "portraitMode", "OFF")
@@ -1060,16 +1118,7 @@ function PortraitBuild.Shell(ctx, builder)
         border = cardH.border + 116,
         advanced = cardH.style + 116,
     }
-    local placementValues = {
-        modes = VT("ATTACHED", "Attached to bar", "DETACHED", "Detached", "OVERLAY", "Overlay on bar"),
-        points = VT(
-            "TOPLEFT", "Top left", "TOP", "Top", "TOPRIGHT", "Top right",
-            "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
-            "BOTTOMLEFT", "Bottom left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom right"),
-        overlay = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "FULL", "Fill bar"),
-        borderArt = VT("FLAT", "Flat", "RELIEF", "Relief"),
-        borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
-    }
+    local placementValues = Shared.PortraitPlacementValues()
     local renderValues = VT("2D", "2D portrait", "CLASS", "Class portrait")
     local sizeModeValues = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height")
     local shapeValues = VT("SQUARE", "Square", "CIRCLE", "Circle", "ROUNDED", "Rounded", "DIAMOND", "Diamond")
@@ -1128,7 +1177,7 @@ function PortraitBuild.Binders(ctx, s)
         if extraKeys then
             meta.searchSettingKeys = extraKeys
         end
-        return meta
+        return DeclarePartySetting(meta, key or extraKeys[1]:sub(#"gf_party." + 1))
     end
     local function SetValue(key, value)
         Set(kind, key, value, "config")
@@ -1140,7 +1189,8 @@ function PortraitBuild.Binders(ctx, s)
         local meta = GroupControlMeta(ctx, path, "setting")
         meta.kind = "textinput"
         meta.label = label
-        meta.searchSettingKeys = { "gf_party." .. tostring(key) }
+        DeclarePartySetting(meta, tostring(key))
+        meta.searchSettingKeys = { meta.settingKey }
         meta.command = {
             kind = "textinput",
             historyMode = "single",
@@ -1597,7 +1647,10 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             command = {
                 kind = "dropdown", valueKind = "enum", values = GROWTH_VALUES,
                 get = function() return Val(CurrentScope(), "growth", "DOWN") end,
-                set = function(value) Set(CurrentScope(), "growth", value, "geometry"); RefreshGrowthTiles() end,
+                set = function(value)
+                    Set(CurrentScope(), "growth", value, "geometry")
+                    RefreshGrowthTiles()
+                end,
             },
         })
         Schema.Owned(btn, "group", "geometry")

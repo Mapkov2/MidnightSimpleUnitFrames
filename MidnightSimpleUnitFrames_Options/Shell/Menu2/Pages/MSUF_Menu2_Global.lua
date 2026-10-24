@@ -83,7 +83,12 @@ local function SetB(key, value, reason, opts)
     M.RequestGeneralDomains(reason or ("MSUF2_BARS_" .. tostring(key)), Targeted(opts))
 end
 local UNIT_SCOPE_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet pettarget boss arena"
-local TEXT_SCOPE_KEYS = M.KeySetFromWords "hpTextMode textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextReverse hpTextSeparator powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator"
+local TEXT_SCOPE_KEYS = M.KeySetFromWords [[
+    hpTextMode textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol
+    hpTextRightHidePercentSymbol hpTextReverse hpTextSeparator powerTextMode powerTextLeft powerTextCenter
+    powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol
+    powerTextSeparator
+]]
 local POWER_BAR_SCOPE_UNITS = M.KeySetFromWords "player target focus boss arena"
 local function NormalizeScopeKey(scope)
     scope = tostring(scope or "shared"):lower()
@@ -595,7 +600,8 @@ local function MenuFontKeySet(value)
     G().menuFontKey = FontSelectionValue(value) or ""
 end
 local TextureValues = M.StatusBarTextureItems
-local GLOBAL_SCOPE_VALUES = (M.FilterSupportedUnitValues or function(values) return values end)(VTP "shared=Shared|player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|pettarget=Pet Target|boss=Boss|arena=Arena|gf_party=Party|gf_raid=Raid")
+local GLOBAL_SCOPE_VALUES = M.FilterSupportedUnitValues(VTP("shared=Shared|player=Player|target=Target|targettarget=Target of Target|"
+    .. "focustarget=Focus Target|focus=Focus|pet=Pet|pettarget=Pet Target|boss=Boss|arena=Arena|gf_party=Party|gf_raid=Raid"))
 -- The strip wraps to more rows, so it can show the full name the unit tabs use;
 -- the bar's built-in chip for this key is only wide enough for "ToT".
 for _, item in ipairs(GLOBAL_SCOPE_VALUES) do
@@ -635,16 +641,19 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
         if row.kind == "button" then Schema.Owned(widget, ctx.key, "global") end
     end
     local scopeId = "menu2." .. ctx.key .. ".scope."
+    local Meta = opts.meta
     local controls = Schema.Build(ctx, scope, {
         { "scopebar", scopeId .. "selector", nil, { scopeOpts }, register = true,
-            meta = opts.selectorMeta, label = opts.selectorLabel or "Editing:", kind = "segment", values = values },
+            meta = opts.selectorMeta or Meta("scope.selector", "ephemeral"), label = opts.selectorLabel or "Editing:", kind = "segment", values = values },
         { "toggle", scopeId .. "override", false,
             { opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260 },
-            get = opts.getOverride, set = opts.setOverride or M.Noop, meta = opts.overrideMeta, domain = "global" },
+            get = opts.getOverride, set = opts.setOverride or M.Noop, meta = opts.overrideMeta or Meta("scope.override.enabled"),
+            domain = "global" },
         { "text", scopeId .. "overrideInfo", nil, { "", 14, overrideY, ctx.width - 130, T.colors.text } },
         { "button", scopeId .. "reset", nil, { opts.resetLabel or "Reset", opts.resetWidth or 76, 22 },
             anchor = { "TOPRIGHT", scope, "TOPRIGHT", -16, overrideY + 8 }, center = true, action = type(opts.reset) == "function" and opts.reset or nil,
-            register = true, meta = opts.resetMeta, label = opts.resetLabel or "Reset", kind = "button" },
+            register = true, meta = opts.resetMeta or Meta("scope.overrides.reset", "action"), label = opts.resetLabel or "Reset",
+            kind = "button" },
         { "text", scopeId .. "hint", nil, { opts.hint or "", 14, hintY, ctx.width - 28, T.colors.muted } },
     }, rowOptions)
     local segment, override, overrideInfo = controls[scopeId .. "selector"], controls[scopeId .. "override"],
@@ -755,15 +764,10 @@ for _, row in ipairs({
 end
 local PRIORITY_ALLOWED = M.KeySetFromWords "dispel aggro purge bossTarget"
 -- Capitalised and upper-case spellings of every single-word key, plus the Boss Target spellings.
-local PRIORITY_KEY_ALIAS = {
-    BossTarget = "bossTarget",
-    Boss_Target = "bossTarget",
-    ["Boss Target"] = "bossTarget",
-    ["boss target"] = "bossTarget",
-    boss_target = "bossTarget",
-    bosstarget = "bossTarget",
-    BOSS_TARGET = "bossTarget",
-}
+local PRIORITY_KEY_ALIAS = { ["Boss Target"] = "bossTarget", ["boss target"] = "bossTarget" }
+for _, spelling in ipairs(M.WordList "BossTarget Boss_Target boss_target bosstarget BOSS_TARGET") do
+    PRIORITY_KEY_ALIAS[spelling] = "bossTarget"
+end
 for _, word in ipairs(M.WordList "dispel magic curse disease poison bleed aggro purge") do
     PRIORITY_KEY_ALIAS[word:sub(1, 1):upper() .. word:sub(2)] = word
     PRIORITY_KEY_ALIAS[word:upper()] = word

@@ -28,7 +28,7 @@ local C_Timer = M.MenuTimer or C_Timer
 local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
 local SPELL_INDICATORS_121_PTR_DISABLED = false
-local issecretvalue = issecretvalue or function() return false end
+local issecretvalue = MSUF.Util.IsSecret
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
 local STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS = GP.STATUS_ICON_ANCHORS or {}, GP.GF_STATUS_ICON_SPECS or {}
 local GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES = GP.GF_STATUS_ICON_VALUES or {}, GP.PLACED_INDICATOR_TYPES or {}
@@ -57,7 +57,7 @@ end
 -- on. A Retail or WoW Forever AuraContainer slot never tells MSUF that its aura
 -- is absent, so there the choice is offered disabled with its reason. A stored
 -- "missing" stays as it is; the runtime shows such a slot while the aura is up.
-local CORNER_MISSING_AVAILABLE = MSUF.Client and MSUF.Client.IsClassic == true or false
+local CORNER_MISSING_AVAILABLE = MSUF.Client.IsClassic == true
 local CORNER_MISSING_NOTICE = "Show when missing is unavailable on this client. Saved settings are kept; the slot shows when present."
 local CORNER_MISSING_NOTE_GAP = CORNER_MISSING_AVAILABLE and 0 or 32
 local cornerModeSource, cornerModeValues
@@ -310,7 +310,8 @@ local function BuildIndicatorsSection(ctx, b)
         groupNumber.groupNumberAnchor, groupNumber.groupNumberLayer }
     local groupNumberScopeHint = W.Text(groupNumberCard, "", 16, -268, leftW - 32, T.colors.muted)
     if groupNumberScopeHint.SetWordWrap then groupNumberScopeHint:SetWordWrap(true) end
-    local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -148, rightW, 190)
+    local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. " ..
+        "Priority: Dispel > Aggro > Target > Focus.", rightX, -148, rightW, 190)
     SharedColors(focusCard, "group.focus", "Focus Highlight Color", "menu:group-focus-highlight-color")
     local focusToggle = Schema.Build(ctx, focusCard, {
         { "switch", "hlFocusEnabled", true, { "Focus Highlight", rightW - 62, -24, 0, "HIDDEN" },
@@ -321,7 +322,8 @@ local function BuildIndicatorsSection(ctx, b)
     local focusControls = { Schema.Build(ctx, focusCard, {
         { "slider", "hlFocusSize", 2, { "Border Thickness", 1, 6, 1, rightW }, { 16, -88, rightW - 58, "CENTER" } },
     }, ROW_OPTIONS).hlFocusSize }
-    local focusColorHint = W.Text(focusCard, M.Format("Focus color is in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -142, rightW - 32, T.colors.muted)
+    local focusColorHint = W.Text(focusCard, M.Format("Focus color is in %s.",
+        M.NavPath("opt_colors", "Party & Raid Frames")), 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
     local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -486, leftW, 202)
     SharedColors(groupBorderCard, "group.border", "Group Border Color", "menu:group-border-color")
@@ -333,7 +335,8 @@ local function BuildIndicatorsSection(ctx, b)
     }, ROW_OPTIONS)
     local groupBorderToggle = groupBorder.groupBorderEnabled
     local groupBorderControls = { groupBorder.groupBorderSize, groupBorder.groupBorderPadding }
-    local groupBorderColorHint = W.Text(groupBorderCard, M.Format("Border color and opacity are in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -168, leftW - 32, T.colors.muted)
+    local groupBorderColorHint = W.Text(groupBorderCard, M.Format("Border color and opacity are in %s.",
+        M.NavPath("opt_colors", "Party & Raid Frames")), 16, -168, leftW - 32, T.colors.muted)
     if groupBorderColorHint.SetWordWrap then groupBorderColorHint:SetWordWrap(true) end
     local function RefreshIndicatorsState()
         local groupNumberEnabled = Bool(CurrentScope(), "showGroupNumber", false)
@@ -645,11 +648,12 @@ function StatusIcons.BuildSelectedCard(state, ctx)
     --- Threat % only (MSUF.Client.SupportsThreatText): the unit frames' threat color curve
     --- and the dark plate behind the number (on for Party, off for Raid by default).
     local threatColorCurve, threatBackground
-    if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+    if MSUF.Client.SupportsThreatText == true then
         local threatRows = Schema.Build(ctx, selectedCard, {
             { "toggle", "threatTextColorCurve", true, { "Color by threat", 16, -106, siconLeftW - 32 },
                 tip = { "Color by threat",
-                    "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.", { hook = true } } },
+                    "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.",
+                        { hook = true } } },
             { "toggle", "threatTextBackground", false, { "Background", 16, -136, siconLeftW - 32 },
                 tip = { "Background", "A dark plate behind the number keeps it readable on any bar color, red enemy bars included.", { hook = true } } },
         }, ROW_OPTIONS)
@@ -1294,7 +1298,8 @@ function SpellTileGrid:OnMouseUp(tile, button)
                 if cfg then cfg.enabled = cfg.enabled == false and true or false end
                 QueueSpellIndicators(kind)
             end
-            M.RunWithHistory("Toggle Spell Indicator", "group:spellToggle:" .. tostring(kind) .. ":" .. tostring(tile._specKey) .. ":" .. tostring(tile._auraName), Toggle)
+            M.RunWithHistory("Toggle Spell Indicator",
+                "group:spellToggle:" .. tostring(kind) .. ":" .. tostring(tile._specKey) .. ":" .. tostring(tile._auraName), Toggle)
         end
     else
         SetCurrentSpellAura(kind, tile._auraName)
@@ -1503,7 +1508,10 @@ local function IconScaleLifecycle(iconScale)
     end
     local function FlushRuntime()
         if not pendingApply then return end
-        if CombatLocked() then releaseScheduled = nil; return false end
+        if CombatLocked() then
+            releaseScheduled = nil
+            return false
+        end
         local scope = pendingScope or CurrentScope()
         pendingApply, pendingScope, releaseScheduled = nil, nil, nil
         QueueSpellIndicators(scope, "auras")
@@ -1597,7 +1605,8 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
             get = function() return Style().cooldownSwipeReverse == true and "REVERSE" or "NORMAL" end,
             convert = function(value) return value == "REVERSE" end },
         { "slider", "cooldownDecimalSeconds", 3, { "Decimals below sec", 0, 30, 1, rightW }, { rightX, -372, rightW, "LEFT" },
-            tip = { "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.", { hook = true } } },
+            tip = { "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.",
+                { hook = true } } },
         { "toggle", "showStacks", true, { "Show Stack Count", leftX, -410, leftW } },
         { "slider", "stackSize", 10, { "Stack Font", 6, 24, 1, leftW }, { leftX, -452, leftW, "LEFT" } },
         { "dropdown", "stackAnchor", "BOTTOMRIGHT", { "Stack Anchor", STATUS_ICON_ANCHORS, leftW }, { leftX, -508, leftW, "LEFT" } },
@@ -1858,7 +1867,8 @@ function SpellSection.BuildSelectedSpell(state, ctx)
     local spellEnabled, customSpellIDs, onlyMine, autoBlacklist = rows.enabled, rows.spells, rows.onlyOwn, rows.autoBlacklist
     if M.AddTooltip then
         M.AddTooltip(autoBlacklist, "Hide duplicate Buff icon",
-            "Hides this aura from the regular Buff icons while this spell indicator is enabled. External-defensive Spell Icons follow the active External Defensives container's Auto-blacklist from Buffs setting.",
+            "Hides this aura from the regular Buff icons while this spell indicator is enabled. External-defensive Spell Icons follow the active " ..
+                "External Defensives container's Auto-blacklist from Buffs setting.",
             { hook = true, titleAsLine = true })
     end
     state.spellEnabled, state.customSpellIDs, state.onlyMine, state.autoBlacklist = spellEnabled, customSpellIDs, onlyMine, autoBlacklist
@@ -1968,7 +1978,8 @@ function SpellSection.BuildPlacedCard(state, ctx)
     RefreshPlacedControlVisibility(PlacedConfig(CurrentScope(), false))
     if M.AddTooltip then
         M.AddTooltip(placedGrowth, "Growth",
-            "For Bar, the first direction controls the fill: Right fills left-to-right; Left fills right-to-left. Up or Down remains the secondary layout direction.",
+            "For Bar, the first direction controls the fill: Right fills left-to-right; " ..
+                "Left fills right-to-left. Up or Down remains the secondary layout direction.",
             { hook = true, titleAsLine = true })
         M.AddTooltip(placedBarSmoothFill, "Smooth fill",
             "Uses Blizzard's native StatusBar interpolation when an active aura duration is refreshed. The countdown itself remains C-side.",
@@ -2194,7 +2205,8 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     }, ROW_OPTIONS)
     local ciEnable, ciSize, ciAlpha, ciLayer = cornerRows.ciEnabled, cornerRows.ciSize, cornerRows.ciAlpha, cornerRows.ciLayer
     W.LabelAt(corners, "Slot Assignments", leftX, -282, leftW, "GameFontNormalSmall", T.colors.accent)
-    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.", leftX, -304, leftW, T.colors.muted)
+    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.",
+        leftX, -304, leftW, T.colors.muted)
     local slotControls = {}
     local slotPositions = {
         TL = { x = leftX, y = -358 },
@@ -2217,7 +2229,8 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         slotControls[#slotControls + 1] = assignmentDrop
     end
     W.LabelAt(corners, "Custom Spell Editor", rightX, -42, rightW, "GameFontNormalSmall", T.colors.accent)
-    W.Text(corners, "Pick a slot, set it to Custom Spell, then enter spell IDs. This edits one slot at a time and keeps the five slot assignments visible.", rightX, -64, rightW, T.colors.muted)
+    W.Text(corners, "Pick a slot, set it to Custom Spell, then enter spell IDs. This edits one slot at a time and keeps the five slot assignments visible.",
+        rightX, -64, rightW, T.colors.muted)
     local editorCommands = Schema.GroupCommands({
         slot = { get = CurrentCISlot, set = function(value)
             M.SetMenuStateValue("gfCornerSlotSelection", value or "TL")
@@ -2278,9 +2291,11 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
             historySource = "menu:group-corner-indicator-color",
         })
     end
-    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506 - CORNER_MISSING_NOTE_GAP, rightW, T.colors.dim)
+    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.",
+        rightX, -506 - CORNER_MISSING_NOTE_GAP, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
-    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
+    local ciGlobalControls, ciEditorControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }
+    local ciCustomControls = { customSpells, customMode, customFilter, customColor }
     local function RefreshCornerIndicatorState()
         local slot = CurrentCISlot()
         local category = Val(CurrentScope(), "ciSlot" .. slot, CI_SLOT_DEFAULTS[slot] or "none")

@@ -103,13 +103,16 @@ local function BuildBehaviorSection(PageState, secBuilder)
         { "dropdown", "castbarFillDirection", "RTL", { "Castbar fill direction", VT("RTL", "Right to left (default)", "LTR",
             "Left to right"), 300 }, { rightX, -72, 300 },
             reason = "MSUF2_CASTBAR_FILL_DIRECTION", afterWrite = ApplyAndRefresh,
-            tooltip = "Which way the bar grows during a cast, on every castbar. Channels drain the other way unless Always use fill direction for all casts is on." },
+            tooltip = "Which way the bar grows during a cast, on every castbar. Channels drain " ..
+                "the other way unless Always use fill direction for all casts is on." },
         Flow("castbarOpositeDirectionTarget", false, "Use opposite fill direction for target", rightX, -126, 360,
             "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh,
             "Flips the fill direction on the Target castbar only, so it can mirror your Player castbar when the two frames face each other."),
         Flow("castbarShowChannelTicks", false, "Spell-specific channel tick markers", rightX, -150, 360,
             "MSUF2_CASTBAR_TICKS", ApplyTicksAndSync,
-            "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling."),
+            "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent " ..
+                "and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the " ..
+                    "automatic layout.\n\nThe markers are event-driven and add no recurring channel polling."),
         Flow("castbarAccentLastTick", false, "Highlight last channel tick", rightX, -178, 360, "MSUF2_CASTBAR_LAST_TICK", ApplyAndRefresh),
     }, "behavior")
     -- The accent marks the last of the channel tick markers, so it needs them on.
@@ -125,9 +128,11 @@ local function BuildFilterSection(PageState, secBuilder)
     local filterLeftX = 14
     PageState.BuildCastControlSpecs(filters, {
         Flow("castbarHideTradeSkills", false, "Hide profession casts", filterLeftX, -46, 320, "MSUF2_CASTBAR_HIDE_TRADESKILLS", ApplyAndRefresh,
-            "Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."),
+            "Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for " ..
+                "units whose spell data is restricted in PvP."),
         Flow("castbarShowPushback", false, "Show cast pushback", filterLeftX, -72, 320, "MSUF2_CASTBAR_PUSHBACK", ApplyAndRefresh,
-            "Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."),
+            "Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the " ..
+                "same event that starts the bar."),
     }, "filters")
 end
 local function BuildGCDSection(PageState, secBuilder)
@@ -150,7 +155,9 @@ local function BuildGCDSection(PageState, secBuilder)
                 setGCDBarEnabled(enabled and true or false)
                 if syncGCD then syncGCD() end
             end,
-            tooltip = "Runs a short castbar for the global cooldown whenever an instant spell triggers it.\n\nThe fill and time text are driven natively by the client from the real (haste-scaled) GCD duration - no per-frame addon work while the bar runs. A real cast, channel or empower always takes priority." },
+            tooltip = "Runs a short castbar for the global cooldown whenever an instant spell triggers it.\n\nThe fill and time text are driven " ..
+                "natively by the client from the real (haste-scaled) GCD duration - no per-frame addon work while the bar runs. A real cast, channel " ..
+                    "or empower always takes priority." },
         Flow("showGCDBarTime", true, "GCD bar: show time text", gcdLeftX, -78, 300, "MSUF2_CASTBAR_GCD_TIME", nil,
             "Shows the remaining global cooldown in the Player castbar time text while the GCD bar runs."),
         Flow("showGCDBarSpell", true, "GCD bar: show spell name + icon", gcdLeftX, -104, 300, "MSUF2_CASTBAR_GCD_SPELL", nil,
@@ -207,11 +214,13 @@ local function BuildTexturesSection(PageState, secBuilder)
                 return (type(v) == "string" and v ~= "") and v or ReadG("castbarTexture", "Blizzard")
             end },
         Slider("castbarOutlineThickness", 1, "Outline thickness", 0, 6, 1, texRightX, -42, "MSUF2_CASTBAR_OUTLINE", ApplyTexturesAndPreview,
-            "Width of the border around each castbar, in pixels; 0 removes it. The Interrupt Ready border style colors this border, so keep it above 0 for that style."),
+            "Width of the border around each castbar, in pixels; 0 removes it. The Interrupt " ..
+                "Ready border style colors this border, so keep it above 0 for that style."),
         Flow("castbarShowGlow", false, "Show castbar glow effect", texRightX, -96, 360, "MSUF2_CASTBAR_GLOW", ApplyTexturesAndPreview,
             "Gradually brightens the bar toward white as a cast nears its end, so the last moment of a cast is easy to spot."),
         Flow("castbarShowLatency", true, "Show latency indicator", texRightX, -120, 360, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview,
-            "Shades the end of the Player castbar by your latency or spell queue window, whichever is larger, to help time your next spell. Player castbar only."),
+            "Shades the end of the Player castbar by your latency or spell queue window, " ..
+                "whichever is larger, to help time your next spell. Player castbar only."),
         Flow("castbarShowSpark", false, "Show spark (leading edge highlight)", texRightX, -144, 360, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview),
         Flow("castbarSparkOverflow", true, "Spark extends beyond bar", texRightX, -168, 360, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview,
             "Lets the spark stick out above and below the bar at about twice its height. Only matters while the spark is shown."),
@@ -274,7 +283,8 @@ local function BuildNameShorteningSection(PageState, secBuilder)
             end,
             tooltip = "Cuts long spell names on every castbar to Max name length and marks the cut with '...'. Reserved space applies only while this is on." },
         Slider("castbarSpellNameMaxLen", 30, "Max name length", 6, 30, 1, textRightX, -42, "MSUF2_CASTBAR_NAME_MAX", ApplyAndRefresh,
-            "Spell names longer than this many characters are cut and end in '...'. Names are also trimmed to fit the free bar width, so narrow bars may show fewer."),
+            "Spell names longer than this many characters are cut and end in '...'. Names " ..
+                "are also trimmed to fit the free bar width, so narrow bars may show fewer."),
         Slider("castbarSpellNameReservedSpace", 8, "Reserved space", 0, 30, 1, textRightX, -96, "MSUF2_CASTBAR_NAME_RESERVED", ApplyAndRefresh,
             "Keeps this many extra pixels free next to the spell name, on top of the room kept for the cast time, so long names stay clear of the timer."),
     }, "name_shortening")

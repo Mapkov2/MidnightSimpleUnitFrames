@@ -90,7 +90,7 @@ end
 -- WoW Forever characters carry a surname. One choice covers every unit and group
 -- frame; a client without surnames gets no control and no extra section height.
 local CharacterNameParts
-if MSUF.Client ~= nil and MSUF.Client.HasCharacterSurnames == true then
+if MSUF.Client.HasCharacterSurnames == true then
     CharacterNameParts = {
         rowHeight = 48,
         values = VT("FULL", "Full name", "FIRST", "First name", "SURNAME", "Surname"),
@@ -503,7 +503,8 @@ local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fon
         if GFNameUsesLocalScope() then
             scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
         else
-            scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
+            scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom " ..
+                "settings above only when group names need different truncation.")
         end
     end
     M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
@@ -574,7 +575,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
                 ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
             end)
         shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis,
-            controls.scopeNotice; nameShorteningControls = { side, chars }
+            controls.scopeNotice
+        nameShorteningControls = { side, chars }
         if fontScopeReason and W.SetControlsDisabledReason then
             local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
             W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)
@@ -605,10 +607,7 @@ local function BuildFontsScope(ctx, b)
     end
     local scopeUI = GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
-        selectorMeta = Meta("scope.selector", "ephemeral"),
-        selectorOptionMeta = function(value) return Meta("scope.selector.option." .. tostring(value), "ephemeral") end,
-        overrideMeta = Meta("scope.override.enabled"),
-        resetMeta = Meta("scope.overrides.reset", "action"),
+        meta = Meta,
         getValue = function() return CurrentFontScope() end,
         setValue = function(v)
             G()._fontScopeKey = NormalizeScopeKey(v)
@@ -878,7 +877,8 @@ local function BuildFonts(ctx)
         function() RefreshScopedFontControls() end)
     if M.AddTooltip then
         M.AddTooltip(rendering, "Font rendering",
-            "Slug uses WoW's crisp vector font renderer. Slug supports None or normal Outline; Thick Outline and text shadow are unavailable while it is active.",
+            "Slug uses WoW's crisp vector font renderer. Slug supports None or normal " ..
+                "Outline; Thick Outline and text shadow are unavailable while it is active.",
             { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local shadow = BindTextSegment("Text shadow", VT("ON", "On", "OFF", "Off"), 260,
@@ -927,7 +927,8 @@ local function BuildFonts(ctx)
     if M.AddControlTooltip then
         local tip = { hook = true }
         M.AddControlTooltip(outline, "Outline",
-            "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.", tip)
+            "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.",
+                tip)
         M.AddControlTooltip(shadow, "Text shadow",
             "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
         M.AddControlTooltip(baseline, "Baseline",
@@ -935,7 +936,8 @@ local function BuildFonts(ctx)
         M.AddControlTooltip(nameColor, "Player Name Color",
             "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
         M.AddControlTooltip(npcColor, "NPC / Boss Name Color",
-            "Colors names of non-player units. NPC / Reaction uses hostile, neutral and friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
+            "Colors names of non-player units. NPC / Reaction uses hostile, neutral and " ..
+                "friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
         M.AddControlTooltip(healthColor, "HP Text Color",
             "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
     end

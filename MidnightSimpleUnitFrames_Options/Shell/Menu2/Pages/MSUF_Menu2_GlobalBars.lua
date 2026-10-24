@@ -26,7 +26,8 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local unpack = unpack or table.unpack
-local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need each UnitFrame's Aura sensor. Enable Buffs or Debuffs on the affected UnitFrame, or turn on its Dispel feature to enable the sensor automatically. Both icon caps may stay at 0."
+local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need each UnitFrame's Aura sensor. Enable Buffs or Debuffs on the affected " ..
+    "UnitFrame, or turn on its Dispel feature to enable the sensor automatically. Both icon caps may stay at 0."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
 local ROUNDED_PREVIEW_DEFAULT_MASK = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
@@ -549,7 +550,8 @@ end
 
 local function ShowRoundedReloadRequiredPopup()
     M.ShowPrompt("MSUF2_ROUNDED_RELOAD_REQUIRED", {
-        text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
+        text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this " ..
+            "style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
         accept = RELOAD or M.Tr("Reload"), single = true, hideOnEscape = false,
         onAccept = ReloadAfterCombatCheck,
     })
@@ -581,7 +583,8 @@ local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, 
         anchor = control._msuf2Title or control._msuf2Label or control,
         values = { "On", "Off", "Enable", "Disable", "Einschalten", "Ausschalten" },
         keywords = keywords,
-        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, class resources, castbars, and mouseover highlights.",
+        help = help or "Controls the rounded frame texture style for unit frames, group frames, " ..
+            "power bars, class resources, castbars, and mouseover highlights.",
     }
     if type(meta) == "table" then for key, value in pairs(meta) do payload[key] = value end end
     M.RegisterSearchWidget(control, payload)
@@ -940,10 +943,7 @@ local function BuildScopeSection(ctx, b)
     end
     local scopeUI = GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
-        selectorMeta = Meta("scope.selector", "ephemeral"),
-        selectorOptionMeta = function(value) return Meta("scope.selector.option." .. tostring(value), "ephemeral") end,
-        overrideMeta = Meta("scope.override.enabled"),
-        resetMeta = Meta("scope.overrides.reset", "action"),
+        meta = Meta,
         getValue = function() return CurrentBarsScope() end,
         setValue = function(v)
             G().hpPowerTextSelectedKey = NormalizeScopeKey(v)
@@ -1017,7 +1017,8 @@ local function BuildScopeSection(ctx, b)
     end
     if M.AddTooltip and scopeUI then
         M.AddTooltip(scopeUI.override, "Use custom settings for this scope",
-            "Gives this unit or group its own gradient, absorb, outline and highlight settings instead of following Shared. Turning it off keeps your custom values.",
+            "Gives this unit or group its own gradient, absorb, outline and highlight " ..
+                "settings instead of following Shared. Turning it off keeps your custom values.",
             { hook = true, labelHit = true })
         M.AddTooltip(scopeUI.reset, "Reset",
             "Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved.",
@@ -1095,7 +1096,8 @@ function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
         { "dropdown", "powerBarTexture", "", { "Power bar texture", function() return TextureValues("Use bar texture") end, leftW },
             { leftX, topY - 108, leftW, "LEFT" }, path = "textures.power_foreground", skipEqual = true, reason = "MSUF2_POWER_BAR_TEXTURE",
             tip = { "Power Bar Texture",
-                "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar.",
+                "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class " ..
+                    "Resources detached power texture still wins for a detached Player bar.",
                 { hook = true, owner = "ANCHOR_RIGHT" } } },
         { "dropdown", "powerBarBgTexture", "", { "Power background texture", function() return TextureValues("Use bar background texture") end, leftW },
             { leftX, topY - 162, leftW, "LEFT" }, path = "textures.power_background", skipEqual = true, reason = "MSUF2_POWER_BAR_BG_TEXTURE",
@@ -1419,7 +1421,8 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
             classification = "ephemeral",
             get = function() return IsAbsorbTextureTestEnabled("absorb") == true end,
             set = function(value) SetAbsorbTextureTest(value and true or false, "absorb") end,
-            tip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat." },
+            tip = "Shows sample bars on the frames of the selected scope, even while this bar " ..
+                "is turned off, so you can check its look. Cannot be turned on in combat." },
         { "toggle", "overAbsorbOverlay", false, { "Over-absorb overlay", rightX, -182, rightW },
             path = "absorb.positive.over_absorb", reason = "MSUF2_OVER_ABSORB_OVERLAY",
             tip = "Adds a shield glow at the end of the health bar when absorbs plus incoming heals cover all of the missing health." },
@@ -1446,7 +1449,8 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
             classification = "ephemeral",
             get = function() return IsAbsorbTextureTestEnabled("healAbsorb") == true end,
             set = function(value) SetAbsorbTextureTest(value and true or false, "healAbsorb") end,
-            tip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat." },
+            tip = "Shows sample bars on the frames of the selected scope, even while this bar " ..
+                "is turned off, so you can check its look. Cannot be turned on in combat." },
     }, options, refs)
     Rows.Build(ctx, heal, {
         { "toggle", "healPredEnabled", ReadGBool("showSelfHealPrediction", false), { "Show heal prediction", leftX, -10, leftW },
@@ -1471,7 +1475,8 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
             classification = "ephemeral",
             get = function() return IsAbsorbTextureTestEnabled("heal") == true end,
             set = function(value) SetAbsorbTextureTest(value and true or false, "heal") end,
-            tip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat." },
+            tip = "Shows sample bars on the frames of the selected scope, even while this bar " ..
+                "is turned off, so you can check its look. Cannot be turned on in combat." },
         { "toggle", "healPredAllHealers", false, { "Include healing from others", rightX, -182, rightW },
             path = "absorb.heal_prediction.all_healers", reason = "MSUF2_HEALPRED_ALL_HEALERS",
             tip = "Counts incoming heals from every healer, not only your own. Useful on group frames when several healers are active." },
@@ -1684,11 +1689,13 @@ local function BuildRoundedSection(ctx, b)
     local roundedControls = Rows.Schema.Build(ctx, rounded, {
         { "switch", "roundedFramesEnabled", false, { "Rounded frame texture", roundLeftX, -52, roundW },
             path = "rounded.roundedFramesEnabled", defaultOn = true, reload = true, register = true,
-            search = { "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames",
+            search = { "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded " ..
+                "frames ausschalten|alle abgerundeten frames",
                 "Master switch for the rounded frame texture style." } },
         { "toggle", "roundedUnitFrames", true, { "Unit frames", roundLeftX, -90, roundW },
             path = "rounded.roundedUnitFrames", defaultOn = true, register = true,
-            search = { "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded",
+            search = { "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes " ..
+                "abgerundet|player target focus boss rounded",
                 "Enable or disable rounded textures on unit frames." } },
         { "toggle", "roundedGroupFrames", true, { "Group frames", roundLeftX, -128, roundW },
             path = "rounded.roundedGroupFrames", defaultOn = true, register = true,
@@ -1696,7 +1703,8 @@ local function BuildRoundedSection(ctx, b)
                 "Enable or disable rounded textures on group frames." } },
         { "toggle", "roundedClassResources", false, { "Class resources", roundLeftX, -166, roundW },
             path = "rounded.roundedClassResources", defaultOn = true, register = true,
-            search = { "rounded class resources|rounded combo points|rounded soul shards|class resource bar corners|klassenressourcen abgerundet|combo punkte abrunden|seelensplitter abrunden",
+            search = { "rounded class resources|rounded combo points|rounded soul shards|class resource bar corners|klassenressourcen abgerundet|combo " ..
+                "punkte abrunden|seelensplitter abrunden",
                 "Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged." } },
         { "toggle", "roundedPowerBars", true, { "Power bars", roundRightX, -52, roundW },
             path = "rounded.roundedPowerBars", defaultOn = true, register = true,
@@ -1704,7 +1712,8 @@ local function BuildRoundedSection(ctx, b)
                 "Enable or disable rounded textures on power bars." } },
         { "toggle", "roundedMouseover", true, { "Mouseover highlights", roundRightX, -90, roundW },
             path = "rounded.roundedMouseover", defaultOn = true, register = true,
-            search = { "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet",
+            search = { "rounded mouseover|rounded hover|rounded hover border|mouseover " ..
+                "rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet",
                 "Enable or disable rounded mouseover highlight edges." } },
         { "toggle", "roundedCastbars", false, { "Castbars", roundRightX, -128, roundW },
             path = "rounded.roundedCastbars", defaultOn = true, register = true,
@@ -1776,7 +1785,8 @@ local function BuildRoundedSection(ctx, b)
     roundingSlider:HookScript("OnShow", FlushRoundingRuntime)
     RegisterRoundedSearch(roundingSlider, "Corner rounding",
         "corner rounding|rounding strength|rounded strength|corner radius|rounding radius|abrundungsstaerke|eckenradius|staerke der abrundung",
-        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value.",
+        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, " ..
+            "and enabled castbars use the same value.",
         "slider", Meta("rounded.roundedCornerStrength", "setting", { step = 1, min = 1, max = 5 }))
     roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -214, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
@@ -2160,7 +2170,8 @@ function GP.BuildHighlightModes(ctx, modesFrame, hlLeftX, hlLeftW)
         { "dropdown", "aggroOutlineMode", 1, { "Aggro border", borderModes, hlLeftW }, { hlLeftX, -136, hlLeftW, "LEFT" },
             path = "highlight.border_mode.aggroOutlineMode", numeric = true, set = BorderModeSet("aggroOutlineMode", 1,
                 "MSUF2_AGGRO_BORDER", "aggro", RequestAggroBorderRuntime),
-            tip = "Shows the aggro color on the border when the unit has threat: your frame while you hold aggro, enemies attacking you, and group members with high threat.", tipOpts = "plain" },
+            tip = "Shows the aggro color on the border when the unit has threat: your frame while " ..
+                "you hold aggro, enemies attacking you, and group members with high threat.", tipOpts = "plain" },
         { "dropdown", "aggroMode", "ALL", { "Group threat visuals show for", aggroModeValues, hlLeftW }, { hlLeftX, -190, hlLeftW, "LEFT" },
             path = "highlight.aggro.roles", readValue = NormalizeAggroMode, writeValue = NormalizeAggroMode,
             reason = "MSUF2_AGGRO_MODE", apply = RequestGroupAggroRoleRuntime },
@@ -2434,10 +2445,12 @@ local function BuildPowerSection(ctx, b)
     local controls = Rows.Build(ctx, power, {
         { "flowToggle", "smooth", false, { "Smooth power bar" }, path = "power.smooth_fill", get = SmoothPowerGet,
             set = FillSetter(SmoothPowerSet, "MSUF2_BARS_SMOOTH_POWER"),
-            tip = "Power bars glide to new values instead of jumping; turns off Chunked power loss. Set per unit: pick a unit scope with a power bar, such as Player or Target.", tipOpts = "power" },
+            tip = "Power bars glide to new values instead of jumping; turns off Chunked power loss. " ..
+                "Set per unit: pick a unit scope with a power bar, such as Player or Target.", tipOpts = "power" },
         { "flowToggle", "chunked", false, { "Chunked power loss" }, path = "power.chunked_fill", get = ChunkedPowerGet,
             set = FillSetter(ChunkedPowerSet, "MSUF2_BARS_CHUNKED_POWER"),
-            tip = "Spent power drops at once while the spent part briefly stays highlighted, then fades; turns off Smooth power bar. Set per unit, like Smooth power bar.", tipOpts = "power" },
+            tip = "Spent power drops at once while the spent part briefly stays highlighted, " ..
+                "then fades; turns off Smooth power bar. Set per unit, like Smooth power bar.", tipOpts = "power" },
         { "flowToggle", "realtime", true, { "Realtime power text" }, path = "power.realtime_text",
             get = function() return ReadB("realtimePowerText", true) ~= false end,
             set = function(v)
@@ -2451,7 +2464,8 @@ local function BuildPowerSection(ctx, b)
                 preview = true, power = true, text = true,
             })
         end,
-            tip = "Updates the Player power text on every power tick instead of the regular update rate. Only the Player frame uses it; set it on the Shared scope.", tipOpts = "power" },
+            tip = "Updates the Player power text on every power tick instead of the regular " ..
+                "update rate. Only the Player frame uses it; set it on the Shared scope.", tipOpts = "power" },
     }, Rows.Commands)
     local smoothPower, chunkedPower, realtimePower = controls.smooth, controls.chunked, controls.realtime
     M.BindGateGroup(ctx, nil, {

@@ -98,7 +98,9 @@ local function SpellStyleComplete(gf, si)
 end
 local function SpellIndicators(kind)
     local conf = Conf(kind)
-    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO", iconZoom = 100, iconScale = 100 } end
+    if type(conf.spellIndicators) ~= "table" then
+        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO", iconZoom = 100, iconScale = 100 }
+    end
     conf.spellIndicators.specs = conf.spellIndicators.specs or {}
     if conf.spellIndicators.strata == nil then conf.spellIndicators.strata = "AUTO" end
     if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100 end

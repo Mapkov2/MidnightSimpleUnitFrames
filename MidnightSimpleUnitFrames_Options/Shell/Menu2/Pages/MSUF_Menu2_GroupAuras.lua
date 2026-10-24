@@ -250,7 +250,8 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
     RegisterAuraControl(ctx, openStyle, "Global Aura Appearance", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
     if type(M.AddTooltip) == "function" then
         M.AddTooltip(openStyle, "Global Aura Appearance",
-            "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This GroupFrame's individual Style stays here.",
+            "Opens the global Aura icon theme: border, shadow, colors, lane padding and " ..
+                "native Player weapon enchants. This GroupFrame's individual Style stays here.",
             { hook = true, titleAsLine = true })
     end
     W.Text(section, M.Format("Ordering and individual Style are edited here. Global icon theme: %s.", M.NavPath("auras3_styling")),
@@ -457,7 +458,8 @@ local function BuildExternalFilterSection(ctx, auraBuilder)
     }}, ROW_OPTIONS).autoBlacklist
     if type(M.AddTooltip) == "function" then
         M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",
-            "While External Defensives is visible and Max is above 0, hides every aura Blizzard classifies as EXTERNAL_DEFENSIVE from the normal Buffs container. If External Defensives is disabled, those auras remain visible in Buffs.",
+            "While External Defensives is visible and Max is above 0, hides every aura Blizzard classifies as EXTERNAL_DEFENSIVE from the normal Buffs " ..
+                "container. If External Defensives is disabled, those auras remain visible in Buffs.",
             { hook = true, titleAsLine = true })
     end
 end

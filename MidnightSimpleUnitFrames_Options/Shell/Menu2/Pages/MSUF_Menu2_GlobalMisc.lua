@@ -26,7 +26,7 @@ end })
 -- elsewhere Shell/EditMode/MSUF_EditMode_Blizzard.lua exports nothing, so the
 -- adapter is required only with the capability on and its switch stays
 -- disabled without it, as the profile and reset paths gate it.
-local SUPPORTS_BLIZZARD_EDIT_MODE = MSUF.Client ~= nil and MSUF.Client.SupportsBlizzardEditMode == true
+local SUPPORTS_BLIZZARD_EDIT_MODE = MSUF.Client.SupportsBlizzardEditMode == true
 if SUPPORTS_BLIZZARD_EDIT_MODE then
     MSUF.Require("MSUF_BlizzardEditMode_SetEnabled", FILE)
 end
@@ -78,9 +78,8 @@ local MENU_WRITE_OPTS = { preview = false, applyAll = false, notify = false }
 local MOUSEOVER_WRITE_OPTS = { preview = false, applyAll = false, mouseoverHighlight = true }
 local PREVIEW_FALSE = { preview = false }
 -- Code family from the client model (WoW Forever is Mainline whatever project ID
--- it reports), so the raw project is never asked here. A harness that loads this
--- page without MSUF.Client keeps the Mainline answer, the build it belongs to.
-local IS_MAINLINE = MSUF.Client == nil or MSUF.Client.Family == "Mainline"
+-- it reports), so the raw project is never asked here.
+local IS_MAINLINE = MSUF.Client.Family == "Mainline"
 local function NormalizeTooltipMode(mode)
     if mode == "OOC" or mode == "MODIFIER" or mode == "NEVER" then return mode end
     if mode == "OFF" then return "NEVER" end
@@ -435,8 +434,10 @@ function MiscSection.MenuAccent(s)
     -- One string literal, not a concatenation: the locale coverage gate reads
     -- literals, so a split body would demand a key per fragment.
     M.AddTooltip(accentTint, "Tint menu surfaces",
-        T.classicAtlas and "Off (default): panels keep the Classic Glass appearance. On: panels and navigation follow your accent color. Success, warning and danger colors never change."
-            or "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change.",
+        T.classicAtlas and "Off (default): panels keep the Classic Glass appearance. On: panels and navigation follow your accent color. Success, " ..
+            "warning and danger colors never change."
+            or "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the " ..
+                "navigation rail follow the accent too. Success, warning and danger colors never change.",
         { hook = true })
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
     HelpText(ctx, menuBehavior, "menu2.opt_misc.menuBehavior.accentHelp", hasAppearancePresets
@@ -475,15 +476,16 @@ function MiscSection.MenuAccent(s)
             end,
             "setting.menuAppearancePreset")
         local opacity = Schema.Build(ctx, menuBehavior, {
-            { "slider", "setting.menuBackgroundOpacity", nil, { "Background opacity", 80, 100, 1, 250 }, bind = function(widget)
-                M.BindSlider(ctx, widget, function() return T.GetMenuBackgroundOpacity(M.GetGeneralDB()) end, function(value)
+            { "slider", "setting.menuBackgroundOpacity", nil, { "Background opacity", 80, 100, 1, 250 },
+                get = function() return T.GetMenuBackgroundOpacity(M.GetGeneralDB()) end,
+                set = function(value)
                     SetG("menuBackgroundOpacity", value, "MSUF2_MENU_BACKGROUND", MENU_WRITE_OPTS)
                     if T.RefreshMenuBackgroundOpacity then T.RefreshMenuBackgroundOpacity() end
-                end, Meta("setting.menuBackgroundOpacity"))
-                Schema.Owned(widget, ctx.key, "global")
-            end, beforeBind = function(opacity)
-                if opacity.SetValueFormatter then opacity:SetValueFormatter(function(v) return M.Format("%d%%", v) end) end
-            end },
+                end,
+                meta = Meta("setting.menuBackgroundOpacity"), domain = "global",
+                beforeBind = function(opacity)
+                    if opacity.SetValueFormatter then opacity:SetValueFormatter(function(v) return M.Format("%d%%", v) end) end
+                end },
         }, ROW_OPTIONS)["setting.menuBackgroundOpacity"]
         W.MoveWidget(opacity, menuBehavior, 14, -372, 250, "LEFT")
         W.SetControlEnabled(opacity, T.classicAtlas == true)
@@ -507,7 +509,8 @@ function MiscSection.Integrations(s)
     local nicknameIntegration = Schema.Section(b:CollapsibleSection("misc_nickname_integration", "Nickname Integration", 124, true), ctx.key)
     BindIntegrationToggle(s, nicknameIntegration, "Use NSRT nicknames on MSUF frames", "nsrtNicknameIntegration",
         "MSUF2_NSRT_NICKNAMES", -42, "MSUF_NSRTNicknames_ApplySetting", "NSRT nickname integration",
-        "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified.")
+        "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show " ..
+            "character names in MSUF. NSRT and its settings are not modified.")
     -- The EllesmereUI bridge loads on the Mainline TOC only (Midnight and WoW
     -- Forever); the section exists only where it does and EllesmereUI is loaded.
     local ellesmereAvailable = MSUF.Optional("MSUF_EllesmereEditMode_IsAvailable")
@@ -515,7 +518,8 @@ function MiscSection.Integrations(s)
         local ellesmere = Schema.Section(b:CollapsibleSection("misc_ellesmere_ui", "EllesmereUI", 138, true), ctx.key)
         BindIntegrationToggle(s, ellesmere, "Use EllesmereUI Unlock Mode for MSUF", "ellesmereEditModeIntegration",
             "MSUF2_ELLESMERE_EDIT_MODE", -42, "MSUF_EllesmereEditMode_SetEnabled", "EllesmereUI Unlock Mode",
-            "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth.")
+            "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile " ..
+                "positions remain the source of truth.")
         HelpText(ctx, ellesmere, "menu2.opt_misc.ellesmere.ellesmereHelp",
             "This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode.",
             30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70)
@@ -532,14 +536,17 @@ function MiscSection.ExternalEditMode(s)
         "On (default): MSUF Edit Mode can move every active Details! window. Windows snapped together by Details! move as one native group.")
     BindIntegrationToggle(s, external, "Show Dominos in MSUF Edit Mode", "dominosEditModeIntegration",
         "MSUF2_DOMINOS_EDIT_MODE", -114, "MSUF_DominosEditMode_SetEnabled", "Dominos Edit Mode integration",
-        "On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions.")
+        "On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos " ..
+            "remains the owner of all bar positions.")
     BindIntegrationToggle(s, external, "Show DandersFrames in MSUF Edit Mode", "dandersEditModeIntegration",
         "MSUF2_DANDERS_EDIT_MODE", -150, "MSUF_DandersEditMode_SetEnabled", "DandersFrames Edit Mode integration",
-        "On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions.")
+        "On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, " ..
+            "and DandersFrames remains the owner of all saved positions.")
     BindIntegrationToggle(s, external, "Show Blizzard frames in MSUF Edit Mode", "blizzardEditModeIntegration",
         "MSUF2_BLIZZARD_EDIT_MODE", -186, SUPPORTS_BLIZZARD_EDIT_MODE and "MSUF_BlizzardEditMode_SetEnabled" or nil,
         "Blizzard Edit Mode integration",
-        "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.")
+        "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a " ..
+            "Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.")
     HelpText(ctx, external, "menu2.opt_misc.external.externalHelp",
         "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified.",
         30, -232, (external._msuf2Width or ctx.width or 720) - 70)
@@ -655,7 +662,8 @@ function MiscSection.Tooltips(s)
         "tooltips.modifier")
     M.TrackRefresh(ctx, RefreshTooltipControls)
     HelpText(ctx, tooltips, "menu2.opt_misc.tooltips.tooltipHelp",
-        "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. Auras only reuse the selected Blizzard/MSUF look and cursor placement.",
+        "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. " ..
+            "Auras only reuse the selected Blizzard/MSUF look and cursor placement.",
         tooltipLeftX, -174, tooltipW - 68)
     -- Both aura tooltip switches drive client options through
     -- Runtime/MSUF_TooltipSpellIDs.lua, and only the Mainline TOC loads that file.
@@ -672,10 +680,14 @@ function MiscSection.Tooltips(s)
                 Core.MSUF_ApplyTooltipCasterNames(v and true or false)
             end)
         M.AddTooltip(tooltipCasterNames, "Aura tooltip caster names",
-            "On: aura tooltips name who applied the aura, coloured by reaction or class, through the game's own 12.1.5 option, and MSUF re-enables it after every login. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
+            "On: aura tooltips name who applied the aura, coloured by reaction or class, through the game's own 12.1.5 option, and MSUF re-enables it " ..
+                "after every login. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; " ..
+                    "turning this switch off clears the option once.",
             { hook = true })
         M.AddTooltip(tooltipSpellIDs, "Aura tooltip spell IDs",
-            "On: aura tooltips show the numeric spell ID through the game's own 12.1 option, and MSUF re-enables that option after every login because the game forgets it between sessions. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
+            "On: aura tooltips show the numeric spell ID through the game's own 12.1 option, and MSUF re-enables that option after every login because " ..
+                "the game forgets it between sessions. Off (default): MSUF never touches the game option, so other addons or a manual console setting " ..
+                    "keep control; turning this switch off clears the option once.",
             { hook = true })
     end
 end
@@ -701,7 +713,8 @@ function MiscSection.BlizzardFrames(s)
         "playerResourcePingEnabled", true, "MSUF2_PLAYER_RESOURCE_PING", nil, nil, nil, PREVIEW_FALSE,
         function() Core.MSUF_RefreshPlayerResourcePing() end)
     M.AddTooltip(resourcePing, "Native Player resource pings",
-        "Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel.",
+        "Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate " ..
+            "Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel.",
         { hook = true })
 end
 local function BuildMisc(ctx)

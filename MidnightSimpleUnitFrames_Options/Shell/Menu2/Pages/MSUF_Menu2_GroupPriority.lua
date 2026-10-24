@@ -592,7 +592,10 @@ local function BindPriorityPins(ctx, who, snap, ui)
         local entries, state = snap.pins, snap.state
         local count = #entries
         local pages = max(1, math.ceil(count / PIN_ROWS_PER_PAGE))
-        if pinPage > pages then pinPage = pages; M.gfPriorityPinPage = pinPage end
+        if pinPage > pages then
+            pinPage = pages
+            M.gfPriorityPinPage = pinPage
+        end
         local first = (pinPage - 1) * PIN_ROWS_PER_PAGE + 1
         T.SetTranslatedText(ui.status, count == 1 and Tr("1 saved player") or M.Format("%d saved players", count))
         ui.pageText:SetText(tostring(pinPage) .. " / " .. tostring(pages))

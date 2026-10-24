@@ -130,7 +130,8 @@ local function BuildDispelOverlaySection(ctx, b)
                 }
             end,
             tip = { "Runtime Preview",
-            "Paints a stand-in tint on the live GroupFrames so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
+            "Paints a stand-in tint on the live GroupFrames so the overlay can be judged " ..
+                "without a real dispellable debuff. Turns itself off when this page closes.",
                 { hook = true } },
         },
     }, ROW_OPTIONS, c)
@@ -160,14 +161,7 @@ local function BuildDispelOverlaySection(ctx, b)
     end
     TrackSectionRefresh(ctx, dispel, RefreshDispelState)
 end
-local GF_DISPEL_SYMBOL_STYLES = VT(
-    "BLIZZARD", "Blizzard symbol",
-    "BLIZZARD_RING", "Blizzard ring + symbol",
-    "BLIZZARD_BORDER", "Blizzard ring",
-    "MSUF_LETTERS", "MSUF Letters",
-    "MSUF_SHAPES", "MSUF Shapes",
-    "MSUF_GLYPHS", "MSUF Glyphs",
-    "MSUF_MINIMAL", "MSUF Minimal")
+local GF_DISPEL_SYMBOL_STYLES = UnitSectionShared.DispelSymbolStyles()
 local GF_DISPEL_SYMBOL_MODES = VT("TOP", "Highest priority only", "ALL", "One per dispel type")
 local GF_DISPEL_SYMBOL_GROWTH = VT("RIGHT", "Right", "LEFT", "Left", "UP", "Up", "DOWN", "Down")
 local GF_DISPEL_SYMBOL_ANCHORS = VT("TOPLEFT", "Top Left", "TOP", "Top", "TOPRIGHT", "Top Right",
@@ -809,7 +803,8 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
         RequestGroupBarsRefresh(ctx, "gf-bars-text-mode")
     end
     local rows = {
-        { "segment", "slot", nil, { "Text slots", SLOT_VALUES, textCardW - 32 }, path = path .. "slot_selector", classification = "ephemeral", domain = "menuState",
+        { "segment", "slot", nil, { "Text slots", SLOT_VALUES, textCardW - 32 }, path = path .. "slot_selector",
+            classification = "ephemeral", domain = "menuState",
             beforeBind = function(widget) W.MoveWidget(widget, content, 16, -92, textCardW - 32, "LEFT") end,
             get = function() return CurrentSlot(kind) end,
             set = function(v)
