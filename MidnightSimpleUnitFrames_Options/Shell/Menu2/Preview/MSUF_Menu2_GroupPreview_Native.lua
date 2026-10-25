@@ -141,15 +141,12 @@ local function OpenGFSection(sectionKey)
     if not (pageKey and M.SelectPage) then return false end
     local lane = SECTION_AURA_LANE[sectionKey]
     local scope = CurrentScope()
-    local previousAuraLane, previousAuraTool, requestedAuraLane
     if M.SetMenuStateValue then
         M.SetMenuStateValue("gfScope", scope)
         if pageKey == "gf_auras" then
             M.SetMenuStateValue("auraStyleGFScope", scope == "mythicraid" and "raid" or scope)
             if lane then
                 M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
-                previousAuraLane = M.gfAuraLaneSelection[scope] or "buff"
-                requestedAuraLane = lane
                 M.gfAuraLaneSelection[scope] = lane
                 M.gfAuraToolSelection = M.gfAuraToolSelection or {}
                 local tools = M.gfAuraToolSelection[scope]
@@ -157,7 +154,6 @@ local function OpenGFSection(sectionKey)
                     tools = {}
                     M.gfAuraToolSelection[scope] = tools
                 end
-                previousAuraTool = tools[lane]
                 tools[lane] = "layout"
                 if lane ~= "externals" then M.SetMenuStateValue("auraStyleGFLane", lane) end
             end
@@ -180,13 +176,7 @@ local function OpenGFSection(sectionKey)
         explicit = true,
         changedAt = GetTime and GetTime() or 0,
     })
-    -- Group Auras builds its lane-specific controls from gfAuraLaneSelection.
-    -- Selecting another preview lane must rebuild any cached Group Auras
-    -- page, whether it is active or hidden; refreshers still target the old lane.
-    if requestedAuraLane and (requestedAuraLane ~= previousAuraLane or previousAuraTool ~= "layout")
-        and M.InvalidatePage then
-        M.InvalidatePage(pageKey)
-    end
+    -- The scope/lane/tool view retains its bound controls across preview routes.
     return M.SelectPage(pageKey) ~= false
 end
 local function PreviewAnimationInCombat()

@@ -27,15 +27,6 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local EMPTY = {}
 -- The animation tick builds its frame state through this export when the module table lacks it.
 local BuildPreviewAnimationFrameState = MSUF.Require("MSUF_BuildPreviewAnimationFrameState", FILE)
--- The core font recipe and the unit frame size bounds, resolved once: every preview
--- refresh sets fonts and clamps the size, and their providers load with the core.
-local GetGlobalFontSettings = MSUF.Require("MSUF_GetGlobalFontSettings", FILE)
-local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
-local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
-local FontPathForKey = MSUF.Require("MSUF_ResolveFontKeyPath", FILE)
-local ResolveSafeFontPath = MSUF.Require("MSUF_ResolveSafeFontPath", FILE)
-local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", FILE)
-local ResolveFontShadowMetrics = MSUF.Require("MSUF_ResolveFontShadowMetrics", FILE)
 local UnitFrameSizeBounds = MSUF.Require("MSUF_UnitFrameSizeBounds", FILE)
 
 -- Preview scale and resolved FULL extents are inputs to the runtime painter.
@@ -339,8 +330,8 @@ local Stage = {}
 
 -- Deps every later stage reads from st.
 local STAGE_DEP_FIELDS = {
-    "TR", "PortraitStyleGet", "max", "min", "abs", "floor", "format", "TEX_W8", "ApplyPreviewFont", "CastbarEnabled",
-    "ReadCastbarSize", "CastbarOffsetFields", "CastbarDetached", "CanDetachPowerBarKey", "ClampPreviewLayer", "SetTex",
+    "TR", "PortraitStyleGet", "max", "min", "abs", "floor", "format", "TEX_W8", "CastbarEnabled",
+    "ReadCastbarSize", "CastbarOffsetFields", "CastbarDetached", "CanDetachPowerBarKey", "ClampPreviewLayer",
     "ReadPowerBarHeight", "PlaceHandle", "UnitPreviewText", "UnitPreviewTextMovesTogether", "SetShownSafe",
     "ApplyPreviewLayerVisibility", "ApplyPreviewTransparency", "RefreshHandleSelectionVisuals", "Auras",
 }
@@ -1332,39 +1323,6 @@ end
 -- s carries the preview object, its deps, the render state and the values a
 -- later stage reads.
 local InstallStage = {}
--- The font recipe of the live frames: global font settings, the font key's path, the safe path
--- resolver, the checked setter (the client font when it fails) and the shared text shadow.
-function InstallStage.PreviewFont(s)
-    local deps = s.deps
-    local fallbackFont = deps.FONT or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-    if type(deps.ApplyPreviewFont) == "function" then return end
-    deps.ApplyPreviewFont = function(fs, size)
-        if not (fs and fs.SetFont) then return end
-        size = tonumber(size) or 12
-        local fontPath, fontFlags, _, _, _, _, useShadow = GetGlobalFontSettings()
-        if type(fontPath) ~= "string" or fontPath == "" then fontPath = GetFontPath() end
-        if fontFlags == nil then fontFlags = GetFontFlags() or "OUTLINE" end
-        local db = EnsureDB()
-        local general = db and db.general
-        local fontKey = general and general.fontKey
-        if type(fontPath) ~= "string" or fontPath == "" then
-            if fontKey then fontPath = FontPathForKey(fontKey, size, fontFlags) end
-        end
-        if type(fontPath) ~= "string" or fontPath == "" then fontPath = fallbackFont end
-        fontPath = ResolveSafeFontPath(fontPath, size, fontFlags, fontKey)
-        if not SetFontChecked(fs, fontPath, size, fontFlags) then SetFontChecked(fs, fallbackFont, size, fontFlags) end
-        if not fs.SetShadowOffset then return end
-        if useShadow == nil then useShadow = not (general and general.textBackdrop == false) end
-        if not useShadow then
-            fs:SetShadowOffset(0, 0)
-            return
-        end
-        local shadowAlpha, shadowX, shadowY = ResolveFontShadowMetrics(general and general.fontShadowOpacity,
-            general and general.fontShadowDistance, general and general.fontShadowStrength)
-        if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, shadowAlpha) end
-        fs:SetShadowOffset(shadowX, shadowY)
-    end
-end
 function InstallStage.Refreshers(s)
     local Preview = s.Preview
 
@@ -1467,7 +1425,6 @@ function Render.Install(Preview, deps)
     }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
     local s = { Preview = Preview, deps = deps, renderState = renderState }
-    InstallStage.PreviewFont(s)
     deps._RenderState = renderState
     InstallStage.Refreshers(s)
 end

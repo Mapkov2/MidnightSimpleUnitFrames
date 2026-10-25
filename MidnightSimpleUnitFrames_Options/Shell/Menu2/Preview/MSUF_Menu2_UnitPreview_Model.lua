@@ -7,8 +7,6 @@ local M = MSUF.MSUF2 or {}
 local ExportPublic = MSUF.ExportPublic
 local TR = MSUF.MSUF2.PreviewHelpers.TranslateUnitPreview
 local max, min = math.max, math.min
-local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
-local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
 ExportPublic("MSUF_UFPreview", Preview)
@@ -575,15 +573,6 @@ local function NormalizeToTInlineColorMode(value)
     if value == "TOT_NAME" or value == "TARGET_NAME" or value == "NPC" or value == "DEFAULT" then return value end
     return "AUTO"
 end
-local function SetTex(region, tex)
-    if region and region.SetTexture then region:SetTexture(tex or TEX_W8) end
-end
-local function MakeFS(parent, layer, size)
-    local fs = PixelLayoutRegion(parent:CreateFontString(nil, layer or "OVERLAY"))
-    fs:SetFont(FONT, size or 12, "OUTLINE")
-    fs:SetShadowOffset(1, -1)
-    return fs
-end
 local function ReadPowerBarEnabled(conf, key)
     conf = conf or {}
     local bars = M.EnsureDB().bars
@@ -658,10 +647,10 @@ M.Assign(Model, {
     PortraitStyleGet = PortraitStyleGet, PortraitStyleSet = PortraitStyleSet, ApplyPortrait = ApplyPortrait,
     NormalizeStatusPreviewId = NormalizeStatusPreviewId, ClassColor = ClassColor, Clamp01 = Clamp01,
     SettingsCache = SettingsCache, PreviewNPCKind = PreviewNPCKind, GradientPreviewColor = GradientPreviewColor, PowerColor = PowerColor, FontColor = FontColor,
-    NormalizeToTInlineColorMode = NormalizeToTInlineColorMode, SetTex = SetTex,
+    NormalizeToTInlineColorMode = NormalizeToTInlineColorMode,
 })
 M.Assign(Model, {
-    MakeFS = MakeFS, ReadPowerBarEnabled = ReadPowerBarEnabled,
+    ReadPowerBarEnabled = ReadPowerBarEnabled,
     CanDetachPowerBarKey = CanDetachPowerBarKey, ReadPowerBarHeight = ReadPowerBarHeight,
     ResolveNameAnchor = ResolveNameAnchor, ResolveNameOffsetDelta = ResolveNameOffsetDelta, UnitPreviewText = UnitPreviewText, LiveUnitData = LiveUnitData,
     LiveRaidSubgroup = LiveRaidSubgroup,

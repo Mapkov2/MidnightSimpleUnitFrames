@@ -747,7 +747,7 @@ function W.OpenTextQuickSettings(anchor, options)
     local scope = CurrentScope()
     if general and general._fontScopeKey ~= scope then
         general._fontScopeKey = scope
-        M.InvalidatePage("opt_fonts")
+        if M.activeKey == "opt_fonts" then M.SelectPage("opt_fonts") end
     end
 
     -- Spell text, Aura text, status text, and every other text without a real

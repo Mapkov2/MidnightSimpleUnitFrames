@@ -208,6 +208,23 @@ function M.ResolvePendingFixedPreviewExpansion(frame)
     })
     return true
 end
+-- Unit texture controls bind one slot for their lifetime. Include that finite
+-- selection alongside the aura workspace view so both selectors reuse their trees.
+local function UnitTexturePageView(key, spec)
+    local unit = key:match("^uf_(.+)$")
+    if not unit then return end
+    local viewKey = spec.variantKey
+    spec.variantKey = function(pageKey)
+        local slots = M.unitTexLayerSlot
+        local slot = tonumber(slots and slots[unit]) or 1
+        if slot < 1 or slot > 3 then slot = 1 end
+        return (viewKey and viewKey(pageKey) or "") .. ":texture:" .. slot
+    end
+    local stateKeys = {}
+    for name, owned in pairs(spec.viewStateKeys or {}) do stateKeys[name] = owned end
+    stateKeys.unitTexLayerSlot = true
+    spec.viewStateKeys = stateKeys
+end
 --- Optional page spec fields read here:
 ---   version         a bump drops every cached entry of the page;
 ---   variantKey(key) names the page's current view state (a short string). Each
@@ -219,6 +236,7 @@ end
 ---                   from the first build on (see M.PageRebuildsItself).
 function M.RegisterPage(key, spec)
     if type(key) ~= "string" or type(spec) ~= "table" then return end
+    UnitTexturePageView(key, spec)
     if not M.pages[key] then M.pageOrder[#M.pageOrder + 1] = key end
     M.pages[key] = spec
 end

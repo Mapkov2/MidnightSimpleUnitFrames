@@ -373,7 +373,7 @@ local function OpenAuraHandleSettings(handle, box, unit, fields, source)
     local lane = fields.auraPreviewKind
     if not AURA_PREVIEW_LANES[lane] then lane = "buff" end
     local laneSelection = SubTable(M2, "unitAuraTabSelection")
-    local previousAuraLane = laneSelection[unit] or "buff"
+    local laneChanged = (laneSelection[unit] or "buff") ~= lane
     laneSelection[unit] = lane
     local toolSelection = SubTable(M2, "unitAuraToolSelection")
     local tools = toolSelection[unit]
@@ -381,7 +381,7 @@ local function OpenAuraHandleSettings(handle, box, unit, fields, source)
         tools = {}
         toolSelection[unit] = tools
     end
-    local previousAuraTool = tools[lane]
+    local toolChanged = tools[lane] ~= "layout"
     tools[lane] = "layout"
     local pageKey = "uf_" .. tostring(unit)
     if not M2.SelectPage then return false end
@@ -396,16 +396,18 @@ local function OpenAuraHandleSettings(handle, box, unit, fields, source)
         -- control refresh rebuilds the Unit page.
         persistSection = true,
     }, source)
-    -- The Aura workspace captures its selected container while the
-    -- Unit page is built. Refreshers cannot replace that cached
-    -- container, so rebuild only when this preview opens another one.
-    if (lane ~= previousAuraLane or previousAuraTool ~= "layout") and M2.InvalidatePage then
+    -- SelectPage switches to the retained container/tool view. Only a view
+    -- change needs restoration after its preview adopts the new page context.
+    if laneChanged or toolChanged then
         Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = unit, handle._key, box
         Preview._restoreSourceShowSerial = tonumber(box and box._msuf2PreviewShowSerial) or 0
-        M2.InvalidatePage(pageKey)
     end
     local selected = M2.SelectPage(pageKey) ~= false
-    if selected then Preview.RestoreQueuedHandle(Preview.active)
+    if selected then
+        -- A retained view can keep the same preview box and show generation.
+        -- Selection has now committed, so that box may restore the new handle.
+        if laneChanged or toolChanged then Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil end
+        Preview.RestoreQueuedHandle(Preview.active)
     else
         Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil, nil, nil
     end
@@ -431,7 +433,7 @@ local function OpenPreviewHandleSettings(handle, source)
     local fields = handle._fields or {}
     local unit = box and box.key or "player"
     local section = Preview.ResolveUnitHandleSection(handle, unit)
-    local textureSlotChanged = Preview.PrepareUnitHandleSubmenu(M2, unit, handle)
+    Preview.PrepareUnitHandleSubmenu(M2, unit, handle)
     if fields.statusRefresh then
         local selected = NormalizeStatusPreviewId(handle._key)
         Preview.selectedStatusId = selected
@@ -443,10 +445,6 @@ local function OpenPreviewHandleSettings(handle, source)
     local sectionId = UNIT_SECTION_IDS[section or ""] or UNIT_SECTION_IDS.text
     local pageKey = box and (box._msuf2PinnedPreviewPageKey or ("uf_" .. tostring(box.key or "player"))) or nil
     if M2.SelectPage and pageKey then
-        -- Texture controls are intentionally bound to one slot for their whole
-        -- lifetime. Opening another texture handle must therefore rebuild the
-        -- cached Unit page before it is focused.
-        if textureSlotChanged and M2.InvalidatePage then M2.InvalidatePage(pageKey) end
         PostMenuFocusRequest({ key = box and box.key, component = handle._key, pageKey = pageKey, sectionId = sectionId }, source)
         return M2.SelectPage(pageKey) ~= false
     end
