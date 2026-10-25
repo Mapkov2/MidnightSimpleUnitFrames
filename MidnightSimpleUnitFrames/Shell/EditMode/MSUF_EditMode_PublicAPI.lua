@@ -696,7 +696,13 @@ end
 function External.CaptureHistorySnapshot()
     if not sessionActive then return nil end
     local snapshot = { _msufEditModeExternalHistory = true, elements = {} }
-    for key, record in pairs(records) do snapshot.elements[key] = Capture(record) end
+    if sessionNotificationPending then
+        -- The entry capture precedes callbacks. History mutates its cursor, so
+        -- copy the captured values while keeping the discard point independent.
+        for key, state in pairs(sessionSnapshot) do snapshot.elements[key] = SafeCopy(state) end
+    else
+        for key, record in pairs(records) do snapshot.elements[key] = Capture(record) end
+    end
     return snapshot
 end
 

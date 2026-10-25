@@ -302,7 +302,19 @@ function Fields.CopySnapshot(value, budget)
             budget.count=budget.count+1
             if budget.count>(budget.limit or 131072) or budget.bytes>(budget.maxBytes or 8388608) then why="limits"
                 return nil,false end
-            local copied,valid=Copy(item,depth+1,seen)
+            local copied, valid = item, true
+            local itemKind = type(item)
+            if itemKind == "table" then
+                copied, valid = Copy(item, depth + 1, seen)
+            elseif itemKind == "string" then
+                budget.bytes = budget.bytes + #item
+                if budget.bytes > (budget.maxBytes or 8388608) then why, valid = "limits", false end
+            elseif itemKind == "number" then
+                valid = Scalar(item)
+                if not valid then why = "number" end
+            elseif itemKind ~= "boolean" then
+                why, valid = "value", false
+            end
             if not valid then return nil,false end
             out[key]=copied
         end

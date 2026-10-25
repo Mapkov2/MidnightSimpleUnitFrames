@@ -998,12 +998,13 @@ do
     end
     VisitPixelLayout = function(region, preserveLogicalGeometry)
         if not mainlinePixelLayout or not region then return region end
+        local visited = region._msufPixelLayoutTemplateVisited
         -- Completed owners/art never need another native type/combat query or
         -- template walk. Only a new region or an explicit policy change does.
-        if region._msufPixelLayoutTemplateVisited then
+        if visited then
             if preserveLogicalGeometry then
                 if region._msufPixelLayoutExcluded and not region._msufPixelLayoutEnabled then return region end
-            elseif region._msufPixelLayoutEnabled or region._msufPixelLayoutExcluded then
+            elseif visited == "ready" or region._msufPixelLayoutEnabled or region._msufPixelLayoutExcluded then
                 return region
             end
         end
@@ -1026,6 +1027,10 @@ do
             region._msufPixelLayoutTemplateVisited = true
             if region.GetRegions then PixelLayoutChildren(region, region:GetRegions()) end
             if region.GetChildren then PixelLayoutChildren(region, region:GetChildren()) end
+        end
+        -- Keep partial visits retryable without another per-region table field.
+        if region._msufPixelLayoutEnabled or region._msufPixelLayoutExcluded then
+            region._msufPixelLayoutTemplateVisited = "ready"
         end
         return region
     end
@@ -1065,7 +1070,9 @@ do
         return ...
     end
     local function PixelLayoutRegion(region, policy, ...)
-        if type(policy) == "string" then
+        if policy == nil then
+            if not mainlinePixelLayout or not region or region._msufPixelLayoutTemplateVisited == "ready" then return region end
+        elseif type(policy) == "string" then
             if not mainlinePixelLayout or not region._msufPixelLayoutOwned
                 or (policy == "SetBackdrop" and (region._msufPixelLayoutBackdropReady or ... == nil)) then
                 return region[policy](region, ...)

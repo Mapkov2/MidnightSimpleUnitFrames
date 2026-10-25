@@ -194,6 +194,7 @@ end
 local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elapsed)
     local icons = group and group._icons
     if not icons then return end
+    group._msufA3PreviewAnimated = elapsed ~= nil or MSUF.PreviewAnimation.enabled == true
     for i = 1, shownIcons do
         local icon = icons[i]
         if icon then
@@ -598,9 +599,6 @@ end
 --- advances the animation state.
 local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeConfig)
     local cfg = ReadGroupConfig(unit, kind)
-    local metrics = A3.BuildAuraLaneMetrics(runtimeConfig or unit, kind)
-    local group = CreateGroup(unit, kind)
-    SyncPreviewGroupStrata(group)
     local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
     -- Target DoTs retain their configuration preview while disabled.
     -- Player Defensives obey their master switch in Edit Mode as well.
@@ -610,7 +608,23 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
     -- nothing tracked means nothing to preview. Placeholder-only custom
     -- lanes exist purely as edit-mode drag surfaces.
     if laneShown and spec.customIndex and not entries and not chrome then laneShown = false end
-    if not (laneShown and cfg.max > 0 and (not metrics or metrics.enabled ~= false)) then
+    local byUnit = EM.groups and EM.groups[unit]
+    local group = byUnit and byUnit[kind]
+    if not laneShown or cfg.max <= 0 then
+        if group then
+            group._msufA3RefreshSignature = nil
+            group:Hide()
+        end
+        return
+    end
+    group = group or CreateGroup(unit, kind)
+    SyncPreviewGroupStrata(group)
+    local metrics = group._msufA3PreviewMetrics
+    if not runtimeConfig or group._msufA3PreviewConfig ~= runtimeConfig then
+        metrics = A3.BuildAuraLaneMetrics(runtimeConfig or unit, kind)
+        group._msufA3PreviewConfig, group._msufA3PreviewMetrics = runtimeConfig, metrics
+    end
+    if metrics and metrics.enabled == false then
         group._msufA3RefreshSignature = nil
         group:Hide()
         return
@@ -630,6 +644,12 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
     if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
         group._msufA3RefreshSignature = signature
         ApplyLaneLayout(group, frame, unit, kind, spec, cfg, metrics, textCfg, entries, lane, chrome)
+    elseif not spec.customIndex and not group._msufA3PreviewAnimated and MSUF.PreviewAnimation.enabled ~= true then
+        -- Animation has its own tick; a refresh of unchanged standard lanes
+        -- keeps those pixels and their pooled icons instead of restarting them.
+        group:Show()
+        if group.Raise then group:Raise() end
+        return
     end
 
     -- Cache the already-resolved lane state so Menu2's existing

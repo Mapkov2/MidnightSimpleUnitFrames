@@ -140,11 +140,16 @@ end
 
 --- A layout switch need not send EDIT_MODE_LAYOUTS_UPDATED (a spec change
 --- re-reads the layouts silently), so every MSUF capture and save first asks
---- the client which layout is active. A different one replaces the cache with
+--- the manager which layout is active. A different one replaces the cache with
 --- the fresh list. Skipped while an MSUF write is unanswered: the fresh list
 --- would be one behind.
 local function ValidateLayoutCache()
     if not cachedLayoutInfo or OwnSaveInFlight() then return end
+    -- Blizzard updates this index on layout events and specialization changes.
+    -- Its layouts array includes presets, so only read the key, never reuse it.
+    local manager = EditModeManagerFrame
+    local current = manager and manager.layoutInfo
+    if current and current.activeLayout == cachedLayoutInfo.activeLayout then return end
     local api = Blizzard()
     local fresh = api and api.GetLayouts()
     if type(fresh) ~= "table" or type(fresh.layouts) ~= "table" then return end

@@ -1526,6 +1526,82 @@
     {
       "test": "tools/tests/castbar_finite_interrupt_providers.lua",
       "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/editmode_entry_budget_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_entry_budget_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}",
+        "check",
+        "api"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_entry_snapshot_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_layout_cache_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_preview_budget_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/history_copy_budget_smoke.lua",
+      "phase": "profiles",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/uf_pixel_layout_budget_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_navigation_cost_smoke.lua",
+      "phase": "menu",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_navigation_repaint_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_preview_close_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ]
     }
   ],
   "excluded": {
