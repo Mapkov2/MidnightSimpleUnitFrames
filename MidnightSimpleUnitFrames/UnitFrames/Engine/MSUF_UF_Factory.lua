@@ -581,6 +581,43 @@ ApplyOne = BuildFactorySpawn(
     UnitWatchRegistered, UnregisterUnitWatch, VariantSwitchesFrame, clickCastRegistered, type, SupportsPlayerResourcePing
 )
 
+local function RunApplyBatch(state, applyOne)
+  local units = state.units
+  for i = 1, #units do
+    if applyOne(units[i], state.config, state.applyMask) == false then state.applied = false end
+  end
+end
+
+local function EndApplyBatch(_, state)
+  UF.Surface.EndBatch(state.unit)
+end
+
+local function FlushApplyBatch(state)
+  if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
+  if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
+end
+
+local function FinishApplyBatch(ok, state)
+  if not ok then state.applied = false end
+  if state.unit == nil then
+    local spawned = true
+    for i = 1, #UF.unitOrder do
+      local token = UF.unitOrder[i]
+      if UF.IsManagedUnit(token) and not UF.frames[token] then spawned = false break end
+    end
+    UF.spawned = spawned
+    UF.initialized = spawned
+  end
+  -- EndBatch also runs if a deferred refresh or width observer raises. The
+  -- outer boundary restores the batch before propagating a raising reporter.
+  if not MSUF.RunUnitFrameApply(FlushApplyBatch, EndApplyBatch, state) then state.applied = false end
+  if state.spawning then
+    Dep("MSUF_FocusKickDriver_ForceUpdate")()
+    Dep("MSUF_KickReady_RefreshAll")()
+  end
+  Dep("MSUF_ArenaTrinkets_RefreshLayout")(state.unit)
+end
+
 function Factory.SpawnAll(applyMask)
   if InCombat() then
     Factory.spawnPending = true
@@ -596,21 +633,12 @@ function Factory.SpawnAll(applyMask)
     Highlight.Refresh()
   end
   if UF.DisableBlizzardFrames then UF.DisableBlizzardFrames() end
+  Factory.spawnPending = true
+  local state = { units = UF.unitOrder, config = config, applyMask = applyMask, spawning = true, applied = true }
   UF.Surface.BeginBatch()
-  for i = 1, #UF.unitOrder do
-    ApplyOne(UF.unitOrder[i], config, applyMask)
-  end
-  UF.spawned = true
-  UF.initialized = true
-  if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
-  if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
-  UF.Surface.EndBatch(nil)
-  -- Optional focus-tracker modules load before the active profile is selected.
-  Dep("MSUF_FocusKickDriver_ForceUpdate")()
-  Dep("MSUF_KickReady_RefreshAll")()
-  Dep("MSUF_ArenaTrinkets_RefreshLayout")(nil)
-  Factory.spawnPending = nil
-  return true
+  local ok = MSUF.RunUnitFrameApply(RunApplyBatch, FinishApplyBatch, state, ApplyOne)
+  if ok and state.applied then Factory.spawnPending = nil end
+  return ok and state.applied
 end
 
 function Factory.Apply(unit, applyMask)
@@ -620,23 +648,11 @@ function Factory.Apply(unit, applyMask)
   if not config then return false end
 
   local units = unit and UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
-  if unit and not units then return false end
+  if unit and not units then return true end
+  local state = { unit = unit, units = units or UF.unitOrder, config = config, applyMask = applyMask, applied = true }
   UF.Surface.BeginBatch()
-  if units then
-    for i = 1, #units do ApplyOne(units[i], config, applyMask) end
-  else
-    for i = 1, #UF.unitOrder do ApplyOne(UF.unitOrder[i], config, applyMask) end
-    UF.spawned = true
-    UF.initialized = true
-  end
-
-  if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
-  if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
-  UF.Surface.EndBatch(unit)
-  -- The arena PvP trinket holders sit outside the element system as well; the
-  -- same applies carry their size, side, offset and layer to them.
-  Dep("MSUF_ArenaTrinkets_RefreshLayout")(unit)
-  return true
+  local ok = MSUF.RunUnitFrameApply(RunApplyBatch, FinishApplyBatch, state, ApplyOne)
+  return ok and state.applied
 end
 
 function Factory.ForceReanchor(unit)

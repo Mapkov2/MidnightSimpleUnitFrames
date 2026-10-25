@@ -157,6 +157,17 @@ function UF.MarkDirty(unit)
   for i = 1, #UF.unitOrder do UF.pendingApply[UF.unitOrder[i]] = true end
 end
 
+local function RunDirtyUnitApply(unit, factory)
+  UF.pendingApply[unit] = nil
+  local applied = factory.Apply(unit)
+  if applied ~= true then UF.pendingApply[unit] = true end
+  return applied
+end
+
+local function FinishDirtyUnitApply(ok, unit)
+  if not ok then UF.pendingApply[unit] = true end
+end
+
 function UF.ApplyDirty()
   if InCombat() then return false end
   local factory = UF.Factory
@@ -167,13 +178,16 @@ function UF.ApplyDirty()
     for unit in pairs(UF.pendingApply) do UF.pendingApply[unit] = nil end
     return true
   end
-  local any = false
-  for unit in pairs(UF.pendingApply) do
-    UF.pendingApply[unit] = nil
-    factory.Apply(unit)
-    any = true
+  -- Walk a snapshot: a failed unit is put back into pendingApply, and adding a
+  -- key to a table during its own pairs() traversal is undefined in Lua 5.1.
+  local units = {}
+  for unit in pairs(UF.pendingApply) do units[#units + 1] = unit end
+  local applied = true
+  for i = 1, #units do
+    local ok, result = MSUF.RunUnitFrameApply(RunDirtyUnitApply, FinishDirtyUnitApply, units[i], factory)
+    if not ok or result ~= true then applied = false end
   end
-  return any
+  return #units > 0 and applied
 end
 
 function UF.RequestReanchorAfterCombat()

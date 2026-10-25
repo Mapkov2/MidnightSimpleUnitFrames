@@ -319,7 +319,7 @@ local function ApplyFrame(frame, spec, applyMask)
   if spec.enabled == false then
     ClearPendingReenableReload(frame, spec)
   elseif RequireReloadForReenable(frame, spec) then
-    return true
+    return nil
   end
 
   EnsureRuntimeOnShow(frame)
@@ -331,12 +331,12 @@ local function ApplyFrame(frame, spec, applyMask)
     DisableFrame(frame)
     if frame._msufDisabledByConfig ~= true and VariantSwitchesFrame(frame, spec) then
       HoldVariantOff(frame)
-      return true
+      return nil
     end
     if UF.DetachFrame then UF.DetachFrame(frame) end
     frame._msufDisabledByConfig = true
     frame._msufVariantOff = nil
-    return true
+    return nil
   end
 
   frame._msufDisabledByConfig = nil
@@ -364,11 +364,23 @@ local function ApplyFrame(frame, spec, applyMask)
   return true
 end
 
-local function ApplyOne(unit, config, applyMask)
-  if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return false end
+-- Tri-state: true applied, false failed, nil not applicable (unsupported or
+-- unmanaged unit, disabled/variant-off frame, or re-enable awaiting reload).
+local function RunApplyOne(unit, config, applyMask)
+  if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return nil end
   local frame = UF.frames[unit] or SpawnFrame(unit)
   if not frame then return false end
   return ApplyFrame(frame, config.GetSpec(unit), applyMask)
+end
+
+local function FinishApplyOne() end
+
+local function ApplyOne(unit, config, applyMask)
+  -- Geometry and secure setup precede ApplySpec's element boundary. Isolate a
+  -- failure there too, so the batch still applies every independent unit.
+  local ok, result = MSUF.RunUnitFrameApply(RunApplyOne, FinishApplyOne, unit, config, applyMask)
+  if not ok then return false end
+  return result
 end
 
 return ApplyOne

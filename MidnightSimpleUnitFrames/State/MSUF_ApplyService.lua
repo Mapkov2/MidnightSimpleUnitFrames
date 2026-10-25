@@ -139,6 +139,54 @@ local function ApplyUnitFrame(unit, applyMask)
     end
     return false
 end
+-- Config applies retain failed work for the next flush without scheduling a
+-- self-retrying timer. Merge any newer request that arrived during the apply.
+local function MergeFailedApplyOptions(target, source)
+    if not target then return source end
+    for key, value in pairs(source) do
+        if key == "classpowerApplied" then
+            if target[key] == nil or value == false then target[key] = value end
+        elseif key == "fontScope" or key == "barsScope" or key == "powerScope" or key == "colorScope" then
+            MergeScopeField(target, key, value)
+        elseif target[key] == nil or value == true then
+            target[key] = value
+        end
+    end
+    return target
+end
+local function RunQueuedUnitFrames(state, applyMask)
+    local opt = state.options
+    local notify = opt.notify ~= false
+    if state.general then
+        if opt.applyAll == false then return false end
+        if opt.fullNotify ~= nil then notify = opt.fullNotify end
+    elseif not notify and opt.applyUnit ~= true then
+        return false
+    end
+    state.requested = true
+    if notify then
+        local reason = opt.reason or (state.general and "MSUF2_GENERAL" or "MSUF2")
+        local result = _G.MSUF_UFCore_NotifyConfigChanged(state.unit, true, true, reason, applyMask)
+        state.applied = result ~= false
+    else
+        state.applied = ApplyUnitFrame(state.unit, applyMask)
+    end
+    return state.applied
+end
+local function FinishQueuedUnitFrames(_, state)
+    if not state.requested or state.applied then return end
+    if state.general then
+        pendingGeneral = MergeFailedApplyOptions(pendingGeneral, state.options)
+    else
+        pendingUnits[state.unit] = true
+        pendingOpts[state.unit] = MergeFailedApplyOptions(pendingOpts[state.unit], state.options)
+    end
+end
+local function ApplyQueuedUnitFrames(unit, options, applyMask, general)
+    local state = { unit = unit, options = options, general = general }
+    local ok, applied = MSUF.RunUnitFrameApply(RunQueuedUnitFrames, FinishQueuedUnitFrames, state, applyMask)
+    return ok and applied
+end
 local function ApplyAuraScope(scope, reason)
     return MSUF.MSUF_Auras3.MenuModel.Apply(scope, reason or "MSUF2_AURAS") ~= false
 end
@@ -878,18 +926,15 @@ FlushApply = function()
     pendingAlphaAll = false
     FlushCastbarSettingsChanged()
     local coordinatedApplyMask = CoordinatedUnitFrameMask()
-    for unit in pairs(pendingUnits) do
+    -- Walk a snapshot: a failed apply puts its unit back into pendingUnits, and
+    -- adding a key to a table during its own pairs() traversal is undefined.
+    local queuedUnits = {}
+    for unit in pairs(pendingUnits) do queuedUnits[#queuedUnits + 1] = unit end
+    for index = 1, #queuedUnits do
+        local unit = queuedUnits[index]
         local opt = pendingOpts[unit] or {}
         pendingUnits[unit], pendingOpts[unit] = nil, nil
-        local notifyUnit = unit
-            local unitFramesApplied = false
-        if opt.notify ~= false then
-            local result = _G.MSUF_UFCore_NotifyConfigChanged(notifyUnit, true, true, opt.reason or "MSUF2", coordinatedApplyMask)
-            unitFramesApplied = result ~= false or false
-        end
-        if opt.notify == false and opt.applyUnit == true then
-            unitFramesApplied = ApplyUnitFrame(unit, coordinatedApplyMask)
-        end
+        local unitFramesApplied = ApplyQueuedUnitFrames(unit, opt, coordinatedApplyMask, false)
         if not unitFramesApplied and opt.text then
             MSUF.PublicGlobals.MSUF_ForceTextLayoutForUnitKey(unit)
         end
@@ -915,16 +960,8 @@ FlushApply = function()
     if pendingGeneral then
         local opt = pendingGeneral
         pendingGeneral = nil
-        local applied = false
         local applyAll = opt.applyAll ~= false
-        local fullNotify = opt.fullNotify
-        if fullNotify == nil then fullNotify = opt.notify ~= false end
-        if applyAll and fullNotify then
-            local result = _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, opt.reason or "MSUF2_GENERAL", coordinatedApplyMask)
-            applied = result ~= false or false
-        end
-        if applyAll and not fullNotify then applied = ApplyUnitFrame(nil, coordinatedApplyMask) end
-        fullUnitFramesApplied = applyAll and applied == true
+        fullUnitFramesApplied = ApplyQueuedUnitFrames(nil, opt, coordinatedApplyMask, true)
         if opt.fonts then
             ApplyFontRuntime(opt, fullUnitFramesApplied, pendingCastbar == true,
                 type(pendingClassPowerOpts) == "table" or ClassPowerAlreadyApplied(opt))
