@@ -32,6 +32,9 @@ local math_abs = math.abs
 local C_DurationUtil = C_DurationUtil
 -- The unit-frame alpha element loads before every castbar file.
 local ApplyCastbarRangeAlpha = ns.Require("MSUF_UF_ApplyCastbarRangeAlpha", "Castbars/MSUF_CastbarRuntime.lua")
+-- Utils precedes Runtime on every client; fail at load if this contract breaks.
+local ResolvePushbackMS = Utils.Castbar_ResolvePushbackMS
+assert(type(ResolvePushbackMS) == "function", "Castbars/MSUF_CastbarRuntime.lua requires Utils.Castbar_ResolvePushbackMS")
 
 local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
 local StatusBarTimerDirection = Enum and Enum.StatusBarTimerDirection
@@ -932,12 +935,7 @@ function Runtime:ApplyActive(frame, state, options)
     -- composes the "+x.x" suffix, so a pushed-back cast carries the suffix on
     -- its first paint. The shared resolver passes a client delayTimeMS through;
     -- nil when the state carries no delay.
-    local resolvePushback = Utils.Castbar_ResolvePushbackMS
-    if type(resolvePushback) == "function" then
-        frame._msufPushbackMS = resolvePushback(frame, state)
-    else
-        frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
-    end
+    frame._msufPushbackMS = ResolvePushbackMS(frame, state)
     SetText(frame, "castText", state.text or spellName or "")
 
     local reverseFill = ResolveReverseFill(frame, state, isChanneled)

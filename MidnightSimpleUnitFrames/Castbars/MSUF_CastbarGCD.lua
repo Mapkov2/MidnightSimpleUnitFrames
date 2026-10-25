@@ -257,7 +257,7 @@ local PlainNumber = Utils.Castbar_PlainNumber
 --- hard-casts (and records them in the skip set).
 local function ResolveInstantSpell(spellID)
     local name = spellNames[spellID]
-    if name ~= nil then return name end
+    if name ~= nil then return name, spellIcons[spellID] end
 
     local spellAPI = C_Spell
     local getInfo = spellAPI and spellAPI.GetSpellInfo
@@ -277,8 +277,8 @@ local function ResolveInstantSpell(spellID)
 
     -- The second scalar describes this spell's own start-recovery (GCD),
     -- independently of any window another spell left running. Missing/secret
-    -- metadata is not a verdict: the caller falls back to the live GCD window
-    -- for this cast, and nothing is cached so a readable value can still win.
+    -- metadata can seed an idle bar, but cannot identify a running bar's owner.
+    -- Nothing is cached until the spell's own GCD trigger is verified.
     local getBaseCooldown = GetSpellBaseCooldown
     local gcdMS
     if type(getBaseCooldown) == "function" then
@@ -292,12 +292,13 @@ local function ResolveInstantSpell(spellID)
     if gcdMS and gcdMS < 0 then return nil end
 
     name = info.name or ""
-    spellIcons[spellID] = info.iconID
-    -- Unverified: OnSucceeded uses the live GCD window for this cast only.
-    if gcdMS == nil then return name end
+    if gcdMS == nil then
+        if activeFrame and activeFrame._msufGCDActive == true then return nil end
+        return name, info.iconID
+    end
     spellNames[spellID] = name
     spellIcons[spellID] = info.iconID
-    return name
+    return name, info.iconID
 end
 
 -- Bar lifecycle
@@ -476,7 +477,7 @@ local function ArmFinish(durationObj)
     Arm(OnPollTicker, POLL_INTERVAL)
 end
 
-local function StartGCDBar(frame, spellID, durationObj, general)
+local function StartGCDBar(frame, spellName, iconID, durationObj, general)
     if activeFrame and activeFrame ~= frame then FinishGCDBar(activeFrame) end
     activeFrame = frame
     local runtime = Castbars.Runtime
@@ -510,8 +511,7 @@ local function StartGCDBar(frame, spellID, durationObj, general)
 
     local castText = ""
     if showSpell then
-        castText = spellNames[spellID] or ""
-        local iconID = spellIcons[spellID]
+        castText = spellName
         if frame.icon and iconID then
             frame.icon:SetTexture(iconID)
         end
@@ -596,10 +596,11 @@ local function OnSucceeded(spellID)
         if frame.interrupted then return end
     end
 
-    if ResolveInstantSpell(spellID) == nil then return end
+    local spellName, iconID = ResolveInstantSpell(spellID)
+    if spellName == nil then return end
 
-    -- Spell-specific metadata confirmed the trigger. The global duration
-    -- supplies only the window to paint, never a spell classification.
+    -- Verified metadata may replace attribution; unknown metadata only seeds
+    -- an idle bar. The global duration supplies the window, not classification.
     local spellAPI = C_Spell
     local getDuration = spellAPI and spellAPI.GetSpellCooldownDuration
     local durationObj = type(getDuration) == "function" and getDuration(GCD_SPELL_ID) or nil
@@ -619,7 +620,7 @@ local function OnSucceeded(spellID)
 
     if not durationObj then return end
 
-    StartGCDBar(frame, spellID, durationObj, general)
+    StartGCDBar(frame, spellName, iconID, durationObj, general)
 end
 
 driver:SetScript("OnEvent", function(_, event, _, _, spellID)

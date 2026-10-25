@@ -118,6 +118,8 @@ names as compatibility aliases.
  registration with the castbar manager, interrupt visuals, and stop cleanup all
  pass through here. Keep API reads in Engine/Driver and keep static frame
  construction in Frames.
+ Runtime binds and validates Utils.Castbar_ResolvePushbackMS once at load;
+ active applies share its native-delay and legacy-start-shift behavior.
 
  Frame-field contract. Fields the runtime writes on a castbar frame (all
  cleared by Stop / ReleaseActive unless noted):
@@ -205,8 +207,10 @@ names as compatibility aliases.
 
  Instant metadata is resolved once per spell. Only a plain positive second
  GetSpellBaseCooldown result establishes that spell's GCD trigger; zero
- excludes it. Missing, invalid or secret metadata stays retryable. A missing
- API declines attribution. An inactive global window never adds a skip entry.
+ excludes it. Missing or secret GCD metadata may start an idle GCD bar only;
+ it never replaces a running bar's attribution. Such spells cache no name,
+ icon or skip verdict and remain retryable. The resolved name and icon pass
+ directly to the display. An inactive global window never adds a skip entry.
 
  12.1 rebuild of the 5.x GCD bar. Everything time-driven runs C-side:
  UNIT_SPELLCAST_SUCCEEDED (player/vehicle only) resolves the active global
