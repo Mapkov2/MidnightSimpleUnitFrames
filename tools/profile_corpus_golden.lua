@@ -152,10 +152,6 @@ Corpus.HARNESS_ERRORS = {
     -- maximum-slot floor sees the generic native-API stub table.
     { "module ClassPower", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)", MIDNIGHT },
     { "PLAYER_LOGIN", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    -- The unit factory isolates each unit apply (stub frames always fail), so the
-    -- screen-cache scale read surfaces in a later timer-driven apply
-    -- instead of escaping PLAYER_LOGIN or the config notification.
-    { "timer", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
     { "timer", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "timer", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "Highlight.Refresh", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },

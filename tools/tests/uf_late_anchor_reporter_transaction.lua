@@ -10,7 +10,9 @@ local cases = 0
 for _, phase in ipairs({ "apply", "classpower", "group" }) do
     for _, reentrant in ipairs({ false, true }) do
         local jobs, exports, failure, reports, schedule = {}, {}, phase, 0
-        local ns = { UF = {} }
+        -- A failed replay marks frames dirty and arms the deferred driver for its retry.
+        local armed = 0
+        local ns = { UF = { MarkDirty = function() end } }
         ns.ExportPublic = function(name, value) exports[name] = value end
         ns.Optional = function(name) return exports[name] end
         local function Fail(at)
@@ -22,7 +24,7 @@ for _, phase in ipairs({ "apply", "classpower", "group" }) do
         end
         ns.GF = { RefreshHeaderLayout = function() Fail("group") end }
         local env = setmetatable({ MSUF = ns, UF = ns.UF, ExportPublic = ns.ExportPublic,
-            Factory = { Apply = Apply, ForceReanchor = Apply }, MSUF_DB = {},
+            Factory = { Apply = Apply, ForceReanchor = Apply, EnsureDeferredDriver = function() armed = armed + 1 end }, MSUF_DB = {},
             InCombat = function() return false end,
             HasGroupLateAnchorConfig = function() return true end,
             Dep = function() return function() Fail("classpower") end end,
@@ -46,6 +48,7 @@ for _, phase in ipairs({ "apply", "classpower", "group" }) do
         local job = table.remove(jobs, 1)
         local ok, why = pcall(job[2])
         assert(reports == 1, "replay did not reach the reporter after restoring its latch")
+        assert(armed >= 1, "a raising reporter skipped the deferred retry")
         assert(not ok and tostring(why):find("injected reporter", 1, true), "reporter raise was hidden")
         local state = exports.MSUF_LateAnchorReanchorState
         assert(not state.flushing and not state.pending, "throwing reporter retained a replay latch")

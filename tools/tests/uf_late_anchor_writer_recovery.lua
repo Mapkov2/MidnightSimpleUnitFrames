@@ -7,7 +7,9 @@ file:close()
 local start = assert(source:find("local function FlushLateAnchorReanchor(forcePosition)", 1, true))
 local finish = assert(source:find('\nExportPublic("MSUF_ScheduleLateAnchorReanchor",', start, true))
 local timers, exports, calls, errors = {}, {}, 0, {}
-local ns = { UF = {} }
+-- A failed replay marks frames dirty and arms the deferred driver for its retry.
+local armed = 0
+local ns = { UF = { MarkDirty = function() end } }
 function ns.ExportPublic(name, value) exports[name] = value end
 function ns.Optional(name) return exports[name] end
 local combat, fail, requestInside, group = false, false, false, false
@@ -19,7 +21,7 @@ local function Apply()
 end
 local env = setmetatable({
     MSUF = ns, UF = ns.UF, ExportPublic = ns.ExportPublic,
-    Factory = { Apply = Apply, ForceReanchor = Apply }, MSUF_DB = {},
+    Factory = { Apply = Apply, ForceReanchor = Apply, EnsureDeferredDriver = function() armed = armed + 1 end }, MSUF_DB = {},
     InCombat = function() return combat end,
     DeferLateAnchorReanchorForCombat = function() return false end,
     HasGroupLateAnchorConfig = function() return group end,
@@ -46,6 +48,7 @@ fail = true
 local ok, why = Tick()
 assert((not ok and why:find("late anchor apply failure", 1, true))
     or (#errors == 1 and errors[1]:find("late anchor apply failure", 1, true)), "apply error was hidden")
+assert(armed >= 1, "failed late-anchor replay did not arm its deferred retry")
 local state = assert(exports.MSUF_LateAnchorReanchorState)
 assert(state.flushing ~= true, "failed apply permanently retained the flushing latch")
 fail = false
