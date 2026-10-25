@@ -278,7 +278,9 @@ local function Build(ctx)
             meta = Meta("enabled", "swingTimers.enabled"), scope = "swing", domain = "swingModule",
             get = Swing.GetEnabled,
                 customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
-                set = function(value) Swing.SetEnabled(value) M.Refresh(ctx) end,
+                write = {
+                    call = Swing.SetEnabled, valueOnly = true, after = function() M.Refresh(ctx) end
+                } --[[schema setter: H4.SwingTimers.1]],
             tip = { "Swing Timers (Forever)",
                 "Replaces all Blizzard swing bars while enabled, even when only one hand is selected. Disabling restores Blizzard's previous visibility." } },
         { "flowToggle", "preview", nil, { "Preview and drag Swing Timers" }, { 28, -42 },

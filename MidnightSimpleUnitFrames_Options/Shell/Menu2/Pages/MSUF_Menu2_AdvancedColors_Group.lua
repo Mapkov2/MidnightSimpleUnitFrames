@@ -152,6 +152,7 @@ local GroupRows = { bind = function(ctx, control, row, kind)
     local meta = row.meta or Meta(row.path or "group_frame.color." .. key, nil, GroupExact(key, kind, row))
     local spec = { id = meta.controlId, kind = kind, key = key, labelKey = row.label or row[4][1],
         scope = "colors", applyDomain = "groupColors", meta = meta, settingPath = meta.settingKey, get = get,
+        writeTargets = row.writeTargets, companionWrites = row.companionWrites,
             customSetReason = "Writes group color channels and the selected scope override together.", set = set }
     if kind == "slider" then
         -- The live label names the slider on screen; search needs it as the label.
@@ -218,7 +219,9 @@ local function BuildGroupFrameColors(ctx, b)
     local controls = Schema.Build(ctx, health, {
         { "dropdown", "gfBarMode", "GLOBAL", { "Bar Color Mode", GROUP_BAR_MODES, min(360, cardW - 32) },
             position = { 12, -10 }, path = "group_frame.health.mode", get = GroupBarMode,
-                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
+                customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            companionWrites = Schema.GroupKeys("healthColorMode").keys,
+            set = function(value)
                 value = value or "GLOBAL"
                 SetGroupValue("gfBarMode", value ~= "GLOBAL" and value or nil, "MSUF2_GROUP_HEALTH_MODE", "visual")
                 if value == "CLASS" or value == "GRADIENT" then

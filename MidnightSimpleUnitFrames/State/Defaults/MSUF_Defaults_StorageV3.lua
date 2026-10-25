@@ -1,9 +1,7 @@
 -- V3 inherited-default presence masks and reversible codec operations.
 local _, MSUF = ...
 local Parts = MSUF.DefaultsSchemaParts
-local sparseV3Fields = Parts.sparseV3Fields
-local sparseV3Owners = Parts.sparseV3Owners
-local sparseV3Runs = Parts.sparseV3Runs
+local sparseV3Fields, sparseV3Owners, sparseV3Runs
 local sparseV2Bits
 local sparseV2Symbols
 -- Additional typed defaults with exact presence and reusable logout scratch.
@@ -12,22 +10,29 @@ do
     local marker = "_msufSparseDefaultsV3"
     local before, tables, nibbles, pieces = {}, {}, {}, {}
     local absent, size = {}, 0
-    for i, spec in ipairs(sparseV3Owners) do
-        spec.fields = {}
-        for _, run in ipairs(spec.runs) do
-            for _, id in ipairs(sparseV3Runs[run]) do spec.fields[#spec.fields + 1] = id end
+    local maskSize
+    function sparseV3.Initialize()
+        if maskSize then return end
+        local data = MSUF.DefaultsStorageData
+        sparseV3Fields, sparseV3Owners, sparseV3Runs = data.sparseV3Fields, data.sparseV3Owners, data.sparseV3Runs
+        for i, spec in ipairs(sparseV3Owners) do
+            spec.fields = {}
+            for _, run in ipairs(spec.runs) do
+                for _, id in ipairs(sparseV3Runs[run]) do spec.fields[#spec.fields + 1] = id end
+            end
+            spec.offset = size
+            tables[i] = false
+            for j, id in ipairs(spec.fields) do
+                local field = sparseV3Fields[id]
+                before[size + j] = false
+                field.bytes = #tostring(field[1]) + (type(field[2]) == "table" and 2 or #tostring(field[2])) + 4
+            end
+            size = size + #spec.fields
         end
-        spec.offset = size
-        tables[i] = false
-        for j, id in ipairs(spec.fields) do
-            local field = sparseV3Fields[id]
-            before[size + j] = false
-            field.bytes = #tostring(field[1]) + (type(field[2]) == "table" and 2 or #tostring(field[2])) + 4
-        end
-        size = size + #spec.fields
+        maskSize = math.ceil(size / 4)
+        for i = 1, maskSize do nibbles[i], pieces[i] = 0, "" end
+        sparseV3.Overhead = maskSize + #marker + 8
     end
-    local maskSize = math.ceil(size / 4)
-    for i = 1, maskSize do nibbles[i], pieces[i] = 0, "" end
     local function Bit(slot)
         local bit = sparseV2Bits[(slot - 1) % 4 + 1]
         return math.floor(nibbles[math.floor((slot - 1) / 4) + 1] / bit) % 2 == 1
@@ -154,7 +159,7 @@ do
         end
         return true
     end
-    sparseV3.Marker, sparseV3.Overhead = marker, maskSize + #marker + 8
+    sparseV3.Marker = marker
 end
 
 

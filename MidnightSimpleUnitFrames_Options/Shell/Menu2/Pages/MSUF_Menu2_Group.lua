@@ -1205,12 +1205,9 @@ function PortraitBuild.Binders(ctx, s)
             previewHandleKey = "portrait",
             previewScope = "party",
             get = function() return tonumber(Val(kind, key, 0)) or 0 end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
-                value = tonumber(value)
-                if value == nil then return false end
-                SetValue(key, value)
-                return true
-            end,
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = { virtual = true,
+                call = SetValue, keyOnly = true, validNumber = true, success = true
+            } --[[schema setter: H4.Group.2]],
         }
         M.RegisterVirtualRuntimeControl(meta, "group-preview-offset")
     end
@@ -1240,13 +1237,15 @@ function PortraitBuild.Binders(ctx, s)
             end
             if row.normalize then
                 row.customSetReason = "Normalizes the selected portrait mode before the fixed Party write."
-                set = function(value)
-                if controlKind == "toggle" then value = value and true or false
-                elseif controlKind == "slider" then value = tonumber(value) or default
-                else value = row.normalize and row.normalize(value or default) or (value or default) end
-                SetValue(key, value)
-                if row.afterSet then row.afterSet() end
-            end
+                set = nil
+                row.write = {
+                    call = SetValue, keyOnly = true,
+                    convert = function(value)
+                        if controlKind == "toggle" then return value and true or false end
+                        if controlKind == "slider" then return tonumber(value) or default end
+                        return row.normalize and row.normalize(value or default) or (value or default)
+                    end, after = row.afterSet
+                } --[[schema setter: H4.Group.4]]
             else
                 row.write = { call = SetValue, keyOnly = true, boolean = controlKind == "toggle",
                     numberDefault = controlKind == "slider" and default or nil,
@@ -1378,10 +1377,11 @@ function PortraitBuild.Controls(ctx, s)
                 return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
                     and "SEPARATE" or "UNIFORM"
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
-                SetValue("portraitSizeMode", value == "SEPARATE" and "SEPARATE" or "UNIFORM")
-                RefreshPortraitControls()
-            end },
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                call = SetValue, keyOnly = true,
+                convert = function(value) return value == "SEPARATE" and "SEPARATE" or "UNIFORM" end,
+                after = RefreshPortraitControls
+            } --[[schema setter: H4.Group.7]] },
         { "slider", "portraitSizeOverride", 0, { "Size override", 0, 128, 1, 280 }, { 16, -116, cardW - 58, "CENTER" } },
         { "slider", "portraitWidth", 0, { "Width override", 0, 256, 1, 280 }, { 16, -170, cardW - 58, "CENTER" } },
         { "slider", "portraitHeight", 0, { "Height override", 0, 256, 1, 280 }, { 16, -224, cardW - 58, "CENTER" } },
@@ -1791,11 +1791,16 @@ local function BuildRoleOrderRows(ctx, section, opts)
             valueKind = "enum",
             values = ROLE_SORT_VALUES,
             get = CurrentRoleOrder,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
-                local changed = ApplyRoleOrder(value)
-                if changed and holder and holder.Refresh then holder.Refresh() end
-                return changed
-            end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            write = { source = function() return Conf(CurrentScope()) end,
+                resolve = function() return "gf_" .. CurrentScope() .. ".roleOrder" end,
+                accept = function(value) return NormalizeRoleOrder(value) ~= nil end, refused = false,
+                convert = NormalizeRoleOrder, success = true,
+                after = function()
+                    QueueGF(CurrentScope(), "rebuild")
+                    if holder and holder.Refresh then holder.Refresh() end
+                end
+            } --[[schema setter: H4.Group.RoleOrder]],
             canExecute = function()
                 local scope = CurrentScope()
                 return scope == "party" or scope == "raid" or scope == "mythicraid"

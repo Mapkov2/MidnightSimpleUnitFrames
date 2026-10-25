@@ -10,8 +10,7 @@ local scratchLists = Parts.scratchLists
 local scratchPath = Parts.scratchPath
 local scratchRefs = Parts.scratchRefs
 local sparseToken = Parts.sparseToken
-local sparseV2Fields = Parts.sparseV2Fields
-local sparseV2Owners = Parts.sparseV2Owners
+local sparseV2Fields, sparseV2Owners
 local sparseV3 = Parts.sparseV3
 -- V2 records only fields actually removed; unlike V1 it never reconstructs an
 -- absent optional field merely because its owner exists. The field pool and
@@ -22,19 +21,27 @@ local sparseV2Absent = {}
 local sparseV2Symbols, sparseV2Bits = {}, { 1, 2, 4, 8 }
 for i = 0, 15 do sparseV2Symbols[i] = ("0123456789abcdef"):sub(i + 1, i + 1) end
 local sparseV2Size = 0
-for i = 1, #sparseV2Owners do
-    local owner = sparseV2Owners[i]
-    owner.offset = sparseV2Size
-    sparseV2Tables[i] = false
-    for j = 1, #owner.fields do sparseV2Before[sparseV2Size + j] = false end
-    sparseV2Size = sparseV2Size + #owner.fields
+local sparseV2MaskSize
+local function InitializeSparse()
+    if sparseV2MaskSize then return end
+    local data = MSUF.DefaultsStorageData
+    data.Load()
+    sparseV2Fields, sparseV2Owners = data.sparseV2Fields, data.sparseV2Owners
+    for i = 1, #sparseV2Owners do
+        local owner = sparseV2Owners[i]
+        owner.offset = sparseV2Size
+        sparseV2Tables[i] = false
+        for j = 1, #owner.fields do sparseV2Before[sparseV2Size + j] = false end
+        sparseV2Size = sparseV2Size + #owner.fields
+    end
+    for i = 1, #sparseV2Fields do
+        local field = sparseV2Fields[i]
+        field.bytes = #field[1] + #tostring(field[2]) + 4
+    end
+    sparseV2MaskSize = math.ceil(sparseV2Size / 4)
+    for i = 1, sparseV2MaskSize do sparseV2Nibbles[i], sparseV2Pieces[i] = 0, "" end
+    sparseV3.Initialize()
 end
-for i = 1, #sparseV2Fields do
-    local field = sparseV2Fields[i]
-    field.bytes = #field[1] + #tostring(field[2]) + 4
-end
-local sparseV2MaskSize = math.ceil(sparseV2Size / 4)
-for i = 1, sparseV2MaskSize do sparseV2Nibbles[i], sparseV2Pieces[i] = 0, "" end
 
 local function ResolveSparseV2Owners(profile, refs, lists)
     for i = 1, #sparseV2Owners do
@@ -170,6 +177,7 @@ function Schema.RestorePersistence(profile)
         profile[sparseV2Marker], profile[sparseV3.Marker] = nil, nil
         return true, "restored"
     elseif marker ~= nil then
+        InitializeSparse()
         local restored = RestoreSparseV2(profile, false)
         ReleaseSparseV2(false)
         return restored, restored and "restored" or "rejected"
@@ -279,6 +287,7 @@ function Schema.Persist(globalDB)
         print(MSUF.Translate("MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full."))
         return false
     end
+    InitializeSparse()
     local count = 0
     if CountTables(globalDB, scratchRefs, scratchPath, 0, scratchLists) and scratchRefs[profiles] == 1 then
         for _, profile in pairs(profiles) do count = count + PersistProfile(profile, scratchRefs, scratchLists) end

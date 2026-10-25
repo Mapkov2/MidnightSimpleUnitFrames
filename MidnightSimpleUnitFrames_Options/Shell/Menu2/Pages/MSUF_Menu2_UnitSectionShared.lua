@@ -955,7 +955,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         overlay:Show()
     end)
     RegisterOwnedControl(pick, opts, "pick", opts.pickLabel or "Pick", "button", "action")
-    pick._msuf2ControlSchema.setting = opts.valueSetting or opts.valueSettingKey
+    M.ControlSchema.SetSetting(pick, opts.valueSetting or opts.valueSettingKey)
     pick._msuf2ControlSchema.ephemeralReason = nil
     local clear = SmallButton(pick, opts.clearLabel or "Clear", opts.clearWidth or 50, 4, true)
     clear:SetScript("OnClick", function()
@@ -963,7 +963,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         box:SetText("")
     end)
     RegisterOwnedControl(clear, opts, "clear", opts.clearLabel or "Clear", "button", "action")
-    clear._msuf2ControlSchema.setting = opts.valueSetting or opts.valueSettingKey
+    M.ControlSchema.SetSetting(clear, opts.valueSetting or opts.valueSettingKey)
     clear._msuf2ControlSchema.ephemeralReason = nil
     M.TrackRefresh(ctx, Refresh)
     Schema.Custom(box, { id = (box._msuf2RuntimeControlRecord or {}).controlId or "shared.customAnchor",

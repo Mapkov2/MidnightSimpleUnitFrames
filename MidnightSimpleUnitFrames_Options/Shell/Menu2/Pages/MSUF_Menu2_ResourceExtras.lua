@@ -186,7 +186,7 @@ end
 local ROW_OPTIONS = { bind = function(ctx, widget, row, kind)
     local spec = { id=row.meta.controlId, kind=kind, key=row[2], labelKey=row[4][1], meta=row.meta,
         settingPath=row.meta.settingKey, scope=row.scope or "bars", applyDomain=row.domain or "resourceExtras",
-        source=row.source, apply=row.apply, get=row.get, set = row.set, write = row.write,
+        setting=row.setting, source=row.source, apply=row.apply, get=row.get, set = row.set, write = row.write,
             customSetReason = row.customSetReason or "Resolves a resource mark and updates its dependent mode or threshold fields.", workspace="classpower",
         defaultSource=function() return row[3] end }
     if kind=="slider" then spec.range={row[4][2],row[4][3],row[4][4]} end
@@ -209,11 +209,10 @@ local function Header(page,section,group,Bars,Apply)
         local row=SettingRow(master,Bars,Apply)
         row.get=function() return Bars()[group.master]==true end
         row.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
-    row.set=function(value)
-            Bars()[group.master]=value and true or false
-            FocusExample(page,group)
-            Apply()
-        end
+    row.write = {
+        source = Bars, boolean = true,
+        after = function() FocusExample(page, group) Apply() end
+    } --[[schema setter: H4.ResourceExtras.1]]
         row[1]="sectionSwitch"
         Schema.Build(page.ctx,section,{row},ROW_OPTIONS)
     end
@@ -472,8 +471,21 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
             end
             return rule and rule[key] or row[3]
         end
-        row.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
-    row.set=function(value) Write(key,value) end
+        if key=="mode" then
+            row.customSetReason="Changes the value mode and clamps the stored resource value."
+            row.set=function(value) Write(key,value) end
+        else
+            row.write={source=Rule,requireRecord=true,
+                convert=key=="value" and function(value)
+                    local stored=tonumber(value)
+                    return stored and math.max(0,math.min(ValueMax(Rule()),stored)) or value
+                end or nil,
+                after=function()
+                    Apply()
+                    if key=="target" or key=="resource" then Refresh() end
+                end
+            } --[[schema setter: H4.ResourceExtras.3]]
+        end
         if key=="value" then
             row.beforeBind=function(widget)
                 M.TrackRefresh(ctx,function()

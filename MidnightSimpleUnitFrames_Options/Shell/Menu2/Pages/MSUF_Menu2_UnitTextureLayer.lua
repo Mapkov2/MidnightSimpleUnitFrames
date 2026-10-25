@@ -499,13 +499,14 @@ local function TextureLayerBinders(ctx, s)
                         return value
                     end
                     row.customSetReason = "Writes the texture-layer slot bound to this build and refreshes that selected layer."
-    row.set = function(value)
-                        if kind == "toggle" then SetBool(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
-                        elseif kind == "slider" then SetNumber(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
-                        else SetString(unit, Key(base), value or default, "MSUF2_TEXLAYER", { preview = true }) end
-                        RefreshLayer()
-                        if row.afterSet then row.afterSet() end
-                    end
+    row.write = {
+        call = kind == "toggle" and SetBool or kind == "slider" and SetNumber or SetString,
+        args = { "MSUF2_TEXLAYER", { preview = true } },
+        convert = function(value)
+            if kind == "toggle" or kind == "slider" then return value end
+            return value or default
+        end, after = function() RefreshLayer() if row.afterSet then row.afterSet() end end
+    } --[[schema setter: H4.UnitTextureLayer.1]]
                 end
             end
         end
@@ -572,7 +573,9 @@ local function TextureLayerSetupCard(ctx, s)
         R.Drop("Texture", "", "Texture (SharedMedia)", function() return M.StatusBarTextureItems("Use bar texture") end, 16, -164),
         { "textinput", "CustomTexturePath", "", { "Custom texture path", colW - 16 }, { 16, -240, colW - 16, "LEFT" }, commitOnBlur = true,
             get = function() return tostring(GetConf(unit)[Key("CustomTexturePath")] or "") end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            companionWrites = { unit .. "." .. Key("SourceMode") },
+            set = function(v)
                 local path = tostring(v or "")
                 -- The typed path is drawn; clearing it returns to the SharedMedia texture.
                 SetString(unit, Key("SourceMode"), path == "" and "SHAREDMEDIA" or (TEXLAYER_PACK_BY_PATH[path] and "PACK" or "CUSTOM"),
@@ -668,10 +671,10 @@ local function TextureLayerAdvancedCard(ctx, s)
             UP.RegisterControl(btn, ctx, "texture_layer.gradient_direction." .. value, "Gradient direction", "button",
                 value == "UP" and "action" or "ephemeral")
         end
-        local declaration = Schema.Owned(btn, unit, "textureLayer")._msuf2ControlSchema
+        Schema.Owned(btn, unit, "textureLayer")
         local keys = {}
         for _, prefix in ipairs(SLOT_PREFIXES) do keys[#keys + 1] = unit .. "." .. prefix .. PAD_DIRECTION_SUFFIXES[value] end
-        declaration.setting, declaration.ephemeralReason = Schema.Family(keys), nil
+        Schema.SetSetting(btn, Schema.Family(keys))
         padButtons[value] = btn
         return btn
     end
@@ -685,10 +688,10 @@ local function TextureLayerAdvancedCard(ctx, s)
     R.Build(advancedCard, {
         R.Toggle("BlendMode", false, "Additive glow", colX, -210, {
             get = function() return GetConf(unit)[Key("BlendMode")] == "ADD" end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
-                SetString(unit, Key("BlendMode"), v and "ADD" or "BLEND", "MSUF2_TEXLAYER", { preview = true })
-                RefreshLayer()
-            end }),
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", write = {
+                call = SetString, convert = function(v) return v and "ADD" or "BLEND" end,
+                args = { "MSUF2_TEXLAYER", { preview = true } }, after = RefreshLayer
+            } --[[schema setter: H4.UnitTextureLayer.3]] }),
         R.Toggle("MirrorH", false, "Mirror horizontally", colX, -256),
         R.Toggle("MirrorV", false, "Mirror vertically", colX, -302),
         R.Percent("EdgeSoftness", 0, "Edge softness", 0, 0.30, 0.02, colX, -360),
@@ -721,7 +724,9 @@ local function TextureLayerRulesCard(ctx, s)
                 if value ~= "COMBAT" and value ~= "OOC" then return "ALWAYS" end
                 return value
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { unit .. "." .. Key("TargetOnly") },
+            set = function(value)
                 local conf = GetConf(unit)
                 if conf[Key("Visibility")] == "TARGET" and conf[Key("TargetOnly")] == nil then
                     SetBool(unit, Key("TargetOnly"), true, "MSUF2_TEXLAYER", { preview = true })
@@ -736,7 +741,9 @@ local function TextureLayerRulesCard(ctx, s)
                 local conf = GetConf(unit)
                 return conf[Key("TargetOnly")] == true or conf[Key("Visibility")] == "TARGET"
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(enabled)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { unit .. "." .. Key("Visibility") },
+            set = function(enabled)
                 local conf = GetConf(unit)
                 if conf[Key("Visibility")] == "TARGET" then
                     SetString(unit, Key("Visibility"), "ALWAYS", "MSUF2_TEXLAYER", { preview = true })

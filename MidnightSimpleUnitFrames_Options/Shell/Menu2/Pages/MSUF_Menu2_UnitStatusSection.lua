@@ -221,13 +221,13 @@ function StatusSection.PrepareSearch(state, ctx, unit)
             end
             local declaration = control._msuf2ControlSchema
             if #keys == 0 then
-                declaration.setting = nil
+                Schema.SetSetting(control, nil)
                 declaration.ephemeralReason = "This unit has no status indicator with a configurable " .. field .. " field."
             else
-                declaration.setting = Schema.Family(keys, function()
+                Schema.SetSetting(control, Schema.Family(keys, function()
                     local selected = CurrentStatusSpec(unit)
                     return selected and selected[field] and unit .. "." .. selected[field]
-                end)
+                end))
             end
         end
     end
@@ -306,7 +306,7 @@ function StatusSection.PrepareBinders(state, ctx, unit)
                 end)
         end }}, ROW_OPTIONS)[path]
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, path, "ephemeral")
-        control._msuf2ControlSchema.setting = unit .. ".stateIconsTestMode"
+        M.ControlSchema.SetSetting(control, unit .. ".stateIconsTestMode")
         control._msuf2ControlSchema.ephemeralReason = nil
         return control
     end
@@ -496,12 +496,13 @@ function StatusSection.RegisterVirtualIndicators(state, ctx, unit, selector)
             meta.command = {
                 kind = "toggle",
                 get = function() return state.ReadStatusEnabled(spec) end,
-                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
-                    SetBool(unit, spec.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = { virtual = true,
+                call = SetBool, strictBoolean = true, success = true,
+                args = { "MSUF2_STATUS_ENABLED", { preview = true } }, after = function()
                     RefreshStatusRuntime(unit, spec)
                     if Refresh then Refresh() end
-                    return true
-                end,
+                end
+            } --[[schema setter: H4.UnitStatusSection.2]],
             }
             M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
         end

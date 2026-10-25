@@ -64,3 +64,17 @@ local function RunHostAPIStep(label, step, ...)
 end
 
 MSUF.RunHostAPIStep = RunHostAPIStep
+
+-- A cold unit-frame apply owns temporary batch flags and routing state.
+-- Restore them before reporting, since the client's error handler can raise.
+local function RunUnitFrameApply(step, finish, ...)
+    local ok, result = pcall(step, ...)
+    finish(ok, ...)
+    if not ok then
+        ReportError("unit-frame apply", result)
+        return false
+    end
+    return true, result
+end
+
+MSUF.RunUnitFrameApply = RunUnitFrameApply

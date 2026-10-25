@@ -170,6 +170,8 @@ function MiscSection.Binders(s)
     local function BindMiscToggle(parent, label, key, default, reason, x, y, width, opts, afterSet)
         local control = Schema.Build(ctx, parent, {
             { "flowToggle", key, default, { label },
+            companionWrites = key == "showMinimapIcon"
+                and { "general.minimapIconDB.hide", "general.minimapIconDB.minimapPos" } or nil,
             get = function() return ReadGBool(key, default) end,
             write = { call = SetGBool, keyOnly = true, args = { reason, opts or PREVIEW_FALSE }, after = afterSet }, --[[schema setter: GlobalMisc.1]]
             meta = Meta("setting." .. key), domain = "global" },
@@ -178,8 +180,17 @@ function MiscSection.Binders(s)
         return control
     end
     local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue, path, writePolicy)
+        local companions
+        if path == "setting.menuAppearancePreset" then
+            companions = { "general.menuAccent", "general.menuAccentTintSurfaces" }
+        elseif path == "tooltips.provider" or path == "tooltips.anchor" then
+            companions = { "general.unitTooltipProvider", "general.unitTooltipAnchor",
+                "general.disableUnitInfoTooltips", "general.unitInfoTooltipStyle" }
+        elseif path == "tooltips.visibility_mode" or path == "tooltips.modifier" then
+            companions = { "general.unitTooltipMode", "general.unitTooltipModifier" }
+        end
         local control = Schema.Build(ctx, parent, {
-            { "dropdown", path, nil, { label, values, width },
+            { "dropdown", path, nil, { label, values, width }, companionWrites = companions,
                 get = getValue, customSetReason = "Normalizes menu options or coordinates tooltip companion fields and runtime state.",
                     set = setValue, write = writePolicy, meta = Meta(path), domain = "global" },
         }, ROW_OPTIONS)[path]
@@ -196,12 +207,8 @@ function MiscSection.Binders(s)
                 end
                 return true
             end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
-                local groupPage = M.GroupPage
-                if groupPage and type(groupPage.Set) == "function" then
-                    groupPage.Set(kind, "targetIndicator", value and true or false, "visual")
-                end
-            end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            write = { call = M.GroupPage.Set, group = true, boolean = true, args = { "visual" } } --[[schema setter: H4.GlobalMisc.1]],
             meta = Meta("group_target." .. kind, "setting", {
                 settingKey = "gf_" .. kind .. ".targetIndicator",
             }), domain = "global" },
@@ -258,18 +265,17 @@ function MiscSection.Language(s)
     local abbrevSegment = Schema.Build(ctx, language, {
         { "segment", "setting.numberAbbrevStyle", nil, { "Number abbreviation", ABBREV_STYLES, abbrevSegW },
         get = AbbrevStyle,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
-            value = (value == "COMPACT") and "COMPACT" or "GAME"
-            -- Persist without a runtime apply, push the new style, then repaint
-            -- once - so the refresh already formats with the new options instead of
-            -- painting stale text and correcting it on the next unit event.
-            SetG("numberAbbrevStyle", value, "MSUF2_NUMBER_ABBREV", MENU_WRITE_OPTS)
-            local NumberFormat = MSUF.NumberFormat
-            if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
-            M.RequestGeneralDomains("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
-            MSUF.GF.RefreshVisuals()
-            RefreshAbbrevSample()
-        end,
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                call = SetG, keyOnly = true,
+                convert = function(value) return value == "COMPACT" and "COMPACT" or "GAME" end,
+                args = { "MSUF2_NUMBER_ABBREV", MENU_WRITE_OPTS }, after = function()
+                    local NumberFormat = MSUF.NumberFormat
+                    if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
+                    M.RequestGeneralDomains("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
+                    MSUF.GF.RefreshVisuals()
+                    RefreshAbbrevSample()
+                end
+            } --[[schema setter: H4.GlobalMisc.2]],
         meta = Meta("setting.numberAbbrevStyle"), domain = "global",
         beforeBind = function(abbrevSegment)
             W.MoveWidget(abbrevSegment, language, 30, -134, abbrevSegW, "LEFT")

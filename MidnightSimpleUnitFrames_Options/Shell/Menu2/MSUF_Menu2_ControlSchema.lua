@@ -104,6 +104,57 @@ function Schema.Matches(setting, path)
     for _, pattern in ipairs(setting.patterns or {}) do if path:match(pattern) then return true end end
     return false
 end
+-- A command's physical writes are separate from its search route. Snapshot the
+-- declaration so later widget reuse or metadata changes cannot widen it.
+-- Record paths name the subtree replaced by an atomic record/account command.
+function Schema.Writes(setting, menuState)
+    local writes = { keys = {}, patterns = {}, menuState = menuState == true }
+    if type(setting) == "string" then writes.keys[1] = setting
+    elseif type(setting) == "table" then
+        for _, path in ipairs(setting.keys or setting.recordPaths or {}) do writes.keys[#writes.keys + 1] = path end
+        for _, pattern in ipairs(setting.patterns or {}) do writes.patterns[#writes.patterns + 1] = pattern end
+    end
+    return writes
+end
+function Schema.MatchesWrite(spec, path)
+    local writes = assert(spec.writes, "schema write contract missing: " .. tostring(spec.id))
+    if writes.menuState then return false end
+    while path do
+        if Schema.Matches(writes, path) then return true end
+        path = path:match("^(.*)%.[^.]+$")
+    end
+    return false
+end
+local function WriteContract(spec, menuState)
+    local meta = spec.meta or {}
+    local command = meta.command or {}
+    local targets = spec.writeTargets or meta.writeTargets or command.writeTargets
+    menuState = menuState and not targets
+    local writes = Schema.Writes(targets or spec.setting, menuState)
+    if not menuState then
+        for _, path in ipairs(spec.companionWrites or meta.companionWrites or command.companionWrites or {}) do
+            writes.keys[#writes.keys + 1] = path
+            if path:find("{", 1, true) then
+                writes.patterns[#writes.patterns + 1] = Schema.Record({ path }).patterns[1]
+            end
+        end
+    end
+    return writes
+end
+local function PublishWrites(widget, spec)
+    local record = widget._msuf2RuntimeControlRecord
+    if record and record.controlId == spec.id then record.writes = spec.writes end
+end
+-- Composite owners refine an existing declaration after attaching the widget.
+-- Keep its search target and concrete write snapshot in the same operation.
+function Schema.SetSetting(widget, setting)
+    local spec = assert(widget._msuf2ControlSchema, "schema composite declaration missing")
+    spec.setting = setting
+    if setting then spec.ephemeralReason = nil end
+    spec.writes = WriteContract(spec, not setting)
+    PublishWrites(widget, spec)
+    return widget
+end
 local UNIT_SCOPE_ROOTS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
 local GROUP_SCOPE_ROOTS = { "gf_party", "gf_raid", "gf_mythicraid" }
 function Schema.ScopedFields(fields, shared, flag, groupFields)
@@ -154,12 +205,19 @@ function Schema.FromMeta(meta)
 end
 -- Named commands retain their existing execution/history owners. Atomic resets
 -- and account operations may replace a complete profile or storage subtree.
+local function ColorTargets(prefixes, channels, targets)
+    targets = targets or {}
+    for _, prefix in ipairs(prefixes) do
+        for index = 1, #channels do targets[#targets + 1] = prefix .. channels:sub(index, index) end
+    end
+    return targets
+end
+local PORTRAIT_RESET_TARGETS = Schema.Fields({ "general", "player", "target", "focus", "targettarget",
+    "focustarget", "pet", "pettarget", "boss" }, { "portraitBorderColorR", "portraitBorderColorG", "portraitBorderColorB",
+    "portraitBgColorR", "portraitBgColorG", "portraitBgColorB" }).recordPaths
+PORTRAIT_RESET_TARGETS[#PORTRAIT_RESET_TARGETS + 1] = "general.portraitBorderColorA"
+PORTRAIT_RESET_TARGETS[#PORTRAIT_RESET_TARGETS + 1] = "general.portraitBgColorA"
 local ACTION_TARGETS = {
-    class_power_quick_setup = {
-        "bars",
-        "player",
-        "general.quickSetupClassBarOffered",
-    },
     reset_player_totems_layout = {
         "gameplay.playerTotemsIconSize",
         "gameplay.playerTotemsOffsetX",
@@ -178,16 +236,15 @@ local ACTION_TARGETS = {
     show_player_power_or_open_class_resources = {
         "player.showPowerBar",
     },
-    reset_selected_group_status_icon = {
-        "gf_{scope}.{field}",
-    },
     reset_health_gradient_colors = {
         "general.healthGradient{stop}R",
         "general.healthGradient{stop}G",
         "general.healthGradient{stop}B",
     },
     reset_aura_colors = {
-        "general",
+        "general.aurasCooldownTextUseBuckets", "general.aurasCooldownTextSafeColor", "general.aurasCooldownTextWarningColor",
+        "general.aurasCooldownTextUrgentColor", "general.aurasCooldownTextSafeSeconds", "general.aurasCooldownTextWarningSeconds",
+        "general.aurasCooldownTextUrgentSeconds", "general.dispelTypeColorOverrides",
     },
     reset_bar_background_color = {
         "general.classBarBgR",
@@ -195,12 +252,16 @@ local ACTION_TARGETS = {
         "general.classBarBgB",
         "general.classBarBgA",
     },
-    reset_bar_colors = {
-        "general",
-    },
-    reset_castbar_colors = {
-        "general",
-    },
+    reset_bar_colors = ColorTargets({ "general.absorbBarColor", "general.healAbsorbBarColor", "general.powerBarBgColor",
+        "general.aggroBorder", "general.purgeBorderColor", "general.barOutlineColor" }, "RGBA",
+        ColorTargets({ "general.healPredictionColor", "general.healthLossColor", "general.powerLossColor",
+            "general.hlAggroColor", "general.hlPurgeColor", "general.aggroBorderColor" }, "RGB",
+            { "general.barOutlineColorMode", "general.powerBarBgMatchBarColor" })),
+    reset_castbar_colors = ColorTargets({ "general.castbarFont", "general.castbarTargetName", "general.castbarInterruptible",
+        "general.castbarNonInterruptible", "general.castbarInterruptFeedback", "general.castbarInterruptUnavailable",
+        "general.playerCastbarOverride" }, "RGB", ColorTargets({ "general.castbarBorder", "general.castbarBg" }, "RGBA",
+            { "general.castbarInterruptUnavailableColor", "general.playerCastbarOverrideEnabled", "general.playerCastbarOverrideMode",
+                "general.kickReadyColor", "general.kickNotReadyColor" })),
     reset_class_colors = {
         "classColors",
     },
@@ -220,21 +281,9 @@ local ACTION_TARGETS = {
     reset_npc_type_colors = {
         "npcColors",
     },
-    reset_unitframe_colors = {
-        "general",
-        "npcColors",
-    },
-    reset_portrait_colors = {
-        "general",
-        "player",
-        "target",
-        "focus",
-        "targettarget",
-        "focustarget",
-        "pet",
-        "pettarget",
-        "boss",
-    },
+    reset_unitframe_colors = { "npcColors", "general.tapDeniedGray", "general.petFrameColorR", "general.petFrameColorG",
+        "general.petFrameColorB", "general.petFrameUsePlayerClassColor", "general.npcClassColorBar" },
+    reset_portrait_colors = PORTRAIT_RESET_TARGETS,
     reset_power_color_token = {
         "general.powerColorOverrides.{token}",
     },
@@ -303,6 +352,31 @@ local DASHBOARD_TARGETS = {
     ["scaling.menu.apply"] = { "general.slashMenuScale" },
     ["scaling.msuf.frames.apply"] = { "general.msufUiScale" },
 }
+local function QuickSetupTargets()
+    local paths = { "general.quickSetupClassBarOffered" }
+    for root, fields in pairs(M.ClassPowerWorkspace.QuickWriteKeys) do
+        for _, field in ipairs(fields) do paths[#paths + 1] = root .. "." .. field end
+    end
+    return Schema.Record(paths)
+end
+local function StatusResetTargets(group, scope)
+    local specs = group and M.GroupPage.GF_STATUS_ICON_SPECS or M.UnitPage.STATUS_CONTROLS
+    local roots = group and GROUP_SCOPE_ROOTS or { (scope:gsub("^uf_", "")) }
+    local fields = group and { "size", "anchor", "x", "y", "layer", "iconStyle", "customIcon" }
+        or { "x", "y", "anchor", "layer", "size", "symbol", "iconStyle", "customIcon", "width" }
+    local names = group and { "levelTextDifficultyColor", "threatTextColorCurve", "threatTextBackground" }
+        or { "raidGroupNameStyle", "levelIndicatorDifficultyColor", "levelIndicatorForeverBadge",
+            "threatIndicatorColorCurve", "threatIndicatorBackground" }
+    for _, selected in ipairs(specs) do
+        for _, field in ipairs(fields) do
+            if selected[field] then names[#names + 1] = selected[field] end
+        end
+        if not group and selected.colorPrefix then
+            for _, channel in ipairs({ "R", "G", "B" }) do names[#names + 1] = selected.colorPrefix .. "Color" .. channel end
+        end
+    end
+    return Schema.Fields(roots, names)
+end
 local function ActionDeclaration(spec, meta)
     local key, id = spec.actionKey or meta.actionKey, tostring(spec.id)
     local paths = ACTION_TARGETS[key]
@@ -316,7 +390,9 @@ local function ActionDeclaration(spec, meta)
             spec.ephemeralReason = "Prints slash-command help; no profile setting is written."
         end
     end
-    if key == "reset_unit_status_indicator" then paths = { spec.scope:gsub("^uf_", "") .. ".{field}" } end
+    if key == "class_power_quick_setup" then return QuickSetupTargets() end
+    if key == "reset_selected_group_status_icon" then return StatusResetTargets(true) end
+    if key == "reset_unit_status_indicator" then return StatusResetTargets(false, spec.scope) end
     if key and key:match("^first_load%.") then paths = { "MSUF_GlobalDB.global.firstLoad6" } end
     if key == "reset_all_scoped_global_font_overrides" then return Schema.ScopedFields({ "fontOverride" }) end
     if key == "reset_all_scoped_global_bars_overrides" then
@@ -361,6 +437,7 @@ local function Declare(spec)
         spec.ephemeralReason = spec.ephemeralReason or meta.ephemeralReason
             or "Menu selection, disclosure or preview state; no addon profile setting is written."
     end
+    spec.writes = WriteContract(spec, not spec.setting and spec.ephemeralReason ~= nil)
     return spec
 end
 local function Metadata(spec)
@@ -377,6 +454,12 @@ end
 -- group at input time; selection-dependent families must provide their resolver.
 function Schema.ResolvePath(spec)
     local setting = assert(spec.setting, "schema writer has no declared target: " .. spec.id)
+    local resolve = spec.write and spec.write.resolve
+    if resolve then
+        local path = assert(resolve(), "schema write target resolver returned no path: " .. spec.id)
+        assert(Schema.Matches(setting, path), "schema write target resolver escaped its family: " .. spec.id)
+        return path
+    end
     if type(setting) == "string" then return setting end
     if setting.resolve then
         local path = assert(setting.resolve(), "schema target resolver returned no path: " .. spec.id)
@@ -476,7 +559,13 @@ function Schema.Setter(spec)
     local write = assert(spec.write, "schema write policy missing")
     local args = write.args or {}
     return function(value)
+        if write.accept and not write.accept(value) then return write.refused end
         local root, key = TargetParts(spec)
+        if write.convert then value = write.convert(value) end
+        if write.validNumber then
+            value = tonumber(value)
+            if value == nil then return false end
+        end
         if write.boolean then value = value and true or false
         elseif write.strictBoolean then value = value == true
         elseif write.defaultSource then value = tonumber(value) or write.defaultSource()
@@ -487,6 +576,7 @@ function Schema.Setter(spec)
         end
         if write.clamp then value = math.max(spec.range[1], math.min(spec.range[2], value)) end
         if write.round then value = math.floor(value + 0.5) end
+        if write.before then write.before(value) end
         local result
         if write.unitDomain then
             result = Schema.SetUnit(write.unitDomain, root, key, value, write.reason, spec.kind)
@@ -496,6 +586,7 @@ function Schema.Setter(spec)
             if write.skipEqual and record[key] == value then return end
             if write.call then result = write.call(record, key, value, unpack(args))
             elseif record or not write.allowMissing then record[key] = value end
+        elseif write.valueOnly then result = write.call(value, unpack(args))
         elseif write.context then result = write.call(write.context, key, value, unpack(args))
         elseif write.keyOnly then result = write.call(key, value, unpack(args))
         else
@@ -504,6 +595,8 @@ function Schema.Setter(spec)
             result = write.call(root, key, value, unpack(args))
         end
         if write.after then write.after(value) end
+        if write.afterChanged and result then write.afterChanged(value) end
+        if write.success then return true end
         if write.returns then return result end
     end
 end
@@ -571,13 +664,22 @@ function Schema.Bind(ctx, widget, spec)
     if spec.gate then
         M.TrackRefresh(ctx, function() W.SetControlEnabled(widget, spec.gate()) end)
     end
+    PublishWrites(widget, spec)
     return widget
 end
 -- Custom composite widgets keep their existing binding owner (scope/copy/color
 -- shortcuts). Their declaration documents the seam without binding them twice.
 function Schema.Custom(widget, spec)
     assert(spec.id and spec.kind and spec.scope and spec.applyDomain, "custom schema row is incomplete")
+    local command = spec.meta and spec.meta.command
+    if command and command.write and command.write.virtual and not command.set then
+        spec.get, spec.write = command.get, command.write
+        Declare(spec)
+        spec.set = Schema.Setter(spec)
+        command.set = spec.set
+    end
     widget._msuf2ControlSchema = Declare(spec)
+    PublishWrites(widget, spec)
     return widget
 end
 -- Native Click dispatches the current owned button's scripts and separate hooks.
@@ -603,6 +705,8 @@ function Schema.Owned(widget, scope, domain)
             return (widget._msuf2CommandAction or record.command).get(...)
         end,
         write = (previous and previous.write) or (command and command.write),
+        writeTargets = previous and previous.writeTargets,
+        companionWrites = previous and previous.companionWrites,
         customSetReason = previous and previous.customSetReason or "Dispatches the composite widget's existing command owner.",
         set = command and command.set and function(...)
             return (widget._msuf2CommandAction or record.command).set(...)
@@ -722,19 +826,24 @@ local function CreateCompositeRow(ctx, parent, row)
     error("unsupported replacing row")
 end
 -- The same native scope selector may be built by a page-owned composite.
-function Schema.ScopeOwner(widget, scope, domain)
+function Schema.ScopeOwner(widget, scope, domain, writeTargets)
     Schema.Owned(widget, scope, domain or "menuState")
     local spec = widget._msuf2ControlSchema
     spec.get = function() return widget:GetValue() end
     spec.customSetReason = "Changes the scope selector's editor state through its native widget."
     spec.set = function(value) return widget:SetValue(value) end
     spec.values = widget.values
+    if writeTargets then
+        spec.writeTargets = writeTargets
+        spec.writes = WriteContract(spec, false)
+        PublishWrites(widget, spec)
+    end
     return widget
 end
 local function DeclareRow(ctx, widget, row, kind)
     local scope = row.scope or (ctx and ctx.key) or "shared"
     if row[1] == "scopebar" then
-        Schema.ScopeOwner(widget, scope, row.domain)
+        Schema.ScopeOwner(widget, scope, row.domain, row.writeTargets)
         return
     end
     local meta = row.meta
@@ -750,7 +859,7 @@ function Schema.UnitBinding(ctx, widget, row, kind)
     if row.bind then
         row.bind(widget)
         if widget._msuf2ControlSchema then
-            widget._msuf2ControlSchema.setting = row.setting or widget._msuf2ControlSchema.setting
+            M.ControlSchema.SetSetting(widget, row.setting or widget._msuf2ControlSchema.setting)
             return widget
         end
         return Schema.Custom(widget, { id = row[2], kind = kind, labelKey = row[4][1],
@@ -759,6 +868,8 @@ function Schema.UnitBinding(ctx, widget, row, kind)
     local meta = assert(row.meta, "unit row metadata missing")
     local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
         meta = meta, scope = row.scope or ctx.key, applyDomain = row.domain or "unit",
+        writeTargets = row.writeTargets,
+            companionWrites = row.companionWrites,
         settingPath = meta.settingKey, setting = row.setting, get = row.get, set = row.set, write = row.write,
             customSetReason = row.customSetReason, unit = row.unit,
         reason = row.reason, commitOnBlur = row.commitOnBlur, textAdapter = row.textAdapter,
@@ -846,6 +957,7 @@ local function CommandAccessors(owner, row, kind, widget, ctx)
     local fallback = command.default
     if fallback == nil then fallback = row[3] end
     row.write, row.customSetReason = command.write, command.customSetReason
+    row.writeTargets, row.companionWrites = command.writeTargets, command.companionWrites
     return command.get, command.set, fallback, command.afterBind
 end
 local function RecordAccessors(owner, row, kind, widget, ctx, spec)
@@ -927,7 +1039,7 @@ local function GroupBindingOptions(owner, accessors)
         if row.bind then
             row.bind(ctx, widget, row)
             Schema.Owned(widget, "group", row.domain or "visual")
-            widget._msuf2ControlSchema.setting = row.setting or widget._msuf2ControlSchema.setting
+            M.ControlSchema.SetSetting(widget, row.setting or widget._msuf2ControlSchema.setting)
             return
         end
         local get, set, fallback, afterBind = accessors(owner, row, kind, widget, ctx)
@@ -937,6 +1049,8 @@ local function GroupBindingOptions(owner, accessors)
         local spec = { id = meta.controlId, kind = kind, key = row[2], labelKey = row[4][1],
             scope = "group", applyDomain = row.domain or "visual", meta = meta, get = get, set = set,
             write = row.write, customSetReason = row.customSetReason,
+            writeTargets = row.writeTargets,
+            companionWrites = row.companionWrites or owner.companionWrites,
             commitOnBlur = row.commitOnBlur, setting = row.setting or (owner.setting and owner.setting(row)) }
         if kind == "slider" then
             spec.range, spec.defaultSource = { row[4][2], row[4][3], row[4][4] }, function() return fallback end

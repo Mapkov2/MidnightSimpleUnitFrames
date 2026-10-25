@@ -75,10 +75,10 @@ end
 local function DispelTriggerCommand(_, ctx, row)
     return {
         get = function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), row[2], "BORDER")) end,
-        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
-            Set(CurrentScope(), row[2], NormalizeGFDispelOverlayTrigger(value), "visual")
-            RequestGroupBarsRefresh(ctx, row.reason)
-        end,
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", write = {
+                call = Set, group = true, convert = NormalizeGFDispelOverlayTrigger, args = { "visual" },
+                after = function() RequestGroupBarsRefresh(ctx, row.reason) end
+            } --[[schema setter: H4.GroupBars.1]],
     }
 end
 -- The runtime preview setter is resolved once, on first use; the core publishes it before this page loads.
@@ -261,7 +261,9 @@ local function PreparePowerSwitch(ctx, power)
     local powerEnabled = Schema.Build(ctx, power, {
         { "sectionSwitch", "powerEnabled", nil, { "Show Power Bar" }, path = "field.powerBarEnabled", domain = "geometry",
             get = function() return IsPowerBarEnabled(CurrentScope()) end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            companionWrites = Schema.GroupKeys("powerHeight").keys,
+            set = function(v)
                 local scope = CurrentScope()
                 Set(scope, "powerBarEnabled", v and true or false, "geometry")
                 if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
@@ -360,7 +362,9 @@ local function PowerCardsAndSize(ctx, b, c)
         { "toggle", "embedPowerBarIntoHealth", true, { "Embed into health", 16, -138, leftW - 32 }, domain = "geometry" },
         { "toggle", "detachPower", nil, { "Detach from frame", 16, -166, leftW - 32 }, path = "field.powerBarDetached", domain = "geometry",
             get = function() return Bool(CurrentScope(), "powerBarDetached", false) end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = Schema.GroupKeys("detachedPowerBarWidth").keys,
+            set = function(v)
                 local scope = CurrentScope()
                 local conf = Conf(scope)
                 if v and not ((tonumber(conf.detachedPowerBarWidth) or 0) > 0) then
@@ -847,15 +851,17 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
                 local mode = CurrentMode()
                 return hasAbsorb and M.UnitSectionsShared.HealthBaseMode(mode) or mode
             end,
-            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(value)
-                local spec, oldMode = SelectedSlotSpec(), CurrentMode()
-                local mode = value or spec.default
-                if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(oldMode) and M.UnitSectionsShared.HealthModeSupportsAbsorb(mode) then
-                    mode = M.UnitSectionsShared.HealthModeWithAbsorb(mode, true)
-                end
-                Set(CurrentScope(), spec.key, mode, "visual")
-                AfterModeChanged(mode)
-            end },
+            customSetReason = "Resolves the currently selected record or text slot at input time.", write = { call = Set, group = true, args = { "visual" },
+                resolve = function() return "gf_" .. CurrentScope() .. "." .. SelectedSlotSpec().key end,
+                convert = function(value)
+                    local mode = value or SelectedSlotSpec().default
+                    if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(CurrentMode()) and
+                        M.UnitSectionsShared.HealthModeSupportsAbsorb(mode) then
+                        mode = M.UnitSectionsShared.HealthModeWithAbsorb(mode, true)
+                    end
+                    return mode
+                end, after = AfterModeChanged
+            } --[[schema setter: H4.GroupBars.8]] },
     }
     if hasAbsorb then
         rows[#rows + 1] = { "segment", "absorb", nil, { "Absorb", ABSORB_STYLE_VALUES, textCardW - 32 }, path = path .. "slot.absorb",
@@ -878,12 +884,14 @@ local function ValueTabSlots(ctx, s, kind, tab, cfg)
             local spec = SelectedSlotSpec()
             return spec.hidePercentKey and SlotHidePercentSymbol(CurrentScope(), spec.hidePercentKey) or false
         end,
-        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
-            local spec = SelectedSlotSpec()
-            if spec.hidePercentKey then Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual") end
-            FocusGFPreviewText(kind, CurrentSlot(kind), true)
-            RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
-        end }
+        customSetReason = "Changes preview or editor selection state through its existing owner.",
+        write = { call = Set, group = true, boolean = true, args = { "visual" },
+            resolve = function() return "gf_" .. CurrentScope() .. "." .. SelectedSlotSpec().hidePercentKey end,
+            after = function()
+                FocusGFPreviewText(kind, CurrentSlot(kind), true)
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
+            end
+        } --[[schema setter: H4.GroupBars.10]] }
     Schema.Build(ctx, content, rows, ROW_OPTIONS, controls)
     function controls.RefreshPercentToggles(enabled)
         SetOptionEnabled(controls.hidePercent, enabled == true and TextModeHasPercent(CurrentMode()))
@@ -952,10 +960,11 @@ local function ValueTabFormatPosition(ctx, s, kind, tab, cfg, controls, content,
                 local value = tonumber(Val(CurrentScope(), SlotFontSizeKey(kind), nil))
                 return value and value > 0 and value or tonumber(Val(CurrentScope(), cfg.sizeKey, cfg.sizeDefault)) or cfg.sizeDefault
             end,
-            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
-                Set(CurrentScope(), SlotFontSizeKey(kind), v, "font")
-                FocusGFPreviewText(kind, CurrentSlot(kind), true)
-            end },
+            customSetReason = "Changes preview or editor selection state through its existing owner.", write = {
+                call = Set, group = true, args = { "font" },
+                resolve = function() return "gf_" .. CurrentScope() .. "." .. SlotFontSizeKey(kind) end,
+                after = function() FocusGFPreviewText(kind, CurrentSlot(kind), true) end
+            } --[[schema setter: H4.GroupBars.11]] },
     }, ROW_OPTIONS, controls)
 end
 local function BuildGFValueTextTab(ctx, s, kind, tab, cfg)

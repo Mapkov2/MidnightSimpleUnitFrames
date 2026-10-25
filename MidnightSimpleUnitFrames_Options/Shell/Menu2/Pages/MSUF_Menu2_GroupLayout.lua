@@ -620,7 +620,9 @@ local function BuildGFSortingSection(ctx, b)
             if conf.sortMode then return conf.sortMode end
             return conf.sortByRole and "ROLE" or "INDEX"
         end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = Schema.GroupKeys("sortByRole").keys,
+            set = function(v)
                 local conf = Conf(CurrentScope())
                 conf.sortMode = v or "INDEX"
                 conf.sortByRole = (conf.sortMode == "ROLE")
@@ -642,7 +644,9 @@ local function BuildGFSortingSection(ctx, b)
             if conf.sortMode then return conf.sortMode == "ROLE" end
             return conf.sortByRole and true or false
         end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = Schema.GroupKeys("sortMode").keys,
+            set = function(v)
                 local conf = Conf(CurrentScope())
                 conf.sortByRole = v and true or false
                 conf.sortMode = v and "ROLE" or "INDEX"
@@ -941,13 +945,11 @@ local function BuildGFAnchorSection(ctx, b)
         { "dropdown", "anchorTo", nil, { "Anchor To", function()
         return M.AnchorTargetValues(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame)
     end, anchorControlW }, get = function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
-                local conf = Conf(CurrentScope())
-                local selectedValue1
-                if not ((v == "FREE")) then selectedValue1 = v end
-                conf.anchorToFrame = selectedValue1
-                QueueGF(CurrentScope(), "rebuild")
-            end,
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                source = function() return Conf(CurrentScope()) end,
+                convert = function(v) if v ~= "FREE" then return v end end,
+                after = function() QueueGF(CurrentScope(), "rebuild") end
+            } --[[schema setter: H4.GroupLayout.7]],
             meta = ControlMeta(ctx, "field.anchorToFrame"), domain = "rebuild",
             beforeBind = function(widget)
                 M.UnitSectionsShared.PlaceDropdown(anchor, widget, anchorLeftX, -38, anchorControlW)

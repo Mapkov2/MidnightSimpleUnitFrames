@@ -8,6 +8,9 @@
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_PortraitDetails.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Portrait.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Prediction_Glow.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Prediction_Layout.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Prediction_Plans.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Prediction_Queue.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Prediction.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Status_Regions.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Status_Indicators.lua"/>

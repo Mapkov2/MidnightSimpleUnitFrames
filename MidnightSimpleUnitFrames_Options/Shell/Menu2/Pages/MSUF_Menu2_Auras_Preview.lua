@@ -88,21 +88,14 @@ local function ApplySharedAppearanceStyleToPreview(cfg, kind)
 end
 
 local function FitMiniAuraPreview(cfg, width, height)
-    local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
-    cfg.actualSize = max(cfg.allowTinyIconScale == true and 1 or 10, tonumber(cfg.size) or 24)
-    cfg.size = min(maxSize, cfg.actualSize)
-    cfg.spacing = min(10, max(0, tonumber(cfg.spacing) or 2))
+    -- The runtime workbench fits its whole canvas; viewport size never changes lane geometry.
+    cfg.actualSize = tonumber(cfg.size) or 24
+    cfg.spacing = max(0, tonumber(cfg.spacing) or 2)
     cfg.perRow = max(1, Round(cfg.perRow))
     cfg.maxIcons = max(0, Round(cfg.maxIcons))
-    local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
-    cfg.columns = min(cfg.perRow, maxCols)
-    cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size * (cfg.heightPercent or 100) / 100 + cfg.spacing)))
-    local vertical = cfg.growth == "UP" or cfg.growth == "DOWN"
-    cfg.rowsPerColumn = cfg.maxRows
-    cfg.columns = vertical and 1 or cfg.columns
-    cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.rowsPerColumn)
-    cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
-    cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
+    cfg.count = min(14, cfg.maxIcons)
+    cfg.stackSize = tonumber(cfg.stackSize) or 10
+    cfg.cooldownSize = tonumber(cfg.cooldownSize) or 9
     cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
     cfg.durationBarHeight = min(max(1, tonumber(cfg.durationBarHeight) or 2), max(1, cfg.size or 24))
     cfg.durationBarDisplay = cfg.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"

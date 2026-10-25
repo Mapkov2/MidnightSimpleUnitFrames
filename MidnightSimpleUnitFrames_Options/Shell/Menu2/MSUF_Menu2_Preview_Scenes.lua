@@ -79,7 +79,8 @@ local GROUP_SAMPLE_SOURCES = { "auras", "spellIndicators", "cornerIndicators" }
 local function CopyPreviewFields(source)
     local copy = {}
     for key, value in pairs(source or {}) do copy[key] = value end
-    return copy
+    -- Group binding specs inherit immutable compiler fields (including portrait) from their scope.
+    return setmetatable(copy, getmetatable(source))
 end
 function H.PrepareGroupSceneSamples(frame, scene, inputs)
     local spec = frame.MSUFSpec

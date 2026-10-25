@@ -1,11 +1,6 @@
 -- Legacy sparse decoding, safe-tree checks and reusable persistence scratch.
 local _, MSUF = ...
 local Parts = MSUF.DefaultsSchemaParts
-local sparseV2Fields = MSUF.DefaultsStorageData.sparseV2Fields
-local sparseV2Owners = MSUF.DefaultsStorageData.sparseV2Owners
-local sparseV3Fields = MSUF.DefaultsStorageData.sparseV3Fields
-local sparseV3Owners = MSUF.DefaultsStorageData.sparseV3Owners
-local sparseV3Runs = MSUF.DefaultsStorageData.sparseV3Runs
 -- Frozen version-1 storage dictionaries. New defaults must not change these
 -- decoder values: add a new codec version instead. Only schema-owned scalar
 -- leaves are eligible; false, zero, empty strings, lists and user keys stay full.
@@ -244,8 +239,3 @@ Parts.scratchLists = scratchLists
 Parts.scratchPath = scratchPath
 Parts.scratchRefs = scratchRefs
 Parts.sparseToken = sparseToken
-Parts.sparseV2Fields = sparseV2Fields
-Parts.sparseV2Owners = sparseV2Owners
-Parts.sparseV3Fields = sparseV3Fields
-Parts.sparseV3Owners = sparseV3Owners
-Parts.sparseV3Runs = sparseV3Runs

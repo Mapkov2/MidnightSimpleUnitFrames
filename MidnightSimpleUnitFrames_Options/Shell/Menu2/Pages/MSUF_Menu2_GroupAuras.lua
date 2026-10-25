@@ -59,7 +59,9 @@ local function RegisterAuraControl(ctx, widget, label, kind, path, classificatio
     if classification == "navigation" then meta.navigationKey = navigationKey end
     M.RegisterSearchWidget(widget, meta)
     -- A selector bar keeps its native GetValue/SetValue/values in the declaration.
-    if kind == "segment" then return Schema.ScopeOwner(widget, "groups", "menuState") end
+    if kind == "segment" then
+        return Schema.ScopeOwner(widget, "groups", "menuState", Schema.Record({ "gf_{scope}.spellIndicators.specs.{spec}" }))
+    end
     Schema.Owned(widget, "groups", classification == "navigation" and "navigation" or "menuState")
     return widget
 end
@@ -275,6 +277,27 @@ local function LaneBackendEnabled(scope, groupKey)
 end
 -- These controls keep their live preview/release setters. The shared binder
 -- owns their typed declarations, native input, history and combat refusal.
+local function AuraWriteTargets(meta)
+    local setting, paths = Schema.FromMeta(meta), {}
+    local keys = type(setting) == "string" and { setting } or (setting and (setting.keys or setting.recordPaths)) or {}
+    for _, path in ipairs(keys) do
+        local suffix = path:match("^gf_[^.]+(%.auras%..+)$")
+        if suffix then
+            for _, key in ipairs(AllGroupAuraSettingKeys(suffix)) do paths[#paths + 1] = key end
+            local lane = suffix:match("^%.auras%.([^.]+)%.enabled$")
+            if lane == "buff" or lane == "debuff" or lane == "externals" then
+                for _, field in ipairs({ ".auras.enabled", ".auras.blizzardTypes." .. NativeAuraKey(lane) }) do
+                    for _, key in ipairs(AllGroupAuraSettingKeys(field)) do paths[#paths + 1] = key end
+                end
+            end
+        else paths[#paths + 1] = path end
+    end
+    local targets = Schema.Record(paths)
+    if type(setting) == "table" then
+        for _, pattern in ipairs(setting.patterns or {}) do targets.patterns[#targets.patterns + 1] = pattern end
+    end
+    return targets
+end
 local function BindAuraWidget(ctx, widget, kind, get, set, fallback, meta)
     local low, high
     if kind == "slider" then low, high = widget:GetMinMaxValues() end
@@ -282,6 +305,8 @@ local function BindAuraWidget(ctx, widget, kind, get, set, fallback, meta)
         id = meta.controlId, kind = kind, scope = "groups", applyDomain = "auras",
         get = get, set = set, customSetReason = "Resolves the active group aura lane and updates its runtime and layout companions.",
         meta = meta, range = low and { low, high, 1 },
+        writeTargets = AuraWriteTargets(meta),
+        companionWrites = { "gf_{scope}.auras.renderer" },
         defaultSource = function() return fallback end,
     })
     widget._msuf2ControlSchema.labelKey = widget._msuf2RuntimeControlRecord.label

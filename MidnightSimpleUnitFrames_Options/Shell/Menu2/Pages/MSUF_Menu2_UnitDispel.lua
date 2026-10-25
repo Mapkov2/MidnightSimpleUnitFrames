@@ -205,6 +205,7 @@ local function PrepareSwitch(ctx, sec, unit, which)
     local master
     master = Schema.Build(ctx, sec, {{ "sectionSwitch", def.key, false, { def.title }, meta = meta,
         scope = unit, domain = "dispel",
+        companionWrites = { "auras3.show" .. unit:gsub("^%l", string.upper) },
         get = function() return ReadValue(unit, def.key, false) == true end,
         customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
             SetDispelMasterValue(unit, def.key, value, def.reason)
@@ -306,13 +307,14 @@ local function Row(ctx, unit, section, row, Sync, x, y, move, toggleWidth)
     end
     if normalize then
         spec.customSetReason = "Canonicalizes client-specific dispel trigger values before the unit write."
-        spec.set = function(value)
-        if row.kind == "dropdown" then value = normalize and normalize(value) or (value or default)
-        elseif row.kind == "toggle" then value = value and true or false
-        else value = tonumber(value) or default end
-        SetValue(unit, key, value, row.reason)
-        if row.sync then Sync() end
-    end
+        spec.write = {
+            call = SetValue, args = { row.reason },
+            convert = function(value)
+                if row.kind == "dropdown" then return normalize and normalize(value) or (value or default) end
+                if row.kind == "toggle" then return value and true or false end
+                return tonumber(value) or default
+            end, after = row.sync and Sync or nil
+        } --[[schema setter: H4.UnitDispel.3]]
     else
         spec.write = { call = SetValue, args = { row.reason }, boolean = row.kind == "toggle",
             numberDefault = row.kind ~= "dropdown" and row.kind ~= "toggle" and default or nil,

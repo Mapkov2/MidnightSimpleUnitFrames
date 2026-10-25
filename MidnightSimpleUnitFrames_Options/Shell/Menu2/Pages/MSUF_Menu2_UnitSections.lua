@@ -852,12 +852,13 @@ local function BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, label
             get = function()
                 return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or HEALTH_COLOR_GLOBAL
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
-                local conf = GetConf(unit)
-                conf.healthColorMode = NormalizeHealthColorMode(v)
-                M.RequestUnitDomains(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
-                if M.Refresh then M.Refresh(ctx) end
-            end,
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                source = function() return GetConf(unit) end, convert = NormalizeHealthColorMode,
+                after = function()
+                    M.RequestUnitDomains(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
+                    if M.Refresh then M.Refresh(ctx) end
+                end
+            } --[[schema setter: H4.UnitSections.1]],
             tip = { "Health Color Scheme",
                 "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.",
                 TIP_OPTS },
@@ -870,7 +871,9 @@ local function BuildBasicsColorRows(ctx, sec, unit, colW, gap, x1, x2, x3, label
             get = function()
                 return FillDirectionValue(ReadBool(unit, "reverseFillBars", false), ReadBool(unit, "verticalFillBars", false))
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { unit .. ".reverseFillBars" },
+            set = function(v)
                 local state = FILL_DIRECTION_STATE[v] or FILL_DIRECTION_STATE.lr
                 -- Write both booleans, then a single apply/preview (mirrors the
                 -- Health Color Scheme setter) so a 4-way change never double-applies.
@@ -963,7 +966,9 @@ local function BuildBasics(ctx, builder, unit, label)
     local basics = Schema.Build(ctx, sec, {
         { "toggle", "smoothFill", false, { "Smooth fill", x1, row1, labelW },
             get = function() return ReadBool(unit, "smoothFill", false) end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            companionWrites = { unit .. ".chunkedFill" },
+            set = function(v)
                 UnitSectionShared.SetFillMode(ctx, unit, "health", "smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL",
                     "Smooth health fill", { preview = true })
             end,
@@ -971,7 +976,9 @@ local function BuildBasics(ctx, builder, unit, label)
         },
         { "toggle", "chunkedFill", false, { "Chunked health loss", x2, row1, labelW },
             get = function() return ReadBool(unit, "chunkedFill", false) end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            companionWrites = { unit .. ".smoothFill" },
+            set = function(v)
                 UnitSectionShared.SetFillMode(ctx, unit, "health", "chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL",
                     "Chunked health loss", { preview = true })
             end,
@@ -982,12 +989,15 @@ local function BuildBasics(ctx, builder, unit, label)
                 widget._msuf2UnitFrameGateAlwaysEnabled = true
             end,
             get = function() return ReadBool(unit, "useBlizzardFrame", false) end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
-                if unit == "pettarget" or ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
-                SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
-                local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
-                Core.ShowReloadPopup(reloadLabel)
-            end,
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = { call = SetBool,
+                accept = function(v)
+                    return unit ~= "pettarget" and ReadBool(unit, "useBlizzardFrame", false) ~= (v == true)
+                end,
+                args = { "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false } },
+                after = function()
+                    Core.ShowReloadPopup(M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit)))
+                end
+            } --[[schema setter: H4.UnitSections.5]],
             meta = SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"), scope = unit,
         }
     }, ROW_OPTIONS)
@@ -1031,7 +1041,10 @@ local function BuildBasics(ctx, builder, unit, label)
                 kind = "toggle", valueKind = "boolean",
                 get = function() return ReadBool(unit, "enabled", true) end,
                 customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
-                    set = function(value) SetBool(unit, "enabled", value == true, "MSUF2_FRAME_ENABLED", { preview = true }) end,
+                    write = { virtual = true,
+                        call = SetBool, strictBoolean = true,
+                        args = { "MSUF2_FRAME_ENABLED", { preview = true } }
+                    } --[[schema setter: H4.UnitSections.6]],
             },
         }
     else
@@ -1219,7 +1232,9 @@ local function BuildLayout(ctx, builder, unit)
                 W.AttachUnitEditFocus(widget, unit, "anchoring")
             end,
             get = AnchorValue,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { unit .. ".anchorFrameName" },
+            set = function(v)
                 if v == "__CUSTOM" then return end
                 local conf = GetConf(unit)
                 conf.anchorToUnitframe = v or "GLOBAL"
@@ -1235,7 +1250,9 @@ local function BuildLayout(ctx, builder, unit)
                 W.AttachUnitEditFocus(widget, unit, "anchoring")
             end,
             get = AnchorPointValue,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { unit .. ".relativePoint" },
+            set = function(v)
                 local conf = GetConf(unit)
                 v = v or "CENTER"
                 conf.point = v
@@ -1359,7 +1376,9 @@ local function BuildInlineText(ctx, builder, unit)
                 W.MoveWidget(widget, sec, 14, -124, 170)
             end,
             get = function() return ToTInlineSeparatorDropdownValue(GetConf("targettarget")) end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { "targettarget.totInlineCustomSeparator" },
+            set = function(v)
                 local conf = GetConf("targettarget")
                 if v == TOT_INLINE_CUSTOM_SEPARATOR then
                     conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
@@ -1383,7 +1402,9 @@ local function BuildInlineText(ctx, builder, unit)
                     and not TOT_INLINE_SEPARATOR_VALUES[token] then return CleanToTInlineCustomSeparator(token) end
                 return CleanToTInlineCustomSeparator(conf and conf.totInlineCustomSeparator)
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { "targettarget.totInlineSeparator" },
+            set = function(v)
                 local conf = GetConf("targettarget")
                 local token = conf and conf.totInlineSeparator
                 local isCustom = token == TOT_INLINE_CUSTOM_SEPARATOR
@@ -1422,7 +1443,7 @@ local function BuildLoadConditions(ctx, builder, unit)
     local function Row(key, label, x, y, width)
         return { "toggle", key, false, { label, x, y, width },
             meta = SettingMeta(ctx, "load_condition." .. tostring(key), unit, key),
-            scope = unit, domain = "loadCondition",
+            scope = unit, domain = "loadCondition", companionWrites = { unit .. ".loadCondActive" },
             get = function() return ReadBool(unit, key, false) end,
             write = { source = function() return GetConf(unit) end, boolean = true, after = function()
                     UpdateLoadActive(unit) M.RequestUnitDomains(unit, "MSUF2_LOAD_CONDITION", { preview = true })
@@ -1573,7 +1594,9 @@ local function BuildStackedLayout(ctx, builder, unit, def)
             local conf = GetConf(unit)
             return NormalizeBossLayoutMode(conf.bossLayoutMode, def.legacyInvert and conf.invertBossOrder)
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { unit .. ".invertBossOrder" },
+            set = function(v)
             local conf = GetConf(unit)
             conf.bossLayoutMode = NormalizeBossLayoutMode(v)
             if def.legacyInvert then conf.invertBossOrder = nil end
@@ -1636,7 +1659,9 @@ local function BuildBossTargetHighlight(ctx, builder, unit)
             if mode == 0 or (mode == nil and g.bossTargetHighlightEnabled == false) then return "OFF" end
             return MSUF.BossTargetIndicator.Style(g)
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { "general.bossTargetHighlightEnabled", "general.bossTargetOutlineMode", unit .. ".bossTargetOutlineMode" },
+            set = function(v)
             local g = GetGeneral()
             g.bossTargetHighlightEnabled = v ~= "OFF"
             g.bossTargetOutlineMode = v ~= "OFF" and 1 or 0

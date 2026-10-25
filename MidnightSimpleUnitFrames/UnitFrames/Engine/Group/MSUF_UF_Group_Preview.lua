@@ -69,6 +69,8 @@ local function NewScene(kind)
   local scene = setmetatable({ kind = kind, free = {}, t = {
     frames = {}, active = {}, count = {}, anchor = {}, container = {}, layout = {}, serial = {},
   } }, Scene)
+  scene.portraitSpecMeta, scene.portraitConfigMeta = {}, {}
+  scene.portraitSampleSpec = setmetatable({ portrait = setmetatable({}, scene.portraitConfigMeta) }, scene.portraitSpecMeta)
   isolatedScenes[scene] = true
   isolatedSceneCount = isolatedSceneCount + 1
   return scene
@@ -1471,6 +1473,29 @@ local function HidePreviewStatus(frame, keepCombatIcon)
 end
 
 local function ApplyPreviewStatus(frame, kind, index, role)
+  local sample = activeScene and activeScene.sample
+  local regions = sample and sample.statusRegions
+  if regions then
+    local status, runtime = frame.MSUFSpec.status, MSUF.UFStatusRuntime
+    MSUF.UF.elements.StatusIndicators.SceneApply(frame, frame.MSUFSpec)
+    runtime.PaintSampleIdentityTexts(frame, status, sample)
+    runtime.PaintSampleIndicators(frame, status, sample)
+    runtime.PaintSceneStatus(frame, status, sample.statusSelection, sample)
+    for i = 1, #regions do
+      local row = regions[i]
+      local region = frame[row.field]
+      if region then
+        if row.text ~= nil then region:SetText(row.text)
+        elseif row.texture then
+          region:SetTexture(row.texture)
+          region:SetTexCoord(row.l or 0, row.r or 1, row.t or 0, row.b or 1)
+        end
+        region:SetShown(row.shown == true and PreviewLayerOn("status"))
+        region:SetAlpha((region._msufStatusAlpha or 1) * (frame._msufAlphaLastFG or 1))
+      end
+    end
+    return
+  end
   if not PreviewLayerOn("status") then
     HidePreviewStatus(frame)
     return
@@ -1678,12 +1703,29 @@ local function ApplyPreviewData(frame, slot, kind)
       return true
     end
     local portrait = MSUF.UF.elements and MSUF.UF.elements.Portrait
-    if classPinned and portrait and portrait.SceneApply then portrait.SceneApply(frame, frame.MSUFSpec) end
+    local art = sample and sample.portrait
+    if (classPinned or art or frame._msufSamplePortraitArt) and portrait and portrait.SceneApply then
+      frame._msufSamplePortraitArt = art and art.texture
+      local spec = frame.MSUFSpec
+      if art then
+        activeScene.portraitSpecMeta.__index, activeScene.portraitConfigMeta.__index = spec, spec.portrait
+        spec = activeScene.portraitSampleSpec
+        local p = spec.portrait
+        p.render = art.texture and "2D" or nil
+        p.texL, p.texR, p.texT, p.texB = art.l, art.r, art.t, art.b
+        local classArt = frame.MSUFSpec.portrait and frame.MSUFSpec.portrait.render == "CLASS"
+        p.panOffsetX, p.panOffsetY = classArt and 0 or nil, classArt and 0 or nil
+      end
+      portrait.SceneApply(frame, spec)
+    end
+    if art and frame.MSUFPortraitHolder then
+      frame.MSUFPortraitHolder:SetShown(art.shown == true and PreviewLayerOn("portrait"))
+    end
     local threat = MSUF.UF.elements and MSUF.UF.elements.ThreatIndicator
     if threat and threat.Update then threat.Update(frame, "MSUF_PREVIEW") end
   end
   ApplyPreviewStatus(frame, kind, index, role)
-  if animState and frame.combatStateIndicatorIcon and PreviewLayerOn("status") then
+  if animState and not (sample and sample.statusRegions) and frame.combatStateIndicatorIcon and PreviewLayerOn("status") then
     if frame.combatStateIndicatorIcon.SetAlpha then frame.combatStateIndicatorIcon:SetAlpha(0.55 + ((animState.pulse or 0) * 0.45)) end
     frame.combatStateIndicatorIcon:Show()
   end
@@ -2548,7 +2590,9 @@ end
 
 --- Pin one sample for every row of the scene: { name, class, hpPct, powerPct, hpMax, powerMax, absorb, healPct,
 --- absorbPct, healAbsorbPct, tempMaxPct, powerColor = { r, g, b } } (any field optional; fractions 0..1, maxima the
---- bar and text scale, absorb the amount the absorb texts show).
+--- bar and text scale, absorb the amount the absorb texts show). Optional portrait = { shown, texture, l, r, t, b }
+--- and statusRegions = { { field, shown, text, texture, l, r, t, b }, ... } carry public owner-selected samples;
+--- the scene alone paints these regions and applies its portrait/status layer filters.
 --- nil clears it.
 function Scene:SetSample(sample)
   if type(sample) ~= "table" then sample = nil end

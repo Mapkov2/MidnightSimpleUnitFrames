@@ -526,6 +526,20 @@ local function DeclaredText(current, declared)
     return declared and CleanText(declared) or current or ""
 end
 
+local function PublishRegistration(widget, record, revisionBefore)
+    widget._msuf2RuntimeControlId = record.controlId
+    widget._msuf2RuntimeControlRecord = record
+    local declaration = widget._msuf2ControlSchema
+    if declaration and declaration.id == record.controlId then record.writes = declaration.writes end
+    local revisionAfter = RevisionKey(record)
+    record._revisionKey = revisionAfter
+    if revisionBefore ~= revisionAfter then
+        STATE.revision = STATE.revision + 1
+        if M.RefreshSearchControlIdentity then M.RefreshSearchControlIdentity(widget, record) end
+    end
+    return record.controlId, record
+end
+
 function Catalog.Register(widget, meta, registrationSource)
     if not widget or type(meta) ~= "table" then return nil, "widget and metadata are required" end
     if widget._msuf2ControlPartOf ~= nil then return nil, "component controls are owned by their logical parent" end
@@ -666,15 +680,7 @@ function Catalog.Register(widget, meta, registrationSource)
     end
     InheritTabPreparation(widget, record)
 
-    widget._msuf2RuntimeControlId = record.controlId
-    widget._msuf2RuntimeControlRecord = record
-    local revisionAfter = RevisionKey(record)
-    record._revisionKey = revisionAfter
-    if revisionBefore ~= revisionAfter then
-        STATE.revision = STATE.revision + 1
-        if M.RefreshSearchControlIdentity then M.RefreshSearchControlIdentity(widget, record) end
-    end
-    return record.controlId, record
+    return PublishRegistration(widget, record, revisionBefore)
 end
 
 -- Search and the menu bindings register the actual controls in this catalog.
@@ -683,6 +689,14 @@ M.RegisterRuntimeControl = Catalog.Register
 
 function Catalog.Get(controlId)
     return STATE.byId[controlId]
+end
+-- Query on demand: search enumeration does not copy every command's full
+-- physical write family. Each caller gets an independent snapshot.
+function Catalog.GetWriteContract(controlId)
+    local record = STATE.byId[controlId]
+    local writes = record and record.writes
+    if not writes then return nil end
+    return M.ControlSchema.Writes(writes, writes.menuState)
 end
 
 function Catalog.RestoreWidget(widget)

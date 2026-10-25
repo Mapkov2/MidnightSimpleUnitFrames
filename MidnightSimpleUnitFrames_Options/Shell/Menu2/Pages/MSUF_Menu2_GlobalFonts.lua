@@ -636,6 +636,7 @@ local function BuildFontsScope(ctx, b)
         values = scopeValues,
         meta = Meta,
         getValue = function() return CurrentFontScope() end,
+        selectorWriteTargets = "general._fontScopeKey",
         setValue = function(v)
             G()._fontScopeKey = NormalizeScopeKey(v)
             if M.InvalidatePage then M.InvalidatePage(ctx.key) end

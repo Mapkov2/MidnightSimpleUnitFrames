@@ -64,9 +64,110 @@ do
         end
         return string.format("%08x%08x", a, b)
     end
-    local function Insert(bucket, profile, revision)
+    local recoveryLimit = 2 * 1024 * 1024
+    local recoveryFields = { "_newerRevisionBackups", "_rejectedProfileBackups" }
+    local function IndexedHistory(bucket)
+        if type(bucket.entries) ~= "table" or type(bucket.order) ~= "table" then return false end
+        local indexed = {}
+        for _, key in ipairs(bucket.order) do
+            if indexed[key] or type(bucket.entries[key]) ~= "table" then return false end
+            indexed[key] = true
+        end
+        for key in pairs(bucket.entries) do if not indexed[key] then return false end end
+        return true
+    end
+    local function Ordinal(value)
+        if MSUF.Util.IsSecret(value) or type(value) ~= "number" then return 0 end
+        if value ~= value or value < 0 or value == math.huge then return 0 end
+        return value
+    end
+    local function RecoveryRows(store)
+        local rows = {}
+        local function Add(owner, name, field, archived)
+            if type(owner) ~= "table" then return end
+            local bucket = owner[name]
+            if bucket == nil then return end
+            if type(bucket) ~= "table" or not IndexedHistory(bucket) then
+                rows[#rows + 1] = { owner = owner, name = name, bucket = bucket, field = field, archived = archived,
+                    legacy = true, key = "legacy:" .. field .. ":" .. tostring(name),
+                    entry = { data = type(bucket) == "table" and bucket.data or bucket } }
+                return
+            end
+            for index, key in ipairs(bucket.order) do
+                rows[#rows + 1] = { owner = owner, name = name, bucket = bucket, key = key,
+                    entry = bucket.entries[key], field = field, archived = archived, index = index }
+            end
+        end
+        for _, field in ipairs(recoveryFields) do
+            if type(store[field]) == "table" then
+                for name in pairs(store[field]) do Add(store[field], name, field) end
+            else Add(store, field, field) end
+        end
+        local archive = store._profileRecoveryArchive
+        if type(archive) == "table" then
+            for field, saved in pairs(archive) do
+                if type(saved) == "table" then
+                    for id in pairs(saved) do Add(saved, id, tostring(field), true) end
+                else Add(archive, field, tostring(field), true) end
+            end
+        else Add(store, "_profileRecoveryArchive", "archive", true) end
+        table.sort(rows, function(a, b)
+            local x, y = Ordinal(a.entry.sequence), Ordinal(b.entry.sequence)
+            if x ~= y then return x < y end
+            local ai = type(a.bucket) == "table" and Ordinal(a.bucket.identity) or 0
+            local bi = type(b.bucket) == "table" and Ordinal(b.bucket.identity) or 0
+            if ai ~= bi then return ai < bi end
+            if a.bucket == b.bucket then return (a.index or 0) < (b.index or 0) end
+            return a.field .. tostring(a.name) .. tostring(a.key) < b.field .. tostring(b.name) .. tostring(b.key)
+        end)
+        return rows
+    end
+    local function RecoveryBytes(store)
+        local view = {}
+        for _, field in ipairs(recoveryFields) do view[field] = store[field] end
+        view._profileRecoveryArchive = store._profileRecoveryArchive
+        local literal = Literal(view, {})
+        return literal and #literal or math.huge
+    end
+    local function RemoveRecovery(row)
+        local bucket = row.bucket
+        if row.legacy then row.owner[row.name] = nil return end
+        bucket.entries[row.key] = nil
+        for i = #bucket.order, 1, -1 do
+            if bucket.order[i] == row.key then table.remove(bucket.order, i) end
+        end
+        local latest = bucket.entries[bucket.order[#bucket.order]]
+        if latest then bucket.revision, bucket.data = latest.revision, latest.data
+        else row.owner[row.name] = nil end
+    end
+    local function BoundRecovery(store)
+        local rows = RecoveryRows(store)
+        local bytes = RecoveryBytes(store)
+        for _, row in ipairs(rows) do
+            if bytes <= recoveryLimit then break end
+            RemoveRecovery(row)
+            bytes = RecoveryBytes(store)
+        end
+        -- Empty archived identities must not accumulate after their last eviction.
+        local function RemoveEmpty(owner)
+            for name, bucket in pairs(type(owner) == "table" and owner or {}) do
+                if type(bucket) == "table" and type(bucket.entries) == "table" and next(bucket.entries) == nil then owner[name] = nil end
+            end
+        end
+        for _, field in ipairs(recoveryFields) do RemoveEmpty(store[field]) end
+        local archive = store._profileRecoveryArchive
+        if type(archive) == "table" then
+            for field, owner in pairs(archive) do
+                RemoveEmpty(owner)
+                if type(owner) == "table" and next(owner) == nil then archive[field] = nil end
+            end
+            if next(archive) == nil then store._profileRecoveryArchive = nil end
+        end
+        return RecoveryBytes(store)
+    end
+    local function Insert(bucket, profile, revision, store)
         local literal = Literal(profile, {})
-        if not literal then return false end
+        if not literal or #literal * 2 + 1024 > recoveryLimit then return false end
         local hash = ContentHash(literal)
         local base = tostring(bucket.identity) .. ":" .. tostring(revision) .. ":" .. hash
         local key, collision = base, 0
@@ -76,6 +177,8 @@ do
             key = base .. ":" .. collision
         end
         local entry = { revision = revision, hash = hash, data = CopyNewerProfile(profile, {}) }
+        store._profileRecoverySequence = Ordinal(store._profileRecoverySequence) + 1
+        entry.sequence = store._profileRecoverySequence
         bucket.entries[key] = entry
         bucket.order[#bucket.order + 1] = key
         if #bucket.order > 3 then bucket.entries[table.remove(bucket.order, 1)] = nil end
@@ -106,12 +209,14 @@ do
             local legacy = bucket
             bucket = { identity = Identity(store, name), entries = {}, order = {} }
             backups[name] = bucket
-            if type(legacy) == "table" and type(legacy.data) == "table" then Insert(bucket, legacy.data, legacy.revision) end
+            if type(legacy) == "table" and type(legacy.data) == "table" then Insert(bucket, legacy.data, legacy.revision, store) end
         end
         return bucket
     end
     local function Save(store, field, name, profile)
-        return Insert(RecoveryBucket(store, field, name), profile, profile._msufDefaultsRevision)
+        local saved = Insert(RecoveryBucket(store, field, name), profile, profile._msufDefaultsRevision, store)
+        BoundRecovery(store)
+        return saved
     end
     local function SaveOwned(profile, field, notice)
         local store = MSUF_GlobalDB
@@ -206,11 +311,59 @@ do
                 else Archive(store, field, source) end
             end
         end
+        BoundRecovery(store)
         local ids = store._profileRecoveryIDs
         if type(ids) == "table" then
             if target then ids[target] = ids[source] end
             ids[source] = nil
         end
+    end
+    function Schema.ListProfileRecovery()
+        local store = MSUF_GlobalDB
+        if type(store) ~= "table" then return {}, 2, recoveryLimit end
+        local rows = RecoveryRows(store)
+        return rows, RecoveryBytes(store), recoveryLimit
+    end
+    function Schema.ExportProfileRecovery(key)
+        local rows = Schema.ListProfileRecovery()
+        for _, row in ipairs(rows) do
+            if row.key == key then return "return " .. Literal(row.entry.data, {}) end
+        end
+    end
+    function Schema.PurgeProfileRecovery(key)
+        local rows, count = Schema.ListProfileRecovery(), 0
+        for _, row in ipairs(rows) do
+            if key == "all" or row.key == key then RemoveRecovery(row) count = count + 1 end
+        end
+        if type(MSUF_GlobalDB) == "table" then BoundRecovery(MSUF_GlobalDB) end
+        return count
+    end
+    function Schema.RegisterRecoveryCommands()
+        local commands = MSUF.SlashCommands
+        if commands.Get("recovery") then return end
+        commands.Register({ name = "recovery", group = "profiles", help = "Profiles",
+            usage = "/msuf recovery list | export <key> | purge <key|all>",
+            run = function(rest)
+                local action, key = (rest or ""):match("^(%S+)%s*(.-)%s*$")
+                if action == "list" then
+                    local rows, bytes, limit = Schema.ListProfileRecovery()
+                    print(string.format("MSUF recovery: %d/%d bytes", bytes, limit))
+                    for _, row in ipairs(rows) do
+                        print(string.format("%s %s %s", row.field, tostring(row.name), tostring(row.key or "legacy")))
+                    end
+                elseif action == "export" and key ~= "" then
+                    local text = Schema.ExportProfileRecovery(key)
+                    if not text or MSUF.Util.InCombat() then return false end
+                    if not MSUF.Require("MSUF_EnsureOptionsLoaded", "State/Defaults/MSUF_Defaults_Recovery.lua")("recovery") then return false end
+                    MSUF.Require("MSUF_ShowCopyLink", "State/Defaults/MSUF_Defaults_Recovery.lua")("Profiles", text)
+                elseif action == "purge" and key ~= "" then
+                    print("MSUF recovery: " .. Schema.PurgeProfileRecovery(key))
+                else print("/msuf recovery list | export <key> | purge <key|all>") end
+            end,
+        })
+    end
+    function Schema.BoundProfileRecovery(store)
+        return BoundRecovery(store)
     end
     -- Restore is explicit and does not bind or normalize the recovered bytes.
     function Schema.RestoreProfileBackup(name, key, kind)
@@ -323,6 +476,8 @@ do
     -- Inspect the on-disk envelope before login has decoded or migrated it.
     function Schema.BeginRollbackSession(store, legacy)
         if not Plain(store) then return end
+        Schema.RegisterRecoveryCommands()
+        Schema.BoundProfileRecovery(store)
         if store._compatSave == "saved" then
             local full = Plain(store.profiles) and next(store.profiles) ~= nil
             if full then

@@ -91,12 +91,11 @@ local function BuildBehaviorSection(PageState, secBuilder)
             "How far the bar jolts, in pixels. 0 turns the shake off even while Shake on interrupt is enabled."),
         { "slider", "castbarInterruptFeedbackDuration", 0.5, { "Interrupt display duration (sec)", 0, 5, 0.1, 300 }, { leftX, -126, 320 },
             reason = "MSUF2_CASTBAR_INTERRUPT_DURATION", precise = true,
-                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
-                local duration = max(0, min(5, tonumber(value) or 0.5))
-                SetG("castbarInterruptFeedbackDuration", duration, "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true })
-                MSUF.Castbars.Config.Refresh()
-                M.PlayCastbarPreviewInterrupt()
-            end,
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                call = SetG, keyOnly = true, numberDefault = 0.5, clamp = true,
+                args = { "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true } },
+                after = function() MSUF.Castbars.Config.Refresh() M.PlayCastbarPreviewInterrupt() end
+            } --[[schema setter: H4.GlobalCastbars.1]],
             tooltip = "How long an interrupted cast stays visible with the interrupt message before the bar hides. 0 hides it immediately." },
         Flow("castbarUnifiedDirection", false, "Always use fill direction for all casts", rightX, -42, 360,
             "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh,
@@ -278,11 +277,11 @@ local function BuildNameShorteningSection(PageState, secBuilder)
     local textControls = BuildCastControlSpecs(text, {
         { "switch", "shorten", nil, { "Spell name shortening", textLeftX, -42, 260 },
             name = "shorten", get = NameShorteningEnabled, settingKey = "general.castbarSpellNameShortening",
-                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
-                SetG("castbarSpellNameShortening", v and 1 or 0, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
-                RequestCastPreviewRefresh()
-                if syncNameShortening then syncNameShortening() end
-            end,
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                call = SetG, keyOnly = true, convert = function(v) return v and 1 or 0 end,
+                args = { "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true } },
+                after = function() RequestCastPreviewRefresh() if syncNameShortening then syncNameShortening() end end
+            } --[[schema setter: H4.GlobalCastbars.2]],
             tooltip = "Cuts long spell names on every castbar to Max name length and marks the cut with '...'. Reserved space applies only while this is on." },
         Slider("castbarSpellNameMaxLen", 30, "Max name length", 6, 30, 1, textRightX, -42, "MSUF2_CASTBAR_NAME_MAX", ApplyAndRefresh,
             "Spell names longer than this many characters are cut and end in '...'. Names " ..
@@ -368,14 +367,15 @@ local function BuildFocusKickSection(PageState, secBuilder)
             end, classification = "ephemeral" },
         { "flowToggle", "focusKickShowCastbar", false, { "Show castbar with Focus Kick icon" }, { focusLeftX, -126 },
             labelWidth = 340, reason = "MSUF2_FOCUS_KICK_CASTBAR", name = "show_castbar",
-                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
-                if M.SetGeneralValue("focusKickShowCastbar", v and true or false, "MSUF2_FOCUS_KICK_CASTBAR",
-                    { applyAll = false, preview = false, notify = false }) then
+                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                call = M.SetGeneralValue, keyOnly = true, boolean = true,
+                args = { "MSUF2_FOCUS_KICK_CASTBAR", { applyAll = false, preview = false, notify = false } },
+                afterChanged = function()
                     MSUF.Castbars.Config.Refresh()
                     forceUpdate = forceUpdate or MSUF.Require("MSUF_FocusKickDriver_ForceUpdate", FILE)
                     forceUpdate()
                 end
-            end },
+            } --[[schema setter: H4.GlobalCastbars.4]] },
         { "slider", "focusKickIconWidth", 40, { "Width", 16, 128, 1, 300 }, { focusRightX, -74, 320 },
             reason = "MSUF2_FOCUS_KICK_WIDTH", afterWrite = ApplyFocusKickOptions, name = "width" },
         { "slider", "focusKickIconHeight", 40, { "Height", 16, 128, 1, 300 }, { focusRightX, -128, 320 },
@@ -385,11 +385,11 @@ local function BuildFocusKickSection(PageState, secBuilder)
                 local v = tonumber(ReadG("focusKickTextSize", nil))
                 if v then return v end
                 return (tonumber(ReadG("focusKickIconHeight", 40)) or 40) >= 48 and 14 or 12
-            end, customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
-                SetG("focusKickTextSize", floor((tonumber(v) or 12) + 0.5), "MSUF2_FOCUS_KICK_TEXT", { castbar = true, preview = true })
-                RequestFocusKickTextFont()
-                ApplyFocusKickOptions()
-            end },
+            end, customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                call = SetG, keyOnly = true, numberDefault = 12, round = true,
+                args = { "MSUF2_FOCUS_KICK_TEXT", { castbar = true, preview = true } },
+                after = function() RequestFocusKickTextFont() ApplyFocusKickOptions() end
+            } --[[schema setter: H4.GlobalCastbars.5]] },
         { "slider", "focusKickIconOffsetX", 300, { "X offset", -500, 500, 1, 300 }, { focusLeftX, -176, 320 },
             reason = "MSUF2_FOCUS_KICK_X", afterWrite = ApplyFocusKickOptions, name = "x", writeDefault = 0 },
         { "slider", "focusKickIconOffsetY", 0, { "Y offset", -500, 500, 1, 300 }, { focusLeftX, -230, 320 },
@@ -594,7 +594,7 @@ local function CreateCastbarPageState(ctx, b)
                 if kind == "slider" then return tonumber(ReadG(key, default)) or default end
                 return ReadG(key, default)
             end
-            if not row.set then
+            if not row.set and not row.write then
                 local fallback = row.writeDefault
                 if fallback == nil then fallback = default end
                 row.write = { call = kind == "toggle" and SetGBool or SetG, keyOnly = true,

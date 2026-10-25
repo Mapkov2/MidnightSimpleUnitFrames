@@ -658,7 +658,7 @@ local function BuildProfilePicker(state)
     -- The selected value is a profile name; search keeps the control name.
     profileDrop._msuf2StableSearchLabel = "Active profile"
     RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
-    profileDrop._msuf2ControlSchema.setting = M.ControlSchema.Record({ "MSUF_GlobalDB.char.{character}.activeProfile" })
+    M.ControlSchema.SetSetting(profileDrop, M.ControlSchema.Record({ "MSUF_GlobalDB.char.{character}.activeProfile" }))
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(state.heroSwitch, profileDrop) end
     profileDrop:SetOnValueChanged(function(value)
         if BlockCombatAction() then

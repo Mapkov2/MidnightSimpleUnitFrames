@@ -84,6 +84,8 @@ local function GameplayRow(declarations,key,layout,apply,defaultApply)
     local row = assert(declarations[key], "unknown Gameplay schema row")
     local fallback = Schema.Default("gameplay", key)
     row[3], row.meta, row.scope, row.domain = fallback, Meta("setting." .. key), "gameplay", "gameplay"
+    if key == "meleeSpellPerClass" then row.companionWrites = { "gameplay.nameplateMeleeSpellIDByClass" }
+    elseif key == "meleeSpellPerSpec" then row.companionWrites = { "gameplay.nameplateMeleeSpellIDBySpec" } end
     if row[1] == "slider" then row[4][5] = layout.width or 280
     elseif row[1] == "dropdown" then row[4][3] = layout.width or 280 end
     row[5] = { layout.x, layout.y }
@@ -107,11 +109,16 @@ local function SwitchAt(ctx, section, label, x, y, width, key, apply, meta)
     })
 end
 local function BindGameplayText(ctx,list,input,getValue,setValue,metadata,apply,label)
+    local write
+    if metadata.settingKey == "gameplay.combatStateEnterText" or metadata.settingKey == "gameplay.combatStateLeaveText" then
+        write = { source = Gameplay, convert = function(value) return tostring(value or "") end,
+            after = apply } --[[schema setter: H4.AdvancedGameplay.Text]]
+    end
     Schema.Bind(ctx, input, {
         id = metadata.controlId, kind = "textinput", labelKey = label, settingPath = metadata.settingKey,
         scope = "gameplay", applyDomain = "gameplay", meta = metadata, commitOnBlur = true,
         get = getValue, customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
-            set = function(value) setValue(value) apply() end,
+        set = not write and function(value) setValue(value) apply() end or nil, write = write,
     })
     M.AppendValues(list, input)
 end

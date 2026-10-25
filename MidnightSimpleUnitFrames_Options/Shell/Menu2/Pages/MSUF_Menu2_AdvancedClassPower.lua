@@ -529,6 +529,7 @@ local QUICK_KEYS = {
         .. "detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar "
         .. "detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill powerChunkedFill"),
 }
+M.ClassPowerWorkspace.QuickWriteKeys = QUICK_KEYS
 local quickSetupUndoSnapshot
 local quickSetupFirstRunChecked = false
 local function QuickTr(text) return (M.Tr and M.Tr(text)) or text end
@@ -865,7 +866,9 @@ function Page.BindRow(ctx, widget, row, kind)
     local meta = row.meta
     local spec = { id = meta.controlId, kind = kind, key = row.field or row[2],
         labelKey = row[4][1], scope = "classpower", applyDomain = "classpower",
-        meta = meta, get = row.get, set = row.set, write = row.write, customSetReason = row.customSetReason, source = row.source, apply = row.apply,
+        meta = meta, get = row.get, set = row.set, write = row.write,
+        writeTargets = row.writeTargets,
+            companionWrites = row.companionWrites, customSetReason = row.customSetReason, source = row.source, apply = row.apply,
         defaultSource = function() return row[3] end, workspace = row.workspace }
     if kind == "slider" then
         spec.range = { row[4][2], row[4][3], row[4][4] }
@@ -890,9 +893,11 @@ function Page.RowAccessors(page, row, source, apply)
     if not policy then return end
     row.workspace = "classpower"
     if policy == "comboColorMode" then
+        row.companionWrites = { "bars.classPowerSlotColorModes.COMBO_POINTS" }
         return function() return M.ColorsPage.GetClassPowerSlotMode("COMBO_POINTS") end,
             function(value) M.ColorsPage.SetClassPowerSlotMode("COMBO_POINTS", value) end
     elseif policy == "playerPowerOutline" then
+        row.companionWrites = { "player.powerBarBorderEnabled", "player.powerBarBorderThickness" }
         row.roundStep = false
         return PlayerPowerOutline, function(value) SetPlayerPowerOutline(value, apply) end
     elseif policy == "alpha" then
@@ -908,6 +913,7 @@ function Page.RowAccessors(page, row, source, apply)
             SetValue(Bars(), key, value / 100, apply)
         end
     elseif policy == "detachedPowerWidth" then
+        row.companionWrites = { "player.detachedPowerBarSyncClassPower" }
         row[3] = nil
         return function() return tonumber(source()[key]) or PlayerFrameWidth() end,
             function(value)
@@ -963,7 +969,9 @@ end
 function Page:SourceToggle(parent, label, source, key, apply, prefix)
     return Schema.Build(self.ctx, parent, { { "flowToggle", key, false, { label }, workspace = "classpower",
         meta = Meta(prefix .. "." .. key), get = function() return HidePercentValue(source(), key) end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { "player.hpPowerTextOverride" },
+            set = function(value)
             value = value and true or false
             if source == Player then SetPlayerTextValue(key, value, apply) else SetValue(source(), key, value, apply) end
         end } }, Page.RowOptions)[key]
@@ -1062,10 +1070,9 @@ function Page:BuildClassLayout()
     local alignValues = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
     self.cpAlign = Schema.Build(self.ctx, section, { { "segment", "alignment", nil, { "Shape alignment", alignValues, 300 },
         meta = Meta("layout.shape_alignment"), get = function() return NormalizeClassPowerShapeAlign(Bars().classPowerShapeAlign) end,
-        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
-            Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value)
-            ApplyClassPower()
-        end } }, Page.RowOptions).alignment
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", write = {
+                source = Bars, convert = NormalizeClassPowerShapeAlign, after = ApplyClassPower
+            } --[[schema setter: H4.AdvancedClassPower.2]] } }, Page.RowOptions).alignment
     RegisterSegment(self.cpAlign, "layout.shape_alignment", alignValues, "setting")
     self:Add("cp", self.cp.shape, self.cp.height, self.cp.widthMode, self.cpAlign, self.cp.x, self.cp.y, self.cp.level)
     AddTooltip(self.cp.level, "Class Resource Layer", "Orders the Class Resource bar and pips. Its numeric, Rune and Ebon duration text uses the separate "
@@ -1316,7 +1323,11 @@ function Page:BuildDetachedPower()
     self.dpbUse = Schema.Build(self.ctx, layout, { { "sectionSwitch", "dpbUse", nil, { "Detached player power" },
         workspace = "classpower", meta = Meta("detached_power.enabled"),
         get = function() return Player().powerBarDetached == true end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = Schema.Fields({ "player" }, { "showPowerBar", "detachedPowerBarSyncClassPower",
+                "detachedPowerBarAnchorToClassPower", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY",
+                "detachedPowerBarHeight", "detachedPowerBarFrameLevelOffset" }).recordPaths,
+            set = function(value)
             local player = Player()
             player.powerBarDetached = value and true or false
             if value then
@@ -1340,13 +1351,10 @@ function Page:BuildDetachedPower()
     self.dpbSource = Schema.Build(self.ctx, layout, { { "dropdown", "resource_source", nil, { "Displayed resource", PLAYER_POWER_SOURCE_VALUES, 300 },
         workspace = "classpower", meta = sourceMeta, flagsBefore = { _msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel },
         get = function() return NormalizePlayerPowerSource(Player().playerPowerSource) end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
-            local player = Player()
-            value = NormalizePlayerPowerSource(value)
-            if player.playerPowerSource == value then return end
-            player.playerPowerSource = value
-            M.ApplyPlayerPowerSource("MSUF2_CLASSPOWER_PLAYER_POWER_SOURCE")
-        end } }, Page.RowOptions).resource_source
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", write = {
+                source = Player, convert = NormalizePlayerPowerSource, skipEqual = true,
+                after = function() M.ApplyPlayerPowerSource("MSUF2_CLASSPOWER_PLAYER_POWER_SOURCE") end
+            } --[[schema setter: H4.AdvancedClassPower.4]] } }, Page.RowOptions).resource_source
     RegisterControl(self.dpbSource, sourceMeta,
         M.PlayerPowerSourceSearchLabel, "dropdown", PLAYER_POWER_SOURCE_VALUES)
     MoveWidget(self.dpbSource, layout, 32, twoColumns and -154 or -188, controlW, "LEFT")
@@ -1382,7 +1390,9 @@ function Page:BuildDetachedPower()
         "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300 },
         workspace = "classpower", meta = Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }),
         get = function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { "player.detachedPowerOrbSize" },
+            set = function(value)
             local player = Player()
             player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
             if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
@@ -1467,7 +1477,9 @@ function Page:BuildDetachedPowerText()
                 local x, y = DetachedTextOffsetKeys()
                 return tonumber(Player()[index == 1 and x or y]) or 0
             end,
-            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(value)
+            customSetReason = "Resolves the currently selected record or text slot at input time.",
+            companionWrites = { "player.hpPowerTextOverride" },
+            set = function(value)
                 local x, y = DetachedTextOffsetKeys()
                 SetPlayerTextValue(index == 1 and x or y, value, ApplyDetachedPowerText)
             end } }, Page.RowOptions).slider

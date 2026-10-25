@@ -81,9 +81,10 @@ local function BuildRangeFade(ctx, builder, unit)
         { "Affects", VT("frame", "Whole", "health", "HP"), rightW - 32 }, { 16, -104, rightW - 32, "LEFT" })
     modeRow.get = function() return GetConf(unit).rangeFadeLayerMode == "health" and "health" or modeRow[3] end
     modeRow.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
-    modeRow.set = function(value)
-        Schema.SetUnit("range", unit, modeRow[2], value == "health" and "health" or modeRow[3], "MSUF2_RANGE_FADE_LAYER", "segment")
-    end
+    modeRow.write = {
+        unitDomain = "range", reason = "MSUF2_RANGE_FADE_LAYER",
+        convert = function(value) return value == "health" and "health" or modeRow[3] end
+    } --[[schema setter: H4.UnitRangeFade.1]]
     local mode = Schema.Build(ctx, alphaCard, { modeRow }, ROW_OPTIONS).rangeFadeLayerMode
     local updateRate
     if unit == "boss" then
@@ -95,16 +96,14 @@ local function BuildRangeFade(ctx, builder, unit)
         rateRow.meta.step, rateRow.meta.roundStep = 1, true
         rateRow.get = function() return ReadNumber(unit, rateRow[2], rateRow[3]) end
         rateRow.customSetReason = "Executes the existing composite command, conversion or selection-dependent policy."
-    rateRow.set = function(value)
-            local rate = floor((tonumber(value) or 0) + 0.5)
-            if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
-            Schema.SetUnit("range", unit, rateRow[2], rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", "slider")
+    rateRow.write = {
+        unitDomain = "range", reason = "MSUF2_BOSS_RANGE_UPDATE_RATE",
+        numberDefault = 0, round = true, clamp = true, after = function(rate)
             if updateRate and updateRate._msuf2SliderActive then
                 updateRate._msuf2BossRateWarningPending = rate > 0 and rate or nil
-            else
-                MaybeShowBossUpdateRateWarning(rate)
-            end
+            else MaybeShowBossUpdateRateWarning(rate) end
         end
+    } --[[schema setter: H4.UnitRangeFade.2]]
         updateRate = Schema.Build(ctx, updateCard, { rateRow }, ROW_OPTIONS).rangeFadeUpdateRate
         if updateRate.SetValueBoxWidth then updateRate:SetValueBoxWidth(76) end
         if updateRate.SetValueFormatter then updateRate:SetValueFormatter(BossUpdateRateValue) end

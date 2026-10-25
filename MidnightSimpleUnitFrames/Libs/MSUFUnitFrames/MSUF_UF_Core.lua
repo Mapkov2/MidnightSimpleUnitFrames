@@ -2175,12 +2175,7 @@ function UF.ApplyElementToFrame(frame, name, spec, updateReason)
   return true
 end
 
-local function ApplyElementSelection(frame, selection, spec, updateReason, selectionIsMask)
-  if not frame or (selection ~= true and type(selection) ~= "table") then return false end
-  local wasApplying = UF._msufApplyingSpec
-  local wasBatching = frame._msufElementApplyBatch
-  UF._msufApplyingSpec = true
-  frame._msufElementApplyBatch = true
+local function RunElementSelection(frame, wasApplying, wasBatching, selection, spec, updateReason, selectionIsMask)
   if spec then UF.SetFrameSpec(frame, spec) end
 
   if selectionIsMask == true then
@@ -2210,6 +2205,34 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
   return true
 end
 
+local function FinishElementSelection(succeeded, frame, wasApplying, wasBatching)
+  frame._msufElementApplyBatch = wasBatching
+  UF._msufApplyingSpec = wasApplying
+  if succeeded then
+    frame._msufElementApplyFailed = nil
+  else
+    frame._msufElementApplyFailed = true
+    frame._msufEventRouteUnit = nil
+    frame._msufElementEventRoutes = nil
+    frame._msufEventRouteSelections = nil
+  end
+end
+
+local function ApplyElementSelection(frame, selection, spec, updateReason, selectionIsMask)
+  if not frame or (selection ~= true and type(selection) ~= "table") then return false end
+  local wasApplying = UF._msufApplyingSpec
+  local wasBatching = frame._msufElementApplyBatch
+  if frame._msufElementApplyFailed == true then
+    selection, selectionIsMask = true, true
+  end
+  UF._msufApplyingSpec = true
+  frame._msufElementApplyBatch = true
+  -- Cold apply only: restore before the Kernel reports, even if its error
+  -- handler raises. A partial frame cannot keep a valid routing signature.
+  return (MSUF.RunUnitFrameApply(RunElementSelection, FinishElementSelection,
+    frame, wasApplying, wasBatching, selection, spec, updateReason, selectionIsMask))
+end
+
 --- Apply an ordered element list as one frame transaction. Element layout and
 --- updates still run in list order, while event routing is validated/rebuilt at
 --- most once after the complete spec has landed.
@@ -2226,7 +2249,7 @@ function UF.ApplySpec(frame, spec, reason, mask)
   if not frame._msufPixelLayoutTemplateVisited then PixelLayoutRegion(frame) end
   UF.AttachFrame(frame, { scope = spec.scope or frame._msufCoreScope or "single" })
   mask = mask or DEFAULT_APPLY_MASK
-  ApplyElementSelection(frame, mask, spec, nil, true)
+  if not ApplyElementSelection(frame, mask, spec, nil, true) then return false end
   if reason then UF.FrameRuntimeUpdate(frame, reason) end
   return true
 end

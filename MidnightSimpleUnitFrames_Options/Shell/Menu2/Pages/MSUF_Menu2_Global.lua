@@ -644,6 +644,7 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
     local Meta = opts.meta
     local controls = Schema.Build(ctx, scope, {
         { "scopebar", scopeId .. "selector", nil, { scopeOpts }, register = true,
+            writeTargets = opts.selectorWriteTargets,
             meta = opts.selectorMeta or Meta("scope.selector", "ephemeral"), label = opts.selectorLabel or "Editing:", kind = "segment", values = values },
         { "toggle", scopeId .. "override", false,
             { opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260 },

@@ -139,7 +139,10 @@ local function PercentSlider(ctx, parent, label, key, default, width, x, y)
         { "slider", key, floor(default * 100 + 0.5), { label, 0, 100, 5, width }, get = function() return floor(GP.Num(GP.CurrentScope(),
             key, default) * 100 + 0.5) end,
             customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
-                set = function(v) GP.Set(GP.CurrentScope(), key, max(0, min(100, floor((tonumber(v) or 0) + 0.5))) / 100, "rebuild") end,
+                write = {
+                    call = GP.Set, group = true, args = { "rebuild" },
+                    convert = function(v) return max(0, min(100, floor((tonumber(v) or 0) + 0.5))) / 100 end
+                } --[[schema setter: H4.GroupLayoutAdditional.1]],
             meta = metadata, domain = "rebuild", scope = "group" },
     }, CUSTOM_OPTIONS)[key]
     W.MoveWidget(control, parent, x, y, width, "LEFT")
@@ -278,7 +281,7 @@ local function BuildSizingTier(ctx, parent, prefix, fullWidth, metadata)
         local meta = metadata(row[2], prefix)
         local binder = kind == "slider" and GP.BindScopeSlider or kind == "dropdown" and GP.BindScopeDropdown or GP.BindScopeToggle
         binder(ctx, widget, row[2], row[3], "rebuild", meta)
-        Schema.Owned(widget, "group", "rebuild")._msuf2ControlSchema.setting = Schema.GroupKeys(row[2])
+        M.ControlSchema.SetSetting(Schema.Owned(widget, "group", "rebuild"), Schema.GroupKeys(row[2]))
         meta.label, meta.kind = row[4][1], kind
         if kind == "dropdown" then meta.values = TIER_GROWTH end
         M.RegisterSearchWidget(widget, meta)

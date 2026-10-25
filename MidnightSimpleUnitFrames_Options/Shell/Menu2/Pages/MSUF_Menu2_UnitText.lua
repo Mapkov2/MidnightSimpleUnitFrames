@@ -559,10 +559,11 @@ function TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, contro
                 local value = tonumber(conf and conf[SlotFontSizeKey(kind)])
                 return value and value > 0 and value or EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey)
             end,
-            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(v)
-                SetNumber(unit, SlotFontSizeKey(kind), v, cfg.slotSizeReason, { text = true, fonts = true, preview = true })
-                FocusPreviewText(kind, CurrentSlot(kind), true)
-            end,
+            customSetReason = "Resolves the currently selected record or text slot at input time.", write = {
+                call = SetNumber, args = { cfg.slotSizeReason, { text = true, fonts = true, preview = true } },
+                resolve = function() return unit .. "." .. SlotFontSizeKey(kind) end,
+                after = function() FocusPreviewText(kind, CurrentSlot(kind), true) end
+            } --[[schema setter: H4.UnitText.3]],
             meta = SelectedSlotMeta("text." .. kind .. ".slot.size"), roundStep = true, scope = unit,
             tip = { "Selected slot size", "Font size of the slot picked in Text slots only. Slots you never resize keep the normal text size.", TIP_HOOK } },
     }, Schema.UnitOptions(), controls)

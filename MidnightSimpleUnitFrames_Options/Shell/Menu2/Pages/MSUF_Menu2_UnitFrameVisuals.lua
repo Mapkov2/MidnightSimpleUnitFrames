@@ -388,15 +388,15 @@ function PortraitSection.Factories(p)
         end
         if row.normalize and kind ~= "slider" and kind ~= "toggle" then
             row.customSetReason = "Canonicalizes the portrait shape or size mode before applying the portrait."
-            row.set = function(value)
-            if kind == "slider" then SetNumber(unit, key, value, row.reason, { preview = true })
-            else
-                if kind == "toggle" then value = value and true or false
-                else value = row.normalize and row.normalize(value or fallback) or (value or fallback) end
-                SetPortraitValue(unit, key, value, row.reason)
-            end
-            if row.afterSet then row.afterSet() end
-        end
+            row.write = {
+                call = kind == "slider" and SetNumber or SetPortraitValue,
+                args = kind == "slider" and { row.reason, { preview = true } } or { row.reason },
+                convert = function(value)
+                    if kind == "slider" then return value end
+                    if kind == "toggle" then return value and true or false end
+                    return row.normalize and row.normalize(value or fallback) or (value or fallback)
+                end, after = row.afterSet
+            } --[[schema setter: H4.UnitFrameVisuals.3]]
         else
             row.write = { call = kind == "slider" and SetNumber or SetPortraitValue,
                 boolean = kind == "toggle", args = { row.reason, kind == "slider" and { preview = true } or nil },
@@ -492,11 +492,11 @@ function PortraitSection.Controls(p)
             return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
                 and "SEPARATE" or "UNIFORM"
         end,
-        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
-            value = value == "SEPARATE" and "SEPARATE" or "UNIFORM"
-            SetPortraitValue(unit, "portraitSizeMode", value, "MSUF2_PORTRAIT_SIZE_MODE")
-            p.Refresh()
-        end,
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", write = {
+                call = SetPortraitValue, args = { "MSUF2_PORTRAIT_SIZE_MODE" },
+                convert = function(value) return value == "SEPARATE" and "SEPARATE" or "UNIFORM" end,
+                after = p.Refresh
+            } --[[schema setter: H4.UnitFrameVisuals.6]],
         scope = unit, meta = Meta("portrait.portraitSizeMode", tostring(unit) .. ".portraitSizeMode"),
     })
     TabTarget(c.sizeMode, "geometry", tostring(unit) .. ".portraitSizeMode")
@@ -812,6 +812,7 @@ function PowerSection.Helpers(pw)
                 end
                 if kind ~= "toggle" and key == "detachedPowerBarWidth" then
                     row.customSetReason = "Disables synchronized width sources before writing the manual detached width."
+                    row.companionWrites = { "bars.detachedPowerBarWidthMode", unit .. ".detachedPowerBarSyncClassPower" }
                     row.set = function(value)
                     if kind == "toggle" then
                         SetBool(unit, key, value, row.reason, row.opts or POWER_OPTS)
@@ -848,7 +849,10 @@ function PowerSection.Cards(pw)
                     kind = "toggle", valueKind = "boolean",
                     get = function() return ReadBool(unit, "showPowerBar", true) end,
                     customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
-                        set = function(value) SetBool(unit, "showPowerBar", value == true, "MSUF2_POWER_SHOW", { power = true, preview = true }) end,
+                        write = { virtual = true,
+                            call = SetBool, strictBoolean = true,
+                            args = { "MSUF2_POWER_SHOW", { power = true, preview = true } }
+                        } --[[schema setter: H4.UnitFrameVisuals.8]],
                 },
             }
         else
@@ -903,10 +907,10 @@ function PowerSection.Cards(pw)
         local playerPowerSource = ControlRow(ctx, mainCard, { "dropdown", "playerPowerSource", nil, { "Displayed resource",
             PLAYER_POWER_SOURCE_VALUES, pw.cardW - 72 }, { 16, -132, pw.cardW - 72 },
             get = function() return NormalizePlayerPowerSource(GetConf(unit).playerPowerSource) end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
-                GetConf(unit).playerPowerSource = NormalizePlayerPowerSource(value)
-                M.ApplyPlayerPowerSource("MSUF2_PLAYER_POWER_SOURCE")
-            end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", write = {
+                source = function() return GetConf(unit) end, convert = NormalizePlayerPowerSource,
+                after = function() M.ApplyPlayerPowerSource("MSUF2_PLAYER_POWER_SOURCE") end
+            } --[[schema setter: H4.UnitFrameVisuals.9]],
             scope = unit, meta = sourceMeta,
             beforeBind = function(widget)
                 widget._msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel
@@ -933,6 +937,7 @@ function PowerSection.Main(pw)
     local SetSyncedPlayerPowerOutline = pw.SetSyncedPlayerPowerOutline
     ControlRow(ctx, borderCard, { "toggle", "powerBorder", false, { "Power bar border", 16, -62, rightW - 32 },
         get = ReadPowerBorderEnabled,
+        companionWrites = { "bars.detachedPowerBarOutline", unit .. ".powerBarBorderThickness" },
         customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
         if isPlayer then
             local thickness = ReadPowerBorderThickness()
@@ -979,6 +984,7 @@ function PowerSection.Main(pw)
     pw.borderSize = ControlRow(ctx, borderCard, { "slider", "borderSize", 1, { "Border thickness", 0, isPlayer and 8 or 6, 1, 300 }, { 16, -108,
         rightW - 72, "CENTER" },
         get = ReadPowerBorderThickness,
+        companionWrites = { "bars.detachedPowerBarOutline", unit .. ".powerBarBorderEnabled" },
         customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
         if isPlayer then
             SetSyncedPlayerPowerOutline(value, "MSUF2_POWER_BORDER_SIZE")
@@ -992,7 +998,11 @@ function PowerSection.Main(pw)
     })
     ControlRow(ctx, mainCard, { "toggle", "detached", false, { "Detach from frame", 16, isPlayer and -230 or -166, cardW - 32 },
         get = function() return ReadBool(unit, "powerBarDetached", false) end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = Schema.Fields({ unit }, { "detachedPowerBarOffsetX", "detachedPowerBarOffsetY",
+                "detachedPowerBarWidth", "detachedPowerBarHeight", "detachedPowerBarFrameLevelOffset",
+                "detachedPowerBarSyncClassPower", "detachedPowerBarShape", "detachedPowerOrbSize" }).recordPaths,
+            set = function(v)
             local conf = GetConf(unit)
             conf.powerBarDetached = v and true or false
             if conf.powerBarDetached then
@@ -1055,7 +1065,9 @@ function PowerSection.Detached(pw)
             get = function()
                 return NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape)
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            companionWrites = { unit .. ".detachedPowerOrbSize" },
+            set = function(v)
                 v = NormalizeDetachedPowerShape(v)
                 local conf = GetConf(unit)
                 conf.detachedPowerBarShape = v
@@ -1307,15 +1319,12 @@ function CastbarSection.Binders(s)
             end
             if row.beforeSet and kind == "slider" then
                 row.customSetReason = "Adjusts coupled text-width or truncation settings before the numeric write."
-                row.set = function(value)
-                if kind == "slider" then
-                    if row.beforeSet then row.beforeSet(value) end
-                    SetGeneralNumber(key, value, row.reason)
-                else
-                    SetGeneralValue(key, value or fallback, row.reason)
-                    if row.afterSet then row.afterSet() end
-                end
-            end
+                row.write = {
+                    call = kind == "slider" and SetGeneralNumber or SetGeneralValue, keyOnly = true,
+                    args = { row.reason }, before = kind == "slider" and row.beforeSet or nil,
+                    convert = function(value) if kind == "slider" then return value end return value or fallback end,
+                    after = kind ~= "slider" and row.afterSet or nil
+                } --[[schema setter: H4.UnitFrameVisuals.15]]
             else
                 row.write = { call = kind == "slider" and SetGeneralNumber or SetGeneralValue,
                     keyOnly = true, args = { row.reason },
@@ -1470,6 +1479,8 @@ function CastbarSection.General(s)
             command = {
                 kind = "toggle", valueKind = "boolean",
                 get = function() return ReadCastbarBackend() ~= "HIDE" end,
+                companionWrites = { "general." .. fields.backend,
+                    "general." .. (fields.providerMemory or (fields.backend .. "BeforeHide")) },
                 customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
                     set = function(value) SetCastbarEnabled(value == true) end,
             },
@@ -1485,6 +1496,8 @@ function CastbarSection.General(s)
         provider = ControlRow(ctx, providerCard, { "dropdown", "provider", "MSUF", { "Castbar provider", CASTBAR_BACKEND_VALUES, min(260,
             controlWRight) }, { 16, -52, min(260, controlWRight) },
             get = ReadCastbarProvider,
+            companionWrites = { "general." .. fields.enable,
+                "general." .. (fields.providerMemory or (fields.backend .. "BeforeHide")) },
             customSetReason = "Coordinates the selected castbar provider, enabled state and dependent backend settings.", set = SetCastbarProvider,
             scope = unit, meta = SettingMeta(ctx, "castbar.provider", "general", fields.backend),
             beforeBind = function(widget)
@@ -1521,13 +1534,11 @@ function CastbarSection.General(s)
     local widthMode = ControlRow(ctx, sizeCard, { "dropdown", "widthMode", "manual", { "Width mode", CASTBAR_WIDTH_SOURCE_VALUES,
         sizeControlWLeft }, { 16, -52, sizeControlWLeft },
         get = ReadWidthSource,
-        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
-            local key = CastbarWidthSourceKey()
-            if not key then return end
-            local nextValue = NormalizeWidthSource(v)
-            SetGeneralValue(key, nextValue, "MSUF2_CASTBAR_WIDTH_MODE")
-            RefreshCastbarEnabled()
-        end,
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+        write = { call = SetGeneralValue, keyOnly = true, convert = NormalizeWidthSource,
+            accept = function() return CastbarWidthSourceKey() ~= nil end,
+            args = { "MSUF2_CASTBAR_WIDTH_MODE" }, after = RefreshCastbarEnabled
+        } --[[schema setter: H4.UnitFrameVisuals.21]],
         scope = unit, meta = SettingMeta(ctx, "castbar.width_mode", "general", CastbarWidthSourceKey()),
         beforeBind = s.PrepareControl, castbarControl = true,
     })
@@ -1574,7 +1585,8 @@ function CastbarSection.IconAndText(s)
             reason = "MSUF2_CASTBAR_ICON_ZOOM" },
         { "slider", DetailKey("IconSpacing"), 1, { "Spacing", 0, 40, 1, controlWLeft }, { 16, -250, controlWLeft }, reason = "MSUF2_CASTBAR_ICON_SPACING" },
         { "slider", DetailKey("IconBorderThickness"), 0, { "Border thickness", 0, 8, 1, controlWLeft }, { 16, -304, controlWLeft },
-            reason = "MSUF2_CASTBAR_ICON_BORDER_THICKNESS", beforeSet = function(v)
+            reason = "MSUF2_CASTBAR_ICON_BORDER_THICKNESS",
+            companionWrites = { "general." .. DetailKey("IconBorderStyle") }, beforeSet = function(v)
             if tonumber(v) and tonumber(v) > 0 and tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "DARK")):upper() == "NONE" then
                 GetGeneral()[DetailKey("IconBorderStyle")] = "DARK"
                 -- The Border style dropdown below must show what this just
@@ -1670,7 +1682,9 @@ function CastbarSection.Advanced(s)
     local spellTextWidthMode = ControlRow(ctx, textAdvancedCard, { "dropdown", "spellTextWidthMode", "AUTO", { "Width behavior",
         CASTBAR_TRUNCATE_VALUES, min(260, controlWLeft) }, { 16, -52, min(260, controlWLeft) },
         get = ReadSpellTextWidthMode,
-        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
+        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+            companionWrites = { "general." .. DetailKey("SpellNameMaxWidth") },
+            set = function(v)
             local nextValue = tostring(v or "AUTO"):upper()
             if nextValue ~= "CLIP" and nextValue ~= "NONE" then nextValue = "AUTO" end
             SetGeneralValue(DetailKey("SpellNameTruncate"), nextValue, "MSUF2_CASTBAR_SPELL_TRUNCATE")

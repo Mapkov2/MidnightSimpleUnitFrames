@@ -96,19 +96,6 @@ local function PaintGroupPreviewPortrait(scene)
     if not frame then return end
     local portrait = frame.MSUFSpec and frame.MSUFSpec.portrait
     local holder = frame.MSUFPortraitHolder
-    local shown = scene.kind == "party" and portrait and portrait.enabled == true
-    -- The engine owns mask, border, shadow, artwork, opacity and placement.
-    if holder then
-        holder:SetShown(shown and scene.layerVisible.portrait ~= false)
-    end
-    if shown and frame.portrait then
-        if portrait.castSpellIcon == true and scene.box._animationEnabled == true then
-            frame.portrait:SetTexture(scene.S.CurrentSpellTexture(scene.kind))
-            frame.portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        elseif portrait.render ~= "CLASS" and SetPortraitTexture then
-            SetPortraitTexture(frame.portrait, "player")
-        end
-    end
     local helpers = M.PreviewHelpers
     helpers.BindGroupSceneHandle(handle, scene.mock, holder, scene.previewScale, nil,
         tonumber(portrait and portrait.x) or 0, tonumber(portrait and portrait.y) or 0)
@@ -120,7 +107,7 @@ local function PaintGroupPreviewPortrait(scene)
 end
 
 -- Kept as a narrow module seam so the interaction smoke can exercise the
--- exact production portrait painter with a real preview Button.
+-- production portrait handle binding with a real preview Button.
 Render.PaintGroupPreviewPortrait = PaintGroupPreviewPortrait
 
 -- Raise the cached mock above the preview canvas, then use that exact level as
@@ -1257,6 +1244,8 @@ function Stage.Animate(env, self)
     M.PreviewHelpers.RestoreGroupSceneHandles(self, false, true)
     st.animatingSamples = true
     -- The scene's own clock: the engine repaints bars, texts and prediction at this elapsed time.
+    local sample = self._msufGFCellSample
+    if sample.portrait.castSpellIcon then sample.portrait.texture = scene.S.CurrentSpellTexture(scene.kind) end
     if self._scene then self._scene:SetClock(self._animationElapsed) end
     PlaceTextHandles(scene)
     local RenderState = scene.S
@@ -1579,6 +1568,7 @@ function Stage.RenderCell(st, env)
             sample = {}
             for key, value in pairs(CELL_SAMPLE) do sample[key] = value end
             sample.powerColor = { CELL_SAMPLE.powerColor[1], CELL_SAMPLE.powerColor[2], CELL_SAMPLE.powerColor[3] }
+            sample.portrait, sample.statusRegions = {}, {}
             self._msufGFCellSample = sample
         end
         -- The live player when it can be read, the stylized sample for any missing field. The exact maxima and the
@@ -1593,6 +1583,7 @@ function Stage.RenderCell(st, env)
         sample.hpPct, sample.powerPct = scene.hpPct, scene.powerPct
         sample.healPct, sample.absorbPct = scene.healPct, scene.absorbPct
         scene.sampleClass = sample.class
+        Stage.PrepareCellSamples(st, env, sample)
         cell:Configure({
             scale = st.previewScale, level = mock._msufPreviewElementLevelBias, role = scene.previewRole,
             sample = sample, bodyOnly = false, layerVisible = scene.layerVisible, layerSolo = false,
@@ -1633,8 +1624,6 @@ function Stage.RenderChrome(st)
     local scene, frame = st.scene, st.mock._cell
     if not frame then return end
     scene.previewScale = st.previewScale
-    -- SceneApply uses the exact runtime portrait layout before handles adopt it.
-    MSUF.UF.elements.Portrait.SceneApply(frame, frame.MSUFSpec)
     PaintGroupPreviewPortrait(scene)
     M.PreviewHelpers.PaintGroupSceneDispel(frame, scene.engineConfig)
     local overlay, symbol = frame._msufSceneDispelOverlay, frame._msufSceneDispelSymbol
@@ -1751,40 +1740,60 @@ local ENGINE_STATUS_FIELDS = {
     statusAFKText = "_msufScene_statusAFKText", statusDNDText = "_msufScene_statusDNDText",
     statusAFKTimer = "statusAFKTimerText", threatText = "threatIndicatorText",
 }
+-- Retained public sample values cross the scene boundary before it paints. Handles only adopt regions.
+function Stage.PrepareCellSamples(st, env, sample)
+    local scene, portrait = st.scene, sample.portrait
+    local cfg = scene.runtimeSpec and scene.runtimeSpec.portrait
+    portrait.shown = st.kind == "party" and cfg and cfg.enabled == true or false
+    portrait.texture, portrait.castSpellIcon = nil, false
+    portrait.l, portrait.r, portrait.t, portrait.b = 0, 1, 0, 1
+    if portrait.shown then
+        portrait.castSpellIcon = cfg.castSpellIcon == true and st.self._animationEnabled == true
+        if portrait.castSpellIcon then
+            portrait.texture = scene.S.CurrentSpellTexture(st.kind)
+            portrait.l, portrait.r, portrait.t, portrait.b = 0.08, 0.92, 0.08, 0.92
+        elseif cfg.render ~= "CLASS" and SetPortraitTexture then
+            local snapshot = st.self._portraitSnapshot
+            if not snapshot then
+                snapshot = PixelLayoutRegion(st.mock:CreateTexture(nil, "ARTWORK"))
+                snapshot:Hide()
+                st.self._portraitSnapshot = snapshot
+            end
+            snapshot:SetTexture(nil)
+            SetPortraitTexture(snapshot, "player")
+            local art = snapshot:GetTexture()
+            if not issecretvalue(art) and (type(art) == "number" or type(art) == "string") then portrait.texture = art end
+        end
+    end
+    sample.player, sample.leader, sample.assist, sample.statusSelection = true, true, true, "all"
+    sample.raidTarget, sample.raidGroup, sample.incomingRes, sample.pvp, sample.level = 1, 3, true, "Alliance", 80
+    local regions = sample.statusRegions
+    for i = 1, #env.statusHandles do
+        local spec = env.statusHandles[i]._statusSpec
+        local status = env.RuntimeStatusConfig(scene.runtimeStatus, spec)
+        local row = regions[i] or {}
+        regions[i] = row
+        row.field = ENGINE_STATUS_FIELDS[spec.value] or spec.value
+        row.shown = status and status.enabled == true and env.StatusSpecInMode(spec, scene.statusSpec) or false
+        row.text, row.texture = nil, nil
+        if env.StatusSpecIsText(spec) then
+            row.text = env.StatusText(spec, status, st.conf)
+        else
+            row.texture, row.l, row.r, row.t, row.b = Stage.StatusIconTexture(scene, spec, status)
+        end
+    end
+    for i = #regions, #env.statusHandles + 1, -1 do regions[i] = nil end
+end
 function Stage.ConfigureStatusHandle(st, env, handle)
     local spec, frame = handle._statusSpec, st.mock._cell
     local cfg = env.RuntimeStatusConfig(st.scene.runtimeStatus, spec)
     local region = frame and frame[ENGINE_STATUS_FIELDS[spec.value] or spec.value]
-    local shown = cfg and cfg.enabled == true and env.StatusSpecInMode(spec, st.scene.statusSpec)
-        and SceneLayerOn(st.scene, "status")
     handle._previewText = spec.text or "Status"
     if handle._label then handle._label:SetText(env.StatusLabel(spec)) end
-    if region then
-        if env.StatusSpecIsText(spec) then
-            region:SetText(env.StatusText(spec, cfg, st.conf))
-        else
-            local texture, l, r, t, b = Stage.StatusIconTexture(st.scene, spec, cfg)
-            if texture then
-                region:SetTexture(texture)
-                region:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
-            end
-        end
-        region:SetShown(shown)
-        if region.SetAlpha then region:SetAlpha((region._msufStatusAlpha or 1) * (frame._msufAlphaLastFG or 1)) end
-    end
     M.PreviewHelpers.BindGroupSceneHandle(handle, st.mock, region, st.previewScale, cfg and cfg.anchor)
 end
 function Stage.ConfigureStatusHandles(st, env)
-    local frame = st.mock._cell
-    if not frame then return end
-    local elements, runtime = MSUF.UF.elements, MSUF.UFStatusRuntime
-    elements.StatusIndicators.SceneApply(frame, frame.MSUFSpec)
-    local sample = st.self._msufGFCellSample
-    sample.player, sample.leader, sample.assist, sample.statusSelection = true, true, true, "all"
-    sample.raidTarget, sample.raidGroup, sample.incomingRes, sample.pvp, sample.level = 1, 3, true, "Alliance", 80
-    runtime.PaintSampleIdentityTexts(frame, frame.MSUFSpec.status, sample)
-    runtime.PaintSampleIndicators(frame, frame.MSUFSpec.status, sample)
-    runtime.PaintSceneStatus(frame, frame.MSUFSpec.status, "all", sample)
+    if not st.mock._cell then return end
     for i = 1, #env.statusHandles do Stage.ConfigureStatusHandle(st, env, env.statusHandles[i]) end
 end
 
