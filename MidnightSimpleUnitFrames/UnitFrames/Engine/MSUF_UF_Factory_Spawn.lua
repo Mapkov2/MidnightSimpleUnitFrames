@@ -347,7 +347,9 @@ local function ApplyFrame(frame, spec, applyMask)
     return false
   end
 
-  UF.ApplySpec(frame, spec, "MSUF_APPLY", (applyMask == nil or fromVariantOff) and true or applyMask)
+  if UF.ApplySpec(frame, spec, "MSUF_APPLY", (applyMask == nil or fromVariantOff) and true or applyMask) ~= true then
+    return false
+  end
   frame._msufVariantOff = nil
 
   local unitWatched = frame._msufUnitWatched == true

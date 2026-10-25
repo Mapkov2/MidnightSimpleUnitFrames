@@ -108,6 +108,20 @@ function GF.EndHeaderLayoutRebind(header)
   return true
 end
 
+local function RestoreHeaderLayoutRebind(_, header, active, previousHeader, previousDepth)
+  headerLayoutRebindHeader = previousHeader
+  headerLayoutRebindDepth = previousDepth
+end
+
+--- Cold protected-header layout only. Restore exact enclosing ownership before
+--- the Boundary reports, including when Show or a native attribute write raises.
+function GF.RunHeaderLayoutRebind(header, coalesce, step, ...)
+  local previousHeader, previousDepth = headerLayoutRebindHeader, headerLayoutRebindDepth
+  local active = coalesce and GF.BeginHeaderLayoutRebind(header) == true
+  return MSUF.RunUnitFrameApply(step, RestoreHeaderLayoutRebind,
+    header, active, previousHeader, previousDepth, ...)
+end
+
 function GF.IsHeaderLayoutRebindActive(frame)
   local header = headerLayoutRebindHeader
   if not (header and frame) then return false end
@@ -481,6 +495,7 @@ local function SameApplied(frame, kind, unit, spec)
   local power = spec and spec.power
   return frame
     and frame.MSUFSpec
+    and frame._msufElementApplyFailed ~= true
     and appliedSerial[frame] == (spec and spec._msufGFCompileSerial or 0)
     and appliedUnit[frame] == unit
     and appliedKind[frame] == kind
@@ -533,7 +548,7 @@ function GF.RebindGroupHotRuntime(frame)
 end
 
 function GF.ApplyStructureSpec(frame, spec, reason, mask)
-  UF.ApplySpec(frame, spec, reason or UNIT_STRUCTURE_REASON, mask or BASIC_GROUP_MASK)
+  if UF.ApplySpec(frame, spec, reason or UNIT_STRUCTURE_REASON, mask or BASIC_GROUP_MASK) ~= true then return false end
   GF.RebindGroupHotRuntime(frame, spec)
   return true
 end
@@ -678,7 +693,9 @@ local function ApplyUnitFrame(frame, kind, unit, reason, applyMask, forceApply)
   end
 
   UF.AttachFrame(visual, { scope = "group" })
-  GF.ApplyStructureSpec(visual, spec, reason == "UNIT_CHANGED" and UNIT_CHANGED_REASON or (reason or UNIT_STRUCTURE_REASON), applyMask or BASIC_GROUP_MASK)
+  local applied = GF.ApplyStructureSpec(visual, spec,
+    reason == "UNIT_CHANGED" and UNIT_CHANGED_REASON or (reason or UNIT_STRUCTURE_REASON), applyMask or BASIC_GROUP_MASK)
+  if applied ~= true then return false end
   MarkApplied(visual, kind, unit, spec)
   attrUnit[shell] = unit
   TrackFrame(visual, unit)
@@ -747,7 +764,9 @@ function GF.ApplySceneButton(frame, kind, dirtyMask, ignoreOocFade)
   frame._msufIsGroupFrame = true
   frame._msufGFKind = kind
   UF.SetFrameSpec(frame, spec)
-  UF.ApplySceneSpec(frame, spec, dirtyMask ~= nil and GF.ApplyMaskForDirtyMask(dirtyMask) or BASIC_GROUP_MASK)
+  if UF.ApplySceneSpec(frame, spec, dirtyMask ~= nil and GF.ApplyMaskForDirtyMask(dirtyMask) or BASIC_GROUP_MASK) ~= true then
+    return false
+  end
   GF.RebindGroupHotRuntime(frame, spec)
   local rounded = MSUF.Optional("MSUF_RoundedUF_OnGroupFrameApplied")
   if rounded then rounded(frame, kind) end
@@ -893,17 +912,19 @@ local function ScanOneChild(child, kind)
     SuspendUnitBinding(child)
     return false
   end
-  return GF.ApplyButton(child, kind, "MSUF_GF_SCAN")
+  return GF.ApplyButton(child, kind, "MSUF_GF_SCAN"), true
 end
 
 --- One GetChildren() expansion per header: re-running it per child was
 --- O(n^2) over a 40-button raid header on every roster settle.
 local function ScanChildList(kind, ...)
-  local found = false
+  local found, failed = false, false
   for i = 1, select("#", ...) do
-    found = ScanOneChild((select(i, ...)), kind) or found
+    local applied, bound = ScanOneChild((select(i, ...)), kind)
+    found = applied or found
+    if bound and applied ~= true then failed = true end
   end
-  return found
+  return found, failed
 end
 
 local function RunHeaderScan(batch, key, kind)
@@ -912,10 +933,11 @@ local function RunHeaderScan(batch, key, kind)
     batch.auraStarted = true
   end
   UF.BeginEventRegistrationBatch()
-  local found = false
+  local found, failed = false, false
   local function ScanPhysicalHeader(header)
     if not (header and header.GetChildren) then return end
-    found = ScanChildList(kind, header:GetChildren()) or found
+    local applied, partial = ScanChildList(kind, header:GetChildren())
+    found, failed = applied or found, partial or failed
   end
 
   if GF.ForEachHeader then
@@ -923,7 +945,7 @@ local function RunHeaderScan(batch, key, kind)
   else
     ScanPhysicalHeader(GF.headers and GF.headers[key])
   end
-  return found
+  return found and not failed
 end
 
 local function EndHeaderScan(batch)

@@ -737,7 +737,14 @@
     },
     {
       "test": "tools/tests/uf_header_scan_transaction.lua",
-      "phase": "apply"
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/uf_late_anchor_reporter_transaction.lua",
@@ -1119,6 +1126,21 @@
         "{root}",
         "{client}"
       ]
+    },
+    {
+      "test": "tools/tests/uf_header_layout_transaction.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_runtime_providers.lua",
+      "phase": "runtime"
     }
   ],
   "excluded": {

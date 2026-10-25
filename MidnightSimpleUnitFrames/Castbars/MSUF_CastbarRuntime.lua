@@ -33,8 +33,14 @@ local C_DurationUtil = C_DurationUtil
 -- The unit-frame alpha element loads before every castbar file.
 local ApplyCastbarRangeAlpha = ns.Require("MSUF_UF_ApplyCastbarRangeAlpha", "Castbars/MSUF_CastbarRuntime.lua")
 -- Utils precedes Runtime on every client; fail at load if this contract breaks.
-local ResolvePushbackMS = Utils.Castbar_ResolvePushbackMS
-assert(type(ResolvePushbackMS) == "function", "Castbars/MSUF_CastbarRuntime.lua requires Utils.Castbar_ResolvePushbackMS")
+local function RequireUtilsFunction(name)
+    local provider = ns.Require(name, "Castbars/MSUF_CastbarRuntime.lua", Utils)
+    assert(type(provider) == "function", "Castbars/MSUF_CastbarRuntime.lua requires Utils." .. name)
+    return provider
+end
+local ResolvePushbackMS = RequireUtilsFunction("Castbar_ResolvePushbackMS")
+local ApplyTexts = RequireUtilsFunction("CB_ApplyTexts")
+local CountsDown = RequireUtilsFunction("GetCastbarCountsDown")
 
 local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
 local StatusBarTimerDirection = Enum and Enum.StatusBarTimerDirection
@@ -173,7 +179,7 @@ end
 local PlainNumber = Utils.Castbar_PlainNumber
 -- The same file owns the fill direction, the status-bar colour write, the
 -- interrupt shake and the empower teardown.
-local GetCastbarReverseFillForFrame = Utils.GetCastbarReverseFillForFrame
+local GetCastbarReverseFillForFrame = RequireUtilsFunction("GetCastbarReverseFillForFrame")
 local SetStatusBarColorIfChanged = Utils.SetStatusBarColorIfChanged
 local PlayCastbarShake = Utils.PlayCastbarShake
 local ClearEmpowerState = Utils.ClearEmpowerState
@@ -698,40 +704,16 @@ local function SetText(frame, textKey, value)
         return
     end
 
-    local applyTexts = Utils.CB_ApplyTexts
-    if type(applyTexts) == "function" then
-        if textKey == "castText" then
-            applyTexts(frame, nil, value or "", nil)
-        elseif textKey == "timeText" then
-            applyTexts(frame, nil, nil, value or "")
-        end
-    elseif fontString.SetText then
-        fontString:SetText(value or "")
+    if textKey == "castText" then
+        ApplyTexts(frame, nil, value or "", nil)
+    elseif textKey == "timeText" then
+        ApplyTexts(frame, nil, nil, value or "")
     end
 
     if textKey == "timeText" and frame._msufTimeTextFollower then
         local syncFollower = Manager.Castbar_SyncTimeTextFollower
         if type(syncFollower) == "function" then syncFollower(frame) end
     end
-end
-
-local function UnifiedDirectionEnabled()
-    local general = Config.Read().general
-    return general ~= nil and general.castbarUnifiedDirection == true
-end
-
---- Single source of truth for "does the bar value count down?", shared with the
---- Lua fallback paths through MSUF_GetCastbarCountsDown so both renderings of a
---- channel agree.
-local function CountsDown(frame, isChanneled)
-    local resolver = Utils.GetCastbarCountsDown
-    if type(resolver) == "function" then
-        return resolver(frame, isChanneled and true or false) == true
-    end
-
-    if isChanneled ~= true then return false end
-    if frame and frame.isEmpower == true then return false end
-    return not UnifiedDirectionEnabled()
 end
 
 local function TimerDirection(parent, isChanneled)

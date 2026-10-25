@@ -12,15 +12,19 @@ local function Read(file)
     return s
 end
 local source, utilsSource = Read(path), Read(utilsPath)
+local ProviderWorld = dofile(root .. "/tools/tests/castbar_secret_world.lua").New(root, { budget = true })
+ProviderWorld.core.Require("MSUF_EnsureDB", "pushback provider fixture")(true)
+ProviderWorld.core.Castbars.Config.Invalidate()
+local realUtils = ProviderWorld.core.Castbars.Utils
 local first, last = utilsSource:find("local function ResolveCastbarPushbackMS%b().-\nend\n")
 local _, lines = utilsSource:sub(1, first - 1):gsub("\n", "\n")
 local function PlainNumber(value)
-    if issecretvalue(value) then return nil end
+    if Secrets.IsSecret(value) then return nil end
     if type(value) == "number" and value == value and value > -math.huge and value < math.huge then return value end
 end
 local providerChunk = assert(loadstring(string.rep("\n", lines) .. utilsSource:sub(first, last)
     .. "return ResolveCastbarPushbackMS", "@" .. utilsPath))
-setfenv(providerChunk, setmetatable({ PlainNumber = PlainNumber, IsSecretValue = issecretvalue }, { __index = _G }))
+setfenv(providerChunk, setmetatable({ PlainNumber = PlainNumber, IsSecretValue = Secrets.IsSecret }, { __index = _G }))
 local provider = providerChunk()
 local nativeCalls, providerCalls = 0, 0
 local function Resolve(frame, state)
@@ -29,15 +33,17 @@ local function Resolve(frame, state)
 end
 local function Load(value)
     local utils = { Castbar_ResolvePushbackMS = value, Castbar_PlainNumber = PlainNumber,
-        GetCastbarReverseFillForFrame = function() return false end }
+        GetCastbarReverseFillForFrame = realUtils.GetCastbarReverseFillForFrame,
+        GetCastbarCountsDown = realUtils.GetCastbarCountsDown, CB_ApplyTexts = realUtils.CB_ApplyTexts }
     local ns = { Scheduler = {}, Castbars = { Config = { Read = function() return { general = {} } end },
         Driver = {}, Engine = {}, Manager = {}, PublicAPI = {}, Runtime = {}, Utils = utils } }
-    ns.Require = function(name)
+    ns.Require = function(name, context, ...)
+        if select("#", ...) > 0 then return ProviderWorld.core.Require(name, context, ...) end
         if name == "MSUF" then return ns end
         assert(name == "MSUF_UF_ApplyCastbarRangeAlpha", name)
         return function() end
     end
-    local env = setmetatable({ issecretvalue = issecretvalue }, { __index = _G })
+    local env = setmetatable({ issecretvalue = Secrets.IsSecret }, { __index = _G })
     local chunk = assert(loadstring(source, "@" .. path))
     setfenv(chunk, env)
     chunk("MidnightSimpleUnitFrames", ns)
@@ -98,8 +104,9 @@ end
 print(string.format("ApplyActive: %.0f VM/apply, %.3f KB/1000, 1 provider + 1 native timer/apply", vm / 100, minimum))
 assert(minimum <= .001, "ApplyActive allocated")
 if measure then return end
--- Before binding: 222 VM/apply; direct binding: 215, with identical native calls.
-assert(vm / 100 <= 215, "ApplyActive exceeded the bound-provider VM budget")
+-- The earlier 215 ceiling used a substitute text path. With the actual Utils
+-- providers in both cases: 382 before -> 348 bound, identical native calls.
+assert(vm / 100 <= 348, "ApplyActive exceeded the bound-provider VM budget")
 -- A required provider must fail at load, with an actionable diagnostic.
 for _, invalid in ipairs({ false, true, 42, "provider", {} }) do
     local ok, message = pcall(Load, invalid)

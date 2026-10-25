@@ -231,15 +231,15 @@ local function Defer(reason)
   end
 end
 
-local function BeginHeaderLayoutRebind(header)
-  local begin = GF.BeginHeaderLayoutRebind
-  return type(begin) == "function" and begin(header) == true
+local function ShowReboundHeader(header)
+  header:Show()
 end
 
-local function EndHeaderLayoutRebind(header, active)
-  if active ~= true then return end
-  local finish = GF.EndHeaderLayoutRebind
-  if type(finish) == "function" then finish(header) end
+local function ShowReboundPriorityHeader(header, active, previousHeader, previousDepth, changed)
+  header:Show()
+  if changed and header.SetAttribute then
+    header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
+  end
 end
 
 local function HeaderName(key)
@@ -1656,9 +1656,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
     PositionPreservedRaidHeader(header, positionIndex, conf, anchor, spacing, blockW, blockH)
 
     if wasHiddenForLayout and header._msufPreservedGroupAllowed == true then
-      local coalescedShow = GF.ScanHeader and BeginHeaderLayoutRebind(header)
-      header:Show()
-      EndHeaderLayoutRebind(header, coalescedShow)
+      if not GF.RunHeaderLayoutRebind(header, GF.ScanHeader ~= nil, ShowReboundHeader) then return nil, false end
     elseif header._msufPreservedGroupAllowed ~= true then
       RetireHeader(header)
     end
@@ -1809,18 +1807,47 @@ function GF.SetupPriorityHeader(kind, nameList, count)
     or conf.growth == "LEFT" and "TOPRIGHT"
     or "TOPLEFT"
   header:SetPoint(origin, anchor, origin, 0, 0)
-  local coalescedShow = needsScan and BeginHeaderLayoutRebind(header)
-  header:Show()
-  if (changed or newHeader or reused or wasHidden) and header.SetAttribute then
-    header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
-  end
-  EndHeaderLayoutRebind(header, coalescedShow)
+  if not GF.RunHeaderLayoutRebind(header, needsScan, ShowReboundPriorityHeader, needsScan) then return nil, false end
 
   if needsScan and header.GetChildren then
     TagPriorityChildren(kind, header:GetChildren())
   end
   if needsScan and GF.ScanHeader then GF.ScanHeader("priority", kind) end
   return header, needsScan
+end
+
+local function CompleteHeaderLayoutRebind(header, active, previousHeader, previousDepth,
+  key, kind, conf, anchor, totalW, totalH, layoutCount, attrChanged, wasHiddenForLayout, newHeader, reused)
+  if wasHiddenForLayout then header:Show() end
+  --- Filtering and preserved-group layouts can make Blizzard's real secure
+  --- footprint differ from the estimate. Re-clamp against the measured header
+  --- once its attributes have synchronously rebuilt the child layout.
+  local actualW = header.GetWidth and header:GetWidth() or nil
+  local actualH = header.GetHeight and header:GetHeight() or nil
+  if actualW and actualH and actualW > 0.5 and actualH > 0.5
+    and (abs(actualW - totalW) > 0.01 or abs(actualH - totalH) > 0.01) then
+    totalW, totalH = actualW, actualH
+    anchor = EnsureAnchor(key, conf, totalW, totalH)
+  end
+  local countChanged = header._msufGFLastLayoutCount ~= layoutCount
+  if (attrChanged or countChanged) and header.SetAttribute and not InCombat() then
+    header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
+  end
+  header._msufGFLastLayoutCount = layoutCount
+  if active then GF.EndHeaderLayoutRebind(header) end
+  -- Attribute writes on a hidden header only update the secure layout recipe.
+  -- SecureGroupHeaderTemplate births its managed children from OnShow, so a
+  -- new/reused hidden header cannot consume the scan here. Runtime shows it and
+  -- performs the one required scan afterward. A visible hide/show rebind can be
+  -- scanned synchronously here and reports that work as already handled.
+  local needsChildScan = newHeader or reused or wasHiddenForLayout == true
+  local scanHandled = false
+  if GF.ScanHeader and needsChildScan and header.IsShown and header:IsShown() then
+    GF.ScanHeader(key, kind)
+    scanHandled = true
+  end
+  ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
+  return scanHandled
 end
 
 function GF.SetupHeader(key, kind)
@@ -1890,38 +1917,9 @@ function GF.SetupHeader(key, kind)
   --- anchor; applying the origin-to-center delta here a second time makes the
   --- visible block drift whenever the roster count changes.
   header:SetPoint(point, anchor, point, 0, 0)
-  local coalescedShow
-  if wasHiddenForLayout then
-    coalescedShow = GF.ScanHeader and BeginHeaderLayoutRebind(header)
-    header:Show()
-  end
-  --- Filtering and preserved-group layouts can make Blizzard's real secure
-  --- footprint differ from the estimate. Re-clamp against the measured header
-  --- once its attributes have synchronously rebuilt the child layout.
-  local actualW = header.GetWidth and header:GetWidth() or nil
-  local actualH = header.GetHeight and header:GetHeight() or nil
-  if actualW and actualH and actualW > 0.5 and actualH > 0.5
-    and (abs(actualW - totalW) > 0.01 or abs(actualH - totalH) > 0.01) then
-    totalW, totalH = actualW, actualH
-    anchor = EnsureAnchor(key, conf, totalW, totalH)
-  end
-  local countChanged = header._msufGFLastLayoutCount ~= layoutCount
-  header._msufGFLastLayoutCount = layoutCount
-  if (attrChanged or countChanged) and header.SetAttribute and not InCombat() then
-    header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
-  end
-  EndHeaderLayoutRebind(header, coalescedShow)
-  -- Attribute writes on a hidden header only update the secure layout recipe.
-  -- SecureGroupHeaderTemplate births its managed children from OnShow, so a
-  -- new/reused hidden header cannot consume the scan here. Runtime shows it and
-  -- performs the one required scan afterward. A visible hide/show rebind can be
-  -- scanned synchronously here and reports that work as already handled.
-  local needsChildScan = newHeader or reused or wasHiddenForLayout == true
-  local scanHandled = false
-  if GF.ScanHeader and needsChildScan and header.IsShown and header:IsShown() then
-    GF.ScanHeader(key, kind)
-    scanHandled = true
-  end
-  ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
+  local ok, scanHandled = GF.RunHeaderLayoutRebind(header, wasHiddenForLayout and GF.ScanHeader ~= nil,
+    CompleteHeaderLayoutRebind, key, kind, conf, anchor, totalW, totalH, layoutCount,
+    attrChanged, wasHiddenForLayout, newHeader, reused)
+  if not ok then return nil, false end
   return header, scanHandled
 end
