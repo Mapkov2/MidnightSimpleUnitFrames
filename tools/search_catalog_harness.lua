@@ -264,6 +264,16 @@ end
 -- Menu page request writers use the actual early core owners, even in this partial catalog world.
 assert(loadfile(Join(CORE, "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(Join(CORE, "UnitFrames/Engine/MSUF_UF_Preview.lua")))("MidnightSimpleUnitFrames", MSUF)
+-- Status pages paint their samples through MSUF.UFStatusRuntime, which needs the
+-- whole unit-frame engine. Search rows come from controls and never read sample
+-- pixels, so this partial catalog world paints nothing. Menu tests on the full
+-- client graph cover the real sample painters.
+if not MSUF.UFStatusRuntime then
+    MSUF.UFStatusRuntime = {
+        ResolveUnitIconSampleConfig = function() end,
+        PaintIconSample = function() return false end,
+    }
+end
 
 -- The Options TOC loads this namespace/capability bridge before its XML files.
 -- History and apply execution now precede the companion in the core graph.

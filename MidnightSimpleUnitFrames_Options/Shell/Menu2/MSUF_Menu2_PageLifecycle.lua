@@ -234,8 +234,12 @@ local function InstallUnitPageAreas()
         if spec.id == "texture_layer" then
             local original = {}
             for name, value in pairs(spec) do original[name] = value end
+            -- Same lazy/eager contract as UnitPage.BuildRegisteredSections; the
+            -- search projector clears BuildSectionLazy to force eager builds.
             local function BuildTextureArea(ctx, builder, unit)
-                return M.UnitPage.BuildSectionLazy(ctx, builder, unit, original)
+                local buildLazy = M.UnitPage.BuildSectionLazy
+                if original.lazy ~= false and buildLazy then return buildLazy(ctx, builder, unit, original) end
+                return original.build(ctx, builder, unit, original)
             end
             spec.lazy = false
             spec.build = function(ctx, builder, unit)

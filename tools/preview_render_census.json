@@ -357,7 +357,7 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "30ded06d735f9f377057aeca5daf661cf391b7cb7332f2341dbf5850f8694415"
+          "source_sha256": "2e80dde599ae5fb5b78d3d4323a4ec960ba79a66484431169211a4132ab47edb"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
@@ -491,7 +491,7 @@
       "support_sources": [
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Model.lua",
-          "source_sha256": "5b0f44f671a075dde7b9475f59e77fe2cbd9059c3038127781634802ac1ee1b7"
+          "source_sha256": "069d512f0f4e24a8d3cba91053cd92542a64cb4bfe3fc7bb575aa0aa07c1480b"
         }
       ],
       "review_note": "K4: removed unreachable ApplyPreviewFont, SetTex and MakeFS plus their owned dependency/export wiring. Shared scene rendering remains unchanged; only reviewed K4 source hashes refreshed.",
