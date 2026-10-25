@@ -18,35 +18,37 @@ core.GF.EnsureDB()
 -- Original ce4767d34 renderer, warmed real TOC/MenuWorld; allocations use the
 -- minimum of four 50-call windows (a 5-call window caught one-off table growth
 -- from unrelated load-time strings and tables, not per-refresh work).
+-- Refresh VM is +1 since c50ebdbe2: the PixelLayoutRegion "ready" field check
+-- on a cold region (warm visits drop 34011 -> 16011 VM per 1000).
 local pins = {
     Mainline = {
-        ["party.refresh"] = { 63887, 2541, 34.077246 },
+        ["party.refresh"] = { 63888, 2541, 34.077246 },
         ["party.animate"] = { 37787, 1335, 23.188281 },
-        ["raid.refresh"] = { 64664, 2564, 34.653809 },
+        ["raid.refresh"] = { 64665, 2564, 34.653809 },
         ["raid.animate"] = { 38019, 1334, 23.416719 },
     },
     Vanilla = {
-        ["party.refresh"] = { 66265, 2666, 34.260684 },
+        ["party.refresh"] = { 66266, 2666, 34.260684 },
         ["party.animate"] = { 38757, 1382, 23.277969 },
-        ["raid.refresh"] = { 67010, 2689, 34.837246 },
+        ["raid.refresh"] = { 67011, 2689, 34.837246 },
         ["raid.animate"] = { 38989, 1381, 23.573418 },
     },
     TBC = {
-        ["party.refresh"] = { 67033, 2738, 34.261934 },
+        ["party.refresh"] = { 67034, 2738, 34.261934 },
         ["party.animate"] = { 38757, 1382, 23.279219 },
-        ["raid.refresh"] = { 67778, 2761, 34.838496 },
+        ["raid.refresh"] = { 67779, 2761, 34.838496 },
         ["raid.animate"] = { 38989, 1381, 23.510469 },
     },
     Mists = {
-        ["party.refresh"] = { 66123, 2687, 34.261934 },
+        ["party.refresh"] = { 66124, 2687, 34.261934 },
         ["party.animate"] = { 38350, 1365, 23.279219 },
-        ["raid.refresh"] = { 66897, 2710, 34.838496 },
+        ["raid.refresh"] = { 66898, 2710, 34.838496 },
         ["raid.animate"] = { 38582, 1364, 23.510469 },
     },
     Forever = {
-        ["party.refresh"] = { 64344, 2536, 34.074434 },
+        ["party.refresh"] = { 64345, 2536, 34.074434 },
         ["party.animate"] = { 38206, 1352, 23.185469 },
-        ["raid.refresh"] = { 65092, 2559, 34.650996 },
+        ["raid.refresh"] = { 65093, 2559, 34.650996 },
         ["raid.animate"] = { 38438, 1351, 23.416719 },
     },
 }
