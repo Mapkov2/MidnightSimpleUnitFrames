@@ -295,6 +295,14 @@ local function ColorStorageSetting(path)
         return schema.Record({ "{unit}.{indicator}ColorR", "{unit}.{indicator}ColorG", "{unit}.{indicator}ColorB" })
     end
 end
+-- The selected-color commands initialize both override maps. Full-color off
+-- may also leave its freshly created enablement map empty.
+local CLASS_POWER_COMPANION_WRITES = {
+    ["class_power.editor.foreground_color"] = { "general.classPowerBgColorOverrides" },
+    ["class_power.editor.background_color"] = { "general.classPowerColorOverrides" },
+    ["class_power.full_resource.color"] = { "general.classPowerBgColorOverrides" },
+    ["class_power.full_resource.enabled"] = { "bars.classPowerFullColorEnabled" },
+}
 local function Meta(path, classification, exact)
     exact = type(exact) == "table" and exact or {}
     if exact.settingKey == nil then
@@ -319,6 +327,10 @@ local function Meta(path, classification, exact)
         exact.searchSettingKeyPatterns = COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]
     end
     exact.setting = exact.setting or ColorStorageSetting(path)
+    exact.companionWrites = exact.companionWrites or CLASS_POWER_COMPANION_WRITES[path]
+    if path:match("^class_power%.resource_slots%.slot%.%d+$") then
+        exact.companionWrites = { "general.classPowerBgColorOverrides" }
+    end
     return ControlMeta("opt_colors", "advanced", path, classification, exact)
 end
 CP.Meta = Meta

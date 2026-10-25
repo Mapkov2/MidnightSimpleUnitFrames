@@ -293,16 +293,10 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
         return tonumber(g and g.fontSize) or 14
     end
     local function PreviewText(parent, text, x, y, width)
-        local id = parent._msuf2ControlSchema.id .. ".preview"
-        local preview = Schema.Build(ctx, parent, {
-            { "text", "label", nil, { "Preview", x, y, width, T.colors.accent }, scope = unit, domain = "preview",
-                meta = { controlId = id .. ".label" } },
-            { "font", "value", nil, { "GameFontNormalSmall", text, T.colors.text }, scope = unit, domain = "preview",
-                anchor = { "TOPLEFT", parent, "TOPLEFT", x, y - 20 }, meta = { controlId = id } },
-        })
-        preview.value:SetWidth(width or 220)
-        preview.value:SetJustifyH("LEFT")
-        return preview.label, preview.value
+        local label, value = UnitSectionShared.PreviewText(parent, text, x, y, width, T.colors.accent)
+        Schema.Custom(value, { id = parent._msuf2ControlSchema.id .. ".preview", kind = "preview", scope = unit,
+            applyDomain = "preview", owner = value, label = label })
+        return label, value
     end
     local function OptionText(values, value)
         value = value or ""
@@ -315,44 +309,6 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
     local function TextModeHasPercent(mode)
         return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
     end
-    local absorbModeBase = {
-        CURRENTABSORB = "CURRENT", FULLVALUEABSORB = "FULLVALUE", MAXABSORB = "MAX", DEFICITABSORB = "DEFICIT",
-        CURMAXABSORB = "CURMAX", PERCENTABSORB = "PERCENT", CURPERCENTABSORB = "CURPERCENT",
-        CURMAXPERCENTABSORB = "CURMAXPERCENT", MAXPERCENTABSORB = "MAXPERCENT",
-        PERCENTCURABSORB = "PERCENTCUR", PERCENTMAXABSORB = "PERCENTMAX",
-        PERCENTCURMAXABSORB = "PERCENTCURMAX", MAXCURABSORB = "MAXCUR",
-        PERCENTMAXCURABSORB = "PERCENTMAXCUR",
-    }
-    local absorbIconMarkup = "|TInterface\\Icons\\INV_Shield_06:0|t"
-    local function TextModeExample(mode, delimiter, isPower, decimalPercent, hidePercentSymbol, abbreviateFullValue, absorbIcon)
-        mode = tostring(mode or "NONE"):upper()
-        if mode == "NONE" then return nil end
-        local absorbBase = absorbModeBase[mode]
-        local cur = isPower and "100" or (abbreviateFullValue and "630.0k" or "630,000")
-        local maxText = isPower and "100" or (abbreviateFullValue and "1.0m" or "1,000,000")
-        local absorb = abbreviateFullValue and "125.0k" or "125,000"
-        local absorbText = (absorbIcon and (absorbIconMarkup .. " ") or "") .. absorb
-        local pct = isPower and "100" or (decimalPercent and "63.4" or "63")
-        if hidePercentSymbol ~= true then pct = pct .. "%" end
-        if mode == "ABSORB" then return absorbText end
-        mode = absorbBase or mode
-        local value
-        if mode == "PERCENT" then value = pct
-        elseif mode == "CURRENT" or mode == "FULLVALUE" then value = cur
-        elseif mode == "MAX" then value = maxText
-        elseif mode == "DEFICIT" then value = abbreviateFullValue and "-370.0k" or "-370,000"
-        elseif mode == "CURMAX" then value = cur .. delimiter .. maxText
-        elseif mode == "MAXCUR" then value = maxText .. delimiter .. cur
-        elseif mode == "CURPERCENT" then value = cur .. delimiter .. pct
-        elseif mode == "PERCENTCUR" then value = pct .. delimiter .. cur
-        elseif mode == "CURMAXPERCENT" then value = cur .. delimiter .. maxText .. delimiter .. pct
-        elseif mode == "PERCENTMAXCUR" then value = pct .. delimiter .. maxText .. delimiter .. cur
-        elseif mode == "MAXPERCENT" then value = maxText .. delimiter .. pct
-        elseif mode == "PERCENTMAX" then value = pct .. delimiter .. maxText
-        elseif mode == "PERCENTCURMAX" then value = pct .. delimiter .. cur .. delimiter .. maxText
-        else value = cur end
-        return absorbBase and (value .. " + " .. absorbText) or value
-    end
     -- The reversed-order mapping is the engine's (the group text DB and the
     -- unit bar element carry the same table); the preview reads it there.
     local function ReversePreviewHealthMode(mode)
@@ -361,8 +317,8 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
     state.tabFrames, state.mouseoverFadeControls, state.MouseoverControl = tabFrames, mouseoverFadeControls, MouseoverControl
     state.ReadSlot, state.ReadSlotHidePercentSymbol, state.EffectiveTextSize, state.PreviewText =
         ReadSlot, ReadSlotHidePercentSymbol, EffectiveTextSize, PreviewText
-    state.OptionText, state.TextModeHasPercent, state.TextModeExample, state.ReversePreviewHealthMode =
-        OptionText, TextModeHasPercent, TextModeExample, ReversePreviewHealthMode
+    state.OptionText, state.TextModeHasPercent, state.ReversePreviewHealthMode =
+        OptionText, TextModeHasPercent, ReversePreviewHealthMode
 end
 function TextSection.BuildHeaderBadges(state, unit)
     local sec, CurrentTextTab, RefreshTextControlState, ReadSlot = state.sec, state.CurrentTextTab, state.RefreshTextControlState, state.ReadSlot
@@ -691,7 +647,7 @@ end
 function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, cfg, controls)
     local cardW, halfDropdownW, FixedSettingMeta = state.cardW, state.halfDropdownW, state.FixedSettingMeta
     local ReadSlot, ReadSlotHidePercentSymbol = state.ReadSlot, state.ReadSlotHidePercentSymbol
-    local ReversePreviewHealthMode, TextModeExample = state.ReversePreviewHealthMode, state.TextModeExample
+    local ReversePreviewHealthMode = state.ReversePreviewHealthMode
     local function FullValueShortEnabled()
         if not cfg.fullValueShortKey then return false end
         local value = ReadText(unit, cfg.fullValueShortKey, nil)
@@ -717,21 +673,11 @@ function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, c
             hideLeft, hideRight = hideRight, hideLeft
             iconLeft, iconRight = iconRight, iconLeft
         end
-        local delimiter = cfg.separatorGet and cfg.separatorGet() or ""
-        local parts = {}
-        local values = {
-            { leftMode, hideLeft, iconLeft },
-            { centerMode, hideCenter, iconCenter },
-            { rightMode, hideRight, iconRight },
-        }
-        for i = 1, #values do
-            local text = TextModeExample(values[i][1], delimiter, cfg.isPower == true,
-                cfg.decimalsKey and ReadText(unit, cfg.decimalsKey, false) == true,
-                values[i][2], FullValueShortEnabled(),
-                values[i][3])
-            if text then parts[#parts + 1] = text end
-        end
-        controls.preview:SetText(#parts > 0 and table.concat(parts, "  ") or "(none)")
+        UnitSectionShared.PaintTextPreview(controls.preview,
+            { { leftMode, hideLeft, iconLeft }, { centerMode, hideCenter, iconCenter }, { rightMode, hideRight, iconRight } },
+            { delimiter = cfg.separatorGet and cfg.separatorGet() or "", isPower = cfg.isPower == true,
+                decimals = cfg.decimalsKey and ReadText(unit, cfg.decimalsKey, false) == true,
+                short = FullValueShortEnabled() })
     end
     local formattingY = cfg.absorbIconKey ~= nil and -310 or -248
     Schema.Build(ctx, content, {

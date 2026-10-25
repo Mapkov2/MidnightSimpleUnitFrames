@@ -1089,7 +1089,8 @@ local function ApplySearchRoute(pageKey, route)
             local value = general[key]
             if value ~= nil and db[key] ~= value then
                 db[key] = value
-                changed, rebuild = true, true
+                changed = true
+                if not RouteStateIsView(pageKey, "general." .. key) then rebuild = true end
             end
         end
     end

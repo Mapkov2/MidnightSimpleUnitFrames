@@ -16753,6 +16753,72 @@
           "reason": "Optional Modern Dark Suite factory payload for Mainline and WoW Forever; the Suite does not ship on Vanilla, Mists or TBC"
         }
       ]
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower_Layout.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group_Portrait.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group_Order.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace_Lists.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace_Style.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace_Setup.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua"
     }
   ],
   "reviewed_lists": {

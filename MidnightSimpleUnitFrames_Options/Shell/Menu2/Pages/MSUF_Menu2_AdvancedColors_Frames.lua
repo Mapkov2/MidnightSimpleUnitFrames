@@ -97,17 +97,24 @@ function Build.BarGradients(ctx, b)
     local compact = sectionW < 560
     local resetY = compact and (colorY - 86) or (colorY - 44)
     local section = ColorsSection(b, "colors_bar_gradients", "Bar Gradient Colors", math.abs(resetY) + 54, true)
+    local scopeSpec = { id = Meta("bar_gradient.scope.selector", "ephemeral").controlId,
+        kind = "segment", scope = "colors", applyDomain = "selection", scopeOwner = true,
+        setting = "general.hpPowerTextSelectedKey", get = CurrentBarsScope, values = values,
+        write = { source = G, convert = NormalizeScopeKey,
+            after = function()
+                if M.RequestRefresh then M.RequestRefresh(ctx, "bar-gradient-color-scope")
+                elseif M.Refresh then M.Refresh(ctx) end
+            end
+        } --[[schema setter: J5.Colors.Scope]] }
+    scopeSpec.set = Schema.Setter(scopeSpec)
     local scopeBar = W.ScopeOverrideBar(ctx, section, {
         values = values, width = sectionW, getValue = CurrentBarsScope,
-        setValue = function(value)
-            G().hpPowerTextSelectedKey = NormalizeScopeKey(value)
-            if M.RequestRefresh then M.RequestRefresh(ctx, "bar-gradient-color-scope")
-            elseif M.Refresh then M.Refresh(ctx) end
-        end,
+        setValue = scopeSpec.set,
         hasOverride = function(value) return value ~= "shared" and ScopeHasOverride(value, "hlOverride") end,
     })
     RegisterControl(scopeBar, Meta("bar_gradient.scope.selector", "ephemeral"), "Editing:", "segment", values)
     Schema.ScopeOwner(scopeBar, "colors", nil, "general.hpPowerTextSelectedKey")
+    Schema.Custom(scopeBar, scopeSpec)
     local hint = W.Text(section, "Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope.",
         14, colorY + 28, sectionW - 28, T.colors.muted)
     hint:SetJustifyH("LEFT")
@@ -203,10 +210,8 @@ function Build.Background(ctx, b)
         nil, nil, Meta("general.classBarBg"), { 0, 0, 0 }), "unitColors")
     ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -228,
         function() return G().darkBgCustomColor == true end,
-        function(v)
-            G().darkBgCustomColor = v and true or false
-            ApplyBackgroundColorPreview()
-        end,
+        { write = { source = G, boolean = true, after = ApplyBackgroundColorPreview
+        } --[[schema setter: J5.Colors.DarkBackground]] },
         Meta("background.dark_mode_custom_color"))
     Owned(ButtonAt(background, "Reset to black", 12, -274, 140, function()
         if not ApiCall("ResetClassBarBgColor") then
@@ -476,13 +481,14 @@ function Build.BarColors(ctx, b)
         nil, nil, Meta("bar.outline_color"), { 0, 0, 0 }), "unitColors")
     local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -148,
         function() return ApiValue("GetPowerBarBackgroundMatchHP", function() return G().powerBarBgMatchBarColor == true end) end,
-        function(v)
-            if not ApiCall("SetPowerBarBackgroundMatchHP", v) then
-                G().powerBarBgMatchBarColor = v and true or false
-                ApplyColors()
-            end
-            SetControlEnabled(powerBg, not (v and true or false))
-        end,
+        { write = { source = G, call = function(record, key, value)
+                if not ApiCall("SetPowerBarBackgroundMatchHP", value) then
+                    record[key] = value and true or false
+                    ApplyColors()
+                end
+            end,
+            after = function(value) SetControlEnabled(powerBg, not (value and true or false)) end
+        } --[[schema setter: J5.Colors.PowerBackground]] },
         Meta("bar.power_background_match_health"))
     GeneralBarColor("Power loss glow", barRightX, -182, "powerLossColor", { 0.70, 0.90, 1 }, "bar.power_loss_color")
     Owned(ButtonAt(barColors, "Reset Bar Colors", barLeftX, -234, 160, function()
@@ -534,13 +540,13 @@ function Build.Castbar(ctx, b)
     local overrideEnable
     local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -190, ValueTextPairs "CLASS=Class color|CUSTOM=Custom color", overrideModeW,
         function() return ApiValue("GetPlayerCastbarOverrideMode", function() return G().playerCastbarOverrideMode or "CLASS" end) end,
-        function(v)
-            if not ApiCall("SetPlayerCastbarOverrideMode", v) then
-                G().playerCastbarOverrideMode = v
-                ApplyCastbarColors()
+        { write = { source = G, call = function(record, key, value)
+                if not ApiCall("SetPlayerCastbarOverrideMode", value) then record[key] = value ApplyCastbarColors() end
+            end,
+            after = function(value)
+                SetControlEnabled(overrideColor, (overrideEnable and overrideEnable:GetChecked() and true or false) and value == "CUSTOM")
             end
-            SetControlEnabled(overrideColor, (overrideEnable and overrideEnable:GetChecked() and true or false) and v == "CUSTOM")
-        end,
+        } --[[schema setter: J5.Colors.CastbarMode]] },
         Meta("castbar.player_override.mode"))
     local function RefreshCastbarOverrideControls(enabled)
         if enabled == nil then enabled = overrideEnable and overrideEnable:GetChecked() and true or false end
@@ -549,13 +555,14 @@ function Build.Castbar(ctx, b)
     end
     overrideEnable = ValueSwitchAt(ctx, castbar, "Player override", 12, -190, 260,
         function() return ApiValue("GetPlayerCastbarOverrideEnabled", function() return G().playerCastbarOverrideEnabled == true end) end,
-        function(v)
-            if not ApiCall("SetPlayerCastbarOverrideEnabled", v) then
-                G().playerCastbarOverrideEnabled = v and true or false
-                ApplyCastbarColors()
-            end
-            RefreshCastbarOverrideControls(v and true or false)
-        end,
+        { write = { source = G, call = function(record, key, value)
+                if not ApiCall("SetPlayerCastbarOverrideEnabled", value) then
+                    record[key] = value and true or false
+                    ApplyCastbarColors()
+                end
+            end,
+            after = function(value) RefreshCastbarOverrideControls(value and true or false) end
+        } --[[schema setter: J5.Colors.CastbarEnabled]] },
         Meta("castbar.player_override.enabled"))
     LabelAt(castbar, "Interrupt Ready Indicator", 12, -280, 260, "GameFontNormal", T.colors.text)
     for _, control in pairs(BuildTableColorSpecs(ctx, castbar, G, {

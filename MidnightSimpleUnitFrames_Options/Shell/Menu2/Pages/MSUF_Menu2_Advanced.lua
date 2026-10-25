@@ -81,6 +81,7 @@ local DeepCopyTable = M.DeepCopy
 -- Every bound row declares through Schema.Bind: the row metadata names the stable ID and the setting key,
 -- the get/set pair keeps the page's own writer and apply route.
 local function BoundRow(ctx, parent, kind, key, default, args, metadata, get, set, writePolicy)
+    if type(set) == "table" then writePolicy, set = set.write, nil end
     local id = type(metadata) == "table" and metadata.controlId
     assert(id, "advanced bound row needs a stable control ID: " .. tostring(key))
     return Row(ctx, parent, { kind, key, default, args, bind = function(widget)

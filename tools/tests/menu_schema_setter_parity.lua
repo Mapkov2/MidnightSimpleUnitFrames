@@ -78,6 +78,14 @@ local function Rewrite(source, path)
         end))
 end
 local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true, beforeCore = function(world)
+    -- Text previews call native numeric formatters, whose generic world stub
+    -- returns opaque tables. Supply finite-number strings before capture.
+    local function NativeNumber(value)
+        assert(type(value) == "number" and value == value and value - value == 0, "non-finite native format input")
+        return string.format("%g", value)
+    end
+    world.env.AbbreviateNumbers, world.env.AbbreviateLargeNumbers = NativeNumber, NativeNumber
+    world.env.BreakUpLargeNumbers = NativeNumber
     -- Exercise the conditional Classic PetXP provider; the base menu world
     -- omits its optional native API, causing that real module to return early.
     if world.client.isClassic then world.env.GetPetExperience = function() return 25, 100 end end
@@ -243,6 +251,37 @@ for _, key in ipairs(pages) do
     end
     assert(not entry._msuf2BuildIncomplete, key .. ": incomplete page")
 end
+-- The non-default Colors categories build lazily from their existing host.
+assert(mw:Select("opt_colors"))
+for _, section in ipairs({ "colors_auras", "colors_castbar", "colors_class_power" }) do
+    M.ColorsEnsureCategoryBuilt(section)
+end
+for _, section in pairs(M.cache.opt_colors.sections or {}) do
+    local disclosure = section._msuf2CollapsibleEntry
+    if disclosure then
+        if disclosure._msuf2EnsureContent then disclosure._msuf2EnsureContent() end
+        disclosure.SetOpenImmediate(true)
+    end
+end
+mw:RunTimers()
+-- Build the finite Custom Aura tools as real page-owned declarations. Their
+-- positional controls are otherwise absent from a default unit page's first view.
+for _, unit in ipairs({ "player", "target" }) do
+    local key = "uf_" .. unit
+    local entry = M.cache[key]
+    local ctx = M.CreateContext(key, entry.wrapper, entry)
+    for index = 1, 4 do
+        for _, tool in ipairs({ "filters", "layout", "appearance", "effect", "behavior", "setup", "whitelist" }) do
+            local builder = M.Widgets.PageBuilder(ctx)
+            M.BuildAuras3CompactCustomWorkspace(ctx, builder, unit, index, tool)
+        end
+    end
+end
+M.gfScope = "party"
+M.gfAuraLaneSelection.party = "externals"
+M.gfAuraToolSelection.party.externals = "layout"
+assert(mw:Select("gf_auras"))
+assert(not M.cache.gf_auras._msuf2BuildIncomplete, "external filter view incomplete")
 -- These exported factories currently have no page consumer. Exercise their real
 -- declaration/binding seam so their conversion cannot escape the differential.
 do
@@ -280,7 +319,7 @@ do
 end
 local missingSource = {}
 for id in pairs(fixtures) do
-    if id:match("^H4%.") and not loaded[id] then missingSource[#missingSource + 1] = id end
+    if (id:match("^H4%.") or id:match("^J5%.")) and not loaded[id] then missingSource[#missingSource + 1] = id end
 end
 table.sort(missingSource)
 assert(#missingSource == 0, "new derived policies missing from source: " .. table.concat(missingSource, ", "))
@@ -298,6 +337,11 @@ if arg[3] == "--inventory-only" then
 end
 local function Candidates(control)
     local spec, widget = control.spec, control.widget
+    if control.command and spec.scopeOwner and spec.write then
+        local values = {}
+        for _, item in ipairs(spec.values) do values[#values + 1] = item.value end
+        return values
+    end
     if control.command then
         local kind = spec.meta and spec.meta.command and spec.meta.command.kind
         if kind == "textinput" then return { "17", "not-a-number" } end
@@ -333,6 +377,7 @@ local function Candidates(control)
 end
 local function Drive(control, value)
     local widget, kind = control.widget, control.spec.kind
+    if control.command and control.spec.scopeOwner and control.spec.write then return widget:SetValue(value) end
     if control.command and control.frozen.id:match("^H4%.") then return control.spec.set(value) end
     if control.command then MenuWorld.FireScript(widget, "OnClick", "LeftButton"); return end
     if kind == "toggle" then MenuWorld.FireScript(widget, "OnClick", "LeftButton")
@@ -422,6 +467,43 @@ local function CheckWrites(spec, before, after, path)
         assert(M.ControlSchema.MatchesWrite(spec, path), spec.id .. ": undeclared profile write " .. path)
     end
 end
+-- A record-creation companion permits the empty parent; populated sibling
+-- maps must still survive the command byte-for-byte.
+local function CheckColorCompanion(spec, set, value, b, c, before)
+    local root, field, target = "general"
+    if spec.id:match("%.class%.power%.editor%.background%.color$") then field = "classPowerColorOverrides"
+    elseif spec.id:match("%.class%.power%.editor%.foreground%.color$")
+        or spec.id:match("%.class%.power%.full%.resource%.color$")
+        or spec.id:match("%.class%.power%.resource%.slots%.slot%.%d+$") then field = "classPowerBgColorOverrides"
+    elseif spec.id:match("%.class%.power%.full%.resource%.enabled$") then
+        root, field, target = "bars", "classPowerFullColorEnabled", M.colorsCPToken or "COMBO_POINTS"
+    end
+    if not field then return 0 end
+    local profile = M.EnsureDB()
+    Replace(profile, before)
+    profile[root][field] = { unchanged = { r = 0.13, g = 0.27, b = 0.41 } }
+    local expected, seeded = Copy(profile[root][field]), Copy(profile)
+    set(value, b, c)
+    if target then expected[target] = profile[root][field][target] end
+    assert(Equal(profile[root][field], expected), spec.id .. ": changed existing companion entries")
+    CheckWrites(spec, seeded, profile, "")
+    return 1
+end
+local function SelectSlotOwner(spec, widget)
+    local slot = tonumber(spec.id:match("%.class%.power%.resource%.slots%.slot%.(%d+)$"))
+    if not slot then return true end
+    local cp = M.ColorsPage
+    local token = M.colorsCPToken or "COMBO_POINTS"
+    if mw.core.Client.SupportsClassResource(token) and cp.ClassPowerSlotCount(token) >= slot then return true end
+    for _, resource in ipairs(cp.CLASS_POWER_SLOT_RESOURCES) do
+        if mw.core.Client.SupportsClassResource(resource[1]) and cp.ClassPowerSlotCount(resource[1]) >= slot then
+            M.SetMenuStateValue("colorsCPToken", resource[1])
+            return true
+        end
+    end
+    assert(widget:IsShown() == false, spec.id .. ": unavailable resource slot is actionable")
+    return false
+end
 local function ReplayCustomContracts()
     assert(M.RuntimeControlCatalog.Get("menu2.auras3_buffs.auras.style.appearance.icon-style.styleborderenabled"),
         "split aura page lost its concrete catalog identity")
@@ -444,7 +526,7 @@ local function ReplayCustomContracts()
         if widget._msuf2ControlSchema == spec and spec.applyDomain ~= "profiles" and spec.scope ~= "profiles"
             and not spec.id:match("advancedprofiles") and not spec.id:match("%.opt_profiles%.")
             and (spec.kind == "toggle" or spec.kind == "slider" or spec.kind == "dropdown"
-                or spec.kind == "segment" or spec.kind == "color") then
+                or spec.kind == "segment" or spec.kind == "color") and SelectSlotOwner(spec, widget) then
             local profile, original = M.EnsureDB(), Copy(M.EnsureDB())
             -- The dedicated Pet XP width row is actionable only for that selected indicator.
             if spec.id:match("%.msuf2_pet_xp_width$") then M.unitStatusSelection.pet = "statusPetXP" end
@@ -496,6 +578,7 @@ local function ReplayCustomContracts()
                         local contract = assert(catalog.GetWriteContract(spec.id), spec.id .. ": catalog lost its write contract")
                         assert(Equal(contract, spec.writes), spec.id .. ": catalog write contract differs from the live declaration")
                     end
+                    cases = cases + CheckColorCompanion(spec, set, value, b, c, before)
                 end)
                 if not ok then issues[#issues + 1] = spec.id .. ": " .. tostring(why) end
                 cases = cases + 1
@@ -593,6 +676,17 @@ if arg[3] == "--scalar-edges-only" then return end
 local function Check(ok, message)
     if not ok then failures[#failures + 1] = message end
 end
+if arg[3] == "--j5-only" then
+    local focused = {}
+    for _, control in ipairs(controls) do
+        local id = control.frozen.id
+        if id:match("^J5%.") or id == "Schema.Record" or id == "Schema.Scope" then
+            focused[#focused + 1] = control
+        end
+    end
+    controls = focused
+    assert(#controls > 80, "missing real J5 control variants")
+end
 local resets, scopeChecks = 0, 0
 for _, control in ipairs(controls) do
     local spec = control.spec
@@ -604,6 +698,13 @@ for _, control in ipairs(controls) do
     end
     for _, scope in ipairs(scopes) do
     M.gfScope = scope
+    if control.frozen.id:match("^J5%.UnitStatus%.") and spec.write.targetAvailable then
+        M.unitStatusSelection = M.unitStatusSelection or {}
+        for _, entry in ipairs(M.UnitPage.StatusValues(spec.scope)) do
+            M.unitStatusSelection[spec.scope] = entry.value
+            if spec.write.targetAvailable() then break end
+        end
+    end
     scopeChecks = scopeChecks + 1
     local baseline = Copy(M.EnsureDB())
     local labels = {}
@@ -634,7 +735,8 @@ for _, control in ipairs(controls) do
             -- Drive the same section-reset operation the popup calls. The
             -- frozen branch is its former raw-key copy; the new branch uses
             -- the production declaration routing, inside identical history.
-            local path = M.ControlSchema.ResolvePath(spec)
+            local available = not spec.write.targetAvailable or spec.write.targetAvailable()
+            local path = available and M.ControlSchema.ResolvePath(spec) or ""
             local targetRoot, field = path:match("^([^.]+)%.([^.]+)$")
             -- A virtual search command has no native section to reset.
             if candidateIndex == 1 and targetRoot and scope == "party" and not control.widget._msuf2VirtualRuntimeControl then
@@ -696,6 +798,12 @@ local fixtureCount = 0
 for _ in pairs(seenFixtures) do fixtureCount = fixtureCount + 1 end
 local missing = {}
 local unavailable = {
+    ["J5.CustomStyle.PandemicEnabled"] = not mw.core.MSUF_Auras3.ApplyPandemicVisual,
+    ["J5.CustomStyle.8"] = not mw.core.MSUF_Auras3.ApplyPandemicVisual,
+    ["J5.CustomStyle.9"] = not mw.core.MSUF_Auras3.ApplyPandemicVisual,
+    ["J5.CustomStyle.10"] = not mw.core.MSUF_Auras3.ApplyPandemicVisual,
+    ["J5.CustomStyle.11"] = not mw.core.MSUF_Auras3.ApplyPandemicVisual,
+    ["J5.CustomStyle.27"] = not mw.core.MSUF_Auras3.ApplyPandemicVisual,
     ["AdvancedColors.9"] = not mw.core.Client.SupportsTapDenied,
     ["SwingTimers.1"] = not mw.core.Client.IsForever,
     ["H4.SwingTimers.1"] = not mw.core.Client.IsForever,
@@ -725,4 +833,4 @@ for _, control in ipairs(controls) do receipt:write(control.page, "\t", control.
 receipt:close()
 print(("PASS schema setters %s: %d controls, %d scope contexts, %d cases, %d reset replays, %d lazy/sparse resets, %d policies")
     :format(flavor, #controls, scopeChecks, checks, resets, sectionResetChecks, fixtureCount))
-ReplayCustomContracts()
+if arg[3] ~= "--j5-only" then ReplayCustomContracts() end

@@ -234,6 +234,37 @@ function StatusSection.PrepareSearch(state, ctx, unit)
     state.StatusSearchKeywords, state.selectedStatusContract, state.RegisterStatusSearch =
         StatusSearchKeywords, selectedStatusContract, RegisterStatusSearch
 end
+-- Native status rows keep their original input metadata and binding lifecycle.
+-- The physical family is declared before binding and follows the selected icon.
+local function BindScalar(ctx, widget, unit, path, kind, get, declaration, fallback, nativeMetadata)
+    local setting = declaration.setting or (declaration.key and unit .. "." .. declaration.key)
+    local field, policy = declaration.field, declaration.write
+    if field then
+        local keys = {}
+        for _, entry in ipairs(StatusValues(unit)) do
+            local spec = FindStatusSpec(unit, entry.value)
+            if spec and spec[field] then keys[#keys + 1] = unit .. "." .. spec[field] end
+        end
+        local function Available()
+            local selected = CurrentStatusSpec(unit)
+            return selected and selected[field] ~= nil
+        end
+        setting = Schema.Family(keys, function()
+            local selected = CurrentStatusSpec(unit)
+            return selected and selected[field] and unit .. "." .. selected[field]
+        end)
+        policy.accept, policy.targetAvailable = Available, Available
+    end
+    local meta = ControlMeta(ctx, path, "setting")
+    local spec = { id = meta.controlId, kind = kind, scope = unit, applyDomain = "unitStatus", meta = meta,
+        setting = setting, get = get, write = policy, nativeMetadata = { nativeMetadata },
+        defaultSource = function() return fallback end }
+    if kind == "slider" then
+        local low, high = widget:GetMinMaxValues()
+        spec.range = { low, high, 1 }
+    end
+    return Schema.Bind(ctx, widget, spec)
+end
 function StatusSection.PrepareBinders(state, ctx, unit)
     local PlaceButton = state.PlaceButton
     local function RefreshStatusMenu()
@@ -269,7 +300,7 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         scope = unit, beforeBind = function(control)
             Shared.PlaceSlider(parent, control, xPos, yPos, width)
         end, bind = function(control)
-            M.BindNumberWidget(ctx, control,
+            BindScalar(ctx, control, unit, path, "slider",
                 function()
                     local spec = CurrentStatusSpec(unit)
                     if not spec then return fallback end
@@ -279,12 +310,10 @@ function StatusSection.PrepareBinders(state, ctx, unit)
                     local value = ReadStatusNumber(unit, spec[specKey], spec[defaultKey], legacyKey)
                     return normalize and normalize(value, spec) or value
                 end,
-                function(value)
-                    local spec = CurrentStatusSpec(unit)
-                    if not spec then return end
-                    SetNumber(unit, spec[specKey], normalize and normalize(value, spec) or value, reason, { preview = true })
-                    RefreshStatusRuntime(unit, spec)
-                end,
+                { field = specKey, write = { call = SetNumber, args = { reason, { preview = true } },
+                    convert = normalize and function(value) return normalize(value, CurrentStatusSpec(unit)) end or nil,
+                    after = function() RefreshStatusRuntime(unit, CurrentStatusSpec(unit)) end
+                } --[[schema setter: J5.UnitStatus.Placement]] },
                 fallback, { step = 1, roundStep = true })
         end }}, ROW_OPTIONS)[path]
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, path, nil, selectedStatusContract)
@@ -297,13 +326,14 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         local path = "status.preview." .. tostring(reason):lower()
         local control = Schema.Build(ctx, parent, {{ "toggle", path, nil, { label, xPos, yPos, width },
         scope = unit, bind = function(control)
-            M.BindBoolWidget(ctx, control,
+            BindScalar(ctx, control, unit, path, "toggle",
                 function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
-                function(value)
-                    SetBool(unit, "stateIconsTestMode", value, reason, { preview = true })
-                    RefreshStatusIcons = RefreshStatusIcons or MSUF.Require("MSUF_RequestStatusIconsRefreshForCurrent", FILE)
-                    RefreshStatusIcons(unit, reason or "MSUF2_STATUS_TEST")
-                end)
+                { key = "stateIconsTestMode", write = { call = SetBool, args = { reason, { preview = true } },
+                    after = function()
+                        RefreshStatusIcons = RefreshStatusIcons or MSUF.Require("MSUF_RequestStatusIconsRefreshForCurrent", FILE)
+                        RefreshStatusIcons(unit, reason or "MSUF2_STATUS_TEST")
+                    end
+                } --[[schema setter: J5.UnitStatus.TestMode]] })
         end }}, ROW_OPTIONS)[path]
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, path, "ephemeral")
         M.ControlSchema.SetSetting(control, unit .. ".stateIconsTestMode")
@@ -338,22 +368,20 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         scope = unit, beforeBind = function(control)
             Shared.PlaceDropdown(parent, control, xPos, yPos, moveWidth)
         end, bind = function(control)
-            M.BindDropdownWidget(ctx, control,
+            BindScalar(ctx, control, unit, path, "dropdown",
                 function()
                     local spec = CurrentStatusSpec(unit)
                     local key = spec and spec[specField]
                     local legacyKey = specField == "anchor" and spec and spec.legacyAnchor or nil
                     return key and ReadStatusString(unit, key, ResolveStatusDefault(defaultValue, spec), legacyKey) or ResolveStatusDefault(defaultValue, spec)
                 end,
-                function(value)
-                    local spec = CurrentStatusSpec(unit)
-                    local key = spec and spec[specField]
-                    if not key then return end
-                    local fallback = ResolveStatusDefault(defaultValue, spec)
-                    SetString(unit, key, value or fallback, reason, { preview = true })
-                    RefreshStatusRuntime(unit, spec)
-                    if afterSet then afterSet() end
-                end)
+                { field = specField, write = { call = SetString, args = { reason, { preview = true } },
+                    convert = function(value) return value or ResolveStatusDefault(defaultValue, CurrentStatusSpec(unit)) end,
+                    after = function()
+                        RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                        if afterSet then afterSet() end
+                    end
+                } --[[schema setter: J5.UnitStatus.Choice]] })
         end }}, ROW_OPTIONS)[path]
         RegisterStatusSearch(control, searchLabel, keywords, searchValues or values, nil, path, nil, selectedStatusContract)
         return control
@@ -382,11 +410,10 @@ function StatusSection.OptionToggle(state, ctx, unit, option)
     local control = Schema.Build(ctx, state.selectedCard, {{ "toggle", option.path, nil,
         { option.label, 16, option.y, state.selectedControlW },
         scope = unit, bind = function(widget)
-            M.BindBoolWidget(ctx, widget, option.get or function() return ReadStatusBool(unit, option.key, option.default) end,
-                function(value)
-                    SetBool(unit, option.key, value, option.reason, { preview = true })
-                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-                end)
+            BindScalar(ctx, widget, unit, option.path, "toggle", option.get or function() return ReadStatusBool(unit, option.key, option.default) end,
+                { key = option.key, write = { call = SetBool, args = { option.reason, { preview = true } },
+                    after = function() RefreshStatusRuntime(unit, CurrentStatusSpec(unit)) end
+                } --[[schema setter: J5.UnitStatus.Option]] })
         end }}, ROW_OPTIONS)[option.path]
     if option.exact then state.AttachStatusExactTarget(control, nil, option.exact, option.key) end
     state.RegisterStatusSearch(control, option.searchLabel, option.keywords, nil, option.help, option.path, nil,
@@ -542,31 +569,32 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     local previewLabel = previewCard and previewCard.title
     local midnight = Schema.Build(ctx, previewCard, {{ "toggle", "status.midnight_style", nil, { "Use Midnight Style", 16, -92, previewControlW },
         scope = unit, bind = function(midnight)
-            M.BindBoolWidget(ctx, midnight,
+            BindScalar(ctx, midnight, unit, "status.midnight_style", "toggle",
                 function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
-                function(value)
-                    SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false })
-                    RefreshStatusIcons = RefreshStatusIcons or MSUF.Require("MSUF_RequestStatusIconsRefreshForCurrent", FILE)
-                    RefreshStatusIcons()
-                end)
+                { setting = "general.statusIconsUseMidnightStyle", write = { call = SetGeneralBool, keyOnly = true,
+                    args = { "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false } },
+                    after = function()
+                        RefreshStatusIcons = RefreshStatusIcons or MSUF.Require("MSUF_RequestStatusIconsRefreshForCurrent", FILE)
+                        RefreshStatusIcons()
+                    end
+                } --[[schema setter: J5.UnitStatus.Midnight]] })
         end }}, ROW_OPTIONS)["status.midnight_style"]
     RegisterStatusSearch(midnight, "Status indicator style", {
         "midnight style", "status style", "indicator style", "icon style",
     }, nil, nil, "status.midnight_style", nil, { settingKey = "general.statusIconsUseMidnightStyle" })
     local enabled = Schema.Build(ctx, selectedCard, {{ "switch", "status.selected.enabled", nil, { "Enabled", leftW - 34, -24, 0, "HIDDEN" },
         scope = unit, bind = function(enabled)
-            M.BindBoolWidget(ctx, enabled,
+            BindScalar(ctx, enabled, unit, "status.selected.enabled", "toggle",
                 function()
                     local spec = CurrentStatusSpec(unit)
                     return ReadStatusEnabled(spec)
                 end,
-                function(value)
-                    local spec = CurrentStatusSpec(unit)
-                    if not spec then return end
-                    SetBool(unit, spec.show, value, "MSUF2_STATUS_ENABLED", { preview = true })
-                    RefreshStatusRuntime(unit, spec)
-                    if RefreshStatusSectionState then RefreshStatusSectionState() end
-                end)
+                { field = "show", write = { call = SetBool, args = { "MSUF2_STATUS_ENABLED", { preview = true } },
+                    after = function()
+                        RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+                        if RefreshStatusSectionState then RefreshStatusSectionState() end
+                    end
+                } --[[schema setter: J5.UnitStatus.Enabled]] })
         end }}, ROW_OPTIONS)["status.selected.enabled"]
     RegisterStatusSearch(enabled, "Status indicator enabled", {
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
@@ -805,13 +833,13 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
         scope = unit, beforeBind = function(raidGroupStyle)
             Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
         end, bind = function(raidGroupStyle)
-            M.BindDropdownWidget(ctx, raidGroupStyle,
+            BindScalar(ctx, raidGroupStyle, unit, "status.raid_group.style", "dropdown",
                 function() return ReadStatusString(unit, "raidGroupNameStyle", "PAREN") end,
-                function(value)
-                    if value ~= "BRACKET" and value ~= "NONE" then value = "PAREN" end
-                    SetString(unit, "raidGroupNameStyle", value, "MSUF2_RAID_GROUP_NAME_STYLE", { preview = true, text = true })
-                    RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
-                end)
+                { key = "raidGroupNameStyle", write = { call = SetString,
+                    args = { "MSUF2_RAID_GROUP_NAME_STYLE", { preview = true, text = true } },
+                    convert = function(value) return (value == "BRACKET" or value == "NONE") and value or "PAREN" end,
+                    after = function() RefreshStatusRuntime(unit, CurrentStatusSpec(unit)) end
+                } --[[schema setter: J5.UnitStatus.RaidGroup]] })
         end }}, ROW_OPTIONS)["status.raid_group.style"]
     RegisterStatusSearch(raidGroupStyle, "Raid group style", {
         "raid group style", "parentheses", "brackets", "no brackets", "group number style",
@@ -821,7 +849,7 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
         scope = unit, beforeBind = function(size)
             Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
         end, bind = function(size)
-            M.BindNumberWidget(ctx, size,
+            BindScalar(ctx, size, unit, "status.selected.size", "slider",
                 function()
                     local spec = CurrentStatusSpec(unit)
                     if not spec then return 14 end
@@ -832,12 +860,9 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
                     if spec.textIndicator or spec.inlineName then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
                     return ReadStatusNumber(unit, spec.size, fallback, spec.legacySize)
                 end,
-                function(value)
-                    local spec = CurrentStatusSpec(unit)
-                    if not spec then return end
-                    SetNumber(unit, spec.size, value, "MSUF2_STATUS_SIZE", { preview = true })
-                    RefreshStatusRuntime(unit, spec)
-                end,
+                { field = "size", write = { call = SetNumber, args = { "MSUF2_STATUS_SIZE", { preview = true } },
+                    after = function() RefreshStatusRuntime(unit, CurrentStatusSpec(unit)) end
+                } --[[schema setter: J5.UnitStatus.Size]] },
                 14, { step = 1, roundStep = true })
         end }}, ROW_OPTIONS)["status.selected.size"]
     RegisterStatusSearch(size, "Status indicator size", {

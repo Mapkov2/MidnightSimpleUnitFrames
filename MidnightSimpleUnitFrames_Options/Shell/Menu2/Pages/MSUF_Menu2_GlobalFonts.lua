@@ -639,7 +639,6 @@ local function BuildFontsScope(ctx, b)
         selectorWriteTargets = "general._fontScopeKey",
         setValue = function(v)
             G()._fontScopeKey = NormalizeScopeKey(v)
-            if M.InvalidatePage then M.InvalidatePage(ctx.key) end
             if M.SelectPage then M.SelectPage(ctx.key) end
         end,
         hasOverride = function(value)
@@ -1002,4 +1001,5 @@ local function BuildFonts(ctx)
     BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason, ActiveFontOverrideLabels)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 6 })
+M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 6, variantKey = CurrentFontScope,
+    viewStateKeys = { ["general._fontScopeKey"] = true } })

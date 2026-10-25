@@ -67,16 +67,19 @@ local function BuildScopeSection(ctx, b)
     local function RefreshBarsPage(reason)
         M.RequestRefresh(ctx, reason)
     end
+    local scopeSpec = { id = Meta("scope.selector", "ephemeral").controlId,
+        kind = "segment", scope = "bars", applyDomain = "selection", scopeOwner = true,
+        setting = "general.hpPowerTextSelectedKey", get = CurrentBarsScope, values = scopeValues,
+        write = { source = G, convert = NormalizeScopeKey,
+            after = function() RefreshBorderTestModes() RefreshBarsPage("bars-scope-change") end
+        } --[[schema setter: J5.Bars.Scope]] }
+    scopeSpec.set = M.ControlSchema.Setter(scopeSpec)
     local scopeUI = GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
         meta = Meta,
         getValue = function() return CurrentBarsScope() end,
         selectorWriteTargets = "general.hpPowerTextSelectedKey",
-        setValue = function(v)
-            G().hpPowerTextSelectedKey = NormalizeScopeKey(v)
-            RefreshBorderTestModes()
-            RefreshBarsPage("bars-scope-change")
-        end,
+        setValue = scopeSpec.set,
         hasOverride = function(value)
             return value ~= "shared" and (ScopeHasOverride(value, "hlOverride") or HasScopedSlantedDirection(value))
         end,
@@ -135,6 +138,7 @@ local function BuildScopeSection(ctx, b)
             end
         end,
     })
+    M.ControlSchema.Custom(scopeUI.segment, scopeSpec)
     if scopeUI then
         local scope = Rows.Schema.ScopeOwner(scopeUI.segment, "bars", "menuState", "general.hpPowerTextSelectedKey")._msuf2ControlSchema
         Rows.Schema.Owned(scopeUI.override, "bars", "bars")

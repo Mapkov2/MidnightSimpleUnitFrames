@@ -89,11 +89,9 @@ function Build.Aura(ctx, b)
     end
     ValueSwitchAt(ctx, cooldown, "Color by time", 16, -166, colW - 32,
         function() return G().aurasCooldownTextUseBuckets == true end,
-        function(v)
-            G().aurasCooldownTextUseBuckets = v and true or false
-            RefreshColorSamples()
-            ApplyAuraColors()
-        end,
+        { write = { source = G, boolean = true,
+            after = function() RefreshColorSamples() ApplyAuraColors() end
+        } --[[schema setter: J5.Colors.CooldownBuckets]] },
         Meta("auras.cooldown.color_by_time"))
     local function RefreshTextColors()
         RefreshColorSamples()
@@ -314,17 +312,16 @@ function Build.Font(ctx, b)
             if value == "CLASS" then return "CLASS" end
             return (value == true or value == "HEALTH") and "HEALTH" or "DEFAULT"
         end,
-        function(v)
-            G().colorHealthTextByHealth = (v == "CLASS") and "CLASS" or (v == "HEALTH")
-            ApplySharedFontTextColors("MSUF2_HP_TEXT_COLOR")
-        end,
+        { write = { source = G,
+            convert = function(v) return (v == "CLASS") and "CLASS" or (v == "HEALTH") end,
+            after = function() ApplySharedFontTextColors("MSUF2_HP_TEXT_COLOR") end
+        } --[[schema setter: J5.Colors.HealthText]] },
         Meta("font.text_mode.hp_text", "ephemeral"))
     local powerModeDropdown = ValueDropdownAt(ctx, font, "Power Text Color", 360, -112, FONT_TEXT_MODE_VALUES.power, 300,
         function() return G().colorPowerTextByType and "RESOURCE" or "DEFAULT" end,
-        function(v)
-            G().colorPowerTextByType = v == "RESOURCE"
-            ApplySharedFontTextColors("MSUF2_POWER_TEXT_COLOR")
-        end,
+        { write = { source = G, convert = function(v) return v == "RESOURCE" end,
+            after = function() ApplySharedFontTextColors("MSUF2_POWER_TEXT_COLOR") end
+        } --[[schema setter: J5.Colors.PowerText]] },
         Meta("font.text_mode.power_text", "ephemeral"))
     if M.AddTooltip then
         -- "Player" means player CHARACTERS (the unit type), not the player

@@ -11,6 +11,9 @@ local partial = { MSUF2 = {}, Require = function() return function() end end }
 assert(loadfile(base .. "Pages/MSUF_Menu2_Auras.lua"))("Options", partial)
 assert(partial.MSUF2.AurasParts == nil, "unavailable aura providers published a partial dependency handoff")
 local groups = {
+    { "Pages/MSUF_Menu2_AdvancedClassPower", "Layout" },
+    { "Pages/MSUF_Menu2_Group", "Portrait", "Order" },
+    { "Pages/MSUF_Menu2_Auras_CustomWorkspace", "Lists", "Style", "Setup" },
     { "Pages/MSUF_Menu2_Auras", "Style", "Layout", "Blacklist", "Workspace" },
     { "Pages/MSUF_Menu2_GlobalBars", "Textures", "Shapes", "Highlights" },
     { "Pages/MSUF_Menu2_GroupIndicators", "Spells", "SpellControls" },
@@ -38,6 +41,7 @@ local function Adler(source)
     return b * 65536 + a
 end
 local hot = {
+    { "Pages/MSUF_Menu2_Group_Order.lua", "DrawGrowthMiniPreview", 3587444972 },
     -- Source bodies stay byte-for-byte identical; moving them adds no calls,
     -- closures or tables to their event/animation callbacks.
     { "MSUF_Menu2_Window.lua", "AnimateWindowLayout", 31766041 },

@@ -55,6 +55,7 @@ function AurasPage.Section(builder, ...) return Schema.Section(builder:Collapsib
 -- existing writer, apply reason and refresh; the metadata names the stable ID.
 -- Ephemeral selectors and inputs declare menuState, settings the aura domain.
 local function PrepareRow(row, scope)
+    if type(row.set) == "table" then row.write, row.set = row.set.write, nil end
     row.customSetReason = row.customSetReason or "Resolves the selected aura scope and lane, canonicalizes values and requests the aura runtime."
     local meta = row.meta
     row[2], row[3] = meta.controlId, meta.fallback

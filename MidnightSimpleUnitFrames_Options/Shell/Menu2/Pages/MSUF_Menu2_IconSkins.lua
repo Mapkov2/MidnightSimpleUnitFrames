@@ -59,6 +59,7 @@ local function Meta(path, classification, settingKey)
 end
 -- Positional rows with the former binder signatures: Schema.Build creates, binds and places each one.
 local function Row(ctx, parent, row)
+    if type(row.set) == "table" then row.write, row.set = row.set.write, nil end
     row.customSetReason = row.customSetReason or "Writes appearance choices and synchronizes the dependent product shapes or registered provider areas."
     local meta = row.meta
     row[2], row.domain = meta.controlId, meta.classification == "ephemeral" and "menuState" or "iconSkins"
@@ -411,12 +412,10 @@ local function BuildLook(P, section, width, top)
             if value == nil then return "AUTO" end
             return value == true and "ON" or "OFF"
         end,
-        function(value)
-            local gloss
-            if value == "ON" then gloss = true elseif value == "OFF" then gloss = false end
-            Skins().WriteDefault("styleSkinGloss", gloss)
-            Page.Apply("AURAS3_ICON_SKIN_GLOSS")
-        end,
+        { write = { keyOnly = true, call = function(key, value) Skins().WriteDefault(key, value) end,
+            convert = function(value) if value == "ON" then return true elseif value == "OFF" then return false end end,
+            after = function() Page.Apply("AURAS3_ICON_SKIN_GLOSS") end
+        } --[[schema setter: J5.IconSkins.Gloss]] },
         Meta("default-skin.gloss", nil, "auras3.shared.iconSkinDefault.styleSkinGloss"))
     if M.AuraControls.AddTooltip then
         M.AuraControls.AddTooltip(gloss, "Skin gloss",
@@ -428,10 +427,9 @@ local function BuildLook(P, section, width, top)
         "AURAS3_ICON_SKIN_COLOR")
     local own = BindSwitch(ctx, section, "Use Own Color", 34 + col, top - 60, col,
         function() return Page.Read("styleSkinColorOverride", false) == true end,
-        function(value)
-            Skins().WriteDefault("styleSkinColorOverride", value == true)
-            Page.Apply("AURAS3_ICON_SKIN_COLOR")
-        end,
+        { write = { keyOnly = true, call = function(key, value) Skins().WriteDefault(key, value) end,
+            strictBoolean = true, after = function() Page.Apply("AURAS3_ICON_SKIN_COLOR") end
+        } --[[schema setter: J5.IconSkins.OwnColor]] },
         Meta("default-skin.own-color", nil, "auras3.shared.iconSkinDefault.styleSkinColorOverride"))
     if M.AuraControls.AddTooltip then
         M.AuraControls.AddTooltip(own, "Own skin color",

@@ -773,6 +773,19 @@ end
 -- Preview setup reuses this painter; the live update keeps its existing call.
 V.ApplyIndicatorVisual = ApplyIndicatorVisual
 
+local PreviewEffects = A3.SpellIndicators or {}
+A3.SpellIndicators = PreviewEffects
+PreviewEffects.ApplyPreviewFrameEffect = V.ApplyPreviewFrameEffect
+PreviewEffects.HidePreviewFrameEffect = V.HidePreviewFrameEffect
+function PreviewEffects.ApplyPreviewIconEffect(button, cfg)
+    button._msufA3IndicatorConfig = nil
+    ApplyIndicatorVisual(button, cfg)
+    return button
+end
+function PreviewEffects.HidePreviewIconEffect(button)
+    if button._msufA3ClassicIconGlow then button._msufA3ClassicIconGlow:Hide() end
+end
+
 local function EnsureStealableTexture(button, key, subLevel)
     local texture = button[key]
     if texture then return texture end

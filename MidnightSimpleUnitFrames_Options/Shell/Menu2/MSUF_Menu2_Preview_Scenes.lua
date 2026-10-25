@@ -283,7 +283,7 @@ function H.NewRuntimeUnitSurface(parent, unit, sample, configure)
                     frame:SetScale(math.min(1, parent:GetWidth() / math.max(1, frame:GetWidth()),
                         parent:GetHeight() / math.max(1, frame:GetHeight())))
                 end
-                if frame and surface.afterPaint then surface.afterPaint(frame, self) end
+                if frame and surface.layout then surface.layout(frame, self) end
                 return result
             end
         end
@@ -317,6 +317,7 @@ function H.NewRuntimeUnitSurface(parent, unit, sample, configure)
             self.scene = group and GroupScene(key) or UnitScene(MSUF.UF.UnitScene.Normalize(key) or "player")
         end
         local scene = self.scene
+        if not group then scene.layerVisible = self.layerVisible end
         root:Activate()
         if group then
             scene:Configure({ fit = true, ignoreOocFade = true, sample = self.sample })

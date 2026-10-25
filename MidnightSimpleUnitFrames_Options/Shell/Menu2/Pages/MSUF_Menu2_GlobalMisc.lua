@@ -180,6 +180,7 @@ function MiscSection.Binders(s)
         return control
     end
     local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue, path, writePolicy)
+        if type(setValue) == "table" then writePolicy, setValue = setValue.write, nil end
         local companions
         if path == "setting.menuAppearancePreset" then
             companions = { "general.menuAccent", "general.menuAccentTintSurfaces" }
@@ -334,18 +335,13 @@ function MiscSection.MenuBehavior(s)
         function()
             return (type(MenuFontKeyGet) == "function" and MenuFontKeyGet()) or ReadG("menuFontKey", "")
         end,
-        function(value)
-            if type(MenuFontKeySet) == "function" then
-                MenuFontKeySet(value)
-            else
-                SetG("menuFontKey", value or "", "MSUF2_MENU_FONT", MENU_WRITE_OPTS)
+        { write = { call = MenuFontKeySet, valueOnly = true,
+            after = function()
+                T.ClearMenuFontCache()
+                T.RefreshMenuFonts()
+                if menuFontPreview and menuFontPreview.SetText then menuFontPreview:SetText("AaBbCc 12345 - MSUF Menu") end
             end
-            T.ClearMenuFontCache()
-            T.RefreshMenuFonts()
-            if menuFontPreview and menuFontPreview.SetText then
-                menuFontPreview:SetText("AaBbCc 12345 - MSUF Menu")
-            end
-        end,
+        } --[[schema setter: J5.Misc.MenuFont]] },
         "menu.font")
     menuFontPreview = Schema.Custom(W.Text(menuBehavior, "AaBbCc 12345 - MSUF Menu", menuFontRightX, -178,
         menuBehaviorW - menuFontRightX - 30, T.colors.text), { id = "menu2.opt_misc.menuBehavior.menuFontPreview",
@@ -406,12 +402,10 @@ function MiscSection.MenuAccent(s)
             "custom", "Custom"),
         hasAppearancePresets and menuFontW or 250, hasAppearancePresets and menuFontRightX or 14, -244,
         ReadAccentMode,
-        function(value)
-            if not IsAccentMode(value) then value = "midnight" end
-            SetG("menuAccent", value, "MSUF2_MENU_ACCENT", MENU_WRITE_OPTS)
-            RefreshAccentSwatchEnabled()
-            AccentReloadCheck()
-        end,
+        { write = { call = SetG, keyOnly = true, args = { "MSUF2_MENU_ACCENT", MENU_WRITE_OPTS },
+            convert = function(value) return IsAccentMode(value) and value or "midnight" end,
+            after = function() RefreshAccentSwatchEnabled() AccentReloadCheck() end
+        } --[[schema setter: J5.Misc.Accent]] },
         "setting.menuAccent")
     accentSwatch = Schema.Build(ctx, menuBehavior, {
         { "color", "setting.menuAccentColor", nil, { "Custom accent color" },
@@ -577,10 +571,9 @@ function MiscSection.FrameHighlights(s)
             local value = tostring(ReadG("highlightStyle", "GRADIENT")):upper()
             return value == "BORDER" and "BORDER" or "GRADIENT"
         end,
-        function(value)
-            SetG("highlightStyle", value == "BORDER" and "BORDER" or "GRADIENT",
-                "MSUF2_MOUSEOVER_STYLE", MOUSEOVER_WRITE_OPTS)
-        end,
+        { write = { call = SetG, keyOnly = true, args = { "MSUF2_MOUSEOVER_STYLE", MOUSEOVER_WRITE_OPTS },
+            convert = function(value) return value == "BORDER" and "BORDER" or "GRADIENT" end
+        } --[[schema setter: J5.Misc.Highlight]] },
         "mouseover.style")
     local size = Schema.Build(ctx, mouseover, {
         { "slider", "mouseover.size", 6, { "Effect size", 1, 16, 1, mouseoverRightW },

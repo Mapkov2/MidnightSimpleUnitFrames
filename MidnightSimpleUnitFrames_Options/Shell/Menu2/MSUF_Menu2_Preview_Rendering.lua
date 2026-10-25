@@ -1,14 +1,11 @@
 local addonName, MSUF = ...
 local FILE = "Shell/Menu2/MSUF_Menu2_Preview_Rendering.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
-addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
-    or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2
 local H = M.PreviewHelpers
 
--- Preview media, masks, edge stacks and shared drawing primitives.
+-- Preview popups and bounds drawing primitives.
 -- These helpers paint options scenes without coupling pages to live frames.
-local floor = math.floor
 local IsSecretValue = issecretvalue
 local WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
 -- The MSUF profile tables arrive with the saved variables and are replaced on a
@@ -68,33 +65,6 @@ end
 local function SetShownText(fs, text)
     return M.Theme.SetTranslatedText(fs, text)
 end
-local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-
-local ROUNDED_SLICE_MARGIN = 9.5
-local ROUNDED_MASK_PATHS, ROUNDED_EDGE_PATHS = {}, {}
-for i = 1, 5 do
-    ROUNDED_MASK_PATHS[i] = ROUNDED_MEDIA_ROOT .. "rounded_clean_mask_s" .. i .. ".png"
-    ROUNDED_EDGE_PATHS[i] = ROUNDED_MEDIA_ROOT .. "rounded_clean_edge_s" .. i .. ".png"
-end
-local STRETCHED_SLICE_MODE = Enum and Enum.UITextureSliceMode
-    and Enum.UITextureSliceMode.Stretched
--- Full Unit/Group previews use the exact clean media family selected by the
--- live rounded runtime. Resolving this only while a preview is repainted keeps
--- slider feedback accurate without putting any work on gameplay paths.
-function H.ResolveRoundedMedia()
-    local db = MSUF_DB
-    local bars = db and db.bars
-    local strength = floor((tonumber(bars and bars.roundedCornerStrength) or 3) + 0.5)
-    if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
-    return ROUNDED_MASK_PATHS[strength], ROUNDED_EDGE_PATHS[strength], strength
-end
-function H.ResolveFrameBarMedia(style, scope, conf)
-    if style == "SLANTED" then
-        return MSUF.RoundedSurface.ResolveSlantedMedia(scope, conf)
-    end
-    return H.ResolveRoundedMedia()
-end
-
 --- Mirrors the controller's effective Player Mana ownership in both previews.
 --- Native API fallback exists only for isolated/early preview loads.
 function H.PlayerManaSourceActive(player)
@@ -111,19 +81,6 @@ function H.PlayerManaSourceActive(player)
     return not IsSecretValue(hasMana) and hasMana == true
 end
 
-function H.ApplyRoundedMediaSlice(region, strength)
-    if not region then return end
-    strength = tonumber(strength) or 3
-    if region._msufPreviewRoundedSliceStrength == strength then return end
-    region._msufPreviewRoundedSliceStrength = strength
-    if type(region.SetTextureSliceMargins) == "function" then
-        local margin = strength == 0 and 0 or ROUNDED_SLICE_MARGIN
-        region:SetTextureSliceMargins(margin, margin, margin, margin)
-    end
-    if STRETCHED_SLICE_MODE ~= nil and type(region.SetTextureSliceMode) == "function" then
-        region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
-    end
-end
 local EDGE_ANCHORS = {
     top = { "TOPLEFT", "TOPRIGHT", "SetHeight" },
     bottom = { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight" },
@@ -136,65 +93,6 @@ function H.SnapOff(region)
         region:SetSnapToPixelGrid(false)
         if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
     end
-end
-function H.MaskOwner(mock, tex, anchor)
-    local owner = tex and tex.GetParent and tex:GetParent() or nil
-    if owner and owner.CreateMaskTexture then return owner end
-    if anchor and anchor.CreateMaskTexture then return anchor end
-    return mock
-end
-function H.EnsureRoundedMask(mock, key, anchor, tex, maskStoreKey, maskTexture, snapOff)
-    if not (mock and anchor) then return nil end
-    local owner = H.MaskOwner(mock, tex, anchor)
-    if not (owner and owner.CreateMaskTexture) then return nil end
-    maskStoreKey = maskStoreKey or "_msufPreviewRoundedMasks"
-    mock[maskStoreKey] = mock[maskStoreKey] or {}
-    local store = mock[maskStoreKey]
-    local bucket = store[key]
-    if type(bucket) ~= "table" or bucket.SetTexture then
-        bucket = {}
-        store[key] = bucket
-    end
-    local ownerKey = tex or owner
-    local mask = bucket[ownerKey]
-    if not mask then
-        mask = owner:CreateMaskTexture(nil, "ARTWORK")
-        local snap = snapOff or H.SnapOff
-        snap(mask)
-        bucket[ownerKey] = mask
-    end
-    if mask._msufPreviewRoundedAnchor ~= anchor or mask._msufPreviewRoundedTexture ~= maskTexture then
-        mask._msufPreviewRoundedAnchor = anchor
-        mask._msufPreviewRoundedTexture = maskTexture
-        mask:ClearAllPoints()
-        mask:SetTexture(maskTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        mask:SetAllPoints(anchor)
-    end
-    H.ApplyRoundedMediaSlice(mask, mock._msufPreviewRoundedMediaStrength)
-    return mask
-end
-function H.SetMask(mock, tex, mask, maskedStoreKey)
-    if not (mock and tex and tex.AddMaskTexture) then return end
-    maskedStoreKey = maskedStoreKey or "_msufPreviewRoundedMasked"
-    mock[maskedStoreKey] = mock[maskedStoreKey] or {}
-    local store = mock[maskedStoreKey]
-    local old = store[tex]
-    if old == mask then return end
-    if old and tex.RemoveMaskTexture then tex:RemoveMaskTexture(old) end
-    store[tex] = nil
-    if mask then
-        tex:AddMaskTexture(mask)
-        store[tex] = mask
-    end
-end
-function H.ClearMasks(mock, maskedStoreKey)
-    local store = mock and mock[maskedStoreKey or "_msufPreviewRoundedMasked"]
-    if store then
-        for tex, mask in pairs(store) do
-            if tex and tex.RemoveMaskTexture and mask then tex:RemoveMaskTexture(mask) end
-        end
-    end
-    if mock then mock[maskedStoreKey or "_msufPreviewRoundedMasked"] = nil end
 end
 local EDGE_LINE_KEYS = { "top", "bottom", "left", "right" }
 function H.SetEdgeLinesShown(frame, shown, opts)
@@ -249,156 +147,6 @@ function H.LayoutEdgeLines(frame, edge, opts)
     return true
 end
 H.ClampEdgeSize = MSUF.Require("MSUF_ClampRoundedEdgeSize", FILE)
-function H.EnsureRoundedVisuals(mock, opts)
-    if not (mock and mock.CreateTexture) then return false end
-    opts = opts or {}
-    local bgKey = opts.bgKey or "roundedBg"
-    local edgeKey = opts.edgeKey or "roundedEdge"
-    local snap = opts.snapOff or H.SnapOff
-    if not mock[bgKey] then
-        mock[bgKey] = PixelLayoutRegion(mock:CreateTexture(nil, opts.bgLayer or "BACKGROUND", nil, opts.bgSubLevel))
-        mock[bgKey]:SetTexture(opts.whiteTexture or "Interface\\Buttons\\WHITE8X8")
-        snap(mock[bgKey])
-    end
-    if not mock[edgeKey] then
-        mock[edgeKey] = PixelLayoutRegion(mock:CreateTexture(nil, opts.edgeLayer or "OVERLAY", nil, opts.edgeSubLevel))
-        snap(mock[edgeKey])
-    end
-    if mock[edgeKey]._msufPreviewRoundedEdgeTexture ~= opts.edgeTexture then
-        mock[edgeKey]._msufPreviewRoundedEdgeTexture = opts.edgeTexture
-        mock[edgeKey]:SetTexture(opts.edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    end
-    H.ApplyRoundedMediaSlice(mock[edgeKey], opts.mediaStrength)
-    return true
-end
-function H.ForEachRoundedEdge(mock, opts, fn)
-    if not (mock and type(fn) == "function") then return end
-    opts = opts or {}
-    local edge = mock[opts.edgeKey or "roundedEdge"]
-    if edge then fn(edge, 1) end
-    local stack = mock[opts.stackKey or "_msufPreviewRoundedEdgeStack"]
-    if type(stack) ~= "table" then return end
-    for i = 2, #stack do
-        if stack[i] then fn(stack[i], i) end
-    end
-end
--- A True Outline or Texture outline style replaces the solid stack with the
--- core's styled rings (MSUF.RoundedSurface), drawn on the same mock so the
--- preview follows its rounded or slanted shape like the live frame. Owners
--- opt in with opts.outlineStyle(mock), returning the compiled border spec.
-local function PreviewStyledKey(opts)
-    return opts.styledKey or ((opts.stackKey or "_msufPreviewRoundedEdgeStack") .. "Styled")
-end
-local function ForEachPreviewStyledRing(mock, opts, fn)
-    local surface = MSUF.RoundedSurface
-    if surface and surface.ForEachStyledEdgeRing then surface.ForEachStyledEdgeRing(mock, PreviewStyledKey(opts), fn) end
-end
-function H.SetRoundedEdgeStackShown(mock, shown, opts)
-    opts = opts or {}
-    local styled = mock and mock[PreviewStyledKey(opts) .. "On"] == true
-    local count = shown and not styled and H.ClampEdgeSize(mock and mock[opts.countKey or "_msufPreviewRoundedEdgeCount"], 1, opts.maxEdgeSize or 8) or 0
-    H.ForEachRoundedEdge(mock, opts, function(edge, i)
-        if edge.SetShown then
-            edge:SetShown(i <= count)
-        elseif i <= count then
-            edge:Show()
-        else
-            edge:Hide()
-        end
-    end)
-    if styled then
-        shown = shown and true or false
-        ForEachPreviewStyledRing(mock, opts, function(ring) ring:SetShown(shown) end)
-    end
-end
-local function ApplyPreviewStyledRings(mock, count, opts, anchor, r, g, b, a)
-    local styledKey = PreviewStyledKey(opts)
-    local style = opts.outlineStyle and opts.outlineStyle(mock) or nil
-    local surface = MSUF.RoundedSurface
-    if count > 0 and type(style) == "table" and style.textureMode and surface and surface.ApplyStyledEdgeRings
-        and surface.ApplyStyledEdgeRings(mock, mock, anchor, styledKey, count, style.textureMode, style.texture,
-            style.textureKey, opts.edgeTexture, opts.edgeLayer or "OVERLAY", opts.edgeSubLevel, r, g, b, a) then
-        mock[styledKey .. "On"] = true
-        return true
-    end
-    mock[styledKey .. "On"] = nil
-    if surface and surface.HideStyledEdgeRings then surface.HideStyledEdgeRings(mock, styledKey) end
-    return false
-end
-function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
-    if not mock then return false end
-    opts = opts or {}
-    local count = H.ClampEdgeSize(edgeSize, 0, opts.maxEdgeSize or 8)
-    local stackKey = opts.stackKey or "_msufPreviewRoundedEdgeStack"
-    local countKey = opts.countKey or "_msufPreviewRoundedEdgeCount"
-    local edgeKey = opts.edgeKey or "roundedEdge"
-    mock[countKey] = count
-    local anchor = type(opts.anchor) == "function" and opts.anchor(mock) or opts.anchor or mock
-    local r, g, b, a
-    if type(opts.baseEdgeColor) == "function" then
-        r, g, b, a = opts.baseEdgeColor(mock)
-    else
-        r, g, b, a = H.BaseEdgeColor()
-    end
-    if ApplyPreviewStyledRings(mock, count, opts, anchor, r, g, b, a) then
-        H.SetRoundedEdgeStackShown(mock, true, opts)
-        return true
-    end
-    if count <= 0 then
-        H.SetRoundedEdgeStackShown(mock, false, opts)
-        return false
-    end
-    mock[stackKey] = mock[stackKey] or {}
-    mock[stackKey][1] = mock[edgeKey]
-    local snap = opts.snapOff or H.SnapOff
-    local edgeTexture = opts.edgeTexture
-    for i = 1, count do
-        local edge = (i == 1) and mock[edgeKey] or mock[stackKey][i]
-        if not edge then
-            edge = PixelLayoutRegion(mock:CreateTexture(nil, opts.edgeLayer or "OVERLAY", nil, opts.edgeSubLevel))
-            snap(edge)
-            mock[stackKey][i] = edge
-        end
-        if edge._msufPreviewRoundedEdgeTexture ~= edgeTexture then
-            edge._msufPreviewRoundedEdgeTexture = edgeTexture
-            edge:SetTexture(edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        end
-        H.ApplyRoundedMediaSlice(edge, opts.mediaStrength)
-        if edge._msufPreviewRoundedAnchor ~= anchor or edge._msufPreviewRoundedPad ~= i then
-            edge._msufPreviewRoundedAnchor = anchor
-            edge._msufPreviewRoundedPad = i
-            edge:ClearAllPoints()
-            edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -i, i)
-            edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", i, -i)
-        end
-        if edge._msufPreviewRoundedR ~= r or edge._msufPreviewRoundedG ~= g
-            or edge._msufPreviewRoundedB ~= b or edge._msufPreviewRoundedA ~= a then
-            edge._msufPreviewRoundedR = r
-            edge._msufPreviewRoundedG = g
-            edge._msufPreviewRoundedB = b
-            edge._msufPreviewRoundedA = a
-            edge:SetVertexColor(r, g, b, a)
-        end
-        edge:Show()
-    end
-    H.SetRoundedEdgeStackShown(mock, true, opts)
-    return true
-end
-local GetBarOutlineColor = MSUF.Require("MSUF_GetBarOutlineColor", FILE)
-function H.BaseEdgeColor()
-    local r, g, b = GetBarOutlineColor()
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b, 1 end
-    local db = MSUF_DB
-    local gen = db and db.general
-    if gen then
-        return tonumber(gen.barOutlineColorR) or 0,
-               tonumber(gen.barOutlineColorG) or 0,
-               tonumber(gen.barOutlineColorB) or 0,
-               1
-    end
-    return 0, 0, 0, 1
-end
-
 -- Shared ClassPower preview contract. BAR mode only needs its two boundary
 -- segments clipped; every interior separator remains square and every non-BAR
 -- shape bypasses this helper entirely.

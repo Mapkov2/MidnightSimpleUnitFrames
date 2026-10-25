@@ -488,65 +488,14 @@ end
 -- (`s`): layout, tab state, tab shell, Name tab, HP and Power tabs, Advanced tab, refresh. The
 -- stages create their widgets in the order the single builder did, so the layout is unchanged.
 -- Preview example strings and focus helpers that need no per-build state are module-level.
--- Every absorb mode is its base mode with an ABSORB suffix (CURMAXABSORB -> CURMAX).
-local GF_ABSORB_MODE_BASE = {}
-for _, base in ipairs({ "CURRENT", "FULLVALUE", "MAX", "DEFICIT", "CURMAX", "PERCENT", "CURPERCENT", "CURMAXPERCENT", "MAXPERCENT",
-    "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX", "MAXCUR", "PERCENTMAXCUR" }) do
-    GF_ABSORB_MODE_BASE[base .. "ABSORB"] = base
-end
-local GF_ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
-local function TextModeExampleStr(mode, delim, isPower, decimalHP, hidePercentSymbol, shortNumbers, absorbIcon)
-    local absorbBase = GF_ABSORB_MODE_BASE[mode]
-    local cur     = isPower and "100"  or (shortNumbers and "12.5k" or "12,450")
-    local max_    = isPower and "100"  or (shortNumbers and "15.0k" or "15,000")
-    local absorb  = shortNumbers and "3.8k" or "3,750"
-    local absorbText = (absorbIcon and (GF_ABSORB_ICON_MARKUP .. " ") or "") .. absorb
-    local pct     = isPower and "100" or (decimalHP and "83.0" or "83")
-    if hidePercentSymbol ~= true then pct = pct .. "%" end
-    local deficit = isPower and "0"    or (shortNumbers and "-2.6k" or "-2,550")
-    if mode == "ABSORB" then return absorbText end
-    mode = absorbBase or mode
-    local value
-    if mode == "PERCENT" then value = pct
-    elseif mode == "CURRENT" or mode == "FULLVALUE" then value = cur
-    elseif mode == "MAX" then value = max_
-    elseif mode == "DEFICIT" then value = deficit
-    elseif mode == "CURMAX" then value = cur .. delim .. max_
-    elseif mode == "MAXCUR" then value = max_ .. delim .. cur
-    elseif mode == "CURPERCENT" then value = cur .. delim .. pct
-    elseif mode == "CURMAXPERCENT" then value = cur .. delim .. max_ .. delim .. pct
-    elseif mode == "MAXPERCENT" then value = max_ .. delim .. pct
-    elseif mode == "PERCENTCUR" then value = pct .. delim .. cur
-    elseif mode == "PERCENTMAX" then value = pct .. delim .. max_
-    elseif mode == "PERCENTCURMAX" then value = pct .. delim .. cur .. delim .. max_
-    elseif mode == "PERCENTMAXCUR" then value = pct .. delim .. max_ .. delim .. cur end
-    if not value then return nil end
-    return absorbBase and (value .. " + " .. absorbText) or value
-end
 local function TextModeHasPercent(mode)
     return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
 end
--- The group text DB owns the reversed-order mapping (GroupFrames/
--- MSUF_GroupFrames_DB_Text.lua), loaded with the core on every client.
-local function ReverseHpPreviewMode(mode)
-    return MSUF.GF.ReverseHealthTextMode(mode)
-end
-local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers, hideLeft, hideCenter, hideRight,
-    absorbIconLeft, absorbIconCenter, absorbIconRight)
-    if reverse and not isPower then
-        leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode)
-        hideLeft, hideRight = hideRight, hideLeft
-        absorbIconLeft, absorbIconRight = absorbIconRight, absorbIconLeft
-    end
-    local slots = { leftMode, centerMode, rightMode }
-    local hideSlots = { hideLeft, hideCenter, hideRight }
-    local iconSlots = { absorbIconLeft, absorbIconCenter, absorbIconRight }
-    local parts = {}
-    for i, mode in ipairs(slots) do
-        local ex = TextModeExampleStr(mode, delim, isPower, decimalHP, hideSlots[i], shortNumbers, iconSlots[i])
-        if ex then parts[#parts + 1] = ex end
-    end
-    return #parts > 0 and table.concat(parts, "  ") or "(none)"
+local function PaintTextPreview(value, leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers,
+    hideLeft, hideCenter, hideRight, absorbIconLeft, absorbIconCenter, absorbIconRight)
+    UnitSectionShared.PaintTextPreview(value,
+        { { leftMode, hideLeft, absorbIconLeft }, { centerMode, hideCenter, absorbIconCenter }, { rightMode, hideRight, absorbIconRight } },
+        { delimiter = delim, reverse = reverse, isPower = isPower, decimals = decimalHP, short = shortNumbers, group = true })
 end
 local function SlotHidePercentSymbol(scope, key)
     local conf = Conf(scope)
@@ -1053,7 +1002,7 @@ local function GFTextRefresh(ctx, s)
         local kind = CurrentScope()
         if hpControls.preview then
             local delim = Val(kind, "textDelimiter", " / ")
-            hpControls.preview:SetText(BuildTextPreviewStr(
+            PaintTextPreview(hpControls.preview,
                 Val(kind, "textLeft", "NONE"), Val(kind, "textCenter", "PERCENT"), Val(kind, "textRight", "NONE"),
                 delim, Bool(kind, "hpTextReverse", false), false, Bool(kind, "healthTextDecimals", false), Bool(kind, "hpFullValueShort", true),
                 SlotHidePercentSymbol(kind, "hpTextLeftHidePercentSymbol"),
@@ -1061,16 +1010,16 @@ local function GFTextRefresh(ctx, s)
                 SlotHidePercentSymbol(kind, "hpTextRightHidePercentSymbol"),
                 Bool(kind, "hpTextLeftAbsorbIcon", Bool(kind, "hpAbsorbIcon", false)),
                 Bool(kind, "hpTextCenterAbsorbIcon", Bool(kind, "hpAbsorbIcon", false)),
-                Bool(kind, "hpTextRightAbsorbIcon", Bool(kind, "hpAbsorbIcon", false))))
+                Bool(kind, "hpTextRightAbsorbIcon", Bool(kind, "hpAbsorbIcon", false)))
         end
         if powerControls.preview then
             local delim = Val(kind, "powerTextDelimiter", " / ")
-            powerControls.preview:SetText(BuildTextPreviewStr(
+            PaintTextPreview(powerControls.preview,
                 Val(kind, "powerTextLeft", "NONE"), Val(kind, "powerTextCenter", "PERCENT"), Val(kind, "powerTextRight", "NONE"),
                 delim, false, true, false, true,
                 SlotHidePercentSymbol(kind, "powerTextLeftHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "powerTextCenterHidePercentSymbol"),
-                SlotHidePercentSymbol(kind, "powerTextRightHidePercentSymbol")))
+                SlotHidePercentSymbol(kind, "powerTextRightHidePercentSymbol"))
         end
         UpdateTextHeaderBadges(s, tab, nameOn, hpOn, powerOn)
         FocusActiveGFPreviewText(s)

@@ -274,7 +274,7 @@ local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey,
             if value == nil then value = defaultValue end
             return value and true or false
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(v)
             GFWriteGroupValue(scope, groupKey, key, v and true or false, mode or "visual")
             if afterSet then afterSet(v and true or false) end
         end,
@@ -288,7 +288,7 @@ local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, 
             if value == nil then value = defaultValue end
             return value and true or false
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(v)
             GFWriteRootValue(scope, key, v and true or false, mode or "visual")
             if afterSet then afterSet(v and true or false) end
         end,
@@ -300,7 +300,7 @@ local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, w
             local group = GFReadGroup(scope, groupKey)
             return tonumber(group[key]) or defaultValue or 0
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(v)
             v = Round(v)
             GFWriteGroupValue(scope, groupKey, key, v, mode or "visual")
             if afterSet then afterSet(v) end
@@ -316,7 +316,7 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
             if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
             return value
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(v)
             local value = v or defaultValue
             if key == "filterToken" then value = CanonicalGroupFilterValue(value, groupKey) end
             if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
@@ -413,7 +413,7 @@ local function BuildGroupStyleBasics(G)
             type(Model.DebuffTypeBorderModeValues) == "function"
                 and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES, basicsCol }, { 24, -140, basicsCol },
             get = function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
-            customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(v)
+            customSetReason = "Writes the paired aura scopes and synchronizes the legacy debuff border mode.", set = function(v)
                 WriteGroupDebuffTypeBorderMode(scope, lane, v)
                 RefreshStylePreview()
             end,
@@ -452,7 +452,7 @@ local function BuildGroupStyleCooldown(G)
             local group = GFReadGroup(scope, lane)
             return group.cooldownSwipeReverse == true and "REVERSE" or "NORMAL"
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(v)
+        customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(v)
             GFWriteGroupValue(scope, lane, "cooldownSwipeReverse", v == "REVERSE", "visual")
             RefreshStylePreview()
         end,
@@ -635,7 +635,7 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
             local group = GFReadGroup(scope, lane)
             return group.sortReverse == true and "REVERSE" or "NORMAL"
         end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
+        customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(value)
             GFWriteGroupValue(scope, lane, "sortReverse", value == "REVERSE", "visual")
         end,
         meta = AuraControlMetaAtVisiblePath(ctx,
@@ -747,7 +747,7 @@ local function BuildGroupCategoryBlacklist(F, meta, half, blacklistY, categoryHe
         local tx = col == 0 and 16 or x2
         local toggle = BoundAura(ctx, blacklist, { "toggle", nil, nil, { CategoryLabel(cat), tx, startY - row * 30, catColW },
             get = function() return GFReadBlacklistCat(scope, lane, cat.key) end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
+            customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.",
                 set = function(v) GFWriteBlacklistCat(scope, lane, cat.key, v) end,
             meta = AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".category." .. AuraCatalogToken(cat.key)) })
         if cat.tooltip then AddTooltip(toggle, CategoryLabel(cat), cat.tooltip) end
@@ -947,7 +947,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 local group = GFReadGroup(scope, lane)
                 return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == "Player"
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
+            customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(value)
                 GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "auras")
             end,
             meta = AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil, {
@@ -960,7 +960,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 get = function()
                     return CanonicalGroupFilterValue(GFReadGroup(scope, lane).filterToken, lane) == "NonPlayer"
                 end,
-                customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
+                customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(value)
                     GFWriteGroupValue(scope, lane, "filterToken", value == true and "NonPlayer" or "ALL", "auras")
                 end,
                 meta = AuraControlMeta(ctx, "group-workspace.lane.debuff.filters.non-player", nil, {
@@ -1015,7 +1015,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 local group = GFReadGroup(scope, lane)
                 return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == item.value
             end,
-            customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(enabled)
+            customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(enabled)
                 local group = GFReadGroup(scope, lane)
                 local current = CanonicalGroupFilterValue(group.filterToken or "ALL", lane)
                 local value = enabled and item.value or (current == item.value and "ALL" or current)

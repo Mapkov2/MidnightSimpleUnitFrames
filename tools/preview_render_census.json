@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "scope": "F1 owned G2 paths and their helpers; C10-reviewed engine adapters retained",
+  "scope": "F1 owned G2 paths and helpers; J4 extends support-source review and separately records newly found remnants",
   "method": "Extend C10's inclusive reviewed render-range census to every F1/G2 path.\nCount physical and stripped Lua lines; union overlaps. Map surviving baseline\nlines with SequenceMatcher. Exclude reviewed runtime adapters (inputs, surface\nadoption, viewport transform), fixtures, lifecycle and editor chrome. A new\nimplementation needs review; hashes pin this census, which is not visual proof.\n",
   "range_policy": "Inclusive reviewed ranges clipped to baseline EOF, matching the measured F1 union.",
   "diagram_exclusions": [
@@ -329,7 +329,7 @@
           1355
         ]
       ],
-      "source_sha256": "2b5d0fe22baf74da42b21c43f836105277d52112083a6b36350362456bb28942",
+      "source_sha256": "bf562f8e68d7143fde5802ae6ff332c875877c5d74121708663984e4a076eb57",
       "adapter_exclusions": [
         {
           "name": "ApplySpellEffectPreview",
@@ -349,6 +349,34 @@
         {
           "file": "MSUF_Menu2_Preview_Scenes.lua",
           "source_sha256": "52a7e21af2795dfba4f5a214d5f041a68bdcc1d7672d383896b3fb2496948f99"
+        },
+        {
+          "file": "MSUF_Menu2_Preview_Rendering.lua",
+          "source_sha256": "cdb831db5e3329b45da2c42bb098ea99ab63623d8d9b4627d2515a1f8473b3ca"
+        },
+        {
+          "file": "MSUF_Menu2_PageLifecycle.lua",
+          "source_sha256": "022cef218fe896f4e28ee7d0d347b5e836fefdd4d7e494471895a1f7e1dccb28"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
+          "source_sha256": "63d1d9c029a40cdf3d34838eadcd25b4193478deab1824b8c0b9181411c4c4d9"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_UnitText.lua",
+          "source_sha256": "28c1555aa8c1eb082c8a487839e2f0d6de38f6f80d80b2dd6d1a582af39e883f"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_GroupBars.lua",
+          "source_sha256": "cba7c3cfd6c714a13ffde3c4310612fa17e6394a9a0bd59cef708eb389304851"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
+          "source_sha256": "0ada676a5e6fa17b1c9f970b89112b012d4f84a23e39675c329863caf7bf4aa1"
+        },
+        {
+          "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
+          "source_sha256": "9a8ee31fe1fa9857ddd486649a66441e45d4293ec5f568abe8a7d625ae444d71"
         }
       ],
       "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
@@ -524,11 +552,11 @@
       "support_sources": [
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Textures.lua",
-          "source_sha256": "63e45a2d220e353aa404d3094e73a8b3cb272e019f9f6db837ac342075f99463"
+          "source_sha256": "3cd2650bbd52e76370695461c36460b9f2bb4b30c8d9dad72d7be6068131ac3c"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
-          "source_sha256": "05c410013e8416a19f16195ef0b407a0de07320195cbd3d42cfa877fad66b801"
+          "source_sha256": "0b53294d715f2e6175842250387ebf437cdcfaa3626de7cc530b504c43cf0eb8"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Highlights.lua",
@@ -566,7 +594,7 @@
           1496
         ]
       ],
-      "source_sha256": "1736d9af68c090e990ec490d277e8d5e5d81b564ec9bc4ae6cd37ba1623306c2",
+      "source_sha256": "587f062d334aec8b48d5869b8af850be1e3f4cde5c1cb9fc7c11c4452b4c2791",
       "adapter_exclusions": [
         {
           "name": "M.RefreshHealthBackgroundInlinePreview",
@@ -585,11 +613,11 @@
       "support_sources": [
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Text.lua",
-          "source_sha256": "28b53e7e21520792782d9476195d83c409e50a98e28f5a861d1142adf025162d"
+          "source_sha256": "746c92f3ef67c9e4204d71c7ca45cbc3fafab0653509d126744858bfe9c0f518"
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua",
-          "source_sha256": "1a00ec6d1da019812b67ad9c6b08f802604897e00cb8ab6817290ce007f37010"
+          "source_sha256": "db02eb1ea36b69ea1a6339e2f93cda35ea55aae92ec03d1a8c534814567c0af8"
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",
@@ -718,5 +746,122 @@
   "before_physical": 2303,
   "before_code": 2176,
   "remaining_physical": 0,
-  "remaining_code": 0
+  "remaining_code": 0,
+  "j4_review": {
+    "baseline": "42ae1813ffb9b5f364b57af9e0d957014e60a7fa",
+    "count_policy": "The original F1 union above is historical. J4 remaining sites below are additional findings, not zeroed by rehashing.",
+    "landed": [
+      {
+        "file": "MSUF_Menu2_Preview_Rendering.lua",
+        "baseline_ranges": [
+          [
+            71,
+            96
+          ],
+          [
+            114,
+            126
+          ],
+          [
+            140,
+            198
+          ],
+          [
+            252,
+            400
+          ]
+        ],
+        "remaining_physical": 0,
+        "remaining_code": 0,
+        "reason": "15 unreachable rounded functions removed; bounds edge-line and snap helpers retained"
+      },
+      {
+        "file": "Pages/MSUF_Menu2_UnitText.lua",
+        "baseline_ranges": [
+          [
+            295,
+            306
+          ],
+          [
+            318,
+            355
+          ],
+          [
+            701,
+            734
+          ]
+        ],
+        "remaining_physical": 0,
+        "remaining_code": 0,
+        "reason": "Preview chrome shared; numeric samples compiled and written by UFText slots"
+      },
+      {
+        "file": "Pages/MSUF_Menu2_GroupBars.lua",
+        "baseline_ranges": [
+          [
+            491,
+            525
+          ],
+          [
+            529,
+            550
+          ],
+          [
+            602,
+            607
+          ],
+          [
+            1053,
+            1074
+          ]
+        ],
+        "remaining_physical": 0,
+        "remaining_code": 0,
+        "reason": "Sample data adapts to the shared UFText slot compiler and writers"
+      },
+      {
+        "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
+        "baseline_ranges": [
+          [
+            758,
+            765
+          ]
+        ],
+        "remaining_physical": 0,
+        "remaining_code": 0,
+        "reason": "Chrome and slot-input adapter only; no independent number formatter"
+      }
+    ],
+    "pending": [
+      {
+        "file": "Preview/MSUF_Menu2_GroupPreview_Render.lua",
+        "sites": [
+          "LayoutAuraGroup font/alpha loop",
+          "BuildPreviewFontSetter",
+          "ConfigureSpellPreviewHandle font/stack writes",
+          "RenderSpellIndicators font writes"
+        ],
+        "reason": "Needs the J1-owned Group_Preview scene font/sample contract; tested proposal outside repository"
+      },
+      {
+        "file": "Preview/MSUF_Menu2_ClassPowerPreview.lua",
+        "sites": [
+          "EnsurePlayerRuntime afterPaint health/border/layer writes"
+        ],
+        "reason": "Needs the J1-owned UnitScene health/border layer contract; tested proposal outside repository"
+      },
+      {
+        "file": "Pages/MSUF_Menu2_ColorPainter.lua",
+        "sites": [
+          "powerSurface.afterPaint",
+          "strip.Update health/layer writes"
+        ],
+        "reason": "Needs the same UnitScene layer contract; tested proposal outside repository"
+      }
+    ],
+    "navigation_dependency": {
+      "file": "Search/MSUF_Menu2_Search_Routing.lua",
+      "reason": "J5 must honor general._fontScopeKey as declared font-page view state; reviewed patch outside repository"
+    }
+  }
 }

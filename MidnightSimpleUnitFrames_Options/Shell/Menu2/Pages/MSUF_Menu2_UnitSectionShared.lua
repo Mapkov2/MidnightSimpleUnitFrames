@@ -272,7 +272,7 @@ function Shared.AttachSectionUX(ctx, opts)
                     popupSource = opts.scope()
                     if not popup then popup = CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices) end
                     popup.RefreshTargets()
-                    T.SetTranslatedText(popup.title, opts.label(popupSource) .. " · " .. (entry.label:GetText() or id))
+                    T.SetTranslatedText(popup.title, opts.label(popupSource) .. " Â· " .. (entry.label:GetText() or id))
                     popup:ClearAllPoints()
                     popup:SetPoint("TOPRIGHT", more, "BOTTOMRIGHT", 0, -4)
                     M.ApplyPopupFramePriority(popup)
@@ -762,6 +762,38 @@ function Shared.PreviewText(parent, text, x, y, width, color)
     value:SetWidth(width or 220)
     value:SetJustifyH("LEFT")
     return label, value
+end
+-- These are sample inputs only. The runtime slot compiler/writers own number,
+-- delimiter, percent and absorb formatting, including the final FontString sink.
+function Shared.PaintTextPreview(value, modes, options)
+    local state = value._msufTextPreview
+    if not state then
+        state = { slots = {}, parts = {} }
+        state.percentFn = function() return state.percent end
+        value._msufTextPreview = state
+    end
+    options = options or {}
+    local text = MSUF.UFText
+    local current, maximum, absorb = 630000, 1000000, 125000
+    if options.group then current, maximum, absorb = 12450, 15000, 3750 end
+    if options.isPower then current, maximum, absorb = 100, 100, 0 end
+    state.healthMissing, state.healthAbsorb = maximum - current, absorb
+    state.percent = current * 100 / maximum
+    for i = #state.parts, 1, -1 do state.parts[i] = nil end
+    for i = 1, 3 do
+        local row = modes[options.reverse and (4 - i) or i]
+        local mode = row[1]
+        if options.reverse then mode = MSUF.GF.ReverseHealthTextMode(mode) end
+        local nextIndex = text.AddTextSlot(state.slots, 1, value, mode, options.delimiter,
+            options.short, row[2], options.decimals and 1 or 0, row[3])
+        if nextIndex > 1 then
+            value._aText, value._aTextPlain = nil, nil
+            text.UpdateTextSlots(state.slots, 1, current, maximum, "player", state.percentFn, true, state)
+            state.parts[#state.parts + 1] = value:GetText()
+        end
+    end
+    value._aText, value._aTextPlain = nil, nil
+    value:SetText(#state.parts > 0 and table.concat(state.parts, "  ") or "(none)")
 end
 function Shared.TextBadgeValue(value)
     return tostring(value or ""):gsub("%s*/%s*", " + ")

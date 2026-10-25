@@ -265,6 +265,8 @@ local function PaintSample(frame, unit, sample, layout)
 end
 
 local LAYER_REGIONS = {
+  health = { "hpBar", "healthBackgroundBar", "healthLossTrail" },
+  border = { "border" },
   power = { "targetPowerBar", "powerBarBG", "powerLossTrail" },
   nameText = { "nameText", "totInlineSep", "totInlineText", "_msufNameDotsFS", "_msufInlineDotsFS" },
   hpText = { "hpTextLeft", "hpTextCenter", "hpText" }, powerText = { "powerTextLeft", "powerTextCenter", "powerText" },
@@ -297,6 +299,11 @@ function Scene:FilterLayers()
   end
   for layer, fields in pairs(LAYER_REGIONS) do
     if visible[layer] == false then for i = 1, #fields do Hide(frame[fields[i]]) end end
+  end
+  if visible.health == false then
+    local trail = frame.healthLossTrail
+    local pool = trail and trail._msufLossTrailPool
+    for i = 1, pool and #pool or 0 do Hide(pool[i]) end
   end
   if visible.power == false then
     local bar = frame.targetPowerBar

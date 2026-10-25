@@ -204,14 +204,22 @@ local function GetClassPowerFullRGB(resourceToken)
     return GetClassPowerRGB(resourceToken)
 end
 local function BindPowerColor(ctx, widget, kind, label, get, set, meta)
+    local write
+    if type(set) == "table" then write, set = set.write, nil end
     return Schema.Bind(ctx, widget, { id = meta.controlId, kind = kind, labelKey = label,
         scope = "colors", applyDomain = "powerColors", get = get,
-            customSetReason = "Writes the selected resource color mode, slot or color-channel record.", set = set, meta = meta })
+            customSetReason = "Writes the selected resource color mode, slot or color-channel record.",
+        set = set, write = write, meta = meta })
 end
 local CLASS_POWER_CONTROLS = {
     Color = function(...) return Schema.Owned(ColorValueAt(...), "colors", "classPowerColors") end,
     Button = function(CH, ...) return Schema.Owned(CH.ButtonAt(...), "colors", "classPowerColors") end,
 }
+local function FullResourceRecord()
+    local bars = Bars()
+    if type(bars.classPowerFullColorEnabled) ~= "table" then bars.classPowerFullColorEnabled = {} end
+    return bars.classPowerFullColorEnabled
+end
 local function BuildPowerAndClassPowerColors(ctx, b, CH)
     if M.ResourceExtrasPage then M.ResourceExtrasPage.BuildColors(ctx,b,Bars,ColorValueAt,function()
         local apply=CurrentApplyService()
@@ -225,7 +233,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     local power = Schema.Section(b:CollapsibleSection("colors_power", "Power Bar Colors", 150, false), "colors")
     AP.MoveWidget(BindPowerColor(ctx, W.Toggle(power, "Power bar color by class"), "toggle", "Power bar color by class",
         function() return M.PowerBarColorByClass.Get() end,
-        function(v) M.PowerBarColorByClass.Set(v) end,
+        { write = M.PowerBarColorByClass.write },
         Meta("power.color_by_class")), power, 12, -94)
     M.colorsPowerToken = M.colorsPowerToken or "MANA"
     local powerColor
@@ -316,9 +324,10 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         Meta("class_power.resource_slots.mode"))
     fullToggle = ValueSwitchAt(ctx, classPower, "Full resource color", 360, -116, 150,
         function() return ClassPowerFullColorEnabled(M.colorsCPToken or "COMBO_POINTS") end,
-        function(value)
-            SetClassPowerFullColorEnabled(M.colorsCPToken or "COMBO_POINTS", value)
-        end,
+        { write = { source = FullResourceRecord,
+            resolve = function() return "bars.classPowerFullColorEnabled." .. (M.colorsCPToken or "COMBO_POINTS") end,
+            convert = function(value) return value == true and true or nil end, after = ApplyClassPowerColors
+        } --[[schema setter: J5.Colors.FullResource]] },
         Meta("class_power.full_resource.enabled"))
     fullColor = CLASS_POWER_CONTROLS.Color(ctx, classPower, "Full", 540, -116,
         function() return GetClassPowerFullRGB(M.colorsCPToken or "COMBO_POINTS") end,

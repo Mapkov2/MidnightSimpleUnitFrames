@@ -473,14 +473,16 @@ local function BuildExternalFilterSection(ctx, auraBuilder)
     })
     local autoBlacklist = Schema.Build(ctx, filterSection, {{ "switch", "autoBlacklist", true,
         { "Auto-blacklist from Buffs", 24, -50, filterWidth - 48 },
-        meta = autoMeta, scope = "groups", domain = "auras", get = function()
+        meta = autoMeta, scope = "groups", domain = "auras",
+        companionWrites = { "gf_{scope}.auras.renderer" }, get = function()
             return AuraGroup(CurrentScope(), "externals").autoBlacklistBuffs ~= false
-        end, customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(value)
-            local activeScope = CurrentScope()
-            AuraGroup(activeScope, "externals").autoBlacklistBuffs = value == true
-            if QueueGF then QueueGF(activeScope, "auras") end
-            RefreshContext(ctx)
-        end,
+        end, write = { source = function() return AuraGroup(CurrentScope(), "externals") end,
+            strictBoolean = true,
+            resolve = function() return "gf_" .. CurrentScope() .. ".auras.externals.autoBlacklistBuffs" end,
+            after = function()
+                if QueueGF then QueueGF(CurrentScope(), "auras") end
+                RefreshContext(ctx)
+            end } --[[schema setter: J5.GroupAuras.AutoBlacklist]],
     }}, ROW_OPTIONS).autoBlacklist
     if type(M.AddTooltip) == "function" then
         M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",

@@ -263,6 +263,42 @@ function SpellSection.Open(state, ctx, b, RefreshPage)
     state.b, state.RefreshPage, state.spells = b, RefreshPage, spells
     state.siLeftX, state.siLeftW, state.siRightX, state.siRightW = siLeftX, siLeftW, siRightX, siRightW
 end
+local function TrackedSpecCommand(state)
+    local RefreshSpellIndicatorState, RequestSpellControlRefresh = state.RefreshState, state.RequestControlRefresh
+    return {
+    get = function()
+        local cfg = SpellIndicators(CurrentScope())
+        local specKey = CurrentSpellMultiSpec(CurrentScope())
+        if IsAllSpecsSpellSpec(specKey) then return true end
+        return cfg.spec == "multi" and specKey ~= "" and cfg.multiSpecs and cfg.multiSpecs[specKey] == true
+    end,
+    companionWrites = { "gf_{scope}.spellIndicators.multiSpecs" },
+    write = { source = function()
+        local cfg = SpellIndicators(CurrentScope())
+        cfg.multiSpecs = cfg.multiSpecs or {}
+        return cfg.multiSpecs
+    end,
+        resolve = function()
+            return "gf_" .. CurrentScope() .. ".spellIndicators.multiSpecs." .. CurrentSpellMultiSpec(CurrentScope())
+        end,
+        accept = function()
+            local key = CurrentSpellMultiSpec(CurrentScope())
+            return key ~= "" and not IsAllSpecsSpellSpec(key)
+        end,
+        targetAvailable = function()
+            local key = CurrentSpellMultiSpec(CurrentScope())
+            return key ~= "" and not IsAllSpecsSpellSpec(key)
+        end,
+        convert = function(value) return value and true or nil end,
+        after = function()
+            QueueSpellIndicators(CurrentScope())
+            RefreshGFPreview()
+            RefreshSpellIndicatorState()
+            RequestSpellControlRefresh("gf-spell-multi-track")
+        end
+    } --[[schema setter: J5.Spell.Tracked]]
+    }
+end
 --- Show spell indicators, Layer, Spec, Preview all spells, the multi-spec pair
 --- and the spell tile grid.
 function SpellSection.BuildSpecControls(state, ctx)
@@ -318,27 +354,7 @@ function SpellSection.BuildSpecControls(state, ctx)
             ChangedSpec(kind, "gf-spell-multi-spec")
         end,
         },
-        tracked = {
-        get = function()
-            local cfg = SpellIndicators(CurrentScope())
-            local specKey = CurrentSpellMultiSpec(CurrentScope())
-            if IsAllSpecsSpellSpec(specKey) then return true end
-            return cfg.spec == "multi" and specKey ~= "" and cfg.multiSpecs and cfg.multiSpecs[specKey] == true
-        end,
-        companionWrites = { "gf_{scope}.spellIndicators.multiSpecs" },
-        customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
-            local kind = CurrentScope()
-            local cfg = SpellIndicators(kind)
-            local specKey = CurrentSpellMultiSpec(kind)
-            if specKey == "" or IsAllSpecsSpellSpec(specKey) then return end
-            cfg.multiSpecs = cfg.multiSpecs or {}
-            cfg.multiSpecs[specKey] = value and true or nil
-            QueueSpellIndicators(kind)
-            RefreshGFPreview()
-            RefreshSpellIndicatorState()
-            RequestSpellControlRefresh("gf-spell-multi-track")
-        end,
-        },
+        tracked = TrackedSpecCommand(state),
     }, ControlMeta, StepMeta)
     local function SelectedSpellConfigTable()
         return CurrentSpellConfig(CurrentScope(), true) or SpellIndicators(CurrentScope())

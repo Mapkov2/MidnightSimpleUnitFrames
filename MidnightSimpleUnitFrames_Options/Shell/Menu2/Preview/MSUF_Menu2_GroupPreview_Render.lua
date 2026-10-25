@@ -953,19 +953,6 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg)
         if visual._sceneAuraLane == cfg and visual:GetParent() ~= host then visual:SetParent(host) end
     end
     M.PreviewHelpers.BindGroupSceneHandle(handle, st.scene.mock, host, scale, cfg.anchor)
-    local textAlpha = min(1, SceneLayerAlpha(st.scene, "auraText") / max(0.0001, SceneLayerAlpha(st.scene, groupKey)))
-    for _, visual in ipairs(frame._msufGFFrameAuraPreviews or {}) do
-        if visual._sceneAuraLane == cfg then
-            if visual._timer then
-                st.scene.SetPreviewFont(visual._timer, tonumber(cfg.cooldownSize) or 8)
-                visual._timer:SetAlpha(textAlpha)
-            end
-            if visual._stack then
-                st.scene.SetPreviewFont(visual._stack, tonumber(cfg.stackSize) or 10)
-                visual._stack:SetAlpha(textAlpha)
-            end
-        end
-    end
     handle._previewWriteScale = scale * ((st.scene.runtimeAuras and st.scene.runtimeAuras.dynamicScaleValue) or 1)
 end
 
@@ -1213,8 +1200,8 @@ function Stage.Refresh(env, self, reason)
     M.PreviewHelpers.RestoreGroupSceneHandles(self)
     Stage.PrepareScene(st, env)
     Stage.LayoutMockFrame(st, env)
-    Stage.RenderCell(st, env)
     Stage.ResolveFont(st, env)
+    Stage.RenderCell(st, env)
     Stage.PlacePowerHandle(st, env)
     Stage.RenderChrome(st, env)
     Stage.RenderBoundsAndAuras(st, env)
@@ -1568,7 +1555,7 @@ function Stage.RenderCell(st, env)
             sample = {}
             for key, value in pairs(CELL_SAMPLE) do sample[key] = value end
             sample.powerColor = { CELL_SAMPLE.powerColor[1], CELL_SAMPLE.powerColor[2], CELL_SAMPLE.powerColor[3] }
-            sample.portrait, sample.statusRegions = {}, {}
+            sample.portrait, sample.statusRegions, sample.auraTextAlpha = {}, {}, {}
             self._msufGFCellSample = sample
         end
         -- The live player when it can be read, the stylized sample for any missing field. The exact maxima and the
@@ -1583,6 +1570,11 @@ function Stage.RenderCell(st, env)
         sample.hpPct, sample.powerPct = scene.hpPct, scene.powerPct
         sample.healPct, sample.absorbPct = scene.healPct, scene.absorbPct
         scene.sampleClass = sample.class
+        sample.font = st.previewFont
+        for i = 1, #AURA_LANES do
+            local key = AURA_LANES[i][1]
+            sample.auraTextAlpha[key] = min(1, SceneLayerAlpha(scene, "auraText") / max(0.0001, SceneLayerAlpha(scene, key)))
+        end
         Stage.PrepareCellSamples(st, env, sample)
         cell:Configure({
             scale = st.previewScale, level = mock._msufPreviewElementLevelBias, role = scene.previewRole,
@@ -1642,53 +1634,17 @@ function Stage.RenderChrome(st)
     scene.mock._msufGFPreviewDispelOverlayRegion = overlay and overlay.Region
 end
 
---- The aura lanes set their texts' fonts through the preview font: path, flags and shadow of the group's font.
-local function BuildPreviewFontSetter(st)
-        local resolveSafe = MSUF.Require("MSUF_ResolveSafeFontPath", FILE)
-        local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", FILE)
-        return function(fs, size)
-            if not fs then return end
-            local path, fontFlags = st.previewFontPath, st.previewFontFlags
-            local g = EnsureDB().general
-            path = resolveSafe(path, size, fontFlags, g and g.fontKey)
-            if not SetFontChecked(fs, path, size, fontFlags) then
-                SetFontChecked(fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, fontFlags)
-            end
-            if fs.SetShadowOffset then
-                if st.previewFontShadow then
-                    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, st.previewFontShadowAlpha or 1) end
-                    fs:SetShadowOffset(st.previewFontShadowX or 1, st.previewFontShadowY or -1)
-                else
-                    fs:SetShadowOffset(0, 0)
-                end
-            end
-        end
-end
-
---- Font resolution for the widgets the preview draws itself (the aura lanes' timers and stacks).
+-- Pass the resolved runtime font as scene input, before the scene paints any text.
 function Stage.ResolveFont(st, env)
-        local gf, kind, runtimeSpec = st.gf, st.kind, st.runtimeSpec
-        local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind))
-            or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
-        local fontFlags = (runtimeSpec and runtimeSpec.fontFlags) or (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
-        local fontShadow = true
-        local fontShadowAlpha = tonumber(runtimeSpec and runtimeSpec.fontShadowAlpha) or 1
-        local fontShadowX = tonumber(runtimeSpec and runtimeSpec.fontShadowX) or 1
-        local fontShadowY = tonumber(runtimeSpec and runtimeSpec.fontShadowY) or -1
-        if runtimeSpec then
-            fontShadow = runtimeSpec.fontShadow == true
-        elseif gf and gf.ResolveFontShadow then
-            fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = gf.ResolveFontShadow(kind)
-        end
-        st.previewFontPath, st.previewFontFlags, st.previewFontShadow = fontPath, fontFlags, fontShadow
-        st.previewFontShadowAlpha, st.previewFontShadowX, st.previewFontShadowY = fontShadowAlpha, fontShadowX, fontShadowY
-        -- One setter per preview box; it reads this refresh's font from the stage state.
-        local setter = env._msufGFFontSetter
-        if not setter or setter.st ~= st then
-            setter = { st = st, fn = BuildPreviewFontSetter(st) }
-            env._msufGFFontSetter = setter
-        end
-        st.SetPreviewFont = setter.fn
+    local spec = st.runtimeSpec
+    local font = st.self._msufGFSceneFont or {}
+    st.self._msufGFSceneFont, st.previewFont = font, font
+    font.path, font.flags = spec.font, spec.fontFlags
+    font.key = EnsureDB().general.fontKey
+    local shadow = spec.fontShadow == true
+    font.shadowAlpha = shadow and (tonumber(spec.fontShadowAlpha) or 1) or 0
+    font.shadowX = shadow and (tonumber(spec.fontShadowX) or 1) or 0
+    font.shadowY = shadow and (tonumber(spec.fontShadowY) or -1) or 0
 end
 
 --- Group block border, bounds guide and the aura lanes (RenderAuras), whose
@@ -1702,7 +1658,6 @@ function Stage.RenderBoundsAndAuras(st, env)
         end
         self._bounds:SetShown(SceneLayerOn(scene, "bounds"))
         scene.previewScale = st.previewScale
-        scene.SetPreviewFont = st.SetPreviewFont
         RenderAuras(scene)
         st.LayoutHandle = scene.LayoutHandle
 end
@@ -1869,34 +1824,12 @@ local function ConfigureSpellPreviewHandle(st, handle, item, placed, appearance,
     local source = slot.color or EMPTY_APPEARANCE
     color[1], color[2], color[3], color[4] = source[1] or 0.69, source[2] or 0.50, source[3] or 0.88, source[4] or 1
     slot.color = color
+    slot.font = st.previewFont
+    slot.cooldownSize = tonumber(slot.cooldownSize or placed.cooldownSize) or 8
+    slot.numberTextSize = slot.visual == "number" and max(8, slot.size * 0.72) or nil
+    slot.stackText = slot.visual == "number" and (slot.showStacks and "9" or "") or nil
     local visual = MSUF.GF.PreviewSpellSample(st.mock._cell, handle, slot)
     if not visual then return false end
-    visual:SetAlpha(tonumber(appearance.alpha) or 1)
-    if visual._timer then st.SetPreviewFont(visual._timer, tonumber(slot.cooldownSize or placed.cooldownSize) or 8) end
-    if visual._stack then
-        st.SetPreviewFont(visual._stack, slot.visual == "number" and max(8, slot.size * 0.72) or tonumber(slot.stackSize) or 10)
-        if slot.visual == "number" then visual._stack:SetText(slot.showStacks and "9" or "") end
-    end
-    if visual._glow then visual._glow:Hide() end
-    if visual._msufA3ClassicIconGlow then visual._msufA3ClassicIconGlow:Hide() end
-    if slot.visual == "icon" and slot.iconEffect == "glow" then
-        local effects, root = MSUF.MSUF_Auras3.SpellIndicators
-        if effects and effects.ApplyPreviewIconEffect then
-            root = effects.ApplyPreviewIconEffect(visual, slot)
-        else
-            root = visual._msufClassicPreviewIconGlow
-            if not root then
-                root = PixelLayoutRegion(CreateFrame("Frame", nil, visual))
-                root:EnableMouse(false)
-                root._msufMenuSpellSampleOwner = visual
-                visual._msufClassicPreviewIconGlow = root
-            end
-            root:SetAllPoints(visual)
-            ShowPreviewGlow(st.env, root, root, color[1], color[2], color[3], color[4], max(2, slot.size * 0.15))
-            root:Show()
-        end
-        handle._msufSpellPreviewIconEffectRoot = root
-    end
     handle._msufSpellIndicatorLayer = item and item.layer
     handle._msufSpellIndicatorStrata = item and item.strata
     if handle._label then
@@ -2057,11 +1990,6 @@ function Stage.RenderSpellIndicators(st, env)
                 handle._msufSpellIndicatorLayer = item.layer
                 handle._msufSpellIndicatorStrata = item.strata
                 if handle._label then handle._label:SetText(item.display or item.auraName or "SPELL") end
-                if visual._timer then st.SetPreviewFont(visual._timer, tonumber(item.cooldownSize) or 8) end
-                if visual._stack then
-                    st.SetPreviewFont(visual._stack, item.visual == "number" and (tonumber(item.size) or 18) * 0.72
-                        or tonumber(item.stackSize) or 10)
-                end
                 local shown = M.PreviewHelpers.BindGroupSceneHandle(handle, st.mock, visual, st.previewScale, item.anchor)
                 local legacyEffect = not engineEffects and EffectShown(item.frameEffect)
                 if legacyEffect then ApplySpellEffectPreview(env, handle, item.frameEffect)

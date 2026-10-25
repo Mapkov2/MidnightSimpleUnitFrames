@@ -57,6 +57,10 @@
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
       },
       {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
+      },
+      {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
         "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
       },
@@ -181,6 +185,10 @@
       {
         "key": "Out of combat",
         "stub": "L[\"Out of combat\"] = \"Out of combat\""
+      },
+      {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
       },
       {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
@@ -341,6 +349,10 @@
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
       },
       {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
+      },
+      {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
         "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
       },
@@ -409,6 +421,10 @@
       {
         "key": "MSUF: Usage: /msuf compatsave [off].",
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
       },
       {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
@@ -481,6 +497,10 @@
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
       },
       {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
+      },
+      {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
         "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
       },
@@ -549,6 +569,10 @@
       {
         "key": "MSUF: Usage: /msuf compatsave [off].",
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
       },
       {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
@@ -621,6 +645,10 @@
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
       },
       {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
+      },
+      {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
         "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
       },
@@ -689,6 +717,10 @@
       {
         "key": "MSUF: Usage: /msuf compatsave [off].",
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
       },
       {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
@@ -761,6 +793,10 @@
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
       },
       {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
+      },
+      {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
         "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
       },
@@ -831,6 +867,10 @@
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
       },
       {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
+      },
+      {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",
         "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
       },
@@ -899,6 +939,10 @@
       {
         "key": "MSUF: Usage: /msuf compatsave [off].",
         "stub": "L[\"MSUF: Usage: /msuf compatsave [off].\"] = \"MSUF: Usage: /msuf compatsave [off].\""
+      },
+      {
+        "key": "Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.",
+        "stub": "L[\"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\"] = \"Profile '%s' could not be backed up. Its original is unchanged; this temporary session copy will not be saved.\""
       },
       {
         "key": "Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.",

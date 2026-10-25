@@ -438,11 +438,10 @@ function PortraitSection.Controls(p)
             local mode = NormalizePortrait(unit)
             return mode == "RIGHT" and "RIGHT" or "LEFT"
         end,
-        customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", set = function(v)
-            M._msuf2LastPortraitSide[unit] = v == "RIGHT" and "RIGHT" or "LEFT"
-            SetPortraitValue(unit, "portraitMode", v or "LEFT", "MSUF2_PORTRAIT_MODE")
-            p.Refresh()
-        end,
+        write = { call = SetPortraitValue, fallback = "LEFT", args = { "MSUF2_PORTRAIT_MODE" },
+            before = function(value) M._msuf2LastPortraitSide[unit] = value == "RIGHT" and "RIGHT" or "LEFT" end,
+            after = p.Refresh
+        } --[[schema setter: J5.UnitPortrait.Position]],
         scope = unit, meta = Meta("portrait.position", tostring(unit) .. ".portraitMode"),
     })
     c.render = Drop(cards.main, "portraitRender", "2D", "Render", PORTRAIT_RENDER, -116, "MSUF2_PORTRAIT_RENDER", { afterSet = Refresh })

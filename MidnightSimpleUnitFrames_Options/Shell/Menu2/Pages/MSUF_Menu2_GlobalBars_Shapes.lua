@@ -57,10 +57,13 @@ local function BuildOutlineSection(ctx, b)
             tip = "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", tipOpts = "plain" },
         { "dropdown", "texture", "", { "Outline style", OutlineTextureValues, 300 }, path = "outline.texture",
             get = function() return BorderStyles.NormalizeFrame(BarScopeGetBars("barOutlineTexture", "")) end,
-        customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.", set = function(value)
-            BarScopeSetBars("barOutlineTexture", value or "", "MSUF2_BAR_OUTLINE_TEXTURE", true)
-            RequestOutlineRuntime()
-        end },
+        write = { call = BarScopeSetBars, keyOnly = true, fallback = "",
+            resolve = function()
+                local scope = CurrentBarsScope()
+                return (scope == "shared" and "bars" or scope) .. ".barOutlineTexture"
+            end,
+            args = { "MSUF2_BAR_OUTLINE_TEXTURE", true }, after = RequestOutlineRuntime
+        } --[[schema setter: J5.GlobalBars.OutlineTexture]] },
     }, options)
     local outlineSlider, outlineLayer, outlineTexture = controls.barOutlineThickness, controls.barOutlineLayer, controls.texture
     AttachBarsColorShortcut(outline,

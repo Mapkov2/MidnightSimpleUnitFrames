@@ -778,12 +778,11 @@ M.PowerBarColorByClass = {
         local g = G()
         return tostring(g.powerColorMode or g.powerBarColorMode or "power"):lower() == "class"
     end,
-    Set = function(enabled)
-        G().powerColorMode = enabled and "class" or "power"
-        ApplyColors()
-    end,
+    write = { source = G, convert = function(enabled) return enabled and "class" or "power" end,
+        after = ApplyColors } --[[schema setter: J5.Colors.PowerMode]]
 }
-
+M.PowerBarColorByClass.Set = Schema.Setter({ id = "colors.powerColorMode", kind = "toggle",
+    setting = "general.powerColorMode", write = M.PowerBarColorByClass.write })
 
 -- Explicit load-time exports for the following responsibility modules.
 Parts.ApiCall = ApiCall

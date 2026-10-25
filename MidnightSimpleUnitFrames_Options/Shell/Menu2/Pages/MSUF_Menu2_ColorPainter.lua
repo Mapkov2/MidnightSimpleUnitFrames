@@ -1097,13 +1097,8 @@ function PainterBuild.ResourcesStrip(state)
             powerSurface.root:Deactivate()
             for _, root in pairs(roots) do root:Deactivate() end
         end)
-        powerSurface.afterPaint = function(frame, scene)
-            frame.hpBar:Hide()
-            frame.healthBackgroundBar:Hide()
-            if frame.healthLossTrail then frame.healthLossTrail:Hide() end
-            scene:SetLayerFilter({ nameText = false, hpText = false, powerText = false, portrait = false,
-                status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
-        end
+        powerSurface.layerVisible = { health = false, nameText = false, hpText = false, powerText = false,
+            portrait = false, status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false }
         function strip.Update()
             if not strip:IsVisible() then return end
             T.SetTranslatedText(powerLabel, Tr("Power") .. " - " .. Tr(preview.powerLabel() or ""))
@@ -1111,13 +1106,7 @@ function PainterBuild.ResourcesStrip(state)
             local powerToken = M.colorsPowerToken or "MANA"
             local powerType = 0
             for key, token in pairs(MSUF.Require("MSUF_CP_CONST", FILE).POWER_TYPE_TOKENS) do if token == powerToken then powerType = key break end end
-            local frame = powerSurface:Refresh({ power = .62, powerType = powerType, powerToken = powerToken })
-            if frame then
-                frame.hpBar:Hide()
-                frame.healthBackgroundBar:Hide()
-                powerSurface.scene:SetLayerFilter({ nameText = false, hpText = false, powerText = false, portrait = false,
-                    status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
-            end
+            powerSurface:Refresh({ power = .62, powerType = powerType, powerToken = powerToken })
             local selected = M.colorsCPToken or "COMBO_POINTS"
             local spec
             for _, candidate in pairs(M.ClassPowerPreviewSpecs) do

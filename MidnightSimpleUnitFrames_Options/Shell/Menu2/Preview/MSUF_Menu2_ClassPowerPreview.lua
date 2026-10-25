@@ -638,6 +638,15 @@ local function EnsurePlayerRuntime(preview, bars, player, spec)
     if not surface then
         surface = Helpers.NewRuntimeUnitSurface(preview.playerRef, "player", {})
         surface.fit = false
+        surface.layerVisible = { health = false, border = false, nameText = false, hpText = false, portrait = false,
+            status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false }
+        surface.layout = function(frame)
+            local player = preview._runtimePlayer
+            if frame.targetPowerBar and DetachedPowerShown(player) then
+                AnchorDetachedPower(preview, frame.targetPowerBar, player, preview.cpScene and preview.cpScene.CP.container,
+                    tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4)
+            end
+        end
         preview.playerRuntime = surface
         surface.configure = function(config)
             config.width, config.height = preview.playerW, preview.playerH
@@ -665,26 +674,9 @@ local function EnsurePlayerRuntime(preview, bars, player, spec)
     sample.powerToken = player._msufResourceExtraPower
     if not sample.powerToken then sample.powerToken = Core.CPConst.POWER_TYPE_TOKENS[sample.powerType] end
     for key, token in pairs(Core.CPConst.POWER_TYPE_TOKENS) do if token == sample.powerToken then sample.powerType = key break end end
+    surface.layerVisible.power = DetachedPowerShown(player)
     local frame = surface:Refresh(sample)
     if not frame then return nil end
-    if not surface.afterPaint then
-        surface.afterPaint = function(frame, scene)
-            frame.hpBar:Hide()
-            frame.healthBackgroundBar:Hide()
-            if frame.healthLossTrail then frame.healthLossTrail:Hide() end
-            if frame.border then frame.border:Hide() end
-            local player = preview._runtimePlayer
-            if frame.targetPowerBar and player then
-                if DetachedPowerShown(player) then
-                    AnchorDetachedPower(preview, frame.targetPowerBar, player, preview.cpScene and preview.cpScene.CP.container,
-                        tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4)
-                else frame.targetPowerBar:Hide() end
-            end
-            scene:SetLayerFilter({ nameText = false, hpText = false, portrait = false, status = false,
-                auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
-        end
-    end
-    surface.afterPaint(frame, surface.scene)
     if not preview.auxiliary then preview.auxiliary = MSUF.CPBuilders.NewAuxiliarySurface(frame) end
     local cp = preview.cpScene and preview.cpScene.CP
     local count = preview.cpSample and preview.cpSample.count or 0

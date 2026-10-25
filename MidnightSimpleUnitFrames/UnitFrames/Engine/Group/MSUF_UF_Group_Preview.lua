@@ -467,13 +467,28 @@ local PREVIEW_AURA_LANES = {
   },
 }
 
-local function SetPreviewFont(fontString, size)
+local function SetPreviewFont(fontString, size, font)
   if not (fontString and fontString.SetFont) then return end
   size = tonumber(size) or 10
   if not (size >= 6) then size = 6 end
-  if fontString._msufGFPreviewFontSize == size then return end
-  fontString._msufGFPreviewFontSize = size
-  fontString:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+  font = font or (activeScene and activeScene.sample and activeScene.sample.font)
+  local path, flags = font and font.path or STANDARD_TEXT_FONT, font and font.flags or "OUTLINE"
+  local alpha, x, y = font and font.shadowAlpha or 0, font and font.shadowX or 0, font and font.shadowY or 0
+  if fontString._msufGFPreviewFontSize == size and fontString._msufGFPreviewFontPath == path
+    and fontString._msufGFPreviewFontFlags == flags and fontString._msufGFPreviewShadowAlpha == alpha
+    and fontString._msufGFPreviewShadowX == x and fontString._msufGFPreviewShadowY == y then return end
+  path = Dep("MSUF_ResolveSafeFontPath")(path, size, flags, font and font.key)
+  local setFont = Dep("MSUF_SetFontChecked")
+  local accepted = setFont(fontString, path, size, flags)
+  if not accepted then
+    path = STANDARD_TEXT_FONT
+    accepted = setFont(fontString, path, size, flags)
+  end
+  fontString._msufGFPreviewFontSize = accepted and size or nil
+  fontString._msufGFPreviewFontPath, fontString._msufGFPreviewFontFlags = accepted and path or nil, flags
+  fontString._msufGFPreviewShadowAlpha, fontString._msufGFPreviewShadowX, fontString._msufGFPreviewShadowY = alpha, x, y
+  fontString:SetShadowColor(0, 0, 0, alpha)
+  fontString:SetShadowOffset(x, y)
 end
 
 
@@ -515,7 +530,7 @@ end
 
 local function ShowPreviewTimer(visual, cfg, text)
   local timer = EnsurePreviewFontString(visual, "_timer")
-  SetPreviewFont(timer, cfg.cooldownSize or 8)
+  SetPreviewFont(timer, cfg.cooldownSize or 8, cfg.font)
   timer:SetText(text)
   timer:SetTextColor(1, 1, 1, 1)
   AuraPainter.PlaceText(timer, visual, cfg.cooldownAnchor or "CENTER", cfg.cooldownX or 0, cfg.cooldownY or 0, "POINT_ONLY")
@@ -524,15 +539,19 @@ end
 
 --- Swipe, timer, stack and duration bar of an icon-type lane aura or indicator;
 --- both read the same field names. Returns the icon's swipe region, if any.
-local function PaintIconLayers(visual, cfg, size, barOnly, textOn, timerText)
+local function PaintIconLayers(visual, cfg, size, barOnly, textOn, timerText, textAlpha)
   if cfg.showCooldownSwipe == true and not barOnly then
     AuraPainter.TopSwipe(EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1), visual, size, 0.42)
   end
-  if cfg.showCooldownText == true and textOn then ShowPreviewTimer(visual, cfg, timerText) end
+  if cfg.showCooldownText == true and textOn then
+    ShowPreviewTimer(visual, cfg, timerText)
+    visual._timer:SetAlpha(textAlpha or 1)
+  end
   if cfg.showStacks == true and textOn then
     local stack = EnsurePreviewFontString(visual, "_stack")
-    SetPreviewFont(stack, cfg.stackSize or 10)
-    stack:SetText("2")
+    SetPreviewFont(stack, cfg.stackSize or 10, cfg.font)
+    stack:SetText(cfg.stackText or "2")
+    stack:SetAlpha(textAlpha or 1)
     local r, g, b
     if type(Auras.GetStackCountColor) == "function" then r, g, b = Auras.GetStackCountColor() end
     stack:SetTextColor(r or 1, g or 1, b or 1, 1)
@@ -646,7 +665,9 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   local barOnly = lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY"
   texture:SetShown(not barOnly)
 
-  swipe = PaintIconLayers(visual, lane, size, barOnly, PreviewLayerOn("auraText"), sampleIndex == 1 and "12" or "8")
+  local textAlphas = activeScene and activeScene.sample and activeScene.sample.auraTextAlpha
+  swipe = PaintIconLayers(visual, lane, size, barOnly, PreviewLayerOn("auraText"),
+    sampleIndex == 1 and "12" or "8", textAlphas and textAlphas[descriptor.key])
 
   if type(A3.ApplyAuraIconShape) == "function" then
     A3.ApplyAuraIconShape(visual, lane.iconShape, nil, texture, swipe)
@@ -1153,8 +1174,8 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   elseif visualType == "number" then
     texture:Hide()
     stack = EnsurePreviewFontString(visual, "_stack")
-    SetPreviewFont(stack, size * 0.72)
-    stack:SetText("2")
+    SetPreviewFont(stack, slot.numberTextSize or size * 0.72, slot.font)
+    stack:SetText(slot.stackText or "2")
     stack:SetTextColor(r, g, b, a)
     AuraPainter.PlaceText(stack, visual, "CENTER", 0, 0, "POINT_ONLY")
     stack:Show()
@@ -1198,6 +1219,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   elseif visual._msufA3ClassicIconGlow then
     visual._msufA3ClassicIconGlow:Hide()
   end
+  visual:SetAlpha(tonumber(slot.alpha) or 1)
   visual:SetShown(not hiddenVisual)
   return not hiddenVisual or effectShown
 end
