@@ -5,6 +5,9 @@ local check = out == "--check" or arg[3] == "--check" or arg[4] == "--check"
 local sparse = out == "--check" or out == "--write" or arg[3] == "--sparse-v2"
 local outputParts = {}
 local dataPath = root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageData.lua"
+local function NormalizeNewlines(text)
+    return text and (text:gsub("\r\n", "\n"))
+end
 local function ReadStorageData()
     local source = assert(io.open(dataPath, "rb"))
     local text = source:read("*a")
@@ -158,7 +161,7 @@ if arg[3] == "--sparse-v3" then
     if check then
         local generated = table.concat(outputParts)
         local current = runtimeText:match("(%-%- BEGIN SPARSE V3 INHERITED DEFAULTS.-%-%- END SPARSE V3 INHERITED DEFAULTS\r?\n)")
-        assert(current == generated, "Sparse V3 generated defaults differ")
+        assert(NormalizeNewlines(current) == NormalizeNewlines(generated), "Sparse V3 generated defaults differ")
     end
     print(("defaults_schema_generate: V3 %d inherited fields, %d owners, %d pooled pairs"):format(count, #names, #pool))
     return
@@ -249,7 +252,7 @@ if sparse then
     if check then
         local text = ReadStorageData()
         local frozen = text:match("(%-%- BEGIN FROZEN SPARSE V2 DATA.-%-%- END FROZEN SPARSE V2 DATA\r?\n)")
-        assert(frozen == table.concat(outputParts), "frozen Sparse V2 dictionary differs")
+        assert(NormalizeNewlines(frozen) == NormalizeNewlines(table.concat(outputParts)), "frozen Sparse V2 dictionary differs")
         print("defaults_schema_generate: frozen Sparse V2 dictionary identical")
     end
     print(("defaults_schema_generate: V2 %d scalar fields, %d owners, %d pooled key/value pairs"):format(

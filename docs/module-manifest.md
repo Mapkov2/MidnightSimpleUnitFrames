@@ -2,8 +2,8 @@
 
 `tools/module-manifest.json` is the hand-edited registration source. Run
 `tools/generate_module_manifest.py --write` after changing it. The same tool's
-`--check` mode is static, compares exact bytes, writes nothing, and runs before
-the Lua slot in `tools/release-check.ps1`.
+`--check` mode is static, compares content after LF/CRLF normalization, writes
+nothing, and runs before the Lua slot in `tools/release-check.ps1`.
 
 The initial import at `c5fe4e3cb` preserves all 12 TOCs, 27 XML load manifests,
 the load lock and the reviewed lists byte for byte, including CRLF, BOM state,
@@ -114,7 +114,7 @@ return 1 without writing, then `--write` repairs the output and `--check` return
 
 The generator emits 49 outputs and runs without Lua, Git, external sources or
 network access. The frozen `load-graph.lua` remains an independent compatible
-reader; its historical lock header is deliberately kept byte-identical.
+reader; both writers name the canonical Python generator in the lock header.
 
 These are source/build contracts. They do not establish live WoW visual,
 combat/taint or performance acceptance.

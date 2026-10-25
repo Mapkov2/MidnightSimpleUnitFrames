@@ -6,6 +6,23 @@ classified as a checker called by the generated-lists phase; its standalone
 regression covers fresh tracked checkouts, pending tests, invalid phases and
 stale exclusions. Pending Lua, Python and PowerShell tests are discovered.
 
+The scorecard reports wall time as information. Its static scan budget is
+strictly below 10 seconds of process CPU time, excluding time the process waits
+for disk or other work on the machine. Every content metric still fails hard;
+timing cannot turn a content failure into a pass. The timing regression drives
+the real verdict with independent clocks and checks each content failure.
+
+Generated manifest and Sparse V2/V3 checks ignore LF/CRLF differences only.
+Content, whitespace and BOM changes still fail. The manifest regression checks
+both checkout styles without rewriting either. The sparse regression runs both
+real generator checks on disposable copies of the schema, storage data and
+helpers in each checkout style, then verifies that content mutations fail.
+
+The scheduler policy smoke advances a fake clock through both delayed backends.
+`ScheduleAt` covers past/future deadlines, earlier/later replacements, cancel,
+cancel-and-reuse and callback execution times. This proves scheduler policy
+against modeled backend contracts; it does not measure native game timing.
+
 ## Schema coverage
 
 `tools/menu_schema_coverage_receipt.json` is compact committed evidence from a

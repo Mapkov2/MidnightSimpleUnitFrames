@@ -2,12 +2,12 @@
 -- (Kernel/MSUF_Scheduler.lua, header):
 --   RunNextFrame / ScheduleOnce  the FIRST function queued for a pending key
 --                                wins; later calls for it are ignored
---   ScheduleAfter                the LAST function and the LAST deadline win
+--   ScheduleAfter / ScheduleAt   the LAST function and the LAST deadline win
 -- Pinned here on both delayed backends (TimedSignalMap and C_Timer.After), plus
 -- the independence of the two tables.
 -- Usage: lua tools/tests/scheduler_pending_key_policy_smoke.lua <repoRoot>
 local repo = assert(arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
-local schedulerPath = repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua"
+local schedulerPath = arg[2] or repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua"
 
 local frame
 local function NewFrame()
@@ -171,5 +171,124 @@ do
     timers[1].callback()
     assert(table.concat(ran, ",") == "next-frame", "the cancelled delayed callback ran")
 end
+
+-- Absolute deadlines: execute callbacks through a chronological fake clock,
+-- rather than firing them manually and hiding deadline conversion mistakes.
+local function CheckDeadlines(native)
+    local now, timers, callbacks, signals = 100, {}, {}, {}
+    local map = {}
+    GetTime = function() return now end
+    function map:RegisterCallback(fn)
+        callbacks[#callbacks + 1] = fn
+        return #callbacks
+    end
+    function map:SignalAt(key, at) signals[key] = at end
+    function map:SignalAfter() error("ScheduleAt must use native absolute deadlines") end
+    function map:CancelSignal(key) signals[key] = nil end
+    if native then
+        TimerUtil = { CreateTimedSignalCallbackMap = function() return map end }
+        C_Timer = { NewTimedSignalMap = function() error("built through TimerUtil") end }
+    else
+        TimerUtil = nil
+        C_Timer = { After = function(delay, fn) timers[#timers + 1] = { at = now + delay, fn = fn } end }
+    end
+    local s, ran = LoadScheduler(), {}
+    local function Mark(name)
+        return function() ran[#ran + 1] = { name, now } end
+    end
+    local function Advance(at)
+        assert(at >= now)
+        while true do
+            local first, deadline
+            if native then
+                for key, due in pairs(signals) do
+                    if due <= at and (deadline == nil or due < deadline) then first, deadline = key, due end
+                end
+            else
+                for key, timer in ipairs(timers) do
+                    if timer.at <= at and (deadline == nil or timer.at < deadline) then first, deadline = key, timer.at end
+                end
+            end
+            if not first then break end
+            assert(deadline >= now, "backend received a deadline in the past")
+            now = deadline
+            if native then
+                signals[first] = nil
+                callbacks[first]()
+            else
+                table.remove(timers, first).fn()
+            end
+        end
+        now = at
+    end
+    local function Expect(count, name, at)
+        assert(#ran == count, "unexpected callback count: " .. #ran .. ", expected " .. count)
+        if name then
+            assert(ran[count][1] == name and ran[count][2] == at, "wrong callback or actual execution time")
+        end
+    end
+
+    assert(s.ScheduleAt("key", 50, Mark("past")) == true and s.IsScheduled("key"))
+    Expect(0) -- Even a past deadline waits for backend dispatch.
+    Advance(100)
+    Expect(1, "past", 100)
+    assert(not s.IsScheduled("key"))
+
+    Advance(200)
+    s.ScheduleAt("key", 240, Mark("future"))
+    Advance(239)
+    Expect(1)
+    Advance(240)
+    Expect(2, "future", 240)
+
+    Advance(300)
+    s.ScheduleAt("key", 310, Mark("replaced"))
+    Advance(302)
+    s.ScheduleAt("key", 320, Mark("later"))
+    Advance(310)
+    Expect(2)
+    Advance(320)
+    Expect(3, "later", 320)
+
+    Advance(400)
+    s.ScheduleAt("key", 430, Mark("replaced"))
+    Advance(402)
+    s.ScheduleAt("key", 410, Mark("earlier"))
+    Advance(409)
+    Expect(3)
+    Advance(410)
+    Expect(4, "earlier", 410)
+    Advance(430)
+    Expect(4)
+
+    Advance(500)
+    s.ScheduleAt("key", 510, Mark("cancelled"))
+    assert(s.CancelScheduled("key") and not s.IsScheduled("key"))
+    assert(not s.CancelScheduled("key"))
+    Advance(510)
+    Expect(4)
+
+    Advance(600)
+    s.ScheduleAt("key", 610, Mark("cancelled"))
+    s.CancelScheduled("key")
+    Advance(602)
+    s.ScheduleAt("key", 620, Mark("reused"))
+    Advance(610)
+    Expect(4)
+    Advance(620)
+    Expect(5, "reused", 620)
+    assert(not s.IsScheduled("key"))
+    if native then assert(#callbacks == 1, "rescheduling registered extra native callbacks") end
+
+    local callback = Mark("default-key")
+    s.ScheduleAt(nil, 650, callback)
+    assert(s.IsScheduled(callback))
+    Advance(650)
+    Expect(6, "default-key", 650)
+    assert(not s.IsScheduled(callback))
+    print("ScheduleAt deadlines: " .. (native and "TimedSignalMap" or "C_Timer.After") .. " OK")
+end
+CheckDeadlines(false)
+CheckDeadlines(true)
 
 print("scheduler_pending_key_policy_smoke: OK")

@@ -1447,6 +1447,19 @@
         "{client}",
         "wide"
       ]
+    },
+    {
+      "test": "tools/tests/scorecard_timing_smoke.py",
+      "phase": "generated",
+      "arguments": []
+    },
+    {
+      "test": "tools/tests/sparse_generator_line_endings_smoke.py",
+      "phase": "profiles",
+      "arguments": [
+        "{root}",
+        "{lua}"
+      ]
     }
   ],
   "excluded": {
