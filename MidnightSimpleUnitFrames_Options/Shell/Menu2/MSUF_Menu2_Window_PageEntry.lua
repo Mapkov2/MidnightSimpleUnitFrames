@@ -306,9 +306,29 @@ ResizePageSurface = function(frame, width)
     if frame._msuf2Width then frame._msuf2Width = width end
     frame:SetWidth(width)
 end
+local function ResizePageControl(widget)
+    local parent = widget._msuf2ContextLayoutParent
+    if parent then
+        W.MoveWidget(widget, parent, widget._msuf2ContextLayoutX, widget._msuf2ContextLayoutY,
+            widget._msuf2RequestedWidth)
+        if widget._msuf2HideValueBox then
+            if widget.editBox then widget.editBox:Hide() end
+            for _, button in ipairs(widget._msuf2StepButtons or {}) do button:Hide() end
+        end
+    end
+end
 local function ResizePageEntry(entry, width, height)
     local ctx = entry.context
     if not ctx then return end
+    -- Lazy sub-builders may have appeared since this area was selected.
+    for _, area in pairs(entry.pageAreas or {}) do
+        for i = #ctx._msuf2PageBuilders, 1, -1 do
+            if ctx._msuf2PageBuilders[i].ctx._msuf2PageArea == area then table.remove(ctx._msuf2PageBuilders, i) end
+        end
+        for _, builder in ipairs(area.active.ctx._msuf2PageBuilders) do
+            ctx._msuf2PageBuilders[#ctx._msuf2PageBuilders + 1] = builder
+        end
+    end
     local builders = ctx._msuf2PageBuilders or {}
     for i = 1, #builders do
         local builder = builders[i]
@@ -325,23 +345,19 @@ local function ResizePageEntry(entry, width, height)
         builder:RelayoutCollapsibles()
     end
     for i = 1, #(entry.searchWidgets or {}) do
-        local widget = entry.searchWidgets[i]
-        local parent = widget._msuf2ContextLayoutParent
-        if parent then
-            W.MoveWidget(widget, parent, widget._msuf2ContextLayoutX, widget._msuf2ContextLayoutY,
-                widget._msuf2RequestedWidth)
-            if widget._msuf2HideValueBox then
-                if widget.editBox then widget.editBox:Hide() end
-                for _, button in ipairs(widget._msuf2StepButtons or {}) do button:Hide() end
-            end
-        end
+        ResizePageControl(entry.searchWidgets[i])
     end
     for i = 1, #(entry.resizeCallbacks or {}) do entry.resizeCallbacks[i]() end
     entry.layoutWidth, entry.layoutHeight = width, height
     ApplyContextContentHeight(entry, entry.wrapper, entry.contentHeight or entry.height)
 end
+local function PageStorageSlot(key, slot)
+    if key:match("^uf_") then return slot:match("^[^|]+") end
+    return slot
+end
 local function PageEntryMatchesLayout(entry, slot)
-    if type(entry) ~= "table" or entry.layoutSlot ~= slot then return false end
+    if type(entry) ~= "table" then return false end
+    if PageStorageSlot(entry.key, entry.layoutSlot) ~= PageStorageSlot(entry.key, slot) then return false end
     local width, height = M.GetContentMetrics()
     if entry.layoutWidth ~= width or entry.layoutHeight ~= height then ResizePageEntry(entry, width, height) end
     return true
@@ -372,6 +388,178 @@ local function RestorePageEntryRegistrations(entry)
         end
     end
 end
+local PAGE_AREA_RELAYOUT = { skipStateRefresh = true }
+-- Unit selection axes own independent subtrees: at most 34 aura views and
+-- three texture slots per structural layout. Never retain their cross product.
+local function BelongsToArea(frame, host)
+    while frame do
+        if frame == host then return true end
+        frame = frame:GetParent()
+    end
+    return false
+end
+local function ParkPageArea(area)
+    local view, entry = area.active, area.ctx.entry
+    if not view then return end
+    view.host:Hide()
+    for _, builder in ipairs(view.ctx._msuf2PageBuilders) do
+        builder._msuf2ResizeWidthOffset = builder.parent:GetWidth() - builder.width
+    end
+    view.searchWidgets, view.sections, view.guidedRegions = {}, {}, {}
+    for id, region in pairs(entry.guidedRegions or {}) do
+        if BelongsToArea(region.body or region.outer, view.host) then
+            view.guidedRegions[id], entry.guidedRegions[id] = region, nil
+        end
+    end
+    for i = #entry.searchWidgets, 1, -1 do
+        local widget = entry.searchWidgets[i]
+        if BelongsToArea(widget, view.host) then
+            table.insert(view.searchWidgets, 1, widget)
+            table.remove(entry.searchWidgets, i)
+        end
+    end
+    for id, body in pairs(entry.sections or {}) do
+        if BelongsToArea(body, view.host) then
+            view.sections[id], entry.sections[id] = body, nil
+        end
+    end
+    local builders = area.ctx._msuf2PageBuilders
+    for i = #builders, 1, -1 do
+        if builders[i].ctx._msuf2PageArea == area then table.remove(builders, i) end
+    end
+end
+local function SettlePageArea(area, view)
+    local builders = view.ctx._msuf2PageBuilders
+    for i = #builders, 1, -1 do
+        local builder = builders[i]
+        local offset = builder._msuf2ResizeWidthOffset
+        if offset then builder.width = builder.parent:GetWidth() - offset end
+        builder.ctx.width = builder.width
+        builder:RelayoutCollapsibles(PAGE_AREA_RELAYOUT)
+    end
+    for i = 1, #builders do
+        local builder = builders[i]
+        builder._msuf2ResizeWidthOffset = builder.parent:GetWidth() - builder.width
+        area.ctx._msuf2PageBuilders[#area.ctx._msuf2PageBuilders + 1] = builder
+    end
+end
+local function PageAreaGuideLess(a, b)
+    return a._msuf2PageAreaGuideOrder < b._msuf2PageAreaGuideOrder
+end
+local function RefreshPageAreaGuides(area)
+    local entry, host, guides = area.ctx.entry, area.active.host, {}
+    for _, body in pairs(entry.sections or {}) do
+        if BelongsToArea(body, host) then guides[#guides + 1] = body._msuf2CollapsibleEntry end
+    end
+    for _, region in pairs(entry.guidedRegions or {}) do
+        if BelongsToArea(region.body or region.outer, host) then guides[#guides + 1] = region end
+    end
+    for i = 1, #guides do
+        local guide = guides[i]
+        guide._msuf2PageAreaGuideOrder = guide._msuf2PageAreaGuideOrder or guide.guidedOrder
+    end
+    table.sort(guides, PageAreaGuideLess)
+    -- Keep every subview between the shared steps surrounding its area.
+    -- The registration counter remains integral, so generated region IDs stay unique.
+    for i = 1, #guides do guides[i].guidedOrder = area.guidedBase + i / (#guides + 1) end
+    entry._msuf2GuidedSortedSections = nil
+end
+local function SelectPageArea(area)
+    local selected = area.select(area.unit)
+    if area.selected == selected then return false end
+    ParkPageArea(area)
+    local entry, view = area.ctx.entry, area.views[selected]
+    if not view then
+        -- select is normalized by the owning control; these fixed counts bound
+        -- retained native trees without eviction (WoW never frees frames).
+        assert(area.count < area.limit, "page area exceeded its finite view budget")
+        area.count = area.count + 1
+        local host = PixelLayoutRegion(CreateFrame("Frame", nil, area.anchor))
+        host:SetPoint("TOPLEFT", area.anchor, "TOPLEFT", 0, 0)
+        host:SetSize(area.builder.width, 1)
+        view = { host = host, searchWidgets = {}, sections = {}, guidedRegions = {}, resizeCallbacks = {} }
+        area.views[selected] = view
+        local ctx = setmetatable({
+            wrapper = host, refreshers = {}, _msuf2RefresherKeys = {}, _msuf2RefresherFns = {},
+            _msuf2PageBuilders = {}, _msuf2PageArea = area, _msuf2Building = true,
+        }, { __index = area.ctx })
+        view.ctx = ctx
+        function ctx:AddResizeCallback(fn)
+            view.resizeCallbacks[#view.resizeCallbacks + 1] = fn
+        end
+        local builder
+        builder = W.PageBuilder(ctx, { parent = host, width = area.builder.width, contentX = 0,
+            onContentHeight = function(height)
+                local size = math.max(1, height - 42)
+                host:SetHeight(size)
+                if area.active == view then
+                    area.anchor:SetHeight(size)
+                    if not ctx._msuf2Building then area.builder:RequestRelayoutCollapsibles() end
+                end
+            end,
+        })
+        builder.y = 0
+        area.active, area.selected = view, selected
+        local incomplete = entry._msuf2BuildIncomplete
+        entry._msuf2BuildIncomplete = true
+        area.build(ctx, builder, area.unit)
+        if entry._msuf2SectionUXOptions then M.UnitSectionsShared.AttachSectionUX(ctx, entry._msuf2SectionUXOptions) end
+        ctx._msuf2Building = nil
+        entry._msuf2BuildIncomplete = incomplete
+        SettlePageArea(area, view)
+    else
+        area.active, area.selected = view, selected
+        for i = 1, #view.searchWidgets do entry.searchWidgets[#entry.searchWidgets + 1] = view.searchWidgets[i] end
+        for id, body in pairs(view.sections) do entry.sections[id] = body end
+        for id, region in pairs(view.guidedRegions) do entry.guidedRegions[id] = region end
+        SettlePageArea(area, view)
+        for i = 1, #view.resizeCallbacks do view.resizeCallbacks[i]() end
+        for i = 1, #view.searchWidgets do ResizePageControl(view.searchWidgets[i]) end
+    end
+    RefreshPageAreaGuides(area)
+    area.anchor:SetHeight(view.host:GetHeight())
+    view.host:Show()
+    return true
+end
+function M.BuildPageArea(ctx, builder, id, unit, select, limit, build)
+    local anchor = PixelLayoutRegion(CreateFrame("Frame", nil, builder.parent))
+    anchor:SetSize(builder.width, 1)
+    anchor:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
+    local area = { ctx = ctx, builder = builder, anchor = anchor, unit = unit,
+        select = select, limit = limit, build = build, views = {}, count = 0,
+        guidedBase = tonumber(ctx.entry._msuf2GuidedTourOrder) or 0 }
+    ctx.entry.pageAreas = ctx.entry.pageAreas or {}
+    ctx.entry.pageAreas[id] = area
+    ctx:AddResizeCallback(function()
+        local callbacks = area.active.resizeCallbacks
+        for i = 1, #callbacks do callbacks[i]() end
+    end)
+    if not builder._collapsibleStartY then builder._collapsibleStartY = builder.y end
+    builder.layoutEntries[#builder.layoutEntries + 1] = { kind = "section", frame = anchor, gap = 0 }
+    SelectPageArea(area)
+    builder.y = builder.y - anchor:GetHeight()
+    M.AddRefresher(ctx, function()
+        local refreshers = area.active.ctx.refreshers
+        for i = 1, #refreshers do refreshers[i]() end
+        RefreshPageAreaGuides(area)
+    end)
+end
+function M.RefreshPageAreas(entry)
+    local changed = false
+    for _, area in pairs(entry.pageAreas or {}) do
+        if SelectPageArea(area) then changed = true end
+    end
+    if not changed then return false end
+    M.SearchBridge.ClearSearchRegistryPage(entry.key)
+    RestorePageEntryRegistrations(entry)
+    RehydratePageAccordion(entry)
+    for _, area in pairs(entry.pageAreas) do
+        area.builder:RelayoutCollapsibles()
+        RefreshPageAreaGuides(area)
+    end
+    entry._msuf2RefreshRevision = nil
+    return true
+end
 local function RememberPageLayoutVariant(key, entry)
     if type(entry) ~= "table" then return end
     local variants = M._msuf2PageLayoutVariants[key]
@@ -379,19 +567,21 @@ local function RememberPageLayoutVariant(key, entry)
         variants = {}
         M._msuf2PageLayoutVariants[key] = variants
     end
-    local previous = variants[entry.layoutSlot]
+    local storageSlot = PageStorageSlot(key, entry.layoutSlot)
+    local previous = variants[storageSlot]
     if previous and previous ~= entry and previous.wrapper then
         previous._msuf2Invalidated = true
         M.DisposePageHeader(previous)
         previous.wrapper:Hide()
         previous.wrapper:SetParent(nil)
     end
-    variants[entry.layoutSlot] = entry
+    variants[storageSlot] = entry
 end
 M.Assign(M, {
     SetFrameHeightIfChanged = SetFrameHeightIfChanged, CreateContext = CreateContext,
     ResizePageSurface = ResizePageSurface,
     BuildSecondaryPageNav = BuildSecondaryPageNav, BuildPlaceholderPage = BuildPlaceholderPage,
+    PageStorageSlot = PageStorageSlot,
     CurrentPageLayoutSlot = CurrentPageLayoutSlot, PageEntryMatchesLayout = PageEntryMatchesLayout,
     RehydratePageAccordion = RehydratePageAccordion,
     RestorePageEntryRegistrations = RestorePageEntryRegistrations, RememberPageLayoutVariant = RememberPageLayoutVariant,

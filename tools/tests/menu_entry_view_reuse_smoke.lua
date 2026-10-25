@@ -71,7 +71,10 @@ else
     end
     visit = function(value)
         if route == "selectors" then
-            assert(slotBars[M.cache[pageKey].wrapper], "texture selector missing"):SetValue(value)
+            local entry = M.cache[pageKey]
+            local area = entry.pageAreas and entry.pageAreas.texture
+            local owner = area and area.active.host or entry.wrapper
+            assert(slotBars[owner], "texture selector missing"):SetValue(value)
         else
             local handle = Handle(value)
             assert(core.UFPreviewViewHandles.OpenPreviewHandleSettings(handle, "click"), "unit handle route failed")
@@ -112,7 +115,10 @@ assert(reopenedFrames == frames and reopenedRegions == regions, route .. ": clos
 if route == "textures" or route == "selectors" then
     local conf = M.EnsureDB()[unit]
     for _, slot in ipairs(values) do
-        local widget = assert(textureControls[entries[slot].wrapper], "retained texture control missing")
+        local entry = entries[slot]
+        local area = entry.pageAreas and entry.pageAreas.texture
+        local owner = area and area.views[slot].host or entry.wrapper
+        local widget = assert(textureControls[owner], "retained texture control missing")
         local key = "texLayer" .. (slot == 1 and "" or slot) .. "CustomTexturePath"
         assert(widget._msuf2RuntimeControlRecord.settingKey == unit .. "." .. key, "control retained wrong slot identity")
         local previous = { conf.texLayerCustomTexturePath, conf.texLayer2CustomTexturePath, conf.texLayer3CustomTexturePath }

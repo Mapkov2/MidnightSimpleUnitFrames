@@ -653,7 +653,7 @@ end
 
 function Quick.OpenPage(pageKey, owner)
     local M = MSUF.MSUF2
-    if pageKey and M and type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
+    if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty("EDIT_MODE_ENTRY") end
     if owner then owner:Hide() end
     local openWindow = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
     local openPage = MSUF.Optional("MSUF_OpenPage")

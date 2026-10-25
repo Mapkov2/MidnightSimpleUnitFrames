@@ -192,9 +192,8 @@ local function SelectUnitWorkspaceLanes(tab)
     SetCurrentLane("auraStyleGFLane", tab)
     SetCurrentLane("auraFilterLane", tab)
 end
---- The unit page's aura workspace builds one container tab and one tool at a
---- time. Each pair is a declared view of the unit page (spec.variantKey): a
---- selector click shows that view's cached entry or builds it once.
+--- Each container/tool pair names an aura subview. PageLifecycle selects this
+--- area independently of the texture slot; the rest of the unit page is shared.
 local UNIT_AURA_VIEWS = {}
 function M.UnitAuraWorkspaceView(unit)
     local tab = CurrentUnitAuraTab(unit)

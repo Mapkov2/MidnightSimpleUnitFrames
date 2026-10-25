@@ -223,7 +223,7 @@ end
 
 local function OpenMenuPage(pageKey)
     local M = Menu2()
-    if M and pageKey and type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
+    if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty("EDIT_MODE_ENTRY") end
     -- Options entry points (load-on-demand; the options loader forwards them).
     local openWindow = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
     local openPage = not openWindow and MSUF.Optional("MSUF_OpenPage")

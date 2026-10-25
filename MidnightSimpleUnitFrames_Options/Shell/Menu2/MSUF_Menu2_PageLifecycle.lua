@@ -208,11 +208,51 @@ function M.ResolvePendingFixedPreviewExpansion(frame)
     })
     return true
 end
--- Unit texture controls bind one slot for their lifetime. Include that finite
--- selection alongside the aura workspace view so both selectors reuse their trees.
+-- Logical view keys still drive selection/search; unit pages store only their
+-- structural layout and rebind each independent area inside that page.
+local function UnitTextureSlot(unit)
+    local slots = M.unitTexLayerSlot
+    local slot = tonumber(slots and slots[unit]) or 1
+    return slot >= 1 and slot <= 3 and slot or 1
+end
+local unitPageAreasInstalled = false
+local function InstallUnitPageAreas()
+    if unitPageAreasInstalled then return end
+    unitPageAreasInstalled = true
+    -- Keep the existing reset/copy/summary contract for newly selected areas.
+    local shared = M.UnitSectionsShared
+    local attach = shared.AttachSectionUX
+    shared.AttachSectionUX = function(ctx, options)
+        ctx.entry._msuf2SectionUXOptions = options
+        return attach(ctx, options)
+    end
+    local auraBuild = M.BuildAuras3UnitSection
+    M.BuildAuras3UnitSection = function(ctx, builder, unit)
+        return M.BuildPageArea(ctx, builder, "auras", unit, M.UnitAuraWorkspaceView, 34, auraBuild)
+    end
+    for _, spec in ipairs(M.UnitPage._sectionRegistry) do
+        if spec.id == "texture_layer" then
+            local original = {}
+            for name, value in pairs(spec) do original[name] = value end
+            local function BuildTextureArea(ctx, builder, unit)
+                return M.UnitPage.BuildSectionLazy(ctx, builder, unit, original)
+            end
+            spec.lazy = false
+            spec.build = function(ctx, builder, unit)
+                return M.BuildPageArea(ctx, builder, "texture", unit, UnitTextureSlot, 3, BuildTextureArea)
+            end
+        end
+    end
+end
+
 local function UnitTexturePageView(key, spec)
     local unit = key:match("^uf_(.+)$")
     if not unit then return end
+    local build = spec.build
+    spec.build = function(ctx)
+        InstallUnitPageAreas()
+        return build(ctx)
+    end
     local viewKey = spec.variantKey
     spec.variantKey = function(pageKey)
         local slots = M.unitTexLayerSlot
@@ -229,7 +269,8 @@ end
 ---   version         a bump drops every cached entry of the page;
 ---   variantKey(key) names the page's current view state (a short string). Each
 ---                   view keeps its own cached entry, so switching back to a view
----                   built before shows that entry again (see RebuildPageKeepingScroll);
+---                   built before shows that entry again. Unit pages instead select
+---                   their independent areas inside one structural page entry;
 ---   viewStateKeys   set of the menu state names variantKey reads. A search route
 ---                   that changes only these switches the view instead of rebuilding;
 ---   rebuildsItself  true when the page's frame structure follows its saved data
@@ -288,6 +329,7 @@ local function BuildPageEntry(key, hidden)
     local specVersion = spec and spec.version
     local layoutVersion = M._msuf2LayoutVersion or 0
     local layoutSlot = M.CurrentPageLayoutSlot(key)
+    local storageSlot = M.PageStorageSlot(key, layoutSlot)
     local cached = M.cache and M.cache[key]
     if cached and (cached._msuf2BuildIncomplete or (specVersion and cached.version ~= specVersion)) then
         InvalidatePageEntries(key)
@@ -300,7 +342,7 @@ local function BuildPageEntry(key, hidden)
         registryCleared = true
         M.cache[key] = nil
         local variants = M._msuf2PageLayoutVariants[key]
-        local variant = type(variants) == "table" and variants[layoutSlot] or nil
+        local variant = type(variants) == "table" and variants[storageSlot] or nil
         if M.PageEntryMatchesLayout(variant, layoutSlot)
             and (not specVersion or variant.version == specVersion)
             and variant._msuf2Invalidated ~= true
@@ -323,13 +365,19 @@ local function BuildPageEntry(key, hidden)
         if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
         if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
         local variants = M._msuf2PageLayoutVariants[key]
-        if type(variants) == "table" and variants[cached.layoutSlot] == cached then
-            variants[cached.layoutSlot] = nil
+        if type(variants) == "table" and variants[M.PageStorageSlot(key, cached.layoutSlot)] == cached then
+            variants[M.PageStorageSlot(key, cached.layoutSlot)] = nil
         end
         M.cache[key] = nil
         cached = nil
     end
-    if cached then return cached end
+    if cached then
+        if cached.layoutSlot ~= layoutSlot then
+            M.RefreshPageAreas(cached)
+            cached.layoutSlot = layoutSlot
+        end
+        return cached
+    end
     if not registryCleared then ClearSearchRegistryPage(key) end
     local wrapper = PixelLayoutRegion(CreateFrame("Frame", nil, M.scrollChild))
     wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
@@ -380,7 +428,7 @@ local function BuildPageEntry(key, hidden)
     local builtSlot = M.CurrentPageLayoutSlot(key)
     if builtSlot ~= layoutSlot then
         local variants = M._msuf2PageLayoutVariants[key]
-        if type(variants) == "table" and variants[layoutSlot] == entry then variants[layoutSlot] = nil end
+        if type(variants) == "table" and variants[storageSlot] == entry then variants[storageSlot] = nil end
         entry.layoutSlot = builtSlot
         M.RememberPageLayoutVariant(key, entry)
     end
@@ -544,7 +592,7 @@ InvalidatePageEntries = function(key)
         -- pooled: the next SelectPage builds the page from scratch, and WoW
         -- never frees a frame. So invalidation stays rare and deliberate: a
         -- page that rebuilds itself, a page spec version bump, a search
-        -- re-index, guided-tour transitions or a preview texture-slot change.
+        -- re-index or guided-tour transitions.
         -- Undo, redo and page resets repaint in place instead
         -- (M.RepaintPageAfterDataChange), and declared views switch between
         -- cached entries (variantKey).

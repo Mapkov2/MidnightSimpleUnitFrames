@@ -1166,6 +1166,195 @@
         "--lua",
         "{lua}"
       ]
+    },
+    {
+      "test": "tools/tests/editmode_menu_entry_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "focus"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_menu_entry_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "quick"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_menu_entry_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "popup"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "player"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "target"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "pet"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "focus"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "boss"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "arena"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "target",
+        "wide"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_lifecycle_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "regions"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_lifecycle_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "order"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_lifecycle_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "resize"
+      ]
     }
   ],
   "excluded": {
