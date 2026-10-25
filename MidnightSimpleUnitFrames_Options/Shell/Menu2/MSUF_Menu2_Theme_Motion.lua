@@ -2,7 +2,7 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 local T = M.Theme
 local FILE = "Shell/Menu2/MSUF_Menu2_Theme_Motion.lua"
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local PixelLayoutLeaf = MSUF.Require("PreparePixelLayoutLeaf", FILE, MSUF.Util)
 local MenuSkin = MSUF.MenuSkin
 
 local function ClampMotionDuration(value, fallback)
@@ -199,7 +199,7 @@ local function FocusVeilRoot(owner, opts)
 end
 local function EnsureFocusVeilFrame()
     if M._focusVeilFrame then return M._focusVeilFrame end
-    local overlay = PixelLayoutRegion(CreateFrame("Frame", "MSUF2FocusVeil", UIParent))
+    local overlay = PixelLayoutLeaf(CreateFrame("Frame", "MSUF2FocusVeil", UIParent))
     overlay:SetFrameStrata("TOOLTIP")
     overlay:SetToplevel(false)
     overlay:EnableMouse(false)

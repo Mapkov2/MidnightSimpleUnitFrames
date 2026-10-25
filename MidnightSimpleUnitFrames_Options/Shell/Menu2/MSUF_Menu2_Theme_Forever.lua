@@ -3,7 +3,7 @@
 -- Register before Menu2 tokens so renderers capture the selected palette.
 local _, MSUF = ...
 if not MSUF then return end
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/MSUF_Menu2_Theme_Forever.lua")
+local PixelLayoutLeaf = MSUF.Require("PreparePixelLayoutLeaf", "Shell/Menu2/MSUF_Menu2_Theme_Forever.lua", MSUF.Util)
 --- Menu palette rows are four-number arrays shared by every renderer.
 local function PaintColors(T, keys, hex, alpha)
     local r, green, b = tonumber(hex:sub(1, 2), 16) / 255,
@@ -200,7 +200,7 @@ local function InstallClassicGlassMaterials(T, root)
         end
         local tex = frame._msuf2AtlasDecoration
         if not tex then
-            tex = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -7))
+            tex = PixelLayoutLeaf(frame:CreateTexture(nil, "BORDER", nil, -7))
             frame._msuf2AtlasDecoration = tex
         end
         tex:ClearAllPoints()

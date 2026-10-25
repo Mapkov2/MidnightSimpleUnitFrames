@@ -1069,6 +1069,20 @@ do
         end
         return ...
     end
+    -- Only freshly created, childless owned regions may use this boundary.
+    -- The caller knows the template is empty; protected/incomplete setup still
+    -- goes through EnablePixelPerfectLayout and remains retryable.
+    function Util.PreparePixelLayoutLeaf(region, preserveLogicalGeometry)
+        if not mainlinePixelLayout or not region then return region end
+        region._msufPixelLayoutOwned = true
+        if preserveLogicalGeometry then
+            region._msufPixelLayoutExcluded = true
+        else
+            if not Util.EnablePixelPerfectLayout(region) then return region end
+        end
+        region._msufPixelLayoutTemplateVisited = "ready"
+        return region
+    end
     local function PixelLayoutRegion(region, policy, ...)
         if policy == nil then
             if not mainlinePixelLayout or not region or region._msufPixelLayoutTemplateVisited == "ready" then return region end

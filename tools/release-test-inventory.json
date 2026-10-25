@@ -480,6 +480,17 @@
       ]
     },
     {
+      "test": "tools/tests/menu_theme_build_cost_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/search_cold_metadata_smoke.lua",
       "phase": "menu",
       "clients": [

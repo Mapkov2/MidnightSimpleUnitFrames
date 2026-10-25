@@ -2,7 +2,7 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 local T = M.Theme
 local FILE = "Shell/Menu2/MSUF_Menu2_Theme_Fonts.lua"
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local PixelLayoutLeaf = MSUF.Require("PreparePixelLayoutLeaf", FILE, MSUF.Util)
 local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", FILE)
 local CoreFont = {
     ResolveSafe = MSUF.Require("MSUF_ResolveSafeFontPath", FILE),
@@ -14,6 +14,7 @@ local Tr = M.Tr
 
 local NO_MENU_FONT = {}
 local menuFontCache = {}
+local styledFontCache, styledMenuFontKey = {}, nil
 local function MenuGeneralDB()
     return M.GetGeneralDB()
 end
@@ -39,7 +40,33 @@ local function ResolveMenuFontPath(size, flags, role)
     return path
 end
 function T.ClearMenuFontCache()
-    menuFontCache = {}
+    menuFontCache, styledFontCache = {}, {}
+end
+-- FontStrings share resolved styles, while each string still verifies native
+-- readback. A caller changing SetFont directly is repaired on the next apply.
+local function StyledFont(font, size, role)
+    local general = MenuGeneralDB()
+    local key = type(general) == "table" and general.menuFontKey or nil
+    if key ~= styledMenuFontKey then
+        styledFontCache, styledMenuFontKey = {}, key
+    end
+    local fonts = styledFontCache[font]
+    if not fonts then
+        fonts = {}
+        styledFontCache[font] = fonts
+    end
+    local roles = fonts[role or false]
+    if not roles then
+        roles = {}
+        fonts[role or false] = roles
+    end
+    local style = roles[size]
+    if not style then
+        local path = ResolveMenuFontPath(size, "", role) or font
+        style = { font = path, key = tostring(path or "") .. "\030" .. tostring(size or "") .. "\030" }
+        roles[size] = style
+    end
+    return style
 end
 local function NormalizeAppliedFontPath(path)
     if type(path) ~= "string" then return nil end
@@ -51,8 +78,7 @@ local function FontPathMatches(expected, actual)
     expected, actual = NormalizeAppliedFontPath(expected), NormalizeAppliedFontPath(actual)
     return expected ~= nil and actual ~= nil and expected == actual
 end
-local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFlags)
-    local actualFont, actualSize, actualFlags = fs:GetFont()
+local function FontApplicationMatches(expectedFont, expectedSize, expectedFlags, actualFont, actualSize, actualFlags)
     if not FontPathMatches(expectedFont, actualFont) then return false end
     if type(actualSize) == "number" and math.abs(actualSize - expectedSize) > 0.01 then return false end
     if tostring(actualFlags or "") ~= tostring(expectedFlags or "") then return false end
@@ -61,7 +87,7 @@ local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFl
 end
 local function TryApplyStyledFont(fs, font, size, flags)
     if type(font) ~= "string" or font == "" then return false end
-    return SetFontChecked(fs, font, size, flags) and FontApplicationMatches(fs, font, size, flags)
+    return SetFontChecked(fs, font, size, flags) and FontApplicationMatches(font, size, flags, fs:GetFont())
 end
 local function ApplyStyledFont(fs, force)
     if not (fs and fs.GetFont and fs.SetFont) then return false end
@@ -75,10 +101,9 @@ local function ApplyStyledFont(fs, force)
         or T.NormalizeFontSize((tonumber(orig.size) or tonumber(size) or T.FontSize("body")) + bump)
     -- Menu text sits on its own surface; inherited outlines blur small labels.
     local nextFlags = ""
-    local menuFont = ResolveMenuFontPath(nextSize, nextFlags, role)
-    local nextFont = menuFont or orig.font or font
-    local fontKey = tostring(nextFont or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
-    if not force and fs._msuf2AppliedFontKey == fontKey and FontApplicationMatches(fs, nextFont, nextSize, nextFlags) then
+    local style = StyledFont(orig.font or font, nextSize, role)
+    local nextFont, fontKey = style.font, style.key
+    if not force and fs._msuf2AppliedFontKey == fontKey and FontApplicationMatches(nextFont, nextSize, nextFlags, font, size, flags) then
         return true
     end
     local applied = TryApplyStyledFont(fs, nextFont, nextSize, nextFlags)
@@ -194,7 +219,7 @@ function T.SetTranslatedText(fs, text)
     return fs:SetText(text)
 end
 function T.Font(parent, template, text, color, role)
-    local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"))
+    local fs = PixelLayoutLeaf(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"))
     fs._msuf2FontRole = role
     fs._msuf2RawSetText = fs.SetText
     fs.SetText = FontSetText

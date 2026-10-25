@@ -2,7 +2,7 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 local T = M.Theme
 local FILE = "Shell/Menu2/MSUF_Menu2_Theme_Buttons.lua"
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local PixelLayoutLeaf = MSUF.Require("PreparePixelLayoutLeaf", FILE, MSUF.Util)
 local MenuSkin, Tr = MSUF.MenuSkin, M.Tr
 local ApplyTextureGradient, SetFillGradient = T.ApplyTextureGradient, T.SetFillGradient
 local SmoothTexture, ShadeColorInto = T._Surface.SmoothTexture, T._Surface.ShadeColorInto
@@ -47,7 +47,7 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     end
     local icon = btn._msuf2NavIcon
     if not icon then
-        icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 3), true)
+        icon = PixelLayoutLeaf(btn:CreateTexture(nil, "ARTWORK", nil, 3), true)
         SmoothTexture(icon)
         icon:SetTexture(T.media.navIcons)
         btn._msuf2NavIcon = icon
@@ -59,7 +59,7 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     if icon.SetTexCoord then icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8) end
     btn._msuf2NavIconColor = color
     if not btn._msuf2NavStripe then
-        local stripe = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 6))
+        local stripe = PixelLayoutLeaf(btn:CreateTexture(nil, "ARTWORK", nil, 6))
         stripe:SetTexture("Interface\\Buttons\\WHITE8X8")
         stripe:SetWidth(3)
         stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
@@ -138,7 +138,7 @@ local function EnsureNavPillArt(btn)
     local art = {}
     for i = 1, #NAV_PILL_LAYERS do
         local spec = NAV_PILL_LAYERS[i]
-        local tex = PixelLayoutRegion(btn:CreateTexture(nil, spec[2], nil, spec[3]))
+        local tex = PixelLayoutLeaf(btn:CreateTexture(nil, spec[2], nil, spec[3]))
         if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         if tex.SetBlendMode then tex:SetBlendMode(spec[4]) end
         ConfigureNavPillSlice(tex)
@@ -365,11 +365,11 @@ local function SetSkinnedSelectionCue(btn, active)
         return
     end
     if not cue then
-        local wash = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 7))
+        local wash = PixelLayoutLeaf(btn:CreateTexture(nil, "ARTWORK", nil, 7))
         wash:SetTexture("Interface\\Buttons\\WHITE8X8")
         wash:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -2)
         wash:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
-        local line = PixelLayoutRegion(btn:CreateTexture(nil, "OVERLAY", nil, 2))
+        local line = PixelLayoutLeaf(btn:CreateTexture(nil, "OVERLAY", nil, 2))
         line:SetTexture("Interface\\Buttons\\WHITE8X8")
         line:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -5)
         line:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 2, 5)
@@ -621,7 +621,7 @@ local function IsPageContent(parent)
     return false
 end
 function T.Button(parent, text, width, height, opts)
-    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
+    local btn = PixelLayoutLeaf(CreateFrame("Button", nil, parent))
     local history = opts and opts.history
     if history == nil then history = IsPageContent(parent) end
     btn._msuf2HistoryCheckpoint = history == true
@@ -758,12 +758,12 @@ local function SetupCloseButtonLine(line, parent)
     line:SetPoint("CENTER", parent, "CENTER", 0, 0)
 end
 function T.CloseButton(parent)
-    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
+    local btn = PixelLayoutLeaf(CreateFrame("Button", nil, parent))
     btn:SetSize(24, 24)
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Close", 2, "BACKGROUND", "BORDER")
     btn._msuf2CloseFill = fill
     btn._msuf2CloseEdge = edge
-    local lineA, lineB = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK")), PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
+    local lineA, lineB = PixelLayoutLeaf(btn:CreateTexture(nil, "ARTWORK")), PixelLayoutLeaf(btn:CreateTexture(nil, "ARTWORK"))
     SetupCloseButtonLine(lineA, btn)
     SetupCloseButtonLine(lineB, btn)
     if lineA.SetRotation and lineB.SetRotation then

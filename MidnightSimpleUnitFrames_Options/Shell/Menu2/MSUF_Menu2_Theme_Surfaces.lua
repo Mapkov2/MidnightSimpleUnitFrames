@@ -3,6 +3,7 @@ local M = MSUF.MSUF2
 local T = M.Theme
 local FILE = "Shell/Menu2/MSUF_Menu2_Theme_Surfaces.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local PixelLayoutLeaf = MSUF.Require("PreparePixelLayoutLeaf", FILE, MSUF.Util)
 local MenuSkin = MSUF.MenuSkin
 local GLASS_VARIANTS = T.glassVariants
 local ConfigureAlphaAnim = T._ConfigureAlphaAnim
@@ -19,7 +20,7 @@ end
 -- on just so this can switch it off again.
 local function SmoothTexture(tex)
     if not tex then return end
-    PixelLayoutRegion(tex, true)
+    if not tex._msufPixelLayoutExcluded or tex._msufPixelLayoutEnabled then PixelLayoutRegion(tex, true) end
     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
@@ -196,15 +197,15 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
     -- Parts are excluded art from creation on. The plain wrapper would switch
     -- native rounding on only for SmoothTexture to switch it off again (two
     -- protected calls per part, ~12k parts per full menu build).
-    local left = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel), true)
+    local left = PixelLayoutLeaf(frame:CreateTexture(nil, layer, nil, subLevel), true)
     left:SetTexture(T.media.superellipse)
     left:SetTexCoord(0.00, 0.25, 0, 1)
     SmoothTexture(left)
-    local middle = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel), true)
+    local middle = PixelLayoutLeaf(frame:CreateTexture(nil, layer, nil, subLevel), true)
     middle:SetTexture(T.media.superellipse)
     middle:SetTexCoord(0.25, 0.75, 0, 1)
     SmoothTexture(middle)
-    local right = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel), true)
+    local right = PixelLayoutLeaf(frame:CreateTexture(nil, layer, nil, subLevel), true)
     right:SetTexture(T.media.superellipse)
     right:SetTexCoord(0.75, 1.00, 0, 1)
     SmoothTexture(right)
@@ -238,6 +239,7 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     local h = (frame.GetHeight and frame:GetHeight()) or 22
     local fill = CreateSuperellipseParts(frame, fillLayer, 0)
     local border = CreateSuperellipseParts(frame, borderLayer, -1)
+    local lastFillCap, lastBorderCap, lastRightPad
     local function Layout()
         local frameW = (frame.GetWidth and frame:GetWidth()) or 120
         local w = frameW
@@ -253,13 +255,17 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
         -- Authored Midnight nav art uses compact corners rather than stadium
         -- caps. Accent-colored procedural nav states must keep that silhouette.
         if frame._msuf2NavItem then nextCapW = math.min(nextCapW, 6) end
-        LayoutSuperellipseParts(fill, frame, p, nextCapW, rightPad)
         local bInset = math.max(0, p - 1)
         local borderInnerW = math.max(1, w - bInset * 2)
         local borderInnerH = math.max(1, h2 - bInset * 2)
         local borderCapW = math.min(math.floor(borderInnerH * 0.5 + 0.5), math.floor(borderInnerW * 0.5))
         if T.controlCapWidth then borderCapW = math.min(borderCapW, T.controlCapWidth) end
         if frame._msuf2NavItem then borderCapW = math.min(borderCapW, 6) end
+        -- Anchors follow the owner. Retain only changed geometry in this existing
+        -- closure, without growing every fill/border table used by the painter.
+        if lastFillCap == nextCapW and lastBorderCap == borderCapW and lastRightPad == rightPad then return end
+        lastFillCap, lastBorderCap, lastRightPad = nextCapW, borderCapW, rightPad
+        LayoutSuperellipseParts(fill, frame, p, nextCapW, rightPad)
         LayoutSuperellipseParts(border, frame, bInset, borderCapW, rightPad)
     end
     Layout()
@@ -311,7 +317,7 @@ function T.ApplyBackdrop(frame, bg, border)
         end
     else
         if not frame._msuf2Bg then
-            local tex = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND"))
+            local tex = PixelLayoutLeaf(frame:CreateTexture(nil, "BACKGROUND"))
             tex:SetAllPoints()
             frame._msuf2Bg = tex
         end
@@ -332,7 +338,7 @@ local function ApplyFocusVeilLayer(frame, spec)
     if not (frame and frame.CreateTexture and type(spec) == "table" and type(spec.key) == "string") then return end
     local tex = frame[spec.key]
     if not tex then
-        tex = PixelLayoutRegion(frame:CreateTexture(nil, spec.layer or "BORDER", nil, spec.subLevel or 0))
+        tex = PixelLayoutLeaf(frame:CreateTexture(nil, spec.layer or "BORDER", nil, spec.subLevel or 0))
         frame[spec.key] = tex
     end
     tex:ClearAllPoints()
@@ -368,7 +374,7 @@ local function GlassTexture(frame, key, layer, subLevel)
     if not (frame and frame.CreateTexture) then return nil end
     local tex = frame[key]
     if not tex then
-        tex = PixelLayoutRegion(frame:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0))
+        tex = PixelLayoutLeaf(frame:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0))
         frame[key] = tex
     end
     return tex
@@ -463,7 +469,7 @@ local function EnsurePanelAsset(frame)
     local art = {}
     for i = 1, #PANEL_SLICES do
         local spec = PANEL_SLICES[i]
-        local tex = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND", nil, 7))
+        local tex = PixelLayoutLeaf(frame:CreateTexture(nil, "BACKGROUND", nil, 7))
         tex:SetTexCoord(spec[2], spec[3], spec[4], spec[5])
         if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
         tex:Hide()
@@ -565,15 +571,15 @@ end
 local function EnsurePanelAssetDepth(frame)
     if not (frame and frame.CreateTexture) then return nil end
     if frame._msuf2PanelAssetDepth then return frame._msuf2PanelAssetDepth end
-    local top = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -8))
+    local top = PixelLayoutLeaf(frame:CreateTexture(nil, "BORDER", nil, -8))
     top:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -5)
     top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -7, -5)
     if top.SetBlendMode then top:SetBlendMode("ADD") end
-    local bottom = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -8))
+    local bottom = PixelLayoutLeaf(frame:CreateTexture(nil, "BORDER", nil, -8))
     bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 6, 5)
     bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, 5)
     local function Glint(point, x, mediaKey)
-        local glint = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 1))
+        local glint = PixelLayoutLeaf(frame:CreateTexture(nil, "ARTWORK", nil, 1))
         glint:SetPoint(point, frame, point, x, -4)
         glint:SetHeight(2)
         glint:SetTexture((T.media[mediaKey]) or WHITE8)
@@ -582,7 +588,7 @@ local function EnsurePanelAssetDepth(frame)
         return glint
     end
     local leftGlint, rightGlint = Glint("TOPLEFT", 12, "gradH"), Glint("TOPRIGHT", -12, "gradHRev")
-    local cornerGlow = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 0))
+    local cornerGlow = PixelLayoutLeaf(frame:CreateTexture(nil, "ARTWORK", nil, 0))
     cornerGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -4)
     cornerGlow:SetSize(76, 18)
     cornerGlow:SetTexture(T.media.bgSmooth or WHITE8)
@@ -740,7 +746,7 @@ function T.PlayNeonFlash(frame, kind, opts)
     local color = NeonColor(kind, opts)
     local flash = frame._msuf2NeonFlash
     if not flash then
-        flash = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, 6))
+        flash = PixelLayoutLeaf(frame:CreateTexture(nil, "OVERLAY", nil, 6))
         flash:SetTexture((T.media.superellipse) or WHITE8)
         flash:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
         flash:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
@@ -843,7 +849,7 @@ function T.ApplyPlasticDepth(frame, variant)
     local bottomH = strong and 22 or 16
     local top = frame._msuf2PlasticTop
     if not top then
-        top = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, -2), true)
+        top = PixelLayoutLeaf(frame:CreateTexture(nil, "ARTWORK", nil, -2), true)
         frame._msuf2PlasticTop = top
         SmoothTexture(top)
     end
@@ -860,7 +866,7 @@ function T.ApplyPlasticDepth(frame, variant)
     top:Show()
     local bottom = frame._msuf2PlasticBottom
     if not bottom then
-        bottom = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, 5), true)
+        bottom = PixelLayoutLeaf(frame:CreateTexture(nil, "BORDER", nil, 5), true)
         frame._msuf2PlasticBottom = bottom
         SmoothTexture(bottom)
     end
@@ -875,7 +881,7 @@ function T.ApplyPlasticDepth(frame, variant)
     bottom:Show()
     local lip = frame._msuf2PlasticLip
     if not lip then
-        lip = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 4))
+        lip = PixelLayoutLeaf(frame:CreateTexture(nil, "ARTWORK", nil, 4))
         frame._msuf2PlasticLip = lip
         lip:SetTexture(WHITE8)
     end
@@ -909,7 +915,7 @@ function T.ApplyGradient(frame, token, opts)
     local key = opts.key or spec.key or "_msuf2MaterialGradient"
     local tex = frame[key]
     if not tex then
-        tex = PixelLayoutRegion(frame:CreateTexture(nil, opts.layer or spec.layer or "BACKGROUND", nil, opts.subLevel or spec.subLevel or 1), true)
+        tex = PixelLayoutLeaf(frame:CreateTexture(nil, opts.layer or spec.layer or "BACKGROUND", nil, opts.subLevel or spec.subLevel or 1), true)
         frame[key] = tex
         SmoothTexture(tex)
     end
@@ -951,7 +957,7 @@ function T.ApplySurface(frame, material, glass)
     return T.ApplyMaterial(frame, material)
 end
 local function CreateAtmosphereTexture(parent, layer, subLevel, texture, color, inset, texCoord)
-    local tex = PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel))
+    local tex = PixelLayoutLeaf(parent:CreateTexture(nil, layer, nil, subLevel))
     tex:SetTexture(texture)
     inset = tonumber(inset) or 0
     tex:SetPoint("TOPLEFT", parent, "TOPLEFT", inset, -inset)
@@ -970,7 +976,7 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
     CreateAtmosphereTexture(host, "BACKGROUND", 1, T.media.bgSmooth, { 0.08, 0.11, 0.20, 0.065 })
     CreateAtmosphereTexture(host, "BACKGROUND", 2, T.media.bgSmooth, { 0.04, 0.05, 0.12, 0.085 }, nil, { 0, 0, 1, 0, 0, 1, 1, 1 })
     CreateAtmosphereTexture(host, "BACKGROUND", 3, T.media.bgCharcoal, { 0.08, 0.08, 0.14, 0.055 })
-    local logo = PixelLayoutRegion(host:CreateTexture(nil, "BORDER", nil, 0))
+    local logo = PixelLayoutLeaf(host:CreateTexture(nil, "BORDER", nil, 0))
     logo:SetTexture(T.media.logo)
     logo:SetSize(120, 120)
     logo:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -12, 12)

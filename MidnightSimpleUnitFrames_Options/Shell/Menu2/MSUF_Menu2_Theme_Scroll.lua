@@ -2,7 +2,7 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 local T = M.Theme
 local FILE = "Shell/Menu2/MSUF_Menu2_Theme_Scroll.lua"
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local PixelLayoutLeaf = MSUF.Require("PreparePixelLayoutLeaf", FILE, MSUF.Util)
 local canaccessvalue, issecretvalue = canaccessvalue, issecretvalue
 local ApplyTextureGradient = T.ApplyTextureGradient
 
@@ -123,7 +123,7 @@ end
 function Scroll.EnsureDriver(scroll)
     local driver = scroll._msuf2SmoothScrollDriver
     if driver then return driver end
-    driver = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
+    driver = PixelLayoutLeaf(CreateFrame("Frame", nil, scroll))
     driver:Hide()
     driver._msuf2ScrollOwner = scroll
     driver:SetScript("OnUpdate", Scroll.SmoothOnUpdate)
@@ -273,27 +273,27 @@ function T.StyleScrollFrame(scroll, anchor)
     if not scroll or scroll._msuf2ScrollStyled then return scroll and scroll._msuf2ScrollBar end
     scroll._msuf2ScrollStyled = true
     local parent = anchor or (scroll.GetParent and scroll:GetParent()) or scroll
-    local bar = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
+    local bar = PixelLayoutLeaf(CreateFrame("Frame", nil, parent))
     -- Keep a generous mouse target while the visible rail stays compact.
     bar:SetWidth(14)
     bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 5, -8)
     bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 5, 8)
     if bar.EnableMouse then bar:EnableMouse(true) end
     if bar.SetFrameLevel and scroll.GetFrameLevel then bar:SetFrameLevel(scroll:GetFrameLevel() + 8) end
-    local track = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND")))
+    local track = PixelBarTexture(PixelLayoutLeaf(bar:CreateTexture(nil, "BACKGROUND")))
     track:SetPoint("TOP", bar, "TOP", 0, 0)
     track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
     track:SetWidth(2)
     Scroll.PaintTrack(track, 0.82)
     bar._msuf2Track = track
-    local trackEdge = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "BORDER")))
+    local trackEdge = PixelBarTexture(PixelLayoutLeaf(bar:CreateTexture(nil, "BORDER")))
     trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
     trackEdge:SetPoint("BOTTOMLEFT", track, "BOTTOMRIGHT", 1, 0)
     trackEdge:SetWidth(1)
     trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.38)
     bar._msuf2TrackEdge = trackEdge
     local thumbBase = T.colors.coreRim
-    local thumb = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY")))
+    local thumb = PixelBarTexture(PixelLayoutLeaf(bar:CreateTexture(nil, "OVERLAY")))
     thumb:SetSize(5, 42)
     ApplyTextureGradient(thumb, "VERTICAL",
         { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 },

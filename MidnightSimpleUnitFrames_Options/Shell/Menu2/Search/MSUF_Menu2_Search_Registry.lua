@@ -238,13 +238,34 @@ local function CopyStaticSearchValues(values)
     return count > 0 and out or nil
 end
 
+-- Registration keeps a compact snapshot. Search-only fields are projected
+-- from it on demand; mutable metadata and value providers retain their exact
+-- registration-time semantics. Fully normalized search rows remain lazy.
+local REGISTRY_METADATA_FIELDS = {
+    values = 1, identityLabel = 2, identityKey = 3, controlPath = 4, sectionId = 5,
+    classification = 6, searchPrepareKind = 7, searchPrepareValue = 8,
+    ephemeral = 9, settingKey = 10, actionKey = 11, actionFixedArgs = 12,
+    actionInputArg = 13, navigationKey = 14, confirmRequired = 15, keywords = 16, help = 17,
+    controlId = 18, _rawValues = 19,
+}
+local REGISTRY_ENTRY_META = {
+    __index = function(entry, key)
+        local slot = REGISTRY_METADATA_FIELDS[key]
+        if slot then return entry._metadata[slot] end
+    end,
+    __newindex = function(entry, key, value)
+        local slot = REGISTRY_METADATA_FIELDS[key]
+        if slot then entry._metadata[slot] = value else rawset(entry, key, value) end
+    end,
+}
 local BuildRegistrySearchRecord
 function M.RefreshSearchControlIdentity(widget, record)
     local id = widget._msuf2SearchRegistryId
     local entry = id and SEARCH_STATE.registry[id]
     if not entry then return end
-    entry.controlId, entry.identityKey, entry.controlPath = record.controlId, record.identityKey, record.controlPath
-    entry.settingKey, entry.actionKey, entry.classification = record.settingKey, record.actionKey, record.classification
+    local data = entry._metadata
+    data[18], data[3], data[4] = record.controlId, record.identityKey, record.controlPath
+    data[10], data[11], data[6] = record.settingKey, record.actionKey, record.classification
     SEARCH_STATE.registryRecords[id] = nil
     MarkSearchIndexDirty()
 end
@@ -434,62 +455,55 @@ function M.RegisterSearchWidget(widget, meta)
     end
 
     local previous = SEARCH_STATE.registry[id]
-    if previous
-        and previous.widget == widget
-        and previous.pageKey == pageKey
-        and previous.label == label
-        and previous.kind == kind
-        and previous.anchor == anchor
-        and previous.controlId == catalogId
-        and previous.identityLabel == (meta.identityLabel or widget._msuf2SearchText or rawLabel)
-        and previous.identityKey == meta.identityKey
-        and previous.controlPath == meta.controlPath
-        and previous.sectionId == meta.sectionId
-        and previous.classification == (meta.classification or meta.controlType)
-        and previous.ephemeral == meta.ephemeral
-        and previous.settingKey == meta.settingKey
-        and previous.actionKey == meta.actionKey
-        and previous.actionFixedArgs == meta.actionFixedArgs
-        and previous.actionInputArg == meta.actionInputArg
-        and previous.navigationKey == meta.navigationKey
-        and previous.keywords == keywords
-        and previous.help == help
-        and previous._rawValues == rawValues
-        and type(rawValues) ~= "function"
-    then
-        return
+    if previous then
+        local previousData = previous._metadata
+        if previous.widget == widget
+            and previous.pageKey == pageKey
+            and previous.label == label
+            and previous.kind == kind
+            and previous.anchor == anchor
+            and previousData[18] == catalogId
+            and previousData[2] == (meta.identityLabel or widget._msuf2SearchText or rawLabel)
+            and previousData[3] == meta.identityKey
+            and previousData[4] == meta.controlPath
+            and previousData[5] == meta.sectionId
+            and previousData[6] == (meta.classification or meta.controlType)
+            and previousData[9] == meta.ephemeral
+            and previousData[10] == meta.settingKey
+            and previousData[11] == meta.actionKey
+            and previousData[12] == meta.actionFixedArgs
+            and previousData[13] == meta.actionInputArg
+            and previousData[14] == meta.navigationKey
+            and previousData[16] == keywords
+            and previousData[17] == help
+            and previousData[19] == rawValues
+            and (rawValues == nil or type(rawValues) ~= "function")
+        then
+            return
+        end
     end
 
     widget._msuf2SearchMeta = meta
     local values = CopyStaticSearchValues(rawValues)
-    -- A changed registration refills the entry it replaces, or the one a page
-    -- move dropped above (only the registry holds entries), instead of
-    -- building a new table. Both branches set the same 25 fields: keep them in step.
     local entry = previous or movedEntry
-    if entry then
+    local data = entry and entry._metadata
+    if data then
         entry.id, entry.widget, entry.pageKey, entry.label, entry.kind, entry.anchor = id, widget, pageKey, label, kind, anchor
-        entry.values, entry.controlId, entry._rawValues = values, catalogId, rawValues
-        entry.identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel
-        entry.identityKey, entry.controlPath, entry.sectionId = meta.identityKey, meta.controlPath, meta.sectionId
-        entry.classification = meta.classification or meta.controlType
-        entry.searchPrepareKind, entry.searchPrepareValue = meta.searchPrepareKind, meta.searchPrepareValue
-        entry.ephemeral, entry.settingKey, entry.actionKey = meta.ephemeral, meta.settingKey, meta.actionKey
-        entry.actionFixedArgs, entry.actionInputArg = meta.actionFixedArgs, meta.actionInputArg
-        entry.navigationKey, entry.confirmRequired = meta.navigationKey, meta.confirmRequired
-        entry.keywords, entry.help = keywords, help
+        data[18], data[19] = catalogId, rawValues
+        data[1], data[2] = values, meta.identityLabel or widget._msuf2SearchText or rawLabel
+        data[3], data[4], data[5] = meta.identityKey, meta.controlPath, meta.sectionId
+        data[6] = meta.classification or meta.controlType
+        data[7], data[8] = meta.searchPrepareKind, meta.searchPrepareValue
+        data[9], data[10], data[11] = meta.ephemeral, meta.settingKey, meta.actionKey
+        data[12], data[13] = meta.actionFixedArgs, meta.actionInputArg
+        data[14], data[15], data[16], data[17] = meta.navigationKey, meta.confirmRequired, keywords, help
     else
-        entry = {
-            id = id, widget = widget, pageKey = pageKey, label = label, kind = kind, anchor = anchor,
-            values = values, controlId = catalogId, _rawValues = rawValues,
-            identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
-            identityKey = meta.identityKey, controlPath = meta.controlPath, sectionId = meta.sectionId,
-            classification = meta.classification or meta.controlType,
-            searchPrepareKind = meta.searchPrepareKind, searchPrepareValue = meta.searchPrepareValue,
-            ephemeral = meta.ephemeral, settingKey = meta.settingKey, actionKey = meta.actionKey,
-            actionFixedArgs = meta.actionFixedArgs, actionInputArg = meta.actionInputArg,
-            navigationKey = meta.navigationKey, confirmRequired = meta.confirmRequired,
-            keywords = keywords, help = help,
-        }
+        data = { values, meta.identityLabel or widget._msuf2SearchText or rawLabel,
+            meta.identityKey, meta.controlPath, meta.sectionId, meta.classification or meta.controlType,
+            meta.searchPrepareKind, meta.searchPrepareValue, meta.ephemeral, meta.settingKey, meta.actionKey,
+            meta.actionFixedArgs, meta.actionInputArg, meta.navigationKey, meta.confirmRequired, keywords, help, catalogId, rawValues }
+        entry = setmetatable({ id = id, widget = widget, pageKey = pageKey, label = label, kind = kind, anchor = anchor,
+            _metadata = data }, REGISTRY_ENTRY_META)
     end
     SEARCH_STATE.registry[id] = entry
     SEARCH_STATE.registryRecords[id] = nil
@@ -613,21 +627,23 @@ end
 
 BuildRegistrySearchRecord = function(entry, pageInfos)
     if type(entry) ~= "table" then return nil end
+    local data = entry._metadata
     local widget = entry.widget
     local catalog = M.RuntimeControlCatalog.GetForWidget(widget)
     if catalog then
-        entry.controlId, entry.identityKey, entry.controlPath = catalog.controlId, catalog.identityKey, catalog.controlPath
-        entry.settingKey, entry.actionKey = catalog.settingKey, catalog.actionKey
+        data[18], data[3], data[4] = catalog.controlId, catalog.identityKey, catalog.controlPath
+        data[10], data[11] = catalog.settingKey, catalog.actionKey
     end
-    local prepareKind, prepareValue = entry.searchPrepareKind, entry.searchPrepareValue
+    local setting, keywords = data[10], data[16]
+    local prepareKind, prepareValue = data[7], data[8]
     local declaredSetting
     if widget then
         local kind, value
-        kind, value, declaredSetting = Search.ResolveExactPreparation(widget._msuf2ExactTargetContracts, entry.settingKey)
+        kind, value, declaredSetting = Search.ResolveExactPreparation(widget._msuf2ExactTargetContracts, setting)
         if not prepareKind then prepareKind, prepareValue = kind, value end
         if kind ~= prepareKind or value ~= prepareValue then declaredSetting = nil end
     end
-    if not M.SupportsSearchTarget(entry.pageKey, entry.settingKey, prepareKind, prepareValue) then return nil end
+    if not M.SupportsSearchTarget(entry.pageKey, setting, prepareKind, prepareValue) then return nil end
     -- One build shares a page's info (and the page text cache AddSearchRecord
     -- keeps on it) across that page's controls.
     local info = pageInfos and pageInfos[entry.pageKey]
@@ -639,19 +655,19 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
         end
     end
     local extra = {}
-    AddValuesSearchText(extra, entry.values)
-    if type(entry.keywords) == "string" then
-        AddSearchText(extra, entry.keywords)
-    elseif type(entry.keywords) == "table" then
-        for i = 1, #entry.keywords do AddSearchText(extra, entry.keywords[i]) end
+    AddValuesSearchText(extra, data[1])
+    if type(keywords) == "string" then
+        AddSearchText(extra, keywords)
+    elseif type(keywords) == "table" then
+        for i = 1, #keywords do AddSearchText(extra, keywords[i]) end
     end
-    AddControlQuestionSearchText(extra, entry.label, entry.kind, entry.values)
-    AddSearchText(extra, entry.help)
+    AddControlQuestionSearchText(extra, entry.label, entry.kind, data[1])
+    AddSearchText(extra, data[17])
     local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra,
         widget and widget._msuf2LiteralSearchLabel)
     if rec then
-        rec.controlId, rec.controlPath, rec.actionKey = entry.controlId, entry.controlPath, entry.actionKey
-        rec.sectionId = entry.sectionId
+        rec.controlId, rec.controlPath, rec.actionKey = data[18], data[4], data[11]
+        rec.sectionId = data[5]
         -- Unbound headings and section actions still have an exact accordion
         -- owner. Its marker is set after construction-time search registration.
         local parent = entry.widget
@@ -660,10 +676,10 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
             rec.sectionId = parent._msuf2SectionId or (section and section.sectionId)
             parent = parent.GetParent and parent:GetParent() or nil
         end
-        local controlId = tostring(entry.controlId or "")
-        local controlPath = tostring(entry.controlPath or "")
-        local settingKey = tostring(entry.settingKey or "")
-        local actionKey = tostring(entry.actionKey or "")
+        local controlId = tostring(data[18] or "")
+        local controlPath = tostring(data[4] or "")
+        local settingKey = tostring(setting or "")
+        local actionKey = tostring(data[11] or "")
         if controlId ~= "" then
             rec.searchIdentity = CatalogSearchIdentity("id", entry.pageKey, controlId)
         elseif controlPath ~= "" then
@@ -677,15 +693,15 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
             rec.searchIdentity = CatalogSearchIdentity(
                 "display", entry.pageKey, rec.kind or "", rec.labelNorm or "", rec.hint or "")
         end
-        rec.answer = entry.help
+        rec.answer = data[17]
         if controlId ~= "" or settingKey ~= "" then
             rec.exactTarget = {
                 pageKey = entry.pageKey,
-                settingKey = (entry.settingKey ~= nil and entry.settingKey ~= "") and entry.settingKey or declaredSetting,
-                controlId = entry.controlId,
+                settingKey = (setting ~= nil and setting ~= "") and setting or declaredSetting,
+                controlId = data[18],
                 sectionId = rec.sectionId,
-                identityKey = entry.identityKey,
-                controlPath = entry.controlPath,
+                identityKey = data[3],
+                controlPath = data[4],
                 label = entry.label,
                 prepareKind = prepareKind, prepareValue = prepareValue,
             }

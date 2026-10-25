@@ -153,8 +153,11 @@ end
 local NORMALIZED_TOKEN_CACHE_LIMIT = 4096
 local NORMALIZED_TOKEN_CACHE_MAX_SOURCE_LEN = 256
 local normalizedTokenCache, normalizedTokenCacheCount = {}, 0
+local aliasSeen = {}
+local NO_SEARCH_ALIASES = {}
 local function NormalizeSearchSettingAliases(value, isPattern)
-    local out, seen = {}, {}
+    local out, seen = {}, aliasSeen
+    for item in pairs(seen) do seen[item] = nil end
     if type(value) ~= "table" then return out end
     for i = 1, #value do
         local item = CleanText(value[i])
@@ -344,17 +347,17 @@ local function RevisionKey(record)
     local parts = REVISION_KEY_PARTS
     local settingKeys = record.searchSettingKeys or REVISION_NO_KEYS
     local settingKeyPatterns = record.searchSettingKeyPatterns or REVISION_NO_KEYS
-    parts[1] = tostring(record.controlId or "")
-    parts[2] = tostring(record.pageKey or "")
-    parts[3] = tostring(record.kind or "")
-    parts[4] = tostring(record.label or "")
-    parts[5] = tostring(record.identityLabel or "")
-    parts[6] = tostring(record.controlPath or "")
-    parts[7] = tostring(record.settingKey or "")
-    parts[8] = tostring(record.actionKey or "")
-    parts[9] = tostring(record.navigationKey or "")
-    parts[10] = tostring(record.help or "")
-    parts[11] = tostring(record.classification or "")
+    parts[1] = (record.controlId or "")
+    parts[2] = (record.pageKey or "")
+    parts[3] = (record.kind or "")
+    parts[4] = (record.label or "")
+    parts[5] = (record.identityLabel or "")
+    parts[6] = (record.controlPath or "")
+    parts[7] = (record.settingKey or "")
+    parts[8] = (record.actionKey or "")
+    parts[9] = (record.navigationKey or "")
+    parts[10] = (record.help or "")
+    parts[11] = (record.classification or "")
     parts[12] = tostring(record.command or "")
     -- Two empty lists join to the bare separator; skip both concats for them.
     if #settingKeys == 0 and #settingKeyPatterns == 0 then
@@ -645,12 +648,12 @@ function Catalog.Register(widget, meta, registrationSource)
     if declaredSearchSettingKeys ~= nil then
         record.searchSettingKeys = NormalizeSearchSettingAliases(declaredSearchSettingKeys, false)
     else
-        record.searchSettingKeys = record.searchSettingKeys or {}
+        record.searchSettingKeys = record.searchSettingKeys or NO_SEARCH_ALIASES
     end
     if declaredSearchSettingKeyPatterns ~= nil then
         record.searchSettingKeyPatterns = NormalizeSearchSettingAliases(declaredSearchSettingKeyPatterns, true)
     else
-        record.searchSettingKeyPatterns = record.searchSettingKeyPatterns or {}
+        record.searchSettingKeyPatterns = record.searchSettingKeyPatterns or NO_SEARCH_ALIASES
     end
     record.actionKey = DeclaredText(record.actionKey, meta.actionKey or (record.command and record.command.actionKey))
     record.navigationKey = DeclaredText(record.navigationKey,

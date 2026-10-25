@@ -3,6 +3,7 @@ local M = MSUF.MSUF2
 local T = M.Theme
 local FILE = "Shell/Menu2/MSUF_Menu2_Theme_Widgets.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local PixelLayoutLeaf = MSUF.Require("PreparePixelLayoutLeaf", FILE, MSUF.Util)
 local WL, MenuSkin, Tr = M.WordList, MSUF.MenuSkin, M.Tr
 local Template, ShadeColor = T.Template, T.ShadeColor
 local ApplyTextureGradient, SetFillGradient = T.ApplyTextureGradient, T.SetFillGradient
@@ -91,7 +92,7 @@ end
 -- visual-state signature compared against the last paint.
 local SLIDER_SCRATCH = { base = { 0, 0, 0, 1 }, from = { 0, 0, 0, 1 }, to = { 0, 0, 0, 1 }, signature = {} }
 local function SliderTexture(slider, key, layer, subLevel, height)
-    local tex = PixelLayoutRegion(slider:CreateTexture(nil, layer, nil, subLevel))
+    local tex = PixelLayoutLeaf(slider:CreateTexture(nil, layer, nil, subLevel))
     tex:SetHeight(height)
     slider[key] = tex
     return tex
@@ -189,7 +190,7 @@ function T.StyleSlider(slider)
         glow:SetPoint("RIGHT", fill, "RIGHT", 0, 0)
     end
     if not slider._msuf2Thumb and slider.CreateTexture then
-        local thumb = PixelLayoutRegion(slider:CreateTexture(nil, "OVERLAY", nil, 4))
+        local thumb = PixelLayoutLeaf(slider:CreateTexture(nil, "OVERLAY", nil, 4))
         slider._msuf2Thumb = thumb
     end
     slider._msuf2UpdateThumb = UpdateSliderThumb
@@ -363,14 +364,14 @@ function T.SkinEditBox(editBox)
     local rim = T.colors.borderSoft or T.colors.coreRim or { 0.070, 0.260, 0.390 }
     T.ApplyBackdrop(editBox, { shadow[1], shadow[2], shadow[3], 0.760 }, { rim[1], rim[2], rim[3], 0.56 })
     if editBox.CreateTexture then
-        local bg = PixelLayoutRegion(editBox:CreateTexture(nil, "BACKGROUND", nil, -6))
+        local bg = PixelLayoutLeaf(editBox:CreateTexture(nil, "BACKGROUND", nil, -6))
         bg:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
         bg:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
         editBox._msuf2EditBg = bg
         local edges = {}
         for i = 1, #RECT_EDGE_SPECS do
             local spec = RECT_EDGE_SPECS[i]
-            local edge = PixelLayoutRegion(editBox:CreateTexture(nil, "OVERLAY", nil, 1))
+            local edge = PixelLayoutLeaf(editBox:CreateTexture(nil, "OVERLAY", nil, 1))
             edge:SetPoint(spec[1], editBox, spec[1], 0, 0)
             edge:SetPoint(spec[2], editBox, spec[2], 0, 0)
             edge[spec[3]](edge, spec[4])
@@ -438,14 +439,14 @@ function T.StyleFeatureLink(button, label)
     if not (button and label and button.CreateTexture) then return nil end
     local base = T.colors.accent2 or T.colors.warning or { 0.95, 0.72, 0.18, 1 }
     local hot = { 1.00, 0.84, 0.30, 1 }
-    local fill = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND"))
+    local fill = PixelLayoutLeaf(button:CreateTexture(nil, "BACKGROUND"))
     fill:SetPoint("TOPLEFT", button, "TOPLEFT", -5, 3)
     fill:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 5, -3)
     fill:SetColorTexture(base[1], base[2], base[3], 0.09)
 
     local edges = {}
     for index = 1, 4 do
-        local edge = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY", nil, 7))
+        local edge = PixelLayoutLeaf(button:CreateTexture(nil, "OVERLAY", nil, 7))
         edge:SetColorTexture(base[1], base[2], base[3], 0.96)
         edges[index] = edge
     end
