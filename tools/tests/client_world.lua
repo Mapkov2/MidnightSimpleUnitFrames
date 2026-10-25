@@ -59,9 +59,9 @@ World.Read = Read
 -- Ordered Lua load list for one TOC. A TOC line may name a Lua file or an XML
 -- embed manifest; an XML manifest names further XML files and Lua scripts. The
 -- client loads each file once, in first-mention order.
-function World.Graph(root, tocRelative, locale, gameType)
+function World.Graph(root, tocRelative, locale, gameType, harnessRoot)
     root = Normalize(AbsoluteRoot(root)):gsub("/$", "")
-    local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+    local manifest = assert(loadfile((harnessRoot or root) .. "/tools/tests/client_manifest.lua"))()
     local ordered, seen, active = {}, {}, {}
     local function visit(path)
         path = Normalize(path)

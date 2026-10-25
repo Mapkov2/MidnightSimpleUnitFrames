@@ -866,6 +866,210 @@
         "Mists",
         "Forever"
       ]
+    },
+    {
+      "test": "tools/tests/profile_rollback_full_graph_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_rollback_session_validation_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/integration_anchor_failure_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/castbar_player_pushback_provider.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/uf_rebind_state_transaction.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "aura"
+      ]
+    },
+    {
+      "test": "tools/tests/uf_rebind_state_transaction.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "index"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_entry_view_reuse_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "fonts"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_entry_view_reuse_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "auras"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_entry_view_reuse_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "textures"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_entry_view_reuse_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "selectors"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_entry_view_reuse_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "groups"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_dead_painters_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_aura_route_restore_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_name_sample_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_k5_boundaries_smoke.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/menu_selected_target_smoke.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/menu_group_owner_budget_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_aura_route_restore_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "selection"
+      ]
     }
   ],
   "excluded": {
@@ -973,6 +1177,7 @@
     "tools/tests/uf_unit_shift_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. uf_unit_shift_budget_smoke.lua <repoRoot> <flavor>",
     "tools/tests/unit_scene_region_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Native health-bar queries absent from the permissive widget fixture: an anchored size and a new child's level.",
     "tools/tests/unresolved_global_reads_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Lua 5.1 makes an undefined name a silent nil read: `CoreFrame(unit)` compiles,",
-    "tools/release_test_inventory.py": "Inventory checker executed explicitly by release-check.ps1 in the generated lists phase; it cannot recursively list itself as a test run."
+    "tools/release_test_inventory.py": "Inventory checker executed explicitly by release-check.ps1 in the generated lists phase; it cannot recursively list itself as a test run.",
+    "tools/tests/menu_entry_view_world.lua": "Shared full-graph loader for menu entry reuse and aura route restore tests; supplies native named-frame publication and an optional immutable baseline overlay, with no standalone test entry point."
   }
 }

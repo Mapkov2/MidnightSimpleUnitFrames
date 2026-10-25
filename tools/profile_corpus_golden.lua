@@ -375,7 +375,7 @@ end
 local function NoteError(world, context, message)
     message = tostring(message)
     local file, text = message:match("^.-([%w_]+%.lua):%d+: (.*)$")
-    world.isolated[#world.isolated + 1] = { context = context, file = file or "?", message = text or message }
+    world.isolated[#world.isolated + 1] = { context = context, file = file or "?", message = text or message, detail = message }
 end
 
 -- Every handler of one event, each isolated like the client's error handler.
@@ -407,7 +407,10 @@ local function RunFrameTimers(world)
     end
 end
 
-function Corpus.NewWorld(root, flavor, character, beforeLoad)
+-- sourceRoot selects an external, read-only TOC graph while retaining this
+-- checkout's client harness. Include it in the cache key to prevent a current
+-- graph from standing in for a historical login in the same Lua process.
+function Corpus.NewWorld(root, flavor, character, beforeLoad, sourceRoot, gameType)
     World = World or assert(loadfile(root .. "/tools/tests/client_world.lua"))()
     Emulator = Emulator or assert(loadfile(root .. "/tools/tests/encoding_util_emulator.lua"))()
     local world = World.New(root, flavor)
@@ -442,9 +445,11 @@ function Corpus.NewWorld(root, flavor, character, beforeLoad)
     env.GetRealmName = function() return realm end
     if beforeLoad then beforeLoad(world) end
     local suffix = world.client.tocSuffix or flavor
-    local graphKey = suffix .. (world.client.isForever and "/camelot" or "")
+    sourceRoot = (sourceRoot or world.root):gsub("\\", "/"):gsub("/$", "")
+    gameType = gameType or (world.client.isForever and "camelot" or nil)
+    local graphKey = sourceRoot .. "/" .. suffix .. "/" .. (gameType or "*")
     graphCache[graphKey] = graphCache[graphKey]
-        or World.Graph(world.root, World.CoreTOC(suffix), "enUS", world.client.isForever and "camelot" or nil)
+        or World.Graph(sourceRoot, World.CoreTOC(suffix), "enUS", gameType, root)
     world.corePaths = graphCache[graphKey]
     world:LoadGraph("MidnightSimpleUnitFrames", world.corePaths, world.core)
     local failure = world:FirstFailure()
@@ -539,7 +544,9 @@ local function CompleteBoundProfile(world)
 end
 
 -- ADDON_LOADED with the saved globals, then PLAYER_LOGIN and the next frame.
-function Corpus.Login(world, saved)
+-- nativeOnly avoids the corpus/export completion pass when a test must observe
+-- precisely the native login state before invoking EnsureDB itself.
+function Corpus.Login(world, saved, nativeOnly)
     -- The native client isolates every frame's ADDON_LOADED handler too.
     -- Keep failures observable through NoteError, as for PLAYER_LOGIN below.
     for name, value in pairs(saved or {}) do rawset(world.env, name, value) end
@@ -547,7 +554,7 @@ function Corpus.Login(world, saved)
     Dispatch(world, "PLAYER_LOGIN")
     RunFrameTimers(world)
     InstallFrameIsolation(world)
-    CompleteBoundProfile(world)
+    if not nativeOnly then CompleteBoundProfile(world) end
 end
 
 ---------------------------------------------------------------------------

@@ -57,9 +57,15 @@ Scan(classResources,{"MSUF_Menu2_AdvancedClassPower.lua","MSUF_Menu2_ResourceExt
     "MSUF_Menu2_AdvancedColors_Resources.lua"})
 local unitPages={"MSUF_Menu2_Global.lua","MSUF_Menu2_GlobalBars.lua"}
 do
-    local pipe=assert(io.popen('git -C "'..root..'" ls-files -- "'..OPTIONS..'Pages/MSUF_Menu2_Unit*.lua"'))
-    for line in pipe:lines() do unitPages[#unitPages+1]=line:match("([^/]+)$") end
-    pipe:close()
+    -- The validated manifest includes newly split modules before git staging.
+    local seen={}
+    for path in Plain("tools/module-manifest.json"):gmatch('"path"%s*:%s*"([^"\n]+)"') do
+        local name=path:match("^"..OPTIONS.."Pages/(MSUF_Menu2_Unit[^/]+%.lua)$")
+        if name and not seen[name] then
+            seen[name]=true
+            unitPages[#unitPages+1]=name
+        end
+    end
 end
 assert(#unitPages>=10,"the Unit Frames page files were not found")
 Scan(unitFrames,unitPages)

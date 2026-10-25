@@ -7,7 +7,7 @@
       "proven": 3719
     },
     "Mainline": {
-      "declarations": 7406,
+      "declarations": 7405,
       "initialDeclarations": 4791,
       "profileControls": 4040,
       "proven": 4040
@@ -33,11 +33,11 @@
   },
   "generatorVersion": "menu-schema-coverage/3",
   "issueCount": 0,
-  "projectionSha256": "f17677c26ee1f5b8b925939ce8eb4f8d85792009ff332fa85be5ce30e141e30d",
+  "projectionSha256": "f6a70cfce8a2443bd967d0dc16f54becf5094ec6ff469436a97abbdb0a823212",
   "projectionVersion": 2,
-  "sourceSha256": "16EAC4629E6557BAF087A3AB508341422A1960884F55EE9426BE0180F21B4B4B",
+  "sourceSha256": "305413E6C4DE1190A1277D32CD9719694D4DFA4D8C056B6FEA1ECE47E0B9035E",
   "totals": {
-    "declarations": 32763,
+    "declarations": 32762,
     "initialDeclarations": 21894,
     "profileControls": 17339,
     "proven": 17339

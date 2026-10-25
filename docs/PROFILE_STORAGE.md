@@ -111,16 +111,58 @@ again. Sparse/incomplete data cannot consume the request. `/msuf compatsave off`
 cancels it explicitly. These account metadata fields are outside the profile
 pool and unchanged 6.50x ignores them.
 
-`profile_rollback_compat_smoke.lua <root> <client>` starts from serialized V3
-SavedVariables, arms the real slash command, runs the real terminal save, and
-checks every resulting profile through the **pinned 6.50 current-profile guard**
-from `profile_sparse_backward_migration_smoke.lua`. That guard selects the old
-native fast load before any repair/migration. Complete canonical Lua literal
-bytes must equal the original full profiles. The factory and applicable
-SavedVariables corpus run on Mainline, Vanilla, TBC, Mists and Forever. This is
-offline source and value proof; native WoW serialization and a live client
-downgrade remain untested. The separate backward-migration smoke continues to
-pin the older migration boundaries.
+`profile_rollback_full_graph_smoke.lua <root> <client>` reads the owner's
+unchanged production 6.50x checkout at
+`C:/MSUF Beta Branch/MidnightSimpleUnitFrames`; it never writes there. The
+current `client_world` harness and its current TOC-condition reader resolve the production core TOC and XML
+manifests and loads every listed Lua chunk. Options remains unloaded, matching
+an ordinary login. The corpus harness's graph cache includes the source root,
+so a 7.0 graph cannot stand in for the historical graph in the same process.
+The test selects `standard` on Mainline and `camelot` on Forever explicitly;
+it omits the corpus's extra export/materialization pass on every login.
+Both TOC-declared SavedVariables globals are serialized as independent Lua
+assignments and evaluated into a fresh sandbox at every handoff:
+
+1. A real 7.0 terminal V3 sparse save and new login.
+2. The real `/msuf compatsave` command, terminal save and serialized full data.
+3. The complete production login (`ADDON_LOADED`, `PLAYER_LOGIN`, queued
+   timers), real `MSUF_EnsureDB`, terminal logout and serialized data.
+4. A fresh 7.0 login; the complete canonical profile-pool bytes must equal the
+   original materialized profiles, including unknown values and absent fields.
+
+The production login, explicit EnsureDB and logout must match the original
+profiles with only the production normalization stamp substituted. Current 7.0
+uses 21 and production 6.503 uses 22. The intermediate stamp changes and is
+restored on return; no fields are excluded from the final byte comparison.
+Raw bytes of every production Lua chunk, XML manifest, TOC and reader inputs
+are checked unchanged after the test. Missing production files, chunk-load
+failures, unexpected isolated errors and changed return values fail the test;
+an unavailable external checkout is not silently skipped. Consequently this
+proof requires that checkout on the machine running the release inventory.
+
+Factory and applicable SavedVariables corpus cases are attempted on Mainline, Vanilla,
+TBC, Mists and Forever. The existing corpus harness isolates known frame-only
+repaint errors while executing their real functions. The production 6.503
+health painter additionally encounters an unmodelled text-runtime numeric
+field at `MSUF_UF_Elements_Health.lua:951`; Classic's deferred Highlight repaint
+also reads an unmodelled number at `MSUF_UF_Highlight.lua:220`. These exact
+frame-only failures are reported explicitly, while State errors remain fatal. This is full-graph
+offline profile proof; native WoW serialization, live rendering/combat/taint
+and an in-game downgrade remain untested.
+
+Production 6.503 snapshot (2026-10-25): Forever cannot finish loading in this
+harness. Its Mainline TOC line 162 stacks `AllowLoadTextLocale` before
+`ExcludeLoadGameType camelot`; the client honors the first condition only.
+The enUS alias chunk therefore loads, while its Common provider at line 161
+is excluded. `Auras3/AliasData/MSUF_Auras3_AliasData_enUS.lua:8` indexes the nil
+`AuraAliasCatalog`. The full-graph smoke fails on that exact unchanged-source
+error; it does not patch, skip or claim a Forever roundtrip. The older
+production test helper interpreted both conditions, masking this load failure.
+
+`profile_rollback_compat_smoke.lua` retains focused arm/off/interrupted-save,
+corrupt-profile and allocation checks, including its pinned historical
+current-profile guard. That excerpt is not the full downgrade proof. The
+separate backward-migration smoke pins the older migration boundaries.
 
 ### One-time account safety copy
 
@@ -153,13 +195,18 @@ stores generator revision 1, the conservative payload size, an anchor profile na
 and an envelope consistency key. Later logins check those scalar facts and the
 anchor compatibility shape in constant time. A missing/inconsistent stamp triggers
 full validation before it can be replaced; invalid payloads remain refused.
-Before sparse saving is first enabled, a separate full content preflight records
-`_pre70SparseValidated` on the account, outside the immutable snapshot. Explicit
-restore always revalidates the full payload. Empty or damaged snapshots cannot
-authorize that first sparse save or restoration; `profile_rollback_validation_smoke.lua`
-pins malformed payloads, stamp upgrades, first-save preflight and strict secret
-handling across all five clients. Fresh full capture reuses its source safety/size
-walk; reconstructed snapshots are checked again after expansion.
+These persisted facts are login hints only. Before the first sparse persist of
+each session (terminal logout/reload), a full content preflight validates the
+snapshot again, including inactive profiles. The result is cached only in a
+session-local weak table keyed by snapshot identity. The old account
+`_pre70SparseValidated` field is cleared at session start and grants no approval.
+A failed preflight removes no defaults and explains once that the account stays
+full. Explicit restore always revalidates the full payload.
+`profile_rollback_session_validation_smoke.lua` covers damage after a previous
+sparse save and serialized login; `profile_rollback_validation_smoke.lua` pins
+malformed payloads, stamp upgrades, preflight and strict secret handling across
+all five clients. Fresh full capture reuses its source safety/size walk;
+reconstructed snapshots are checked again after expansion.
 
 In the corpus, maximum uncompressed `profile_state_harness.Literal` snapshot
 sizes are **699,910 bytes** on Mainline/Forever and **447,590 bytes** on
