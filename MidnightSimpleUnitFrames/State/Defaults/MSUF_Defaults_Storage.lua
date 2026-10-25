@@ -272,6 +272,8 @@ function Schema.PreparePersistence(globalDB)
     return globalDB.profiles
 end
 
+local sparseRefusalNotices = setmetatable({}, { __mode = "k" })
+
 function Schema.Persist(globalDB)
     local profiles = Schema.PreparePersistence(globalDB)
     if not profiles then return false end
@@ -284,7 +286,10 @@ function Schema.Persist(globalDB)
     -- A failed safety snapshot leaves the live account full. Standalone codec
     -- callers have no account/login lifecycle and retain their pure contract.
     if globalDB == MSUF_GlobalDB and not Schema.HasRollbackBackup(globalDB, true) then
-        print(MSUF.Translate("MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full."))
+        if not sparseRefusalNotices[globalDB] then
+            sparseRefusalNotices[globalDB] = true
+            print(MSUF.Translate("MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full."))
+        end
         return false
     end
     InitializeSparse()

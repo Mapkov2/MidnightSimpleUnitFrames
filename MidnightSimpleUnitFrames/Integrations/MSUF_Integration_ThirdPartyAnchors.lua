@@ -66,10 +66,18 @@ local function RunOptional(name, ...)
     local fn = Optional(name)
     if fn then return fn(...) end
 end
--- Every provider frame and CVar accessor here is foreign. The probes check
--- types first; one that still raises reaches the client error handler (there
--- is no protected boundary here).
 local format = string.format
+
+-- Cold discovery and source-change callbacks may enter another addon's code.
+-- Isolate each provider independently; later events and bounded retries can
+-- acquire it again. Retain both refresh results for combat deferral.
+local function IsolateAnchorProvider(label, callback)
+    local state = { label = label }
+    return function(...)
+        local ok, result, detail = MSUF.RunIntegrationCall(state, callback, ...)
+        if ok then return result, detail end
+    end
+end
 
 local ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"
 local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
@@ -126,7 +134,7 @@ local suiteCooldownRefreshAfterCombat = false
 local suiteCooldownResolveState = { generation = 0 }
 -- [viewer name] = the acquired Suite frame of that name.
 local suiteCooldownActiveSources = {}
--- [frame] = the viewer name its observers refresh.
+-- [frame] = observer progress and the viewer name its hooks refresh.
 local observedSuiteCooldownSources = setmetatable({}, { __mode = "k" })
 local automaticCooldownProviderId
 local automaticCooldownProviderLabel
@@ -421,12 +429,15 @@ local function ShowFirstCooldownConsent(data)
     })
 end
 
+local suiteConsentState = { label = "Suite anchor consent" }
+
 local function MaybeShowCooldownConsent()
     local providerId, providerLabel = MSUF.GetAutomaticCooldownAnchorProvider()
     -- Consent offers the Cooldown Manager layout; a client that cannot host
     -- the anchor has nothing to ask about.
     if not cooldownAnchorSupported then return false end
-    if MSUF.SuiteLink.InstallerBusy() then return false end
+    local ok, busy = MSUF.RunIntegrationCall(suiteConsentState, MSUF.SuiteLink.InstallerBusy)
+    if not ok or busy then return false end
     if not providerId or cooldownConsentPromptProviderId == providerId then return false end
     local general = GeneralDB()
     if type(general) ~= "table" then return false end
@@ -521,6 +532,11 @@ local function GetCooldownAnchorScaledWidth(frame, targetFrame, knownWidth)
     if targetScale <= 0 then targetScale = 1 end
     return width * sourceScale / targetScale
 end
+
+-- These exported layout probes also read cached provider frames after login.
+-- A broken geometry method must leave the caller free to try another anchor.
+GetUsableCooldownAnchorSize = IsolateAnchorProvider("cooldown anchor geometry", GetUsableCooldownAnchorSize)
+GetCooldownAnchorScaledWidth = IsolateAnchorProvider("cooldown anchor scale", GetCooldownAnchorScaledWidth)
 
 MSUF.GetUsableCooldownAnchorSize = GetUsableCooldownAnchorSize
 MSUF.GetCooldownAnchorScaledWidth = GetCooldownAnchorScaledWidth
@@ -634,26 +650,44 @@ local function EnsureEllesmereCooldownAnchorSource()
     return source, transition ~= nil, transition, false
 end
 
+-- Record each successful native hook separately. A later hook may raise;
+-- retry only the missing suffix instead of duplicating the installed hooks.
+local function ObserveAnchorSourceHooks(source, observers, callback, viewerName)
+    local observer = observers[source]
+    if not observer then
+        observer = { step = 0, viewerName = viewerName }
+        observers[source] = observer
+    end
+    if observer.step < 1 then
+        source:HookScript("OnSizeChanged", callback)
+        observer.step = 1
+    end
+    if observer.step < 2 then
+        source:HookScript("OnShow", callback)
+        observer.step = 2
+    end
+    if observer.step < 3 then
+        source:HookScript("OnHide", callback)
+        observer.step = 3
+    end
+    return true
+end
+
+local function OnCoolinatorSourceChanged()
+    refreshCoolinatorAnchor(true)
+end
+
 local function ObserveCoolinatorSource(source)
     if not IsFrameObservable(source) then return false end
-    if observedCoolinatorSources[source] then return true end
+    local observer = observedCoolinatorSources[source]
+    if observer and observer.step == 3 then return true end
     if InCombat()
         and source.IsProtected and source:IsProtected() then
         coolinatorSourceHookPending = true
         if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false
     end
-    observedCoolinatorSources[source] = true
-    source:HookScript("OnSizeChanged", function()
-        refreshCoolinatorAnchor(true)
-    end)
-    source:HookScript("OnShow", function()
-        refreshCoolinatorAnchor(true)
-    end)
-    source:HookScript("OnHide", function()
-        refreshCoolinatorAnchor(true)
-    end)
-    return true
+    return ObserveAnchorSourceHooks(source, observedCoolinatorSources, OnCoolinatorSourceChanged)
 end
 
 local function EnsureCoolinatorAnchorSource()
@@ -685,12 +719,13 @@ end
 
 -- Hook callbacks receive the frame first; it names the bar to refresh.
 local function OnSuiteCooldownSourceChanged(source)
-    refreshSuiteCooldownAnchor(observedSuiteCooldownSources[source], true)
+    refreshSuiteCooldownAnchor(observedSuiteCooldownSources[source].viewerName, true)
 end
 
 local function ObserveSuiteCooldownSource(source, viewerName)
     if not IsFrameObservable(source) then return false end
-    if observedSuiteCooldownSources[source] then return true end
+    local observer = observedSuiteCooldownSources[source]
+    if observer and observer.step == 3 then return true end
     -- The Suite promises a plain insecure frame; the protected-frame deferral is
     -- kept anyway so a changed contract can never hook in lockdown.
     if InCombat()
@@ -699,11 +734,7 @@ local function ObserveSuiteCooldownSource(source, viewerName)
         if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false
     end
-    observedSuiteCooldownSources[source] = viewerName
-    source:HookScript("OnSizeChanged", OnSuiteCooldownSourceChanged)
-    source:HookScript("OnShow", OnSuiteCooldownSourceChanged)
-    source:HookScript("OnHide", OnSuiteCooldownSourceChanged)
-    return true
+    return ObserveAnchorSourceHooks(source, observedSuiteCooldownSources, OnSuiteCooldownSourceChanged, viewerName)
 end
 
 local function EnsureSuiteCooldownAnchorSource(viewerName)
@@ -726,26 +757,21 @@ local function EnsureSuiteCooldownAnchorSource(viewerName)
     return source, transition ~= nil, transition, false
 end
 
+local function OnSkironSourceChanged()
+    refreshSkironAnchorProxy(nil, false, true)
+end
+
 local function ObserveSkironSource(source)
     if not IsFrameObservable(source) then return false end
-    if observedSkironSources[source] then return true end
+    local observer = observedSkironSources[source]
+    if observer and observer.step == 3 then return true end
     if InCombat()
         and source.IsProtected and source:IsProtected() then
         skironSourceHookPending = true
         if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false
     end
-    observedSkironSources[source] = true
-    source:HookScript("OnSizeChanged", function()
-        refreshSkironAnchorProxy(nil, false, true)
-    end)
-    source:HookScript("OnShow", function()
-        refreshSkironAnchorProxy(nil, false, true)
-    end)
-    source:HookScript("OnHide", function()
-        refreshSkironAnchorProxy(nil, false, true)
-    end)
-    return true
+    return ObserveAnchorSourceHooks(source, observedSkironSources, OnSkironSourceChanged)
 end
 
 -- The MSUF-owned proxy frame over the Skiron anchor; created on first acquire.
@@ -1031,6 +1057,7 @@ refreshArcUIAnchor = function(sizeChanged)
     NotifyCooldownAnchorTransition(transition ~= nil, transition, sizeChanged)
     return source ~= nil
 end
+refreshArcUIAnchor = IsolateAnchorProvider("ArcUI anchor", refreshArcUIAnchor)
 
 refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
     local proxy, changed, transition, deferred = EnsureSkironAnchorProxy(source, isActiveProxy)
@@ -1038,6 +1065,7 @@ refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
     NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
     return proxy ~= nil
 end
+refreshSkironAnchorProxy = IsolateAnchorProvider("Skiron anchor", refreshSkironAnchorProxy)
 
 refreshCoolinatorAnchor = function(sizeChanged)
     local source, changed, transition, deferred = EnsureCoolinatorAnchorSource()
@@ -1045,6 +1073,7 @@ refreshCoolinatorAnchor = function(sizeChanged)
     NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
     return source ~= nil
 end
+refreshCoolinatorAnchor = IsolateAnchorProvider("Coolinator anchor", refreshCoolinatorAnchor)
 
 refreshSuiteCooldownAnchor = function(viewerName, sizeChanged)
     local source, changed, transition, deferred = EnsureSuiteCooldownAnchorSource(viewerName)
@@ -1056,6 +1085,7 @@ refreshSuiteCooldownAnchor = function(viewerName, sizeChanged)
     end
     return source ~= nil
 end
+refreshSuiteCooldownAnchor = IsolateAnchorProvider("Suite anchor", refreshSuiteCooldownAnchor)
 
 -- Every Suite bar MSUF follows, Essential first. True once all are acquired,
 -- so the retry ladder runs all its steps while a Suite bar is switched off.
@@ -1073,6 +1103,7 @@ local function refreshEllesmereCooldownAnchor()
     NotifyCooldownAnchorTransition(changed, transition, nil)
     return source ~= nil, false
 end
+refreshEllesmereCooldownAnchor = IsolateAnchorProvider("EllesmereUI anchor", refreshEllesmereCooldownAnchor)
 
 -- One bounded retry ladder: try now, then after each SKIRON_RETRY_DELAYS step until
 -- refresh() reports success. A newer ladder on the same state supersedes this one.
@@ -1217,6 +1248,12 @@ local function RegisterSuiteCooldownAnchor()
     ScheduleSuiteCooldownAnchorResolve()
     return true
 end
+
+RegisterSuiteCooldownAnchor = IsolateAnchorProvider("Suite anchor registration", RegisterSuiteCooldownAnchor)
+RegisterArcUIAnchor = IsolateAnchorProvider("ArcUI anchor registration", RegisterArcUIAnchor)
+RegisterSkironAnchorProxy = IsolateAnchorProvider("Skiron anchor registration", RegisterSkironAnchorProxy)
+RegisterCoolinatorAnchor = IsolateAnchorProvider("Coolinator anchor registration", RegisterCoolinatorAnchor)
+RegisterEllesmereCooldownAnchor = IsolateAnchorProvider("EllesmereUI anchor registration", RegisterEllesmereCooldownAnchor)
 
 local function RegisterThirdPartyAnchors()
     if not loginReached then return false end

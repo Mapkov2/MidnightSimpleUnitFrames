@@ -405,6 +405,7 @@ end
 -- never a per-profile history or a copy on each logout.
 do
     local blockedStore
+    local sparseValidation = setmetatable({}, { __mode = "k" })
     local snapshotLimit = 8 * 1024 * 1024
 
     local function SnapshotCost(value, remaining)
@@ -521,13 +522,18 @@ do
     function Schema.HasRollbackBackup(store, beforeSparse)
         if not Plain(store) then return false end
         local backup = store._pre70ProfileBackup
-        if not HasStamp(backup) and not ValidateAndStamp(backup) then return false end
-        if beforeSparse and (MSUF.Util.IsSecret(store._pre70SparseValidated)
-            or store._pre70SparseValidated ~= backup.validation.key) then
-            if not ValidateAndStamp(backup) then return false end
-            store._pre70SparseValidated = backup.validation.key
+        if beforeSparse then
+            -- Disk stamps keep login cheap; only this session's full content
+            -- preflight can authorize removing defaults at logout or reload.
+            if not Plain(backup) then return false end
+            local valid = sparseValidation[backup]
+            if valid == nil then
+                valid = ValidateAndStamp(backup)
+                sparseValidation[backup] = valid
+            end
+            return valid
         end
-        return true
+        return HasStamp(backup) or ValidateAndStamp(backup)
     end
 
     function Schema.CaptureRollbackBackup(store, legacy)
@@ -575,6 +581,7 @@ do
     -- Inspect the on-disk envelope before login has decoded or migrated it.
     function Schema.BeginRollbackSession(store, legacy)
         if not Plain(store) then return end
+        store._pre70SparseValidated = nil
         Schema.RegisterRecoveryCommands()
         Schema.BoundProfileRecovery(store)
         if store._compatSave == "saved" then

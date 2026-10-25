@@ -33,8 +33,8 @@ for _, damage in ipairs({ "empty-pool", "empty-profile", "scalar-profile", "miss
     assert(not schema.Persist(account), damage .. ": damaged backup enabled sparse saving")
     assert(H.Literal(account.profiles) == before, damage .. ": refusal edited live profiles")
 end
--- A serialized stamp avoids another whole-tree scan, but never authorizes the
--- account's first sparse save without a fresh content preflight.
+-- A serialized stamp avoids a login scan, but never authorizes a session's
+-- first sparse save without a fresh content preflight.
 local stamped = Copy(seed.env.MSUF_GlobalDB)
 local stamp = assert(stamped._pre70ProfileBackup.validation, "snapshot validation stamp missing")
 assert(stamp.generator == 1 and stamp.bytes > 0 and type(stamp.key) == "string")
@@ -73,7 +73,7 @@ local reload = C.NewWorld(root, flavor, "Tester-Realm")
 C.Login(reload, { MSUF_GlobalDB = disk })
 assert(H.Literal(disk._pre70ProfileBackup) == H.Literal(stamped._pre70ProfileBackup), "reload rewrote valid snapshot stamp")
 assert(reload.core.DefaultsSchema.Persist(disk), "first sparse preflight refused a valid snapshot")
-assert(disk._pre70SparseValidated == disk._pre70ProfileBackup.validation.key, "first sparse preflight was not recorded")
+assert(disk._pre70SparseValidated == nil, "session preflight was persisted into the account")
 -- Historical snapshots retain raw pre-normalization values and remain usable.
 local historical = 0
 for _, entry in ipairs(C.Manifest(root)) do
