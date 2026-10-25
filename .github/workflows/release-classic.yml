@@ -99,7 +99,9 @@ jobs:
   # Nothing is packaged or uploaded until both gates are green: a skipped or
   # failed job above skips this one.
   publish-classic:
-    needs: [preflight, release-check]
+    # Owner decision 2026-10-25 for 7.0 alphas: the release check runs locally
+    # before tagging; this CI run reports in parallel but does not hold the upload.
+    needs: [preflight]
     runs-on: ubuntu-24.04
     env:
       CLASSIC_RELEASE_TAG: ${{ github.ref_name }}
