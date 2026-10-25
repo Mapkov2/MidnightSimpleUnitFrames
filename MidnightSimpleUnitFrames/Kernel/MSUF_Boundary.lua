@@ -78,3 +78,16 @@ local function RunUnitFrameApply(step, finish, ...)
 end
 
 MSUF.RunUnitFrameApply = RunUnitFrameApply
+
+-- Only third-party callbacks enter this boundary. Quarantine before reporting;
+-- even a broken external error handler must not stop independent providers.
+local function RunIntegrationCall(state, callback, ...)
+    local ok, result = pcall(callback, ...)
+    if not ok then
+        state.failed = true
+        pcall(ReportError, state.label, result)
+    end
+    return ok, result
+end
+
+MSUF.RunIntegrationCall = RunIntegrationCall

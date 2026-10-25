@@ -4,8 +4,8 @@
 ---
 --- Foreign symbols this file depends on: none. This is the inbound side of
 --- the integration: third-party addons (and MSUF_Integration_NSRTNicknames.lua)
---- register resolvers through MSUF.API.Nicknames. Resolver exceptions propagate
---- directly to the client. Only Blizzard API is read here (UnitName,
+--- register resolvers through MSUF.API.Nicknames. Failing resolvers are
+--- quarantined through the Kernel boundary until explicitly registered again. Only Blizzard API is read here (UnitName,
 --- UnitFullName, UnitIsPlayer, GetNormalizedRealmName, InCombatLockdown,
 --- issecretvalue).
 
@@ -27,7 +27,7 @@ local pairs = pairs
 local sort = table.sort
 -- Providers are foreign code; registration-owned handlers report and quarantine
 -- failures before the resolver's stack unwinds.
-local ReportError = MSUF.ReportError
+local RunIntegrationCall = MSUF.RunIntegrationCall
 
 local API = { VERSION = 1 }
 local providers = {}
@@ -180,12 +180,6 @@ local function FrozenDisplayName(nativeName, fullName)
   return nativeName
 end
 
-local function ReportProviderError(record, err)
-  local message = ("MSUF Nickname API (%s): resolver failed: %s"):format(
-    record and record.owner or "?", tostring(err))
-  ReportError("NicknameProvider", message)
-end
-
 local function RebuildProviderOrder()
   Wipe(orderedProviders)
   providerCount = 0
@@ -195,7 +189,6 @@ local function RebuildProviderOrder()
     if record.playerOnly == true then
       playerOnlyProviderCount = playerOnlyProviderCount + 1
     end
-    record.failed = false
     orderedProviders[providerCount] = record
   end
   sort(orderedProviders, function(a, b)
@@ -261,8 +254,9 @@ local function ResolveDisplayName(unit, frame)
   for i = 1, providerCount do
     local record = orderedProviders[i]
     if record and not record.failed then
-      local result = record.resolve(unit, nativeName, fullName, playerOnlyPrevalidated == true and record.playerOnly == true or nil, true)
-      if issecretvalue(result) ~= true
+      local ok, result = RunIntegrationCall(record, record.resolve, unit, nativeName, fullName,
+        playerOnlyPrevalidated == true and record.playerOnly == true or nil, true)
+      if ok and issecretvalue(result) ~= true
         and type(result) == "string"
         and result ~= ""
         and result ~= nativeName then
@@ -477,7 +471,7 @@ function API.RegisterProvider(owner, provider, priority)
   local ownerKey = OwnerKey(owner)
   local current = providers[ownerKey]
   if current and current.resolve == resolve and current.priority == priority
-    and current.playerOnly == playerOnly then
+    and current.playerOnly == playerOnly and not current.failed then
     return true, "unchanged"
   end
 
@@ -487,12 +481,8 @@ function API.RegisterProvider(owner, provider, priority)
     resolve = resolve,
     priority = priority,
     playerOnly = playerOnly,
+    label = "NicknameProvider " .. owner,
   }
-  record.errorHandler = function(err)
-    record.failed = true
-    ReportProviderError(record, err)
-    return err
-  end
   providers[ownerKey] = record
   orderDirty = true
   return RequestApply()
@@ -512,7 +502,6 @@ function API.NotifyChanged(owner, unit)
   if unit ~= nil and not ValidUnitToken(unit) then return false, "invalid_unit" end
   local record = providers[OwnerKey(owner)]
   if not record then return false, "not_registered" end
-  record.failed = false
   return RequestApply(unit)
 end
 

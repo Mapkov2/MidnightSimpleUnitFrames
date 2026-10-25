@@ -5,10 +5,10 @@ local addonName, MSUF = ...
 --   MiniAurasApi.v1 or MiniCCApi.v1: table whose RegisterFrameProvider(api,
 --     provider) accepts MSUF's party/raid frame provider. When neither exists
 --     at load, a watcher frame retries on ADDON_LOADED "MiniAuras"/"MiniCC"
---     and gives up at PLAYER_LOGIN; MiniAuras then never sees MSUF's group
---     frames. A registration that raises counts as absent.
+--     until PLAYER_LOGIN when the API is absent. A throwing API retains the
+--     filtered ADDON_LOADED watcher until registration succeeds.
 --   The refresh callback MiniAuras hands to provider.RegisterRefreshFrames:
---     isolated on every frame-registry change; errors retain the callback stack.
+--     quarantined after a failure until MiniAuras registers another callback.
 
 local GF = MSUF.GF
 if not (GF and type(GF.ForEachFrame) == "function"
@@ -17,6 +17,9 @@ if not (GF and type(GF.ForEachFrame) == "function"
 local PROVIDER_NAME = "MidnightSimpleUnitFrames"
 local OBSERVER_OWNER = addonName or PROVIDER_NAME
 local providerFrames = {}
+local RunIntegrationCall = MSUF.RunIntegrationCall
+local refreshState = { label = "MiniAuras refresh" }
+local registrationState = { label = "MiniAuras registration" }
 local refreshFrames
 local observerRegistered = false
 local registered = false
@@ -37,11 +40,12 @@ local function GetFrames()
 end
 
 local function RequestRefresh()
-    if refreshFrames then refreshFrames() end
+    if refreshFrames and not refreshState.failed then RunIntegrationCall(refreshState, refreshFrames) end
 end
 
 local function RegisterRefreshFrames(callback)
     refreshFrames = type(callback) == "function" and callback or nil
+    refreshState.failed = nil
     if not observerRegistered then
         observerRegistered = GF.RegisterFrameRegistryObserver(OBSERVER_OWNER, RequestRefresh) == true
     end
@@ -67,7 +71,7 @@ local function TryRegister()
     local apiRoot = MiniAurasApi or MiniCCApi
     local api = type(apiRoot) == "table" and apiRoot.v1
     if type(api) ~= "table" or type(api.RegisterFrameProvider) ~= "function" then return false end
-    api:RegisterFrameProvider(provider)
+    if not RunIntegrationCall(registrationState, api.RegisterFrameProvider, api, provider) then return false end
     registered = true
     StopLoadWatcher()
     return true
@@ -80,5 +84,9 @@ loadWatcher:RegisterEvent("ADDON_LOADED")
 loadWatcher:RegisterEvent("PLAYER_LOGIN")
 loadWatcher:SetScript("OnEvent", function(_, event, loadedAddon)
     if event == "ADDON_LOADED" and loadedAddon ~= "MiniAuras" and loadedAddon ~= "MiniCC" then return end
-    if TryRegister() or event == "PLAYER_LOGIN" then StopLoadWatcher() end
+    if TryRegister() then return end
+    if event == "PLAYER_LOGIN" then
+        if registrationState.failed then loadWatcher:UnregisterEvent("PLAYER_LOGIN")
+        else StopLoadWatcher() end
+    end
 end)

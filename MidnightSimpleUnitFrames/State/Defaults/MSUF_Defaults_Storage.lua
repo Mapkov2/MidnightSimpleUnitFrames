@@ -165,7 +165,7 @@ end
 function Schema.RestorePersistence(profile)
     if not Plain(profile) or MSUF.Util.IsSecret(profile._msufDefaultsRevision) then return false, "rejected" end
     if Schema.IsQuarantinedProfile(profile) then return false, "rejected" end
-    Schema.BackupNewerRevision(profile)
+    if not Schema.BackupNewerRevision(profile) then return false, "rejected" end
     local marker = profile[sparseV2Marker]
     local extension = profile[sparseV3.Marker]
     if MSUF.Util.IsSecret(marker) or MSUF.Util.IsSecret(extension) then return false, "rejected" end
