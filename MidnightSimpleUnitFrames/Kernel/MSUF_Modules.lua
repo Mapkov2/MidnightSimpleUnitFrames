@@ -86,8 +86,8 @@ local function GetDesiredEnabled(module)
 end
 
 --- Query and transition share the Kernel boundary. Commit state only after
---- the transition returns; release the lock before an error reporter can raise.
-local RunModuleStep = MSUF.RunLabeledStep
+--- the transition returns; release the lock and isolate a raising error reporter.
+local RunModuleStep = MSUF.RunModuleStep
 local function FinishModuleStep(_, m)
     m.__msufSwitchTo = nil
 end

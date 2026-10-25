@@ -410,6 +410,7 @@ function World.New(root, flavor, options)
         client = client,
         widgets = widgets,
         core = {},
+        reported = {},
         options = {},
         loaded = {},
         failures = {},
@@ -529,7 +530,10 @@ function World.New(root, flavor, options)
     end
     env.issecurevariable = function() return true end
     env.forceinsecure = function() end
-    env.geterrorhandler = function() return function() end end
+    local function ReportError(message)
+        world.reported[#world.reported + 1] = tostring(message)
+    end
+    env.geterrorhandler = function() return ReportError end
     env.seterrorhandler = function() end
     env.debugprofilestop = function() return 0 end
     env.debugstack = function() return "" end

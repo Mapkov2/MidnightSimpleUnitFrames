@@ -55,11 +55,13 @@ $contractQueue = $null
 function Invoke-Check([string]$Name, [string]$Executable, [string[]]$Arguments) {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $previous = $ErrorActionPreference
+    $previousPowerShell = $env:MSUF_POWERSHELL
     $ErrorActionPreference = "Continue"
     try {
+        $env:MSUF_POWERSHELL = $PowerShell
         $output = (& $Executable @Arguments 2>&1 | Out-String)
         $code = $LASTEXITCODE
-    } finally { $ErrorActionPreference = $previous }
+    } finally { $ErrorActionPreference = $previous; $env:MSUF_POWERSHELL = $previousPowerShell }
     [IO.File]::AppendAllText($log, "=== $Name ($code, $($timer.Elapsed.TotalSeconds.ToString('F2')) s)$nl$output$nl", $utf8)
     return @{ Ok = ($code -eq 0); Text = $output; Seconds = $timer.Elapsed.TotalSeconds }
 }

@@ -1,43 +1,50 @@
--- Real module transitions must release their reentrancy lock before reporting.
+-- Real module transitions isolate a throwing reporter within the same pass.
 local root = assert(arg[1])
 local ns = { PublicGlobals = {} }
 function ns.ExportPublic(name, value) ns.PublicGlobals[name] = value end
-local reports, fail, desired, following = 0, true, true, 0
+local reports, attempts, fail, desired, following = 0, 0, true, true, 0
+local lastReport
 local env = setmetatable({}, { __index = _G })
 env._G = env
 env.geterrorhandler = function() return function(message)
     reports = reports + 1
-    assert(message:find("module-fault", 1, true), message)
+    lastReport = message
     error("reporter-fault")
 end end
 for _, name in ipairs({ "MSUF_Boundary.lua", "MSUF_Modules.lua" }) do
     local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/" .. name))
     setfenv(chunk, env)("test", ns)
 end
-local module = { order = 1,
-    IsEnabled = function() return desired end,
-    Enable = function() if fail then error("module-fault") end end,
-    Disable = function() if fail then error("module-fault") end end }
-ns.MSUF_RegisterModule("throwing", module)
-ns.MSUF_RegisterModule("following", { order = 2, Enable = function() following = following + 1 end })
-local function Failure()
-    local ok, why = pcall(ns.MSUF_ApplyModules)
-    assert(not ok and tostring(why):find("reporter-fault", 1, true), "reporter did not throw")
-    assert(module.__msufSwitchTo == nil, "throwing reporter latched the module lock")
+local function Transition()
+    attempts = attempts + 1
+    if fail then error("module-fault") end
 end
-Failure()
+local module = { order = 1, IsEnabled = function() return desired end, Enable = Transition, Disable = Transition }
+local nextModule = { order = 2, IsEnabled = function() return desired end,
+    Enable = function() following = following + 1 end, Disable = function() following = following + 1 end }
+ns.MSUF_RegisterModule("throwing", module)
+ns.MSUF_RegisterModule("following", nextModule)
+local function Failure(expectedAttempts, expectedFollowing)
+    local ok, why = pcall(ns.MSUF_ApplyModules)
+    assert(ok, "throwing reporter aborted module pass: " .. tostring(why))
+    assert(lastReport:find("module throwing: ", 1, true), lastReport)
+    assert(lastReport:find("module-fault", 1, true), lastReport)
+    assert(module.__msufSwitchTo == nil, "throwing reporter latched the module lock")
+    assert(attempts == expectedAttempts and following == expectedFollowing, "retry/following module was blocked")
+    assert(nextModule.__msufEnabled == desired, "following module missed its state in the same pass")
+end
+Failure(1, 1)
 assert(not module.__msufEnabled, "failed enable committed state")
--- Keep the failed module disabled while the next independent module runs.
-desired = false
-ns.MSUF_ApplyModules()
-assert(following == 1, "following module was blocked")
-fail, desired = false, true
-ns.MSUF_ApplyModules()
-assert(module.__msufEnabled, "same module could not retry enable")
-fail, desired = true, false
-Failure()
-assert(module.__msufEnabled, "failed disable committed state")
+Failure(2, 1) -- The desired state is unchanged: the failed enable must retry.
 fail = false
 ns.MSUF_ApplyModules()
-assert(module.__msufEnabled == false and following == 1 and reports == 2, "retry/idempotence failed")
-print("PASS module lock: throwing reporter, following module, enable/disable retries")
+assert(module.__msufEnabled and attempts == 3, "same module could not retry enable")
+fail, desired = true, false
+Failure(4, 2)
+assert(module.__msufEnabled, "failed disable committed state")
+Failure(5, 2) -- An unchanged disable also retries without blocking the next module.
+fail = false
+ns.MSUF_ApplyModules()
+ns.MSUF_ApplyModules()
+assert(module.__msufEnabled == false and attempts == 6 and following == 2 and reports == 4, "retry/idempotence failed")
+print("PASS module isolation: throwing reporter, same-pass following state, unchanged enable/disable retries")

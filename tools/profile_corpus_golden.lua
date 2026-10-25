@@ -141,6 +141,16 @@ local CLASSIC_CLIENTS = { Vanilla = true, TBC = true, Mists = true }
 local NUMBER_WITH_TABLE = "attempt to compare number with table"
 local TABLE_WITH_NUMBER = "attempt to compare table with number"
 Corpus.HARNESS_ERRORS = {
+    -- Generic frame fields are callable-table stubs: the text runtime has no
+    -- numeric healthSlotCount, and rounded art pools have no numeric pad bounds.
+    { "unit-frame apply", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
+    { "module roundedUnitframes", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
+    -- A native frame reached from the screen cache is an unknown-frame stub;
+    -- its GetEffectiveScale result is a table instead of a native number.
+    { "unit-frame apply", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
+    -- Mainline's UnitPowerMax is not modelled, so the class-power module's
+    -- maximum-slot floor sees the generic native-API stub table.
+    { "module ClassPower", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)", MIDNIGHT },
     { "PLAYER_LOGIN", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     -- The unit factory isolates each unit apply (stub frames always fail), so the
     -- screen-cache scale read surfaces in a later timer-driven apply
@@ -373,10 +383,26 @@ end
 -- An error a run caught: where it was caught (context), the file it was
 -- raised in and its message without the line number (lines move with any
 -- edit; the file and the message identify the failure).
-local function NoteError(world, context, message)
+local function CaughtError(context, message)
     message = tostring(message)
     local file, text = message:match("^.-([%w_]+%.lua):%d+: (.*)$")
-    world.isolated[#world.isolated + 1] = { context = context, file = file or "?", message = text or message, detail = message }
+    return { context = context, file = file or "?", message = text or message, detail = message }
+end
+
+local function NoteError(world, context, message)
+    world.isolated[#world.isolated + 1] = CaughtError(context, message)
+end
+
+-- Kernel boundaries report caught exceptions without rethrowing them. Both
+-- channels must pass the same explicit harness allowlist, including in rollback.
+function Corpus.Errors(world)
+    local errors = {}
+    for _, caught in ipairs(world.isolated) do errors[#errors + 1] = caught end
+    for _, message in ipairs(world.reported or {}) do
+        local label, detail = message:match("^MSUF (.-): (.*)$")
+        errors[#errors + 1] = CaughtError(label or "errorhandler", detail or message)
+    end
+    return errors
 end
 
 -- Every handler of one event, each isolated like the client's error handler.
@@ -1264,7 +1290,7 @@ end
 -- The errors of a run no allowlist row covers; marks the rows it used.
 local function UnexpectedErrors(run, used)
     local unexpected, seen = {}, {}
-    for _, caught in ipairs(run.world.isolated) do
+    for _, caught in ipairs(Corpus.Errors(run.world)) do
         local index = AllowedError(run.flavor, caught)
         if index then
             used[index] = true
@@ -1280,9 +1306,10 @@ Corpus.UnexpectedErrors = UnexpectedErrors
 local function Report(run, verbose)
     if not verbose then return end
     local world = run.world
-    print(string.format("    %d runtime applies, %d caught errors, %d chat lines",
-        #(world.runtimeApplies or {}), #world.isolated, #world.prints))
-    for _, caught in ipairs(world.isolated) do print("    caught: " .. ErrorText(caught)) end
+    local errors = Corpus.Errors(world)
+    print(string.format("    %d runtime applies, %d caught errors, %d reported errors, %d chat lines",
+        #(world.runtimeApplies or {}), #world.isolated, #(world.reported or {}), #world.prints))
+    for _, caught in ipairs(errors) do print("    caught: " .. ErrorText(caught)) end
 end
 
 -- Check mode for one client. Returns the number of failing entries.

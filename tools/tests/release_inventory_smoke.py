@@ -1,9 +1,31 @@
 """Inventory regression: real discovery, fresh checkout, missing and stale rows."""
 import importlib.util
 import json
+import os
+import shutil
+import sys
 from pathlib import Path
 import subprocess
 import tempfile
+from unittest.mock import patch
+
+def run_powershell(arguments, **options):
+    powershell = os.environ.get('MSUF_POWERSHELL') or shutil.which('pwsh') or shutil.which('powershell')
+    assert powershell, 'PowerShell required: set MSUF_POWERSHELL to the active host path'
+    return subprocess.run([powershell, *arguments], **options)
+
+
+# No Linux host is needed: PATH lookup must not replace the inherited host,
+# whether its executable is named powershell or pwsh (including spaces).
+for name in ('powershell', 'pwsh'):
+    executable = str(Path(tempfile.gettempdir()) / 'shell with spaces' / name)
+    with patch.dict(os.environ, {'MSUF_POWERSHELL': executable}), \
+            patch.object(shutil, 'which', side_effect=AssertionError('inherited shell path was ignored')), \
+            patch.object(subprocess, 'run') as launch:
+        run_powershell(['-NoProfile', '-File', 'probe.ps1'], check=True)
+        launch.assert_called_once_with([executable, '-NoProfile', '-File', 'probe.ps1'], check=True)
+print('PowerShell child launch: inherited powershell/pwsh paths with spaces; no PATH fallback')
+
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('inventory', ROOT / 'tools/release_test_inventory.py')
@@ -67,18 +89,32 @@ try {
 } finally { Note 'finish'; $lock.Dispose() }
 exit 0
 """, encoding='utf-8')
-    probe = r"""param($Repository, $Fixture)
+    (root / 'child-probe.py').write_text('import os; print(os.environ.get("MSUF_POWERSHELL", "missing"))\n', encoding='utf-8')
+    probe = r"""param($Repository, $Fixture, $Python)
 $ErrorActionPreference = 'Stop'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $Repository 'tools/release-check.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors) { throw $errors[0] }
-foreach ($name in @('Order-ContractRuns', 'Start-ContractWorker')) {
+foreach ($name in @('Order-ContractRuns', 'Start-ContractWorker', 'Invoke-Check')) {
     $node = $ast.Find({ param($item) $item -is [Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq $name }, $true)
     if (-not $node) { throw "Missing worker function $name" }
     Invoke-Expression $node.Extent.Text
 }
 $root = $Fixture; $Slot = ''; $Owner = 'scheduling-probe'
 $PowerShell = (Get-Process -Id $PID).Path
+$actualPowerShell = $PowerShell
+$log = Join-Path $Fixture 'child-probe.log'
+$utf8 = New-Object Text.UTF8Encoding($false); $nl = [Environment]::NewLine
+$oldPowerShell = $env:MSUF_POWERSHELL
+$env:MSUF_POWERSHELL = 'stale-parent-shell'
+try {
+    foreach ($name in @('powershell', 'pwsh')) {
+        $PowerShell = Join-Path $Fixture ("shell with spaces/" + $name)
+        $result = Invoke-Check $name $Python @((Join-Path $Fixture 'child-probe.py'))
+        if (-not $result.Ok -or $result.Text.Trim() -ne $PowerShell) { throw "Child did not inherit active $name path: $($result.Text)" }
+        if ($env:MSUF_POWERSHELL -ne 'stale-parent-shell') { throw 'Parent shell environment was not restored' }
+    }
+} finally { $PowerShell = $actualPowerShell; $env:MSUF_POWERSHELL = $oldPowerShell }
 $queue = Join-Path $Fixture 'probe.queue'; $events = Join-Path $Fixture 'events.log'
 [IO.File]::WriteAllText($queue, '0')
 $runs = @()
@@ -104,7 +140,7 @@ try {
 }
 """
     (root / 'probe.ps1').write_text(probe, encoding='utf-8')
-    result = subprocess.run(['powershell', '-NoProfile', '-File', str(root / 'probe.ps1'), str(ROOT), str(root)],
+    result = run_powershell(['-NoProfile', '-File', str(root / 'probe.ps1'), str(ROOT), str(root), sys.executable],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     rows = json.loads(next(line for line in result.stdout.splitlines() if line.startswith('[{')))

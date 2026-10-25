@@ -85,6 +85,17 @@ end
 MSUF.RunLabeledStep = RunLabeledStep
 MSUF.RunUnitFrameApply = RunUnitFrameApply
 
+-- Module transitions are independent: a broken reporter must not abort the
+-- registry pass after the transition's lock has already been released.
+local function RunModuleStep(label, step, finish, ...)
+    local ok, result = pcall(step, ...)
+    finish(ok, ...)
+    if not ok then pcall(ReportError, label, result) end
+    return ok, result
+end
+
+MSUF.RunModuleStep = RunModuleStep
+
 -- Only third-party callbacks enter this boundary. Quarantine before reporting;
 -- even a broken external error handler must not stop independent providers.
 local function RunIntegrationCall(state, callback, ...)

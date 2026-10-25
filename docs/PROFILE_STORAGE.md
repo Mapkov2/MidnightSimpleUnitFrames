@@ -111,53 +111,62 @@ again. Sparse/incomplete data cannot consume the request. `/msuf compatsave off`
 cancels it explicitly. These account metadata fields are outside the profile
 pool and unchanged 6.50x ignores them.
 
-`profile_rollback_full_graph_smoke.lua <root> <client>` reads the owner's
-unchanged production 6.50x checkout at
-`C:/MSUF Beta Branch/MidnightSimpleUnitFrames`; it never writes there. The
-current `client_world` harness and its current TOC-condition reader resolve the production core TOC and XML
-manifests and loads every listed Lua chunk. Options remains unloaded, matching
-an ordinary login. The corpus harness's graph cache includes the source root,
-so a 7.0 graph cannot stand in for the historical graph in the same process.
-The test selects `standard` on Mainline and `camelot` on Forever explicitly;
-it omits the corpus's extra export/materialization pass on every login.
-Both TOC-declared SavedVariables globals are serialized as independent Lua
-assignments and evaluated into a fresh sandbox at every handoff:
+As of 2026-10-25, `profile_rollback_full_graph_smoke.lua <root> <client>`
+reads an immutable **v6.503** source snapshot, pinned by
+`tools/tests/historical_6503_source.py` to commit
+`d8af82416ec07e8755c89e35c83bcd2320868a10` and tree
+`ded900e72626f1ad37b4915f5dc05e92c8e5f401`. The default location is
+`dist/historical/6.503-d8af824`; `MSUF_HISTORICAL_6503_DIR` selects another
+prepared source directory. Prepare the ignored local archive with
+`python tools/tests/historical_6503_source.py --materialize-from <repository-containing-the-pinned-commit>`.
+CI checks out the pinned commit separately. The verifier reconstructs its Git
+tree from file bytes; missing, changed or extra files fail verification. The
+owner's live production worktree is neither a test input nor required on CI.
+
+The current `client_world` harness and `client_manifest.lua` reader resolve the
+historical core TOC and XML manifests and load every listed Lua chunk. Options
+remains unloaded, matching an ordinary login. The corpus graph cache includes
+the source root, so a 7.0 graph cannot stand in for the historical graph in the
+same process. The test selects `standard` on Mainline and `camelot` on Forever
+explicitly; it omits the corpus's extra export/materialization pass on every
+login. Both TOC-declared SavedVariables globals are serialized as independent
+Lua assignments and evaluated into a fresh sandbox at every handoff:
 
 1. A real 7.0 terminal V3 sparse save and new login.
 2. The real `/msuf compatsave` command, terminal save and serialized full data.
-3. The complete production login (`ADDON_LOADED`, `PLAYER_LOGIN`, queued
+3. The complete pinned v6.503 login (`ADDON_LOADED`, `PLAYER_LOGIN`, queued
    timers), real `MSUF_EnsureDB`, terminal logout and serialized data.
 4. A fresh 7.0 login; the complete canonical profile-pool bytes must equal the
    original materialized profiles, including unknown values and absent fields.
 
-The production login, explicit EnsureDB and logout must match the original
-profiles with only the production normalization stamp substituted. Current 7.0
-uses 21 and production 6.503 uses 22. The intermediate stamp changes and is
-restored on return; no fields are excluded from the final byte comparison.
-Raw bytes of every production Lua chunk, XML manifest, TOC and reader inputs
-are checked unchanged after the test. Missing production files, chunk-load
-failures, unexpected isolated errors and changed return values fail the test;
-an unavailable external checkout is not silently skipped. Consequently this
-proof requires that checkout on the machine running the release inventory.
+The historical login, explicit EnsureDB and logout must match the original
+profiles with only the historical normalization stamp substituted. On
+2026-10-25, current 7.0 uses 21 and pinned v6.503 uses 22. The intermediate
+stamp changes and is restored on return; no fields are excluded from the final
+byte comparison. Raw bytes of every historical Lua chunk, XML manifest, TOC
+and reader input are checked unchanged after the test. Missing source files,
+chunk-load failures, unexpected caught or reported errors and changed return
+values fail the test; an unavailable snapshot is never silently skipped.
 
-Factory and applicable SavedVariables corpus cases are attempted on Mainline, Vanilla,
-TBC, Mists and Forever. The existing corpus harness isolates known frame-only
-repaint errors while executing their real functions. The production 6.503
-health painter additionally encounters an unmodelled text-runtime numeric
-field at `MSUF_UF_Elements_Health.lua:951`; Classic's deferred Highlight repaint
-also reads an unmodelled number at `MSUF_UF_Highlight.lua:220`. These exact
-frame-only failures are reported explicitly, while State errors remain fatal. This is full-graph
+Factory and applicable SavedVariables corpus cases run on Mainline, Vanilla,
+TBC, Mists and Forever. The corpus harness checks isolated exceptions and
+Boundary error-handler reports against `Corpus.HARNESS_ERRORS`; each allowed
+failure names the precise frame-only stub artifact. The historical graph has
+additional explicit frame-only exceptions in the rollback smoke, including its
+health painter's unmodelled text-runtime numeric field at
+`MSUF_UF_Elements_Health.lua:951` and deferred Highlight frame scale at
+`MSUF_UF_Highlight.lua:220`. State errors remain fatal. This is full-graph
 offline profile proof; native WoW serialization, live rendering/combat/taint
 and an in-game downgrade remain untested.
 
-Production 6.503 snapshot (2026-10-25): Forever cannot finish loading in this
-harness. Its Mainline TOC line 162 stacks `AllowLoadTextLocale` before
-`ExcludeLoadGameType camelot`; the client honors the first condition only.
-The enUS alias chunk therefore loads, while its Common provider at line 161
-is excluded. `Auras3/AliasData/MSUF_Auras3_AliasData_enUS.lua:8` indexes the nil
-`AuraAliasCatalog`. The full-graph smoke fails on that exact unchanged-source
-error; it does not patch, skip or claim a Forever roundtrip. The older
-production test helper interpreted both conditions, masking this load failure.
+Historical correction (2026-10-25): the earlier documentation described a
+Forever alias-catalog abort using a first-condition-only TOC interpretation.
+The current reader evaluates **all stacked conditions together**. On the
+pinned v6.503 alias line, `AllowLoadTextLocale enUS` does not override
+`ExcludeLoadGameType camelot`; Forever excludes both the alias data and its
+Common provider. That obsolete harness interpretation is no longer a reason
+to abort the Forever rollback test. Current addon TOCs retain the separate
+lint rule requiring one condition per line.
 
 `profile_rollback_compat_smoke.lua` retains focused arm/off/interrupted-save,
 corrupt-profile and allocation checks, including its pinned historical

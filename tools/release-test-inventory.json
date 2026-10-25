@@ -1396,6 +1396,19 @@
         "{client}",
         "shared_ux"
       ]
+    },
+    {
+      "test": "tools/tests/profile_rollback_full_graph_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--inject-logout-error"
+      ]
     }
   ],
   "excluded": {

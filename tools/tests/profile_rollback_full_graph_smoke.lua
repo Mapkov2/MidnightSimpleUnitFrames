@@ -20,6 +20,7 @@ pipe:close()
 assert(verification:find("PASS historical 6.503 d8af82416ec07e8755c89e35c83bcd2320868a10 tree "
     .. "ded900e72626f1ad37b4915f5dc05e92c8e5f401", 1, true), "historical source verification failed: " .. verification)
 if arg[3] == "--verify-source" then print(verification) return end
+local injectLogout = arg[3] == "--inject-logout-error"
 local C = assert(loadfile(root .. "/tools/profile_corpus_golden.lua"))()
 local H = assert(loadfile(root .. "/tools/tests/profile_state_harness.lua"))()
 local function Read(path)
@@ -66,7 +67,7 @@ end
 local historicalErrors = {}
 local function Healthy(world, stage)
     local errors, checked = {}, { isolated = {} }
-    for _, caught in ipairs(world.isolated) do
+    for _, caught in ipairs(C.Errors(world)) do
         -- The historical health painter reads an unmodelled runtime field.
         -- This aborts a frame repaint, never State/login/EnsureDB/logout code.
         local health = caught.context == "PLAYER_LOGIN" and caught.file == "MSUF_UF_Elements_Health.lua"
@@ -87,7 +88,7 @@ local function Healthy(world, stage)
     end
     errors = C.UnexpectedErrors({ world = checked, flavor = flavor }, {})
     if #errors > 0 then
-        for _, caught in ipairs(world.isolated) do print(stage .. ": " .. (caught.detail or caught.message)) end
+        for _, caught in ipairs(C.Errors(world)) do print(stage .. ": " .. (caught.detail or caught.message)) end
     end
     assert(#errors == 0, stage .. ": " .. table.concat(errors, "; "))
 end
@@ -129,6 +130,13 @@ local function Roundtrip()
             local character = entry.login or "Tester-Realm"
             local saved = entry.kind == "sv" and C.LoadSavedVariablesFixture(root, entry.file) or {}
             local world, env = Login(saved, character)
+            if injectLogout then
+                local listener = env.CreateFrame("Frame")
+                listener:RegisterEvent("PLAYER_LOGOUT")
+                listener:SetScript("OnEvent", function()
+                    world.core.RunUnitFrameApply(function() error("injected-logout-apply-error") end, function() end)
+                end)
+            end
             for name in pairs(env.MSUF_GlobalDB.profiles) do assert(env.MSUF_SwitchProfile(name)) end
             local pool = env.MSUF_GlobalDB.profiles
             pool.Inactive = C.Copy(env.MSUF_DB)
@@ -137,10 +145,13 @@ local function Roundtrip()
             local full, active, bindings = H.Literal(pool), H.Literal(env.MSUF_DB), H.Literal(env.MSUF_GlobalDB.char)
             for _ in pairs(pool) do profiles = profiles + 1 end
             world:FireEvent("PLAYER_LOGOUT")
+            Healthy(world, "7.0 sparse logout")
             assert(type(pool.Inactive._msufSparseDefaultsV3) == "string", "source was not V3 sparse")
             world, env = Login(Saved(env), character)
+            if injectLogout then return end
             world.core.SlashCommands.Dispatch("compatsave")
             world:FireEvent("PLAYER_LOGOUT")
+            Healthy(world, "7.0 compatibility logout")
             assert(env.MSUF_GlobalDB._compatSave == "saved", "full compatibility save did not finish")
             Equal(env, full, entry.id .. " compatibility save")
             world, env = Login(Saved(env), character, production)
@@ -155,6 +166,7 @@ local function Roundtrip()
             Equal(env, historicalFull, entry.id .. " production EnsureDB")
             Healthy(world, "production EnsureDB")
             world:FireEvent("PLAYER_LOGOUT")
+            Healthy(world, "production logout")
             Equal(env, historicalFull, entry.id .. " production logout")
             world, env = Login(Saved(env), character)
             Equal(env, full, entry.id .. " 7.0 return")
@@ -167,6 +179,13 @@ local function Roundtrip()
 end
 local ok, failure = pcall(Roundtrip)
 for path, bytes in pairs(original) do assert(Read(path) == bytes, "production source changed: " .. path) end
+if injectLogout then
+    local expected = "7.0 sparse logout: unit-frame apply | profile_rollback_full_graph_smoke.lua | injected-logout-apply-error"
+    assert(not ok and tostring(failure):find(expected, 1, true),
+        "rollback accepted a terminal Boundary report: " .. tostring(failure))
+    print("PASS rollback rejects reported terminal apply error " .. flavor)
+    return
+end
 assert(ok, failure)
 for detail in pairs(historicalErrors) do print("HARNESS historical frame repaint: " .. detail) end
 print("PASS full downgrade " .. flavor .. ": production " .. version .. ", " .. #graph .. " unchanged TOC chunks; "
