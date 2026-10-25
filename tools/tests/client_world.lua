@@ -26,6 +26,17 @@ local World = {}
 -- Paths and files
 --------------------------------------------------------------------------
 
+local function AbsoluteRoot(path)
+    path = tostring(path):gsub("\\", "/")
+    if path:sub(1, 1) == "/" or path:match("^%a:/") then return path end
+    -- Lua 5.1 has no getcwd. Query only the current directory, never interpolate
+    -- the supplied path into a shell command. PWD can be stale after a chdir.
+    local pipe = assert(io.popen(package.config:sub(1, 1) == "\\" and "cd" or "pwd", "r"))
+    local cwd = assert(pipe:read("*l"), "client_world: cannot resolve current directory")
+    pipe:close()
+    return cwd:gsub("\\", "/") .. "/" .. path
+end
+
 local function Normalize(path)
     local prefix = path:sub(1, 1) == "/" and "/" or ""
     local parts = {}
@@ -49,6 +60,7 @@ World.Read = Read
 -- embed manifest; an XML manifest names further XML files and Lua scripts. The
 -- client loads each file once, in first-mention order.
 function World.Graph(root, tocRelative, locale, gameType)
+    root = Normalize(AbsoluteRoot(root)):gsub("/$", "")
     local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
     local ordered, seen, active = {}, {}, {}
     local function visit(path)
@@ -369,7 +381,7 @@ end
 --   locale  GetLocale() result (default "enUS")
 function World.New(root, flavor, options)
     options = options or {}
-    root = Normalize(root):gsub("/$", "")
+    root = Normalize(AbsoluteRoot(root)):gsub("/$", "")
     local client = World.ClientFor(root, flavor)
     local Stubs = assert(loadfile(root .. "/.github/scripts/msuf_test_stubs.lua"),
         "client_world: .github/scripts/msuf_test_stubs.lua is missing")()

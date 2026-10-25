@@ -101,6 +101,9 @@ return function(root, flavor, C, H)
         local full = Serial(runtime.env.MSUF_GlobalDB)
         full.profiles[runtime.env.MSUF_ActiveProfile] = expected
         runtime:FireEvent("PLAYER_LOGOUT")
+        assert(runtime.env.MSUF_GlobalDB._pre70SparseValidated == full._pre70ProfileBackup.validation.key,
+            "first sparse save did not record its account safety preflight")
+        full._pre70SparseValidated = full._pre70ProfileBackup.validation.key
         assert(rawget(runtime.env, "MSUF_DB") == nil, "terminal alias survived")
         assert(profile.general[key] == expected.general[key], "variant restoration changed the internal marker")
         local a = World({ MSUF_GlobalDB = full })

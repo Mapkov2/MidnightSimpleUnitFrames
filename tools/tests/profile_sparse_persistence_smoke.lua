@@ -59,6 +59,9 @@ observer:SetScript("OnEvent", function()
     seen = env.MSUF_GlobalDB.profiles[env.MSUF_ActiveProfile] == profile
 end)
 w:FireEvent("PLAYER_LOGOUT")
+assert(env.MSUF_GlobalDB._pre70SparseValidated == reference._pre70ProfileBackup.validation.key,
+    "first sparse save did not record its account safety preflight")
+reference._pre70SparseValidated = reference._pre70ProfileBackup.validation.key
 assert(rawget(env, "MSUF_DB") == nil, "duplicate public SavedVariable survived")
 assert(earlyAlias == profile and earlyDefault == true, "pruning ran before earlier logout consumers")
 assert(seen and pool[env.MSUF_ActiveProfile] == profile, "terminal snapshot replaced stored profile")

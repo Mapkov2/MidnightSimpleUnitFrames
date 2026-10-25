@@ -21,6 +21,8 @@ from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
+GENERATOR_VERSION = "menu-schema-coverage/3"
+RECEIPT = "tools/menu_schema_coverage_receipt.json"
 MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 INDEXES = ("Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua",
            "Search/MSUF_Menu2_Search_StaticIndex_Data.lua")
@@ -193,6 +195,68 @@ def audit(evidence, root):
     return proven, total, issues
 
 
+def projection_hash(evidence, root):
+    """Debug setter locations may name this checkout; never bind its directory."""
+    prefix = str(root.resolve())
+    variants = {prefix, prefix.replace("\\", "/"), prefix.replace("/", "\\")}
+    pattern = re.compile("|".join(re.escape(value + separator) for value in variants for separator in ("/", "\\")), re.I)
+    def portable(value):
+        if isinstance(value, str):
+            return pattern.sub(lambda match: "{repo}/", value)
+        if isinstance(value, list):
+            return [portable(item) for item in value]
+        if isinstance(value, dict):
+            return {key: portable(item) for key, item in value.items()}
+        return value
+    return hashlib.sha256(json.dumps(portable(evidence), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def make_receipt(evidence, root):
+    """Only an independently audited complete projection may issue a receipt."""
+    proven, total, issues = audit(evidence, root)
+    if issues:
+        raise ValueError("cannot receipt invalid schema projection: " + "; ".join(issues[:8]))
+    clients = {}
+    for flavor, client in evidence["clients"].items():
+        count = sum(profile_control(row) for row in client["controls"])
+        clients[flavor] = {"proven": count, "profileControls": count,
+                           "declarations": len(client["controls"]), "initialDeclarations": len(client["initialControlIds"])}
+    return {"version": 1, "projectionVersion": 2, "generatorVersion": GENERATOR_VERSION,
+            "sourceSha256": evidence["sourceSha256"], "issueCount": 0,
+            "projectionSha256": projection_hash(evidence, root),
+            "clients": clients, "totals": {key: sum(row[key] for row in clients.values()) for key in next(iter(clients.values()))}}
+
+
+def audit_receipt(receipt, root):
+    """Read-only fresh-checkout check; full declarations remain a release check."""
+    issues = []
+    if not isinstance(receipt, dict):
+        return 0, 0, ["invalid schema coverage receipt"]
+    if (receipt.get("version") != 1 or receipt.get("projectionVersion") != 2
+            or receipt.get("generatorVersion") != GENERATOR_VERSION or receipt.get("issueCount") != 0
+            or receipt.get("sourceSha256") != source_hash(root)
+            or not re.fullmatch("[a-f0-9]{64}", str(receipt.get("projectionSha256", "")))):
+        issues.append("missing/stale schema coverage receipt; regenerate the full projection and receipt")
+    clients = receipt.get("clients", {})
+    required = {row["Suffix"] for row in csv.DictReader(read(root / "tools/classic-client-matrix.tsv").splitlines(), delimiter="\t")}
+    required.add("Forever")
+    if not isinstance(clients, dict) or set(clients) != required:
+        issues.append("receipt client inventory differs")
+    sums = {key: 0 for key in ("proven", "profileControls", "declarations", "initialDeclarations")}
+    for flavor, row in clients.items() if isinstance(clients, dict) else ():
+        if (not isinstance(row, dict) or set(row) != set(sums)
+                or any(type(row.get(key)) is not int or row[key] <= 0 for key in sums)):
+            issues.append("invalid receipt counts: " + flavor)
+            continue
+        if row["proven"] != row["profileControls"] or row["profileControls"] > row["declarations"] or row["initialDeclarations"] > row["declarations"]:
+            issues.append("unproven/inconsistent receipt counts: " + flavor)
+        for key in sums:
+            sums[key] += row[key]
+    if receipt.get("totals") != sums or not sums["profileControls"]:
+        issues.append("receipt totals differ")
+    return sums["proven"], sums["profileControls"], issues
+
+
 def load_stream(path):
     """Fold page observations in order, preserving the former exact row union."""
     rows = {}
@@ -266,7 +330,17 @@ def main():
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--ensure", action="store_true", help="verify current projection, regenerate when missing or stale")
+    parser.add_argument("--write-receipt", action="store_true", help="commit-sized evidence from a current, fully audited projection")
+    parser.add_argument("--check-receipt", action="store_true", help="verify compact evidence read-only, without the projection")
     args = parser.parse_args()
+    if args.check_receipt:
+        path = ROOT / RECEIPT
+        receipt = json.loads(read(path)) if path.exists() else {}
+        proven, total, issues = audit_receipt(receipt, ROOT)
+        for issue in issues:
+            print(issue)
+        print("schema receipt: %d/%d proven; %d issues" % (proven, total, len(issues)))
+        return bool(issues)
     path = ROOT / "tools/menu_schema_coverage.json"
     evidence = json.loads(read(path)) if path.exists() and not args.write else {}
     regenerate = args.write
@@ -282,6 +356,14 @@ def main():
         path.write_bytes((json.dumps(evidence, ensure_ascii=False, indent=2) + "\n").replace("\n", "\r\n").encode())
         counts = {flavor: len(client["initialControlIds"]) for flavor, client in evidence["clients"].items()}
         print("initial declaration counts: " + json.dumps(counts, sort_keys=True))
+    if not issues and args.ensure:
+        committed = ROOT / RECEIPT
+        receipt = json.loads(read(committed)) if committed.exists() else {}
+        if receipt != make_receipt(evidence, ROOT):
+            issues.append("committed coverage receipt differs from the full projection")
+    if not issues and (args.write or args.write_receipt):
+        receipt = make_receipt(evidence, ROOT)
+        (ROOT / RECEIPT).write_bytes((json.dumps(receipt, indent=2, sort_keys=True) + "\n").replace("\n", "\r\n").encode())
     for issue in issues:
         print(issue)
     print("menu schema: %d/%d proven; %d issues" % (proven, total, len(issues)))

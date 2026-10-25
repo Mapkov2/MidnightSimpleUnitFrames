@@ -8,7 +8,7 @@ param(
     [switch]$Reproducible
 )
 # Compact offline release contracts. The frozen gate is never invoked.
-# Fast-check owns its slot; the suite acquires it immediately afterwards.
+# Parallel mode shares one bounded queue for fast-check and behaviour contracts.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'check-common.ps1')
@@ -103,8 +103,9 @@ function Order-ContractRuns([object[]]$Runs) {
     # other workers drain. Every run retains its original inventory ID.
     return $Runs | Sort-Object @{ Expression = {
         if ($_.Phase -eq 'setter parity') { 0 }
-        elseif ($_.Label -eq 'flip') { 1 }
-        else { 2 }
+        elseif ($_.Phase -eq 'fast-check') { 1 }
+        elseif ($_.Phase -eq 'namespace') { 2 }
+        else { 3 }
     } }, @{ Expression = { $_.Id } }
 }
 function LuaRun([string]$Smoke, [string]$Flavor, [string]$Mode = "") {
@@ -182,6 +183,9 @@ function Start-ContractWorker([string]$Name, [object[]]$Runs, [string]$QueuePath
                 $output = & $executable @arguments 2>&1 | Out-String
                 $code = $LASTEXITCODE
                 $ok = $code -eq 0
+                if ($run.Phase -eq 'fast-check') {
+                    $ok = $ok -and [regex]::Matches($output, '(?m)^fast-check: 0 failed,').Count -eq 1
+                }
                 if ($run.Phase -eq 'setter parity') {
                     $completion = '(?m)^PASS schema setters ' + [regex]::Escape($run.Client) + ':'
                     $writes = '(?m)^PASS compound/temporary write contracts ' + [regex]::Escape($run.Client) + ':'
@@ -232,7 +236,8 @@ try {
     $projectionTimer = [Diagnostics.Stopwatch]::StartNew()
     try {
         Contract 'schema projection' @(
-            @{ Label = 'current-or-regenerate'; Exe = $Python; Args = @('tools/menu_schema_coverage.py', '--ensure', '--lua', $Lua) }
+            @{ Label = 'current-or-regenerate'; Exe = $Python; Args = @('tools/menu_schema_coverage.py', '--ensure', '--lua', $Lua) },
+            @{ Label = 'committed-receipt'; Exe = $Python; Args = @('tools/menu_schema_coverage.py', '--check-receipt') }
         )
     } finally {
         $projectionTime = $projectionTimer.Elapsed.TotalSeconds
@@ -246,15 +251,17 @@ try {
     $fastArguments = @('-NoProfile', '-File', $FastCheck, '-Owner', $Owner, '-Lua', $Lua, '-Luac', $Luac,
         '-Python', $Python, '-LogDirectory', $LogDirectory)
     if ($Slot) { $fastArguments += @('-Slot', $Slot) }
-    $fast = Invoke-Check "fast-check" $PowerShell $fastArguments
-    $fastOk = $fast.Ok -and $fast.Text -match "fast-check: 0 failed,"
-    if (-not $fastOk) { $failed++ }
-    if ($fast.Text -match "fast-check: \d+ failed, ([\d.,]+) s,") {
-        $slotTime += [double]::Parse($Matches[1].Replace(",", ""), [Globalization.CultureInfo]::InvariantCulture)
-    } else { $slotTime += $fast.Seconds }
-    $line = "{0} fast-check: {1:F1} s" -f $(if ($fastOk) { "PASS" } else { "FAIL" }), $fast.Seconds
-    $summary.Add($line)
-    Write-Output $line
+    if (-not $ParallelContracts) {
+        $fast = Invoke-Check "fast-check" $PowerShell $fastArguments
+        $fastOk = $fast.Ok -and $fast.Text -match "fast-check: 0 failed,"
+        if (-not $fastOk) { $failed++ }
+        if ($fast.Text -match "fast-check: \d+ failed, ([\d.,]+) s,") {
+            $slotTime += [double]::Parse($Matches[1].Replace(",", ""), [Globalization.CultureInfo]::InvariantCulture)
+        } else { $slotTime += $fast.Seconds }
+        $line = "{0} fast-check: {1:F1} s" -f $(if ($fastOk) { "PASS" } else { "FAIL" }), $fast.Seconds
+        $summary.Add($line)
+        Write-Output $line
+    }
     Enter-CheckSlot $Slot $Owner
     $suiteSlotHeld = $true
     $suiteTime = [Diagnostics.Stopwatch]::StartNew()
@@ -267,11 +274,16 @@ try {
             'menu' = @(Get-InventoryRuns 'menu')
             'apply path' = @(Get-InventoryRuns 'apply')
             'namespace' = @(Get-InventoryRuns 'namespace') + @(
-                @{ Label = 'flip'; Exe = $Python; Args = @('tools/flip_check.py', $root, '--luac', $luaCompiler, '--lua', $Lua) })
+                @{ Label = 'flip'; Exe = $Python; Args = @('tools/flip_check.py', $root, '--luac', $luaCompiler, '--lua', $Lua, '--inventory', "$log.required-registry.json") })
             'group preview' = @(Get-InventoryRuns 'group preview')
             'Edit Mode' = @(Get-InventoryRuns 'edit')
         }
         if ($ParallelContracts) {
+            # Fast-check is one sequential child inside the six-worker limit.
+            # Its worker owns the slot, so the child must not acquire it again.
+            $phaseNames = @('fast-check') + $phaseNames
+            $phases['fast-check'] = @(@{ Label = 'full preflight'; Exe = $PowerShell;
+                Args = @($fastArguments) + @('-InheritedSlot') })
             $allRuns = @()
             foreach ($phase in $phaseNames) {
                 foreach ($run in $phases[$phase]) {
@@ -285,9 +297,9 @@ try {
             $allRuns = @(Order-ContractRuns $allRuns)
             $contractQueue = "$log.queue"
             [IO.File]::WriteAllText($contractQueue, '0')
-            # Five independent setter worlds lead the queue. A free worker can
-            # immediately run another client's contracts instead of idling
-            # behind that client's setter. The six workers share one cursor.
+            # Five setter worlds and the complete fast-check lead the queue.
+            # Any free worker then claims namespace and remaining contracts.
+            # Every original inventory ID still runs exactly once.
             $epoch = [Diagnostics.Stopwatch]::GetTimestamp()
             foreach ($number in 1..6) {
                 $contractJobs += (Start-ContractWorker "worker-$number" $allRuns $contractQueue $epoch)
@@ -329,7 +341,8 @@ try {
         if ($Slot -and $suiteSlotHeld) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
     }
     Contract 'final freshness' @(
-        @{ Label = 'unchanged product/projection inputs'; Exe = $Python; Args = @('tools/menu_schema_coverage.py', '--check') }
+        @{ Label = 'unchanged product/projection inputs'; Exe = $Python; Args = @('tools/menu_schema_coverage.py', '--check') },
+        @{ Label = 'committed coverage receipt'; Exe = $Python; Args = @('tools/menu_schema_coverage.py', '--check-receipt') }
     )
     if ($suiteSlotHeld) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
     $slotTime += $suiteTime.Elapsed.TotalSeconds

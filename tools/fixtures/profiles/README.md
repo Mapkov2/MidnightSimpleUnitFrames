@@ -5,9 +5,20 @@ SavedVariables file and every profile string that loads today must give the
 same effective settings after a refactor. This corpus is that safety net: a
 refactor package is accepted only while its golden files stay byte-identical.
 
-Gate rows: `tools/tests/profile_corpus_golden_smoke.lua <root> <flavor>`, once per
-client (Mainline, Forever, Vanilla, TBC, Mists), 11 to 15 s each, and
-`tools/tests/encoding_util_emulator_smoke.lua <root>` for the codec emulator.
+Current release path (2026-10-25): `tools/release-check.ps1` executes
+`tools/tests/profile_corpus_golden_smoke.lua <root> <flavor>` on Mainline,
+Forever, Vanilla, TBC and Mists, plus `encoding_util_emulator_smoke.lua <root>`.
+The executable rows live in `tools/release-test-inventory.json`; the frozen
+prototype gate is not invoked. Historical expected files are read-only.
+`profile_defaults_oracle_smoke.lua` additionally checks the recorded typed
+factory/repair schema on all five clients and rejects deliberate provider
+mutations. Roundtrip contracts remain additional checks.
+
+The corpus excludes only the new account `_pre70ProfileBackup` from its
+historical account-key view: it duplicates profiles and has its own exact-byte
+and validation contracts (`profile_rollback_backup_smoke.lua` and
+`profile_rollback_validation_smoke.lua`). Historical profile, archive, binding,
+import and reset values remain compared with their committed goldens.
 
 ## Files
 

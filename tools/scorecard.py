@@ -33,7 +33,7 @@ Other finite dynamic global families require reviewed tools/scorecard_global_fam
 rows: file, line, prefix, suffix, source_sha256 (normalized LF source), names
 (a JSON array of exact names), reason. Source/family changes invalidate the row.
 
-settingKey coverage reads tools/menu_schema_coverage.json (version 2), generated
+settingKey coverage reads the compact, committed menu_schema_coverage_receipt.json, generated
 from actual declarations during live page builds on every supported client. The
 projection captures declarations before search filtering, lists ephemeral reasons
 and crosswalks the current indexes. Its source digest includes the page sources,
@@ -468,6 +468,17 @@ def global_counts(root):
             len(active & native_frames), frame_reasons)
 
 
+def preview_pending_sites(evidence):
+    count = 0
+    for row in evidence.get("j4_review", {}).get("pending", []):
+        if (not isinstance(row, dict) or not row.get("file") or not row.get("reason")
+                or not isinstance(row.get("sites"), list) or not row["sites"]
+                or not all(isinstance(site, str) and site for site in row["sites"])):
+            raise ValueError("invalid supplemental preview finding")
+        count += len(row["sites"])
+    return count
+
+
 def preview_render_census(root):
     """Fail closed if the reviewed scope, counts or exact product sources drift."""
     evidence = json.loads(keep.read(root / "tools/preview_render_census.json"))
@@ -495,13 +506,14 @@ def preview_render_census(root):
         totals.update({key: row[key] for key in ("before_physical", "before_code", "remaining_physical", "remaining_code")})
     if any(evidence[key] != value for key, value in totals.items()):
         raise ValueError("preview render census totals differ")
+    totals["pending_sites"] = preview_pending_sites(evidence)
     return totals
 
 
 def menu_coverage(root):
-    path = root / "tools/menu_schema_coverage.json"
+    path = root / schema_coverage.RECEIPT
     evidence = json.loads(keep.read(path)) if path.exists() else {}
-    proven, total, issues = schema_coverage.audit(evidence, root)
+    proven, total, issues = schema_coverage.audit_receipt(evidence, root)
     return proven, total, [], proven, issues
 
 
@@ -528,10 +540,15 @@ def run():
         rows.append(("clone_windows", "%d (%d unlisted); %d reviewed non-code candidates" %
                      (clones, clones_open, totals["noncode_clone_candidates"]),
                      "only listed hot-path copies", clones_open == 0))
-        preview = preview_render_census(args.root)
-        rows.append(("preview-only render code", "%d/%d physical; %d/%d code; %d reviewed files" %
-                     (preview["remaining_physical"], preview["before_physical"], preview["remaining_code"],
-                      preview["before_code"], len(PREVIEW_FILES)), "0 remaining in current reviewed F1 census", True))
+        try:
+            preview = preview_render_census(args.root)
+            rows.append(("preview-only render code", "%d/%d physical; %d/%d code; %d reviewed files; %d pending scene sites" %
+                         (preview["remaining_physical"], preview["before_physical"], preview["remaining_code"],
+                          preview["before_code"], len(PREVIEW_FILES), preview["pending_sites"]),
+                         "0 remaining in current reviewed census and scene findings", preview["pending_sites"] == 0))
+        except (ValueError, OSError, KeyError) as error:
+            rows.append(("preview-only render code", str(error), "current reviewed sources", False))
+            details.append(str(error))
         count, total, stale, declared, issues = menu_coverage(args.root)
         rows.append(("schema settingKey coverage of menu controls", "%d/%d proven; %d keyed (%.2f%%)%s" %
                      (declared, total, count, 100 * count / total if total else 0, "; stale inventory" if stale else ""),

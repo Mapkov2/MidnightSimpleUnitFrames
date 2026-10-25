@@ -145,10 +145,24 @@ WoW file formatting or Lua heap use. No profiles are truncated to fit. Unsafe,
 cyclic, undecodable or oversize input leaves no partial copy; sparse saving is
 disabled for that live account and a logout message explains that it stays
 full. A failed original capture cannot be replaced with post-migration data in
-that session. Existing snapshot data is retained even when invalid.
+that session. Existing snapshot data is retained even when invalid. Capture validates
+bounded table content and required compatibility shape: a nonempty named profile
+pool, character-binding shape, a nonempty general font key and positive player and
+target dimensions, with no sparse envelopes. The snapshot's `validation` stamp
+stores generator revision 1, the conservative payload size, an anchor profile name
+and an envelope consistency key. Later logins check those scalar facts and the
+anchor compatibility shape in constant time. A missing/inconsistent stamp triggers
+full validation before it can be replaced; invalid payloads remain refused.
+Before sparse saving is first enabled, a separate full content preflight records
+`_pre70SparseValidated` on the account, outside the immutable snapshot. Explicit
+restore always revalidates the full payload. Empty or damaged snapshots cannot
+authorize that first sparse save or restoration; `profile_rollback_validation_smoke.lua`
+pins malformed payloads, stamp upgrades, first-save preflight and strict secret
+handling across all five clients. Fresh full capture reuses its source safety/size
+walk; reconstructed snapshots are checked again after expansion.
 
 In the corpus, maximum uncompressed `profile_state_harness.Literal` snapshot
-sizes are **699,795 bytes** on Mainline/Forever and **447,475 bytes** on
+sizes are **699,910 bytes** on Mainline/Forever and **447,590 bytes** on
 Vanilla/TBC/Mists. The extra full copy is a deliberate one-time storage/memory
 cost; later sparse saves do not create another snapshot. Full-save and sparse
 terminal persistence retain their **zero-byte steady-state allocation** contracts;
@@ -165,8 +179,9 @@ profile restore, not an import, rolling history or restore of other addons.
 `profile_rollback_backup_smoke.lua <root> <client>` verifies exact pre-login
 corpus bytes, snapshot independence across edits/logout/reload/restore,
 confirmation/cancel/combat, the size bound, and reconstructed-input provenance.
-Both new tests take each of the five client tokens and need director/E4 test
-registration; they add no shipped module or TOC entry.
+The rollback compatibility and backup tests are registered for all five client
+tokens in `tools/release-test-inventory.json` and run through
+`tools/release-check.ps1`; they add no shipped module or TOC entry.
 
 ### Decoder rejection and quarantine (E2, 2026-10-24)
 
@@ -200,7 +215,16 @@ Before either login normalizer changes a stored profile with a newer numeric
 the shared decoder saves an independent deep copy. Active, inactive, standalone
 and startup donor profiles use the same boundary. Ordinary revisions create no
 backup state. A supported full newer profile retains its previous normalization
-behaviour; an undecodable sparse envelope uses quarantine instead.
+behaviour only after that backup succeeds; an undecodable sparse envelope
+uses quarantine instead.
+
+As of 2026-10-25, refused capture of a newer full profile also uses quarantine.
+Unsafe, oversized or malformed recovery data cannot authorize lossy
+normalization: the stored original stays untouched, the session uses a detached
+working copy, and one translated notice explains that session edits will not
+be saved. The refusal propagates from `BackupNewerRevision` through
+`RestorePersistence` to the normalizer. `profile_backup_refusal_smoke.lua`
+checks this on all five clients.
 
 `MSUF_GlobalDB._newerRevisionBackups[profileName]` is now a bucket with a persisted
 `identity`, an ordered list `order`, and `entries[key]`. A key contains profile

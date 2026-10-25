@@ -33,6 +33,47 @@ for _, damage in ipairs({ "empty-pool", "empty-profile", "scalar-profile", "miss
     assert(not schema.Persist(account), damage .. ": damaged backup enabled sparse saving")
     assert(H.Literal(account.profiles) == before, damage .. ": refusal edited live profiles")
 end
+-- A serialized stamp avoids another whole-tree scan, but never authorizes the
+-- account's first sparse save without a fresh content preflight.
+local stamped = Copy(seed.env.MSUF_GlobalDB)
+local stamp = assert(stamped._pre70ProfileBackup.validation, "snapshot validation stamp missing")
+assert(stamp.generator == 1 and stamp.bytes > 0 and type(stamp.key) == "string")
+for _, damage in ipairs({ "missing", "generator", "size", "key" }) do
+    local account = Copy(stamped)
+    local backup = account._pre70ProfileBackup
+    if damage == "missing" then backup.validation = nil
+    elseif damage == "generator" then backup.validation.generator = -1
+    elseif damage == "size" then backup.validation.bytes = -1
+    else backup.validation.key = "corrupted" end
+    -- An inconsistent stamp must reach the full validator, not refresh itself
+    -- from the remaining superficially valid compatibility fields.
+    backup.profiles.Default.future = function() end
+    assert(not seed.core.DefaultsSchema.HasRollbackBackup(account), damage .. ": stamp bypassed full validation")
+end
+for _, damage in ipairs({ "missing", "generator", "size", "key" }) do
+    local account = Copy(stamped)
+    local backup = account._pre70ProfileBackup
+    if damage == "missing" then backup.validation = nil
+    elseif damage == "generator" then backup.validation.generator = -1
+    elseif damage == "size" then backup.validation.bytes = -1
+    else backup.validation.key = "corrupted" end
+    assert(seed.core.DefaultsSchema.HasRollbackBackup(account), damage .. ": valid legacy snapshot not upgraded")
+    assert(backup.validation.generator == 1 and backup.validation.bytes > 0 and backup.validation.key ~= "corrupted")
+end
+local damaged = Copy(stamped)
+damaged._pre70ProfileBackup.profiles.Hidden = { bad = true }
+local oldAccount = seed.env.MSUF_GlobalDB
+seed.env.MSUF_GlobalDB = damaged
+local before = H.Literal(damaged.profiles)
+assert(not seed.core.DefaultsSchema.Persist(damaged), "stamp authorized first sparse save with a damaged secondary profile")
+assert(damaged._pre70SparseValidated == nil and H.Literal(damaged.profiles) == before)
+seed.env.MSUF_GlobalDB = oldAccount
+local disk = Copy(stamped)
+local reload = C.NewWorld(root, flavor, "Tester-Realm")
+C.Login(reload, { MSUF_GlobalDB = disk })
+assert(H.Literal(disk._pre70ProfileBackup) == H.Literal(stamped._pre70ProfileBackup), "reload rewrote valid snapshot stamp")
+assert(reload.core.DefaultsSchema.Persist(disk), "first sparse preflight refused a valid snapshot")
+assert(disk._pre70SparseValidated == disk._pre70ProfileBackup.validation.key, "first sparse preflight was not recorded")
 -- Historical snapshots retain raw pre-normalization values and remain usable.
 local historical = 0
 for _, entry in ipairs(C.Manifest(root)) do
@@ -65,6 +106,16 @@ for _, field in ipairs({ "revision", "fontKey", "width", "marker" }) do
     else profile._msufSparseDefaultsV3 = secret end
     assert(not seed.core.DefaultsSchema.HasRollbackBackup({ _pre70ProfileBackup = {
         version = 1, source = "full", profiles = { Default = profile }, char = {} } }), "secret snapshot accepted")
+end
+for _, field in ipairs({ "generator", "bytes", "profile", "key", "source", "legacy", "width", "bars" }) do
+    local account = Copy(stamped)
+    local backup = account._pre70ProfileBackup
+    local secret = Secrets.New("number")
+    if field == "source" or field == "legacy" then backup[field] = secret
+    elseif field == "width" then backup.profiles.Default.target.width = secret
+    elseif field == "bars" then backup.profiles.Default.bars = secret
+    else backup.validation[field] = secret end
+    assert(not seed.core.DefaultsSchema.HasRollbackBackup(account), "secret stamped snapshot accepted: " .. field)
 end
 local violations = stop()
 seed.core.Util.IsSecret = oldIsSecret

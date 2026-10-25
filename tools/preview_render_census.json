@@ -197,7 +197,7 @@
           1665
         ]
       ],
-      "source_sha256": "19f13f0d6567b5e9634bda29dc1052533dd26bf9f949ab3440a1bef8f5f4d8fd",
+      "source_sha256": "4a3a98362fc2f3e51a1be4999c2d2d00c9734b9f45f95f94118a731eae71a4d7",
       "adapter_exclusions": [
         {
           "name": "HideMeterText",
@@ -329,7 +329,7 @@
           1355
         ]
       ],
-      "source_sha256": "bf562f8e68d7143fde5802ae6ff332c875877c5d74121708663984e4a076eb57",
+      "source_sha256": "49ce1eab1aa21896204f0e9c9217867e6f6bf6170f4d3517e8378122d9d57295",
       "adapter_exclusions": [
         {
           "name": "ApplySpellEffectPreview",
@@ -348,7 +348,7 @@
       "support_sources": [
         {
           "file": "MSUF_Menu2_Preview_Scenes.lua",
-          "source_sha256": "52a7e21af2795dfba4f5a214d5f041a68bdcc1d7672d383896b3fb2496948f99"
+          "source_sha256": "df47254302976c4728bc576ba9d2a90d5a0e8ca4ffad8f83bbb078c6ae684524"
         },
         {
           "file": "MSUF_Menu2_Preview_Rendering.lua",
@@ -372,7 +372,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "0ada676a5e6fa17b1c9f970b89112b012d4f84a23e39675c329863caf7bf4aa1"
+          "source_sha256": "c705260b346231c79c16f4dbde4f2b13ab8521ce3e7ed4dbcca9de89822fb332"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
@@ -679,7 +679,7 @@
           1115
         ]
       ],
-      "source_sha256": "8a7a0c2bf729bcb19d5364a061fa9c6defbe7d6ae7f5a18e93339bb9926d77d5",
+      "source_sha256": "8e5518aa28e87cb81eade91053a14e2cb26b084e6a5137429e74b5e8b62ba893",
       "adapter_exclusions": [
         {
           "name": "PainterBuild.ResourcesStrip",
@@ -830,9 +830,7 @@
         "remaining_physical": 0,
         "remaining_code": 0,
         "reason": "Chrome and slot-input adapter only; no independent number formatter"
-      }
-    ],
-    "pending": [
+      },
       {
         "file": "Preview/MSUF_Menu2_GroupPreview_Render.lua",
         "sites": [
@@ -841,14 +839,18 @@
           "ConfigureSpellPreviewHandle font/stack writes",
           "RenderSpellIndicators font writes"
         ],
-        "reason": "Needs the J1-owned Group_Preview scene font/sample contract; tested proposal outside repository"
+        "reason": "Scene input contract landed; independently source-reviewed and all five client scene-input contracts pass; no live visual proof",
+        "remaining_physical": 0,
+        "remaining_code": 0
       },
       {
         "file": "Preview/MSUF_Menu2_ClassPowerPreview.lua",
         "sites": [
           "EnsurePlayerRuntime afterPaint health/border/layer writes"
         ],
-        "reason": "Needs the J1-owned UnitScene health/border layer contract; tested proposal outside repository"
+        "reason": "Scene input contract landed; independently source-reviewed and all five client scene-input contracts pass; no live visual proof",
+        "remaining_physical": 0,
+        "remaining_code": 0
       },
       {
         "file": "Pages/MSUF_Menu2_ColorPainter.lua",
@@ -856,12 +858,16 @@
           "powerSurface.afterPaint",
           "strip.Update health/layer writes"
         ],
-        "reason": "Needs the same UnitScene layer contract; tested proposal outside repository"
+        "reason": "Scene input contract landed; independently source-reviewed and all five client scene-input contracts pass; no live visual proof",
+        "remaining_physical": 0,
+        "remaining_code": 0
       }
     ],
+    "pending": [],
     "navigation_dependency": {
       "file": "Search/MSUF_Menu2_Search_Routing.lua",
-      "reason": "J5 must honor general._fontScopeKey as declared font-page view state; reviewed patch outside repository"
+      "reason": "Search routing honors the declared general._fontScopeKey view state; independent source review and five-client routing reuse contracts pass",
+      "status": "landed"
     }
   }
 }

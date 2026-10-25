@@ -1,6 +1,7 @@
 param(
     [string]$Owner = 'fast-check', [string]$Lua, [string]$Luac, [string]$Python,
-    [string]$Slot = $env:MSUF_LUA_SLOT, [string]$LogDirectory
+    [string]$Slot = $env:MSUF_LUA_SLOT, [string]$LogDirectory,
+    [switch]$InheritedSlot
 )
 # Portable safety net; release-check is the CI entry point and owns the full inventory.
 $ErrorActionPreference = 'Stop'
@@ -26,7 +27,9 @@ function Step([string]$Name, [scriptblock]$Body) {
     [IO.File]::AppendAllText($log, "=== $Name ($code)`n$output`n", $utf8)
     $script:results.Add(("{0} {1}" -f $(if ($code -eq 0) { 'PASS' } else { 'FAIL' }), $Name))
 }
-Enter-CheckSlot $Slot $Owner
+# Internal release worker mode: its worker already owns the same slot. All
+# standalone invocations still acquire/release their own slot normally.
+if (-not $InheritedSlot) { Enter-CheckSlot $Slot $Owner }
 $start = Get-Date
 Push-Location $root
 try {
@@ -41,7 +44,7 @@ try {
         }
     }
     Step 'ratchet' { & $Python tools/quality_ratchet.py --check --luac $Luac }
-} finally { Pop-Location; Exit-CheckSlot $Slot $Owner }
+} finally { Pop-Location; if (-not $InheritedSlot) { Exit-CheckSlot $Slot $Owner } }
 $results | ForEach-Object { $_ }
 "fast-check: $fail failed, {0:N0} s, details in $log" -f ((Get-Date) - $start).TotalSeconds
 exit $fail

@@ -36,6 +36,12 @@ control.core.DefaultsSchema.Persist = function() return false end
 original:FireEvent("PLAYER_LOGOUT")
 control:FireEvent("PLAYER_LOGOUT")
 local full, compact = Saved(control, source), Saved(original, source)
+assert(compact.MSUF_GlobalDB._pre70SparseValidated == compact.MSUF_GlobalDB._pre70ProfileBackup.validation.key,
+    "first sparse save did not record its account safety preflight")
+assert(full.MSUF_GlobalDB._pre70SparseValidated == nil, "disabled persistence unexpectedly recorded a sparse preflight")
+-- The unpruned control suppresses Persist entirely. Pin its one deliberate
+-- account-metadata difference before comparing every saved value as before.
+full.MSUF_GlobalDB._pre70SparseValidated = full.MSUF_GlobalDB._pre70ProfileBackup.validation.key
 assert(full.MSUF_DB == nil and compact.MSUF_DB == nil, "terminal alias remained")
 assert(full.MSUF_GlobalDB.profiles.Marker1.general[marker] == true, "marker control was pruned")
 assert(compact.MSUF_GlobalDB.profiles.Marker1.general[marker] == true, "internal experience marker changed")

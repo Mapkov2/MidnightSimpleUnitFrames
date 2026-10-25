@@ -18,7 +18,7 @@ def discover(root):
     # Pending tests are checked too; no staging/git writes are needed by a lane.
     for directory in ('tools/tests', 'tools/MenuTest', '.github/scripts/tests'):
         names.update(p.relative_to(root).as_posix() for p in (root / directory).rglob('*')
-                     if p.is_file() and p.suffix in {'.lua', '.py'} and '__pycache__' not in p.parts)
+                     if p.is_file() and p.suffix in {'.lua', '.py', '.ps1'} and '__pycache__' not in p.parts)
     return names
 
 def check(root, inventory=None, tests=None):

@@ -46,9 +46,18 @@ folds the disk records with the same first-public/last-schema/set-union rules. T
 budget applies to fast-check plus behaviour contracts, excluding queue wait and
 projection preparation. All child output is retained; any failed contract fails
 the runner. Freshness failures remain failures while independent contracts continue.
-Contracts run through a bounded queue with at most six Lua processes. All
-five setter replays and the long independent namespace check lead the queue; each keeps one menu world for scalar,
-reset and compound checks. A free worker claims the next independent client
+Namespace and Require readers share one source parse and bytecode inventory
+per content SHA256 within the run, across all five clients and both load
+phases. Compiler listings are collected in bounded batches; provider
+observations remain client/phase-specific. Negative probes also verify
+cache invalidation for equal-size edits and batched/standalone parity.
+Contracts run through a bounded queue with at most six Lua processes. The five
+setter replays and the complete fast-check lead the queue; fast-check inherits
+its worker's slot and runs its unchanged checks sequentially inside that slot.
+A zero exit without its exact successful completion receipt is rejected.
+Namespace jobs follow as soon as a worker becomes free, avoiding a phase span
+inflated by late probes. Each setter keeps one menu world for scalar, reset
+and compound checks. A free worker claims the next independent client
 or root-only contract under a shared cursor mutex. No worker waits for another
 client's setter before running unrelated work. Exact run-ID inventories,
 exit codes and both setter completion receipts are required. Every worker

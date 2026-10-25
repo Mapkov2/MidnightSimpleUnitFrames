@@ -141,24 +141,23 @@ local CLASSIC_CLIENTS = { Vanilla = true, TBC = true, Mists = true }
 local NUMBER_WITH_TABLE = "attempt to compare number with table"
 local TABLE_WITH_NUMBER = "attempt to compare table with number"
 Corpus.HARNESS_ERRORS = {
-    { "PLAYER_LOGIN", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "PLAYER_LOGIN", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "PLAYER_LOGIN", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
-    { "timer", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
+    { "timer", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, MAINLINE_FAMILY },
+    { "timer", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "timer", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "Highlight.Refresh", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "MSUF_UFCore_NotifyConfigChanged", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_UFCore_NotifyConfigChanged", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
     { "MSUF_ApplyModules", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
-    { "MSUF_ApplyModules", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)",
-        MIDNIGHT },
     { "MSUF_GF_RebuildAll", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ClassPower_Apply", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)",
         MIDNIGHT },
-    { "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
+    -- Classic profiles authored on Era can resolve an unmodelled native unit
+    -- frame in Driver.ApplyAnchor (GetWidth is the generic fixture stub).
+    { "MSUF_Castbars_OnSettingsChanged", "MSUF_CastbarDriver.lua", NUMBER_WITH_TABLE, { TBC = true, Mists = true } },
+    { "MSUF_ApplyAllCastbarsAndSync", "MSUF_CastbarDriver.lua", NUMBER_WITH_TABLE, { Mists = true } },
     { "MSUF_Castbars_OnSettingsChanged", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ApplyAllCastbarsAndSync", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "MSUF_RefreshAllUnitAlphas", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_Auras3.RefreshAll", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, CLASSIC_CLIENTS },
     { "GF.Rebuild", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "GF.RefreshVisuals", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
@@ -653,7 +652,13 @@ end
 -- Account table, bindings and resolutions right after the login.
 local function RecordAccount(world, run, input, character)
     local env = world.env
-    local globalDB = env.MSUF_GlobalDB
+    local globalDB = {}
+    for key, value in pairs(env.MSUF_GlobalDB) do
+        -- The 7.0 rollback snapshot duplicates the account, including every
+        -- profile. Its byte/content contract is profile_rollback_backup_smoke;
+        -- it is not an effective setting in the frozen 6.x corpus.
+        if key ~= "_pre70ProfileBackup" then globalDB[key] = value end
+    end
     local inputDB = input.MSUF_GlobalDB or {}
     local pool = Pool(env)
     Subtree(run, "login", {
@@ -848,7 +853,7 @@ local function RunFactoryEntry(root, entry, flavor)
     Must(world, "MSUF_CreateProfile", env.MSUF_CreateProfile, "Created")
     Must(world, "MSUF_CreateProfile", env.MSUF_CreateProfile, "Reset Stored")
     Must(world, "MSUF_SwitchProfile", env.MSUF_SwitchProfile, "Default")
-    Must(world, "MSUF_ResetProfile", env.MSUF_ResetProfile, "Reset Stored")
+    Must(world, "MSUF_ResetProfile", world.core.PublicGlobals.MSUF_ResetProfile, "Reset Stored")
     local imports, payloads, digests = {}, {}, {}
     for _, import in ipairs(entry.imports or {}) do
         local text = Corpus.ReadImportFixture(root, import.file)
@@ -881,7 +886,7 @@ local function RunFactoryEntry(root, entry, flavor)
     end, function(name) return payloads[name] == nil end)
     -- Reset of the active profile last: it starts over from the factory profile.
     Must(world, "MSUF_SwitchProfile", env.MSUF_SwitchProfile, "Default")
-    Must(world, "MSUF_ResetProfile", env.MSUF_ResetProfile, "Default")
+    Must(world, "MSUF_ResetProfile", world.core.PublicGlobals.MSUF_ResetProfile, "Default")
     CompleteBoundProfile(world)
     Subtree(run, "resetActive", Copy(Corpus.Effective(env.MSUF_GlobalDB.profiles.Default, Defaults(world))),
         relativeToDefault)
