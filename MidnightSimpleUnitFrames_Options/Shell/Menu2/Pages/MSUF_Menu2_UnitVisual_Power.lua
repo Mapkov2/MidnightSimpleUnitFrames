@@ -3,11 +3,29 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.UnitVisualFactories = M.UnitVisualFactories or {}
 
-M.UnitVisualFactories.Power = function(
-    M, Core, W, Schema, ControlRow, SectionCard, EnsureCooldownWidthObservers, floor, max, min, VT, POWER_UNITS, GetConf,
-    GetGeneral, GetBars, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, IsPlayerPowerManagedByClassResources,
-    SettingMeta, RegisterControl, UnitSectionShared, SetSectionHeaderStatus, CreateSectionNotice
-)
+local function RequireFields(domain, values, fields)
+    assert(type(values) == "table", domain .. " interface is required")
+    for key in fields:gmatch("%S+") do
+        assert(values[key] ~= nil, domain .. "." .. key .. " is required")
+    end
+end
+
+M.UnitVisualFactories.Power = function(profile, controls, runtime)
+    RequireFields("Power.Profile", profile,
+        "Units GetConf GetGeneral GetBars UnitTopLabel ReadBool SetBool ReadNumber SetNumber IsPlayerPowerManagedByClassResources")
+    RequireFields("Power.Controls", controls, "Widgets Schema Row Card SettingMeta RegisterControl Shared")
+    RequireFields("Power.Runtime", runtime, "Core EnsureCooldownWidthObservers")
+local floor, max, min = math.floor, math.max, math.min
+local VT = M.ValueTextList
+local POWER_UNITS, GetConf, GetGeneral, GetBars = profile.Units, profile.GetConf, profile.GetGeneral, profile.GetBars
+local UnitTopLabel, ReadBool, SetBool = profile.UnitTopLabel, profile.ReadBool, profile.SetBool
+local ReadNumber, SetNumber = profile.ReadNumber, profile.SetNumber
+local IsPlayerPowerManagedByClassResources = profile.IsPlayerPowerManagedByClassResources
+local W, Schema, ControlRow, SectionCard = controls.Widgets, controls.Schema, controls.Row, controls.Card
+local SettingMeta, RegisterControl = controls.SettingMeta, controls.RegisterControl
+local UnitSectionShared = controls.Shared
+local SetSectionHeaderStatus, CreateSectionNotice = UnitSectionShared.SetSectionHeaderStatus, UnitSectionShared.CreateSectionNotice
+local Core, EnsureCooldownWidthObservers = runtime.Core, runtime.EnsureCooldownWidthObservers
 
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
 local PLAYER_POWER_SOURCE_VALUES = M.PlayerPowerSourceValues

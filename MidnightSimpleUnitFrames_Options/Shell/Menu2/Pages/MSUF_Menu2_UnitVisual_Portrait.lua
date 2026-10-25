@@ -3,12 +3,30 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.UnitVisualFactories = M.UnitVisualFactories or {}
 
-M.UnitVisualFactories.Portrait = function(
-    MSUF, M, W, Schema, ControlRow, SectionCard, PixelLayoutRegion, UP, max, min, VT, PORTRAIT_RENDER, PORTRAIT_SHAPES,
-    PORTRAIT_BORDERS, GetConf, ReadBool, ReadNumber, SetNumber, NormalizePortrait, SetPortraitValue, ControlMeta, ReviewedMeta,
-    CASTBAR_UNITS, UnitSectionShared, SetSectionHeaderStatus, NormalizeTabKey, CurrentTab, SetSectionBodyHeight,
-    BuildSectionTabs, PrepareTabTarget
-)
+local function RequireFields(domain, values, fields)
+    assert(type(values) == "table", domain .. " interface is required")
+    for key in fields:gmatch("%S+") do
+        assert(values[key] ~= nil, domain .. "." .. key .. " is required")
+    end
+end
+
+M.UnitVisualFactories.Portrait = function(profile, controls, portrait, tabs)
+    RequireFields("Portrait.Profile", profile, "GetConf ReadBool ReadNumber SetNumber NormalizePortrait SetPortraitValue")
+    RequireFields("Portrait.Controls", controls, "Widgets Schema Row Card PixelLayoutRegion ControlMeta ReviewedMeta Shared")
+    RequireFields("Portrait.Portrait", portrait, "Render Shapes Borders CastbarUnits")
+    RequireFields("Portrait.Tabs", tabs, "Normalize Current SetBodyHeight Build PrepareTarget")
+local max, min = math.max, math.min
+local VT, UP = M.ValueTextList, M.UnitPage
+local GetConf, ReadBool, ReadNumber, SetNumber = profile.GetConf, profile.ReadBool, profile.ReadNumber, profile.SetNumber
+local NormalizePortrait, SetPortraitValue = profile.NormalizePortrait, profile.SetPortraitValue
+local W, Schema, ControlRow, SectionCard = controls.Widgets, controls.Schema, controls.Row, controls.Card
+local PixelLayoutRegion, ControlMeta, ReviewedMeta = controls.PixelLayoutRegion, controls.ControlMeta, controls.ReviewedMeta
+local UnitSectionShared = controls.Shared
+local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus
+local PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BORDERS = portrait.Render, portrait.Shapes, portrait.Borders
+local CASTBAR_UNITS = portrait.CastbarUnits
+local NormalizeTabKey, CurrentTab, SetSectionBodyHeight = tabs.Normalize, tabs.Current, tabs.SetBodyHeight
+local BuildSectionTabs, PrepareTabTarget = tabs.Build, tabs.PrepareTarget
 
 -- Portrait placement value lists. Kept in one table instead of one file local
 -- per list; the shared ones come from the section helpers the Group page also uses.

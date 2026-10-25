@@ -42,8 +42,6 @@ local ShowReloadRecommendedPopup = Core("MSUF_ShowReloadRecommendedPopup")
 local UP = M.UnitPage or {}
 local floor = math.floor
 local max = math.max
-local min = math.min
-local VT = M.ValueTextList
 local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER = UP.POWER_UNITS or {}, UP.CASTBAR_FIELDS or {}, UP.PORTRAIT_RENDER or {}
 local PORTRAIT_SHAPES, PORTRAIT_BORDERS = UP.PORTRAIT_SHAPES or {}, UP.PORTRAIT_BORDERS or {}
 local GetConf, GetGeneral, GetBars, UnitTopLabel, ReadBool = UP.GetConf, UP.GetGeneral, UP.GetBars, UP.UnitTopLabel, UP.ReadBool
@@ -53,8 +51,6 @@ local IsPlayerPowerManagedByClassResources, ControlMeta, SettingMeta = UP.IsPlay
 local ReviewedMeta, RegisterControl = UP.ReviewedMeta, UP.RegisterControl
 local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss arena"
 local UnitSectionShared = M.UnitSectionsShared or {}
-local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus
-local CreateSectionNotice = UnitSectionShared.CreateSectionNotice
 -- Tab workspaces shared by the Portrait and Castbar sections. A selection lives in
 -- M[stateKey][unit]; a tab key is valid when the section's height table lists it,
 -- anything else reads as General.
@@ -131,15 +127,21 @@ end
 
 -- Build independent section owners once; callbacks retain direct function bindings.
 local BuildPortrait, PreparePortraitSwitch, PortraitLayoutForWidth, CurrentPortraitTab = M.UnitVisualFactories.Portrait(
-    MSUF, M, W, Schema, ControlRow, SectionCard, PixelLayoutRegion, UP, max, min, VT, PORTRAIT_RENDER, PORTRAIT_SHAPES,
-    PORTRAIT_BORDERS, GetConf, ReadBool, ReadNumber, SetNumber, NormalizePortrait, SetPortraitValue, ControlMeta, ReviewedMeta,
-    CASTBAR_UNITS, UnitSectionShared, SetSectionHeaderStatus, NormalizeTabKey, CurrentTab, SetSectionBodyHeight,
-    BuildSectionTabs, PrepareTabTarget
+    { GetConf = GetConf, ReadBool = ReadBool, ReadNumber = ReadNumber, SetNumber = SetNumber,
+        NormalizePortrait = NormalizePortrait, SetPortraitValue = SetPortraitValue },
+    { Widgets = W, Schema = Schema, Row = ControlRow, Card = SectionCard, PixelLayoutRegion = PixelLayoutRegion,
+        ControlMeta = ControlMeta, ReviewedMeta = ReviewedMeta, Shared = UnitSectionShared },
+    { Render = PORTRAIT_RENDER, Shapes = PORTRAIT_SHAPES, Borders = PORTRAIT_BORDERS, CastbarUnits = CASTBAR_UNITS },
+    { Normalize = NormalizeTabKey, Current = CurrentTab, SetBodyHeight = SetSectionBodyHeight,
+        Build = BuildSectionTabs, PrepareTarget = PrepareTabTarget }
 )
 local BuildPower, PreparePowerSwitch, PowerSectionHeight = M.UnitVisualFactories.Power(
-    M, Core, W, Schema, ControlRow, SectionCard, EnsureCooldownWidthObservers, floor, max, min, VT, POWER_UNITS, GetConf,
-    GetGeneral, GetBars, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, IsPlayerPowerManagedByClassResources,
-    SettingMeta, RegisterControl, UnitSectionShared, SetSectionHeaderStatus, CreateSectionNotice
+    { Units = POWER_UNITS, GetConf = GetConf, GetGeneral = GetGeneral, GetBars = GetBars, UnitTopLabel = UnitTopLabel,
+        ReadBool = ReadBool, SetBool = SetBool, ReadNumber = ReadNumber, SetNumber = SetNumber,
+        IsPlayerPowerManagedByClassResources = IsPlayerPowerManagedByClassResources },
+    { Widgets = W, Schema = Schema, Row = ControlRow, Card = SectionCard, SettingMeta = SettingMeta,
+        RegisterControl = RegisterControl, Shared = UnitSectionShared },
+    { Core = Core, EnsureCooldownWidthObservers = EnsureCooldownWidthObservers }
 )
 local BuildCastbar, PrepareCastbarSwitch, CastbarTabHeight, CurrentCastbarTab = M.UnitVisualFactories.Castbar(
     { Fields = CASTBAR_FIELDS, GetGeneral = GetGeneral, UnitTopLabel = UnitTopLabel, ReadBool = ReadBool, SetBool = SetBool,
