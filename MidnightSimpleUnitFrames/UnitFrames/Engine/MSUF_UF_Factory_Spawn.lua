@@ -4,7 +4,7 @@ MSUF.UFModuleFactories = MSUF.UFModuleFactories or {}
 
 MSUF.UFModuleFactories.FactorySpawn = function(
   ApplyPosition, ApplySize, ClearPendingReenableReload, DeferApply, DisableFrame, EnableScreenClamp, ExportPublic, Highlight,
-    HoldVariantOff, InCombat, MSUF, RegisterUnitWatch, RequireReloadForReenable, ResolvePetBattleFrameHider, UF, UnitGUID,
+    HoldVariantOff, InCombat, MSUF, RegisterUnitWatch, RequireReloadForReenable, ResolvePetBattleFrameHider, RetryApply, UF, UnitGUID,
     UnitWatchRegistered, UnregisterUnitWatch, VariantSwitchesFrame, clickCastRegistered, type, SupportsPlayerResourcePing
 )
 
@@ -375,7 +375,7 @@ end
 
 local function FinishApplyOne(ok, unit)
   if not ok then
-    DeferApply(unit)
+    RetryApply(unit)
   end
 end
 
@@ -384,7 +384,7 @@ local function ApplyOne(unit, config, applyMask)
   -- failure there too, so the batch still applies every independent unit.
   local ok, result = MSUF.RunUnitFrameApply(RunApplyOne, FinishApplyOne, unit, config, applyMask)
   if not ok or result == false then
-    DeferApply(unit)
+    RetryApply(unit)
     return false
   end
   return result

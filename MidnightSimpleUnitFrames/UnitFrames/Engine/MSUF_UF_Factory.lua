@@ -298,6 +298,15 @@ local function DeferApply(unit)
   return false
 end
 
+-- A failed apply keeps only its unit pending. The compiled specs are still
+-- current: dirtying Config here made every later GetSpec in the batch, and
+-- every retry, recompile all units.
+local function RetryApply(unit)
+  UF.MarkDirty(unit)
+  Factory.EnsureDeferredDriver()
+  return false
+end
+
 local function ResolveConfig(refresh)
   local config = UF.Config
   if not (config) then
@@ -577,7 +586,7 @@ end
 local ApplyOne
 ApplyOne = BuildFactorySpawn(
   ApplyPosition, ApplySize, ClearPendingReenableReload, DeferApply, DisableFrame, EnableScreenClamp, ExportPublic, Highlight,
-    HoldVariantOff, InCombat, MSUF, RegisterUnitWatch, RequireReloadForReenable, ResolvePetBattleFrameHider, UF, UnitGUID,
+    HoldVariantOff, InCombat, MSUF, RegisterUnitWatch, RequireReloadForReenable, ResolvePetBattleFrameHider, RetryApply, UF, UnitGUID,
     UnitWatchRegistered, UnregisterUnitWatch, VariantSwitchesFrame, clickCastRegistered, type, SupportsPlayerResourcePing
 )
 
@@ -656,13 +665,13 @@ function Factory.Apply(unit, applyMask)
 end
 
 local function FinishForcedPosition(ok, frame)
-  if not ok then DeferApply(frame.MSUFUnitKey) end
+  if not ok then RetryApply(frame.MSUFUnitKey) end
 end
 
 local function ForceFramePosition(frame, spec)
   local ok, applied = MSUF.RunUnitFrameApply(ApplyPosition, FinishForcedPosition, frame, spec)
   if not ok or applied == false then
-    DeferApply(frame.MSUFUnitKey)
+    RetryApply(frame.MSUFUnitKey)
     return false
   end
   return true
