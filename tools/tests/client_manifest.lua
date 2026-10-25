@@ -10,38 +10,42 @@ local function normalize(path)
     end
     return prefix .. table.concat(parts, "/")
 end
--- Nil locale / game type inventories every branch. The client honors only
--- the first bracket condition; trailing conditions have no effect.
+-- Nil locale / game type inventories every branch. Stacked conditions must all
+-- hold: "Multiple inline directives can be used per line" (warcraft.wiki.gg TOC
+-- format, example "ForeverOnly.lua [AllowLoadGameType camelot][ExcludeLoadGameType
+-- standard, classic]"). The unchanged 6.50x TOCs rely on this on Forever.
 local function Listed(values, name)
     for value in values:gmatch("%a+") do if value == name then return true end end
     return false
 end
+local function Holds(kind, values, locale, gameType, line)
+    if kind == "AllowLoadTextLocale" then return locale == nil or Listed(values, locale)
+    elseif kind == "AllowLoadGameType" then return gameType == nil or Listed(values, gameType)
+    elseif kind == "ExcludeLoadGameType" then return gameType == nil or not Listed(values, gameType) end
+    error("unsupported TOC directive: " .. line)
+end
 function Manifest.TocReference(line, locale, gameType)
     line = line:match("^%s*(.-)%s*$")
     if line == "" or line:sub(1, 1) == "#" then return end
-    local file, kind, values = line:match("^(.-)%s+%[(%a+)%s+([^%]]+)%]")
-    if not file then
-        assert(not line:find("[", 1, true), "unsupported TOC directive: " .. line)
-        return line
-    end
-    if kind == "AllowLoadTextLocale" then
-        if locale ~= nil and not Listed(values, locale) then return end
-    elseif kind == "AllowLoadGameType" then
-        if gameType ~= nil and not Listed(values, gameType) then return end
-    elseif kind == "ExcludeLoadGameType" then
-        if gameType ~= nil and Listed(values, gameType) then return end
-    else
-        error("unsupported TOC directive: " .. line)
-    end
-    return file
+    local file, conditions = line:match("^(.-)%s*(%[.*)$")
+    if not file then return line end
+    local loads = true
+    local rest = conditions:gsub("%[(%a+)%s+([^%]]+)%]%s*", function(kind, values)
+        if not Holds(kind, values, locale, gameType, line) then loads = false end
+        return ""
+    end)
+    assert(file ~= "" and rest == "", "unsupported TOC directive: " .. line)
+    if loads then return file end
 end
+-- House rule for MSUF's own TOCs: one condition per line, so every gate reader
+-- (Lua, Python, PowerShell) stays trivially correct.
 function Manifest.LintToc(source, path)
     local number = 0
     for line in (source .. "\n"):gmatch("([^\n]*)\n") do
         number = number + 1
         if not line:match("^%s*#%s") then
             local _, conditions = line:gsub("%[%a+%s+[^%]]+%]", "")
-            assert(conditions <= 1, path .. ":" .. number .. ": stacked TOC conditions: only the first is honored")
+            assert(conditions <= 1, path .. ":" .. number .. ": stacked TOC conditions: keep one condition per line")
         end
     end
 end

@@ -713,6 +713,10 @@
       ]
     },
     {
+      "test": "tools/tests/client_manifest_toc_conditions_smoke.lua",
+      "phase": "namespace"
+    },
+    {
       "test": "tools/tests/profile_defaults_oracle_smoke.lua",
       "phase": "profiles",
       "clients": [
