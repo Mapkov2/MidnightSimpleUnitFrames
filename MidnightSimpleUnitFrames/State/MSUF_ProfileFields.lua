@@ -271,57 +271,66 @@ end
 -- "cycle" (a table inside itself) or "limits".
 function Fields.CopySnapshot(value, budget)
     budget=budget or {count=0,limit=131072,maxDepth=32,bytes=0,maxBytes=8388608}
-    budget.bytes=budget.bytes or 0
+    -- Only this cold copy owns the counters until it returns. Publish them
+    -- together so external profile captures keep the same cumulative budget.
+    local count, bytes = budget.count, budget.bytes or 0
+    local limit, maxDepth, maxBytes = budget.limit or 131072, budget.maxDepth or 32, budget.maxBytes or 8388608
+    local huge = math.huge
+    local type, pairs, getmetatable = type, pairs, getmetatable
     local why
     local function Copy(entry,depth,seen)
         local kind=type(entry)
         if kind=="string" then
-            budget.bytes=budget.bytes+#entry
-            if budget.bytes>(budget.maxBytes or 8388608) then why="limits"
+            bytes=bytes+#entry
+            if bytes>maxBytes then why="limits"
                 return nil,false end
             return entry,true
         end
-        if entry==nil or kind=="boolean" or kind=="number" and Scalar(entry) then return entry,true end
+        if entry==nil or kind=="boolean" or kind=="number" and entry==entry and entry>-huge and entry<huge then return entry,true end
         if kind=="number" then why="number"
             return nil,false end
         if kind~="table" or getmetatable(entry)~=nil then why="value"
             return nil,false end
         if seen[entry] then why="cycle"
             return nil,false end
-        if depth>=(budget.maxDepth or 32) then why="limits"
+        if depth>=maxDepth then why="limits"
             return nil,false end
         seen[entry]=true
         local out={}
         for key,item in pairs(entry) do
             local keyKind=type(key)
-            if keyKind~="string" and keyKind~="boolean" and not (keyKind=="number" and Scalar(key)) then
-                why=keyKind=="number" and "number" or "value"
-                return nil,false
+            if keyKind == "string" then bytes = bytes + #key
+            elseif keyKind ~= "boolean" and not (keyKind == "number" and key == key and key > -huge and key < huge) then
+                why = keyKind == "number" and "number" or "value"
+                return nil, false
             end
-            if keyKind=="string" then budget.bytes=budget.bytes+#key end
-            budget.count=budget.count+1
-            if budget.count>(budget.limit or 131072) or budget.bytes>(budget.maxBytes or 8388608) then why="limits"
+            count=count+1
+            if count>limit or bytes>maxBytes then why="limits"
                 return nil,false end
-            local copied, valid = item, true
+            local copied = item
             local itemKind = type(item)
-            if itemKind == "table" then
-                copied, valid = Copy(item, depth + 1, seen)
-            elseif itemKind == "string" then
-                budget.bytes = budget.bytes + #item
-                if budget.bytes > (budget.maxBytes or 8388608) then why, valid = "limits", false end
-            elseif itemKind == "number" then
-                valid = Scalar(item)
-                if not valid then why = "number" end
-            elseif itemKind ~= "boolean" then
-                why, valid = "value", false
+            if itemKind ~= "boolean" then
+                if itemKind == "number" then
+                    if not (item == item and item > -huge and item < huge) then why = "number"
+                        return nil, false end
+                elseif itemKind == "table" then
+                    local valid
+                    copied, valid = Copy(item, depth + 1, seen)
+                    if not valid then return nil, false end
+                elseif itemKind == "string" then
+                    bytes = bytes + #item
+                    if bytes > maxBytes then why = "limits"
+                        return nil, false end
+                else why = "value"
+                    return nil, false end
             end
-            if not valid then return nil,false end
             out[key]=copied
         end
         seen[entry]=nil
         return out,true
     end
     local copy,valid=Copy(value,0,{})
+    budget.count, budget.bytes = count, bytes
     return copy,valid,why
 end
 

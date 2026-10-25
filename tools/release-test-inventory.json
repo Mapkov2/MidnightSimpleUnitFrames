@@ -1627,6 +1627,13 @@
       "clients": [
         "Mainline"
       ]
+    },
+    {
+      "test": "tools/tests/menu_schema_setter_snapshot_smoke.lua",
+      "phase": "profiles",
+      "arguments": [
+        "{root}"
+      ]
     }
   ],
   "excluded": {
