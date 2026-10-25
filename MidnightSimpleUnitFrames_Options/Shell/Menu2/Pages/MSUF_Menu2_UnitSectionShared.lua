@@ -272,7 +272,7 @@ function Shared.AttachSectionUX(ctx, opts)
                     popupSource = opts.scope()
                     if not popup then popup = CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices) end
                     popup.RefreshTargets()
-                    T.SetTranslatedText(popup.title, opts.label(popupSource) .. " Â· " .. (entry.label:GetText() or id))
+                    T.SetTranslatedText(popup.title, opts.label(popupSource) .. " · " .. (entry.label:GetText() or id))
                     popup:ClearAllPoints()
                     popup:SetPoint("TOPRIGHT", more, "BOTTOMRIGHT", 0, -4)
                     M.ApplyPopupFramePriority(popup)

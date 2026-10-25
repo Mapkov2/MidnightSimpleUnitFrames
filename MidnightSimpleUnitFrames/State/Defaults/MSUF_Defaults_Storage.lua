@@ -283,7 +283,7 @@ function Schema.Persist(globalDB)
     end
     -- A failed safety snapshot leaves the live account full. Standalone codec
     -- callers have no account/login lifecycle and retain their pure contract.
-    if globalDB == MSUF_GlobalDB and not Schema.HasRollbackBackup(globalDB) then
+    if globalDB == MSUF_GlobalDB and not Schema.HasRollbackBackup(globalDB, true) then
         print(MSUF.Translate("MSUF: No complete safety copy is available. Sparse saving is disabled; your profiles stay full."))
         return false
     end

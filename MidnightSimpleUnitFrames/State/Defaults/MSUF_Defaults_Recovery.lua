@@ -429,8 +429,9 @@ do
 
     local function CopySafe(value, bounded)
         if not Safe(value) then return nil end
-        if bounded and SnapshotCost(value, snapshotLimit) > snapshotLimit then return nil end
-        return CopyNewerProfile(value, {})
+        local cost = bounded and SnapshotCost(value, snapshotLimit)
+        if cost and cost > snapshotLimit then return nil end
+        return CopyNewerProfile(value, {}), cost
     end
 
     local function IsFull(profile)
@@ -451,13 +452,16 @@ do
         if profile[sparseV2Marker] ~= nil or profile[sparseV3.Marker] ~= nil
             or profile._msufDefaultsRevision == sparseToken or profile._msufDefaultsRevision == "MSUF_SPARSE_DEFAULTS_1" then return false end
         for key in pairs(Schema.Values.UnitFrames) do
-            if profile[key] ~= nil and not Plain(profile[key]) then return false end
+            local owner = profile[key]
+            if MSUF.Util.IsSecret(owner) or (owner ~= nil and not Plain(owner)) then return false end
         end
-        return profile.bars == nil or Plain(profile.bars)
+        return not MSUF.Util.IsSecret(profile.bars) and (profile.bars == nil or Plain(profile.bars))
     end
 
-    local function ValidSnapshot(backup)
-        if not Plain(backup) or not Safe(backup) or SnapshotCost(backup, snapshotLimit) > snapshotLimit then return false end
+    local function ValidSnapshot(backup, knownCost)
+        if not Plain(backup) or (not knownCost and not Safe(backup)) then return false end
+        local cost = knownCost or SnapshotCost(backup, snapshotLimit)
+        if cost > snapshotLimit then return false end
         if backup.version ~= 1 or not Plain(backup.profiles) or next(backup.profiles) == nil or not Plain(backup.char)
             or (backup.source ~= "full" and backup.source ~= "reconstructed") then return false end
         for name, profile in pairs(backup.profiles) do
@@ -467,11 +471,63 @@ do
             if type(name) ~= "string" or name == "" or not Plain(binding)
                 or (binding.activeProfile ~= nil and type(binding.activeProfile) ~= "string") then return false end
         end
-        return backup.legacy == nil or ValidSnapshotProfile(backup.legacy)
+        return backup.legacy == nil or ValidSnapshotProfile(backup.legacy), cost
     end
 
-    function Schema.HasRollbackBackup(store)
-        return Plain(store) and ValidSnapshot(store._pre70ProfileBackup)
+    -- The payload is immutable. Persist only scalar validation facts; never
+    -- serialize table identities or scan the profile tree on ordinary reload.
+    local function StampKey(backup, stamp)
+        return table.concat({ "1", stamp.bytes, stamp.profile, backup.source, tostring(backup.legacy ~= nil) }, ":")
+    end
+
+    local function Readable(...)
+        for i = 1, select("#", ...) do
+            if MSUF.Util.IsSecret(select(i, ...)) then return false end
+        end
+        return true
+    end
+
+    local function HasStamp(backup)
+        if not Plain(backup) then return false end
+        local stamp = backup.validation
+        if not Plain(stamp) then return false end
+        if not Readable(stamp.generator, stamp.bytes, stamp.profile, stamp.key, backup.version, backup.source, backup.legacy) then return false end
+        if stamp.generator ~= 1 or type(stamp.bytes) ~= "number" or stamp.bytes ~= stamp.bytes
+            or stamp.bytes <= 0 or stamp.bytes > snapshotLimit or type(stamp.profile) ~= "string"
+            or stamp.profile == "" or type(stamp.key) ~= "string" or backup.version ~= 1
+            or (backup.source ~= "full" and backup.source ~= "reconstructed")
+            or not Plain(backup.profiles) or not Plain(backup.char) then return false end
+        local profile = backup.profiles[stamp.profile]
+        if not Plain(profile) or not Plain(profile.general) or not Plain(profile.player) or not Plain(profile.target) then return false end
+        if not Readable(profile.general.fontKey, profile.player.width, profile.player.height,
+            profile.target.width, profile.target.height, profile._msufDefaultsRevision,
+            profile[sparseV2Marker], profile[sparseV3.Marker]) then return false end
+        return ValidSnapshotProfile(profile) and stamp.key == StampKey(backup, stamp)
+    end
+
+    local function ValidateAndStamp(backup, knownCost)
+        local valid, cost = ValidSnapshot(backup, knownCost)
+        if not valid then return false end
+        if not HasStamp(backup) then
+            local stamp = { generator = 1, bytes = cost, profile = next(backup.profiles) }
+            stamp.key = StampKey(backup, stamp)
+            local overhead = SnapshotCost("validation", snapshotLimit) + 4 + SnapshotCost(stamp, snapshotLimit)
+            if cost + overhead > snapshotLimit then return false end
+            backup.validation = stamp
+        end
+        return true
+    end
+
+    function Schema.HasRollbackBackup(store, beforeSparse)
+        if not Plain(store) then return false end
+        local backup = store._pre70ProfileBackup
+        if not HasStamp(backup) and not ValidateAndStamp(backup) then return false end
+        if beforeSparse and (MSUF.Util.IsSecret(store._pre70SparseValidated)
+            or store._pre70SparseValidated ~= backup.validation.key) then
+            if not ValidateAndStamp(backup) then return false end
+            store._pre70SparseValidated = backup.validation.key
+        end
+        return true
     end
 
     function Schema.CaptureRollbackBackup(store, legacy)
@@ -483,7 +539,7 @@ do
             if not Plain(legacy) then return false end
             profiles = { Default = legacy }
         end
-        local snapshot = CopySafe({ profiles = profiles, char = Plain(store.char) and store.char or {}, legacy = legacy }, true)
+        local snapshot, cost = CopySafe({ profiles = profiles, char = Plain(store.char) and store.char or {}, legacy = legacy }, true)
         if not snapshot then
             blockedStore = store
             return false
@@ -506,7 +562,12 @@ do
             source = "reconstructed"
         end
         snapshot.version, snapshot.source = 1, source
-        if not ValidSnapshot(snapshot) then blockedStore = store return false end
+        -- CopySafe already checked the full source tree. Only reconstruction
+        -- changes its payload; avoid a second full walk for a fresh full copy.
+        if source == "reconstructed" then cost = nil
+        else cost = cost + SnapshotCost("version", snapshotLimit) + 36
+            + SnapshotCost("source", snapshotLimit) + 4 + SnapshotCost(source, snapshotLimit) end
+        if not ValidateAndStamp(snapshot, cost) then blockedStore = store return false end
         store._pre70ProfileBackup = snapshot
         return true
     end
@@ -529,7 +590,7 @@ do
     end
 
     function Schema.RestoreRollbackBackup(store)
-        if not Schema.HasRollbackBackup(store) then return false end
+        if not Plain(store) or not ValidateAndStamp(store._pre70ProfileBackup) then return false end
         local restored = CopySafe(store._pre70ProfileBackup, true)
         if not restored then return false end
         store.profiles, store.char = restored.profiles, restored.char
