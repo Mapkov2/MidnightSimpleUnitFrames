@@ -37,6 +37,8 @@ local function AbsoluteRoot(path)
     return cwd:gsub("\\", "/") .. "/" .. path
 end
 
+World.AbsoluteRoot = AbsoluteRoot
+
 local function Normalize(path)
     local prefix = path:sub(1, 1) == "/" and "/" or ""
     local parts = {}

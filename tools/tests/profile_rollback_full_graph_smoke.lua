@@ -1,9 +1,27 @@
--- Full serialized 7.0 -> unchanged production 6.50x -> 7.0 profile roundtrip.
+-- Full serialized 7.0 -> immutable historical 6.503 -> 7.0 profile roundtrip.
 local root, flavor = assert(arg[1]), assert(arg[2])
-local production = "C:/MSUF Beta Branch/MidnightSimpleUnitFrames"
+local W = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+local production = W.Normalize(W.AbsoluteRoot(os.getenv("MSUF_HISTORICAL_6503_DIR")
+    or (root .. "/dist/historical/6.503-d8af824")))
+local function Quote(value)
+    if package.config:sub(1, 1) == "\\" then
+        assert(not value:find('[\r\n"%%!&|<>^]'), "unsafe historical verifier argument")
+        return '"' .. value .. '"'
+    end
+    return "'" .. value:gsub("'", "'\\''") .. "'"
+end
+local python = os.getenv("MSUF_PYTHON") or (package.config:sub(1, 1) == "\\" and "python" or "python3")
+local command = Quote(python) .. " "
+    .. Quote(root .. "/tools/tests/historical_6503_source.py") .. " " .. Quote(production)
+if package.config:sub(1, 1) == "\\" then command = '"' .. command .. '"' end
+local pipe = assert(io.popen(command .. " 2>&1", "r"), "cannot run historical source verifier (set MSUF_PYTHON)")
+local verification = pipe:read("*a")
+pipe:close()
+assert(verification:find("PASS historical 6.503 d8af82416ec07e8755c89e35c83bcd2320868a10 tree "
+    .. "ded900e72626f1ad37b4915f5dc05e92c8e5f401", 1, true), "historical source verification failed: " .. verification)
+if arg[3] == "--verify-source" then print(verification) return end
 local C = assert(loadfile(root .. "/tools/profile_corpus_golden.lua"))()
 local H = assert(loadfile(root .. "/tools/tests/profile_state_harness.lua"))()
-local W = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 local function Read(path)
     local file = assert(io.open(path, "rb"))
     local bytes = file:read("*a")
@@ -11,7 +29,7 @@ local function Read(path)
     return bytes
 end
 local version = W.Read(production .. "/VERSION"):match("^(%S+)")
-assert(version:match("^6%.50%d*$"), "production is not a 6.50x checkout: " .. version)
+assert(version == "6.503", "historical source VERSION differs from pin: " .. version)
 local client = W.ClientFor(production, flavor)
 local toc = W.CoreTOC(client.tocSuffix)
 local gameType = client.isForever and "camelot" or (client.isClassic and client.gameType or "standard")

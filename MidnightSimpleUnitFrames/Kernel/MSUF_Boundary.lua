@@ -65,18 +65,24 @@ end
 
 MSUF.RunHostAPIStep = RunHostAPIStep
 
--- A cold unit-frame apply owns temporary batch flags and routing state.
--- Restore them before reporting, since the client's error handler can raise.
-local function RunUnitFrameApply(step, finish, ...)
+-- A cold step that owns temporary flags or locks (a unit-frame apply, a module
+-- transition). finish restores them before reporting, since the client's error
+-- handler can raise; label names the step in the report.
+local function RunLabeledStep(label, step, finish, ...)
     local ok, result = pcall(step, ...)
     finish(ok, ...)
     if not ok then
-        ReportError("unit-frame apply", result)
+        ReportError(label, result)
         return false
     end
     return true, result
 end
 
+local function RunUnitFrameApply(step, finish, ...)
+    return RunLabeledStep("unit-frame apply", step, finish, ...)
+end
+
+MSUF.RunLabeledStep = RunLabeledStep
 MSUF.RunUnitFrameApply = RunUnitFrameApply
 
 -- Only third-party callbacks enter this boundary. Quarantine before reporting;

@@ -963,7 +963,6 @@ def main(argv=None):
 
     if args.report:
         print_report(results, excluded, args.top, profile, details, data_limits)
-        return 0
 
     baseline, missing_columns = read_baseline(baseline_path)
     valid, malformed, orphans = allowlist_state(allowlist, set(results) | set(data_limits))

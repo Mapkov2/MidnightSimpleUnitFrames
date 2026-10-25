@@ -87,7 +87,7 @@ def source_hash(root, include_indexes=True):
                 paths.add(helper)
                 pending.append(helper)
     digest = hashlib.sha256()
-    for path in sorted(paths):
+    for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
         if not include_indexes and path.as_posix().endswith(tuple(INDEXES)):
             continue
         digest.update(path.relative_to(root).as_posix().encode() + b"\0" + read(path).encode() + b"\0")

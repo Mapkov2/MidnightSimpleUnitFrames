@@ -59,6 +59,19 @@ jobs:
               git('fetch', '--depth=1', '--no-tags', 'upstream', sha)
               git('update-ref', 'refs/remotes/' + ref, sha)
           PY
+      - name: Check out immutable historical MSUF 6.503
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: Mapkov2/MidnightSimpleUnitFrames
+          ref: d8af82416ec07e8755c89e35c83bcd2320868a10
+          path: dist/historical/6.503-d8af824
+          persist-credentials: false
+      - name: Verify historical source tree
+        shell: bash
+        run: |
+          python tools/tests/historical_6503_source.py
+          echo "MSUF_HISTORICAL_6503_DIR=$GITHUB_WORKSPACE/dist/historical/6.503-d8af824" >> "$GITHUB_ENV"
+          echo "MSUF_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
       - name: Run the sole release inventory
         shell: bash
         run: |

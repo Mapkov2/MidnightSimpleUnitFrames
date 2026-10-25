@@ -1141,6 +1141,31 @@
     {
       "test": "tools/tests/castbar_runtime_providers.lua",
       "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/menu_schema_portable_hash_smoke.py",
+      "phase": "generated",
+      "arguments": []
+    },
+    {
+      "test": "tools/tests/quality_ratchet_report_smoke.py",
+      "phase": "generated",
+      "arguments": [
+        "--luac",
+        "{luac}"
+      ]
+    },
+    {
+      "test": "tools/tests/modules_throwing_reporter_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/historical_6503_source_smoke.py",
+      "phase": "profiles",
+      "arguments": [
+        "--lua",
+        "{lua}"
+      ]
     }
   ],
   "excluded": {
@@ -1250,6 +1275,8 @@
     "tools/tests/unresolved_global_reads_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Lua 5.1 makes an undefined name a silent nil read: `CoreFrame(unit)` compiles,",
     "tools/release_test_inventory.py": "Inventory checker executed explicitly by release-check.ps1 in the generated lists phase; it cannot recursively list itself as a test run.",
     "tools/tests/menu_entry_view_world.lua": "Shared full-graph loader for menu entry reuse and aura route restore tests; supplies native named-frame publication and an optional immutable baseline overlay, with no standalone test entry point.",
-    "tools/tests/menu_l4_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Replays the L4-owned sources against the current full client graph."
+    "tools/tests/menu_l4_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Replays the L4-owned sources against the current full client graph.",
+    "tools/tests/historical_6503_source.py": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Read-only verifier and archive cache for the pinned historical 6.503 source (tag v6.503, d8af824).",
+    "tools/tests/profile_sparse_historical_oracle_smoke.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Executed inside profile_sparse_backward_migration_smoke.lua on every client: frozen ce4767d34 V2/V3 mask oracle."
   }
 }

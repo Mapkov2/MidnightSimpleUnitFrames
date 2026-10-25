@@ -86,8 +86,11 @@ local function GetDesiredEnabled(module)
 end
 
 --- Query and transition share the Kernel boundary. Commit state only after
---- the transition returns; the caller clears the in-progress marker on errors.
-local RunModuleStep = MSUF.RunHostAPIStep
+--- the transition returns; release the lock before an error reporter can raise.
+local RunModuleStep = MSUF.RunLabeledStep
+local function FinishModuleStep(_, m)
+    m.__msufSwitchTo = nil
+end
 local function ApplyModule(m)
     local desired = GetDesiredEnabled(m)
     if desired == not not m.__msufEnabled then return end
@@ -107,8 +110,7 @@ function MSUF.MSUF_ApplyModules()
         if m and m.__msufSwitchTo == nil then
             -- Guard the query too: it may re-enter Apply or raise.
             m.__msufSwitchTo = true
-            RunModuleStep("module " .. m.key, ApplyModule, m)
-            m.__msufSwitchTo = nil
+            RunModuleStep("module " .. m.key, ApplyModule, FinishModuleStep, m)
         end
     end
 

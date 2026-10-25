@@ -1,0 +1,36 @@
+{
+  "commit": "ce4767d344bdafc01685ef5299bca2e26735539d",
+  "tree": "5707eb5d0c9c9d01b5699846d1b58c5872c66e6e",
+  "files": {
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua": {
+      "gitBlob": "7380c7c36a81b15196298c578cfc019944bf5b5a",
+      "sha256": "f200368040d9e92c132d419ec9d34f65f01cc0a3d07c5b548da5ab98a1437752"
+    },
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageData.lua": {
+      "gitBlob": "4c8eebf9af01db8f6c1d97f59796ddae4330dd4f",
+      "sha256": "95de62fca83570a5207be9461498f74ff1b57278e3863155043ab799b09c97db"
+    },
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageCommon.lua": {
+      "gitBlob": "ee039ee0505a0cd1201f6da071b4e60079e6d077",
+      "sha256": "fff1492d94a8c1530a6ad97df3c1474c54c805540fe40b6d78f9f43c056a2204"
+    },
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_StorageV3.lua": {
+      "gitBlob": "0860cb83b44fdb28b7e0e15fdfc432092ca21d46",
+      "sha256": "4ab0be77ad750a5b92d20c36162fbe784cf89bc83b941a6b299e985b07242281"
+    },
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Storage.lua": {
+      "gitBlob": "1e24340b580e64519014cdeb25ebbfe9215c6271",
+      "sha256": "849d64bab656b0f324e32b3a58f902557b33cb03a46aa46d3613bfb4d40af2ba"
+    },
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Recovery.lua": {
+      "gitBlob": "bebebb5dd207059a49f913998a3ad38b3866109f",
+      "sha256": "f8dcabcc61d3109185877c637323cf784626dd421a381a6a73488c576554b4ca"
+    }
+  },
+  "cases": 606,
+  "singleBitCases": 581,
+  "mixedCases": 25,
+  "v2Bits": 3595,
+  "v3Bits": 6622,
+  "fixtureLfSha256": "4d44779f0bb6cfd619cb9b7e3941e49ae73df07fa8dd21d6e65f1192abdd2eee"
+}

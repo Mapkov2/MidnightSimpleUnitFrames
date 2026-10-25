@@ -2,6 +2,8 @@
 -- Frozen sources below come from the read-only 6.50 checkout, 2026-10-24.
 -- Optional arg2 verifies every excerpt against that checkout before executing it.
 local root, legacyRoot = assert(arg[1]), arg[2]
+-- The historical wire oracle is independent of the current-dictionary roundtrips below.
+assert(loadfile(root .. "/tools/tests/profile_sparse_historical_oracle_smoke.lua"))()
 local function Read(path)
     local f = assert(io.open(path, "rb"))
     local s = f:read("*a")
