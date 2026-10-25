@@ -43,24 +43,25 @@ jobs:
           $release = & "./.github/scripts/resolve_classic_release_channel.ps1" -Tag $tag
           $version = $release.Version
 
-          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          # MSUF 7.0 releases from its own branch; main carries the 6.50x line.
+          git fetch --no-tags origin "+refs/heads/7.0:refs/remotes/origin/7.0"
           if ($LASTEXITCODE -ne 0) {
-            throw "Could not fetch origin/main for release freshness validation."
+            throw "Could not fetch origin/7.0 for release freshness validation."
           }
 
           $tagCommit = (git rev-list -n 1 "refs/tags/$tag" 2>$null)
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tagCommit)) {
             throw "Could not resolve Classic release tag '$tag' to a commit."
           }
-          $mainCommit = (git rev-parse "refs/remotes/origin/main" 2>$null)
+          $mainCommit = (git rev-parse "refs/remotes/origin/7.0" 2>$null)
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($mainCommit)) {
-            throw "Could not resolve origin/main to a commit."
+            throw "Could not resolve origin/7.0 to a commit."
           }
 
           $tagCommit = $tagCommit.Trim()
           $mainCommit = $mainCommit.Trim()
           if ($tagCommit -ne $mainCommit) {
-            throw "Refusing Classic release tag '$tag' at $tagCommit; current origin/main is $mainCommit."
+            throw "Refusing Classic release tag '$tag' at $tagCommit; current origin/7.0 is $mainCommit."
           }
 
           $releaseName = $release.DisplayName
@@ -78,7 +79,7 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
           "release_type=$releaseType" >> $env:GITHUB_OUTPUT
-          Write-Host "Classic tag '$tag' is current at origin/main $mainCommit."
+          Write-Host "Classic tag '$tag' is current at origin/7.0 $mainCommit."
 
       - name: Validate CurseForge publishing configuration
         shell: pwsh

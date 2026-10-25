@@ -360,7 +360,9 @@ try {
         finally { Pop-Location; $env:PATH = $oldPath }
     }
 }
-if ($slotTime -ge 300) { $failed++; Write-Output "FAIL time budget: must be under 300 s inside the Lua slot" }
+# The budget measures the six-worker development machine; a reproducible CI
+# runner has other hardware, so it reports the time without gating on it.
+if (-not $Reproducible -and $slotTime -ge 300) { $failed++; Write-Output "FAIL time budget: must be under 300 s inside the Lua slot" }
 $final = "release-check: {0} failed; {1:F1} s contract slots; {2:F1} s projection preparation; {3:F1} s elapsed; log {4}" -f $failed, $slotTime, $projectionTime, $wall.Elapsed.TotalSeconds, $log
 [IO.File]::AppendAllText($log, ($summary -join $nl) + "$nl$final$nl", $utf8)
 Write-Output $final
