@@ -24,6 +24,9 @@ local Publish = PublicAPI.Publish
 -- Kernel (Scheduler, Util) and Runtime/MSUF_Colors.lua load before every
 -- castbar file; their per-cast helpers resolve once here.
 local FILE = "Castbars/MSUF_PlayerCastbarRuntime.lua"
+-- Utils precedes the player runtime on every client; validate the shared contract once.
+local ResolvePushbackMS = Utils.Castbar_ResolvePushbackMS
+assert(type(ResolvePushbackMS) == "function", FILE .. " requires Utils.Castbar_ResolvePushbackMS")
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
 local GetClassBarColor = MSUF.Require("MSUF_GetClassBarColor", FILE)
@@ -660,12 +663,7 @@ local function ApplyCastState(frame, state)
     -- fields this value lives next to. delayTimeMs is NeverSecret, so it needs
     -- no secret-safe unwrapping. The shared resolver also measures the legacy
     -- start shift on clients whose cast tuple carries no delay.
-    local resolvePushback = Utils.Castbar_ResolvePushbackMS
-    if type(resolvePushback) == "function" then
-        frame._msufPushbackMS = resolvePushback(frame, state)
-    else
-        frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
-    end
+    frame._msufPushbackMS = ResolvePushbackMS(frame, state)
     if frame.castText then
         Utils.RefreshCastbarSpellNameText(frame)
     end
