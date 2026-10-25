@@ -87,7 +87,8 @@ local function InstallStickyHeaderActivation(scroll, pageHeaderHost, LayoutPageH
     --- gates would reject any work started while the wrapper is still hidden.
     local function ActivateStickyHeaderStack(entry)
         local records = type(entry) == "table" and entry.pageHeaders or nil
-        local active = {}
+        local active = scroll._msuf2StickyPageHeaders or {}
+        for i = #active, 1, -1 do active[i] = nil end
         if type(records) ~= "table" then return active end
         local stackOffset = 0
         for i = 1, #records do

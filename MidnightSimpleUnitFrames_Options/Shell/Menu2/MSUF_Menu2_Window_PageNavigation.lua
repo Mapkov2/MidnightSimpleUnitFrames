@@ -119,9 +119,8 @@ function M.MarkMenuDataDirty()
 end
 local function RunRefreshers(entry, opts)
     if not entry or not entry.refreshers then return end
-    opts = opts or {}
     local revision = CurrentMenuDataRevision()
-    if opts.force ~= true and entry._msuf2RefreshRevision == revision then return false end
+    if not (opts and opts.force == true) and entry._msuf2RefreshRevision == revision then return false end
     for i = 1, #entry.refreshers do
         local fn = entry.refreshers[i]
         if type(fn) == "function" then fn() end
@@ -233,9 +232,9 @@ end
 function M.RefreshPageHistoryNav()
     local back, forward = M.pageHistoryBackButton, M.pageHistoryForwardButton
     if not (back and forward) then return end
-    local state = M.GetPageHistoryState()
-    if back.SetEnabled then back:SetEnabled(state.canBack == true) end
-    if forward.SetEnabled then forward:SetEnabled(state.canForward == true) end
+    local backStack, forwardStack = EnsurePageHistoryStacks()
+    if back.SetEnabled then back:SetEnabled(#backStack > 0) end
+    if forward.SetEnabled then forward:SetEnabled(#forwardStack > 0) end
     local cuePage = M._pageHistoryTourCuePage
     local showTourCue = cuePage ~= nil and M.activeKey == cuePage
     if cuePage ~= nil and not showTourCue then M._pageHistoryTourCuePage = nil end

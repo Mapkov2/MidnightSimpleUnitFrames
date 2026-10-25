@@ -30,6 +30,12 @@ end
 local VISIBLE_SETTLE_RELAYOUT = { refreshUntrackedState = true }
 local function QueueVisiblePageLayoutSettle(key, entry)
     if type(entry) ~= "table" then return end
+    local width, height = M.GetContentMetrics()
+    if entry._msuf2VisibleLayoutWidth == width and entry._msuf2VisibleLayoutHeight == height
+        and entry._msuf2VisibleLayoutRevision == M._msuf2MenuDataRevision
+        and entry._msuf2VisibleLayoutSlot == entry.layoutSlot
+        and entry._msuf2VisibleContentHeight == entry.height
+    then return end
     local queued = entry._msuf2VisibleLayoutSettleQueued
     if queued and queued.active then return end
     local function Settle()
@@ -82,6 +88,10 @@ local function QueueVisiblePageLayoutSettle(key, entry)
             end
         end
         ApplyScrollMetrics()
+        entry._msuf2VisibleLayoutWidth, entry._msuf2VisibleLayoutHeight = M.GetContentMetrics()
+        entry._msuf2VisibleLayoutRevision = M._msuf2MenuDataRevision
+        entry._msuf2VisibleLayoutSlot = entry.layoutSlot
+        entry._msuf2VisibleContentHeight = entry.height
     end
     entry._msuf2VisibleLayoutSettleQueued = C_Timer.After(0, Settle)
 end

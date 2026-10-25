@@ -301,16 +301,28 @@ local function FocusUnitPreview(box, category, noRender)
     if not noRender then RequestPreview(box, "MSUF2_COLOR_PAINTER_FOCUS") end
 end
 
-local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
+local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey, result)
     local function FillAnchor(bar)
         if bar and bar.GetStatusBarTexture then return bar:GetStatusBarTexture() or bar end
         return bar
     end
-    local result = {}
+    local count, changed = 0, false
     local function Add(anchor, sectionId, label, priority, ownerLabel)
-        if anchor then
-            result[#result + 1] = { anchor = anchor, sectionId = sectionId, label = label, priority = priority or 0, ownerLabel = ownerLabel }
-        end
+        if not anchor then return end
+        count = count + 1
+        local spec = result[count]
+        if not spec then spec = {} result[count] = spec end
+        priority = priority or 0
+        if spec.anchor ~= anchor or spec.sectionId ~= sectionId or spec.label ~= label
+            or spec.priority ~= priority or spec.ownerLabel ~= ownerLabel
+        then changed = true end
+        spec.anchor, spec.sectionId, spec.label = anchor, sectionId, label
+        spec.priority, spec.ownerLabel = priority, ownerLabel
+    end
+    local function Finish()
+        if #result ~= count then changed = true end
+        for i = #result, count + 1, -1 do result[i] = nil end
+        return result, changed
     end
     -- One text target per named element of a preview mock, in order.
     local function AddTexts(mock, label, priority, ...)
@@ -328,9 +340,9 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
         AddTexts(groupMock, "Name Text Color", 80, "_nameFS")
         AddTexts(groupMock, "Health Text Color", 90, "_hpLeftFS", "_hpCenterFS", "_hpRightFS")
         AddTexts(groupMock, "Power Text Color", 90, "_powerLeftFS", "_powerCenterFS", "_powerRightFS")
-        return result
+        return Finish()
     end
-    for i = 1, #(unitBoxes or {}) do
+    for i = 1, #unitBoxes do
         local unitBox = unitBoxes[i]
         local mock = unitBox and unitBox.mock
         if mock then
@@ -361,7 +373,7 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
             end
         end
     end
-    return result
+    return Finish()
 end
 
 -- Click targets are rebuilt on every category show and WoW can never destroy
@@ -966,6 +978,8 @@ function PainterBuild.PaintTargets(state)
     local tabDescription = Label(section, "", 144, -14, innerW - 144, T.colors.muted)
 
     state.clickTargets = {}
+    local targetAnchors, castTargets = {}, {}
+    local targetCategory, targetLevel
     local function FocusColorSection(sectionId)
         sectionId = sectionId or CATEGORY_SECTION[Current()]
         local target = EnsureSectionForPaint(sectionId)
@@ -975,10 +989,16 @@ function PainterBuild.PaintTargets(state)
         return false
     end
     local function RebuildClickTargets(category, castPanel)
+        castTargets[1] = castPanel
+        local anchors, changed = ResolveCategoryAnchors(castPanel and castTargets or unitBoxes, state.groupBox, category.key, targetAnchors)
+        local level = shield:GetFrameLevel()
+        -- Anchors follow their regions without a new binding. Rebuild when an
+        -- actual target, category or shield level changes, including late mocks.
+        if not changed and targetCategory == category and targetLevel == level and #state.clickTargets == #anchors then return end
+        targetCategory, targetLevel = category, level
         ReleaseClickTargets(state.clickTargets)
-        local clickTargets = {}
-        state.clickTargets = clickTargets
-        local anchors = ResolveCategoryAnchors(castPanel and { castPanel } or unitBoxes, state.groupBox, category.key)
+        local clickTargets = state.clickTargets
+        for i = #clickTargets, 1, -1 do clickTargets[i] = nil end
         for i = 1, #anchors do
             local spec = anchors[i]
             local navigateTooltip = NAVIGATE_ONLY_SECTIONS[spec.sectionId or ""]

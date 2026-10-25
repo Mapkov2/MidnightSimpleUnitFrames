@@ -435,6 +435,8 @@ end
 -- preview controls (test toggles, preview handle gears) as results.
 local function InheritTabPreparation(widget, record)
     if not widget.GetParent then return end
+    if widget._msuf2InheritedTabPrepare
+        and widget._msuf2InheritedTabPrepare == widget._msuf2PrepareExactSearchTarget then return end
     local node, views = widget:GetParent(), nil
     while node do
         local view = node._msuf2ExactTabView
@@ -444,8 +446,7 @@ local function InheritTabPreparation(widget, record)
         end
         node = node.GetParent and node:GetParent() or nil
     end
-    if not views or (widget._msuf2InheritedTabPrepare
-        and widget._msuf2InheritedTabPrepare == widget._msuf2PrepareExactSearchTarget) then return end
+    if not views then return end
     local previous = widget._msuf2PrepareExactSearchTarget
     local view = views[1]
     local listed = record and (record.searchIndexed == true or record.classification == "setting"

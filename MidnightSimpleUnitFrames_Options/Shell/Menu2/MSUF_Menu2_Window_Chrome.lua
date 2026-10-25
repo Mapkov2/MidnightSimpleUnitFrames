@@ -814,13 +814,12 @@ local function InstallWindowLifecycle(state)
         M.EndHistorySession("menu")
         ResetStatusIndicatorTestModeOnMenuExit()
         SavePersistentMenuState()
-        ResetBossPagePreviewCache()
         M.SuspendPinnedPreviews("WINDOW_HIDE")
         M.ReleaseGFNativePreviews("WINDOW_HIDE", nil)
-        -- Force: ResetBossPagePreviewCache just cleared lastCastbarPagePreviewUnit,
-        -- so the castbar-page fake cast would dedupe against nil and never be
-        -- stopped when the window closes straight from the castbar page.
-        SyncBossPagePreviewForKey(nil, true)
+        -- Retain the owned preview state through cleanup, so an active castbar
+        -- stops while already inactive families can skip their structural apply.
+        SyncBossPagePreviewForKey(nil)
+        ResetBossPagePreviewCache()
         RequestGroupPagePreviewForKey(nil)
         M.UpdateMenuCombatListener()
         if type(MenuRuntime.Quiesce) == "function" then
