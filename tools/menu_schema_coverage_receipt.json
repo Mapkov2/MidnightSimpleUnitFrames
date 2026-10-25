@@ -19,13 +19,13 @@
       "proven": 3760
     },
     "TBC": {
-      "declarations": 6464,
+      "declarations": 6465,
       "initialDeclarations": 4398,
       "profileControls": 3379,
       "proven": 3379
     },
     "Vanilla": {
-      "declarations": 4943,
+      "declarations": 4944,
       "initialDeclarations": 3345,
       "profileControls": 2441,
       "proven": 2441
@@ -33,11 +33,11 @@
   },
   "generatorVersion": "menu-schema-coverage/3",
   "issueCount": 0,
-  "projectionSha256": "02e086ce5f3dd69719553c1ef278f7b25827451a2e83a2749f71168e1b80a32f",
+  "projectionSha256": "56a9f1eebd495c5c582b72ebfd6817ea408fdd34affb07dc853660c091ad7baf",
   "projectionVersion": 2,
-  "sourceSha256": "0C69DA57AEDFB3F77A9A36E27878B7295901285116A6C37AC7C6D3156CA49AAB",
+  "sourceSha256": "8714FE7F09EE27D3B634D8EB4E04B377506E39EA5A96474448462E6E10E7B8C5",
   "totals": {
-    "declarations": 32762,
+    "declarations": 32764,
     "initialDeclarations": 21894,
     "profileControls": 17339,
     "proven": 17339

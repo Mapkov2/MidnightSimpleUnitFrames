@@ -357,7 +357,7 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "31e5bc895a963d80a8745853db0f3f2e843e158d07c1c0aae4c1c799939e4907"
+          "source_sha256": "ede132a845bce0c9be9181c5e90175f5ce7aff7f98d967b8529c69f0ee2185aa"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
@@ -728,7 +728,7 @@
           1115
         ]
       ],
-      "source_sha256": "8e5518aa28e87cb81eade91053a14e2cb26b084e6a5137429e74b5e8b62ba893",
+      "source_sha256": "93d30e5b18c66eca0e1568ff3b1ae0ea657ce3bf72627a2d59e650d38653180e",
       "adapter_exclusions": [
         {
           "name": "PainterBuild.ResourcesStrip",
