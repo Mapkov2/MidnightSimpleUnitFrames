@@ -134,6 +134,18 @@ S.RenameOrDelete("A","Renamed")
 MSUF_GlobalDB.profiles.Renamed,MSUF_GlobalDB.profiles.A=MSUF_GlobalDB.profiles.A,nil
 assert(S.GetGroups()[1].members.Renamed)
 S.RenameOrDelete("B"); assert(not S.GetGroups()[1].members.B)
+-- A group saved before exclusions existed has no exclude list. Loading it must
+-- complete the list instead of aborting the next sync with ipairs over nil.
+local f,g={player={width=10}},{player={width=20}}
+MSUF_GlobalDB={profiles={F=f,G=g},global={profileSyncGroups={
+    {name="Old",members={F=true,G=true},modules={unitframes=true}}}}}
+MSUF_ActiveProfile,MSUF_DB="F",f
+S.Activate()
+f.player.width=55
+assert(S.Flush(),"a saved group without exclusions aborted the sync")
+assert(g.player.width==55,"a saved group without exclusions stopped syncing")
+local stored=MSUF_GlobalDB.global.profileSyncGroups[1]
+assert(type(stored.exclude)=="table" and #stored.exclude==0,"the missing exclusion list was not completed")
 -- profile.bars holds the class resource settings next to the unit frame bar
 -- settings. The Class Resources module syncs the Class Resources page's keys;
 -- the Unit Frames module keeps the other bar keys and no longer carries those.

@@ -78,7 +78,7 @@ local repairReported
 local function Sanitize(groups)
     if type(groups)~="table" or getmetatable(groups) then return {},true end
     local profiles=MSUF_GlobalDB and MSUF_GlobalDB.profiles
-    local clean,names,ownership,changed={},{},{},false
+    local clean,names,ownership,changed,completed={},{},{},false,false
     for key in pairs(groups) do
         if type(key)~="number" or key<1 or key>#groups or key~=math.floor(key) then changed=true end
     end
@@ -116,21 +116,24 @@ local function Sanitize(groups)
                 for _,path in ipairs(exclusions) do
                     if #out.exclude<512 and Fields.Path(path) then out.exclude[#out.exclude+1]=Fields.Copy(path) else changed=true end
                 end
-            elseif exclusions~=nil then changed=true end
+            elseif exclusions==nil then completed=true
+            else changed=true end
             clean[#clean+1]=out
         end
     end
-    return clean,changed
+    return clean,changed,completed
 end
 -- The repaired list replaces the saved one, so callers that edit members
 -- (rename/delete) edit the stored table.
 local function Groups()
     local global=MSUF_GlobalDB and MSUF_GlobalDB.global
     if type(global)~="table" or global.profileSyncGroups==nil then return {} end
-    local clean,changed=Sanitize(global.profileSyncGroups)
-    if not changed then return global.profileSyncGroups end
+    local clean,changed,completed=Sanitize(global.profileSyncGroups)
+    if not changed and not completed then return global.profileSyncGroups end
+    -- A group saved before exclusions existed only gains its empty list; nothing
+    -- was removed, so that completion stays silent.
     global.profileSyncGroups=clean
-    if not repairReported then
+    if changed and not repairReported then
         repairReported=true
         Report("Saved profile sync groups had invalid entries; those entries were removed.")
     end
