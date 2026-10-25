@@ -5,6 +5,7 @@ local Open = assert(loadfile(root .. "/tools/tests/menu_entry_view_world.lua"))(
 local mw = Open(root, flavor, { page = "home", clientScriptBindings = true })
 local M, key = mw.M, "uf_" .. unit
 local FRAME_BUDGET = 4500 -- Entire unit page, all 34 aura subviews and three texture subviews.
+local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit)
 local function Settle() mw:RunTimers() M.Theme.StopAllMenuAnimations() end
 M.unitAuraTabSelection, M.unitAuraToolSelection = {}, {}
 M.unitTexLayerSlot = {}
@@ -42,6 +43,10 @@ local function Walk()
                     Settle()
                     local entry = assert(M.cache[key])
                     OpenSections(entry)
+                    local height = entry.sections.auras._msuf2CollapsibleEntry.outer:GetHeight()
+                    assert(height == Expected(lane, tool.value, slot), string.format(
+                        "%s %s:%s slot %d: outer height %d differs from 75ff89d0f (%d)",
+                        unit, lane, tool.value, slot, height, Expected(lane, tool.value, slot)))
                     shared = shared or entry.sections.frame_basics
                     assert(shared == entry.sections.frame_basics, "selection rebuilt unchanged Basics section")
                     if entry.pageAreas then
@@ -99,5 +104,12 @@ assert(afterRegions == regions, "second product walk created regions")
 local pages = 0
 for _ in pairs(M._msuf2PageLayoutVariants[key]) do pages = pages + 1 end
 assert(pages == 1, "selection axes retained " .. pages .. " whole page trees")
-print(string.format("menu_page_area_cache_smoke %s %s: %d combinations x2; %d/%d frames; 1 page; 0 growth",
+for _, view in pairs(M.cache[key].pageAreas.auras.views) do
+    for _, layout in ipairs(view.contentLayouts) do
+        local count = 0
+        for _ in pairs(layout.paddingByView) do count = count + 1 end
+        assert(count <= #M.cache[key].pageAreas.texture.declaration.values, "padding provenance exceeded declared combinations")
+    end
+end
+print(string.format("menu_page_area_cache_smoke %s %s: %d combinations x2, baseline heights; %d/%d frames; 1 page; 0 growth",
     flavor, unit, combinations, frames - start, FRAME_BUDGET))

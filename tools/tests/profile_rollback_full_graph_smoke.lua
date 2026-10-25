@@ -71,10 +71,17 @@ local function Healthy(world, stage)
         -- This aborts a frame repaint, never State/login/EnsureDB/logout code.
         local health = caught.context == "PLAYER_LOGIN" and caught.file == "MSUF_UF_Elements_Health.lua"
             and caught.detail:match("MSUF_UF_Elements_Health%.lua:951: attempt to compare number with table$")
-        local highlight = flavor ~= "Mainline" and flavor ~= "Forever" and caught.context == "timer"
+        -- The historical highlight timer reads a stubbed frame scale on every client
+        -- (the 7.0 corpus allowlist no longer lists it for the Mainline family).
+        local highlight = caught.context == "timer"
             and caught.file == "MSUF_UF_Highlight.lua"
             and caught.detail:match("MSUF_UF_Highlight%.lua:220: attempt to compare number with table$")
-        if world.historical and (health or highlight) then
+        -- 6.503 has no per-unit factory boundary, so its screen-cache scale read on
+        -- a stub frame escapes the login or config notification it runs in.
+        local scale = (caught.context == "PLAYER_LOGIN" or caught.context == "MSUF_UFCore_NotifyConfigChanged")
+            and caught.file == "MSUF_UF_Runtime.lua"
+            and caught.detail:match("MSUF_UF_Runtime%.lua:%d+: attempt to compare table with number$")
+        if world.historical and (health or highlight or scale) then
             historicalErrors[caught.context .. " | " .. caught.detail] = true
         else checked.isolated[#checked.isolated + 1] = caught end
     end

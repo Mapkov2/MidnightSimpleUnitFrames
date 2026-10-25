@@ -1,5 +1,6 @@
--- Frozen outer heights captured from 75ff89d0f, using the cache smoke's open/settle walk.
--- buff/layout's first closed->open view has 14px more padding than views built open.
+-- Diagnostic: the frozen 75ff89d0f heights (menu_page_area_height_baseline.lua), also
+-- against an old source tree via MSUF_L6_HEIGHT_SOURCE_ROOT. Releases check the same
+-- heights inside menu_page_area_cache_smoke.lua.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local flavor, unit, width = arg[2] or "Mainline", arg[3] or "target", arg[4] or "normal"
 local Open = assert(loadfile(root .. "/tools/tests/menu_entry_view_world.lua"))()
@@ -15,17 +16,8 @@ local mw = Open(root, flavor, { page = "home", clientScriptBindings = true, befo
     end
 end })
 local M, key = mw.M, "uf_" .. unit
-local classic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists"
 local player = unit == "player"
-local normal = {
-    layout = 408, behavior = 356, filters = classic and 318 or 456, blacklist = 820,
-    style = classic and 1464 or 1714,
-}
-local custom = { setup = 722, layout = 390, behavior = 390, filters = 456, whitelist = player and 968 or 630, style = 1302 }
-local custom4 = {
-    setup = player and 590 or 610, layout = 390, behavior = 390, filters = 360,
-    defensives = 760, dots = 630, style = not player and not classic and 1590 or 1302,
-}
+local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit)
 M.unitAuraTabSelection, M.unitAuraToolSelection, M.unitTexLayerSlot = {}, {}, {}
 if width == "wide" then
     M.GetContentMetrics = function() return 1100, 700 end
@@ -44,10 +36,7 @@ local function Check(lane, tool, slot)
         end
         Settle()
     end
-    local expected = (lane == "buff" or lane == "debuff") and normal[tool] or (lane == "custom4" and custom4[tool] or custom[tool])
-    if lane == "buff" and tool == "layout" and slot == 1 then expected = 422 end
-    if lane == "buff" and tool == "style" and not player then expected = expected + 34 end
-    if lane == "debuff" and tool == "blacklist" and player then expected = 646 end
+    local expected = Expected(lane, tool, slot)
     local actual = entry.sections.auras._msuf2CollapsibleEntry.outer:GetHeight()
     assert(actual == expected, string.format("%s %s slot %d: outer height %d differs from 75ff89d0f (%d)",
         unit, lane .. ":" .. tool, slot, actual, expected))

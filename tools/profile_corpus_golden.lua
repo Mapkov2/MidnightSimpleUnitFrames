@@ -142,12 +142,13 @@ local NUMBER_WITH_TABLE = "attempt to compare number with table"
 local TABLE_WITH_NUMBER = "attempt to compare table with number"
 Corpus.HARNESS_ERRORS = {
     { "PLAYER_LOGIN", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "PLAYER_LOGIN", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
-    { "timer", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, MAINLINE_FAMILY },
+    -- The unit factory isolates each unit apply (stub frames always fail), so the
+    -- screen-cache scale read surfaces in a later timer-driven apply
+    -- instead of escaping PLAYER_LOGIN or the config notification.
+    { "timer", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
     { "timer", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "timer", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "Highlight.Refresh", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "MSUF_UFCore_NotifyConfigChanged", "MSUF_UF_Runtime.lua", TABLE_WITH_NUMBER, MAINLINE_FAMILY },
     { "MSUF_ApplyModules", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "MSUF_GF_RebuildAll", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ClassPower_Apply", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)",
