@@ -258,14 +258,27 @@ function UnitPage.BuildSectionLazy(ctx, builder, unit, spec)
     if type(spec) ~= "table" or type(spec.build) ~= "function" then return false end
     return BuildRegisteredSectionLazy(ctx, builder, unit, spec)
 end
-function UnitPage.BuildRegisteredSections(ctx, builder, unit, placement)
+local function BuildRegisteredArea(ctx, builder, unit, spec, sectionUX)
+    local function BuildView(areaCtx, areaBuilder, areaUnit)
+        local lazy = UnitPage.BuildSectionLazy
+        if spec.lazy ~= false and lazy then return lazy(areaCtx, areaBuilder, areaUnit, spec) end
+        return spec.build(areaCtx, areaBuilder, areaUnit, spec)
+    end
+    return M.BuildPageArea(ctx, builder, unit, {
+        id = spec.area.id, selector = spec.area.selector, values = spec.area.values,
+        build = BuildView, sectionUX = sectionUX,
+    })
+end
+function UnitPage.BuildRegisteredSections(ctx, builder, unit, placement, sectionUX)
     for i = 1, #UNIT_SECTION_REGISTRY do
         local spec = UNIT_SECTION_REGISTRY[i]
         if spec
             and spec.placement == placement
             and UnitSectionSupportsUnit(spec, unit)
         then
-            if spec.lazy ~= false then
+            if spec.area then
+                BuildRegisteredArea(ctx, builder, unit, spec, sectionUX)
+            elseif spec.lazy ~= false then
                 BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             else
                 spec.build(ctx, builder, unit, spec)

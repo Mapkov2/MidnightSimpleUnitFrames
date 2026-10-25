@@ -148,7 +148,7 @@ local function MeasureWorkspaceBar(values, width, centerY)
     })
 end
 
-function M.BuildAuras3UnitSection(ctx, builder, unit)
+local function BuildUnitAuraWorkspace(ctx, builder, unit)
     if not Model.UnitSupported(unit) then return end
     -- Custom container writes call this on every slider tick: one call, inline.
     ctx._auraAppearancePreviewRefresh = function(reason)
@@ -170,6 +170,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local customContainerContract = UnitCustomContainerContract(unit)
     local outer = AurasPage.Section(builder, "auras", "Auras", 120, false)
     local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
+    ctx:TrackPageAreaContentLayout(auraBuilder)
     local sectionW = auraBuilder.width or 720
     local tools = normalLane and UNIT_AURA_NORMAL_TOOLS
         or (currentTab == "custom4"
@@ -215,6 +216,13 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     BuildUnitWorkspaceFooter(ctx, top, unit, currentTab, normalLane, footerY, sectionW)
 
     BuildUnitWorkspaceTool(ctx, auraBuilder, unit, currentTab, currentTool, normalLane)
+end
+function M.BuildAuras3UnitSection(ctx, builder, unit, sectionUX)
+    if not Model.UnitSupported(unit) then return end
+    return M.BuildPageArea(ctx, builder, unit, {
+        id = "auras", selector = M.UnitAuraWorkspaceView, values = Parts.UnitAuraWorkspaceValues(unit),
+        build = BuildUnitAuraWorkspace, sectionUX = sectionUX,
+    })
 end
 local function BuildMovedAuraPage(ctx)
     local b = W.PageBuilder(ctx)

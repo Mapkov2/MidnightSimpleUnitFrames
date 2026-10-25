@@ -1370,6 +1370,116 @@
     {
       "test": "tools/tests/menu_schema_setter_parity_compare_smoke.lua",
       "phase": "menu"
+    },
+    {
+      "test": "tools/tests/menu_page_area_declaration_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "declarations"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_declaration_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "normalize"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_declaration_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "eager"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_declaration_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "eager_nil"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_declaration_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "shared_ux"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_heights_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "player"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_heights_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "target"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_area_heights_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "target",
+        "wide"
+      ]
     }
   ],
   "excluded": {

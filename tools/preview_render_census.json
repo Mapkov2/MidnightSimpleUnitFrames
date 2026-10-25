@@ -357,7 +357,7 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "2e80dde599ae5fb5b78d3d4323a4ec960ba79a66484431169211a4132ab47edb"
+          "source_sha256": "cf76196cc32053c9d063e328745682682610fa26822d4853b03832b72e76eaa5"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
@@ -373,7 +373,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "c705260b346231c79c16f4dbde4f2b13ab8521ce3e7ed4dbcca9de89822fb332"
+          "source_sha256": "13ae8d05f3d2ca9cb4900971c5843056f8f2f9c9af7ce6bb61a49b761164ddff"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",

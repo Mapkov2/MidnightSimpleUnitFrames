@@ -210,53 +210,9 @@ function M.ResolvePendingFixedPreviewExpansion(frame)
 end
 -- Logical view keys still drive selection/search; unit pages store only their
 -- structural layout and rebind each independent area inside that page.
-local function UnitTextureSlot(unit)
-    local slots = M.unitTexLayerSlot
-    local slot = tonumber(slots and slots[unit]) or 1
-    return slot >= 1 and slot <= 3 and slot or 1
-end
-local unitPageAreasInstalled = false
-local function InstallUnitPageAreas()
-    if unitPageAreasInstalled then return end
-    unitPageAreasInstalled = true
-    -- Keep the existing reset/copy/summary contract for newly selected areas.
-    local shared = M.UnitSectionsShared
-    local attach = shared.AttachSectionUX
-    shared.AttachSectionUX = function(ctx, options)
-        ctx.entry._msuf2SectionUXOptions = options
-        return attach(ctx, options)
-    end
-    local auraBuild = M.BuildAuras3UnitSection
-    M.BuildAuras3UnitSection = function(ctx, builder, unit)
-        return M.BuildPageArea(ctx, builder, "auras", unit, M.UnitAuraWorkspaceView, 34, auraBuild)
-    end
-    for _, spec in ipairs(M.UnitPage._sectionRegistry) do
-        if spec.id == "texture_layer" then
-            local original = {}
-            for name, value in pairs(spec) do original[name] = value end
-            -- Same lazy/eager contract as UnitPage.BuildRegisteredSections; the
-            -- search projector clears BuildSectionLazy to force eager builds.
-            local function BuildTextureArea(ctx, builder, unit)
-                local buildLazy = M.UnitPage.BuildSectionLazy
-                if original.lazy ~= false and buildLazy then return buildLazy(ctx, builder, unit, original) end
-                return original.build(ctx, builder, unit, original)
-            end
-            spec.lazy = false
-            spec.build = function(ctx, builder, unit)
-                return M.BuildPageArea(ctx, builder, "texture", unit, UnitTextureSlot, 3, BuildTextureArea)
-            end
-        end
-    end
-end
-
 local function UnitTexturePageView(key, spec)
     local unit = key:match("^uf_(.+)$")
     if not unit then return end
-    local build = spec.build
-    spec.build = function(ctx)
-        InstallUnitPageAreas()
-        return build(ctx)
-    end
     local viewKey = spec.variantKey
     spec.variantKey = function(pageKey)
         local slots = M.unitTexLayerSlot

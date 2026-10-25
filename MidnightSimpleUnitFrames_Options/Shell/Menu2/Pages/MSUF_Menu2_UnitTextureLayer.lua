@@ -19,6 +19,20 @@ local max = math.max
 -- control set. This file only reorganizes the existing profile keys; runtime
 -- interpretation remains owned by UnitFrames/Effects/MSUF_UF_TextureLayer.lua.
 local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
+local TEXLAYER_SLOT_CHOICES = {
+    { value = 1, text = "Texture 1" },
+    { value = 2, text = "Texture 2" },
+    { value = 3, text = "Texture 3" },
+}
+local TEXLAYER_SLOT_VALUES = {}
+for i = 1, #TEXLAYER_SLOT_CHOICES do TEXLAYER_SLOT_VALUES[i] = TEXLAYER_SLOT_CHOICES[i].value end
+local function NormalizeSlot(value)
+    local slot = tonumber(value)
+    return SLOT_PREFIXES[slot] and slot or TEXLAYER_SLOT_VALUES[1]
+end
+local function CurrentTextureSlot(unit)
+    return NormalizeSlot(M.unitTexLayerSlot and M.unitTexLayerSlot[unit])
+end
 local TEXLAYER_ANCHORS = VTP("TOPLEFT=Top Left|TOP=Top|TOPRIGHT=Top Right|LEFT=Left|CENTER=Center|RIGHT=Right|BOTTOMLEFT=Bottom Left|BOTTOM=Bottom|" ..
     "BOTTOMRIGHT=Bottom Right")
 local TEXLAYER_ANCHOR_TARGETS = VTP "FRAME=Whole frame|HEALTH=Health bar|POWER=Power bar|PORTRAIT=Portrait"
@@ -281,11 +295,6 @@ local function TextureLayerActions(ctx, unit, s)
 
     M.unitTexLayerSlot = M.unitTexLayerSlot or {}
     M.unitTexLayerTab = M.unitTexLayerTab or {}
-    local function NormalizeSlot(value)
-        local slot = tonumber(value) or 1
-        if slot < 1 or slot > #SLOT_PREFIXES then slot = 1 end
-        return slot
-    end
     local function CurrentSlot()
         return NormalizeSlot(M.unitTexLayerSlot[unit])
     end
@@ -839,18 +848,13 @@ local function TextureLayerSelectors(ctx, s)
             end,
         }
     end
-    local slotValues = {
-        { value = 1, text = "Texture 1" },
-        { value = 2, text = "Texture 2" },
-        { value = 3, text = "Texture 3" },
-    }
     local tabValues = {}
     for i = 1, #TEXLAYER_TABS do
         tabValues[i] = { value = TEXLAYER_TABS[i], text = TEXLAYER_TAB_TEXTS[TEXLAYER_TABS[i]] }
     end
     Schema.Build(ctx, sec, {
         { "scopebar", "texture_layer.slot_bar", nil, { {
-            values = slotValues,
+            values = TEXLAYER_SLOT_CHOICES,
             width = sectionW,
             label = "Texture:",
             labelX = leftX,
@@ -944,5 +948,6 @@ if type(UP.RegisterSection) == "function" then
         placement = "after_load_conditions",
         order = 30,
         build = BuildTextureLayer,
+        area = { id = "texture", selector = CurrentTextureSlot, values = TEXLAYER_SLOT_VALUES },
     })
 end

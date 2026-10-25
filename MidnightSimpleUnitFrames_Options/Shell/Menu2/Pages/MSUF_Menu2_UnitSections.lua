@@ -135,7 +135,7 @@ local BuildLayout, BuildInlineText, BuildStatus, BuildLoadConditions, BuildBossL
     { Core = Core, RequestUnitApply = RequestUnitRuntimeApply }
 )
 
-local function AttachUnitSectionUX(ctx, unit)
+local function UnitSectionUX(unit)
     local fields = UP.SectionFields or {}
     local sections = {
         -- frameBarShape has no Basics control any more, but the rounded surface still
@@ -177,7 +177,7 @@ local function AttachUnitSectionUX(ctx, unit)
             targets[#targets + 1] = { value = key, text = UnitTopLabelKey(key) }
         end
     end
-    UnitSectionShared.AttachSectionUX(ctx, {
+    return {
         sections = sections, targets = targets, scope = function() return unit end, conf = GetConf, label = UnitTopLabel,
         targetOff = function(key) return not UnitFrameEnabled(key) end,
         defaults = function(scope)
@@ -193,7 +193,7 @@ local function AttachUnitSectionUX(ctx, unit)
             -- The frame bar shape decides whether the rounded runtime runs at all.
             if id == "frame_basics" then Core.ApplyRounded() end
         end,
-    })
+    }
 end
 local function PrepareBasicsSwitch(ctx, sec, unit)
     Schema.Section(sec, unit)
@@ -510,6 +510,7 @@ Preview.pages = {
 local function BuildUnitPage(info)
     return function(ctx)
         local unit = info.unit
+        local sectionUX = UnitSectionUX(unit)
         local pagePreview = Preview.pages[unit]
         if pagePreview and ctx and ctx.wrapper then Preview.TrackPage(ctx, pagePreview) end
         local builder = W.PageBuilder(ctx)
@@ -522,13 +523,13 @@ local function BuildUnitPage(info)
         if UNIT_AURAS_MENU_UNITS[unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.
-            M.BuildAuras3UnitSection(ctx, builder, unit)
+            M.BuildAuras3UnitSection(ctx, builder, unit, sectionUX)
         end
-        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_auras") end
+        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_auras", sectionUX) end
         if unit == "target" then
             LazySection(ctx, builder, unit, BuildInlineText, "inline_text", "Inline Text", 214)
         end
-        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_inline_text") end
+        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_inline_text", sectionUX) end
         BuildStatus(ctx, builder, unit)
         if unit == "boss" then
             LazySection(ctx, builder, unit, BuildBossLayout, "boss_layout", "Boss Layout", 150)
@@ -538,8 +539,8 @@ local function BuildUnitPage(info)
             LazySection(ctx, builder, unit, BuildArenaLayout, "arena_layout", "Arena Layout", 160)
         end
         LazySection(ctx, builder, unit, BuildLoadConditions, "load_conditions", "Visibility", 210)
-        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_load_conditions") end
-        AttachUnitSectionUX(ctx, unit)
+        if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, unit, "after_load_conditions", sectionUX) end
+        UnitSectionShared.AttachSectionUX(ctx, sectionUX)
         M.TrackRefresh(ctx, function()
             ApplyUnitFrameEnabledGate(ctx, unit)
         end)

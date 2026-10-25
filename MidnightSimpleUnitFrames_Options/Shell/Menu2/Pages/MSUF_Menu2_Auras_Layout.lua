@@ -192,23 +192,37 @@ local function SelectUnitWorkspaceLanes(tab)
     SetCurrentLane("auraStyleGFLane", tab)
     SetCurrentLane("auraFilterLane", tab)
 end
---- Each container/tool pair names an aura subview. PageLifecycle selects this
---- area independently of the texture slot; the rest of the unit page is shared.
+--- Each container/tool pair names a declared aura subview, independently of
+--- the texture slot; the rest of the unit page is shared. The finite values
+--- come from the same tab/tool lists that build the workspace selectors.
 local UNIT_AURA_VIEWS = {}
+local function WorkspaceValues(tabs, custom4Tools)
+    local values = {}
+    for i = 1, #tabs do
+        local tab = tabs[i].value
+        local tools = (tab == "buff" or tab == "debuff") and UNIT_AURA_NORMAL_TOOLS
+            or (tab == "custom4" and custom4Tools or UNIT_AURA_CUSTOM_TOOLS)
+        for j = 1, #tools do
+            local tool = tools[j].value
+            UNIT_AURA_VIEWS[tab] = UNIT_AURA_VIEWS[tab] or {}
+            UNIT_AURA_VIEWS[tab][tool] = tab .. ":" .. tool
+            values[#values + 1] = UNIT_AURA_VIEWS[tab][tool]
+        end
+    end
+    return values
+end
+local UNIT_AURA_WORKSPACE_VALUES = WorkspaceValues(UNIT_AURA_WORKSPACE_TABS, UNIT_AURA_TARGET_DOT_TOOLS)
+local UNIT_AURA_WORKSPACE_VALUES_PLAYER = WorkspaceValues(M._unitAuraWorkspaceTabsPlayer, M._unitAuraPlayerDefensiveTools)
+local UNIT_AURA_WORKSPACE_VALUES_PET = WorkspaceValues(UNIT_AURA_WORKSPACE_TABS_PET)
+function Parts.UnitAuraWorkspaceValues(unit)
+    if unit == "player" then return UNIT_AURA_WORKSPACE_VALUES_PLAYER end
+    if unit == "pet" then return UNIT_AURA_WORKSPACE_VALUES_PET end
+    return UNIT_AURA_WORKSPACE_VALUES
+end
 function M.UnitAuraWorkspaceView(unit)
     local tab = CurrentUnitAuraTab(unit)
     local tool = CurrentUnitAuraTool(unit, tab)
-    local byTab = UNIT_AURA_VIEWS[tab]
-    if not byTab then
-        byTab = {}
-        UNIT_AURA_VIEWS[tab] = byTab
-    end
-    local view = byTab[tool]
-    if not view then
-        view = tab .. ":" .. tool
-        byTab[tool] = view
-    end
-    return view
+    return UNIT_AURA_VIEWS[tab][tool]
 end
 
 local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)

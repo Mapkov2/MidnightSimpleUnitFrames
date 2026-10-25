@@ -172,12 +172,19 @@ function Shared.RestoreSectionValues(entry, keys, dst, src, reset)
     if reset then Schema.ResetSection(entry, keys, dst, src, Shared.FactoryProfile(), true) end
 end
 
-function Shared.AttachSectionUX(ctx, opts)
+local function SectionBelongsToRoot(section, root)
+    while section do
+        if section == root then return true end
+        section = section:GetParent()
+    end
+    return false
+end
+function Shared.AttachSectionUX(ctx, opts, root)
     if not (ctx and ctx.entry) then return end
     for id, spec in pairs(opts.sections) do
         local section = ctx.entry.sections and ctx.entry.sections[id]
         local entry = section and section._msuf2CollapsibleEntry
-        if entry and not entry._msuf2UXSummary then
+        if entry and not entry._msuf2UXSummary and (not root or SectionBelongsToRoot(section, root)) then
             local summary = Chrome(entry.header, "font", "section.summary",
                 { "GameFontHighlightSmall", "", T.colors.muted, "supporting" })
             summary:SetJustifyH("LEFT")

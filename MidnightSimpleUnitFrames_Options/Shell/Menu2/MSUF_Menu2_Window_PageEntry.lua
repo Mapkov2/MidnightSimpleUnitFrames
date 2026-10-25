@@ -389,8 +389,8 @@ local function RestorePageEntryRegistrations(entry)
     end
 end
 local PAGE_AREA_RELAYOUT = { skipStateRefresh = true }
--- Unit selection axes own independent subtrees: at most 34 aura views and
--- three texture slots per structural layout. Never retain their cross product.
+-- Unit selection axes own independent subtrees, bounded by the owning
+-- sections' finite declarations. Never retain their cross product.
 local function BelongsToArea(frame, host)
     while frame do
         if frame == host then return true end
@@ -466,18 +466,18 @@ local function RefreshPageAreaGuides(area)
 end
 local function SelectPageArea(area)
     local selected = area.select(area.unit)
+    if not area.values[selected] then selected = area.declaration.values[1] end
     if area.selected == selected then return false end
     ParkPageArea(area)
     local entry, view = area.ctx.entry, area.views[selected]
     if not view then
-        -- select is normalized by the owning control; these fixed counts bound
-        -- retained native trees without eviction (WoW never frees frames).
-        assert(area.count < area.limit, "page area exceeded its finite view budget")
+        -- Membership in the declaration bounds retained native trees without
+        -- eviction (WoW never frees frames).
         area.count = area.count + 1
         local host = PixelLayoutRegion(CreateFrame("Frame", nil, area.anchor))
         host:SetPoint("TOPLEFT", area.anchor, "TOPLEFT", 0, 0)
         host:SetSize(area.builder.width, 1)
-        view = { host = host, searchWidgets = {}, sections = {}, guidedRegions = {}, resizeCallbacks = {} }
+        view = { host = host, searchWidgets = {}, sections = {}, guidedRegions = {}, resizeCallbacks = {}, contentLayouts = {} }
         area.views[selected] = view
         local ctx = setmetatable({
             wrapper = host, refreshers = {}, _msuf2RefresherKeys = {}, _msuf2RefresherFns = {},
@@ -487,10 +487,22 @@ local function SelectPageArea(area)
         function ctx:AddResizeCallback(fn)
             view.resizeCallbacks[#view.resizeCallbacks + 1] = fn
         end
+        function ctx:TrackPageAreaContentLayout(nestedBuilder)
+            local nestedCtx = nestedBuilder.ctx
+            local layout = { builder = nestedBuilder, setHeight = nestedCtx.SetContentHeight, paddingByView = {} }
+            view.contentLayouts[#view.contentLayouts + 1] = layout
+            -- This is this view's own context method, never a shared builder/provider.
+            function nestedCtx:SetContentHeight(height, options)
+                layout.padding = height - math.abs(nestedBuilder.y)
+                return layout.setHeight(self, height, options)
+            end
+        end
         local builder
         builder = W.PageBuilder(ctx, { parent = host, width = area.builder.width, contentX = 0,
             onContentHeight = function(height)
-                local size = math.max(1, height - 42)
+                -- The builder owns its cursor and page-end padding. Only its
+                -- occupied span belongs inside the enclosing page area.
+                local size = math.max(1, math.abs(builder.y))
                 host:SetHeight(size)
                 if area.active == view then
                     area.anchor:SetHeight(size)
@@ -503,10 +515,11 @@ local function SelectPageArea(area)
         local incomplete = entry._msuf2BuildIncomplete
         entry._msuf2BuildIncomplete = true
         area.build(ctx, builder, area.unit)
-        if entry._msuf2SectionUXOptions then M.UnitSectionsShared.AttachSectionUX(ctx, entry._msuf2SectionUXOptions) end
+        if area.declaration.sectionUX then M.UnitSectionsShared.AttachSectionUX(ctx, area.declaration.sectionUX, host) end
         ctx._msuf2Building = nil
         entry._msuf2BuildIncomplete = incomplete
         SettlePageArea(area, view)
+        for _, layout in ipairs(view.contentLayouts) do layout.initialPadding = layout.padding end
     else
         area.active, area.selected = view, selected
         for i = 1, #view.searchWidgets do entry.searchWidgets[#entry.searchWidgets + 1] = view.searchWidgets[i] end
@@ -521,15 +534,18 @@ local function SelectPageArea(area)
     view.host:Show()
     return true
 end
-function M.BuildPageArea(ctx, builder, id, unit, select, limit, build)
+function M.BuildPageArea(ctx, builder, unit, declaration)
     local anchor = PixelLayoutRegion(CreateFrame("Frame", nil, builder.parent))
     anchor:SetSize(builder.width, 1)
     anchor:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
-    local area = { ctx = ctx, builder = builder, anchor = anchor, unit = unit,
-        select = select, limit = limit, build = build, views = {}, count = 0,
+    local values = {}
+    for i = 1, #declaration.values do values[declaration.values[i]] = i end
+    local area = { ctx = ctx, builder = builder, anchor = anchor, unit = unit, declaration = declaration,
+        select = declaration.selector, limit = #declaration.values, values = values,
+        build = declaration.build, views = {}, count = 0,
         guidedBase = tonumber(ctx.entry._msuf2GuidedTourOrder) or 0 }
     ctx.entry.pageAreas = ctx.entry.pageAreas or {}
-    ctx.entry.pageAreas[id] = area
+    ctx.entry.pageAreas[declaration.id] = area
     ctx:AddResizeCallback(function()
         local callbacks = area.active.resizeCallbacks
         for i = 1, #callbacks do callbacks[i]() end
@@ -544,7 +560,38 @@ function M.BuildPageArea(ctx, builder, id, unit, select, limit, build)
         RefreshPageAreaGuides(area)
     end)
 end
+-- Before areas were shared, a logical view built open kept its builder's
+-- construction padding; opening a closed view settled it with relayout padding.
+-- Retain only that provenance (numbers), not another tree for each combination.
+local function PageAreaProjectionKey(entry)
+    local parts = {}
+    for id, area in pairs(entry.pageAreas or {}) do
+        parts[#parts + 1] = id .. ":" .. area.values[area.selected]
+    end
+    table.sort(parts)
+    return table.concat(parts, "|")
+end
+local function SavePageAreaPadding(entry, key)
+    for _, area in pairs(entry.pageAreas or {}) do
+        for _, layout in ipairs(area.active.contentLayouts) do
+            layout.paddingByView[key] = layout.padding
+        end
+    end
+end
+local function RestorePageAreaPadding(entry, key)
+    for _, area in pairs(entry.pageAreas or {}) do
+        for _, layout in ipairs(area.active.contentLayouts) do
+            local padding = layout.paddingByView[key] or layout.initialPadding
+            if padding then
+                layout.padding = padding
+                local builder = layout.builder
+                layout.setHeight(builder.ctx, math.abs(builder.y) + padding)
+            end
+        end
+    end
+end
 function M.RefreshPageAreas(entry)
+    SavePageAreaPadding(entry, PageAreaProjectionKey(entry))
     local changed = false
     for _, area in pairs(entry.pageAreas or {}) do
         if SelectPageArea(area) then changed = true end
@@ -553,6 +600,7 @@ function M.RefreshPageAreas(entry)
     M.SearchBridge.ClearSearchRegistryPage(entry.key)
     RestorePageEntryRegistrations(entry)
     RehydratePageAccordion(entry)
+    RestorePageAreaPadding(entry, PageAreaProjectionKey(entry))
     for _, area in pairs(entry.pageAreas) do
         area.builder:RelayoutCollapsibles()
         RefreshPageAreaGuides(area)
