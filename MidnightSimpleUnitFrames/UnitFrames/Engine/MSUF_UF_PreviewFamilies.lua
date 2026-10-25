@@ -448,20 +448,27 @@ local function BuildLifecycle(kind, prefix, castbar, paint, clear, forcedKey)
     if cleanupPending ~= true and appliedActive == active and not (UF.Config and UF.Config.dirty == true)
       and lightReasons[refreshReason] == true and framesReady(active) then
       applyFrames(active)
-      if active then reapplyAlpha(refreshReason) end
+      if active and reapplyAlpha(refreshReason) == false then
+        cleanupPending = true
+        return false
+      end
       return true
     end
     -- Seed missing opponents before structural refresh, then repaint after it.
     applyFrames(active)
     UF.RefreshVisibilityDrivers(kind)
-    UF.RefreshElements(kind, REFRESH_ELEMENTS, refreshReason)
+    local applied = UF.RefreshElements(kind, REFRESH_ELEMENTS, refreshReason)
     UF.UpdateRuntime(kind, refreshReason)
     if active then applyFrames(true) end
-    reapplyAlpha(refreshReason)
+    if reapplyAlpha(refreshReason) == false then applied = false end
     MSUF.MSUF_Auras3.RequestScope(kind, baseReason)
     MSUF.Require(castbar, FILE)()
     local em2 = EditModeController
     if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then em2.Movers.SyncAll() end
+    if applied == false then
+      cleanupPending = true
+      return false
+    end
     appliedActive = active
     cleanupPending = nil
     return true

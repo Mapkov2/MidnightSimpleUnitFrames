@@ -89,7 +89,13 @@ local function ClearFrameOnUpdateScript(frame)
 end
 
 local CastbarRuntime = Castbars.Runtime
-local ApplyInterruptValues = CastbarRuntime and CastbarRuntime.ApplyInterruptValues
+local function RequireInterruptFunction(name, owner)
+    local provider = MSUF.Require(name, FILE, owner)
+    assert(type(provider) == "function", FILE .. " requires " .. name)
+    return provider
+end
+local ApplyInterruptValues = RequireInterruptFunction("ApplyInterruptValues", CastbarRuntime)
+local GetInterruptFeedbackDuration = RequireInterruptFunction("GetInterruptFeedbackDuration", Utils)
 
 local function ReleaseRuntimeActive(frame)
     if CastbarRuntime and CastbarRuntime.ReleaseActive then
@@ -906,21 +912,12 @@ local function ShowInterruptFeedback(frame, label)
     frame._msufActiveSpellID = nil
     frame._msufActiveCastBarID = nil
     frame._msufChanNilSince = nil
-    local getFeedbackDuration = Utils.GetInterruptFeedbackDuration
-    local duration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
+    local duration = GetInterruptFeedbackDuration()
     frame.interruptFeedbackEndTime = GetTime() + duration
 
     local reverseFill = Utils.GetReverseFillSafe and Utils.GetReverseFillSafe(frame, false) or false
     local interruptLabel = label or INTERRUPTED
-    if ApplyInterruptValues then
-        ApplyInterruptValues(CastbarRuntime, frame, 1, reverseFill, interruptLabel)
-    else
-        Runtime.ApplyInterruptBarVisuals(frame, {
-            barValue = 1,
-            reverseFill = reverseFill,
-            label = interruptLabel,
-        })
-    end
+    ApplyInterruptValues(CastbarRuntime, frame, 1, reverseFill, interruptLabel)
 
     frame._msufHideToken = (frame._msufHideToken or 0) + 1
     frame._msufPlayerInterruptHideToken = frame._msufHideToken

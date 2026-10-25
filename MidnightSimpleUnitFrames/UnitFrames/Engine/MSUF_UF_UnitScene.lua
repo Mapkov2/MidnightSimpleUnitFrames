@@ -399,7 +399,12 @@ function Scene:Compile()
 end
 
 --- Re-apply the spec (compiled now into this scene's own table) and paint the sample.
-function Scene:Refresh()
+local function FinishSceneRefresh(_, self)
+  UF.Layers.SetLevelBias(0)
+  if self.frame then CloseWindow(self.frame) end
+end
+
+local function RefreshScene(self)
   if InCombat() or self.shown ~= true then return false end
   local unit = self.unit
   local spec = self:Compile()
@@ -428,7 +433,10 @@ function Scene:Refresh()
   CloseWindow(frame)
   local layers = UF.Layers
   layers.SetLevelBias(self.level or 0)
-  UF.ApplySceneSpec(frame, spec, SCENE_MASK, "single", unit)
+  if UF.ApplySceneSpec(frame, spec, SCENE_MASK, "single", unit, FinishSceneRefresh, self) ~= true then
+    layers.SetLevelBias(0)
+    return false
+  end
   local rounded = UF.Decorators.RoundedFrames
   if rounded and rounded.active then
     OpenWindow(frame, unit, sample)
@@ -439,6 +447,11 @@ function Scene:Refresh()
   self:RefreshData(true)
   frame:Show()
   return true
+end
+
+function Scene:Refresh()
+  local ok, applied = MSUF.RunUnitFrameApply(RefreshScene, FinishSceneRefresh, self)
+  return ok and applied
 end
 
 --- Paint the sample again; no spec and no layout.

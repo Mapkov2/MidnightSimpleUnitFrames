@@ -67,7 +67,7 @@ function Framework:AttachFrame(frame, spec, mask)
     unit = frame.MSUFUnitKey or frame.unit,
     enabled = true,
   }
-  UF.ApplySpec(frame, spec, "MSUF_FRAME_ATTACH", mask or spec.elements or DefaultElementMask(frame))
+  if UF.ApplySpec(frame, spec, "MSUF_FRAME_ATTACH", mask or spec.elements or DefaultElementMask(frame)) ~= true then return nil end
   return frame
 end
 

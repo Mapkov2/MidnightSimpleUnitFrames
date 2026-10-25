@@ -1849,9 +1849,13 @@ ExportPublic("MSUF_SetCurrentProfileScreenReferenceHeight", function(height)
     end
   end
   Config.Refresh()
-  if UF.spawned and UF.Factory and UF.Factory.ForceReanchor then UF.Factory.ForceReanchor() end
-  if MSUF.GF and MSUF.GF.RefreshHeaderLayout then MSUF.GF.RefreshHeaderLayout() end
-  return true
+  local success = true
+  if UF.spawned and UF.Factory and UF.Factory.ForceReanchor then success = UF.Factory.ForceReanchor() ~= false end
+  if MSUF.GF and MSUF.GF.RefreshHeaderLayout then
+    local _, applied = MSUF.GF.RefreshHeaderLayout()
+    if applied == false then success = false end
+  end
+  return success
 end)
 
 local function MSUF_GetBossLayoutDelta(index, conf)

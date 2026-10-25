@@ -689,17 +689,30 @@ UF.RegisterElement("Alpha", Alpha)
 do
   local pendingAll
   local pendingUnits = {}
+  local requestSerial = 0
 
   local function Flush()
     if pendingAll then
-      pendingAll = nil
-      for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
-      return RefreshAllUnitAlphas()
+      local serial = requestSerial
+      local result = RefreshAllUnitAlphas()
+      if result ~= false and requestSerial == serial then
+        pendingAll = nil
+        for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
+      end
+      return result
     end
-    local did = false
-    for unit in pairs(pendingUnits) do
-      pendingUnits[unit] = nil
-      did = RefreshAllUnitAlphas(unit) or did
+    local units = {}
+    for unit in pairs(pendingUnits) do units[#units + 1] = unit end
+    local did
+    for i = 1, #units do
+      local unit = units[i]
+      local serial = pendingUnits[unit]
+      local result = RefreshAllUnitAlphas(unit)
+      if result == false then did = false
+      else
+        if pendingUnits[unit] == serial then pendingUnits[unit] = nil end
+        if did == nil then did = result end
+      end
     end
     return did
   end
@@ -709,8 +722,9 @@ do
       unit = tostring(unit or "")
       if unit == "" or unit == "*" then unit = nil end
     end
+    requestSerial = requestSerial + 1
     if unit then
-      pendingUnits[unit] = true
+      pendingUnits[unit] = requestSerial
     else
       pendingAll = true
     end

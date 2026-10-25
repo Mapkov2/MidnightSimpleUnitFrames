@@ -100,11 +100,12 @@ end
 
 local function FlushQueuedRefresh()
     refreshQueued = false
-    local state = pendingStateSet and pendingState or nil
-    local stateProvided = pendingStateSet
-    pendingState = nil
-    pendingStateSet = false
+    local state, stateProvided = pendingState, pendingStateSet
     ApplyState(state, stateProvided)
+    if not refreshQueued then
+        pendingState = nil
+        pendingStateSet = false
+    end
 end
 
 local function QueueRefresh(state, stateProvided)

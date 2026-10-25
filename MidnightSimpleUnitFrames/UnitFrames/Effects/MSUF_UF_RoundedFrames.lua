@@ -1501,7 +1501,6 @@ local function ApplyAll()
   UpdateMouseoverEdgeColor()
   UpdateRoundedMediaState()
   UpdateSlantedBarState()
-  MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
   groupIndicatorHotEnabled = enabled and RoundedGroupFramesEnabled() or false
   ApplyRoundedClassPower(enabled)
@@ -1509,6 +1508,7 @@ local function ApplyAll()
     roundedSurfaceActive = false
     ExportPublic("MSUF_RoundedUF_Active", nil)
     UpdateMouseoverHotState(false)
+    MSUF.__msufRoundedPending = nil
     return
   end
   if IsCombatLocked() then
@@ -1553,6 +1553,7 @@ local function ApplyAll()
       end
     end
   end
+  MSUF.__msufRoundedPending = nil
   if not enabled then
     roundedSurfaceActive = false
     ExportPublic("MSUF_RoundedUF_Active", nil)

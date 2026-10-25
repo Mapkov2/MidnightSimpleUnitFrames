@@ -423,7 +423,6 @@ local function ApplyRaidManagerMouse(manager, enabled)
     EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
     return
   end
-  raidManagerPendingMouse = nil
   if MouseEnabled(manager) ~= wanted then
     manager:EnableMouse(wanted)
   end
@@ -434,6 +433,7 @@ local function ApplyRaidManagerMouse(manager, enabled)
       button:EnableMouse(default and keepToggles)
     end
   end
+  raidManagerPendingMouse = nil
 end
 
 --- A collapse click fades a MOUSEOVER panel and hands a HIDDEN panel's toggles
@@ -721,8 +721,6 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   if not force and lastOwnershipSig == sig and not next(pendingHide) then
     return true
   end
-  lastOwnershipSig = sig
-
   if partyUsesMSUF then
     HidePartyFrames()
   else
@@ -744,6 +742,7 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   ApplyRaidManagerMode()
 
   RefreshRosterEventRegistration()
+  lastOwnershipSig = sig
   return true
 end
 
@@ -760,8 +759,10 @@ local function ScheduleApply(reason)
 end
 
 local function FlushPending()
-  for frame in next, pendingHide do
-    pendingHide[frame] = nil
+  local frames = {}
+  for frame in pairs(pendingHide) do frames[#frames + 1] = frame end
+  for i = 1, #frames do
+    local frame = frames[i]
     local info = frame and ownedFrames[frame]
     if info and info.hidden then
       if frame.Hide and not info.soft and not IsForbidden(frame) then
@@ -770,10 +771,10 @@ local function FlushPending()
       HookFrame(frame)
       ReparentHidden(frame)
     end
+    pendingHide[frame] = nil
   end
   if raidManagerPendingMouse ~= nil then
     local wanted = raidManagerPendingMouse
-    raidManagerPendingMouse = nil
     ApplyRaidManagerMouse(CompactRaidFrameManager, wanted)
   end
 end

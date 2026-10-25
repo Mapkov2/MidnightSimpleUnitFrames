@@ -550,6 +550,7 @@ end
 function GF.ApplyStructureSpec(frame, spec, reason, mask)
   if UF.ApplySpec(frame, spec, reason or UNIT_STRUCTURE_REASON, mask or BASIC_GROUP_MASK) ~= true then return false end
   GF.RebindGroupHotRuntime(frame, spec)
+  frame._msufGFRoleOverlayEnabled = spec.power.enabled
   return true
 end
 
@@ -778,12 +779,16 @@ local ROLE_OVERLAY_ELEMENTS = { "Health", "Power", "Text", "PowerText", "GroupVi
 function GF.RefreshFrameRoleOverlay(frame, withoutRoleIcon)
   local spec = frame and frame.MSUFSpec
   if not spec or (withoutRoleIcon and spec.status.role.enabled) then return end
-  local enabled = spec.power.enabled
+  -- The compiler mutates the reusable overlay. Compare with the last committed
+  -- power state so an unchanged retry cannot skip a failed apply.
+  local enabled = frame._msufGFRoleOverlayEnabled
   spec = GF.CompileSpec(frame._msufGFKind, frame, frame.MSUFUnitKey)
   if enabled == spec.power.enabled then return end
   frame._msufTextLayoutRevision = nil
-  UF.ApplyElementsToFrame(frame, ROLE_OVERLAY_ELEMENTS, spec, UNIT_CHANGED_REASON)
+  local applied = UF.ApplyElementsToFrame(frame, ROLE_OVERLAY_ELEMENTS, spec, UNIT_CHANGED_REASON)
+  if applied == true then frame._msufGFRoleOverlayEnabled = spec.power.enabled end
   if InCombat() then GF.MarkDirty(frame, GF.DIRTY_GEOMETRY + GF.DIRTY_LAYOUT) end
+  return applied
 end
 
 local function RunChildUnitRebind(self, visual, rawUnit, oldUnit, kind)

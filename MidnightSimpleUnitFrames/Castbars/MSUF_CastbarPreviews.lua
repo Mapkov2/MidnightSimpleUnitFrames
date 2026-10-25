@@ -475,8 +475,8 @@ end
 
 local function FlushPoolPreviewsPending()
     if poolPreviewsPending then
-        poolPreviewsPending = false
         RefreshPoolPreviews()
+        poolPreviewsPending = false
     end
 end
 

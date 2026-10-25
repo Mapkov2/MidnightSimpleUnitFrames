@@ -26,11 +26,12 @@ function Kit.NewHost(parent, opts)
   }, Host)
   -- One closure per host; a repaint request allocates nothing.
   host.run = function()
+    host.scheduled = nil
     if not host.queued then return end
-    host.queued = nil
-    local reason = host.reason
-    host.reason = nil
-    host:Refresh(reason)
+    local reason, serial = host.reason, host.serial
+    if host:Refresh(reason) ~= false and host.serial == serial then
+      host.queued, host.reason = nil, nil
+    end
   end
   return host
 end
@@ -56,7 +57,7 @@ function Host:Deactivate()
   if not self.active then return false end
   self.active = false
   -- A queued repaint finds its request cleared and ends.
-  self.queued, self.reason = nil, nil
+  self.queued, self.reason, self.scheduled = nil, nil, nil
   local opts = self.opts
   if opts.deactivate then opts.deactivate(self) end
   for kind in pairs(self.acquired) do self:ReleaseAll(kind) end
@@ -75,16 +76,17 @@ function Host:Refresh(reason)
   if not self.active then return false end
   local allowed = self.opts.allowed
   if allowed and not allowed(self) then return false end
-  self.opts.paint(self, reason)
-  return true
+  return self.opts.paint(self, reason) ~= false
 end
 
 function Host:Request(reason)
   if not self.active then return false end
   if self.opts.allowed and not self.opts.allowed(self) then return false end
   if reason ~= nil then self.reason = reason end
-  if self.queued then return true end
+  self.serial = (self.serial or 0) + 1
   self.queued = true
+  if self.scheduled then return true end
+  self.scheduled = true
   self.after(0, self.run)
   return true
 end

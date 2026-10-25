@@ -116,6 +116,7 @@ function UF.RefreshElements(unit, names, reason)
       elseif applied == true and result == nil then result = true end
     end
   end
+  if result == false then QueueDeferredElementRefresh(unit, names, reason) end
   return result
 end
 
@@ -505,51 +506,70 @@ end
 
 local function ApplyGroupPredictionSpec(frame, spec, unit, reason)
   UF.SetFrameSpec(frame, spec, unit)
-  UF.ApplyElementsToFrame(frame, GROUP_PREDICTION_ELEMENTS, spec, reason)
+  if UF.ApplyElementsToFrame(frame, GROUP_PREDICTION_ELEMENTS, spec, reason) ~= true then return false end
   UF.ApplyPredictionAlphaFills(frame, spec, true)
   UF.elements.GroupRangeFade.RecomposePredictionAlpha(frame)
+  return true
 end
 
 local function ApplyGroupTempMaxHealthSpec(frame, spec, unit, reason)
   UF.SetFrameSpec(frame, spec, unit)
-  UF.ApplyElementToFrame(frame, "TempMaxHealth", spec, reason)
+  return UF.ApplyElementsToFrame(frame, TEMP_MAX_HEALTH_ELEMENTS, spec, reason)
 end
 
--- Recompiles the spec of every group frame in scope and hands it to
--- apply(frame, spec, unit, reason). True when at least one frame was applied.
-local function RefreshGroupSpecs(scope, reason, apply)
+local function RefreshGroupSpecFrame(frame, unit, kind, state)
+  if GroupPredictionScopeMatches(kind, state.scope) ~= true then return end
+  if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
+  local spec = MSUF.GF.CompileSpec(kind, frame, unit)
+  if not spec then return false end
+  return state.apply(frame, spec, unit, state.reason)
+end
+
+local function RunGroupSpecs(state)
   local GF = MSUF.GF
-  local did = false
-  InvalidateGroupPredictionSpecs(GF, scope)
-  GF.ForEachFrame(function(frame, unit, kind)
-    if GroupPredictionScopeMatches(kind, scope) ~= true then return end
-    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
-    local spec = GF.CompileSpec(kind, frame, unit)
-    if spec then
-      apply(frame, spec, unit, reason)
-      did = true
-    end
-  end, true)
-  return did
+  InvalidateGroupPredictionSpecs(GF, state.scope)
+  state.did, state.success = GF.ForEachFrame(RefreshGroupSpecFrame, true, state)
+end
+
+local function FinishGroupSpecs(ok, state)
+  if ok and state.success ~= false then return end
+  -- The normal group replay is a superset of this selection. Keep it reachable
+  -- before reporting, including when the client's error reporter itself raises.
+  local scope = state.scope
+  if scope == "party" or scope == "gf_party" then scope = "party"
+  elseif scope == "mythicraid" or scope == "gf_mythicraid" then scope = "mythicraid"
+  else scope = nil end
+  MSUF.GF.DeferGroupRuntime("refresh", scope, MSUF.GF.DIRTY_VISUAL)
+end
+
+local function RefreshGroupSpecs(scope, reason, apply)
+  local state = { scope = scope, reason = reason, apply = apply }
+  local ok = MSUF.RunUnitFrameApply(RunGroupSpecs, FinishGroupSpecs, state)
+  if not ok or state.success == false then return false end
+  if state.did then return true end
 end
 
 function UF.RefreshPredictionBars(scope, reason, skipUnitFrames)
   reason = reason or "MSUF2_ABSORB"
-  local did = false
+  local did
   if skipUnitFrames ~= true then
     local selectedValue2
     if not (scope == "shared") then selectedValue2 = scope end
-    did = UF.RefreshElements(selectedValue2, PREDICTION_ELEMENTS, reason) or false
+    did = UF.RefreshElements(selectedValue2, PREDICTION_ELEMENTS, reason)
   end
-  return RefreshGroupSpecs(scope, reason, ApplyGroupPredictionSpec) or did
+  local group = RefreshGroupSpecs(scope, reason, ApplyGroupPredictionSpec)
+  if did == false or group == false then return false end
+  return group or did or false
 end
 
 function UF.RefreshTempMaxHealth(scope, reason)
   reason = reason or "MSUF2_TEMP_MAX_HEALTH"
   local selectedValue1
   if not (scope == "shared") then selectedValue1 = scope end
-  local did = UF.RefreshElements(selectedValue1, TEMP_MAX_HEALTH_ELEMENTS, reason) or false
-  return RefreshGroupSpecs(scope, reason, ApplyGroupTempMaxHealthSpec) or did
+  local did = UF.RefreshElements(selectedValue1, TEMP_MAX_HEALTH_ELEMENTS, reason)
+  local group = RefreshGroupSpecs(scope, reason, ApplyGroupTempMaxHealthSpec)
+  if did == false or group == false then return false end
+  return group or did or false
 end
 
 function UF.RefreshPowerLayout(unit)

@@ -59,7 +59,13 @@ local tonumber = tonumber
 local tostring = tostring
 local castbarEngine = Castbars.Engine
 local castbarRuntime = Castbars.Runtime
-local ApplyInterruptValues = castbarRuntime and castbarRuntime.ApplyInterruptValues
+local function RequireInterruptFunction(name, owner)
+    local provider = MSUF.Require(name, FILE, owner)
+    assert(type(provider) == "function", FILE .. " requires " .. name)
+    return provider
+end
+local ApplyInterruptValues = RequireInterruptFunction("ApplyInterruptValues", castbarRuntime)
+local GetInterruptFeedbackDuration = RequireInterruptFunction("GetInterruptFeedbackDuration", Utils)
 
 local function ScheduleDelayed(callback, delay)
     return ScheduleAfter(callback, delay, callback)
@@ -1514,18 +1520,8 @@ local function InstallDriverCastMethods(frame)
 
         local reverseFill = Utils.GetReverseFillSafe(self, false)
         local interruptLabel = Driver.Castbar_ResolveInterruptLabel(interruptedBy, self.unit, INTERRUPTED)
-        if ApplyInterruptValues then
-            ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
-        else
-            Runtime.ApplyInterruptBarVisuals(self, {
-                barValue = 1,
-                reverseFill = reverseFill,
-                label = interruptLabel,
-            })
-        end
-
-        local getFeedbackDuration = Utils.GetInterruptFeedbackDuration
-        local feedbackDuration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
+        ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
+        local feedbackDuration = GetInterruptFeedbackDuration()
 
         if self._msufCastState then
             local now = (type(GetTime) == "function") and GetTime() or 0

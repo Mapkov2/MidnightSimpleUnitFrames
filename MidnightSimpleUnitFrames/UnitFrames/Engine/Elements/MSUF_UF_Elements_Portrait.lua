@@ -596,22 +596,24 @@ local function ApplyPortraitClickTarget(frame, p)
       portraitClickReplay = CreateFrame("Frame")
       portraitClickReplay:SetScript("OnEvent", function(self)
         if InCombatLockdown and InCombatLockdown() then return end
-        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        for pending in pairs(pendingPortraitClicks) do
-          pendingPortraitClicks[pending] = nil
+        local frames = {}
+        for pending in pairs(pendingPortraitClicks) do frames[#frames + 1] = pending end
+        for i = 1, #frames do
+          local pending = frames[i]
           ApplyPortraitClickTarget(pending, pending._msufPortraitRuntimeCfg)
         end
+        if next(pendingPortraitClicks) == nil then self:UnregisterEvent("PLAYER_REGEN_ENABLED") end
       end)
     end
     portraitClickReplay:RegisterEvent("PLAYER_REGEN_ENABLED")
     return
   end
-  pendingPortraitClicks[frame] = nil
   local button = frame.MSUFPortraitClickTarget
   local enabled = p and p.enabled == true and p.clickable == true
     and frame._msufGFIsPreviewFrame ~= true
   if not enabled then
     if button then button:Hide() end
+    pendingPortraitClicks[frame] = nil
     return
   end
   if not button then
@@ -639,6 +641,7 @@ local function ApplyPortraitClickTarget(frame, p)
   end
   button:SetFrameLevel(frame.MSUFPortraitHolder:GetFrameLevel() + 1)
   button:Show()
+  pendingPortraitClicks[frame] = nil
 end
 
 -- The cast spell icon must not overwrite frame.portrait. SetPortraitTexture is

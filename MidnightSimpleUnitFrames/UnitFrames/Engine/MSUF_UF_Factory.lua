@@ -392,8 +392,8 @@ local function ApplyPosition(frame, spec)
     frame._msufHardLockPoint = nil
     frame._msufLoadedFromScreenCache = nil
   end
-  frame._msufExternalAnchorFrozen = nil
   ApplyBossPhysicalBarGeometry(frame)
+  frame._msufExternalAnchorFrozen = nil
   return true
 end
 
@@ -655,6 +655,19 @@ function Factory.Apply(unit, applyMask)
   return ok and state.applied
 end
 
+local function FinishForcedPosition(ok, frame)
+  if not ok then DeferApply(frame.MSUFUnitKey) end
+end
+
+local function ForceFramePosition(frame, spec)
+  local ok, applied = MSUF.RunUnitFrameApply(ApplyPosition, FinishForcedPosition, frame, spec)
+  if not ok or applied == false then
+    DeferApply(frame.MSUFUnitKey)
+    return false
+  end
+  return true
+end
+
 function Factory.ForceReanchor(unit)
   -- This is deliberately separate from ApplyPosition's hot comparison path.
   -- Zoning/recovery callers invalidate once; normal config applies stay O(1)
@@ -667,21 +680,22 @@ function Factory.ForceReanchor(unit)
   if not config then return false end
   local units = unit and UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
   if unit and not units then return false end
+  local success = true
   if units then
     for i = 1, #units do
       local frame = UF.frames[units[i]]
       local spec = frame and config.GetSpec(units[i])
-      if spec then ApplyPosition(frame, spec) end
+      if spec and ForceFramePosition(frame, spec) == false then success = false end
     end
   else
     for i = 1, #UF.unitOrder do
       local managedUnit = UF.unitOrder[i]
       local frame = UF.frames[managedUnit]
       local spec = frame and config.GetSpec(managedUnit)
-      if spec then ApplyPosition(frame, spec) end
+      if spec and ForceFramePosition(frame, spec) == false then success = false end
     end
   end
-  return true
+  return success
 end
 
 local externalAnchorRefreshAfterCombat = {}
@@ -695,17 +709,26 @@ local externalAnchorRefreshedSinceCombat = {}
 
 local function FlushExternalAnchorRefreshAfterCombat()
   local pending = externalAnchorRefreshAfterCombat
-  externalAnchorRefreshAfterCombat = {}
-  for name in pairs(pending) do Factory.RefreshExternalAnchor(name) end
+  local names = {}
+  for name in pairs(pending) do names[#names + 1] = name end
+  for i = 1, #names do
+    local name = names[i]
+    Factory.RefreshExternalAnchor(name)
+  end
 end
 
 local function FlushScheduledExternalAnchorRefresh()
   externalAnchorRefreshScheduled = false
   local pending = externalAnchorRefreshPending
-  externalAnchorRefreshPending = {}
-  for name, mode in pairs(pending) do
-    if not (mode == "replay" and externalAnchorRefreshedSinceCombat[name]) then
-      Factory.RefreshExternalAnchor(name)
+  local names = {}
+  for name in pairs(pending) do names[#names + 1] = name end
+  for i = 1, #names do
+    local name = names[i]
+    local mode = pending[name]
+    if mode == "replay" and externalAnchorRefreshedSinceCombat[name] then
+      pending[name] = nil
+    elseif Factory.RefreshExternalAnchor(name) ~= false and pending[name] == mode then
+      pending[name] = nil
     end
   end
 end
@@ -785,43 +808,40 @@ local function ThawFrozenExternalAnchors()
   if InCombat() then return false end
   local did = false
   if frozenUnitAnchorProxies then
-    frozenUnitAnchorProxies = false
+    local success = true
     for _, proxy in pairs(unitExternalAnchorProxies) do
       if proxy._msufExternalAnchorFrozen and (proxy._msufUnitConsumerCount or 0) > 0 then
         -- Reattach the one shared rectangle. Unit roots never changed their
         -- own points, so thawing performs zero per-unit geometry writes.
-        did = AttachUnitExternalAnchorProxy(proxy, proxy._msufExternalAnchorSource) or did
+        local applied = AttachUnitExternalAnchorProxy(proxy, proxy._msufExternalAnchorSource)
+        if applied == false then success = false else did = applied or did end
       end
     end
+    frozenUnitAnchorProxies = not success
   end
   if frozenDirectUnitFrames then
-    frozenDirectUnitFrames = false
+    local success = true
     for i = 1, #UF.unitOrder do
       local frame = UF.frames and UF.frames[UF.unitOrder[i]]
       if frame and frame._msufExternalAnchorFrozen then
-        frame._msufExternalAnchorFrozen = nil
         local queuedName = frame._msufRequestedAnchorName
         if not (queuedName and externalAnchorRefreshAfterCombat[queuedName]) then
           local spec = frame.MSUFSpec
           if spec then
             InvalidateFramePositionCache(frame)
-            ApplyPosition(frame, spec)
-            if queuedName and IsCooldownViewerAnchor(queuedName) then
-              externalAnchorRefreshedSinceCombat[queuedName] = true
-            end
-            did = true
+            if ApplyPosition(frame, spec) == false then success = false
+            else did = true end
           end
+        else
+          success = false
         end
       end
     end
+    frozenDirectUnitFrames = not success
   end
   if frozenGroupAnchors then
-    frozenGroupAnchors = false
     local GF = MSUF.GF
     local anchors = GF and GF.anchors
-    if anchors then
-      for _, anchor in pairs(anchors) do anchor._msufExternalAnchorFrozen = nil end
-    end
     local db = MSUF_DB
     local replayCoversGroup = false
     if type(db) == "table" then
@@ -833,18 +853,24 @@ local function ThawFrozenExternalAnchors()
       end
     end
     if not replayCoversGroup and GF then
-      GF.RefreshHeaderLayout()
-      did = true
+      local _, success = GF.RefreshHeaderLayout()
+      if success ~= false then
+        if anchors then
+          for _, anchor in pairs(anchors) do anchor._msufExternalAnchorFrozen = nil end
+        end
+        frozenGroupAnchors = false
+        did = true
+      end
     end
   end
   if frozenClassPower then
-    frozenClassPower = false
-    local cp = MSUF_ClassPowerContainer
-    if cp then cp._msufExternalAnchorFrozen = nil end
     if not externalAnchorRefreshAfterCombat.EssentialCooldownViewer then
-      Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false })
-      externalAnchorRefreshedSinceCombat.EssentialCooldownViewer = true
-      did = true
+      if Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false }) ~= false then
+        local cp = MSUF_ClassPowerContainer
+        if cp then cp._msufExternalAnchorFrozen = nil end
+        frozenClassPower = false
+        did = true
+      end
     end
   end
   return did
@@ -860,7 +886,11 @@ function Factory.ScheduleExternalAnchorRefresh(frameName, replayOnly)
     return true
   end
   if replayOnly == true and externalAnchorRefreshedSinceCombat[frameName] then return true end
-  if externalAnchorRefreshAfterCombat[frameName] then return true end
+  if externalAnchorRefreshAfterCombat[frameName] then
+    if replayOnly ~= true then externalAnchorRefreshAfterCombat[frameName] = externalAnchorRefreshAfterCombat[frameName] + 1 end
+    Factory.EnsureDeferredDriver()
+    return true
+  end
   if externalAnchorRefreshPending[frameName] ~= true then
     externalAnchorRefreshPending[frameName] = replayOnly == true and "replay" or true
   end
@@ -886,8 +916,13 @@ local function DeferredOnEvent(self)
   if UF.ApplyDirty then UF.ApplyDirty() end
   ThawFrozenExternalAnchors()
   FlushExternalAnchorRefreshAfterCombat()
+  if next(externalAnchorRefreshPending) then FlushScheduledExternalAnchorRefresh() end
+  local late = MSUF.Optional("MSUF_LateAnchorReanchorState")
+  if late and late.failed then ScheduleLateAnchorReanchor(late.forcePosition) end
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
-  if next(UF.pendingApply) or next(UF.pendingElementRefreshes) or Factory.spawnPending then return end
+  if next(UF.pendingApply) or next(UF.pendingElementRefreshes) or Factory.spawnPending
+    or next(externalAnchorRefreshAfterCombat) or next(externalAnchorRefreshPending)
+    or frozenUnitAnchorProxies or frozenDirectUnitFrames or frozenGroupAnchors or frozenClassPower then return end
   deferredDriverArmed = false
   self:UnregisterEvent("PLAYER_REGEN_ENABLED")
 end
@@ -924,6 +959,7 @@ local cooldownWidthVisualConfigMask = 0
 local cooldownWidthCastbarConfigMask = 0
 local cooldownAnchorConfigMask = 0
 local cooldownWidthRefreshPending = false
+local cooldownWidthRefreshSerial = 0
 local cooldownWidthRefreshPendingMask = 0
 local cooldownWidthVisualPendingMask = 0
 local cooldownWidthRefreshAfterCombatMask = 0
@@ -939,14 +975,9 @@ local function EnsureCooldownWidthRegenDriver()
     cooldownWidthRegenDriver = CreateFrame("Frame")
     cooldownWidthRegenDriver:SetScript("OnEvent", function(self)
       if InCombat() then return end
-      cooldownWidthRegenArmed = false
-      self:UnregisterEvent("PLAYER_REGEN_ENABLED")
       local refreshMask = cooldownWidthRefreshAfterCombatMask
       local visualMask = cooldownWidthVisualAfterCombatMask
       local observe = cooldownWidthObserverAfterCombat
-      cooldownWidthRefreshAfterCombatMask = 0
-      cooldownWidthVisualAfterCombatMask = 0
-      cooldownWidthObserverAfterCombat = false
       if observe then
         EnsureCooldownWidthObservers(true)
         -- The source could not fire callbacks before its protected hook was
@@ -959,6 +990,11 @@ local function EnsureCooldownWidthRegenDriver()
       if visualMask ~= 0 then ScheduleCooldownWidthRefresh(visualMask, false, true, true) end
       local castbarOnlyMask = MaskSubtract(refreshMask, visualMask)
       if castbarOnlyMask ~= 0 then ScheduleCooldownWidthRefresh(castbarOnlyMask, true, true) end
+      cooldownWidthRefreshAfterCombatMask = 0
+      cooldownWidthVisualAfterCombatMask = 0
+      cooldownWidthObserverAfterCombat = false
+      cooldownWidthRegenArmed = false
+      self:UnregisterEvent("PLAYER_REGEN_ENABLED")
     end)
   end
   cooldownWidthRegenArmed = true
@@ -985,14 +1021,16 @@ local function FlushCooldownWidthRefresh()
     EnsureCooldownWidthRegenDriver()
     return false
   end
+  local serial = cooldownWidthRefreshSerial
   local requestedMask = cooldownWidthRefreshPendingMask
   local requestedVisualMask = cooldownWidthVisualPendingMask
   cooldownWidthRefreshPending = false
-  cooldownWidthRefreshPendingMask = 0
-  cooldownWidthVisualPendingMask = 0
   local configuredMask, visualMask, castbarMask = ConfiguredCooldownWidthMask()
   local refreshMask = MaskIntersect(requestedMask, configuredMask)
-  if refreshMask == 0 then return false end
+  if refreshMask == 0 then
+    cooldownWidthRefreshPendingMask, cooldownWidthVisualPendingMask = 0, 0
+    return false
+  end
   local visualRefreshMask = MaskIntersect(requestedVisualMask, visualMask)
   local castbarRefreshMask = MaskIntersect(refreshMask, castbarMask)
 
@@ -1033,6 +1071,9 @@ local function FlushCooldownWidthRefresh()
   -- The unit preview belongs to the load-on-demand options addon.
   local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
   if refreshPreview then refreshPreview("MSUF_COOLDOWN_WIDTH_SOURCE") end
+  if cooldownWidthRefreshSerial == serial then
+    cooldownWidthRefreshPendingMask, cooldownWidthVisualPendingMask = 0, 0
+  end
   return true
 end
 
@@ -1059,6 +1100,7 @@ ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig, skip
     Factory.ScheduleExternalAnchorRefresh("EssentialCooldownViewer")
   end
   local requestedVisualMask = castbarOnly == true and 0 or MaskIntersect(requestedMask, visualMask)
+  cooldownWidthRefreshSerial = cooldownWidthRefreshSerial + 1
   if InCombat() then
     for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
       local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
@@ -1103,16 +1145,23 @@ end
 
 local function ObserveCooldownWidthFrame(frame, sourceBit, castbarOnly)
   if not IsCooldownViewerAnchorFrameUsable(frame) or not frame.HookScript then return false end
-  if not cooldownWidthHooked[frame] then
+  local stage = cooldownWidthHooked[frame] or 0
+  if stage ~= 3 then
     if InCombat() and frame.IsProtected and frame:IsProtected() then
       cooldownWidthObserverAfterCombat = true
       EnsureCooldownWidthRegenDriver()
       return false
     end
-    cooldownWidthHooked[frame] = true
-    frame:HookScript("OnSizeChanged", OnCooldownWidthSourceChanged)
-    frame:HookScript("OnShow", OnCooldownWidthSourceChanged)
+    if stage < 1 then
+      frame:HookScript("OnSizeChanged", OnCooldownWidthSourceChanged)
+      cooldownWidthHooked[frame] = 1
+    end
+    if stage < 2 then
+      frame:HookScript("OnShow", OnCooldownWidthSourceChanged)
+      cooldownWidthHooked[frame] = 2
+    end
     frame:HookScript("OnHide", OnCooldownWidthSourceChanged)
+    cooldownWidthHooked[frame] = 3
   end
   if cooldownWidthActiveGeneration[frame] ~= cooldownWidthSourceGeneration then
     cooldownWidthActiveGeneration[frame] = cooldownWidthSourceGeneration
@@ -1148,8 +1197,10 @@ EnsureCooldownWidthObservers = function(force)
     return false
   end
 
-  cooldownWidthScannedGeneration = cooldownWidthSourceGeneration
-  if configuredMask == 0 then return false end
+  if configuredMask == 0 then
+    cooldownWidthScannedGeneration = cooldownWidthSourceGeneration
+    return false
+  end
   local found = false
   for i = 1, #COOLDOWN_WIDTH_SOURCE_NAMES do
     local sourceBit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
@@ -1164,6 +1215,7 @@ EnsureCooldownWidthObservers = function(force)
       found = ObserveCooldownWidthFrame(_G[COOLDOWN_WIDTH_CASTBAR_CONTAINERS[i]], sourceBit, true) or found
     end
   end
+  if not cooldownWidthObserverAfterCombat then cooldownWidthScannedGeneration = cooldownWidthSourceGeneration end
   return found
 end
 
@@ -1173,22 +1225,15 @@ ExportPublic("MSUF_EnsureCooldownWidthObservers", EnsureCooldownWidthObservers)
 -- Rebind consumers after a supported provider changes while out of combat.
 
 -- During combat the request is queued and replayed once after regen.
-function Factory.RefreshExternalAnchor(frameName)
-  if not IsCooldownViewerAnchor(frameName) then return false end
-  if InCombat() then
-    externalAnchorRefreshAfterCombat[frameName] = true
-    Factory.EnsureDeferredDriver()
-    return false
-  end
-  externalAnchorRefreshedSinceCombat[frameName] = true
-  local refreshed = false
+local function RunExternalAnchorRefresh(frameName)
+  local refreshed
   if UF.spawned then
     for i = 1, #UF.unitOrder do
       local frame = UF.frames and UF.frames[UF.unitOrder[i]]
       local spec = frame and frame.MSUFSpec
       if spec and (frame._msufRequestedAnchorName == frameName or spec.anchorFrameName == frameName) then
-        ApplyPosition(frame, spec)
-        refreshed = true
+        if ApplyPosition(frame, spec) == false then refreshed = false
+        elseif refreshed == nil then refreshed = true end
       end
     end
   end
@@ -1197,8 +1242,13 @@ function Factory.RefreshExternalAnchor(frameName)
     local db = MSUF_DB
     local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
     if bars and bars.classPowerAnchorToCooldown == true then
-      Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false })
-      refreshed = true
+      if Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false }) == false then refreshed = false
+      else
+        frozenClassPower = false
+        local cp = MSUF_ClassPowerContainer
+        if cp then cp._msufExternalAnchorFrozen = nil end
+        if refreshed == nil then refreshed = true end
+      end
     end
   end
 
@@ -1206,10 +1256,41 @@ function Factory.RefreshExternalAnchor(frameName)
   local GF = MSUF.GF
   if type(db) == "table" and GroupUsesExternalAnchor(db, frameName)
     and GF then
-    GF.RefreshHeaderLayout()
-    refreshed = true
+    local _, success = GF.RefreshHeaderLayout()
+    if success == false then refreshed = false
+    else
+      frozenGroupAnchors = false
+      if GF.anchors then
+        for _, anchor in pairs(GF.anchors) do anchor._msufExternalAnchorFrozen = nil end
+      end
+      if refreshed == nil then refreshed = true end
+    end
   end
   return refreshed
+end
+
+local function FinishExternalAnchorRefresh(ok)
+  if not ok then Factory.EnsureDeferredDriver() end
+end
+
+function Factory.RefreshExternalAnchor(frameName)
+  if not IsCooldownViewerAnchor(frameName) then return false end
+  local serial = (externalAnchorRefreshAfterCombat[frameName] or 0) + 1
+  externalAnchorRefreshAfterCombat[frameName] = serial
+  if InCombat() then
+    Factory.EnsureDeferredDriver()
+    return false
+  end
+  local ok, result = MSUF.RunUnitFrameApply(RunExternalAnchorRefresh, FinishExternalAnchorRefresh, frameName)
+  if not ok or result == false then
+    Factory.EnsureDeferredDriver()
+    return false
+  end
+  if externalAnchorRefreshAfterCombat[frameName] == serial then
+    externalAnchorRefreshAfterCombat[frameName] = nil
+    externalAnchorRefreshedSinceCombat[frameName] = true
+  end
+  return result
 end
 
 ExportPublic("MSUF_RefreshExternalUnitFrameAnchor", function(frameName)
@@ -1327,29 +1408,31 @@ end
 
 local function FlushLateAnchorReanchor(forcePosition)
   if InCombat() then return DeferLateAnchorReanchorForCombat(forcePosition) end
+  local success = true
   if forcePosition then
-    Factory.ForceReanchor()
+    if Factory.ForceReanchor() == false then success = false end
     local applyElements = UF.ApplyElementsToFrame
     local config = UF.Config
     if config then
       UF.ForEachFrame(function(frame)
         local spec = frame and config.GetSpec(frame.MSUFUnitKey)
         if spec then
-          applyElements(frame, STARTUP_TRANSPARENCY_ELEMENTS, spec, "MSUF_STARTUP_TRANSPARENCY")
+          if applyElements(frame, STARTUP_TRANSPARENCY_ELEMENTS, spec, "MSUF_STARTUP_TRANSPARENCY") == false then success = false end
         end
       end)
     end
   else
-    Factory.Apply()
+    if Factory.Apply() == false then success = false end
   end
-  Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false })
+  if Dep("MSUF_ClassPower_Apply")({ anchor = true, cdm = true, syncNow = false }) == false then success = false end
   local db = MSUF_DB
   local GF = MSUF.GF
   if type(db) == "table" and HasGroupLateAnchorConfig(db)
     and GF then
-    GF.RefreshHeaderLayout()
+    local _, applied = GF.RefreshHeaderLayout()
+    if applied == false then success = false end
   end
-  return true
+  return success
 end
 
 local LATE_ANCHOR_RETRY_DELAYS = { 0, 0.05, 0.15, 0.35, 0.75, 1.5 }
@@ -1371,8 +1454,14 @@ local function QueueLateAnchorReanchor(state, delay)
   return false
 end
 
-local function FinishLateAnchorReplay(_, force, state)
+local function FinishLateAnchorReplay(ok, force, state)
   state.flushing = false
+  if not ok then
+    state.forcePosition = force or state.forcePosition
+    state.failed = true
+    UF.MarkDirty(nil)
+    Factory.EnsureDeferredDriver()
+  end
 end
 
 FlushScheduledLateAnchorReanchor = function(state)
@@ -1385,6 +1474,12 @@ FlushScheduledLateAnchorReanchor = function(state)
   -- Release the cold replay latch before reporting, even when the client's
   -- error handler raises. Reentrant requests still use the bounded retry below.
   local ok, flushed = MSUF.RunUnitFrameApply(FlushLateAnchorReanchor, FinishLateAnchorReplay, force, state)
+  if not ok or flushed == false then
+    state.failed = true
+    state.forcePosition = force or state.forcePosition
+    UF.MarkDirty(nil)
+    Factory.EnsureDeferredDriver()
+  else state.failed = nil end
   if state.retryRequested and (state.attempt or 1) < #LATE_ANCHOR_RETRY_DELAYS then
     state.attempt = (state.attempt or 1) + 1
     QueueLateAnchorReanchor(state, LATE_ANCHOR_RETRY_DELAYS[state.attempt])

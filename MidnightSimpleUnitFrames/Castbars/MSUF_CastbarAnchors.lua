@@ -77,6 +77,7 @@ local widthSourceDependencyGeneration = { player = 0, target = 0, focus = 0, bos
 -- on every source Show/Hide/Size event.
 local widthSourceSignatures = {}
 local dirtyWidthSourceUnits = {}
+local widthSourceDirtySerial = {}
 
 -- Sync state machine flags.
 local widthSourceQueued = false             -- a next-frame flush is queued
@@ -562,17 +563,22 @@ local function FlushWidthSourceSync()
     local g = GeneralDB()
     for _, unit in ipairs(CASTBAR_UNITS) do
         if dirtyWidthSourceUnits[unit] then
-            dirtyWidthSourceUnits[unit] = nil
-            if WidthSourceNeedsReanchor(g, unit) then
+            local serial = widthSourceDirtySerial[unit]
+            if dirtyWidthSourceUnits[unit] == "retry" or WidthSourceNeedsReanchor(g, unit) then
+                -- Signature calculation precedes native layout. An exception must
+                -- retry the writer even when that signature now compares equal.
+                dirtyWidthSourceUnits[unit] = "retry"
                 ApplyCastbarEffectiveSizeUnit(unit, g)
             end
+            if widthSourceDirtySerial[unit] == serial then dirtyWidthSourceUnits[unit] = nil end
         end
     end
 end
 
 local function MarkAllWidthSourceUnitsDirty(g)
     for _, unit in ipairs(CASTBAR_UNITS) do
-        dirtyWidthSourceUnits[unit] = ConfiguredWidthSource(g, unit) and true or nil
+        dirtyWidthSourceUnits[unit] = ConfiguredWidthSource(g, unit) and (dirtyWidthSourceUnits[unit] or true) or nil
+        widthSourceDirtySerial[unit] = (widthSourceDirtySerial[unit] or 0) + 1
     end
 end
 
@@ -627,28 +633,40 @@ local function HookWidthSourceFrame(frame, unit, generation)
         widthSourceFrameDependents[frame] = dependents
     end
     dependents[unit] = generation
-    if hookedWidthSourceFrames[frame] then return true end
+    local hooks = hookedWidthSourceFrames[frame]
+    if hooks and hooks.stage == 3 then return true end
     if InCombat() and frame.IsProtected and frame:IsProtected() then
         return false
     end
-    hookedWidthSourceFrames[frame] = true
-    local function QueueIfActive()
+    if not hooks then
+      local function QueueIfActive()
         if not widthSourceLifecycleActive then return end
         local current = widthSourceFrameDependents[frame]
         local anyDirty = false
         if current then
             for dependentUnit, dependencyGeneration in pairs(current) do
                 if widthSourceDependencyGeneration[dependentUnit] == dependencyGeneration then
-                    dirtyWidthSourceUnits[dependentUnit] = true
+                    dirtyWidthSourceUnits[dependentUnit] = dirtyWidthSourceUnits[dependentUnit] or true
+                    widthSourceDirtySerial[dependentUnit] = (widthSourceDirtySerial[dependentUnit] or 0) + 1
                     anyDirty = true
                 end
             end
         end
         if anyDirty then QueueWidthSourceSync() end
     end
-    frame:HookScript("OnSizeChanged", QueueIfActive)
-    frame:HookScript("OnShow", QueueIfActive)
-    frame:HookScript("OnHide", QueueIfActive)
+      hooks = { callback = QueueIfActive, stage = 0 }
+      hookedWidthSourceFrames[frame] = hooks
+    end
+    if hooks.stage < 1 then
+      frame:HookScript("OnSizeChanged", hooks.callback)
+      hooks.stage = 1
+    end
+    if hooks.stage < 2 then
+      frame:HookScript("OnShow", hooks.callback)
+      hooks.stage = 2
+    end
+    frame:HookScript("OnHide", hooks.callback)
+    hooks.stage = 3
     return true
 end
 
@@ -827,10 +845,10 @@ do
             widthSourcePendingAfterCombat = true
             return
         end
-        widthSourcePendingAfterCombat = false
         local g = GeneralDB()
         Anchors.UpdateCastbarWidthSourceSync(g, nil, true)
         QueueWidthSourceSync()
+        widthSourcePendingAfterCombat = false
     end)
 
     SyncWidthSourceLifecycle = function(g)

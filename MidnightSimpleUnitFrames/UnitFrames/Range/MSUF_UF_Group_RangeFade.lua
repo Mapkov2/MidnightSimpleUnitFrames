@@ -508,8 +508,8 @@ end
 
 function UF.FlushDeferredGroupRangeSettle(frame)
   if not (frame and frame._msufGFRangeSettleDeferred == true) then return false end
-  frame._msufGFRangeSettleDeferred = nil
   RefreshSettledRange(frame)
+  frame._msufGFRangeSettleDeferred = nil
   return true
 end
 

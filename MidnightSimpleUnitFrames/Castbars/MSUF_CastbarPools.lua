@@ -567,6 +567,7 @@ local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
     -- a terminal event bumps so a queued pass can never resurrect a cast, and
     -- (where the descriptor asks for it) a one-bar-per-frame anchor prewarm.
 
+    local poolKind = desc.kind
     local passQueued = false
     local passGeneration = 0
     local passPendingGeneration
@@ -622,14 +623,17 @@ local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
     local function FlushPass()
         passQueued = false
         if passPendingGeneration ~= passGeneration then return end
-        passPendingGeneration = nil
-        if not Enabled() then return end
+        if not Enabled() then
+            passPendingGeneration = nil
+            return
+        end
 
-        local castbars = Pools.live[desc.kind]
-        if not castbars then return end
+        -- Only HandleLifecycle queues a pass, after confirming this pool exists.
+        local castbars = Pools.live[poolKind]
         for index = 1, #castbars do
             RefreshFromUnit(castbars[index], true)
         end
+        if not passQueued then passPendingGeneration = nil end
     end
 
     local function QueuePass()

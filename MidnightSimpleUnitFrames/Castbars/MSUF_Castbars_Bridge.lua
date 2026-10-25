@@ -171,20 +171,19 @@ local function SetNativeFrameSuppressed(frame, suppressed)
         record = record or {}
         nativeRecords[frame] = record
         record.unit = frame.unit or unit
-        record.suppressed = true
-
         EnsureNativeHideGuard(frame, record)
         if type(frame.UnregisterAllEvents) == "function" then
             frame:UnregisterAllEvents()
             record.detached = true
         end
         ConcealNativeFrame(frame)
+        record.suppressed = true
         return true
     end
 
     -- A bar the previews concealed has a record without the suppression.
     if record then RevealNativeFrame(frame, record) end
-    if not (record and record.suppressed) then
+    if not (record and (record.suppressed or record.detached)) then
         return false
     end
 
@@ -197,7 +196,6 @@ local function SetNativeFrameSuppressed(frame, suppressed)
     -- the next cast; a cast already running at the release stays unshown
     -- (SetUnit's PLAYER_ENTERING_WORLD resync is Blizzard code). Only a
     -- CastingBarMixin bar (it has SetUnit) is known to want exactly these.
-    record.suppressed = nil
     if record.detached and type(frame.SetUnit) == "function" then
         local castUnit = record.unit or unit
         for index = 1, #NATIVE_CAST_EVENTS do
@@ -206,6 +204,7 @@ local function SetNativeFrameSuppressed(frame, suppressed)
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     end
     record.detached = nil
+    record.suppressed = nil
     return true
 end
 
@@ -222,12 +221,13 @@ function NativeOwner:Apply()
         return false
     end
 
-    nativeOwnershipPending = false
+    nativeOwnershipPending = true
     local foundAny = false
     ForEachBlizzardPlayerCastbar(function(frame)
         foundAny = true
         SetNativeFrameSuppressed(frame, suppress)
     end)
+    nativeOwnershipPending = false
     return foundAny
 end
 

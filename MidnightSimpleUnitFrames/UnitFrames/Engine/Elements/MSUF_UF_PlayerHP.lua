@@ -77,10 +77,8 @@ end
 
 local function FlushPending(_, event)
     if Combat(event) then return end
-    pendingDriver:UnregisterEvent("PLAYER_REGEN_ENABLED")
-    local disable = PHP.pendingDisable
-    PHP.pending, PHP.pendingDisable = nil, nil
-    if disable then PlayerHP.Hide() else PlayerHP.Refresh(PHP.owner) end
+    if PHP.pendingDisable then return PlayerHP.Hide() end
+    return PlayerHP.Refresh(PHP.owner)
 end
 
 local function Defer(disable)
@@ -96,8 +94,6 @@ end
 function PlayerHP.Refresh(playerFrame)
     PHP.owner = playerFrame or GetPlayerFrame()
     if Combat() then return Defer(false) end
-    PHP.pending, PHP.pendingDisable = nil, nil
-    if pendingDriver then pendingDriver:UnregisterEvent("PLAYER_REGEN_ENABLED") end
     if not (_cpDB.bars and _cpDB.bars.playerHPBarEnabled == true) then return PlayerHP.Hide() end
     if not visual.Create(PHP.owner) then return false end
     local frame = PHP.frame
@@ -107,18 +103,23 @@ function PlayerHP.Refresh(playerFrame)
     end
     -- The resource option is the only enablement predicate. ApplyResource
     -- retains the native sinks, layout stamps and ResourceVisibility ownership.
-    return ApplyElement(frame, "PlayerHP")
+    local applied = ApplyElement(frame, "PlayerHP")
+    if applied ~= false then
+        PHP.pending, PHP.pendingDisable = nil, nil
+        if pendingDriver then pendingDriver:UnregisterEvent("PLAYER_REGEN_ENABLED") end
+    end
+    return applied
 end
 
 function PlayerHP.Hide()
     if Combat() then return Defer(true) end
-    PHP.pending, PHP.pendingDisable = nil, nil
-    if pendingDriver then pendingDriver:UnregisterEvent("PLAYER_REGEN_ENABLED") end
     if PHP.frame and UF.attachedFrames[PHP.frame] then
         PHP.frame:DisableElement("PlayerHP")
     else
         visual.Hide()
     end
+    PHP.pending, PHP.pendingDisable = nil, nil
+    if pendingDriver then pendingDriver:UnregisterEvent("PLAYER_REGEN_ENABLED") end
 end
 
 local function Refresh(playerFrame) return PlayerHP.Refresh(playerFrame) end

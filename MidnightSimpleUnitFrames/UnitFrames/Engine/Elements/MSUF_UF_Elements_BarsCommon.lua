@@ -820,25 +820,32 @@ local function GradientGroupKinds(scope)
 end
 
 local function UpdateAllBarGradients(unit, skipUnitFrames)
-  local refreshed = false
+  local refreshed, success = false, true
   local kindA, kindB = GradientGroupKinds(unit)
   local unitScope = NormalizeGradientScope(unit)
   if skipUnitFrames ~= true and UF then
     if not kindA then
-      refreshed = UF.RefreshElements(unitScope, BAR_GRADIENT_ELEMENTS, "MSUF2_GRADIENT") or refreshed
+      local result = UF.RefreshElements(unitScope, BAR_GRADIENT_ELEMENTS, "MSUF2_GRADIENT")
+      if result == false then success = false else refreshed = result or refreshed end
     end
   end
   local GF = MSUF and MSUF.GF
   if GF then
     if kindA then
-      refreshed = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL) or refreshed
-      if kindB then refreshed = GF.RefreshVisuals(kindB, GF.DIRTY_VISUAL) or refreshed end
+      local result, applied = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL)
+      refreshed, success = result or refreshed, success and applied ~= false
+      if kindB then
+        result, applied = GF.RefreshVisuals(kindB, GF.DIRTY_VISUAL)
+        refreshed, success = result or refreshed, success and applied ~= false
+      end
     elseif not unitScope then
-      refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
+      local result, applied = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+      refreshed, success = result or refreshed, success and applied ~= false
     end
   end
   -- RoundedFrames exports its apply hook only while the module is active.
   if not unitScope then UF.Surface.OnVisualChanged(nil, "MSUF_RoundedUF_OnApplyAll") end
+  if not success then return false end
   return refreshed
 end
 

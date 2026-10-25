@@ -105,9 +105,9 @@ local function AttachUnitExternalAnchorProxy(proxy, source)
   proxy:SetAllPoints(source)
   proxy._msufStableExternalAnchor = source
   proxy._msufExternalAnchorSource = source
-  proxy._msufExternalAnchorFrozen = nil
   proxy._msufHasStableExternalRect = true
   if proxy.Show then proxy:Show() end
+  proxy._msufExternalAnchorFrozen = nil
   return true
 end
 

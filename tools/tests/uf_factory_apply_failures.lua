@@ -296,6 +296,9 @@ Case("targeted-refresh", function()
     assert(UF.RefreshElements("target", {}) == nil, "empty selection is not no-work")
     fault = false
     assert(UF.RefreshElements("target", { "Health" }) == true, "unchanged targeted retry failed")
+    -- Failed ordinary refreshes now retain their full original selection. Finish
+    -- that earlier global request before testing a new combat-scoped selection.
+    assert(UF.FlushDeferredRefreshes() ~= false, "earlier failed selection did not finish")
 end)
 
 for _, global in ipairs({ false, true }) do

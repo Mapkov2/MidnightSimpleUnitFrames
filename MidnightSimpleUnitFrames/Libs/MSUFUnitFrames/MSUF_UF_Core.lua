@@ -2223,6 +2223,15 @@ local function FinishElementSelection(succeeded, frame, wasApplying, wasBatching
     frame._msufEventRouteUnit = nil
     frame._msufElementEventRoutes = nil
     frame._msufEventRouteSelections = nil
+    -- Failure-only recovery: retain the full owning selection before the
+    -- boundary invokes a possibly throwing reporter. Success pays no extra call.
+    if frame._msufIsGroupFrame and not frame._msufGFIsPreviewFrame then
+      frame._msufGFRoleOverlayEnabled = nil
+      MSUF.GF.DeferGroupRuntime("refresh", frame._msufGFKind, MSUF.GF.DIRTY_ALL)
+    elseif UF.Factory and UF.MarkDirty and frame.MSUFUnitKey then
+      UF.MarkDirty(frame.MSUFUnitKey)
+      UF.Factory.EnsureDeferredDriver()
+    end
   end
 end
 
@@ -2320,17 +2329,18 @@ local function RunSceneSpec(frame, wasApplying, heldUnit, spec, mask, scope, sta
   return true
 end
 
-local function FinishSceneSpec(_, frame, wasApplying, heldUnit)
+local function FinishSceneSpec(ok, frame, wasApplying, heldUnit, _, _, _, _, failureCleanup, owner)
   frame.MSUFUnitKey = heldUnit
   UF._msufApplyingSpec = wasApplying
+  if not ok and failureCleanup then failureCleanup(false, owner) end
 end
 
-function UF.ApplySceneSpec(frame, spec, mask, scope, standsFor)
+function UF.ApplySceneSpec(frame, spec, mask, scope, standsFor, failureCleanup, owner)
   if not (frame and spec) then return false end
   local wasApplying = UF._msufApplyingSpec
   UF._msufApplyingSpec = true
   return (MSUF.RunUnitFrameApply(RunSceneSpec, FinishSceneSpec,
-    frame, wasApplying, frame.MSUFUnitKey, spec, mask, scope, standsFor))
+    frame, wasApplying, frame.MSUFUnitKey, spec, mask, scope, standsFor, failureCleanup, owner))
 end
 
 function UF.BeginEventRegistrationBatch()

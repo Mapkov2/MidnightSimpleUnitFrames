@@ -168,18 +168,21 @@ function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride, startupEn
     RepaintPVPIndicators()
     return true
   end
+  local success = true
   if UF.RefreshElements then
-    UF.RefreshElements(nil, PVP_CONTEXT_REFRESH_ELEMENTS, reason or "MSUF_PVP_CONTEXT")
+    success = UF.RefreshElements(nil, PVP_CONTEXT_REFRESH_ELEMENTS, reason or "MSUF_PVP_CONTEXT") ~= false
   end
   local gf = MSUF.GF
   if gf then
     if gf.RefreshVisuals then
-      gf.RefreshVisuals(nil, gf.DIRTY_VISUAL)
+      local _, applied = gf.RefreshVisuals(nil, gf.DIRTY_VISUAL)
+      if applied == false then success = false end
     elseif gf.RefreshAll then
-      gf.RefreshAll()
+      local _, applied = gf.RefreshAll()
+      if applied == false then success = false end
     end
   end
-  return true
+  return success
 end
 
 local function RegisterPVPContextEvent(frame, event)

@@ -655,8 +655,9 @@ local startupVisualsPending = false
 
 local function RefreshStartupVisuals()
   if not startupVisualsPending then return false end
-  startupVisualsPending = false
-  return GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+  local did, success = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+  if success ~= false then startupVisualsPending = false end
+  return did, success
 end
 
 -- SecureGroupHeader can change its measured footprint after MSUF's roster or
@@ -672,11 +673,10 @@ local headerLayoutSettleState = SETTLE.LAYOUT
 local function FlushHeaderLayoutSettle()
   local state = headerLayoutSettleState
   headerLayoutSettlePending = false
-  headerLayoutSettleState = SETTLE.LAYOUT
 
   if not AnyGroupFrameEnabled() then return false end
   local did
-  if InCombat() then
+  if GF._raidRosterCombatActive or InCombatLockdown() then
     -- Raid slots/layout are frozen, but raidN occupants can still change. Keep
     -- the coalesced identity repaint aligned with the secure click unit.
     did = GF.DeferGroupRuntime(state ~= SETTLE.LAYOUT and "roster" or "layout")
@@ -685,8 +685,9 @@ local function FlushHeaderLayoutSettle()
     did = RefreshStartupVisuals() or did
   end
   if state == SETTLE.ROSTER then did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did end
-  if state == SETTLE.LAYOUT then return did end
-  return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
+  if state ~= SETTLE.LAYOUT then did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did end
+  if headerLayoutSettleState == state then headerLayoutSettleState = SETTLE.LAYOUT end
+  return did
 end
 
 local function ScheduleHeaderLayoutSettle(state)

@@ -133,8 +133,7 @@ function Preview:EndBatch()
     end
     self.batchDepth = self.batchDepth - 1
     if self.batchDepth == 0 and self.batchPending then
-        self.batchPending = nil
-        self:Update()
+        if self:Update() ~= false then self.batchPending = nil end
     end
 end
 

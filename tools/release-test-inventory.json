@@ -1500,6 +1500,32 @@
         "enUS",
         "specs"
       ]
+    },
+    {
+      "test": "tools/tests/uf_result_sweep.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/uf_review_drains.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_finite_interrupt_providers.lua",
+      "phase": "runtime"
     }
   ],
   "excluded": {

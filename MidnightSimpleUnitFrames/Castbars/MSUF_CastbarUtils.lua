@@ -664,7 +664,7 @@ local function PlainNumber(value)
     local toPlain = ToPlain
     if type(toPlain) == "function" then
         local plain = toPlain(value)
-        if plain ~= nil and toPlainIsSecret(plain) ~= true then
+        if toPlainIsSecret(plain) ~= true and plain ~= nil then
             local plainType = type(plain)
             if plainType == "number" then
                 if plain == plain and plain ~= toPlainHuge and plain ~= -toPlainHuge then
@@ -672,11 +672,15 @@ local function PlainNumber(value)
                 end
                 return nil
             elseif plainType == "string" then
-                return tonumber(plain)
+                local number = tonumber(plain)
+                if number and number == number and number ~= toPlainHuge and number ~= -toPlainHuge then return number end
+                return nil
             end
 
             -- Compatibility fallback for an unexpected ToPlain wrapper type.
-            return tonumber(tostring(plain))
+            local number = tonumber(tostring(plain))
+            if number and number == number and number ~= toPlainHuge and number ~= -toPlainHuge then return number end
+            return nil
         end
     end
 
@@ -686,7 +690,9 @@ local function PlainNumber(value)
             return value
         end
     elseif valueType == "string" then
-        return tonumber(value)
+        local number = tonumber(value)
+        if number and number == number and number ~= toPlainHuge and number ~= -toPlainHuge then return number end
+        return nil
     end
 
     return nil

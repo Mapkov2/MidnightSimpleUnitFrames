@@ -373,13 +373,20 @@ local function RunApplyOne(unit, config, applyMask)
   return ApplyFrame(frame, config.GetSpec(unit), applyMask)
 end
 
-local function FinishApplyOne() end
+local function FinishApplyOne(ok, unit)
+  if not ok then
+    DeferApply(unit)
+  end
+end
 
 local function ApplyOne(unit, config, applyMask)
   -- Geometry and secure setup precede ApplySpec's element boundary. Isolate a
   -- failure there too, so the batch still applies every independent unit.
   local ok, result = MSUF.RunUnitFrameApply(RunApplyOne, FinishApplyOne, unit, config, applyMask)
-  if not ok then return false end
+  if not ok or result == false then
+    DeferApply(unit)
+    return false
+  end
   return result
 end
 
