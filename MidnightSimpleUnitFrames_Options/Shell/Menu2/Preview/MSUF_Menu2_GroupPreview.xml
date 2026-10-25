@@ -3,6 +3,9 @@
     <Script file="MSUF_Menu2_GroupPreview_TextFocus.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_ZoomPan.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Handles.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Auras.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Frame.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Spells.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Render.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Native.lua"/>
 </Ui>

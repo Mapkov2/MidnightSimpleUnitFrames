@@ -687,6 +687,29 @@ if arg[3] == "--j5-only" then
     controls = focused
     assert(#controls > 80, "missing real J5 control variants")
 end
+-- Replay every scalar selected-slot declaration after binding, in all three slots.
+-- The frozen setter and schema writer share the real binder/history/apply route.
+if arg[3] == "--k5-only" then
+    local focused = {}
+    for _, control in ipairs(controls) do
+        if control.frozen.id:match("^K5%.") then focused[#focused + 1] = control end
+    end
+    controls = focused
+    assert(#controls >= 8, "missing real K5 selected-slot declarations")
+end
+local expanded = {}
+for _, control in ipairs(controls) do
+    if control.frozen.id:match("^K5%.") then
+        local kind = assert(control.spec.id:match("%.text%.([^.]+)%.slot%."), "selected slot kind missing")
+        for _, slot in ipairs({ "left", "center", "right" }) do
+            local copy = {}
+            for key, value in pairs(control) do copy[key] = value end
+            copy.selectedKind, copy.selectedSlot = kind, slot
+            expanded[#expanded + 1] = copy
+        end
+    else expanded[#expanded + 1] = control end
+end
+controls = expanded
 local resets, scopeChecks = 0, 0
 for _, control in ipairs(controls) do
     local spec = control.spec
@@ -698,6 +721,10 @@ for _, control in ipairs(controls) do
     end
     for _, scope in ipairs(scopes) do
     M.gfScope = scope
+    if control.selectedSlot then
+        M.unitTextSlotSelection[spec.scope] = M.unitTextSlotSelection[spec.scope] or {}
+        M.unitTextSlotSelection[spec.scope][control.selectedKind] = control.selectedSlot
+    end
     if control.frozen.id:match("^J5%.UnitStatus%.") and spec.write.targetAvailable then
         M.unitStatusSelection = M.unitStatusSelection or {}
         for _, entry in ipairs(M.UnitPage.StatusValues(spec.scope)) do
@@ -750,10 +777,22 @@ for _, control in ipairs(controls) do
                     local shared = M.UnitSectionsShared
                     local factory = shared.FactoryProfile()
                     local conf, defaults = M.EnsureDB()[targetRoot], factory[targetRoot] or {}
+                    local resetKeys = { field }
+                    if control.selectedSlot then
+                        local owner = assert(sectionPolicies[entry], "selected slot has no real section reset owner")
+                        resetKeys = shared.SectionFieldKeys(owner.policy, conf, defaults)
+                        for _, path in ipairs(spec.setting.keys) do
+                            local destination, key = path:match("^([^.]+)%.([^.]+)$")
+                            if destination == targetRoot then
+                                conf[key] = control.frozen.id == "K5.UnitText.Mode" and "FULLVALUE" or true
+                            end
+                        end
+                    end
                     M.ClearHistory()
                     M.RunWithHistory("Reset section", "section:setter-parity", function()
-                        if old then conf[field] = Copy(defaults[field])
-                        else shared.RestoreSectionValues(entry, { field }, conf, defaults, true) end
+                        if old then
+                            for _, key in ipairs(resetKeys) do conf[key] = Copy(defaults[key]) end
+                        else shared.RestoreSectionValues(entry, resetKeys, conf, defaults, true) end
                     end)
                     if not old then derivedResetObserved = true end
                     if old then frozenReset = { profile = Copy(M.EnsureDB()), history = History() }
@@ -833,4 +872,4 @@ for _, control in ipairs(controls) do receipt:write(control.page, "\t", control.
 receipt:close()
 print(("PASS schema setters %s: %d controls, %d scope contexts, %d cases, %d reset replays, %d lazy/sparse resets, %d policies")
     :format(flavor, #controls, scopeChecks, checks, resets, sectionResetChecks, fixtureCount))
-if arg[3] ~= "--j5-only" then ReplayCustomContracts() end
+if arg[3] ~= "--j5-only" and arg[3] ~= "--k5-only" then ReplayCustomContracts() end

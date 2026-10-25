@@ -468,6 +468,14 @@ function Schema.ResolvePath(spec)
         end
         return assert(result, "scalar container writer has no selected target: " .. spec.id)
     end
+    local selected = spec.write and spec.write.selected
+    if selected then
+        local record = selected.get()
+        local key = record and record[selected.key]
+        local path = key and spec.scope .. "." .. key
+        assert(path and Schema.Matches(setting, path), "selected target escaped its family: " .. spec.id)
+        return path
+    end
     local resolve = spec.write and spec.write.resolve
     if resolve then
         local path = assert(resolve(), "schema write target resolver returned no path: " .. spec.id)
@@ -519,8 +527,17 @@ function Schema.ProfileRecord(spec, initialize)
 end
 -- Section ownership decides which controls reset. Their destination is the
 -- accessor's declaration; unopened sections retain the existing field policy.
+local function WriteTargetAvailable(spec)
+    local write = spec.write
+    if write.targetAvailable and not write.targetAvailable() then return false end
+    if write.selected then
+        local selected = write.selected.get()
+        return selected and selected[write.selected.key] ~= nil
+    end
+    return true
+end
 local function RegisterResetTarget(widget, spec)
-    if spec.write.targetAvailable and not spec.write.targetAvailable() then return end
+    if not WriteTargetAvailable(spec) then return end
     local path = Schema.ResolvePath(spec)
     local root, key = path:match("^([^.]+)%.([^.]+)")
     if not root then return end
@@ -546,10 +563,11 @@ function Schema.ResetSection(entry, keys, conf, defaults, factory, nested)
     for _, target in pairs(entry._msuf2SchemaResetTargets or {}) do
         local root = target.root
         if target.spec.scope == "group" then root = "gf_" .. M.GroupPage.CurrentScope() end
-        local available = not target.spec.write.targetAvailable or target.spec.write.targetAvailable()
+        local available = WriteTargetAvailable(target.spec)
+        local path = available and Schema.ResolvePath(target.spec)
+        local key = path and path:match("^[^.]+%.([^.]+)")
         if available and (target.nested == true) == (nested == true)
-            and eligible[target.key] and M.EnsureDB()[root] == conf then
-            local path = Schema.ResolvePath(target.spec)
+            and eligible[key] and M.EnsureDB()[root] == conf then
             local destination, field = Schema.ProfileRecord(target.spec, false), path:match("([^.]+)$")
             if destination then
                 local source, defaultPath = factory, path
@@ -562,7 +580,7 @@ function Schema.ResetSection(entry, keys, conf, defaults, factory, nested)
                     else source = nil end
                 end
                 destination[field] = M.DeepCopy(source)
-                if not target.nested then claimed[target.key] = true end
+                if not target.nested then claimed[key] = true end
             end
         end
     end
@@ -577,6 +595,11 @@ function Schema.Setter(spec)
     local args = write.args or {}
     return function(value)
         if write.accept and not write.accept(value) then return write.refused end
+        local selected = write.selected and write.selected.get()
+        if write.selected and not (selected and selected[write.selected.key]) then
+            if write.after then write.after(value) end
+            return
+        end
         local root, key = TargetParts(spec)
         if write.convert then value = write.convert(value) end
         if write.validNumber then
@@ -609,7 +632,8 @@ function Schema.Setter(spec)
         else
             if write.group then root = root:match("^gf_(.+)$") end
             if write.parent then root = Schema.ResolvePath(spec):match("([^.]+)%.[^.]+$") end
-            result = write.call(root, key, value, unpack(args))
+            if write.selected then result = write.call(root, key, value, selected[write.selected.reason], unpack(args))
+            else result = write.call(root, key, value, unpack(args)) end
         end
         if write.after then write.after(value) end
         if write.afterChanged and result then write.afterChanged(value) end

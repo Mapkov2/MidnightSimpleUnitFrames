@@ -142,16 +142,8 @@ function TextSection.PrepareSlotState(state, unit)
         return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget"
             or unitKey == "pettarget" or unitKey == "focus"
     end
-    local function RaidGroupNamePreviewValue()
-        local style = ReadText(unit, "raidGroupNameStyle", "PAREN")
-        if style == "BRACKET" then return "[2]" end
-        if style == "NONE" then return "2" end
-        return "(2)"
-    end
-    local function NamePreviewText()
-        local text = sampleNames[unit] or UnitTopLabel(unit)
-        if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then text = text .. " " .. RaidGroupNamePreviewValue() end
-        return text
+    local function PaintNamePreview(value)
+        M.UnitNameSample.Paint(value, unit, sampleNames[unit] or UnitTopLabel(unit), RaidGroupNameAllowed(unit))
     end
     M.unitTextSlotSelection = M.unitTextSlotSelection or {}
     M.unitTextMoveTogether = M.unitTextMoveTogether or {}
@@ -229,7 +221,7 @@ function TextSection.PrepareSlotState(state, unit)
         end)
         widget:HookScript("OnLeave", RestorePreviewTextFocus)
     end
-    state.tabValues, state.RaidGroupNameAllowed, state.NamePreviewText = tabValues, RaidGroupNameAllowed, NamePreviewText
+    state.tabValues, state.RaidGroupNameAllowed, state.PaintNamePreview = tabValues, RaidGroupNameAllowed, PaintNamePreview
     state.CurrentSlot, state.SetCurrentSlot, state.SlotFontSizeKey, state.MoveTogether, state.SetMoveTogether =
         CurrentSlot, SetCurrentSlot, SlotFontSizeKey, MoveTogether, SetMoveTogether
     state.FocusPreviewText, state.FocusActivePreviewText, state.HookPreviewTextFocus =
@@ -448,7 +440,7 @@ function TextSection.BuildTabs(state, ctx, unit)
 end
 function TextSection.BuildNameTab(state, ctx, unit)
     local nameTab, leftX, cardW, rightX, rightW = state.nameTab, state.leftX, state.cardW, state.rightX, state.rightW
-    local PreviewText, NamePreviewText = state.PreviewText, state.NamePreviewText
+    local PreviewText, PaintNamePreview = state.PreviewText, state.PaintNamePreview
     local RefreshTextControlState, FixedSettingMeta = state.RefreshTextControlState, state.FixedSettingMeta
     local FocusPreviewText = state.FocusPreviewText
     local RefreshTextHeader, MouseoverControl, EffectiveTextSize = state.RefreshTextHeader, state.MouseoverControl, state.EffectiveTextSize
@@ -462,7 +454,8 @@ function TextSection.BuildNameTab(state, ctx, unit)
             textSettings = { scope = unit, unit = unit, kind = "name" },
         })
     end
-    local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
+    local _, namePreviewValue = PreviewText(nameContent, "", 16, -54, cardW - 32)
+    PaintNamePreview(namePreviewValue)
     local showNameText = Control(ctx, nameContent, { "switch", "showNameText", nil, { "Show Name", 16, -24, 0, "HIDDEN" },
         get = function() return ReadBool(unit, "showName", true) end,
         write = { call = SetBool, args = { "MSUF2_SHOW_NAME_TEXT", { text = true, preview = true } }, after = RefreshTextControlState },
@@ -588,15 +581,14 @@ function TextSection.BuildValueTextContent(state, ctx, unit, kind, tab, cfg, con
                 local mode = CurrentMode()
                 return hasAbsorb and UnitSectionShared.HealthBaseMode(mode) or mode
             end,
-            customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(v)
-                local spec, oldMode = SelectedSlotSpec(), CurrentMode()
-                local mode = v or "NONE"
-                if hasAbsorb and UnitSectionShared.HealthModeHasAbsorb(oldMode) and UnitSectionShared.HealthModeSupportsAbsorb(mode) then
-                    mode = UnitSectionShared.HealthModeWithAbsorb(mode, true)
-                end
-                SetText(unit, spec.key, mode, spec.reason)
-                AfterModeChanged(mode)
-            end,
+            write = { call = SetText, selected = { get = SelectedSlotSpec, key = "key", reason = "reason" },
+                convert = function(value)
+                    local mode, oldMode = value or "NONE", CurrentMode()
+                    if hasAbsorb and UnitSectionShared.HealthModeHasAbsorb(oldMode) and UnitSectionShared.HealthModeSupportsAbsorb(mode) then
+                        mode = UnitSectionShared.HealthModeWithAbsorb(mode, true)
+                    end
+                    return mode
+                end, after = AfterModeChanged }, --[[schema setter: K5.UnitText.Mode]]
             meta = SelectedSlotMeta("text." .. kind .. ".slot.mode"), scope = unit,
             tip = { cfg.valueLabel or "Value", "What the selected slot shows. None leaves the slot empty; choices with several values are joined by " ..
                 "the Delimiter.", TIP_HOOK } },
@@ -623,12 +615,12 @@ function TextSection.BuildValueTextContent(state, ctx, unit, kind, tab, cfg, con
             local spec = SelectedSlotSpec()
             return spec.hidePercentKey and ReadSlotHidePercentSymbol(spec.hidePercentKey) or false
         end,
-        customSetReason = "Resolves the currently selected record or text slot at input time.", set = function(v)
-            local spec = SelectedSlotSpec()
-            if spec.hidePercentKey then SetText(unit, spec.hidePercentKey, v and true or false, spec.hidePercentReason) end
-            FocusPreviewText(kind, CurrentSlot(kind), true)
-            RefreshTextHeader()
-        end,
+        write = { call = SetText, boolean = true,
+            selected = { get = SelectedSlotSpec, key = "hidePercentKey", reason = "hidePercentReason" },
+            after = function()
+                FocusPreviewText(kind, CurrentSlot(kind), true)
+                RefreshTextHeader()
+            end }, --[[schema setter: K5.UnitText.HidePercent]]
         meta = SelectedSlotMeta("text." .. kind .. ".slot.hide_percent"), scope = unit,
         tip = { "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value " ..
             "includes a percent.",
@@ -864,7 +856,7 @@ function TextSection.BindRefreshState(state, ctx, unit)
     local hpControls, powerControls, CurrentSlot = state.hpControls, state.powerControls, state.CurrentSlot
     local RefreshTextControlState, CurrentTextTab, RefreshTextTabs = state.RefreshTextControlState, state.CurrentTextTab, state.RefreshTextTabs
     local PowerTextShown = state.PowerTextShown
-    local namePreviewValue, NamePreviewText, UpdateTextHeaderBadges = state.namePreviewValue, state.NamePreviewText, state.UpdateTextHeaderBadges
+    local namePreviewValue, PaintNamePreview, UpdateTextHeaderBadges = state.namePreviewValue, state.PaintNamePreview, state.UpdateTextHeaderBadges
     local MoveTogether, mouseoverFadeControls, powerManagedNotice = state.MoveTogether, state.mouseoverFadeControls, state.powerManagedNotice
     local FocusActivePreviewText = state.FocusActivePreviewText
     local function HookTextControls(kind, controls)
@@ -903,7 +895,7 @@ function TextSection.BindRefreshState(state, ctx, unit)
         local hpOn = ReadBool(unit, "showHP", true)
         local powerOn = PowerTextShown()
         local powerManaged = IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
-        if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
+        if namePreviewValue then PaintNamePreview(namePreviewValue) end
         if hpControls.RefreshPreview then hpControls.RefreshPreview() end
         if powerControls.RefreshPreview then powerControls.RefreshPreview() end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)

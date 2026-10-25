@@ -2,12 +2,18 @@
     <!-- Unit/global page modules load after preview APIs, matching the established Menu2 order. -->
     <Script file="Pages\MSUF_Menu2_UnitSectionShared.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitStatusSection.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitText_NameSample.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitText.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitRangeFade.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitAlpha.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitTextureLayer.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitVisual_Portrait.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitVisual_Power.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitVisual_Castbar.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitFrameVisuals.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitDispel.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitSections_Page.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitSections_Layout.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitSections.lua"/>
     <Script file="Pages\MSUF_Menu2_Global.lua"/>
     <Script file="Pages\MSUF_Menu2_GlobalFonts.lua"/>

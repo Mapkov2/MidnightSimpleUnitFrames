@@ -329,18 +329,19 @@
           1355
         ]
       ],
-      "source_sha256": "49ce1eab1aa21896204f0e9c9217867e6f6bf6170f4d3517e8378122d9d57295",
+      "source_sha256": "ca0ed8976e5c2f4dc0c061e7519d77dd40d8919636c31e4bb317d3af54694ef6",
       "adapter_exclusions": [
         {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
           "name": "ApplySpellEffectPreview",
-          "start": 1102,
-          "end": 1108,
-          "reason": "reviewed runtime adapter / editor chrome"
+          "start": 251,
+          "end": 257,
+          "reason": "reviewed runtime adapter / editor chrome; unchanged body moved to the spell owner"
         }
       ],
       "declaration_exclusions": [
         {
-          "line": 92,
+          "line": 96,
           "text": "local SetPreviewFrameLevel, PreviewElementLevel, PreviewInteractionLevel",
           "reason": "sample metadata / shared provider / editor chrome"
         }
@@ -356,7 +357,7 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "022cef218fe896f4e28ee7d0d347b5e836fefdd4d7e494471895a1f7e1dccb28"
+          "source_sha256": "30ded06d735f9f377057aeca5daf661cf391b7cb7332f2341dbf5850f8694415"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
@@ -364,7 +365,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
-          "source_sha256": "28c1555aa8c1eb082c8a487839e2f0d6de38f6f80d80b2dd6d1a582af39e883f"
+          "source_sha256": "6d94052c74e60117f6f1dcdd8b60f24ee51878eaca5fe102365b097442a7d541"
         },
         {
           "file": "Pages/MSUF_Menu2_GroupBars.lua",
@@ -377,9 +378,25 @@
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
           "source_sha256": "9a8ee31fe1fa9857ddd486649a66441e45d4293ec5f568abe8a7d625ae444d71"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Auras.lua",
+          "source_sha256": "d9e69e79fff4d9eb65e5007eb54bac579a64318f08bd2897aa1323537639b1b9"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Frame.lua",
+          "source_sha256": "3028991dde13203703dd6b6894d61097e9547a8742a3ea43858c3254a2b4a5d2"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
+          "source_sha256": "c94f31799b3277568419dc67a2321e4cfbeb84e9b8bdf5dae39812b56f75b818"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_UnitText_NameSample.lua",
+          "source_sha256": "6dd16d9530f0386f7586bdc9c86aa6d7d024e91b9285ff43143e914fdd838c97"
         }
       ],
-      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
+      "review_note": "2026-10-25 K5: reviewed unchanged aura, spell and frame-owner extraction; new support sources pinned; historical counts retained."
     },
     {
       "file": "Pages/MSUF_Menu2_Auras_Preview.lua",
@@ -461,7 +478,7 @@
           252
         ]
       ],
-      "source_sha256": "0f3e3a5698e85008c5bc68e275d72288478d90016c21da7937fe1ad4de09c4bc",
+      "source_sha256": "8bd27fafbc899183d47ea8c7fac43f6d8e21f3d4673ed385dec17dea9827c88a",
       "adapter_exclusions": [
         {
           "name": "ApplyGcdSample",
@@ -470,7 +487,39 @@
           "reason": "reviewed runtime adapter / editor chrome"
         }
       ],
-      "declaration_exclusions": []
+      "declaration_exclusions": [],
+      "support_sources": [
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Model.lua",
+          "source_sha256": "5b0f44f671a075dde7b9475f59e77fe2cbd9059c3038127781634802ac1ee1b7"
+        }
+      ],
+      "review_note": "K4: removed unreachable ApplyPreviewFont, SetTex and MakeFS plus their owned dependency/export wiring. Shared scene rendering remains unchanged; only reviewed K4 source hashes refreshed.",
+      "retired_painters": {
+        "baseline": "ce4767d344bdafc01685ef5299bca2e26735539d",
+        "ranges": [
+          {
+            "file": "Preview/MSUF_Menu2_UnitPreview_Render.lua",
+            "name": "ApplyPreviewFont",
+            "start": 1341,
+            "end": 1366
+          },
+          {
+            "file": "Preview/MSUF_Menu2_UnitPreview_Model.lua",
+            "name": "SetTex",
+            "start": 578,
+            "end": 580
+          },
+          {
+            "file": "Preview/MSUF_Menu2_UnitPreview_Model.lua",
+            "name": "MakeFS",
+            "start": 581,
+            "end": 586
+          }
+        ],
+        "remaining_physical": 0,
+        "remaining_code": 0
+      }
     },
     {
       "file": "Pages/MSUF_Menu2_UnitArenaTrinket.lua",
