@@ -49,10 +49,9 @@ local function FieldCatalog()
 end
 local function Save(ctx,groups) return VariantPage.Result(ctx,Sync.Replace(groups)) end
 local function Exclusions(state,section,group,groups,y,width)
-    local query=""
     local input=VariantPage.Input(section,"Find a setting to exclude","sync.field.search",20,y,width)
-    input:HookScript("OnTextChanged",function(self) query=tostring(self:GetText() or ""):lower() end)
     local function Values()
+        local query=tostring(input:GetText() or ""):lower()
         local out={{value="",text="Choose a setting"}}
         for _,field in ipairs(FieldCatalog()) do
             if group.modules[field.module] and (query=="" or field.label:lower():find(query,1,true)) then
@@ -87,7 +86,7 @@ local function Exclusions(state,section,group,groups,y,width)
         return Save(state.ctx,groups)
     end,width)
 end
-function M.ProfileSyncPageBuild(state)
+local function DrawSync(state)
     if not Sync then return end
     local ctx=state.ctx
     local groups=Sync.GetGroups() or {}
@@ -100,10 +99,10 @@ function M.ProfileSyncPageBuild(state)
     local names=MSUF.Require("MSUF_GetAllProfiles",FILE)()
     local rows=math.ceil(#names/2)
     local width=math.max(180,math.floor((state.contentW-50)/2))
-    local section=state.b:CollapsibleSection("profiles_sync","Profile synchronization",group
+    local section=VariantPage.Section(state,"profiles_sync","Profile synchronization",group
         and (950+rows*32+math.max(0,math.ceil(#Sync.Modules/2)-4)*32) or 250,true)
     M.ControlSchema.Section(section, "profiles")
-    AP.Row(nil, section, { "text", "profilesync.text.2", nil,
+    VariantPage.Row(nil, section, { "text", "profilesync.text.2", nil,
         { "Share selected modules between profiles. Changes sync when switching profiles or logging out."
             .. " Local variant settings and excluded fields stay independent.",
         20,-40,state.contentW-40,T.colors.muted } })
@@ -124,21 +123,21 @@ function M.ProfileSyncPageBuild(state)
         return VariantPage.Result(ctx,ok,why)
     end,width)
     if not group then return end
-    AP.Row(nil, section, { "text", "profilesync.text.4", nil,
+    VariantPage.Row(nil, section, { "text", "profilesync.text.4", nil,
         { "Member profiles",20,-234,state.contentW-40,T.colors.text } })
     for i,name in ipairs(names) do
-        local toggle=AP.Row(nil, section, { "switch", VariantPage.Meta("profiles_sync","sync.member."..i).controlId, nil,
+        local toggle=VariantPage.Row(nil, section, { "switch", VariantPage.Meta("profiles_sync","sync.member."..i).controlId, nil, poolKey="sync.member."..i,
             { name,20+((i-1)%2)*(width+10),-266-math.floor((i-1)/2)*32,width,"RIGHT",true },
             bind = AP.NativeInput }) -- a profile name, shown as typed
         VariantPage.BindBool(ctx,toggle,function() return group.members[name]==true end,
             function(value) group.members[name]=value and true or nil end,VariantPage.Meta("profiles_sync","sync.member."..i))
     end
     local y=-282-rows*32
-    AP.Row(nil, section, { "text", "profilesync.text.6", nil,
+    VariantPage.Row(nil, section, { "text", "profilesync.text.6", nil,
         { "Shared modules",20,y,state.contentW-40,T.colors.text } })
     y=y-34
     for i,id in ipairs(Sync.Modules) do
-        local toggle=AP.Row(nil, section, { "switch", "profilesync.toggle.7", nil,
+        local toggle=VariantPage.Row(nil, section, { "switch", "profilesync.toggle.7", nil, poolKey="sync.module."..id,
             { M.ProfileSyncModuleLabel(id),20+((i-1)%2)*(width+10),y-math.floor((i-1)/2)*32,width },
             bind = function(toggle)
                 VariantPage.BindBool(ctx,toggle,function() return group.modules[id]==true end,
@@ -158,11 +157,15 @@ function M.ProfileSyncPageBuild(state)
     VariantPage.Button(state,section,"Copy shared modules now","sync.initialize",30+width,y,
         function() return VariantPage.Result(ctx,Sync.Flush(true)) end,width)
     y=y-42
-    AP.Row(nil, section, { "text", "profilesync.text.8", nil,
+    VariantPage.Row(nil, section, { "text", "profilesync.text.8", nil,
         { "Copy shared modules now uses the active profile as the starting point for its groups."
             .. " Existing local exclusions and variant values are preserved. Save the group first.",
         20,y,state.contentW-40,T.colors.muted } })
     Exclusions(state,section,group,groups,y-62,width)
+end
+function M.ProfileSyncPageBuild(state)
+    if not Sync then return end
+    VariantPage.Editor(state,DrawSync)
 end
 M.ProfileSyncPage={Build=M.ProfileSyncPageBuild}
 
@@ -170,4 +173,5 @@ M.ProfileSearch.RegisterSelector("sync",function(name)
     selected=name
     selectedField=nil
     excludedField=nil
+    VariantPage.Dirty()
 end)

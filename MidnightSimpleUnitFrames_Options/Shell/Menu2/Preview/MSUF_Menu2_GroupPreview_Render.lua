@@ -561,13 +561,18 @@ SceneAuraLaneAvailable, SceneAuraLaneTextAvailable, PreviewIconScale, AURA_LANES
     MSUF, M, wipe, max, Stage
 )
 TEXT_HANDLE_KEYS, TEXT_LEVEL_SPECS, TEXT_SLOT_HANDLE_KEYS, EMPTY_APPEARANCE, SELECTED_SPELL_PLACED_DEFAULT = M.GroupRenderFactories.Frame(
-    MSUF, PixelLayoutRegion, CoreExports, M, EnsureDB, Render, Layers, issecretvalue, floor, max, min, MENU_EXTRA_OPTIONS,
-    ADDITIONAL_PREVIEW_PREFIXES, SetPreviewFrameLevel, PreviewElementLevel, SceneLayerOn, SceneLayerAlpha, AURA_LANES, Stage,
-    RenderAuras
+    { Core = MSUF, Menu = M, Exports = CoreExports, EnsureDB = EnsureDB, IsSecret = issecretvalue },
+    { Render = Render, Stage = Stage, RenderAuras = RenderAuras, AuraLanes = AURA_LANES,
+        ExtraOptions = MENU_EXTRA_OPTIONS, AdditionalPrefixes = ADDITIONAL_PREVIEW_PREFIXES },
+    { PixelLayoutRegion = PixelLayoutRegion, Floor = floor, Max = max, Min = min },
+    { API = Layers, SetFrameLevel = SetPreviewFrameLevel, ElementLevel = PreviewElementLevel, IsOn = SceneLayerOn, Alpha = SceneLayerAlpha }
 )
 BuildSceneSpells, FinalizeSpellLevels, SuspendHandleEffects = M.GroupRenderFactories.Spells(
-    MSUF, PixelLayoutRegion, M, Layers, wipe, floor, max, min, SetPreviewFrameLevel, PreviewElementLevel, PreviewIconScale,
-    ApplyHandleStrata, SyncIconDetailLevels, FinalizeScene, Stage, EMPTY_APPEARANCE, SELECTED_SPELL_PLACED_DEFAULT
+    { Core = MSUF, Menu = M, Wipe = wipe },
+    { PixelLayoutRegion = PixelLayoutRegion, Floor = floor, Max = max, Min = min, IconScale = PreviewIconScale },
+    { API = Layers, SetFrameLevel = SetPreviewFrameLevel, ElementLevel = PreviewElementLevel,
+        ApplyHandleStrata = ApplyHandleStrata, SyncIconDetailLevels = SyncIconDetailLevels },
+    { Finalize = FinalizeScene, Stage = Stage, EmptyAppearance = EMPTY_APPEARANCE, SelectedPlacedDefault = SELECTED_SPELL_PLACED_DEFAULT }
 )
 
 Render.Components = { Plan = BuildScene, Auras = RenderAuras, Finalize = FinalizeScene }

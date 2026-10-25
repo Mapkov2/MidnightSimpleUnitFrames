@@ -1460,6 +1460,46 @@
         "{root}",
         "{lua}"
       ]
+    },
+    {
+      "test": "tools/tests/menu_profile_variant_reuse.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_profile_variant_reuse.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "-",
+        "-",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_profile_variant_reuse.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "-",
+        "-",
+        "enUS",
+        "specs"
+      ]
     }
   ],
   "excluded": {

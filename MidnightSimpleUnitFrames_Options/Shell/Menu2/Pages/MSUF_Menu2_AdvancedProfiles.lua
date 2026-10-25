@@ -1369,5 +1369,5 @@ local function BuildModules(ctx)
     end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("profiles", { title = "MSUF Profiles", build = ProfilesPage.Build, version = 7 })
+M.RegisterPage("profiles", { title = "MSUF Profiles", build = ProfilesPage.Build, version = 7, refreshInPlace = true })
 M.RegisterPage("modules", { title = "MSUF Modules", build = BuildModules })

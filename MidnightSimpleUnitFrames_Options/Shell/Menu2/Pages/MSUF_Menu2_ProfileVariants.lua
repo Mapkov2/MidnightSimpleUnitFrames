@@ -6,6 +6,7 @@ local FILE="Shell/Menu2/Pages/MSUF_Menu2_ProfileVariants.lua"
 local P={}
 M.ProfileVariantPage=P
 local selected,fieldID,editorBar
+local editorRevision=0
 -- A saved schema that fails validation (a newer import, too many variants, a
 -- tightened rule) must never look empty: the page names the error and every write
 -- refuses with it, so the next Create or Delete cannot replace the saved variants.
@@ -22,12 +23,117 @@ end
 function P.Meta(section,path)
     return M.ProfileSearch.Meta(path, AP.ControlMeta("profiles",section,path,"ephemeral"))
 end
+-- Editor refreshers are replaced as a selection changes; the page and each
+-- semantic row survive. Unsaved drafts survive ordinary value refreshes.
+function P.Editor(state,draw)
+    local ctx=setmetatable({refreshers={},_msuf2RefresherFns={},_msuf2RefresherKeys={}}, {__index=state.ctx})
+    local editor=setmetatable({ctx=ctx}, {__index=state})
+    function ctx:AddRefresher(fn) M.AddRefresher(self,fn) end
+    local revision,db,schema,groups,profile,recording
+    local function Refresh()
+        local current=M.EnsureDB()
+        local sync=MSUF_GlobalDB and MSUF_GlobalDB.global
+        local currentGroups=sync and sync.profileSyncGroups
+        local currentRecording=Variants.RecordingName()
+        if revision~=editorRevision or db~=current or schema~=current.profileVariants or groups~=currentGroups
+            or profile~=MSUF_ActiveProfile or recording~=currentRecording then
+            revision,db,schema,groups=editorRevision,current,current.profileVariants,currentGroups
+            profile,recording=MSUF_ActiveProfile,currentRecording
+            wipe(ctx.refreshers)
+            wipe(ctx._msuf2RefresherFns)
+            wipe(ctx._msuf2RefresherKeys)
+            if editor.section then
+                for _,row in pairs(editor.section._msuf2ProfileRows) do row.used=false end
+            end
+            draw(editor)
+            for _,row in pairs(editor.section._msuf2ProfileRows) do
+                if not row.used then
+                    row.widget:Hide()
+                    if row.widget._msuf2Title then row.widget._msuf2Title:Hide() end
+                    if row.widget._msuf2Label then row.widget._msuf2Label:Hide() end
+                    if row.widget._msuf2LabelHit then row.widget._msuf2LabelHit:Hide() end
+                    M.UnregisterSearchWidget(row.widget)
+                end
+            end
+        end
+        for i=1,#ctx.refreshers do ctx.refreshers[i]() end
+    end
+    state.ctx:AddRefresher(Refresh)
+    Refresh()
+end
+function P.Section(state,id,title,height)
+    local section=state.section
+    if not section then
+        section=state.b:CollapsibleSection(id,title,height,true)
+        section._msuf2ProfileRows={}
+        state.section=section
+    else
+        local entry=section._msuf2CollapsibleEntry
+        if entry.contentHeight~=height then
+            entry.contentHeight=height
+            section:SetHeight(height)
+            entry.outer:SetHeight((entry.headerHeight or 28)+(entry.open and height or 0))
+            entry.builder:RelayoutCollapsibles()
+        end
+    end
+    return section
+end
+function P.Row(ctx,section,row)
+    local pool=section._msuf2ProfileRows
+    if not pool then return AP.Row(ctx,section,row) end
+    local key=row.poolKey or row[2]
+    local item=pool[key]
+    if not item then
+        item={widget=AP.Row(ctx,section,row)}
+        pool[key]=item
+    else
+        local widget,args=item.widget,row[4]
+        if row[1]=="text" then
+            M.UnregisterSearchWidget(widget)
+            widget._msuf2SearchText=args[1]
+            W.RegisterSearchObject(widget,args[1],"text")
+            T.SetTranslatedText(widget,M.Tr(args[1]))
+            widget:ClearAllPoints()
+            widget:SetPoint("TOPLEFT",section,"TOPLEFT",args[2],args[3])
+            widget:SetWidth(args[4])
+        elseif row[1]=="dropdown" then
+            T.SetTranslatedText(widget._msuf2Title,M.Tr(args[1]))
+            widget.values=args[2]
+        elseif row[1]=="switch" then
+            widget._msuf2SearchText=args[1]
+            T.SetTranslatedText(widget._msuf2Label,args[6] and args[1] or M.Tr(args[1]))
+            widget._msuf2Label:SetWidth(math.max(20,args[4]-22))
+            widget:_msuf2UpdateToggleProxyBounds()
+            widget:ClearAllPoints()
+            widget:SetPoint("TOPLEFT",section,"TOPLEFT",args[2],args[3])
+        elseif row[1]=="textinput" then
+            widget:SetText("")
+        end
+        if row.bind and row.bind~=AP.NativeInput then
+            row.bind(widget)
+        end
+        if widget._msuf2ControlSchema then widget._msuf2ControlSchema.id=row[2] end
+        if row.bind and row.bind~=AP.NativeInput then M.ControlSchema.Owned(widget,"profiles","menuState") end
+    end
+    item.used=true
+    local widget=item.widget
+    widget:Show()
+    if widget._msuf2Title then widget._msuf2Title:Show() end
+    if widget._msuf2Label then widget._msuf2Label:Show() end
+    if widget._msuf2LabelHit then widget._msuf2LabelHit:Show() end
+    return widget
+end
+function P.Dirty()
+    editorRevision=editorRevision+1
+    local entry=M.cache.profiles
+    if entry then entry._msuf2RefreshRevision=nil end
+end
 function P.Refresh(ctx)
+    P.Dirty()
     M.ProfileSearch.Refresh()
     P.EditorBar(ctx)
-    if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll("profiles") then return end
-    if M.InvalidatePage then M.InvalidatePage("profiles") end
-    if M.RequestRefresh then M.RequestRefresh(ctx,"profile-variants") end
+    if M.RebuildPageKeepingScroll("profiles") then return end
+    if ctx then M.RequestRefresh(ctx,"profile-variants") end
 end
 function P.EditorBar(ctx)
     if not Variants.IsRecording() then
@@ -85,10 +191,22 @@ function P.RemoveFirst(list,match)
     end
 end
 function P.Button(state,section,label,path,x,y,fn,width)
-    local button=state.ProfileButton(section,label,function()
+    local action=function()
         if state.ConfigLocked() then return end
         return fn()
-    end,false,path,false,nil,nil,nil,width or 180)
+    end
+    local pool=section._msuf2ProfileRows
+    local key="button:"..path
+    local item=pool and pool[key]
+    if not item then
+        item={widget=state.ProfileButton(section,label,action,false,path,false,nil,nil,nil,width or 180)}
+        if pool then pool[key]=item end
+    end
+    item.used=true
+    local button=item.widget
+    button:SetScript("OnClick",action)
+    button:Show()
+    if button._msuf2Label then button._msuf2Label:Show() end
     button:SetPoint("TOPLEFT",section,"TOPLEFT",x,y)
     AP.RegisterControl(button,P.Meta(SectionKey(path),path),label,"button")
     M.ControlSchema.Owned(button,"profiles","menuState")
@@ -98,15 +216,15 @@ end
 local NAME_PICKERS={["variant.select"]=true,["sync.group.select"]=true}
 function P.Input(section,label,path,x,y,width)
     local meta=P.Meta(SectionKey(path),path)
-    local input=AP.Row(nil, section, { "textinput", meta.controlId, nil, { label,width }, bind = AP.NativeInput })
+    local input=P.Row(nil, section, { "textinput", meta.controlId, nil, { label,width }, bind = AP.NativeInput, poolKey=path })
     W.MoveWidget(input,section,x,y,width)
     AP.RegisterControl(input,meta,label,"editbox")
     return input
 end
 function P.Drop(state,section,label,path,values,get,set,x,y,width)
     local meta=P.Meta(SectionKey(path),path)
-    return AP.Row(state.ctx, section, { "dropdown", meta.controlId, nil,
-        { label,values,width or 250 },
+    return P.Row(state.ctx, section, { "dropdown", meta.controlId, nil,
+        { label,values,width or 250 }, poolKey=path,
         bind=function(drop)
             if NAME_PICKERS[path] then drop._msuf2StableSearchLabel=label end
             W.MoveWidget(drop,section,x,y,width or 250)
@@ -146,18 +264,18 @@ local function Conditions(state,section,entry,schema,width,specs)
             entry.hotkey=value~=0 and value or nil
             c.manual=value~=0
         end,left,-350,width)
-    local enabled=AP.Row(nil, section, { "switch", "profilevariants.enabled.5", nil,
+    local enabled=P.Row(nil, section, { "switch", "profilevariants.enabled.5", nil,
         { "Enable variant",right,-350,width }, bind = function(enabled)
         P.BindBool(state.ctx,enabled,function() return entry.enabled~=false end,
             function(value) entry.enabled=value==true end,P.Meta("profiles_variants","variant.enabled"))
     end })
-    AP.Row(nil, section, { "text", "profilevariants.text.6", nil,
+    P.Row(nil, section, { "text", "profilevariants.text.6", nil,
         { "Specializations: none selected means all. Matching conditions are combined; later variants take priority.",
         20,-414,state.contentW-40,T.colors.muted } })
     c.specs=c.specs or {}
     for i,spec in ipairs(specs) do
         local id=tostring(spec.id)
-        local toggle=AP.Row(nil, section, { "switch", "profilevariants.toggle.7", nil,
+        local toggle=P.Row(nil, section, { "switch", "profilevariants.toggle.7", nil, poolKey="variant.spec."..i,
             { spec.name,20+((i-1)%2)*(width+10),-454-math.floor((i-1)/2)*32,width },
             bind = function(toggle)
                 P.BindBool(state.ctx,toggle,function() return c.specs[id]==true end,
@@ -166,7 +284,7 @@ local function Conditions(state,section,entry,schema,width,specs)
     end
     return -464-math.ceil(#specs/2)*32
 end
-function P.Build(state,specs)
+local function DrawVariants(state,specs)
     if not Variants then return end
     local ctx=state.ctx
     P.EditorBar(ctx)
@@ -178,13 +296,13 @@ function P.Build(state,specs)
     end
     M.ProfileSearch.Selecting("variant",selected)
     local width=math.max(180,math.floor((state.contentW-50)/2))
-    local section=state.b:CollapsibleSection("profiles_variants","Profile variants",entry and (850+math.ceil(#specs/2)*32) or 250,true)
+    local section=P.Section(state,"profiles_variants","Profile variants",entry and (850+math.ceil(#specs/2)*32) or 250,true)
     M.ControlSchema.Section(section, "profiles")
-    AP.Row(nil, section, { "text", "profilevariants.text.8", nil,
+    P.Row(nil, section, { "text", "profilevariants.text.8", nil,
         { "Override individual settings or layouts for several specializations, a location or a hotkey. The base profile stays intact.",
         20,-40,state.contentW-40,T.colors.muted } })
     if schemaError then
-        AP.Row(nil, section, { "text", "profilevariants.text.9", nil,
+        P.Row(nil, section, { "text", "profilevariants.text.9", nil,
             { M.Format("The saved profile variants cannot be read (%s). They are kept unchanged, and editing them here is blocked.",
             M.Tr(schemaError)),20,-62,state.contentW-40,T.colors.danger or T.colors.muted } })
     end
@@ -205,7 +323,7 @@ function P.Build(state,specs)
         return P.Result(ctx,ok,err)
     end,width)
     if not entry then return end
-    AP.Row(nil, section, { "text", "profilevariants.text.11", nil,
+    P.Row(nil, section, { "text", "profilevariants.text.11", nil,
         { "Change conditions below, then save them. Assign hotkey slots in the game's MSUF key bindings.",
         20,-218,state.contentW-40,T.colors.muted } })
     local y=Conditions(state,section,entry,schema,width,specs)
@@ -219,7 +337,7 @@ function P.Build(state,specs)
     end,width)
     y=y-64
     local editing=Variants.IsRecording()
-    local note=AP.Row(nil, section, { "text", "profilevariants.note.12", nil, { not editing
+    local note=P.Row(nil, section, { "text", "profilevariants.note.12", nil, { not editing
         and "Edit values records only changed settings. Removing an overridden value returns that setting to the base profile."
         or "",20,y,state.contentW-40,T.colors.muted } })
     -- The line names the variant as typed, so the composed text is not looked up again.
@@ -257,6 +375,10 @@ function P.Build(state,specs)
         return Put(ctx,current)
     end,width)
 end
+function P.Build(state,specs)
+    if not Variants then return end
+    P.Editor(state,function(editor) DrawVariants(editor,specs) end)
+end
 function P.Transport(state)
     local section=state.b:CollapsibleSection("profiles_variant_transport","Variant import and export",192,true)
     M.ControlSchema.Section(section, "profiles")
@@ -279,4 +401,5 @@ end
 M.ProfileSearch.RegisterSelector("variant",function(name)
     selected=name
     fieldID=nil
+    P.Dirty()
 end)

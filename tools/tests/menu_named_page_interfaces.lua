@@ -3,6 +3,15 @@ local root, flavor = assert(arg[1]):gsub("\\", "/"):gsub("/$", ""), arg[2] or "M
 local observe = arg[4] == "--observe"
 local captured = {}
 local contracts = {
+    Frame = {
+        Runtime = "Core Menu Exports EnsureDB IsSecret", Scene = "Render Stage RenderAuras AuraLanes ExtraOptions AdditionalPrefixes",
+        Layout = "PixelLayoutRegion Floor Max Min", Layers = "API SetFrameLevel ElementLevel IsOn Alpha",
+    },
+    Spells = {
+        Runtime = "Core Menu Wipe", Layout = "PixelLayoutRegion Floor Max Min IconScale",
+        Layers = "API SetFrameLevel ElementLevel ApplyHandleStrata SyncIconDetailLevels",
+        Scene = "Finalize Stage EmptyAppearance SelectedPlacedDefault",
+    },
     Layout = {
         Profile = "EnsureDB GetConf GetGeneral ReadBool ReadNumber NormalizeBossLayoutMode UpdateLoadActive",
         Controls = "Widgets Theme Schema SetControlEnabled SettingMeta RegisterControl UnitOptions TooltipOptions Shared",
@@ -25,6 +34,8 @@ local contracts = {
     },
 }
 local domains = {
+    Frame = { "Runtime", "Scene", "Layout", "Layers" },
+    Spells = { "Runtime", "Layout", "Layers", "Scene" },
     Layout = { "Profile", "Controls", "Layout", "HealthColors", "Runtime" },
     Castbar = { "Profile", "Controls", "Runtime", "Tabs" },
     Portrait = { "Profile", "Controls", "Portrait", "Tabs" },
@@ -36,8 +47,10 @@ local mw = Open(root, flavor, { page = "uf_player", beforeCore = function(world)
     function world:LoadFile(path, addon, ns)
         local names = path:match("MSUF_Menu2_UnitSections.lua$") and { "Layout" }
             or path:match("MSUF_Menu2_UnitFrameVisuals.lua$") and { "Castbar", "Portrait", "Power" }
+            or path:match("MSUF_Menu2_GroupPreview_Render.lua$") and { "Frame", "Spells" }
         for _, name in ipairs(names or {}) do
-            local factories = name == "Layout" and world.core.MSUF2.UnitSectionFactories or world.core.MSUF2.UnitVisualFactories
+            local factories = (name == "Frame" or name == "Spells") and world.core.MSUF2.GroupRenderFactories
+                or name == "Layout" and world.core.MSUF2.UnitSectionFactories or world.core.MSUF2.UnitVisualFactories
             local factory = factories[name]
             factories[name] = function(...)
                 local prior = captured[name]
@@ -49,7 +62,7 @@ local mw = Open(root, flavor, { page = "uf_player", beforeCore = function(world)
     end
 end }, arg[3])
 local count = 0
-for _, name in ipairs({ "Layout", "Castbar", "Portrait", "Power" }) do
+for _, name in ipairs({ "Layout", "Castbar", "Portrait", "Power", "Frame", "Spells" }) do
     local entry = assert(captured[name], name .. " factory was not bound")
     if not observe then
         assert(#entry.args == #domains[name] and type(entry.args[1]) == "table",
@@ -169,3 +182,47 @@ for i = 1, #receiptText do a = (a + receiptText:byte(i)) % 65521; b = (b + a) % 
 local expected = assert(expectedReceipts[flavor], "unsupported receipt client")
 assert(#receipts == expected[1] and b * 65536 + a == expected[2], "portrait/power page build changed from positional baseline")
 print("PASS named page interfaces " .. flavor .. ": " .. count .. " required fields; " .. builds .. " real sections; one binding per owner")
+
+-- Compare the real composed preview's native drawing calls with the positional owners.
+local drawing, methodNames = {}, { "SetTexture", "SetAtlas", "SetTexCoord", "SetText", "SetVertexColor", "SetTextColor",
+    "SetStatusBarColor", "SetValue", "SetAlpha", "SetSize", "SetPoint", "SetFrameLevel", "SetShown" }
+local active = false
+for _, name in ipairs(methodNames) do
+    local original = mw.world.widgets.Methods[name]
+    if original then
+        mw.world.widgets.Methods[name] = function(self, ...)
+            if active then drawing[#drawing + 1] = name .. Encode({ ... }) end
+            return original(self, ...)
+        end
+    end
+end
+mw.core.GF.EnsureDB()
+for _, scope in ipairs({ "party", "raid" }) do
+    M.gfScope = scope
+    local box = M.GroupPreview.CreateNative(mw.env.UIParent, { width = 760, key = "gf_layout" })
+    box:Show()
+    box._stage:SetSize(600, 220)
+    box._animationEnabled, box._animationElapsed = true, 0.25
+    for _ = 1, 3 do box:Refresh("SETTINGS") end
+    active = true
+    box:Refresh("SETTINGS")
+    assert(box:RefreshAnimation(), "group preview did not animate")
+    active = false
+    assert(box._msufGFScene.mock._cell, "group preview did not compose an engine cell")
+    box:Hide()
+end
+local a, b = 1, 0
+for _, row in ipairs(drawing) do
+    for i = 1, #row do a = (a + row:byte(i)) % 65521; b = (b + a) % 65521 end
+end
+local digest = b * 65536 + a
+if observe then print("GROUP_DRAWING " .. flavor .. " " .. #drawing .. " " .. string.format("%.0f", digest)) end
+local drawingPins = {
+    Mainline = { 1887, 2024945047 }, Vanilla = { 1927, 658558823 }, TBC = { 1927, 658558823 },
+    Mists = { 1911, 1695158335 }, Forever = { 1903, 314246156 },
+}
+if not observe then
+    local pin = assert(drawingPins[flavor], "missing positional drawing receipt")
+    assert(#drawing == pin[1] and digest == pin[2], "group drawing changed from positional owners")
+end
+for name, entry in pairs(captured) do assert(entry.calls == 1, name .. " interface was allocated per preview") end

@@ -3,11 +3,25 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.GroupRenderFactories = M.GroupRenderFactories or {}
 
-M.GroupRenderFactories.Frame = function(
-    MSUF, PixelLayoutRegion, CoreExports, M, EnsureDB, Render, Layers, issecretvalue, floor, max, min, MENU_EXTRA_OPTIONS,
-    ADDITIONAL_PREVIEW_PREFIXES, SetPreviewFrameLevel, PreviewElementLevel, SceneLayerOn, SceneLayerAlpha, AURA_LANES, Stage,
-    RenderAuras
-)
+local function RequireFields(domain, values, fields)
+    assert(type(values) == "table", domain .. " interface is required")
+    for key in fields:gmatch("%S+") do
+        assert(values[key] ~= nil, domain .. "." .. key .. " is required")
+    end
+end
+
+M.GroupRenderFactories.Frame = function(runtime, scene, layout, layers)
+    RequireFields("Frame.Runtime", runtime, "Core Menu Exports EnsureDB IsSecret")
+    RequireFields("Frame.Scene", scene, "Render Stage RenderAuras AuraLanes ExtraOptions AdditionalPrefixes")
+    RequireFields("Frame.Layout", layout, "PixelLayoutRegion Floor Max Min")
+    RequireFields("Frame.Layers", layers, "API SetFrameLevel ElementLevel IsOn Alpha")
+local MSUF, M, CoreExports, EnsureDB = runtime.Core, runtime.Menu, runtime.Exports, runtime.EnsureDB
+local issecretvalue = runtime.IsSecret
+local Render, Stage, RenderAuras = scene.Render, scene.Stage, scene.RenderAuras
+local AURA_LANES, MENU_EXTRA_OPTIONS, ADDITIONAL_PREVIEW_PREFIXES = scene.AuraLanes, scene.ExtraOptions, scene.AdditionalPrefixes
+local PixelLayoutRegion, floor, max, min = layout.PixelLayoutRegion, layout.Floor, layout.Max, layout.Min
+local Layers, SetPreviewFrameLevel, PreviewElementLevel = layers.API, layers.SetFrameLevel, layers.ElementLevel
+local SceneLayerOn, SceneLayerAlpha = layers.IsOn, layers.Alpha
 
 local function PaintGroupPreviewPortrait(scene)
     local frame, handle = scene.mock._cell, scene.S.portraitHandle

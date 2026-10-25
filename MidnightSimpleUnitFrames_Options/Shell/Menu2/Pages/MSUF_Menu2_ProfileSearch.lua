@@ -77,15 +77,15 @@ end
 -- rebuilds the Profiles page on screen: that blanked it on the first keystroke.
 -- Tokens stay bound to their entry tables (weak keys) and Current() checks the
 -- profile, so a built page keeps matching the rows Collect produces; a cached
--- page that is not on screen is rebuilt on its next visit.
+-- page that is not on screen refreshes its pooled editor rows on its next visit.
 function H.ContextChanged()
     local db, schema, groups, profile, recording = Context()
     if db == lastDB and schema == lastSchema and groups == lastGroups and profile == lastProfile
         and recording == lastRecording then return false end
     lastDB, lastSchema, lastGroups, lastProfile, lastRecording = db, schema, groups, profile, recording
     targets = {}
-    local onScreen = M.activeKey == "profiles" and M.frame and M.frame.IsShown and M.frame:IsShown()
-    if M.cache and M.cache.profiles and not onScreen then M.InvalidatePage("profiles") end
+    local entry = M.cache and M.cache.profiles
+    if entry then entry._msuf2RefreshRevision = nil end
     return true
 end
 function H.RegisterSelector(scope, selectEntry)
@@ -120,7 +120,7 @@ function H.Prepare(target)
     if selectedNames[bound.scope] ~= bound.name then
         selectors[bound.scope](bound.name)
         selectedNames[bound.scope] = bound.name
-        M.InvalidatePage("profiles")
+        if M.activeKey == "profiles" then M.RebuildPageKeepingScroll("profiles") end
     end
     return true
 end

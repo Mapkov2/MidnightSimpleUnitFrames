@@ -235,6 +235,7 @@ end
 ---                   that changes only these switches the view instead of rebuilding;
 ---   rebuildsItself  true when the page's frame structure follows its saved data
 ---                   from the first build on (see M.PageRebuildsItself).
+---   refreshInPlace  true when pooled rows handle keep-scroll editor refreshes.
 function M.RegisterPage(key, spec)
     if type(key) ~= "string" or type(spec) ~= "table" then return end
     UnitTexturePageView(key, spec)
@@ -249,6 +250,7 @@ end
 local selfRebuildingPages = {}
 function M.PageRebuildsItself(key)
     local spec = key and M.pages[key]
+    if spec and spec.refreshInPlace then return false end
     return selfRebuildingPages[key] == true or (spec ~= nil and spec.rebuildsItself == true)
 end
 local function MenuShown()
@@ -431,6 +433,7 @@ function M.SelectPage(key)
     end
     local spec = M.pages[key]
     local cached = M.cache[key]
+    if cached and spec.refreshInPlace then cached._msuf2RefreshRevision = nil end
     local specVersion = spec and spec.version
     if cached and (cached._msuf2BuildIncomplete or (specVersion and cached.version ~= specVersion)) then
         InvalidatePageEntries(key)

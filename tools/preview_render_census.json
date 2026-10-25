@@ -329,7 +329,7 @@
           1355
         ]
       ],
-      "source_sha256": "ca0ed8976e5c2f4dc0c061e7519d77dd40d8919636c31e4bb317d3af54694ef6",
+      "source_sha256": "c55093d4f5674fd96e615c2afc81db44af10bb8943c711dbfb580208ad1e0c10",
       "adapter_exclusions": [
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
@@ -357,7 +357,7 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "cf76196cc32053c9d063e328745682682610fa26822d4853b03832b72e76eaa5"
+          "source_sha256": "31e5bc895a963d80a8745853db0f3f2e843e158d07c1c0aae4c1c799939e4907"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
@@ -385,11 +385,11 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Frame.lua",
-          "source_sha256": "3028991dde13203703dd6b6894d61097e9547a8742a3ea43858c3254a2b4a5d2"
+          "source_sha256": "4f1132d835a12f0a0e56bceb6edf4e70f57c8be31f3ed4b14bdb87eb82737fdd"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
-          "source_sha256": "c94f31799b3277568419dc67a2321e4cfbeb84e9b8bdf5dae39812b56f75b818"
+          "source_sha256": "17a5415fa48c5b45a5d03e7b3635f531533cfc319279ef841778ba31d7232475"
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText_NameSample.lua",

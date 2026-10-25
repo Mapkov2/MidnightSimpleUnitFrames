@@ -3,10 +3,25 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.GroupRenderFactories = M.GroupRenderFactories or {}
 
-M.GroupRenderFactories.Spells = function(
-    MSUF, PixelLayoutRegion, M, Layers, wipe, floor, max, min, SetPreviewFrameLevel, PreviewElementLevel, PreviewIconScale,
-    ApplyHandleStrata, SyncIconDetailLevels, FinalizeScene, Stage, EMPTY_APPEARANCE, SELECTED_SPELL_PLACED_DEFAULT
-)
+local function RequireFields(domain, values, fields)
+    assert(type(values) == "table", domain .. " interface is required")
+    for key in fields:gmatch("%S+") do
+        assert(values[key] ~= nil, domain .. "." .. key .. " is required")
+    end
+end
+
+M.GroupRenderFactories.Spells = function(runtime, layout, layers, scene)
+    RequireFields("Spells.Runtime", runtime, "Core Menu Wipe")
+    RequireFields("Spells.Layout", layout, "PixelLayoutRegion Floor Max Min IconScale")
+    RequireFields("Spells.Layers", layers, "API SetFrameLevel ElementLevel ApplyHandleStrata SyncIconDetailLevels")
+    RequireFields("Spells.Scene", scene, "Finalize Stage EmptyAppearance SelectedPlacedDefault")
+local MSUF, M, wipe = runtime.Core, runtime.Menu, runtime.Wipe
+local PixelLayoutRegion, floor, max, min = layout.PixelLayoutRegion, layout.Floor, layout.Max, layout.Min
+local PreviewIconScale = layout.IconScale
+local Layers, SetPreviewFrameLevel, PreviewElementLevel = layers.API, layers.SetFrameLevel, layers.ElementLevel
+local ApplyHandleStrata, SyncIconDetailLevels = layers.ApplyHandleStrata, layers.SyncIconDetailLevels
+local FinalizeScene, Stage = scene.Finalize, scene.Stage
+local EMPTY_APPEARANCE, SELECTED_SPELL_PLACED_DEFAULT = scene.EmptyAppearance, scene.SelectedPlacedDefault
 
 local function EffectKind(effect)
     return type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"

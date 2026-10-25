@@ -273,7 +273,8 @@ end
 --- the serial drops stale retries once a newer rebuild has started.
 --- A page that declares views (spec.variantKey) and only changed its view
 --- shows that view's cached entry, or builds it once, and keeps the other
---- views cached; any other call rebuilds the page from scratch.
+--- views cached. Pages with pooled editor rows declare refreshInPlace and run
+--- their refreshers instead; other calls rebuild the page from scratch.
 --- Returns false only when nothing was rebuilt, so callers keep their fallback.
 function M.RebuildPageKeepingScroll(key)
     key = key or M.activeKey
@@ -282,7 +283,13 @@ function M.RebuildPageKeepingScroll(key)
     local offset = AccessibleNumber(scroll and scroll.GetVerticalScroll and scroll:GetVerticalScroll() or 0, 0)
     pageScrollRestoreSerial = pageScrollRestoreSerial + 1
     local serial = pageScrollRestoreSerial
-    if not ActiveViewChanged(key) then M.InvalidatePage(key) end
+    local spec = M.pages[key]
+    if spec and spec.refreshInPlace then
+        local entry = M.cache[key]
+        if entry then entry._msuf2RefreshRevision = nil end
+    elseif not ActiveViewChanged(key) then
+        M.InvalidatePage(key)
+    end
     if M.SelectPage(key) ~= false then
         RestorePageScroll(key, offset, serial)
         if C_Timer and C_Timer.After then
