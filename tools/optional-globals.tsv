@@ -74,7 +74,6 @@ MSUF_ShowReloadRecommendedPopup	lod-options	MidnightSimpleUnitFrames_Options/She
 MSUF_StandaloneOptionsWindow	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua	the named window is published only after the load-on-demand menu builds its window shell
 MSUF_Style	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua	the style owner adopts a previous public style table or publishes its own during initial publication
 MSUF_THEME	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_Style.lua	the style owner creates the theme table when no earlier public theme exists
-MSUF_UIThemeProviderCandidate	optional-module	MidnightSimpleUnitFrames/Runtime/MSUF_UIThemeBridge.lua	an external skin may park a theme provider before the bridge loads; no external provider is the documented normal state
 MSUF_UpdateAllBarGradients	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua	the gradient owner preserves an existing updater or publishes its local updater on first load
 MSUF_UpdateAllBarTextures_Immediate	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_TextureRuntime.lua	the texture owner checks for a previous immediate updater before installing its own implementation and deferred wrapper
 MSUF_UpdateCastbarTextures_Immediate	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a texture refresh while the core loads runs before Castbars_Core; castbars retain their own first apply
@@ -86,5 +85,3 @@ MSUF_EnsureAnchorPicker	load-order	MidnightSimpleUnitFrames/Shell/UI/MSUF_Anchor
 MSUF_GF_AuraFilter	load-order	MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua	only the GroupFilters factory initial lookup may be absent before it creates and publishes its table; later Common readers require the composed owner
 MSUF_AddTooltip	load-order	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua	the Support provider adopts a previously published tooltip helper or installs its local helper on the first Options load
 MSUF_LeftJustifyButtonText	load-order	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua	the Support provider adopts a previous button-text helper or installs its local helper on the first Options load
-MSUF_GetUITheme	optional-module	MidnightSimpleUnitFrames/Runtime/MSUF_UIThemeBridge.lua	the retained theme bridge is intentionally not loaded by the Core TOCs; ThemeSkin keeps its native palette when no separately supplied bridge theme API exists
-MSUF_AddUIThemeListener	optional-module	MidnightSimpleUnitFrames/Runtime/MSUF_UIThemeBridge.lua	the retained theme bridge is intentionally not loaded by the Core TOCs; ThemeSkin registers a live theme listener only when that bridge API exists

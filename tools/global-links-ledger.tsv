@@ -11,4 +11,3 @@ MSUF_GF_RefreshOverlays	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/
 MSUF_GF_RefreshVisuals	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RefreshVisuals", "RefreshVisuals" }	public alias exported from the GF_PUBLIC_ALIASES table
 MSUF_RefreshStatusIndicators	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua::"MSUF_RefreshStatusIndicators",	status refresh alias written from STATUS_REFRESH_ALIASES
 MSUF_RequestStatusIconsRefreshForCurrent	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua::"MSUF_RequestStatusIconsRefreshForCurrent",	status refresh alias written from STATUS_REFRESH_ALIASES
-MSUF_UIThemeProviderCandidate	external	A-C4	-	documented hand-off for a skin addon that loads before MSUF (Runtime/MSUF_UIThemeBridge.lua); MSUF never defines it
