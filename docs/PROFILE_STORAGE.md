@@ -173,6 +173,21 @@ corrupt-profile and allocation checks, including its pinned historical
 current-profile guard. That excerpt is not the full downgrade proof. The
 separate backward-migration smoke pins the older migration boundaries.
 
+### Terminal variant, recording and sync combination
+
+`profile_logout_combination_smoke.lua` reuses the full core TOC/corpus harness
+on Mainline. Four cases combine an active variant or a running recording with
+sparse or compatibility saving, then serialize the TOC SavedVariables and log
+in in a fresh world. Native logout handlers restore the variant, cancel unsaved
+recording work, flush eligible sync edits, persist and clear the public alias.
+
+The test compares complete base-profile pools, including target profiles and
+variant patches, and checks exclusions, character bindings, sync groups and the
+rebound `MSUF_DB` identity. Starting a recording flushes preceding base edits;
+subsequent unsaved recording edits must reach neither the base nor sync targets.
+This extends the offline combination coverage; native SavedVariables and an
+in-game downgrade retain the evidence limits above.
+
 ### One-time account safety copy
 
 Before the first sparse save, `_pre70ProfileBackup` retains one independent,

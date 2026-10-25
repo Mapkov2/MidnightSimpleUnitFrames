@@ -1613,6 +1613,13 @@
         "Mainline",
         "Vanilla"
       ]
+    },
+    {
+      "test": "tools/tests/profile_logout_combination_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline"
+      ]
     }
   ],
   "excluded": {

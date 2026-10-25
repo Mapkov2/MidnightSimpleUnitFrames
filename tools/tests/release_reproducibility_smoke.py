@@ -33,8 +33,24 @@ print('PASS CI rejects corrupted PowerShell before extraction')
 import shutil
 import subprocess
 import sys
-ps = shutil.which('pwsh') or shutil.which('powershell')
-assert ps, 'PowerShell is required by the release runner'
+def run_powershell(arguments, **options):
+    powershell = os.environ.get('MSUF_POWERSHELL') or shutil.which('pwsh') or shutil.which('powershell')
+    assert powershell, 'PowerShell required: set MSUF_POWERSHELL to the active host path'
+    return subprocess.run([powershell, *arguments], **options)
+
+
+# The release runner passes its own host, which may be absent from PATH or
+# differ from the first installed shell. Exercise the actual child launcher.
+for name in ('powershell', 'pwsh'):
+    inherited = str(Path(tempfile.gettempdir()) / 'shell with spaces' / name)
+    for discovered in (None, str(Path(tempfile.gettempdir()) / 'different host' / name)):
+        with patch.dict(os.environ, {'MSUF_POWERSHELL': inherited}), \
+                patch.object(shutil, 'which', return_value=discovered) as lookup, \
+                patch.object(subprocess, 'run') as launch:
+            run_powershell(['-NoProfile', '-File', 'probe.ps1'], check=True)
+            launch.assert_called_once_with([inherited, '-NoProfile', '-File', 'probe.ps1'], check=True)
+            lookup.assert_not_called()
+print('PASS inherited PowerShell host wins over missing/different PATH hosts')
 script = r'''param($root, $python, $runner)
 $ErrorActionPreference = 'Stop'
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($runner, [ref]$null, [ref]$null)
@@ -111,7 +127,7 @@ try {
 with tempfile.TemporaryDirectory() as tmp:
     probe = Path(tmp) / 'worker-probe.ps1'
     probe.write_text(script, encoding='utf-8')
-    result = subprocess.run([ps, '-NoProfile', '-File', str(probe), str(root), sys.executable,
+    result = run_powershell(['-NoProfile', '-File', str(probe), str(root), sys.executable,
                              str(root / 'tools/release-check.ps1')], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
 print('PASS bounded contract worker preserves all runs and rejects incomplete/failed receipts')

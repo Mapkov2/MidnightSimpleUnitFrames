@@ -1,14 +1,13 @@
 # Menu skin bridge ownership
 
-The optional core bridge owns menu and Edit Mode chrome. It leaves unit frames
-and profile color values to their existing owners. Motion settings are read
-from the active skin appearance snapshot after login; profile binding refreshes
-the snapshot. Menu animation and smooth-scrolling preferences remain separate,
-and a reduced-motion request settles active menu animations.
+This is a historical note for the former core menu/Edit Mode skin bridge.
+`MSUF_UIThemeBridge.lua` and `MSUF_Menu2_ThemeSkin.lua` were removed in
+`161c4134b`; they no longer own or load any chrome. Current skin integration
+belongs to MapkoSkin / the Suite skin bridge.
 
-The original source explanations below are retained verbatim. They are kept
-here so startup does not load lengthy documentation on every supported client.
-Executable and blank source bytes are unchanged by this documentation move.
+The source explanations below describe the removed implementation. They were
+originally moved out of its startup source to reduce loaded documentation bytes;
+they do not specify the current skin or motion contract.
 
 ```lua
     -- Search adds its rounded layers after the first skin pass. Include their
