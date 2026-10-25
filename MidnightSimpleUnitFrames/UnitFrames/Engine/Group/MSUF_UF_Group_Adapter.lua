@@ -203,11 +203,6 @@ function GF.UnregisterClickCastFrame(frame)
   return true
 end
 
-local function NormalizeAttrUnit(value)
-  if type(value) == "string" and value ~= "" then return value end
-  return NO_UNIT
-end
-
 local function StoredAttrUnit(frame)
   local value = attrUnit[frame]
   if value == NO_UNIT then return nil end
@@ -406,17 +401,6 @@ function GF.ForEachFrameForUnit(unit, fn, ...)
     end
   end
   return any
-end
-
-local function BeginUnitIndexRebind()
-  unitIndexRebindDepth = unitIndexRebindDepth + 1
-end
-
-local function EndUnitIndexRebind()
-  unitIndexRebindDepth = unitIndexRebindDepth - 1
-  if unitIndexRebindDepth < 1 then
-    unitIndexRebindDepth = 0
-  end
 end
 
 --- Resolve a PARTY_MEMBER_ENABLE/DISABLE target only when the secure child,
@@ -783,17 +767,9 @@ function GF.RefreshFrameRoleOverlay(frame, withoutRoleIcon)
   if InCombat() then GF.MarkDirty(frame, GF.DIRTY_GEOMETRY + GF.DIRTY_LAYOUT) end
 end
 
-local function OnChildAttributeChanged(self, name, value)
-  if name ~= UNIT_ATTR then return end
-  BeginUnitIndexRebind()
-  local visual = EnsureGroupVisual(self)
-  local rawUnit = NormalizeAttrUnit(value)
-  local oldUnit = StoredAttrUnit(self)
-  local kind = childKind[self] or self._msufGFKind
-
+local function RunChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
   if rawUnit == NO_UNIT then
     SuspendUnitBinding(self)
-    EndUnitIndexRebind()
     return
   end
 
@@ -812,17 +788,15 @@ local function OnChildAttributeChanged(self, name, value)
         RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
       end
     end
-    EndUnitIndexRebind()
     return
   end
 
   if not (visual and visual.MSUFSpec) then
     ApplyUnitFrame(self, kind or "party", rawUnit, "UNIT_CHANGED")
-    EndUnitIndexRebind()
     return
   end
 
-  if visual.MSUFUnitKey == rawUnit then
+  if visual.MSUFUnitKey == rawUnit and oldUnit == rawUnit then
     visual.MSUFSpec.unit = rawUnit
     visual.MSUFUnitKey = rawUnit
     visual.unitKey = rawUnit
@@ -834,13 +808,12 @@ local function OnChildAttributeChanged(self, name, value)
     TrackFrame(visual, rawUnit)
     RefreshGroupUnitState(visual, UNIT_CHANGED_REASON)
     GF.RefreshFrameRoleOverlay(visual, true)
-    EndUnitIndexRebind()
     return
   end
 
   visual.MSUFSpec.unit = rawUnit
   if UF.OnUnitChanged then
-    UF.OnUnitChanged(visual, oldUnit, rawUnit)
+    if UF.OnUnitChanged(visual, oldUnit, rawUnit) == false then return end
   else
     visual.MSUFUnitKey = rawUnit
     visual.unitKey = rawUnit
@@ -853,7 +826,28 @@ local function OnChildAttributeChanged(self, name, value)
   appliedUnit[visual] = rawUnit
   if kind then appliedKind[visual] = kind end
   TrackFrame(visual, rawUnit)
-  EndUnitIndexRebind()
+end
+
+local function FinishChildUnitRebind(_, self, visual, rawUnit, oldUnit, kind, previousDepth)
+  unitIndexRebindDepth = previousDepth
+end
+
+local function OnChildAttributeChanged(self, name, value)
+  if name ~= UNIT_ATTR then return end
+  local visual = EnsureGroupVisual(self)
+  local rawUnit = value
+  if type(value) ~= "string" or value == "" then rawUnit = NO_UNIT end
+  local oldUnit = StoredAttrUnit(self)
+  local kind = childKind[self] or self._msufGFKind
+  -- An unchanged non-priority raid child has no catch-up work or callbacks.
+  -- Keep this frequent header rewrite outside the cold apply boundary.
+  if oldUnit == rawUnit and visual and visual.MSUFSpec and appliedUnit[visual] == rawUnit
+    and (kind or visual._msufGFKind) ~= "party" and not IsPriorityFrame(visual) then return end
+  local previousDepth = unitIndexRebindDepth
+  unitIndexRebindDepth = previousDepth + 1
+  -- A cold rebind can fail after changing the visual but before indexing it.
+  -- Keep the exact route locked only for this scope, including nested children.
+  MSUF.RunUnitFrameApply(RunChildUnitRebind, FinishChildUnitRebind, self, visual, rawUnit, oldUnit, kind, previousDepth)
 end
 
 local function InstallChildAttrHook(child, kind)

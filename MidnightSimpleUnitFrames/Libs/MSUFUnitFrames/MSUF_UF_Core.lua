@@ -2069,7 +2069,7 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
   else
     UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
   end
-  if Compiler.OnUnitChanged then Compiler.OnUnitChanged(frame, oldUnit, newUnit) end
+  if Compiler.OnUnitChanged and Compiler.OnUnitChanged(frame, oldUnit, newUnit) == false then return false end
   return true
 end
 

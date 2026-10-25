@@ -502,6 +502,11 @@ if UF.RouteCompiler then
   Compiler.RefreshIdentitySurface = RefreshIdentityHealthBackground
   Compiler.CompileIdentityPath = CompileIdentityRuntimePath
   Compiler.CompileIdentityBars = CompileIdentityBarPath
+  local function FinishAuraUnitRebind(_, frame, oldUnit, newUnit, auras, previousDepth)
+    -- End restores depth before its native topology sync can raise.
+    auras.EndTopologyBatch(previousDepth)
+  end
+
   Compiler.OnUnitChanged = function(frame, oldUnit, newUnit)
     local A3 = MSUF and MSUF.MSUF_Auras3
     local active = frame._msufActiveElements
@@ -511,9 +516,14 @@ if UF.RouteCompiler then
       -- and the four-token shards resync once per rebind, not once per owner.
       local batchTopology = type(A3.BeginTopologyBatch) == "function"
         and type(A3.EndTopologyBatch) == "function"
-      if batchTopology then A3.BeginTopologyBatch() end
-      A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
-      if batchTopology then A3.EndTopologyBatch() end
+      if batchTopology then
+        local depth = A3.BeginTopologyBatch()
+        local previousDepth = depth and (depth - 1)
+        return (MSUF.RunUnitFrameApply(A3.OnFrameUnitChanged, FinishAuraUnitRebind,
+          frame, oldUnit, newUnit, A3, previousDepth))
+      else
+        A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
+      end
     end
   end
   Compiler.AfterApply = function(frame)

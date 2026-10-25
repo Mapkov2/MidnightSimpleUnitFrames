@@ -320,9 +320,11 @@ IdentityTopology.BeginDirectIdentityEventTopologyBatch = function()
     return directIdentityEventTopologyBatchDepth
 end
 
-IdentityTopology.EndDirectIdentityEventTopologyBatch = function()
+IdentityTopology.EndDirectIdentityEventTopologyBatch = function(previousDepth)
     if directIdentityEventTopologyBatchDepth <= 0 then return false end
-    directIdentityEventTopologyBatchDepth = directIdentityEventTopologyBatchDepth - 1
+    -- A rebind owns only its nested scope; restore the caller's saved depth
+    -- before syncing or reporting an error. Other callers close one level.
+    directIdentityEventTopologyBatchDepth = previousDepth or (directIdentityEventTopologyBatchDepth - 1)
     if directIdentityEventTopologyBatchDepth > 0
         or directIdentityEventTopologySyncPending ~= true then
         return false
