@@ -132,9 +132,8 @@ local function SetAuraWorkspaceLane(scope, lane)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
     M.gfAuraLaneSelection[scope] = (lane == "debuff" and "debuff") or (lane == "externals" and "externals") or "buff"
 end
---- The workspace builds one scope, lane and tool at a time. Each combination
---- is a declared view of the page (spec.variantKey), so a lane or tool click
---- shows that view's cached entry or builds it once.
+--- Only the aura area varies with scope, lane and tool. The scope header,
+--- preview and spell indicators keep their existing native trees.
 local function RebuildGroupAuraPage(ctx)
     M.RebuildPageKeepingScroll((ctx and ctx.key) or M.activeKey or "gf_auras")
 end
@@ -157,6 +156,26 @@ local function GroupAuraWorkspaceView()
     end
     return view
 end
+local function GroupAuraWorkspaceValues()
+    local values = {}
+    for _, scope in ipairs(M.GroupSpecs.SCOPE_VALUES) do
+        for _, lane in ipairs(GF_AURA_WORKSPACE_LANES) do
+            for _, tool in ipairs(AuraWorkspaceTools(lane.value)) do
+                values[#values + 1] = scope.value .. ":" .. lane.value .. ":" .. tool.value
+            end
+        end
+    end
+    return values
+end
+local GROUP_AURA_SECTION_UX = {
+    scope = CurrentScope, conf = GP.Conf,
+    sections = { auras = { summary = function(conf)
+        local auras = conf.auras or {}
+        if auras.enabled == false then return M.Tr("Disabled") end
+        return M.Tr("Buffs") .. " " .. tostring(floor((tonumber(auras.buff and auras.buff.max) or 6) + 0.5))
+            .. " / " .. M.Tr("Debuffs") .. " " .. tostring(floor((tonumber(auras.debuff and auras.debuff.max) or 6) + 0.5))
+    end } },
+}
 local function MeasureWorkspaceBar(values, width, centerY)
     return W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(values, {
         width = width,
@@ -562,15 +581,12 @@ local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
         SetOptionEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
     end)
 end
-local function BuildGFAuras(ctx)
-    local b = W.PageBuilder(ctx)
-    ScopeSection(ctx, b)
-    M.GroupPreview.Add(ctx, b)
-    local function RefreshPage() M.SelectPage(ctx.key) end
+local function BuildGroupAuraArea(ctx, b)
     local scope, lane, tool = PrepareWorkspaceSearch(ctx)
 
     local outer = Schema.Section(b:CollapsibleSection("auras", "Auras", 120, false), "groups")
     local auraBuilder = CreateNestedGroupAuraBuilder(ctx, b, outer)
+    ctx:TrackPageAreaContentLayout(auraBuilder)
     local workspaceLayout = AuraWorkspaceLayout(lane, auraBuilder.width or 720)
     local top = auraBuilder:Section("", workspaceLayout.height)
     if top.title then top.title:Hide() end
@@ -592,7 +608,25 @@ local function BuildGFAuras(ctx)
     elseif type(M.BuildAuras3GroupLaneWorkspace) == "function" then
         M.BuildAuras3GroupLaneWorkspace(ctx, auraBuilder, scope, lane, { tool = tool, compact = true })
     end
-
+end
+local function BuildGFAuras(ctx)
+    -- Scope buttons refresh this context without selecting the page again.
+    M.AddRefresher(ctx, function()
+        if M.cache[ctx.key] ~= ctx.entry then return end
+        local slot = M.CurrentPageLayoutSlot(ctx.key)
+        if ctx.entry.layoutSlot ~= slot then
+            M.RefreshPageAreas(ctx.entry)
+            ctx.entry.layoutSlot = slot
+        end
+    end)
+    local b = W.PageBuilder(ctx)
+    ScopeSection(ctx, b)
+    M.GroupPreview.Add(ctx, b)
+    M.BuildPageArea(ctx, b, nil, {
+        id = "auras", selector = GroupAuraWorkspaceView, values = GroupAuraWorkspaceValues(),
+        build = BuildGroupAuraArea, sectionUX = GROUP_AURA_SECTION_UX,
+    })
+    local function RefreshPage() M.SelectPage(ctx.key) end
     if GP.BuildSpellIndicatorsSection then GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage) end
     FinalizeScopePage(ctx, b)
 end

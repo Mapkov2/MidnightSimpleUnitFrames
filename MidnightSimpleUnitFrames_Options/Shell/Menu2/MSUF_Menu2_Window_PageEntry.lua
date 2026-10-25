@@ -352,7 +352,7 @@ local function ResizePageEntry(entry, width, height)
     ApplyContextContentHeight(entry, entry.wrapper, entry.contentHeight or entry.height)
 end
 local function PageStorageSlot(key, slot)
-    if key:match("^uf_") then return slot:match("^[^|]+") end
+    if key:match("^uf_") or key == "gf_auras" then return slot:match("^[^|]+") end
     return slot
 end
 local function PageEntryMatchesLayout(entry, slot)
@@ -383,6 +383,9 @@ local function RestorePageEntryRegistrations(entry)
         local widget = entry.searchWidgets[i]
         local meta = widget and widget._msuf2SearchMeta
         if widget and type(meta) == "table" then
+            -- Pooled preview controls can belong to both retained layouts.
+            -- Their membership already exists here; registration must not append it again.
+            widget._msuf2SearchOwnerEntry = entry
             M.RuntimeControlCatalog.RestoreWidget(widget)
             M.RegisterSearchWidget(widget, meta)
         end
@@ -591,13 +594,22 @@ local function RestorePageAreaPadding(entry, key)
     end
 end
 function M.RefreshPageAreas(entry)
+    local pending = false
+    for _, area in pairs(entry.pageAreas or {}) do
+        local selected = area.select(area.unit)
+        if not area.values[selected] then selected = area.declaration.values[1] end
+        if area.selected ~= selected then pending = true end
+    end
+    if not pending then return false end
     SavePageAreaPadding(entry, PageAreaProjectionKey(entry))
+    -- Release semantic IDs before a new view binds them. Clearing afterwards
+    -- makes shared controls look like collisions during their first build.
+    M.SearchBridge.ClearSearchRegistryPage(entry.key)
     local changed = false
     for _, area in pairs(entry.pageAreas or {}) do
         if SelectPageArea(area) then changed = true end
     end
     if not changed then return false end
-    M.SearchBridge.ClearSearchRegistryPage(entry.key)
     RestorePageEntryRegistrations(entry)
     RehydratePageAccordion(entry)
     RestorePageAreaPadding(entry, PageAreaProjectionKey(entry))

@@ -1424,6 +1424,29 @@
     {
       "test": "tools/tests/castbar_outer_providers.lua",
       "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/menu_group_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_group_area_cache_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "wide"
+      ]
     }
   ],
   "excluded": {
@@ -1497,6 +1520,7 @@
     "tools/tests/menu_dispel_overlay_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Dispel Overlay section: receipts captured before it moved onto the control schema.",
     "tools/tests/menu_dispel_symbol_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Dispel Symbol section: receipts captured before it moved onto the control schema.",
     "tools/tests/menu_entry_view_world.lua": "Shared full-graph loader for menu entry reuse and aura route restore tests; supplies native named-frame publication and an optional immutable baseline overlay, with no standalone test entry point.",
+    "tools/tests/menu_group_area_baseline.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Frozen group aura area heights and catalog identities before group page areas.",
     "tools/tests/menu_l4_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Replays the L4-owned sources against the current full client graph.",
     "tools/tests/menu_page_area_height_baseline.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Frozen 75ff89d0f outer heights of the unit aura workspace.",
     "tools/tests/menu_page_area_heights_smoke.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Diagnostic for the frozen 75ff89d0f heights, also against an old source tree; menu_page_area_cache_smoke.lua checks the same heights in releases.",
