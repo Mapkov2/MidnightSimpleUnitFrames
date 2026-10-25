@@ -4,6 +4,7 @@ io.stdout:setvbuf("no")
 local root, flavor = assert(arg[1]), assert(arg[2])
 root = root:gsub("\\", "/"):gsub("/$", "")
 local reportDirectory = os.getenv("MSUF_SCHEMA_SETTER_REPORT_DIR") or os.getenv("TEMP") or os.getenv("TMPDIR") or "/tmp"
+local Capture, Restore, Matches, Snapshot = assert(loadfile(root .. "/tools/tests/menu_schema_setter_parity_compare.lua"))()
 local fixtures = assert(loadfile(root .. "/tools/tests/menu_schema_setter_legacy.lua"))()
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local function Read(path)
@@ -12,6 +13,7 @@ local function Read(path)
     file:close()
     return source
 end
+local type, pairs = type, pairs
 local function Copy(value, seen)
     if not seen then
         if type(value) ~= "table" then return value end
@@ -60,6 +62,17 @@ local function Equal(a, b, path)
         if a[key] == nil then return false, (path or "") .. "." .. tostring(key) .. " extra" end
     end
     return true
+end
+-- Compare metadata unchanged, and compare the full profile through the frozen
+-- baseline delta. The live branch needs no second allocated delta on success.
+local function EqualOutcome(baseline, frozen, actual)
+    local expectedProfile, actualProfile = frozen.profile, actual.profile
+    frozen.profile, actual.profile = nil, nil
+    local profileSame, profileWhy = Matches(baseline, expectedProfile, actualProfile, Equal)
+    local same, why = Equal(frozen, actual)
+    frozen.profile, actual.profile = expectedProfile, actualProfile
+    if not profileSame then return false, ".profile" .. tostring(profileWhy) end
+    return same, why
 end
 local policies, controls, seenFixtures, loaded = {}, {}, {}, {}
 local customControls = {}
@@ -482,7 +495,7 @@ local function CheckColorCompanion(spec, set, value, b, c, before)
     local profile = M.EnsureDB()
     Replace(profile, before)
     profile[root][field] = { unchanged = { r = 0.13, g = 0.27, b = 0.41 } }
-    local expected, seeded = Copy(profile[root][field]), Copy(profile)
+    local expected, seeded = Copy(profile[root][field]), Snapshot(before, profile)
     set(value, b, c)
     if target then expected[target] = profile[root][field][target] end
     assert(Equal(profile[root][field], expected), spec.id .. ": changed existing companion entries")
@@ -509,6 +522,7 @@ local function ReplayCustomContracts()
         "split aura page lost its concrete catalog identity")
     local cases, schemas, issues, ordered = 0, {}, {}, {}
     local branches, sinceCollect = {}, 0
+    local previousOriginal
     local menuState = Copy(M._persistentMenuState or {})
     for _, widget in ipairs(mw.world.widgets.frames) do
         local spec = widget._msuf2ControlSchema
@@ -527,7 +541,9 @@ local function ReplayCustomContracts()
             and not spec.id:match("advancedprofiles") and not spec.id:match("%.opt_profiles%.")
             and (spec.kind == "toggle" or spec.kind == "slider" or spec.kind == "dropdown"
                 or spec.kind == "segment" or spec.kind == "color") and SelectSlotOwner(spec, widget) then
-            local profile, original = M.EnsureDB(), Copy(M.EnsureDB())
+            local profile, current = M.EnsureDB(), M.EnsureDB()
+            local original = previousOriginal and Snapshot(previousOriginal, current) or Copy(current)
+            previousOriginal = original
             -- The dedicated Pet XP width row is actionable only for that selected indicator.
             if spec.id:match("%.msuf2_pet_xp_width$") then M.unitStatusSelection.pet = "statusPetXP" end
             local path = spec.settingPath or (spec.meta and spec.meta.settingKey) or ""
@@ -563,7 +579,7 @@ local function ReplayCustomContracts()
                 end
                 if #values == 0 and a ~= nil then values[1] = a end
             end
-            local before = Copy(M.EnsureDB())
+            local before = Snapshot(original, M.EnsureDB())
             for _, value in ipairs(values) do
                 Replace(M.EnsureDB(), before)
                 M.ClearHistory()
@@ -654,7 +670,7 @@ local function ReplayScalarEdges()
                         local ok, result = pcall(setter, value)
                         tracing = false
                         assert(ok, spec.id .. ": scalar edge " .. tostring(result))
-                        local outcome = { profile = Copy(M.EnsureDB()), result = result, apply = Copy(applyLog) }
+                        local outcome = { profile = Capture(baseline, M.EnsureDB()), result = result, apply = Copy(applyLog) }
                         if old then frozen = outcome
                         else
                             local equal, why = Equal(frozen, outcome)
@@ -710,6 +726,7 @@ for _, control in ipairs(controls) do
     else expanded[#expanded + 1] = control end
 end
 controls = expanded
+local previousBaseline
 local resets, scopeChecks = 0, 0
 for _, control in ipairs(controls) do
     local spec = control.spec
@@ -733,7 +750,9 @@ for _, control in ipairs(controls) do
         end
     end
     scopeChecks = scopeChecks + 1
-    local baseline = Copy(M.EnsureDB())
+    local baseline = previousBaseline and Snapshot(previousBaseline, M.EnsureDB()) or Copy(M.EnsureDB())
+    previousBaseline = baseline
+    local restoreKnown, restoreDelta = false, nil
     local labels = {}
     for _, field in ipairs({ "_msuf2Title", "_msuf2Label" }) do
         local font = control.widget[field]
@@ -744,7 +763,10 @@ for _, control in ipairs(controls) do
         local frozenOutcome, frozenReset, derivedResetObserved
         for _, old in ipairs({ true, false }) do
             legacy = old
-            Replace(M.EnsureDB(), baseline)
+            local profile = M.EnsureDB()
+            if restoreKnown then Restore(profile, baseline, restoreDelta, Replace)
+            else Replace(profile, baseline) end
+            restoreKnown, restoreDelta = false, nil
             M.ClearHistory()
             for font, text in pairs(labels) do font:SetText(text) end
             applyLog, tracing = {}, true
@@ -752,10 +774,10 @@ for _, control in ipairs(controls) do
             tracing, applyDepth = false, 0
             Check(ok, spec.id .. ": " .. tostring(why))
             if old then
-                frozenOutcome = { profile = Copy(M.EnsureDB()), history = History(), apply = applyLog,
+                frozenOutcome = { profile = Capture(baseline, M.EnsureDB()), history = History(), apply = applyLog,
                     declarationResult = control.declarationOnly and why }
             else
-                local same, difference = Equal(frozenOutcome, { profile = M.EnsureDB(), history = History(), apply = applyLog,
+                local same, difference = EqualOutcome(baseline, frozenOutcome, { profile = M.EnsureDB(), history = History(), apply = applyLog,
                     declarationResult = control.declarationOnly and why })
                 Check(same, control.frozen.id .. " / " .. spec.id .. ": " .. tostring(difference))
             end
@@ -795,11 +817,19 @@ for _, control in ipairs(controls) do
                         else shared.RestoreSectionValues(entry, resetKeys, conf, defaults, true) end
                     end)
                     if not old then derivedResetObserved = true end
-                    if old then frozenReset = { profile = Copy(M.EnsureDB()), history = History() }
+                    if old then
+                        frozenReset = { profile = Capture(baseline, M.EnsureDB()), history = History() }
+                        restoreDelta = frozenReset.profile
                     else
-                        local same, difference = Equal(frozenReset, { profile = M.EnsureDB(), history = History() })
+                        local outcome = { profile = M.EnsureDB(), history = History() }
+                        local same, difference = EqualOutcome(baseline, frozenReset, outcome)
                         Check(same, control.frozen.id .. " / " .. spec.id .. ": reset " .. tostring(difference))
+                        if same then restoreDelta = frozenReset.profile
+                        else restoreDelta = Capture(baseline, outcome.profile) end
                     end
+                    -- History() only copies undo records. Equality proves that
+                    -- the frozen delta also completely describes this branch.
+                    restoreKnown = true
                     resets = resets + 1
                 end
             end
@@ -810,7 +840,11 @@ for _, control in ipairs(controls) do
     local frozenCombat
     for _, old in ipairs({ true, false }) do
         legacy = old
-        Replace(M.EnsureDB(), baseline)
+        local profile = M.EnsureDB()
+        if old then
+            if restoreKnown then Restore(profile, baseline, restoreDelta, Replace)
+            else Replace(profile, baseline) end
+        end
         M.ClearHistory()
         combat, setterCalls = true, 0
         local ok, why = pcall(Drive, control, candidates[1])
@@ -822,10 +856,22 @@ for _, control in ipairs(controls) do
         if control.command and not control.declarationOnly then
             Check(Equal(M.EnsureDB(), baseline), spec.id .. ": combat command wrote profile")
         end
-        if old then frozenCombat = Copy(M.EnsureDB())
-        else Check(Equal(frozenCombat, M.EnsureDB()), spec.id .. ": combat refresh changed profile behavior") end
+        local profile = M.EnsureDB()
+        local outcome
+        if old then
+            outcome = Capture(baseline, profile)
+            frozenCombat = outcome
+        else
+            local same = Matches(baseline, frozenCombat, profile, Equal)
+            Check(same, spec.id .. ": combat refresh changed profile behavior")
+            if same then outcome = frozenCombat
+            else outcome = Capture(baseline, profile) end
+        end
+        -- No profile-writing callback follows this complete capture. Reuse its
+        -- delta for the next branch/scope's identical in-place baseline restore.
+        Restore(profile, baseline, outcome, Replace)
     end
-    Replace(M.EnsureDB(), baseline)
+    M.EnsureDB()
     end
 end
 if #failures > 0 then

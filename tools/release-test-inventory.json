@@ -1366,6 +1366,10 @@
         "Mists",
         "Forever"
       ]
+    },
+    {
+      "test": "tools/tests/menu_schema_setter_parity_compare_smoke.lua",
+      "phase": "menu"
     }
   ],
   "excluded": {
@@ -1477,6 +1481,7 @@
     "tools/tests/menu_entry_view_world.lua": "Shared full-graph loader for menu entry reuse and aura route restore tests; supplies native named-frame publication and an optional immutable baseline overlay, with no standalone test entry point.",
     "tools/tests/menu_l4_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Replays the L4-owned sources against the current full client graph.",
     "tools/tests/historical_6503_source.py": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Read-only verifier and archive cache for the pinned historical 6.503 source (tag v6.503, d8af824).",
-    "tools/tests/profile_sparse_historical_oracle_smoke.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Executed inside profile_sparse_backward_migration_smoke.lua on every client: frozen ce4767d34 V2/V3 mask oracle."
+    "tools/tests/profile_sparse_historical_oracle_smoke.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Executed inside profile_sparse_backward_migration_smoke.lua on every client: frozen ce4767d34 V2/V3 mask oracle.",
+    "tools/tests/menu_schema_setter_parity_compare.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Baseline-plus-delta capture, restore and match helpers for menu_schema_setter_parity.lua."
   }
 }
