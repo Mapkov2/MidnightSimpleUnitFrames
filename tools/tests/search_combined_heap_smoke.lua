@@ -45,7 +45,10 @@ local function Upvalue(fn, wanted)
 end
 local build = Upvalue(M.Search._CoreAPI.WhenIndexReady, "SearchIndexBuild")
 local search, slot = Upvalue(build.Pump, "SearchPages")
-debug.setupvalue(build.Pump, slot, function(...)
+-- A local keeps the injected pump alive: Lua 5.1's lua_setupvalue puts its GC
+-- write barrier on the closure, not on the upvalue cell, so an otherwise
+-- unreferenced replacement can be collected while installed.
+local function MeasuredSearchPages(...)
     local result = search(...)
     if result then
         local request = M.Search._RenderContext.SEARCH_STATE.request
@@ -57,7 +60,8 @@ debug.setupvalue(build.Pump, slot, function(...)
         end
     end
     return result
-end)
+end
+debug.setupvalue(build.Pump, slot, MeasuredSearchPages)
 for _, query in ipairs({ "castbar", "cstbr", "helth", "player power", "auras", "thret", "portrait" }) do
     M.Search._CoreAPI.OpenSearchResults(query)
     Drain()

@@ -69,6 +69,14 @@ local function FindUpvalue(fn, wanted)
         if not name then break end
     end
 end
+-- Lua 5.1's lua_setupvalue puts its GC write barrier on the closure, not on the
+-- upvalue cell that receives the value, so an otherwise unreferenced injected
+-- function can be collected while installed. Keep every injection anchored.
+local injected = {}
+local function SetUpvalue(fn, index, value)
+    injected[#injected + 1] = value
+    return debug.setupvalue(fn, index, value)
+end
 local function Upvalue(fn, wanted)
     local value, index = FindUpvalue(fn, wanted)
     assert(value ~= nil, "missing upvalue " .. wanted)
@@ -77,7 +85,7 @@ end
 local finishBatch = FindUpvalue(Factory.Apply, "FinishApplyBatch")
 local flushBatch = finishBatch and Upvalue(finishBatch, "FlushApplyBatch") or Factory.Apply
 local observe, observerIndex = Upvalue(flushBatch, "EnsureCooldownWidthObservers")
-debug.setupvalue(flushBatch, observerIndex, function(...)
+SetUpvalue(flushBatch, observerIndex, function(...)
     observers = observers + 1
     return observe(...)
 end)
@@ -205,12 +213,12 @@ for _, dependency in ipairs({ "ApplySize", "ApplyPosition" }) do
         local before = Before()
         -- Fault injection at the real cold geometry dependency, keeping the
         -- actual factory loop, ApplyFrame and batch finalization in place.
-        debug.setupvalue(frameApply, index, function(frame, ...)
+        SetUpvalue(frameApply, index, function(frame, ...)
             if frame == target then return false end
             return original(frame, ...)
         end)
         local ok, result = pcall(UF.Apply)
-        debug.setupvalue(frameApply, index, original)
+        SetUpvalue(frameApply, index, original)
         assert(ok and result == false, dependency .. " refusal was hidden")
         Closed(before)
         assert(UF.Apply() == true, dependency .. " retry failed")
@@ -293,9 +301,9 @@ end)
 Case("observer-throw", function()
     local observer = Upvalue(flushBatch, "EnsureCooldownWidthObservers")
     local before = Before()
-    debug.setupvalue(flushBatch, observerIndex, function() error("injected width observer") end)
+    SetUpvalue(flushBatch, observerIndex, function() error("injected width observer") end)
     local ok, result = pcall(UF.Apply)
-    debug.setupvalue(flushBatch, observerIndex, observer)
+    SetUpvalue(flushBatch, observerIndex, observer)
     assert(ok and result == false, "width observer failure recorded success")
     assert(UF.Surface.batch == false and commits == before[2] + 1, "width observer failure bypassed EndBatch")
     assert(UF.Apply() == true, "retry after width observer failure failed")
