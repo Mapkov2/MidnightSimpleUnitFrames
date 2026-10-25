@@ -5,10 +5,18 @@ local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_
 local file = assert(io.open(arg[3] or path, "rb"))
 local source = file:read("*a"):gsub("\r\n", "\n")
 file:close()
-local start = assert(source:find("local predictionQueueA, predictionQueueB", 1, true)
-    or source:find("local predictionWriteQueue, predictionReadQueue", 1, true))
-local finish = assert(source:find("\nfunction Prediction.UpdateHealthValue", start, true))
-local body = source:sub(start, finish - 1)
+local queueSource, queuePath = source, path
+if not arg[3] then
+    queuePath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Queue.lua"
+    local queueFile = assert(io.open(queuePath, "rb"))
+    queueSource = queueFile:read("*a"):gsub("\r\n", "\n")
+    queueFile:close()
+end
+local start = assert(queueSource:find("local predictionQueueA, predictionQueueB", 1, true)
+    or queueSource:find("local predictionWriteQueue, predictionReadQueue", 1, true))
+local finish = assert(queueSource:find("\nreturn QueuePredictionDataEvent, CancelQueuedPrediction", start, true)
+    or queueSource:find("\nfunction Prediction.UpdateHealthValue", start, true))
+local body = queueSource:sub(start, finish - 1)
 
 local function World(persistent)
     local w = { calls = {}, natives = 0, writes = 0, glow = 0 }

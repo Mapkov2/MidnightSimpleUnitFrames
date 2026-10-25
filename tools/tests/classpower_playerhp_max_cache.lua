@@ -3,6 +3,13 @@ local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local path = root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_PlayerHP.lua"
 local Secrets = dofile(root .. "/tools/tests/classpower_secrets.lua")
 Secrets.Install()
+-- Load the actual provider before the builder binds its methods, as in the TOC.
+local World = dofile(root .. "/tools/tests/client_world.lua")
+local world = World.New(root, "Mainline")
+world.env.issecretvalue = Secrets.IsSecret
+world:LoadGraph("MidnightSimpleUnitFrames", World.Graph(root, World.CoreTOC("Mainline"), "enUS"), world.core)
+assert(not world:FirstFailure(), "PlayerHP provider graph did not boot")
+local common = assert(world.core.UFBarTextCommon)
 local builders, php = {}, { visible = true, frame = { unit = "player" }, owner = { unit = "player" } }
 local current, maximum, healthCalls, maxCalls = 500, 1000, 0, 0
 local bar = {}
@@ -10,7 +17,7 @@ function bar:SetValue(value) self.value = value end
 function bar:SetMinMaxValues(_, value) self.maximum = value end
 function bar:SetStatusBarColor() end
 php.bar, php._colorMode = bar, "DARK"
-local ns = { UFText = { DISPATCH_KEY = { CURRENT = 1, CURRENT_MAX = 3, MAX = 2, PERCENT_MAX = 5, PERCENT = 4 } } }
+local ns = { UFBarTextCommon = common, UFText = { DISPATCH_KEY = { CURRENT = 1, CURRENT_MAX = 3, MAX = 2, PERCENT_MAX = 5, PERCENT = 4 } } }
 function ns.Require(name)
     if name == "MSUF_CP_CONST" then return { BuilderRegistry = function() return builders end } end
     return function() end

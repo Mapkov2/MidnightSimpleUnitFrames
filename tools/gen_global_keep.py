@@ -1,7 +1,7 @@
 """Generate the active Kernel global keep policy from reviewed contracts.
 
 Uses the existing public-globals inventory and reviewed integration ledger. Suite
-sources are scanned read-only. --write installs generated data in Bootstrap;
+reads come from a pinned consumer contract, never an external working checkout. --write installs generated data in Bootstrap;
 --consumers PATH records compiler-proven bare reads outside the keep list.
 No addon code is executed and no git state is written.
 """
@@ -177,7 +177,29 @@ def shipped_lua(root=ROOT):
     return sorted(name for name in names if name.endswith(".lua"))
 
 
-def keep_inventory(root=ROOT, suite=Path(ledger.DEFAULT_SUITE_REPO)):
+def consumer_contract(path):
+    contract = json.loads(read(path))
+    if (contract.get("version") != 1 or not re.fullmatch(r"[0-9a-f]{40}", contract.get("commit", ""))
+            or not re.fullmatch(r"[0-9a-f]{64}", contract.get("snapshotSha256", ""))):
+        raise ValueError("invalid pinned Suite revision/snapshot")
+    for key in ("names", "prefixes"):
+        values = contract.get(key)
+        if (not isinstance(values, list) or values != sorted(set(values))
+                or any(not isinstance(name, str) or not re.fullmatch(ledger.NAME, name) for name in values)):
+            raise ValueError("invalid Suite consumer " + key)
+    return contract
+
+
+def check_policy(root, block):
+    text = read(root / BOOTSTRAP)
+    if text.count(BEGIN) != 1 or text.count(END) != 1:
+        raise ValueError("generated Kernel policy markers missing or duplicated")
+    actual = text[text.index(BEGIN):text.index(END) + len(END)]
+    if actual != block:
+        raise ValueError("generated Kernel keep policy is stale; review contracts and regenerate")
+
+
+def keep_inventory(root=ROOT, contract_path=None):
     exports, dynamic = ledger.static_inventory(str(root))
     rows = augment_inventory(root, exports, dynamic)
     reasons = collections.defaultdict(set)
@@ -223,21 +245,11 @@ def keep_inventory(root=ROOT, suite=Path(ledger.DEFAULT_SUITE_REPO)):
             continue
         keep(row["name"], "reviewed " + ",".join(row["evidence"]))
 
-    if not suite.is_dir():
-        raise ValueError("Suite source missing: " + str(suite))
-    # Existing scanner handles bare GETGLOBAL, _G aliases, rawget/getglobal,
-    # quoted dispatch names and dynamic prefixes, without confusing nsfields.
-    sources = list(ledger.repo_sources(str(suite)))
-    if not sources or not any(source.addon == "MSUF_Suite" for source in sources):
-        raise ValueError("Suite addon sources missing: " + str(suite))
-    scan = ledger.scan_external(sources, set(exports), set(), ratchet.find_luac())
-    if scan.unparsed:
-        raise ValueError("Suite files did not compile: " + repr(scan.unparsed))
-    for name in scan.readers:
+    contract = consumer_contract(contract_path or root / "tools/global_keep_consumers.json")
+    for name in contract["names"]:
         if name in exports:
             keep(name, "Suite reader")
-    for prefix in scan.prefixes:
-        # Bare MSUF_ strings are frequently labels, not an addressable family.
+    for prefix in contract["prefixes"]:
         if prefix in ("MSUF_", "MSUF", "MSUF_GF_"):
             continue
         for name in exports:
@@ -323,15 +335,19 @@ def consumers(root, keep, exports, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
-    parser.add_argument("--suite", type=Path, default=Path(ledger.DEFAULT_SUITE_REPO))
-    parser.add_argument("--write", action="store_true")
+    parser.add_argument("--consumer-contract", type=Path)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true")
+    mode.add_argument("--write", action="store_true")
     parser.add_argument("--consumers", type=Path)
     args = parser.parse_args()
     args.root = args.root.resolve()
     try:
-        reasons, exports, _ = keep_inventory(args.root, args.suite)
+        reasons, exports, _ = keep_inventory(args.root, args.consumer_contract)
         block = generated_block(reasons)
-        if args.write:
+        if args.check:
+            check_policy(args.root, block)
+        elif args.write:
             write_policy(args.root, block)
         else:
             print(block)

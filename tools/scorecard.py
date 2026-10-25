@@ -481,6 +481,11 @@ def preview_render_census(root):
         digest = hashlib.sha256(keep.read(path).encode("utf-8")).hexdigest()
         if digest != row["source_sha256"] or not row["runtime_owner"].strip():
             raise ValueError("stale/unreviewed preview source: " + row["file"])
+        for support in row.get("support_sources", []):
+            path = root / schema_coverage.MENU / support["file"]
+            digest = hashlib.sha256(keep.read(path).encode("utf-8")).hexdigest()
+            if digest != support["source_sha256"]:
+                raise ValueError("stale/unreviewed preview support source: " + support["file"])
         physical = {n for first, last in row["reviewed_ranges"] for n in range(first, last + 1)}
         if (len(physical) != row["before_physical"] or not physical or min(physical) < 1
                 or max(physical) > row["baseline_line_count"]

@@ -34,6 +34,7 @@ jobs:
           assert hashlib.sha256(archive.read_bytes()).hexdigest() == pins['luaSourceSha256']
           version = pins['powershell']
           urllib.request.urlretrieve('https://github.com/PowerShell/PowerShell/releases/download/v' + version + '/powershell-' + version + '-linux-x64.tar.gz', temp / 'pwsh.tar.gz')
+          assert hashlib.sha256((temp / 'pwsh.tar.gz').read_bytes()).hexdigest() == pins['powershellLinuxX64Sha256']
           PY
           tar -xzf "$RUNNER_TEMP/lua.tar.gz" -C "$RUNNER_TEMP"
           make -C "$RUNNER_TEMP/lua-5.1.5" linux

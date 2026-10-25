@@ -16,5 +16,7 @@
   },
   "powershell": "7.4.6",
   "luaSourceUrl": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
-  "blizzardRepository": "https://github.com/Gethe/wow-ui-source"
+  "blizzardRepository": "https://github.com/Gethe/wow-ui-source",
+  "powershellLinuxX64Sha256": "6f6015203c47806c5cc444c19d8ed019695e610fbd948154264bf9ca8e157561",
+  "powershellHashSource": "https://github.com/PowerShell/PowerShell/releases/tag/v7.4.6"
 }

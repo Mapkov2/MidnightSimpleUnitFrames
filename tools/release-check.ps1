@@ -50,8 +50,8 @@ $wall = [Diagnostics.Stopwatch]::StartNew()
 $slotTime = 0.0
 $projectionTime = 0.0
 $suiteSlotHeld = $false
-$profileJob = $null
-$setterJobs = @()
+$contractJobs = @()
+$contractQueue = $null
 function Invoke-Check([string]$Name, [string]$Executable, [string[]]$Arguments) {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $previous = $ErrorActionPreference
@@ -76,56 +76,128 @@ function Contract([string]$Name, [object[]]$Runs) {
     $script:summary.Add($line)
     Write-Output $line
 }
+function Get-MenuControlCounts {
+    if (-not $script:MenuControlCounts) {
+        # Read the validated projection's five counts once, without turning the
+        # full 75 MB declaration graph into nested PowerShell objects.
+        $code = @'
+import json, sys
+with open(sys.argv[1], encoding='utf-8-sig') as source:
+    clients = json.load(source)['clients']
+counts = {}
+for name, client in clients.items():
+    ids = client['initialControlIds']
+    if not isinstance(ids, list) or not ids:
+        raise ValueError('Missing initial control IDs for ' + name)
+    counts[name] = len(ids)
+print(json.dumps(counts))
+'@
+        $text = & $Python -c $code (Join-Path $root 'tools/menu_schema_coverage.json') 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { throw "Cannot read menu control counts: $text" }
+        $script:MenuControlCounts = $text | ConvertFrom-Json
+    }
+    return $script:MenuControlCounts
+}
+function Order-ContractRuns([object[]]$Runs) {
+    # Lead with long independent jobs, avoiding a late namespace tail after
+    # other workers drain. Every run retains its original inventory ID.
+    return $Runs | Sort-Object @{ Expression = {
+        if ($_.Phase -eq 'setter parity') { 0 }
+        elseif ($_.Label -eq 'flip') { 1 }
+        else { 2 }
+    } }, @{ Expression = { $_.Id } }
+}
 function LuaRun([string]$Smoke, [string]$Flavor, [string]$Mode = "") {
     $arguments = @("$root/tools/tests/$Smoke", "$root/", $Flavor)
     if ($Mode) { $arguments += $Mode }
     if ($Smoke -eq 'release_menu_smoke.lua') {
-        if (-not $script:MenuProjection) {
-            $script:MenuProjection = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'menu_schema_coverage.json') -Raw | ConvertFrom-Json
-        }
-        $ids = $script:MenuProjection.clients.$Flavor.initialControlIds
-        if (-not $ids) { throw "Missing schema projection for $Flavor" }
-        $arguments += [string]$ids.Count
+        $count = (Get-MenuControlCounts).$Flavor
+        if (-not $count) { throw "Missing schema projection for $Flavor" }
+        $arguments += [string]$count
     }
     return @{ Label = "$Smoke/$Flavor"; Exe = $Lua; Args = $arguments }
 }
-function New-ProfileRuns {
-    $runs = @(
-        @{ Label = 'sparse-v2'; Exe = $Lua; Args = @('tools/defaults_schema_generate.lua', "$root/", '--check') },
-        @{ Label = 'sparse-v3'; Exe = $Lua; Args = @('tools/defaults_schema_generate.lua', "$root/", '--check', '--sparse-v3') },
-        @{ Label = 'size-malformed-rollback-inheritance'; Exe = $Lua; Args = @('tools/tests/profile_sparse_size_smoke.lua', "$root/") }
-    )
-    foreach ($flavor in @('Mainline', 'Vanilla', 'TBC', 'Mists', 'Forever')) {
-        foreach ($smoke in @('release_profiles_smoke.lua', 'profile_decoder_quarantine_smoke.lua',
-            'profile_backup_history_smoke.lua', 'profile_alias_corpus_bytes_smoke.lua',
-            'profile_ensure_recovery_budget_smoke.lua', 'profile_rollback_compat_smoke.lua',
-            'profile_rollback_backup_smoke.lua', 'profile_rollback_guards_smoke.lua', 'profile_newer_revision_backup_smoke.lua')) {
-            $runs += (LuaRun $smoke $flavor)
+$testInventory = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'release-test-inventory.json') -Raw | ConvertFrom-Json
+function Get-InventoryRuns([string]$Phase) {
+    $runs = @()
+    foreach ($entry in @($testInventory.runs | Where-Object { $_.phase -eq $Phase })) {
+        $flavors = if ($entry.clients) { @($entry.clients) } else { @('') }
+        foreach ($flavor in $flavors) {
+            $arguments = @((Join-Path $root $entry.test))
+            $tail = if ($null -ne $entry.arguments) { @($entry.arguments) }
+                elseif ($flavor) { @('{root}', '{client}') } else { @('{root}') }
+            foreach ($value in $tail) {
+                $arguments += ([string]$value).Replace('{root}', "$root/").Replace('{client}', $flavor).Replace('{lua}', $Lua).Replace('{luac}', $Luac)
+            }
+            if ($entry.test -eq 'tools/tests/release_menu_smoke.lua') {
+                $count = (Get-MenuControlCounts).$flavor
+                if (-not $count) { throw "Missing schema projection for $flavor" }
+                $arguments += [string]$count
+            }
+            $exe = if ($entry.test.EndsWith('.py')) { $Python } else { $Lua }
+            $runs += @{ Label = "$($entry.test)/$flavor/$($entry.arguments -join ' ')"; Exe = $exe; Args = $arguments; Client = $flavor }
         }
     }
     return $runs
 }
-function Start-SetterWorker([string]$flavor) {
-    $ready = "$log.setters.$flavor.ready"
-    $job = Start-Job -ArgumentList $root, $Lua, $Slot, "$Owner-setter-$flavor", $flavor, $ready -ScriptBlock {
-        param($root, $lua, $slot, $owner, $flavor, $ready)
+function New-ProfileRuns {
+    $runs = @(
+        @{ Label = 'sparse-v2'; Exe = $Lua; Args = @('tools/defaults_schema_generate.lua', "$root/", '--check') },
+        @{ Label = 'sparse-v3'; Exe = $Lua; Args = @('tools/defaults_schema_generate.lua', "$root/", '--check', '--sparse-v3') }
+    )
+    return $runs + @(Get-InventoryRuns 'profiles')
+}
+# A bounded shared queue: at most six Lua processes. Each
+# setter replay keeps its single menu world for scalar, reset and compound cases.
+function Start-ContractWorker([string]$Name, [object[]]$Runs, [string]$QueuePath = '', [long]$Epoch = 0) {
+    $job = Start-Job -ArgumentList $root, $Slot, "$Owner-$Name", $Name, @($Runs), $QueuePath, $Epoch -ScriptBlock {
+        param($root, $slot, $owner, $name, $runs, $queue, $epoch)
         . (Join-Path $root 'tools/check-common.ps1')
         $script:PowerShell = (Get-Process -Id $PID).Path
-        $held, $code, $output = $false, 1, ''
-        $timer = [Diagnostics.Stopwatch]::StartNew()
+        $receipts = New-Object 'System.Collections.Generic.List[object]'
+        $held = $false
+        if (-not $epoch) { $epoch = [Diagnostics.Stopwatch]::GetTimestamp() }
+        $frequency = [double][Diagnostics.Stopwatch]::Frequency
         try {
-            Enter-CheckSlot $slot $owner "MSUF-Compact-Checks-Setters-$flavor"
+            Enter-CheckSlot $slot $owner "MSUF-Compact-Checks-$name"
             $held = $true
-            [IO.File]::WriteAllText($ready, [string]$PID)
-            $ErrorActionPreference = 'Continue'
-            $LASTEXITCODE = 1
-            $output = & $lua "$root/tools/tests/menu_schema_setter_parity.lua" "$root/" $flavor 2>&1 | Out-String
-            $code = $LASTEXITCODE
-        } catch { $output = "setter worker error: $_" }
-        finally { if ($held) { Exit-CheckSlot $slot $owner } }
-        [pscustomobject]@{ Flavor = $flavor; Code = $code; Text = $output; Seconds = $timer.Elapsed.TotalSeconds }
+            Push-Location $root
+            $position, $claim = 0, $null
+            if ($queue) { $claim = New-Object Threading.Mutex($false, ('MSUF-Contract-Queue-' + [IO.Path]::GetFileName($queue))) }
+            while ($true) {
+                if ($claim) {
+                    try { [void]$claim.WaitOne() } catch [Threading.AbandonedMutexException] { }
+                    try {
+                        $index = [int][IO.File]::ReadAllText($queue)
+                        if ($index -lt 0 -or $index -gt $runs.Count) { throw 'Invalid contract queue cursor' }
+                        if ($index -lt $runs.Count) { [IO.File]::WriteAllText($queue, [string]($index + 1)) }
+                    } finally { $claim.ReleaseMutex() }
+                } else { $index = $position; $position++ }
+                if ($index -ge $runs.Count) { break }
+                $run = $runs[$index]
+                $started = ([Diagnostics.Stopwatch]::GetTimestamp() - $epoch) / $frequency
+                $ErrorActionPreference = 'Continue'
+                $LASTEXITCODE = 1
+                $executable, $arguments = $run.Exe, $run.Args
+                $output = & $executable @arguments 2>&1 | Out-String
+                $code = $LASTEXITCODE
+                $ok = $code -eq 0
+                if ($run.Phase -eq 'setter parity') {
+                    $completion = '(?m)^PASS schema setters ' + [regex]::Escape($run.Client) + ':'
+                    $writes = '(?m)^PASS compound/temporary write contracts ' + [regex]::Escape($run.Client) + ':'
+                    $ok = $ok -and [regex]::Matches($output, $completion).Count -eq 1 -and
+                        [regex]::Matches($output, $writes).Count -eq 1
+                }
+                $receipts.Add([pscustomobject]@{ Id = $run.Id; Phase = $run.Phase; Label = $run.Label;
+                    Ok = $ok; Code = $code; Text = $output; Started = $started; Finished = ([Diagnostics.Stopwatch]::GetTimestamp() - $epoch) / $frequency })
+            }
+        } finally {
+            if ($claim) { $claim.Dispose() }
+            if ($held) { Pop-Location; Exit-CheckSlot $slot $owner }
+        }
+        [pscustomobject]@{ Name = $name; Receipts = $receipts.ToArray() }
     }
-    return @{ Job = $job; Flavor = $flavor; Ready = $ready }
+    return @{ Job = $job; Name = $Name; Runs = $Runs }
 }
 if ($ProfilesOnly) {
     Push-Location $root
@@ -146,8 +218,10 @@ try {
     }
     Contract "generated lists" @(
         @{ Label = "module-manifest"; Exe = $Python; Args = @("tools/generate_module_manifest.py", "--check") },
-        @{ Label = "schema-projection-proof"; Exe = $Python; Args = @("tools/tests/menu_schema_coverage_smoke.py") }
+        @{ Label = "test-inventory"; Exe = $Python; Args = @("tools/release_test_inventory.py", "--check") },
+        @{ Label = "global-keep"; Exe = $Python; Args = @("tools/gen_global_keep.py", "--check") }
     )
+    Contract 'generator regressions' @(Get-InventoryRuns 'generated')
     if ($failed) {
         Write-Output "release-check: $failed failed; generated lists are stale or invalid; log $log"
         exit 1
@@ -185,166 +259,74 @@ try {
     $suiteSlotHeld = $true
     $suiteTime = [Diagnostics.Stopwatch]::StartNew()
     try {
-        $clients = @('Mainline', 'Vanilla', 'TBC', 'Mists', 'Forever')
-        $profileRuns = New-ProfileRuns
-        $menuRuns = @(
-            @{ Label = 'schema-projection-proof'; Exe = $Python; Args = @('tools/tests/menu_schema_coverage_smoke.py') },
-            @{ Label = 'shared-widget-declarations'; Exe = $Lua; Args = @('tools/tests/menu_schema_capture_smoke.lua', "$root/") },
-            @{ Label = 'schema-setter-contract'; Exe = $Lua; Args = @('tools/tests/menu_schema_setter_contract.lua', "$root/") },
-            @{ Label = 'scanner'; Exe = $Lua; Args = @('tools/tests/menu_scanner_lifecycle.lua', "$root/") },
-            @{ Label = 'crosshair'; Exe = $Lua; Args = @('tools/tests/menu_crosshair_geometry.lua', "$root/") }
-        )
-        $runtimeRuns = @()
-        # These isolated writer/builder tests take the repository root only.
-        foreach ($smoke in @('castbar_pubsub_mutation.lua', 'classpower_playerhp_max_cache.lua',
-            'classpower_builder_contracts.lua', 'castbar_empower_reuse.lua', 'modules_enabled_boundary.lua',
-            'uf_prediction_writer_recovery.lua', 'uf_late_anchor_writer_recovery.lua')) {
-            $runtimeRuns += @{ Label = $smoke; Exe = $Lua; Args = @("$root/tools/tests/$smoke", "$root/") }
+        $phaseNames = @('setter parity', 'profiles', 'runtime robustness', 'menu', 'apply path', 'namespace', 'group preview', 'Edit Mode')
+        $phases = @{
+            'setter parity' = @(Get-InventoryRuns 'setters')
+            'profiles' = @(New-ProfileRuns)
+            'runtime robustness' = @(Get-InventoryRuns 'runtime')
+            'menu' = @(Get-InventoryRuns 'menu')
+            'apply path' = @(Get-InventoryRuns 'apply')
+            'namespace' = @(Get-InventoryRuns 'namespace') + @(
+                @{ Label = 'flip'; Exe = $Python; Args = @('tools/flip_check.py', $root, '--luac', $luaCompiler, '--lua', $Lua) })
+            'group preview' = @(Get-InventoryRuns 'group preview')
+            'Edit Mode' = @(Get-InventoryRuns 'edit')
         }
-        foreach ($flavor in $clients) {
-            foreach ($smoke in @('release_menu_smoke.lua', 'menu_changelog_reopen.lua', 'search_entrypoint_slices.lua',
-                'menu_schema_reused_declarations_smoke.lua')) {
-                $menuRuns += (LuaRun $smoke $flavor)
-            }
-        }
-        # Both index families, across every supported text locale.
-        foreach ($flavor in @('Mainline', 'Vanilla')) {
-            foreach ($locale in @('enUS', 'enGB', 'deDE', 'esES', 'esMX', 'frFR', 'itIT', 'koKR', 'ptBR', 'ruRU', 'zhCN', 'zhTW')) {
-                $menuRuns += @{ Label = "search_static_heap.lua/$flavor/$locale"; Exe = $Lua;
-                    Args = @('tools/tests/search_static_heap.lua', "$root/", $flavor, '--check', $locale) }
-            }
-        }
-        $runtimeRuns += (LuaRun 'text_drain_writer_recovery_smoke.lua' 'Mainline')
-        $menuRuns += @(
-            (LuaRun 'menu_page_rebuild_leak_smoke.lua' 'Mainline'),
-            (LuaRun 'menu_page_rebuild_leak_smoke.lua' 'Vanilla'),
-            (LuaRun 'search_cold_metadata_smoke.lua' 'Mainline'),
-            (LuaRun 'search_cold_metadata_smoke.lua' 'Vanilla'),
-            (LuaRun 'guided_tour_restore_retention_smoke.lua' 'Mainline')
-        )
-        $profileJob = $null
         if ($ParallelContracts) {
-            $profileJob = Start-Job -ArgumentList $PowerShell, $PSCommandPath, "$Owner-profiles", $Lua, $Luac, $Python, $Slot, $LogDirectory -ScriptBlock {
-                param($ps, $runner, $owner, $lua, $luac, $python, $slot, $logs)
-                $workerArgs = @('-NoProfile', '-File', $runner, '-ProfilesOnly', '-Owner', $owner,
-                    '-Lua', $lua, '-Luac', $luac, '-Python', $python, '-LogDirectory', $logs)
-                if ($slot) { $workerArgs += @('-Slot', $slot) }
-                $output = & $ps @workerArgs 2>&1 | Out-String
-                [pscustomobject]@{ Code = $LASTEXITCODE; Text = $output }
+            $allRuns = @()
+            foreach ($phase in $phaseNames) {
+                foreach ($run in $phases[$phase]) {
+                    $run.Phase, $run.Id = $phase, $allRuns.Count
+                    $allRuns += $run
+                }
             }
-            $setterTimer = [Diagnostics.Stopwatch]::StartNew()
-            foreach ($flavor in $clients) {
-                if ($Slot -or $flavor -ne 'TBC') { $setterJobs += (Start-SetterWorker $flavor) }
+            # External schedulers own capacity. Release the parent's slot before
+            # the workers acquire theirs, including with a capacity-one scheduler.
+            if ($Slot) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
+            $allRuns = @(Order-ContractRuns $allRuns)
+            $contractQueue = "$log.queue"
+            [IO.File]::WriteAllText($contractQueue, '0')
+            # Five independent setter worlds lead the queue. A free worker can
+            # immediately run another client's contracts instead of idling
+            # behind that client's setter. The six workers share one cursor.
+            $epoch = [Diagnostics.Stopwatch]::GetTimestamp()
+            foreach ($number in 1..6) {
+                $contractJobs += (Start-ContractWorker "worker-$number" $allRuns $contractQueue $epoch)
             }
-            # Each client owns its scheduler slot. Release the parent's slot
-            # while clients enter, including on a capacity-one scheduler.
-            if ($Slot) {
-                Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false
-                do {
-                    $waiting = @($setterJobs | Where-Object {
-                        -not (Test-Path -LiteralPath $_.Ready) -and $_.Job.State -notin @('Completed', 'Failed', 'Stopped')
-                    })
-                    if ($waiting.Count) { Start-Sleep -Milliseconds 100 }
-                } while ($waiting.Count)
-                Enter-CheckSlot $Slot $Owner; $suiteSlotHeld = $true
+            $receipts = @()
+            foreach ($worker in $contractJobs) {
+                $result = @($worker.Job | Wait-Job | Receive-Job | Where-Object { $_.PSObject.Properties['Receipts'] })
+                if ($result.Count -ne 1 -or $result[0].Name -cne $worker.Name) {
+                    throw "Incomplete contract worker receipt: $($worker.Name)"
+                }
+                $receipts += @($result[0].Receipts)
+                $worker.Job | Remove-Job -Force
+            }
+            $contractJobs = @()
+            $expectedIds = @($allRuns | ForEach-Object { $_.Id } | Sort-Object)
+            $actualIds = @($receipts | ForEach-Object { $_.Id } | Sort-Object)
+            if ($receipts.Count -ne $allRuns.Count -or (Compare-Object $expectedIds $actualIds)) {
+                throw 'Contract worker inventory changed: missing, duplicate or unknown run ID'
+            }
+            Remove-Item -LiteralPath $contractQueue -Force
+            $contractQueue = $null
+            foreach ($phase in $phaseNames) {
+                $items = @($receipts | Where-Object { $_.Phase -eq $phase })
+                $bad = @($items | Where-Object { -not $_.Ok })
+                foreach ($item in $items) {
+                    [IO.File]::AppendAllText($log, "=== $phase/$($item.Label) ($($item.Code), $(( $item.Finished - $item.Started ).ToString('F2')) s)$nl$($item.Text)$nl", $utf8)
+                }
+                $status = if ($bad.Count) { $failed++; 'FAIL' } else { 'PASS' }
+                $detail = if ($bad.Count) { '; failed: ' + (($bad | ForEach-Object { $_.Label }) -join ', ') } else { '' }
+                $first = ($items | Measure-Object -Property Started -Minimum).Minimum
+                $last = ($items | Measure-Object -Property Finished -Maximum).Maximum
+                $line = "{0} {1}: {2} runs, {3:F1} s{4}" -f $status, $phase, $items.Count, ($last - $first), $detail
+                $summary.Add($line); Write-Output $line
             }
         } else {
-            Contract 'profiles' $profileRuns
-            $setterRuns = @($clients | ForEach-Object { LuaRun 'menu_schema_setter_parity.lua' $_ })
-            Contract 'setter parity' $setterRuns
+            foreach ($phase in $phaseNames) { Contract $phase $phases[$phase] }
         }
-        Contract 'runtime robustness' $runtimeRuns
-        Contract 'menu' $menuRuns
-        if ($ParallelContracts -and -not $Slot) {
-            # Four setters, profiles and main occupy at most six Lua lanes.
-            # Start the fifth while main is idle, then resume after a worker ends.
-            $setterJobs += (Start-SetterWorker 'TBC')
-            $activeWorkers = @($setterJobs | ForEach-Object { $_.Job }) + @($profileJob)
-            $activeWorkers | Wait-Job -Any | Out-Null
-        }
-        Contract "apply path" @(
-            (LuaRun "release_apply_smoke.lua" "Mainline"),
-            (LuaRun "release_apply_smoke.lua" "Vanilla"),
-            (LuaRun "release_apply_smoke.lua" "TBC"),
-            (LuaRun "release_apply_smoke.lua" "Mists"),
-            (LuaRun "release_apply_smoke.lua" "Forever")
-        )
-        $namespaceRuns = @(
-            @{ Label = "mutation-proof"; Exe = $Python; Args = @("tools/tests/flip_check_smoke.py", "--luac", $luaCompiler, "--lua", $Lua) },
-            @{ Label = "flip"; Exe = $Python; Args = @("tools/flip_check.py", $root, "--luac", $luaCompiler, "--lua", $Lua) }
-        )
-        foreach ($flavor in $clients) { $namespaceRuns += (LuaRun 'flip_check_exports.lua' $flavor) }
-        Contract 'namespace' $namespaceRuns
-        Contract "group preview" @(
-            (LuaRun "group_preview_scene_lifecycle_smoke.lua" "Mainline" "release"),
-            (LuaRun "group_preview_scene_lifecycle_smoke.lua" "Vanilla" "release"),
-            (LuaRun "group_preview_scene_lifecycle_smoke.lua" "Forever" "release"),
-            (LuaRun "group_preview_combat_restore_smoke.lua" "Mainline"),
-            (LuaRun "group_preview_combat_restore_smoke.lua" "Forever"),
-            (LuaRun 'group_preview_configured_glow_smoke.lua' 'Mainline'),
-            (LuaRun 'group_preview_configured_glow_smoke.lua' 'Vanilla'),
-            (LuaRun 'group_preview_configured_glow_smoke.lua' 'Forever')
-        )
-        Contract "Edit Mode" @(
-            (LuaRun "release_apply_smoke.lua" "Mainline" "edit"),
-            (LuaRun "release_apply_smoke.lua" "Vanilla" "edit"),
-            (LuaRun "release_apply_smoke.lua" "TBC" "edit"),
-            (LuaRun "release_apply_smoke.lua" "Mists" "edit"),
-            (LuaRun "release_apply_smoke.lua" "Forever" "edit"),
-            (LuaRun "editmode_core_history_smoke.lua" "Mainline"),
-            (LuaRun "editmode_core_history_smoke.lua" "Vanilla"),
-            (LuaRun "editmode_core_history_smoke.lua" "TBC"),
-            (LuaRun "editmode_core_history_smoke.lua" "Mists"),
-            (LuaRun "editmode_core_history_smoke.lua" "Forever")
-        )
     } finally {
-        # External capacity-one schedulers need this release before the join.
-        # The default global mutex must still exclude another compact runner.
-        if ($Slot) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
-    }
-    if ($profileJob) {
-        try {
-            $result = $profileJob | Wait-Job | Receive-Job
-            if ($result.Text -match 'profile-worker-log: ([^\r\n]+)') {
-                $workerLog = $Matches[1].Trim()
-                [IO.File]::AppendAllText($log, [IO.File]::ReadAllText($workerLog), $utf8)
-            }
-            $line = @($result.Text -split "`r?`n" | Where-Object { $_ -match '^(PASS|FAIL) profiles:' })
-            if ($result.Code -ne 0 -or $line.Count -ne 1) { $failed++ }
-            if ($line.Count -ne 1) { $line = @('FAIL profiles: worker did not return a complete contract receipt') }
-            $summary.Add($line[0]); Write-Output $line[0]
-        } catch {
-            $failed++
-            $line = 'FAIL profiles: worker failed before a complete contract receipt'
-            $summary.Add($line); Write-Output $line
-            [IO.File]::AppendAllText($log, "profile worker error: $_$nl", $utf8)
-        } finally { $profileJob | Remove-Job -Force; $profileJob = $null }
-    }
-    if ($setterJobs.Count) {
-        $badSetters = New-Object 'System.Collections.Generic.List[string]'
-        foreach ($worker in $setterJobs) {
-            try {
-                $result = @($worker.Job | Wait-Job | Receive-Job | Where-Object { $_.PSObject.Properties['Flavor'] })
-                if ($result.Count -ne 1) { throw 'worker did not return one complete receipt' }
-                $item = $result[0]
-                [IO.File]::AppendAllText($log,
-                    "=== setter parity/$($item.Flavor) ($($item.Code), $($item.Seconds.ToString('F2')) s)$nl$($item.Text)$nl", $utf8)
-                $completion = '(?m)^PASS schema setters ' + [regex]::Escape($worker.Flavor) + ':'
-                if ($item.Code -ne 0 -or $item.Flavor -cne $worker.Flavor -or
-                    [regex]::Matches($item.Text, $completion).Count -ne 1) { $badSetters.Add($worker.Flavor) }
-            } catch {
-                $badSetters.Add($worker.Flavor)
-                [IO.File]::AppendAllText($log, "setter worker $($worker.Flavor) error: $_$nl", $utf8)
-            } finally {
-                $worker.Job | Remove-Job -Force
-                Remove-Item -LiteralPath $worker.Ready -Force -ErrorAction SilentlyContinue
-            }
-        }
-        $setterJobs = @()
-        $status = if ($badSetters.Count) { $failed++; 'FAIL' } else { 'PASS' }
-        $detail = if ($badSetters.Count) { '; failed: ' + ($badSetters -join ', ') } else { '' }
-        $line = "{0} setter parity: 5 runs, {1:F1} s{2}" -f $status, $setterTimer.Elapsed.TotalSeconds, $detail
-        $summary.Add($line); Write-Output $line
+        if ($Slot -and $suiteSlotHeld) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
     }
     Contract 'final freshness' @(
         @{ Label = 'unchanged product/projection inputs'; Exe = $Python; Args = @('tools/menu_schema_coverage.py', '--check') }
@@ -353,19 +335,11 @@ try {
     $slotTime += $suiteTime.Elapsed.TotalSeconds
 } finally {
     try {
-        if ($profileJob) {
-            try { $profileJob | Wait-Job | Receive-Job | Out-Null }
-            catch { [IO.File]::AppendAllText($log, "profile cleanup error: $_$nl", $utf8) }
-            finally { $profileJob | Remove-Job -Force -ErrorAction SilentlyContinue }
+        foreach ($worker in $contractJobs) {
+            if ($worker.Job.State -notin @('Completed', 'Failed', 'Stopped')) { $worker.Job | Stop-Job }
+            $worker.Job | Remove-Job -Force -ErrorAction SilentlyContinue
         }
-        foreach ($worker in $setterJobs) {
-            try { $worker.Job | Wait-Job | Receive-Job | Out-Null }
-            catch { [IO.File]::AppendAllText($log, "setter cleanup $($worker.Flavor) error: $_$nl", $utf8) }
-            finally {
-                $worker.Job | Remove-Job -Force -ErrorAction SilentlyContinue
-                Remove-Item -LiteralPath $worker.Ready -Force -ErrorAction SilentlyContinue
-            }
-        }
+        if ($contractQueue) { Remove-Item -LiteralPath $contractQueue -Force -ErrorAction SilentlyContinue }
     } finally {
         try { if ($suiteSlotHeld) { Exit-CheckSlot $Slot $Owner } }
         finally { Pop-Location; $env:PATH = $oldPath }

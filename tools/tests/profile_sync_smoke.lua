@@ -6,7 +6,10 @@
 -- the list State/MSUF_ProfileSync.lua keeps; keys a Unit Frames page also
 -- writes stay with Unit Frames. --write rewrites that list from the sources.
 local root=assert(arg[1])
-local NS={}
+-- DefaultsSchema owns quarantine and precedes sync in every real client graph.
+local C = assert(loadfile(root .. "/tools/profile_corpus_golden.lua"))()
+local NS = { DefaultsSchema = C.NewWorld(root, "Mainline", "Tester-Realm").core.DefaultsSchema }
+assert(NS.DefaultsSchema.IsQuarantinedProfile and NS.DefaultsSchema.QuarantineProfile)
 function InCombatLockdown() return false end
 function CreateFrame() return {SetScript=function() end,RegisterEvent=function() end,UnregisterAllEvents=function() end} end
 for _,name in ipairs({"ProfileFields","ProfileVariants","ProfileSync"}) do

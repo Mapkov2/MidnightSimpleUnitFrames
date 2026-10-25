@@ -20,7 +20,7 @@ their base colour. They do not replace the controller's config or colour caches.
 The Options unit body is `root:Unit(unitKey):Frame()`. The stage owns only its parent,
 scale and position; engine regions own the health, power, prediction, texts, portraits,
 status, shapes, aura lanes, texture layers and dispel samples. Handles refer to these
-real regions. Castbar and ClassPower retain their Options paths for package 98 and
+real regions. Castbar and ClassPower use their standalone engine surfaces and
 anchor to the scene body. Text focus, layer/solo controls, animation, background,
 selection, guides and zoom/pan remain stage chrome. Drag deltas divide by each real
 region's effective-scale ratio to the outer stage before moving its anchors.
@@ -67,7 +67,8 @@ read nothing. Names, levels, roles and hp come from the sample data
 row's sample hp, health text by health from the sample values); the threat sample is
 painted by the scene's own preview data. The row's sample class (`_msufPortraitSampleClass`)
 is its identity wherever a unit would be asked: `Portrait.SceneApply` draws the class icon
-in either render mode (a bust needs a unit; `SetPortraitTexture` is never called), takes
+by default in either render mode (a supplied portrait sample replaces the class art;
+the scene never calls `SetPortraitTexture`), takes
 the class border colour from it and uses the friendly colour for the reaction border, and
 the name colour with class name colour on is the same class colour
 (`Text.PaintSampleName`, `NameTextColorFor` for a frame with no unit).
@@ -138,10 +139,10 @@ when the Options file loads (sections 7 to 9 of
 `menu_preview_runtime_drift_smoke`). Its old mock-cell renderer is gone; the oracle fixtures
 of that preview were recaptured (see `tools/fixtures/preview-render-oracle/README.md`).
 
-The unit body renderer, class-resource surface construction, castbar page layout and
-preview aura painters remain scene-specific. Their region ownership, rounding, animation and
-interactions need scene integration before their larger render blocks can be deleted safely.
-Moving those blocks into another helper would retain their independent rendering rules.
+The unit, group, castbar and class-resource frame bodies belong to engine scenes. Options
+keeps viewport layout and interaction chrome. The smaller standalone painter contracts
+listed below deliberately demonstrate one product or setting without constructing a full
+unit scene.
 
 ## Unit preview scenes
 
@@ -158,7 +159,7 @@ click casting or event route, installs no secure attribute, event or script of i
 hook is the one script it carries), and no engine cache or driver holds it. It is applied by `UF.ApplySceneSpec(frame,
 spec, mask, "single", unit)` with a **private** spec: `UF.Config.CompileSpec(unit, out)` resolves the saved settings now into
 the scene's own table, so a preview never wipes a live spec and never lags behind a pending apply. The mask names the unit
-elements a scene paints; the castbar and the class power are not among them (the next scene package paints those), the
+elements a scene paints; castbar and class power use the separate surfaces described below, the
 auras are drawn as stand-ins (below), and the load conditions and the range fade drive live visibility and range.
 
 **The frame holds no unit.** `MSUFUnitKey` is nil while the elements apply, so no element's apply can ask the client about
@@ -372,3 +373,69 @@ it on the saved configuration without changing the profile.
 reviewed files have zero remaining preview-only render lines. Normalized source
 hashes pin that review; any file change requires reviewing and renewing its
 receipt. This source census does not establish in-game visual equivalence.
+
+## Group portrait and status sample contract
+
+The group sample optionally carries `portrait = { shown, texture, l, r, t, b }` and
+`statusRegions = { { field, shown, text, texture, l, r, t, b }, ... }`. These are retained,
+public sample values, never live regions or callbacks. The existing sample identity fields
+(`player`, `leader`, `assist`, `raidTarget`, `raidGroup`, `incomingRes`, `pvp`, `level`,
+`statusSelection`) seed the runtime's status painters first. Each status record then supplies
+the selected editor example for the named runtime region. Configured custom art, icon-pack
+coordinates, role style, status text and the selected status mode come from the existing
+Options selectors. The engine applies the portrait/status layer gates and status alpha.
+Absent records preserve the ordinary group-scene samples used by Edit Mode and other owners.
+
+Options samples a 2D player portrait into a hidden donor texture outside the scene, checks
+that the resource is public, and passes that resource and coordinates. An animated cast
+portrait passes the selected spell resource instead; a class portrait stays with the engine's
+class art. The scene paints its own holder and portrait through `Portrait.SceneApply` and retained
+spec views; the portrait provider owns its texture/UV caches, including return to class art. After paint, Options only binds the
+portrait and status interaction handles; it does not replace their content or visibility.
+The records survive configuration repaint, owner-clock repaint and close/reopen. Private menu
+spec copies retain the binding spec's inherited compiler fields as well as its own fields.
+
+## Intentional standalone painter contracts
+
+Reviewed at the H3 source change on 2026-10-24 against the G2b inventory. Paths below are
+relative to `MidnightSimpleUnitFrames_Options/Shell/Menu2`; names identify functions rather
+than line numbers, which move during page refactoring. These are bounded demonstrations,
+asset selectors or explanatory samples. They are excluded from a claim that every preview
+is a full scene. A painter contract shares the runtime renderer and configuration rules;
+Options owns only the sample inputs, local host and interaction chrome. A diagram or text
+sample makes no claim to reproduce a complete frame.
+
+| Surface and source owner | Shared painter or resolver | Explicit sample and ownership boundary |
+| --- | --- | --- |
+| Detached/attached GCD, `Preview/MSUF_Menu2_UnitPreview_Render.lua:ApplyGcdSample` | `CastbarGCD.CreateSurface`, `LayoutSurface`, `PaintSample` | Retained local surface and feature-sample progress; shared GCD settings determine layout/style. This strip is separate from the castbar scene and never acquires a live spell or native duration. |
+| Arena trinket, `Pages/MSUF_Menu2_UnitArenaTrinket.lua:TrinketPreview.Paint` | Arena trinket runtime `PaintSurface` | A local icon projects the configured trinket appearance onto the selected arena mock; it neither registers a live cooldown nor chooses a real opponent. |
+| Aura workbench, `Pages/MSUF_Menu2_Auras_Preview.lua:WorkbenchRefresh` | `MockAuraPainter.NewWorkbench`, native `ButtonVisuals` or Classic backend sample painters | The unit/group menu readers supply the selected scope's geometry/style; the retained buff/debuff texture lists and special-product entries supply fake auras. Sample capacity is bounded; icon dimensions, spacing and per-row wrapping are preserved. Only the whole workbench canvas is fitted/zoomed. Appearance-only special-product strips deliberately use four 32px icons at spacing 4. |
+| Resource auxiliaries, `Preview/MSUF_Menu2_ClassPowerPreview.lua:RenderDetachedPower`, `RenderPlayerHP`, `RenderAlternativeMana`, `RenderExtraSamples`, `UpdateSampleThresholds` | Runtime auxiliary `PaintEbon`, `PaintHP`, `PaintMana`, `PaintExtras`, `marks.PaintSample` | The scene's class/spec and retained sample/config overlays own values and eligibility. These painters supplement the core ClassPower/Player surfaces with Ebon Might, PlayerHP, alternate mana, Ignore Pain, Arcane Window and thresholds. The owner hands over its clock; no live controller or native resource subscription is acquired. Bounds and text handles are chrome. |
+| Dispel example, `MSUF_Menu2_Preview_Scenes.lua:PaintGroupSceneDispel` | Aura `PaintSceneEffects`, or Classic `UpdateDispelOverlay`/`UpdateDispelSymbols` | Engine-owned effect regions use the scene's resolved sensor/visual configuration. Classic's retained set of dispel types intentionally demonstrates every symbol. Options binds the footprint/handle and selects the example; no aura of a unit is queried. |
+| Crosshair, `Pages/MSUF_Menu2_AdvancedGameplay.lua:previewRefresh` | `Gameplay.PaintCrosshairGeometry` | The saved size and thickness feed the gameplay painter on a local host. The example has no cursor tracking or gameplay driver. |
+| Swing timers, `Pages/MSUF_Menu2_SwingTimersPreview.lua:Preview.Build` | `Swing.CreateMenuPreview`, `Swing.PaintMenuPreview` | The gameplay module owns sample bars and their paint/config rules. Options selects the main/off/ranged example and its section; these samples start no native swing timer and write no profile while painting. |
+| Icon skin strip and gallery, `Pages/MSUF_Menu2_IconSkins.lua:Page.PaintSample`, `P.RefreshGallery` | `IconShape.ApplyIconShape`, `IconSkins.AttachPreview`, `ApplyIconStyleSkinned` | Fixed local icon/tile sizes and selected product skin/look are deliberate catalog examples. No aura acquisition or alternate skin renderer is installed. |
+| Dragon/elite preview selector, `Pages/MSUF_Menu2_UnitFrameVisuals.lua:p.DragonPreview` | Portrait element `GetClassificationPreview`/`SetClassificationPreview` | The control selects ephemeral classification state owned by the runtime portrait element. It has no local dragon painter and does not persist a fake unit classification. |
+
+## Diagrams, asset strips and typography samples
+
+These intentional examples have a narrower contract than the painters above. Their sample
+geometry or text is explanatory; the shared setting/asset resolver remains authoritative.
+
+| Surface and source owner | Contract |
+| --- | --- |
+| Group growth tiles, `Pages/MSUF_Menu2_Group.lua:DrawGrowthMiniPreview` | Colored cells and a direction arrow explain the growth choice using the tile's direction/layout descriptor. They are a diagram, without health, texts, unit regions or a roster. |
+| Boss/arena growth tiles, `Pages/MSUF_Menu2_UnitSections.lua:DrawMiniBossPreview` | A fixed number of colored rectangles and the shared tile direction arrow explain stacking. The selected direction descriptor drives the diagram; its tile dimensions are illustrative. |
+| Group status strip, `Pages/MSUF_Menu2_GroupIndicators.lua:StatusIcons.RefreshIconPreviewStrip` | `PreviewEntries` enumerates example variants; `ResolvePreviewIcon` resolves the selected runtime style/custom art. The strip previews assets and coordinates, with dimming for a disabled setting; it is not a status-state simulation. |
+| Unit status strip, `Pages/MSUF_Menu2_UnitStatusSection.lua:RefreshIconPreviewStrip` | `StatusPreviewEntries`/`ResolvePreviewStatusIcon` select the same icon assets, atlas or shared resting flipbook. A page refresh stops the previous strip animation before replacing it. Labels, spacing and disabled alpha belong to the catalog chrome. |
+| Font/shadow samples, `Pages/MSUF_Menu2_GlobalFonts.lua:ApplyPreviewFont`, `RefreshFontPreview`, `RefreshShadowPreview` | Fixed sample text demonstrates the selected font, flags, color, scale-animation mode and shadow through the core font resolvers. It does not emulate a unit's name/health-text layout. |
+| Dropdown font specimens, `MSUF_Menu2_Dropdowns.lua:ApplyDropdownItemFont` | A font-choice item supplies its font key/object to the safe runtime font resolver; the dropdown label is the specimen. The item does not create a unit scene. |
+| Number samples, `Pages/MSUF_Menu2_GlobalMisc.lua:RefreshAbbrevSample` | A fixed list of numbers passes through `NumberFormat.FormatWith` and the selected settings. Separators merely place the examples beside one another. No copied abbreviation algorithm is permitted. |
+| Guided tour images, `MSUF_Menu2_Widgets.lua:W.PreviewImage`, `MSUF_Menu2_GuidedTour_Pages.lua:PreviewCard` | Static texture/UV metadata displays a packaged screenshot in explanatory chrome. It is not a live preview and is never evidence of the current runtime render. |
+| Layer tutorial, `MSUF_Menu2_UpgradeHighlights.lua:BuildLayerDummyPreview` | A fixed range track, knob and layer-name rows explain ordering. This tutorial diagram has no runtime regions, scene selection or saved-setting write. |
+
+For all entries, sample constants stay with their named owner and shared rendering/configuration
+logic stays with the runtime provider. A new renderer or a changed sample meaning requires
+updating this contract and a behavioral regression. These source contracts and offline tests
+do not establish live WoW pixels, combat/taint safety or native CPU/GPU behavior. The bounded
+render census is an inventory receipt, not a broader rendering-equivalence claim.

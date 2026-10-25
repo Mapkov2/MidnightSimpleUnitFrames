@@ -16,17 +16,24 @@ scheduler, pass `-Slot <scheduler.ps1>` or set `MSUF_LUA_SLOT`; child fast-check
 uses the same scheduler. Logs default to ignored dist/checks (`-LogDirectory`
 overrides this). The fast runner remains usable by parallel development lanes.
 
+`tools/release-test-inventory.json` is the single test inventory for fast-check
+and release-check. Each executable row declares its phase, clients and arguments.
+`python tools/release_test_inventory.py --check` fails for a tracked or pending
+test without an executable row or an explicit, reasoned exclusion. Exclusions
+identify shared harnesses and frozen reference contracts; they do not count as
+executed checks. New lane regressions must be registered before release.
+
 One inventory runs locally and in push/nightly/release CI:
 
 | Contract | Coverage |
 | --- | --- |
-| Generated lists | Module manifest exact outputs, without modifying them. |
+| Generated lists | Module manifest exact outputs and negative probes (`python tools/test_module_manifest.py`); exact global keep policy (`python tools/gen_global_keep.py --check`); complete test inventory. |
 | Freshness | Verify or regenerate ignored tools/menu_schema_coverage.json after verifying both current search indexes; never rewrite shipped indexes. Run the complete scorecard. |
 | Fast check | Compile every shipped client graph; real core/Options boot and sparse persistence/transfer on Mainline, Vanilla, TBC, Mists, Forever; backward migration and ratchet. |
-| Profiles and storage formats | Frozen V2 and V3 generator --check; exact sparse size, malformed inputs, rollback, inherited defaults and explicit overrides. Newer-revision backup, quarantine, immutable recovery history and corpus contracts on all five clients. |
+| Profiles and storage formats | Frozen V2 and V3 generator --check; exact sparse size, malformed inputs, rollback, inherited defaults and explicit overrides. Newer-revision backup, quarantine, immutable recovery history, the 2 MiB account recovery budget and corpus contracts on all five clients. Profile-sync ownership runs once. |
 | Apply/Edit Mode | All five clients, including CRUD, capability differences, dispatcher and painted state, move/nudge/undo/lock and late Options history. |
-| Menu | All five clients, every registered page/lazy section, exact schema-projected initial declaration count, query and visible exact-target navigation. Reopen, scanner, crosshair and search-entrypoint regressions. Both search index families run decoder heap checks in all twelve locales. |
-| Runtime robustness | Subscriber mutation, player-health maximum caching, class-resource builders, empower object reuse, module enablement boundaries, prediction/late-anchor/text writer recovery. Root-only harnesses run once; the builder harness covers all five clients internally. |
+| Menu | All five clients, every registered page/lazy section, exact schema-projected initial declaration count, query and visible exact-target navigation. Reopen, scanner, crosshair and search-entrypoint regressions. Both search index families run decoder heap checks in all twelve locales. Combined Options/page/index/fuzzy heap checks cover enUS and deDE on Mainline and Vanilla (Mainline 288/272 MiB open/closed; Vanilla 200/188 MiB). |
+| Runtime robustness | Subscriber mutation, player-health maximum caching, class-resource builders, empower object reuse, module enablement boundaries, prediction/late-anchor/text writer recovery. Scheduler pending-key semantics run once; the pinned reload startup budget runs on Mainline. Root-only harnesses run once; the builder harness covers all five clients internally. |
 | Namespace | Actual exports per client at core/login and Options boundaries; source-backed delayed exports. Negative probes remove a provider, keep only policy, use inactive clients/nil exports, cross phases, comment out a delayed publisher and exceed bounded legacy allowances. |
 | Group preview | Mainline/Vanilla/Forever lifecycle, engine ownership, supported scenes, combat suspend/restore and independent owners. |
 
@@ -39,18 +46,24 @@ folds the disk records with the same first-public/last-schema/set-union rules. T
 budget applies to fast-check plus behaviour contracts, excluding queue wait and
 projection preparation. All child output is retained; any failed contract fails
 the runner. Freshness failures remain failures while independent contracts continue.
-Profiles run in a separate serial worker alongside the other contracts; both
-workers acquire their own external scheduler slot. Without an external scheduler,
-the parent mutex excludes other compact runs and the profile worker uses a second
-named mutex. At most two Lua processes belong to this release run. Capacity-one
-schedulers run the worker after the parent releases its slot; they cannot deadlock.
-Use `-ParallelContracts:$false` to force the fully serial mode. The 300-second
-budget measures fast-check plus elapsed contract-suite work, including the join;
-no test or time is omitted from the receipt.
+Contracts run through a bounded queue with at most six Lua processes. All
+five setter replays and the long independent namespace check lead the queue; each keeps one menu world for scalar,
+reset and compound checks. A free worker claims the next independent client
+or root-only contract under a shared cursor mutex. No worker waits for another
+client's setter before running unrelated work. Exact run-ID inventories,
+exit codes and both setter completion receipts are required. Every worker
+uses the selected checkout as its working directory and acquires its own
+external scheduler slot when supplied. The parent releases that slot before
+starting workers, including for a capacity-one scheduler; its default mutex
+excludes another compact release run. `-ParallelContracts:$false` stays serial.
+Only the five initial control counts are decoded once from the complete validated
+projection; the full document is not repeatedly materialized as PowerShell objects.
+The 300-second budget measures fast-check plus elapsed contract-suite work,
+including the joins; no test or time is omitted from the receipt.
 
 `-Reproducible` additionally requires exact versions and immutable Blizzard refs
 from tools/check-pins.json, then runs the source audit against those commits.
-The reusable release-check workflow prepares them. The independent source-audit
+The reusable release-check workflow verifies both Lua and PowerShell archives against SHA256 values in that file before extracting or executing them. The independent source-audit
 job still follows upstream branch tips and reports drift separately. The frozen
 Classic full gate is retired from CI.
 
@@ -74,3 +87,17 @@ These generated English stubs are translation work, never loaded as translations
 
 Offline results establish these modelled contracts. Live WoW visuals, combat
 taint, controller behaviour and measured CPU performance require their own proof.
+
+Global keep generation reads `tools/global_keep_consumers.json`: the Suite base
+commit, an LF-normalized Lua snapshot hash, exact read names and dynamic prefixes.
+The hash identifies the reviewed working-tree snapshot when it includes edits
+beyond the base commit. Neither generation nor `--check` reads an installed or
+local Suite checkout. Refresh the contract deliberately when reviewing changed
+consumer APIs, then review the generated policy before changing Bootstrap.
+
+The runnable prune tool is `tools/prune_frozen_tests.py`; the manifest negative
+probes are `tools/test_module_manifest.py`. The runner's required helpers are
+`tools/check-common.ps1`, `tools/check-pins.json`, `tools/check_ready.py` and
+the inventory above. These paths are versioned; no external lane script is a
+release dependency. Earlier receipts describe their own HEAD and working tree,
+and cannot certify a later checkout.

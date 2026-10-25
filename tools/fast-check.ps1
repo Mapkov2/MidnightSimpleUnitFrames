@@ -31,12 +31,15 @@ $start = Get-Date
 Push-Location $root
 try {
     Step 'syntax and load order' { & $Python tools/check_ready.py --root $root --luac $Luac }
-    foreach ($flavor in @('Mainline', 'Vanilla', 'TBC', 'Mists', 'Forever')) {
-        Step "boot:$flavor" { & $Lua tools/tests/client_boot_smoke.lua "$root/" $flavor }
-        Step "sparse-persist:$flavor" { & $Lua tools/tests/profile_sparse_persistence_smoke.lua "$root/" $flavor }
-        Step "sparse-transfer:$flavor" { & $Lua tools/tests/profile_sparse_client_transfer_smoke.lua "$root/" $flavor }
+    $inventory = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'release-test-inventory.json') -Raw | ConvertFrom-Json
+    foreach ($entry in @($inventory.runs | Where-Object { $_.phase -eq 'fast' })) {
+        $flavors = if ($entry.clients) { @($entry.clients) } else { @('') }
+        foreach ($flavor in $flavors) {
+            $testArgs = @((Join-Path $root $entry.test), "$root/")
+            if ($flavor) { $testArgs += $flavor }
+            Step "$($entry.test):$flavor" { & $Lua @testArgs }
+        }
     }
-    Step 'sparse-legacy-markers' { & $Lua tools/tests/profile_sparse_backward_migration_smoke.lua "$root/" }
     Step 'ratchet' { & $Python tools/quality_ratchet.py --check --luac $Luac }
 } finally { Pop-Location; Exit-CheckSlot $Slot $Owner }
 $results | ForEach-Object { $_ }

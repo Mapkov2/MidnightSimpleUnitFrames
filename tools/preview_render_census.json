@@ -286,7 +286,7 @@
     },
     {
       "file": "Preview/MSUF_Menu2_GroupPreview_Render.lua",
-      "runtime_owner": "SpellIndicators/ClassicVisuals.ApplyPreviewFrameEffect -> live ApplyFrameEffect",
+      "runtime_owner": "GF scene sample.portrait/statusRegions; engine Group Preview painters; SpellIndicators.ApplyPreviewFrameEffect",
       "before_sha256": "e1c6d4032f192e19b210463cea5bfab66637a6c998b9987ec99a458680b4f003",
       "before_physical": 248,
       "before_code": 236,
@@ -329,7 +329,7 @@
           1355
         ]
       ],
-      "source_sha256": "e76e7f138b20da1d3db1414ac9349c90507a67a8308367796f522c68c6e5f980",
+      "source_sha256": "2b5d0fe22baf74da42b21c43f836105277d52112083a6b36350362456bb28942",
       "adapter_exclusions": [
         {
           "name": "ApplySpellEffectPreview",
@@ -344,7 +344,14 @@
           "text": "local SetPreviewFrameLevel, PreviewElementLevel, PreviewInteractionLevel",
           "reason": "sample metadata / shared provider / editor chrome"
         }
-      ]
+      ],
+      "support_sources": [
+        {
+          "file": "MSUF_Menu2_Preview_Scenes.lua",
+          "source_sha256": "52a7e21af2795dfba4f5a214d5f041a68bdcc1d7672d383896b3fb2496948f99"
+        }
+      ],
+      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
     },
     {
       "file": "Pages/MSUF_Menu2_Auras_Preview.lua",
@@ -383,7 +390,7 @@
           607
         ]
       ],
-      "source_sha256": "1b5f8fb48b765d82f539f381d79c6179f8afb100c3a57be7d0a9cbbfe0238276",
+      "source_sha256": "e4ce9f8ec67ced73e4b22e0c9d6429237c817222d5a8a59cdff4b07813270f11",
       "adapter_exclusions": [
         {
           "name": "WorkbenchRefresh",
@@ -498,7 +505,7 @@
           1934
         ]
       ],
-      "source_sha256": "855fd0b924d251f04a493123fd66a10bbe46127ef18616efac54f66a0559a788",
+      "source_sha256": "8e99b0b950a650b6d371502e25e6cd87fb5910d75aa9105fb1d43cefccfd363a",
       "adapter_exclusions": [
         {
           "name": "CreateRoundedTexturePreview",
@@ -513,7 +520,22 @@
           "reason": "reviewed runtime adapter / editor chrome"
         }
       ],
-      "declaration_exclusions": []
+      "declaration_exclusions": [],
+      "support_sources": [
+        {
+          "file": "Pages/MSUF_Menu2_GlobalBars_Textures.lua",
+          "source_sha256": "63e45a2d220e353aa404d3094e73a8b3cb272e019f9f6db837ac342075f99463"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
+          "source_sha256": "05c410013e8416a19f16195ef0b407a0de07320195cbd3d42cfa877fad66b801"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_GlobalBars_Highlights.lua",
+          "source_sha256": "2620b59f121caaa9711295ef6f0f3d7135c82c74d563dbc2b9c9b86dad9b17e2"
+        }
+      ],
+      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
     },
     {
       "file": "Pages/MSUF_Menu2_AdvancedColors.lua",
@@ -544,7 +566,7 @@
           1496
         ]
       ],
-      "source_sha256": "1cf37dce9b15fd3d27e0e3bfb18e5d21a656f006a1c031240c6be68fb4aab4e5",
+      "source_sha256": "1736d9af68c090e990ec490d277e8d5e5d81b564ec9bc4ae6cd37ba1623306c2",
       "adapter_exclusions": [
         {
           "name": "M.RefreshHealthBackgroundInlinePreview",
@@ -559,7 +581,22 @@
           "reason": "reviewed runtime adapter / editor chrome"
         }
       ],
-      "declaration_exclusions": []
+      "declaration_exclusions": [],
+      "support_sources": [
+        {
+          "file": "Pages/MSUF_Menu2_AdvancedColors_Text.lua",
+          "source_sha256": "28b53e7e21520792782d9476195d83c409e50a98e28f5a861d1142adf025162d"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua",
+          "source_sha256": "1a00ec6d1da019812b67ad9c6b08f802604897e00cb8ab6817290ce007f37010"
+        },
+        {
+          "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",
+          "source_sha256": "aa8750e5b69041f5035c201ca75d0cba2e44afd515655ff61e33c95662bf3b99"
+        }
+      ],
+      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
     },
     {
       "file": "Pages/MSUF_Menu2_ColorPainter.lua",

@@ -9,6 +9,8 @@ local function World(saved)
     return w, w.env, w.core
 end
 local w = C.NewWorld(root, flavor, "Tester-Realm")
+assert(w.core.DefaultsStorageData.sparseV3Owners == nil,
+    "sparse codec expanded its logout dictionaries at file load")
 local early = w.env.CreateFrame("Frame")
 local earlyAlias, earlyDefault
 -- This consumer registers before the lifecycle's terminal native handlers.
@@ -90,6 +92,14 @@ assert(ns.DefaultsSchema.Persist(factoryStore))
 assert(factoryStore.profiles.Default.npcColors ~= nil, "factory pruning forced destination repair")
 local sparseTemplate = Serial(factoryStore.profiles.Default)
 assert(sparseTemplate._msufDefaultsRevision == 17.5 and type(sparseTemplate._msufSparseDefaultsV2) == "string")
+local cold = C.NewWorld(root, flavor, "Tester-Realm")
+assert(cold.core.DefaultsStorageData.sparseV3Owners == nil, "cold codec was already initialized")
+local coldProfile = Serial(sparseTemplate)
+assert(cold.core.DefaultsSchema.RestorePersistence(coldProfile), "first sparse restore did not initialize the codec")
+assert(H.Literal(coldProfile) == H.Literal(factoryTemplate), "cold sparse restore changed wire values")
+local coldOwners = assert(cold.core.DefaultsStorageData.sparseV3Owners)
+assert(cold.core.DefaultsSchema.Persist({ profiles = { Default = coldProfile } }))
+assert(cold.core.DefaultsStorageData.sparseV3Owners == coldOwners, "warm persistence rebuilt its dictionaries")
 local unchanged = H.Literal(factoryStore)
 local repeated, count = ns.DefaultsSchema.Persist(factoryStore)
 assert(repeated and count == 0 and H.Literal(factoryStore) == unchanged, "sparse persistence is not idempotent")

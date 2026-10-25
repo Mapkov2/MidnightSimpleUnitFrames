@@ -187,6 +187,10 @@
         "stub": "L[\"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\"] = \"Profile '%s' uses a newer MSUF revision (%s). An untouched backup was saved.\""
       },
       {
+        "key": "Profiles",
+        "stub": "L[\"Profiles\"] = \"Profiles\""
+      },
+      {
         "key": "Restore the one-time pre-7.0 account profile safety copy after confirmation.",
         "stub": "L[\"Restore the one-time pre-7.0 account profile safety copy after confirmation.\"] = \"Restore the one-time pre-7.0 account profile safety copy after confirmation.\""
       },

@@ -1,5 +1,7 @@
 -- Frozen hand setters captured before the schema accessor conversion.
 return {
+    ["H4.AdvancedGameplay.Text"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedGameplay.lua",
+        source = [====[set = function(value) setValue(value) apply() end]====] },
     ["AdvancedClassPower.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", source = [====[set = function(value) SetValue(source(), key, value, apply) end]====] },
     ["AdvancedClassPower.11"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", source = [====[set = function(value) SetValue(Bars(), "playerHPBarEnabled", value, applyRefresh) end]====] },
     ["AdvancedClassPower.12"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", source = [====[set = function(value) SetValue(Bars(), "showAltMana", value, applyRefresh) end]====] },
@@ -127,12 +129,12 @@ return {
             SetBool(unit, cfg.showKey, v, cfg.showReason, { text = true, preview = true })
             RefreshTextControlState()
         end]====] },
-    ["AdvancedColors.7"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua", source = [====[set = function(v)
+    ["AdvancedColors.7"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors_Frames.lua", source = [====[set = function(v)
             G().petFrameUsePlayerClassColor = v and true or false
             M.RequestUnitDomains("pet", "MSUF2_PET_PLAYER_CLASS_COLOR", { preview = true })
             RefreshPetColorControl()
         end]====] },
-    ["AdvancedColors.9"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua", source = [====[set = function(v)
+    ["AdvancedColors.9"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors_Frames.lua", source = [====[set = function(v)
                 G().tapDeniedGray = v and true or false
                 ApplyUnitframeColorWithReload()
                 SetControlEnabled(tappedColor, v and true or false)
@@ -147,7 +149,7 @@ return {
                 UpdateLoadActive(unit)
                 M.RequestUnitDomains(unit, "MSUF2_LOAD_CONDITION", { preview = true })
             end]====] },
-    ["GlobalBars.19"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua", source = [====[set = function(v)
+    ["GlobalBars.19"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars_Highlights.lua", source = [====[set = function(v)
             v = v and true or false
             local bars = Bars()
             if bars.realtimePowerText == v then return end
@@ -158,7 +160,7 @@ return {
                 preview = true, power = true, text = true,
             })
         end]====] },
-    ["GlobalBars.11"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua", source = [====[set = function(value)
+    ["GlobalBars.11"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars_Shapes.lua", source = [====[set = function(value)
             value = floor((tonumber(value) or 3) + 0.5)
             if value < 1 then value = 1 elseif value > 5 then value = 5 end
             local bars = Bars()
@@ -310,4 +312,213 @@ return {
             value = value or "auto"
             SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true })
         end]====] },
+    ["H4.AdvancedClassPower.2"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", source = [====[set = function(value)
+            Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value)
+            ApplyClassPower()
+        end]====] },
+    ["H4.AdvancedClassPower.4"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", source = [====[set = function(value)
+            local player = Player()
+            value = NormalizePlayerPowerSource(value)
+            if player.playerPowerSource == value then return end
+            player.playerPowerSource = value
+            M.ApplyPlayerPowerSource("MSUF2_CLASSPOWER_PLAYER_POWER_SOURCE")
+        end]====] },
+    ["H4.GlobalCastbars.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua", source = [====[set = function(value)
+                local duration = max(0, min(5, tonumber(value) or 0.5))
+                SetG("castbarInterruptFeedbackDuration", duration, "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true })
+                MSUF.Castbars.Config.Refresh()
+                M.PlayCastbarPreviewInterrupt()
+            end]====] },
+    ["H4.GlobalCastbars.2"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua", source = [====[set = function(v)
+                SetG("castbarSpellNameShortening", v and 1 or 0, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
+                RequestCastPreviewRefresh()
+                if syncNameShortening then syncNameShortening() end
+            end]====] },
+    ["H4.GlobalCastbars.5"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua", source = [====[set = function(v)
+                SetG("focusKickTextSize", floor((tonumber(v) or 12) + 0.5), "MSUF2_FOCUS_KICK_TEXT", { castbar = true, preview = true })
+                RequestFocusKickTextFont()
+                ApplyFocusKickOptions()
+            end]====] },
+    ["H4.GlobalMisc.2"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", source = [====[set = function(value)
+            value = (value == "COMPACT") and "COMPACT" or "GAME"
+            -- Persist without a runtime apply, push the new style, then repaint
+            -- once - so the refresh already formats with the new options instead of
+            -- painting stale text and correcting it on the next unit event.
+            SetG("numberAbbrevStyle", value, "MSUF2_NUMBER_ABBREV", MENU_WRITE_OPTS)
+            local NumberFormat = MSUF.NumberFormat
+            if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
+            M.RequestGeneralDomains("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
+            MSUF.GF.RefreshVisuals()
+            RefreshAbbrevSample()
+        end]====] },
+    ["H4.Group.7"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua", source = [====[set = function(value)
+                SetValue("portraitSizeMode", value == "SEPARATE" and "SEPARATE" or "UNIFORM")
+                RefreshPortraitControls()
+            end]====] },
+    ["H4.GroupBars.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua", source = [====[set = function(value)
+            Set(CurrentScope(), row[2], NormalizeGFDispelOverlayTrigger(value), "visual")
+            RequestGroupBarsRefresh(ctx, row.reason)
+        end]====] },
+    ["H4.GroupLayout.7"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua", source = [====[set = function(v)
+                local conf = Conf(CurrentScope())
+                local selectedValue1
+                if not ((v == "FREE")) then selectedValue1 = v end
+                conf.anchorToFrame = selectedValue1
+                QueueGF(CurrentScope(), "rebuild")
+            end]====] },
+    ["H4.GroupLayoutAdditional.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua", source = [====[set = function(v) GP.Set(GP.CurrentScope(), key, max(0, min(100, floor((tonumber(v) or 0) + 0.5))) / 100, "rebuild") end]====] },
+    ["H4.ResourceExtras.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua", source = [====[row.set=function(value)
+            Bars()[group.master]=value and true or false
+            FocusExample(page,group)
+            Apply()
+        end]====] },
+    ["H4.UnitDispel.3"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitDispel.lua", source = [====[spec.set = function(value)
+        if row.kind == "dropdown" then value = normalize and normalize(value) or (value or default)
+        elseif row.kind == "toggle" then value = value and true or false
+        else value = tonumber(value) or default end
+        SetValue(unit, key, value, row.reason)
+        if row.sync then Sync() end
+    end]====] },
+    ["H4.UnitFrameVisuals.3"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", source = [====[row.set = function(value)
+            if kind == "slider" then SetNumber(unit, key, value, row.reason, { preview = true })
+            else
+                if kind == "toggle" then value = value and true or false
+                else value = row.normalize and row.normalize(value or fallback) or (value or fallback) end
+                SetPortraitValue(unit, key, value, row.reason)
+            end
+            if row.afterSet then row.afterSet() end
+        end]====] },
+    ["H4.UnitFrameVisuals.8"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", source = [====[set = function(value) SetBool(unit, "showPowerBar", value == true, "MSUF2_POWER_SHOW", { power = true, preview = true }) end]====] },
+    ["H4.UnitFrameVisuals.9"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", source = [====[set = function(value)
+                GetConf(unit).playerPowerSource = NormalizePlayerPowerSource(value)
+                M.ApplyPlayerPowerSource("MSUF2_PLAYER_POWER_SOURCE")
+            end]====] },
+    ["H4.UnitFrameVisuals.15"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", source = [====[row.set = function(value)
+                if kind == "slider" then
+                    if row.beforeSet then row.beforeSet(value) end
+                    SetGeneralNumber(key, value, row.reason)
+                else
+                    SetGeneralValue(key, value or fallback, row.reason)
+                    if row.afterSet then row.afterSet() end
+                end
+            end]====] },
+    ["H4.UnitRangeFade.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitRangeFade.lua", source = [====[modeRow.set = function(value)
+        Schema.SetUnit("range", unit, modeRow[2], value == "health" and "health" or modeRow[3], "MSUF2_RANGE_FADE_LAYER", "segment")
+    end]====] },
+    ["H4.UnitRangeFade.2"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitRangeFade.lua", source = [====[rateRow.set = function(value)
+            local rate = floor((tonumber(value) or 0) + 0.5)
+            if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
+            Schema.SetUnit("range", unit, rateRow[2], rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", "slider")
+            if updateRate and updateRate._msuf2SliderActive then
+                updateRate._msuf2BossRateWarningPending = rate > 0 and rate or nil
+            else
+                MaybeShowBossUpdateRateWarning(rate)
+            end
+        end]====] },
+    ["H4.UnitSections.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", source = [====[set = function(v)
+                local conf = GetConf(unit)
+                conf.healthColorMode = NormalizeHealthColorMode(v)
+                M.RequestUnitDomains(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
+                if M.Refresh then M.Refresh(ctx) end
+            end]====] },
+    ["H4.UnitSections.6"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", source = [====[set = function(value) SetBool(unit, "enabled", value == true, "MSUF2_FRAME_ENABLED", { preview = true }) end]====] },
+    ["H4.UnitStatusSection.2"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua", source = [====[set = function(value)
+                    SetBool(unit, spec.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
+                    RefreshStatusRuntime(unit, spec)
+                    if Refresh then Refresh() end
+                    return true
+                end]====] },
+    ["H4.UnitTextureLayer.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer.lua", source = [====[row.set = function(value)
+                        if kind == "toggle" then SetBool(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
+                        elseif kind == "slider" then SetNumber(unit, Key(base), value, "MSUF2_TEXLAYER", { preview = true })
+                        else SetString(unit, Key(base), value or default, "MSUF2_TEXLAYER", { preview = true }) end
+                        RefreshLayer()
+                        if row.afterSet then row.afterSet() end
+                    end]====] },
+    ["H4.UnitTextureLayer.3"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer.lua", source = [====[set = function(v)
+                SetString(unit, Key("BlendMode"), v and "ADD" or "BLEND", "MSUF2_TEXLAYER", { preview = true })
+                RefreshLayer()
+            end]====] },
+    ["H4.GlobalCastbars.4"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua", source = [====[set = function(v)
+                if M.SetGeneralValue("focusKickShowCastbar", v and true or false, "MSUF2_FOCUS_KICK_CASTBAR",
+                    { applyAll = false, preview = false, notify = false }) then
+                    MSUF.Castbars.Config.Refresh()
+                    forceUpdate = forceUpdate or MSUF.Require("MSUF_FocusKickDriver_ForceUpdate", FILE)
+                    forceUpdate()
+                end
+            end]====] },
+    ["H4.Group.2"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua", source = [====[set = function(value)
+                value = tonumber(value)
+                if value == nil then return false end
+                SetValue(key, value)
+                return true
+            end]====] },
+    ["H4.Group.4"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua", source = [====[set = function(value)
+                if controlKind == "toggle" then value = value and true or false
+                elseif controlKind == "slider" then value = tonumber(value) or default
+                else value = row.normalize and row.normalize(value or default) or (value or default) end
+                SetValue(key, value)
+                if row.afterSet then row.afterSet() end
+            end]====] },
+    ["H4.GroupBars.11"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua", source = [====[set = function(v)
+                Set(CurrentScope(), SlotFontSizeKey(kind), v, "font")
+                FocusGFPreviewText(kind, CurrentSlot(kind), true)
+            end]====] },
+    ["H4.SwingTimers.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua", source = [====[set = function(value) Swing.SetEnabled(value) M.Refresh(ctx) end]====] },
+    ["H4.UnitFrameVisuals.6"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", source = [====[set = function(value)
+            value = value == "SEPARATE" and "SEPARATE" or "UNIFORM"
+            SetPortraitValue(unit, "portraitSizeMode", value, "MSUF2_PORTRAIT_SIZE_MODE")
+            p.Refresh()
+        end]====] },
+    ["H4.UnitText.3"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua", source = [====[set = function(v)
+                SetNumber(unit, SlotFontSizeKey(kind), v, cfg.slotSizeReason, { text = true, fonts = true, preview = true })
+                FocusPreviewText(kind, CurrentSlot(kind), true)
+            end]====] },
+    ["H4.GlobalMisc.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", source = [====[set = function(value)
+                local groupPage = M.GroupPage
+                if groupPage and type(groupPage.Set) == "function" then
+                    groupPage.Set(kind, "targetIndicator", value and true or false, "visual")
+                end
+            end]====] },
+    ["H4.UnitFrameVisuals.21"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", source = [====[set = function(v)
+            local key = CastbarWidthSourceKey()
+            if not key then return end
+            local nextValue = NormalizeWidthSource(v)
+            SetGeneralValue(key, nextValue, "MSUF2_CASTBAR_WIDTH_MODE")
+            RefreshCastbarEnabled()
+        end]====] },
+    ["H4.UnitSections.5"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", source = [====[set = function(v)
+                if unit == "pettarget" or ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
+                SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
+                local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
+                Core.ShowReloadPopup(reloadLabel)
+            end]====] },
+    ["H4.AdvancedColors.10"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors_Frames.lua", source = [====[set = function(v)
+            if not ApiCall("SetNPCColorMode", v and "type" or "reaction") then
+                G().npcColorMode = v and "type" or "reaction"
+                ApplyUnitframeColorWithReload()
+            end
+            RefreshNPCTypeControls(v and true or false)
+        end]====] },
+    ["H4.GroupBars.8"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua", source = [====[set = function(value)
+                local spec, oldMode = SelectedSlotSpec(), CurrentMode()
+                local mode = value or spec.default
+                if hasAbsorb and M.UnitSectionsShared.HealthModeHasAbsorb(oldMode) and M.UnitSectionsShared.HealthModeSupportsAbsorb(mode) then
+                    mode = M.UnitSectionsShared.HealthModeWithAbsorb(mode, true)
+                end
+                Set(CurrentScope(), spec.key, mode, "visual")
+                AfterModeChanged(mode)
+            end]====] },
+    ["H4.GroupBars.10"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua", source = [====[set = function(value)
+            local spec = SelectedSlotSpec()
+            if spec.hidePercentKey then Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual") end
+            FocusGFPreviewText(kind, CurrentSlot(kind), true)
+            RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
+        end]====] },
+    ["H4.ResourceExtras.3"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua", source = [====[row.set=function(value) Write(key,value) end]====] },
+    ["H4.Group.RoleOrder"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua", source = [====[set = function(value)
+                local changed = ApplyRoleOrder(value)
+                if changed and holder and holder.Refresh then holder.Refresh() end
+                return changed
+            end]====] },
 }

@@ -40,6 +40,15 @@
 -- enter_world 824k -> 826k, settle 2302k -> 2305k, all within their limits. The load
 -- limit rises to the measurement plus 2%: 160k -> 167k.
 
+-- 2026-10-25: replayed original blobs and smoke at 2a1e3ff5e: PASS,
+-- load 156k/160k and login 1812k/1849k. The unrefreshed budget predates
+-- namespace binding (847b13935 already loads 239k) and mandatory rollback:
+-- f4d42a9d6^ login 1833k, f4d42a9d6 login 6963k, with identical widget calls.
+-- Preserve the immutable pre-migration backup. Sparse dictionaries/scratch now
+-- initialize only for sparse I/O: round-3 load 431k -> 201k (limit +2%).
+-- First-upgrade login retains f4d42a9d6's 6963k +2%; ordinary reload still
+-- must meet the original 1849k login limit with the saved backup present.
+
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required (Mainline)")
 assert(rawget(_G, "MSUF_Auras3TestLoader") == nil,
@@ -48,7 +57,7 @@ assert(rawget(_G, "MSUF_Auras3TestLoader") == nil,
 -- [flavor] = { [phase] = { k instructions, widget API calls } }
 local BUDGETS = {
     Mainline = {
-        load = { 167, 242 }, login = { 1849, 19365 }, enter_world = { 841, 2021 }, settle = { 2349, 8790 },
+        load = { 206, 242 }, login = { 7103, 19365 }, enter_world = { 841, 2021 }, settle = { 2349, 8790 },
     },
 }
 local SV_FIXTURE = "tools/fixtures/profiles/sv/sv_retail_rev16_17.lua"
@@ -175,7 +184,7 @@ end
 
 -- One login: the four phases of the header, measured by `mode`
 -- ("instructions" or "calls"). Returns the per-phase measure and facts.
-local function RunStartup(mode)
+local function RunStartup(mode, existingBackup)
     local world = NewWorld()
     local env = world.env
     local counter = mode == "calls" and CountWidgetCalls(world) or nil
@@ -251,6 +260,7 @@ local function RunStartup(mode)
     Check(#failures == 0, "the core graph failed to load: " .. tostring(failures[1]))
 
     for name, value in pairs(Corpus.LoadSavedVariablesFixture(root, SV_FIXTURE)) do rawset(env, name, value) end
+    if existingBackup then env.MSUF_GlobalDB._pre70ProfileBackup = existingBackup end
     Measure("login", function()
         Dispatch("ADDON_LOADED", "MidnightSimpleUnitFrames", false)
         Dispatch("PLAYER_LOGIN")
@@ -264,11 +274,14 @@ local function RunStartup(mode)
     local frames = 0
     for _ in pairs(UF.frames or {}) do frames = frames + 1 end
     Check(frames >= 15, "PLAYER_LOGIN built only " .. frames .. " unit frames")
-    return measured, { files = #paths, frames = frames, timers = timersRun }
+    return measured, { files = #paths, frames = frames, timers = timersRun, backup = env.MSUF_GlobalDB._pre70ProfileBackup }
 end
 
 local instructions, facts = RunStartup("instructions")
 local calls = RunStartup("calls")
+local warm = RunStartup("instructions", assert(facts.backup, "first login did not retain rollback safety copy"))
+Check(warm.login <= 1849, "ordinary reload login exceeded original 1849k instruction budget: " .. warm.login)
+print(string.format("%s ordinary reload login %dk instructions (budget 1849k)", flavor, warm.login))
 local over = {}
 for _, phase in ipairs(PHASES) do
     local limit = budget[phase]

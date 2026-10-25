@@ -9,7 +9,12 @@ local function Clean(w)
     assert(#unexpected == 0, "unexpected profile error:\n" .. table.concat(unexpected, "\n"))
 end
 local function World(saved, character)
-    local w = C.NewWorld(root, flavor, character or "Tester-Realm")
+    local w = C.NewWorld(root, flavor, character or "Tester-Realm", function(world)
+        -- A solo client's native roster count is a number. H1 correctly keeps
+        -- applying after an isolated frame failure, so the scale timer now
+        -- reaches this provider too; the generic unknown-global stub is invalid.
+        world.env.GetNumSubgroupMembers = function() return 0 end
+    end)
     C.Login(w, saved or {})
     Clean(w)
     return w, w.env, w.core

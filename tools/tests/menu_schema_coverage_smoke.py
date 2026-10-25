@@ -104,6 +104,10 @@ with tempfile.TemporaryDirectory(prefix="preview-census-") as directory:
         path = fixture / coverage.MENU / row["file"]
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes((root / coverage.MENU / row["file"]).read_bytes())
+        for support in row.get("support_sources", []):
+            path = fixture / coverage.MENU / support["file"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((root / coverage.MENU / support["file"]).read_bytes())
     census = fixture / "tools/preview_render_census.json"
     def WriteProof(value):
         census.write_text(json.dumps(value), encoding="utf-8")

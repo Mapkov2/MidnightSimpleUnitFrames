@@ -1,0 +1,789 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "test": "tools/tests/client_boot_smoke.lua",
+      "phase": "fast",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_sparse_persistence_smoke.lua",
+      "phase": "fast",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_sparse_client_transfer_smoke.lua",
+      "phase": "fast",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_sparse_backward_migration_smoke.lua",
+      "phase": "fast"
+    },
+    {
+      "test": "tools/tests/menu_schema_coverage_smoke.py",
+      "phase": "generated",
+      "arguments": []
+    },
+    {
+      "test": "tools/tests/global_keep_contract_smoke.py",
+      "phase": "generated",
+      "arguments": []
+    },
+    {
+      "test": "tools/tests/release_reproducibility_smoke.py",
+      "phase": "generated",
+      "arguments": []
+    },
+    {
+      "test": "tools/tests/release_test_inventory_smoke.py",
+      "phase": "generated",
+      "arguments": []
+    },
+    {
+      "test": "tools/test_module_manifest.py",
+      "phase": "generated",
+      "arguments": []
+    },
+    {
+      "test": "tools/tests/profile_sparse_size_smoke.lua",
+      "phase": "profiles"
+    },
+    {
+      "test": "tools/tests/profile_sync_smoke.lua",
+      "phase": "profiles"
+    },
+    {
+      "test": "tools/tests/release_profiles_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_decoder_quarantine_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_backup_history_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_alias_corpus_bytes_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_ensure_recovery_budget_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_rollback_compat_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_rollback_backup_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_rollback_guards_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_newer_revision_backup_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_recovery_account_budget_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_pubsub_mutation.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/classpower_playerhp_max_cache.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/classpower_builder_contracts.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/castbar_empower_reuse.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/modules_enabled_boundary.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/uf_prediction_writer_recovery.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/uf_late_anchor_writer_recovery.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/scheduler_pending_key_policy_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/uf_apply_transaction.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/uf_prediction_modules.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/classpower_playerhp_binding.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/castbar_timing_reset_owner.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/text_drain_writer_recovery_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline"
+      ]
+    },
+    {
+      "test": "tools/tests/startup_login_budget_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_schema_capture_smoke.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/menu_schema_setter_contract.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/menu_scanner_lifecycle.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/menu_crosshair_geometry.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/release_menu_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_changelog_reopen.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/search_entrypoint_slices.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_schema_reused_declarations_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "enGB"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "esES"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "esMX"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "frFR"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "itIT"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "koKR"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "ptBR"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "ruRU"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "zhCN"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_heap.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--check",
+        "zhTW"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_rebuild_leak_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ]
+    },
+    {
+      "test": "tools/tests/search_cold_metadata_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ]
+    },
+    {
+      "test": "tools/tests/guided_tour_restore_retention_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ]
+    },
+    {
+      "test": "tools/tests/search_combined_heap_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_combined_heap_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/release_apply_smoke.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/flip_check_smoke.py",
+      "phase": "namespace",
+      "arguments": [
+        "--luac",
+        "{luac}",
+        "--lua",
+        "{lua}"
+      ]
+    },
+    {
+      "test": "tools/tests/flip_check_exports.lua",
+      "phase": "namespace",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_scene_lifecycle_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "release"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_combat_restore_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_configured_glow_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/release_apply_smoke.lua",
+      "phase": "edit",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "edit"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_core_history_smoke.lua",
+      "phase": "edit",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_schema_setter_parity.lua",
+      "phase": "setters",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/uf_prediction_layout_budget.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/uf_prediction_native_budget.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_gcd_spell_attribution.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/preview_aura_geometry_smoke.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/preview_group_sample_contract_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_group_sample_contract_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "budget"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_page_structure.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/menu_schema_write_contract.lua",
+      "phase": "menu"
+    },
+    {
+      "test": "tools/tests/preview_census_support_smoke.py",
+      "phase": "generated",
+      "arguments": []
+    }
+  ],
+  "excluded": {
+    ".github/quality/forever_swing_timer_settings_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local root = assert(arg[1], \"repository root required\")",
+    ".github/quality/menu_search_skin_lifecycle_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. The navigation search input acquires rounded chrome after its first skin paint.",
+    ".github/scripts/arena_postbase_integration_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. arena_postbase_integration_smoke.lua",
+    ".github/scripts/arena_restoration_gaps_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Focused Arena restoration coverage for profile payloads, UI scale, and rounded castbars.",
+    ".github/scripts/auras3_test_driver.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Run an unchanged legacy harness against XML-defined Auras3 module groups.",
+    ".github/scripts/auras3_test_loader.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Test-only compatibility for pre-split Auras3 harnesses. Production load order",
+    ".github/scripts/castbar_tint_parity_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Compare the complete tint sink/cache contract with the behavior of the frozen Retail",
+    ".github/scripts/classic_refactor_load_order_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. import csv",
+    ".github/scripts/group_structure_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. import argparse",
+    ".github/scripts/health_background_sample_parity_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Real Health -> background -> gradient pipeline, including API/sink order.",
+    ".github/scripts/health_runtime_equivalence_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Compare native writes and consumer handoffs against the behavior of the frozen",
+    ".github/scripts/mapkoskin_menu_integration_contract.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local NS, check, new_frame, new_region, root = ...",
+    ".github/scripts/menu2_accordion_contrast_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Run the Classic-owned accordion color setter with a pale menu accent.",
+    ".github/scripts/menu2_search_index_hash_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Each index records the SHA256 of every Lua and XML file under Shell/Menu2 at the moment",
+    ".github/scripts/menu2_skinned_selection_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Exercise the Menu2 painter when an external skin owns its button material.",
+    ".github/scripts/msuf_test_stubs.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Shared offline WoW client stubs for the MSUF smoke suite.",
+    ".github/scripts/prediction_data_writer_parity_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Compare production snapshots: native calls, cache/lifecycle state and Lua work.",
+    ".github/scripts/ptr_12_1_5_runtime_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local repo = assert(arg[1], \"repo root required\")",
+    ".github/scripts/retail_12_1_0_fallback_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local repo = assert(arg[1], \"repo root required\")",
+    ".github/scripts/rounded_border_highlight_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Regression: rounded highlights must retain their resolved frame level.",
+    ".github/scripts/rounded_forbidden_mask_owner_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Each slice below is one function, cut at its own `end`; it used to stop at",
+    ".github/scripts/rounded_styled_outline_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Regression: rounded and slanted frames draw the frame outline's True Outline",
+    ".github/scripts/slanted_bar_shape_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Exercise per-frame shape precedence without a live WoW client.",
+    ".github/scripts/tests/elite_indicator_classification_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local root = arg and arg[1] or \".\"",
+    ".github/scripts/text_runtime_value_parity_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Compare the complete text value pipeline against the behavior of the frozen Retail source,",
+    "tools/MenuTest/wow_stubs.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Dev-only WoW API stubs for headless MSUF menu tests.",
+    "tools/arena_unit_scope_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local root = arg[1] or \".\"",
+    "tools/tests/aura_icon_skin_media_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. 1. Rebuilds every texture with tools/generate_aura_icon_skins.py (plain",
+    "tools/tests/aura_icon_skin_paint_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Aura icon skins: the painter and the compiler (Auras3/MSUF_Auras3_IconSkins.lua).",
+    "tools/tests/aura_mock_painter_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Partial UI/math fixtures use the same mock painter owners as the TOCs.",
+    "tools/tests/castbar_cast_path_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. castbar_cast_path_budget_smoke.lua <repoRoot> [print]",
+    "tools/tests/castbar_hotpath_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. castbar_hotpath_budget_smoke.lua <repoRoot> [print]",
+    "tools/tests/castbar_namespace_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Partial castbar worlds bind their old fixture handles to the real namespace.",
+    "tools/tests/castbar_pool_preview_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. castbar_pool_preview_smoke.lua <repoRoot>",
+    "tools/tests/castbar_secret_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. castbar_secret_world.lua -- the real Mainline core with every secret-capable",
+    "tools/tests/castbar_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. castbar_world.lua -- a fake client for castbar smokes.",
+    "tools/tests/classic_aura_hotpath_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. classic_aura_hotpath_budget_smoke.lua <repoRoot>",
+    "tools/tests/classic_aura_lane_schema_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. classic_aura_lane_schema_smoke.lua <repoRoot>",
+    "tools/tests/classpower_balance_aura_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. classpower_balance_aura_budget_smoke.lua <repoRoot>",
+    "tools/tests/classpower_collaborators.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. classpower_collaborators.lua -- the cross-file providers ClassPower requires.",
+    "tools/tests/classpower_hotpath_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. classpower_hotpath_budget_smoke.lua <repoRoot> [print]",
+    "tools/tests/classpower_secrets.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. classpower_secrets.lua -- secret values as strict as the 12.x client.",
+    "tools/tests/classpower_target_combo_trace_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Behavioural call trace of the REAL ClassPower stack, per client.",
+    "tools/tests/classpower_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. classpower_world.lua -- a fake client for ClassPower controller smokes.",
+    "tools/tests/client_manifest.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Test-only reader of the shipped TOC/XML load graph. Dependencies are selected",
+    "tools/tests/client_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. client_world.lua -- a fake WoW client for whole-graph load tests.",
+    "tools/tests/editmode_prerequisites.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Standalone fixtures load the same pure prerequisites as the client TOCs.",
+    "tools/tests/encoding_util_emulator.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. encoding_util_emulator.lua -- a pure Lua 5.1 stand-in for Blizzard's",
+    "tools/tests/encoding_util_emulator_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. encoding_util_emulator_smoke.lua <repo root>",
+    "tools/tests/factory_default_profile_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Factory default profile smoke.",
+    "tools/tests/focus_kick_cast_state_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. focus_kick_cast_state_budget_smoke.lua <repoRoot> [print]",
+    "tools/tests/gf_aura_filter_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. gf_aura_filter_fixture.lua: the shipped group aura filter table for page fixtures.",
+    "tools/tests/global_links_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. global_links_smoke.lua <repoRoot> [--list]",
+    "tools/tests/group_header_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. group_header_world.lua -- the real group runtime on an emulated SecureGroupHeader.",
+    "tools/tests/group_name_update_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. A 20-member name burst measures real name recovery, with no headroom.",
+    "tools/tests/group_preview_aura_config_share_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. group_preview_aura_config_share_smoke.lua <repoRoot> <flavor>",
+    "tools/tests/group_preview_repaint_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. group_preview_repaint_budget_smoke.lua <repoRoot> <flavor>",
+    "tools/tests/group_preview_secret_name_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. A secret player name must not enter preview shortening or identity caches.",
+    "tools/tests/group_raid_header_blizzard_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. group_raid_header_blizzard_smoke.lua <repoRoot>",
+    "tools/tests/group_roster_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. group_roster_budget_smoke.lua <repoRoot> <flavor>",
+    "tools/tests/group_text_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Real UFText providers for narrow group, profile and catalog fixtures.",
+    "tools/tests/health_tick_native_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. health_tick_native_budget_smoke.lua <repoRoot> <flavor> [print]",
+    "tools/tests/health_tick_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. health_tick_world.lua -- one health tick on the real core, natives counted.",
+    "tools/tests/menu_boss_arena_layout_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Boss and Arena Layout sections: receipts captured before they moved onto the control schema.",
+    "tools/tests/menu_boss_target_highlight_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Boss target highlight section: receipts captured before it moved onto the control schema.",
+    "tools/tests/menu_core_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. menu_core_world.lua: shared harness for the Menu2 core smokes.",
+    "tools/tests/menu_dispel_overlay_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Dispel Overlay section: receipts captured before it moved onto the control schema.",
+    "tools/tests/menu_dispel_symbol_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Dispel Symbol section: receipts captured before it moved onto the control schema.",
+    "tools/tests/menu_page_build_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. menu_page_build_budget_smoke.lua <repoRoot> [report]",
+    "tools/tests/menu_portrait_schema_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Portrait colors retain their real multi-root/history/lifecycle behavior.",
+    "tools/tests/menu_preview_repaint_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. menu_preview_repaint_budget_smoke.lua <repoRoot> <flavor> [report]",
+    "tools/tests/menu_pvp_trinket_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. PvP Trinket section: receipts captured before it moved onto the control schema.",
+    "tools/tests/menu_schema_setter_legacy.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Frozen hand setters captured before the schema accessor conversion.",
+    "tools/tests/menu_section_auth.py": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. import hashlib",
+    "tools/tests/menu_section_capture.py": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. import sys",
+    "tools/tests/menu_section_parent_semantics.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Additional storage and numeric-binding observations, kept apart from frozen historical rows.",
+    "tools/tests/menu_section_parity_semantics.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Additional observations replayed from the original committed builders.",
+    "tools/tests/menu_section_parity_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. menu_section_parity_world.lua: control/layout/behavior receipts for unit page sections.",
+    "tools/tests/menu_unit_visibility_inventory_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Unit Visibility (load conditions) section: receipts captured before it moved onto the control schema.",
+    "tools/tests/namespace_view.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. A test-only view for smokes written before namespace-only publication.",
+    "tools/tests/optional_globals_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. optional_globals_smoke.lua <repoRoot>",
+    "tools/tests/preview_family_parity_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Compare the actual frozen original family owner with the shipped real graph.",
+    "tools/tests/preview_family_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Compare the actual frozen original family owner with the shipped real graph.",
+    "tools/tests/preview_namespace_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Partial loaders use the same request/secret owners as the shipped early prelude.",
+    "tools/tests/preview_oracle_capture.py": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. import argparse",
+    "tools/tests/preview_oracle_cases.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Explicit input matrix. Defaults are supplied by the loaded addon, never by a replacement painter.",
+    "tools/tests/preview_oracle_mutations.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Typed native output mutations. This helper is loaded only by negative probes, never by capture.",
+    "tools/tests/preview_oracle_regions.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Deterministic native-region observations, shared by legacy and future scene adapters.",
+    "tools/tests/preview_oracle_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Adapters call the real preview builders and refreshers. They contain no painting rules.",
+    "tools/tests/preview_render_oracle_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local root = assert(arg[1], \"root required\"):gsub(\"\\\\\", \"/\"):gsub(\"/$\", \"\")",
+    "tools/tests/profile_corpus_golden_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. profile_corpus_golden_smoke.lua <repo root> <flavor>",
+    "tools/tests/profile_normalize_loader.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. profile_normalize_loader.lua -- the real profile normalizer for harnesses that",
+    "tools/tests/profile_sparse_preview_marker.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Preview cadence remains independent of V2 storage; internal markers stay explicit.",
+    "tools/tests/profile_state_harness.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. profile_state_harness.lua -- the real profile pipeline without frames.",
+    "tools/tests/public_globals_ledger_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. tools/public-globals.tsv lists the exported globals other code reads by name, with the readers;",
+    "tools/tests/public_globals_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. public_globals_smoke.lua <repoRoot> <flavor> [--inventory | --probe <file> | --ledger <file>]",
+    "tools/tests/require_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. require_fixture.lua: the shipped dependency helpers for page and Edit Mode fixtures.",
+    "tools/tests/resource_extras_translator_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. resource_extras_translator_smoke.lua <repoRoot>",
+    "tools/tests/runtime_media_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Partial worlds load the same early font owner as the TOCs, without copying policy.",
+    "tools/tests/static_popup_stub.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. static_popup_stub.lua: Blizzard's StaticPopup system for test worlds.",
+    "tools/tests/threat_text_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Threat percentage text smoke.",
+    "tools/tests/uf_dispatch_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. uf_dispatch_budget_smoke.lua <repoRoot> <flavor>",
+    "tools/tests/uf_surface_lifecycle_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Pin the original show, combat-end and rounded roster work at 76d9a9fd.",
+    "tools/tests/uf_unit_shift_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. uf_unit_shift_budget_smoke.lua <repoRoot> <flavor>",
+    "tools/tests/unit_scene_region_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Native health-bar queries absent from the permissive widget fixture: an anchored size and a new child's level.",
+    "tools/tests/unresolved_global_reads_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Lua 5.1 makes an undefined name a silent nil read: `CoreFrame(unit)` compiles,"
+  }
+}

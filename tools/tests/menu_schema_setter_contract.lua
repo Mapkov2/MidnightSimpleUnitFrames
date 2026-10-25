@@ -72,7 +72,7 @@ end
 print("PASS schema setter authority: full paths, dynamic families, bounds, false/zero and reset destination")
 
 -- Comparator optimization must preserve every failure and avoid success-path diagnostics.
-local parityFile = assert(io.open(root .. "/tools/tests/menu_schema_setter_parity.lua", "rb"))
+local parityFile = assert(io.open(arg[3] or (root .. "/tools/tests/menu_schema_setter_parity.lua"), "rb"))
 local paritySource = parityFile:read("*a"):gsub("\r\n", "\n")
 parityFile:close()
 local equalSource = assert(paritySource:match("(local function Equal%b().-\nend)\nlocal policies"))
@@ -148,6 +148,40 @@ local newCopyInstructions, newCopyNative = Budget(function(value) return copy(va
 assert(newCopyInstructions < oldCopyInstructions and newCopyNative <= oldCopyNative, "snapshot still calls Lua recursively for primitive fields")
 print(("PASS parity snapshot: cycles/aliases/values; VM %d -> %d; native %d -> %d")
     :format(oldCopyInstructions, newCopyInstructions, oldCopyNative, newCopyNative))
+
+-- The restore still traverses in source-key order and retains existing table
+-- identities. Skip only identical scalar assignments in the plain profile tree.
+local restoreSource = assert(paritySource:match("(local function Replace%b().-\nend)\nlocal function Equal"))
+local restore = assert(loadstring(restoreSource .. "\nreturn Replace"))()
+local function FrozenReplace(dst, src)
+    for key in pairs(dst) do if src[key] == nil then dst[key] = nil end end
+    for key, value in pairs(src) do
+        if type(value) == "table" then
+            if type(dst[key]) ~= "table" then dst[key] = {} end
+            FrozenReplace(dst[key], value)
+        else dst[key] = value end
+    end
+end
+for _, source in ipairs({ {}, { enabled = false, zero = 0, text = "" },
+    { nested = { 1, false, other = {} } }, { nested = false }, { nested = {} } }) do
+    local initial = { enabled = true, stale = 4, nested = { old = 1 } }
+    local expected, actual = copy(initial), copy(initial)
+    local identity = actual.nested
+    FrozenReplace(expected, source)
+    restore(actual, source)
+    assert(compare(expected, actual), "restore changed nil/false/zero/record/list values")
+    if type(source.nested) == "table" then assert(actual.nested == identity, "restore replaced an existing table") end
+end
+local function RestoreBudget(fn)
+    local target = copy(sample)
+    return Budget(function(_, source) fn(target, source); return true end)
+end
+local oldRestoreVM, oldRestoreNative = RestoreBudget(FrozenReplace)
+local newRestoreVM, newRestoreNative = RestoreBudget(restore)
+assert(newRestoreVM < oldRestoreVM and newRestoreNative < oldRestoreNative,
+    "profile restore still calls native type/writes for unchanged scalar leaves")
+print(("PASS parity restore: values/identities; VM %d -> %d; native %d -> %d")
+    :format(oldRestoreVM, newRestoreVM, oldRestoreNative, newRestoreNative))
 
 -- History emits independent leaf paths through pairs; only that unordered set is canonicalized.
 local historySource = assert(paritySource:match("(local function HistoryPathLess%b().-)local function History%(%)"))

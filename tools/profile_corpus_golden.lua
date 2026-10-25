@@ -408,7 +408,7 @@ local function RunFrameTimers(world)
     end
 end
 
-function Corpus.NewWorld(root, flavor, character)
+function Corpus.NewWorld(root, flavor, character, beforeLoad)
     World = World or assert(loadfile(root .. "/tools/tests/client_world.lua"))()
     Emulator = Emulator or assert(loadfile(root .. "/tools/tests/encoding_util_emulator.lua"))()
     local world = World.New(root, flavor)
@@ -441,6 +441,7 @@ function Corpus.NewWorld(root, flavor, character)
     local name, realm = character:match("^(.-)%-(.*)$")
     env.UnitName = function() return name, nil end
     env.GetRealmName = function() return realm end
+    if beforeLoad then beforeLoad(world) end
     local suffix = world.client.tocSuffix or flavor
     local graphKey = suffix .. (world.client.isForever and "/camelot" or "")
     graphCache[graphKey] = graphCache[graphKey]

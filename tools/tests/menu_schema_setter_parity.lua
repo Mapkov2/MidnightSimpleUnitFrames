@@ -1,5 +1,6 @@
 -- Differential replay of every converted declaration against its frozen hand setter.
 -- Usage: lua menu_schema_setter_parity.lua <root> <Mainline|Vanilla|TBC|Mists|Forever>
+io.stdout:setvbuf("no")
 local root, flavor = assert(arg[1]), assert(arg[2])
 root = root:gsub("\\", "/"):gsub("/$", "")
 local reportDirectory = os.getenv("MSUF_SCHEMA_SETTER_REPORT_DIR") or os.getenv("TEMP") or os.getenv("TMPDIR") or "/tmp"
@@ -28,10 +29,13 @@ end
 local function Replace(dst, src)
     for key in pairs(dst) do if src[key] == nil then dst[key] = nil end end
     for key, value in pairs(src) do
-        if type(value) == "table" then
-            if type(dst[key]) ~= "table" then dst[key] = {} end
-            Replace(dst[key], value)
-        else dst[key] = value end
+        local current = dst[key]
+        if current ~= value then
+            if type(value) == "table" then
+                if type(current) ~= "table" then dst[key] = {} end
+                Replace(dst[key], value)
+            else dst[key] = value end
+        end
     end
 end
 local function Equal(a, b, path)
@@ -42,8 +46,15 @@ local function Equal(a, b, path)
         return false, (path or "") .. " values " .. tostring(a) .. " / " .. tostring(b)
     end
     for key, value in pairs(a) do
-        local ok, why = Equal(value, b[key])
-        if not ok then return false, (path or "") .. "." .. tostring(key) .. why end
+        local other = b[key]
+        if type(value) == "table" then
+            local ok, why = Equal(value, other)
+            if not ok then return false, (path or "") .. "." .. tostring(key) .. why end
+        elseif value ~= other then
+            local why = " types"
+            if type(value) == type(other) then why = " values " .. tostring(value) .. " / " .. tostring(other) end
+            return false, (path or "") .. "." .. tostring(key) .. why
+        end
     end
     for key in pairs(b) do
         if a[key] == nil then return false, (path or "") .. "." .. tostring(key) .. " extra" end
@@ -51,6 +62,7 @@ local function Equal(a, b, path)
     return true
 end
 local policies, controls, seenFixtures, loaded = {}, {}, {}, {}
+local customControls = {}
 local customMissing = {}
 local sectionPolicies, sectionResetChecks, sectionWatched = {}, 0, false
 local legacy, watching, combat, setterCalls = false, false, false, 0
@@ -66,6 +78,9 @@ local function Rewrite(source, path)
         end))
 end
 local mw = MenuWorld.Open(root, flavor, { clientScriptBindings = true, beforeCore = function(world)
+    -- Exercise the conditional Classic PetXP provider; the base menu world
+    -- omits its optional native API, causing that real module to return early.
+    if world.client.isClassic then world.env.GetPetExperience = function() return 25, 100 end end
     if not world.client.isForever then return end
     -- Forever has no legacy global GetSpecialization. The shared world's
     -- unknown-global stub is callable and returns an opaque table instead.
@@ -101,6 +116,7 @@ end, beforeOptions = function(world)
             local custom = schema.Custom
             schema.Custom = function(widget, spec)
                 local result = custom(widget, spec)
+                if spec.set and spec.get and not spec.write then customControls[widget] = spec end
                 if spec._parityFrozen then
                     controls[#controls + 1] = { widget = widget, spec = spec, frozen = spec._parityFrozen,
                         page = M.activeKey, command = true }
@@ -126,6 +142,7 @@ end, beforeOptions = function(world)
             schema.Bind = function(ctx, widget, spec)
                 local frozen = policies[spec.write]
                 local result = bind(ctx, widget, spec)
+                if spec.set and spec.get and not spec.write then customControls[widget] = spec end
                 frozen = frozen or spec._parityFrozen
                 if frozen then
                     controls[#controls + 1] = { widget = widget, spec = spec, frozen = frozen, page = ctx.key }
@@ -135,6 +152,19 @@ end, beforeOptions = function(world)
                     customMissing[spec.id] = info.short_src .. ":" .. info.linedefined
                 end
                 return result
+            end
+            local registerVirtual = M.RegisterVirtualRuntimeControl
+            M.RegisterVirtualRuntimeControl = function(meta, ...)
+                local command = meta.command
+                local policy = command and command.write and policies[command.write]
+                if policy and policy.id == "H4.UnitStatusSection.2" then
+                    -- The expanded native row normally owns this catalog ID.
+                    -- Exercise the genuine virtual fallback binding as well.
+                    schema.Custom({ _msuf2VirtualRuntimeControl = true }, {
+                        id = meta.controlId .. ".virtual-fallback", kind = meta.kind,
+                        scope = meta.pageKey or "virtual", applyDomain = "virtual", meta = meta, settingPath = meta.settingKey })
+                end
+                return registerVirtual(meta, ...)
             end
         end
         local shared = self.core.MSUF2 and self.core.MSUF2.UnitSectionsShared
@@ -225,6 +255,35 @@ do
     M.ControlSchema.Build({ key = "gf_layout", refreshers = {}, entry = M.cache.gf_layout }, M.frame, { row },
         M.ControlSchema.GroupOptions())
 end
+-- Retired command metadata has no live execution route. Replay its real lexical
+-- writer declaration directly; native drag rows keep their existing SaveOrder.
+do
+    local found
+    for _, entry in pairs(M.cache) do
+        for _, widget in ipairs(entry.searchWidgets or {}) do
+            local meta = widget._msuf2SearchMeta
+            local command = meta and meta.command
+            local frozen = command and command.write and policies[command.write]
+            if frozen and frozen.id == "H4.Group.RoleOrder" and not found then
+                found = true
+                local owner = { _msuf2VirtualRuntimeControl = true }
+                local spec = { id = meta.controlId .. ".declaration-fixture", kind = "dragrow", scope = "group",
+                    applyDomain = "rebuild", setting = M.ControlSchema.Family(meta.searchSettingKeys), meta = meta,
+                    get = command.get, write = command.write, owner = owner }
+                spec.set = M.ControlSchema.Setter(spec)
+                M.ControlSchema.Custom(owner, spec)
+                controls[#controls].declarationOnly = true
+            end
+        end
+    end
+    assert(found, "role order writer declaration not built")
+end
+local missingSource = {}
+for id in pairs(fixtures) do
+    if id:match("^H4%.") and not loaded[id] then missingSource[#missingSource + 1] = id end
+end
+table.sort(missingSource)
+assert(#missingSource == 0, "new derived policies missing from source: " .. table.concat(missingSource, ", "))
 assert(#controls > 100, "too few converted controls: " .. #controls)
 assert(sectionResetChecks > 20, "real lazy/sparse section policies were not exercised")
 if arg[3] == "--inventory-only" then
@@ -239,7 +298,14 @@ if arg[3] == "--inventory-only" then
 end
 local function Candidates(control)
     local spec, widget = control.spec, control.widget
-    if control.command then return { true } end
+    if control.command then
+        local kind = spec.meta and spec.meta.command and spec.meta.command.kind
+        if kind == "textinput" then return { "17", "not-a-number" } end
+        if control.frozen.id == "H4.Group.RoleOrder" then
+            return { "HEALER,TANK,DAMAGER", " ranged , tank , healer ", "TANK,TANK,DAMAGER", "bad" }
+        end
+        return { true }
+    end
     local current = widget._msuf2CommandAction.get()
     if spec.kind == "toggle" then return { not current } end
     if spec.kind == "slider" then
@@ -267,6 +333,7 @@ local function Candidates(control)
 end
 local function Drive(control, value)
     local widget, kind = control.widget, control.spec.kind
+    if control.command and control.frozen.id:match("^H4%.") then return control.spec.set(value) end
     if control.command then MenuWorld.FireScript(widget, "OnClick", "LeftButton"); return end
     if kind == "toggle" then MenuWorld.FireScript(widget, "OnClick", "LeftButton")
     elseif kind == "slider" then MenuWorld.FireScript(widget, "OnValueChanged", value)
@@ -325,6 +392,136 @@ local function History()
     for _, entry in ipairs(entries) do entry.seq = nil end
     return OrderHistory(entries)
 end
+-- Replay unchanged compound setters against their physical write declarations.
+-- Their original command/history owner stays in place; the contract audits all
+-- changed profile leaves, including dependent values written by an apply.
+local function CheckWrites(spec, before, after, path)
+    if type(before) == "table" and type(after) == "table" then
+        for key, value in pairs(before) do
+            if value ~= after[key] then
+                CheckWrites(spec, value, after[key], path == "" and tostring(key) or path .. "." .. tostring(key))
+            end
+        end
+        for key, value in pairs(after) do
+            if before[key] == nil then
+                CheckWrites(spec, nil, value, path == "" and tostring(key) or path .. "." .. tostring(key))
+            end
+        end
+    elseif type(before) == "table" or type(after) == "table" then
+        local record = type(before) == "table" and before or after
+        if next(record) == nil then
+            assert(M.ControlSchema.MatchesWrite(spec, path), spec.id .. ": undeclared record write " .. path)
+        end
+        for key in pairs(record) do
+            local oldValue, newValue
+            if type(before) == "table" then oldValue = before[key] end
+            if type(after) == "table" then newValue = after[key] end
+            CheckWrites(spec, oldValue, newValue, path .. "." .. tostring(key))
+        end
+    elseif before ~= after then
+        assert(M.ControlSchema.MatchesWrite(spec, path), spec.id .. ": undeclared profile write " .. path)
+    end
+end
+local function ReplayCustomContracts()
+    assert(M.RuntimeControlCatalog.Get("menu2.auras3_buffs.auras.style.appearance.icon-style.styleborderenabled"),
+        "split aura page lost its concrete catalog identity")
+    local cases, schemas, issues, ordered = 0, {}, {}, {}
+    local branches, sinceCollect = {}, 0
+    local menuState = Copy(M._persistentMenuState or {})
+    for _, widget in ipairs(mw.world.widgets.frames) do
+        local spec = widget._msuf2ControlSchema
+        local command = widget._msuf2CommandAction
+        if spec and ((spec.get and spec.set) or (spec.write and command and command.get and command.set)) then
+            customControls[widget] = spec
+        end
+    end
+    for widget, spec in pairs(customControls) do ordered[#ordered + 1] = { widget = widget, spec = spec } end
+    table.sort(ordered, function(a, b) return a.spec.id < b.spec.id end)
+    for _, entry in ipairs(ordered) do
+        local widget, spec = entry.widget, entry.spec
+        local command = widget._msuf2CommandAction
+        local get, set = spec.get or (command and command.get), spec.set or (command and command.set)
+        if widget._msuf2ControlSchema == spec and spec.applyDomain ~= "profiles" and spec.scope ~= "profiles"
+            and not spec.id:match("advancedprofiles") and not spec.id:match("%.opt_profiles%.")
+            and (spec.kind == "toggle" or spec.kind == "slider" or spec.kind == "dropdown"
+                or spec.kind == "segment" or spec.kind == "color") then
+            local profile, original = M.EnsureDB(), Copy(M.EnsureDB())
+            -- The dedicated Pet XP width row is actionable only for that selected indicator.
+            if spec.id:match("%.msuf2_pet_xp_width$") then M.unitStatusSelection.pet = "statusPetXP" end
+            local path = spec.settingPath or (spec.meta and spec.meta.settingKey) or ""
+            if path == "general.showMinimapIcon" then profile.general.minimapIconDB = nil end
+            if path:match("IconBorderThickness$") then
+                profile.general[path:match("^[^.]+%.(.+)$"):gsub("Thickness$", "Style")] = "NONE"
+                branches.iconBorder = true
+            end
+            if spec.id:match("%.slanted%.") then
+                profile.bars.roundedFramesEnabled = true
+                profile.bars.slantedBarsEnabled, profile.bars.slantedUnitFrames, profile.bars.slantedGroupFrames = false, false, false
+                branches.slanted = true
+                for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget",
+                    "boss", "arena", "gf_party", "gf_raid", "gf_mythicraid" }) do
+                    profile[key] = profile[key] or {}
+                    profile[key].frameBarShape = "SQUARE"
+                end
+            end
+            if spec.key == "combatStateEnterColor" then profile.gameplay.combatStateColorSync = true end
+            local a, b, c = get()
+            local values = {}
+            if spec.kind == "toggle" then values = { true, false }
+            elseif spec.kind == "slider" then values = { (tonumber(a) or 0) + 1 }
+            elseif spec.kind == "color" then values = { a == 0.5 and 0.6 or 0.5 }
+            else
+                local choices = spec.values or widget.values or widget._msuf2Values
+                if type(choices) == "function" then choices = choices() end
+                if type(choices) == "table" then
+                    for _, choice in ipairs(choices) do
+                        local option = type(choice) == "table" and choice.value or choice
+                        if option ~= a then values[1] = option; break end
+                    end
+                end
+                if #values == 0 and a ~= nil then values[1] = a end
+            end
+            local before = Copy(M.EnsureDB())
+            for _, value in ipairs(values) do
+                Replace(M.EnsureDB(), before)
+                M.ClearHistory()
+                local ok, why = pcall(function()
+                    assert(spec.writes and (spec.writes.menuState or #spec.writes.keys > 0 or #spec.writes.patterns > 0),
+                        spec.id .. ": command has no concrete write contract (" .. spec.kind .. ", " .. tostring(spec.labelKey)
+                        .. ", " .. tostring(spec.applyDomain) .. ", " .. tostring(spec.meta and spec.meta.classification) .. ")")
+                    set(value, b, c)
+                    CheckWrites(spec, before, M.EnsureDB(), "")
+                    local catalog = M.RuntimeControlCatalog
+                    if catalog.Get(spec.id) and catalog.Get(spec.id) == catalog.GetForWidget(widget) then
+                        local contract = assert(catalog.GetWriteContract(spec.id), spec.id .. ": catalog lost its write contract")
+                        assert(Equal(contract, spec.writes), spec.id .. ": catalog write contract differs from the live declaration")
+                    end
+                end)
+                if not ok then issues[#issues + 1] = spec.id .. ": " .. tostring(why) end
+                cases = cases + 1
+            end
+            Replace(M.EnsureDB(), original)
+            if M._persistentMenuState then
+                Replace(M._persistentMenuState, menuState)
+                for field, value in pairs(menuState) do
+                    M[field] = type(value) == "table" and M._persistentMenuState[field] or value
+                end
+            end
+            schemas[spec.id] = true
+            sinceCollect = sinceCollect + 1
+            if sinceCollect == 16 then collectgarbage("step", 512); sinceCollect = 0 end
+        end
+    end
+    assert(branches.iconBorder and branches.slanted, "conditional write branches were not seeded")
+    if #issues > 0 then
+        local file = assert(io.open(reportDirectory .. "/writes-" .. flavor .. ".log", "wb"))
+        file:write(table.concat(issues, "\n")); file:close()
+        error(#issues .. " write contract failures; first: " .. issues[1])
+    end
+    assert(cases > 80, "too few compound/temporary write contracts replayed: " .. cases)
+    print(("PASS compound/temporary write contracts %s: %d real control replays"):format(flavor, cases))
+end
+if arg[3] == "--write-contracts-only" then ReplayCustomContracts(); return end
 local checks, failures = 0, {}
 local applyLog, applyDepth, tracing = {}, 0, false
 for name, original in pairs(mw.core.ApplyService) do
@@ -340,6 +537,59 @@ for name, original in pairs(mw.core.ApplyService) do
         end
     end
 end
+local function ReplayScalarEdges()
+    local cases = 0
+    for _, control in ipairs(controls) do
+        local id, spec = control.frozen.id, control.spec
+        if id == "H4.ResourceExtras.3" or id == "H4.UnitSections.5" then
+            local original = Copy(M.EnsureDB())
+            local setter = M.ControlSchema.Setter(spec)
+            local key = M.ControlSchema.ResolvePath(spec):match("([^.]+)$")
+            local values = { true, false }
+            if id == "H4.ResourceExtras.3" then
+                values = ({ target = { "CLASS", "PLAYER" }, resource = { "RAGE", "ALL" },
+                    value = { -30, 25000000, "240" }, width = { 1, 20 },
+                    direction = { "BELOW", "ABOVE" } })[key] or values
+            end
+            for scenario = 1, 4 do
+                local baseline = Copy(original)
+                if id == "H4.ResourceExtras.3" then
+                    if scenario == 1 then baseline.bars.resourceMarks = nil
+                    elseif scenario == 2 then baseline.bars.resourceMarks = {}
+                    else baseline.bars.resourceMarks = { { target = "PLAYER", resource = "ALL",
+                        mode = scenario == 3 and "PERCENT" or "ABSOLUTE", value = 240,
+                        width = 2, mark = true, threshold = false, direction = "ABOVE" } } end
+                else
+                    local unit = M.ControlSchema.ResolvePath(spec):match("^([^.]+)")
+                    baseline[unit].useBlizzardFrame = scenario % 2 == 0
+                end
+                for _, value in ipairs(values) do
+                    local frozen
+                    for _, old in ipairs({ true, false }) do
+                        Replace(M.EnsureDB(), baseline)
+                        legacy, applyLog, tracing = old, {}, true
+                        local ok, result = pcall(setter, value)
+                        tracing = false
+                        assert(ok, spec.id .. ": scalar edge " .. tostring(result))
+                        local outcome = { profile = Copy(M.EnsureDB()), result = result, apply = Copy(applyLog) }
+                        if old then frozen = outcome
+                        else
+                            local equal, why = Equal(frozen, outcome)
+                            assert(equal, spec.id .. ": scalar edge " .. tostring(why))
+                        end
+                    end
+                    cases = cases + 1
+                end
+            end
+            Replace(M.EnsureDB(), original)
+        end
+    end
+    legacy = false
+    assert(cases >= 56, "missing real mark/ownership edge declarations")
+    print(("PASS scalar edge parity %s: %d absent/empty/clamped/ownership refusal cases"):format(flavor, cases))
+end
+ReplayScalarEdges()
+if arg[3] == "--scalar-edges-only" then return end
 local function Check(ok, message)
     if not ok then failures[#failures + 1] = message end
 end
@@ -374,9 +624,11 @@ for _, control in ipairs(controls) do
             tracing, applyDepth = false, 0
             Check(ok, spec.id .. ": " .. tostring(why))
             if old then
-                frozenOutcome = { profile = Copy(M.EnsureDB()), history = History(), apply = applyLog }
+                frozenOutcome = { profile = Copy(M.EnsureDB()), history = History(), apply = applyLog,
+                    declarationResult = control.declarationOnly and why }
             else
-                local same, difference = Equal(frozenOutcome, { profile = M.EnsureDB(), history = History(), apply = applyLog })
+                local same, difference = Equal(frozenOutcome, { profile = M.EnsureDB(), history = History(), apply = applyLog,
+                    declarationResult = control.declarationOnly and why })
                 Check(same, control.frozen.id .. " / " .. spec.id .. ": " .. tostring(difference))
             end
             -- Drive the same section-reset operation the popup calls. The
@@ -384,7 +636,8 @@ for _, control in ipairs(controls) do
             -- the production declaration routing, inside identical history.
             local path = M.ControlSchema.ResolvePath(spec)
             local targetRoot, field = path:match("^([^.]+)%.([^.]+)$")
-            if candidateIndex == 1 and targetRoot and scope == "party" then
+            -- A virtual search command has no native section to reset.
+            if candidateIndex == 1 and targetRoot and scope == "party" and not control.widget._msuf2VirtualRuntimeControl then
                 local parent, entry = control.widget:GetParent()
                 while parent do
                     entry = parent._msuf2CollapsibleEntry
@@ -425,7 +678,9 @@ for _, control in ipairs(controls) do
         -- Native command tiles keep their existing history owner's inner combat
         -- gate. Standard widgets refuse before reaching the schema accessor.
         Check((control.command or setterCalls == 0) and #M.historyUndo == 0, spec.id .. ": combat reached setter/history")
-        if control.command then Check(Equal(M.EnsureDB(), baseline), spec.id .. ": combat command wrote profile") end
+        if control.command and not control.declarationOnly then
+            Check(Equal(M.EnsureDB(), baseline), spec.id .. ": combat command wrote profile")
+        end
         if old then frozenCombat = Copy(M.EnsureDB())
         else Check(Equal(frozenCombat, M.EnsureDB()), spec.id .. ": combat refresh changed profile behavior") end
     end
@@ -443,6 +698,13 @@ local missing = {}
 local unavailable = {
     ["AdvancedColors.9"] = not mw.core.Client.SupportsTapDenied,
     ["SwingTimers.1"] = not mw.core.Client.IsForever,
+    ["H4.SwingTimers.1"] = not mw.core.Client.IsForever,
+    ["H4.ResourceExtras.1"] = not mw.core.Client.IsRetail or mw.core.Client.IsForever,
+    ["H4.GlobalCastbars.4"] = not mw.core.Client.SupportsUnit("focus"),
+    ["H4.GlobalCastbars.5"] = not mw.core.Client.SupportsUnit("focus"),
+    ["H4.UnitRangeFade.2"] = not mw.core.Client.SupportsUnit("boss"),
+    ["H4.UnitStatusSection.2"] = not (mw.core.Client.IsClassic or mw.core.Client.SupportsPetHappiness
+        or mw.core.Client.SupportsThreatText),
     ["UnitArenaTrinket.1"] = not mw.core.Client.SupportsUnit("arena"),
     ["UnitSections.17"] = not mw.core.Client.SupportsUnit("boss"),
     ["UnitSections.19"] = not mw.core.Client.SupportsUnit("boss"),
@@ -463,3 +725,4 @@ for _, control in ipairs(controls) do receipt:write(control.page, "\t", control.
 receipt:close()
 print(("PASS schema setters %s: %d controls, %d scope contexts, %d cases, %d reset replays, %d lazy/sparse resets, %d policies")
     :format(flavor, #controls, scopeChecks, checks, resets, sectionResetChecks, fixtureCount))
+ReplayCustomContracts()
