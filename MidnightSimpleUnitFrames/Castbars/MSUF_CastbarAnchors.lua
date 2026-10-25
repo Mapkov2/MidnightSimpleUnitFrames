@@ -838,7 +838,7 @@ do
             return
         end
         if event == "PLAYER_REGEN_ENABLED" then
-            if not widthSourcePendingAfterCombat and not widthSourceQueued then
+            if not widthSourcePendingAfterCombat and not widthSourceQueued and not next(dirtyWidthSourceUnits) then
                 return
             end
         elseif InCombat() then

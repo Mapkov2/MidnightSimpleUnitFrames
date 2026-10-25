@@ -27,6 +27,7 @@ local FILE = "Castbars/MSUF_PlayerCastbarRuntime.lua"
 -- Utils precedes the player runtime on every client; validate the shared contract once.
 local ResolvePushbackMS = Utils.Castbar_ResolvePushbackMS
 assert(type(ResolvePushbackMS) == "function", FILE .. " requires Utils.Castbar_ResolvePushbackMS")
+local GetReverseFillSafe = MSUF.Require("GetReverseFillSafe", FILE, Utils)
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
 local GetClassBarColor = MSUF.Require("MSUF_GetClassBarColor", FILE)
@@ -915,7 +916,7 @@ local function ShowInterruptFeedback(frame, label)
     local duration = GetInterruptFeedbackDuration()
     frame.interruptFeedbackEndTime = GetTime() + duration
 
-    local reverseFill = Utils.GetReverseFillSafe and Utils.GetReverseFillSafe(frame, false) or false
+    local reverseFill = GetReverseFillSafe(frame, false)
     local interruptLabel = label or INTERRUPTED
     ApplyInterruptValues(CastbarRuntime, frame, 1, reverseFill, interruptLabel)
 

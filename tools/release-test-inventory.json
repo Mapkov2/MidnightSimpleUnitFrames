@@ -1620,6 +1620,13 @@
       "clients": [
         "Mainline"
       ]
+    },
+    {
+      "test": "tools/tests/uf_pending_writes.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline"
+      ]
     }
   ],
   "excluded": {

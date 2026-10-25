@@ -422,12 +422,12 @@ local function RefreshScene(self)
   frame._msufSampleReaction = REACTION_VALUE[sample.reaction or "friendly"]
   frame._msufSamplePortraitArt = sample.portraitTexture or (sample.player ~= true and sample.portrait or nil)
   if frame._msufSceneWidth ~= spec.width or frame._msufSceneHeight ~= spec.height then
-    frame._msufSceneWidth, frame._msufSceneHeight = spec.width, spec.height
     frame:SetSize(spec.width, spec.height)
+    frame._msufSceneWidth, frame._msufSceneHeight = spec.width, spec.height
   end
   if not frame._msufScenePlaced then
-    frame._msufScenePlaced = true
     frame:SetPoint("CENTER", self.root.parent, "CENTER", 0, 0)
+    frame._msufScenePlaced = true
   end
   -- A paint that failed left its window open; the apply must not hold the unit.
   CloseWindow(frame)

@@ -201,17 +201,15 @@ local function AnchorDependsOn(region, target, state, depth)
   -- Anchor candidates resolve from user-supplied global names, so this can walk
   -- FOREIGN frames. Forbidden frames raise on any accessor; IsForbidden is the
   -- sanctioned no-throw probe (and a forbidden frame is not anchorable anyway).
-  local forbiddenRead, isForbidden = true, region.IsForbidden
-  if not forbiddenRead then return FinishAnchorDependencyCheck(state, region, true) end
+  local isForbidden = region.IsForbidden
   if type(isForbidden) == "function" then
     local forbidden = isForbidden(region)
     if (issecretvalue and issecretvalue(forbidden)) or forbidden == true then
       return FinishAnchorDependencyCheck(state, region, true)
     end
   end
-  local numRead, getNumPoints = true, region.GetNumPoints
-  local pointRead, getPoint = true, region.GetPoint
-  if not numRead or not pointRead then return FinishAnchorDependencyCheck(state, region, true) end
+  local getNumPoints = region.GetNumPoints
+  local getPoint = region.GetPoint
   if type(getNumPoints) == "function" and type(getPoint) == "function" then
     local count = getNumPoints(region)
     if (issecretvalue and issecretvalue(count)) or type(count) ~= "number" then
@@ -978,7 +976,9 @@ local cooldownWidthRegenDriver
 
 local cooldownWidthRegenArmed = false
 
-local function EnsureCooldownWidthRegenDriver()
+local function EnsureCooldownWidthRegenDriver(batchSucceeded)
+  -- Also the cold batch's boundary finish: success needs no retry route.
+  if batchSucceeded == true then return true end
   if cooldownWidthRegenArmed then return true end
   if not cooldownWidthRegenDriver then
     cooldownWidthRegenDriver = CreateFrame("Frame")
@@ -986,6 +986,14 @@ local function EnsureCooldownWidthRegenDriver()
       if InCombat() then return end
       local refreshMask = cooldownWidthRefreshAfterCombatMask
       local visualMask = cooldownWidthVisualAfterCombatMask
+      -- Failed timer writes keep their pending masks; regen owns those too.
+      if cooldownWidthRefreshPendingMask ~= 0 then
+        for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
+          local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+          if MaskHas(cooldownWidthRefreshPendingMask, bit) then refreshMask = MaskAdd(refreshMask, bit) end
+          if MaskHas(cooldownWidthVisualPendingMask, bit) then visualMask = MaskAdd(visualMask, bit) end
+        end
+      end
       local observe = cooldownWidthObserverAfterCombat
       if observe then
         EnsureCooldownWidthObservers(true)
@@ -1086,6 +1094,12 @@ local function FlushCooldownWidthRefresh()
   return true
 end
 
+-- This cold geometry batch may abort in any native width writer. Register its
+-- resume before reporting, since even the client's error handler can raise.
+local function RunCooldownWidthRefresh()
+  MSUF.RunUnitFrameApply(FlushCooldownWidthRefresh, EnsureCooldownWidthRegenDriver)
+end
+
 ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig, skipAnchorSchedule)
   local requestedMask = NormalizeCooldownWidthMask(source)
   if requestedMask == 0 then return false end
@@ -1135,9 +1149,9 @@ ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig, skip
   if cooldownWidthRefreshPending then return true end
   cooldownWidthRefreshPending = true
   if C_Timer and C_Timer.After then
-    C_Timer.After(0, FlushCooldownWidthRefresh)
+    C_Timer.After(0, RunCooldownWidthRefresh)
   else
-    FlushCooldownWidthRefresh()
+    RunCooldownWidthRefresh()
   end
   return true
 end

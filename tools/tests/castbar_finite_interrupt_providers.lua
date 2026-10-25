@@ -1,4 +1,4 @@
--- <root> [baseline directory or -] [measure|plain|providers].
+-- <root> [baseline directory or -] [measure|plain|providers] [client].
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local baseline = arg[2] and arg[2] ~= "-" and arg[2] or nil
 local mode = arg[3]
@@ -60,7 +60,8 @@ if mode ~= "providers" and mode ~= "measure" then
 end
 if mode ~= "plain" then
     local World = dofile(root .. "/tools/tests/castbar_secret_world.lua")
-    for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+    local clients = arg[4] and { arg[4] } or { "Mainline", "Forever", "Vanilla", "TBC", "Mists" }
+    for _, flavor in ipairs(clients) do
         local world = World.New(root, { budget = true, flavor = flavor })
         local ns, bars = world.core, world.core.Castbars
         ns.Require("MSUF_EnsureDB", "interrupt sweep")(true)
@@ -120,6 +121,18 @@ if mode ~= "plain" then
                 local ok = pcall(spec[2])
                 bars.Utils.GetInterruptFeedbackDuration = duration
                 Check(ok, flavor .. " " .. spec[1] .. " re-read feedback provider")
+                if spec[1] == "MSUF_PlayerCastbarRuntime.lua" then
+                    world:Fire(player, "UNIT_SPELLCAST_START", "player", nil, nil, 531)
+                    local reverse = bars.Utils.GetReverseFillSafe
+                    bars.Utils.GetReverseFillSafe = function() error("interrupt consumer re-read direction provider") end
+                    local ok = pcall(world.Fire, world, player, "UNIT_SPELLCAST_INTERRUPTED", "player", nil, nil, nil, 531)
+                    bars.Utils.GetReverseFillSafe = reverse
+                    Check(ok, flavor .. " player re-read direction provider")
+                    bars.Utils.GetReverseFillSafe = nil
+                    local loaded, why = pcall(Load, spec[1])
+                    bars.Utils.GetReverseFillSafe = reverse
+                    Check(not loaded and tostring(why):find("GetReverseFillSafe", 1, true), flavor .. " accepted absent direction provider")
+                end
                 for _, entry in ipairs({ { bars.Utils, "GetInterruptFeedbackDuration" }, { bars.Runtime, "ApplyInterruptValues" } }) do
                     local saved = entry[1][entry[2]]
                     for _, invalid in ipairs({ false, true, 42, "bad", {} }) do
