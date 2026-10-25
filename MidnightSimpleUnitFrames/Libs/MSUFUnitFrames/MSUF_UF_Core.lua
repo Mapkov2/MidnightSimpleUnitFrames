@@ -2073,10 +2073,7 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
   return true
 end
 
-function UF.DetachFrame(frame)
-  if not frame then return false end
-  local wasApplying = UF._msufApplyingSpec
-  UF._msufApplyingSpec = true
+local function RunDetachFrame(frame, wasApplying)
   if frame._msufActiveElements then
     for name in pairs(frame._msufActiveElements) do
       FrameDisableElement(frame, name, true)
@@ -2111,6 +2108,17 @@ function UF.DetachFrame(frame)
   UF._msufApplyingSpec = wasApplying
   if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
   return true
+end
+
+local function FinishDetachFrame(_, frame, wasApplying)
+  UF._msufApplyingSpec = wasApplying
+end
+
+function UF.DetachFrame(frame)
+  if not frame then return false end
+  local wasApplying = UF._msufApplyingSpec
+  UF._msufApplyingSpec = true
+  return (MSUF.RunUnitFrameApply(RunDetachFrame, FinishDetachFrame, frame, wasApplying))
 end
 
 function UF.GetFrame(unit)
@@ -2272,8 +2280,7 @@ end
 --- show/hide hooks, no attached-frame registry entry, no event routing and no update on apply (this function never
 --- calls the routing refresh or an element's Update). An element whose apply asks the client something or joins a
 --- registry names its scene form SceneApply. A unit scene passes scope "single" and the unit it stands for (IsEnabled only).
-function UF.ApplySceneSpec(frame, spec, mask, scope, standsFor)
-  if not (frame and spec) then return false end
+local function RunSceneSpec(frame, wasApplying, heldUnit, spec, mask, scope, standsFor)
   if not frame._msufPixelLayoutTemplateVisited then PixelLayoutRegion(frame) end
   scope = scope or "group"
   frame._msufCoreScope = scope
@@ -2284,8 +2291,6 @@ function UF.ApplySceneSpec(frame, spec, mask, scope, standsFor)
   if not active then active = {} frame._msufActiveElements = active end
   mask = mask or DEFAULT_APPLY_MASK
   local order = scopedElementOrders[scope] or elementOrder
-  local wasApplying = UF._msufApplyingSpec
-  UF._msufApplyingSpec = true
   for i = 1, #order do
     local name = order[i]
     if mask == true or mask[name] == true then
@@ -2315,13 +2320,26 @@ function UF.ApplySceneSpec(frame, spec, mask, scope, standsFor)
   return true
 end
 
+local function FinishSceneSpec(_, frame, wasApplying, heldUnit)
+  frame.MSUFUnitKey = heldUnit
+  UF._msufApplyingSpec = wasApplying
+end
+
+function UF.ApplySceneSpec(frame, spec, mask, scope, standsFor)
+  if not (frame and spec) then return false end
+  local wasApplying = UF._msufApplyingSpec
+  UF._msufApplyingSpec = true
+  return (MSUF.RunUnitFrameApply(RunSceneSpec, FinishSceneSpec,
+    frame, wasApplying, frame.MSUFUnitKey, spec, mask, scope, standsFor))
+end
+
 function UF.BeginEventRegistrationBatch()
   UF._msufApplyingSpec = true
 end
 
-function UF.EndEventRegistrationBatch()
-  UF._msufApplyingSpec = nil
-  if UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+function UF.EndEventRegistrationBatch(wasApplying)
+  UF._msufApplyingSpec = wasApplying
+  if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
 end
 
 MSUF.UnitFrames = UF

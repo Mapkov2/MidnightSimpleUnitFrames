@@ -1352,6 +1352,10 @@ local function QueueLateAnchorReanchor(state, delay)
   return false
 end
 
+local function FinishLateAnchorReplay(_, force, state)
+  state.flushing = false
+end
+
 FlushScheduledLateAnchorReanchor = function(state)
   if not state.pending or state.flushing then return false end
   local force = state.forcePosition == true
@@ -1359,10 +1363,9 @@ FlushScheduledLateAnchorReanchor = function(state)
   state.pending = false
   state.retryRequested = false
   state.flushing = true
-  -- This cold replay owns a latch across an apply; the boundary reports a
-  -- failed step and returns so retries and later requests can release it.
-  local ok, flushed = MSUF.RunHostAPIStep("late-anchor replay", FlushLateAnchorReanchor, force)
-  state.flushing = false
+  -- Release the cold replay latch before reporting, even when the client's
+  -- error handler raises. Reentrant requests still use the bounded retry below.
+  local ok, flushed = MSUF.RunUnitFrameApply(FlushLateAnchorReanchor, FinishLateAnchorReplay, force, state)
   if state.retryRequested and (state.attempt or 1) < #LATE_ANCHOR_RETRY_DELAYS then
     state.attempt = (state.attempt or 1) + 1
     QueueLateAnchorReanchor(state, LATE_ANCHOR_RETRY_DELAYS[state.attempt])

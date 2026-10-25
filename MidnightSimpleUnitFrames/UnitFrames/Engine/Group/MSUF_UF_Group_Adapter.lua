@@ -912,15 +912,13 @@ local function ScanChildList(kind, ...)
   return found
 end
 
-function GF.ScanHeader(key, kind)
+local function RunHeaderScan(batch, key, kind)
+  if batch.auras then
+    batch.auras.BeginTopologyBatch()
+    batch.auraStarted = true
+  end
+  UF.BeginEventRegistrationBatch()
   local found = false
-  local auras = MSUF.MSUF_Auras3
-  local batchAuraTopology = auras
-    and type(auras.BeginTopologyBatch) == "function"
-    and type(auras.EndTopologyBatch) == "function"
-  if batchAuraTopology then auras.BeginTopologyBatch() end
-  if UF.BeginEventRegistrationBatch then UF.BeginEventRegistrationBatch() end
-
   local function ScanPhysicalHeader(header)
     if not (header and header.GetChildren) then return end
     found = ScanChildList(kind, header:GetChildren()) or found
@@ -931,10 +929,36 @@ function GF.ScanHeader(key, kind)
   else
     ScanPhysicalHeader(GF.headers and GF.headers[key])
   end
-
-  if batchAuraTopology then auras.EndTopologyBatch() end
-  if UF.EndEventRegistrationBatch then UF.EndEventRegistrationBatch() end
   return found
+end
+
+local function EndHeaderScan(batch)
+  if batch.auraStarted then
+    -- EndTopologyBatch releases its depth before syncing native registrations.
+    batch.auraStarted = false
+    batch.auras.EndTopologyBatch()
+  end
+  UF.EndEventRegistrationBatch(batch.wasApplying)
+end
+
+local function RestoreHeaderScan(_, batch)
+  UF._msufApplyingSpec = batch.wasApplying
+end
+
+local function FinishHeaderScan(_, batch)
+  -- Closing aura topology can raise too. Restore the outer registration flag
+  -- before either transaction reports, including a throwing error handler.
+  batch.finished = MSUF.RunUnitFrameApply(EndHeaderScan, RestoreHeaderScan, batch)
+end
+
+function GF.ScanHeader(key, kind)
+  local auras = MSUF.MSUF_Auras3
+  local batchAuraTopology = auras
+    and type(auras.BeginTopologyBatch) == "function"
+    and type(auras.EndTopologyBatch) == "function"
+  local batch = { wasApplying = UF._msufApplyingSpec, auras = batchAuraTopology and auras }
+  local ok, found = MSUF.RunUnitFrameApply(RunHeaderScan, FinishHeaderScan, batch, key, kind)
+  return ok and batch.finished and found
 end
 
 function GF.ForEachFrame(fn, includeHidden, a, b, c)
