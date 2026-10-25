@@ -13,6 +13,13 @@ local Manager = Castbars.Manager
 local Player = Castbars.Player
 local PublicAPI = Castbars.PublicAPI
 local Utils = Castbars.Utils
+local function RequireUtilsFunction(name)
+    local provider = ns.Require(name, "Castbars/MSUF_CastbarGCD.lua", Utils)
+    assert(type(provider) == "function", "Castbars/MSUF_CastbarGCD.lua requires Utils." .. name)
+    return provider
+end
+local ApplyTexts = RequireUtilsFunction("CB_ApplyTexts")
+local GetReverseFillSafe = RequireUtilsFunction("GetReverseFillSafe")
 
 -- Kernel/MSUF_Util.lua and the Edit Mode public API load before this file.
 local PixelLayoutRegion = ns.Require("MSUF_PixelLayoutRegion", "Castbars/MSUF_CastbarGCD.lua")
@@ -251,7 +258,7 @@ local spellNames = {}
 local spellIcons = {}
 
 -- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper.
-local PlainNumber = Utils.Castbar_PlainNumber
+local PlainNumber = RequireUtilsFunction("Castbar_PlainNumber")
 
 --- Resolves and caches name/icon for an instant spell. Returns nil for
 --- hard-casts (and records them in the skip set).
@@ -357,13 +364,7 @@ FinishGCDBar = function(frame)
     -- the native bindings above needed to be released.
     if frame.MSUF_testMode == true then return end
 
-    local applyTexts = Utils.CB_ApplyTexts
-    if type(applyTexts) == "function" then
-        applyTexts(frame, nil, "", "")
-    else
-        if frame.castText then frame.castText:SetText("") end
-        if frame.timeText then frame.timeText:SetText("") end
-    end
+    ApplyTexts(frame, nil, "", "")
 
     if frame._msufDetachedGCD then RefreshDetached() else frame:Hide() end
 end
@@ -488,11 +489,7 @@ local function StartGCDBar(frame, spellName, iconID, durationObj, general)
     --- Assign copies the GCD window into it without allocating.
     local stable = runtime:RetainDuration(frame, durationObj)
 
-    local reverseFill = false
-    local getReverse = Utils.GetReverseFillSafe
-    if type(getReverse) == "function" then
-        reverseFill = getReverse(frame, false) == true
-    end
+    local reverseFill = GetReverseFillSafe(frame, false) == true
 
     -- C-side fill or nothing: without a working SetTimerDuration there is no
     -- zero-cost way to animate the GCD, and this module never installs an
@@ -507,7 +504,6 @@ local function StartGCDBar(frame, spellName, iconID, durationObj, general)
     local g = general or GeneralDB()
     local showTime = g == nil or g.showGCDBarTime ~= false
     local showSpell = g == nil or g.showGCDBarSpell ~= false
-    local applyTexts = Utils.CB_ApplyTexts
 
     local castText = ""
     if showSpell then
@@ -516,21 +512,13 @@ local function StartGCDBar(frame, spellName, iconID, durationObj, general)
             frame.icon:SetTexture(iconID)
         end
     end
-    if type(applyTexts) == "function" then
-        applyTexts(frame, nil, castText, nil)
-    elseif frame.castText then
-        frame.castText:SetText(castText)
-    end
+    ApplyTexts(frame, nil, castText, nil)
 
     if showTime and frame.timeText then
         runtime:BindNativeTimeText(frame, stable, "CURRENT")
     else
         runtime:DisableNativeTimeText(frame)
-        if type(applyTexts) == "function" then
-            applyTexts(frame, nil, nil, "")
-        elseif frame.timeText then
-            frame.timeText:SetText("")
-        end
+        ApplyTexts(frame, nil, nil, "")
     end
 
     local updateColor = Player.PlayerCastbar_UpdateColorForInterruptible
@@ -656,10 +644,10 @@ GCD.PaintSample = function(frame, g)
         Player.PlayerCastbar_UpdateColorForInterruptible(frame)
         if frame.latencyBar then frame.latencyBar:Hide() end
     end
-    frame.statusBar:SetReverseFill(Utils.GetReverseFillSafe(frame, false) == true)
+    frame.statusBar:SetReverseFill(GetReverseFillSafe(frame, false) == true)
     frame.statusBar:SetMinMaxValues(0, 1)
     frame.statusBar:SetValue(.65)
-    Utils.CB_ApplyTexts(frame, nil, g.showGCDBarSpell ~= false and "GCD" or "", g.showGCDBarTime ~= false and "0.8" or "")
+    ApplyTexts(frame, nil, g.showGCDBarSpell ~= false and "GCD" or "", g.showGCDBarTime ~= false and "0.8" or "")
     frame.icon:SetTexture(136243)
     if frame._msufDetachedGCD then frame.icon:SetShown(g.showGCDBarSpell ~= false) end
     frame:Show()

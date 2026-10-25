@@ -593,7 +593,7 @@ local function EndApplyBatch(_, state)
 end
 
 local function FlushApplyBatch(state)
-  if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
+  if UF.FlushDeferredRefreshes and UF.FlushDeferredRefreshes() == false then state.applied = false end
   if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
 end
 
@@ -881,12 +881,15 @@ local deferredDriverArmed = false
 
 local function DeferredOnEvent(self)
   if InCombat() then return end
-  deferredDriverArmed = false
-  self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+  -- Keep the driver armed until the real drains complete, including a raising
+  -- reporter. A retained job must be reachable on the next combat end.
   if UF.ApplyDirty then UF.ApplyDirty() end
   ThawFrozenExternalAnchors()
   FlushExternalAnchorRefreshAfterCombat()
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
+  if next(UF.pendingApply) or next(UF.pendingElementRefreshes) or Factory.spawnPending then return end
+  deferredDriverArmed = false
+  self:UnregisterEvent("PLAYER_REGEN_ENABLED")
 end
 
 function Factory.EnsureDeferredDriver()

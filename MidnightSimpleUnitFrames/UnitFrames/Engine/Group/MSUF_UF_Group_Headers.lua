@@ -310,7 +310,7 @@ local function ConfiguredCount(kind, conf)
 end
 
 function GF.GetLiveLayoutCount(kind)
-  local conf = GF.GetConf and GF.GetConf(kind) or {}
+  local conf = GF.GetConf(kind)
   return ConfiguredCount(kind, conf)
 end
 
@@ -1771,7 +1771,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
     GF.RetireHeader("priority")
     return nil
   end
-  if GF.EnsureDB then GF.EnsureDB() end
+  GF.EnsureDB()
   local conf = GF.GetPriorityConf and GF.GetPriorityConf() or {}
   local w, h, spacing, totalW, totalH = PriorityLayoutParts(kind, conf, count)
   local anchor = EnsureAnchor("priority", conf, totalW, totalH)
@@ -1800,20 +1800,29 @@ function GF.SetupPriorityHeader(kind, nameList, count)
   end
 
   local changed, wasHidden = ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spacing)
-  local needsScan = changed or newHeader or reused or wasHidden
+  local needsScan = changed or newHeader or reused or wasHidden or header._msufGFScanFailed == true
   if header:GetParent() ~= anchor then header:SetParent(anchor) end
   header:ClearAllPoints()
   local origin = conf.growth == "UP" and "BOTTOMLEFT"
     or conf.growth == "LEFT" and "TOPRIGHT"
     or "TOPLEFT"
   header:SetPoint(origin, anchor, origin, 0, 0)
-  if not GF.RunHeaderLayoutRebind(header, needsScan, ShowReboundPriorityHeader, needsScan) then return nil, false end
+  if needsScan then header._msufGFScanFailed = true end
+  if not GF.RunHeaderLayoutRebind(header, needsScan, ShowReboundPriorityHeader, needsScan) then
+    header._msufGFScanFailed = true
+    return nil, false, false
+  end
 
   if needsScan and header.GetChildren then
     TagPriorityChildren(kind, header:GetChildren())
   end
-  if needsScan and GF.ScanHeader then GF.ScanHeader("priority", kind) end
-  return header, needsScan
+  local success = true
+  if needsScan and GF.ScanHeader then
+    local scanned
+    scanned, success = GF.ScanHeader("priority", kind)
+  end
+  header._msufGFScanFailed = success == false or nil
+  return header, needsScan, success
 end
 
 local function CompleteHeaderLayoutRebind(header, active, previousHeader, previousDepth,
@@ -1842,9 +1851,9 @@ local function CompleteHeaderLayoutRebind(header, active, previousHeader, previo
   -- scanned synchronously here and reports that work as already handled.
   local needsChildScan = newHeader or reused or wasHiddenForLayout == true
   local scanHandled = false
-  if GF.ScanHeader and needsChildScan and header.IsShown and header:IsShown() then
-    GF.ScanHeader(key, kind)
-    scanHandled = true
+  if needsChildScan and header:IsShown() then
+    local scanned, success = GF.ScanHeader(key, kind)
+    if success then scanHandled = true else scanHandled = nil end
   end
   ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
   return scanHandled
@@ -1855,8 +1864,8 @@ function GF.SetupHeader(key, kind)
     Defer("setup")
     return nil
   end
-  if GF.EnsureDB then GF.EnsureDB() end
-  local conf = GF.GetConf and GF.GetConf(kind) or {}
+  GF.EnsureDB()
+  local conf = GF.GetConf(kind)
   -- This snapshot exists only inside one out-of-combat protected-header setup.
   -- Reuse its roster-derived block count for layout as well as name sorting so
   -- no second GetRaidRosterInfo sweep is hidden in the geometry helpers.
@@ -1920,6 +1929,7 @@ function GF.SetupHeader(key, kind)
   local ok, scanHandled = GF.RunHeaderLayoutRebind(header, wasHiddenForLayout and GF.ScanHeader ~= nil,
     CompleteHeaderLayoutRebind, key, kind, conf, anchor, totalW, totalH, layoutCount,
     attrChanged, wasHiddenForLayout, newHeader, reused)
-  if not ok then return nil, false end
-  return header, scanHandled
+  if not ok then return nil, false, false end
+  if scanHandled == nil then return header, false, false end
+  return header, scanHandled, true
 end

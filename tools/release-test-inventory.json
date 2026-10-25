@@ -1409,6 +1409,21 @@
         "{client}",
         "--inject-logout-error"
       ]
+    },
+    {
+      "test": "tools/tests/group_outer_refresh_contract.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_outer_providers.lua",
+      "phase": "runtime"
     }
   ],
   "excluded": {

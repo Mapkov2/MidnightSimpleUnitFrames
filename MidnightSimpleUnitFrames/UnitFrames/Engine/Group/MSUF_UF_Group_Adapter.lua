@@ -933,18 +933,18 @@ local function RunHeaderScan(batch, key, kind)
     batch.auraStarted = true
   end
   UF.BeginEventRegistrationBatch()
+  local first = GF.headers[key]
+  if not first then return false end
+  local grouped = key == "raid" and first._msufRaidGroupIndex
   local found, failed = false, false
-  local function ScanPhysicalHeader(header)
-    if not (header and header.GetChildren) then return end
-    local applied, partial = ScanChildList(kind, header:GetChildren())
-    found, failed = applied or found, partial or failed
+  for i = 1, grouped and first._msufRaidGroupCount or 1 do
+    local header = grouped and GF.raidGroupHeaders[i] or first
+    if header then
+      local applied, partial = ScanChildList(kind, header:GetChildren())
+      found, failed = applied or found, partial or failed
+    end
   end
-
-  if GF.ForEachHeader then
-    GF.ForEachHeader(key, ScanPhysicalHeader)
-  else
-    ScanPhysicalHeader(GF.headers and GF.headers[key])
-  end
+  batch.failed = failed
   return found and not failed
 end
 
@@ -968,23 +968,31 @@ local function FinishHeaderScan(_, batch)
 end
 
 function GF.ScanHeader(key, kind)
+  local priorityHeader
+  if key == "priority" then
+    priorityHeader = GF.headers.priority
+    if priorityHeader then priorityHeader._msufGFScanFailed = true end
+  end
   local auras = MSUF.MSUF_Auras3
   local batchAuraTopology = auras
     and type(auras.BeginTopologyBatch) == "function"
     and type(auras.EndTopologyBatch) == "function"
-  local batch = { wasApplying = UF._msufApplyingSpec, auras = batchAuraTopology and auras }
+  local batch = { wasApplying = UF._msufApplyingSpec, auras = batchAuraTopology and auras, failed = false }
   local ok, found = MSUF.RunUnitFrameApply(RunHeaderScan, FinishHeaderScan, batch, key, kind)
-  return ok and batch.finished and found
+  local success = ok and batch.finished and not batch.failed
+  if priorityHeader then priorityHeader._msufGFScanFailed = not success end
+  return ok and batch.finished and found, success
 end
 
 function GF.ForEachFrame(fn, includeHidden, a, b, c)
   if type(fn) ~= "function" then return false end
-  local any = false
+  local any, success = false, true
   for i = 1, #GF.frameList do
     local frame = GF.frameList[i]
     if frame and GF.frames[frame] == true and (includeHidden == true or not frame.IsShown or frame:IsShown()) then
-      if fn(frame, frame.MSUFUnitKey, frame._msufGFKind, a, b, c) == true then any = true end
+      local result = fn(frame, frame.MSUFUnitKey, frame._msufGFKind, a, b, c)
+      if result == true then any = true elseif result == false then success = false end
     end
   end
-  return any
+  return any, success
 end

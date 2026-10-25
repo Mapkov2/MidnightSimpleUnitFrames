@@ -65,6 +65,7 @@ local function QueueDeferredElementRefresh(unit, names, reason)
     end
   end
   entry.reason = reason or entry.reason or "MSUF_DEFERRED_REFRESH"
+  entry.serial = (entry.serial or 0) + 1
   local factory = UF.Factory
   if factory and factory.EnsureDeferredDriver then factory.EnsureDeferredDriver() end
   return false
@@ -85,63 +86,85 @@ local function DeferredList(entry)
   return list
 end
 
+-- true: applied work; nil: no eligible work; false: failed/deferred work.
 function UF.RefreshElements(unit, names, reason)
   if type(names) ~= "table" then return false end
+  if #names == 0 then return nil end
   if InCombat() then return QueueDeferredElementRefresh(unit, names, reason) end
-
-  local applyElements = UF.ApplyElementsToFrame
-
+  local units = unit and UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
+  if unit and not units then return nil end
   local config = UF.Config
-  local refreshedAll = false
-  if config then
-    if not unit and type(config.Refresh) == "function" then
-      config.Refresh()
-      refreshedAll = true
+  local refreshedAll = not unit and config and type(config.Refresh) == "function"
+  if refreshedAll then config.Refresh() end
+  local result
+  local frames = UF.frames
+  local list = units or UF.frameList
+  for i = 1, #list do
+    local frame
+    if units then frame = frames[list[i]] else frame = list[i] end
+    if frame then
+      local spec = frame.MSUFSpec
+      if refreshedAll and config and type(config.GetSpec) == "function" then
+        spec = config.GetSpec(frame.MSUFUnitKey)
+      elseif config and type(config.RefreshUnit) == "function" then
+        spec = config.RefreshUnit(frame.MSUFUnitKey)
+      elseif config and type(config.GetSpec) == "function" then
+        spec = config.GetSpec(frame.MSUFUnitKey)
+      end
+      local applied = UF.ApplyElementsToFrame(frame, names, spec, reason or "MSUF_ELEMENT_REFRESH")
+      if applied == false then result = false
+      elseif applied == true and result == nil then result = true end
     end
   end
+  return result
+end
 
-  local function specFor(frame)
-    if not frame then return nil end
-    if refreshedAll and config and type(config.GetSpec) == "function" then
-      return config.GetSpec(frame.MSUFUnitKey)
-    elseif config and type(config.RefreshUnit) == "function" then
-      return config.RefreshUnit(frame.MSUFUnitKey)
-    elseif config and type(config.GetSpec) == "function" then
-      return config.GetSpec(frame.MSUFUnitKey)
+local deferredRefreshActive = false
+local deferredKeys, deferredEntries = {}, {}
+
+local function RunDeferredRefreshes()
+  local result
+  local pending = UF.pendingElementRefreshes
+  local count = 0
+  for key, entry in pairs(pending) do
+    count = count + 1
+    deferredKeys[count], deferredEntries[count] = key, entry
+  end
+  for i = 1, count do
+    local key, entry = deferredKeys[i], deferredEntries[i]
+    if pending[key] == entry then
+      local list = DeferredList(entry)
+      local serial = entry.serial
+      local applied
+      if #list > 0 then
+        applied = UF.RefreshElements(key ~= DEFERRED_REFRESH_ALL and key or nil, list, entry.reason)
+      end
+      -- Leave the original names/reason reachable even if an error reporter raises.
+      -- A global failed selection stays global; retrying successful siblings is safe.
+      if applied == false then
+        result = false
+      else
+        if pending[key] == entry and entry.serial == serial then pending[key] = nil end
+        if applied == true and result == nil then result = true end
+      end
     end
-    return frame.MSUFSpec
   end
+  return result
+end
 
-  local function refreshFrame(frame)
-    if not frame then return end
-    local spec = specFor(frame)
-    applyElements(frame, names, spec, reason or "MSUF_ELEMENT_REFRESH")
-  end
-
-  if unit then
-    local units = UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
-    if not units then return false end
-    for i = 1, #units do refreshFrame(UF.frames[units[i]]) end
-    return true
-  end
-
-  UF.ForEachFrame(refreshFrame)
-  return true
+local function FinishDeferredRefreshes()
+  deferredRefreshActive = false
+  for i = #deferredKeys, 1, -1 do deferredKeys[i], deferredEntries[i] = nil, nil end
+  if next(UF.pendingElementRefreshes) then UF.Factory.EnsureDeferredDriver() end
 end
 
 function UF.FlushDeferredRefreshes()
   if InCombat() then return false end
-  local any = false
-  local pending = UF.pendingElementRefreshes
-  for key, entry in pairs(pending) do
-    pending[key] = nil
-    local list = DeferredList(entry)
-    if #list > 0 then
-      UF.RefreshElements(key ~= DEFERRED_REFRESH_ALL and key or nil, list, entry.reason)
-      any = true
-    end
-  end
-  return any
+  if deferredRefreshActive or next(UF.pendingElementRefreshes) == nil then return nil end
+  deferredRefreshActive = true
+  local ok, result = MSUF.RunUnitFrameApply(RunDeferredRefreshes, FinishDeferredRefreshes)
+  if not ok then return false end
+  return result
 end
 
 function UF.MarkDirty(unit)

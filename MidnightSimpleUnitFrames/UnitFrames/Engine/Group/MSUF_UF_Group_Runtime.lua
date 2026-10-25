@@ -49,20 +49,20 @@ local function SetupLiveHeader(key, kind)
 
   GF.EnsureDB()
   local resolve = GF.ResolveFrameScale
-  local desiredScale = tonumber(resolve(kind)) or nil
+  local desiredScale = tonumber(resolve(kind))
   local width, height
-  if GF.GetScaledFrameMetrics then width, height = GF.GetScaledFrameMetrics(kind) end
+  width, height = GF.GetScaledFrameMetrics(kind)
   if (desiredScale ~= nil and appliedLayoutScaleByKind[kind] ~= desiredScale)
     or (width ~= nil and (appliedLayoutWidthByKind[kind] ~= width or appliedLayoutHeightByKind[kind] ~= height)) then
     GF.InvalidateCompiledSpecs(kind)
   end
 
-  local header, scanned = setup(key, kind)
+  local header, scanned, success = setup(key, kind)
   if header and desiredScale ~= nil then
     appliedLayoutScaleByKind[kind] = desiredScale
   end
   if header then appliedLayoutWidthByKind[kind], appliedLayoutHeightByKind[kind] = width, height end
-  return header, scanned
+  return header, scanned, success
 end
 
 local function RefreshRosterStateFrame(frame, _, kind, reason, refreshOverlay)
@@ -378,26 +378,29 @@ local function HeaderScope(kind)
 end
 
 local function SetupWantedPriority()
-  GF._pendingPriorityRefresh = nil
   local priorityKind = LivePriorityKind()
   local wanted = WantPriorityBase(priorityKind)
     and not PreviewSuppressesHeader("priority")
     and not HiddenByEnvironment(priorityKind)
     and GF.PriorityFramesConfigured() == true
   if not wanted then
-    return RetireHeader("priority")
+    GF._pendingPriorityRefresh = nil
+    return RetireHeader("priority"), true
   end
   local resolve = GF.ResolvePrioritySelection
   local setup = GF.SetupPriorityHeader
   local nameList, count = resolve()
   if not nameList or not count or count < 1 then
+    GF._pendingPriorityRefresh = nil
     GF.NotifyPriorityListeners("runtime-empty", 0)
-    return RetireHeader("priority")
+    return RetireHeader("priority"), true
   end
-  local header = setup(priorityKind, nameList, count)
+  local header, _, success = setup(priorityKind, nameList, count)
   if header and header.Show then header:Show() end
+  success = header ~= nil and success ~= false
+  GF._pendingPriorityRefresh = not success or nil
   GF.NotifyPriorityListeners("runtime", count)
-  return header ~= nil
+  return success, success
 end
 
 local function FinishOwnershipHandoff()
@@ -424,54 +427,62 @@ local function SetupWantedHeaders(kind)
     if not scope or scope == "party" then RetireHeader("party") end
     if not scope or scope == "raid" then RetireHeader("raid") end
     RetireHeader("priority")
-    return FinishOwnershipHandoff()
+    return FinishOwnershipHandoff(), true
   end
 
+  local success = true
   local wantParty = WantParty() and not PreviewSuppressesHeader("party") and not housingHidden.party
   local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid") and not housingHidden.raid
 
   if scope ~= "raid" and scope ~= "priority" and wantParty then
-    local header, scanHandled
-    header, scanHandled = SetupLiveHeader("party", "party")
-    if GF.ShowHeaders then GF.ShowHeaders("party") elseif header and header.Show then header:Show() end
-    if not scanHandled and GF.ScanHeader then GF.ScanHeader("party", "party") end
+    local header, scanHandled, scanned
+    header, scanHandled, scanned = SetupLiveHeader("party", "party")
+    GF.ShowHeaders("party")
+    if not header or scanned == false then
+      success = false
+    elseif not scanHandled then
+      local did
+      did, scanned = GF.ScanHeader("party", "party")
+      if scanned == false then success = false end
+    end
   elseif scope ~= "raid" and scope ~= "priority" then
     RetireHeader("party")
   end
 
   if scope ~= "party" and scope ~= "priority" and wantRaid then
-    local header, scanHandled
-    header, scanHandled = SetupLiveHeader("raid", raidKind)
-    if GF.ShowHeaders then GF.ShowHeaders("raid") elseif header and header.Show then header:Show() end
-    if not scanHandled and GF.ScanHeader then GF.ScanHeader("raid", raidKind) end
+    local header, scanHandled, scanned
+    header, scanHandled, scanned = SetupLiveHeader("raid", raidKind)
+    GF.ShowHeaders("raid")
+    if not header or scanned == false then
+      success = false
+    elseif not scanHandled then
+      local did
+      did, scanned = GF.ScanHeader("raid", raidKind)
+      if scanned == false then success = false end
+    end
   elseif scope ~= "party" and scope ~= "priority" then
     RetireHeader("raid")
   end
 
   -- Priority inherits whichever base group kind is active, so both Party and
   -- Raid scoped layout changes must update the one switching secure header.
-  SetupWantedPriority()
-
-  return FinishOwnershipHandoff()
+  local _, prioritySuccess = SetupWantedPriority()
+  if prioritySuccess == false then success = false end
+  FinishOwnershipHandoff()
+  return true, success
 end
 
 local function ApplyFrameDirty(frame, kind, mask, reason, applyMask)
-  if not (frame and kind) then return false end
-  if not IsUnitToken(frame.MSUFUnitKey) then return false end
-  if not (UF and UF.ApplySpec and GF.CompileSpec) then
-    return GF.ApplyButton and GF.ApplyButton(frame, kind, reason)
-  end
+  if not (frame and kind) then return nil end
+  if not IsUnitToken(frame.MSUFUnitKey) then return nil end
   local spec = GF.CompileSpec(kind, frame, frame.MSUFUnitKey)
   if not spec then return false end
   applyMask = applyMask or (GF.ApplyMaskForDirtyMask and GF.ApplyMaskForDirtyMask(mask)) or Metadata.MASK_RUNTIME
-  if GF.ApplyStructureSpec then
-    return GF.ApplyStructureSpec(frame, spec, reason or "MSUF_GF_DIRTY", applyMask) == true
-  end
-  return UF.ApplySpec(frame, spec, reason or "MSUF_GF_DIRTY", applyMask) == true
+  return GF.ApplyStructureSpec(frame, spec, reason or "MSUF_GF_DIRTY", applyMask) == true
 end
 
 local function ApplyRefreshFrame(frame, _, frameKind, kind, mask, applyMask)
-  if kind and kind ~= frameKind then return false end
+  if kind and kind ~= frameKind then return nil end
   return ApplyFrameDirty(frame, frameKind, mask, "MSUF_GF_REFRESH_VISUALS", applyMask)
 end
 
@@ -559,11 +570,11 @@ function GF.UnregisterRuntimeObserver(owner)
   return true
 end
 
-local function NotifyRuntimeObservers(operation, kind, mask, result)
+local function NotifyRuntimeObservers(operation, kind, mask, result, success)
   for _, callback in pairs(runtimeObservers) do
-    callback(operation, kind, mask, result)
+    callback(operation, kind, mask, result, success)
   end
-  return result
+  return result, success
 end
 
 --- Deferred reasons accumulate as a set. Keeping only the newest one dropped
@@ -588,6 +599,7 @@ local DEFER_ALL_KINDS = false
 
 function GF.DeferGroupRuntime(reason, kind, mask)
   GF._pendingGroupRuntime = true
+  GF._pendingGroupRuntimeSerial = (GF._pendingGroupRuntimeSerial or 0) + 1
   reason = reason or GF._pendingGroupRuntimeReason or "refresh"
   AddPendingReason(reason)
   local currentReason = GF._pendingGroupRuntimeReason
@@ -605,12 +617,14 @@ function GF.DeferGroupRuntime(reason, kind, mask)
   end
   if reason == "refresh" and mask == nil then mask = GF.DIRTY_ALL end
   GF._pendingGroupRuntimeMask = MergeDirtyMask(GF._pendingGroupRuntimeMask, mask)
-  return false
+  return false, false
 end
 
 function GF.UpdateGroupVisibility()
   if InCombat() then return GF.DeferGroupRuntime("visibility") end
-  return SetupWantedHeaders()
+  local did, success = SetupWantedHeaders()
+  if success == false then GF.DeferGroupRuntime("visibility") end
+  return did, success
 end
 
 --- True when Hide in Housing would now retire or restore a block that the last
@@ -621,19 +635,20 @@ local function HousingVisibilityStale()
 end
 
 function GF.RefreshHeaderLayout(kind)
-  if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
+  GF.InvalidateLayoutRoster()
   local inCombat = GF._raidRosterCombatActive or InCombatLockdown()
-  if not inCombat and GF.EnsureDB then GF.EnsureDB() end
+  if not inCombat then GF.EnsureDB() end
   local enabled = AnyGroupFrameEnabled()
   if inCombat then
     local result = GF.DeferGroupRuntime("layout", kind)
     SetRuntimeEventsEnabled(enabled, not enabled)
-    return result
+    return result, false
   end
-  local result = SetupWantedHeaders(kind)
+  local result, success = SetupWantedHeaders(kind)
+  if success == false then GF.DeferGroupRuntime("layout", kind) end
   SetRuntimeEventsEnabled(enabled)
   GF.RefreshSpellIndicatorSeedEvents()
-  return result
+  return result, success
 end
 
 local startupVisualsPending = false
@@ -709,56 +724,61 @@ end
 
 function GF.RefreshUnitBindings(kind)
   if InCombat() then return GF.DeferGroupRuntime("roster", kind, GF.DIRTY_UNIT_BINDING) end
-  local did = false
-  if GF.headers and GF.ScanHeader then
-    if (not kind or kind == "party") and GF.headers.party then
-      did = GF.ScanHeader("party", "party") or did
-    end
-    local raidKind = LiveRaidKind()
-    if (not kind or kind == "raid" or kind == "mythicraid" or kind == raidKind) and GF.headers.raid then
-      did = GF.ScanHeader("raid", raidKind) or did
-    end
-    local priorityHeader = GF.headers.priority
-    local priorityKind = LivePriorityKind() or (priorityHeader and priorityHeader._msufGFKind) or raidKind
-    local priorityRaidLike = priorityKind == "raid" or priorityKind == "mythicraid"
-    local priorityMatches = not kind or kind == "priority" or kind == "gf_priority" or kind == priorityKind
-      or (priorityRaidLike and (kind == "raid" or kind == "mythicraid"))
-    if priorityMatches and priorityHeader then
-      did = GF.ScanHeader("priority", priorityKind) or did
-    end
+  local did, success = false, true
+  if (not kind or kind == "party") and GF.headers.party then
+    local worked, applied = GF.ScanHeader("party", "party")
+    did, success = worked or did, success and applied ~= false
   end
-  return did
+  local raidKind = LiveRaidKind()
+  if (not kind or kind == "raid" or kind == "mythicraid" or kind == raidKind) and GF.headers.raid then
+    local worked, applied = GF.ScanHeader("raid", raidKind)
+    did, success = worked or did, success and applied ~= false
+  end
+  local priorityHeader = GF.headers.priority
+  local priorityKind = LivePriorityKind() or (priorityHeader and priorityHeader._msufGFKind) or raidKind
+  local priorityRaidLike = priorityKind == "raid" or priorityKind == "mythicraid"
+  local priorityMatches = not kind or kind == "priority" or kind == "gf_priority" or kind == priorityKind
+    or (priorityRaidLike and (kind == "raid" or kind == "mythicraid"))
+  if priorityMatches and priorityHeader then
+    local worked, applied = GF.ScanHeader("priority", priorityKind)
+    did, success = worked or did, success and applied ~= false
+  end
+  if not success then GF.DeferGroupRuntime("roster", kind, GF.DIRTY_UNIT_BINDING) end
+  return did, success
 end
 
 function GF.RefreshPriorityFrames(reason)
   if InCombat() then
     GF._pendingPriorityRefresh = reason or true
     GF._pendingGroupRuntime = true
+    GF._pendingGroupRuntimeSerial = (GF._pendingGroupRuntimeSerial or 0) + 1
     AddPendingReason("priority")
     if not GF._pendingGroupRuntimeReason or GF._pendingGroupRuntimeReason == "refresh" then
       GF._pendingGroupRuntimeReason = "priority"
     end
-    return false
+    return false, false
   end
-  local result = SetupWantedPriority()
+  local result, success = SetupWantedPriority()
+  if success == false then GF.DeferGroupRuntime("priority") end
   SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
-  return NotifyRuntimeObservers("refreshPriority", LivePriorityKind(), GF.DIRTY_UNIT_BINDING, result)
+  return NotifyRuntimeObservers("refreshPriority", LivePriorityKind(), GF.DIRTY_UNIT_BINDING, result, success)
 end
 
 function GF.RebuildAll()
-  if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
+  GF.InvalidateLayoutRoster()
   if InCombat() then return GF.DeferGroupRuntime("rebuild") end
   if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs() end
-  local result = GF.RefreshHeaderLayout()
-  return NotifyRuntimeObservers("rebuildAll", nil, nil, result)
+  local result, success = GF.RefreshHeaderLayout()
+  return NotifyRuntimeObservers("rebuildAll", nil, nil, result, success)
 end
 
 function GF.Rebuild(kind)
   if kind == nil then return GF.RebuildAll() end
   if InCombat() then return GF.DeferGroupRuntime("rebuild", kind) end
   if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs(kind) end
-  GF.RefreshHeaderLayout(kind)
-  return GF.RefreshVisuals(kind, GF.DIRTY_ALL)
+  local layout, layoutSuccess = GF.RefreshHeaderLayout(kind)
+  local visual, visualSuccess = GF.RefreshVisuals(kind, GF.DIRTY_ALL)
+  return visual or layout, layoutSuccess ~= false and visualSuccess ~= false
 end
 
 -- The group block border lives on the anchor, not on a unit frame, so no
@@ -789,27 +809,30 @@ local function RefreshVisualsNow(kind, mask)
 end
 
 local function RefreshAllNow()
-  local layoutResult = GF.RefreshHeaderLayout()
-  local visualResult = RefreshVisualsNow(nil, GF.DIRTY_ALL)
-  return visualResult or layoutResult
+  local layoutResult, layoutSuccess = GF.RefreshHeaderLayout()
+  local visualResult, visualSuccess = RefreshVisualsNow(nil, GF.DIRTY_ALL)
+  return visualResult or layoutResult, layoutSuccess ~= false and visualSuccess ~= false
 end
 
 function GF.RefreshVisuals(kind, mask)
   if GF.InvalidateTextFormatCache then GF.InvalidateTextFormatCache() end
   if InCombat() then return GF.DeferGroupRuntime("refresh", kind, mask) end
-  local result = RefreshVisualsNow(kind, mask)
+  local result, success = RefreshVisualsNow(kind, mask)
   -- The Hide in Housing toggle applies as a visual change: the header pass
   -- retires or restores the block and (un)registers the plot events.
   if HousingVisibilityStale() or HousingEventsWanted() ~= housingEventsOn or SceneEventsWanted() ~= sceneEventsOn then
-    result = GF.RefreshHeaderLayout() or result
+    local layout, layoutSuccess = GF.RefreshHeaderLayout()
+    result, success = layout or result, success ~= false and layoutSuccess ~= false
   end
-  return NotifyRuntimeObservers("refreshVisuals", kind, mask, result)
+  if success == false then GF.DeferGroupRuntime("refresh", kind, mask) end
+  return NotifyRuntimeObservers("refreshVisuals", kind, mask, result, success)
 end
 
 function GF.RefreshAll()
   if InCombat() then return GF.DeferGroupRuntime("refreshAll") end
-  GF.RefreshHeaderLayout()
-  return GF.RefreshVisuals(nil, GF.DIRTY_ALL)
+  local layout, layoutSuccess = GF.RefreshHeaderLayout()
+  local visual, visualSuccess = GF.RefreshVisuals(nil, GF.DIRTY_ALL)
+  return visual or layout, layoutSuccess ~= false and visualSuccess ~= false
 end
 
 GF.Refresh = GF.RefreshAll
@@ -864,16 +887,7 @@ local DEFERRED_REASON_UNITS = {
 --- Runs the union of everything deferred during combat. Reasons are orthogonal
 --- work units, not alternatives: only rebuild/refreshAll subsume the rest. Each
 --- unit below is an idempotent cold-path pass, so overlapping reasons are safe.
-local function FlushDeferred()
-  local reasons = GF._pendingGroupRuntimeReasons
-  local kind = GF._pendingGroupRuntimeKind
-  if kind == DEFER_ALL_KINDS then kind = nil end
-  local mask = GF._pendingGroupRuntimeMask
-  GF._pendingGroupRuntime = nil
-  GF._pendingGroupRuntimeReason = nil
-  GF._pendingGroupRuntimeReasons = nil
-  GF._pendingGroupRuntimeKind = nil
-  GF._pendingGroupRuntimeMask = nil
+local function ReplayDeferred(reasons, kind, mask)
 
   --- No reason recorded (only the bare pending flag, e.g. the Headers fallback
   --- path): keep the established catch-all.
@@ -888,38 +902,58 @@ local function FlushDeferred()
 
   if reasons.rebuild then
     if kind then return GF.Rebuild(kind) end
-    local result = RefreshAllNow()
-    return NotifyRuntimeObservers("rebuildAll", nil, GF.DIRTY_ALL, result)
+    local result, success = RefreshAllNow()
+    return NotifyRuntimeObservers("rebuildAll", nil, GF.DIRTY_ALL, result, success)
   end
   if reasons.refreshAll then return GF.RefreshAll() end
 
-  local did = false
+  local did, success = false, true
   --- Header setup. roster/layout scope it to `kind`; visibility always covers
   --- every wanted kind, and carries no SetRuntimeEventsEnabled/seed-event work,
   --- so both passes run when both were deferred.
   if reasons.roster or reasons.layout then
-    did = GF.RefreshHeaderLayout(kind) or did
+    local worked, applied = GF.RefreshHeaderLayout(kind)
+    did, success = worked or did, success and applied ~= false
   end
   if reasons.visibility then
-    did = GF.UpdateGroupVisibility() or did
+    local worked, applied = GF.UpdateGroupVisibility()
+    did, success = worked or did, success and applied ~= false
   end
   if reasons.roster then
     did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did
     did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
   end
-  --- No priority work unit on purpose: SetupWantedHeaders already ends in
-  --- SetupWantedPriority (the one switching secure header follows whichever base
-  --- kind is active) and clears _pendingPriorityRefresh, and RuntimeOnEvent
-  --- catches up straight after this flush when no header pass ran. Refreshing it
-  --- here as well rebuilt the Priority header twice per regen.
+  if reasons.priority and not (reasons.roster or reasons.layout or reasons.visibility) then
+    local worked, applied = GF.RefreshPriorityFrames("deferred-priority")
+    did, success = worked or did, success and applied ~= false
+  end
+  --- Header passes already include priority. A priority-only request runs the
+  --- same owner above, once, and retains its flag until the scan succeeds.
   --- "refresh" always repaints visuals; layout/priority only when a mask came
   --- with them, matching the previous per-reason behaviour.
   if reasons.refresh then
-    did = GF.RefreshVisuals(kind, mask) or did
+    local worked, applied = GF.RefreshVisuals(kind, mask)
+    did, success = worked or did, success and applied ~= false
   elseif mask and (reasons.layout or reasons.priority) then
-    did = GF.RefreshVisuals(kind, mask) or did
+    local worked, applied = GF.RefreshVisuals(kind, mask)
+    did, success = worked or did, success and applied ~= false
   end
-  return did
+  return did, success
+end
+
+local function FlushDeferred()
+  local serial = GF._pendingGroupRuntimeSerial
+  local kind = GF._pendingGroupRuntimeKind
+  if kind == DEFER_ALL_KINDS then kind = nil end
+  local did, success = ReplayDeferred(GF._pendingGroupRuntimeReasons, kind, GF._pendingGroupRuntimeMask)
+  if success ~= false and GF._pendingGroupRuntimeSerial == serial then
+    GF._pendingGroupRuntime = nil
+    GF._pendingGroupRuntimeReason = nil
+    GF._pendingGroupRuntimeReasons = nil
+    GF._pendingGroupRuntimeKind = nil
+    GF._pendingGroupRuntimeMask = nil
+  end
+  return did, success
 end
 
 local function RuntimeOnEvent(self, event, unit)
@@ -950,7 +984,7 @@ local function RuntimeOnEvent(self, event, unit)
     RefreshStartupVisuals()
     -- Priority selection is orthogonal to the broader pending reason. Catch up
     -- once unless the broad flush already rebuilt the active Priority header.
-    if GF._pendingPriorityRefresh then GF.RefreshPriorityFrames("deferred-priority") end
+    if GF._pendingPriorityRefresh and not GF._pendingGroupRuntime then GF.RefreshPriorityFrames("deferred-priority") end
     GF.RefreshCornerThreatState(event)
     if refreshEvents then SetRuntimeEventsEnabled(AnyGroupFrameEnabled()) end
     return
@@ -966,7 +1000,7 @@ local function RuntimeOnEvent(self, event, unit)
     GF.SetRaidRosterFrozen(true)
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
-    if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
+    GF.InvalidateLayoutRoster()
     local inCombat = InCombat()
     if event == "GROUP_ROSTER_UPDATE" then
       GF.ApplyGroupBorder(inCombat and "party" or nil)

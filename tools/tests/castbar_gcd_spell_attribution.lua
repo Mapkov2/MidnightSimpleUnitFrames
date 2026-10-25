@@ -76,6 +76,7 @@ local function Budget(label, w, spell, unknown)
     env.Castbars = { Runtime = { RetainDuration = function(_, _, duration) Native() return duration end,
         ApplyTimer = function() Native() return true end, BindNativeTimeText = Native } }
     env.Utils = { GetReverseFillSafe = function() Native() return false end, CB_ApplyTexts = Native }
+    env.GetReverseFillSafe, env.ApplyTexts = env.Utils.GetReverseFillSafe, env.Utils.CB_ApplyTexts
     env.Player = { PlayerCastbar_UpdateColorForInterruptible = Native }
     env.ArmFinish = Native
     local frame = env.Frames.player

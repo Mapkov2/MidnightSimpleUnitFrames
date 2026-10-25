@@ -7,6 +7,8 @@ local ChannelTicks = Castbars.ChannelTicks
 local Frames = Castbars.Frames
 local PublicAPI = Castbars.PublicAPI
 local Utils = Castbars.Utils
+local CountsDown = MSUF.Require("GetCastbarCountsDown", "Castbars/MSUF_CastbarChannelTicks.lua", Utils)
+assert(type(CountsDown) == "function", "Castbars/MSUF_CastbarChannelTicks.lua requires Utils.GetCastbarCountsDown")
 local Publish = PublicAPI.Publish
 -- WoW Forever and Classic Era run Classic Era spell data: one spell ID per rank
 -- and Era tick counts. TBC and Mists keep the Retail table below until their
@@ -389,13 +391,7 @@ return function(frame, force)
     -- frame without one (a preview) asks the same cast-type rule.
     local countsDown = frame._msufCountsDown
     if type(countsDown) ~= "boolean" then
-        local getCountsDown = Utils.GetCastbarCountsDown
-        if type(getCountsDown) == "function" then
-            countsDown = getCountsDown(frame, true) == true
-        else
-            local general = Config.Read().general
-            countsDown = not (general and general.castbarUnifiedDirection == true)
-        end
+        countsDown = CountsDown(frame, true) == true
     end
     local lastIndex, lastPosition = countsDown and 1 or tickCount, nil
     if useCustom and type(customPositions) == "table" then

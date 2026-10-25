@@ -288,6 +288,102 @@ Case("reentrant-general-merge", function()
     assert(calls > 0 and not target._msufElementApplyFailed, "merged retry skipped required live apply work")
 end)
 
+Case("targeted-refresh", function()
+    visits, fault = {}, true
+    assert(UF.RefreshElements(nil, { "Health" }, "outer refresh") == false, "targeted refresh hid element failure")
+    assert(visits.player and visits.targettarget, "targeted refresh stopped independent frames")
+    assert(UF.RefreshElements("unmanaged", { "Health" }) == nil, "unmanaged refresh is not no-work")
+    assert(UF.RefreshElements("target", {}) == nil, "empty selection is not no-work")
+    fault = false
+    assert(UF.RefreshElements("target", { "Health" }) == true, "unchanged targeted retry failed")
+end)
+
+for _, global in ipairs({ false, true }) do
+    Case("real-combat-drain-" .. tostring(global), function()
+        h:EnterCombat()
+        local unit
+        if not global then unit = "target" end
+        assert(UF.RefreshElements(unit, { "Health" }, "combat outer refresh") == false)
+        local key = global and "*" or "target"
+        local entry = assert(UF.pendingElementRefreshes[key])
+        assert(entry.names.Health and entry.reason == "combat outer refresh")
+        visits, fault = {}, true
+        h:LeaveCombat()
+        assert(visits.target and target._msufElementApplyFailed, "real regen drain bypassed failing element")
+        assert(UF.pendingElementRefreshes[key], "real combat drain discarded failed job")
+        local attempts = visits.target
+        fault = false
+        h:Event("PLAYER_REGEN_ENABLED")
+        assert(visits.target > attempts and not target._msufElementApplyFailed,
+            "unchanged real regen retry skipped failed frame")
+        assert(next(UF.pendingElementRefreshes) == nil, "successful real drain retained job")
+        assert(UF.FlushDeferredRefreshes() == nil, "empty drain is not no-work")
+    end)
+end
+
+Case("factory-real-drain", function()
+    h:EnterCombat()
+    UF.RefreshElements("target", { "Health" }, "factory drain")
+    h.widgets:SetCombat(false)
+    fault = true
+    assert(UF.Apply("player") == false, "factory finalizer hid real deferred failure")
+    assert(UF.pendingElementRefreshes.target, "factory finalizer consumed failed job")
+    local attempts = visits.target
+    fault = false
+    assert(UF.Apply("player") == true and visits.target == attempts + 1, "factory drain retry failed")
+    assert(not UF.pendingElementRefreshes.target)
+    h:LeaveCombat()
+end)
+
+Case("drain-throwing-reporter", function()
+    h:EnterCombat()
+    UF.RefreshElements("target", { "Health" }, "throwing drain")
+    local reporter = h.env.geterrorhandler
+    h.env.geterrorhandler = function() return function() error("injected drain reporter") end end
+    fault = true
+    h:LeaveCombat()
+    assert(UF.pendingElementRefreshes.target, "throwing reporter consumed deferred job")
+    local driver = assert(Factory.deferredDriver)
+    assert(driver.events.PLAYER_REGEN_ENABLED, "throwing reporter disarmed retry driver")
+    local attempts = visits.target
+    fault, h.env.geterrorhandler = false, reporter
+    h:Event("PLAYER_REGEN_ENABLED")
+    assert(visits.target > attempts and not UF.pendingElementRefreshes.target, "reporter failure prevented drain retry")
+end)
+
+Case("drain-reentrant-factory", function()
+    h:EnterCombat()
+    UF.RefreshElements("target", { "Health" }, "nested drain")
+    onTargetApply = function()
+        fault = false
+        assert(UF.Apply("player"))
+        fault = true
+    end
+    h:LeaveCombat()
+    assert(UF.pendingElementRefreshes.target and target._msufElementApplyFailed,
+        "nested factory drain consumed failing outer job")
+    local attempts = visits.target
+    fault = false
+    h:Event("PLAYER_REGEN_ENABLED")
+    assert(visits.target > attempts and not UF.pendingElementRefreshes.target, "nested drain retry failed")
+end)
+
+Case("drain-reentrant-selection", function()
+    h:EnterCombat()
+    UF.RefreshElements("target", { "Health" }, "old selection")
+    onTargetApply = function()
+        h.widgets:SetCombat(true)
+        UF.RefreshElements("target", { "Borders" }, "new selection")
+        h.widgets:SetCombat(false)
+    end
+    h:LeaveCombat()
+    local entry = assert(UF.pendingElementRefreshes.target, "older success consumed reentrant selection")
+    assert(entry.names.Borders and entry.reason == "new selection", "reentrant selection lost names/reason")
+    local attempts = visits.target
+    h:Event("PLAYER_REGEN_ENABLED")
+    assert(visits.target > attempts and not UF.pendingElementRefreshes.target, "reentrant selection retry failed")
+end)
+
 Case("flush-throw", function()
     local deferred, before = UF.FlushDeferredRefreshes, Before()
     UF.FlushDeferredRefreshes = function() error("injected deferred refresh") end
