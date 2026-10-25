@@ -30,7 +30,7 @@ local MarkSearchIndexDirty = Parts.MarkSearchIndexDirty
 local NormalizeSearchText = Parts.NormalizeSearchText
 local RefreshSearchPlaceholder = Parts.RefreshSearchPlaceholder
 local SEARCH_EASTER_EGGS = Parts.SEARCH_EASTER_EGGS
-local SEARCH_FAQ = Parts.SEARCH_FAQ
+local GetFAQRecords = Parts.GetFAQRecords
 local SEARCH_INPUT_DEBOUNCE_SEC = Parts.SEARCH_INPUT_DEBOUNCE_SEC
 local SEARCH_KEYWORDS = Parts.SEARCH_KEYWORDS
 local SEARCH_MAX_RESULTS = Parts.SEARCH_MAX_RESULTS
@@ -171,6 +171,7 @@ SearchIndexBuild.PHASES = {
     end,
     function(job, deadline)
         local records, seenRecords = job.records, job.seenRecords
+        local SEARCH_FAQ = GetFAQRecords()
         for i = job.index, #SEARCH_FAQ do
             local faq = SEARCH_FAQ[i]
             local pageKey = faq.pageKey or "home"
@@ -732,7 +733,7 @@ Search._CoreAPI = {
         return true
     end,
     IsSearchPageAvailable = IsSearchPageAvailable,
-    GetFAQRecords = function() return SEARCH_FAQ end,
+    GetFAQRecords = GetFAQRecords,
     GetSearchProviderCache = function() return SEARCH_STATE.providerCache end,
     SearchPlaceholderText = SearchPlaceholderText,
     ShortLabel = ShortLabel,

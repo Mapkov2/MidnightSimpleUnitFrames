@@ -1,7 +1,24 @@
 local root = assert(arg[1])
-local mw = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))().Open(root, arg[2] or "Mainline", { page = "home" })
+local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
+local faqBuilds = 0
+local mw = MenuWorld.Open(root, arg[2] or "Mainline", { page = "home", beforeOptions = function(world)
+    local load = world.LoadFile
+    function world:LoadFile(path, addon, ns)
+        if path:match("MSUF_Menu2_Search_Catalog.lua$") then
+            local data = self.core.MSUF2.SearchData
+            local build = data.BuildFAQ
+            data.BuildFAQ = function(...)
+                faqBuilds = faqBuilds + 1
+                return build(...)
+            end
+        end
+        return load(self, path, addon, ns)
+    end
+end })
 local M, env = mw.M, mw.env
 local api = M.Search._CoreAPI
+assert(faqBuilds == 0, "Home eagerly built the FAQ catalog")
+assert(next(M.SearchData.QUERY_ALIASES) == nil, "Home eagerly expanded search aliases")
 local function Drain()
     for _ = 1, 30 do
         if #mw.world.widgets.timers == 0 then return end
@@ -40,6 +57,7 @@ end
 M.SelectPage("search")
 Drain()
 assert(not M.Search.StaticIndex.IsDecoded(), "empty search opened a cold build")
+assert(faqBuilds == 0 and next(M.SearchData.QUERY_ALIASES) == nil, "empty search built its catalogs")
 M.SelectPage("home")
 local at = clock
 assert(#api.GetSearchRecords() == 0, "cold getter synchronously built records")
@@ -64,6 +82,9 @@ end
 assert(not M.searchResultsPending and #M.searchResults > 0 and slices > 4, "cold entry point failed to finish in slices")
 assert(max < 4, "a build callback exceeded 4 ms: " .. max)
 if arg[3] == "--real" then assert(wallMax < 4, "real callback exceeded 4 ms: " .. wallMax) end
+assert(faqBuilds == 1, "first search did not build the FAQ exactly once")
+local faq = api.GetFAQRecords()
+assert(#faq == 15 and api.GetFAQRecords() == faq, "FAQ catalog content/count or reuse changed")
 local expected = Signature(M.searchResults)
 assert(Signature(api.SearchPages("castbar")) == expected, "query result changes after ready")
 if arg[4] then
@@ -162,3 +183,36 @@ assert(Signature(M.searchResults) == expected, "reopening changed results")
 local view = M.cache.search._msuf2SearchView
 assert(view.rows[1].rec and view.rows[1].button:IsShown(), "async completion did not repaint cached search widgets")
 print(string.format("search entry points (%s): %d slices, maximum clock budget %.2f ms; results identical; wall callback max %.2f ms", arg[2], slices, max, wallMax))
+
+-- Companion dictionaries keep cold writes and deletions while the source is pending.
+do
+local mw = MenuWorld.Open(root, arg[2] or "Mainline", { page = "home" })
+local M, data = mw.M, mw.M.SearchData
+local aliases = data.QUERY_ALIASES
+-- A cold deletion must not be resurrected, including a set followed by delete.
+aliases.castbar = {'cold replacement'}
+aliases.castbar = nil
+aliases.counterspell = nil
+aliases['cold custom alias'] = {'crosshair'}
+do
+    local clock = 0
+    mw.env.debugprofilestop = function() clock=clock+0.05; return clock end
+    assert(not data.EnsureQueryAliases(0.10), 'alias build ignored its slice deadline')
+    -- Writes while a source build is pending keep precedence as well.
+    aliases.evoker = {'cold custom term'}
+    local complete = false
+    for i=1,5000 do
+        if data.EnsureQueryAliases(clock+1) then complete = true; break end
+    end
+    assert(complete, 'alias source did not finish within bounded slices')
+end
+assert(rawget(aliases,'castbar') == nil, 'cold set/delete resurrected castbar')
+assert(rawget(aliases,'counterspell') == nil, 'cold deletion resurrected counterspell')
+assert(aliases.evoker[1] == 'cold custom term' and #aliases.evoker == 1, 'cold overwrite was merged with defaults')
+assert(aliases['cold custom alias'][1] == 'crosshair', 'cold extension alias lost')
+assert(rawget(aliases, 'pummel') and #rawget(aliases, 'pummel') > 0, 'untouched aliases were not initialized')
+local serial=M.Search._RenderContext.SEARCH_STATE.dirtySerial
+aliases['warm custom alias']={'font'}
+assert(M.Search._RenderContext.SEARCH_STATE.dirtySerial > serial, 'warm source mutation no longer invalidates')
+print('PASS cold source writes/deletes, sliced preparation, partial-build overrides, warm invalidation ' .. (arg[2] or 'Mainline'))
+end

@@ -28,25 +28,14 @@ local function TermList(text, zeroIndex)
     return list
 end
 
-local function AliasMap(rows)
-    local aliases = {}
-    local function Add(keys, terms)
-        for key in tostring(keys or ""):gmatch("[^|]+") do
-            aliases[key] = TermList(terms, ZERO_INDEX_ALIASES[key])
-        end
+local function AddAliasRow(aliases, line)
+    local keys, terms = line:match("^([^=]+)=(.*)$")
+    for key in tostring(keys or ""):gmatch("[^|]+") do
+        aliases[key] = TermList(terms, ZERO_INDEX_ALIASES[key])
     end
-    if type(rows) == "string" then
-        for line in Lines(rows) do
-            local keys, terms = line:match("^([^=]+)=(.*)$")
-            Add(keys, terms)
-        end
-    else
-        for i = 1, #rows, 2 do Add(rows[i], rows[i + 1]) end
-    end
-    return aliases
 end
 
-Data.QUERY_ALIASES = AliasMap([[
+local aliasRows = [[
 evoker=empowered|empower|empowered casts|stage|stages|hold cast|release cast|quell|essence|augmentation|devastation|preservation
 devastation|preservation=evoker|empowered|empower|empowered casts|essence
 augmentation=evoker|empowered|empower|empowered casts|essence|ebon might
@@ -447,15 +436,14 @@ soulshards=soul shards|class resources|warlock
 runen=runes|runic power|class resources
 eclipse=eclipse|class resources|druid
 stagger=stagger|class resources|brewmaster
-]])
-
+]]
 
 -- Later blocks add words to a key; they never replace its meaning. Assigning
 -- used to swap "color" (bar, unit and class colors) for castbar terms.
-local function AddAliasTerms(key, terms)
-    local list = Data.QUERY_ALIASES[key]
+local function MergeAliasTerms(aliases, key, terms)
+    local list = aliases[key]
     if not list then
-        Data.QUERY_ALIASES[key] = TermList(terms)
+        aliases[key] = TermList(terms)
         return
     end
     local seen = {}
@@ -466,6 +454,13 @@ local function AddAliasTerms(key, terms)
             list[#list + 1] = term
         end
     end
+end
+
+-- Keep additions compact as well; expansion belongs to the first search.
+local aliasAdditions = {}
+local function AddAliasTerms(key, terms)
+    aliasAdditions[#aliasAdditions + 1] = key
+    aliasAdditions[#aliasAdditions + 1] = terms
 end
 
 Data.CONTROL_QUERY_TARGETS = {
@@ -1367,3 +1362,45 @@ Data.QUERY_COMPOUNDS = {
 
 AddLocalizedAlias("调大", "target size|width|height|scale")
 AddLocalizedAlias("放大", "target size|width|height|scale")
+
+-- Search prepares the source in its existing bounded slices. A direct table
+-- reader may request it too. Preserve companion writes, including cold deletes.
+local aliasJob, aliasesReady
+local aliasOverrides = {}
+function Data.EnsureQueryAliases(deadline)
+    if aliasesReady then return true end
+    local job = aliasJob
+    if not job then
+        job = { rows = Lines(aliasRows), values = {}, index = 1 }
+        aliasJob = job
+    end
+    if job.rows then
+        for line in job.rows do
+            AddAliasRow(job.values, line)
+            if deadline and debugprofilestop() >= deadline then return false end
+        end
+        job.rows = nil
+    end
+    while job.index <= #aliasAdditions do
+        local index = job.index
+        MergeAliasTerms(job.values, aliasAdditions[index], aliasAdditions[index + 1])
+        job.index = index + 2
+        if deadline and debugprofilestop() >= deadline then return false end
+    end
+    for key, value in pairs(job.values) do
+        if not aliasOverrides[key] then rawset(Data.QUERY_ALIASES, key, value) end
+    end
+    aliasesReady = true
+    aliasJob, aliasRows, aliasAdditions, aliasOverrides = nil, nil, nil, nil
+    return true
+end
+Data.QUERY_ALIASES = setmetatable({}, {
+    __index = function(dictionary, key)
+        Data.EnsureQueryAliases()
+        return rawget(dictionary, key)
+    end,
+    __newindex = function(dictionary, key, value)
+        if aliasOverrides then aliasOverrides[key] = true end
+        rawset(dictionary, key, value)
+    end,
+})

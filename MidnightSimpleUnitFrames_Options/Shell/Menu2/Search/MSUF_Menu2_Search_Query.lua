@@ -47,9 +47,15 @@ LEXICON_SOURCES.watch = { __newindex = function(dictionary, key, value)
 end }
 if getmetatable(LEXICON_SOURCES.stop) == nil then setmetatable(LEXICON_SOURCES.stop, LEXICON_SOURCES.watch) end
 if getmetatable(LEXICON_SOURCES.soft) == nil then setmetatable(LEXICON_SOURCES.soft, LEXICON_SOURCES.watch) end
-if getmetatable(LEXICON_SOURCES.aliases) == nil then setmetatable(LEXICON_SOURCES.aliases, LEXICON_SOURCES.watch) end
+local aliasMeta = getmetatable(LEXICON_SOURCES.aliases)
+local writeAlias = aliasMeta.__newindex
+aliasMeta.__newindex = function(dictionary, key, value)
+    writeAlias(dictionary, key, value)
+    M.InvalidateSearchLexicon()
+end
 local function EnsureSearchLexicon(deadline)
     if searchLexiconReady then return true end
+    if not SearchData.EnsureQueryAliases(deadline) then return false end
     local job = LEXICON_SOURCES.job
     if not job then
         job = { phase = 1, stop = {}, soft = {}, keys = {}, aliases = {}, seen = {}, multiWord = {} }
