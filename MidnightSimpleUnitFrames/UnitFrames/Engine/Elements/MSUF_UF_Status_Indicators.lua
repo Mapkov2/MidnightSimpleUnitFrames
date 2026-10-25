@@ -8,7 +8,7 @@ MSUF.UFModuleFactories.StatusIndicatorArt = function(
     ReadDeadCached, Runtime, SYMBOL_PATH_CACHE, SafeNumber, SetAtlas, SetRaidTargetIconTexture, SetShown, SetTexCoord, SetText, SetTexture,
     StopRestingFlipbook, UF, UnitAffectingCombat, UnitClassification, UnitExistsRuntime, UnitFactionGroup, UnitHasIncomingResurrection,
     UnitIsAFK, UnitIsDND, UnitIsGhost, UnitIsGroupAssistant, UnitIsGroupLeader, UnitIsMercenary, UnitIsPVP, UnitIsPVPFreeForAll,
-    UnitIsPlayerRuntime, UnitLevel, VALID_STATE_SYMBOLS, find, issecretvalue, type, ApplyLeaderTexture, RefreshHealthAfterGoneStatus
+    UnitIsPlayerRuntime, UnitLevel, VALID_STATE_SYMBOLS, find, issecretvalue, type, ApplyLeaderTexture, RefreshHealthAfterGoneStatus, SUMMON_TEXTURES
 )
 local ApplyRoleTexture = StatusApplyRoleTexture
 local ApplyStatusIconPackTexture = StatusApplyStatusIconPackTexture
@@ -811,6 +811,115 @@ function Runtime.PaintSceneStatus(frame, status, selection, sample)
       SetShown(fs, true)
     end
   end
+end
+
+-- Asset fields consumed by Config.Status.CompileUnit; deliberately absent style keys stay absent.
+-- This read-only projection avoids the full compiler's PvP context and difficulty-palette writes.
+local SAMPLE_UNIT_CONFIG = {
+  leader = { prefix = "leaderIcon", style = "leaderIconStyle" },
+  assist = { prefix = "assistIcon", style = "assistIconStyle" },
+  raidMarker = { prefix = "raidMarker" },
+  elite = { prefix = "eliteIcon" },
+  combat = { prefix = "combatStateIndicator", symbol = "combatStateIndicatorSymbol", defaultSymbol = "DEFAULT" },
+  resting = { prefix = "restedStateIndicator", style = "restedStateIndicatorIconStyle", symbol = "restedStateIndicatorSymbol",
+    defaultSymbol = "rested_blizzard_animated", legacySymbol = "restingStateIndicatorSymbol" },
+  incomingRes = { prefix = "incomingResIndicator", symbol = "incomingResIndicatorSymbol", defaultSymbol = "DEFAULT" },
+  pvp = { prefix = "pvpIndicator" },
+}
+local function SampleString(conf, general, key, fallback, legacy)
+  local value = conf[key]
+  if type(value) == "string" and value ~= "" then return value end
+  value = legacy and conf[legacy]
+  if type(value) == "string" and value ~= "" then return value end
+  value = general[key]
+  if type(value) == "string" and value ~= "" then return value end
+  value = legacy and general[legacy]
+  if type(value) == "string" and value ~= "" then return value end
+  return fallback
+end
+-- Only caller-owned output tables change; saved settings and live runtime state are read-only.
+function Runtime.ResolveUnitIconSampleConfig(cfg, status, conf, general, kind)
+  local def = SAMPLE_UNIT_CONFIG[kind]
+  cfg.style = def and def.style and SampleString(conf, general, def.style, "BLIZZARD") or nil
+  cfg.symbol = def and def.symbol and SampleString(conf, general, def.symbol, def.defaultSymbol, def.legacySymbol) or nil
+  cfg.customIcon = def and SampleString(conf, general, def.prefix .. "CustomIcon", "") or nil
+  local midnight = conf.statusIconsUseMidnightStyle
+  if midnight == nil then midnight = general.statusIconsUseMidnightStyle end
+  status.useMidnight = UF.BoolWithFallback(midnight, false)
+end
+
+-- Cold sample adapters take scalar configuration and paint only the supplied sample region.
+-- They reuse the live painters and asset helpers; no live updater calls this dispatch.
+local function SampleLeader(tex, cfg, status)
+  ApplyLeaderTexture(tex, cfg, status, false)
+  return true
+end
+local function SampleAssist(tex, cfg, status)
+  ApplyLeaderTexture(tex, cfg, status, true)
+  return true
+end
+local function SampleState(tex, cfg, status, variant, kind)
+  return ApplyStateOrPackIconTexture(tex, kind, cfg, status, variant, true)
+end
+local function SampleRaidMarker(tex, cfg, status, index)
+  if not ApplyStatusIconPackTexture(tex, cfg, status, "raidMarker", index) then
+    ApplyDefaultRaidMarkerTexture(tex, index)
+  end
+  return true
+end
+local function SampleElite(tex, cfg, status, state)
+  if not ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
+    if tex.SetAtlas then
+      SetAtlas(tex, EliteAtlas(state))
+    else
+      SetTexture(tex, "Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
+      SetTexCoord(tex, 0, 1, 0, 1)
+    end
+  end
+  return true
+end
+local function SamplePVP(tex, cfg, status, faction)
+  local atlas = faction == "FFA" and Media.PVP_FFA_ATLAS or PVPAtlasForFaction(faction)
+  return ApplyStatusIconPackTexture(tex, cfg, status, "pvp", faction) or ApplyPVPTexture(tex, atlas)
+end
+local function SampleGroupIcon(tex, cfg, status, variant, kind)
+  if ApplyStatusIconPackTexture(tex, cfg, status, kind, variant) then return true end
+  local path = kind == "readyCheck" and Media.READY_TEXTURES[variant]
+    or kind == "summon" and SUMMON_TEXTURES[variant] or kind == "phase" and Media.PHASE_TEXTURE
+  if not path then return false end
+  SetTexture(tex, path)
+  SetTexCoord(tex, 0, 1, 0, 1)
+  return true
+end
+local function SamplePetHappiness(tex, cfg, status, happiness)
+  local resolver = MSUF.Optional("MSUF_GetPetHappinessIcon")
+  if not resolver then return false end
+  local path, l, r, t, b, atlas = resolver(happiness)
+  if atlas and tex.SetAtlas then
+    SetAtlas(tex, atlas)
+  elseif path then
+    SetTexture(tex, path)
+    SetTexCoord(tex, l, r, t, b)
+  else
+    return false
+  end
+  return true
+end
+local SAMPLE_PAINTERS = {
+  leader = SampleLeader, assist = SampleAssist, role = ApplyRoleTexture,
+  combat = SampleState, resting = SampleState, incomingRes = SampleState,
+  raidMarker = SampleRaidMarker, elite = SampleElite, pvp = SamplePVP,
+  readyCheck = SampleGroupIcon, summon = SampleGroupIcon, phase = SampleGroupIcon,
+  petHappiness = SamplePetHappiness,
+}
+-- Pure resolver: stable runtime-owned output functions, no unit/profile reads or writes.
+function Runtime.ResolveIconSample(kind)
+  return SAMPLE_PAINTERS[kind]
+end
+function Runtime.PaintIconSample(tex, cfg, status, kind, variant)
+  local painter = Runtime.ResolveIconSample(kind)
+  if not (tex and painter) then return false end
+  return painter(tex, cfg, status, variant, kind)
 end
 
 local function BindStatusIndicatorArt(values)

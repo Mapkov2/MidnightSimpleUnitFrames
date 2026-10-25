@@ -1441,10 +1441,9 @@ do
     M2.PickFallbackTable(PreviewModel, nil, "UNIT_LABELS UNIT_DATA CurrentPanelKey UnitDB NormalizeHpMode NormalizePowerMode "
         .. "TextScopeGet TextScopeHasSlots TextScopeSlotGet ToTInlineSeparator PortraitStyleGet ClassColor PowerColor FontColor "
         .. "SetTex ReadPowerBarEnabled ReadPowerBarHeight CanDetachPowerBarKey ResolveNameAnchor UnitPreviewText "
-        .. "NormalizeStatusPreviewId PreviewRaidGroupNameAllowed PreviewRaidGroupNameText LiveUnitData", deps)
+        .. "NormalizeStatusPreviewId LiveUnitData", deps)
     M2.Assign(deps, {
         PreviewInCombat = PreviewInCombat, TR = TR,
-        NormalizeRaidGroupNameAnchor = PreviewModel.NormalizePreviewRaidGroupNameAnchor,
         RuntimeSpecForPreviewKey = PreviewRuntime.SpecForPreviewKey or Fallbacks.Nil,
         RuntimeAppliedPortraitSizeForPreviewKey = PreviewRuntime.AppliedPortraitSizeForPreviewKey or Fallbacks.Nil,
         DetachedCastbarOffsetForPreviewKey = PreviewRuntime.DetachedCastbarOffsetForPreviewKey,

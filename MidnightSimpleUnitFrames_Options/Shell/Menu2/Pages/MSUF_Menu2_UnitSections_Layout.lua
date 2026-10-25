@@ -3,13 +3,37 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.UnitSectionFactories = M.UnitSectionFactories or {}
 
-M.UnitSectionFactories.Layout = function(
-    MSUF, M, FILE, PixelLayoutRegion, Core, EnsureDB, W, T, SetControlsEnabled, UP, floor, max, min, VT, LOAD_CONDITIONS,
-    BOSS_LAYOUT_OPTIONS, SEPARATORS, GetConf, GetGeneral, ReadBool, ReadNumber, SetControlEnabled, NormalizeBossLayoutMode,
-    UpdateLoadActive, SettingMeta, RegisterControl, Schema, ROW_OPTIONS, TIP_OPTS, UNIT_ANCHOR_SECTION_HEIGHT,
-    HEALTH_COLOR_GLOBAL, HEALTH_COLOR_LABELS, HEALTH_COLOR_ALIASES, HEALTH_COLOR_OPTIONS, RequestUnitRuntimeApply,
-    UnitSectionShared, SetSectionHeaderStatus
-)
+local function RequireFields(domain, values, fields)
+    assert(type(values) == "table", domain .. " interface is required")
+    for key in fields:gmatch("%S+") do
+        assert(values[key] ~= nil, domain .. "." .. key .. " is required")
+    end
+end
+
+M.UnitSectionFactories.Layout = function(profile, controls, layout, healthColors, runtime)
+    RequireFields("Layout.Profile", profile, "EnsureDB GetConf GetGeneral ReadBool ReadNumber NormalizeBossLayoutMode UpdateLoadActive")
+    RequireFields("Layout.Controls", controls, "Widgets Theme Schema SetControlEnabled SettingMeta RegisterControl UnitOptions TooltipOptions Shared")
+    RequireFields("Layout.Layout", layout, "PixelLayoutRegion LoadConditions BossLayouts Separators AnchorSectionHeight")
+    RequireFields("Layout.HealthColors", healthColors, "Global Labels Aliases Options")
+    RequireFields("Layout.Runtime", runtime, "Core RequestUnitApply")
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitSections_Layout.lua"
+local floor, max, min = math.floor, math.max, math.min
+local VT, UP = M.ValueTextList, M.UnitPage
+local EnsureDB, GetConf, GetGeneral = profile.EnsureDB, profile.GetConf, profile.GetGeneral
+local ReadBool, ReadNumber = profile.ReadBool, profile.ReadNumber
+local NormalizeBossLayoutMode, UpdateLoadActive = profile.NormalizeBossLayoutMode, profile.UpdateLoadActive
+local W, T, Schema = controls.Widgets, controls.Theme, controls.Schema
+local SetControlsEnabled, SetControlEnabled = W.SetControlsEnabled, controls.SetControlEnabled
+local SettingMeta, RegisterControl = controls.SettingMeta, controls.RegisterControl
+local ROW_OPTIONS, TIP_OPTS = controls.UnitOptions, controls.TooltipOptions
+local UnitSectionShared = controls.Shared
+local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus
+local PixelLayoutRegion, LOAD_CONDITIONS = layout.PixelLayoutRegion, layout.LoadConditions
+local BOSS_LAYOUT_OPTIONS, SEPARATORS = layout.BossLayouts, layout.Separators
+local UNIT_ANCHOR_SECTION_HEIGHT = layout.AnchorSectionHeight
+local HEALTH_COLOR_GLOBAL, HEALTH_COLOR_LABELS = healthColors.Global, healthColors.Labels
+local HEALTH_COLOR_ALIASES, HEALTH_COLOR_OPTIONS = healthColors.Aliases, healthColors.Options
+local Core, RequestUnitRuntimeApply = runtime.Core, runtime.RequestUnitApply
 
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5

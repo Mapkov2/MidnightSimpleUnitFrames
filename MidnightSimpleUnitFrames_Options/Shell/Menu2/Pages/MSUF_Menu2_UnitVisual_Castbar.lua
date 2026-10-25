@@ -3,13 +3,35 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.UnitVisualFactories = M.UnitVisualFactories or {}
 
-M.UnitVisualFactories.Castbar = function(
-    MSUF, M, FILE, W, Schema, ControlRow, SectionCard, SectionNote, CastbarsOnSettingsChanged, SuppressBlizzardPlayerCastbars,
-    ShowReloadRecommendedPopup, floor, max, min, VT, CASTBAR_FIELDS, GetGeneral, UnitTopLabel, ReadBool, SetBool,
-    ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, SettingMeta, ReviewedMeta, RegisterControl,
-    UnitSectionShared, SetSectionHeaderStatus, CreateSectionNotice, NormalizeTabKey, CurrentTab, SetSectionBodyHeight,
-    BuildSectionTabs, PrepareTabTarget
-)
+local function RequireFields(domain, values, fields)
+    assert(type(values) == "table", domain .. " interface is required")
+    for key in fields:gmatch("%S+") do
+        assert(values[key] ~= nil, domain .. "." .. key .. " is required")
+    end
+end
+
+M.UnitVisualFactories.Castbar = function(profile, controls, runtime, tabs)
+    RequireFields("Castbar.Profile", profile,
+        "Fields GetGeneral UnitTopLabel ReadBool SetBool ReadGeneralBool SetGeneralBool NormalizePortrait SetPortraitValue")
+    RequireFields("Castbar.Controls", controls, "Widgets Schema Row Card Note SettingMeta ReviewedMeta RegisterControl Shared")
+    RequireFields("Castbar.Runtime", runtime, "OnSettingsChanged SuppressBlizzardPlayerCastbars ShowReloadPopup")
+    RequireFields("Castbar.Tabs", tabs, "Normalize Current SetBodyHeight Build PrepareTarget")
+local FILE = "Shell/Menu2/Pages/MSUF_Menu2_UnitVisual_Castbar.lua"
+local floor, max, min = math.floor, math.max, math.min
+local VT = M.ValueTextList
+local CASTBAR_FIELDS, GetGeneral, UnitTopLabel = profile.Fields, profile.GetGeneral, profile.UnitTopLabel
+local ReadBool, SetBool = profile.ReadBool, profile.SetBool
+local ReadGeneralBool, SetGeneralBool = profile.ReadGeneralBool, profile.SetGeneralBool
+local NormalizePortrait, SetPortraitValue = profile.NormalizePortrait, profile.SetPortraitValue
+local W, Schema = controls.Widgets, controls.Schema
+local ControlRow, SectionCard, SectionNote = controls.Row, controls.Card, controls.Note
+local SettingMeta, ReviewedMeta, RegisterControl = controls.SettingMeta, controls.ReviewedMeta, controls.RegisterControl
+local UnitSectionShared = controls.Shared
+local SetSectionHeaderStatus, CreateSectionNotice = UnitSectionShared.SetSectionHeaderStatus, UnitSectionShared.CreateSectionNotice
+local CastbarsOnSettingsChanged = runtime.OnSettingsChanged
+local SuppressBlizzardPlayerCastbars, ShowReloadRecommendedPopup = runtime.SuppressBlizzardPlayerCastbars, runtime.ShowReloadPopup
+local NormalizeTabKey, CurrentTab, SetSectionBodyHeight = tabs.Normalize, tabs.Current, tabs.SetBodyHeight
+local BuildSectionTabs, PrepareTabTarget = tabs.Build, tabs.PrepareTarget
 
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast", arena = "arenaCast" }

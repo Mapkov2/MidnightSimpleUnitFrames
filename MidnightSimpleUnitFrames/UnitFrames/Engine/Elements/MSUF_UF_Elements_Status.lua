@@ -517,7 +517,7 @@ ApplyRoleTexture, ApplyStateOrPackIconTexture, ApplyStatusIconPackTexture, HideA
     SYMBOL_PATH_CACHE, SafeNumber, SetAtlas, SetRaidTargetIconTexture, SetShown, SetTexCoord, SetText, SetTexture, StopRestingFlipbook, UF,
     UnitAffectingCombat, UnitClassification, UnitExistsRuntime, UnitFactionGroup, UnitHasIncomingResurrection, UnitIsAFK, UnitIsDND,
     UnitIsGhost, UnitIsGroupAssistant, UnitIsGroupLeader, UnitIsMercenary, UnitIsPVP, UnitIsPVPFreeForAll, UnitIsPlayerRuntime, UnitLevel,
-    VALID_STATE_SYMBOLS, find, issecretvalue, type, ApplyLeaderTexture, RefreshHealthAfterGoneStatus
+    VALID_STATE_SYMBOLS, find, issecretvalue, type, ApplyLeaderTexture, RefreshHealthAfterGoneStatus, SUMMON_TEXTURES
 )
 
 local function HideField(frame, field)

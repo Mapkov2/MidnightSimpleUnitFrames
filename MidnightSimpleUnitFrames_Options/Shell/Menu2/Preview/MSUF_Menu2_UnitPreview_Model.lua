@@ -61,23 +61,6 @@ local POWER_BAR_MASTER_KEYS = {
 }
 -- Units not listed (focus, targettarget, focustarget, pettarget, boss) default to off.
 local POWER_BAR_DEFAULT_ON = { player = true, target = true, pet = true, arena = true }
-local function PreviewRaidGroupNameAllowed(key)
-    return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "pettarget" or key == "focus"
-end
-local function PreviewRaidGroupNameText(conf)
-    local style = conf and conf.raidGroupNameStyle
-    local group = tostring(Preview.LiveRaidSubgroup and Preview.LiveRaidSubgroup() or 2)
-    if style == "BRACKET" then return "[" .. group .. "]" end
-    if style == "NONE" then return group end
-    return "(" .. group .. ")"
-end
-local RAID_GROUP_NAME_ANCHORS = {
-    NAMELEFT = true, NAMERIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true,
-    CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
-}
-local function NormalizePreviewRaidGroupNameAnchor(anchor)
-    return RAID_GROUP_NAME_ANCHORS[anchor] and anchor or "NAMERIGHT"
-end
 local function KeyLabelValues(values)
     local out = {}
     for i = 1, #(values or {}) do
@@ -622,8 +605,7 @@ end
 -- chunks to 230).
 M.Assign(Model, {
     UNIT_KEYS = UNIT_KEYS, UNIT_SET = UNIT_SET, UNIT_LABELS = UNIT_LABELS, UNIT_DATA = UNIT_DATA,
-    PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText = PreviewRaidGroupNameText,
-    NormalizePreviewRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor, TEXT_ANCHORS = TEXT_ANCHORS,
+    TEXT_ANCHORS = TEXT_ANCHORS,
     HP_MODES = HP_MODES, POWER_MODES = POWER_MODES, SEP_ITEMS = SEP_ITEMS, PORTRAIT_MODE_ITEMS = PORTRAIT_MODE_ITEMS,
     PORTRAIT_RENDER_ITEMS = PORTRAIT_RENDER_ITEMS, PortraitClassItems = PortraitClassItems,
     PORTRAIT_SHAPE_ITEMS = PORTRAIT_SHAPE_ITEMS, PORTRAIT_BORDER_ITEMS = PORTRAIT_BORDER_ITEMS,

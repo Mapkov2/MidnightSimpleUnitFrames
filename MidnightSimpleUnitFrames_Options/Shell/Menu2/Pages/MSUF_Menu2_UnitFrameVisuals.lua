@@ -142,11 +142,15 @@ local BuildPower, PreparePowerSwitch, PowerSectionHeight = M.UnitVisualFactories
     SettingMeta, RegisterControl, UnitSectionShared, SetSectionHeaderStatus, CreateSectionNotice
 )
 local BuildCastbar, PrepareCastbarSwitch, CastbarTabHeight, CurrentCastbarTab = M.UnitVisualFactories.Castbar(
-    MSUF, M, FILE, W, Schema, ControlRow, SectionCard, SectionNote, CastbarsOnSettingsChanged, SuppressBlizzardPlayerCastbars,
-    ShowReloadRecommendedPopup, floor, max, min, VT, CASTBAR_FIELDS, GetGeneral, UnitTopLabel, ReadBool, SetBool,
-    ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, SettingMeta, ReviewedMeta, RegisterControl,
-    UnitSectionShared, SetSectionHeaderStatus, CreateSectionNotice, NormalizeTabKey, CurrentTab, SetSectionBodyHeight,
-    BuildSectionTabs, PrepareTabTarget
+    { Fields = CASTBAR_FIELDS, GetGeneral = GetGeneral, UnitTopLabel = UnitTopLabel, ReadBool = ReadBool, SetBool = SetBool,
+        ReadGeneralBool = ReadGeneralBool, SetGeneralBool = SetGeneralBool, NormalizePortrait = NormalizePortrait,
+        SetPortraitValue = SetPortraitValue },
+    { Widgets = W, Schema = Schema, Row = ControlRow, Card = SectionCard, Note = SectionNote, SettingMeta = SettingMeta,
+        ReviewedMeta = ReviewedMeta, RegisterControl = RegisterControl, Shared = UnitSectionShared },
+    { OnSettingsChanged = CastbarsOnSettingsChanged, SuppressBlizzardPlayerCastbars = SuppressBlizzardPlayerCastbars,
+        ShowReloadPopup = ShowReloadRecommendedPopup },
+    { Normalize = NormalizeTabKey, Current = CurrentTab, SetBodyHeight = SetSectionBodyHeight,
+        Build = BuildSectionTabs, PrepareTarget = PrepareTabTarget }
 )
 
 if type(UP.RegisterSection) == "function" then

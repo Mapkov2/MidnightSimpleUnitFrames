@@ -125,11 +125,14 @@ local BuildPreview, BuildTopActions, ApplyUnitFrameEnabledGate, Preview, UNIT_TA
 )
 local BuildLayout, BuildInlineText, BuildStatus, BuildLoadConditions, BuildBossLayout, BuildBossTargetHighlight, BuildArenaLayout,
     NormalizeHealthColorMode, GlobalHealthColorMode, HealthColorModeOptions = M.UnitSectionFactories.Layout(
-    MSUF, M, FILE, PixelLayoutRegion, Core, EnsureDB, W, T, SetControlsEnabled, UP, floor, max, min, VT, LOAD_CONDITIONS,
-    BOSS_LAYOUT_OPTIONS, SEPARATORS, GetConf, GetGeneral, ReadBool, ReadNumber, SetControlEnabled, NormalizeBossLayoutMode,
-    UpdateLoadActive, SettingMeta, RegisterControl, Schema, ROW_OPTIONS, TIP_OPTS, UNIT_ANCHOR_SECTION_HEIGHT,
-    HEALTH_COLOR_GLOBAL, HEALTH_COLOR_LABELS, HEALTH_COLOR_ALIASES, HEALTH_COLOR_OPTIONS, RequestUnitRuntimeApply,
-    UnitSectionShared, SetSectionHeaderStatus
+    { EnsureDB = EnsureDB, GetConf = GetConf, GetGeneral = GetGeneral, ReadBool = ReadBool, ReadNumber = ReadNumber,
+        NormalizeBossLayoutMode = NormalizeBossLayoutMode, UpdateLoadActive = UpdateLoadActive },
+    { Widgets = W, Theme = T, Schema = Schema, SetControlEnabled = SetControlEnabled, SettingMeta = SettingMeta,
+        RegisterControl = RegisterControl, UnitOptions = ROW_OPTIONS, TooltipOptions = TIP_OPTS, Shared = UnitSectionShared },
+    { PixelLayoutRegion = PixelLayoutRegion, LoadConditions = LOAD_CONDITIONS, BossLayouts = BOSS_LAYOUT_OPTIONS,
+        Separators = SEPARATORS, AnchorSectionHeight = UNIT_ANCHOR_SECTION_HEIGHT },
+    { Global = HEALTH_COLOR_GLOBAL, Labels = HEALTH_COLOR_LABELS, Aliases = HEALTH_COLOR_ALIASES, Options = HEALTH_COLOR_OPTIONS },
+    { Core = Core, RequestUnitApply = RequestUnitRuntimeApply }
 )
 
 local function AttachUnitSectionUX(ctx, unit)

@@ -14,7 +14,6 @@ local UP = M.UnitPage or {}
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
 local RestingFlipbook = MSUF.UFRestingFlipbook or {}
-local ApplyRestingFlipbook = RestingFlipbook.Apply
 local StopRestingFlipbook = RestingFlipbook.Stop
 local floor = math.floor
 local max = math.max
@@ -33,7 +32,6 @@ local SetControlsEnabled = W.SetControlsEnabled
 STATUS_ANCHORS = STATUS_ANCHORS or {}
 DEFAULT_SYMBOLS = DEFAULT_SYMBOLS or {}
 StatusIconPackValues = StatusIconPackValues or function() return {} end
-local SYMBOL_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\"
 local RAID_GROUP_NAME_STYLES = VT("PAREN", "(2)", "BRACKET", "[2]", "NONE", "2")
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
 -- The Basic tab starts 64px below the body; these heights leave 12px below
@@ -646,27 +644,13 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     state.previewLabel, state.midnight, state.identityRestrictionWarning = previewLabel, midnight, identityRestrictionWarning
 end
 function StatusSection.PrepareIconResolvers(state, unit)
-    -- Core icon providers, resolved once per build because the resolvers below run on every
-    -- preview refresh. The pet happiness art exists only on clients that support it, so that
-    -- provider keeps its type check.
+    -- The runtime owns the output; this page supplies only the selected scalar settings.
     local supports = MSUF.Require("MSUF_StatusIconPackSupports", FILE)
-    local resolver = MSUF.Require("MSUF_GetStatusIconTexture", FILE)
-    local petHappinessIcon = MSUF.Optional("MSUF_GetPetHappinessIcon")
+    local runtime = MSUF.UFStatusRuntime
+    local sampleConfig, sampleStatus = {}, {}
     local function CurrentStatusSymbolValues()
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
-    end
-    local function StatusSymbolPreviewTexture(symbolKey)
-        if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then return nil end
-        if symbolKey == "rested_blizzard_animated" then return nil end
-        local mid = ReadGeneralBool("statusIconsUseMidnightStyle", false)
-        local folder, suffix = "Combat", mid and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
-        if symbolKey:find("^rested_") then
-            folder, suffix = "Rested", mid and "_midnight_64.tga" or "_classic_64.tga"
-        elseif symbolKey:find("^resurrection_") then
-            folder, suffix = "Ress", mid and "_midnight_64.tga" or "_classic_64.tga"
-        end
-        return SYMBOL_MEDIA .. folder .. "\\" .. symbolKey .. suffix
     end
     local function IconPackValuesForCurrentStatus()
         local values = StatusIconPackValues()
@@ -693,48 +677,13 @@ function StatusSection.PrepareIconResolvers(state, unit)
     local function IconAssetValuesForCurrentStatus()
         return UP.StatusIconAssetValues(StatusPreviewEntries(CurrentStatusSpec(unit)))
     end
-    local function ResolvePreviewStatusIcon(spec, entry)
-        if not entry then return nil end
-        local symbolKey = entry[3]
-        if symbolKey then
-            local selectedSymbol = ReadStatusString(unit, symbolKey, "DEFAULT")
-            if selectedSymbol == "rested_blizzard_animated" then
-                return nil, 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Rest-Flipbook", true
-            end
-            local path = StatusSymbolPreviewTexture(selectedSymbol)
-            if path then return path, 0, 1, 0, 1 end
-        end
-        local customPath = spec and spec.customIcon and ReadStatusString(unit, spec.customIcon, "") or ""
-        if type(customPath) == "string" and customPath ~= "" then return customPath, 0, 1, 0, 1 end
-        -- Runtime and the main unit preview use the nameplate classification atlases for the
-        -- built-in Elite / Rare indicator.  Returning the atlas alongside the skull fallback
-        -- keeps this compact strip visually identical without changing custom-icon behavior.
-        if entry[1] == "elite" then
-            local atlas = entry[2] == "RARE" and "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star"
-                or entry[2] == "RAREELITE" and "nameplates-icon-elite-silver"
-                or "nameplates-icon-elite-gold"
-            return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1, atlas
-        end
-        local style = "BLIZZARD"
-        local path, l, r, t, b = resolver(style, entry[1], entry[2], ReadGeneralBool("statusIconsUseMidnightStyle", false))
-        if type(path) == "string" and path ~= "" then return path, l, r, t, b end
-        if entry[1] == "leader" then return "Interface\\GroupFrame\\UI-Group-LeaderIcon", 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Group-LeaderIcon" end
-        if entry[1] == "assist" then return "Interface\\GroupFrame\\UI-Group-AssistantIcon", 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Group-GuideIcon" end
-        if entry[1] == "raidMarker" then return "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 0.75, 1, 0.25, 0.5 end
-        if entry[1] == "combat" then return "Interface\\CharacterFrame\\UI-StateIcon", 0.5, 1, 0, 0.5, "UI-HUD-UnitFrame-Player-CombatIcon" end
-        if entry[1] == "resting" then return "Interface\\CharacterFrame\\UI-StateIcon", 0, 0.5, 0, 0.5 end
-        if entry[1] == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
-        if entry[1] == "pvp" then return entry[2] == "Horde" and "Interface\\TargetingFrame\\UI-PVP-Horde"
-            or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
-        if entry[1] == "petHappiness" then
-            -- The runtime element owns the per-client art (texture cells or atlases).
-            if type(petHappinessIcon) == "function" then return petHappinessIcon(tonumber(entry[2])) end
-            return nil
-        end
-        return nil
+    local function PaintPreviewStatusIcon(tex, spec, entry)
+        if not entry then return false end
+        runtime.ResolveUnitIconSampleConfig(sampleConfig, sampleStatus, GetConf(unit), GetGeneral(), entry[1])
+        return runtime.PaintIconSample(tex, sampleConfig, sampleStatus, entry[1], entry[2])
     end
     state.CurrentStatusSymbolValues, state.IconPackValuesForCurrentStatus = CurrentStatusSymbolValues, IconPackValuesForCurrentStatus
-    state.IconAssetValuesForCurrentStatus, state.ResolvePreviewStatusIcon = IconAssetValuesForCurrentStatus, ResolvePreviewStatusIcon
+    state.IconAssetValuesForCurrentStatus, state.PaintPreviewStatusIcon = IconAssetValuesForCurrentStatus, PaintPreviewStatusIcon
 end
 function StatusSection.BuildIconStyleControls(state, ctx, unit)
     local selectedCard, selectedControlW, BindStatusSpecDropdown = state.selectedCard, state.selectedControlW, state.BindStatusSpecDropdown
@@ -941,7 +890,7 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
 end
 function StatusSection.BuildPreviewCard(state, unit)
     local previewCard, previewControlW, BindStatusTestToggle = state.previewCard, state.previewControlW, state.BindStatusTestToggle
-    local StatusPreviewButton, ResolvePreviewStatusIcon = state.StatusPreviewButton, state.ResolvePreviewStatusIcon
+    local StatusPreviewButton, PaintPreviewStatusIcon = state.StatusPreviewButton, state.PaintPreviewStatusIcon
     local test = BindStatusTestToggle(previewCard, "Test mode", 16, -120, previewControlW, "MSUF2_STATUS_TEST", "Status indicator test mode", {
         "test mode", "preview level", "test level", "status preview",
     })
@@ -992,18 +941,7 @@ function StatusSection.BuildPreviewCard(state, unit)
         for i = 1, #iconPreviewTextures do
             local holder = iconPreviewTextures[i]
             if IS_CLASSIC_FAMILY then holder._msufStatusPreviewLabel = entries[i] and entries[i][4] or nil end
-            local path, l, r, t, b, atlas, animated = ResolvePreviewStatusIcon(spec, entries[i])
-            if animated == true and ApplyRestingFlipbook and ApplyRestingFlipbook(holder.tex, true) then
-                holder.tex:SetVertexColor(1, 1, 1, 1)
-                holder:Show()
-            elseif type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas
-                and (not IS_CLASSIC_FAMILY or (C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas))) then
-                holder.tex:SetAtlas(atlas)
-                holder.tex:SetVertexColor(1, 1, 1, 1)
-                holder:Show()
-            elseif type(path) == "string" and path ~= "" then
-                holder.tex:SetTexture(path)
-                holder.tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
+            if PaintPreviewStatusIcon(holder.tex, spec, entries[i]) then
                 holder.tex:SetVertexColor(1, 1, 1, 1)
                 holder:Show()
             else

@@ -1074,6 +1074,51 @@
         "{client}",
         "selection"
       ]
+    },
+    {
+      "test": "tools/tests/menu_status_sample_runtime.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_named_page_interfaces.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_dead_model_helpers_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
     }
   ],
   "excluded": {
@@ -1182,6 +1227,7 @@
     "tools/tests/unit_scene_region_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Native health-bar queries absent from the permissive widget fixture: an anchored size and a new child's level.",
     "tools/tests/unresolved_global_reads_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Lua 5.1 makes an undefined name a silent nil read: `CoreFrame(unit)` compiles,",
     "tools/release_test_inventory.py": "Inventory checker executed explicitly by release-check.ps1 in the generated lists phase; it cannot recursively list itself as a test run.",
-    "tools/tests/menu_entry_view_world.lua": "Shared full-graph loader for menu entry reuse and aura route restore tests; supplies native named-frame publication and an optional immutable baseline overlay, with no standalone test entry point."
+    "tools/tests/menu_entry_view_world.lua": "Shared full-graph loader for menu entry reuse and aura route restore tests; supplies native named-frame publication and an optional immutable baseline overlay, with no standalone test entry point.",
+    "tools/tests/menu_l4_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Replays the L4-owned sources against the current full client graph."
   }
 }

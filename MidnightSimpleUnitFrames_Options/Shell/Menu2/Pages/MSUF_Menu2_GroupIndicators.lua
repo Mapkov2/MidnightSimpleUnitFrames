@@ -412,7 +412,7 @@ function StatusIcons.SetDropdownTitle(control, label)
 end
 -- The pack probe and the texture resolver run from refreshes and dropdown sources, so each core
 -- function is resolved once, on first use (the core publishes both before this page loads).
-local packSupports, previewTexture
+local packSupports
 --- Each style value carries its own Midnight flag now, so the support probe runs per entry
 --- and silently drops packs that ship no art for the selected indicator.
 function StatusIcons.IconPackValues()
@@ -441,10 +441,6 @@ function StatusIcons.IconPackValues()
 end
 function StatusIcons.IconAssetValues()
     return M.UnitPage.StatusIconAssetValues(StatusIcons.PreviewEntries(CurrentGFStatusSpec()))
-end
-function StatusIcons.ResolvePreviewIcon(style, iconType, variant, useMidnight)
-    previewTexture = previewTexture or MSUF.Require("MSUF_GetStatusIconTexture", FILE)
-    return previewTexture(style, iconType, variant, useMidnight == true)
 end
 --- Profiles saved before the per-indicator split still store "DEFAULT"; resolve it through
 --- the runtime so the dropdown shows the style that is actually drawn rather than an entry
@@ -760,30 +756,15 @@ function StatusIcons.RefreshIconPreviewStrip(state, spec, enabled)
     state.iconPreviewLabel:SetShown(shown and true or false)
     iconPreviewStrip:SetShown(shown and true or false)
     if not shown then return end
-    --- Preview the style the indicator itself carries; the value may hold the Midnight
-    --- suffix, which the texture resolver splits off on its own.
-    local style = StatusIcons.CurrentIconStyle()
-    if type(style) ~= "string" or style == "" or style == "DEFAULT" then style = "BLIZZARD" end
-    local customPath = spec and spec.customIcon and Val(CurrentScope(), spec.customIcon, "") or ""
+    local cfg = { style = StatusIcons.CurrentIconStyle(),
+        customIcon = spec.customIcon and Val(CurrentScope(), spec.customIcon, "") or nil }
+    local status = { kind = CurrentScope(), useMidnight = false }
     iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
     for i = 1, #iconPreviewTextures do
-        local holder = iconPreviewTextures[i]
-        local entry = entries[i]
-        if entry then
-            local path, l, r, t, b
-            if type(customPath) == "string" and customPath ~= "" then
-                path, l, r, t, b = customPath, 0, 1, 0, 1
-            else
-                path, l, r, t, b = StatusIcons.ResolvePreviewIcon(style, entry[1], entry[2], false)
-            end
-            if type(path) == "string" and path ~= "" then
-                holder.tex:SetTexture(path)
-                holder.tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
-                holder.tex:SetVertexColor(1, 1, 1, 1)
-                holder:Show()
-            else
-                holder:Hide()
-            end
+        local holder, entry = iconPreviewTextures[i], entries[i]
+        if entry and MSUF.UFStatusRuntime.PaintIconSample(holder.tex, cfg, status, entry[1], entry[2]) then
+            holder.tex:SetVertexColor(1, 1, 1, 1)
+            holder:Show()
         else
             holder:Hide()
         end
