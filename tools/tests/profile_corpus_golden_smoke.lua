@@ -23,7 +23,12 @@ assert(#entries > 0, "the corpus has no entry for " .. flavor)
 
 -- Exercise the real registry and Boundary report path, then the corpus driver.
 -- A successfully caught/reported module exception must still fail the entry.
-local injected = Corpus.RunEntry(root, entries[1], flavor)
+-- Any saved-variables entry reaches the same path; skip the costly factory build.
+local probe = entries[1]
+for _, entry in ipairs(entries) do
+    if entry.kind ~= "factory" then probe = entry break end
+end
+local injected = Corpus.RunEntry(root, probe, flavor)
 local attempts = 0
 injected.world.core.MSUF_RegisterModule("corpus-injected-fault", {
     order = -1000, Enable = function() attempts = attempts + 1; error("injected-real-module-error") end,
@@ -33,7 +38,7 @@ assert(attempts > 0, "injected module transition did not run")
 local runEntry = Corpus.RunEntry
 Corpus.RunEntry = function() return injected end
 print("Expected corpus rejection of injected module on " .. flavor .. ":")
-local rejected = Corpus.CheckClient(root, flavor, { entry = entries[1].id })
+local rejected = Corpus.CheckClient(root, flavor, { entry = probe.id })
 Corpus.RunEntry = runEntry
 assert(rejected == 1, "corpus accepted a real Boundary-reported module error")
 local found = false
