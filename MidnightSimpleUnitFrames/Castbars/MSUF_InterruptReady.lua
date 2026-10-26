@@ -742,30 +742,51 @@ local function EnsureBox(frame)
     box.fill:SetTexture("Interface\\Buttons\\WHITE8x8")
     box:Hide()
 
+    -- What ApplyBoxLayout last wrote (false = nothing yet), created here so the
+    -- cast path only ever updates existing keys.
+    box._kickReadySize, box._kickReadyTarget, box._kickReadyAnchor = false, false, false
+    box._kickReadyOffsetX, box._kickReadyOffsetY = false, false
+
     frame.kickReadyBox = box
     return box
 end
 
+-- 2026-10-26 M+ trace: every cast start and interruptibility switch rewrote a
+-- size and anchors that only a castbar resize or a setting change moves (432
+-- calls, 3.1 ms). Each write now repeats only when its own inputs differ from
+-- the ones on the box. They are stored after the write, so a write that raised
+-- is retried by the next call.
 local function ApplyBoxLayout(frame, general)
     general = general or GeneralDB()
     local box = EnsureBox(frame)
-    local castbarHeight = frame.statusBar and frame.statusBar:GetHeight() or frame:GetHeight() or 16
-    local boxSize = general.kickReadyAutoSize == false and tonumber(general.kickReadySize) or castbarHeight
+    -- Only auto size follows the castbar height, so only it reads that.
+    local boxSize = general.kickReadyAutoSize == false and tonumber(general.kickReadySize)
+    if not boxSize then
+        boxSize = frame.statusBar and frame.statusBar:GetHeight() or frame:GetHeight() or 16
+    end
+    boxSize = math.max(8, math.min(boxSize, 80))
+    if box._kickReadySize ~= boxSize then
+        box:SetSize(boxSize, boxSize)
+        box._kickReadySize = boxSize
+    end
 
-    boxSize = math.max(8, math.min(boxSize or 16, 80))
-
+    local target = frame.statusBar or frame
     local anchor = general.kickReadyAnchor or "RIGHT"
     local offsetX = tonumber(general.kickReadyOffsetX) or 4
     local offsetY = tonumber(general.kickReadyOffsetY) or 0
-    local relativePoint = anchor == "RIGHT" and "LEFT"
-        or anchor == "LEFT" and "RIGHT"
-        or anchor == "TOP" and "BOTTOM"
-        or anchor == "BOTTOM" and "TOP"
-        or anchor
-
-    box:SetSize(boxSize, boxSize)
-    box:ClearAllPoints()
-    box:SetPoint(relativePoint, frame.statusBar or frame, anchor, offsetX, offsetY)
+    if box._kickReadyTarget ~= target or box._kickReadyAnchor ~= anchor
+        or box._kickReadyOffsetX ~= offsetX or box._kickReadyOffsetY ~= offsetY
+    then
+        local relativePoint = anchor == "RIGHT" and "LEFT"
+            or anchor == "LEFT" and "RIGHT"
+            or anchor == "TOP" and "BOTTOM"
+            or anchor == "BOTTOM" and "TOP"
+            or anchor
+        box:ClearAllPoints()
+        box:SetPoint(relativePoint, target, anchor, offsetX, offsetY)
+        box._kickReadyTarget, box._kickReadyAnchor = target, anchor
+        box._kickReadyOffsetX, box._kickReadyOffsetY = offsetX, offsetY
+    end
     return box
 end
 

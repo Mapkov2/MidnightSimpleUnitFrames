@@ -21,15 +21,40 @@ local issecretvalue = dependencies.Platform.issecretvalue
 -- UnitCanAssist is a normal non-secret boolean in the 12.1 API contract. Keep
 -- the write on the native boolean sink so every affected owner receives one
 -- direct alpha update without inspecting any restricted aura data.
+--
+-- A result the region already shows costs no native call: the last result is
+-- cached on the region (2026-10-26 raid trace: 1,710 writes, 29 ms, in refresh
+-- passes that mostly re-asserted a settled state). Hide and reveal transitions
+-- still write whenever the shown alpha changes. A hidden result is cached only
+-- on owners whose alpha nothing but these gates writes. ButtonVisuals'
+-- SyncContainerGeometry restores lane.alpha on plain lane containers behind
+-- this cache; that equals every visible gate value, so a cached visible result
+-- stays true there and a cached hidden one would not.
+local function GatesOwnAlpha(region)
+    local config = region._msufA3NativeLaneConfig
+    return region._msufA3GroupSlotsRoot == true or region._msufA3SpellIndicatorRoot == true
+        or config ~= nil and config.sensorRoot == true
+end
+
 local function SetAssistAlpha(region, value, trueAlpha)
     if not region then return false end
+    if issecretvalue(value) == true then
+        -- A secret flag is never inspected or cached; the native sink takes it as is.
+        if not region.SetAlphaFromBoolean then return false end
+        region:SetAlphaFromBoolean(value, trueAlpha, 0)
+        region._msufA3GateAlpha = nil
+        return true
+    end
+    local alpha = value and trueAlpha or 0
+    if region._msufA3GateAlpha == alpha then return true end
     if region.SetAlphaFromBoolean then
         region:SetAlphaFromBoolean(value, trueAlpha, 0)
     elseif region.SetAlpha then
-        region:SetAlpha(value and trueAlpha or 0)
+        region:SetAlpha(alpha)
     else
         return false
     end
+    region._msufA3GateAlpha = (alpha ~= 0 or GatesOwnAlpha(region)) and alpha or nil
     return true
 end
 

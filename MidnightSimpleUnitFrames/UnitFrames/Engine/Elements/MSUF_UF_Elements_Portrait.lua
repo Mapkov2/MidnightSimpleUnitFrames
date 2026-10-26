@@ -3,6 +3,7 @@ local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elemen
 local EventBusRegister = MSUF.Require("MSUF_EventBus_Register", "MSUF_UF_Elements_Portrait.lua")
 local EventBusUnregister = MSUF.Require("MSUF_EventBus_Unregister", "MSUF_UF_Elements_Portrait.lua")
 local PublicGlobals = MSUF.PublicGlobals
+local RunNextFrame = MSUF.Require("MSUF_RunNextFrame", "MSUF_UF_Elements_Portrait.lua")
 
 -- Era's legacy PlayerFrame does not use the modern HUD portrait atlases.
 -- Do not select them merely because GetAtlasInfo exposes an atlas entry.
@@ -174,6 +175,13 @@ local PORTRAIT_GUID_BUST_EVENTS = {
   PARTY_MEMBER_ENABLE = true,
   PARTY_MEMBER_DISABLE = true,
 }
+-- 2026-10-26 raid trace: repeated model invalidations each resolve a native portrait.
+-- Only model refreshes may wait one frame; identity and cast transitions stay immediate.
+local PORTRAIT_MODEL_REFRESH_EVENTS = {
+  UNIT_PORTRAIT_UPDATE = true,
+  UNIT_MODEL_CHANGED = true,
+  PORTRAITS_UPDATED = true,
+}
 local PORTRAIT_UNIT_STATE_EVENTS = {
   PLAYER_TARGET_CHANGED = true,
   PLAYER_FOCUS_CHANGED = true,
@@ -319,6 +327,7 @@ local function PortraitFrameVisible(frame)
   if not frame then
     return false
   end
+  if frame._msufCoreVisible == false then return false end
   local holder = frame.MSUFPortraitHolder
   if holder and frame._msufCoreVisible == true and holder._msufShown == true then
     return true
@@ -519,6 +528,14 @@ local function EnsurePortrait(frame)
     return holder, frame.portrait
   end
 
+  frame._msufPortraitRefresh = function()
+    local revision = frame._msufPortraitQueuedRevision
+    frame._msufPortraitQueuedRevision = nil
+    if revision ~= nil and revision ~= frame._msufPortraitAppliedRevision
+      and frame._msufPortraitCastIconActive ~= true then
+      ApplyPortraitUpdate(frame, true)
+    end
+  end
   holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
   holder._msufUnitFrameOwner = frame
   holder:EnableMouse(false)
@@ -945,6 +962,10 @@ end
 
 ApplyUnitPortrait = function(texture, unit, frame, p, force,
     keyPrepared, preparedKey, preparedGuid, preparedExists)
+  if frame then
+    frame._msufPortraitQueuedRevision = nil
+    frame._msufPortraitAppliedRevision = frame._msufPortraitModelRevision
+  end
   ClearClassPortraitCache(texture)
   local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
@@ -1752,6 +1773,7 @@ function Portrait.ReleasePositionAnchor(frame)
 end
 
 function Portrait.Apply(frame, spec)
+  frame._msufPortraitQueuedRevision = nil
   local p = spec and spec.portrait
   local holder = EnsurePortrait(frame)
   if frame then
@@ -1809,6 +1831,7 @@ end
 --- class border takes the sample class and the reaction border the friendly colour. The client's portrait
 --- renderer and its class and reaction lookups are never asked; a scene has no cast overlay and no click target.
 function Portrait.SceneApply(frame, spec)
+  frame._msufPortraitQueuedRevision = nil
   local p = spec and spec.portrait
   local holder = EnsurePortrait(frame)
   frame._msufPortraitRuntimeCfg = p
@@ -1857,6 +1880,7 @@ function Portrait.PaintSample(frame, sample)
 end
 
 function Portrait.Disable(frame)
+  frame._msufPortraitQueuedRevision = nil
   ApplyPortraitClickTarget(frame, nil)
   SyncPlayerPortraitWorldEvent(frame, frame and frame.MSUFSpec, nil)
   local holder = frame.MSUFPortraitHolder
@@ -1921,6 +1945,9 @@ function Portrait.Update(frame, event, unit)
   if forceRefresh then
     frame._msufPortraitForceRefresh = true
   end
+  if p.render ~= "CLASS" and PORTRAIT_MODEL_REFRESH_EVENTS[event] then
+    frame._msufPortraitModelRevision = (frame._msufPortraitModelRevision or 0) + 1
+  end
   if not PortraitFrameVisible(frame) then
     frame._msufPortraitNeedsVisibleRefresh = true
     return
@@ -1944,7 +1971,10 @@ function Portrait.Update(frame, event, unit)
   end
 
   local class
-  if p.render == "CLASS" then
+  if p.render ~= "CLASS" and PORTRAIT_MODEL_REFRESH_EVENTS[event] then
+    frame._msufPortraitQueuedRevision = frame._msufPortraitModelRevision
+    RunNextFrame(frame._msufPortraitRefresh)
+  elseif p.render == "CLASS" then
     local force = forceRefresh == true or frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil

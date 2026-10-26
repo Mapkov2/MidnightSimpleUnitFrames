@@ -222,6 +222,22 @@
       "phase": "runtime"
     },
     {
+      "test": "tools/tests/portrait_model_refresh_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/castbar_interrupt_ready_geometry.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/auras3_identity_alpha_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/auras3_identity_alpha_world_smoke.lua",
+      "phase": "runtime"
+    },
+    {
       "test": "tools/tests/classpower_playerhp_binding.lua",
       "phase": "runtime"
     },
