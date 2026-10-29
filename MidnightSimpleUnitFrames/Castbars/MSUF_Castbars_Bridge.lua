@@ -98,10 +98,9 @@ local NATIVE_CAST_EVENTS = {
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED",
 }
 
---- WoW Forever defines a second player castbar, GamepadPlayerCastingBarFrame,
---- that handles cast events only while the Gamepad UI style is active (and
---- PlayerCastingBarFrame then ignores them). It is owned like the main bar; no
---- other client defines it, so the lookup is a no-op there.
+--- Forever builds before 70425 use a separate GamepadPlayerCastingBarFrame.
+--- New builds route both input styles through PlayerCastingBarFrame. Keep the
+--- older bar's reversible ownership when present; its absence needs no fallback.
 local function ForEachBlizzardPlayerCastbar(callback)
     local player = rawget(_G, "PlayerCastingBarFrame")
     local legacyPlayer = rawget(_G, "CastingBarFrame")
@@ -120,8 +119,8 @@ end
 --- addon code runs that layout tainted, so a shown managed bar is concealed
 --- instead: alpha 0 and no mouse. Its cast events are gone, so it shows no cast;
 --- Blizzard hides it itself (Edit Mode exit) and MSUF's release restores it.
---- Hiding stays for a bar outside the container (Forever's GamepadPlayer-
---- CastingBarFrame: its OnHide lays nothing out), and a hidden bar is left alone.
+--- Hiding stays for an unmanaged bar: the older Forever gamepad bar, or the
+--- shared PlayerCastingBarFrame after a 70425 gamepad start. A hidden bar stays idle.
 --- Previews (MSUF_HideBlizzardPlayerCastbar) conceal through the same helper.
 local function ConcealNativeFrame(frame)
     if not (frame.IsShown and frame:IsShown()) then return end

@@ -1,11 +1,12 @@
 -- forever_castbar_client_data_smoke.lua
--- WoW Forever is a Mainline client with Classic Era spell data and a second
--- Blizzard player castbar. This smoke pins the castbar files that branch on it:
+-- WoW Forever is a Mainline client with Classic Era spell data. Before 70425
+-- it used a second Blizzard player castbar; newer builds share the main bar.
+-- This smoke pins the castbar files that branch on it:
 --   Bridge:     GamepadPlayerCastingBarFrame is suppressed and restored with
---               PlayerCastingBarFrame, and a client without it (every other
---               client) still owns PlayerCastingBarFrame alone. As in the
---               client, PlayerCastingBarFrame is a managed frame (concealed,
---               never hidden by MSUF) and the gamepad bar is not (hidden).
+--               PlayerCastingBarFrame. 70425 and clients without the second
+--               bar own PlayerCastingBarFrame alone. Keyboard starts keep it
+--               managed (concealed); 70425 gamepad starts mark it unmanaged
+--               (hidden). Both paths restore native unit events without SetUnit.
 --               The restore registers SetUnit's cast events for the player
 --               and never calls CastingBarMixin:SetUnit (rc1 LB-1).
 --   Interrupt:  Forever resolves the Vanilla interrupt table (no Paladin or
@@ -111,7 +112,7 @@ local function NewCastbar(name, managed)
 end
 
 local backend
-local function LoadBridge(withGamepad)
+local function LoadBridge(withGamepad, managed)
     InstallCommonGlobals()
     for _, name in ipairs({ "MSUF_IsCastbarEnabledForUnit", "MSUF_IsCastTimeEnabled", "MSUF_AreAnyCastbarsEnabled",
         "MSUF_Castbars_ForceHideAll", "MSUF_Castbars_OnSettingsChanged", "MSUF_Castbars_RunNextFrame",
@@ -120,7 +121,7 @@ local function LoadBridge(withGamepad)
     end
     _G.MSUF_DB = { general = {} }
     _G.CastingBarFrame = nil
-    _G.PlayerCastingBarFrame = NewCastbar("PlayerCastingBarFrame", true)
+    _G.PlayerCastingBarFrame = NewCastbar("PlayerCastingBarFrame", managed ~= false)
     _G.GamepadPlayerCastingBarFrame = withGamepad and NewCastbar("GamepadPlayerCastingBarFrame") or nil
     local ns = Namespace(nil)
     ns.MSUF_CastbarBackend = { Resolve = function() return backend end }
@@ -166,6 +167,30 @@ do -- (b) A client without the gamepad castbar keeps the single-frame path.
     LoadBridge(false)
     Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == true, "(b) ownership apply must find PlayerCastingBarFrame")
     CheckSuppressed(_G.PlayerCastingBarFrame, "(b)")
+end
+
+-- 70425 cold gamepad start: one native bar whose OnLoad cleared both managed
+-- flags. Repeated ownership, native OnShow, combat and release use this same bar.
+for _, selectedBackend in ipairs({ "MSUF", "NONE" }) do
+    backend = selectedBackend
+    LoadBridge(false, false)
+    local bar = _G.PlayerCastingBarFrame
+    bar.isManagedFrame, bar.isBottomManagedFrame = false, false
+    bar.shown = true
+    Check(_G.GamepadPlayerCastingBarFrame == nil, "70425 must not create a second player bar")
+    Check(_G.MSUF_ApplyBlizzardCastbarOwnership(), "70425 takeover must find the single player bar")
+    CheckSuppressed(bar, "70425 " .. selectedBackend)
+    _G.MSUF_ApplyBlizzardCastbarOwnership()
+    CheckSuppressed(bar, "70425 repeated " .. selectedBackend)
+    _G.InCombatLockdown = function() return true end
+    backend = "BLIZZARD"
+    Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == false, "70425 combat release must defer")
+    Check(next(bar.events) == nil, "70425 deferred release restored events in combat")
+    _G.InCombatLockdown = function() return false end
+    Check(_G.MSUF_ApplyBlizzardCastbarOwnership(), "70425 release must find the single player bar")
+    CheckRestored(bar, "70425 " .. selectedBackend)
+    Check(bar.isManagedFrame == false and bar.isBottomManagedFrame == false,
+        "70425 ownership must preserve Blizzard's managed-frame flags")
 end
 
 do -- (c) Combat defers ownership but still hides both bars.
