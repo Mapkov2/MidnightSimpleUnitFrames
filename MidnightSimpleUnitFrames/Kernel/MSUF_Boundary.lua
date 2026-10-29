@@ -64,18 +64,3 @@ local function RunHostAPIStep(label, step, ...)
 end
 
 MSUF.RunHostAPIStep = RunHostAPIStep
-
-local reportedNativeAuraRegistrations = {}
-
-local function RunNativeAuraRegistration(label, method, owner, ...)
-    local ok, err = pcall(method, owner, ...)
-    if ok then return true end
-    local message = tostring(label) .. ": " .. tostring(err)
-    if not reportedNativeAuraRegistrations[message] then
-        reportedNativeAuraRegistrations[message] = true
-        ReportError("Auras3", message)
-    end
-    return false
-end
-
-MSUF.RunNativeAuraRegistration = RunNativeAuraRegistration

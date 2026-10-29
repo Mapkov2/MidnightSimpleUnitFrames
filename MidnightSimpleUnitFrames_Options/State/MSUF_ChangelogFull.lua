@@ -8,34 +8,12 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "0F4D4DEB7B5C6FB191C138874B2C10CFA1068C1AAD41385508DAE559D9880B5E",
-    currentVersion = "6.504-beta3",
+    sourceSha256 = "7F55BD4413A35ECD17421EDE331EC5F362E6AFDB90D3049715EE04680725319A",
+    currentVersion = "6.503",
     historyFromVersion = "6.02",
-    previousVersion = "6.503",
-    rangeLabel = "6.503 -> 6.504-beta3",
+    previousVersion = "6.02",
+    rangeLabel = "6.02 -> 6.503",
     entries = {
-        {
-            version = "6.504-beta3",
-            date = "2026-10-20",
-            sections = {
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        {
-                            text = "Fixed buffs on the target and other unit frames still going missing until /reload in some places, such as the Labyrinth delve. Aura icons are now set up more robustly, and a broken aura display is rebuilt right away instead of on the next target change.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "target buff aura visible",
-                                label = "Target buff visibility",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible",
-                                settingKey = "auras3.target.buff.visible",
-                            },
-                        },
-                    },
-                },
-            },
-        },
         {
             version = "6.503",
             date = "2026-10-17",

@@ -593,7 +593,7 @@ local function SetLaneMouseSuppressed(container, suppressed)
     -- forbids untrusted scripts and AlwaysPropagateInput (Blizzard_AuraButton.xml),
     -- and a SetScript or HookScript on it then raises "blocked by secret
     -- aspects". Its input is final from initializeFrame (PrepareStage
-    -- BindRegions, Runtime_ButtonVisuals), so
+    -- BindLaneIdentity and BindPandemicAndTooltip, Runtime_ButtonVisuals), so
     -- the container is the only surface rewired there.
     if type(container.AddAuraSlot) == "function" then return restored end
 

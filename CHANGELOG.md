@@ -1,26 +1,5 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.504-beta3 - 2026-10-20
-
-### Bug Fixes
-
-- Fixed buffs on the target and other unit frames still going missing until /reload in some places, such as the Labyrinth delve. Aura icons are now set up more robustly, and a broken aura display is rebuilt right away instead of on the next target change.
-<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","prepareKind":"","prepareValue":"","query":"target buff aura visible","label":"Target buff visibility"} -->
-
-## 6.504-beta2 - 2026-10-20
-
-### Bug Fixes
-
-- Fixed buffs on the target, focus, boss and arena frames still staying missing until /reload in some sessions. When Blizzard's aura display stops updating, MSUF now rebuilds it on the next target change.
-<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","prepareKind":"","prepareValue":"","query":"target buff aura visible","label":"Target buff visibility"} -->
-
-## 6.504-beta1 - 2026-10-19
-
-### Bug Fixes
-
-- Fixed buffs on the target, focus, boss and arena frames sometimes disappearing, or showing an old buff from an earlier target, until /reload while debuffs kept working.
-<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","prepareKind":"","prepareValue":"","query":"target buff aura visible","label":"Target buff visibility"} -->
-
 ## 6.503 - 2026-10-17
 
 Stable maintenance release for all supported clients.

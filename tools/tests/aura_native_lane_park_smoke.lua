@@ -31,9 +31,6 @@ local function NewContainer()
     function container:GetUnit() return self.boundUnit end
     function container:SetAuraGroupMaxFrameCount() end
     function container:SetAuraGroupSortMethod() end
-    -- Revive asks LatchGuard first; these stubs never freeze (see
-    -- aura_native_latch_guard_smoke.lua for frozen parked owners).
-    function container:UpdateAllAuras() end
     created[#created + 1] = container
     return container
 end
@@ -64,9 +61,6 @@ _G.MSUF_NS = MSUF
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 local exports = MSUF.Auras3RuntimeFactories.NativeApply("MidnightSimpleUnitFrames", MSUF, A3, {}, function() end, dependencies)
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LatchGuard.lua"))(
-    "MidnightSimpleUnitFrames", MSUF)
-MSUF.Auras3RuntimeFactories.LatchGuard("MidnightSimpleUnitFrames", MSUF, A3, {}, function() end, { Platform = {} })
 local ApplyLane = assert(exports.ApplyLane, "NativeApply exports no ApplyLane")
 A3._RegisterDirectIdentityRefreshContainer = function() end
 A3._UnregisterDirectIdentityRefreshContainer = function() end

@@ -54,8 +54,7 @@ A3._DirectIdentityRefreshUnitBase = function(
                 local filterChanged = SyncCuratedBigDefensiveContainer(container)
                 local update = container and container.UpdateAllAuras
                 if type(update) == "function" then
-                    -- Also checks hidden owners; a frozen one is rebuilt (LatchGuard).
-                    A3._RefreshNativeAuraOwner(container, filterChanged)
+                    if not filterChanged and A3._NativeContainerVisible(container) then update(container) end
                     if container._msufA3ForceManagedAuraGeometry == true
                         or container._msufA3ForceSpellIndicatorGeometry == true then
                         A3._SyncManagedAuraContainerGeometry(container, true)
@@ -229,7 +228,10 @@ A3._DirectIdentityRefreshUnitWithUnitAuraGate = function(
             local filterChanged = SyncCuratedBigDefensiveContainer(container)
             local update = container and container.UpdateAllAuras
             if type(update) == "function" then
-                if identityEligible then A3._RefreshNativeAuraOwner(container, filterChanged) end
+                if identityEligible and not filterChanged
+                    and A3._NativeContainerVisible(container) then
+                    update(container)
+                end
                 if container._msufA3ForceManagedAuraGeometry == true
                     or container._msufA3ForceSpellIndicatorGeometry == true then
                     A3._SyncManagedAuraContainerGeometry(container, true)
