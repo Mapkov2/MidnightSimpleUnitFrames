@@ -8,12 +8,44 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7F55BD4413A35ECD17421EDE331EC5F362E6AFDB90D3049715EE04680725319A",
-    currentVersion = "6.503",
+    sourceSha256 = "7576CB967FE18A5014FFCFF311EA2DAB5EF22A4F3C2ADD890873BE2FE357B860",
+    currentVersion = "6.505-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.503",
+    previousVersion = "6.503",
+    rangeLabel = "6.503 -> 6.505-beta1",
     entries = {
+        {
+            version = "6.505-beta1",
+            date = "2026-10-29",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Searching the options for a word such as \"pandemic\" now lists the options containing that word before related matches.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        {
+                            text = "Texture layers have a new \"Class color / NPC type\" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.",
+                            linkless = true,
+                        },
+                        {
+                            text = "The group name strip color is now edited through the section's ::: button, like other colors.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.503",
             date = "2026-10-17",

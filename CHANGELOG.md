@@ -1,5 +1,23 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.505-beta1 - 2026-10-29
+
+Built on 6.503. The aura changes from the 6.504 betas are not included.
+
+### Bug Fixes
+
+- Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.
+<!-- msuf-menu-link: none -->
+- Searching the options for a word such as "pandemic" now lists the options containing that word before related matches.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- Texture layers have a new "Class color / NPC type" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.
+<!-- msuf-menu-link: none -->
+- The group name strip color is now edited through the section's ::: button, like other colors.
+<!-- msuf-menu-link: none -->
+
 ## 6.503 - 2026-10-17
 
 Stable maintenance release for all supported clients.

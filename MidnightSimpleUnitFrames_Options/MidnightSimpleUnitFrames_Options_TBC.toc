@@ -3,7 +3,7 @@
 ## Notes: Load-on-demand configuration UI for TBC Classic.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.503
+## Version: 6.505-beta1
 ## X-MSUF-Client: TBC
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
