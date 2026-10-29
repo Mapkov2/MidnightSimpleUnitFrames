@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7576CB967FE18A5014FFCFF311EA2DAB5EF22A4F3C2ADD890873BE2FE357B860",
+    sourceSha256 = "CDB6F0C3B7E2FC54D153A483B1457407C28FD5E95DFD0AFDD67664AB72BFC15C",
     currentVersion = "6.505-beta1",
     historyFromVersion = "6.501",
     previousVersion = "6.503",
@@ -36,7 +36,16 @@ local data = {
                     bullets = {
                         {
                             text = "Texture layers have a new \"Class color / NPC type\" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.",
-                            linkless = true,
+                            link = {
+                                pageKey = "uf_player",
+                                query = "texture layer color mode",
+                                label = "Color mode",
+                                sectionId = "texture_layer",
+                                controlId = "menu2.uf_player.unit.texture_layer.colormode",
+                                settingKey = "player.texLayerColorMode",
+                                prepareKind = "unitTextureLayer",
+                                prepareValue = "1_setup",
+                            },
                         },
                         {
                             text = "The group name strip color is now edited through the section's ::: button, like other colors.",

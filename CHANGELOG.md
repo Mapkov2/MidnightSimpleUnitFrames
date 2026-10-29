@@ -14,7 +14,7 @@ Built on 6.503. The aura changes from the 6.504 betas are not included.
 ### Changes
 
 - Texture layers have a new "Class color / NPC type" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.colormode","settingKey":"player.texLayerColorMode","prepareKind":"unitTextureLayer","prepareValue":"1_setup","query":"texture layer color mode","label":"Color mode"} -->
 - The group name strip color is now edited through the section's ::: button, like other colors.
 <!-- msuf-menu-link: none -->
 
