@@ -130,7 +130,10 @@ local function BuildNameBar(ctx, b)
     end
     Slider("Strip height", "nameBarHeight", 4, 60, 1, 14, 32, -128)
     PercentSlider(ctx, section, "Strip opacity", "nameBarAlpha", .95, width, width + 64, -128)
-    ScopeColor(ctx, section, "Strip color", width, "nameBarR", "nameBarG", "nameBarB", {.05, .05, .05}, "rebuild", 32, -218, width, "LEFT")
+    local stripColor = ScopeColor(ctx, section, "Strip color", width, "nameBarR", "nameBarG", "nameBarB", {.05, .05, .05}, "rebuild", 32, -218, width, "LEFT")
+    stripColor:Hide()
+    stripColor._msuf2Title:Hide()
+    stripColor._msuf2Title._msuf2AlwaysHidden = true
     BindAdditionalGate(ctx, section, "nameBarEnabled")
 end
 -- Buff coverage (WoW Forever). A toggle shows the client's own name for the
