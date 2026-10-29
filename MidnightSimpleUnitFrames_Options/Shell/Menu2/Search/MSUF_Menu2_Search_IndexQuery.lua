@@ -639,12 +639,16 @@ local function BuildSearchQueryClauses(query)
             AddSearchTermUnique(terms, seen, word, allowSoftStop)
             if phrases and phrases[i] then AddSearchTermUnique(terms, seen, phrases[i], allowSoftStop) end
             local aliases = SEARCH_QUERY_ALIASES[word]
+            -- terms[1..typed]: the word as typed, its phrase and its spelling
+            -- corrections. Every later term comes from an alias.
+            local typed = #terms
             if not aliases then
                 local typoKeys = SearchAliasKeysForTypo(word)
                 if typoKeys then
                     -- Keep a bounded set of equally close native spellings.
                     -- A new synonym must not displace the typed word's meaning.
                     for _, key in ipairs(typoKeys) do AddSearchTermUnique(terms, seen, key, allowSoftStop) end
+                    typed = #terms
                     for _, key in ipairs(typoKeys) do
                         for _, term in ipairs(SEARCH_QUERY_ALIASES[key]) do AddSearchTermUnique(terms, seen, term, allowSoftStop) end
                     end
@@ -654,7 +658,7 @@ local function BuildSearchQueryClauses(query)
                 for k = 1, #aliases do AddSearchTermUnique(terms, seen, aliases[k], allowSoftStop) end
             end
             if #terms > 0 then
-                clauses[#clauses + 1] = { word = word, terms = terms }
+                clauses[#clauses + 1] = { word = word, terms = terms, typed = typed }
             end
         end
         return clauses
@@ -799,13 +803,20 @@ local function SearchFuzzyTokenMatch(rec, term, distanceCache)
     return false
 end
 
+-- A word that query aliases expand ("pandemic" also means colors, auras,
+-- cooldown text and timer) ranks the records that contain the word as typed
+-- (or its spelling correction) before those only an alias reached. The bonus
+-- is the most one term earns below (180+90+70+55+45+35+35+10), so an alias
+-- that names a whole label ("Cooldown text") no longer buries "Show Pandemic
+-- State". Records only the aliases reach keep their order among themselves.
 local function SearchClauseScore(rec, clause, fuzzyDistanceCache)
     local haystack = rec.haystack or ""
-    local best = 0
+    local best, typedHit = 0, false
     for i = 1, #clause.terms do
         local term = clause.terms[i]
         local score = 0
         if haystack:find(term, 1, true) then
+            if i <= clause.typed then typedHit = true end
             if rec.labelNorm == term or rec.titleNorm == term then score = score + 180 end
             if rec.labelNorm:find(term, 1, true) == 1 or rec.titleNorm:find(term, 1, true) == 1 then score = score + 90 end
             if rec.labelNorm:find(term, 1, true) then score = score + 70 end
@@ -819,6 +830,7 @@ local function SearchClauseScore(rec, clause, fuzzyDistanceCache)
         end
         if score > best then best = score end
     end
+    if typedHit and clause.typed < #clause.terms then best = best + 520 end
     return best > 0, best
 end
 

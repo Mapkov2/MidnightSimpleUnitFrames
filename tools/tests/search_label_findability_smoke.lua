@@ -8,8 +8,10 @@
 --   * named cases that used to fail stay fixed (English clients): a label made of
 --     stop words ("Player Enable", "To", "Not now"), a page name that other page
 --     names contain ("Target ..." against Focus Target), a typed pair the parser
---     joins ("global cooldown", "Ko-fi"), a button whose name is typed, and an
---     easter egg that no longer empties the list for an ordinary word.
+--     joins ("global cooldown", "Ko-fi"), a button whose name is typed, an
+--     easter egg that no longer empties the list for an ordinary word, and a
+--     word the query aliases expand ("pandemic") that still finds the options
+--     containing it first.
 -- Names shorter than the search minimum (the class resource slot swatches "1"
 -- to "9") are found by their slot name instead and are skipped here.
 -- Plain Lua 5.1.
@@ -100,6 +102,23 @@ if locale == "enUS" or locale == "enGB" then
     local castbarColor = api.SearchPages("castbar color")
     Check(castbarColor[1] and castbarColor[1].kind == "color",
         flavor .. ": \"castbar color\" ranks " .. tostring(castbarColor[1] and castbarColor[1].label) .. " first")
+    -- Query aliases also send "pandemic" to colors, auras, cooldown text and timer.
+    -- Every option that contains the word comes before those only an alias reaches
+    -- (the six "Cooldown text" switches used to bury every pandemic option).
+    local aliasOnly
+    for i, row in ipairs(api.SearchPages("pandemic")) do
+        if not (row.haystack or ""):find("pandemic", 1, true) then
+            aliasOnly = aliasOnly or row
+        elseif aliasOnly then
+            Check(false, string.format("%s: \"pandemic\" ranks %s:%s (alias only) above %s:%s at %d", flavor,
+                tostring(aliasOnly.key), tostring(aliasOnly.label), tostring(row.key), tostring(row.label), i))
+            break
+        end
+    end
+    Expect("pandemic", "opt_colors", "Colors", 1)
+    if world.core.Client.IsRetail and not world.core.Client.IsForever then
+        Expect("pandemic", "uf_target", "Show Pandemic State", PALETTE)
+    end
 end
 
 if #failures > 0 then
