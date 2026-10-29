@@ -11,8 +11,11 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local members = { raid1 = { "Mage", "MAGE" }, raid2 = { "Warrior", "WARRIOR" } }
 local colors = { MAGE = { r = .1, g = .6, b = 1 }, WARRIOR = { r = .8, g = .5, b = .2 } }
 local guidReads, nameReads = 0, 0
-local rosterGuidReads = 0
+local rosterGuidReads, elementGuidReads = 0, 0
 local secret = false
+-- members[unit][3] == false marks that occupant offline; transientOffline models
+-- UnitIsConnected answering false for every token while the roster is in flux.
+local transientOffline = false
 local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.type, h.env.issecretvalue = type, issecretvalue
     h.env.GetNumClasses = function() return 13 end
@@ -23,9 +26,19 @@ local h = Harness.New(root, flavor, { beforeBoot = function(h)
     end
     h.env.UnitGUID = function(unit)
         guidReads = guidReads + 1
-        local source = debug.getinfo(2, "S").source
-        if source:find("MSUF_UF_Group_Runtime.lua", 1, true) or source:find("MSUF_UF_Group_Adapter.lua", 1, true) then
-            rosterGuidReads = rosterGuidReads + 1
+        -- Classify by the nearest group caller; shared helpers sit in between.
+        for level = 2, 4 do
+            local info = debug.getinfo(level, "S")
+            local source = info and info.source or ""
+            if source:find("MSUF_UF_Group_Runtime.lua", 1, true) or source:find("MSUF_UF_Group_Adapter.lua", 1, true) then
+                rosterGuidReads = rosterGuidReads + 1
+                break
+            elseif source:find("MSUF_UF_Group_RangeFade.lua", 1, true) or source:find("MSUF_UF_Group_Visuals.lua", 1, true) then
+                -- The identity reseed of the range self-check and the target/focus
+                -- indicator bucket, the same reads every token change makes.
+                elementGuidReads = elementGuidReads + 1
+                break
+            end
         end
         if secret then return secretGUID end
         return "Player-" .. (members[unit] and members[unit][1] or unit)
@@ -35,6 +48,10 @@ local h = Harness.New(root, flavor, { beforeBoot = function(h)
         return class, class, 1
     end
     h.env.UnitIsPlayer = function() return true end
+    h.env.UnitIsConnected = function(unit)
+        local member = members[unit]
+        return member ~= nil and member[3] ~= false and not transientOffline
+    end
     h.env.RAID_CLASS_COLORS = colors
     h.env.GetRaidRosterInfo = function(index)
         local member = members[h.units[index]]
@@ -148,7 +165,7 @@ guidReads = 0
 for _ = 1, 100 do frame:GetScript("OnEvent")(frame, "UNIT_HEALTH", frame.MSUFUnitKey) end
 assert(guidReads == 0, "identity detection leaked onto health ticks")
 -- Roster bursts paint the final occupant once after the native headers finish.
-refreshes, guidReads = 0, 0
+refreshes, guidReads, elementGuidReads = 0, 0, 0
 local registrations, auraRebinds = 0, 0
 for _, child in ipairs(children) do
     local register = child.RegisterUnitEvent
@@ -168,7 +185,11 @@ h:RunTimers()
 assert(refreshes == #children, "roster burst must refresh each live frame once")
 assert(registrations == 0 and auraRebinds == 0, "same-token roster repaint rebound event or aura ownership")
 assert(rosterGuidReads == 0, "roster repaint depends on GUID")
-if flavor == "Mainline" or flavor == "Forever" then assert(guidReads == 0, "Retail roster pass read GUID") end
+-- The settle is an identity pass: only the range self-check and the target/focus
+-- indicator bucket reseed from the GUID, once each per frame, as on a token change.
+if flavor == "Mainline" or flavor == "Forever" then
+    assert(guidReads == elementGuidReads and elementGuidReads <= 2 * #children, "Retail roster pass read GUID")
+end
 Check("burst final occupant")
 -- Cover the opposite native/addon event registration order as well.
 local frames, runtimeIndex, headerIndex = h.widgets.frames
@@ -221,7 +242,7 @@ Check("secret GUID independent refresh")
 -- successful compiled refresh. Missing element state must not raise here.
 local iterate, rosterCallback = GF.ForEachFrame
 GF.ForEachFrame = function(callback, hiddenFrames, reason)
-    if reason == "GROUP_ROSTER_UPDATE" then rosterCallback = callback end
+    if reason == "MSUF_GF_UNIT_IDENTITY" then rosterCallback = callback end
     return iterate(callback, hiddenFrames, reason)
 end
 Roster()
@@ -242,4 +263,37 @@ Check("recycled child")
 h:LeaveCombat()
 h:RunTimers()
 Check("after combat")
-print("group_raid_identity_smoke: PASS (" .. flavor .. "/" .. kind .. ": names/bar/background colors, roster ordering, coalesced bursts, combat, GUID-free roster path, hidden/preview, recycle)")
+-- Out of combat the settle must reseed status from the current occupant too:
+-- a same-token shift may not keep the previous occupant's OFFLINE label, and a
+-- disconnected answer read mid-roster may not outlive the settled roster.
+conf.statusText = true
+GF.InvalidateCompiledSpecs(kind)
+GF.RefreshHeaderLayout()
+Roster()
+local function FrameOf(name)
+    for _, child in ipairs(children) do
+        local member = members[child:GetAttribute("unit")]
+        if member and member[1] == name then return child end
+    end
+end
+local function CheckStatus(label)
+    for _, child in ipairs(children) do
+        local member = assert(members[child:GetAttribute("unit")])
+        local shown = child._msufStatusTextValue == "OFFLINE"
+        assert(shown == (member[3] == false), label .. ": " .. member[1] .. (shown and " shows" or " lacks") .. " OFFLINE")
+    end
+end
+CheckStatus("status fixture")
+local mage = FrameOf("Mage")
+members[mage:GetAttribute("unit")][3] = false
+mage:GetScript("OnEvent")(mage, "UNIT_CONNECTION", mage.MSUFUnitKey, false)
+assert(mage._msufStatusTextValue == "OFFLINE", "status fixture did not paint OFFLINE")
+CheckStatus("occupant disconnected")
+Swap(); Roster(); CheckStatus("same tokens, offline occupant moved")
+h.units[1], h.units[2] = h.units[2], h.units[1]
+transientOffline = true
+h:Event("GROUP_ROSTER_UPDATE")
+transientOffline = false
+h:RunTimers()
+CheckStatus("disconnected read during the roster update")
+print("group_raid_identity_smoke: PASS (" .. flavor .. "/" .. kind .. ": names/bar/background colors, OFFLINE status, roster ordering, coalesced bursts, combat, GUID-free roster path, hidden/preview, recycle)")

@@ -61,6 +61,19 @@
 -- 4640 -> 1000 calls, 1192.8 -> 290.5KB. Tighten the affected VM/native/x86
 -- allocation caps to the new measurements +2%; unchanged routes keep theirs.
 -- PUC Lua 5.1 x64: shift 4.1/13.3KB and burst 41.0/403.6KB (Mainline/Vanilla).
+
+-- 2026-10-29: the roster settle repaints as an identity change
+-- (MSUF_GF_UNIT_IDENTITY) instead of the raw GROUP_ROSTER_UPDATE, which the
+-- status runtime maps to leader/raid group only: a same-token occupant kept the
+-- previous occupant's OFFLINE label (owner report; group_raid_identity pins it).
+-- Status, range/offline fade, power type and indicators now reseed per frame,
+-- about 1.7k instructions and one or two native calls each, no allocation.
+-- Mainline party_join/settle 137/38k -> 146/47k, raid build/settle/shift
+-- 1554/133/93k -> 1589/168/130k, raid40 settle/burst 270/658k -> 336/728k;
+-- native 389/61 -> 393/65, raid settle/shift 221/100 -> 241/140, raid40
+-- 421/200 -> 461/280. Vanilla 138/38k -> 147/47k, 1533/135/98k -> 1569/171/136k,
+-- 279/884k -> 347/956k; native raid 261/120 -> 281/160, raid40 501/1000 ->
+-- 541/1080. KB unchanged. Caps that no longer held are ceil(measured*1.02).
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required")
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
@@ -68,14 +81,14 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 -- [flavor] = { [case] = { k instructions, KB } }
 local BUDGETS = {
     Mainline = {
-        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1586, 3912 },
-        raid_settle = { 136, 12 }, raid_apply = { 1097, 596 }, raid_shift = { 96, 4 },
-        raid40_settle = { 276, 10 }, raid40_burst = { 675, 29 },
+        party_join = { 149, 220 }, party_settle = { 48, 10 }, party_apply = { 294, 207 }, raid_build = { 1621, 3912 },
+        raid_settle = { 172, 12 }, raid_apply = { 1097, 596 }, raid_shift = { 133, 4 },
+        raid40_settle = { 343, 10 }, raid40_burst = { 743, 29 },
     },
     Vanilla = {
-        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1564, 4865 },
-        raid_settle = { 138, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 100, 10 },
-        raid40_settle = { 285, 23 }, raid40_burst = { 906, 297 },
+        party_join = { 150, 272 }, party_settle = { 48, 12 }, party_apply = { 314, 411 }, raid_build = { 1601, 4865 },
+        raid_settle = { 175, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 139, 10 },
+        raid40_settle = { 354, 23 }, raid40_burst = { 976, 297 },
     },
 }
 local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"
@@ -114,11 +127,11 @@ if arg[3] == "native" then
         if natives[debug.getinfo(2, "f").func] then h.nativeCalls = h.nativeCalls + 1 end
     end
     h.nativeLimits = flavor == "Mainline" and {
-        party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6347,
-        raid_settle = 226, raid_apply = 1120, raid_shift = 102, raid40_settle = 430, raid40_burst = 204,
+        party_join = 401, party_settle = 71, party_apply = 278, raid_build = 6347,
+        raid_settle = 246, raid_apply = 1120, raid_shift = 143, raid40_settle = 471, raid40_burst = 286,
     } or {
         party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6736,
-        raid_settle = 267, raid_apply = 1380, raid_shift = 123, raid40_settle = 512, raid40_burst = 1020,
+        raid_settle = 287, raid_apply = 1380, raid_shift = 164, raid40_settle = 552, raid40_burst = 1102,
     }
 end
 

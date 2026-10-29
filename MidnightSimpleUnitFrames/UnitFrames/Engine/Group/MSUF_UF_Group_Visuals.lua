@@ -1248,7 +1248,10 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
   end
   if not cfg then return end
   if event == "MSUF_GF_UNIT_IDENTITY" or event == "MSUF_GF_UNIT_STRUCTURE" then
-    local guid, guidKnown = RefreshIndicatorUnitGUID(frame)
+    -- Only the target/focus indicators keep a GUID bucket (SetIndicatorRegistration
+    -- drops it when both are off); every roster settle runs this branch.
+    local guid, guidKnown
+    if cfg.runtimeOnTarget or cfg.runtimeOnFocus then guid, guidKnown = RefreshIndicatorUnitGUID(frame) end
     local fn = cfg.runtimeOnTarget
     if fn then
       if guidKnown == true and targetIndicatorGUIDKnown == true then

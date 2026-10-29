@@ -88,6 +88,13 @@ local function RefreshVisibleRosterState(reason)
   return GF.ForEachFrame(RefreshRosterStateFrame, false, reason)
 end
 
+--- The settled roster repaints as an identity change, not as the raw event:
+--- the group status runtime maps GROUP_ROSTER_UPDATE to leader/raid group only,
+--- and range fade, power type and the indicators reseed only on this reason. A
+--- slot that kept its token for another occupant, or read a disconnect while
+--- the roster was in flux, otherwise kept OFFLINE/DEAD/AFK from that read.
+local ROSTER_IDENTITY_REASON = "MSUF_GF_UNIT_IDENTITY"
+
 local function RoleFilteredAggroMode(mode)
   mode = tostring(mode or "ALL"):upper()
   if mode == "TANK_ONLY" then mode = "TANK"
@@ -681,7 +688,7 @@ local function FlushHeaderLayoutSettle()
     did = GF.RefreshHeaderLayout()
     did = RefreshStartupVisuals() or did
   end
-  if state == SETTLE.ROSTER then did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did end
+  if state == SETTLE.ROSTER then did = RefreshVisibleRosterState(ROSTER_IDENTITY_REASON) or did end
   if state == SETTLE.LAYOUT then return did end
   return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
 end
@@ -946,7 +953,7 @@ local function FlushDeferred()
     did = GF.UpdateGroupVisibility() or did
   end
   if reasons.roster then
-    did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did
+    did = RefreshVisibleRosterState(ROSTER_IDENTITY_REASON) or did
     did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
   end
   --- No priority work unit on purpose: SetupWantedHeaders already ends in
