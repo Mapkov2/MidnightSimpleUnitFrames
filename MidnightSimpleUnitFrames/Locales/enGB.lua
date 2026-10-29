@@ -4995,6 +4995,8 @@ L["Spec profile"] = "Spec profile"
 L["New-character default"] = "New-character default"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."
 L["Profiles deleted: %d"] = "Profiles deleted: %d"
+L["Class color / NPC type"] = "Class colour / NPC type"
+L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "Single colour uses this layer's configured tint. Class colour / NPC type uses player class colours and existing NPC type colours, independently of the HP bar colour. HP gradient follows the shared low, mid and high HP colours."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)

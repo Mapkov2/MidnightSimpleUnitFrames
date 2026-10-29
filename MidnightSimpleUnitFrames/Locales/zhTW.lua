@@ -6952,6 +6952,8 @@ L["Spec profile"] = "專精設定檔"
 L["New-character default"] = "新角色預設"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "刪除所選的 %d 個設定檔？\n\n%s\n\n使用它們的角色會切換到 Default。沒有匯出就無法復原。"
 L["Profiles deleted: %d"] = "已刪除設定檔：%d"
+L["Class color / NPC type"] = "職業顏色 / NPC類型"
+L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "單色使用此圖層設定的色調。職業顏色 / NPC類型為玩家使用職業顏色，為NPC使用現有的NPC類型顏色，與生命條顏色無關。生命漸層使用低、中、高生命值的共用顏色。"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)

@@ -28,6 +28,23 @@ local function Check(condition, message)
 end
 
 local world = World.New(root, flavor)
+local liveUnits = {}
+local function Live(unit) return liveUnits[unit] or {} end
+world.env.UnitExists = function(unit) return liveUnits[unit] ~= nil end
+world.env.UnitIsPlayer = function(unit) return Live(unit).player == true end
+world.env.UnitClass = function(unit) return "Class", Live(unit).class or "WARRIOR" end
+world.env.UnitClassification = function(unit) return Live(unit).classification or "normal" end
+world.env.UnitHasPowerType = function(unit) return Live(unit).mana == true end
+world.env.UnitPowerType = function(unit) return Live(unit).mana and 0 or 1, Live(unit).mana and "MANA" or "RAGE" end
+world.env.UnitEffectiveLevel = function(unit) return Live(unit).level or 80 end
+world.env.UnitIsBossMob = function(unit) return Live(unit).classification == "worldboss" end
+world.env.UnitIsLieutenant = function(unit) return Live(unit).lieutenant == true end
+world.env.UnitSelectionType = function(unit) return Live(unit).neutral and 2 or 0 end
+world.env.UnitReaction = function(unit) return Live(unit).neutral and 4 or 2 end
+world.env.UnitIsDeadOrGhost = function() return false end
+world.env.UnitCanAttack = function() return true end
+world.env.UnitCanAssist = function() return false end
+world.env.IsInInstance = function() return false, "none" end
 world:Boot()
 local failure = world:FirstFailure()
 Check(failure == nil, "load failed in " .. tostring(failure and failure.file) .. ": " .. tostring(failure and failure.message))
@@ -47,6 +64,7 @@ end
 
 local env, MSUF = world.env, world.core
 env.MSUF_EnsureDB(true)
+MSUF.UF.Config.Refresh()
 local Preview = MSUF.UFPreview
 Check(type(Preview) == "table" and type(Preview._BuildPreview) == "function", "no unit preview builder")
 local refreshSource = debug.getinfo(Preview.Refresh, "S").source
@@ -56,7 +74,8 @@ Check(refreshSource:find("MSUF_Menu2_UnitPreview_Render.lua", 1, true) ~= nil,
 local parent = env.CreateFrame("Frame", nil, env.UIParent)
 parent:SetSize(900, 400)
 local panel = env.CreateFrame("Frame", nil, env.UIParent)
-panel._msufGetCurrentKey = function() return "player" end
+local currentKey = "player"
+panel._msufGetCurrentKey = function() return currentKey end
 local box = Preview._BuildPreview(parent, panel, 900, 400)
 Check(type(box) == "table" and type(box.mock) == "table", "the unit preview did not build")
 box:Show()
@@ -113,4 +132,103 @@ Check(Anchor(mock.texLayers[1]) == mock,
 Check(Anchor(mock.texLayers[2]) == mock,
     "a texture layer stays on the Portrait this refresh hid")
 
-print(string.format("classic_unit_preview_texture_layer_order_smoke: ok (%s)", flavor))
+-- The same real preview lifecycle paints all three slots with the shared
+-- class/NPC palette even when health remains black and its NPC flags are off.
+do
+    local db, runtime = env.MSUF_DB, MSUF.TextureLayer
+    local colors = {
+        npcCaster = { r = 0.12, g = 0.34, b = 0.56 },
+        npcMiniboss = { r = 0.38, g = 0.29, b = 0.71 },
+        npcBoss = { r = 0.27, g = 0.58, b = 0.19 },
+        neutral = { r = 0.65, g = 0.41, b = 0.23 },
+    }
+    db.npcColors = colors
+    db.classColors = { MAGE = { r = 0.16, g = 0.37, b = 0.68 } }
+    db.general.npcColorMode = "reaction"
+    db.general.npcTypeColorBar, db.general.npcTypeColorText = false, false
+    db.general.npcTypeTarget, db.general.npcTypeBoss = false, false
+    db.general.barMode = "dark"
+    db.general.darkBarR, db.general.darkBarG, db.general.darkBarB = 0, 0, 0
+    local prefixes = { "texLayer", "texLayer2", "texLayer3" }
+    for _, key in ipairs({ "player", "target", "boss" }) do
+        local conf = db[key]
+        conf.healthColorMode = "DARK"
+        for _, prefix in ipairs(prefixes) do
+            conf[prefix .. "Enabled"] = true
+            conf[prefix .. "ColorMode"] = "CLASS_NPC"
+            conf[prefix .. "SourceMode"] = "CUSTOM"
+            conf[prefix .. "CustomTexturePath"] = "Interface\\PETBATTLES\\PetBattle-SelectedPetGlow"
+            conf[prefix .. "AnchorTarget"] = "HEALTH"
+            conf[prefix .. "Visibility"] = "ALWAYS"
+            conf[prefix .. "TargetOnly"] = false
+            conf[prefix .. "HealthCondition"] = "ANY"
+            conf[prefix .. "HealthLowAlphaEnabled"] = false
+            conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = 0.8, 0.7, 0.6
+        end
+    end
+    local function Tint(color, label)
+        for slot = 1, 3 do
+            local holder = mock.texLayers[slot]
+            local tint = holder and holder.tex and holder.tex.gradient and holder.tex.gradient.from
+            Check(Shown(holder) and tint and tint.r == color.r and tint.g == color.g and tint.b == color.b,
+                label .. ": slot " .. slot .. " did not paint the shared NPC/class colour")
+        end
+        local hp = mock.healthBar.color
+        Check(hp and hp[1] == 0 and hp[2] == 0 and hp[3] == 0, label .. ": texture mode changed the black HP bar")
+    end
+    local sample = Preview.RefreshDeps.UNIT_DATA
+    Check(sample and sample.target and sample.player, "harness: preview sample data missing")
+    sample.target.npcKind, sample.target.reactionKind = "npcCaster", "enemy"
+    currentKey = "target"
+    Refresh()
+    Check(not box._msufPreviewScene.data.live, "harness: expected a simulated target")
+    Tint(colors.npcCaster, "simulated caster")
+    sample.target.reactionKind = "neutral"
+    Refresh()
+    Tint(colors.neutral, "simulated neutral")
+    sample.player.class = "MAGE"
+    currentKey = "player"
+    Refresh()
+    Tint(db.classColors.MAGE, "simulated player")
+
+    -- The live model's approximate elite sample is a caster. The real shared
+    -- classifier must win and identify this lieutenant as a miniboss.
+    liveUnits.target = { classification = "elite", mana = true, lieutenant = true, level = 80 }
+    currentKey = "target"
+    Refresh()
+    Check(box._msufPreviewScene.data.liveUnit == "target", "harness: target did not use live data")
+    Tint(colors.npcMiniboss, "live lieutenant")
+    liveUnits.boss1 = { classification = "worldboss", level = -1 }
+    currentKey = "boss"
+    Refresh()
+    Tint(colors.npcBoss, "live boss")
+
+    -- Low-health opacity animates the existing tint without consulting NPCs
+    -- again. A subsequent full refresh must pick up the changed palette.
+    currentKey = "target"
+    local calls, resolve = 0, runtime.ResolveClassNPCRGB
+    runtime.ResolveClassNPCRGB = function(...)
+        calls = calls + 1
+        return resolve(...)
+    end
+    for _, prefix in ipairs(prefixes) do
+        db.target[prefix .. "HealthLowAlphaEnabled"] = true
+        db.target[prefix .. "HealthThreshold"] = 1
+        db.target[prefix .. "HealthLowAlpha"] = 0.25
+    end
+    box._animationEnabled, box._animationElapsed = true, 0
+    Refresh()
+    Check(calls == 1, "three preview slots resolved the NPC more than once per refresh")
+    box._animationElapsed = 0.8
+    Check(Preview.RefreshAnimation(box) == true, "CLASS_NPC opacity animation requested a full repaint")
+    Check(calls == 1, "opacity animation queried NPC classification again")
+    Tint(colors.npcMiniboss, "animated lieutenant")
+    for slot = 1, 3 do Check(mock.texLayers[slot]:GetAlpha() == 0.25, "low-health opacity was not animated") end
+    colors.npcMiniboss.r = 0.73
+    Refresh()
+    Tint(colors.npcMiniboss, "updated NPC palette")
+    Check(db.general.npcColorMode == "reaction" and db.general.npcTypeColorBar == false,
+        "preview enabled NPC health colours")
+    runtime.ResolveClassNPCRGB = resolve
+end
+print(string.format("classic_unit_preview_texture_layer_order_smoke: ok (%s, geometry + NPC tint lifecycle)", flavor))

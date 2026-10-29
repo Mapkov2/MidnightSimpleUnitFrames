@@ -90,7 +90,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- clients -14,966 exact LF bytes (largest selections Mainline/koKR
         -- 16,910,006 -> 16,895,040, TBC/enUS 14,792,734 -> 14,777,768). Both
         -- ceilings fall by exactly that; the reset-safety share stays.
-        assert(bytes < (suffix == "Mainline" and 16907944 or 14787944),
+        -- 2026-10-27 (texture class/NPC tint): all clients +9955 exact LF bytes
+        -- for the optional event-driven colour mode and two translated menu
+        -- keys in twelve packs. No startup files or catalogs were added;
+        -- both ceilings retain exactly their previous headroom.
+        assert(bytes < (suffix == "Mainline" and 16917899 or 14797899),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

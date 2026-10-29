@@ -6952,6 +6952,8 @@ L["Spec profile"] = "전문화 프로필"
 L["New-character default"] = "새 캐릭터 기본값"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "선택한 프로필 %d개를 삭제하시겠습니까?\n\n%s\n\n이 프로필을 사용하는 캐릭터는 Default로 전환됩니다. 내보내기 없이는 되돌릴 수 없습니다."
 L["Profiles deleted: %d"] = "삭제된 프로필: %d"
+L["Class color / NPC type"] = "직업 색상 / NPC 유형"
+L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "단색은 이 레이어에 설정된 색조를 사용합니다. 직업 색상 / NPC 유형은 생명력 바 색상과 관계없이 플레이어에게는 직업 색상을, NPC에게는 기존 NPC 유형 색상을 사용합니다. 생명력 그라데이션은 낮은, 중간, 높은 생명력의 공통 색상을 따릅니다."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

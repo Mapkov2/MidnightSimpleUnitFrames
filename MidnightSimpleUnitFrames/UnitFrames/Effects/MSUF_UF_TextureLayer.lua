@@ -275,14 +275,22 @@ TextureLayer.ResolveLayerOffsets = ResolveLayerOffsets
 
 --- Class color for the unit a frame currently shows. 12.x can hand back
 --- secret class tokens for hostile units; those fall back to the custom color.
-local function ResolveClassRGB(unitKey)
-  local UnitClass = _G.UnitClass
-  if type(UnitClass) ~= "function" then return nil end
-  local unit = unitKey == "boss" and "boss1" or unitKey
-  if unit == "arena" then unit = "arena1" end
-  local exists = _G.UnitExists
-  if type(exists) == "function" and exists(unit) ~= true then return nil end
-  local _, token = UnitClass(unit)
+local function ResolveClassRGB(unitKey, classToken)
+  local token = classToken
+  if issecretvalue(token) == true then return nil end
+  if token == nil then
+    local UnitClass = _G.UnitClass
+    if type(UnitClass) ~= "function" then return nil end
+    local unit = unitKey == "boss" and "boss1" or unitKey
+    if unit == "arena" then unit = "arena1" end
+    local exists = _G.UnitExists
+    if type(exists) == "function" then
+      local present = exists(unit)
+      if issecretvalue(present) == true or present ~= true then return nil end
+    end
+    local _, liveToken = UnitClass(unit)
+    token = liveToken
+  end
   if issecretvalue(token) == true or type(token) ~= "string" or token == "" then return nil end
   -- Keep texture accents on the same effective class palette as health bars,
   -- including MSUF's user-configured class colors. Resolve at apply time so a
@@ -301,6 +309,28 @@ local function ResolveClassRGB(unitKey)
   return color.r or 1, color.g or 1, color.b or 1
 end
 
+-- This dedicated, immutable request has no health-frame dispatch cache or
+-- per-unit bar switches. Selecting CLASS_NPC always requests the shared type
+-- classifier while leaving every HP/name setting and its cached result alone.
+local NPC_TYPE_REQUEST = { health = { npcColorMode = "type" }, text = {} }
+local function ResolveClassNPCRGB(unitKey, npcKind, classToken)
+  if issecretvalue(npcKind) == true or issecretvalue(classToken) == true then return nil end
+  local common = MSUF.UFBarTextCommon
+  if type(npcKind) == "string" then return common.NPCColor(npcKind) end
+  if type(classToken) == "string" then return ResolveClassRGB(nil, classToken) end
+  if issecretvalue(unitKey) == true or type(unitKey) ~= "string" then return nil end
+  local unit = unitKey == "boss" and "boss1" or unitKey
+  if unit == "arena" then unit = "arena1" end
+  local present = common.UnitExists(unit)
+  if issecretvalue(present) == true or (present ~= true and present ~= 1) then return nil end
+  local player = common.UnitIsPlayer(unit)
+  if issecretvalue(player) == true or player == nil then return nil end
+  if player == true or player == 1 then return ResolveClassRGB(unit) end
+  local key = unit:match("^boss%d+$") and "boss" or unit
+  return common.NPCColor(common.UnitNPCKind(NPC_TYPE_REQUEST, unit, NPC_TYPE_REQUEST, false, key))
+end
+TextureLayer.ResolveClassNPCRGB = ResolveClassNPCRGB
+
 --- The regen/retarget driver exists only while some applied layer needs it.
 local driver
 local driverEvents = {}
@@ -318,7 +348,12 @@ local wantArenaEvents = false
 local RefreshUnitTextureLayers
 local RefreshDynamicTextureLayers
 local ApplyHealthStateFrame
+local NPC_COLOR_EVENTS = {
+  UNIT_FACTION = true, UNIT_CLASSIFICATION_CHANGED = true, UNIT_DISPLAYPOWER = true,
+  UNIT_LEVEL = true, UNIT_FLAGS = true, PLAYER_ENTERING_WORLD = true,
+}
 local DYNAMIC_MASK_FIELDS = {
+  "_msufTexLayerNPCColorMask",
   "_msufTexLayerRegenMask",
   "_msufTexLayerTargetMask",
   "_msufTexLayerTargetColorMask",
@@ -368,6 +403,9 @@ local function DriverOnEvent(_, event, unit)
     RefreshDynamicTextureLayers("_msufTexLayerBossMask", "_msufTexLayerBossColorMask")
   elseif event == "ARENA_OPPONENT_UPDATE" then
     RefreshDynamicTextureLayers("_msufTexLayerArenaMask", "_msufTexLayerArenaColorMask")
+  elseif NPC_COLOR_EVENTS[event] and issecretvalue(unit) ~= true then
+    if event == "PLAYER_ENTERING_WORLD" or (event == "UNIT_LEVEL" and unit == "player") then unit = nil end
+    RefreshDynamicTextureLayers(nil, "_msufTexLayerNPCColorMask", nil, unit)
   end
 end
 
@@ -428,6 +466,8 @@ local function SyncDriverEvents()
   SetDriverEvent("UNIT_PET", wantUnitTargetPet)
   SetDriverEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", wantBossEvents)
   SetDriverEvent("ARENA_OPPONENT_UPDATE", wantArenaEvents)
+  local npcColors = dynamicFrameCounts._msufTexLayerNPCColorMask > 0
+  for event in pairs(NPC_COLOR_EVENTS) do SetDriverEvent(event, npcColors) end
 end
 
 local function AddMaskBit(mask, bit)
@@ -442,7 +482,7 @@ local function CompileDynamicMasks(frame, unitKey, conf)
   local unitTargetTargetMask, unitTargetFocusMask, unitTargetPetMask, bossMask = 0, 0, 0, 0
   local targetColorMask, focusColorMask = 0, 0
   local unitTargetTargetColorMask, unitTargetFocusColorMask, unitTargetPetColorMask, bossColorMask = 0, 0, 0, 0
-  local arenaMask, arenaColorMask = 0, 0
+  local arenaMask, arenaColorMask, npcColorMask = 0, 0, 0
   local healthMask, healthColorMask, healthDirectGradientMask = 0, 0, 0
   local bossUnit = unitKey:match("^boss") ~= nil
   local arenaUnit = unitKey:match("^arena") ~= nil
@@ -453,7 +493,8 @@ local function CompileDynamicMasks(frame, unitKey, conf)
       local visibility = conf[keys.Visibility]
       local targetOnly = conf[keys.TargetOnly] == true or visibility == "TARGET"
       local colorMode = conf[keys.ColorMode]
-      local classColor = colorMode == "CLASS"
+      if colorMode == "CLASS_NPC" then npcColorMask = AddMaskBit(npcColorMask, bit) end
+      local classColor = colorMode == "CLASS" or colorMode == "CLASS_NPC"
         or (colorMode == "HEALTH" and conf[keys.HealthAboveMode] == "CLASS")
       if colorMode == "HEALTH" or conf[keys.HealthCondition] == "BELOW"
         or conf[keys.HealthLowAlphaEnabled] == true then
@@ -527,6 +568,7 @@ local function CompileDynamicMasks(frame, unitKey, conf)
       end
     end
   end
+  frame._msufTexLayerNPCColorMask = npcColorMask > 0 and npcColorMask or nil
   frame._msufTexLayerRegenMask = regenMask > 0 and regenMask or nil
   frame._msufTexLayerTargetMask = targetMask > 0 and targetMask or nil
   frame._msufTexLayerTargetColorMask = targetColorMask > 0 and targetColorMask or nil
@@ -562,7 +604,7 @@ local function CompileDynamicMasks(frame, unitKey, conf)
     for slot = 1, #SLOT_KEYS do
       local keys = SLOT_KEYS[slot]
       local colorMode = conf[keys.ColorMode]
-      if conf[keys.Enabled] == true and (colorMode == "CLASS"
+      if conf[keys.Enabled] == true and (colorMode == "CLASS" or colorMode == "CLASS_NPC"
           or (colorMode == "HEALTH" and conf[keys.HealthAboveMode] == "CLASS")) then
         wantBossEvents = true
         break
@@ -573,7 +615,7 @@ local function CompileDynamicMasks(frame, unitKey, conf)
     for slot = 1, #SLOT_KEYS do
       local keys = SLOT_KEYS[slot]
       local colorMode = conf[keys.ColorMode]
-      if conf[keys.Enabled] == true and (colorMode == "CLASS"
+      if conf[keys.Enabled] == true and (colorMode == "CLASS" or colorMode == "CLASS_NPC"
           or (colorMode == "HEALTH" and conf[keys.HealthAboveMode] == "CLASS")) then
         wantArenaEvents = true
         break
@@ -1086,8 +1128,8 @@ local function ApplySlot(frame, conf, unitKey, slot, event)
     hp, maxHP = ColdHealthValues(unitKey)
   end
   local r, g, b
-  if colorMode == "CLASS" then
-    r, g, b = ResolveClassRGB(unitKey)
+  if colorMode == "CLASS" or colorMode == "CLASS_NPC" then
+    r, g, b = (colorMode == "CLASS_NPC" and ResolveClassNPCRGB or ResolveClassRGB)(unitKey)
   elseif colorMode == "HEALTH" then
     r, g, b = ResolveHealthRGB(holder, frame, conf, keys, unitKey, hp, maxHP)
   end
@@ -1212,13 +1254,14 @@ local function ApplyClassColorSlot(frame, conf, unitKey, slot)
     ApplySlot(frame, conf, unitKey, slot)
     return
   end
-  if colorMode ~= "CLASS" then return end
+  if colorMode ~= "CLASS" and colorMode ~= "CLASS_NPC" then return end
   local holders = frame._msufTexLayers
   local holder = holders and holders[slot]
   local tex = holder and holder.tex
   if not tex then return end
   if holder.IsShown and holder:IsShown() ~= true then return end
-  local r, g, b = ResolveClassRGB(unitKey)
+  local resolve = colorMode == "CLASS_NPC" and ResolveClassNPCRGB or ResolveClassRGB
+  local r, g, b = resolve(unitKey)
   if not r then
     r = Clamp01(conf[keys.ColorR], 1)
     g = Clamp01(conf[keys.ColorG], 1)
@@ -1330,14 +1373,19 @@ local function RecomputeDriverNeeds(frames)
   SyncDriverEvents()
 end
 
-local function RefreshDynamicMask(maskField, colorOnly, event)
+local function RefreshDynamicMask(maskField, colorOnly, event, unit)
   local frames = dynamicFrameLists[maskField]
   local count = dynamicFrameCounts[maskField] or 0
   if not frames or count == 0 then return false end
   for i = 1, count do
     local frame = frames[i]
     local mask = frame[maskField]
-    if mask then
+    local matches = unit == nil or frame.MSUFUnitKey == unit
+    if not matches and UnitIsUnit then
+      local same = UnitIsUnit(frame.MSUFUnitKey, unit)
+      matches = issecretvalue(same) ~= true and same == true
+    end
+    if mask and matches then
       local unitKey = frame.MSUFUnitKey
       local conf = unitKey and ConfForUnitKey(unitKey)
       if conf then
@@ -1352,9 +1400,9 @@ local function RefreshDynamicMask(maskField, colorOnly, event)
   return true
 end
 
-RefreshDynamicTextureLayers = function(maskField, colorMaskField, event)
-  local refreshed = RefreshDynamicMask(maskField, false, event)
-  if colorMaskField and RefreshDynamicMask(colorMaskField, true) then refreshed = true end
+RefreshDynamicTextureLayers = function(maskField, colorMaskField, event, unit)
+  local refreshed = maskField and RefreshDynamicMask(maskField, false, event) or false
+  if colorMaskField and RefreshDynamicMask(colorMaskField, true, nil, unit) then refreshed = true end
   return refreshed
 end
 

@@ -6985,6 +6985,8 @@ L["Spec profile"] = "Perfil de especialização"
 L["New-character default"] = "Padrão para novos personagens"
 L["Delete %d selected profiles?\n\n%s\n\nCharacters using them switch to Default. Without an export this cannot be undone."] = "Excluir %d perfis selecionados?\n\n%s\n\nPersonagens que os usam mudam para Default. Sem uma exportação, isso não pode ser desfeito."
 L["Profiles deleted: %d"] = "Perfis excluídos: %d"
+L["Class color / NPC type"] = "Cor de classe / Tipo de PNJ"
+L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "Cor única usa a tonalidade configurada para esta camada. Cor de classe / Tipo de PNJ usa as cores de classe dos jogadores e as cores existentes dos tipos de PNJ, independentemente da cor da barra de vida. O gradiente de vida segue as cores compartilhadas de vida baixa, média e alta."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)

@@ -18,7 +18,7 @@ local max = math.max
 local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
 local TEXLAYER_ANCHORS = VTP "TOPLEFT=Top Left|TOP=Top|TOPRIGHT=Top Right|LEFT=Left|CENTER=Center|RIGHT=Right|BOTTOMLEFT=Bottom Left|BOTTOM=Bottom|BOTTOMRIGHT=Bottom Right"
 local TEXLAYER_ANCHOR_TARGETS = VTP "FRAME=Whole frame|HEALTH=Health bar|POWER=Power bar|PORTRAIT=Portrait"
-local TEXLAYER_COLOR_MODES = VTP "CUSTOM=Single color|CLASS=Class color|HEALTH=HP gradient"
+local TEXLAYER_COLOR_MODES = VTP "CUSTOM=Single color|CLASS=Class color|CLASS_NPC=Class color / NPC type|HEALTH=HP gradient"
 local TEXLAYER_ABOVE_THRESHOLD_MODES = VTP "HEALTH=Continue HP gradient|CLASS=Class color|CUSTOM=Single color (monochrome)"
 local TEXLAYER_VISIBILITY = VTP "ALWAYS=Any combat state|COMBAT=In combat|OOC=Out of combat"
 local TEXLAYER_HEALTH_CONDITIONS = VTP "ANY=Any health|BELOW=Below threshold"
@@ -661,8 +661,9 @@ local function TextureLayerSetupCard(ctx, s)
         M.AddTooltip(highlightPreset, "Highlight", "Applies the built-in additive highlight style to this texture slot.", { hook = true })
         M.AddTooltip(texturePackPreset, "MSUF textures",
             "Choose one of the bundled MSUF textures for this texture slot. Frames fit around the unit frame on their own.", { hook = true })
-        M.AddTooltip(colorMode, "Color mode", "Single color uses this layer's configured tint. HP gradient follows the shared low, mid and high HP colors.",
-            { hook = true })
+        M.AddTooltip(colorMode, "Color mode", "Single color uses this layer's configured tint. "
+            .. "Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. "
+            .. "HP gradient follows the shared low, mid and high HP colors.", { hook = true })
     end
     s.customPath = customPath
 end

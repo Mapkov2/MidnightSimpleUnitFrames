@@ -1193,13 +1193,16 @@ local function TextureLayerColor(owner, field, r, g, b, a)
 end
 --- A slot's colour and alpha at a health percentage, exactly as the live layer
 --- resolves them: the full stamp and the animation tick share this.
-local function TextureLayerSlotLook(conf, prefix, classR, classG, classB, healthR, healthG, healthB, healthPct)
+local function TextureLayerSlotLook(conf, prefix, classR, classG, classB, healthR, healthG, healthB, healthPct, holder)
+    if conf[prefix .. "ColorMode"] == "CLASS_NPC" and holder then
+        classR, classG, classB = holder._msufTexLayerNPCR, holder._msufTexLayerNPCG, holder._msufTexLayerNPCB
+    end
     local threshold = tonumber(conf[prefix .. "HealthThreshold"]) or 0.35
     if threshold < 0.01 then threshold = 0.01 elseif threshold > 1 then threshold = 1 end
     local r = tonumber(conf[prefix .. "ColorR"]) or 1
     local g = tonumber(conf[prefix .. "ColorG"]) or 1
     local b = tonumber(conf[prefix .. "ColorB"]) or 1
-    if conf[prefix .. "ColorMode"] == "CLASS" and classR then
+    if (conf[prefix .. "ColorMode"] == "CLASS" or conf[prefix .. "ColorMode"] == "CLASS_NPC") and classR then
         r, g, b = classR, classG or 1, classB or 1
     elseif conf[prefix .. "ColorMode"] == "HEALTH" and healthR then
         local aboveMode = conf[prefix .. "HealthAboveMode"]
@@ -1348,7 +1351,7 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
             tex:SetTexCoord(mirrorH and 1 or 0, mirrorH and 0 or 1, mirrorV and 1 or 0, mirrorV and 0 or 1)
         end
     end
-    local r, g, b, alpha = TextureLayerSlotLook(conf, prefix, classR, classG, classB, healthR, healthG, healthB, healthPct)
+    local r, g, b, alpha = TextureLayerSlotLook(conf, prefix, classR, classG, classB, healthR, healthG, healthB, healthPct, holder)
     PaintTextureLayerColor(tex, r, g, b)
     if clipWanted then
         _G.MSUF_RoundedUF_OnDispelOverlayChanged(mock, tex)
@@ -1418,11 +1421,27 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     end
 end
 
+--- Sample NPCs keep their displayed kind; live samples share the runtime
+--- classifier. Cache once per refresh so health animation only repaints tint.
+local function TextureLayerNPCPreviewRGB(data)
+    local resolve = MSUF.TextureLayer.ResolveClassNPCRGB
+    if data.live then return resolve(data.liveUnit) end
+    if data.isPlayer then return resolve(nil, nil, data.class) end
+    local kind = data.reactionKind == "neutral" and "neutral" or data.npcKind or data.reactionKind
+    if kind then return resolve(nil, kind) end
+end
 local function RenderTextureLayerPreview(box, mock, conf, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle, renderState, data, health)
     local classR, classG, classB = renderState.ClassColor(data.class)
     local gradientColor = renderState.GradientPreviewColor or UNIT_RENDER_FALLBACKS.GradientPreviewColor
     local healthR, healthG, healthB = gradientColor(data.hp, health)
+    local npcR, npcG, npcB, npcResolved
     for slot = 1, #TEXLAYER_PREVIEW_PREFIXES do
+        local holder = mock.texLayers and mock.texLayers[slot]
+        if holder and conf[TEXLAYER_PREVIEW_PREFIXES[slot] .. "ColorMode"] == "CLASS_NPC" then
+            if not npcResolved then npcR, npcG, npcB = TextureLayerNPCPreviewRGB(data) end
+            npcResolved = true
+            holder._msufTexLayerNPCR, holder._msufTexLayerNPCG, holder._msufTexLayerNPCB = npcR, npcG, npcB
+        end
         RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle,
             classR, classG, classB, healthR, healthG, healthB, data.hp)
     end
@@ -1455,7 +1474,7 @@ local function AnimateTextureLayerPreview(mock, conf, renderState, data, health)
                 local gradientColor = renderState.GradientPreviewColor or UNIT_RENDER_FALLBACKS.GradientPreviewColor
                 healthR, healthG, healthB = gradientColor(data.hp, health)
             end
-            local r, g, b, alpha = TextureLayerSlotLook(conf, prefix, classR, classG, classB, healthR, healthG, healthB, data.hp)
+            local r, g, b, alpha = TextureLayerSlotLook(conf, prefix, classR, classG, classB, healthR, healthG, healthB, data.hp, holder)
             if not holder.tex._msufTexLayerAtlas then PaintTextureLayerColor(holder.tex, r, g, b) end
             holder:SetAlpha(alpha)
         end
