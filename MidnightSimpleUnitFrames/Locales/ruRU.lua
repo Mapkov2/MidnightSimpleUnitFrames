@@ -6982,6 +6982,9 @@ L["Profiles deleted: %d"] = "Удалено профилей: %d"
 L["Class color / NPC type"] = "Цвет класса / Тип НИП"
 L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "Один цвет использует оттенок, настроенный для этого слоя. Цвет класса / Тип НИП использует цвета классов для игроков и существующие цвета типов НИП независимо от цвета полосы здоровья. Градиент здоровья использует общие цвета для низкого, среднего и высокого уровня здоровья."
 
+L["Right-click focus in combat"] = "Фокус правой кнопкой в бою"
+L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "В бою щёлкните правой кнопкой мыши по этой рамке, чтобы запомнить её персонажа как цель. Вне боя щелчок правой кнопкой открывает контекстное меню."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

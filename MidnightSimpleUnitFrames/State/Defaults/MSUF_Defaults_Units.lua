@@ -333,9 +333,9 @@ local function MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
         offsetY      = MSUF_DEFAULT_BOSS_OFFSET_Y,
         spacing      = -96,
         --- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
-        --- Kept invertBossOrder for one-shot migration (see below).
         bossLayoutMode = "VERTICAL_DOWN",
         invertBossOrder = false,
+        rightClickFocusInCombat = false,
         showName     = true,
         showLevelIndicator = false,
         showHP       = true,
@@ -363,10 +363,10 @@ local function MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
         offsetX      = MSUF_DEFAULT_ARENA_OFFSET_X,
         offsetY      = MSUF_DEFAULT_ARENA_OFFSET_Y,
         spacing      = -96,
-        --- Arena reuses the boss stacked-container model and its exact key
-        --- names (spacing/bossLayoutMode), so the engine delta math, Edit Mode
-        --- drag path, and copy-coverage allowlists apply unchanged.
+        --- Arena reuses the boss spacing/layout model, including the engine
+        --- deltas, Edit Mode drag path and copy-coverage allowlists.
         bossLayoutMode = "VERTICAL_DOWN",
+        rightClickFocusInCombat = false,
         showName     = true,
         showLevelIndicator = false,
         showHP       = true,

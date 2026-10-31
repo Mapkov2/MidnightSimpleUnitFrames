@@ -1,5 +1,12 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.505-beta2 - 2026-10-31
+
+### New Feature
+
+- Added "Right-click focus in combat" to Boss Frames and Arena Frames under General > Frame Basics. When enabled, right-clicking a frame sets that unit as your focus during combat and opens its context menu outside combat. Each frame type has its own toggle, disabled by default.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"frame_basics","controlId":"menu2.uf_boss.unit.basics.right_click_focus_in_combat","settingKey":"boss.rightClickFocusInCombat","prepareKind":"","prepareValue":"","query":"right click focus combat","label":"Right-click focus in combat"} -->
+
 ## 6.505-beta1 - 2026-10-29
 
 Built on 6.503. The aura changes from the 6.504 betas are not included.

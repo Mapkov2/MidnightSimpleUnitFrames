@@ -6955,6 +6955,9 @@ L["Profiles deleted: %d"] = "삭제된 프로필: %d"
 L["Class color / NPC type"] = "직업 색상 / NPC 유형"
 L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "단색은 이 레이어에 설정된 색조를 사용합니다. 직업 색상 / NPC 유형은 생명력 바 색상과 관계없이 플레이어에게는 직업 색상을, NPC에게는 기존 NPC 유형 색상을 사용합니다. 생명력 그라데이션은 낮은, 중간, 높은 생명력의 공통 색상을 따릅니다."
 
+L["Right-click focus in combat"] = "전투 중 우클릭 주시 설정"
+L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "전투 중 이 유닛 프레임을 우클릭하면 해당 유닛을 주시 대상으로 설정합니다. 전투 중이 아닐 때는 우클릭으로 상황별 메뉴를 엽니다."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

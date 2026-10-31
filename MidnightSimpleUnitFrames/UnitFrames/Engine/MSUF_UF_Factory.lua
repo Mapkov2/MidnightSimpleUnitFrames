@@ -956,6 +956,23 @@ function UF.AttachSecureUnitMenu(frame)
   return nil
 end
 
+-- Blizzard's attribute driver changes the native click action securely in combat.
+-- Configure only on profile/apply transitions; no addon combat or click handler.
+function UF.ConfigureCombatRightClickFocus(button, unit)
+  local scope = UF.ConfigKeyForUnit(unit)
+  if scope ~= "boss" and scope ~= "arena" then return end
+  local db = UF.Config.GetDB()
+  local enabled = db and db[scope] and db[scope].rightClickFocusInCombat == true or false
+  if (button._msufCombatRightClickFocus == true) == enabled then return end
+  if enabled then
+    RegisterAttributeDriver(button, "*type2", "[combat] focus; togglemenu")
+  else
+    UnregisterAttributeDriver(button, "*type2")
+    button:SetAttribute("*type2", "togglemenu")
+  end
+  button._msufCombatRightClickFocus = enabled or nil
+end
+
 local function ConfigureClickTarget(button, unit)
   if not (button and button.SetAttribute) or InCombat() then return false end
   if button._msufSecureUnit ~= unit then
@@ -974,6 +991,7 @@ local function ConfigureClickTarget(button, unit)
     UF.AttachSecureUnitMenu(button)
     button._msufSecureType2Menu = true
   end
+  UF.ConfigureCombatRightClickFocus(button, unit)
   if button._msufSecureToggleVehicle ~= true then
     button:SetAttribute("toggleForVehicle", true)
     button._msufSecureToggleVehicle = true

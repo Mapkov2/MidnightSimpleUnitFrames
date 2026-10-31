@@ -609,3 +609,5 @@ clients+Forever	python	tools/tests/group_page_reset_smoke.py	{root} {flavor}	Gro
 clients+Forever	lua	tools/tests/profile_group_filter_migration_smoke.lua	{root} {flavor}	Legacy group filter tables import unchanged, without a prompt, as 6.21 showed them: {flavor}
 clients+Forever	lua	tools/tests/group_raid_combat_freeze_smoke.lua	{root} {flavor}	Raid combat slot and geometry freeze regression: {flavor}
 -	lua	tools/tests/player_empower_cleanup_smoke.lua	{root}	Player Empower releases preceding channel ticks and preserves stage timing
+clients+Forever	lua	tools/tests/boss_right_click_focus_smoke.lua	{root} {flavor}	Boss right-click focus secure action and menu lifecycle: {flavor}
+clients+Forever	lua	tools/tests/boss_right_click_focus_smoke.lua	{root} {flavor} arena	Arena right-click focus secure action and menu lifecycle: {flavor}

@@ -190,6 +190,7 @@ UnitSex	api	Blizzard client API
 UnitStagger	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitThreatSituation	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitWatchRegistered	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnregisterAttributeDriver	api	Blizzard secure attribute-driver API paired with RegisterAttributeDriver; removes only the owned boss/arena right-click driver outside combat
 UnregisterStateDriver	api	Blizzard client API
 UnregisterUnitWatch	api	Blizzard client API
 WagoAnalytics	thirdparty	Wago's analytics global, probed by the shipped shim

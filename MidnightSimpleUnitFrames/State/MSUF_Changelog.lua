@@ -8,48 +8,29 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "CDB6F0C3B7E2FC54D153A483B1457407C28FD5E95DFD0AFDD67664AB72BFC15C",
-    currentVersion = "6.505-beta1",
+    sourceSha256 = "556BE0EFE54783E8405E2D867B2A6467E0AB22EF7D3D1F7857D1CD0F395C5918",
+    currentVersion = "6.505-beta2",
     historyFromVersion = "6.501",
     previousVersion = "6.503",
-    rangeLabel = "6.503 -> 6.505-beta1",
+    rangeLabel = "6.503 -> 6.505-beta2",
     entries = {
         {
-            version = "6.505-beta1",
-            date = "2026-10-29",
+            version = "6.505-beta2",
+            date = "2026-10-31",
             sections = {
                 {
-                    title = "Bug Fixes",
+                    title = "New Feature",
                     bullets = {
                         {
-                            text = "Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Searching the options for a word such as \"pandemic\" now lists the options containing that word before related matches.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        {
-                            text = "Texture layers have a new \"Class color / NPC type\" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.",
+                            text = "Added \"Right-click focus in combat\" to Boss Frames and Arena Frames under General > Frame Basics. When enabled, right-clicking a frame sets that unit as your focus during combat and opens its context menu outside combat. Each frame type has its own toggle, disabled by default.",
                             link = {
-                                pageKey = "uf_player",
-                                query = "texture layer color mode",
-                                label = "Color mode",
-                                sectionId = "texture_layer",
-                                controlId = "menu2.uf_player.unit.texture_layer.colormode",
-                                settingKey = "player.texLayerColorMode",
-                                prepareKind = "unitTextureLayer",
-                                prepareValue = "1_setup",
+                                pageKey = "uf_boss",
+                                query = "right click focus combat",
+                                label = "Right-click focus in combat",
+                                sectionId = "frame_basics",
+                                controlId = "menu2.uf_boss.unit.basics.right_click_focus_in_combat",
+                                settingKey = "boss.rightClickFocusInCombat",
                             },
-                        },
-                        {
-                            text = "The group name strip color is now edited through the section's ::: button, like other colors.",
-                            linkless = true,
                         },
                     },
                 },

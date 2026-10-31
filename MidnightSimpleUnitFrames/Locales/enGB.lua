@@ -4998,6 +4998,9 @@ L["Profiles deleted: %d"] = "Profiles deleted: %d"
 L["Class color / NPC type"] = "Class colour / NPC type"
 L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "Single colour uses this layer's configured tint. Class colour / NPC type uses player class colours and existing NPC type colours, independently of the HP bar colour. HP gradient follows the shared low, mid and high HP colours."
 
+L["Right-click focus in combat"] = "Right-click focus in combat"
+L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

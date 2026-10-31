@@ -6988,6 +6988,9 @@ L["Profiles deleted: %d"] = "Perfis excluídos: %d"
 L["Class color / NPC type"] = "Cor de classe / Tipo de PNJ"
 L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "Cor única usa a tonalidade configurada para esta camada. Cor de classe / Tipo de PNJ usa as cores de classe dos jogadores e as cores existentes dos tipos de PNJ, independentemente da cor da barra de vida. O gradiente de vida segue as cores compartilhadas de vida baixa, média e alta."
 
+L["Right-click focus in combat"] = "Foco com clique direito em combate"
+L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "Em combate, clique com o botão direito neste quadro de unidade para defini-la como foco. Fora de combate, o clique direito abre o menu de contexto."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

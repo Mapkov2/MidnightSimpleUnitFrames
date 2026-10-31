@@ -6955,6 +6955,9 @@ L["Profiles deleted: %d"] = "已刪除設定檔：%d"
 L["Class color / NPC type"] = "職業顏色 / NPC類型"
 L["Single color uses this layer's configured tint. Class color / NPC type uses player class colors and existing NPC type colors, independently of the HP bar color. HP gradient follows the shared low, mid and high HP colors."] = "單色使用此圖層設定的色調。職業顏色 / NPC類型為玩家使用職業顏色，為NPC使用現有的NPC類型顏色，與生命條顏色無關。生命漸層使用低、中、高生命值的共用顏色。"
 
+L["Right-click focus in combat"] = "戰鬥中右鍵設為焦點"
+L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "戰鬥中以右鍵點擊此單位框架，將該單位設為焦點。非戰鬥狀態下，右鍵點擊開啟快顯選單。"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end
