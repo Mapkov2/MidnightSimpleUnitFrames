@@ -8,18 +8,18 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "556BE0EFE54783E8405E2D867B2A6467E0AB22EF7D3D1F7857D1CD0F395C5918",
-    currentVersion = "6.505-beta2",
+    sourceSha256 = "E46D0EDD4FDC73D6BE35B93F6FBC56A5556B8E5B84CDBD8C2982FC10FC92F52A",
+    currentVersion = "6.505",
     historyFromVersion = "6.02",
-    previousVersion = "6.503",
-    rangeLabel = "6.503 -> 6.505-beta2",
+    previousVersion = "6.02",
+    rangeLabel = "6.02 -> 6.505",
     entries = {
         {
-            version = "6.505-beta2",
+            version = "6.505",
             date = "2026-10-31",
             sections = {
                 {
-                    title = "New Feature",
+                    title = "Highlights",
                     bullets = {
                         {
                             text = "Added \"Right-click focus in combat\" to Boss Frames and Arena Frames under General > Frame Basics. When enabled, right-clicking a frame sets that unit as your focus during combat and opens its context menu outside combat. Each frame type has its own toggle, disabled by default.",
@@ -31,6 +31,41 @@ local data = {
                                 controlId = "menu2.uf_boss.unit.basics.right_click_focus_in_combat",
                                 settingKey = "boss.rightClickFocusInCombat",
                             },
+                        },
+                        {
+                            text = "Texture layers have a new \"Class color / NPC type\" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "texture layer color mode",
+                                label = "Color mode",
+                                sectionId = "texture_layer",
+                                controlId = "menu2.uf_player.unit.texture_layer.colormode",
+                                settingKey = "player.texLayerColorMode",
+                                prepareKind = "unitTextureLayer",
+                                prepareValue = "1_setup",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Searching the options for a word such as \"pandemic\" now lists the options containing that word before related matches.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        {
+                            text = "The group name strip color is now edited through the section's ::: button, like other colors.",
+                            linkless = true,
                         },
                     },
                 },

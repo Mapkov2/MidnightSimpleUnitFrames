@@ -1,5 +1,29 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.505 - 2026-10-31
+
+Stable release for all supported clients, combining the changes tested in 6.505 Beta 1 and Beta 2.
+
+### Highlights
+
+- Added "Right-click focus in combat" to Boss Frames and Arena Frames under General > Frame Basics. When enabled, right-clicking a frame sets that unit as your focus during combat and opens its context menu outside combat. Each frame type has its own toggle, disabled by default.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"frame_basics","controlId":"menu2.uf_boss.unit.basics.right_click_focus_in_combat","settingKey":"boss.rightClickFocusInCombat","prepareKind":"","prepareValue":"","query":"right click focus combat","label":"Right-click focus in combat"} -->
+
+- Texture layers have a new "Class color / NPC type" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.colormode","settingKey":"player.texLayerColorMode","prepareKind":"unitTextureLayer","prepareValue":"1_setup","query":"texture layer color mode","label":"Color mode"} -->
+
+### Bug Fixes
+
+- Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.
+<!-- msuf-menu-link: none -->
+- Searching the options for a word such as "pandemic" now lists the options containing that word before related matches.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- The group name strip color is now edited through the section's ::: button, like other colors.
+<!-- msuf-menu-link: none -->
+
 ## 6.505-beta2 - 2026-10-31
 
 ### New Feature
