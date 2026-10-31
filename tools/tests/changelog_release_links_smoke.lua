@@ -39,6 +39,9 @@ local ABSENT = {
     ["uf_arena menu2.uf_arena.unit.basics.enabled"] = { Vanilla = true, Forever = true },
     ["uf_arena menu2.uf_arena.unit.castbar.feature.msuf2_castbar_icon"] = { Vanilla = true, Forever = true },
     ["uf_arena menu2.uf_arena.unit.trinket.show"] = { Vanilla = true, Forever = true },
+    ["uf_arena menu2.uf_arena.unit.basics.right_click_focus_in_combat"] = { Vanilla = true, Forever = true },
+    -- Boss units, including their combat-focus toggle, are absent on Era and TBC.
+    ["uf_boss menu2.uf_boss.unit.basics.right_click_focus_in_combat"] = { Vanilla = true, TBC = true },
     -- Threat % and Pet Happiness: MSUF.Client.SupportsThreatText / SupportsPetHappiness
     -- (Classic Era, TBC and WoW Forever).
     ["uf_target menu2.uf_target.unit.status.selected.enabled statusThreat"] = { Mainline = true, Mists = true },
