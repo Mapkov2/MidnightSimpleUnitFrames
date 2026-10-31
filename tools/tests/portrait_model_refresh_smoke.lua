@@ -238,7 +238,9 @@ Check(state.calls == before + 1, "cast restore left duplicate model work")
 -- Disabling cancels the pending request; re-enabling still seeds native art.
 before = state.calls
 Burst(frame)
+Check(frame._msufPortraitQueuedRevision ~= nil, "disable fixture did not queue model work")
 Portrait.Disable(frame)
+Check(frame._msufPortraitQueuedRevision == nil, "disable did not cancel the queued revision immediately")
 Flush()
 Check(state.calls == before, "disabled portrait applied queued model work")
 Portrait.Apply(frame, frame.MSUFSpec)
@@ -264,7 +266,9 @@ frame.MSUFSpec.portrait.render = "2D"
 Portrait.Apply(frame, frame.MSUFSpec)
 Burst(frame)
 frame._msufSamplePortraitArt = "scene:portrait"
+Check(frame._msufPortraitQueuedRevision ~= nil, "scene fixture did not queue model work")
 Portrait.SceneApply(frame, frame.MSUFSpec)
+Check(frame._msufPortraitQueuedRevision == nil, "scene did not cancel the queued revision immediately")
 before = state.calls
 Flush()
 Check(state.calls == before and frame.portrait.image == "scene:portrait", "scene preview replayed live portrait")

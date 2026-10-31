@@ -103,7 +103,7 @@ local function EnsureHolder(frame, layer)
     if holder.SetFrameLevel then
         local layers = UF.Layers or {}
         local base = frame.Health or frame.hpBar or frame
-        local level = layers.StatusLevel and layers.StatusLevel(frame, layer, 7)
+        local level = layers.FrameElementLevel and layers.FrameElementLevel(frame, layer, 7, 8)
             or (((base.GetFrameLevel and base:GetFrameLevel()) or 0) + 10 + layer)
         if holder._msufHappinessFrameLevel ~= level then
             holder:SetFrameLevel(level)

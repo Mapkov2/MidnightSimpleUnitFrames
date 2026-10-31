@@ -800,8 +800,8 @@ local function LayoutPortrait(frame, p)
   elseif levelOffset > 30 then
     levelOffset = 30
   end
-  local portraitLevel = Layers.PortraitLevel and Layers.PortraitLevel(frame.Health or frame.hpBar or frame, levelOffset, defaultLevel)
-    or (Layers.ElementLevel and Layers.ElementLevel(levelOffset, defaultLevel, 0))
+  local portraitLevel = Layers.PortraitLevel and Layers.PortraitLevel(frame.Health or frame.hpBar or frame, levelOffset, defaultLevel, frame)
+    or (Layers.FrameElementLevel and Layers.FrameElementLevel(frame, levelOffset, defaultLevel, 0))
     or ((frame:GetFrameLevel() or 1) + levelOffset)
   if portraitLevel < 0 then
     portraitLevel = 0

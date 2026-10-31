@@ -394,11 +394,9 @@ function StatusSection.VirtualIndicatorMeta(ctx, unit, path, spec, selector, ref
     local meta = ControlMeta(ctx, path, "setting")
     meta.kind, meta.label, meta.anchor = "toggle", spec.text, selector
     meta.searchPrepareKind, meta.searchPrepareValue = "unitStatusIndicator", spec.value
-    meta.prepareExactSearchTarget = function()
-        M.unitStatusSelection = M.unitStatusSelection or {}
-        M.unitStatusSelection[unit] = spec.value
-        if refresh then refresh() end
-        return true
+    meta.prepareExactSearchTarget = function(_, target)
+        if target.prepareValue ~= spec.value then return false end
+        return refresh(spec)
     end
     return meta
 end
@@ -504,6 +502,11 @@ end
 -- boss pages), and the shared editor above re-targets to them, so they have no widget
 -- of their own. A virtual control gives each its own row in the static search index,
 -- which the search query ties to that capability (MSUF_Menu2_Search_IndexQuery.lua).
+local STATUS_SEARCH_TERMS = {
+    statusCombat = { "status icons", "combat icon", "Kampfsymbol" },
+    statusResting = { "status icons", "resting icon", "rested icon", "Ruhesymbol" },
+    leader = { "status icons", "leader icon", "Gruppenleiter" },
+}
 local VIRTUAL_INDICATORS = {
     { "statusPetHappiness", "status.indicator.pet_happiness" },
     { "statusPetXP", "status.indicator.pet_xp", { "pet xp", "pet experience", "pet experience bar" } },
@@ -512,11 +515,26 @@ local VIRTUAL_INDICATORS = {
 function StatusSection.RegisterVirtualIndicators(state, ctx, unit, selector)
     if type(M.RegisterVirtualRuntimeControl) ~= "function" then return end
     local Refresh = state.RefreshStatusSectionState
-    for _, item in ipairs(VIRTUAL_INDICATORS) do
-        local spec = FindStatusSpec(unit, item[1])
-        if spec and spec.value == item[1] then
-            local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, item[2], spec, selector, Refresh)
-            if item[3] then meta.keywords = item[3] end
+    local section = ControlMeta(ctx, "status.section", "navigation")
+    section.kind, section.label, section.anchor, section.sectionId = "section", "Status icons", selector, "status_icons"
+    section.schemaEphemeralReason = "Opens the status editor; no profile setting is written."
+    section.searchIndexed, section.navigationKey = true, ctx.key
+    section.searchPrepareKind, section.searchPrepareValue = "menuTab", "basic"
+    section.prepareExactSearchTarget = function() return state.sec._msuf2GuidedSelectTab("basic") end
+    M.RegisterVirtualRuntimeControl(section, "unit-status-section")
+    for _, choice in ipairs(StatusValues(unit)) do
+        local spec = FindStatusSpec(unit, choice.value)
+        local item
+        for _, legacy in ipairs(VIRTUAL_INDICATORS) do if legacy[1] == choice.value then item = legacy break end end
+        if spec and spec.value == choice.value then
+            local path = item and item[2] or ("status.indicator." .. choice.value:lower())
+            local meta = StatusSection.VirtualIndicatorMeta(ctx, unit, path, spec, selector, state.SelectStatusExact)
+            meta.sectionId = "status_icons"
+            meta.keywords = STATUS_SEARCH_TERMS[choice.value] or (item and item[3]) or { "status icons", "status indicator" }
+            if not item then
+                meta.classification, meta.kind, meta.searchIndexed, meta.navigationKey = "navigation", "control", true, ctx.key
+                meta.schemaEphemeralReason = "Selects the status editor view; no profile setting is written."
+            else
             meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(spec.show) }
             meta.command = {
                 kind = "toggle",
@@ -529,6 +547,7 @@ function StatusSection.RegisterVirtualIndicators(state, ctx, unit, selector)
                 end
             } --[[schema setter: H4.UnitStatusSection.2]],
             }
+            end
             M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
         end
     end
@@ -603,6 +622,15 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     --- publishes its own value -> setting-key contract under the same kind.
     --- onlyStatus/fixedKey: a control that belongs to one indicator (Threat %
     --- options) names that indicator and its own key.
+    state.SelectStatusExact = function(spec)
+        M.unitStatusSelection = M.unitStatusSelection or {}
+        M.unitStatusSelection[unit] = spec.value
+        if sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab("basic") == false then return false end
+        selector:SetValue(spec.value)
+        SelectPreviewIcon(spec.value)
+        if RefreshStatusSectionState then RefreshStatusSectionState() end
+        return CurrentStatusSpec(unit) == spec
+    end
     local function AttachStatusExactTarget(control, field, onlyStatus, fixedKey)
         if not control then return end
         local contracts = {}
@@ -624,13 +652,7 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
             then
                 return false
             end
-            M.unitStatusSelection = M.unitStatusSelection or {}
-            M.unitStatusSelection[unit] = spec.value
-            if sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab("basic") == false then return false end
-            if selector and selector.SetValue then selector:SetValue(spec.value) end
-            SelectPreviewIcon(spec.value)
-            if RefreshStatusSectionState then RefreshStatusSectionState() end
-            return CurrentStatusSpec(unit) == spec
+            return state.SelectStatusExact(spec)
         end
     end
     AttachStatusExactTarget(enabled, "show")
@@ -758,7 +780,8 @@ function StatusSection.BuildIconStyleControls(state, ctx, unit)
         if type(M.RegisterSearchWidget) == "function" then
             local shortcutMeta = ControlMeta(ctx, "status.selected.text_settings", "ephemeral")
             shortcutMeta.label = "Status text settings"
-            shortcutMeta.kind = "button"
+            shortcutMeta.kind, shortcutMeta.searchIndexed = "button", true
+            shortcutMeta.sectionId = "status_icons"
             shortcutMeta.anchor = selectedTextShortcut
             shortcutMeta.keywords = StatusSearchKeywords({
                 "level color", "level text color", "race text color", "class text color",

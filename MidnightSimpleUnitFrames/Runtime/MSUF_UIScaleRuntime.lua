@@ -176,7 +176,7 @@ local function CancelPendingScaleTimers()
     ExportPublic("MSUF_ScaleReanchorPending", false)
     return reanchorPending, CancelBlizzardRestoreTimers()
 end
-local function ApplyMsufScale(scale)
+local function ApplyMsufScale(scale, onlyChanged)
     scale = tonumber(scale)
     if not scale then return end
     scale = Clamp(scale, 0.25, 2.0)
@@ -186,9 +186,17 @@ local function ApplyMsufScale(scale)
         return
     end
     local frames = CollectMsufScaleFrames()
+    local changed = false
     for i = 1, #frames do
-        frames[i]:SetScale(scale)
+        local frame = frames[i]
+        if not onlyChanged or abs(frame:GetScale() - scale) > 0.0001 then
+            frame:SetScale(scale)
+            changed = true
+        end
     end
+    -- Lifecycle repeats use live geometry, including newly created frames.
+    -- Explicit applies still force repair and replay cancelled combat work.
+    if onlyChanged and not changed then return end
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview() end
     ScheduleUnitframeReanchorAfterScale()
@@ -445,7 +453,8 @@ local function GetDesiredGlobalScaleFromDB()
 end
 local function EnsureGlobalUiScaleApplied(silent)
     local want = tonumber(GetDesiredGlobalScaleFromDB())
-    if want and want > 0 then SetGlobalUiScale(want, silent) end
+    local current = GetCurrentGlobalUiScale()
+    if want and want > 0 and (not current or abs(current - want) > 0.0001) then SetGlobalUiScale(want, silent) end
 end
 local function ApplyCurrentProfileGlobalUiScale()
     if IsConfigCombatLocked and IsConfigCombatLocked() then return false end
@@ -510,8 +519,8 @@ ExportPublic("MSUF_RestoreBlizzardUiScale", RestoreBlizzardUiScale)
 ExportPublic("MSUF_ResetStandaloneWindowGeometry", ResetStandaloneWindowGeometry)
 ExportPublic("MSUF_GetPixelPerfectScale", GetPixelPerfectScale)
 MSUF.Require("MSUF_InstallGlobalScaleGate", "Runtime/MSUF_UIScaleRuntime.lua")()
-local function ApplySavedScaleState(applyGlobalCVar)
-    ApplyMsufScale(GetSavedMsufScale())
+local function ApplySavedScaleState(applyGlobalCVar, onlyChanged)
+    ApplyMsufScale(GetSavedMsufScale(), onlyChanged)
     local want = GetDesiredGlobalScaleFromDB()
     if want then
         if applyGlobalCVar then SetGlobalUiScale(want, true) end
@@ -525,7 +534,7 @@ UpdateGlobalScaleEvents = function()
         if not scaleEvents then
             scaleEvents = CreateFrame("Frame")
             scaleEvents:SetScript("OnEvent", function(_, event)
-                ApplySavedScaleState(event == "PLAYER_LOGIN")
+                ApplySavedScaleState(event == "PLAYER_LOGIN", event == "PLAYER_ENTERING_WORLD")
             end)
         end
         if not scaleEvents._msuf2Registered then

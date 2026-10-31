@@ -108,14 +108,24 @@ end
 local function BuildAuraStylePage(ctx)
     local b = W.PageBuilder(ctx)
     Model.EnsureDB()
-    b:GlobalStyleHeader("Global Aura Appearance", "Global Appearance theme selected only by Aura type. All layout, filters, timers, text and effects stay "
-        .. "scope-aware in the corresponding UnitFrame or GroupFrame.", 84)
+    local extension = AurasPage.AppearanceType(Parts.CurrentAuraStyleContainer("appearance"))
+    if extension then
+        b:GlobalStyleHeader(extension.text, extension.description, 84)
+    else
+        b:GlobalStyleHeader("Global Aura Appearance", "Global Appearance theme selected only by Aura type. All layout, filters, timers, text and effects stay "
+            .. "scope-aware in the corresponding UnitFrame or GroupFrame.", 84)
+    end
     local container = BuildAuraStyleNav(ctx, b, "appearance")
-    SetCurrentLane("auraStyleGFLane", AppearanceThemeLane(container))
-    BuildUnitStyle(ctx, b, "appearance", {
-        appearanceGlobalsOnly = true,
-        previewContainer = container,
-    })
+    if extension then
+        if extension.blizzardVisibility then AurasPage.BuildBlizzardVisibility(ctx, b, "aura_style_" .. container) end
+        extension.build(ctx, b)
+    else
+        SetCurrentLane("auraStyleGFLane", AppearanceThemeLane(container))
+        BuildUnitStyle(ctx, b, "appearance", {
+            appearanceGlobalsOnly = true,
+            previewContainer = container,
+        })
+    end
     FinishPage(ctx, b)
 end
 local function BuildAuraStyleLanePage(ctx, lane)

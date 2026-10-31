@@ -83,7 +83,8 @@ opt_fonts=opt_fonts
 opt_misc=opt_misc
 classpower=classpower
 gameplay=gameplay
-profiles=profiles|modules
+profiles=profiles|modules|profile_tools
+edit_selection=edit_selection
 ]]
 
 -- Canonical labels for pages reached through a visible primary page and then

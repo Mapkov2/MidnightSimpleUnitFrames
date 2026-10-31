@@ -39,6 +39,12 @@ local PAGE_FIELD = { title = "title", group = "group", titleNorm = "titleNorm", 
 local function ColumnField(row, key)
     local store, id = getmetatable(row), row[1]
     if key == "controlId" then return StaticIndex.ControlId(row) end
+    if key == "hint" then return store.columns[3][id][1] end
+    if key == "hintNorm" then return store.columns[3][id][2] end
+    if key == "label" then return store.columns[1][id][1] end
+    if key == "labelNorm" then return store.columns[1][id][2] end
+    if key == "sourceLabelNorm" then return store.columns[1][id][3] end
+    if key == "prepareKinds" then return store.columns[11][id] or store.columns[14][id] end
     local column = FIELD[key]
     if column then return store.columns[column][id] end
     local pageField = PAGE_FIELD[key]
@@ -183,7 +189,7 @@ end
 -- thousands of decoded duplicate ID strings need not live beside the source.
 function StaticIndex.ControlId(row)
     local store, id = getmetatable(row), row[1]
-    if not store.columns[16][id] then return nil end
+    if store.columns[16][id] then return nil end
     local encoded = store.columns[5][id]:match("^id\031[^\031]+\031([^\031]+)$")
     return DecodeIdentityPart(encoded)
 end
@@ -241,6 +247,32 @@ function Search.ResolveExactPreparation(contracts, settingKey)
     end
 end
 
+local function LocalizedMetadata(decoder, metadata)
+    local id = metadata:match("^@(%d+)$")
+    if id then
+        id = tonumber(id)
+        while #decoder.metadata < id do
+            decoder.metadata[#decoder.metadata + 1] = assert(decoder.metadataLines(), "Search metadata is missing")
+        end
+        metadata = decoder.metadata[id]
+    end
+    local normalized, keys = metadata:match("^(.-)\031(.*)$")
+    if not keys then return metadata end
+    if decoder.locale == "enUS" then return normalized end
+    for encoded in keys:gmatch("%d+") do
+        local id = tonumber(encoded)
+        while #decoder.translations < id do
+            local key = DecodeIdentityPart(decoder.keys())
+            if not key then error("Search locale key is missing: " .. encoded) end
+            local text = MSUF.Translate(key)
+            decoder.translations[#decoder.translations + 1] = text ~= key and Normalize(text) or ""
+        end
+        local translated = decoder.translations[id]
+        if translated ~= "" then normalized = normalized .. " " .. translated end
+    end
+    return normalized
+end
+
 local function DecodeLine(decoder, line)
     local EnsurePage, records, hintCache = decoder.EnsurePage, decoder.records, decoder.hintCache
     local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
@@ -250,11 +282,14 @@ local function DecodeLine(decoder, line)
         -- The compact extension keeps the twelve TSV columns and accepts older
         -- blobs too. Both pieces are already normalized by the generator.
         local base, metadataNorm = haystack:match("^(.-)|(.*)$")
-        if base then haystack = metadataNorm ~= "" and (base .. " " .. metadataNorm) or base end
+        if base then
+            metadataNorm = LocalizedMetadata(decoder, metadataNorm)
+            haystack = metadataNorm ~= "" and (base .. " " .. metadataNorm) or base
+        end
         local encodedPage, encodedControl = searchIdentity:match("^id\031([^\031]+)\031([^\031]+)$")
         local hasControlId = DecodeIdentityPart(encodedPage) == pageKey and ValidEncodedControl(encodedControl)
         local page = EnsurePage(pageKey)
-        local displayLabel = Translate(label)
+        local sourceLabelNorm, displayLabel = labelNorm, Translate(label)
         -- The baked text is English. A localized label is added on top instead of
         -- replacing it, so a player can find a setting by either wording.
         if displayLabel ~= label then
@@ -276,11 +311,10 @@ local function DecodeLine(decoder, line)
         if localizedHint ~= hint then hintNorm = hintNorm .. " " .. Normalize(hint) end
         -- The clause scorer gates on the haystack before it inspects the page
         -- title, so page/group words have to be present here too.
-        if page.groupNorm ~= "" then
-            haystack = haystack .. " " .. hintNorm .. " " .. page.groupNorm
-        else
-            haystack = haystack .. " " .. hintNorm
-        end
+        -- The baked base already contains the English breadcrumb. Retain it
+        -- once; append only page/group names and genuinely translated segments.
+        haystack = haystack .. " " .. page.titleNorm .. " " .. page.groupNorm
+        if localizedHint ~= hint then haystack = haystack .. " " .. Normalize(localizedHint) end
 
         local prepareKind, prepareValue, declaredSetting = Search.ResolveExactPreparation(exactTargetContracts, settingKey)
         if settingKey == "" then settingKey = declaredSetting or "" end
@@ -294,16 +328,31 @@ local function DecodeLine(decoder, line)
             decoder.pages[pageId] = page
         end
         local columns = decoder.columns
-        columns[1][count], columns[2][count] = displayLabel, kind ~= "" and kind or "control"
-        columns[3][count], columns[4][count] = displayHint, labelNorm
-        columns[5][count], columns[6][count], columns[7][count] = searchIdentity, hintNorm, haystack
+        local labelInfo = decoder.labels[label]
+        if not labelInfo then
+            labelInfo = { displayLabel, labelNorm, sourceLabelNorm ~= labelNorm and sourceLabelNorm or nil }
+            decoder.labels[label] = labelInfo
+        end
+        columns[1][count], columns[2][count] = labelInfo, kind ~= "" and kind or "control"
+        local pageHints = decoder.hints[pageId]
+        if not pageHints then
+            pageHints = {}
+            decoder.hints[pageId] = pageHints
+        end
+        local hintInfo = pageHints[hint]
+        if not hintInfo then
+            hintInfo = { displayHint, hintNorm }
+            pageHints[hint] = hintInfo
+        end
+        columns[3][count] = hintInfo
+        columns[5][count], columns[7][count] = searchIdentity, haystack
         columns[8][count] = settingKey ~= "" and settingKey or nil
         columns[9][count] = actionKey ~= "" and actionKey or nil
         columns[10][count] = exactSectionId ~= "" and exactSectionId or nil
-        columns[11][count] = exactTargetKinds ~= "" and exactTargetKinds or nil
+        if exactTargetKinds ~= "" and exactTargetKinds ~= prepareKind then columns[11][count] = exactTargetKinds end
         columns[12][count] = exactTargetContracts ~= "" and exactTargetContracts or nil
         columns[13][count], columns[14][count], columns[15][count] = pageId, prepareKind, prepareValue
-        columns[16][count] = hasControlId
+        if not hasControlId then columns[16][count] = true end
         records[count] = setmetatable({ count }, decoder.rowMeta)
     end
 end
@@ -320,7 +369,10 @@ local function Decode(deadline)
         local columns, pages = {}, {}
         for i = 1, 16 do columns[i] = {} end
         decoder = { lines = blob:gmatch("[^\n]+"), records = {}, count = 0, hintCache = {}, EnsurePage = EnsurePage,
-            columns = columns, pages = pages, pageIds = {} }
+            columns = columns, pages = pages, pageIds = {}, labels = {}, hints = {}, translations = {},
+            locale = Search.Text.SearchEffectiveLocale and Search.Text.SearchEffectiveLocale(), metadata = {},
+            metadataLines = (Search.StaticIndexMetadataBlob or ""):gmatch("[^\n]+"),
+            keys = (Search.StaticIndexLocaleKeys or ""):gmatch("[^\n]+") }
         decoder.rowMeta = { __index = RecordField, columns = columns, pages = pages, _staticColumns = true }
         state.decoder = decoder
     end

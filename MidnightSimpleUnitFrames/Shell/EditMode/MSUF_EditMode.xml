@@ -8,6 +8,7 @@
     <Script file="MSUF_EditMode_Layout_Grid.lua"/>
     <Script file="MSUF_EditMode_Layout_Snap.lua"/>
     <Script file="MSUF_EditMode_Layout_Nudge.lua"/>
+    <Script file="MSUF_EditMode_MultiSelection.lua"/>
     <Script file="MSUF_EditMode_Layout.lua"/>
     <Script file="MSUF_EditMode_ExternalProvider.lua"/>
     <Script file="MSUF_EditMode_ExternalMovement.lua"/>

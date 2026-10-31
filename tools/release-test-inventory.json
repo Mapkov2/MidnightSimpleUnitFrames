@@ -2,6 +2,54 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/menu_colors_preview_regressions_smoke.lua",
+      "phase": "menu",
+      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"],
+      "arguments": ["{root}", "{client}", "resize"]
+    },
+    {
+      "test": "tools/tests/menu_colors_preview_regressions_smoke.lua",
+      "phase": "menu",
+      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"],
+      "arguments": ["{root}", "{client}", "resources"]
+    },
+    {
+      "test": "tools/tests/menu_preview_power_loss_smoke.lua",
+      "phase": "menu",
+      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"]
+    },
+    {
+      "test": "tools/tests/menu_preview_health_loss_smoke.lua",
+      "phase": "menu",
+      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"]
+    },
+    {
+      "test": "tools/tests/alpha_text_sparse_budget_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/menu_sticky_header_width_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/icon_skins_section_bounds_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/client_boot_smoke.lua",
       "phase": "fast",
       "clients": [
@@ -591,6 +639,134 @@
         "{root}",
         "{client}",
         "release"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_context_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "nested"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_context_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "error"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_context_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "default"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_level_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "nested"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_level_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "error"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_level_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "default"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_level_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "group-unit"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_level_ownership_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "unit-group"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_level_samples_smoke.lua",
+      "phase": "group preview",
+      "clients": [
+        "Vanilla",
+        "TBC",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_percent_readers_smoke.lua",
+      "phase": "group preview",
+      "arguments": [
+        "{root}"
       ]
     },
     {
@@ -1449,6 +1625,28 @@
       ]
     },
     {
+      "test": "tools/tests/group_roster_identity_status_smoke.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/unit_tooltip_raiderio_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/castbar_outer_providers.lua",
       "phase": "runtime"
     },
@@ -1650,6 +1848,323 @@
       "arguments": [
         "{root}"
       ]
+    },
+    {
+      "test": "tools/tests/instance_difficulty_layout_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/instance_scale_reanchor_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_workbench_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_unit_selection_layout_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_scope_bar_resize_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/history_provider_restore_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_group_target_owner_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_feature_legacy_routes_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_feature_context_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_restore_normalize_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "phase": "runtime",
+      "test": "tools/tests/interrupt_ready_slots_contract.lua"
+    },
+    {
+      "test": "tools/tests/profile_history_ownership_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/search_status_findability_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_status_findability_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_dropdown_identity_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_dropdown_identity_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_status_choices_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_status_choices_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_cold_metadata_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enGB"
+      ]
+    },
+    {
+      "test": "tools/tests/search_cold_metadata_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_catalog_findability_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_catalog_findability_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_status_choices_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "itIT"
+      ]
+    },
+    {
+      "test": "tools/tests/boss_right_click_focus_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "boss"
+      ]
+    },
+    {
+      "test": "tools/tests/boss_right_click_focus_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "arena"
+      ]
     }
   ],
   "excluded": {
@@ -1765,6 +2280,8 @@
     "tools/tests/uf_surface_lifecycle_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Pin the original show, combat-end and rounded roster work at 76d9a9fd.",
     "tools/tests/uf_unit_shift_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. uf_unit_shift_budget_smoke.lua <repoRoot> <flavor>",
     "tools/tests/unit_scene_region_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Native health-bar queries absent from the permissive widget fixture: an anchored size and a new child's level.",
-    "tools/tests/unresolved_global_reads_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Lua 5.1 makes an undefined name a silent nil read: `CoreFrame(unit)` compiles,"
+    "tools/tests/unresolved_global_reads_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Lua 5.1 makes an undefined name a silent nil read: `CoreFrame(unit)` compiles,",
+    "tools/tests/profile_workbench_suite_smoke.lua": "Cross-repository integration contract requires the separately installed Suite source as argument 2; run explicitly with the matching Suite checkout during integration.",
+    "tools/tests/menu_feature_suite_ownership_smoke.lua": "Cross-repository integration uses the separately installed Suite source as argument 2 and Mainline/Forever as argument 3; run with matching Suite during integration. Covers saved search-target relocation and cold/warm disabled-styling search."
   }
 }

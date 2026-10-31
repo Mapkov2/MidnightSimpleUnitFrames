@@ -668,6 +668,104 @@ function W.MeasureScopeOverrideBar(values, opts)
     end
     return MeasureScopeOverrideLayout(values, opts)
 end
+-- Moves what a section lays out below its scope bar by dy. Only anchors on the
+-- section's top edge move; a W.MoveWidget control also keeps its new offset,
+-- because every page reflow places it again from that offset.
+local function ShiftBelowScopeBar(section, bar, bottomY, dy)
+    local skip = { [bar] = true, [bar.label] = true }
+    for i = 1, #bar.buttons do skip[bar.buttons[i]] = true end
+    local objects, placed = { section:GetChildren() }, {}
+    for _, region in ipairs({ section:GetRegions() }) do objects[#objects + 1] = region end
+    for i = 1, #objects do
+        local object = objects[i]
+        if skip[object] then
+            -- The bar's own parts are placed by the reflow.
+        elseif object._msuf2ContextLayoutParent == section then
+            if object._msuf2ContextLayoutY < bottomY then placed[#placed + 1] = object end
+        else
+            local points, below = {}, false
+            for p = 1, object:GetNumPoints() do
+                local point, relative, relativePoint, x, y = object:GetPoint(p)
+                local top = relative == section and type(relativePoint) == "string" and relativePoint:find("^TOP") ~= nil
+                if top and (y or 0) < bottomY then below = true end
+                points[p] = { point, relative, relativePoint, x or 0, top and (y or 0) + dy or y or 0 }
+            end
+            if below then
+                object:ClearAllPoints()
+                for p = 1, #points do
+                    local anchor = points[p]
+                    object:SetPoint(anchor[1], anchor[2], anchor[3], anchor[4], anchor[5])
+                end
+            end
+        end
+    end
+    -- After the plain anchors: MoveWidget also places each control's title.
+    for i = 1, #placed do
+        local widget = placed[i]
+        W.MoveWidget(widget, section, widget._msuf2ContextLayoutX, widget._msuf2ContextLayoutY + dy, widget._msuf2RequestedWidth)
+        if widget._msuf2HideValueBox then
+            if widget.editBox then widget.editBox:Hide() end
+            for _, button in ipairs(widget._msuf2StepButtons or {}) do button:Hide() end
+        end
+    end
+end
+-- Gives a section the height its scope bar gained or lost and lets the
+-- builder that stacks it restack what follows.
+local function GrowScopeSection(ctx, section, dh)
+    local accordion = section._msuf2CollapsibleEntry
+    if accordion and accordion.body == section then
+        accordion.contentHeight = (accordion.contentHeight or section:GetHeight()) + dh
+        section:SetHeight(accordion.contentHeight)
+    else
+        section:SetHeight(section:GetHeight() + dh)
+        -- A fixed page header left the builder flow; it restores this height
+        -- whenever it parks, and the header host sizes its slot from it.
+        local record = section._msuf2StickyPageHeaderRecord
+        if record then
+            record.originalHeight = record.originalHeight + dh
+            if record.active then M.RelayoutPageHeaderHost() end
+            return
+        end
+    end
+    local builders = ctx._msuf2PageBuilders or {}
+    for i = 1, #builders do
+        if builders[i].RequestRelayoutCollapsibles then builders[i]:RequestRelayoutCollapsibles() end
+    end
+end
+-- A retained page only reflows on a resize, so a scope bar wraps its buttons
+-- again for its new width, and its section grows or shrinks by the rows it
+-- gained or lost.
+local function ReflowScopeBar(ctx, section, bar, layout)
+    local width = bar:GetWidth()
+    if width == layout.width then return end
+    layout.width = width
+    local startX, gap, rowStep = layout.startX, layout.gap, layout.rowStep
+    local maxRight = width - layout.inset
+    local x, y, rows = startX, layout.centerY, 1
+    for i = 1, #bar.buttons do
+        local btn = bar.buttons[i]
+        local buttonW = btn._msuf2BaseWidth
+        if x > startX and x + buttonW > maxRight then
+            x = startX
+            y = y - rowStep
+            rows = rows + 1
+        end
+        btn:ClearAllPoints()
+        btn:SetPoint("LEFT", section, "TOPLEFT", x, y)
+        x = x + buttonW + gap
+    end
+    local metrics, oldBottom, grow = layout.metrics, bar._msuf2BottomY, (rows - bar._msuf2Rows) * rowStep
+    metrics.rows, metrics.lastRowCenterY = rows, y
+    metrics.bottomY = y - math.floor(layout.buttonHeight * 0.5 + 0.5)
+    metrics.sectionWidth, metrics.maxRight = width, maxRight
+    bar._msuf2Rows, bar._msuf2BottomY, bar._msuf2LastRowCenterY = rows, metrics.bottomY, y
+    bar:SetHeight(math.abs(metrics.bottomY) + 6)
+    W.RefreshSelectionMotion(bar, true)
+    if grow ~= 0 then
+        ShiftBelowScopeBar(section, bar, oldBottom, -grow)
+        GrowScopeSection(ctx, section, grow)
+    end
+end
 function W.ScopeOverrideBar(ctx, section, opts)
     opts = opts or {}
     local values = opts.values or {}
@@ -742,6 +840,11 @@ function W.ScopeOverrideBar(ctx, section, opts)
         end
         bar.buttons[i] = btn
         x = x + width + gap
+    end
+    if ctx and ctx.AddResizeCallback then
+        local layout = { width = sectionW, inset = sectionW - maxRight, startX = startX, gap = gap, rowStep = rowStep,
+            centerY = centerY, buttonHeight = buttonH, metrics = metrics }
+        ctx:AddResizeCallback(function() ReflowScopeBar(ctx, section, bar, layout) end)
     end
     function bar:GetValue()
         if type(opts.getValue) == "function" then return opts.getValue() end

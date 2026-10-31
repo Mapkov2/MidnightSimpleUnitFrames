@@ -1060,7 +1060,7 @@ function PainterBuild.ResourcesStrip(state)
             end
             ForwardMenuScrollWheel(button)
             button:SetScript("OnClick", function(_, mouseButton)
-                if mouseButton == "RightButton" then
+                if mouseButton == "RightButton" or not M.colorsBrushHex then
                     FocusColorSection(sectionId)
                     return
                 end
@@ -1079,6 +1079,7 @@ function PainterBuild.ResourcesStrip(state)
         local powerSurface = M.PreviewHelpers.NewRuntimeUnitSurface(powerHost, "player", { power = .62 }, function(spec)
             spec.width, spec.height = barW, 18
             spec.power.enabled, spec.power.detached, spec.power.height = true, false, 18
+            spec.prediction.enabled = false
         end)
         local resourceRow = StripButton(-66, 56, "Class Power Colors", "colors_class_power", "Color")
         local resourceLabel = Label(resourceRow, "", 12, -4, barW, T.colors.text)
@@ -1117,8 +1118,9 @@ function PainterBuild.ResourcesStrip(state)
             powerSurface.root:Deactivate()
             for _, root in pairs(roots) do root:Deactivate() end
         end)
-        powerSurface.layerVisible = { health = false, nameText = false, hpText = false, powerText = false,
-            portrait = false, status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false }
+        powerSurface.layerVisible = { health = false, border = false, nameText = false, hpText = false, powerText = false,
+            portrait = false, status = false, buff = false, debuff = false, auras = false,
+            dispelOverlay = false, dispelSymbol = false, texLayer = false }
         function strip.Update()
             if not strip:IsVisible() then return end
             T.SetTranslatedText(powerLabel, Tr("Power") .. " - " .. Tr(preview.powerLabel() or ""))
@@ -1219,7 +1221,7 @@ function PainterBuild.Category(state)
         RaiseZoomBars()
         -- One taxonomy: the same tab drives which section category the page
         -- shows below the preview.
-        if type(M.ColorsOnPainterCategory) == "function" then M.ColorsOnPainterCategory(key) end
+        if state.OnCategory then state.OnCategory(key) end
     end
     state.ShowCategory = ShowCategory
     M.ColorsSetPainterCategory = ShowCategory
@@ -1321,5 +1323,5 @@ function P.Build(ctx, builder, categories)
     PainterBuild.PaintTargets(state)
     PainterBuild.ResourcesStrip(state)
     PainterBuild.Category(state)
-    return PainterBuild.Lifecycle(state)
+    return PainterBuild.Lifecycle(state), state
 end

@@ -449,6 +449,7 @@ local function BuildLook(P, section, width, top)
             end,
         })
     end
+    return top - 104 -- Skin Alpha title, 24px label gap and 24px slider.
 end
 
 local function NewTile(P, section, item)
@@ -536,16 +537,15 @@ local function BuildGallery(P, section, width, top)
 end
 
 local function BuildDefault(P, b)
-    local estimate = b.width or 720
-    local perRow = max(6, floor((estimate - 56) / TILE_STEP))
-    local rows = floor((#Skins().List() + perRow - 1) / perRow)
-    local height = 294 + rows * TILE_STEP
-    local section = b:CollapsibleSection("icon_skins_default", "Default Skin", height, true)
+    local section = b:CollapsibleSection("icon_skins_default", "Default Skin", 120, true)
     local width = section._msuf2Width or b.width or 720
     W.Text(section, "Pick one skin for all your icons. Round, rounded and hex skins also set the icon shape.",
         24, -16, width - 48, T.colors.muted)
     local bottom = BuildGallery(P, section, width, -40)
-    BuildLook(P, section, width, bottom - 16)
+    -- The body can be narrower than the page, so measure the actual gallery
+    -- and last control before the builder places the following section.
+    section._msuf2CursorY = BuildLook(P, section, width, bottom - 16)
+    b:FinishSection(section, 14)
 end
 
 --- The groups of "Where It Applies": MSUF's aura types, then each module's

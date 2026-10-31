@@ -398,7 +398,8 @@ function Stage.RenderCell(st, env)
             -- The scene then reuses it on animation ticks without another query or call.
             local power = MSUF.UF.elements.Power
             if frame.targetPowerBar then
-                power.PaintSample(frame, "player", floor(scene.powerPct * sample.powerMax + 0.5), sample.powerMax,
+                power.PaintSample(frame, "player", self._animationEnabled == true and frame.targetPowerBar:GetValue()
+                    or floor(scene.powerPct * sample.powerMax + 0.5), sample.powerMax,
                     live and live.powerType or 0, live and live.powerToken or "MANA")
                 local r, g, b, a = frame.targetPowerBar:GetStatusBarColor()
                 if not issecretvalue(r) and not issecretvalue(g) and not issecretvalue(b) and not issecretvalue(a) then

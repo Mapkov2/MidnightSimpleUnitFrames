@@ -14,7 +14,8 @@ if locale ~= "enUS" then
     M.Tr = function(s) return translations[s] or s end
     ns.Translate = M.Tr
 end
-M.Search.Text = { NormalizeSearchText = function(s) return s:lower():gsub("%s+", " ") end }
+M.Search.Text = { NormalizeSearchText = function(s) return s:lower():gsub("%s+", " ") end,
+    SearchEffectiveLocale = function() return locale end }
 function InCombatLockdown() return false end
 function UnitAffectingCombat() return false end
 function debugprofilestop() return os.clock() * 1000 end

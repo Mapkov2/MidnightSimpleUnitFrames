@@ -40,10 +40,10 @@ function Fields.ExternalOwner(path)
     if provider and provider.Owner then return provider.Owner(path) end
 end
 function Fields.ExternalRoots() return roots end
-function Fields.CaptureExternal(db,copy,budget)
+function Fields.CaptureExternal(db,copy,budget,excluded)
     if not Fields.ProfileName(db) then return true end
     for root in pairs(providers) do
-        local source=Fields.ProfileRoot(db,root,true)
+        local source=not (excluded and excluded[root]) and Fields.ProfileRoot(db,root,true)
         if source then
             local provider=providers[root]
             if provider.Snapshot then
@@ -62,9 +62,9 @@ function Fields.StripExternal(copy)
     for root in pairs(roots) do copy[root]=nil end
     return copy
 end
-function Fields.RestoreExternal(db,snapshot)
+function Fields.RestoreExternal(db,snapshot,excluded)
     for root,provider in pairs(providers) do
-        if snapshot[root]~=nil then
+        if snapshot[root]~=nil and not (excluded and excluded[root]) then
             local target=Fields.ProfileRoot(db,root,true)
             if target then
                 local copy,valid=Fields.CopySnapshot(snapshot[root])

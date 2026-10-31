@@ -280,8 +280,9 @@ per line). It has been de-minified for maintainability; behavior is unchanged.
 --------------------------------------------------------------- consumers
 MSUF.KickReady: this engine and MSUF's indicator look for consumers that
 draw on castbars MSUF does not own (the MSUF Suite's nameplates), handed
-out by MSUF_HostAPI.GetKickReady() (Runtime/MSUF_HostAPI.lua). Version 1:
-  Register(owner, onChange) -> true    onChange(reason): "readiness" and
+out by MSUF_HostAPI.GetKickReady() (Runtime/MSUF_HostAPI.lua). Version 2
+retains every v1 member and its original two-argument Register semantics:
+  Register(owner, onChange, independent) -> true    onChange(reason): "readiness" and
       "projection" while the owner is active, "settings" always
       (NotifyConsumers above)
   Unregister(owner)
@@ -295,6 +296,21 @@ out by MSUF_HostAPI.GetKickReady() (Runtime/MSUF_HostAPI.lua). Version 1:
       interrupt is ready; a restricted readiness is selected natively
   SlotCount() -> 0..2         tracked interrupts (0: the class has none)
   Cooldown(index) -> Duration | nil   that interrupt's cooldown, this frame
+  Spell(index) -> public spell ID | nil   provider-owned resolved identity;
+      compare with public catalog IDs/names, never infer it from cooldown data
+  SelectSlotColor(index, readyColor, unavailableColor, rawNotInterruptible)
+      -> ColorMixin   readiness of this slot alone; an optional raw cast flag
+      also selects unavailableColor while uninterruptible. Restricted values
+      compose natively. Unknown/invalid slots fail closed.
+  independent=true explicitly starts this consumer's engine even when MSUF's
+      castbar and nameplate switches are off. Omit it for v1 nameplate behavior.
+      Unregister releases this opt-in. SetActive is still required while a
+      running cast needs cooldown events/wakes; registration alone only keeps
+      spell/lifecycle identity current.
+  A per-slot consumer must repaint on both readiness AND projection: a second
+      slot can change while the aggregate remains ready. Never pass restricted
+      readiness into a Lua glow union; a selected color alpha can go directly
+      to an owned frame's SetAlpha. Deactivation clears those visual masks.
 ```
 
 ## Consumer look fields

@@ -357,7 +357,7 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "ede132a845bce0c9be9181c5e90175f5ce7aff7f98d967b8529c69f0ee2185aa"
+          "source_sha256": "fc140867bb318b0aec34ffffa28aa14385442026f15717b162a1d17ad3ce0264"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
@@ -377,7 +377,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
-          "source_sha256": "9a8ee31fe1fa9857ddd486649a66441e45d4293ec5f568abe8a7d625ae444d71"
+          "source_sha256": "6d8c1e029c2ad2247d7577f45ca5ed7afc9e69ce003203aecf529530ba56e4d4"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Auras.lua",
@@ -670,7 +670,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",
-          "source_sha256": "aa8750e5b69041f5035c201ca75d0cba2e44afd515655ff61e33c95662bf3b99"
+          "source_sha256": "605d1f9d1fbb90ce9834fc7a7e7f44a13187ed8df68921e612e9b0f11e955024"
         }
       ],
       "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
@@ -768,7 +768,7 @@
           800
         ]
       ],
-      "source_sha256": "82d9cf1c38a3301c1380496b1fdf6b4d1e8a2c2a2ad5dab095a8443ef504d631",
+      "source_sha256": "8cab7694a93045a51bdb346b7158189e02116e53513c7d7b0d66caab7abda14f",
       "adapter_exclusions": [
         {
           "name": "AddDropdownBarPreviewLane",

@@ -736,7 +736,7 @@ local function FrameEffectLevel(effect, kind, parentFrame, healthBar)
         local nameSource = NameFontString(parentFrame)
         targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or parentFrame
     end
-    return FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner)
+    return FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner, parentFrame)
         or FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
         or ((parentFrame:GetFrameLevel() or 0) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer)
 end

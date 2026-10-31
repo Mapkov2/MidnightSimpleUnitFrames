@@ -3,8 +3,8 @@
 ## Notes: Load-on-demand configuration UI for Midnight Simple Unit Frames.
 ## Author: Mapko
 ## Category: MSUF
-## Version: 7.0-alpha1 [AllowLoadGameType standard]
-## Version: 7.0-alpha1 [ExcludeLoadGameType standard]
+## Version: 7.0-alpha2 [AllowLoadGameType standard]
+## Version: 7.0-alpha2 [ExcludeLoadGameType standard]
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1

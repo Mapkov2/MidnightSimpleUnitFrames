@@ -710,7 +710,7 @@ local function LayoutDetached(frame, bar, power, defaultHeight)
   if bar.SetFrameLevel and frame.GetFrameLevel then
     local layer = math_min(30, RoundNonNegative(power.detachedLevel, 6))
     local layers = UF and UF.Layers
-    local level = layers and layers.ElementLevel and layers.ElementLevel(layer, 6, 0)
+    local level = layers and layers.FrameElementLevel and layers.FrameElementLevel(frame, layer, 6, 0)
       or ((frame:GetFrameLevel() or 1) + layer)
     SetPowerFrameLevel(bar, level)
   end
@@ -1342,15 +1342,15 @@ function Power.SceneApply(frame, spec)
 end
 
 --- Scene form: the bar values and the sample power type's colour, with no client query.
-function Power.PaintSample(frame, unit, value, maxValue, powerType, token)
+function Power.PaintSample(frame, unit, value, maxValue, powerType, token, animate)
   local bar = frame and frame.targetPowerBar
   if not bar then return false end
   if bar._msufMinMax ~= maxValue then
     bar:SetMinMaxValues(0, maxValue)
     bar._msufMinMax = maxValue
   end
-  bar:SetValue(value)
-  bar._msufInterpolating = nil
+  if animate ~= true then bar._msufDirectValuePlain = nil end
+  C.SetBarValuePlain(bar, value, animate == true)
   bar._msufPowerValue = value
   bar._msufPowerValueUnit = unit
   bar._msufPowerMax = maxValue

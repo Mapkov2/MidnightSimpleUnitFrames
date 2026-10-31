@@ -61,10 +61,10 @@ function P.Editor(state,draw)
     state.ctx:AddRefresher(Refresh)
     Refresh()
 end
-function P.Section(state,id,title,height)
+function P.Section(state,id,title,height,open)
     local section=state.section
     if not section then
-        section=state.b:CollapsibleSection(id,title,height,true)
+        section=state.b:CollapsibleSection(id,title,height,open~=false)
         section._msuf2ProfileRows={}
         state.section=section
     else
@@ -106,7 +106,7 @@ function P.Row(ctx,section,row)
             widget:_msuf2UpdateToggleProxyBounds()
             widget:ClearAllPoints()
             widget:SetPoint("TOPLEFT",section,"TOPLEFT",args[2],args[3])
-        elseif row[1]=="textinput" then
+        elseif row[1]=="textinput" and not row.preserveInput then
             widget:SetText("")
         end
         if row.bind and row.bind~=AP.NativeInput then

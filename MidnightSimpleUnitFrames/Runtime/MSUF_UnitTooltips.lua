@@ -559,6 +559,63 @@ Tooltips.Allowed = function()
     local cache = MSUF_GetTooltipCache()
     return MSUF_TooltipModeAllowed(cache.mode, cache.modifier)
 end
+
+-- Raider.IO bridge. Raider.IO draws its profile from a Unit post-call that
+-- finds the unit through the tooltip data's GUID. Blizzard's own frames build
+-- the tooltip securely and keep that GUID readable; MSUF builds it as addon
+-- code, so under restrictions (a running keystone, combat) the GUID arrives
+-- secret and Raider.IO skips the tooltip. While GameTooltip shows an MSUF unit
+-- and the GUID is secret, hand Raider.IO the plain unit token MSUF hovered,
+-- behind Raider.IO's own unit-tooltip settings. A readable GUID stays
+-- Raider.IO's own job, so the profile is never drawn twice. The post-call is
+-- added on the first MSUF unit tooltip with Raider.IO loaded (every addon has
+-- loaded by then), so other setups pay nothing.
+local MSUF_PrepareRaiderIOTooltip
+do
+    local bridgedTooltip, checked
+
+    local function RaiderIOSetting(key, default)
+        local config = Optional("RaiderIO_Config")
+        local value = config and config[key]
+        if value == nil then return default end
+        return value
+    end
+
+    local function RaiderIOUnitPostCall(tooltip)
+        if tooltip ~= bridgedTooltip then return end
+        local owner, unit = tooltip._msufUnitTooltipOwner, tooltip._msufUnitTooltipUnit
+        if owner == nil or unit == nil then return end
+        local data = tooltip:GetPrimaryTooltipData()
+        if not MSUF_UnitInfo_IsSecret(data and data.guid) then return end
+        -- A marker another UI left behind without hiding the tooltip must not
+        -- draw this unit's profile on its tooltip: the frame is still hovered.
+        local portrait = owner.MSUFPortraitClickTarget
+        if not ((portrait and portrait._msufPortraitHovered) or (owner.IsMouseOver and owner:IsMouseOver())) then return end
+        if MSUF_UnitInfo_PlainBoolean(UnitIsPlayer(unit)) ~= true then return end
+        if not RaiderIOSetting("enableUnitTooltips", true) then return end
+        if RaiderIOSetting("showScoreModifier", false) then
+            if not IsModifierKeyDown() then return end
+        elseif not RaiderIOSetting("showScoreInCombat", true) and InCombat() then
+            return
+        end
+        local raiderIO = Optional("RaiderIO")
+        local showProfile = raiderIO and raiderIO.ShowProfile
+        if showProfile then showProfile(tooltip, unit) end
+    end
+
+    MSUF_PrepareRaiderIOTooltip = function(gt)
+        if checked then return end
+        checked = true
+        local processor = TooltipDataProcessor
+        local types = Enum and Enum.TooltipDataType
+        local unitType = types and types.Unit
+        if not (MSUF_IsSecretValueAPI and processor and processor.AddTooltipPostCall and unitType) then return end
+        if not Optional("RaiderIO") then return end
+        bridgedTooltip = gt
+        processor.AddTooltipPostCall(unitType, RaiderIOUnitPostCall)
+    end
+end
+
 Tooltips.ShowUnit = function(owner, unit, opts)
     if not unit then return false end
     local exists = UnitExists(unit)
@@ -617,6 +674,7 @@ Tooltips.ShowUnit = function(owner, unit, opts)
     gt._msufUnitTooltipOwner = owner
     gt._msufUnitTooltipUnit = unit
     gt._msufUnitTooltipAnchor = anchor
+    MSUF_PrepareRaiderIOTooltip(gt)
     gt:SetUnit(unit)
     gt:Show()
     return true

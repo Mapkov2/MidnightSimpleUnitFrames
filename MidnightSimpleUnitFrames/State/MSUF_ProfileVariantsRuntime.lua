@@ -5,6 +5,7 @@ local Variants = MSUF.ProfileVariants
 local driver, pending, signature
 -- Only the conditions the entries use subscribe; nothing is allocated per event.
 local LOCATION_EVENTS = { "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "GROUP_ROSTER_UPDATE" }
+local DISPLAY_EVENTS = { "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED", "PLAYER_ENTERING_WORLD" }
 local SPEC_EVENTS = { "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "ACTIVE_TALENT_GROUP_CHANGED" }
 local function Subscribe(list)
     for _,event in ipairs(list) do
@@ -54,9 +55,10 @@ function Variants.RefreshEvents()
         driver:SetScript("OnEvent",Event) end
     driver:UnregisterAllEvents()
     if enabled then
-        local location,spec=Variants.ConditionKinds(MSUF_DB)
+        local location,spec,display=Variants.ConditionKinds(MSUF_DB)
         if location then Subscribe(LOCATION_EVENTS) end
         if spec then Subscribe(SPEC_EVENTS) end
+        if display then Subscribe(DISPLAY_EVENTS) end
         driver:RegisterEvent("PLAYER_LOGOUT")
     end
     if pending then driver:RegisterEvent("PLAYER_REGEN_ENABLED") end

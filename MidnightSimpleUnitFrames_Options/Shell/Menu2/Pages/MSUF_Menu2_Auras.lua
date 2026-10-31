@@ -117,6 +117,45 @@ local LANE_VALUES = M.AuraControls.LANE_VALUES
 -- by Aura product. Every layout/filter/deep-Style value remains frame-local.
 M.SHARED_AURA_STYLE_CONTAINER_VALUES = VTP
     "buff=Buffs|debuff=Debuffs|playerDefensives=Player Defensives|targetDots=Dots on Target"
+-- Optional menu providers own their controls and profile data. No provider
+-- leaves the original selector and all Blizzard visibility controls intact.
+local appearanceTypes, appearanceValues = {}, nil
+function AurasPage.RegisterAppearanceType(value, spec)
+    assert(value ~= "buff" and value ~= "debuff" and value ~= "playerDefensives" and value ~= "targetDots")
+    assert(spec.text and spec.build and spec.resetProvider)
+    appearanceTypes[value] = spec
+    appearanceValues = nil
+    M.InvalidatePage("auras3_styling")
+    M.InvalidatePage("auras3_buffs")
+    M.InvalidatePage("auras3_debuffs")
+    return true
+end
+function AurasPage.AppearanceType(value)
+    return appearanceTypes[value]
+end
+function AurasPage.AppearanceValues()
+    if not next(appearanceTypes) then return M.SHARED_AURA_STYLE_CONTAINER_VALUES end
+    if not appearanceValues then
+        appearanceValues = {}
+        for _, value in ipairs(M.SHARED_AURA_STYLE_CONTAINER_VALUES) do
+            appearanceValues[#appearanceValues + 1] = value
+        end
+        for value, spec in pairs(appearanceTypes) do
+            appearanceValues[#appearanceValues + 1] = { value = value, text = spec.text }
+        end
+    end
+    return appearanceValues
+end
+function AurasPage.BlizzardVisibilityType()
+    for value, spec in pairs(appearanceTypes) do
+        if spec.blizzardVisibility then return value end
+    end
+end
+function AurasPage.AppearanceResetProvider(pageKey)
+    if pageKey ~= "auras3_styling" then return nil end
+    local spec = appearanceTypes[M.auraAppearanceContainer]
+    return spec and spec.resetProvider
+end
 local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target"
 local UNIT_STYLE_CONTAINER_VALUES_PLAYER = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensive Buffs"
 local CUSTOM_FRAME_EFFECTS = M.AuraSettings.CUSTOM_FRAME_EFFECTS
@@ -393,6 +432,7 @@ local function CurrentAuraStyleContainer(scope)
     if scope == "appearance" then
         if container ~= "buff" and container ~= "debuff"
             and container ~= "playerDefensives" and container ~= "targetDots"
+            and not appearanceTypes[container]
         then
             container = CurrentLane("auraStyleGFLane", "debuff")
         end
@@ -411,7 +451,15 @@ local function AppearanceThemeLane(container)
     return (container == "targetDots" or container == "debuff") and "debuff" or "buff"
 end
 local function BuildAuraStyleNav(ctx, b, scope)
+    local values = scope == "appearance" and AurasPage.AppearanceValues()
+        or ((not IsGroupScope(scope))
+            and (scope == "player" and UNIT_STYLE_CONTAINER_VALUES_PLAYER or UNIT_STYLE_CONTAINER_VALUES)
+            or LANE_VALUES)
     local h = 56
+    if scope == "appearance" and next(appearanceTypes) then
+        local metrics = W.MeasureScopeOverrideBar(values, { width = b.width, labelWidth = 88, centerY = -28 })
+        h = max(h, abs(metrics.bottomY) + 16)
+    end
     local section = T.Panel(b.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
     T.ApplySurface(section, "card")
     section:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
@@ -421,10 +469,6 @@ local function BuildAuraStyleNav(ctx, b, scope)
     b.y = b.y - h - 12
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 28) end
     local w = section._msuf2Width or b.width or 720
-    local values = scope == "appearance" and M.SHARED_AURA_STYLE_CONTAINER_VALUES
-        or ((not IsGroupScope(scope))
-            and (scope == "player" and UNIT_STYLE_CONTAINER_VALUES_PLAYER or UNIT_STYLE_CONTAINER_VALUES)
-            or LANE_VALUES)
     local bar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, section, {
         values = values,
         width = w,
@@ -454,7 +498,7 @@ local function BuildAuraStyleNav(ctx, b, scope)
         or current == "custom4" and (scope == "player" and Tr("Defensive Buff Aura Style") or Tr("Dots on target Aura Style"))
         or (tostring(current):match("^custom[123]$") and M.Format("Custom %s Aura Style", tostring(current):match("(%d)$")))
         or M.Format("%s Aura Style", Tr(LaneTitle(current)))
-    M.AttachAuraFontsAndColors(section, title, scope)
+    if not appearanceTypes[current] then M.AttachAuraFontsAndColors(section, title, scope) end
     -- Dock the container strip beneath the already-docked scope strip, like
     -- the unit pages' Editing strip: scope, container and preview form one fixed
     -- stack before the settings ScrollFrame begins.

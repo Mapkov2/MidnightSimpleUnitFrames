@@ -43,7 +43,8 @@ local function BuildColorPainter(ctx, b)
     if not (painter and type(painter.Build) == "function") then return end
     M.colorsPowerToken = M.colorsPowerToken or "MANA"
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
-    painter.Build(ctx, b, COLOR_PAINTER_CATEGORIES)
+    local _, state = painter.Build(ctx, b, COLOR_PAINTER_CATEGORIES)
+    return state
 end
 
 -- One taxonomy: the painter tabs above decide which category of sections is
@@ -51,8 +52,13 @@ end
 -- its category, so search keywords, Search metadata and cross-page focus
 -- requests keep working. Categories build lazily on first activation; hidden
 -- (coverage/audit) builds materialize everything, matching the old groups.
-local COLOR_CATEGORY_ORDER = { "unit", "group", "cast", "auras", "resources" }
+local COLOR_CATEGORY_ORDER = { "unit", "group", "cast", "auras", "resources", "accessibility" }
+COLOR_PAINTER_CATEGORIES[#COLOR_PAINTER_CATEGORIES + 1] = {
+    key = "accessibility", title = "Color vision accessibility", shortTitle = "Color preset",
+    subtitle = "Review accessibility changes", scopes = {},
+}
 local COLOR_CATEGORY_SECTIONS = {
+    accessibility = { "workbench_accessibility" },
     unit = { "colors_appearance", "colors_bar_colors", "colors_bar_gradients", "colors_background",
         "colors_font", "colors_classes", "colors_unit", "colors_npc_type", "colors_highlight",
         "colors_texture_layer", "colors_gameplay", "colors_portrait", "colors_status_text" },
@@ -74,6 +80,7 @@ end
 -- later stages hold only default-collapsed sections, so they can fill in
 -- below the visible content without moving anything the user already sees.
 local COLOR_CATEGORY_BUILDERS = {
+    accessibility = function(ctx, inner) M.ProfileWorkbenchUI.Colors(ctx, inner) end,
     unit = function(ctx, inner)
         Build.Appearance(ctx, inner)
         Build.BarColors(ctx, inner)
@@ -173,8 +180,8 @@ function Host.Resume(category, now)
 end
 -- The painter's category switch, or a direct activation while it is not wired.
 function Host.Select(H, categoryKey)
-    if type(M.ColorsSetPainterCategory) == "function" then
-        M.ColorsSetPainterCategory(categoryKey)
+    if H.painter then
+        H.painter.ShowCategory(categoryKey)
     else
         Host.Activate(H, categoryKey)
     end
@@ -240,7 +247,7 @@ function Host.Ensure(H, categoryKey, now)
     category.container._msuf2ExactTabView = {
         kind = "colorsPainterCategory", value = categoryKey,
         select = function()
-            M.ColorsSetPainterCategory(categoryKey)
+            Host.Select(H, categoryKey)
         end,
     }
     local ctx = H.ctx
@@ -287,14 +294,26 @@ local function BuildColors(ctx)
     M.ColorsEnsureCategoryBuilt = nil
     if ctx and ctx.entry then ctx.entry._msuf2HealthBackgroundInlinePreviewRefresh = nil end
     b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
-    BuildColorPainter(ctx, b)
+    local painter = BuildColorPainter(ctx, b)
 
     local H = Host.New(ctx, b)
-    M.ColorsOnPainterCategory = function(categoryKey) Host.Activate(H, categoryKey) end
-    M.ColorsEnsureCategoryBuilt = function(sectionId)
+    H.painter = painter
+    local function ActivateCategory(categoryKey) Host.Activate(H, categoryKey) end
+    local function EnsureCategory(sectionId)
         local categoryKey = COLOR_SECTION_CATEGORY[tostring(sectionId or "")]
         if categoryKey then Host.Ensure(H, categoryKey, true) end
     end
+    if painter then painter.OnCategory = ActivateCategory end
+    -- Normal and maximized pages are cached separately. External color/search
+    -- entry points must follow the visible entry each time either returns.
+    local function BindColorPage()
+        M.ColorsOnPainterCategory = ActivateCategory
+        M.ColorsSetPainterCategory = painter and painter.ShowCategory
+        M.ColorsEnsureCategoryBuilt = EnsureCategory
+    end
+    BindColorPage()
+    ctx.wrapper:HookScript("OnShow", BindColorPage)
+    M.TrackRefresh(ctx, BindColorPage)
     if ctx.entry then
         ctx.entry._msuf2ResolveMissingSection = function(sectionId)
             local categoryKey = COLOR_SECTION_CATEGORY[tostring(sectionId or "")]

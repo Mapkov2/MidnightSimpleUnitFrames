@@ -80,8 +80,26 @@ function menu.SupportsSearchTarget(pageKey, settingKey, prepareKind, prepareValu
     if targetScope and targetScope ~= "party" then return false end
     if settingKey == "general.kickReadyShowNameplates"
         and not (menu.CastbarSuiteNameplatesSupported and menu.CastbarSuiteNameplatesSupported()) then return false end
+    if prepareKind == "unitStatusIndicator" then
+        local unit = pageKey:match("^uf_(.+)$")
+        local spec = unit and menu.UnitPage.FindStatusSpec(unit, prepareValue)
+        return spec ~= nil and spec.value == prepareValue
+    end
     local scope
-    if prepareKind == "groupScope" then scope = prepareValue
+    if prepareKind == "groupStatus" then
+        local value
+        scope, value = tostring(prepareValue):match("^(%a+)_(%w+)$")
+        if pageKey ~= "gf_indicators" or not scope or not main.Client.SupportsGroupKind(scope) then return false end
+        local recognizedScope = false
+        for _, candidate in ipairs(menu.GroupPage.SCOPE_VALUES) do
+            if candidate.value == scope then recognizedScope = true break end
+        end
+        if not recognizedScope then return false end
+        for _, spec in ipairs(menu.GroupPage.GF_STATUS_ICON_SPECS) do
+            if spec.value == value then return true end
+        end
+        return false
+    elseif prepareKind == "groupScope" then scope = prepareValue
     elseif prepareKind == "groupAuraWorkspace" then
         scope = type(prepareValue) == "string" and prepareValue:match("^(%w+)_")
     end

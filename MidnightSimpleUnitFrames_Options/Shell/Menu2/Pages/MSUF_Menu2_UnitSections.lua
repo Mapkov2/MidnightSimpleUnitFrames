@@ -170,6 +170,9 @@ local function UnitSectionUX(unit)
         end },
         anchoring = { fields = "point relativePoint offsetX offsetY anchorFrameName anchorToUnitframe", noCopy = true },
     }
+    if unit == "boss" or unit == "arena" then
+        sections.frame_basics.fields = sections.frame_basics.fields .. " rightClickFocusInCombat"
+    end
     -- The same frames as the unit tabs, so a client never offers a frame it cannot show.
     local targets = {}
     for _, key in ipairs(UNIT_TAB_ORDER) do
@@ -336,6 +339,21 @@ local function AttachBasicsColorReferences(sec, unit)
         end,
     })
 end
+local function BuildCombatRightClickFocus(ctx, sec, unit, x, y, width)
+    if unit ~= "boss" and unit ~= "arena" then return end
+    local toggle = Schema.Build(ctx, sec, {
+        { "toggle", "rightClickFocusInCombat", false, { "Right-click focus in combat", x, y, width },
+            meta = SettingMeta(ctx, "basics.right_click_focus_in_combat", unit, "rightClickFocusInCombat"), scope = unit,
+            reason = "MSUF2_COMBAT_RIGHT_CLICK_FOCUS", unit = true, domain = "layout" },
+    }, ROW_OPTIONS).rightClickFocusInCombat
+    if M.AddTooltip then
+        M.AddTooltip(toggle, "Right-click focus in combat",
+            "In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu.",
+            TIP_OPTS)
+    end
+    if W.AttachUnitEditFocus then W.AttachUnitEditFocus(toggle, unit, "frame") end
+end
+
 local function BuildBasics(ctx, builder, unit, label)
     -- Default-open so the page greets users with real settings instead of a
     -- stack of closed headers; saved accordion state still wins afterwards.
@@ -421,6 +439,7 @@ local function BuildBasics(ctx, builder, unit, label)
             W.AttachUnitEditFocus(control, unit, "frame")
         end
     end
+    BuildCombatRightClickFocus(ctx, sec, unit, x3, row1, labelW)
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit)
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end

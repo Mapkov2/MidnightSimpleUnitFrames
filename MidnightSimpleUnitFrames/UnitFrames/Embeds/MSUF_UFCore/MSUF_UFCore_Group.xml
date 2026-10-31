@@ -25,6 +25,13 @@
   <Script file="..\..\..\Game\Forever\GroupFrames\MSUF_GroupFrames_BlessingPriorities.lua"/>
   <Script file="..\..\..\Game\Forever\GroupFrames\MSUF_GroupFrames_BuffCoverage.lua"/>
   <Include file="..\..\..\GroupFrames\MSUF_GroupFrames_Additional.xml"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview_Style.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview_Layout.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview_Auras.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview_Indicators.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview_Samples.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview_Pool.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview_Scenes.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_EM2.lua"/>
 </Ui>

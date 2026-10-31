@@ -10,7 +10,7 @@ local h = Harness.New(root, "Mainline", { beforeBoot = function(world)
     local plain = world.env.UnitName
     world.env.UnitName = function(unit)
         local caller = debug.getinfo(2, "S")
-        if caller.source:find("MSUF_UF_Group_Preview.lua", 1, true) then return secretName end
+        if caller.source:find("MSUF_UF_Group_Preview_Samples.lua", 1, true) then return secretName end
         return plain(unit)
     end
 end })
@@ -18,7 +18,7 @@ local GF = h.GF
 GF.EnsureDB()
 local conf = GF.GetConf("party")
 conf.enabled, conf.nameShortenMax = true, 3
-local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua"
+local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua"
 local stop = Secrets.Watch(path)
 h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 assert(GF.ShowPreview("party", 2))

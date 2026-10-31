@@ -414,6 +414,12 @@ end
 -- Exact pixel nudge of the current selection, for the gamepad's right stick
 -- (Game/Forever/PadNavigation.lua). Unlike the arrow keys it ignores modifiers.
 function Nudge.By(dx, dy)
+    local multi = EM2.MultiSelection
+    if multi and next(multi.selected) then
+        local count = 0
+        for _ in pairs(multi.selected) do count = count + 1 end
+        if count > 1 then return multi.Apply("move", dx, dy) end
+    end
     return NudgeTarget(dx, dy, true)
 end
 
@@ -425,6 +431,23 @@ function Nudge.AuraBy(unitKey, auraGroup, dx, dy)
     return NudgeAuraGroup(db, auraGroup, unitKey, dx, dy)
 end
 
+-- Explicit element route for group operations; ignores open popup selection.
+function Nudge.Named(key, dx, dy)
+    if not EM2.State.IsActive() or BlockConfigCombatLocked() then return false end
+    local cfg = EM2.Registry.Get(key)
+    if not cfg or cfg.canNudge == false then return false end
+    if cfg.externalPublicElement then return EM2.ExternalElements.Nudge(key, dx, dy) end
+    if cfg.popupType == "castbar" then return NudgeCastbar(cfg.castbarUnit, dx, dy) end
+    if cfg.popupType == "resource" then return NudgeResource(cfg, dx, dy) end
+    if key:match("^gf_") then return MSUF.Require("MSUF_GF_EM2_NudgePreview", CALLER)(key, dx, dy) end
+    local db = NudgeDB()
+    local conf = db and db[key]
+    if not conf then return false end
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("unit", key, true)
+    conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + dx) + 0.5)
+    conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + dy) + 0.5)
+    return ApplySettingsForKeySafe(key) == true
+end
 function Nudge.Enable()
     if not owner then
         owner = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_NudgeOwner", UIParent))

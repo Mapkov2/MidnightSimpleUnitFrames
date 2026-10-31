@@ -337,7 +337,7 @@ end
 function Fields.Equal(a, b, depth)
     if type(a) ~= type(b) then return false end
     if type(a) ~= "table" then return a == b end
-    if (depth or 0) >= 12 then return false end
+    if (depth or 0) >= 32 then return false end
     for key, value in pairs(a) do if not Fields.Equal(value,b[key],(depth or 0)+1) then return false end end
     for key in pairs(b) do if a[key] == nil then return false end end
     return true
@@ -345,8 +345,9 @@ end
 
 -- Imported patches are copied before use and cannot contain expressions,
 -- metatables, cyclic values, non-finite numbers or overlapping parent paths.
-function Fields.ValidatePatch(patch)
-    if type(patch) ~= "table" or #patch > 512 then return nil, "too many fields" end
+function Fields.ValidatePatch(patch, limit)
+    limit = math.min(8192, limit or 512)
+    if type(patch) ~= "table" or #patch > limit then return nil, "too many fields" end
     local clean, ids = {}, {}
     for key in pairs(patch) do
         if type(key) ~= "number" or key < 1 or key > #patch or key ~= math.floor(key) then return nil, "invalid field list" end
@@ -392,11 +393,12 @@ end
 
 -- Diff only known settings roots. Metadata, migrations and session caches never
 -- become variant fields. Numeric table keys retain their type in saved patches.
-function Fields.Diff(before, after)
+function Fields.Diff(before, after, limit)
+    limit = math.min(8192, limit or 512)
     local patch, path, failed, skipped = {}, {}, false, 0
     local function Visit(a,b,depth)
         if failed or Fields.Equal(a,b) then return end
-        if depth > 12 or #patch >= 512 then failed=true
+        if depth > 12 or #patch >= limit then failed=true
             return end
         if type(a) == "table" and type(b) == "table" then
             local keys = {}
@@ -432,7 +434,7 @@ function Fields.Diff(before, after)
         end
     end
     if failed then return nil, "variant exceeds field limits" end
-    local clean, why = Fields.ValidatePatch(patch)
+    local clean, why = Fields.ValidatePatch(patch, limit)
     return clean, why, skipped
 end
 

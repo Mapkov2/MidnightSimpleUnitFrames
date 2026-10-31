@@ -337,6 +337,19 @@ local function ResizePageEntry(entry, width, height)
     ctx.width, ctx.fullWidth = width - 32, width - 32
     if ctx.resizeWidthOwner then ctx.resizeWidthOwner.width = ctx.width end
     ResizePageSurface(entry.wrapper, width - 12)
+    -- Docked headers live outside the wrapper; parked headers were already
+    -- resized above. Keep their restore geometry current before size callbacks
+    -- can reactivate them, then reflow only any still-outdated subtree.
+    local widthDelta = width - entry.layoutWidth
+    if widthDelta ~= 0 then
+        for i = 1, #(entry.pageHeaders or {}) do
+            local record = entry.pageHeaders[i]
+            if not record.disposed then
+                record.originalWidth = math.max(1, record.originalWidth + widthDelta)
+                ResizePageSurface(record.section, record.originalWidth)
+            end
+        end
+    end
     for i = #builders, 1, -1 do
         local builder = builders[i]
         builder.width = math.max(1, builder.parent:GetWidth() - builder._msuf2ResizeWidthOffset)

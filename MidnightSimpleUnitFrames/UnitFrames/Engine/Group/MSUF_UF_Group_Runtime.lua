@@ -86,6 +86,13 @@ local function RefreshVisibleRosterState(reason)
   return GF.ForEachFrame(RefreshRosterStateFrame, false, reason, InCombat())
 end
 
+--- The settled roster repaints as an identity change, not as the raw event:
+--- the group status runtime maps GROUP_ROSTER_UPDATE to leader/raid group only,
+--- and range fade, power type and the indicators reseed only on this reason. A
+--- slot that kept its token for another occupant, or read a disconnect while
+--- the roster was in flux, otherwise kept OFFLINE/DEAD/AFK from that read.
+local ROSTER_IDENTITY_REASON = "MSUF_GF_UNIT_IDENTITY"
+
 local function RoleFilteredAggroMode(mode)
   mode = tostring(mode or "ALL"):upper()
   if mode == "TANK_ONLY" then mode = "TANK"
@@ -669,10 +676,13 @@ end
 local SETTLE = { LAYOUT = 0, ROLES = 1, ROSTER = 2 }
 local headerLayoutSettlePending = false
 local headerLayoutSettleState = SETTLE.LAYOUT
+local difficultyLayoutPending = false
+local difficultyLayoutGroupKind, difficultyLayoutRaidKind
 
 local function FlushHeaderLayoutSettle()
   local state = headerLayoutSettleState
   headerLayoutSettlePending = false
+  difficultyLayoutPending = false
 
   if not AnyGroupFrameEnabled() then return false end
   local did
@@ -684,7 +694,7 @@ local function FlushHeaderLayoutSettle()
     did = GF.RefreshHeaderLayout()
     did = RefreshStartupVisuals() or did
   end
-  if state == SETTLE.ROSTER then did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did end
+  if state == SETTLE.ROSTER then did = RefreshVisibleRosterState(ROSTER_IDENTITY_REASON) or did end
   if state ~= SETTLE.LAYOUT then did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did end
   if headerLayoutSettleState == state then headerLayoutSettleState = SETTLE.LAYOUT end
   return did
@@ -921,7 +931,7 @@ local function ReplayDeferred(reasons, kind, mask)
     did, success = worked or did, success and applied ~= false
   end
   if reasons.roster then
-    did = RefreshVisibleRosterState("GROUP_ROSTER_UPDATE") or did
+    did = RefreshVisibleRosterState(ROSTER_IDENTITY_REASON) or did
     did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
   end
   if reasons.priority and not (reasons.roster or reasons.layout or reasons.visibility) then
@@ -1042,10 +1052,17 @@ local function RuntimeOnEvent(self, event, unit)
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" then
-    -- Normal and mythic raid share one secure header, so the difficulty edge
-    -- has to swap its config kind immediately; the queued settle only corrects
-    -- the footprint afterwards.
-    GF.RefreshHeaderLayout()
+    -- Keep a real shared-header kind switch immediate. Repeated difficulty
+    -- notifications for the same kinds share that pass until the native settle.
+    local groupKind, raidKind = LiveGroupKind(), LiveRaidKind()
+    if not difficultyLayoutPending or groupKind ~= difficultyLayoutGroupKind or raidKind ~= difficultyLayoutRaidKind then
+      difficultyLayoutPending = false
+      local _, success = GF.RefreshHeaderLayout()
+      if success ~= false then
+        difficultyLayoutPending = true
+        difficultyLayoutGroupKind, difficultyLayoutRaidKind = groupKind, raidKind
+      end
+    end
     ScheduleHeaderLayoutSettle()
   elseif event == "ZONE_CHANGED_NEW_AREA" then
     -- HeaderScope() is nil for this event, so an inline pass would be an exact

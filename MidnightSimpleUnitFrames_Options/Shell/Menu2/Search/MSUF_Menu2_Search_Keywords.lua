@@ -65,7 +65,7 @@ Data.KEYWORDS = {
         "spells placed spell icons anchor position x offset y offset icon size max buffs max debuffs spacing layer growth per row hots healer " ..
         "buffs raid debuffs boss debuffs custom spells slots preview frame highlight",
     gf_indicators = "group frames groupframes party raid indicators status icons corner indicators group number focus glow border dispel aggro " ..
-        "threat role icon marker raid marker ready check leader assist dead ghost offline afk dnd",
+        "target highlight group targets gruppenziel threat role icon marker raid marker ready check leader assist dead ghost offline afk dnd",
     gf_priority = "group frames groupframes party raid priority frames priority group frames party priority frames priority party frames priority " ..
         "raid frames extra party frames extra raid frames dungeon priority frames duplicate frames pinned players pinned party members pin player " ..
         "tanks automatic tanks tank frames hover hotkey keybind important players healer externals stable strip slots placement attach group " ..

@@ -254,6 +254,7 @@ local API = {
     GetResourceStack = GetResourceStack,
     GetKickReady = GetKickReady,
     GetIconSkins = GetIconSkins,
+    GetProfileWorkbench = function() return MSUF.ProfileWorkbench end,
 }
 MSUF.HostAPI = API
 MSUF.HostAPIPlayerInCombat = PlayerInCombat

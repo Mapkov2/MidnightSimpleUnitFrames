@@ -1120,10 +1120,11 @@ function Health.PaintSampleBackground(frame, fraction)
 end
 
 --- Scene form: the health values, background and colours from a sample, with no client query.
-function Health.PaintSample(frame, unit, hp, hpMax)
+function Health.PaintSample(frame, unit, hp, hpMax, animate)
   local bar = frame and frame.hpBar
   if not bar then return false end
-  UpdateAbsoluteValues(frame, unit, hp, hpMax, true, false)
+  UpdateAbsoluteValues(frame, unit, hp, hpMax, true, animate == true)
+  if animate ~= true and bar._msufChunkedLoss then bar:SetValue(hp) end
   if frame._msufHealthBackgroundNeedsValue == true then
     SetHealthBackgroundValue(frame, unit, hp * 100 / hpMax, false, false)
   end

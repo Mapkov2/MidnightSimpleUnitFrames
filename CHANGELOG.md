@@ -1,5 +1,42 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-alpha2 - 2026-10-31
+
+Test build for Midnight, WoW Forever, Classic Era, TBC and Mists. Please report issues found while trying the new tools and previews.
+
+### Profiles and Edit Mode
+
+- **Profile workbench:** create and restore named restore points, inspect changed settings and their sources, and review imported settings before applying selected changes.
+<!-- msuf-menu-link: none -->
+- **Display and accessibility tools:** save layouts for your display, try color-vision presets, and inspect why an element is hidden.
+<!-- msuf-menu-link: none -->
+- **Move several elements together:** select multiple Edit Mode elements, move and align them together, and undo or redo the selection's layout changes.
+<!-- msuf-menu-link: none -->
+- **Shared history:** profile restores and undo/redo now include supported Suite settings while preserving profile variant overrides.
+<!-- msuf-menu-link: none -->
+
+### Frames, previews and search
+
+- **Animated previews:** group and unit samples follow the live health and power loss effects, with corrected scene ownership, aura samples, level displays and preview cleanup.
+<!-- msuf-menu-link: none -->
+- **More reliable frames:** settled raid rosters refresh status information correctly; instance scale changes reanchor affected layouts, and failed frame updates remain pending for retry.
+<!-- msuf-menu-link: none -->
+- **Cast and aura feedback:** improved interrupt-ready updates and cleanup, dispel highlights, and aura effect attachment across supported clients.
+<!-- msuf-menu-link: none -->
+- **Tooltips and texture layers:** improved Raider.IO information on unit tooltips and added class-color or NPC-type tinting for cosmetic texture layers.
+<!-- msuf-menu-link: none -->
+- **Find settings more easily:** expanded search coverage for status indicators, dropdown choices, preview controls and Suite-owned settings, with corrected result routing and page context.
+<!-- msuf-menu-link: none -->
+- **Menu layout:** corrected section bounds, sticky headers, scope selectors, group target editing and profile page selection layouts.
+<!-- msuf-menu-link: none -->
+
+### Performance and compatibility
+
+- Reduced repeated aura alpha, portrait, text-layer and interrupt-ready writes when the displayed state is unchanged.
+<!-- msuf-menu-link: none -->
+- Improved profile snapshot copying, group preview reuse and menu refreshes; updated translations and client-specific load declarations.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-alpha1 - 2026-10-14
 
 The first alpha of MSUF 7.0 for Midnight, WoW Forever, Classic Era, TBC and Mists.

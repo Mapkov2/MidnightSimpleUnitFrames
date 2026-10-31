@@ -1026,7 +1026,7 @@ local function ApplySlot(frame, conf, unitKey, slot, event)
   if holder.SetFrameLevel and frame.GetFrameLevel then
     local offset = tonumber(conf[keys.Level]) or 1
     if offset < 0 then offset = 0 elseif offset > 30 then offset = 30 end
-    local level = Layers.ElementLevel and Layers.ElementLevel(offset, 1, 0)
+    local level = Layers.FrameElementLevel and Layers.FrameElementLevel(frame, offset, 1, 0)
       or ((frame:GetFrameLevel() or 0) + offset)
     if holder._msufTexLayerLevel ~= level then
       holder:SetFrameLevel(level)

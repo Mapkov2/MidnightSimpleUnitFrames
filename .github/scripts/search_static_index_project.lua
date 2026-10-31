@@ -695,10 +695,16 @@ end
 local function SearchMetadata(M, Catalog, record)
     local raw = Catalog.Get(tostring(record.controlId or ""))
     local widget = raw and raw.widget
-    local meta = widget and widget._msuf2SearchMeta or {}
-    local parts, seen = {}, {}
+    local meta = widget and (widget._msuf2SearchMeta or (widget._msuf2ControlSchema and widget._msuf2ControlSchema.meta)) or {}
+    local parts, seen, localized, localeSeen = {}, {}, {}, {}
     local function Add(text)
         if text == nil then return end
+        if type(text) == "string" and not localeSeen[text] then
+            localeSeen[text] = true
+            localized[#localized + 1] = text:gsub("[%%|\031\t\r\n]", function(char)
+                return string.format("%%%02X", char:byte())
+            end)
+        end
         local variants = {}
         M.Search.Text.AddSearchText(variants, text)
         for i = 1, #variants do
@@ -744,7 +750,7 @@ local function SearchMetadata(M, Catalog, record)
         Add(meta.keywords)
     end
     Add(meta.help or meta.description or record.help)
-    return table.concat(parts, " ")
+    return table.concat(parts, " ") .. "\031" .. table.concat(localized, "\031")
 end
 
 --- Called from inside the crosswalk harness, where every page has been built with the
@@ -853,6 +859,20 @@ end
 --- than every character a field may contain.
 -- Shared selector widgets expose different choices on each client. Preserve the
 -- union of their proven runtime contracts when all other row fields agree.
+local function MergeMetadata(first, second)
+    local a, rawA = first:match("^(.-)\031(.*)$")
+    local b, rawB = second:match("^(.-)\031(.*)$")
+    a, b = a or first, b or second
+    if b ~= "" and not a:find(b, 1, true) then a = a == "" and b or (a .. " " .. b) end
+    local keys, seen = {}, {}
+    for _, raw in ipairs({ rawA or "", rawB or "" }) do
+        for key in raw:gmatch("[^\031]+") do
+            if not seen[key] then seen[key] = true; keys[#keys + 1] = key end
+        end
+    end
+    return a .. "\031" .. table.concat(keys, "\031")
+end
+
 local function MergeSelectorContracts(first, second)
     local a, b = {}, {}
     for field in (first .. "\t"):gmatch("(.-)\t") do a[#a + 1] = field end
@@ -864,9 +884,7 @@ local function MergeSelectorContracts(first, second)
     local baseA, extraA = a[12]:match("^(.-)|(.*)$")
     local baseB, extraB = b[12]:match("^(.-)|(.*)$")
     if baseA ~= baseB then return nil end
-    if extraA ~= extraB and not extraA:find(extraB, 1, true) then
-        a[12] = baseA .. "|" .. (extraA == "" and extraB or (extraA .. " " .. extraB))
-    end
+    a[12] = baseA .. "|" .. MergeMetadata(extraA, extraB)
     for _, column in ipairs({ 10, 11 }) do
         local separator = column == 10 and "," or "|"
         local values, seen = {}, {}
@@ -896,9 +914,7 @@ local function Render(lines)
             order[#order + 1] = identity
         elseif previous.line ~= rest then
             local extra = rest:match("|([^|]*)$") or ""
-            if extra ~= "" and not previous.metadata:find(extra, 1, true) then
-                previous.metadata = previous.metadata == "" and extra or (previous.metadata .. " " .. extra)
-            end
+            previous.metadata = MergeMetadata(previous.metadata, extra)
             if ORIGIN_RANK[origin] > ORIGIN_RANK[previous.origin] then
                 previous.origin, previous.line = origin, rest
             elseif previous.origin == origin then
@@ -925,8 +941,32 @@ local function Render(lines)
         unique[#unique + 1] = row.line:match("^(.*)|[^|]*$") .. "|" .. row.metadata
     end
     table.sort(unique)
+    local localeKeys, localeIds = {}, {}
+    for i, row in ipairs(unique) do
+        -- Identities themselves use the separator: metadata follows the final
+        -- pipe (raw key pipes are percent-escaped).
+        local base, raw = row:match("^(.*|[^|\031]*)\031(.*)$")
+        if raw then
+            local ids = {}
+            for key in raw:gmatch("[^\031]+") do
+                local id = localeIds[key]
+                if not id then id = #localeKeys + 1; localeKeys[id], localeIds[key] = key, id end
+                ids[#ids + 1] = id
+            end
+            unique[i] = base .. "\031" .. table.concat(ids, ",")
+        end
+    end
+    local metadataRows, metadataIds = {}, {}
+    for i, row in ipairs(unique) do
+        local base, metadata = row:match("^(.*)|(.*)$")
+        local id = metadataIds[metadata]
+        if not id then id = #metadataRows + 1; metadataRows[id], metadataIds[metadata] = metadata, id end
+        unique[i] = base .. "|@" .. id
+    end
+    local metadataBlob = table.concat(metadataRows, "\n")
+    local localeBlob = table.concat(localeKeys, "\n")
     local blob = table.concat(unique, "\n")
-    if blob:find("]==]", 1, true) then Fail("blob would terminate its own long string") end
+    if blob:find("]==]", 1, true) or localeBlob:find("]==]", 1, true) or metadataBlob:find("]==]", 1, true) then Fail("blob would terminate its own long string") end
 
     return #unique, table.concat({
         "-- Generated by .github/scripts/search_static_index_project.lua. Do not edit by hand.\n",
@@ -943,6 +983,8 @@ local function Render(lines)
         "M.Search = Search\n",
         "Search.StaticIndexSourceSha256 = \"" .. SOURCE_SHA256 .. "\"\n",
         "Search.StaticIndexRecordCount = " .. tostring(#unique) .. "\n",
+        "Search.StaticIndexLocaleKeys = [==[" .. localeBlob .. "]==]\n",
+        "Search.StaticIndexMetadataBlob = [==[" .. metadataBlob .. "]==]\n",
         "Search.StaticIndexBlob = [==[\n",
         blob,
         "\n]==]\n",

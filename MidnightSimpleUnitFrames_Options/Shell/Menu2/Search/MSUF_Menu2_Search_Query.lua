@@ -578,7 +578,11 @@ local function BuildSearchQueryClauses(query)
                 for k = 1, #aliases do AddSearchTermUnique(terms, seen, aliases[k], allowSoftStop) end
             end
             if #terms > 0 then
-                clauses[#clauses + 1] = { word = word, terms = terms }
+                local literal = phrases and phrases[i] or word
+                for _, term in ipairs(terms) do
+                    if term ~= word and term:gsub(" ", "") == word then literal = term break end
+                end
+                clauses[#clauses + 1] = { word = word, literal = literal, terms = terms }
             end
         end
         return clauses
@@ -725,19 +729,21 @@ end
 
 local function SearchClauseScore(rec, clause, fuzzyDistanceCache)
     local haystack = rec.haystack or ""
+    local source = rec.sourceLabelNorm or rec.labelNorm
     local best = 0
     for i = 1, #clause.terms do
         local term = clause.terms[i]
         local score = 0
         if haystack:find(term, 1, true) then
-            if rec.labelNorm == term or rec.titleNorm == term then score = score + 180 end
-            if rec.labelNorm:find(term, 1, true) == 1 or rec.titleNorm:find(term, 1, true) == 1 then score = score + 90 end
-            if rec.labelNorm:find(term, 1, true) then score = score + 70 end
+            if rec.labelNorm == term or source == term or rec.titleNorm == term then score = score + 180 end
+            if rec.labelNorm:find(term, 1, true) == 1 or source:find(term, 1, true) == 1 or rec.titleNorm:find(term, 1, true) == 1 then score = score + 90 end
+            if rec.labelNorm:find(term, 1, true) or source:find(term, 1, true) then score = score + 70 end
             if rec.titleNorm:find(term, 1, true) then score = score + 55 end
             if rec.hintNorm and rec.hintNorm:find(term, 1, true) then score = score + 45 end
             if rec.groupNorm:find(term, 1, true) then score = score + 35 end
-            if term ~= clause.word then score = score + 35 end
             score = score + 10
+            if term == clause.word or term == clause.literal then score = score + 120
+            else score = math.min(score, 40) end
         elseif term == clause.word and SearchFuzzyTokenMatch(rec, term, fuzzyDistanceCache) then
             score = 28
         end
@@ -842,7 +848,7 @@ end
 
 local function SearchDirectSubjectMatches(rec, clauses)
     if not rec or type(clauses) ~= "table" then return 0, 0, 0 end
-    local labelText = tostring(rec.labelNorm or "") .. " " .. tostring(rec.titleNorm or "")
+    local labelText = (rec.labelNorm or "") .. " " .. (rec.sourceLabelNorm or "") .. " " .. (rec.titleNorm or "")
     local contextText = labelText .. " " .. tostring(rec.hintNorm or "") .. " " .. tostring(rec.groupNorm or "")
     local haystack = tostring(rec.haystack or "")
     local labelMatches, contextMatches, haystackMatches = 0, 0, 0
@@ -852,7 +858,7 @@ local function SearchDirectSubjectMatches(rec, clauses)
         if type(terms) == "table" then
             for k = 1, #terms do
                 local term = terms[k]
-                if term and term ~= "" then
+                if term == clauses[i].word or term == clauses[i].literal then
                     if labelText:find(term, 1, true) then inLabel = true end
                     if contextText:find(term, 1, true) then inContext = true end
                     if haystack:find(term, 1, true) then inHaystack = true end
@@ -867,8 +873,9 @@ local function SearchDirectSubjectMatches(rec, clauses)
     return labelMatches, contextMatches, haystackMatches
 end
 
-local function SearchGenericLocationBoost(rec, clauses, matchedClauses, missedClauses)
+local function SearchGenericLocationBoost(rec, clauses, matchedClauses, missedClauses, normalized)
     if not rec or type(clauses) ~= "table" or #clauses == 0 then return 0 end
+    if rec.labelNorm == normalized or rec.sourceLabelNorm == normalized then return 860 + #clauses * 160 end
     local labelMatches, contextMatches, haystackMatches = SearchDirectSubjectMatches(rec, clauses)
     local direct = math.max(labelMatches, contextMatches)
     local allMatched = (tonumber(missedClauses) or 0) == 0 and (tonumber(matchedClauses) or 0) >= #clauses
@@ -919,7 +926,7 @@ local function SearchResultSpecificityBoost(rec, clauses)
     if clauseCount == 0 then return 0 end
 
     local label = rec.labelNorm or ""
-    local title = rec.titleNorm or ""
+    local source, title = rec.sourceLabelNorm or label, rec.titleNorm or ""
     local direct = 0
     for i = 1, clauseCount do
         local clause = clauses[i]
@@ -928,7 +935,8 @@ local function SearchResultSpecificityBoost(rec, clauses)
         if type(terms) == "table" then
             for k = 1, #terms do
                 local term = terms[k]
-                if term and term ~= "" and (label:find(term, 1, true) or title:find(term, 1, true)) then
+                if (term == clause.word or term == clause.literal)
+                    and (label:find(term, 1, true) or source:find(term, 1, true) or title:find(term, 1, true)) then
                     matched = true
                     break
                 end

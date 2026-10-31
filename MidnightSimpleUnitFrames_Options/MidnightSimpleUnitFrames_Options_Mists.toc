@@ -3,7 +3,7 @@
 ## Notes: Load-on-demand configuration UI for Mists Classic.
 ## Author: Mapko
 ## Category: Combat
-## Version: 7.0-alpha1
+## Version: 7.0-alpha2
 ## X-MSUF-Client: Mists
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames

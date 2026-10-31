@@ -20,6 +20,7 @@ local DrawSubLayer = Text.DrawSubLayer
 local ClampFrameLayer = Text.ClampFrameLayer
 local GetLayerBaseLevel = Text.GetLayerBaseLevel
 local Layers = UF and UF.Layers or {}
+local FrameElementLevel = Layers.FrameElementLevel
 local SetFrameLevelCached = Text.SetFrameLevelCached
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
@@ -263,7 +264,7 @@ local function EnsureClipFrame(frame, key, layer)
   end
   frame[key] = clip
   if frame.GetFrameLevel and clip.SetFrameLevel then
-    local level = (Layers.TextLevel and Layers.TextLevel(frame, layer, 5)) or (GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, 5))
+    local level = (FrameElementLevel and FrameElementLevel(frame, layer, 5, 8)) or (GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, 5))
     SetFrameLevelCached(clip, level)
   end
   return clip
@@ -725,7 +726,7 @@ local function EnsureTextOverlay(frame, field, layer, fallback)
     overlay:SetParent(frame._msufPowerVisibilityParent)
   end
   if frame.GetFrameLevel and overlay.SetFrameLevel then
-    local level = (Layers.TextLevel and Layers.TextLevel(frame, layer, fallback)) or (GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, fallback))
+    local level = (FrameElementLevel and FrameElementLevel(frame, layer, fallback, 8)) or (GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, fallback))
     if overlay._msufFrameLevel ~= level then
       overlay:SetFrameLevel(level)
       overlay._msufFrameLevel = level
@@ -1272,7 +1273,7 @@ local function PositionConfiguredText(frame, spec, text, inlineEnabled,
     local detachedTextLayer = ClampFrameLayer(tonumber(text.powerLayer) or 2, 2)
     local overlay = EnsureTextOverlay(frame, "MSUFPowerTextLayer", detachedTextLayer, 2)
     local baseLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or GetLayerBaseLevel(frame)
-    SetFrameLevelCached(overlay, (Layers.TextLevel and Layers.TextLevel(baseLevel, detachedTextLayer, 2)) or (baseLevel + 10 + detachedTextLayer))
+    SetFrameLevelCached(overlay, (FrameElementLevel and FrameElementLevel(frame, detachedTextLayer, 2, 8)) or (baseLevel + 10 + detachedTextLayer))
   end
 
   RestoreNameParent(frame)

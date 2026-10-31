@@ -509,13 +509,24 @@ PRELUDE_LINE = re.compile(
     + r'|if\s+(?:not\s+)?[\w.]+\s+then\s+return\s+end)$')
 
 
+# Cold dependency declarations only: assert(dotted.namespace, literal message)
+# or assert(MSUF.Require(literal, literal).Identifier). No arbitrary nested
+# call, fallback, indexing, arithmetic or dynamic argument is an import.
+PRELUDE_IMPORT_LITERAL = r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')"
+PRELUDE_IMPORT_ASSERT = re.compile(
+    r"^local\s+[A-Za-z_]\w*\s*=\s*assert\s*\(\s*(?:"
+    r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+\s*,\s*" + PRELUDE_IMPORT_LITERAL
+    + r"|MSUF\.Require\s*\(\s*" + PRELUDE_IMPORT_LITERAL + r"\s*,\s*"
+    + PRELUDE_IMPORT_LITERAL + r"\s*\)\.[A-Za-z_]\w*)\s*\)$")
+
+
 def clone_source_lines(plain):
     kept, prelude = [], True
     for number, line in enumerate(plain.split("\n"), 1):
         text = " ".join(line.split())
         if not text:
             continue
-        if prelude and (PRELUDE_LINE.fullmatch(text) or re.fullmatch(
+        if prelude and (PRELUDE_LINE.fullmatch(text) or PRELUDE_IMPORT_ASSERT.fullmatch(text) or re.fullmatch(
                 r'MSUF\.Auras3RuntimeFactories\.\w+ = function\([\w, ]*\)', text)):
             continue
         prelude = False

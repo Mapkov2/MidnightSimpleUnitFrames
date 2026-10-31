@@ -516,9 +516,12 @@ local function ButtonSetText(self, value, translated)
     local text = translated == true and raw or Tr(raw)
     if self._msuf2RawText == raw and self._msuf2Label and self._msuf2Label:GetText() == text then return end
     self._msuf2RawText = raw
-    self._msuf2SearchText = raw
+    if self._msuf2ControlKind ~= "dropdown" then self._msuf2SearchText = raw end
     if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
     T.SetTranslatedText(self._msuf2Label, text)
+    -- A selected value is display state. The dropdown's registration owns its
+    -- semantic name, choices and exact route; repainting must not replace them.
+    if self._msuf2ControlKind == "dropdown" then return end
     if value and value ~= "" then
         -- Dropdown buttons display the selected value, but selected text is not
         -- always the semantic control name. Opt-in controls keep one stable

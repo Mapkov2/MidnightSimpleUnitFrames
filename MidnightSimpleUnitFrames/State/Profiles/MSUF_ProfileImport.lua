@@ -622,7 +622,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     --- Pending edits reach the other sync members first; the imported
     --- settings themselves stay in this profile (re-based below).
     if ProfileSync then ProfileSync.Flush() end
-    PrepareProfileMutation()
+    if plan.preserveIdentity then Variants.Restore() else PrepareProfileMutation() end
     local kind, payload = plan.kind, plan.payload
     --- Always keep the profile-table reference stable (important!).
     --- Do not replace MSUF_DB with a new table here. Runtime modules keep
@@ -678,6 +678,10 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
 end
 --- The end every import into the active profile shares: commit, then report.
 function ImportTx.Finish(plan)
+    if MSUF.ProfileWorkbench then
+        local ok, why = MSUF.ProfileWorkbench.Checkpoint("Before importing settings", true)
+        if not ok then return false, why end
+    end
     MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     if plan.isSnapshot then
         ProfileChat("ok", "Imported %s settings into the active profile.", tostring(plan.snapshotKind))
@@ -932,6 +936,30 @@ Parts.MSUF_ProfileIO_GetProfileTable = MSUF_ProfileIO_GetProfileTable
 Parts.MSUF_ProfileIO_MaterializeProfileCopyForExport = MSUF_ProfileIO_MaterializeProfileCopyForExport
 
 -- Complete forward bindings once; gameplay closures keep direct local calls.
+-- Staging and commit share the existing importer and normalization owners.
+MSUF.ProfileImportReview = {
+    Prepare = function(text, base)
+        local plan, why = MSUF_ProfileIO_PrepareImport(text, "active")
+        if not plan then return nil, why end
+        return ImportTx.Stage(plan, base)
+    end,
+    Factory = ImportTx.FactoryBase,
+    PrepareSnapshot = function(snapshot)
+        local candidate, valid = MSUF.ProfileFields.CopySnapshot(snapshot)
+        if not valid or type(candidate) ~= "table" then return nil, "Invalid restore point." end
+        MSUF_ProfileIO_TranslateProfileToCurrent(candidate, {
+            source = "restore_point", markProfile = true, trustProfileMetadata = true,
+            createGeneral = true, normalizePositions = true,
+        })
+        -- Stage owns all current repairs. The snapshot's own variants are its
+        -- base too, so the ordinary import preference cannot replace them.
+        return ImportTx.Stage({ kind = "all", payload = candidate }, candidate)
+    end,
+    Commit = function(candidate)
+        return MSUF_ProfileIO_CommitImportToActiveProfile({ candidate = candidate, payload = candidate,
+            kind = "all", isSnapshot = true, snapshotKind = "all", preserveIdentity = true })
+    end,
+}
 Parts.Bind1()
 Parts.Bind3()
 MSUF.ProfilesParts = nil

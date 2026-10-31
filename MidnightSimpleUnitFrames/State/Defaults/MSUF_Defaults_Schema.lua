@@ -517,6 +517,7 @@ local values = {
         powerBarBgTexture = "", powerBarTexture = "",
     },
         boss = {
+        rightClickFocusInCombat = false,
         height = 30, offsetX = 360, offsetY = 230, spacing = -96, width = 180,
         --- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
         --- Kept invertBossOrder for one-shot migration (see below).
@@ -532,6 +533,7 @@ local values = {
         powerBarBgTexture = "", powerBarTexture = "",
     },
         arena = {
+        rightClickFocusInCombat = false,
         height = 30, offsetX = 360, offsetY = -40, spacing = -96, width = 180,
         --- Arena reuses the boss stacked-container model and its exact key
         --- names (spacing/bossLayoutMode), so the engine delta math, Edit Mode

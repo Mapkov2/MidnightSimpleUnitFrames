@@ -59,15 +59,15 @@ local function DispelSensorFrameLevel(parentFrame, sensor, target)
         -- Geometry follows the health target, but AUTO/equal-strata ordering is
         -- based on the unit frame so Dispel deterministically wins the shared
         -- health-effect band above every Spell Indicator priority.
-        if FrameLayers.ElementLevel then return FrameLayers.ElementLevel(sensor.layer, 0, 12) end
+        if FrameLayers.FrameElementLevel then return FrameLayers.FrameElementLevel(parentFrame, sensor.layer, 0, 12) end
         return math_max(targetLevel + 1, parentLevel + DISPEL_OVERLAY_EFFECT_OFFSET + (sensor.layer or 0))
     end
     if sensor and (sensor.visual == "corner" or sensor.visual == "symbol") then
-        if FrameLayers.ElementLevel then return FrameLayers.ElementLevel(sensor.layer, 14, 8) end
+        if FrameLayers.FrameElementLevel then return FrameLayers.FrameElementLevel(parentFrame, sensor.layer, 14, 8) end
         return parentLevel + AuraIconBaseOffset(parentFrame) + (sensor.layer or 14)
     end
-    if FrameLayers.ElementLevel then
-        return FrameLayers.ElementLevel(sensor and sensor.layer, 14, sensor and sensor.detail or 8)
+    if FrameLayers.FrameElementLevel then
+        return FrameLayers.FrameElementLevel(parentFrame, sensor and sensor.layer, 14, sensor and sensor.detail or 8)
     end
     return parentLevel + (sensor and sensor.layer or 14)
 end

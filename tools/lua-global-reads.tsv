@@ -406,3 +406,4 @@ secureexecuterange	api	Blizzard client API (Blizzard_SharedXMLBase CallbackRegis
 strmatch	luaenv	string.match, which WoW also publishes as a global
 time	luaenv	WoW's time() global (there is no os table in the client)
 wipe	luaenv	WoW's table-clearing global
+UnregisterAttributeDriver	api	Blizzard secure attribute-driver API paired with RegisterAttributeDriver; removes the owned boss/arena right-click driver outside combat

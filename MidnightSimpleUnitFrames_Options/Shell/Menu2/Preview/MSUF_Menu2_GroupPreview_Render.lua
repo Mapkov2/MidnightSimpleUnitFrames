@@ -497,6 +497,17 @@ local function FinalizeVisibility(scene)
             helpers.ApplyGroupSceneLayerAlpha(scene.box, frame[ENGINE_TEXT_FIELDS[i]], textAlpha)
         end
         helpers.ApplyGroupSceneLayerAlpha(scene.box, frame.targetPowerBar, SceneLayerAlpha(scene, "power"))
+        local bar, trail = frame.targetPowerBar, frame.powerLossTrail
+        if bar and trail and bar._msufChunkedLoss then
+            local pool = trail._msufLossTrailPool
+            local alpha = bar:GetStatusBarTexture():GetAlpha() * bar:GetAlpha()
+            for i = 1, pool and #pool or 1 do
+                local snapshot = pool and pool[i] or trail
+                local fill = snapshot:GetStatusBarTexture()
+                if fill:GetAlpha() ~= alpha then fill:SetAlpha(alpha) end
+                if not bar:IsShown() then snapshot:Hide() end
+            end
+        end
     end
 end
 
@@ -510,6 +521,14 @@ local function FinalizeRangeFade(scene)
     local healthMul = rangeHealthOnly and rangeAlpha or 1
     if mock.SetAlpha then mock:SetAlpha(wholeFrameMul) end
     if mock._health and mock._health.SetAlpha then mock._health:SetAlpha(healthMul) end
+    local trail = mock._cell and mock._cell.healthLossTrail
+    if trail and mock._health._msufChunkedLoss then
+        local fill = trail:GetStatusBarTexture()
+        local alpha = mock._health:GetStatusBarTexture():GetAlpha() * healthMul
+        if fill:GetAlpha() ~= alpha then
+            fill:SetAlpha(alpha)
+        end
+    end
     -- The engine paints each prediction bar at its configured opacity (the bar's alpha): the range fade scales it.
     for i = 1, #PREDICTION_BAR_FIELDS do
         local bar = mock[PREDICTION_BAR_FIELDS[i]]

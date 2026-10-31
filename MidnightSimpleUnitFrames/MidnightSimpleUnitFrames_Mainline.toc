@@ -3,9 +3,9 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: MSUF
-## Version: 7.0-alpha1 [AllowLoadGameType standard]
-## Version: 7.0-alpha1 [ExcludeLoadGameType standard]
-## X-MSUF-Version-Forever: 7.0-alpha1
+## Version: 7.0-alpha2 [AllowLoadGameType standard]
+## Version: 7.0-alpha2 [ExcludeLoadGameType standard]
+## X-MSUF-Version-Forever: 7.0-alpha2
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI, Grid2, Details, MapkoSkin
@@ -134,6 +134,8 @@ Media\MSUF_Media.lua
 Runtime\MSUF_BorderStyles.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
+State\MSUF_ProfileWorkbench.lua
+State\MSUF_ProfileWorkbenchTools.lua
 State\MSUF_RetiredData.lua
 Runtime\MSUF_SlashCommands.lua
 Runtime\MSUF_UnitTooltips.lua
@@ -287,6 +289,7 @@ Runtime\MSUF_HostAPI.lua
 Runtime\MSUF_WelcomeMessage.lua
 Runtime\MSUF_TooltipSpellIDs.lua
 Kernel\MSUF_OptionsLoader.lua
+Castbars\MSUF_InterruptReady_Consumers.lua
 
 # ---------------------------------------------------------------
 # OPTIONAL VISUAL / CASTBAR FEATURES
@@ -300,5 +303,6 @@ Castbars\MSUF_CastbarRounded.lua
 UnitFrames\Effects\MSUF_UF_TextureLayer.lua
 
 State\MSUF_ApplyService.lua
+State\MSUF_HistoryProviders.lua
 State\MSUF_History.lua
 Kernel\MSUF_RuntimeContracts.lua

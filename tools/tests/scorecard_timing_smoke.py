@@ -55,5 +55,81 @@ class ScorecardTimingTest(unittest.TestCase):
                 self.assertIn("scorecard: 1 failed", output)
 
 
+class CloneImportPreludeTest(unittest.TestCase):
+    def normalized(self, source):
+        return s.ratchet.clone_source_lines(s.ratchet.strip_source(source)[1])
+
+    def test_guarded_dotted_imports_are_only_prefix_wiring(self):
+        for guard in ('local Style = assert(GF.PreviewStyle, "required provider")',
+                      "local Layout = assert(MSUF.GF.PreviewLayout, 'required provider')",
+                      'local Style = assert ( GF.PreviewStyle , "required provider" )',
+                      'local AuraPainter = assert(MSUF.Require("MSUF_Auras3", "GroupFrames/Preview").MockAuraPainter)',
+                      "local AuraPainter = assert(MSUF.Require('MSUF_Auras3', 'owner').MockAuraPainter)"):
+            with self.subTest(guard=guard):
+                source = 'local _, MSUF = ...\n' + guard + '\nlocal Paint = Style.Paint\nlocal value = 17 + 1\n'
+                self.assertEqual(self.normalized(source), [(4, 'local value = 17 + 1')])
+
+    def test_executable_or_mixed_inputs_terminate_the_prefix(self):
+        for guard in ('local Style = assert(BuildStyle(), "required provider")',
+                      'local Style = assert(GF.PreviewStyle or fallback, "required provider")',
+                      'local Style = assert(GF["PreviewStyle"], "required provider")',
+                      'local Style = assert(GF.PreviewStyle, message)',
+                      'local Style = assert(GF.PreviewStyle, "required" .. suffix)',
+                      'local Style = assert(GF.PreviewStyle, "required", extra)',
+                      'local Style, other = assert(GF.PreviewStyle, "required")',
+                      'local Style = assert(GF.PreviewStyle)',
+                      'local Style = assert(GF, "required")',
+                      'Style = assert(GF.PreviewStyle, "required")',
+                      'local Style = assert(MSUF.Require(name, "owner").Paint)',
+                      'local Style = assert(MSUF.Require("Style", owner).Paint)',
+                      'local Style = assert(MSUF.Require("Style", "owner"))',
+                      'local Style = assert(Other.Require("Style", "owner").Paint)',
+                      'local Style = assert(MSUF.Require("Style", "owner").Paint())',
+                      'local Style = assert(MSUF.Require("Style", "owner").Paint + 1)',
+                      'local Style = assert(MSUF.Require("Style", "owner")["Paint"])',
+                      'local Style = assert(MSUF.Require("Style", "owner", extra).Paint)',
+                      'local Style = assert(MSUF.Require("Style" .. suffix, "owner").Paint)',
+                      'local Style = assert(GF.PreviewStyle, "required"); Paint()'):
+            with self.subTest(guard=guard):
+                source = 'local _, MSUF = ...\n' + guard + '\nlocal Paint = Style.Paint\n'
+                kept = self.normalized(source)
+                self.assertTrue(any(number == 2 for number, _ in kept), guard)
+                self.assertTrue(any(number == 3 for number, _ in kept), guard)
+
+    def test_real_body_copies_still_form_clone_windows(self):
+        body = ('local function Paint(frame)\n'
+                '  local a = frame.alpha\n  local b = frame.beta\n  local c = frame.gamma\n'
+                '  local d = frame.delta\n  local e = frame.epsilon\n  local f = frame.zeta\n'
+                '  return a + b + c + d + e + f\nend\n')
+        prelude = 'local Style = assert(GF.PreviewStyle, "required provider")\nlocal Paint = Style.Paint\n'
+        kept = self.normalized(prelude + body)
+        hashes = s.ratchet.window_hashes([line for _, line in kept])
+        self.assertTrue(hashes, 'executable duplicate body disappeared')
+        self.assertEqual(hashes, s.ratchet.window_hashes([line for _, line in self.normalized(body)]))
+        # An import-looking assertion after feature code is executable too.
+        kept = self.normalized('Paint()\n' + prelude)
+        self.assertTrue(any(number == 2 for number, _ in kept))
+
+    def test_real_scorecard_rejects_unlisted_executable_copies(self):
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix='clone-prelude-') as directory:
+            root = Path(directory)
+            (root / 'tools').mkdir()
+            folder = root / 'MidnightSimpleUnitFrames'
+            folder.mkdir()
+            source = ('local Style = assert(GF.PreviewStyle, "required provider")\n'
+                      'local Paint = Style.Paint\nlocal function Paint(frame)\n'
+                      'local a = frame.alpha\nlocal b = frame.beta\nlocal c = frame.gamma\n'
+                      'local d = frame.delta\nlocal e = frame.epsilon\nlocal f = frame.zeta\n'
+                      'return a + b + c + d + e + f\nend\n')
+            for name in ('First.lua', 'Second.lua'):
+                (folder / name).write_text(source, encoding='utf-8')
+            rels = ['MidnightSimpleUnitFrames/First.lua', 'MidnightSimpleUnitFrames/Second.lua']
+            with patch.object(s.ratchet, 'product_files', return_value=(rels, set())):
+                measured = s.measure(root)
+            self.assertGreater(measured[3], 0)
+            self.assertEqual(measured[3], measured[4], 'unlisted duplicate body was excused')
+
+
 if __name__ == "__main__":
     unittest.main()

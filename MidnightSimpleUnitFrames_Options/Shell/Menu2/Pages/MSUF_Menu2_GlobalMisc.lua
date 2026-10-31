@@ -198,26 +198,7 @@ function MiscSection.Binders(s)
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return control
     end
-    local function BindGroupTargetSwitch(parent, label, kind, x, y, width)
-        local control = Schema.Build(ctx, parent, {
-            { "switch", kind, true, { label, x, y, width },
-            get = function()
-                local groupPage = M.GroupPage
-                if groupPage and type(groupPage.Bool) == "function" then
-                    return groupPage.Bool(kind, "targetIndicator", true)
-                end
-                return true
-            end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
-            write = { call = M.GroupPage.Set, group = true, boolean = true, args = { "visual" } } --[[schema setter: H4.GlobalMisc.1]],
-            meta = Meta("group_target." .. kind, "setting", {
-                settingKey = "gf_" .. kind .. ".targetIndicator",
-            }), domain = "global" },
-        }, ROW_OPTIONS)[kind]
-        return control
-    end
     s.BindMiscToggle, s.BindMiscDropdown = BindMiscToggle, BindMiscDropdown
-    s.BindGroupTargetSwitch = BindGroupTargetSwitch
 end
 function MiscSection.Language(s)
     local ctx, b, BindMiscDropdown = s.ctx, s.b, s.BindMiscDropdown
@@ -549,8 +530,7 @@ function MiscSection.ExternalEditMode(s)
 end
 function MiscSection.FrameHighlights(s)
     local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
-    local BindGroupTargetSwitch = s.BindGroupTargetSwitch
-    local mouseover = Schema.Section(b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true), ctx.key)
+    local mouseover = Schema.Section(b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 210, true), ctx.key)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(mouseover, { "highlight.mouseover" }, {
             title = "Mouseover Highlight Color",
@@ -601,24 +581,7 @@ function MiscSection.FrameHighlights(s)
     end
     if enabled and enabled.HookScript then enabled:HookScript("OnClick", RefreshMouseoverControls) end
     M.TrackRefresh(ctx, RefreshMouseoverControls)
-    local targetCardW = max(320, mouseoverW - 28)
-    local targetCard = Schema.Build(ctx, mouseover, {
-        { "card", "menu2.opt_misc.mouseover.targetCard", nil, { "Group Target Highlight",
-            "Independent of mouseover. Marks your current target in the selected group-frame types.", 14, -198, targetCardW, 116 }, domain = "layout" },
-    })["menu2.opt_misc.mouseover.targetCard"]
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(targetCard, { "group.target" }, {
-            title = "Target Highlight Color",
-            note = "Shared by Party, Raid and Mythic Raid.",
-            historySource = "menu:group-target-highlight-color",
-            offsetX = -76,
-        })
-    end
-    local mythicSupported = not M.SupportsFrameScope or M.SupportsFrameScope("mythicraid")
-    local targetColumnW = math.floor((targetCardW - 36) / (mythicSupported and 3 or 2))
-    BindGroupTargetSwitch(targetCard, "Party frames", "party", 18, -78, targetColumnW - 42)
-    BindGroupTargetSwitch(targetCard, "Raid frames", "raid", 18 + targetColumnW, -78, targetColumnW - 42)
-    if mythicSupported then BindGroupTargetSwitch(targetCard, "Mythic Raid frames", "mythicraid", 18 + (targetColumnW * 2), -78, targetColumnW - 42) end
+
 end
 function MiscSection.Tooltips(s)
     local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown

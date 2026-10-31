@@ -550,6 +550,10 @@ function SearchNaming.BuildPageNames(pageInfos)
             local source = sources[k]
             local short = source and NormalizeSearchText((M.Tr(source):gsub("^MSUF[%s%-]+", ""))) or ""
             if short ~= "" then names[#names + 1] = { key = key, padded = " " .. short .. " " } end
+            local english = source and NormalizeSearchText((source:gsub("^MSUF[%s%-]+", ""))) or ""
+            if key:match("^uf_") and english ~= "" and english ~= short then
+                names[#names + 1] = { key = key, padded = " " .. english .. " " }
+            end
         end
     end
     local overlapping = {}
@@ -561,9 +565,11 @@ function SearchNaming.BuildPageNames(pageInfos)
             end
         end
     end
-    local kept = {}
+    local kept = { byKey = {} }
     for i = 1, #names do
-        if overlapping[names[i]] then kept[#kept + 1] = names[i] end
+        local name = names[i]
+        kept.byKey[name.key] = (kept.byKey[name.key] or "") .. name.padded
+        if overlapping[names[i]] or names[i].key:match("^uf_") then kept[#kept + 1] = names[i] end
     end
     table.sort(kept, function(a, b)
         if #a.padded ~= #b.padded then return #a.padded > #b.padded end
@@ -591,7 +597,10 @@ end
 --- Allocates only for a record whose label occurs in the query.
 function SearchNaming.Label(rec, normalized)
     local label = rec.labelNorm
+    if rec.sourceLabelNorm and not normalized:find(label, 1, true) then label = rec.sourceLabelNorm end
     if label == "" or label == normalized then return false end
+    local pageNames = SEARCH_STATE.pageNames
+    local pageContext = pageNames and pageNames.byKey and pageNames.byKey[rec.key]
     local offset = 1
     while true do
         local first, last = normalized:find(label, offset, true)
@@ -603,7 +612,8 @@ function SearchNaming.Label(rec, normalized)
             for word in (normalized:sub(1, first - 1) .. " " .. normalized:sub(last + 1)):gmatch("%S+") do
                 if not SearchIgnoreQueryWord(word) then
                     if not (rec.titleNorm:find(word, 1, true) or (rec.hintNorm or ""):find(word, 1, true)
-                        or rec.groupNorm:find(word, 1, true)) then
+                        or rec.groupNorm:find(word, 1, true)
+                        or (pageContext and pageContext:find(" " .. word .. " ", 1, true))) then
                         valid = false
                         break
                     end

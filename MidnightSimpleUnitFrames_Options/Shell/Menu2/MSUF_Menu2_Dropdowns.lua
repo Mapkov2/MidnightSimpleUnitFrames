@@ -1046,19 +1046,21 @@ function W.OpenDropdown(owner, values, currentValue, onSelect)
 end
 local function ResolveDropdownValues(owner)
     local valuesTable = owner.values
-    if type(valuesTable) == "function" then
+    local dynamic = type(valuesTable) == "function"
+    if dynamic then
         local resolved = valuesTable()
         valuesTable = resolved or nil
     end
     if type(valuesTable) ~= "table" then valuesTable = {} end
-    return valuesTable
+    return valuesTable, dynamic
 end
 local function FindDropdownItem(owner, value)
-    local valuesTable = ResolveDropdownValues(owner)
+    local valuesTable, dynamic = ResolveDropdownValues(owner)
     for i = 1, #valuesTable do
         local item = valuesTable[i]
-        if DropdownItemValue(item) == value then return item end
+        if DropdownItemValue(item) == value then return item, dynamic end
     end
+    return nil, dynamic
 end
 function W.Dropdown(section, label, values, width)
     local x, y = NextRow(section, 48)
@@ -1086,18 +1088,16 @@ function W.Dropdown(section, label, values, width)
     function btn:SetValues(nextValues)
         self.values = nextValues or {}
         if type(M.RegisterSearchWidget) == "function" then
-            M.RegisterSearchWidget(self, {
-                label = self._msuf2SearchText,
-                kind = "dropdown",
-                anchor = self._msuf2Title,
-                values = self.values,
-            })
+            local meta = self._msuf2SearchMeta or { label = self._msuf2SearchText,
+                kind = "dropdown", anchor = self._msuf2Title }
+            meta.values = self.values
+            M.RegisterSearchWidget(self, meta)
         end
         self:SetValue(self.value)
     end
     function btn:SetValue(value)
         self.value = value
-        local selectedItem = FindDropdownItem(self, value)
+        local selectedItem, dynamic = FindDropdownItem(self, value)
         local icon = DropdownItemIcon(selectedItem)
         local statusbarTexture = DropdownItemStatusbarTexture(selectedItem)
         local barPreview = DropdownItemBarPreview(selectedItem)
@@ -1111,6 +1111,8 @@ function W.Dropdown(section, label, values, width)
             self:SetText(item and DropdownItemText(item) or tostring(value or ""))
         end
         if DropdownItemHasFontPreview(selectedItem) then ApplyDropdownItemFont(self._msuf2Label, selectedItem) end
+        local meta = self._msuf2SearchMeta
+        if meta and dynamic then M.RegisterSearchWidget(self, meta) end
     end
     function btn:GetValue()
         return self.value

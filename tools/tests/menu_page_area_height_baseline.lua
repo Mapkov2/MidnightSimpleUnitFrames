@@ -1,8 +1,12 @@
 -- Frozen outer heights of the unit aura workspace, captured from 75ff89d0f (before
 -- page areas) with the cache smoke's open/settle walk. buff/layout's first
 -- closed->open view has 14px more padding than views built open.
--- Returns Expected(flavor, unit) -> function(lane, tool, slot) -> height.
-return function(flavor, unit)
+-- Optional contextualVisibility adds only the reviewed 2026-10-29 diagnostic card.
+-- Its 132px outer card adds 154px to ordinary flow and 140px where the previous
+-- style/first-view layout already retained 14px padding. With the card suppressed,
+-- all original heights still match across the complete release matrix.
+-- Returns Expected(flavor, unit, contextualVisibility) -> function(lane, tool, slot) -> height.
+return function(flavor, unit, contextualVisibility)
     local classic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists"
     local player = unit == "player"
     local normal = {
@@ -19,6 +23,11 @@ return function(flavor, unit)
         if lane == "buff" and tool == "layout" and slot == 1 then expected = 422 end
         if lane == "buff" and tool == "style" and not player then expected = expected + 34 end
         if lane == "debuff" and tool == "blacklist" and player then expected = 646 end
+        local diagnostic = player and lane == "custom4" or not player and (lane == "buff" or lane == "debuff")
+        if contextualVisibility and diagnostic then
+            local retainedPadding = tool == "style" or lane == "buff" and tool == "layout" and slot == 1
+            expected = expected + (retainedPadding and 140 or 154)
+        end
         return expected
     end
 end

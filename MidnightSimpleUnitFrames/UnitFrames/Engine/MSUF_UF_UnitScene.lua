@@ -211,7 +211,7 @@ local function PaintTestModeElements(frame, unit)
 end
 
 --- Paint the sample into one applied frame; the window is open.
-local function PaintSample(frame, unit, sample, layout)
+local function PaintSample(frame, unit, sample, layout, animate)
   local elements = UF.elements
   local active = frame._msufActiveElements or {}
   local hpMax = sample.hpMax or UnitScene.HEALTH_MAX
@@ -219,12 +219,12 @@ local function PaintSample(frame, unit, sample, layout)
   local hp = sample.hpCur or floor(hpMax * fraction + 0.5)
   fraction = hp / hpMax
   local health = elements.Health
-  if health and health.PaintSample then health.PaintSample(frame, unit, hp, hpMax) end
+  if health and health.PaintSample then health.PaintSample(frame, unit, hp, hpMax, animate) end
   local powerMax = sample.powerMax or 100
   local power = sample.powerCur or floor(powerMax * min(1, max(0, sample.power or 0)) + 0.5)
   local powerElement = elements.Power
   if powerElement and powerElement.PaintSample and frame.targetPowerBar then
-    powerElement.PaintSample(frame, unit, power, powerMax, sample.powerType, sample.powerToken)
+    powerElement.PaintSample(frame, unit, power, powerMax, sample.powerType, sample.powerToken, animate)
   end
   local prediction = elements.Prediction
   if prediction and active.Prediction == true and prediction.PaintSample then
@@ -400,7 +400,6 @@ end
 
 --- Re-apply the spec (compiled now into this scene's own table) and paint the sample.
 local function FinishSceneRefresh(_, self)
-  UF.Layers.SetLevelBias(0)
   if self.frame then CloseWindow(self.frame) end
 end
 
@@ -431,10 +430,8 @@ local function RefreshScene(self)
   end
   -- A paint that failed left its window open; the apply must not hold the unit.
   CloseWindow(frame)
-  local layers = UF.Layers
-  layers.SetLevelBias(self.level or 0)
+  frame._msufPreviewLevelBase = UF.Layers.ELEMENT_LEVEL_BASE + (self.level or 0)
   if UF.ApplySceneSpec(frame, spec, SCENE_MASK, "single", unit, FinishSceneRefresh, self) ~= true then
-    layers.SetLevelBias(0)
     return false
   end
   local rounded = UF.Decorators.RoundedFrames
@@ -443,7 +440,6 @@ local function RefreshScene(self)
     rounded.Apply(frame)
     CloseWindow(frame)
   end
-  layers.SetLevelBias(0)
   self:RefreshData(true)
   frame:Show()
   return true
@@ -458,16 +454,16 @@ end
 function Scene:RefreshData(layout)
   if InCombat() or self.shown ~= true or not self.frame then return false end
   self:RestoreLayers()
-  local layers = UF.Layers
-  layers.SetLevelBias(self.level or 0)
   local frame, unit, spec = self.frame, self.unit, self.frame.MSUFSpec
+  frame._msufPreviewLevelBase = UF.Layers.ELEMENT_LEVEL_BASE + (self.level or 0)
   local sample = self.sample
   if self.root.animating then
     local animated = self.animatedSample or {}
     self.animatedSample = animated
     for key in pairs(animated) do animated[key] = nil end
     for key, value in pairs(sample) do animated[key] = value end
-    local state = MSUF.Require("MSUF_BuildPreviewAnimationFrameState", FILE)(frame, 1, unit, self.animationState or {}, self.root.elapsed)
+    local state = MSUF.Require("MSUF_BuildPreviewAnimationFrameState", FILE)(frame, 1, unit, self.animationState or {},
+      self.root.elapsed, spec.health and spec.health.chunked == true, spec.power and spec.power.chunked == true)
     self.animationState = state
     animated.hp, animated.power = state.hpPct, state.powerPct
     animated.hpCur, animated.powerCur = nil, nil
@@ -515,7 +511,7 @@ function Scene:RefreshData(layout)
     elseif effects and owner then effects.HidePreviewFrameEffect(owner) end
   end
   OpenWindow(frame, unit, sample)
-  PaintSample(frame, unit, sample, layout)
+  PaintSample(frame, unit, sample, layout, layout == false and self.root.animating == true)
   local gf = MSUF.GF
   if gf and gf.AnimateUnitFrameAuras then gf.AnimateUnitFrameAuras(frame, self.root.animating and self.root.elapsed or nil) end
   CloseWindow(frame)
@@ -529,7 +525,6 @@ function Scene:RefreshData(layout)
     alpha.SceneApply(frame, frame.MSUFSpec)
   end
   self:FilterLayers()
-  layers.SetLevelBias(0)
   return true
 end
 

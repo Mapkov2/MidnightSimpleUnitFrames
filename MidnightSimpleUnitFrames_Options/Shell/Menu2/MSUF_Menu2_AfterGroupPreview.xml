@@ -43,6 +43,9 @@
     <Script file="Pages\MSUF_Menu2_ProfileSync.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileCleanup.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedProfiles.lua"/>
+    <Script file="Pages\MSUF_Menu2_ProfileWorkbench.lua"/>
+    <Script file="Pages\MSUF_Menu2_ProfileWorkbenchRouting.lua"/>
+    <Script file="Pages\MSUF_Menu2_MultiSelection.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraSettings.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraControls.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras.lua"/>

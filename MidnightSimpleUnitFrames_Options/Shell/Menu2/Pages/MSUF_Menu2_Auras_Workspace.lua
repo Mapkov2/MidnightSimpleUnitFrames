@@ -216,6 +216,7 @@ local function BuildUnitAuraWorkspace(ctx, builder, unit)
     BuildUnitWorkspaceFooter(ctx, top, unit, currentTab, normalLane, footerY, sectionW)
 
     BuildUnitWorkspaceTool(ctx, auraBuilder, unit, currentTab, currentTool, normalLane)
+    M.ProfileWorkbenchUI.Aura(ctx, auraBuilder, unit, currentTab)
 end
 function M.BuildAuras3UnitSection(ctx, builder, unit, sectionUX)
     if not Model.UnitSupported(unit) then return end

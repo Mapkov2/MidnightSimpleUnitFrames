@@ -5,7 +5,7 @@ local Open = assert(loadfile(root .. "/tools/tests/menu_entry_view_world.lua"))(
 local mw = Open(root, flavor, { page = "home", clientScriptBindings = true })
 local M, key = mw.M, "uf_" .. unit
 local FRAME_BUDGET = 4500 -- Entire unit page, all 34 aura subviews and three texture subviews.
-local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit)
+local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit, true)
 local function Settle() mw:RunTimers() M.Theme.StopAllMenuAnimations() end
 M.unitAuraTabSelection, M.unitAuraToolSelection = {}, {}
 M.unitTexLayerSlot = {}
@@ -45,8 +45,15 @@ local function Walk()
                     OpenSections(entry)
                     local height = entry.sections.auras._msuf2CollapsibleEntry.outer:GetHeight()
                     assert(height == Expected(lane, tool.value, slot), string.format(
-                        "%s %s:%s slot %d: outer height %d differs from 75ff89d0f (%d)",
+                        "%s %s:%s slot %d: outer height %d differs from reviewed contextual baseline (%d)",
                         unit, lane, tool.value, slot, height, Expected(lane, tool.value, slot)))
+                    local diagnostic = entry.sections.workbench_visibility
+                    local hasDiagnostic = unit == "player" and lane == "custom4"
+                        or unit ~= "player" and (lane == "buff" or lane == "debuff")
+                    assert((diagnostic ~= nil) == hasDiagnostic, "visibility diagnostic leaked into another aura lane")
+                    if diagnostic then
+                        assert(diagnostic._msuf2CollapsibleEntry.outer:GetHeight() == 132, "visibility card height changed")
+                    end
                     shared = shared or entry.sections.frame_basics
                     assert(shared == entry.sections.frame_basics, "selection rebuilt unchanged Basics section")
                     if entry.pageAreas then

@@ -489,12 +489,8 @@ return {
                 SetNumber(unit, SlotFontSizeKey(kind), v, cfg.slotSizeReason, { text = true, fonts = true, preview = true })
                 FocusPreviewText(kind, CurrentSlot(kind), true)
             end]====] },
-    ["H4.GlobalMisc.1"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", source = [====[set = function(value)
-                local groupPage = M.GroupPage
-                if groupPage and type(groupPage.Set) == "function" then
-                    groupPage.Set(kind, "targetIndicator", value and true or false, "visual")
-                end
-            end]====] },
+    -- H4.GlobalMisc.1 retired: group target highlighting now uses the standard
+    -- Schema.GroupOptions binding on gf_indicators; no custom Misc writer remains.
     ["H4.UnitFrameVisuals.21"] = { path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitVisual_Castbar.lua", source = [====[set = function(v)
             local key = CastbarWidthSourceKey()
             if not key then return end

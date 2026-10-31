@@ -30,6 +30,13 @@ its native inverse percentage, secret handling, interpolation and surface masks.
 Mocks provide public sample fractions without unit API reads. Castbar padding is
 scaled after the runtime resolves the anchor offset, preserving fractional zoom.
 
+Menu health animation opts into discrete 0.8-second sample steps when Chunked Health Loss is enabled.
+Unit and group scenes send those samples through the native loss trail; static samples clear it.
+The shared animation clock retains its existing waveform for other preview owners.
+
+Chunked Power Loss uses the same 0.8-second sample cadence for embedded and detached power bars.
+Power sample writers retain native interpolation only while the owner clock animates; static samples clear loss snapshots.
+
 ## Group preview scenes
 
 `GF.NewPreviewScene(parent)` returns a scene root; `root:Group(kind, count)` makes the
@@ -80,7 +87,7 @@ read a unit must keep the scene form in step; `group_preview_scene_lifecycle_smo
 fails on the first unit API a scene calls.
 
 A grid slot and the sample member it shows are two things. `PreviewMember(scene, slot)`
-(Group_Preview.lua) is the one place that maps the first to the second; it stores the member
+(MSUF_UF_Group_Preview_Samples.lua) is the one place that maps the first to the second; it stores the member
 in `frame._msufGFPreviewIndex`, and the sample role (`GF.PreviewSampleRole`), the portrait
 class, the sample name and everything `ApplyPreviewData` paints read that field, never the
 slot. A sorted preview order changes only `PreviewMember`.
@@ -88,21 +95,29 @@ slot. A sorted preview order changes only `PreviewMember`.
 The scene root is a preview kit host (`UnitFrames/Engine/MSUF_UF_PreviewKit.lua`, the
 same shape the Suite implements: `NewHost`, `Activate`/`Deactivate`, `Acquire`/`ReleaseAll`,
 `Request`). Nothing shows or listens until `root:Activate()`. While active the root
-listens for `CONFIG_APPLIED` and `PLAYER_REGEN_ENABLED` and answers either with one
+listens for `CONFIG_APPLIED`, `PLAYER_REGEN_ENABLED` and `PLAYER_REGEN_DISABLED` and answers the first two with one
 coalesced repaint (`root:Request`) on the next frame; combat defers the repaint and the
 regen edge brings the groups back (`group.want` keeps the count the owner asked for, an
 explicit `group:Hide()` forgets it). A scene shows its static sample state: it never
 follows the shared preview animation, only a clock its owner hands over (`root:SetClock`,
-below). `root:Deactivate()` hides every group and drops both
+below). `root:Deactivate()` hides every group and drops all three
 subscriptions. The owner still calls `group:Refresh()` after a change the signals do not
 carry, `group:SetLayerFilter(visible, solo)` for the layer chips and `group:SetRole(role)`
 to lay the frames out for one role.
+
+The entry file owns the public kit root. Its named group domains own style primitives,
+geometry, aura and indicator artwork, sample painting, frame pools and scene lifecycle.
+Painters receive their scene, sample and clock explicitly. Default scenes keep the
+legacy `GF._preview*` tables; every group preview frame names its scene through
+`_msufGFPreviewScene`. The older `_msufPreviewScene` marker remains exclusive to isolated
+frames. A scene frame's element-level base stays on that frame, so nested paints and
+errors cannot alter another preview or the absolute live/Suite layer contract.
 
 An owner embeds a scene in its own window: `group:Configure({ scale, level, role, sample,
 bodyOnly, layerVisible, layerSolo, ignoreOocFade, fit })` sets, without a repaint, the zoom of the whole
 container (`SetScale`: the frames keep their spec size), the frame level the scene sits at
 (`SetLevel`: container, layout and frames take the one base, and every element level is
-shifted by the same bias, `Layers.SetLevelBias`), the role the row lays out for, one pinned
+shifted by its frame-owned base, `Layers.FrameElementLevel`), the role the row lays out for, one pinned
 sample for every row (`SetSample`: `name`, `class`, `hpPct`, `powerPct`, `hpMax`, `powerMax`,
 `absorb`, `healPct`, `absorbPct`, `healAbsorbPct`, `tempMaxPct`, `powerColor`; the prediction and
 reduced max health bars take their fractions from it, the absorb text and the combined health

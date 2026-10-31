@@ -40,7 +40,7 @@ local function EnsureLayerFrame(frame, layer)
     layers[layer] = holder
   end
   if holder.SetFrameLevel then
-    local level = (Layers.StatusLevel and Layers.StatusLevel(frame, layer, 7)) or (GetLayerBaseLevel(frame) + 10 + layer)
+    local level = (Layers.FrameElementLevel and Layers.FrameElementLevel(frame, layer, 7, 8)) or (GetLayerBaseLevel(frame) + 10 + layer)
     if holder._msufStatusFrameLevel ~= level then
       holder:SetFrameLevel(level)
       holder._msufStatusFrameLevel = level

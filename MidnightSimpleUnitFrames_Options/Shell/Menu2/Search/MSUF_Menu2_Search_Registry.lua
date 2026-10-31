@@ -592,6 +592,7 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
         kind = kind,
         anchor = anchor,
         labelNorm = labelNorm,
+        sourceLabelNorm = labelNorm ~= idLabelNorm and idLabelNorm or nil,
         groupNorm = groupNorm,
         titleNorm = titleNorm,
         hintNorm = hintNorm,

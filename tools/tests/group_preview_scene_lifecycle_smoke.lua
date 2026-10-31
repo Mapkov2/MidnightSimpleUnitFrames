@@ -818,6 +818,48 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- Secondary growth agrees with live headers, including a direction-only
+-- change whose dimensions and configuration revision stay unchanged.
+do
+    local growthHost = env.CreateFrame("Frame", nil, env.UIParent)
+    growthHost:SetSize(600, 400)
+    local growthRoot = GF.NewPreviewScene(growthHost)
+    growthRoot:Activate()
+    local conf = GF.GetConf("raid")
+    local saved = { growth = conf.growth, groupGrowth = conf.groupGrowth, unitsPerColumn = conf.unitsPerColumn,
+        maxColumns = conf.maxColumns, preserveRaidGroups = conf.preserveRaidGroups }
+    conf.unitsPerColumn, conf.maxColumns = 5, 8
+    local group = growthRoot:Group("raid")
+    for _, preserve in ipairs({ false, true }) do
+        conf.preserveRaidGroups = preserve
+        for _, growth in ipairs({ "DOWN", "UP", "RIGHT", "LEFT" }) do
+            conf.growth = growth
+            local vertical = growth == "DOWN" or growth == "UP"
+            for _, reverse in ipairs({ false, true }) do
+                conf.groupGrowth = vertical and (reverse and "LEFT" or "RIGHT") or (reverse and "UP" or "DOWN")
+                group:Show(6, { immediate = true })
+                h:RunTimers()
+                local first, second = group:Frames()[1], group:Frames()[6]
+                local point, _, _, x, y = second:GetPoint(1)
+                local expected = vertical and ((growth == "DOWN" and "TOP" or "BOTTOM") .. (reverse and "RIGHT" or "LEFT"))
+                    or ((reverse and "BOTTOM" or "TOP") .. (growth == "RIGHT" and "LEFT" or "RIGHT"))
+                Check(point == expected, "secondary growth used " .. tostring(point) .. " instead of " .. expected)
+                Check(vertical and (reverse and x < 0 or not reverse and x > 0)
+                    or not vertical and (reverse and y > 0 or not reverse and y < 0),
+                    "secondary growth/cache moved the second column to the wrong side")
+                local firstPoint = first:GetPoint(1)
+                Check(firstPoint == expected, "the origin uses another secondary growth anchor")
+            end
+        end
+    end
+    for key, value in pairs(saved) do conf[key] = value end
+    conf.groupGrowth = saved.groupGrowth
+    conf.preserveRaidGroups = saved.preserveRaidGroups
+    GF.InvalidateCompiledSpecs("raid")
+    growthRoot:Release()
+    h:RunTimers()
+end
+
 -- 8. The spy saw nothing.
 ---------------------------------------------------------------------------
 armed = false

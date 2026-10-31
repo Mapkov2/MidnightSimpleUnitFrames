@@ -290,8 +290,10 @@ end
 local function SetTextLayerAlpha(frame, alpha, force)
   for i = 1, #TEXT_ALPHA_FIELDS do
     local region = frame and frame[TEXT_ALPHA_FIELDS[i]]
-    -- A status text keeps the status opacity its layout wrote (_msufStatusAlpha).
-    SetAlphaCached(region, alpha * (region and region._msufStatusAlpha or 1), "_msufAlphaText", force)
+    if region then
+      -- A status text keeps the status opacity its layout wrote (_msufStatusAlpha).
+      SetAlphaCached(region, alpha * (region._msufStatusAlpha or 1), "_msufAlphaText", force)
+    end
   end
 end
 

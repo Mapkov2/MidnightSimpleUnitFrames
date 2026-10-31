@@ -450,7 +450,7 @@ function SearchIndexBuild.QueryContext(query)
     local supportQuestion = SearchLooksLikeSupportQuestion(query, normalized)
     local genericLocationSubject, genericLocationClauses = SearchGenericLocationSubjectClauses(query, normalized)
     local genericLocationQuestion = genericLocationSubject ~= nil and genericLocationClauses ~= nil
-    local controlQuestion = SearchLooksLikeControlQuestion(query, normalized) or genericLocationQuestion
+    local controlQuestion = SearchLooksLikeControlQuestion(query, normalized)
     local profileTransferQuestion = normalized:find("import", 1, true)
         or normalized:find("export", 1, true)
         or normalized:find("profile string", 1, true)
@@ -529,7 +529,7 @@ function SearchPages(query, job, deadline)
             matched, matchedClauses, missedClauses = true, #clauses, 0
         end
         if matched and matchedClauses >= requiredMatches then
-            if rec.labelNorm == normalized or rec.titleNorm == normalized then
+            if rec.labelNorm == normalized or rec.sourceLabelNorm == normalized then
                 -- SearchClauseScore pays an exact/prefix label bonus per clause, so a
                 -- short label that nails one clause accumulates more than a record
                 -- whose entire label is the query. "Status indicator size" lost every
@@ -538,13 +538,15 @@ function SearchPages(query, job, deadline)
                 score = score + 260 + 220 * #clauses
             end
             if rec.labelNorm:find(normalized, 1, true) == 1 then score = score + 130 end
-            local labelNamed = rec.labelNorm == normalized or SearchNaming.Label(rec, normalized)
+            local labelNamed = rec.labelNorm == normalized or rec.sourceLabelNorm == normalized or SearchNaming.Label(rec, normalized)
             if labelNamed and rec.labelNorm ~= normalized then score = score + 260 + 120 * #clauses end
             if rec.haystack and rec.haystack:find(normalized, 1, true) then score = score + 80 end
             if rec.kind == "section" then score = score + 70 end
             if rec.kind == "faq" then score = score + 55 end
             if supportQuestion and not genericLocationQuestion then score = score + SearchSupportQuestionBoost(rec, clauses) end
-            if genericLocationQuestion then score = score + SearchGenericLocationBoost(rec, genericLocationClauses, matchedClauses, missedClauses) end
+            if genericLocationQuestion then
+                score = score + SearchGenericLocationBoost(rec, genericLocationClauses, matchedClauses, missedClauses, normalized)
+            end
             score = score + SearchResultSpecificityBoost(rec, clauses)
             if missedClauses > 0 then score = score - (missedClauses * 60) end
             if rec.kind ~= "page" then score = score + 45 end

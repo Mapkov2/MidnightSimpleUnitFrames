@@ -161,7 +161,7 @@ function PA.Elapsed()
   return tonumber(PA.elapsed) or 0
 end
 
-function PA.BuildFrameState(frame, index, kind, scratch, elapsed)
+function PA.BuildFrameState(frame, index, kind, scratch, elapsed, chunkedHealth, chunkedPower)
   scratch = scratch or frameStateScratch
   local i = tonumber(index) or tonumber(frame and frame._msufGFPreviewIndex) or 1
   elapsed = tonumber(elapsed) or 0
@@ -173,7 +173,16 @@ function PA.BuildFrameState(frame, index, kind, scratch, elapsed)
 
   scratch.elapsed = elapsed
   scratch.hpPct = Clamp01(0.23 + hpWave * 0.69, 0.70)
+  -- Hold each menu damage step long enough for the runtime loss trail to finish.
+  if chunkedHealth then
+    local step = floor(elapsed * 1.25 + offset * 8) % 8
+    scratch.hpPct = 0.9 - min(step, 8 - step) * 0.15
+  end
   scratch.powerPct = Clamp01(0.16 + powerWave * 0.78, 0.74)
+  if chunkedPower then
+    local step = floor(elapsed * 1.25 + (offset + 0.31) * 8) % 8
+    scratch.powerPct = 0.9 - min(step, 8 - step) * 0.15
+  end
   scratch.healPct = Clamp01(0.04 + Triangle(elapsed, 0.32, offset + 0.44) * 0.12, 0.08)
   scratch.absorbPct = Clamp01(0.05 + Triangle(elapsed, 0.27, offset + 0.67) * 0.11, 0.10)
   scratch.castPct = Clamp01(castPct, 0.50)
@@ -1163,8 +1172,8 @@ end
 ExportPublic("MSUF_IsPreviewAnimationEnabled", function() return PA.IsEnabled() end)
 ExportPublic("MSUF_TogglePreviewAnimation", function(source) return PA.Toggle(source) end)
 ExportPublic("MSUF_RegisterPreviewAnimationRefreshOwner", function(owner, fn) return PA.RegisterRefreshOwner(owner, fn) end)
-ExportPublic("MSUF_BuildPreviewAnimationFrameState", function(frame, index, kind, scratch, elapsed)
-  return PA.BuildFrameState(frame, index, kind, scratch, elapsed)
+ExportPublic("MSUF_BuildPreviewAnimationFrameState", function(frame, index, kind, scratch, elapsed, chunkedHealth, chunkedPower)
+  return PA.BuildFrameState(frame, index, kind, scratch, elapsed, chunkedHealth, chunkedPower)
 end)
 ExportPublic("MSUF_BuildPreviewAnimationAuraState", function(kind, index, scratch, options, elapsed)
   return PA.BuildAuraState(kind, index, scratch, options, elapsed)

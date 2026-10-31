@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local FILE = "Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
-local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 -- Load-time dependency handoff; runtime callbacks retain their original local bindings.
 local Parts = {}
@@ -265,26 +264,13 @@ local function BuildIndicatorsSection(ctx, b)
     local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 710, true)
     local leftX, leftW, rightX, rightW, innerW = Schema.Columns(indicators, ctx.width, 20, 16, 0.48)
     local highlightCard = W.ControlCard(indicators, "Target Highlight",
-        M.Format("Configure target highlighting in %s.", M.NavPath("opt_misc", "Frame Highlights")),
+        "Shows a border around the current target in group frames. Aggro and dispel borders are controlled in Bars.",
         leftX, -38, innerW, 92)
     SharedColors(highlightCard, "group.target", "Target Highlight Color", "menu:group-target-highlight-color")
-    local function OpenFrameHighlights()
-        ExportPublic("MSUF_EM2_MenuFocusRequest", {
-            pageKey = "opt_misc",
-            sectionId = "misc_mouseover_highlight",
-            explicit = true,
-            consumed = false,
-        })
-        if M.SelectPage and M.SelectPage("opt_misc") == false then
-            ExportPublic("MSUF_EM2_MenuFocusRequest", nil)
-        end
-    end
-    local openHighlights = Schema.Build(ctx, highlightCard, {
-        { "button", "openHighlights", nil, { "Open Highlights", 132, 22 }, anchor = { "TOPRIGHT", highlightCard, "TOPRIGHT", -16, -56 },
-            center = true, tip = { "Open Highlights", M.NavPath("opt_misc", "Frame Highlights"), { hook = true } },
-            action = OpenFrameHighlights, register = true, path = "navigation.frame_highlights",
-            classification = "navigation", exact = { navigationKey = "opt_misc" } },
-    }, ROW_OPTIONS).openHighlights
+    local targetToggle = Schema.Build(ctx, highlightCard, {
+        { "switch", "targetIndicator", true, { "Target Highlight", innerW - 62, -24, 0, "HIDDEN" },
+            flagsAfter = { _msuf2GroupFrameGateAlwaysEnabled = true } },
+    }, ROW_OPTIONS).targetIndicator
     local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 320)
     Schema.Colors(groupNumberCard, nil, {
         title = "Group Number Text Settings", historyLabel = "Group number text color",
@@ -352,6 +338,7 @@ local function BuildIndicatorsSection(ctx, b)
             and "Shows the raid subgroup number in a raid. Move it in Preview."
             or "Shows the raid subgroup number from the raid roster. Move it in Preview.")
         local targetEnabled = Bool(CurrentScope(), "targetIndicator", true)
+        SetOptionEnabled(targetToggle, true)
         local focusEnabled = Bool(CurrentScope(), "hlFocusEnabled", true)
         SetOptionsEnabled(focusControls, focusEnabled)
         SetOptionEnabled(focusToggle, true)
@@ -600,6 +587,42 @@ function StatusIcons.DeclareExactStatusOption(state, control, status)
 end
 --- Selected Indicator: the indicator, its switch, its style and icon, the
 --- Level Text and Threat % options and the role filter.
+function StatusIcons.RegisterSearchChoices(state, ctx, selector)
+    for _, scopeInfo in ipairs(GP.SCOPE_VALUES) do
+        local scope = scopeInfo.value
+        if MSUF.Client.SupportsGroupKind(scope) then
+            local section = ControlMeta(ctx, "status.section." .. scope, "navigation")
+            section.kind, section.label, section.anchor, section.sectionId = "section", "Status Icons", selector, "sicons"
+            section.schemaEphemeralReason = "Opens the status editor; no profile setting is written."
+            section.searchIndexed, section.navigationKey, section.keywords = true, ctx.key, { scope, scopeInfo.text }
+            section.searchPrepareKind, section.searchPrepareValue = "groupScope", scope
+            section.prepareExactSearchTarget = function()
+                M.SetMenuStateValue("gfScope", scope)
+                return state.sicons._msuf2GuidedSelectTab("basic")
+            end
+            M.RegisterVirtualRuntimeControl(section, "group-status-section")
+            for _, spec in ipairs(GF_STATUS_ICON_SPECS) do
+                local meta = ControlMeta(ctx, "status.indicator." .. scope .. "." .. spec.value:lower(), "navigation")
+                meta.kind, meta.label, meta.anchor = "control", spec.text, selector
+                meta.schemaEphemeralReason = "Selects the status editor view; no profile setting is written."
+                meta.searchIndexed, meta.navigationKey, meta.sectionId = true, ctx.key, "sicons"
+                meta.keywords = { "status icons", "status indicator", scope, scopeInfo.text,
+                    spec.value == "roleIcon" and "Rollensymbol" or spec.text }
+                meta.searchPrepareKind, meta.searchPrepareValue = "groupStatus", scope .. "_" .. spec.value
+                meta.prepareExactSearchTarget = function(_, target)
+                    if target.prepareValue ~= scope .. "_" .. spec.value then return false end
+                    M.SetMenuStateValue("gfScope", scope)
+                    M.SetMenuStateValue("gfStatusIconSelection", spec.value)
+                    if state.sicons._msuf2GuidedSelectTab("basic") == false then return false end
+                    selector:SetValue(spec.value)
+                    state.RefreshStatusIconMenu()
+                    return CurrentGFStatusSpec().value == spec.value
+                end
+                M.RegisterVirtualRuntimeControl(meta, "group-status-indicator")
+            end
+        end
+    end
+end
 function StatusIcons.BuildSelectedCard(state, ctx)
     local selectedCard, siconLeftW = state.selectedCard, state.siconLeftW
     local RefreshStatusIconMenu = state.RefreshStatusIconMenu
@@ -617,10 +640,11 @@ function StatusIcons.BuildSelectedCard(state, ctx)
             end
         end,
     } }, ControlMeta, StepMeta)
-    Schema.Build(ctx, selectedCard, {
+    local selector = Schema.Build(ctx, selectedCard, {
         { "dropdown", "selector", nil, { "Indicator", GF_STATUS_ICON_VALUES, siconLeftW },
             { 16, -54, siconLeftW - 32, "LEFT" }, path = "status.selector", classification = "ephemeral" },
-    }, selectionRows)
+    }, selectionRows).selector
+    StatusIcons.RegisterSearchChoices(state, ctx, selector)
     local statusEnabled = Schema.Build(ctx, selectedCard, {
         { "switch", "enabled", false, { "Enabled", siconLeftW - 62, -24, 0, "HIDDEN" },
             beforeBind = function(control) control._msuf2GroupFrameGateAlwaysEnabled = true end,

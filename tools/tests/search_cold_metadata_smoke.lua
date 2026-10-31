@@ -1,7 +1,7 @@
 -- Real cold search: dropdown choices, explicit aliases and help on unopened pages.
-local root, flavor = assert(arg[1]), arg[2] or "Mainline"
+local root, flavor, locale = assert(arg[1]), arg[2] or "Mainline", arg[3] or "enUS"
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
-local mw = MenuWorld.Open(root, flavor, { page = "home" })
+local mw = MenuWorld.Open(root, flavor, { page = "home", locale = locale })
 local M = mw.M
 local function Ready()
     M.Search._CoreAPI.GetSearchRecords()
@@ -14,11 +14,21 @@ end
 assert(not M.cache.uf_player, "target page was already warm")
 Ready()
 assert(not M.cache.uf_player, "metadata decode built the target page")
+local translated = M.Tr(locale == "enGB" and "None (solid color)" or "By Role")
+local normalized, choiceFound = M.Search.Text.NormalizeSearchText(translated), false
+for _, row in ipairs(M.Search._CoreAPI.GetSearchRecords()) do
+    if row.key == (locale == "enGB" and "opt_bars" or "gf_layout") and row.kind == "dropdown"
+        and row.haystack:find(normalized, 1, true) then
+        choiceFound = true
+        break
+    end
+end
+assert(choiceFound, "unopened sorting dropdown omitted its translated choice " .. translated)
 local cases = { { "camelot", "Round Level Badge" }, { "medallion", "Round Level Badge" } }
 for _, case in ipairs(cases) do
     local found
     for _, row in ipairs(M.Search._CoreAPI.SearchPages(case[1])) do
-        if row.key == "uf_player" and row.label == case[2] then found = row break end
+        if row.key == "uf_player" and row.label == M.Tr(case[2]) then found = row break end
     end
     assert(found and found.static, "cold metadata query missed " .. case[1])
     assert(not M.cache.uf_player, "cold query built the target page")
@@ -37,7 +47,7 @@ Ready()
 for _, case in ipairs(cases) do
     local found
     for _, row in ipairs(M.Search._CoreAPI.SearchPages(case[1])) do
-        if row.key == "uf_player" and row.label == case[2] then found = row break end
+        if row.key == "uf_player" and row.label == M.Tr(case[2]) then found = row break end
     end
     assert(found, "warming the page lost " .. case[1])
 end

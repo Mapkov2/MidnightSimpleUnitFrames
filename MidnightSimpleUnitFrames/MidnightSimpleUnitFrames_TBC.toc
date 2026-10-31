@@ -3,7 +3,7 @@
 ## Notes: TBC Classic client support.
 ## Author: Mapko
 ## Category: Combat
-## Version: 7.0-alpha1
+## Version: 7.0-alpha2
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, MapkoSkin
@@ -134,6 +134,8 @@ Media\MSUF_Media.lua
 Runtime\MSUF_BorderStyles.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
+State\MSUF_ProfileWorkbench.lua
+State\MSUF_ProfileWorkbenchTools.lua
 State\MSUF_RetiredData.lua
 Runtime\MSUF_SlashCommands.lua
 Runtime\MSUF_UnitTooltips.lua
@@ -248,6 +250,7 @@ Runtime\MSUF_UIScaleRuntime.lua
 Runtime\MSUF_HostAPI.lua
 Runtime\MSUF_WelcomeMessage.lua
 Kernel\MSUF_OptionsLoader.lua
+Castbars\MSUF_InterruptReady_Consumers.lua
 
 # ---------------------------------------------------------------
 # OPTIONAL VISUAL / CASTBAR FEATURES
@@ -262,5 +265,6 @@ Game\Classic\Castbars\MSUF_CastbarVisualCompat.lua
 UnitFrames\Effects\MSUF_UF_TextureLayer.lua
 
 State\MSUF_ApplyService.lua
+State\MSUF_HistoryProviders.lua
 State\MSUF_History.lua
 Kernel\MSUF_RuntimeContracts.lua

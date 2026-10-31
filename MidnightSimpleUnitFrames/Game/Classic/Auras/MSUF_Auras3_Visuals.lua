@@ -1221,7 +1221,7 @@ function V.UpdateDispelOverlay(frame, visual, active, r, g, b, a, preview)
     local target = visual.overlayOnHealth == true and FrameEffectHealthFill(frame) or FrameEffectHealthBar(frame)
     if not target then return V.HideDispelOverlay(frame, preview) end
     local layers = MSUF.UF and MSUF.UF.Layers
-    local level = layers and layers.ElementLevel and layers.ElementLevel(visual.overlayLayer, 0, 12)
+    local level = layers and layers.FrameElementLevel and layers.FrameElementLevel(frame, visual.overlayLayer, 0, 12)
         or (frame:GetFrameLevel() or 0) + 12 + (visual.overlayLayer or 0)
     local strata = visual.overlayStrata
     if not strata or strata == "AUTO" then strata = A3.ReadParentFrameStrata(frame) end

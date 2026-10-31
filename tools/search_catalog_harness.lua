@@ -277,8 +277,15 @@ end
 
 -- The Options TOC loads this namespace/capability bridge before its XML files.
 -- History and apply execution now precede the companion in the core graph.
-for _, file in ipairs({ "MSUF_ApplyService.lua", "MSUF_History.lua" }) do
+for _, file in ipairs({ "MSUF_ApplyService.lua", "MSUF_HistoryProviders.lua", "MSUF_History.lua" }) do
     assert(loadfile(Join(CORE, "State/" .. file)))("MidnightSimpleUnitFrames", MSUF)
+end
+for _, file in ipairs({ "MSUF_ProfileFields.lua", "MSUF_ProfileExternal.lua", "MSUF_ProfileVariants.lua",
+    "MSUF_ProfileVariantEditor.lua", "MSUF_ProfileWorkbench.lua", "MSUF_ProfileWorkbenchTools.lua" }) do
+    assert(loadfile(Join(CORE, "State/" .. file)))("MidnightSimpleUnitFrames", MSUF)
+end
+for _, file in ipairs({ "MSUF_EditMode_Core.lua", "MSUF_EditMode_Registry.lua", "MSUF_EditMode_State.lua", "MSUF_EditMode_MultiSelection.lua" }) do
+    assert(loadfile(Join(CORE, "Shell/EditMode/" .. file)))("MidnightSimpleUnitFrames", MSUF)
 end
 assert(loadfile(Join(OPTIONS, "MSUF_OptionsLOD_Bootstrap.lua")))("MidnightSimpleUnitFrames_Options", MSUF)
 

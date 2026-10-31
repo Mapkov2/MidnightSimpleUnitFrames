@@ -208,7 +208,7 @@ local function EnsureHolder(frame, layer)
     end
     if holder.SetFrameLevel then
         local layers = UF.Layers
-        local level = layers and layers.StatusLevel and layers.StatusLevel(frame, layer, 7)
+        local level = layers and layers.FrameElementLevel and layers.FrameElementLevel(frame, layer, 7, 8)
             or (((layers and layers.BaseFrameLevel and layers.BaseFrameLevel(frame)) or 0) + 10 + layer)
         if holder._msufThreatFrameLevel ~= level then
             holder:SetFrameLevel(level)

@@ -183,6 +183,17 @@ apply of a group blacklist change, the group blacklist Preset opening on the
 lane's default set) key on the page's `M.CLASSIC_AURA_FILTERS_REDUCED`, and
 `tools/tests/classic_aura_page_client_gates_smoke.lua` pins both sides. Raw
 Retail filter tokens are compiled once into a Classic-safe plan.
+
+The Aura Appearance menu also accepts optional providers through
+`M.AurasPage.RegisterAppearanceType(value, spec)`. With a compatible Suite,
+Blizzard player auras receive their own view containing the existing host
+visibility switches and Suite-owned layout/skin controls. The corresponding
+Suite QoL entries disappear; old links resolve to the new view. Without that
+provider, the original four Aura types, visibility controls and reset scope
+remain unchanged. Page resets follow the selected owner through the existing
+history/combat boundary. The Suite's layout/skin settings keep their stored
+keys and runtime owners; this menu integration adds no aura listeners.
+
 Vanilla/Mists/TBC scan only with tokens
 their AuraUtil accepts; `IMPORTANT`, `DISPELLABLE`, `BOSS`, `STEALABLE`,
 `!PLAYER`, and related requirements use equivalent AuraData/C_Spell

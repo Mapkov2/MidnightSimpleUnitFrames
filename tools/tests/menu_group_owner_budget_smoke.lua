@@ -20,36 +20,41 @@ core.GF.EnsureDB()
 -- from unrelated load-time strings and tables, not per-refresh work).
 -- Refresh VM is +1 since c50ebdbe2: the PixelLayoutRegion "ready" field check
 -- on a cold region (warm visits drop 34011 -> 16011 VM per 1000).
+-- 27a05e03fb cancels stale queued portrait work in SceneApply and Disable.
+-- Each cancellation runs twice per refresh and once per animation: +4/+2 VM.
+-- Replaying only the portrait source at c14c585ad restores every old client pin;
+-- native calls and paired allocations are unchanged. portrait_model_refresh_smoke
+-- verifies both cancellations, including pending work before each transition.
 local pins = {
     Mainline = {
-        ["party.refresh"] = { 63888, 2541, 34.077246 },
-        ["party.animate"] = { 37787, 1335, 23.188281 },
-        ["raid.refresh"] = { 64665, 2564, 34.653809 },
-        ["raid.animate"] = { 38019, 1334, 23.416719 },
+        ["party.refresh"] = { 63892, 2541, 34.077246 },
+        ["party.animate"] = { 37789, 1335, 23.188281 },
+        ["raid.refresh"] = { 64669, 2564, 34.653809 },
+        ["raid.animate"] = { 38021, 1334, 23.416719 },
     },
     Vanilla = {
-        ["party.refresh"] = { 66266, 2666, 34.260684 },
-        ["party.animate"] = { 38757, 1382, 23.277969 },
-        ["raid.refresh"] = { 67011, 2689, 34.837246 },
-        ["raid.animate"] = { 38989, 1381, 23.573418 },
+        ["party.refresh"] = { 66270, 2666, 34.260684 },
+        ["party.animate"] = { 38759, 1382, 23.277969 },
+        ["raid.refresh"] = { 67015, 2689, 34.837246 },
+        ["raid.animate"] = { 38991, 1381, 23.573418 },
     },
     TBC = {
-        ["party.refresh"] = { 67034, 2738, 34.261934 },
-        ["party.animate"] = { 38757, 1382, 23.279219 },
-        ["raid.refresh"] = { 67779, 2761, 34.838496 },
-        ["raid.animate"] = { 38989, 1381, 23.510469 },
+        ["party.refresh"] = { 67038, 2738, 34.261934 },
+        ["party.animate"] = { 38759, 1382, 23.279219 },
+        ["raid.refresh"] = { 67783, 2761, 34.838496 },
+        ["raid.animate"] = { 38991, 1381, 23.510469 },
     },
     Mists = {
-        ["party.refresh"] = { 66124, 2687, 34.261934 },
-        ["party.animate"] = { 38350, 1365, 23.279219 },
-        ["raid.refresh"] = { 66898, 2710, 34.838496 },
-        ["raid.animate"] = { 38582, 1364, 23.510469 },
+        ["party.refresh"] = { 66128, 2687, 34.261934 },
+        ["party.animate"] = { 38352, 1365, 23.279219 },
+        ["raid.refresh"] = { 66902, 2710, 34.838496 },
+        ["raid.animate"] = { 38584, 1364, 23.510469 },
     },
     Forever = {
-        ["party.refresh"] = { 64345, 2536, 34.074434 },
-        ["party.animate"] = { 38206, 1352, 23.185469 },
-        ["raid.refresh"] = { 65093, 2559, 34.650996 },
-        ["raid.animate"] = { 38438, 1351, 23.416719 },
+        ["party.refresh"] = { 64349, 2536, 34.074434 },
+        ["party.animate"] = { 38208, 1352, 23.185469 },
+        ["raid.refresh"] = { 65097, 2559, 34.650996 },
+        ["raid.animate"] = { 38440, 1351, 23.416719 },
     },
 }
 local function Measure(fn)

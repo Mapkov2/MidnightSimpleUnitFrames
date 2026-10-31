@@ -8,74 +8,75 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9C9726E9371436179C3DB678B78131D2D371FBDDE1DAC77996E1A18F649DEA42",
-    currentVersion = "7.0-alpha1",
+    sourceSha256 = "13D3DF4ABE6F6707B88495CB932580DE52162418702D8765D6A11E707C6CFCB1",
+    currentVersion = "7.0-alpha2",
     historyFromVersion = "6.02",
     previousVersion = "6.50",
-    rangeLabel = "6.50 -> 7.0-alpha1",
+    rangeLabel = "6.50 -> 7.0-alpha2",
     entries = {
         {
-            version = "7.0-alpha1",
-            date = "2026-10-14",
+            version = "7.0-alpha2",
+            date = "2026-10-31",
             sections = {
                 {
-                    title = "Features & changes",
+                    title = "Profiles and Edit Mode",
                     bullets = {
                         {
-                            text = "Many-step undo and redo: move back and forward through a history of menu edits, including nested settings and scoped changes, instead of keeping only the last change.",
+                            text = "Profile workbench: create and restore named restore points, inspect changed settings and their sources, and review imported settings before applying selected changes.",
                             linkless = true,
                         },
                         {
-                            text = "Forever blessing priorities: choose which Paladin blessings matter most for each class and role in group Buff coverage, with matching configuration and previews.",
+                            text = "Display and accessibility tools: save layouts for your display, try color-vision presets, and inspect why an element is hidden.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Move several elements together: select multiple Edit Mode elements, move and align them together, and undo or redo the selection's layout changes.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Shared history: profile restores and undo/redo now include supported Suite settings while preserving profile variant overrides.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Bug fixes",
+                    title = "Frames, previews and search",
                     bullets = {
                         {
-                            text = "Group roles: role overlays repaint after roster changes during combat, and role information is handled safely on clients that restrict it.",
+                            text = "Animated previews: group and unit samples follow the live health and power loss effects, with corrected scene ownership, aura samples, level displays and preview cleanup.",
                             linkless = true,
                         },
                         {
-                            text = "Group names and boss power: delayed member names now appear when they become available, and boss power bars update correctly when an encounter changes the unit behind a frame.",
+                            text = "More reliable frames: settled raid rosters refresh status information correctly; instance scale changes reanchor affected layouts, and failed frame updates remain pending for retry.",
                             linkless = true,
                         },
                         {
-                            text = "Auras: buff and debuff displays refresh reliably as their contents change, with previews following the same display rules as live frames.",
+                            text = "Cast and aura feedback: improved interrupt-ready updates and cleanup, dispel highlights, and aura effect attachment across supported clients.",
                             linkless = true,
                         },
                         {
-                            text = "Castbars: interrupted or cancelled empower casts now show feedback on the player castbar. Disabled boss and arena castbars hide correctly, and focus castbar settings remain independent of target settings.",
+                            text = "Tooltips and texture layers: improved Raider.IO information on unit tooltips and added class-color or NPC-type tinting for cosmetic texture layers.",
                             linkless = true,
                         },
                         {
-                            text = "Edit Mode: typed positions are checked before applying, and dragging, cancelling and reopening Edit Mode keep the frame layout and session state consistent.",
+                            text = "Find settings more easily: expanded search coverage for status indicators, dropdown choices, preview controls and Suite-owned settings, with corrected result routing and page context.",
                             linkless = true,
                         },
                         {
-                            text = "Menu and Suite: controls and previews refresh the settings they display, and Suite navigation retains the correct tab preparation when opening an MSUF page.",
+                            text = "Menu layout: corrected section bounds, sticky headers, scope selectors, group target editing and profile page selection layouts.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Performance improvements",
+                    title = "Performance and compatibility",
                     bullets = {
                         {
-                            text = "Less to load at startup: only the client's language pack loads at login, greatly reducing startup bytes. Other menu languages remain available through the optional MidnightSimpleUnitFrames_Locales folder.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "menu language",
-                                label = "Menu language",
-                                sectionId = "misc_language",
-                                controlId = "menu2.opt.misc.global.language.selection",
-                                settingKey = "general.menuLocale",
-                            },
+                            text = "Reduced repeated aura alpha, portrait, text-layer and interrupt-ready writes when the displayed state is unchanged.",
+                            linkless = true,
                         },
                         {
-                            text = "More compact profiles: profiles are stored with less duplicated data while retaining old profiles and import strings. Downgrading to the 6.50 line preserves your settings losslessly.",
+                            text = "Improved profile snapshot copying, group preview reuse and menu refreshes; updated translations and client-specific load declarations.",
                             linkless = true,
                         },
                     },

@@ -460,7 +460,13 @@ eliteicon=elite|rare|elite icon|rare icon
 raidgroupname=raid group|group number|subgroup
 level=level|level text|level indicator
 raidmarker=raid marker|marker
-leader=leader|assist|leader assist|leader / assist
+assist=assist icon|assist|assistant
+leader=leader|leader icon
+bossNumber=boss number
+raceText=race text
+classText=class text
+statusThreat=threat percent|threat
+statusPetXP=pet xp|pet experience
 ]]
 
 local GROUP_STATUS_TERMS = SearchTermRows [[
@@ -556,6 +562,13 @@ local DASHBOARD_ROUTE_TERMS = {
 
 local function SearchRouteUnitStatusSelection(route, unit, normalized)
     local value = SearchFirstMatch(normalized, UNIT_STATUS_TERMS)
+    local best = 0
+    for _, item in ipairs(M.UnitPage.StatusValues(unit)) do
+        local label = NormalizeSearchText(M.Tr(item.text))
+        if #label > best and (" " .. normalized .. " "):find(" " .. label .. " ", 1, true) then
+            value, best = item.value, #label
+        end
+    end
     if value then SearchRouteSetTable(route, "unitStatusSelection", unit, value) end
 end
 
@@ -1197,6 +1210,21 @@ local function SearchRouteExactView(route, pageKey, exactTarget)
             SearchRouteSetTable(route, "globalBarsAbsorbTabSelection", "shared", value)
         end
         return route
+    elseif kind == "unitStatusIndicator" or (kind == "menuTab" and exactTarget.sectionId == "status_icons") then
+        route = type(route) == "table" and route or {}
+        local unit = SEARCH_UNIT_BY_PAGE[pageKey]
+        local selections = route.tables and route.tables.unitStatusSelection
+        local selected = kind == "unitStatusIndicator" and value or (selections and selections[unit])
+        route = {}
+        if unit then
+            local spec = selected and M.UnitPage.FindStatusSpec(unit, selected)
+            M.unitStatusSelection = M.unitStatusSelection or {}
+            if spec and spec.value == selected then M.unitStatusSelection[unit] = selected end
+            M.unitStatusTabSelection = M.unitStatusTabSelection or {}
+            M.unitStatusTabSelection[unit] = "basic"
+            SearchRouteOpenAccordion(route, pageKey, "status_icons")
+        end
+        return route
     elseif kind == "unitTextureLayer" then
         route = type(route) == "table" and route or {}
         local unit, slot, tab = SEARCH_UNIT_BY_PAGE[pageKey], value:match("^([123])_(%a+)$")
@@ -1211,8 +1239,12 @@ local function SearchRouteExactView(route, pageKey, exactTarget)
         if pageKey == "gf_indicators" and scope then
             SearchRouteSetState(route, "gfScope", M.NormalizeGroupScope(scope))
             if kind == "groupStatus" then
-                SearchRouteSetState(route, "gfStatusIconSelection", view)
-                SearchRouteSetTable(route, "gfStatusIconTabSelection", M.NormalizeGroupScope(scope), "basic")
+                route = {}
+                M.SetMenuStateValue("gfScope", M.NormalizeGroupScope(scope))
+                M.SetMenuStateValue("gfStatusIconSelection", view)
+                M.gfStatusIconTabSelection = M.gfStatusIconTabSelection or {}
+                M.gfStatusIconTabSelection[M.NormalizeGroupScope(scope)] = "basic"
+                SearchRouteOpenAccordion(route, pageKey, "sicons")
             else
                 SearchRouteSetState(route, "gfCornerSlotSelection", view)
             end
@@ -1282,7 +1314,24 @@ local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     SearchRouteSetNestedTable(route, "unitAuraToolSelection", unit, tab, tool)
     return route
 end
+local TARGET_RESOLVERS, TARGET_RESOLVER_ORDER = {}, {}
+function M.RegisterSearchTargetResolver(name, resolver)
+    assert(type(name) == "string" and name ~= "", "named search resolver required")
+    if not TARGET_RESOLVERS[name] then TARGET_RESOLVER_ORDER[#TARGET_RESOLVER_ORDER + 1] = name end
+    TARGET_RESOLVERS[name] = resolver
+end
+local function ResolveSearchTarget(pageKey, exactTarget, route)
+    for _, name in ipairs(TARGET_RESOLVER_ORDER) do
+        local page, target, prepared = TARGET_RESOLVERS[name](pageKey, exactTarget)
+        if page == false then return false end
+        if page then pageKey, exactTarget, route = page, target, prepared or route end
+    end
+    return pageKey, exactTarget, route
+end
 local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
+    if SearchCombatLocked() or not (M.frame and M.frame:IsShown()) then return false, false, false end
+    pageKey, exactTarget, route = ResolveSearchTarget(pageKey, exactTarget, route)
+    if pageKey == false then return false, false, false end
     if exactTarget and not M.SupportsSearchTarget(pageKey, exactTarget.settingKey, exactTarget.prepareKind, exactTarget.prepareValue) then
         return false, false, false
     end

@@ -535,6 +535,10 @@ local function CreateMover(key, cfg)
             return
         end
         if button ~= "LeftButton" and button ~= "RightButton" then return end
+        if IsControlKeyDown() and EM2.MultiSelection then
+            EM2.MultiSelection.Toggle(key)
+            return
+        end
         ClearPreviewNudgeTarget()
         if EM2.State then EM2.State.SetUnitKey(key) end
         if EM2.HUD then EM2.HUD.RefreshUnitSelector() end

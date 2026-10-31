@@ -155,8 +155,6 @@ local MISC_GENERAL_KEYS = KSW [[
 ]]
 local MISC_UNIT_KEYS = {}
 local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
--- Frame Highlights: the Group Target Highlight switches of each group scope.
-local MISC_GROUP_KEYS = KS("targetIndicator")
 local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickIconShape focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss kickReadyShowArena
@@ -345,6 +343,9 @@ local AURA_APPEARANCE_LABELS = {
     playerDefensives = "Player Defensives Appearance",
     targetDots = "Dots on Target Appearance",
 }
+local function BlizzardVisibilityIsShared()
+    return not M.AurasPage or not M.AurasPage.BlizzardVisibilityType()
+end
 local function ResolvePageResetInfo(pageKey)
     local base = PAGE_RESET_INFO[pageKey or ""]
     if not base or base.kind ~= "auraAppearance" then return base end
@@ -352,7 +353,7 @@ local function ResolvePageResetInfo(pageKey)
     for key, value in pairs(base) do info[key] = value end
     info.appearanceKind = ActiveAuraAppearanceKind(info)
     info.label = AURA_APPEARANCE_LABELS[info.appearanceKind] or info.label
-    local blizzardAuraScope = info.appearanceKind == "buff" or info.appearanceKind == "debuff"
+    local blizzardAuraScope = (info.appearanceKind == "buff" or info.appearanceKind == "debuff") and BlizzardVisibilityIsShared()
     local summary = blizzardAuraScope
         and "only the global %s icon shape, border and shadow settings, plus the shared Blizzard Buff/Debuff visibility settings; other Aura " ..
             "types and all Unit/Group lane settings stay unchanged"
@@ -375,7 +376,7 @@ local function ResetAuraAppearancePage(db, defaults, info)
         or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE")
     dst.appearanceIconStyles[kind] = DeepCopy(srcStyles[kind]) or {}
     if kind == "buff" then dst.showWeaponEnchants = src.showWeaponEnchants == true end
-    if kind == "buff" or kind == "debuff" then
+    if (kind == "buff" or kind == "debuff") and BlizzardVisibilityIsShared() then
         dst.hideBlizzardAuraFrames = nil
         dst.hideBlizzardBuffFrame = src.hideBlizzardBuffFrame == true
         dst.hideBlizzardDebuffFrame = src.hideBlizzardDebuffFrame == true
@@ -409,9 +410,6 @@ local function ResetMiscPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return MISC_GENERAL_KEYS[key] == true end)
     for _, key in ipairs(MISC_UNIT_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, function(unitKey) return MISC_UNIT_KEYS[unitKey] == true end)
-    end
-    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
-        ResetUnitFiltered(db, defaults, key, function(scopeKey) return MISC_GROUP_KEYS[scopeKey] == true end)
     end
 end
 local function ResetClassPowerPage(db, defaults)
@@ -701,13 +699,25 @@ end
 -- MSUF_Menu2_PageResetProviders.lua. A key without one keeps the code below.
 local PageResetProviders = {}
 M.PageResetProviders = PageResetProviders
+local function PageResetProvider(pageKey)
+    local aura = M.AurasPage
+    return (aura and aura.AppearanceResetProvider(pageKey)) or PageResetProviders[pageKey]
+end
+-- Called by an optional Aura menu provider inside the host's reset/history boundary.
+function M.ResetBlizzardAuraVisibility()
+    local shared = MSUF.Defaults.Get("auras3", "shared")
+    local model = MSUF.MSUF_Auras3.MenuModel
+    model.WriteHideBlizzardBuffFrame(shared.hideBlizzardBuffFrame == true)
+    model.WriteHideBlizzardDebuffFrame(shared.hideBlizzardDebuffFrame == true)
+    return true
+end
 function M.PageHasReset(pageKey)
-    local provider = PageResetProviders[pageKey]
+    local provider = PageResetProvider(pageKey)
     if provider then return provider.canReset(pageKey) == true end
     return PAGE_RESET_INFO[pageKey or ""] ~= nil
 end
 function M.BuildPageResetWarning(pageKey)
-    local provider = PageResetProviders[pageKey]
+    local provider = PageResetProvider(pageKey)
     local providerWarning = provider and M.ProviderPageResetWarning(pageKey, provider, PAGE_RESET_INFO[pageKey] ~= nil)
     if providerWarning ~= nil then return providerWarning end
     local info = ResolvePageResetInfo(pageKey)
@@ -731,7 +741,7 @@ function M.BuildPageResetWarning(pageKey)
     )
 end
 function M.ResetPageToDefaults(pageKey)
-    local provider = PageResetProviders[pageKey]
+    local provider = PageResetProvider(pageKey)
     if provider then return M.ResetProviderPage(pageKey, provider) end
     if M.BlockCombatAction() then return false end
     local info = ResolvePageResetInfo(pageKey)
@@ -745,7 +755,7 @@ function M.ResetPageToDefaults(pageKey)
     end)
 end
 function M.ShowPageResetConfirm(pageKey)
-    local provider = PageResetProviders[pageKey]
+    local provider = PageResetProvider(pageKey)
     if provider then return M.ShowProviderPageResetConfirm(pageKey, provider) end
     if M.BlockCombatAction() then return false end
     if not M.PageHasReset(pageKey) then return false end

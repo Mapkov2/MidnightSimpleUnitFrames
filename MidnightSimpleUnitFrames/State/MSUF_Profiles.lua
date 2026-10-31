@@ -397,6 +397,10 @@ local function MSUF_ResetProfile(name)
     if not name or not profiles[name] then return false, "unknown profile" end
     if name == MSUF_ActiveProfile then local ok,why=BeforeProfileSwitch()
         if not ok then return false,why end end
+    if name == MSUF_ActiveProfile and MSUF.ProfileWorkbench then
+        local ok, why = MSUF.ProfileWorkbench.Checkpoint("Before resetting settings", true)
+        if not ok then return false, why end
+    end
     if name ~= MSUF_ActiveProfile then
         --- A stored profile needs its schema stamp (an unstamped table is
         --- archived as pre-6.0 at the next login), so it is seeded the way

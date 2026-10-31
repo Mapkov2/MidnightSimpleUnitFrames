@@ -514,6 +514,7 @@ function Focus.ResetPosition()
 end
 
 function Focus.OpenFullSettings(pageKey)
+    if pageKey == "edit_selection" then return OpenMenuPage(pageKey) end
     local key = state.key or state.popupKey
     if not key and EM2.State and EM2.State.GetUnitKey then key = EM2.State.GetUnitKey() end
     local cfg = key and EM2.Registry and EM2.Registry.Get(key) or nil

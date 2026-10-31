@@ -217,9 +217,12 @@ for _, row in ipairs(drawing) do
 end
 local digest = b * 65536 + a
 if observe then print("GROUP_DRAWING " .. flavor .. " " .. #drawing .. " " .. string.format("%.0f", digest)) end
+-- G1 frame-owned aura levels correct the old data-paint reset to the live
+-- base: exactly 84 SetFrameLevel arguments gain the scene's 403-level band.
+-- All call counts/order and every other native drawing argument are unchanged.
 local drawingPins = {
-    Mainline = { 1887, 2024945047 }, Vanilla = { 1927, 658558823 }, TBC = { 1927, 658558823 },
-    Mists = { 1911, 1695158335 }, Forever = { 1903, 314246156 },
+    Mainline = { 1887, 2437232485 }, Vanilla = { 1927, 901566773 }, TBC = { 1927, 901566773 },
+    Mists = { 1911, 819991053 }, Forever = { 1903, 3822126554 },
 }
 if not observe then
     local pin = assert(drawingPins[flavor], "missing positional drawing receipt")

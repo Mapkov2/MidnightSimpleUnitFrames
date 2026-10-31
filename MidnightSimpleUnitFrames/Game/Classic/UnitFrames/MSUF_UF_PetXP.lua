@@ -79,7 +79,7 @@ local function Layout(frame, holder, cfg, status)
     end
     local layers = UF.Layers
     local base = frame.Health or frame.hpBar or frame
-    local level = layers and layers.StatusLevel and layers.StatusLevel(frame, cfg.layer, 7)
+    local level = layers and layers.FrameElementLevel and layers.FrameElementLevel(frame, cfg.layer, 7, 8)
         or (((base.GetFrameLevel and base:GetFrameLevel()) or 0) + 10 + Clamp(cfg.layer, 7, 0, 30))
     if holder._msufLevel ~= level then
         holder:SetFrameLevel(level)

@@ -177,37 +177,31 @@ local function SnapshotProfileRouting()
         specProfileMap = existed and DeepCopy(char.specProfileMap) or nil,
     }
 end
-local historyProviders = {}
+local Providers = MSUF.HistoryProviders
 local ForgetHistoryPath, SyncHistoryCursor, SettleHistoryCursor
-function M.RegisterHistoryProvider(key, capture, restore)
-    if type(key) ~= "string" or key == "" or type(capture) ~= "function" or type(restore) ~= "function" then return false end
-    historyProviders[key] = { capture = capture, restore = restore }
+function M.RegisterHistoryProvider(key, capture, restore, metadata)
+    local registered, previous = Providers.Register(key, capture, restore, metadata)
+    if not registered then return false end
     local cursor = historySessionActive and historySessionSnapshot
     if type(cursor) == "table" and cursor._msuf2HistoryState == true then
+        local value, valid = Providers.CaptureOne(key)
+        if not valid then Providers.RestoreRegistration(key, previous) return false end
+        local roots, validRoots = Providers.CoveredRoots(key, value)
+        if not validRoots then Providers.RestoreRegistration(key, previous) return false end
         cursor.externalProviders = cursor.externalProviders or {}
-        cursor.externalProviders[key] = DeepCopy(capture())
+        cursor.externalProviders[key] = value
         ForgetHistoryPath({ "externalProviders", key })
+        for _, alias in ipairs(metadata and metadata.aliases or {}) do cursor.externalProviders[alias] = nil end
+        for root in pairs(roots or {}) do
+            cursor.profileDB[root] = nil
+            cursor._msuf2HistoryOwners = cursor._msuf2HistoryOwners or {}
+            cursor._msuf2HistoryOwners[root] = key
+        end
     end
     return true
 end
 function M.UnregisterHistoryProvider(key)
-    historyProviders[key] = nil
-end
-local function SnapshotHistoryProviders()
-    local snapshot = {}
-    for key, provider in pairs(historyProviders) do
-        local value = provider.capture()
-        if value ~= nil then snapshot[key] = value end
-    end
-    return snapshot
-end
-local function RestoreHistoryProviders(snapshot, reason, source)
-    local values = type(snapshot) == "table" and snapshot.externalProviders
-    if type(values) ~= "table" then return end
-    for key, value in pairs(values) do
-        local provider = historyProviders[key]
-        if provider then provider.restore(DeepCopy(value), reason, source) end
-    end
+    Providers.Unregister(key)
 end
 local function OwnedViewTable(parent, key, owned, create)
     local child = parent[key]
@@ -225,12 +219,12 @@ local function OwnedViewTable(parent, key, owned, create)
     parent[key] = child
     return child
 end
-local function BaseProfileView(db)
+local function BaseProfileView(db, excluded)
     local Variants, Fields = MSUF.ProfileVariants, MSUF.ProfileFields
     local journal = Variants.BaseJournal and Variants.BaseJournal(db)
     local view = {}
     for key, value in pairs(db) do view[key] = value end
-    if Fields and Fields.CaptureExternal and not Fields.CaptureExternal(db, view) then return nil end
+    if Fields and Fields.CaptureExternal and not Fields.CaptureExternal(db, view, nil, excluded) then return nil end
     if not journal then return view end
     local owned, created = { [view] = true }, {}
     for _, record in pairs(journal) do
@@ -248,17 +242,20 @@ local function BaseProfileView(db)
         local value = parent and parent[path[#path]]
         if type(value) == "table" and next(value) == nil then parent[path[#path]] = nil end
     end
+    if excluded then for root in pairs(excluded) do view[root] = nil end end
     return view
 end
 local function SnapshotDB(view)
+    local externalProviders, externalRoots = Providers.Capture(not view)
+    if not externalProviders then return nil end
     local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
     local externalState = type(externalAPI) == "table"
         and type(externalAPI._CaptureHistorySnapshot) == "function"
         and externalAPI._CaptureHistorySnapshot() or nil
     local profileDB
-    if view and MSUF.ProfileVariants then profileDB = BaseProfileView(M.EnsureDB())
+    if view and MSUF.ProfileVariants then profileDB = BaseProfileView(M.EnsureDB(), externalRoots)
     elseif view then profileDB = M.EnsureDB()
-    elseif MSUF.ProfileVariants then profileDB=MSUF.ProfileVariants.BaseSnapshot(M.EnsureDB(),true)
+    elseif MSUF.ProfileVariants then profileDB=MSUF.ProfileVariants.BaseSnapshot(M.EnsureDB(),true,externalRoots)
     else profileDB=DeepCopy(M.EnsureDB()) end
     if type(profileDB)~="table" then return nil end
     return {
@@ -266,7 +263,8 @@ local function SnapshotDB(view)
         profileDB = profileDB,
         profileRouting = SnapshotProfileRouting(),
         externalEditMode = externalState,
-        externalProviders = SnapshotHistoryProviders(),
+        externalProviders = externalProviders,
+        _msuf2HistoryOwners = externalRoots,
     }
 end
 local snapshotProfiles = setmetatable({}, { __mode = "k" })
@@ -1064,10 +1062,10 @@ local function ResyncSetterOnlySettings(before)
         end
     end
 end
-local function RestoreHistoryProfile(activeDB, profileDB, reason)
+local function RestoreHistoryProfile(activeDB, profileDB, reason, excluded)
     if MSUF.ProfileVariants then MSUF.ProfileVariants.Restore(false) end
     if MSUF.ProfileFields and MSUF.ProfileFields.RestoreExternal then
-        local restored=MSUF.ProfileFields.RestoreExternal(activeDB,profileDB)
+        local restored=MSUF.ProfileFields.RestoreExternal(activeDB,profileDB,excluded)
         if not restored then
             if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
             return false
@@ -1082,12 +1080,23 @@ local function RestoreHistoryProfile(activeDB, profileDB, reason)
     if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason) end
     return true
 end
-local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
-    if type(snapshot) ~= "table" then return false end
-    if trustProfile ~= true and IsForeignProfileSnapshot(snapshot) then return false, "profile_mismatch" end
+local function RestoreHistoryState(snapshot, reason, source, restoreAll)
     local profileDB = HistoryProfileDB(snapshot)
-    if type(profileDB) ~= "table" then return false end
-    historyRestoring = true
+    local plan = Providers.Prepare(snapshot)
+    if not plan or type(profileDB) ~= "table"
+        or not RestoreHistoryProfile(M.EnsureDB(), profileDB, reason or "MSUF2_HISTORY", plan.roots) then
+        return false
+    end
+    RestoreProfileRouting(snapshot)
+    local externalAPI = MSUF.EditModeAPI
+    if externalAPI and snapshot.externalEditMode then
+        local ok = externalAPI._RestoreHistorySnapshot(snapshot.externalEditMode, reason or "history")
+        if ok == false then return false end
+    end
+    return Providers.Restore(snapshot, reason, source, restoreAll, plan)
+end
+local function RestoreHistorySnapshot(snapshot, reason, source, restoreAll)
+    local profileDB = HistoryProfileDB(snapshot)
     local activeDB = M.EnsureDB()
     local activeGeneral = activeDB and activeDB.general
     local activeUi = type(activeGeneral) == "table" and activeGeneral.UIScale
@@ -1098,18 +1107,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     local scaleChanged = wasEnabled ~= willEnable
         or (willEnable and tonumber(activeUi.Scale) ~= tonumber(restoredUi.Scale))
     local setterOnly = CaptureSetterOnlySettings()
-    if not RestoreHistoryProfile(activeDB, profileDB, reason or "MSUF2_HISTORY") then
-        historyRestoring = false
-        return false
-    end
-    RestoreProfileRouting(snapshot)
-    local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
-    if type(externalAPI) == "table" and type(externalAPI._RestoreHistorySnapshot) == "function"
-        and type(snapshot.externalEditMode) == "table" then
-        externalAPI._RestoreHistorySnapshot(snapshot.externalEditMode, reason or "history")
-    end
-    RestoreHistoryProviders(snapshot, reason, source)
-    historyRestoring = false
+    if not RestoreHistoryState(snapshot, reason, source, restoreAll) then return false end
     if scaleChanged and type(_G.MSUF_ApplyCurrentProfileGlobalUiScale) == "function" then
         _G.MSUF_ApplyCurrentProfileGlobalUiScale()
     end
@@ -1147,9 +1145,21 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     MSUF.PublicGlobals.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
     return true
 end
+local function RunHistoryRestore(snapshot, reason, source, restore, trustProfile)
+    if type(snapshot) ~= "table" then return false end
+    if trustProfile ~= true and IsForeignProfileSnapshot(snapshot) then return false, "profile_mismatch" end
+    historyRestoring = true
+    local ok, why = Providers.Transaction(snapshot, reason, source, SnapshotDB, restore)
+    historyRestoring = false
+    return ok, why
+end
+local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
+    return RunHistoryRestore(snapshot, reason, source, RestoreHistorySnapshot, trustProfile)
+end
 function M.CaptureGuidedTourRestorePoint()
     if IsConfigCombatLocked() then return nil end
     local snapshot = SnapshotDB()
+    if not snapshot then return nil end
     snapshot._msuf2GuidedProfileName = tostring(_G.MSUF_ActiveProfile or "Default")
     return snapshot
 end
@@ -1334,18 +1344,11 @@ function M.CancelHistorySurface(surface, restoreState)
     if restoreState == true then
         local cursor, changes, replaced = RewindCursorToPoint(marker.point)
         if not cursor then return false end
-        local profileDB = HistoryProfileDB(cursor)
         local setterOnly = CaptureSetterOnlySettings()
-        historyRestoring = true
-        if type(profileDB) ~= "table"
-            or not RestoreHistoryProfile(M.EnsureDB(), profileDB, "MSUF2_HISTORY_CANCEL_SURFACE") then
+        if not RunHistoryRestore(cursor, "MSUF2_HISTORY_CANCEL_SURFACE", surface, RestoreHistoryState) then
             RevertChanges(cursor, changes, replaced, "before")
-            historyRestoring = false
             return false
         end
-        RestoreProfileRouting(cursor)
-        RestoreHistoryProviders(cursor, "MSUF2_HISTORY_CANCEL_SURFACE", surface)
-        historyRestoring = false
         ResyncSetterOnlySettings(setterOnly)
         marker.point.tree = {}
     else
@@ -1522,7 +1525,7 @@ function M.Undo()
     end
     NotifyHistoryChanged()
     if ok then UI("CommandFeedback", "undo", entry.label) end
-    return ok
+    return ok, why
 end
 function M.Redo()
     if M.BlockCombatAction() then return false end
@@ -1542,7 +1545,7 @@ function M.Redo()
     end
     NotifyHistoryChanged()
     if ok then UI("CommandFeedback", "redo", entry.label) end
-    return ok
+    return ok, why
 end
 function M.RequestUnitDomains(unit, reason, opts)
     if M.BlockCombatAction() then return false end

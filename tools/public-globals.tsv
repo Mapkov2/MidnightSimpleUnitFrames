@@ -30,6 +30,7 @@ MSUF2.AddNavIcon	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2
 MSUF2.AddTooltip	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:237	MSUF_Suite_Options:Menu/SectionActions.lua:176	1	1	suite	all	Suite Menu2 reader
 MSUF2.AllowCombatClick	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:62	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
 MSUF2.ApplyPopupFramePriority	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:1159	MSUF_Suite_Options:Menu/SectionActions.lua:147	1	1	suite	all	Suite Menu2 reader
+MSUF2.AurasPage	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Workspace.lua:265	MSUF_Suite:Core/HostBridgeMenu.lua:206	1	1	suite	all	Optional Aura appearance provider; nested RegisterAppearanceType, AppearanceType and BlizzardVisibilityControlId are covered by the Suite integration contract
 MSUF2.BeginHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1107	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:151	1	1	suite	all	Suite Menu2 reader
 MSUF2.BindBoolWidget	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:731	MSUF_Suite_Options:Menu/Controls.lua:706	1	1	suite	all	Suite Menu2 reader
 MSUF2.BindDropdownAt	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:766	MSUF_Suite_Options:Menu/PreviewClasses.lua:38	1	1	suite	all	Suite Menu2 reader
@@ -81,6 +82,7 @@ MSUF2.RelayoutPageHeaderHost	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu
 MSUF2.ReleaseColorShortcut	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:98	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
 MSUF2.RequestRefresh	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua:310	MSUF_Suite_Options:Menu/Bridge.lua:340	1	1	suite	all	Suite Menu2 reader
 MSUF2.ReserveSectionActions	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:168	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
+MSUF2.ResetBlizzardAuraVisibility	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua:707	MSUF_Suite:Core/HostBridgeMenu.lua:216	1	1	suite	all	Optional Aura provider reset inside the host history and combat boundary
 MSUF2.ResetPageToDefaults	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua:732	MSUF_Suite:Core/HostBridge.lua:367	1	1	suite	all	Suite Menu2 reader
 MSUF2.ResumeForeverPadNavigation	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua:2243	MSUF_Suite_Skin_Options:Shell/Embedded.lua:30	1	1	suite	Forever	Suite Menu2 reader
 MSUF2.RunWithHistory	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:960	MSUF_Suite_Options:Menu/Bridge.lua:200|MSUF_Suite_Skin:Rendering/WindowControls.lua:60	2	2	suite	all	Suite Menu2 reader

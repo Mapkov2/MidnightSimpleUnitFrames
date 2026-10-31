@@ -131,6 +131,7 @@ local consumers = {}
 local consumerCount = 0
 local activeConsumers = {}
 local activeConsumerCount = 0
+local independentConsumers, independentConsumerCount = {}, 0
 local refreshActiveFrames = {}
 local UpdateCooldownEventRegistration
 local UpdateLifecycleEventRegistration
@@ -1719,7 +1720,8 @@ end
 -- registering alone starts nothing.
 local function EngineEnabled()
     local general = GeneralDB()
-    return (consumerCount > 0 and general.kickReadyShowNameplates == true) or FeatureEnabled(general)
+    return independentConsumerCount > 0
+        or (consumerCount > 0 and general.kickReadyShowNameplates == true) or FeatureEnabled(general)
 end
 
 local function RefreshEngine()
@@ -1761,7 +1763,7 @@ function KickReady.KickReady_NotifySettings(current)
     if consumerCount > 0 then NotifyConsumers("settings") end
 end
 
--- MSUF.KickReady v1 is the HostAPI consumer surface for foreign castbars.
+-- MSUF.KickReady is the versioned HostAPI surface for foreign castbars and cooldown icons.
 -- Registration, active/settings notifications and result fields: Castbars/README.md.
 local function ConsumerSetActive(owner, active)
     active = active == true and consumers[owner] ~= nil
@@ -1778,10 +1780,15 @@ local function ConsumerSetActive(owner, active)
     ScheduleCooldownRefresh(nil, false)
 end
 
-local function ConsumerRegister(owner, onChange)
+local function ConsumerRegister(owner, onChange, independent)
     if owner == nil or onChange == nil then return false end
     if consumers[owner] == nil then consumerCount = consumerCount + 1 end
     consumers[owner] = onChange
+    independent = independent == true
+    if (independentConsumers[owner] == true) ~= independent then
+        independentConsumers[owner] = independent or nil
+        independentConsumerCount = independentConsumerCount + (independent and 1 or -1)
+    end
     RefreshEngine()
     return true
 end
@@ -1789,56 +1796,13 @@ end
 local function ConsumerUnregister(owner)
     if owner == nil or consumers[owner] == nil then return end
     ConsumerSetActive(owner, false)
+    if independentConsumers[owner] then
+        independentConsumers[owner] = nil
+        independentConsumerCount = independentConsumerCount - 1
+    end
     consumers[owner] = nil
     consumerCount = consumerCount - 1
     RefreshEngine()
-end
-
--- Reused consumer look table, refreshed from the profile each call; fields: Castbars/README.md.
-local look = {}
-local function ConsumerLook()
-    local general = GeneralDB()
-    look.show = general.kickReadyShowNameplates == true
-    look.style = IndicatorStyle(general)
-    look.marker, look.segment = general.kickReadyTimeMarker == true, general.kickReadyTimeSegment == true
-    look.readyR, look.readyG, look.readyB, look.readyA = RGBAForReady(true, general)
-    look.outline = math.max(0, math.min(math.floor((tonumber(general.castbarOutlineThickness) or 1) + 0.5), 12))
-    look.boxSize = general.kickReadyAutoSize == false and tonumber(general.kickReadySize) or 0
-    look.boxAnchor = general.kickReadyAnchor or "RIGHT"
-    look.boxOffsetX = tonumber(general.kickReadyOffsetX) or 4
-    look.boxOffsetY = tonumber(general.kickReadyOffsetY) or 0
-    -- Castbars/MSUF_Castbars_Core.lua, resolved at use.
-    local castbarTexture = MSUF.Public.GetCastbarTexture
-    look.texture = castbarTexture and castbarTexture() or "Interface\\TargetingFrame\\UI-StatusBar"
-    return look
-end
-
--- MSUF's border and box color for a cast's interruptibility (plain,
--- restricted or nil): ready or not ready, grey for a restricted
--- uninterruptible cast; restricted values are composed natively.
-local function ConsumerRGBA(rawNotInterruptible)
-    local red, green, blue, alpha = EvaluateIndicatorRGBA(InterruptStatus(), rawNotInterruptible)
-    return red, green, blue, alpha
-end
-
--- The castbar colors of MSUF's fill style (Castbars/MSUF_CastbarUtils.lua,
--- resolved at use): interruptible, not interruptible and interrupt
--- unavailable. One ColorMixin each, replaced only when its color changes.
-local fillColors = { {}, {}, {} }
-local function FillColor(cache, red, green, blue)
-    if cache.r ~= red or cache.g ~= green or cache.b ~= blue or not cache.color then
-        cache.r, cache.g, cache.b = red, green, blue
-        cache.color = CreateColor(red, green, blue, 1)
-    end
-    return cache.color
-end
-
-local function ConsumerFillColors()
-    local public = MSUF.Public
-    local castR, castG, castB, nonR, nonG, nonB = public.ResolveCastbarColors()
-    local unavailableR, unavailableG, unavailableB = public.ResolveInterruptUnavailableCastColor()
-    return FillColor(fillColors[1], castR, castG, castB), FillColor(fillColors[2], nonR, nonG, nonB),
-        FillColor(fillColors[3], unavailableR, unavailableG, unavailableB)
 end
 
 local function ConsumerSelectColor(readyColor, notReadyColor)
@@ -1855,19 +1819,21 @@ local function ConsumerCooldown(index)
     return SlotCooldown(slots[index])
 end
 
-local consumerAPI = {
-    version = 1,
-    Register = ConsumerRegister,
-    Unregister = ConsumerUnregister,
+local function ConsumerSlotReady(index)
+    local cooldown = ConsumerCooldown(index)
+    return CooldownReadyValue(cooldown, CooldownRemaining(cooldown))
+end
+
+-- The adapter owns its public look and the v2 slot selectors; the engine
+-- keeps its private spell resolution, cooldown snapshots and wake lifecycle.
+local consumerAPI = KickReady.CreateConsumerAPI({
+    Host = MSUF, General = GeneralDB, Style = IndicatorStyle, ReadyRGBA = RGBAForReady,
+    EvaluateRGBA = EvaluateIndicatorRGBA, Status = InterruptStatus, IsSecret = plainIsSecret,
+    SelectNative = EvaluateColorFromBoolean, Color = CreateColor, Slots = slots, SlotReady = ConsumerSlotReady,
+    Register = ConsumerRegister, Unregister = ConsumerUnregister, SetActive = ConsumerSetActive,
     HasConsumers = function() return consumerCount > 0 end,
-    SetActive = ConsumerSetActive,
-    Look = ConsumerLook,
-    RGBA = ConsumerRGBA,
-    FillColors = ConsumerFillColors,
-    SelectColor = ConsumerSelectColor,
-    SlotCount = ConsumerSlotCount,
-    Cooldown = ConsumerCooldown,
-}
+    SelectColor = ConsumerSelectColor, SlotCount = ConsumerSlotCount, Cooldown = ConsumerCooldown,
+})
 MSUF.KickReady = consumerAPI
 
 local function CooldownEventAlreadyDisplayed()

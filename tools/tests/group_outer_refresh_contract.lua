@@ -56,17 +56,23 @@ h.env.geterrorhandler = function() return function(message)
     if throwing then error("injected outer reporter") end
 end end
 -- Frozen before this repair, same full graph and fixture. VM/calls/fixture calls/KB per 100.
+-- 2026-10-29, owner-approved exception: the roster settle repaints as an identity
+-- change so a raid slot that kept its token for another occupant drops the old
+-- OFFLINE/DEAD/AFK (group_roster_identity_status_smoke). roster5 measured
+-- Mainline 30325 -> 39210 VM, 1757 -> 2282 calls, 1601 -> 1986 natives (Forever
+-- 39100/2302/1780, Vanilla/TBC 39400/2337/1805, Mists 39403/2337/1805); KB
+-- unchanged. Its three cost caps are ceil(measured * 1.02); the rest stay frozen.
 local BUDGETS = {
     Mainline = { scan5 = { 3784, 252, 153, 28.516 }, visual5 = { 97370, 5051, 3292, 1944.922 },
-        roster5 = { 30385, 1765, 1607, 568.359 } },
+        roster5 = { 39995, 2328, 2026, 568.359 } },
     Forever = { scan5 = { 3859, 252, 163, 28.516 }, visual5 = { 98545, 5116, 3300, 1944.922 },
-        roster5 = { 30275, 1785, 1401, 568.359 } },
+        roster5 = { 39882, 2349, 1816, 568.359 } },
     Vanilla = { scan5 = { 3816, 252, 163, 28.516 }, visual5 = { 100796, 5231, 3385, 1944.922 },
-        roster5 = { 30340, 1805, 1426, 732.422 } },
+        roster5 = { 40188, 2384, 1842, 732.422 } },
     TBC = { scan5 = { 3816, 252, 163, 28.516 }, visual5 = { 100796, 5231, 3385, 1944.922 },
-        roster5 = { 30340, 1805, 1426, 732.422 } },
+        roster5 = { 40188, 2384, 1842, 732.422 } },
     Mists = { scan5 = { 3816, 252, 163, 28.516 }, visual5 = { 99891, 5186, 3380, 1944.922 },
-        roster5 = { 30343, 1805, 1426, 732.422 } },
+        roster5 = { 40192, 2384, 1842, 732.422 } },
 }
 local function Budget(label, operation)
     for _ = 1, 20 do operation() end

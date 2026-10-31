@@ -75,6 +75,9 @@ local function ProfilesMeta(path, classification, exact)
     elseif resolved.actionKey == "set_spec_profile" then
         resolved.setting = M.ControlSchema.Record({ "MSUF_GlobalDB.char.{character}.specProfileMap.{spec}", "MSUF_GlobalDB.char.{character}.activeProfile" })
     end
+    if path == "import.review" then
+        resolved.schemaEphemeralReason = "Builds an import review draft; only the separate Apply action writes profile settings."
+    end
     return ControlMeta("profiles", "advanced", path, classification, resolved)
 end
 local function ModulesMeta(path, classification, exact)
@@ -667,6 +670,7 @@ local function BuildProfilePicker(state)
         end
         local wanted = value and value ~= "" and value ~= MSUF_ActiveProfile and value or nil
         if wanted then
+            M.ProfileWorkbenchUI.ImportChanged()
             MSUF.Require("MSUF_SwitchProfile", FILE)(wanted)
             if MSUF_ActiveProfile == wanted then ClearProfileHistory() end
         end
@@ -1008,6 +1012,7 @@ function ProfilesPage.ImportExport(state)
     local function MirrorImportBuffer(self) M.profileImportString = self:GetText() or "" end
     blob:HookScript("OnTextChanged", function(self, userInput)
         if userInput then MirrorImportBuffer(self) end
+        M.ProfileWorkbenchUI.ImportChanged(self:GetText() or "")
     end)
     blob:HookScript("OnEditFocusLost", MirrorImportBuffer)
     local export = ProfileButton(actionsCard, "Export", function()
@@ -1224,6 +1229,8 @@ local function TrackImportMode(state, importModeHelp)
     local function RefreshImportMode()
         local createNew = M.profileImportCreateNew == true
         importCreateNew:SetChecked(createNew)
+        state.reviewImport:SetEnabled(not createNew)
+        M.ProfileWorkbenchUI.ImportChanged(M.profileImportString)
         if import.SetText then import:SetText(createNew and "Import new profile" or "Import to current profile") end
         if T.ApplyButtonRole then T.ApplyButtonRole(import, createNew and "success" or "danger") end
         W.SetControlShown(importProfileName, createNew)
@@ -1277,6 +1284,7 @@ function ProfilesPage.ImportActions(state)
         end
         M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
         self:SetChecked(M.profileImportCreateNew == true)
+        M.ProfileWorkbenchUI.ImportChanged(M.profileImportString)
         if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info",
             1.2) end
         if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
@@ -1291,6 +1299,12 @@ function ProfilesPage.ImportActions(state)
     WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, ioWide and 220 or 162)
     PlaceActionRow(actionsCard, 20, export, import, -82)
     MoveWidget(wago, actionsCard, 20, -126, ioButtonW)
+    local review = ProfileButton(actionsCard, "Review changes", function()
+        M.ProfileWorkbenchUI.ReviewImport(blob:GetText())
+    end, nil, "import.review", false, nil, nil, nil, ioButtonW)
+    state.reviewImport = review
+    state.AddProfileTooltip(review, "Review changes", "Selective review changes the current profile. Turn off new-profile import to use it.")
+    MoveWidget(review, actionsCard, 20 + ioButtonW + state.buttonGap, -126, ioButtonW)
     MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)
     StyleProfileInput(importProfileName, importNameW, 28, false)
     local importModeHelp = AP.Row(nil, actionsCard, { "text", "advancedprofiles.importModeHelp.30", nil,
@@ -1300,15 +1314,22 @@ function ProfilesPage.ImportActions(state)
 end
 function ProfilesPage.UnitSelection(state)
     local ctx, b = state.ctx, state.b
-    local section = b:CollapsibleSection("profiles_unit_selection", "Selected unitframes", 246, false)
+    local labels = VT("player", "Player", "target", "Target", "targettarget", "Target of Target",
+        "pet", "Pet", "pettarget", "Pet Target", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
+    -- Two switches per 28 px row. Arena Frames adds a fifth row on clients with
+    -- arena units, so the note and the section follow the row count.
+    local count = 0
+    for i = 1, #labels do
+        if not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(labels[i].value) then count = count + 1 end
+    end
+    local rows = floor((count + 1) / 2)
+    local section = b:CollapsibleSection("profiles_unit_selection", "Selected unitframes", 134 + rows * 28, false)
     M.ControlSchema.Section(section, "profiles")
     state.unitSelectionSection = section
     AP.Row(nil, section, { "text", "advancedprofiles.text.31", nil,
         { "Choose frames for a Selected unitframes export. Imports automatically use the frames included in the string.",
         20, -44, max(220, state.contentW - 40), T.colors.muted } })
     M.profileExportUnits = M.profileExportUnits or { player = true }
-    local labels = VT("player", "Player", "target", "Target", "targettarget", "Target of Target",
-        "pet", "Pet", "pettarget", "Pet Target", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
     local index = 0
     for i = 1, #labels do
         local unit, label = labels[i].value, labels[i].text
@@ -1330,7 +1351,7 @@ function ProfilesPage.UnitSelection(state)
     end
     AP.Row(nil, section, { "text", "advancedprofiles.text.33", nil,
         { "Includes each frame's own settings, auras and castbar. Shared appearance settings stay unchanged.",
-        20, -214, max(220, state.contentW - 40), T.colors.muted } })
+        20, -102 - rows * 28, max(220, state.contentW - 40), T.colors.muted } })
 end
 function ProfilesPage.Build(ctx)
     local state = ProfilesPage.Prepare(ctx)
@@ -1339,12 +1360,16 @@ function ProfilesPage.Build(ctx)
     ProfilesPage.ManagementControls(state)
     ProfilesPage.ProfileCleanup(state)
     ProfilesPage.Specializations(state)
+    M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "versions")
     if M.ProfileVariantPage then M.ProfileVariantPage.Build(state,GetSpecMeta()) end
+    M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "display")
     if M.ProfileSyncPage then M.ProfileSyncPage.Build(state) end
     ProfilesPage.ImportExport(state)
     ProfilesPage.ImportActions(state)
+    M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "review")
     ProfilesPage.UnitSelection(state)
     if M.ProfileVariantPage then M.ProfileVariantPage.Transport(state) end
+    M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "inspector")
     ctx:SetContentHeight(math.abs(state.b.y) + 42)
 end
 local StyleIsEnabled

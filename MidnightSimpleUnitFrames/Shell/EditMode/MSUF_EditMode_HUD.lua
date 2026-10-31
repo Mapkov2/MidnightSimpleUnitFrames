@@ -577,6 +577,9 @@ local function BuildLayoutCluster()
     resetBtn = AddRowButton(layoutItems, layoutCluster, "Reset", 56, CLUSTER_BTN_H, "caption", function()
         HUD.ResetCurrentPosition()
     end, "Reset the selected frame position.\nSize stays unchanged.")
+    AddRowButton(layoutItems, layoutCluster, "Align", 80, CLUSTER_BTN_H, "caption", function()
+        EM2.Focus.OpenFullSettings("edit_selection")
+    end, "Move and align multiple elements")
     FinishCluster(layoutCluster, layoutItems, CLUSTER_H, -7)
     layoutCluster._stepFS = stepFS
     layoutCluster._alphaFS = alphaFS

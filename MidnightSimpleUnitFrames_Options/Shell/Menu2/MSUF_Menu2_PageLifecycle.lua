@@ -420,7 +420,7 @@ end
 -- the single executable source of truth.
 M.BuildPageEntry = BuildPageEntry
 function M.SelectPage(key)
-    local _, CONTENT_H = M.GetContentMetrics()
+    local CONTENT_W, CONTENT_H = M.GetContentMetrics()
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
@@ -450,7 +450,10 @@ function M.SelectPage(key)
         cached = nil
         if M.activeKey == key then M.activeKey = nil end
     end
-    if key == M.activeKey and cached and EntryShowsCurrentView(cached, key, spec) then
+    -- A cancelled window animation can leave new metrics on the same page.
+    -- Reuse the fast path only after its retained layout has caught up.
+    if key == M.activeKey and cached and cached.layoutWidth == CONTENT_W and cached.layoutHeight == CONTENT_H
+        and EntryShowsCurrentView(cached, key, spec) then
         M.sessionLastPage = key
         M.RememberPrimaryNavPage(key)
         M.SetActivePageHeader(cached)

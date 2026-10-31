@@ -92,17 +92,16 @@ function Layers.ClampDetail(detail)
   return detail
 end
 
--- A preview embedded in a window (a scene inside the menu) paints in the window's own level band: it shifts the
--- absolute element levels by one constant, the way a live frame keeps them comparable to the castbars. The shift
--- moves the base ElementLevel reads, so the live function runs exactly the instructions it always did; 0 outside
--- such a paint.
-local plainLevelBase = Layers.ELEMENT_LEVEL_BASE
-function Layers.SetLevelBias(bias)
-  Layers.ELEMENT_LEVEL_BASE = plainLevelBase + (tonumber(bias) or 0)
-end
-
 function Layers.ElementLevel(layer, fallback, detail)
   return Layers.ELEMENT_LEVEL_BASE
+    + Layers.ClampLayer(layer, fallback) * Layers.ELEMENT_LEVEL_STRIDE
+    + Layers.ClampDetail(detail)
+end
+
+-- Embedded preview bands belong to the unit/group root frame. The ordinary
+-- ElementLevel contract stays absolute even inside a nested preview callback.
+function Layers.FrameElementLevel(frame, layer, fallback, detail)
+  return (frame and frame._msufPreviewLevelBase or Layers.ELEMENT_LEVEL_BASE)
     + Layers.ClampLayer(layer, fallback) * Layers.ELEMENT_LEVEL_STRIDE
     + Layers.ClampDetail(detail)
 end
@@ -136,22 +135,22 @@ end
 -- Layer 0 is the portrait's documented behind-health placement. Health bars
 -- use their frame-local level, below the universal foreground scale; reserve
 -- one extra level for the portrait rim so it also stays behind the bar.
-function Layers.PortraitLevel(healthBar, layer, fallback)
+function Layers.PortraitLevel(healthBar, layer, fallback, frame)
   layer = Layers.ClampLayer(layer, fallback or 7)
   if layer == 0 and healthBar and healthBar.GetFrameLevel then
     return max(0, (healthBar:GetFrameLevel() or 0) - 2)
   end
-  return Layers.ElementLevel(layer, fallback or 7, 0)
+  return Layers.FrameElementLevel(frame, layer, fallback or 7, 0)
 end
 
 --- Full-frame Aura effects must at least clear the surface they are meant to
 --- recolor.  The configured 0..30 Layer still wins whenever it is higher; this
 --- floor only prevents a low/default Layer from being completely overdrawn by
 --- the health bar or original name text.  All inputs are cold-path layout data.
-function Layers.AuraEffectLevel(layer, priority, targetOwner)
+function Layers.AuraEffectLevel(layer, priority, targetOwner, frame)
   priority = floor((tonumber(priority) or 5) + 0.5)
   if priority < 1 then priority = 1 elseif priority > 10 then priority = 10 end
-  local level = Layers.ElementLevel(layer, 0, 11 - priority)
+  local level = Layers.FrameElementLevel(frame, layer, 0, 11 - priority)
   if not (targetOwner and type(targetOwner.GetFrameLevel) == "function") then
     return level
   end
@@ -199,7 +198,7 @@ function Layers.BorderOffset(frame, offset, layer)
   local frameLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or 0
   offset = tonumber(offset) or Layers.FRAME_BORDER_DEFAULT_OFFSET
   local detail = 8 + (offset - Layers.FRAME_BORDER_NORMAL_OFFSET)
-  return Layers.ElementLevel(layer, 0, detail) - frameLevel
+  return Layers.FrameElementLevel(frame, layer, 0, detail) - frameLevel
 end
 
 --- Preview mirror of Layers.BorderOffset for group mocks, which carry no

@@ -58,6 +58,20 @@ function Variants.Validate(schema)
             if type(input.dark) ~= "boolean" then return nil, "invalid dark condition" end
             condition.dark = input.dark
         end
+        if input.display ~= nil then
+            local display = input.display
+            if type(display) ~= "table" then return nil, "invalid display condition" end
+            condition.display = {}
+            for key, value in pairs(display) do
+                local bound = key == "minWidth" or key == "maxWidth"
+                local ratio = key == "minAspect" or key == "maxAspect"
+                if not (bound or ratio) or type(value) ~= "number" or value ~= value
+                    or value < 0 or value > (ratio and 8 or 32000) then return nil, "invalid display condition" end
+                condition.display[key] = value
+            end
+            if (display.minWidth or 0) > (display.maxWidth or 32000)
+                or (display.minAspect or 0) > (display.maxAspect or 8) then return nil, "invalid display range" end
+        end
         condition.manual = input.manual == true
         if input.specs ~= nil then
             if type(input.specs) ~= "table" then return nil, "invalid specialization group" end
@@ -90,9 +104,29 @@ end
 
 -- Context values travel as plain arguments so the per-event signature below
 -- allocates nothing.
+function Variants.DisplayValues()
+    local parent = UIParent
+    if not parent then return 0, 0 end
+    local width, height = parent:GetWidth(), parent:GetHeight()
+    local scale = parent:GetEffectiveScale()
+    if MSUF.Util.IsSecret(width) or MSUF.Util.IsSecret(height) or MSUF.Util.IsSecret(scale) then return 0, 0 end
+    if type(width) ~= "number" or type(height) ~= "number" or height <= 0 then return 0, 0 end
+    return math.floor(width * (scale or 1) + 0.5), width / height
+end
+function Variants.Source(path)
+    for _, record in pairs(journal) do
+        if Fields.Overlaps(record.path, path) then return record.owner end
+    end
+end
 local function MatchValues(entry, location, spec, dark)
     if type(entry) ~= "table" or entry.enabled == false then return false end
     local c = type(entry.conditions) == "table" and entry.conditions or NO_CONDITIONS
+    if c.display then
+        local width, aspect = Variants.DisplayValues()
+        local d = c.display
+        if width < (d.minWidth or 0) or width > (d.maxWidth or 32000)
+            or aspect < (d.minAspect or 0) or aspect > (d.maxAspect or 8) then return false end
+    end
     if c.manual and entry.name ~= manual then return false end
     if c.context and c.context ~= location then return false end
     if c.dark ~= nil and c.dark ~= dark then return false end
@@ -247,30 +281,59 @@ end
 -- Whether any entry depends on the location or the specialization: only
 -- those conditions need game events.
 function Variants.ConditionKinds(db)
-    local location, spec = false, false
+    local location, spec, display = false, false, false
     for _, entry in ipairs(Entries(db) or NO_ENTRIES) do
         local c = type(entry) == "table" and entry.conditions
         if type(c) == "table" then
             if c.context ~= nil then location = true end
+            if c.display ~= nil then display = true end
             if type(c.specs) == "table" and next(c.specs) then spec = true end
         end
     end
-    return location, spec
+    return location, spec, display
+end
+
+-- Project one external base into a caller-owned deep copy. The journal stays
+-- private; Suite need not copy the whole Core or recapture its own store.
+-- Only already validated journal values are copied, under snapshot bounds.
+function Variants.ProjectBaseRoot(db, root, copy)
+    if type(db) ~= "table" or type(root) ~= "string" or not Fields.IsExternal(root)
+        or type(copy) ~= "table" or getmetatable(copy) ~= nil
+        or copy == Fields.ProfileRoot(db, root, false) then return false end
+    if db ~= activeDB then return true end
+    CaptureEdits()
+    local target, created = { [root] = copy }, {}
+    local budget = { count = 0, limit = 131072, maxDepth = 32, bytes = 0, maxBytes = 8388608 }
+    for _, record in pairs(journal) do
+        if record.path[1] == root then
+            local value, valid = Fields.CopySnapshot(record.base, budget)
+            if not valid then return false end
+            Fields.Write(target, record.path, value)
+            for _, path in ipairs(record.created) do created[#created + 1] = path end
+        end
+    end
+    table.sort(created, function(a, b) return #a > #b end)
+    for _, path in ipairs(created) do
+        local value = Fields.Read(target, path)
+        if type(value) == "table" and next(value) == nil then Fields.Write(target, path, nil) end
+    end
+    return true
 end
 
 -- Snapshots export the base even while the live table carries active overrides.
 -- Do not add a setting to partial exports that did not include it in the first place.
-function Variants.BaseSnapshot(db, include)
+function Variants.BaseSnapshot(db, include, excluded)
     if db == activeDB then CaptureEdits() end
     -- A complete trusted profile includes the schema/entry/path wrappers around
     -- already validated bounded values; their nesting is not value nesting.
     local budget={count=0,limit=131072,maxDepth=32,bytes=0,maxBytes=8388608}
     local copy, valid, problem = Fields.CopySnapshot(db,budget)
     if not valid then return nil, SNAPSHOT_PROBLEMS[problem] or "profile exceeds snapshot limits" end
-    if Fields.CaptureExternal and not Fields.CaptureExternal(db,copy,budget) then return nil, "an add-on part of the profile could not be copied" end
+    if Fields.CaptureExternal and not Fields.CaptureExternal(db,copy,budget,excluded) then return nil, "an add-on part of the profile could not be copied" end
     if db == activeDB then
         RestoreInto(copy)
     end
+    for root in pairs(excluded or NO_ENTRIES) do copy[root] = nil end
     if include == false then copy.profileVariants=nil end
     return copy
 end
