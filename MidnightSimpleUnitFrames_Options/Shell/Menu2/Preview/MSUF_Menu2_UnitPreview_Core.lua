@@ -453,6 +453,7 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
     local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
     PreviewSetMask(mock, mock.hpBG, hpBgMask)
     PreviewSetMask(mock, mock.hp, hpMask)
+    PreviewHelpers.MaskHealthLoss(mock, mock.healthBar, hpMask, "_msufPreviewRoundedMasked")
     ApplyPreviewGradientMasks(mock, mock._msufPreviewHealthGradients,
         "healthGradient", healthAnchor, true)
     PreviewSetMask(mock, mock.tempMaxHealthBg, tempMaxBgMask)
@@ -473,6 +474,7 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
     local powerMask = roundedPower and EnsurePreviewRoundedMask(mock, "power", powerAnchor, mock.power) or nil
     PreviewSetMask(mock, mock.powerBG, powerBgMask)
     PreviewSetMask(mock, mock.power, powerMask)
+    PreviewHelpers.MaskPowerLoss(mock, mock._msufPreviewPowerBar, powerMask, "_msufPreviewRoundedMasked", false)
     ApplyPreviewGradientMasks(mock, mock._msufPreviewPowerGradients,
         "powerGradient", powerAnchor, roundedPower)
     local inlinePowerHost = mock._msufPreviewInlinePowerRoundedHost
@@ -508,6 +510,7 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         local detachedFillMask = EnsurePreviewRoundedMask(mock, "detachedPowerFill", detached, detached.fill)
         PreviewSetMask(mock, detached.bg, detachedBgMask)
         PreviewSetMask(mock, detached.fill, detachedFillMask)
+        PreviewHelpers.MaskPowerLoss(mock, mock._msufPreviewPowerBar, detachedFillMask, "_msufPreviewRoundedMasked", true)
         ApplyPreviewGradientMasks(mock, mock._msufPreviewDetachedPowerGradients,
             "detachedPowerGradient", detached, true)
         local edge = ClampPreviewEdgeSize(detachedEdgeSize, 1, 8)
@@ -522,6 +525,7 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         if detached then
             PreviewSetMask(mock, detached.bg, nil)
             PreviewSetMask(mock, detached.fill, nil)
+            PreviewHelpers.MaskPowerLoss(mock, mock._msufPreviewPowerBar, nil, "_msufPreviewRoundedMasked", true)
         end
         ApplyPreviewGradientMasks(mock, mock._msufPreviewDetachedPowerGradients,
             "detachedPowerGradient", detached, false)
@@ -584,6 +588,8 @@ function Core.ApplyLayerVisibility(box)
         Core.SetShownSafe(mock.detachedPower, false)
         Core.SetShownSafe(box.handleDetachedPower, false)
     end
+    PreviewHelpers.SyncPowerLoss(mock._msufPreviewPowerBar, mock._msufPreviewPowerBar
+        and mock._msufPreviewPowerBar._msufPreviewPowerSource)
     if not classOn then
         Core.SetShownSafe(mock.classPower, false)
         Core.SetShownSafe(box.handleClassPower, false)

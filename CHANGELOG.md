@@ -14,6 +14,10 @@ Stable release for all supported clients, combining the changes tested in 6.505 
 
 ### Bug Fixes
 
+- Fixed Health Chunks in animated unit and group previews: health loss now shows the same fading chunks as the live frames, including their colors, opacity and rounded shapes.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"frame_basics","controlId":"menu2.uf_player.unit.basics.chunked_fill","settingKey":"player.chunkedFill","prepareKind":"","prepareValue":"","query":"chunked health loss","label":"Chunked health loss"} -->
+- Fixed Power Chunks in animated unit and group previews, including detached power bars: spent power now leaves the correct fading chunks, and stopping or hiding the preview clears them.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"power_bar","controlId":"menu2.uf_player.unit.power.powerchunkedfill","settingKey":"player.powerChunkedFill","prepareKind":"","prepareValue":"","query":"chunked power loss","label":"Chunked power loss"} -->
 - Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.
 <!-- msuf-menu-link: none -->
 - Searching the options for a word such as "pandemic" now lists the options containing that word before related matches.

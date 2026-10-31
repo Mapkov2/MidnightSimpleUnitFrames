@@ -268,6 +268,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     SetMask(mock, mock._roundedBg, bodyMask)
     SetMask(mock, mock._healthBg, healthBgMask)
     SetMask(mock, healthTex, healthTexMask)
+    PreviewHelpers.MaskHealthLoss(mock, mock._health, healthTexMask, "_msufGFRoundedPreviewMasked")
     ApplyGradientMasks(mock, mock._msufGFPreviewHealthGradients,
         "healthGradient", healthAnchor, true)
     SetMask(mock, dispelOverlay, dispelOverlayMask)
@@ -282,6 +283,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     SetMask(mock, healAbsorbTex, healAbsorbMask)
     SetMask(mock, mock._powerBg, powerBgMask)
     SetMask(mock, powerTex, powerTexMask)
+    PreviewHelpers.MaskPowerLoss(mock, mock._power, powerTexMask, "_msufGFRoundedPreviewMasked")
     ApplyGradientMasks(mock, mock._msufGFPreviewPowerGradients,
         "powerGradient", powerAnchor, roundPower)
     if roundPower and not sharedBody and PreviewHelpers.EnsureRoundedVisuals

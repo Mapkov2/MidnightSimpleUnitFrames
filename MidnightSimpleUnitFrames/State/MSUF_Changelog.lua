@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E46D0EDD4FDC73D6BE35B93F6FBC56A5556B8E5B84CDBD8C2982FC10FC92F52A",
+    sourceSha256 = "3D1AF27FAEF5EF463481FDA2DC66AEBEDD2F6D1EF04173684B94CCCBBCA8152D",
     currentVersion = "6.505",
     historyFromVersion = "6.501",
     previousVersion = "6.501",
@@ -50,6 +50,28 @@ local data = {
                 {
                     title = "Bug Fixes",
                     bullets = {
+                        {
+                            text = "Fixed Health Chunks in animated unit and group previews: health loss now shows the same fading chunks as the live frames, including their colors, opacity and rounded shapes.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "chunked health loss",
+                                label = "Chunked health loss",
+                                sectionId = "frame_basics",
+                                controlId = "menu2.uf_player.unit.basics.chunked_fill",
+                                settingKey = "player.chunkedFill",
+                            },
+                        },
+                        {
+                            text = "Fixed Power Chunks in animated unit and group previews, including detached power bars: spent power now leaves the correct fading chunks, and stopping or hiding the preview clears them.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "chunked power loss",
+                                label = "Chunked power loss",
+                                sectionId = "power_bar",
+                                controlId = "menu2.uf_player.unit.power.powerchunkedfill",
+                                settingKey = "player.powerChunkedFill",
+                            },
+                        },
                         {
                             text = "Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.",
                             linkless = true,

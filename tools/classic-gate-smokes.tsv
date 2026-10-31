@@ -611,3 +611,5 @@ clients+Forever	lua	tools/tests/group_raid_combat_freeze_smoke.lua	{root} {flavo
 -	lua	tools/tests/player_empower_cleanup_smoke.lua	{root}	Player Empower releases preceding channel ticks and preserves stage timing
 clients+Forever	lua	tools/tests/boss_right_click_focus_smoke.lua	{root} {flavor}	Boss right-click focus secure action and menu lifecycle: {flavor}
 clients+Forever	lua	tools/tests/boss_right_click_focus_smoke.lua	{root} {flavor} arena	Arena right-click focus secure action and menu lifecycle: {flavor}
+clients+Forever	lua	tools/tests/menu_preview_health_loss_smoke.lua	{root} {flavor}	Menu preview health loss animation failed: {flavor}
+clients+Forever	lua	tools/tests/menu_preview_power_loss_smoke.lua	{root} {flavor}	Menu preview power loss animation failed: {flavor}

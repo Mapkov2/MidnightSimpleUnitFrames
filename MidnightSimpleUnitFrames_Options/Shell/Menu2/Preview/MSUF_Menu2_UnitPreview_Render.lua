@@ -447,7 +447,7 @@ local function PreviewLivePowerBar(key)
     local frame = PreviewLiveFrame(key)
     return frame and (frame.targetPowerBar or frame.powerBar or frame.Power) or nil
 end
-local function UnitPreviewAnimationState(box, index, key)
+local function UnitPreviewAnimationState(box, index, key, conf)
     if not (box and box._animationEnabled == true) then return nil end
     local previewAnimation = MSUF and MSUF.PreviewAnimation
     local buildState = previewAnimation and previewAnimation.BuildFrameState or _G.MSUF_BuildPreviewAnimationFrameState
@@ -457,7 +457,7 @@ local function UnitPreviewAnimationState(box, index, key)
         scratch = {}
         box._previewAnimationState = scratch
     end
-    return buildState(box, index, key, scratch, box._animationElapsed)
+    return buildState(box, index, key, scratch, box._animationElapsed, conf.chunkedFill == true, PreviewHelpers.PowerChunked(conf, key))
 end
 local function ShortenCastbarPreviewSpellName(key, text)
     local shorten = _G.MSUF_ShortenCastbarSpellName
@@ -1166,7 +1166,7 @@ end
 --- refresh and the animation tick share it, so both read the same values.
 local function AnimatedPreviewData(st, data, powerFrac)
     local box = st.box
-    local animState = UnitPreviewAnimationState(box, 1, st.key)
+    local animState = UnitPreviewAnimationState(box, 1, st.key, st.conf)
     local animHp = animState and tonumber(animState.hpPct)
     local animPower = animState and tonumber(animState.powerPct)
     if animHp then
@@ -2203,7 +2203,7 @@ function Stage.PaintHealthValues(st, fullRefresh)
     local hpReverse, hpAreaW = st.hpReverse, st.hpAreaW
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
     if not fullRefresh then
-        mock.healthBar:SetValue(hpFrac)
+        PreviewHelpers.PaintHealthValue(mock.healthBar, hpFrac, box._animationEnabled == true)
         if st.healPredShown and st.healPredMode == 3 then
             -- RenderHealth anchored it to the fill's edge; only its width
             -- (PreviewOverlayWidth) follows the health.
@@ -2289,8 +2289,8 @@ function Stage.RenderHealth(st)
     end
     if mock.healthBar.SetReverseFill then mock.healthBar:SetReverseFill(hpReverse) end
     mock.healthBar._msufReverseFill = hpReverse
-    if mock.healthBar.SetMinMaxValues then mock.healthBar:SetMinMaxValues(0, 1) end
-    mock.healthBar:SetValue(hpFrac)
+    PreviewHelpers.ConfigureHealthLoss(mock.healthBar, runtimeSpec and runtimeSpec.health, conf, g)
+    PreviewHelpers.PaintHealthValue(mock.healthBar, hpFrac, false)
     st.hpReverse, st.hpAreaW = hpReverse, hpAreaW
     -- Query after SetValue, exactly like Group Preview: the client owns this
     -- fill region and may bind it lazily when the StatusBar is initialized.
@@ -2902,6 +2902,7 @@ end
 --- The full refresh lays both bars out first; the animation tick repaints only
 --- this.
 function Stage.PaintPowerValues(st)
+    PreviewHelpers.PaintUnitPowerLoss(st)
     local box, floor, max, mock, powerFrac, S = st.box, st.floor, st.max, st.mock, st.powerFrac, st.S
     if st.powerOn then PaintPreviewPowerFill(mock.power, st.sw, st.powerH, powerFrac, st.powerVertical) end
     if not (st.detachedPowerInUnitPreview and box._runtimeAugCompositePreview ~= true) then return end
@@ -4378,6 +4379,7 @@ function Preview.Refresh(box, reason)
     Stage.RenderPowerBar(st)
     Stage.RenderClassPower(st)
     Stage.RenderDetachedPower(st)
+    PreviewHelpers.ConfigureUnitPowerLoss(st)
     Stage.RenderFrameChrome(st)
     Stage.ApplyTextStyle(st)
     Stage.RenderTextContent(st)
@@ -4393,6 +4395,8 @@ function Preview.Refresh(box, reason)
     Stage.RenderAurasAndStatus(st, Preview)
     Stage.RenderArenaTrinket(st)
     Stage.FinalizeLayersAndHandles(st)
+    PreviewHelpers.SyncHealthLoss(st.mock.healthBar)
+    PreviewHelpers.SyncUnitPowerLoss(st)
     st.complete = true
 end
 

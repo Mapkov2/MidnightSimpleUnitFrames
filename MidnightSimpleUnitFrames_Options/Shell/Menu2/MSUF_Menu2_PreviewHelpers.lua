@@ -12,6 +12,165 @@ M.PreviewHelpers = H
 local CP = M.ClassPowerPreview or {}
 M.ClassPowerPreview = CP
 
+-- Menu-owned bars reuse the runtime loss snapshot, mask and native fade.
+function H.ConfigureHealthLoss(bar, health, conf, general)
+    local common = MSUF.UFBarTextCommon
+    local chunked = conf.chunkedFill == true
+    local smooth = conf.smoothFill == true
+    local trail = bar._msufPreviewHealthLoss
+    if chunked and not trail then
+        trail = common.CreateLossTrail(bar:GetParent(), bar:GetStatusBarTexture():GetTexture(), bar:GetValue())
+        bar._msufPreviewHealthLoss = trail
+    end
+    if trail then
+        trail:SetAllPoints(bar)
+        trail:SetFrameLevel(math.max(0, bar:GetFrameLevel() - 1))
+        trail:SetStatusBarTexture(bar:GetStatusBarTexture():GetTexture())
+        trail:SetOrientation(bar._msufOrientation or "HORIZONTAL")
+        trail:SetReverseFill(bar._msufReverseFill == true)
+        trail:SetStatusBarColor(health and health.lossR or general.healthLossColorR or 1,
+            health and health.lossG or general.healthLossColorG or 0.55,
+            health and health.lossB or general.healthLossColorB or 0.08, 1)
+    end
+    common.SetBarSmoothing(bar, smooth and not chunked, chunked, trail)
+    bar:SetMinMaxValues(0, 1)
+end
+
+function H.PaintHealthValue(bar, value, animate)
+    if not animate then bar._msufDirectValuePlain = nil end
+    MSUF.UFBarTextCommon.SetBarValuePlain(bar, value, animate)
+end
+
+function H.SyncHealthLoss(bar)
+    local trail = bar._msufPreviewHealthLoss
+    if not trail or not bar._msufChunkedLoss then return end
+    local fill = trail:GetStatusBarTexture()
+    local alpha = bar:GetStatusBarTexture():GetAlpha() * bar:GetAlpha()
+    if fill:GetAlpha() ~= alpha then
+        fill:SetAlpha(alpha)
+    end
+end
+
+function H.MaskHealthLoss(mock, bar, mask, storeKey)
+    local trail = bar and bar._msufPreviewHealthLoss
+    if not trail then return end
+    local fill = trail:GetStatusBarTexture()
+    H.SetMask(mock, fill, mask, storeKey)
+end
+
+-- Power previews feed the same native loss writer without replacing their texture painter.
+function H.PowerChunked(conf, key)
+    if conf.powerChunkedFill ~= nil then return conf.powerChunkedFill == true end
+    return key == "player" and M.EnsureDB().bars.chunkedPowerBar == true
+end
+
+function H.ConfigurePowerLoss(bar, power, conf, general, key)
+    local common = MSUF.UFBarTextCommon
+    local chunked = H.PowerChunked(conf, key)
+    local trail = bar._msufPreviewPowerLoss
+    if chunked and not trail then
+        trail = common.CreateLossTrail(bar:GetParent(), bar:GetStatusBarTexture():GetTexture(), bar:GetValue())
+        bar._msufPreviewPowerLoss = trail
+    end
+    if trail then
+        trail:SetParent(bar:GetParent())
+        trail:SetAllPoints(bar)
+        trail:SetFrameLevel(math.max(0, bar:GetFrameLevel() - 1))
+        trail:SetStatusBarTexture(bar:GetStatusBarTexture():GetTexture())
+        trail:SetOrientation(bar._msufOrientation or "HORIZONTAL")
+        trail:SetReverseFill(bar._msufReverseFill == true)
+        trail._msufLossBlendMode = key == "player" and "BLEND" or nil
+        trail:SetStatusBarColor(power and power.lossR or general.powerLossColorR or 0.7,
+            power and power.lossG or general.powerLossColorG or 0.9,
+            power and power.lossB or general.powerLossColorB or 1, 1)
+    end
+    common.SetBarSmoothing(bar, conf.powerSmoothFill == true and not chunked, chunked, trail)
+    bar:SetMinMaxValues(0, 1)
+end
+
+function H.PaintPowerValue(bar, value, animate)
+    if not animate then bar._msufDirectValuePlain = nil end
+    MSUF.UFBarTextCommon.SetBarValuePlain(bar, value, animate)
+end
+
+function H.SyncPowerLoss(bar, source)
+    local trail = bar and bar._msufPreviewPowerLoss
+    if not trail or not bar._msufChunkedLoss then return end
+    source = source or bar:GetStatusBarTexture()
+    local fill = trail:GetStatusBarTexture()
+    local alpha = source:GetAlpha() * bar:GetAlpha()
+    if fill:GetAlpha() ~= alpha then fill:SetAlpha(alpha) end
+    if not source:IsVisible() or not bar:IsShown() then
+        bar:SetValue(bar:GetValue())
+        trail:Hide()
+    end
+end
+
+function H.MaskPowerLoss(mock, bar, mask, storeKey, detached)
+    if bar and detached ~= nil and bar._msufPreviewPowerDetached ~= detached then return end
+    local trail = bar and bar._msufPreviewPowerLoss
+    if trail then H.SetMask(mock, trail:GetStatusBarTexture(), mask, storeKey) end
+end
+
+function H.ConfigureUnitPowerLoss(st)
+    st.previewPowerBar, st.previewPowerSource = nil, nil
+    local mock, box = st.mock, st.box
+    local bar = mock._msufPreviewPowerBar
+    local detached = st.detachedPowerInUnitPreview and box._runtimeAugCompositePreview ~= true
+    local enabled = H.PowerChunked(st.conf, st.key) and (st.powerOn or detached)
+    if not enabled then
+        if bar then
+            MSUF.UFBarTextCommon.SetBarSmoothing(bar, false, false, bar._msufPreviewPowerLoss)
+            bar:Hide()
+        end
+        return
+    end
+    local source = detached and mock.detachedPower.fill or mock.power
+    local anchor = detached and mock.detachedPower or mock.powerBG
+    if not bar then
+        bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, source:GetParent()))
+        mock._msufPreviewPowerBar = bar
+    end
+    bar:SetParent(source:GetParent())
+    bar:SetFrameLevel(source:GetParent():GetFrameLevel() + 1)
+    bar:ClearAllPoints()
+    bar:SetAllPoints(anchor)
+    bar:SetStatusBarTexture(source:GetTexture())
+    bar:GetStatusBarTexture():SetAlpha(0)
+    local shape = detached and CP.POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
+    local vertical = shape and shape.axis == "VERTICAL" or not shape and st.powerVertical
+    bar._msufOrientation = vertical and "VERTICAL" or "HORIZONTAL"
+    bar._msufPreviewPowerDetached = detached == true
+    bar._msufReverseFill = not shape and st.powerReverse == true
+    bar:SetOrientation(bar._msufOrientation)
+    bar:SetReverseFill(bar._msufReverseFill)
+    H.ConfigurePowerLoss(bar, st.runtimePower, st.conf, st.g, st.key)
+    H.PaintPowerValue(bar, st.powerFrac, false)
+    bar:Show()
+    bar._msufPreviewPowerSource = source
+    st.previewPowerBar, st.previewPowerSource = bar, source
+end
+
+function H.PaintUnitPowerLoss(st)
+    local bar = st.previewPowerBar
+    if bar and st.previewPowerSource:IsVisible() then
+        H.PaintPowerValue(bar, st.powerFrac, st.box._animationEnabled == true)
+    end
+end
+
+function H.SyncUnitPowerLoss(st)
+    local bar = st.previewPowerBar
+    if bar then H.SyncPowerLoss(bar, st.previewPowerSource) end
+end
+
+function H.ConfigureGroupPowerLoss(st)
+    local bar = st.mock._power
+    bar._msufOrientation, bar._msufReverseFill = "HORIZONTAL", st.runtimePower.reverse == true
+    bar:SetReverseFill(bar._msufReverseFill)
+    H.ConfigurePowerLoss(bar, st.runtimePower, st.conf, st.gen, st.kind)
+    H.PaintPowerValue(bar, st.powerPct, false)
+end
+
 -- Shared Menu2 preview helpers.
 -- Centralizes mock class-power colors, shape helpers, and small rendering utilities used by
 -- preview modules. Keep preview-only fallbacks here instead of coupling pages to live runtime.

@@ -1028,7 +1028,7 @@ local function BuildScene(box, reason)
     local buildFrameState = previewAnimation and previewAnimation.BuildFrameState
         or _G.MSUF_BuildPreviewAnimationFrameState
     local animState = box._animationEnabled == true and type(buildFrameState) == "function"
-        and buildFrameState(box, 1, kind, box._msufGFMenuPreviewAnimState or {}, box._animationElapsed)
+        and buildFrameState(box, 1, kind, box._msufGFMenuPreviewAnimState or {}, box._animationElapsed, conf.chunkedFill == true, conf.powerChunkedFill == true)
     if animState then box._msufGFMenuPreviewAnimState = animState end
     local runtimeSpec = RenderState.CompiledSpec(kind)
     -- Group cells mirror the player's current state (name, class, exact
@@ -1528,6 +1528,8 @@ local function FinalizeScene(scene)
     local healthMul = rangeHealthOnly and rangeAlpha or 1
     if mock.SetAlpha then mock:SetAlpha(wholeFrameMul) end
     if mock._health and mock._health.SetAlpha then mock._health:SetAlpha(healthMul) end
+    M.PreviewHelpers.SyncHealthLoss(mock._health)
+    M.PreviewHelpers.SyncPowerLoss(mock._power)
     if mock._healPred and mock._healPred.SetAlpha then mock._healPred:SetAlpha(healthMul) end
     if mock._absorb and mock._absorb.SetAlpha then mock._absorb:SetAlpha(healthMul) end
     if mock._healAbsorb and mock._healAbsorb.SetAlpha then mock._healAbsorb:SetAlpha(healthMul) end
@@ -2374,6 +2376,7 @@ function Stage.Refresh(env, self, reason)
     Stage.LayoutMockFrame(st, env)
     Stage.RenderHealthBars(st, env)
     Stage.RenderPowerBar(st, env)
+    M.PreviewHelpers.ConfigureGroupPowerLoss(st)
     Stage.RenderChrome(st, env)
     Stage.RenderNameText(st, env)
     Stage.RenderHealthText(st, env)
@@ -2404,7 +2407,7 @@ function Stage.Animate(env, self)
     local buildFrameState = previewAnimation and previewAnimation.BuildFrameState
         or _G.MSUF_BuildPreviewAnimationFrameState
     if type(buildFrameState) ~= "function" then return false end
-    local animState = buildFrameState(self, 1, scene.kind, self._msufGFMenuPreviewAnimState or {}, self._animationElapsed)
+    local animState = buildFrameState(self, 1, scene.kind, self._msufGFMenuPreviewAnimState or {}, self._animationElapsed, st.conf.chunkedFill == true, st.conf.powerChunkedFill == true)
     self._msufGFMenuPreviewAnimState = animState
     scene.animState = animState
     local max, min = math.max, math.min
@@ -2414,7 +2417,7 @@ function Stage.Animate(env, self)
     st.absorbPct = max(0.01, min(0.24, tonumber(animState.absorbPct) or 0.08))
     scene.hpPct, scene.powerPct, scene.healPct, scene.absorbPct = st.hpPct, st.powerPct, st.healPct, st.absorbPct
     Stage.PaintHealthValues(st, env)
-    if st.powerShown then st.mock._power:SetValue(st.powerPct) end
+    if st.powerShown then M.PreviewHelpers.PaintPowerValue(st.mock._power, st.powerPct, true) end
     Stage.PaintHealthTexts(st, env)
     Stage.PaintPowerTexts(st, env)
     PlaceTextHandles(scene)
@@ -3006,13 +3009,13 @@ function Stage.RenderHealthBars(st, env)
         end
         local predictionFillAlpha = alphaExcludePredictionBars and 1 or hpFillAlpha
         mock._health:SetStatusBarColor(hr, hg, hb)
-        if mock._health.SetMinMaxValues then mock._health:SetMinMaxValues(0, 1) end
-        mock._health:SetValue(hpPct)
         local hpReverse = runtimeHealth.reverse == true or (not runtimeSpec and conf.reverseFill == true)
         local gen = EnsureDB().general
         if mock._health.SetReverseFill then mock._health:SetReverseFill(hpReverse) end
         mock._health._msufOrientation = "HORIZONTAL"
         mock._health._msufReverseFill = hpReverse
+        M.PreviewHelpers.ConfigureHealthLoss(mock._health, runtimeHealth, conf, gen)
+        M.PreviewHelpers.PaintHealthValue(mock._health, hpPct, false)
         if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradient then
             MSUF.UFBarTextCommon.ApplyBarGradient(mock, mock._health,
                 runtimeHealth.barGradient, "_msufGFPreviewHealthGradients")
@@ -3184,7 +3187,7 @@ function Stage.PaintHealthValues(st, env)
     local mock, hpPct, max = st.mock, st.hpPct, math.max
     local hr, hg, hb = GroupHealthFillColor(st.runtimeHealth, env.HealthColor, st.conf, hpPct, st.cls)
     mock._health:SetStatusBarColor(hr, hg, hb)
-    mock._health:SetValue(hpPct)
+    M.PreviewHelpers.PaintHealthValue(mock._health, hpPct, st.self._animationEnabled == true)
     local hbr, hbg, hbb = GroupHealthBackgroundColor(st.S, env.MSUF, env.ClassColor, mock._msufGFPreviewBackgroundColorMode,
         st.healthBgCfg, st.conf, st.gen, st.runtimeHealth, st.cls, hr, hg, hb, hpPct)
     mock._healthBg:SetVertexColor(hbr, hbg, hbb, st.healthBgAlpha)
