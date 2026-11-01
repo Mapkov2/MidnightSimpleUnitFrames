@@ -1312,11 +1312,11 @@ function Page:BuildDetachedPower()
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {
         { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false, group = "detachedPlayer" },
         { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true, ApplyDetachedPowerSource, group = "detachedPlayer" },
-        { "width", "detachedPowerWidth", "Power width", 20, 800, 1, 300, "detachedPowerBarWidth", 0, self:WithRefresh(ApplyDetachedPowerSource), group = "detachedPlayer" },
+        { "width", "detachedPowerWidth", "Power width", 10, 800, 1, 300, "detachedPowerBarWidth", 0, self:WithRefresh(ApplyDetachedPowerSource), group = "detachedPlayer" },
         { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "detachedPowerOrbSize", 54, group = "detachedPlayer" },
         { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
         { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },
-        { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6, group = "detachedPlayer" },
+        { "height", "slider", "Power height", 2, 800, 1, 300, "detachedPowerBarHeight", 6, group = "detachedPlayer" },
         { "layer", "slider", "Player Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
     })
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width. In Automatic mode, Augmentation Evoker uses this bar for Ebon Might; an explicit Mana selection keeps it as Mana.")

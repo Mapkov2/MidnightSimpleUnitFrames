@@ -773,6 +773,25 @@ local function EnsureMeter(preview, name, separateTextOwner)
     preview[name] = frame
     return frame
 end
+local function UpdateMeterFill(frame, fraction)
+    if not (frame and frame.fill) then return false end
+    local w = max(1, floor(tonumber(frame._msufCPPreviewW) or (frame.GetWidth and frame:GetWidth()) or 1))
+    local h = max(1, floor(tonumber(frame._msufCPPreviewH) or (frame.GetHeight and frame:GetHeight()) or 1))
+    local frac = tonumber(fraction) or 0
+    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+    local axis = frame._msufCPPreviewShapeAxis
+    if axis == "VERTICAL" then
+        local fillH = frac > 0 and max(1, floor(h * frac + 0.5)) or 0
+        frame.fill:SetTexCoord(0, 1, frame._msufCPPreviewHasShape and (frac > 0 and (1 - frac) or 1) or 0, 1)
+        frame.fill:SetHeight(max(1, fillH))
+    else
+        local fillW = frac > 0 and max(1, floor(w * frac + 0.5)) or 0
+        frame.fill:SetTexCoord(0, frame._msufCPPreviewHasShape and frac or 1, 0, 1)
+        frame.fill:SetWidth(max(1, fillW))
+    end
+    if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
+    return true
+end
 local function RenderMeter(frame, shapeInfo, opts)
     opts = opts or {}
     local w = max(1, floor(tonumber(opts.width) or 1))
@@ -781,7 +800,7 @@ local function RenderMeter(frame, shapeInfo, opts)
     if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
     frame._msufCPPreviewW = w
     frame._msufCPPreviewH = h
-    frame._msufCPPreviewShapeAxis = shapeInfo and shapeInfo.axis or nil
+    frame._msufCPPreviewShapeAxis = shapeInfo and shapeInfo.axis or (not shapeInfo and opts.vertical == true and "VERTICAL" or nil)
     frame._msufCPPreviewHasShape = shapeInfo ~= nil
     frame:SetSize(w, h)
     frame.bg:ClearAllPoints()
@@ -826,30 +845,10 @@ local function RenderMeter(frame, shapeInfo, opts)
         frame.fill:SetTexture(opts.texture or WHITE8)
         frame.fill:SetVertexColor(opts.r or 1, opts.g or 1, opts.b or 1, 1)
         frame.fill:SetTexCoord(0, 1, 0, 1)
-        frame.fill:SetSize(frac > 0 and max(1, floor(w * frac + 0.5)) or 1, h)
-        frame.fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        frame.fill:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-        if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
+        frame.fill:SetSize(w, h)
+        M.PreviewHelpers.PlacePowerFill(frame.fill, frame, opts.vertical == true, opts.reverse == true)
+        UpdateMeterFill(frame, frac)
     end
-end
-local function UpdateMeterFill(frame, fraction)
-    if not (frame and frame.fill) then return false end
-    local w = max(1, floor(tonumber(frame._msufCPPreviewW) or (frame.GetWidth and frame:GetWidth()) or 1))
-    local h = max(1, floor(tonumber(frame._msufCPPreviewH) or (frame.GetHeight and frame:GetHeight()) or 1))
-    local frac = tonumber(fraction) or 0
-    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-    local axis = frame._msufCPPreviewShapeAxis
-    if axis == "VERTICAL" then
-        local fillH = frac > 0 and max(1, floor(h * frac + 0.5)) or 0
-        frame.fill:SetTexCoord(0, 1, frac > 0 and (1 - frac) or 1, 1)
-        frame.fill:SetHeight(max(1, fillH))
-    else
-        local fillW = frac > 0 and max(1, floor(w * frac + 0.5)) or 0
-        frame.fill:SetTexCoord(0, frame._msufCPPreviewHasShape and frac or 1, 0, 1)
-        frame.fill:SetWidth(max(1, fillW))
-    end
-    if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
-    return true
 end
 local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeBar)
     local shape = not nativeBar and CP_SHAPES[NormalizeClassShape(bars and bars.classPowerShape)] or nil
@@ -1217,8 +1216,8 @@ local function DetachedPowerWidth(preview, bars, player, classFrame)
         }), shape
     end
     if shape == "ORB" then return Clamp(player.detachedPowerOrbSize, 54, 20, 160), shape end
-    if player.detachedPowerBarSyncClassPower ~= false and classFrame and classFrame.GetWidth then return max(20, floor(classFrame:GetWidth() + 0.5)), shape end
-    return Clamp(player.detachedPowerBarWidth, preview.playerW, 20, 800), shape
+    if player.detachedPowerBarSyncClassPower ~= false and classFrame and classFrame.GetWidth then return max(10, floor(classFrame:GetWidth() + 0.5)), shape end
+    return Clamp(player.detachedPowerBarWidth, preview.playerW, 10, 800), shape
 end
 local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText, layout)
     ApplyFont(frame.left, size)
@@ -1293,7 +1292,7 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
     if type(ebonSpec) ~= "table" then ebonSpec = nil end
     local width, shape = DetachedPowerWidth(preview, bars, player, classFrame)
     local shapeInfo = POWER_SHAPES[shape]
-    local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 80)
+    local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 800)
     local x, y = tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4
     local pr, pg, pb = PowerColor(player)
     -- The detached bar follows the normal power-texture precedence (per-unit
@@ -1332,6 +1331,8 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
         width = width,
         height = height,
         fraction = fraction,
+        vertical = player.verticalFillBars == true,
+        reverse = player.reverseFillBars == true,
         r = pr,
         g = pg,
         b = pb,

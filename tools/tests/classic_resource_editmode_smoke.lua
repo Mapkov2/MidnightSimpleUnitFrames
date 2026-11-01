@@ -260,6 +260,21 @@ popup.anchorBtn.callback(false)
 assert(MSUF_DB.player.detachedPowerBarAnchorToClassPower == false,
     "separate Power placement was not saved")
 
+-- Manual detached dimensions retain old layouts and accept vertical geometry.
+for _, size in ipairs({ { 10, 200 }, { 10, 800 }, { 800, 2 }, { 0, 1000, 10, 800 }, { 275, 6 } }) do
+    popup.wBox:SetText(tostring(size[1]))
+    popup.callbacks.wBox()
+    popup.hBox:SetText(tostring(size[2]))
+    popup.callbacks.hBox()
+    assert(MSUF_DB.player.detachedPowerBarWidth == (size[3] or size[1])
+        and MSUF_DB.player.detachedPowerBarHeight == (size[4] or size[2]),
+        "detached Power popup clipped vertical dimensions or lost existing bounds")
+end
+popup.wBox:SetText("220")
+popup.callbacks.wBox()
+popup.hBox:SetText("10")
+popup.callbacks.hBox()
+
 local selectedKey
 local historyCommits = 0
 MSUF_EM2.State = {

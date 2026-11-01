@@ -312,7 +312,7 @@ local function Apply()
         end
         local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText())
         if dw then
-            dw = floor(max(20,min(800,dw))+0.5)
+            dw = floor(max(10,min(800,dw))+0.5)
             local original = tonumber(pf._msufDetachedWidthOriginal)
             manualDetachedWidthSelected = original ~= nil and dw ~= original
             if manualDetachedWidthSelected then
@@ -329,7 +329,7 @@ local function Apply()
         end
         local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText())
         if dh then
-            conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5)
+            conf.detachedPowerBarHeight=floor(max(2,min(800,dh))+0.5)
         end
         local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText())
         if dl then
@@ -409,7 +409,7 @@ function Sync()
         if detachedOn then
             Quick.SetBoxText(pf.dpbXBox, San(conf.detachedPowerBarOffsetX, 0))
             Quick.SetBoxText(pf.dpbYBox, San(conf.detachedPowerBarOffsetY, -4))
-            local detachedWidth = floor(max(20, min(800, tonumber(conf.detachedPowerBarWidth or conf.width) or 250)) + 0.5)
+            local detachedWidth = floor(max(10, min(800, tonumber(conf.detachedPowerBarWidth or conf.width) or 250)) + 0.5)
             Quick.SetBoxText(pf.dpbWBox, detachedWidth)
             pf._msufDetachedWidthOriginal = detachedWidth
             Quick.SetBoxText(pf.dpbHBox, conf.detachedPowerBarHeight or 6)
@@ -822,8 +822,8 @@ local function ApplyResource()
     end
     local oldWidth = frame and floor(frame:GetWidth() + 0.5) or tonumber(conf[widthKey]) or 0
     local oldHeight = tonumber(conf[heightKey]) or (kind == "classpower" and 4 or 6)
-    local width = ResourceValue(resourceFrame.wBox:GetText(), oldWidth, kind == "classpower" and 30 or 20, 800)
-    local height = ResourceValue(resourceFrame.hBox:GetText(), oldHeight, 2, kind == "classpower" and 30 or 80)
+    local width = ResourceValue(resourceFrame.wBox:GetText(), oldWidth, kind == "classpower" and 30 or 10, 800)
+    local height = ResourceValue(resourceFrame.hBox:GetText(), oldHeight, 2, kind == "classpower" and 30 or 800)
     local widthChanged = width ~= oldWidth
     local sync = kind == "power" and cfg.resourceUnit == "player"
         and resourceFrame.syncBtn._checked == true or false

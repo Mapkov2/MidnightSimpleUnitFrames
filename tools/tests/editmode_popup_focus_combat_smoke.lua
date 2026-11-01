@@ -337,6 +337,28 @@ local function RunUndoEntries(flavor)
     world.widgets:RunTimers()
 end
 
+-- Detached dimensions survive both the unit popup's initial sync and its edits.
+local function RunDetachedPowerDimensions(flavor)
+    local world, env = Boot(flavor)
+    local player = env.MSUF_DB.player
+    player.powerBarDetached, player.detachedPowerBarSyncClassPower = true, false
+    player.detachedPowerBarWidth, player.detachedPowerBarHeight = 10, 200
+    local pf = OpenUnitPopup(world, env, flavor .. " detached dimensions")
+    if not pf then return end
+    Check(tonumber(pf.dpbWBox:GetText()) == 10 and tonumber(pf.dpbHBox:GetText()) == 200,
+        flavor .. ": unit popup sync clipped the saved detached dimensions")
+    for _, size in ipairs({ { 10, 800 }, { 800, 2 }, { 0, 1000, 10, 800 }, { 275, 6 } }) do
+        pf.dpbWBox:SetText(tostring(size[1]))
+        pf.dpbHBox:SetText(tostring(size[2]))
+        pf.dpbHBox.scripts.OnEnterPressed(pf.dpbHBox)
+        Check(player.detachedPowerBarWidth == (size[3] or size[1])
+            and player.detachedPowerBarHeight == (size[4] or size[2]),
+            flavor .. ": unit popup apply clipped dimensions or lost its outer bounds")
+    end
+    env.MSUF_EM2.State.Exit("test")
+    world.widgets:RunTimers()
+end
+
 -- C6.5 ----------------------------------------------------------------------
 -- Menu2 shows Edit Mode history labels as given, so they arrive translated.
 local function RunTranslatedHistoryLabel(flavor)
@@ -372,6 +394,7 @@ for _, flavor in ipairs({ "Mainline", "Vanilla" }) do
     RunCombatExitFocusedBox(flavor)
     RunCombatMidDrag(flavor)
     RunUndoEntries(flavor)
+    RunDetachedPowerDimensions(flavor)
 end
 
 if #failures > 0 then

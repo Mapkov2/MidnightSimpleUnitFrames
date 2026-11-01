@@ -1779,7 +1779,7 @@ function Stage.ResolvePowerGeometry(st)
     local detachedH = detachedPower and (box._runtimeAugCompositePreview == true
         and (cpH + 2 + box._runtimeClassPowerSecondaryH)
         or (tonumber(runtimePower and runtimePower.detachedHeight) or tonumber(conf.detachedPowerBarHeight) or 6)) or 0
-    if detachedH < 2 then detachedH = 2 elseif detachedH > 80 then detachedH = 80 end
+    if detachedH < 2 then detachedH = 2 elseif detachedH > 800 then detachedH = 800 end
     if detachedPower and box._runtimeAugCompositePreview ~= true and box._runtimeDetachedPowerShape == "ORB" then
         local orbSize = tonumber(runtimePower and runtimePower.orbSize) or tonumber(conf.detachedPowerOrbSize) or 54
         if orbSize < 20 then orbSize = 20 elseif orbSize > 160 then orbSize = 160 end
@@ -2387,18 +2387,7 @@ function Stage.RenderHealth(st)
     st.hb, st.hg, st.hr, st.powerEnabled, st.powerH, st.powerOn = hb, hg, hr, powerEnabled, powerH, powerOn
 end
 
-local function PlacePreviewPowerFill(fill, anchor, vertical, reverse)
-    fill:ClearAllPoints()
-    if vertical then
-        local side = reverse and "TOP" or "BOTTOM"
-        fill:SetPoint(side .. "LEFT", anchor, side .. "LEFT", 0, 0)
-        fill:SetPoint(side .. "RIGHT", anchor, side .. "RIGHT", 0, 0)
-    else
-        local side = reverse and "RIGHT" or "LEFT"
-        fill:SetPoint("TOP" .. side, anchor, "TOP" .. side, 0, 0)
-        fill:SetPoint("BOTTOM" .. side, anchor, "BOTTOM" .. side, 0, 0)
-    end
-end
+local PlacePreviewPowerFill = PreviewHelpers.PlacePowerFill
 local function PaintPreviewPowerFill(fill, width, height, fraction, vertical)
     if vertical then fill:SetHeight(math.max(1, height * fraction))
     else fill:SetWidth(math.max(1, width * fraction)) end
@@ -2908,7 +2897,7 @@ function Stage.PaintPowerValues(st)
     if not (st.detachedPowerInUnitPreview and box._runtimeAugCompositePreview ~= true) then return end
     local fill = mock.detachedPower.fill
     local dW = box._runtimeDetachedPowerW
-    if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
+    if dW < 10 then dW = 10 elseif dW > 800 then dW = 800 end
     local shapeInfo = PREVIEW_POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
     if not shapeInfo then
         PaintPreviewPowerFill(fill, S(dW), max(2, S(st.detachedH)), powerFrac, st.powerVertical)
@@ -2973,7 +2962,7 @@ function Stage.RenderDetachedPower(st)
     if detachedPowerInUnitPreview and box._runtimeAugCompositePreview ~= true then
         mock.detachedPower:Show()
         local dW = box._runtimeDetachedPowerW
-        if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
+        if dW < 10 then dW = 10 elseif dW > 800 then dW = 800 end
         mock.detachedPower:SetSize(S(dW), max(2, S(detachedH)))
         mock.detachedPower:ClearAllPoints()
         local dx = S(box._runtimeDetachedPowerX)

@@ -1,0 +1,216 @@
+-- Detached Power geometry through the real client graph, menu and previews.
+local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
+local flavor, selected = arg[2] or "Mainline", arg[3]
+local MenuWorld = dofile(root .. "/tools/tests/menu_core_world.lua")
+local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = function(world)
+    world.widgets.Methods.GetCenter = function(frame)
+        return (tonumber(frame.left) or 0) + (tonumber(frame.width) or 0) / 2,
+            (tonumber(frame.bottom) or 0) + (tonumber(frame.height) or 0) / 2
+    end
+end })
+local env, core, M = mw.env, mw.core, mw.M
+-- Native frame/text lifecycle is covered by its own smokes; geometry below applies Power directly.
+env.MSUF_UFCore_NotifyConfigChanged = function() end
+core.UF.Config.Refresh()
+local cases = 0
+local function Check(ok, message)
+    assert(ok, flavor .. ": " .. message)
+    cases = cases + 1
+end
+local function Configure(width, height, vertical, reverse, anchor)
+    local player, bars = env.MSUF_DB.player, env.MSUF_DB.bars
+    player.showPower, player.showPowerBar, player.powerBarDetached = true, true, true
+    player.detachedPowerBarShape = "BAR"
+    player.detachedPowerBarWidth, player.detachedPowerBarHeight = width, height
+    player.detachedPowerBarSyncClassPower, player.detachedPowerBarAnchorToClassPower = false, anchor == true
+    player.verticalFillBars, player.reverseFillBars = vertical, reverse
+    bars.detachedPowerBarWidthMode = nil
+    core.UF.Config.Refresh()
+    return player, bars
+end
+local function Control(page, key, id, section, prepare)
+    local target = { controlId = id, settingKey = key, sectionId = section,
+        prepareKind = prepare and "classPowerWorkspace", prepareValue = prepare }
+    local selectedPage, found, exact = M.Search._RoutingAPI.OpenSearchTarget(page, "unrelated", "", nil, nil, target)
+    Check(selectedPage and found and exact, "exact route missing for " .. key)
+    mw:RunTimers()
+    for _, widget in ipairs(mw.world.widgets.frames) do
+        local command = widget._msuf2CommandAction
+        if command and command.controlId == id then return widget end
+    end
+    error("control missing: " .. id)
+end
+local function RunControls()
+    Configure(275, 6, false, false)
+    for _, page in ipairs({ "uf_player", "classpower" }) do
+        local prefix = page == "uf_player" and "menu2.uf_player.unit.power." or "menu2.classpower.advanced.detached.power.layout."
+        local section = page == "uf_player" and "power_bar" or "classpower_detached_power"
+        local prepare = page == "classpower" and "power" or nil
+        for _, field in ipairs({ { "Width", 10, 800 }, { "Height", 2, 800 } }) do
+            local suffix = page == "uf_player" and ("detachedpowerbar" .. field[1]:lower()) or field[1]:lower()
+            local key = "player.detachedPowerBar" .. field[1]
+            local widget = Control(page, key, prefix .. suffix, section, prepare)
+            local low, high = widget:GetMinMaxValues()
+            Check(low == field[2] and high == field[3], page .. " " .. field[1] .. " limits " .. low .. ".." .. high)
+            local value = field[1] == "Width" and 10 or 200
+            widget.editBox:SetText(tostring(value))
+            widget.editBox:GetScript("OnEnterPressed")(widget.editBox)
+            -- The native Slider emits this event when SetValue accepts the edit.
+            MenuWorld.FireScript(widget, "OnValueChanged", widget:GetValue())
+            Check(env.MSUF_DB.player["detachedPowerBar" .. field[1]] == value, page .. " typed " .. field[1] .. " lost")
+        end
+    end
+    Check(env.MSUF_DB.player.detachedPowerBarSyncClassPower == false, "manual width kept Class Resource sync")
+end
+local function RunRuntime()
+    local frame = env.CreateFrame("Button", nil, env.UIParent)
+    frame:SetSize(40, 200)
+    frame.MSUFUnitKey, frame.unit = "player", "player"
+    core.UF.AttachFrame(frame, { scope = "unit" })
+    for _, size in ipairs({ { 275, 6 }, { 20, 80 }, { 10, 200 }, { 10, 800 }, { 800, 2 } }) do
+        for _, vertical in ipairs({ false, true }) do
+            for _, reverse in ipairs({ false, true }) do
+                Configure(size[1], size[2], vertical, reverse)
+                local spec = core.UF.Config.GetSpec("player")
+                spec.enabled, spec.power.enabled = true, true
+                core.UF.Elements.Power.Apply(frame, spec)
+                local bar = frame.targetPowerBar
+                Check(bar:GetWidth() == size[1] and bar:GetHeight() == size[2], "runtime geometry changed")
+                Check(bar._msufPowerOrientation == (vertical and "VERTICAL" or "HORIZONTAL"), "runtime axis changed")
+                Check(bar._msufReverseFill == reverse, "runtime reverse fill changed")
+            end
+        end
+    end
+end
+local function RunUnitPreview()
+    local parent = env.CreateFrame("Frame", nil, env.UIParent); parent:SetSize(900, 400)
+    local panel = env.CreateFrame("Frame", nil, env.UIParent)
+    panel._msufGetCurrentKey = function() return "player" end
+    local box = core.UFPreview._BuildPreview(parent, panel, 900, 400)
+    box:Show(); box.canvas:SetSize(600, 260)
+    for _, size in ipairs({ { 275, 6 }, { 20, 80 }, { 10, 200 }, { 10, 800 }, { 800, 2 } }) do
+        for _, vertical in ipairs({ false, true }) do
+            for _, reverse in ipairs({ false, true }) do
+                Configure(size[1], size[2], vertical, reverse)
+                core.UFPreview.Refresh(box, "SETTINGS")
+                local bar = box.mock.detachedPower
+                local scale = bar:GetWidth() / size[1]
+                Check(math.abs(bar:GetHeight() / size[2] - scale) < .001, "unit preview aspect ratio clipped")
+                Check(math.abs(box._runtimeDetachedPowerW - size[1]) < .001, "unit preview width clipped")
+                local point = vertical and (reverse and "TOPLEFT" or "BOTTOMLEFT") or (reverse and "TOPRIGHT" or "TOPLEFT")
+                Check(bar.fill:GetPoint() == point, "unit preview fill anchor changed")
+            end
+        end
+    end
+end
+local function ClassPreview()
+    M.activeKey = "classpower"
+    M.GetClassPowerPreviewSpec = function() return M.ClassPowerPreviewSpecs.rogue_combo end
+    local parent = env.CreateFrame("Frame", nil, env.UIParent); parent:SetSize(800, 400)
+    local previous = M.Widgets.FixedPreviewSection
+    M.Widgets.FixedPreviewSection = function()
+        return env.CreateFrame("Frame", nil, parent), env.CreateFrame("Frame", nil, parent)
+    end
+    local pin, expand = M.Widgets.AttachPinnedPreview, M.Widgets.AttachFixedPreviewExpander
+    M.Widgets.AttachPinnedPreview, M.Widgets.AttachFixedPreviewExpander = nil, nil
+    local ctx = { key = "classpower", width = 800, entry = {}, wrapper = parent }
+    Check(M.ClassPowerStackPreview.Create(ctx, { width = 800 }), "Class Resource preview did not build")
+    M.Widgets.FixedPreviewSection, M.Widgets.AttachPinnedPreview, M.Widgets.AttachFixedPreviewExpander = previous, pin, expand
+    return ctx.entry.classPowerPreview
+end
+local function RunClassPreview()
+    Configure(10, 200, true, false, true)
+    local box = ClassPreview()
+    for _, size in ipairs({ { 275, 6 }, { 20, 80 }, { 10, 200 }, { 10, 800 }, { 800, 2 } }) do
+        for _, vertical in ipairs({ false, true }) do
+            for _, reverse in ipairs({ false, true }) do
+                Configure(size[1], size[2], vertical, reverse, true)
+                box:Refresh()
+                local bar = box.detachedPower
+                Check(bar:IsShown() and bar:GetWidth() == size[1] and bar:GetHeight() == size[2], "linked preview geometry clipped")
+                local point = vertical and (reverse and "TOPLEFT" or "BOTTOMLEFT") or (reverse and "TOPRIGHT" or "TOPLEFT")
+                Check(bar.fill:GetPoint() == point, "linked preview axis or reverse fill ignored")
+                Check(vertical and bar.fill:GetHeight() < size[2] or not vertical and bar.fill:GetWidth() < size[1], "linked preview fill has wrong axis")
+                Check(vertical and bar.fill:GetWidth() == size[1] or not vertical and bar.fill:GetHeight() == size[2], "linked preview cross axis changed")
+                box._animationEnabled = true
+                box:RefreshAnimation()
+                Check(bar.fill:GetPoint() == point, "linked animation lost fill anchor")
+                Check(vertical and bar.fill:GetWidth() == size[1] or not vertical and bar.fill:GetHeight() == size[2], "linked animation changed cross axis")
+                box._animationEnabled = false
+            end
+        end
+    end
+    for _, shape in ipairs({ "ROUND", "CRYSTAL", "ORB" }) do
+        local player = Configure(40, 60, true, true, true)
+        player.detachedPowerBarShape, player.detachedPowerOrbSize = shape, 54
+        core.UF.Config.Refresh(); box:Refresh()
+        local bar = box.detachedPower
+        Check(shape ~= "ORB" or bar:GetWidth() == 54 and bar:GetHeight() == 54, "orb dimensions changed")
+        Check(bar._msufCPPreviewShapeAxis == M.ClassPowerPreview.POWER_SHAPES[shape].axis, "shape axis changed")
+    end
+end
+local function RunWidthSources()
+    local player, bars = Configure(10, 200, true, false)
+    local frame = env.CreateFrame("Button", nil, env.UIParent)
+    frame:SetSize(40, 200); frame.MSUFUnitKey, frame.unit = "player", "player"
+    core.UF.AttachFrame(frame, { scope = "unit" })
+    core.UF.Elements.Power.Apply(frame, core.UF.Config.GetSpec("player"))
+    local previousClass, previousResolver = rawget(env, "MSUF_ClassPowerContainer"), rawget(env, "MSUF_GetEffectiveCooldownFrame")
+    local anchor = env.CreateFrame("Frame", nil, env.UIParent)
+    anchor:SetSize(92, 12); anchor._msufAnchorOnly = true; anchor:Show()
+    local cooldown = env.CreateFrame("Frame", nil, env.UIParent); cooldown:SetSize(135, 20); cooldown:Show()
+    env.MSUF_ClassPowerContainer = anchor
+    env.MSUF_GetEffectiveCooldownFrame = function(name) return name == "EssentialCooldownViewer" and cooldown or nil end
+    local function Width(expected, label)
+        core.UF.Config.Refresh()
+        local power = core.UF.Config.GetSpec("player").power
+        Check(core.UF.Elements.Power.ResolveDetachedWidth(frame, power) == expected, label .. " runtime width")
+        Check(M.ClassPowerPreview.ResolveDetachedPowerWidth({ widthMode = bars.detachedPowerBarWidthMode,
+            syncClass = player.detachedPowerBarSyncClassPower ~= false, classWidth = 92,
+            explicitWidth = player.detachedPowerBarWidth, manualWidth = player.detachedPowerBarWidth,
+            frameWidth = core.UF.Config.GetSpec("player").width }) == expected, label .. " fallback preview width")
+    end
+    Width(10, "manual")
+    player.detachedPowerBarSyncClassPower = true; Width(92, "Class Resource sync")
+    bars.detachedPowerBarWidthMode = "cooldown"; Width(135, "Cooldown source wins")
+    cooldown:Hide(); Width(92, "hidden Cooldown falls back to Class Resource")
+    bars.detachedPowerBarWidthMode, player.detachedPowerBarSyncClassPower = nil, false
+    Width(10, "manual restored")
+    player.detachedPowerBarWidth = nil
+    core.UF.Config.Refresh()
+    Check(player.detachedPowerBarWidth == nil, "compiling an old profile materialized an optional width")
+    env.MSUF_ClassPowerContainer, env.MSUF_GetEffectiveCooldownFrame = previousClass, previousResolver
+end
+local function RunMeterEndpoints()
+    Configure(10, 200, true, false, true)
+    local box = ClassPreview(); box:Refresh()
+    local file = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua", "rb"))
+    local source = file:read("*a"); file:close()
+    -- Expose the real local painters only inside this fixture, without changing product APIs.
+    local chunk = assert(loadstring(source .. "\nreturn { render = RenderMeter, paint = UpdateMeterFill }", "@meter-endpoints"))
+    setfenv(chunk, env)
+    local meter = chunk("MidnightSimpleUnitFrames_Options", core)
+    local bar = box.detachedPower
+    for _, vertical in ipairs({ false, true }) do
+        for _, reverse in ipairs({ false, true }) do
+            for _, fraction in ipairs({ 0, .25, 1 }) do
+                meter.render(bar, nil, { width = 10, height = 200, fraction = fraction, vertical = vertical, reverse = reverse })
+                local point = vertical and (reverse and "TOPLEFT" or "BOTTOMLEFT") or (reverse and "TOPRIGHT" or "TOPLEFT")
+                Check(bar.fill:GetPoint() == point, "meter endpoint anchor")
+                Check(bar.fill:IsShown() == (fraction > 0), "meter endpoint visibility")
+                local first, second, third, fourth = bar.fill:GetTexCoord()
+                Check(first == 0 and second == 1 and third == 0 and fourth == 1, "plain meter cropped texture coordinates")
+                meter.paint(bar, 1 - fraction)
+                Check(bar.fill:IsShown() == (fraction < 1), "animated endpoint visibility")
+                Check(vertical and bar.fill:GetWidth() == 10 or not vertical and bar.fill:GetHeight() == 200,
+                    "animated endpoint changed cross axis")
+            end
+        end
+    end
+end
+local tests = { controls = RunControls, runtime = RunRuntime, unit = RunUnitPreview,
+    linked = RunClassPreview, sources = RunWidthSources, endpoints = RunMeterEndpoints }
+for _, name in ipairs({ "controls", "runtime", "unit", "linked", "sources", "endpoints" }) do
+    if not selected or selected == name then tests[name]() end
+end
+print("detached_power_geometry_smoke: " .. flavor .. " PASS (" .. cases .. " assertions)")

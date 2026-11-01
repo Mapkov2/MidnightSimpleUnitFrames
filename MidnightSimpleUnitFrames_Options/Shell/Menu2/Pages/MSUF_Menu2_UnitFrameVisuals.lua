@@ -978,8 +978,8 @@ local function BuildPower(ctx, builder, unit)
         detachedSync = playerDetached.sync
     end
     local detachedFields = BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "slider", "Detached width", 16, sliderTop, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached height", detachedRightX, sliderTop, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached width", 16, sliderTop, detachedSliderW, 10, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached height", detachedRightX, sliderTop, detachedSliderW, 2, 800, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
         { "slider", "Detached layer", 16, sliderTop - 66, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
     })
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height

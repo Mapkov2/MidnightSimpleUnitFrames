@@ -112,6 +112,19 @@ function H.MaskPowerLoss(mock, bar, mask, storeKey, detached)
     if trail then H.SetMask(mock, trail:GetStatusBarTexture(), mask, storeKey) end
 end
 
+function H.PlacePowerFill(fill, anchor, vertical, reverse)
+    fill:ClearAllPoints()
+    if vertical then
+        local side = reverse and "TOP" or "BOTTOM"
+        fill:SetPoint(side .. "LEFT", anchor, side .. "LEFT", 0, 0)
+        fill:SetPoint(side .. "RIGHT", anchor, side .. "RIGHT", 0, 0)
+    else
+        local side = reverse and "RIGHT" or "LEFT"
+        fill:SetPoint("TOP" .. side, anchor, "TOP" .. side, 0, 0)
+        fill:SetPoint("BOTTOM" .. side, anchor, "BOTTOM" .. side, 0, 0)
+    end
+end
+
 function H.ConfigureUnitPowerLoss(st)
     st.previewPowerBar, st.previewPowerSource = nil, nil
     local mock, box = st.mock, st.box
@@ -661,7 +674,7 @@ local function PreviewExternalFrameWidth(frameName, relativeTo)
 end
 local function ClampDetachedPowerWidth(value, fallback, minValue, maxValue)
     value = tonumber(value) or tonumber(fallback) or 1
-    minValue, maxValue = minValue or 20, maxValue or 800
+    minValue, maxValue = minValue or 10, maxValue or 800
     if value < minValue then value = minValue elseif value > maxValue then value = maxValue end
     return floor(value + 0.5)
 end
