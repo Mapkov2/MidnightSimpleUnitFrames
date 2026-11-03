@@ -89,4 +89,135 @@ for _, secret in ipairs({ false, true }) do
     Check(#violations == 0, "secret misuse: " .. table.concat(violations, " | "))
     Check(#world.errors == 0, "deferred error: " .. table.concat(world.errors, " | "))
 end
-print("Player cast-first selection: " .. checks .. " checks passed (readable + strict secret)")
+
+
+-- A normal STOP must identify the running cast. Retail permits a missing
+-- castBarID; stale readable GUIDs must not end the next player/vehicle cast.
+-- Measured known-ID STOP cost: +4 VM instructions, no added allocations;
+-- START is unchanged. Unknown identity reuses one coalesced next-frame resync.
+local function CheckStopIdentity(secret)
+    local world = World.New(root, { budget = true, setup = function(env, w)
+        env.UnitHasVehicleUI = function() return w.vehicle == true end
+    end })
+    local env = world.env
+    env.MSUF_EnsureDB(true)
+    env.MSUF_DB.general.showGCDBar = false
+    env.MSUF_DB.player.showInterrupt = true
+    env.MSUF_Castbars_OnSettingsChanged()
+    world:Advance(0.5)
+    for index = #world.errors, 1, -1 do world.errors[index] = nil end
+    local frame = assert(env.MSUF_PlayerCastbar)
+    local S = world.Secrets.New
+    local stopWatch = world:Watch(world:CastbarPaths())
+    local function Start(id, unit)
+        unit = unit or "player"
+        world.secretCasts = secret
+        world.vehicle, world.exists.vehicle = unit == "vehicle", unit == "vehicle"
+        world.casting.player, world.casting.vehicle = nil, nil
+        world.channeling.player, world.channeling.vehicle = nil, nil
+        world:StartCast(unit, "Current cast", 3, id, { guid = "current-guid" })
+        world:Fire(frame, "UNIT_SPELLCAST_START", unit, "current-guid", 133, id)
+        Check(frame:IsShown() and frame.MSUF_castActive == true, "STOP setup: missing cast")
+        return unit
+    end
+    local function Stop(unit, guid, id, secretPayload)
+        if secretPayload then guid = S("string") end
+        world:Fire(frame, "UNIT_SPELLCAST_STOP", unit, guid, secretPayload and S() or 133, id)
+    end
+    local function Active(message)
+        Check(frame:IsShown() and frame.MSUF_castActive == true, message)
+    end
+    for _, ids in ipairs({ { 701, false }, { false, 702 }, { false, false }, { 701, 700 } }) do
+        local storedID, eventID = ids[1] or nil, ids[2] or nil
+        Start(storedID)
+        Stop("player", "old-guid", eventID, secret)
+        Active("stale normal STOP hid the current player cast")
+        world:Advance(0.1)
+        Active("stale normal STOP resync lost the current player cast")
+        world.casting.player = nil
+        Stop("player", "current-guid", storedID, secret)
+        world:Advance(0.1)
+        Check(not frame:IsShown() and not frame.MSUF_castActive, "legitimate STOP did not finish")
+    end
+    -- NeverSecret IDs are authoritative even if a readable GUID disagrees.
+    Start(703)
+    world.casting.player = nil
+    Stop("player", "old-guid", 703, secret)
+    Check(not frame:IsShown(), "matching castBarID did not stop immediately")
+    -- A readable GUID fallback is exact when either or both IDs are missing.
+    if not secret then
+        for _, ids in ipairs({ { 704, false }, { false, 704 }, { false, false } }) do
+            Start(ids[1] or nil)
+            world.casting.player = nil
+            Stop("player", "current-guid", ids[2] or nil, false)
+            Check(not frame:IsShown(), "matching readable GUID did not stop immediately")
+        end
+    end
+    -- Ambiguous secret identity is coalesced through the existing resync. A
+    -- secret on only one side is equally unreadable, not a GUID mismatch.
+    Start(nil)
+    Stop("player", "old-guid", nil, true)
+    Active("ambiguous STOP hid the current cast before confirmation")
+    Check(frame._msufSoftResyncPending == true, "ambiguous STOP did not schedule confirmation")
+    local callback = frame._msufSoftResyncCB
+    Stop("player", "old-guid", nil, true)
+    Check(frame._msufSoftResyncCB == callback, "ambiguous STOP allocated another callback")
+    world:Advance(0.1)
+    Active("ambiguous STOP lost the current API cast")
+    Check(not frame._msufSoftResyncPending, "ambiguous STOP confirmation remained pending")
+    world.casting.player = nil
+    Stop("player", "current-guid", nil, true)
+    world:Advance(0.1)
+    Check(not frame:IsShown(), "ambiguous legitimate end left the player bar shown")
+    if secret then
+        Start(nil)
+        Stop("player", "old-guid", nil, false)
+        world:Advance(0.1)
+        Active("plain payload compared to a secret stored GUID")
+    end
+    -- A normal STOP is not a CHANNEL_STOP, even with a matching bar ID.
+    world.casting.player = nil
+    world:StartChannel("player", "Current channel", 3, 705)
+    world:Fire(frame, "UNIT_SPELLCAST_CHANNEL_START", world:Payload("UNIT_SPELLCAST_CHANNEL_START", "player", 705))
+    Stop("player", "old-guid", 705, secret)
+    world:Advance(0.1)
+    Active("normal STOP killed the active channel")
+    Check(frame.MSUF_isChanneled == true, "normal STOP changed the channel phase")
+    world.channeling.player = nil
+    world:Fire(frame, "UNIT_SPELLCAST_CHANNEL_STOP", world:Payload("UNIT_SPELLCAST_CHANNEL_STOP", "player", 705))
+    world:Advance(0.1)
+    Check(not frame:IsShown(), "legitimate channel stop failed")
+    -- Vehicle casts have the same identity rule; player events cannot stop them.
+    Start(706, "vehicle")
+    Stop("player", "current-guid", 706, secret)
+    Active("player STOP killed a vehicle cast")
+    Stop("vehicle", "old-guid", nil, secret)
+    world:Advance(0.1)
+    Active("stale vehicle STOP killed its current cast")
+    world.casting.vehicle = nil
+    Stop("vehicle", "current-guid", nil, secret)
+    world:Advance(0.1)
+    Check(not frame:IsShown(), "legitimate vehicle end failed")
+    -- A queued ambiguous confirmation yields to newer interrupt feedback.
+    Start(nil)
+    Stop("player", "old-guid", nil, true)
+    world.casting.player = nil
+    world:Fire(frame, "UNIT_SPELLCAST_INTERRUPTED", "player", "current-guid", 133, nil, nil)
+    local deadline = frame.interruptFeedbackEndTime
+    Check(deadline ~= nil, "interrupt feedback did not start")
+    world:Advance(0.1)
+    Check(frame:IsShown() and frame.interruptFeedbackEndTime == deadline, "queued STOP erased interrupt feedback")
+    Stop("player", "current-guid", nil, true)
+    Check(frame:IsShown() and frame.interruptFeedbackEndTime == deadline, "STOP erased interrupt feedback")
+    world:Advance(0.8)
+    Check(not frame:IsShown(), "interrupt feedback did not terminate")
+    -- Idle duplicate stops have nothing to confirm.
+    Stop("player", "old-guid", nil, true)
+    Check(not frame._msufSoftResyncPending, "idle STOP scheduled a resync")
+    local violations = stopWatch()
+    Check(#violations == 0, "STOP secret misuse: " .. table.concat(violations, " | "))
+    Check(#world.errors == 0, "STOP deferred error: " .. table.concat(world.errors, " | "))
+end
+for _, secret in ipairs({ false, true }) do CheckStopIdentity(secret) end
+
+print("Player cast-first selection and STOP identity: " .. checks .. " checks passed (readable + strict secret)")
