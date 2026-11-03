@@ -54,9 +54,12 @@ jobs:
           def git(*args):
               subprocess.run(['git', '-C', str(mirror), *args], check=True)
           git('init', '-q')
+          git('config', 'gc.auto', '0')
+          git('config', 'maintenance.auto', 'false')
           git('remote', 'add', 'upstream', 'https://github.com/Gethe/wow-ui-source.git')
-          for ref, sha in json.load(open('tools/check-pins.json'))['blizzard'].items():
-              git('fetch', '--depth=1', '--no-tags', 'upstream', sha)
+          pins = json.load(open('tools/check-pins.json'))['blizzard']
+          git('fetch', '--depth=1', '--no-tags', '--no-auto-maintenance', 'upstream', *pins.values())
+          for ref, sha in pins.items():
               git('update-ref', 'refs/remotes/' + ref, sha)
           PY
       - name: Check out immutable historical MSUF 6.503
