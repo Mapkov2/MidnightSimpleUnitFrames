@@ -159,8 +159,32 @@ local function BuffLabel(entry)
     if name ~= nil and not (secret and secret(name)) and type(name) == "string" and name ~= "" then return name end
     return entry.label
 end
+local BLESSING_CHOICES = {
+    {value=0,text="Any blessing"}, {value=1,text="Blessing of Might"},
+    {value=2,text="Blessing of Wisdom"}, {value=3,text="Blessing of Kings"},
+    {value=4,text="Blessing of Salvation"}, {value=5,text="Blessing of Light"},
+}
+local CLASS_BLESSING_CHOICES = { {value=0,text="Follow role"} }
+for i = 2, #BLESSING_CHOICES do CLASS_BLESSING_CHOICES[i] = BLESSING_CHOICES[i] end
+local BLESSING_TARGETS = {
+    {"Default", "Unassigned role"}, {"Tank", "Tanks"}, {"Healer", "Healers"}, {"Damage", "Damage dealers"},
+    {"WARRIOR", "Warrior"}, {"PALADIN", "Paladin"}, {"HUNTER", "Hunter"}, {"ROGUE", "Rogue"},
+    {"PRIEST", "Priest"}, {"SHAMAN", "Shaman"}, {"MAGE", "Mage"}, {"WARLOCK", "Warlock"}, {"DRUID", "Druid"},
+}
+local function BuildBlessingPreferences(ctx, section, width)
+    W.Text(section, "Preferred paladin blessings", 32, -674, width * 2 + 32, T.colors.muted)
+    for i, target in ipairs(BLESSING_TARGETS) do
+        local x = i % 2 == 1 and 32 or width + 64
+        local y = -746 - math.floor((i - 1) / 2) * 80
+        ScopeDropdown(ctx, section, target[2], i <= 4 and BLESSING_CHOICES or CLASS_BLESSING_CHOICES, width,
+            "buffCoverageBlessing" .. target[1], 0, "visual", x, y, width, "LEFT")
+    end
+    W.Text(section, "Class choices override the assigned role; Follow role uses its choice. " ..
+        "Any blessing accepts all blessings. Preferred-blessing checks hide while aura data is restricted.",
+        32, -1280, width * 2 + 32, T.colors.muted)
+end
 local function BuildBuffCoverage(ctx, b)
-    local section = b:CollapsibleSection("buff_coverage", "Buff coverage (Forever)", 656, false)
+    local section = b:CollapsibleSection("buff_coverage", "Buff coverage (Forever)", 1360, false)
     local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
     PrepareAdditionalSwitch(ctx, section, "buffCoverageEnabled", "Show buff coverage icons", "visual")
     for i = 1, #BUFF_COVERAGE_TOGGLES do
@@ -179,6 +203,7 @@ local function BuildBuffCoverage(ctx, b)
     ScopeSlider(ctx, section, "Vertical offset", -200, 200, 1, width, "buffCoverageY", 2, "visual", width + 64, -406, width, "LEFT")
     ScopeSlider(ctx, section, "Layer", 0, 30, 1, width, "buffCoverageLayer", 6, "visual", 32, -496, width, "LEFT")
     W.Text(section, "Each icon marks a buff that a class in your group can cast but this member lacks. Thorns is checked on members with the Tank role (on everyone with Thorns only on tanks off), Arcane Intellect and Divine Spirit on mana users. Combat, encounters and PvP matches hide aura data, so the icons keep their last known state until it ends.", 32, -566, width * 2 + 32, T.colors.muted)
+    BuildBlessingPreferences(ctx, section, width)
     BindAdditionalGate(ctx, section, "buffCoverageEnabled")
 end
 local TIER_GROWTH = { {value="INHERIT",text="Same as the base layout"}, {value="DOWN",text="Down"}, {value="UP",text="Up"}, {value="LEFT",text="Left"},

@@ -284,14 +284,15 @@ local function SetCombatTimerText(text)
     end
 end
 
-local function SetCombatTimerValue(minutes, seconds)
-    if lastTimerText == false and minutes == lastTimerMinute and seconds == lastTimerSecond then
+local function SetCombatTimerValue(minutes, seconds, padded)
+    local format = padded and "%02d:%02d" or "%d:%02d"
+    if lastTimerText == format and minutes == lastTimerMinute and seconds == lastTimerSecond then
         return
     end
-    lastTimerText = false
+    lastTimerText = format
     lastTimerMinute = minutes
     lastTimerSecond = seconds
-    timerText:SetFormattedText("%d:%02d", minutes, seconds)
+    timerText:SetFormattedText(format, minutes, seconds)
 end
 
 local function SetCombatTimerShown(shown)
@@ -314,8 +315,17 @@ local function TickCombatTimer(event)
     local inCombat = MSUF.Util.InCombat(event)
 
     if not inCombat then
-        SetCombatTimerShown(not gNow.lockCombatTimer)
-        SetCombatTimerText(gNow.lockCombatTimer and "" or "0:00")
+        if gNow.combatTimerKeepLast then
+            if combatStartTime then
+                local elapsed = math_max(GetTime() - combatStartTime, 0)
+                SetCombatTimerValue(math.floor(elapsed / 60), math.floor(elapsed % 60), gNow.combatTimerPadMinutes)
+            else
+                SetCombatTimerValue(lastTimerMinute or 0, lastTimerSecond or 0, gNow.combatTimerPadMinutes)
+            end
+        else
+            SetCombatTimerText(gNow.lockCombatTimer and "" or (gNow.combatTimerPadMinutes and "00:00" or "0:00"))
+        end
+        SetCombatTimerShown(gNow.combatTimerKeepLast or not gNow.lockCombatTimer)
         combatStartTime = nil
         return
     end
@@ -324,7 +334,7 @@ local function TickCombatTimer(event)
     local now = GetTime()
     combatStartTime = combatStartTime or now
     local elapsedCombat = math_max(now - combatStartTime, 0)
-    SetCombatTimerValue(math.floor(elapsedCombat / 60), math.floor(elapsedCombat % 60))
+    SetCombatTimerValue(math.floor(elapsedCombat / 60), math.floor(elapsedCombat % 60), gNow.combatTimerPadMinutes)
 end
 
 local function _StartCombatTimerTick()
@@ -1166,8 +1176,6 @@ local function MSUF_CombatTimer_OnRegenEnabled(event)
     local gd = GetGameplayDB()
     if not gd or not gd.enableCombatTimer then return end
     _StopCombatTimerTick()
-    combatStartTime = nil
-    lastTimerText = ""
     TickCombatTimer(event)
 end
 

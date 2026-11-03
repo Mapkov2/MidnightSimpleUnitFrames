@@ -479,4 +479,42 @@ assert(page:find('"Icon size", 8, 48, 1, width, "buffCoverageSize"', 1, true)
 GF.HideBuffCoveragePreview(mock)
 assert(Keys(mock) == "", "sample hide failed")
 
+-- Preferences distinguish the chosen blessing from any other blessing.
+do
+    local function PreferredIcon(frame)
+        local holder = frame._msufBuffCoverage
+        if not holder or not holder.shown then return end
+        for _, icon in ipairs(holder.icons) do
+            if icon.shown and icon._msufBuff < 0 then return icon end
+        end
+    end
+    confs.party.buffCoverageEnabled = true
+    confs.party.buffCoverageBlessingTank = 3
+    roles.party3 = "TANK"
+    auras.party3 = { Aura(19740, 901) }
+    Fire("PLAYER_ENTERING_WORLD")
+    RunTimers(0)
+    local icon = PreferredIcon(f.party3)
+    assert(icon and icon.texture == "tex20217", "Might incorrectly satisfies preferred Kings")
+    auras.party3[2] = Aura(25898, 902)
+    reads = 0
+    UnitAura("party3", { isFullUpdate = false, addedAuras = { auras.party3[2] } })
+    assert(not PreferredIcon(f.party3) and reads == 0, "greater Kings failed incremental preference coverage")
+    UnitAura("party3", { isFullUpdate = false, removedAuraInstanceIDs = { 902 } })
+    assert(PreferredIcon(f.party3) and reads == 0, "removing Kings while Might remains failed")
+    confs.party.buffCoverageBlessingWARRIOR = 2
+    GF.observer("refreshVisuals")
+    RunTimers(0)
+    icon = PreferredIcon(f.party3)
+    assert(icon and icon.texture == "tex19742", "class preference did not override Tank")
+    Fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 1)
+    assert(not PreferredIcon(f.party3), "specific preference was asserted from restricted aura data")
+    Fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 0)
+    RunTimers(0)
+    confs.party.buffCoverageBlessingWARRIOR, confs.party.buffCoverageBlessingTank = 0, 0
+    GF.observer("refreshVisuals")
+    RunTimers(0)
+    assert(not PreferredIcon(f.party3), "cleared preferences retained a specific blessing")
+end
+
 print("forever_group_buff_coverage_smoke: PASS")

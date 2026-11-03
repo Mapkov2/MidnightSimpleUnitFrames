@@ -1297,6 +1297,7 @@ end
 
 local function CompileBarBackground(conf)
   return {
+    override = conf.barBgColorOverride == true,
     r = Num(conf.bgR, 0.1),
     g = Num(conf.bgG, 0.1),
     b = Num(conf.bgB, 0.1),

@@ -14,6 +14,19 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhCN")) or (MSUF.L or {})
+L["Any blessing"] = "任意祝福"
+L["Follow role"] = "遵循职责"
+L["Blessing of Might"] = "力量祝福"
+L["Blessing of Wisdom"] = "智慧祝福"
+L["Blessing of Kings"] = "王者祝福"
+L["Blessing of Salvation"] = "拯救祝福"
+L["Blessing of Light"] = "光明祝福"
+L["Unassigned role"] = "未分配职责"
+L["Tanks"] = "坦克"
+L["Healers"] = "治疗"
+L["Damage dealers"] = "伤害输出"
+L["Preferred paladin blessings"] = "偏好的圣骑士祝福"
+L["Class choices override the assigned role; Follow role uses its choice. Any blessing accepts all blessings. Preferred-blessing checks hide while aura data is restricted."] = "职业选择优先于职责；遵循职责使用职责的选择。任意祝福接受所有祝福。光环数据受限时隐藏特定祝福的检查。"
 -- Reviewed Edit Mode, setup and client-capability labels.
 L["Player Name Position"] = "玩家名称位置"
 L["Target Name Position"] = "目标名称位置"
@@ -6280,7 +6293,7 @@ L["Add resource mark"] = "添加资源标记"
 L["Additional resource colors"] = "额外资源颜色"
 L["Additional resources"] = "额外资源"
 L["Mana spend preview"] = "法力消耗预览"
-L["Regeneration pause after spending"] = "消耗后的回复暂停"
+L["Regeneration pause after spending"] = "五秒规则（法力值）"
 L["Mana return pulse"] = "法力回复脉冲"
 L["Arcane Surge window timer"] = "奥术涌动时段计时器"
 L["Arcane window warning (seconds)"] = "奥术时段警告（秒）"

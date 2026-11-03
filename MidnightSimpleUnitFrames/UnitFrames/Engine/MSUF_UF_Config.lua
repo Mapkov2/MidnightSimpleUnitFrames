@@ -472,6 +472,10 @@ local function ResolveHealthBackground(general, bars, health, dst, conf)
   -- default is 1.0. This replaces the old hidden 0.9 tint alpha, so setting
   -- both the tint and per-unit Background controls to 100% is truly opaque.
   CopyColor(dst, r, g, b, ResolveBgAlpha(general, bars, conf) * Clamp01(tintAlpha, 1))
+  dst.override = conf and conf.barBgColorOverride == true and ResolveBarBackgroundColorMode(general) == "custom"
+  if dst.override then
+    dst.r, dst.g, dst.b = Clamp01(conf.bgR, r), Clamp01(conf.bgG, g), Clamp01(conf.bgB, b)
+  end
   return dst
 end
 

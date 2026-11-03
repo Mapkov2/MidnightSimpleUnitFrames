@@ -158,6 +158,61 @@ if classic then
     assert(edge.L.drawLayer == fill.L.drawLayer and edge.L.drawSublevel < fill.L.drawSublevel,
         "solid bronze edge covers button fill")
 end
+do
+    local NewFrame, UIParentFrame = CreateFrame, UIParent
+    -- Native texture rectangles may be unavailable while a hidden header is
+    -- moved. The middle fill must keep its owner bounds through that interval.
+    local parent = NewFrame("Frame", nil, UIParentFrame)
+    local owner = NewFrame("Button", nil, parent)
+    local x, y, ready = 265, 508, true
+    owner.GetRect = function(self) return x, y, self:GetWidth(), self:GetHeight() end
+    local function Corner(part, index)
+        local _, relative, point, dx, dy = part:GetPoint(index)
+        local left, bottom, width, height = relative:GetRect()
+        if not left or not bottom or not width or not height then return end
+        return left + (point:find("RIGHT", 1, true) and width or 0) + dx,
+            bottom + (point:find("TOP", 1, true) and height or 0) + dy
+    end
+    owner:SetSize(330, 22)
+    local fill, border = T.CreateSuperellipseLayers(owner, "_bounds", 2)
+    local function Check()
+        local visual = owner._msuf2NavPillVisualWidth or owner:GetWidth()
+        for i, parts in ipairs({ fill, border }) do
+            local inset, cap = i == 1 and 2 or 1, parts.L:GetWidth()
+            parts.L.GetRect = function()
+                if ready then return x + inset, y + inset, cap, owner:GetHeight() - 2 * inset end
+            end
+            parts.R.GetRect = function()
+                if ready then return x + visual - inset - cap, y + inset, cap, owner:GetHeight() - 2 * inset end
+            end
+            for _, resolved in ipairs({ true, false }) do
+                ready = resolved
+                local left, top = Corner(parts.M, 1)
+                local right, bottom = Corner(parts.M, 2)
+                assert(left and right, "middle texture lost its bounds while cap rectangles were unavailable")
+                assert(left == x + inset + cap and right == x + visual - inset - cap,
+                    "middle texture escaped the dropdown horizontally")
+                assert(top == y + owner:GetHeight() - inset and bottom == y + inset,
+                    "middle texture escaped the dropdown vertically")
+            end
+        end
+    end
+    for _, dimensions in ipairs({ { 330, 22 }, { 60, 22 }, { 240, 40 } }) do
+        owner:SetSize(dimensions[1], dimensions[2])
+        owner._msuf2NavPillVisualWidth = nil
+        fill.Layout()
+        Check()
+        owner._msuf2NavPillVisualWidth = math.min(48, dimensions[1])
+        fill.Layout()
+        Check()
+    end
+    owner:Hide()
+    owner:SetParent(NewFrame("Frame", nil, UIParentFrame))
+    x, y = 90, 200
+    owner:Show()
+    fill.Layout()
+    Check()
+end
 local button = T.Button(shell, "Reset page", 140, 28)
 if classic then
     assert(button._msuf2Edge.L.drawLayer == button._msuf2Fill.L.drawLayer)

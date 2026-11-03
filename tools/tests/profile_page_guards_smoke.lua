@@ -12,6 +12,8 @@
 --      reused until the profile or the menu's data revision changes.
 --   3. "Use hotkey variant" follows the saved conditions, not the page's unsaved
 --      copy: a hotkey slot chosen but not saved does not activate the variant.
+--   4. The Selected unitframes note (Pages/MSUF_Menu2_AdvancedProfiles.lua)
+--      stays below the frame switches when Arena Frames adds a fifth row.
 --
 -- Plain Lua 5.1 with the repo root and a flavor as arguments.
 
@@ -59,9 +61,15 @@ end
 W.Dropdown = function(parent, label, ...)
     local widget = Dropdown(parent, label, ...); widget.testLabel = label; return widget
 end
+local textAt, switches, SwitchAt = {}, {}, W.SwitchAt
 W.Text = function(parent, text, ...)
     texts[#texts + 1] = tostring(text)
+    textAt[tostring(text)] = { parent = parent, y = select(2, ...) }
     return Text(parent, text, ...)
+end
+W.SwitchAt = function(parent, label, x, y, ...)
+    switches[#switches + 1] = { parent = parent, y = y }
+    return SwitchAt(parent, label, x, y, ...)
 end
 for _, kind in ipairs({ "BindDropdownWidget", "BindBoolWidget" }) do
     local original = M[kind]
@@ -158,5 +166,25 @@ Check(V.Find(e.MSUF_DB, "Burst").conditions.manual == true, "harness: the hotkey
 Build()
 Click("Use hotkey variant")
 Check(V.GetManual() == "Burst", "a saved hotkey slot no longer activates the variant")
+
+---------------------------------------------------------------------------
+-- 4. The Selected unitframes note sits a full row below the last frame
+--    switch, also where Arena Frames adds a fifth row, inside the section.
+---------------------------------------------------------------------------
+for i = #switches, 1, -1 do switches[i] = nil end
+Build()
+local note = Check(textAt["Includes each frame's own settings, auras and castbar. Shared appearance settings stay unchanged."],
+    "the Selected unitframes note is missing")
+local count, lowest = 0, nil
+for _, switch in ipairs(switches) do
+    if switch.parent == note.parent then
+        count = count + 1
+        if not lowest or switch.y < lowest then lowest = switch.y end
+    end
+end
+Check(count > 0, "the Selected unitframes section built no frame switch")
+Check(note.y <= lowest - 28, ("the note at y %d overlaps the last frame switch at y %d"):format(note.y, lowest))
+Check(note.parent:GetHeight() >= 24 - note.y,
+    ("the section height %s clips the note at y %d"):format(tostring(note.parent:GetHeight()), note.y))
 
 print("profile_page_guards_smoke: ok (" .. flavor .. ")")

@@ -11,6 +11,19 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
+L["Any blessing"] = "모든 축복 허용"
+L["Follow role"] = "역할 설정 사용"
+L["Blessing of Might"] = "힘의 축복"
+L["Blessing of Wisdom"] = "지혜의 축복"
+L["Blessing of Kings"] = "왕의 축복"
+L["Blessing of Salvation"] = "구원의 축복"
+L["Blessing of Light"] = "빛의 축복"
+L["Unassigned role"] = "지정되지 않은 역할"
+L["Tanks"] = "방어 전담"
+L["Healers"] = "치유 전담"
+L["Damage dealers"] = "공격 전담"
+L["Preferred paladin blessings"] = "선호하는 성기사 축복"
+L["Class choices override the assigned role; Follow role uses its choice. Any blessing accepts all blessings. Preferred-blessing checks hide while aura data is restricted."] = "직업 선택이 역할보다 우선합니다. 역할 설정 사용은 역할의 선택을 따릅니다. 모든 축복 허용은 아무 축복이나 허용합니다. 오라 정보가 제한되면 특정 축복 검사를 숨깁니다."
 -- Reviewed Edit Mode, setup and client-capability labels.
 L["Player Name Position"] = "플레이어 이름 위치"
 L["Target Name Position"] = "대상 이름 위치"
@@ -6120,7 +6133,7 @@ L["Add resource mark"] = "자원 표시 추가"
 L["Additional resource colors"] = "추가 자원 색상"
 L["Additional resources"] = "추가 자원"
 L["Mana spend preview"] = "마나 소모 미리 보기"
-L["Regeneration pause after spending"] = "소모 후 재생 정지"
+L["Regeneration pause after spending"] = "5초 규칙 (마나)"
 L["Mana return pulse"] = "마나 회복 펄스"
 L["Arcane Surge window timer"] = "비전 쇄도 구간 타이머"
 L["Arcane window warning (seconds)"] = "비전 구간 경고 (초)"

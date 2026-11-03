@@ -8,21 +8,51 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "97EC5C12DA578DF0DDE2500759380DB4BB97B4D376BD69790EC20505C00E9D0C",
-    currentVersion = "6.506-beta2",
+    sourceSha256 = "F051B7C939A313794B97374ADF913F21BB8754A5CBC3D1F099112CE99A19C1DF",
+    currentVersion = "6.506",
     historyFromVersion = "6.02",
-    previousVersion = "6.505",
-    rangeLabel = "6.505 -> 6.506-beta2",
+    previousVersion = "6.02",
+    rangeLabel = "6.02 -> 6.506",
     entries = {
         {
-            version = "6.506-beta2",
+            version = "6.506",
             date = "2026-11-03",
             sections = {
+                {
+                    title = "Improvements",
+                    bullets = {
+                        {
+                            text = "Expanded detached power-bar dimensions to widths of 10-800 and heights of 2-800, with matching vertical and reversed preview fills.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "detached power width",
+                                label = "Power width",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.width",
+                                settingKey = "player.detachedPowerBarWidth",
+                                prepareKind = "classPowerWorkspace",
+                                prepareValue = "power",
+                            },
+                        },
+                        {
+                            text = "On WoW Forever, choose preferred Paladin blessings by class and role in group Buff coverage.",
+                            linkless = true,
+                        },
+                        {
+                            text = "On WoW Forever, the five-second mana-rule indicator is enabled by default. The one-time update preserves later deliberate changes, and the setting is easier to find in search.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Added support for preset-controlled combat-timer retention and padded minutes.",
+                            linkless = true,
+                        },
+                    },
+                },
                 {
                     title = "Bug Fixes",
                     bullets = {
                         {
-                            text = "Fixed Warlock interrupt readiness staying red after sacrificing a Felhunter with Grimoire of Sacrifice. Spell Lock now follows the granted player ability and its cooldown, and returns to the pet ability when the Felhunter is summoned again.",
+                            text = "Fixed Warlock Spell Lock readiness staying red after sacrificing a Felhunter with Grimoire of Sacrifice. Readiness follows the granted player spell and switches back when the Felhunter is summoned again.",
                             link = {
                                 pageKey = "opt_castbar",
                                 query = "show on target castbar",
@@ -31,6 +61,26 @@ local data = {
                                 controlId = "menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target",
                                 settingKey = "general.kickReadyShowTarget",
                             },
+                        },
+                        {
+                            text = "Fixed normal player casts disappearing after a late stop event from an earlier cast.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed synchronization of older saved profile groups that have no exclusion list.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Preserve explicit unit and group health-background colors during texture and palette refreshes.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed dropdown middle-texture anchoring, color-shortcut artwork and overlapping text in selected-unitframe profile exports.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Specific Paladin-blessing checks now hide while WoW Forever aura data is restricted.",
+                            linkless = true,
                         },
                     },
                 },

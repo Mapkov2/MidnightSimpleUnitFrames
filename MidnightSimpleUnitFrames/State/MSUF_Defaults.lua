@@ -1733,6 +1733,9 @@ local function MSUF_Defaults_CreateFactoryProfile()
         out.general._msufFactoryProfileApplied = true
         out.general.fontKey = MSUF_Defaults_GetGlobalFontDefault()
         out.general.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
+        out.bars = out.bars or {}
+        out.bars.manaRegenPause = true
+        out._msufForeverFiveSecondDefault_v1 = true
         return out
     end
     local payload = MSUF_Defaults_GetProfilePayload(tbl)
@@ -2000,6 +2003,19 @@ local function MSUF_Defaults_RepairModernFactoryNamePresentation(db)
     return false
 end
 
+-- Owner default for Forever: lift existing Off profiles once, then keep
+-- later deliberate choices. The separate stamp also handles Retail imports.
+local function MSUF_Defaults_SeedForeverFiveSecondRule(profile)
+    if MSUF.Client and MSUF.Client.IsForever then
+        local bars = profile.bars
+        if profile._msufForeverFiveSecondDefault_v1 ~= true or bars.manaRegenPause == nil then
+            bars.manaRegenPause = true
+            profile._msufForeverFiveSecondDefault_v1 = true
+        end
+    end
+    return profile
+end
+
 local MSUF_DB_LastHeavyRun
 local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
@@ -2011,7 +2027,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- aura alias keys, using the wider StateHelpers.ProfileIOSpec. The two
 --- revisions are bumped independently and are deliberately not merged; keep
 --- both in mind when a key alias changes.
-local MSUF_DEFAULTS_CURRENT_REVISION = 17
+local MSUF_DEFAULTS_CURRENT_REVISION = 18
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 
 local MSUF_DEFAULTS_PLAYER_DEFENSIVE_SHAPE_REVISION = 10
@@ -3288,7 +3304,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     MSUF_Defaults_Stage_MigrateUnitTextModes(profileDB, g)
     MSUF_Defaults_Stage_SeedPredictionDefaults(g)
     MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
-    MSUF_Defaults_Stage_SeedBarsTableDefaults(profileDB)
+    MSUF_Defaults_Stage_SeedBarsTableDefaults(MSUF_Defaults_SeedForeverFiveSecondRule(profileDB))
     MSUF_Defaults_Stage_SeedGameplayDefaults(profileDB)
     --- 5.6 -> 6.0 shape repair for existing DBs and factory defaults.
     MSUF_Defaults_NormalizeProfileTo60Defaults(profileDB)
@@ -3344,6 +3360,10 @@ local function MSUF_Defaults_IsCurrentProfileDB(db)
         for _, owner in pairs(auras.perUnit) do
             if type(owner) ~= "table" then return false end
         end
+    end
+    if MSUF.Client and MSUF.Client.IsForever
+        and (db._msufForeverFiveSecondDefault_v1 ~= true or db.bars.manaRegenPause == nil) then
+        return false
     end
     local g = db.general
     if type(g.fontKey) ~= "string" or g.fontKey == ""

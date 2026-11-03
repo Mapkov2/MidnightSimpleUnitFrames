@@ -7,6 +7,19 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enUS")) or (MSUF.L or {})
+L["Any blessing"] = "Any blessing"
+L["Follow role"] = "Follow role"
+L["Blessing of Might"] = "Blessing of Might"
+L["Blessing of Wisdom"] = "Blessing of Wisdom"
+L["Blessing of Kings"] = "Blessing of Kings"
+L["Blessing of Salvation"] = "Blessing of Salvation"
+L["Blessing of Light"] = "Blessing of Light"
+L["Unassigned role"] = "Unassigned role"
+L["Tanks"] = "Tanks"
+L["Healers"] = "Healers"
+L["Damage dealers"] = "Damage dealers"
+L["Preferred paladin blessings"] = "Preferred paladin blessings"
+L["Class choices override the assigned role; Follow role uses its choice. Any blessing accepts all blessings. Preferred-blessing checks hide while aura data is restricted."] = "Class choices override the assigned role; Follow role uses its choice. Any blessing accepts all blessings. Preferred-blessing checks hide while aura data is restricted."
 L["Icon height (percent)"] = "Icon height (percent)"
 
 -- Reviewed Edit Mode, setup and client-capability labels.
@@ -4479,7 +4492,7 @@ L["Add resource mark"] = "Add resource mark"
 L["Additional resource colors"] = "Additional resource colors"
 L["Additional resources"] = "Additional resources"
 L["Mana spend preview"] = "Mana spend preview"
-L["Regeneration pause after spending"] = "Regeneration pause after spending"
+L["Regeneration pause after spending"] = "Five-second rule (mana)"
 L["Mana return pulse"] = "Mana return pulse"
 L["Arcane Surge window timer"] = "Arcane Surge window timer"
 L["Arcane window warning (seconds)"] = "Arcane window warning (seconds)"

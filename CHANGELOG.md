@@ -1,5 +1,35 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.506 - 2026-11-03
+
+Stable update for all supported clients, including the fixes tested in 6.506 Beta 1 and Beta 2 and the latest options and compatibility improvements.
+
+### Improvements
+
+- Expanded detached power-bar dimensions to widths of 10-800 and heights of 2-800, with matching vertical and reversed preview fills.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.width","settingKey":"player.detachedPowerBarWidth","prepareKind":"classPowerWorkspace","prepareValue":"power","query":"detached power width","label":"Power width"} -->
+- On WoW Forever, choose preferred Paladin blessings by class and role in group Buff coverage.
+<!-- msuf-menu-link: none -->
+- On WoW Forever, the five-second mana-rule indicator is enabled by default. The one-time update preserves later deliberate changes, and the setting is easier to find in search.
+<!-- msuf-menu-link: none -->
+- Added support for preset-controlled combat-timer retention and padded minutes.
+<!-- msuf-menu-link: none -->
+
+### Bug Fixes
+
+- Fixed Warlock Spell Lock readiness staying red after sacrificing a Felhunter with Grimoire of Sacrifice. Readiness follows the granted player spell and switches back when the Felhunter is summoned again.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_interrupt_ready","controlId":"menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target","settingKey":"general.kickReadyShowTarget","prepareKind":"","prepareValue":"","query":"show on target castbar","label":"Show on Target castbar"} -->
+- Fixed normal player casts disappearing after a late stop event from an earlier cast.
+<!-- msuf-menu-link: none -->
+- Fixed synchronization of older saved profile groups that have no exclusion list.
+<!-- msuf-menu-link: none -->
+- Preserve explicit unit and group health-background colors during texture and palette refreshes.
+<!-- msuf-menu-link: none -->
+- Fixed dropdown middle-texture anchoring, color-shortcut artwork and overlapping text in selected-unitframe profile exports.
+<!-- msuf-menu-link: none -->
+- Specific Paladin-blessing checks now hide while WoW Forever aura data is restricted.
+<!-- msuf-menu-link: none -->
+
 ## 6.506-beta2 - 2026-11-03
 
 ### Bug Fixes

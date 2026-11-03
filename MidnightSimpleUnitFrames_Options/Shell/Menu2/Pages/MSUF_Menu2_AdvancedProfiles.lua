@@ -1226,32 +1226,36 @@ function ProfilesPage.ImportActions(state)
 end
 function ProfilesPage.UnitSelection(state)
     local ctx, b = state.ctx, state.b
-    local section = b:CollapsibleSection("profiles_unit_selection", "Selected unitframes", 246, false)
+    local labels = VT("player", "Player", "target", "Target", "targettarget", "Target of Target",
+        "pet", "Pet", "pettarget", "Pet Target", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
+    local units = {}
+    for i = 1, #labels do
+        local unit = labels[i].value
+        if not MSUF.Client or not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(unit) then units[#units + 1] = labels[i] end
+    end
+    -- Two switches per 28 px row. Arena Frames adds a fifth row on clients with
+    -- arena units, so the note and the section follow the row count.
+    local rows = floor((#units + 1) / 2)
+    local section = b:CollapsibleSection("profiles_unit_selection", "Selected unitframes", 134 + rows * 28, false)
     state.unitSelectionSection = section
     W.Text(section, "Choose frames for a Selected unitframes export. Imports automatically use the frames included in the string.",
         20, -44, max(220, state.contentW - 40), T.colors.muted)
     M.profileExportUnits = M.profileExportUnits or { player = true }
-    local labels = VT("player", "Player", "target", "Target", "targettarget", "Target of Target",
-        "pet", "Pet", "pettarget", "Pet Target", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
-    local index = 0
-    for i = 1, #labels do
-        local unit, label = labels[i].value, labels[i].text
-        if not MSUF.Client or not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(unit) then
-            local column = index % 2
-            local row = floor(index / 2)
-            local width = max(140, floor((state.contentW - 60) / 2))
-            local toggle = W.SwitchAt(section, label, 20 + column * (width + 20), -92 - row * 28, width)
-            RegisterControl(toggle, ProfilesMeta("export.unit." .. unit, "ephemeral"), label, "toggle")
-            toggle:SetChecked(M.profileExportUnits[unit] == true)
-            toggle:SetScript("OnClick", function(self)
-                M.profileExportUnits[unit] = self:GetChecked() == true
-                M.SetMenuStateValue("profileExportKind", "unitselection")
-            end)
-            index = index + 1
-        end
+    for index = 0, #units - 1 do
+        local unit, label = units[index + 1].value, units[index + 1].text
+        local column = index % 2
+        local row = floor(index / 2)
+        local width = max(140, floor((state.contentW - 60) / 2))
+        local toggle = W.SwitchAt(section, label, 20 + column * (width + 20), -92 - row * 28, width)
+        RegisterControl(toggle, ProfilesMeta("export.unit." .. unit, "ephemeral"), label, "toggle")
+        toggle:SetChecked(M.profileExportUnits[unit] == true)
+        toggle:SetScript("OnClick", function(self)
+            M.profileExportUnits[unit] = self:GetChecked() == true
+            M.SetMenuStateValue("profileExportKind", "unitselection")
+        end)
     end
     W.Text(section, "Includes each frame's own settings, auras and castbar. Shared appearance settings stay unchanged.",
-        20, -214, max(220, state.contentW - 40), T.colors.muted)
+        20, -102 - rows * 28, max(220, state.contentW - 40), T.colors.muted)
 end
 function ProfilesPage.Build(ctx)
     local state = ProfilesPage.Prepare(ctx)

@@ -78,6 +78,19 @@ local BUFFS_BY_CLASS = {
             14752, 14818, 14819, 16875, 27681, 27841 } },
     },
 }
+-- SpellName 1.60.1.70009: normal and greater ranks of each selectable blessing.
+-- The existing generic coverage remains the default until a preference is chosen.
+local BLESSINGS = {
+    { ids = { 19740, 19834, 19835, 19836, 19837, 19838, 25291, 25782, 25916 } },
+    { ids = { 19742, 19850, 19852, 19853, 19854, 25290, 25894, 25918 } },
+    { ids = { 20217, 25898, 1213408 } },
+    { ids = { 1038, 25895 } },
+    { ids = { 19977, 19978, 19979, 25890, 26650 } },
+}
+local BLESSING_OF_SPELL = {}
+for index, buff in ipairs(BLESSINGS) do
+    for _, id in ipairs(buff.ids) do BLESSING_OF_SPELL[id] = index end
+end
 local CLASS_ORDER = { "DRUID", "MAGE", "PALADIN", "PRIEST" }
 -- Classic Era classes whose primary resource is mana (a shapeshifted druid
 -- still counts). Warriors and rogues never need Intellect or Spirit.
@@ -139,7 +152,7 @@ end
 local function State(unit)
     local state = states[unit]
     if not state then
-        state = { known = false, count = {}, instance = {} }
+        state = { known = false, count = {}, instance = {}, blessings = {}, blessingInstances = {} }
         for i = 1, BUFF_COUNT do state.count[i] = 0 end
         states[unit] = state
     end
@@ -158,6 +171,8 @@ local function ReadUnit(unit)
     local count, instance = state.count, state.instance
     for i = 1, BUFF_COUNT do count[i] = 0 end
     wipe(instance)
+    wipe(state.blessings)
+    wipe(state.blessingInstances)
     state.known = false
     if not Reachable(unit) then return state end
     local auras = GetUnitAuras(unit, "HELPFUL")
@@ -170,8 +185,13 @@ local function ReadUnit(unit)
         local index = spellID and BUFF_OF_SPELL[spellID]
         if index then
             count[index] = count[index] + 1
+            local blessing = BLESSING_OF_SPELL[spellID]
+            if blessing then state.blessings[blessing] = (state.blessings[blessing] or 0) + 1 end
             local auraInstanceID = aura.auraInstanceID
-            if auraInstanceID ~= nil and not IsSecret(auraInstanceID) then instance[auraInstanceID] = index end
+            if not IsSecret(auraInstanceID) and auraInstanceID ~= nil and blessing then
+                state.blessingInstances[auraInstanceID] = blessing
+            end
+            if not IsSecret(auraInstanceID) and auraInstanceID ~= nil then instance[auraInstanceID] = index end
         end
     end
     state.known = true
@@ -196,6 +216,12 @@ local function ApplyUpdate(state, info)
             local index = spellID and BUFF_OF_SPELL[spellID]
             if index and auraInstanceID ~= nil and instance[auraInstanceID] == nil then
                 instance[auraInstanceID] = index
+                local blessing = BLESSING_OF_SPELL[spellID]
+                if blessing then
+                    state.blessingInstances[auraInstanceID] = blessing
+                    state.blessings[blessing] = (state.blessings[blessing] or 0) + 1
+                    changed = true
+                end
                 count[index] = count[index] + 1
                 if count[index] == 1 then changed = true end
             end
@@ -212,6 +238,12 @@ local function ApplyUpdate(state, info)
             local index = auraInstanceID ~= nil and instance[auraInstanceID]
             if index then
                 instance[auraInstanceID] = nil
+                local blessing = state.blessingInstances[auraInstanceID]
+                if blessing then
+                    state.blessings[blessing] = max(0, (state.blessings[blessing] or 0) - 1)
+                    state.blessingInstances[auraInstanceID] = nil
+                    changed = true
+                end
                 count[index] = max(0, count[index] - 1)
                 if count[index] == 0 then changed = true end
             end
@@ -380,7 +412,7 @@ local function ShowRow(frame, conf, list, n, scale)
     for slot = 1, n do
         local icon = Icon(holder, slot)
         local index = list[slot]
-        if icon._msufBuff ~= index then icon:SetTexture(Texture(BUFFS[index])); icon._msufBuff = index end
+        if icon._msufBuff ~= index then icon:SetTexture(Texture(index < 0 and BLESSINGS[-index] or BUFFS[index])); icon._msufBuff = index end
         local placed = resized or not icon:IsShown()
         if placed then
             icon:ClearAllPoints()
@@ -422,6 +454,16 @@ local function Needs(buff, state, unit, conf)
     return true
 end
 
+local BLESSING_ROLES = { TANK = "Tank", HEALER = "Healer", DAMAGER = "Damage" }
+local function PreferredBlessing(conf, state, unit)
+    local value = state.class and conf["buffCoverageBlessing" .. state.class]
+    if not value or value == 0 then
+        local role = BLESSING_ROLES[GF.GetUnitGroupRole(unit)] or "Default"
+        value = conf["buffCoverageBlessing" .. role]
+    end
+    if type(value) == "number" and value == floor(value) and BLESSINGS[value] then return value end
+end
+
 local function PaintFrame(frame, unit)
     if not frame then return end
     local conf = GF.GetConf(frame._msufGFKind or "party")
@@ -438,9 +480,12 @@ local function PaintFrame(frame, unit)
     local n = 0
     for index = 1, BUFF_COUNT do
         local buff = BUFFS[index]
-        if state.count[index] == 0 and providers[buff.class] and conf[buff.setting] == true and Needs(buff, state, unit, conf) then
+        local preferred = buff.key == "Blessings" and PreferredBlessing(conf, state, unit)
+        local missing = state.count[index] == 0
+        if preferred then missing = not restricted and (state.blessings[preferred] or 0) == 0 end
+        if missing and providers[buff.class] and conf[buff.setting] == true and Needs(buff, state, unit, conf) then
             n = n + 1
-            order[n] = index
+            order[n] = preferred and -preferred or index
         end
     end
     ShowRow(frame, conf, order, n, 1)

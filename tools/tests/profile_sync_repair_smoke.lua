@@ -20,6 +20,28 @@ for _, name in ipairs({ "ProfileFields", "ProfileVariants", "ProfileSync" }) do
 end
 local S = NS.ProfileSync
 
+-- (0) Older saved groups may omit the optional exclusion list. Complete it
+-- silently before a normal edit is flushed, without losing either member.
+MSUF_GlobalDB = {
+    profiles = { A = { player = { width = 100 } }, B = { player = { width = 150 } } },
+    global = { profileSyncGroups = {
+        { name = "Existing group", members = { A = true, B = true }, modules = { unitframes = true } },
+    } },
+}
+MSUF_ActiveProfile, MSUF_DB = "A", MSUF_GlobalDB.profiles.A
+assert(S.Validate(MSUF_GlobalDB.global.profileSyncGroups), "omitted exclusions must remain a valid group")
+S.Activate(true)
+MSUF_DB.player.width = 220
+assert(S.Flush(), "an older saved group without exclusions blocked the flush")
+assert(MSUF_GlobalDB.profiles.B.player.width == 220, "older saved group stopped syncing its members")
+local completed = MSUF_GlobalDB.global.profileSyncGroups[1]
+assert(type(completed.exclude) == "table" and #completed.exclude == 0,
+    "the optional exclusion list was not completed in SavedVariables")
+assert(completed.members.A and completed.members.B and #prints == 0,
+    "completing optional exclusions removed a member or reported invalid entries")
+assert(S.Flush() and #prints == 0, "repeat flush reported a completed group as invalid")
+assert(S.Replace({}), "the completed group could not be replaced")
+
 -- (1) The review's dead lock: a stale member plus a rename put one profile
 -- into two groups for the same module.
 MSUF_GlobalDB = { profiles = { A = { player = { width = 1 } }, C = { player = { width = 3 } }, Z = { player = { width = 9 } } }, global = {} }

@@ -7,6 +7,19 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("esES")) or (MSUF.L or {})
+L["Any blessing"] = "Cualquier bendición"
+L["Follow role"] = "Seguir rol"
+L["Blessing of Might"] = "Bendición de poderío"
+L["Blessing of Wisdom"] = "Bendición de sabiduría"
+L["Blessing of Kings"] = "Bendición de reyes"
+L["Blessing of Salvation"] = "Bendición de salvación"
+L["Blessing of Light"] = "Bendición de Luz"
+L["Unassigned role"] = "Sin rol asignado"
+L["Tanks"] = "Tanques"
+L["Healers"] = "Sanadores"
+L["Damage dealers"] = "Daño"
+L["Preferred paladin blessings"] = "Bendiciones de paladín preferidas"
+L["Class choices override the assigned role; Follow role uses its choice. Any blessing accepts all blessings. Preferred-blessing checks hide while aura data is restricted."] = "La elección de clase tiene prioridad; Seguir rol usa la del rol. Cualquier bendición acepta todas. Las comprobaciones específicas se ocultan si los datos de auras están restringidos."
 -- Reviewed Edit Mode, setup and client-capability labels.
 L["Player Name Position"] = "Posición del nombre del jugador"
 L["Target Name Position"] = "Posición del nombre del objetivo"
@@ -6196,7 +6209,7 @@ L["Add resource mark"] = "Añadir marca de recurso"
 L["Additional resource colors"] = "Colores de recursos adicionales"
 L["Additional resources"] = "Recursos adicionales"
 L["Mana spend preview"] = "Vista previa del gasto de maná"
-L["Regeneration pause after spending"] = "Pausa de regeneración tras el gasto"
+L["Regeneration pause after spending"] = "Regla de los cinco segundos (maná)"
 L["Mana return pulse"] = "Pulso de recuperación de maná"
 L["Arcane Surge window timer"] = "Temporizador de la ventana de Oleada Arcana"
 L["Arcane window warning (seconds)"] = "Aviso de la ventana arcana (segundos)"

@@ -916,7 +916,7 @@ local GROUP_LAYOUT_SECTION_SPECS = {
     -- ties client-only static search rows to. frameScope: the unit or group scope
     -- the section needs (M.SupportsFrameScope), e.g. boss units for allied bosses.
     {
-        sectionId = "buff_coverage", title = "Buff coverage (Forever)", height = 656, clientCapability = "IsForever", build = AdditionalSections.BuffCoverage,
+        sectionId = "buff_coverage", title = "Buff coverage (Forever)", height = 1360, clientCapability = "IsForever", build = AdditionalSections.BuffCoverage,
         prepareShell = function(ctx, section)
             AdditionalSections.PrepareSwitch(ctx, section, "buffCoverageEnabled", "Show buff coverage icons", "visual")
         end,
