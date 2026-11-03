@@ -1,5 +1,17 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.506-beta1 - 2026-11-03
+
+### Improvements
+
+- Expanded detached power-bar dimensions to widths of 10-800 and heights of 2-800. Menu controls, Edit Mode and previews use the same limits, and detached resource previews follow vertical and reversed fill directions.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.width","settingKey":"player.detachedPowerBarWidth","prepareKind":"classPowerWorkspace","prepareValue":"power","query":"detached power width","label":"Power width"} -->
+
+### Bug Fixes
+
+- Fixed normal Player casts disappearing when a late stop event belongs to an earlier cast and carries no cast-bar ID. Uncertain stop events now confirm the active cast before hiding the bar.
+<!-- msuf-menu-link: none -->
+
 ## 6.505 - 2026-10-31
 
 Stable release for all supported clients, combining the changes tested in 6.505 Beta 1 and Beta 2.

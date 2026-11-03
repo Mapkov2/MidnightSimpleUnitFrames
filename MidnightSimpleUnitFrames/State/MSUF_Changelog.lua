@@ -8,12 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "3D1AF27FAEF5EF463481FDA2DC66AEBEDD2F6D1EF04173684B94CCCBBCA8152D",
-    currentVersion = "6.505",
-    historyFromVersion = "6.501",
-    previousVersion = "6.501",
-    rangeLabel = "6.501 -> 6.505",
+    sourceSha256 = "9E0BFC580CFB21D94A3A8949D2EE34090EF376EBA2911CD370E0F3649DFC1B4B",
+    currentVersion = "6.506-beta1",
+    historyFromVersion = "6.502",
+    previousVersion = "6.505",
+    rangeLabel = "6.505 -> 6.506-beta1",
     entries = {
+        {
+            version = "6.506-beta1",
+            date = "2026-11-03",
+            sections = {
+                {
+                    title = "Improvements",
+                    bullets = {
+                        {
+                            text = "Expanded detached power-bar dimensions to widths of 10-800 and heights of 2-800. Menu controls, Edit Mode and previews use the same limits, and detached resource previews follow vertical and reversed fill directions.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "detached power width",
+                                label = "Power width",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.width",
+                                settingKey = "player.detachedPowerBarWidth",
+                                prepareKind = "classPowerWorkspace",
+                                prepareValue = "power",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed normal Player casts disappearing when a late stop event belongs to an earlier cast and carries no cast-bar ID. Uncertain stop events now confirm the active cast before hiding the bar.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.505",
             date = "2026-10-31",
@@ -180,41 +213,6 @@ local data = {
                         {
                             text = "Player castbars now select an active channel when a channel starts while the outgoing cast is still reported, preventing the old cast from masking the channel.",
                             linkless = true,
-                        },
-                    },
-                },
-            },
-        },
-        {
-            version = "6.501",
-            date = "2026-10-14",
-            sections = {
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        {
-                            text = "Fixed boss power bars and power text freezing on Target and Boss frames when an encounter uses a custom resource name.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed delayed or missing party and raid member names after joining a group or changing zones. Names now refresh when the client receives the unit's name.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        {
-                            text = "Removed the feature, bug fix and performance counters from the login welcome message.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "show welcome message",
-                                label = "Show welcome message",
-                                sectionId = "misc_startup",
-                                controlId = "menu2.opt.misc.global.setting.show.welcome.message",
-                                settingKey = "general.showWelcomeMessage",
-                            },
                         },
                     },
                 },

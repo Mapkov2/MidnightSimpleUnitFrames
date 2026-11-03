@@ -8,12 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "3D1AF27FAEF5EF463481FDA2DC66AEBEDD2F6D1EF04173684B94CCCBBCA8152D",
-    currentVersion = "6.505",
+    sourceSha256 = "9E0BFC580CFB21D94A3A8949D2EE34090EF376EBA2911CD370E0F3649DFC1B4B",
+    currentVersion = "6.506-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.505",
+    previousVersion = "6.505",
+    rangeLabel = "6.505 -> 6.506-beta1",
     entries = {
+        {
+            version = "6.506-beta1",
+            date = "2026-11-03",
+            sections = {
+                {
+                    title = "Improvements",
+                    bullets = {
+                        {
+                            text = "Expanded detached power-bar dimensions to widths of 10-800 and heights of 2-800. Menu controls, Edit Mode and previews use the same limits, and detached resource previews follow vertical and reversed fill directions.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "detached power width",
+                                label = "Power width",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.width",
+                                settingKey = "player.detachedPowerBarWidth",
+                                prepareKind = "classPowerWorkspace",
+                                prepareValue = "power",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed normal Player casts disappearing when a late stop event belongs to an earlier cast and carries no cast-bar ID. Uncertain stop events now confirm the active cast before hiding the bar.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.505",
             date = "2026-10-31",
