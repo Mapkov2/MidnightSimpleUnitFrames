@@ -263,6 +263,19 @@ local function InterruptAvailable(spellID, classToken, specKeyed)
     return true
 end
 
+-- Retail TrackedCooldowns.lua lists 132409 separately for Affliction/Destruction.
+-- An empty pet book also occurs after dismissal or sacrificing another demon:
+-- only Command Demon's current, known override proves that Spell Lock is granted.
+local function SacrificedSpellLock(spellID)
+    if spellID ~= 19647 or IS_CLASSIC or IS_FOREVER then return nil end
+    local getOverride = SpellAPI and SpellAPI.GetOverrideSpell
+    if getOverride then
+        if PlainNumber(getOverride(119898)) == 132409 then return 132409 end
+    elseif KnowsInterrupt(132409) then
+        return 132409
+    end
+end
+
 local function SecondaryInterruptSpellID(classToken)
     local spellID = classToken and SECONDARY_INTERRUPT_SPELLS[classToken]
     if KnowsInterrupt(spellID) then return spellID end
@@ -294,7 +307,9 @@ local function ResolveInterruptSpellID()
         state.specID = specID
     end
 
-    if not InterruptAvailable(spellID, classToken, specKeyed) then spellID = nil end
+    if not InterruptAvailable(spellID, classToken, specKeyed) then
+        spellID = SacrificedSpellLock(spellID)
+    end
     local secondarySpellID = SecondaryInterruptSpellID(classToken)
     if not spellID then spellID, secondarySpellID = secondarySpellID, nil end
     state.spellsResolved = true

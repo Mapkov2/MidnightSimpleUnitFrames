@@ -15,6 +15,7 @@ local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\
 local REBUKE, AVENGERS_SHIELD = 96231, 31935
 local classToken, knownSpells, petSpells, usable, power, reads = "PRIEST", {}, {}, true, false, 0
 local frameStamp = 100
+local commandOverride, overrideReads, specID = 119898, 0, 66
 local events = {}
 local eventHandler
 local wakeFrames, wakeSets = {}, 0
@@ -30,7 +31,7 @@ _G.MSUF_EnsureDB = function() end
 _G.UnitClass = function() return classToken, classToken end
 _G.C_SpecializationInfo = {
     GetSpecialization = function() return 2 end,
-    GetSpecializationInfo = function() return 66 end,
+    GetSpecializationInfo = function() return specID end,
 }
 _G.Enum = { SpellBookSpellBank = { Player = 0, Pet = 1 } }
 _G.C_SpellBook = { IsSpellKnown = function(spellID, bank)
@@ -57,6 +58,11 @@ local function Cooldown(remaining, endTime)
 end
 local cooldowns = { [REBUKE] = Cooldown(5, 105), [AVENGERS_SHIELD] = Cooldown(8, 108) }
 _G.C_Spell = {
+    GetOverrideSpell = function(spellID)
+        assert(spellID == 119898, "only Command Demon should be resolved")
+        overrideReads = overrideReads + 1
+        return commandOverride
+    end,
     GetSpellCooldownDuration = function(spellID, ignoreGCD)
         assert(ignoreGCD == true)
         return cooldowns[spellID] or Cooldown(0, 0)
@@ -85,6 +91,7 @@ end
 
 -- ExportPublic as Kernel/MSUF_Bootstrap.lua: the global and MSUF.Public.
 local ns = { Public = {}, Client = { IsForever = arg[2] == "Forever", IsMists = arg[2] == "Mists", IsVanilla = arg[2] == "Vanilla", IsTBC = arg[2] == "TBC" } }
+ns.Client.IsClassic = ns.Client.IsVanilla or ns.Client.IsTBC or ns.Client.IsMists
 ns.ExportPublic = function(name, value)
     _G[name] = value
     ns.Public[(name:gsub("^MSUF_", ""))] = value
@@ -121,7 +128,7 @@ assert(K.SlotCount() == 0, "removed talent retained")
 local before = reads
 for i = 1, 1000 do K.SlotCount() end
 assert(reads == before, "absent interrupt rescans spellbook in steady state")
-classToken = "WARLOCK"; _G.MSUF_KickReady_RefreshAll()
+classToken, specID = "WARLOCK", 267; _G.MSUF_KickReady_RefreshAll()
 assert(events.UNIT_PET, "pet replacement lifecycle missing")
 knownSpells[19647] = true; eventHandler(nil, "SPELLS_CHANGED")
 assert(K.SlotCount() == 0, "player knowledge admits absent pet spell")
@@ -129,6 +136,71 @@ petSpells[19647] = true; eventHandler(nil, "UNIT_PET", "player")
 assert(K.SlotCount() == 1, "current pet Spell Lock missing")
 petSpells[19647] = nil; eventHandler(nil, "UNIT_PET", "player")
 assert(K.SlotCount() == 0, "dismissed pet retained")
+-- Grimoire of Sacrifice grants a player override, not a pet-book spell.
+-- The exact known override is authoritative even if the spellbook lists an
+-- inactive variant; an empty pet book alone must never admit an interrupt.
+local SACRIFICE_LOCK, PET_LOCK = 132409, 19647
+local retail = not ns.Client.IsClassic and not ns.Client.IsForever
+knownSpells[119898] = true
+cooldowns[SACRIFICE_LOCK] = Cooldown(0, 0)
+cooldowns[PET_LOCK] = Cooldown(0, 0)
+commandOverride = SACRIFICE_LOCK
+-- Pet removal may precede the override change; SPELLS_CHANGED must recover.
+eventHandler(nil, "SPELLS_CHANGED")
+if retail then
+    assert(K.SlotCount() == 1, "sacrificed Felhunter's player Spell Lock is missing")
+    assert(K.Cooldown(1) == cooldowns[SACRIFICE_LOCK], "sacrifice uses the pet cooldown")
+    local function CheckColor(red, green, message)
+        local r, g, b = K.RGBA(false)
+        assert(r == red and g == green and b == 0, message)
+    end
+    K.SetActive("audit", true)
+    CheckColor(0, 1, "ready sacrifice interrupt is not green")
+    local bookBefore, overrideBefore = reads, overrideReads
+    for i = 1, 1000 do K.SlotCount(); K.RGBA(false) end
+    assert(reads == bookBefore and overrideReads == overrideBefore, "warm paints re-resolve the interrupt")
+    frameStamp = frameStamp + 1
+    cooldowns[SACRIFICE_LOCK].remaining, cooldowns[SACRIFICE_LOCK].endTime = 24, frameStamp + 24
+    eventHandler(nil, "SPELL_UPDATE_COOLDOWN", SACRIFICE_LOCK, 119898)
+    CheckColor(1, 0, "sacrifice cooldown did not turn red")
+    assert(wakeSets > 0 and wakeFrames[1].done, "sacrifice cooldown wake missing")
+    frameStamp = frameStamp + 24
+    cooldowns[SACRIFICE_LOCK].remaining = 0
+    wakeFrames[1].done()
+    CheckColor(0, 1, "sacrifice cooldown wake did not return to green")
+    commandOverride = 132411 -- a non-interrupt demon ability
+    knownSpells[SACRIFICE_LOCK] = true -- stale/book membership cannot override current Command Demon
+    eventHandler(nil, "UNIT_PET", "target")
+    assert(K.SlotCount() == 1, "another unit's pet change affected the player's interrupt")
+    eventHandler(nil, "SPELLS_CHANGED")
+    assert(K.SlotCount() == 0, "a different sacrificed demon admitted Spell Lock")
+    commandOverride, petSpells[PET_LOCK] = 119910, true
+    eventHandler(nil, "UNIT_PET", "player")
+    assert(K.SlotCount() == 1 and K.Cooldown(1) == cooldowns[PET_LOCK], "resummoned Felhunter kept sacrifice cooldown")
+    commandOverride, petSpells[PET_LOCK] = 119898, nil
+    eventHandler(nil, "UNIT_PET", "player")
+    assert(K.SlotCount() == 0, "dismissed Felhunter retained sacrifice interrupt")
+    specID, commandOverride = 265, SACRIFICE_LOCK
+    eventHandler(nil, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(K.SlotCount() == 1, "Affliction sacrifice interrupt missing")
+    commandOverride = { secret = true }
+    eventHandler(nil, "SPELLS_CHANGED")
+    assert(K.SlotCount() == 0, "unreadable override admitted an interrupt")
+    local getOverride = _G.C_Spell.GetOverrideSpell
+    _G.C_Spell.GetOverrideSpell = nil
+    eventHandler(nil, "SPELLS_CHANGED")
+    assert(K.SlotCount() == 1, "learned sacrifice spell fallback missing without override API")
+    knownSpells[SACRIFICE_LOCK] = nil
+    _G.C_SpellBook.IsSpellKnownOrInSpellBook = function() return true end
+    eventHandler(nil, "SPELLS_CHANGED")
+    assert(K.SlotCount() == 0, "fallback admitted an unlearned spellbook entry")
+    _G.C_Spell.GetOverrideSpell = getOverride
+    _G.C_SpellBook.IsSpellKnownOrInSpellBook = nil
+    K.SetActive("audit", false)
+else
+    assert(K.SlotCount() == 0 and overrideReads == 0, "Retail sacrifice resolution leaked onto another client")
+end
+commandOverride = 119898
 classToken = "DRUID"; knownSpells[16979], knownSpells[106839] = true, true
 _G.C_SpecializationInfo.GetSpecializationInfo = function() return 103 end
 usable, power = false, false; _G.MSUF_KickReady_RefreshAll()

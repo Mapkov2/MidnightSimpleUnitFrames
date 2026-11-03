@@ -1,5 +1,12 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.506-beta2 - 2026-11-03
+
+### Bug Fixes
+
+- Fixed Warlock interrupt readiness staying red after sacrificing a Felhunter with Grimoire of Sacrifice. Spell Lock now follows the granted player ability and its cooldown, and returns to the pet ability when the Felhunter is summoned again.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_interrupt_ready","controlId":"menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target","settingKey":"general.kickReadyShowTarget","prepareKind":"","prepareValue":"","query":"show on target castbar","label":"Show on Target castbar"} -->
+
 ## 6.506-beta1 - 2026-11-03
 
 ### Improvements

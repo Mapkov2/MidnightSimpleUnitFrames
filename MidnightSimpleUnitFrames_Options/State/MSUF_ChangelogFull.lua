@@ -8,40 +8,29 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9E0BFC580CFB21D94A3A8949D2EE34090EF376EBA2911CD370E0F3649DFC1B4B",
-    currentVersion = "6.506-beta1",
+    sourceSha256 = "97EC5C12DA578DF0DDE2500759380DB4BB97B4D376BD69790EC20505C00E9D0C",
+    currentVersion = "6.506-beta2",
     historyFromVersion = "6.02",
     previousVersion = "6.505",
-    rangeLabel = "6.505 -> 6.506-beta1",
+    rangeLabel = "6.505 -> 6.506-beta2",
     entries = {
         {
-            version = "6.506-beta1",
+            version = "6.506-beta2",
             date = "2026-11-03",
             sections = {
-                {
-                    title = "Improvements",
-                    bullets = {
-                        {
-                            text = "Expanded detached power-bar dimensions to widths of 10-800 and heights of 2-800. Menu controls, Edit Mode and previews use the same limits, and detached resource previews follow vertical and reversed fill directions.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "detached power width",
-                                label = "Power width",
-                                sectionId = "classpower_detached_power",
-                                controlId = "menu2.classpower.advanced.detached.power.layout.width",
-                                settingKey = "player.detachedPowerBarWidth",
-                                prepareKind = "classPowerWorkspace",
-                                prepareValue = "power",
-                            },
-                        },
-                    },
-                },
                 {
                     title = "Bug Fixes",
                     bullets = {
                         {
-                            text = "Fixed normal Player casts disappearing when a late stop event belongs to an earlier cast and carries no cast-bar ID. Uncertain stop events now confirm the active cast before hiding the bar.",
-                            linkless = true,
+                            text = "Fixed Warlock interrupt readiness staying red after sacrificing a Felhunter with Grimoire of Sacrifice. Spell Lock now follows the granted player ability and its cooldown, and returns to the pet ability when the Felhunter is summoned again.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "show on target castbar",
+                                label = "Show on Target castbar",
+                                sectionId = "castbar_interrupt_ready",
+                                controlId = "menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target",
+                                settingKey = "general.kickReadyShowTarget",
+                            },
                         },
                     },
                 },
