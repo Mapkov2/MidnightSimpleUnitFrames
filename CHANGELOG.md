@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-alpha3 - 2026-11-03
+
+### Resource bars and previews
+
+- Added resource marks based on a selected spell's resource cost, with matching options and previews.
+<!-- msuf-menu-link: none -->
+- Expanded detached power-bar dimensions and corrected vertical and reversed preview fills.
+<!-- msuf-menu-link: none -->
+- Improved unit and group preview selection, resizing, layer order, status examples, aura placement and cleanup.
+<!-- msuf-menu-link: none -->
+
+### Castbars and interrupt readiness
+
+- Fixed Warlock Spell Lock readiness with Grimoire of Sacrifice and switching back to the Felhunter.
+<!-- msuf-menu-link: none -->
+- Fixed stale player cast-stop events and channel transitions, and corrected independent focus castbar colors and preview sizing.
+<!-- msuf-menu-link: none -->
+
+### Menu, search and compatibility
+
+- Improved search results for scoped settings and dropdown choices, including links that open the correct menu context.
+<!-- msuf-menu-link: none -->
+- Improved Edit Mode and preview update scheduling, color shortcuts and frame-background updates.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-alpha2 - 2026-10-31
 
 Test build for Midnight, WoW Forever, Classic Era, TBC and Mists. Please report issues found while trying the new tools and previews.

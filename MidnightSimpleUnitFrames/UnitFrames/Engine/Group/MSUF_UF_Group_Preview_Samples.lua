@@ -9,7 +9,8 @@ local SetShown = Style.SetShown
 local SetText = Style.SetText
 local Layout = assert(GF.PreviewLayout, "Group preview requires PreviewLayout")
 local NormalizeKind = Layout.NormalizeKind
-local GetPreviewAnimationFrameState = MSUF.Require("MSUF_GetPreviewAnimationFrameState", "GroupFrames/Preview")
+local Animation = assert(MSUF.PreviewAnimation, "Group preview requires PreviewAnimation")
+local GetPreviewAnimationFrameState = Animation.FrameState
 local UnitName = UnitName
 local issecretvalue = issecretvalue
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
@@ -147,7 +148,9 @@ local PREVIEW_TEXT_REGIONS = {
 }
 
 local function ClearPreviewTexts(frame)
-  for i = 1, #PREVIEW_TEXT_REGIONS do SetText(frame[PREVIEW_TEXT_REGIONS[i]], "") end
+  -- Use the runtime writer so its cached glyph value agrees with the region.
+  -- Clearing only the native text would make an unchanged sample skip repaint.
+  for i = 1, #PREVIEW_TEXT_REGIONS do MSUF.UFText.SetTextCached(frame[PREVIEW_TEXT_REGIONS[i]], "") end
 end
 
 local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class, absorb, isolated)
@@ -416,7 +419,7 @@ local function ApplyPreviewData(frame, slot, kind, scene)
   if isolatedScene then
     -- The scene's own clock, not the shared preview animation: scenes animate only while their owner hands one over.
     if elapsed then
-      animState = Dep("MSUF_BuildPreviewAnimationFrameState")(frame, index, kind, frame._msufGFPreviewAnimState or {},
+      animState = Animation.BuildFrameState(frame, index, kind, frame._msufGFPreviewAnimState or {},
         elapsed, frame.MSUFSpec.health.chunked == true, frame.MSUFSpec.power.chunked == true)
     end
   elseif PreviewAnimationActive() then
@@ -444,7 +447,8 @@ local function ApplyPreviewData(frame, slot, kind, scene)
   local powerBar = frame.targetPowerBar or frame.powerBar or frame.Power or frame.power
   -- The layer only hides the drawn bar; the health geometry keeps following the
   -- settings, so switching the chip never fakes a layout change on the dummies.
-  if powerBar and (not powerBar.IsShown or powerBar:IsShown()) then
+  local powerSpec = frame.MSUFSpec and frame.MSUFSpec.power
+  if powerBar and powerSpec and powerSpec.enabled == true then
     if PreviewLayerOn("power", scene) then
       local color = sample and sample.powerColor
       if color then

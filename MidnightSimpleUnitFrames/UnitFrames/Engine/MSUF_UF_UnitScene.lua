@@ -278,6 +278,30 @@ local LAYER_REGIONS = {
     "petHappinessIndicatorHolder", "petXPBar", "threatIndicatorHolder", "stanceIndicatorText", "_msufScene_statusText", "_msufScene_statusGhostText",
     "_msufScene_statusAFKText", "_msufScene_statusDNDText" },
 }
+-- Layer chips ask whether runtime content exists, independently of the filter
+-- that temporarily hides it. The scene owns both the regions and that filter.
+-- Holders supply geometry, but only their painted children supply content.
+function Scene:IsRegionShown(region, includeFiltered)
+  if not region then return false end
+  if not (region:IsShown() or (includeFiltered and self.hidden and self.hidden[region])) then return false end
+  local frame = self.frame
+  if region == frame.threatIndicatorHolder then
+    return frame.threatIndicatorText and frame.threatIndicatorText:IsShown() or false
+  end
+  if region == frame.petHappinessIndicatorHolder then
+    return frame.petHappinessIndicatorIcon and frame.petHappinessIndicatorIcon:IsShown() or false
+  end
+  return true
+end
+function Scene:HasLayerContent(layer)
+  local fields, frame = LAYER_REGIONS[layer], self.frame
+  if not (fields and frame) then return false end
+  for i = 1, #fields do
+    local region = frame[fields[i]]
+    if self:IsRegionShown(region, true) then return true end
+  end
+  return false
+end
 function Scene:RestoreLayers()
   if self.hidden then
     for region in pairs(self.hidden) do
@@ -384,6 +408,12 @@ function Scene:Compile()
   if not self.spec or changed or self.serial ~= UF.Config.serial then
     self.serial = UF.Config.serial
     self.spec = UF.Config.CompileSpec(self.unit, self.spec)
+    -- The private scene previews configured icons even outside their live context.
+    local status = self.spec and self.spec.status
+    if status and status.pvp then
+      status.pvp.enabled = status.pvp.configuredEnabled == true
+      status.enabled = status.enabled or status.pvp.enabled
+    end
     local p = self.spec and self.spec.portrait
     if p and p.blizzardCorner then
       if MSUF.Client.IsVanilla then self.cornerAvailable = false end
@@ -462,7 +492,8 @@ function Scene:RefreshData(layout)
     self.animatedSample = animated
     for key in pairs(animated) do animated[key] = nil end
     for key, value in pairs(sample) do animated[key] = value end
-    local state = MSUF.Require("MSUF_BuildPreviewAnimationFrameState", FILE)(frame, 1, unit, self.animationState or {},
+    -- UnitScene loads before the animation provider; resolve its namespace at use.
+    local state = MSUF.PreviewAnimation.BuildFrameState(frame, 1, unit, self.animationState or {},
       self.root.elapsed, spec.health and spec.health.chunked == true, spec.power and spec.power.chunked == true)
     self.animationState = state
     animated.hp, animated.power = state.hpPct, state.powerPct

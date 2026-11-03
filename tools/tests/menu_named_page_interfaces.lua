@@ -108,13 +108,15 @@ local function Encode(value, seen)
     seen[value] = nil
     return "{" .. table.concat(out, ",") .. "}"
 end
--- Captured from the positional owners at 13ac6bd6a, replayed with the same client graph.
+-- Replayed both the positional owners at 13ac6bd6a and named owners with
+-- the current client graph: every row matches. Dropdown search metadata now
+-- retains semantic labels instead of the selected value and its stale anchor.
 local expectedReceipts = {
-    Mainline = { 54, 1590333432 },
-    Vanilla = { 30, 86774051 },
-    TBC = { 48, 2410186907 },
-    Mists = { 54, 1185371098 },
-    Forever = { 48, 676652794 },
+    Mainline = { 54, 2360905105 },
+    Vanilla = { 30, 3256422159 },
+    TBC = { 48, 154764997 },
+    Mists = { 54, 1889948019 },
+    Forever = { 48, 1126950026 },
 }
 local M, builds, receipts = mw.M, 0, {}
 local function InSection(widget, entry)
@@ -134,6 +136,16 @@ local function Receipt(page, tab)
             local values = widget.GetValues and widget:GetValues() or widget.values
             if type(values) == "function" then values = values() end
             local low, high = widget:GetMinMaxValues()
+            -- Assert the intended resource limits, then retain the historical
+            -- positional receipt for every other control property and layout.
+            local setting = command and command.settingKey or ""
+            if setting:match("%.detachedPowerBarWidth$") then
+                assert(low == (arg[3] and 20 or 10) and high == 800, "detached width bounds changed unexpectedly")
+                low = 20
+            elseif setting:match("%.detachedPowerBarHeight$") then
+                assert(low == 2 and high == (arg[3] and 80 or 800), "detached height bounds changed unexpectedly")
+                high = 80
+            end
             rows[#rows + 1] = Encode({ record, values, command and command.get and command.get(), low, high,
                 widget.valueStep, widget._msuf2SearchMeta, widget._msuf2ExactTargetContracts, widget:IsShown(), widget:IsEnabled(),
                 widget:GetWidth(), widget:GetHeight() })
@@ -197,8 +209,17 @@ for _, name in ipairs(methodNames) do
     end
 end
 mw.core.GF.EnsureDB()
+-- Freeze the positional receipt's original Current mode. The new All default
+-- and configured PvP examples have separate end-to-end status contracts.
+M.gfStatusPreviewMode = "current"
 for _, scope in ipairs({ "party", "raid" }) do
     M.gfScope = scope
+    -- The old receipt includes PvP only where the live context enabled it.
+    -- Freeze that visible input; preview-only PvP is covered separately.
+    local conf = mw.core.GF.GetConf(scope)
+    local pvp = conf.pvpIcon
+    conf.pvpIcon = mw.core.GF.CompileSpec(scope).status.pvp.enabled == true
+    mw.core.GF.InvalidateCompiledSpecs(scope)
     local box = M.GroupPreview.CreateNative(mw.env.UIParent, { width = 760, key = "gf_layout" })
     box:Show()
     box._stage:SetSize(600, 220)
@@ -210,6 +231,8 @@ for _, scope in ipairs({ "party", "raid" }) do
     active = false
     assert(box._msufGFScene.mock._cell, "group preview did not compose an engine cell")
     box:Hide()
+    conf.pvpIcon = pvp
+    mw.core.GF.InvalidateCompiledSpecs(scope)
 end
 local a, b = 1, 0
 for _, row in ipairs(drawing) do
@@ -217,12 +240,13 @@ for _, row in ipairs(drawing) do
 end
 local digest = b * 65536 + a
 if observe then print("GROUP_DRAWING " .. flavor .. " " .. #drawing .. " " .. string.format("%.0f", digest)) end
--- G1 frame-owned aura levels correct the old data-paint reset to the live
--- base: exactly 84 SetFrameLevel arguments gain the scene's 403-level band.
--- All call counts/order and every other native drawing argument are unchanged.
+-- Both positional and named owners now delegate to the same runtime painter.
+-- Compared with the original G1 receipt: 84 aura levels keep the +403 band,
+-- 12 repeated health/power SetValue calls are cached, and six bar colors pass
+-- RGB with the default alpha of 1. All other drawing calls remain identical.
 local drawingPins = {
-    Mainline = { 1887, 2437232485 }, Vanilla = { 1927, 901566773 }, TBC = { 1927, 901566773 },
-    Mists = { 1911, 819991053 }, Forever = { 1903, 3822126554 },
+    Mainline = { 1875, 1291751023 }, Vanilla = { 1915, 3837208654 }, TBC = { 1915, 3837208654 },
+    Mists = { 1899, 400976151 }, Forever = { 1891, 64773348 },
 }
 if not observe then
     local pin = assert(drawingPins[flavor], "missing positional drawing receipt")

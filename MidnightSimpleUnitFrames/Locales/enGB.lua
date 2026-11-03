@@ -8,6 +8,8 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
+L["Focus override"] = "Focus override"
+L["Focus interruptible cast color"] = "Focus interruptible cast color"
 L["Icon height (percent)"] = "Icon height (percent)"
 
 -- Reviewed Edit Mode, setup and client-capability labels.
@@ -5239,6 +5241,15 @@ L["Align"] = "Align"
 
 L["Right-click focus in combat"] = "Right-click focus in combat"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."
+
+L["Guides preview layer"] = "Guides preview layer"
+L["Add custom group spell indicator"] = "Add custom group spell indicator"
+
+L["Spell minimum cost (out of combat)"] = "Spell minimum cost (out of combat)"
+L["Spell ID, link or name"] = "Spell ID, link or name"
+L["Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."] = "Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."
+L["No readable spell cost for this bar."] = "No readable spell cost for this bar."
+L["Minimum cost: %s (%s)."] = "Minimum cost: %s (%s)."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)

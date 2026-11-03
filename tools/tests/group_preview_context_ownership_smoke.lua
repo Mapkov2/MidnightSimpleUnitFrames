@@ -20,7 +20,7 @@ local function New(name, class, clock)
     group:Configure({ sample = { name = name, class = class, hpPct = 0.25,
         statusRegions = { { field = "levelText", shown = true, text = name .. " level" } } } })
     owner:Activate()
-    h:RunTimers()
+    h:RunDeferred()
     if clock then owner:SetClock(clock, true) end
     return owner, group
 end
@@ -30,11 +30,12 @@ local outerFrames, innerFrames = outer:Frames(), inner:Frames()
 assert(#outerFrames == 2 and #innerFrames == 2, "scene fixture did not build its rows")
 assert(outerFrames[2]._msufGFPreviewClass == "MAGE", "uninterrupted scene sample did not apply")
 
-local observed, sample = {}, core.Require("MSUF_BuildPreviewAnimationFrameState", "preview context test")
-core.ExportPublic("MSUF_BuildPreviewAnimationFrameState", function(frame, index, kind, state, elapsed)
+local animation = assert(core.PreviewAnimation)
+local observed, sample = {}, animation.BuildFrameState
+animation.BuildFrameState = function(frame, index, kind, state, elapsed, ...)
     observed[frame] = elapsed
-    return sample(frame, index, kind, state, elapsed)
-end)
+    return sample(frame, index, kind, state, elapsed, ...)
+end
 local first = outerFrames[1].hpBar or outerFrames[1].Health or outerFrames[1].health
 local setValue, entered = first.SetValue, false
 first.SetValue = function(self, ...)
@@ -104,11 +105,11 @@ assert(default._msufGFPreviewScene == nil, "default release retained its paint o
 assert(outer:Show(12))
 h:EnterCombat()
 GF.HidePreviewsForCombat()
-h:RunTimers()
+h:RunDeferred()
 assert(not outer:IsActive() and not inner:IsActive(), "queued cold work survived combat release")
 assert(held._msufGFPreviewScene == nil and innerFrames[1] == nil, "combat retained an active frame binding")
 h:LeaveCombat()
-h:RunTimers()
+h:RunDeferred()
 assert(outer:IsActive() and #outer:Frames() == 12 and inner:IsActive(), "combat restore lost per-scene wanted counts")
 assert(outer:Frames()[1]._msufGFPreviewScene == outer and inner:Frames()[1]._msufGFPreviewScene == inner,
     "combat restore crossed pool ownership")

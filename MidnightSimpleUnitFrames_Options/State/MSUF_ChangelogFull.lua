@@ -8,75 +8,55 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "13D3DF4ABE6F6707B88495CB932580DE52162418702D8765D6A11E707C6CFCB1",
-    currentVersion = "7.0-alpha2",
+    sourceSha256 = "C4B58CA704C3CC31E1C0DDB39FD7FC516E8A25D854B0A0A631C5BC901B4413BD",
+    currentVersion = "7.0-alpha3",
     historyFromVersion = "6.02",
     previousVersion = "6.50",
-    rangeLabel = "6.50 -> 7.0-alpha2",
+    rangeLabel = "6.50 -> 7.0-alpha3",
     entries = {
         {
-            version = "7.0-alpha2",
-            date = "2026-10-31",
+            version = "7.0-alpha3",
+            date = "2026-11-03",
             sections = {
                 {
-                    title = "Profiles and Edit Mode",
+                    title = "Resource bars and previews",
                     bullets = {
                         {
-                            text = "Profile workbench: create and restore named restore points, inspect changed settings and their sources, and review imported settings before applying selected changes.",
+                            text = "Added resource marks based on a selected spell's resource cost, with matching options and previews.",
                             linkless = true,
                         },
                         {
-                            text = "Display and accessibility tools: save layouts for your display, try color-vision presets, and inspect why an element is hidden.",
+                            text = "Expanded detached power-bar dimensions and corrected vertical and reversed preview fills.",
                             linkless = true,
                         },
                         {
-                            text = "Move several elements together: select multiple Edit Mode elements, move and align them together, and undo or redo the selection's layout changes.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Shared history: profile restores and undo/redo now include supported Suite settings while preserving profile variant overrides.",
+                            text = "Improved unit and group preview selection, resizing, layer order, status examples, aura placement and cleanup.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Frames, previews and search",
+                    title = "Castbars and interrupt readiness",
                     bullets = {
                         {
-                            text = "Animated previews: group and unit samples follow the live health and power loss effects, with corrected scene ownership, aura samples, level displays and preview cleanup.",
+                            text = "Fixed Warlock Spell Lock readiness with Grimoire of Sacrifice and switching back to the Felhunter.",
                             linkless = true,
                         },
                         {
-                            text = "More reliable frames: settled raid rosters refresh status information correctly; instance scale changes reanchor affected layouts, and failed frame updates remain pending for retry.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Cast and aura feedback: improved interrupt-ready updates and cleanup, dispel highlights, and aura effect attachment across supported clients.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Tooltips and texture layers: improved Raider.IO information on unit tooltips and added class-color or NPC-type tinting for cosmetic texture layers.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Find settings more easily: expanded search coverage for status indicators, dropdown choices, preview controls and Suite-owned settings, with corrected result routing and page context.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Menu layout: corrected section bounds, sticky headers, scope selectors, group target editing and profile page selection layouts.",
+                            text = "Fixed stale player cast-stop events and channel transitions, and corrected independent focus castbar colors and preview sizing.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Performance and compatibility",
+                    title = "Menu, search and compatibility",
                     bullets = {
                         {
-                            text = "Reduced repeated aura alpha, portrait, text-layer and interrupt-ready writes when the displayed state is unchanged.",
+                            text = "Improved search results for scoped settings and dropdown choices, including links that open the correct menu context.",
                             linkless = true,
                         },
                         {
-                            text = "Improved profile snapshot copying, group preview reuse and menu refreshes; updated translations and client-specific load declarations.",
+                            text = "Improved Edit Mode and preview update scheduling, color shortcuts and frame-background updates.",
                             linkless = true,
                         },
                     },

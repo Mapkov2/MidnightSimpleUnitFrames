@@ -44,7 +44,7 @@ assert(command.set == existing, "declaration rebound an existing compound comman
 for _, row in ipairs({
     { "reset_aura_colors", "general.aurasCooldownTextSafeColor.r", 8 },
     { "reset_bar_colors", "general.barOutlineColorA", 44 },
-    { "reset_castbar_colors", "general.castbarFontR", 34 },
+    { "reset_castbar_colors", "general.castbarFontR", 36 },
     { "reset_unitframe_colors", "general.petFrameUsePlayerClassColor", 7 },
     { "reset_portrait_colors", "boss.portraitBgColorB", 56 },
 }) do
@@ -53,6 +53,9 @@ for _, row in ipairs({
     assert(not S.MatchesWrite(spec, "general.unrelated") and not S.MatchesWrite(spec, "player.unrelated"),
         row[1] .. ": reset admitted unrelated profile siblings")
 end
+spec = Declare({ actionKey = "reset_castbar_colors" })
+assert(S.MatchesWrite(spec, "general.focusCastbarOverrideEnabled")
+    and S.MatchesWrite(spec, "general.focusCastbarOverrideColor"), "focus color reset fields missing")
 M.ClassPowerWorkspace = { QuickWriteKeys = { bars = { "height" }, player = { "showPowerBar" } } }
 spec = Declare({ actionKey = "class_power_quick_setup" })
 assert(#spec.writes.keys == 3 and S.MatchesWrite(spec, "bars.height") and not S.MatchesWrite(spec, "bars.unrelated"),

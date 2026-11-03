@@ -112,9 +112,9 @@ end, afterFile = function(world, path)
     -- stand-in installed right after its owner and before the preview: it answers like the real one until a
     -- section sets `samplerOverride`.
     if path:find("UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua", 1, true) then
-        local view = assert(loadfile(root .. "/tools/tests/namespace_view.lua"))()(world.world)
-        local real = view.MSUF_GetPreviewAnimationFrameState
-        view.MSUF_GetPreviewAnimationFrameState = function(...)
+        local animation = assert(world.world.core.PreviewAnimation)
+        local real = animation.FrameState
+        animation.FrameState = function(...)
             if samplerOverride then return samplerOverride(...) end
             return real(...)
         end
@@ -186,7 +186,7 @@ end
 -- The release tier drives the native combat route; direct fixture DB writes
 -- must first refresh the runtime's event subscription as a real setter does.
 if arg[3] == "release" then GF.RefreshHeaderLayout() end
-h:RunTimers()
+h:RunDeferred()
 Check(Queued() == 0, "the timer queue was not idle before the test")
 
 ---------------------------------------------------------------------------
@@ -194,14 +194,14 @@ Check(Queued() == 0, "the timer queue was not idle before the test")
 ---------------------------------------------------------------------------
 armed = true
 GF.ShowPreview("party", 3, { immediate = true })
-h:RunTimers()
+h:RunDeferred()
 armed = false
 local controlNames = {}
 for _, name in ipairs(seen) do controlNames[name] = true end
 Check(controlNames.UnitName == true and controlNames.UnitExists == true, "the spy missed the on-screen dummy's unit calls; it is blind")
 Check(controlNames.UnitLevel == true, "the spy missed the on-screen dummy's level lookup; it is blind")
 GF.HidePreview("party")
-h:RunTimers()
+h:RunDeferred()
 seen, detail = {}, {}
 
 ---------------------------------------------------------------------------
@@ -227,7 +227,7 @@ Check(Queued() == 0, "a config signal reached an inactive root")
 local paints = CountPaints(rootA)
 Check(rootA:Activate() == true and rootA:IsActive(), "activate failed")
 Check(rootA:Activate() == false, "a second activate did something")
-h:RunTimers()
+h:RunDeferred()
 Check(groupA:IsActive() and Shown(groupA) == 4 and groupRaid:IsActive() and Shown(groupRaid) == 12, "activate did not show the wanted groups")
 Check(#paints == 1 and paints[1] == "activate", "activate painted " .. #paints .. " times")
 Check(Subscribed("CONFIG_APPLIED", key) and Subscribed("PLAYER_REGEN_ENABLED", key), "an active root did not subscribe")
@@ -243,7 +243,7 @@ end
 for _ = 1, 6 do Bus:Publish("CONFIG_APPLIED", "MSUF_Test") end
 Check(Queued() == 1, "six config signals queued " .. Queued() .. " repaints, not one")
 Check(#paints == 1, "a config signal painted before the next frame")
-h:RunTimers()
+h:RunDeferred()
 Check(#paints == 2 and paints[2] == "config", "the coalesced repaint did not run once with its reason")
 Check(Shown(groupA) == 4 and Shown(groupRaid) == 12, "the repaint changed what is shown")
 
@@ -257,10 +257,10 @@ Check(not groupA:IsActive() and not groupRaid:IsActive(), "combat left a group a
 Check(rootA.host.active == true and groupA.want == 4 and groupRaid.want == 12, "combat made the root forget its groups")
 local before = #paints
 Bus:Publish("CONFIG_APPLIED", "MSUF_Test")
-h:RunTimers()
+h:RunDeferred()
 Check(#paints == before and not groupA:IsActive(), "a repaint ran during combat")
 h:LeaveCombat()
-h:RunTimers()
+h:RunDeferred()
 Check(#paints == before + 1 and paints[#paints] == "regen", "combat end did not request one repaint")
 Check(groupA:IsActive() and Shown(groupA) == 4 and groupRaid:IsActive() and Shown(groupRaid) == 12, "combat end did not bring the groups back")
 -- A group the owner hid on purpose stays hidden through combat.
@@ -269,17 +269,17 @@ Check(groupRaid.want == nil, "an explicit hide kept the wanted count")
 h:EnterCombat()
 GF.HidePreviewsForCombat()
 h:LeaveCombat()
-h:RunTimers()
+h:RunDeferred()
 Check(groupA:IsActive() and not groupRaid:IsActive(), "combat end showed a group the owner had hidden")
 rootA:Group("raid", 12)
-h:RunTimers()
+h:RunDeferred()
 Check(groupRaid:IsActive(), "asking for a group on an active root did not show it")
 -- A count the owner sets on the group itself is the count combat brings back.
 Check(groupRaid:Show(10, { immediate = true }) and Shown(groupRaid) == 10, "showing a group directly failed")
 h:EnterCombat()
 GF.HidePreviewsForCombat()
 h:LeaveCombat()
-h:RunTimers()
+h:RunDeferred()
 Check(groupRaid:IsActive() and Shown(groupRaid) == 10, "combat end did not bring back the count the owner showed last (" .. Shown(groupRaid) .. ")")
 
 ---------------------------------------------------------------------------
@@ -288,7 +288,7 @@ Check(groupRaid:IsActive() and Shown(groupRaid) == 10, "combat end did not bring
 local rootB = GF.NewPreviewScene(host)
 local groupB = rootB:Group("party", 4)
 rootB:Activate()
-h:RunTimers()
+h:RunDeferred()
 local function StaticHp(index)
     return math.floor(math.min(0.95, 0.34 + (((index * 13) % 55) * 0.01)) * 100 + 0.5)
 end
@@ -310,14 +310,14 @@ do
     -- Control: the on-screen dummy does ask for the animation state (and, unlike a scene, the client: not spied here).
     armed = false
     GF.ShowPreview("party", 2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     GF.HidePreview("party")
     armed = true
     Check(asked > 0, "the on-screen dummy never asked the shared animation; the control is blind")
     PA.IsEnabled, samplerOverride = isEnabled, nil
 end
 rootA:Deactivate()
-h:RunTimers()
+h:RunDeferred()
 Check(Queued() == 0, "a deactivated root keeps a timer")
 
 ---------------------------------------------------------------------------
@@ -332,12 +332,12 @@ local quiet = #paints
 Bus:Publish("CONFIG_APPLIED", "MSUF_Test")
 h:EnterCombat()
 h:LeaveCombat()
-h:RunTimers()
+h:RunDeferred()
 Check(#paints == quiet and Queued() == 0, "a deactivated root repainted")
 Check(rootB:IsActive() and groupB:IsActive(), "deactivating one root touched another")
 -- Activate again: the wanted groups return.
 rootA:Activate()
-h:RunTimers()
+h:RunDeferred()
 Check(groupA:IsActive() and Shown(groupA) == 4, "re-activate did not bring the groups back")
 
 -- The compact release tier reuses the complete lifecycle above and adds the
@@ -360,7 +360,7 @@ if arg[3] == "release" then
     local all = { groupA, groupRaid }
     if h.core.Client.SupportsGroupKind("mythicraid") then
         all[#all + 1] = rootA:Group("mythicraid", 20)
-        h:RunTimers()
+        h:RunDeferred()
     end
     local retained = {}
     for _, scene in ipairs(all) do
@@ -374,13 +374,13 @@ if arg[3] == "release" then
         end
     end
     h:EnterCombat()
-    h:RunTimers()
+    h:RunDeferred()
     for _, scene in ipairs(all) do Check(Visible(scene) == 0, "scene remained visible in combat") end
     h:LeaveCombat()
-    h:RunTimers()
+    h:RunDeferred()
     for _, scene in ipairs(all) do Check(Visible(scene) > 0, "scene failed to restore after combat") end
     rootA:Release()
-    h:RunTimers()
+    h:RunDeferred()
     for _, scene in ipairs(all) do Check(Visible(scene) == 0, "released scene left frames shown") end
     for _, frame in ipairs(retained) do Check(not FrameVisible(frame), "released engine frame remained visible") end
     Check(rootB:IsActive(), "closing one owner retired another")
@@ -398,7 +398,7 @@ groupA:RefreshAuras()
 groupA:RefreshSpellIndicators()
 groupA:Refresh({ immediate = true })
 rootA:Group("mythicraid", 20)
-h:RunTimers()
+h:RunDeferred()
 
 -- The sample name takes its colour from the row's sample class (class name colour on), the custom colour, or the
 -- frame's text colour, and asks the client nothing: called on its own, not one unit API is touched.
@@ -448,7 +448,7 @@ do
     general.nameClassColor, general.npcNameRed, general.nameNpcClassColor = false, false, false
     GF.InvalidateCompiledSpecs("party")
     groupA:Refresh({ immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     EveryFrame(function(frame)
         local c = frame.MSUFSpec.textColor
         return c and c.r or 1, c and c.g or 1, c and c.b or 1
@@ -457,7 +457,7 @@ do
     general.nameClassColor, general.nameColorMode, general.nameColorR, general.nameColorG, general.nameColorB = true, "CUSTOM", 0.25, 0.5, 0.75
     GF.InvalidateCompiledSpecs("party")
     groupA:Refresh({ immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     EveryFrame(function() return 0.25, 0.5, 0.75 end, "custom name colour")
     Check(#seen == 0, "painting a sample name called a unit API: " .. table.concat(detail, " | ", 1, math.min(#detail, 4)))
     general.nameColorMode = nil
@@ -489,7 +489,7 @@ do
             GF.InvalidateCompiledSpecs("party")
             seen, detail = {}, {}
             groupA:Refresh({ immediate = true })
-            h:RunTimers()
+            h:RunDeferred()
             Check(#seen == 0, label .. ": the portrait called a client API: " .. table.concat(detail, " | ", 1, math.min(#detail, 4)))
             local arts = {}
             for index, frame in ipairs(groupA:Frames()) do
@@ -522,7 +522,7 @@ do
 end
 rootA:Release()
 rootB:Release()
-h:RunTimers()
+h:RunDeferred()
 Check(Queued() == 0, "a released root keeps a timer")
 Check(not Subscribed("CONFIG_APPLIED", rootB.eventKey), "a released root kept a subscription")
 
@@ -540,7 +540,7 @@ do
         healPct = 0.2, absorbPct = 0.1, healAbsorbPct = 0.05, tempMaxPct = 0.25, powerColor = { 0.1, 0.2, 0.3 } }
     cell:Configure({ scale = 1.5, level = 40, role = "HEALER", sample = sample, bodyOnly = true })
     cell:Show(1, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     local frame = cell:Frames()[1]
     Check(frame and #cell:Frames() == 1, "the embedded scene did not show one row")
     Check(cell:Container():GetScale() == 1.5, "the embedded scene is not zoomed as a whole")
@@ -556,7 +556,7 @@ do
     -- A second sample repaints without a unit query; a clock animates the groups and nil returns them to the sample.
     sample.hpPct = 0.8
     cell:SetSample(sample)
-    h:RunTimers()
+    h:RunDeferred()
     Check(bar.value == 800000, "a new sample did not repaint the row")
     embedRoot:SetClock(2.5, true)
     cell:Refresh({ immediate = true })
@@ -565,9 +565,9 @@ do
     cell:Refresh({ immediate = true })
     Check(bar.value == 800000, "a cleared clock did not return the sample")
     cell:SetBodyOnly(false)
-    h:RunTimers()
+    h:RunDeferred()
     embedRoot:Release()
-    h:RunTimers()
+    h:RunDeferred()
 end
 
 ---------------------------------------------------------------------------
@@ -582,7 +582,7 @@ do
     local clocked, still = clockedRoot:Group("party", 3), stillRoot:Group("party", 3)
     clockedRoot:Activate()
     stillRoot:Activate()
-    h:RunTimers()
+    h:RunDeferred()
     local function StaticAt(index) return math.floor(math.min(0.95, 0.34 + (((index * 13) % 55) * 0.01)) * 100 + 0.5) end
     local function ExpectedHp(frame, index, elapsed)
         local state = env.MSUF_BuildPreviewAnimationFrameState(frame, index, "party", {}, elapsed)
@@ -593,7 +593,7 @@ do
     -- A clock repaints the active groups (no noRefresh) and the picture follows the builder at that time.
     for _, elapsed in ipairs({ 0.9, 2.5, 7.25 }) do
         clockedRoot:SetClock(elapsed)
-        h:RunTimers()
+        h:RunDeferred()
         local moved = false
         for index, frame in ipairs(clocked:Frames()) do
             Check(HpOf(frame) == ExpectedHp(frame, index, elapsed), "clock " .. elapsed .. ": row " .. index .. " does not follow the handed clock")
@@ -610,14 +610,14 @@ do
     clockedRoot:SetClock(11, true)
     Check(HpOf(clocked:Frames()[1]) == held, "a clock handed with noRefresh repainted the group")
     clocked:Refresh({ immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     Check(HpOf(clocked:Frames()[1]) == ExpectedHp(clocked:Frames()[1], 1, 11), "the owner's refresh did not use the clock it handed over")
     clockedRoot:SetClock(nil)
-    h:RunTimers()
+    h:RunDeferred()
     for index, frame in ipairs(clocked:Frames()) do Check(HpOf(frame) == StaticAt(index), "clearing the clock left row " .. index .. " animated") end
     clockedRoot:Release()
     stillRoot:Release()
-    h:RunTimers()
+    h:RunDeferred()
 end
 
 ---------------------------------------------------------------------------
@@ -644,7 +644,7 @@ do
     for _, class in ipairs({ "MAGE", "DRUID", "MAGE" }) do
         cell:Configure({ sample = { name = "Pinned", class = class } })
         cell:Show(1, { immediate = true })
-        h:RunTimers()
+        h:RunDeferred()
         local frame = cell:Frames()[1]
         Check(frame._msufPortraitSampleClass == class, class .. ": the frame kept the class of its slot (" .. tostring(frame._msufPortraitSampleClass) .. ")")
         Check(frame.portrait and frame.portrait._msufPortraitClassToken == class, class .. ": the portrait does not draw the pinned class")
@@ -653,7 +653,7 @@ do
         Check(color[1] == er and color[2] == eg and color[3] == eb, class .. ": the name is not in the pinned class colour")
     end
     pinRoot:Release()
-    h:RunTimers()
+    h:RunDeferred()
 end
 
 ---------------------------------------------------------------------------
@@ -679,12 +679,12 @@ do
     local cell = fadeRoot:Group("party")
     -- Control: a scene that does not ask fades like a live frame, and so does the on-screen dummy.
     cell:Show(2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     local frame = cell:Frames()[1]
     Check(frame:GetAlpha() == 0.4, "a plain scene does not fade out of combat (" .. tostring(frame:GetAlpha()) .. "); the control is blind")
     armed = false
     GF.ShowPreview("party", 2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     local dummy = GF._previewFrames.party and GF._previewFrames.party[1]
     Check(dummy and dummy:GetAlpha() == 0.4, "the on-screen dummy does not fade out of combat; the live control is blind")
     GF.HidePreview("party")
@@ -692,7 +692,7 @@ do
     -- The request: the frame is at full alpha, with the health bar opacity and the shared spec untouched.
     cell:Configure({ ignoreOocFade = true })
     cell:Show(2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     for index, f in ipairs(cell:Frames()) do
         Check(f:GetAlpha() == 1, "row " .. index .. " faded out of combat although the scene ignores it (" .. tostring(f:GetAlpha()) .. ")")
         Check(f.MSUFSpec.alpha.oocFade == false and f.MSUFSpec.alpha.active == true and f.MSUFSpec.alpha.hpAlpha == 0.6,
@@ -705,11 +705,11 @@ do
     -- Flipping the request repaints: back to the fade, then to full alpha again.
     cell:Configure({ ignoreOocFade = false })
     cell:Show(2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     Check(frame:GetAlpha() == 0.4 and frame.MSUFSpec.alpha == shared.alpha, "withdrawing the request did not bring the fade back")
     cell:Configure({ ignoreOocFade = true })
     cell:Show(2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     Check(frame:GetAlpha() == 1, "asking again did not remove the fade")
     -- No health bar opacity: the fade is the only alpha setting, so the scene has no alpha element to run and the
     -- frame returns to full alpha when the request comes and to the fade when it goes.
@@ -717,22 +717,22 @@ do
     GF.InvalidateCompiledSpecs("party")
     cell:Configure({ ignoreOocFade = false })
     cell:Show(2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     Check(frame:GetAlpha() == 0.4, "without a health bar opacity the plain scene does not fade")
     cell:Configure({ ignoreOocFade = true })
     cell:Show(2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     Check(frame:GetAlpha() == 1 and frame.MSUFSpec.alpha.oocFade == false, "without a health bar opacity the request did not remove the fade")
     -- The fade switched off: the overlay is gone and the compiled lane is used as it is.
     party.oocFadeEnabled = false
     GF.InvalidateCompiledSpecs("party")
     cell:Show(2, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     Check(frame:GetAlpha() == 1 and frame.MSUFSpec.alpha == GF.CompileSpec("party").alpha, "a profile without the fade kept a scene alpha overlay")
     party.oocFadeEnabled, party.oocFadeAlpha, party.hpBarAlpha = nil, nil, savedHp
     GF.InvalidateCompiledSpecs("party")
     fadeRoot:Release()
-    h:RunTimers()
+    h:RunDeferred()
 end
 
 ---------------------------------------------------------------------------
@@ -750,7 +750,7 @@ do
     GF.InvalidateCompiledSpecs("party")
     cell:Configure({ sample = { name = "Absorb", class = "MAGE", hpPct = 0.5, hpMax = 1000000, absorb = 77000 }, bodyOnly = true })
     cell:Show(1, { immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     local frame = cell:Frames()[1]
     local text = MSUF.UFText
     local plain = text.UpdateTextSlots
@@ -762,18 +762,18 @@ do
         return plain(slots, count, current, max, ...)
     end
     cell:Refresh({ immediate = true })
-    h:RunTimers()
+    h:RunDeferred()
     Check(seen.health == 500000 and seen.healthAbsorb == 77000, "the combined health text did not get the sample absorb (" .. tostring(seen.healthAbsorb) .. ")")
     Check(seen.absorbSlots == 77000, "the absorb text did not get the sample absorb (" .. tostring(seen.absorbSlots) .. ")")
     seen = {}
     cell:SetSample({ name = "Absorb", class = "MAGE", hpPct = 0.5, hpMax = 1000000 })
-    h:RunTimers()
+    h:RunDeferred()
     Check(frame._msufTextRuntime.healthAbsorb == nil and seen.absorbSlots == nil, "a sample without an absorb kept the previous one")
     text.UpdateTextSlots = plain
     party.textLeft, party.textCenter, party.textRight = savedText[1], savedText[2], savedText[3]
     GF.InvalidateCompiledSpecs("party")
     absorbRoot:Release()
-    h:RunTimers()
+    h:RunDeferred()
 end
 
 ---------------------------------------------------------------------------
@@ -793,20 +793,20 @@ do
         GF.InvalidateCompiledSpecs(kind)
         local group = fitRoot:Group(kind)
         group:Show(1, { immediate = true })
-        h:RunTimers()
+        h:RunDeferred()
         local frame = group:Frames()[1]
         local container = group:Container()
         Check(container:GetHeight() > frame:GetHeight(), kind .. ": harness: the grouped layout is not a whole column (" .. container:GetHeight() .. " vs " .. frame:GetHeight() .. ")")
         group:Configure({ fit = true })
         group:Show(1, { immediate = true })
-        h:RunTimers()
+        h:RunDeferred()
         Check(container:GetWidth() == frame:GetWidth() and container:GetHeight() == frame:GetHeight(),
             kind .. ": a fitted container is not the size of its frame (" .. container:GetWidth() .. "x" .. container:GetHeight() .. ")")
         local layout = group:Layout()
         Check(layout:GetWidth() == frame:GetWidth() and layout:GetHeight() == frame:GetHeight(), kind .. ": a fitted layout is not the size of its frame")
         group:Configure({ fit = false })
         group:Show(1, { immediate = true })
-        h:RunTimers()
+        h:RunDeferred()
         Check(container:GetHeight() > frame:GetHeight(), kind .. ": withdrawing fit did not bring the grid footprint back")
         group:Hide()
         conf.preserveRaidGroups = saved
@@ -814,7 +814,7 @@ do
     end
     raid.preserveRaidGroups = savedPreserve
     fitRoot:Release()
-    h:RunTimers()
+    h:RunDeferred()
 end
 
 ---------------------------------------------------------------------------
@@ -838,7 +838,7 @@ do
             for _, reverse in ipairs({ false, true }) do
                 conf.groupGrowth = vertical and (reverse and "LEFT" or "RIGHT") or (reverse and "UP" or "DOWN")
                 group:Show(6, { immediate = true })
-                h:RunTimers()
+                h:RunDeferred()
                 local first, second = group:Frames()[1], group:Frames()[6]
                 local point, _, _, x, y = second:GetPoint(1)
                 local expected = vertical and ((growth == "DOWN" and "TOP" or "BOTTOM") .. (reverse and "RIGHT" or "LEFT"))
@@ -857,7 +857,7 @@ do
     conf.preserveRaidGroups = saved.preserveRaidGroups
     GF.InvalidateCompiledSpecs("raid")
     growthRoot:Release()
-    h:RunTimers()
+    h:RunDeferred()
 end
 
 -- 8. The spy saw nothing.

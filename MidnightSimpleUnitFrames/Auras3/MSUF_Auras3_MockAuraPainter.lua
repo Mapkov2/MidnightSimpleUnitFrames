@@ -7,8 +7,9 @@ local _, MSUF = ...
 local A3 = assert(MSUF.MSUF_Auras3)
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MockAuraPainter")
 -- Preview sample builders (UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua loads first).
-local BuildPreviewAnimationAuraState = MSUF.Require("MSUF_BuildPreviewAnimationAuraState", "Auras3/MockAuraPainter")
-local GetPreviewAnimationAuraState = MSUF.Require("MSUF_GetPreviewAnimationAuraState", "Auras3/MockAuraPainter")
+local Animation = assert(MSUF.PreviewAnimation, "Mock aura painter requires PreviewAnimation")
+local BuildPreviewAnimationAuraState = Animation.BuildAuraState
+local GetPreviewAnimationAuraState = Animation.AuraState
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local IGNORE_ATLAS_SIZE = TextureKitConstants and TextureKitConstants.IgnoreAtlasSize
 local type, tonumber, tostring = type, tonumber, tostring

@@ -611,12 +611,12 @@ function Page:BuildDetachedPower()
         { "flowToggle", "anchor", false, { "Anchor to Class Resource" }, field = "detachedPowerBarAnchorToClassPower", group = "detachedPlayer" },
         { "flowToggle", "sync", true, { "Sync width to Class Resource" }, field = "detachedPowerBarSyncClassPower", apply = ApplyDetachedPowerSource,
             group = "detachedPlayer" },
-        { "slider", "width", 0, { "Power width", 20, 800, 1, 300 }, field = "detachedPowerBarWidth", policy = "detachedPowerWidth",
+        { "slider", "width", 0, { "Power width", 10, 800, 1, 300 }, field = "detachedPowerBarWidth", policy = "detachedPowerWidth",
             apply = self:WithRefresh(ApplyDetachedPowerSource), group = "detachedPlayer" },
         { "slider", "orbSize", 54, { "Orb size", 20, 160, 1, 300 }, field = "detachedPowerOrbSize", group = "detachedPlayer" },
         { "slider", "x", 0, { "Power X", -1000, 1000, 1, 300 }, field = "detachedPowerBarOffsetX", group = "detachedPlayer" },
         { "slider", "y", -4, { "Power Y", -1000, 1000, 1, 300 }, field = "detachedPowerBarOffsetY", group = "detachedPlayer" },
-        { "slider", "height", 6, { "Power height", 2, 80, 1, 300 }, field = "detachedPowerBarHeight", group = "detachedPlayer" },
+        { "slider", "height", 6, { "Power height", 2, 800, 1, 300 }, field = "detachedPowerBarHeight", group = "detachedPlayer" },
         { "slider", "layer", 6, { "Player Power layer", 0, 30, 1, 300 }, field = "detachedPowerBarFrameLevelOffset", group = "detachedPlayer" },
     })
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync "

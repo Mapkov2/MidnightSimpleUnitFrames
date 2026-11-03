@@ -620,12 +620,12 @@ local function ButtonAt(parent, label, x, y, width, onClick, semanticPath)
             if M.RequestRefresh then M.RequestRefresh(nil, "advanced-colors-button") elseif M.Refresh then M.Refresh() end
         end)
     end
-    -- These two resets depend on the adjacent ephemeral selectors and have no
-    -- stable Search action contract. Keep them menu-executable but exclude
-    -- them from automatic Search mutation.
+    -- Search only navigates to these selector-dependent reset buttons.
     local classification = (semanticPath == "castbar.text_color.reset" or semanticPath == "status_text.color.reset")
         and "ephemeral" or "action"
-    RegisterControl(btn, Meta(semanticPath, classification), label, "button")
+    local meta = Meta(semanticPath, classification)
+    meta.searchIndexed = classification == "ephemeral"
+    RegisterControl(btn, meta, label, "button")
     return btn
 end
 local Card = W.ThemedControlCard

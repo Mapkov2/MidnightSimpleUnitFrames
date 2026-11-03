@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
 -- Reviewed Edit Mode, setup and client-capability labels.
+L["Focus override"] = "주시 대상 재정의"
+L["Focus interruptible cast color"] = "주시 대상 차단 가능 시전 색상"
 L["Player Name Position"] = "플레이어 이름 위치"
 L["Target Name Position"] = "대상 이름 위치"
 L["Focus Name Position"] = "주시 대상 이름 위치"
@@ -7483,6 +7485,15 @@ L["Align"] = "정렬"
 
 L["Right-click focus in combat"] = "전투 중 우클릭 주시 설정"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "전투 중 이 유닛 프레임을 우클릭하면 해당 유닛을 주시 대상으로 설정합니다. 전투 중이 아닐 때는 우클릭으로 상황별 메뉴를 엽니다."
+
+L["Guides preview layer"] = "미리 보기 안내선 레이어"
+L["Add custom group spell indicator"] = "사용자 지정 그룹 주문 표시기 추가"
+
+L["Spell minimum cost (out of combat)"] = "주문 최소 자원 소모량 (비전투 중)"
+L["Spell ID, link or name"] = "주문 ID, 링크 또는 이름"
+L["Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."] = "선택한 막대에 배운 주문의 최소 자원 소모량을 사용합니다. 비전투 중 주문 또는 특성 변경 후와 전투 종료 후 갱신됩니다. 전투 중 일시적인 소모량 변경은 추적하지 않습니다. 소모량을 확인할 수 없으면 표시선을 숨깁니다."
+L["No readable spell cost for this bar."] = "이 막대의 주문 자원 소모량을 확인할 수 없습니다."
+L["Minimum cost: %s (%s)."] = "최소 소모량: %s (%s)."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

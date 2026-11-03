@@ -320,7 +320,7 @@ do
             if child:GetObjectType() == "ScrollFrame" then scroll = child end
         end
         Check(hint and hint.text == (open and "Hide" or "View"), "cached Changelog hint disagrees with its card height")
-        Check(arrow and arrow.rotation == (open and math.pi * 0.5 or 0), "cached Changelog arrow disagrees with its card height")
+        Check(arrow and arrow.rotation == (open and math.pi * 0.5 or 0), "cached Changelog arrow disagrees with its card height: " .. tostring(arrow and arrow.rotation) .. " open=" .. tostring(open))
         Check(scroll and scroll:IsShown() == open, "cached Changelog content disagrees with its card height")
         Check(scroll:GetScrollChild() and scroll:GetScrollChild():GetHeight() > 1, "bundled release notes are missing")
         head:GetScript("OnEnter")(head)
@@ -367,6 +367,89 @@ do
     end
     Check(WidgetCount() == first, "warm Dashboard clicks allocated new frames or regions")
     Note("home real clicks, all 8 views x" .. CYCLES, "consistent disclosures; 0 widgets")
+    -- Clicks must animate the actual card stack in both directions. Reusing
+    -- cached views alone does not prove visible intermediate geometry.
+    local disclosures = {
+        { "changelog.disclosure", "dashboardChangelogOpen", 420 },
+        { "scaling.disclosure", "dashboardScalingOpen" },
+        { "display_recovery.disclosure", "dashboardRecoveryOpen" },
+    }
+    local function Tick(elapsed)
+        for frame in pairs(M.Theme._menuAnimationGroups) do
+            local update = frame.channels and frame.GetScript and frame:GetScript("OnUpdate")
+            if update and frame:IsVisible() then update(frame, elapsed) end
+        end
+    end
+    local function RawClick(path)
+        local head = Header(M.cache.home, path)
+        head:GetScript("OnClick")(head, "LeftButton")
+        return Header(M.cache.home, path).parent
+    end
+    for _, disclosure in ipairs(disclosures) do
+        local path, key = disclosure[1], disclosure[2]
+        Check(not M[key], "motion fixture must start collapsed")
+        local card = RawClick(path)
+        Check(card:GetHeight() == 42, path .. " opening jumped to its final height")
+        Tick(0.01)
+        local openingHeight = card:GetHeight()
+        local arrow = card._msuf2DashboardArrow
+        Check(arrow.rotation > 0 and arrow.rotation < math.pi * 0.5, path .. " arrow did not follow opening")
+        Check(card:DoesClipChildren(), path .. " moving content is not clipped")
+        Check(openingHeight > 42, path .. " opening never advanced")
+        Tick(0.2)
+        local expanded = card:GetHeight()
+        Check(expanded > openingHeight, path .. " opening has no intermediate height")
+        Check(not card:DoesClipChildren(), path .. " clipping was not restored after opening")
+        card = RawClick(path)
+        Check(card:GetHeight() == expanded, path .. " closing jumped to its final height")
+        Tick(0.01)
+        local closingHeight = card:GetHeight()
+        Check(closingHeight > 42 and closingHeight < expanded, path .. " closing has no intermediate height")
+        local reversed = RawClick(path)
+        Check(reversed == card and card:GetHeight() == closingHeight, path .. " rapid reversal jumped or replaced its card")
+        Tick(0.2)
+        Check(card:GetHeight() == expanded, path .. " reversal did not settle open")
+        RawClick(path)
+        Tick(0.2)
+        Check(Header(M.cache.home, path).parent:GetHeight() == 42, path .. " did not settle closed")
+        Settle()
+    end
+    env.MSUF_DB.general.reduceMotion = true
+    local reduced = RawClick("changelog.disclosure")
+    Check(reduced:GetHeight() == 420, "reduced-motion open did not snap")
+    reduced = RawClick("changelog.disclosure")
+    Check(reduced:GetHeight() == 42, "reduced-motion close did not snap")
+    env.MSUF_DB.general.reduceMotion = nil
+    RawClick("changelog.disclosure")
+    Tick(0.01)
+    Select("opt_misc")
+    Check(M.activeKey == "opt_misc", "hidden Dashboard motion stole navigation")
+    Select("home")
+    CheckChangelog(M.cache.home, true)
+    Click(Header(M.cache.home, "changelog.disclosure"))
+    -- Closing interrupted by another disclosure still ends in the requested
+    -- combination, and a hidden menu must settle without reopening itself.
+    RawClick("changelog.disclosure")
+    Tick(0.2)
+    RawClick("changelog.disclosure")
+    Tick(0.01)
+    RawClick("scaling.disclosure")
+    Tick(0.2)
+    Check(not M.dashboardChangelogOpen and M.dashboardScalingOpen, "cross-disclosure click lost the requested state")
+    Click(Header(M.cache.home, "scaling.disclosure"))
+    RawClick("changelog.disclosure")
+    Tick(0.2)
+    RawClick("changelog.disclosure")
+    Tick(0.01)
+    M.frame:Hide()
+    Check(not M.frame:IsShown(), "stopping a closing disclosure reopened the menu")
+    for frame in pairs(M.Theme._menuAnimationGroups) do
+        Check(not (frame.channels and frame.GetScript and frame:GetScript("OnUpdate")), "hidden menu retained an animation tick")
+    end
+    M.frame:Show()
+    Select("home")
+    CheckChangelog(M.cache.home, false)
+    Note("home disclosure motion", "open/close, reversal, reduced motion, navigation and shutdown")
 end
 
 do

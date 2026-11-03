@@ -777,6 +777,7 @@ local function BuildInlineClassPowerPreview(ctx, b)
     -- Keeping only this loader guard prevents a second renderer from drifting out of sync.
     if ctx and ctx.hiddenBuild then
         local section = W.FixedPreviewSection(ctx, b, { title = "Preview", height = 64 })
+        M.ClassPowerStackPreview.RegisterSearchSettings(ctx, section)
         Schema.Build(ctx, section, { { "text", "menu2.classpower.preview.placeholder", nil,
             { "Class resource preview is built when this page is opened.", 14, -38, ctx.width - 28, T.colors.muted }, scope = "classpower" } })
         return section

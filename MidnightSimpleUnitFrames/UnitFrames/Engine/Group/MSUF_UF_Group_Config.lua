@@ -590,6 +590,7 @@ local function CompileStatus(kind, conf)
   pvp.style = conf.pvpIconStyle
   pvp.customIcon = conf.pvpIconCustomIcon
   pvp.contextGated = PVP_CONTEXT_GATED and pvpEnabled or nil
+  pvp.configuredEnabled = conf.pvpIcon == true
   local phase = StatusRegionDef(conf, phaseEnabled, "phase", resize)
   phase.style = conf.phaseIconStyle
   phase.customIcon = conf.phaseIconCustomIcon
@@ -1290,6 +1291,7 @@ end
 
 local function CompileBarBackground(conf)
   return {
+    override = conf.barBgColorOverride == true,
     r = Num(conf.bgR, 0.1),
     g = Num(conf.bgG, 0.1),
     b = Num(conf.bgB, 0.1),
@@ -2029,6 +2031,7 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
   local metrics = frame._msufGFOverlayMetrics
   if not metrics then metrics = {} frame._msufGFOverlayMetrics = metrics end
   metrics.base, metrics.conf = base, conf
+  metrics.preview = frame._msufPreviewScope == true
   local shell = frame._msufSecureShell or frame
   local header = shell.GetParent and shell:GetParent()
   local previewCount = (frame._msufGFIsPreviewFrame or shell._msufGFIsPreviewFrame) and GF.GetActivePreviewCount

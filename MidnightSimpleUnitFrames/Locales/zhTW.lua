@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
 -- Reviewed Edit Mode, setup and client-capability labels.
+L["Focus override"] = "焦點覆蓋"
+L["Focus interruptible cast color"] = "焦點可中斷施法顏色"
 L["Player Name Position"] = "玩家名稱位置"
 L["Target Name Position"] = "目標名稱位置"
 L["Focus Name Position"] = "專注目標名稱位置"
@@ -7483,6 +7485,15 @@ L["Align"] = "對齊"
 
 L["Right-click focus in combat"] = "戰鬥中右鍵設為焦點"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "戰鬥中以右鍵點擊此單位框架，將該單位設為焦點。非戰鬥狀態下，右鍵點擊開啟快顯選單。"
+
+L["Guides preview layer"] = "預覽參考線圖層"
+L["Add custom group spell indicator"] = "新增自訂團隊法術指示器"
+
+L["Spell minimum cost (out of combat)"] = "法術最低消耗（非戰鬥狀態）"
+L["Spell ID, link or name"] = "法術ID、連結或名稱"
+L["Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."] = "在所選資源條上使用已學會法術的最低消耗。在非戰鬥狀態下，法術或天賦變更後及戰鬥結束後更新。不追蹤戰鬥期間暫時的消耗變化。無法取得消耗時隱藏標記。"
+L["No readable spell cost for this bar."] = "無法讀取此資源條的法術消耗。"
+L["Minimum cost: %s (%s)."] = "最低消耗：%s（%s）。"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)

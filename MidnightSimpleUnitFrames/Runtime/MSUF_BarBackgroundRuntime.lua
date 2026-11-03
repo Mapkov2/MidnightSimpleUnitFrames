@@ -373,6 +373,10 @@ local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
     -- resolved too, so neither value may be multiplied again during a repaint.
     local healthBg = frame and frame.MSUFSpec and frame.MSUFSpec.health
         and frame.MSUFSpec.health.background
+    -- Explicit scoped colors survive texture and palette refreshes.
+    if colorMode == "custom" and healthBg and healthBg.override then
+        r, gg, b = healthBg.r, healthBg.g, healthBg.b
+    end
     if healthBg and type(healthBg.a) == "number" then
         a = healthBg.a
     elseif not cache then

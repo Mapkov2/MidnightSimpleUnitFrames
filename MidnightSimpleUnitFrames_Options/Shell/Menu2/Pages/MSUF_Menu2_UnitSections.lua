@@ -344,7 +344,7 @@ local function BuildCombatRightClickFocus(ctx, sec, unit, x, y, width)
     local toggle = Schema.Build(ctx, sec, {
         { "toggle", "rightClickFocusInCombat", false, { "Right-click focus in combat", x, y, width },
             meta = SettingMeta(ctx, "basics.right_click_focus_in_combat", unit, "rightClickFocusInCombat"), scope = unit,
-            reason = "MSUF2_COMBAT_RIGHT_CLICK_FOCUS", unit = true, domain = "layout" },
+            reason = "MSUF2_COMBAT_RIGHT_CLICK_FOCUS", unit = unit, domain = "layout" },
     }, ROW_OPTIONS).rightClickFocusInCombat
     if M.AddTooltip then
         M.AddTooltip(toggle, "Right-click focus in combat",

@@ -16,6 +16,7 @@ local previewState = Preview.State
 -- (most load after Edit Mode): MSUF.Require raises naming this file when
 -- one is missing, and a hook installed on the global still applies.
 local CALLER = "Shell/EditMode/MSUF_EditMode_Compat.lua"
+local RunNextFrame = MSUF.Require("MSUF_Scheduler", CALLER).RunWorkNextFrame
 local SetAllOff = Preview.Bind("all", false)
 local SetBossOff = Preview.Bind("boss", false)
 local SetArenaOff = Preview.Bind("arena", false)
@@ -421,48 +422,42 @@ do
             return true
         end
 
-        local function Phase(delay, fn)
-            timer.After(delay, function()
-                if not Alive() then return end
-                fn()
-            end)
+        -- Advancing from the scheduler's snapshot admits one phase per frame,
+        -- even after a hitch has made all the former timer deadlines overdue.
+        local phases = {
+            function() MSUF.Require("MSUF_SyncBossUnitframePreviewWithUnitEdit", CALLER)() end,
+            function() MSUF.Require("MSUF_SyncArenaUnitframePreviewWithUnitEdit", CALLER)() end,
+            function() MSUF.Require("MSUF_RefreshAllUnitVisibilityDrivers", CALLER)(want) end,
+            function() ForPreviewFrames(ReforcePreviewFrame, want) end,
+            SyncCastbarPreviewTests,
+            function()
+                local a3 = MSUF and MSUF.MSUF_Auras3
+                if a3 and type(a3.RefreshEditPreview) == "function" then
+                    a3.RefreshEditPreview()
+                elseif a3 and type(a3.RefreshAll) == "function" then
+                    a3.RefreshAll()
+                end
+            end,
+            function()
+                SchedulePreviewMoverSync(0.02)
+                if want then
+                    MSUF_EM2_SchedulePreviewReforce()
+                    ScheduleReforce(0.05)
+                    ScheduleReforce(0.20)
+                    InstallPipelineWrappers()
+                else
+                    UninstallPipelineWrappers()
+                end
+            end,
+        }
+        local phase = 0
+        local function Step()
+            if not Alive() then return end
+            phase = phase + 1
+            phases[phase]()
+            if phase < #phases and Alive() then RunNextFrame(Step, SyncAllUnitPreviewsAsync) end
         end
-
-        Phase(0, function()
-            MSUF.Require("MSUF_SyncBossUnitframePreviewWithUnitEdit", CALLER)()
-            MSUF.Require("MSUF_SyncArenaUnitframePreviewWithUnitEdit", CALLER)()
-        end)
-
-        Phase(0.02, function()
-            MSUF.Require("MSUF_RefreshAllUnitVisibilityDrivers", CALLER)(want)
-        end)
-
-        Phase(0.04, function()
-            ForPreviewFrames(ReforcePreviewFrame, want)
-        end)
-
-        Phase(0.06, SyncCastbarPreviewTests)
-
-        Phase(0.08, function()
-            local a3 = MSUF and MSUF.MSUF_Auras3
-            if a3 and type(a3.RefreshEditPreview) == "function" then
-                a3.RefreshEditPreview()
-            elseif a3 and type(a3.RefreshAll) == "function" then
-                a3.RefreshAll()
-            end
-        end)
-
-        Phase(0.10, function()
-            SchedulePreviewMoverSync(0.02)
-            if want then
-                MSUF_EM2_SchedulePreviewReforce()
-                ScheduleReforce(0.05)
-                ScheduleReforce(0.20)
-                InstallPipelineWrappers()
-            else
-                UninstallPipelineWrappers()
-            end
-        end)
+        RunNextFrame(Step, SyncAllUnitPreviewsAsync)
     end
     ExportPublic("MSUF_SyncAllUnitPreviewsAsync", SyncAllUnitPreviewsAsync)
 end

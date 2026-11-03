@@ -59,9 +59,12 @@ end
 -- actions now belong to their contextual pages; all remaining rows stay pinned.
 -- menu_feature_legacy_routes_smoke exercises the old identities against these
 -- new owners through the real search target route, including reset and no-action checks.
+-- The spell-cost mark adds one Mainline text input and its mode option.
+-- Existing 4520 identities and all Classic rows were compared to the prior index.
+-- Focus color adds its switch and swatch; existing semantic rows are unchanged.
 local indexes = {
-    { "", 4334, 2694257964 },
-    { "_Classic", 3926, 3038031184 },
+    { "", 4523, 823652977 },
+    { "_Classic", 4098, 105715440 },
 }
 local moved = {
     { "edit_selection", "workbench_alignment", "multi", "bottom left right top horizontal vertical move open toggle" },
@@ -70,11 +73,10 @@ local moved = {
     { "profiles", "workbench_display", "display", "record save" },
     { "profiles", "profiles_io", false, "menu2.profiles.advanced.import.review" },
 }
-local function CheckMovedActions(blob)
+local StaticRows = assert(loadfile(root .. "/tools/tests/search_static_rows.lua"))()
+local function CheckMovedActions(decoded)
     local rows, count = {}, 0
-    for line in blob:gmatch("[^\n]+") do
-        local columns = {}
-        for value in (line .. "\t"):gmatch("(.-)\t") do columns[#columns + 1] = value end
+    for _, columns in ipairs(decoded) do
         assert(columns[1] ~= "profile_tools", "obsolete workbench page still owns indexed actions")
         rows[columns[8]] = columns
     end
@@ -92,9 +94,10 @@ local function CheckMovedActions(blob)
 end
 for _, row in ipairs(indexes) do
     local source = Read(base .. "Search/MSUF_Menu2_Search_StaticIndex_Data" .. row[1] .. ".lua")
-    local blob = assert(source:match("Search%.StaticIndexBlob = %[%=+%[(.-)%]%=+%]"))
+    local decoded, blob = StaticRows.Load(root,
+        "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data" .. row[1] .. ".lua")
     assert(tonumber(source:match("StaticIndexRecordCount = (%d+)")) == row[2], "static search control count changed")
-    CheckMovedActions(blob)
+    CheckMovedActions(decoded)
     assert(Adler(blob) == row[3], "static search rows changed: " .. row[1])
 end
 print("PASS menu page responsibilities: <=1200 lines; reviewed static search inventory and 17 ownership moves preserved")

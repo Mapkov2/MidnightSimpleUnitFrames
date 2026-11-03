@@ -2,26 +2,81 @@
   "version": 1,
   "runs": [
     {
-      "test": "tools/tests/menu_colors_preview_regressions_smoke.lua",
+      "test": "tools/tests/menu_focus_color_smoke.lua",
       "phase": "menu",
-      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"],
-      "arguments": ["{root}", "{client}", "resize"]
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_focus_scene_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/castbar_focus_color_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/menu_colors_preview_regressions_smoke.lua",
       "phase": "menu",
-      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"],
-      "arguments": ["{root}", "{client}", "resources"]
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "resize"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_colors_preview_regressions_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "resources"
+      ]
     },
     {
       "test": "tools/tests/menu_preview_power_loss_smoke.lua",
       "phase": "menu",
-      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"]
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/menu_preview_health_loss_smoke.lua",
       "phase": "menu",
-      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"]
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/alpha_text_sparse_budget_smoke.lua",
@@ -243,6 +298,10 @@
     },
     {
       "test": "tools/tests/castbar_empower_reuse.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/player_channel_transition_smoke.lua",
       "phase": "runtime"
     },
     {
@@ -1331,6 +1390,36 @@
       ]
     },
     {
+      "test": "tools/tests/preview_runtime_animation_owner_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_castbar_footprint_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
       "test": "tools/tests/uf_header_layout_transaction.lua",
       "phase": "apply",
       "clients": [
@@ -2165,6 +2254,276 @@
         "{client}",
         "arena"
       ]
+    },
+    {
+      "test": "tools/tests/search_open_gaps_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_open_gaps_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_semantic_context_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/search_semantic_context_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/search_static_context_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ]
+    },
+    {
+      "test": "tools/tests/scheduler_work_queue_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/group_preview_work_queue_smoke.lua",
+      "phase": "group preview",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_preview_work_queue_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/aura_editmode_work_queue_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/editmode_exit_work_queue_smoke.lua",
+      "phase": "edit",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/resource_mark_spell_cost_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/resource_mark_spell_menu_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
+      "test": "tools/tests/resource_mark_spell_menu_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "600"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_owner_globals_smoke.py",
+      "phase": "namespace",
+      "arguments": [
+        "{root}",
+        "{luac}"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_owner_contracts_smoke.lua",
+      "phase": "namespace"
+    },
+    {
+      "test": "tools/tests/preview_interaction_contract_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_layers_status_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "unit_layers"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_layers_status_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "group_layers"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_layers_status_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "unit_status"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_layers_status_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "group_status"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_status_examples_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/preview_status_catalog_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/detached_power_geometry_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_color_shortcut_art_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     }
   ],
   "excluded": {
@@ -2282,6 +2641,7 @@
     "tools/tests/unit_scene_region_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Native health-bar queries absent from the permissive widget fixture: an anchored size and a new child's level.",
     "tools/tests/unresolved_global_reads_smoke.py": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Lua 5.1 makes an undefined name a silent nil read: `CoreFrame(unit)` compiles,",
     "tools/tests/profile_workbench_suite_smoke.lua": "Cross-repository integration contract requires the separately installed Suite source as argument 2; run explicitly with the matching Suite checkout during integration.",
-    "tools/tests/menu_feature_suite_ownership_smoke.lua": "Cross-repository integration uses the separately installed Suite source as argument 2 and Mainline/Forever as argument 3; run with matching Suite during integration. Covers saved search-target relocation and cold/warm disabled-styling search."
+    "tools/tests/menu_feature_suite_ownership_smoke.lua": "Cross-repository integration uses the separately installed Suite source as argument 2 and Mainline/Forever as argument 3; run with matching Suite during integration. Covers saved search-target relocation and cold/warm disabled-styling search.",
+    "tools/tests/search_static_rows.lua": "Shared source inventory decoder for context-dictionary and legacy inline rows; exercised by profile sync, page structure and the context roundtrip smoke."
   }
 }

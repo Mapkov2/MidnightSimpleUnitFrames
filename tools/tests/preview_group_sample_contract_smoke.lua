@@ -41,6 +41,14 @@ local conf = mw.core.GF.GetConf("party")
         "statusAFKTimerText", "statusDNDText", "showGroupNumber" }) do conf[key] = true end
     mw.core.GF.InvalidateCompiledSpecs("party")
 M.gfScope = "party"
+if mode == "budget" then
+    -- Preserve the measured scene: Current mode and no displayed PvP example.
+    -- Preview status examples separately covers All and configured PvP outside
+    -- live context. The original VM/call limits below stay unchanged.
+    M.gfStatusPreviewMode = "current"
+    conf.pvpIcon = false
+    mw.core.GF.InvalidateCompiledSpecs("party")
+end
 local box = M.GroupPreview.CreateNative(env.UIParent, { width = 760, key = "gf_layout" })
 box:Show()
 box._stage:SetSize(600, 220)

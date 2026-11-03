@@ -22,7 +22,7 @@ local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_
 local stop = Secrets.Watch(path)
 h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 assert(GF.ShowPreview("party", 2))
-h:RunTimers()
+h:RunDeferred()
 local name = GF._previewFrames.party[1]._msufPreviewNameText
 assert(not issecretvalue(name) and type(name) == "string" and name ~= "", "preview retained a secret identity")
 local violations = stop()

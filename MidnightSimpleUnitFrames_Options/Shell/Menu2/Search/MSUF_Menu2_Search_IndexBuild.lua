@@ -416,6 +416,28 @@ local function ExactQueryTarget(normalized)
     end
     return exactQueryTargets[normalized] or SearchData.NaturalQueryTarget(normalized)
 end
+local function QueryScope(rec, target)
+    local contracts = Search.StaticIndex.TargetField(rec, "prepareContracts")
+    if not contracts then
+        local entry = M.RuntimeControlCatalog.Get(Search.StaticIndex.TargetField(rec, "controlId"))
+        contracts = entry and entry.widget and entry.widget._msuf2ExactTargetContracts
+    end
+    return Search.ResolveExactPreparation(contracts, target.querySettingKey)
+end
+
+local function ScopedQueryResult(rec, target)
+    if not target or not target.querySettingKey then return rec end
+    local kind, value, setting = QueryScope(rec, target)
+    if not kind or setting ~= target.querySettingKey then return rec end
+    local result, exact = {}, {}
+    for k, v in pairs(rec) do result[k] = v end
+    setmetatable(result, getmetatable(rec))
+    for k, v in pairs(rec.exactTarget) do exact[k] = v end
+    exact.settingKey, exact.prepareKind, exact.prepareValue = setting, kind, value
+    result.exactTarget = exact
+    return result
+end
+
 local function MatchesExactQueryTarget(rec, target)
     if not target then return false end
     if target.pageKey and rec.key ~= target.pageKey then return false end
@@ -427,7 +449,12 @@ local function MatchesExactQueryTarget(rec, target)
         return key:sub(-#target.settingSuffix) == target.settingSuffix
     end
     local id = tostring(field(rec, "controlId") or "")
-    return (target.pageKey or rec.key == "profiles") and target.controlSuffix and id:find(target.controlSuffix, 1, true) ~= nil
+    if not ((target.pageKey or rec.key == "profiles") and target.controlSuffix and id:find(target.controlSuffix, 1, true)) then return false end
+    if target.querySettingKey then
+        local kind, _, setting = QueryScope(rec, target)
+        return kind ~= nil and setting == target.querySettingKey
+    end
+    return true
 end
 
 function SearchIndexBuild.QueryContext(query)
@@ -574,7 +601,7 @@ function SearchPages(query, job, deadline)
             rec.matchedClauses = matchedClauses
             rec.missedClauses = missedClauses
             rec.queryClauseCount = #clauses
-            results[#results + 1] = rec
+            results[#results + 1] = exactQueryHit and ScopedQueryResult(rec, exactQueryTarget) or rec
         end
         if deadline and SearchIndexBuild.Due(deadline) then job.index = i + 1 return nil end
     end

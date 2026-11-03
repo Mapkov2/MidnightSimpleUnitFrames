@@ -3,9 +3,12 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.GroupRenderFactories = M.GroupRenderFactories or {}
 
-M.GroupRenderFactories.Auras = function(
-    MSUF, M, wipe, max, Stage
-)
+local RequireFields = M.PreviewContracts.RequireFields
+M.GroupRenderFactories.Auras = function(runtime, scene)
+    RequireFields("Auras.Runtime", runtime, "Core Menu Wipe Max")
+    RequireFields("Auras.Scene", scene, "Stage")
+    local MSUF, M, wipe, max = runtime.Core, runtime.Menu, runtime.Wipe, runtime.Max
+    local Stage = scene.Stage
 
 local EMPTY_RAW_LANE = {}
 -- Tracked lane field -> the tracked buff setting it copies as it stands.

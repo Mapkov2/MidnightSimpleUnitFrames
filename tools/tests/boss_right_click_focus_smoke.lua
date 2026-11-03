@@ -35,7 +35,17 @@ assert(not failure, failure and failure.message)
 local UF = world.core.UF
 world.core.EnsureDB(true)
 local db = UF.Config.GetDB()
-assert(db[scope].rightClickFocusInCombat == false, "fresh profiles must opt in")
+assert(db[scope].rightClickFocusInCombat == nil, "untouched profiles must remain sparse and opt in")
+for _, value in ipairs({ true, false }) do
+    db[scope].rightClickFocusInCombat = value
+    world.core.EnsureDB(true)
+    db = UF.Config.GetDB()
+    assert(db[scope].rightClickFocusInCombat == value, "normalization changed an explicit focus preference")
+end
+db[scope].rightClickFocusInCombat = nil
+world.core.EnsureDB(true)
+db = UF.Config.GetDB()
+assert(db[scope].rightClickFocusInCombat == nil, "normalization materialized an absent focus preference")
 local originalSet = world.widgets.Methods.SetAttribute
 world.widgets.Methods.SetAttribute = function(frame, key, value)
     assert(not combat or secure, "insecure protected write in combat: " .. key)

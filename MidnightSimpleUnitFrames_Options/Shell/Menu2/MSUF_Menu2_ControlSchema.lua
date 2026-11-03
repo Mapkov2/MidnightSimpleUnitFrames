@@ -261,7 +261,8 @@ local ACTION_TARGETS = {
         "general.castbarNonInterruptible", "general.castbarInterruptFeedback", "general.castbarInterruptUnavailable",
         "general.playerCastbarOverride" }, "RGB", ColorTargets({ "general.castbarBorder", "general.castbarBg" }, "RGBA",
             { "general.castbarInterruptUnavailableColor", "general.playerCastbarOverrideEnabled", "general.playerCastbarOverrideMode",
-                "general.kickReadyColor", "general.kickNotReadyColor" })),
+                "general.kickReadyColor", "general.kickNotReadyColor",
+                "general.focusCastbarOverrideEnabled", "general.focusCastbarOverrideColor" })),
     reset_class_colors = {
         "classColors",
     },

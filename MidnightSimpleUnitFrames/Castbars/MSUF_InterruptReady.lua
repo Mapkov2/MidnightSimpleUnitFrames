@@ -1342,6 +1342,14 @@ function KickReady.CreateSamplePainter(status)
     local function FillSample(frame)
         local general = GeneralDB()
         if UnitSupportsFillStyle(general, frame.unit) then
+            if frame.unit == "focus" and general.focusCastbarOverrideEnabled == true then
+                local utils = Castbars.Utils
+                local r, g, b, nr, ng, nb = utils.ResolveCastbarColors("focus")
+                local ur, ug, ub, ua = utils.ResolveInterruptUnavailableCastColor()
+                utils.Castbar_ApplyNonInterruptibleTint(frame, frame.isNotInterruptible,
+                    nr, ng, nb, 1, r, g, b, 1, frame.isNotInterruptible, ur, ug, ub, ua, status.ready, true)
+                return
+            end
             local r, g, b, a = EvaluateIndicatorRGBA(status.ready, false, general)
             Castbars.Utils.SetStatusBarColorIfChanged(frame.statusBar, r, g, b, a)
         end

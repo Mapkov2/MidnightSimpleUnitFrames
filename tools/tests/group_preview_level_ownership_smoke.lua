@@ -20,7 +20,7 @@ local function New(level, unit)
         group:Configure({ level = level })
     end
     owner:Activate()
-    h:RunTimers()
+    h:RunDeferred()
     return owner, group, assert(unit and group:Frame() or group:Frames()[1])
 end
 local outerRoot, outer, frame = New(500, mode == "unit-group")

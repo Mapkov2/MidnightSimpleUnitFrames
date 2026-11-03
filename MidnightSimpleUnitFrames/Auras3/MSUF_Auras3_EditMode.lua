@@ -17,6 +17,7 @@ local MAX_ARENA_FRAMES = tonumber(MSUF.Client.MaxArenaOpponents) or 3
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
+local RunNextFrame = MSUF.Require("MSUF_Scheduler", "Auras3/MSUF_Auras3_EditMode.lua").RunWorkNextFrame
 
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- driver disabled and silently kills the drag OnUpdate.
@@ -150,13 +151,19 @@ local function RequestEditModeAurasRefresh(delay)
     end
     local serial = editRefreshSerial
     if C_Timer and C_Timer.After then
-        C_Timer.After(delay or 0, function()
-            if serial ~= editRefreshSerial then return end
+        local index = 1
+        local function Step()
+            if serial ~= editRefreshSerial or IsConfigBlocked() then return end
             if not UnitPreviewActive() then
                 EM.HideAll()
                 return
             end
-            EM.RefreshAll()
+            EM.RefreshUnit(config.AURA_UNITS[index])
+            index = index + 1
+            if serial == editRefreshSerial and index <= #config.AURA_UNITS then RunNextFrame(Step, EM) end
+        end
+        C_Timer.After(delay or 0, function()
+            if serial == editRefreshSerial then RunNextFrame(Step, EM) end
         end)
     else
         EM.RefreshAll()
@@ -233,7 +240,7 @@ function A3.RefreshEditPreview(unit)
     end
     if IsConfigBlocked() then return false end
     if unit then return EM.RefreshUnit(unit) end
-    return EM.RefreshAll()
+    RequestEditModeAurasRefresh(0)
 end
 
 --- Advances only already-built Edit Mode aura dummy regions from Menu2's

@@ -247,6 +247,13 @@ function Search.ResolveExactPreparation(contracts, settingKey)
     end
 end
 
+local function DescriptionPrefix(text, limit)
+    if #text <= limit then return text end
+    local last = limit
+    while last > 0 and text:byte(last + 1) >= 128 and text:byte(last + 1) < 192 do last = last - 1 end
+    return text:sub(1, last)
+end
+
 local function LocalizedMetadata(decoder, metadata)
     local id = metadata:match("^@(%d+)$")
     if id then
@@ -264,8 +271,12 @@ local function LocalizedMetadata(decoder, metadata)
         while #decoder.translations < id do
             local key = DecodeIdentityPart(decoder.keys())
             if not key then error("Search locale key is missing: " .. encoded) end
+            local limit, source = key:match("^!(%d+)!(.*)$")
+            if limit then key = source end
             local text = MSUF.Translate(key)
-            decoder.translations[#decoder.translations + 1] = text ~= key and Normalize(text) or ""
+            local normalized = text ~= key and Normalize(text) or ""
+            if limit then normalized = DescriptionPrefix(normalized, tonumber(limit)) end
+            decoder.translations[#decoder.translations + 1] = normalized
         end
         local translated = decoder.translations[id]
         if translated ~= "" then normalized = normalized .. " " .. translated end
@@ -273,16 +284,62 @@ local function LocalizedMetadata(decoder, metadata)
     return normalized
 end
 
+local function ContextValue(decoder, id)
+    assert(id and id >= 1, "Search context reference is missing")
+    while #decoder.contextValues < id do
+        local index = #decoder.contextValues + 1
+        local value = assert(decoder.contextLines(), "Search context is missing")
+        decoder.contextValues[index] = value
+    end
+    return decoder.contextValues[id]
+end
+
+local function ContextText(decoder, value)
+    if not decoder.contextValues or value == "" then return value end
+    return ContextValue(decoder, tonumber(value:match("^@(%d+)$")))
+end
+
+local function ContextWordToken(tokens, token)
+    local comma = token:byte(-1) == 44
+    local id = comma and token:sub(1, -2) or token
+    local value = ContextValue(tokens._decoder, tonumber(id))
+    if comma then value = value .. " " end
+    rawset(tokens, token, value)
+    return value
+end
+
+local function ContextWords(decoder, value)
+    if not decoder.contextValues then return value end
+    local encoded = value:match("^@([%d,]+)$")
+    assert(encoded and encoded:sub(1, 1) ~= "," and encoded:sub(-1) ~= ","
+        and not encoded:find(",,", 1, true), "Search identity reference is missing")
+    return (encoded:gsub("%d+,?", decoder.wordTokens))
+end
+
+local function ContextIdentity(decoder, value)
+    if not decoder.contextValues then return value end
+    local id, suffix = value:match("^@(%d+):(.*)$")
+    return ContextValue(decoder, tonumber(id)) .. suffix
+end
+
 local function DecodeLine(decoder, line)
     local EnsurePage, records, hintCache = decoder.EnsurePage, decoder.records, decoder.hintCache
     local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
         exactSectionId, exactTargetKinds, exactTargetContracts, haystack =
         line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+    if pageKey then
+        pageKey, label, kind = ContextText(decoder, pageKey), ContextText(decoder, label), ContextText(decoder, kind)
+        hint, labelNorm = ContextText(decoder, hint), ContextText(decoder, labelNorm)
+        searchIdentity = ContextIdentity(decoder, searchIdentity)
+        exactSectionId = ContextText(decoder, exactSectionId)
+        exactTargetKinds, exactTargetContracts = ContextText(decoder, exactTargetKinds), ContextText(decoder, exactTargetContracts)
+    end
     if pageKey and pageKey ~= "" then
         -- The compact extension keeps the twelve TSV columns and accepts older
         -- blobs too. Both pieces are already normalized by the generator.
         local base, metadataNorm = haystack:match("^(.-)|(.*)$")
         if base then
+            base = ContextWords(decoder, base)
             metadataNorm = LocalizedMetadata(decoder, metadataNorm)
             haystack = metadataNorm ~= "" and (base .. " " .. metadataNorm) or base
         end
@@ -371,9 +428,12 @@ local function Decode(deadline)
         decoder = { lines = blob:gmatch("[^\n]+"), records = {}, count = 0, hintCache = {}, EnsurePage = EnsurePage,
             columns = columns, pages = pages, pageIds = {}, labels = {}, hints = {}, translations = {},
             locale = Search.Text.SearchEffectiveLocale and Search.Text.SearchEffectiveLocale(), metadata = {},
+            contextValues = Search.StaticIndexContextBlob and {},
+            contextLines = (Search.StaticIndexContextBlob or ""):gmatch("[^\n]+"),
             metadataLines = (Search.StaticIndexMetadataBlob or ""):gmatch("[^\n]+"),
             keys = (Search.StaticIndexLocaleKeys or ""):gmatch("[^\n]+") }
         decoder.rowMeta = { __index = RecordField, columns = columns, pages = pages, _staticColumns = true }
+        decoder.wordTokens = setmetatable({ _decoder = decoder }, { __index = ContextWordToken })
         state.decoder = decoder
     end
     for line in decoder.lines do

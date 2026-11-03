@@ -1,6 +1,6 @@
 --- Unit preview zoom and canvas pan helpers.
 
-local MSUF = _G.MSUF
+local _, MSUF = ...
 local ZoomPan = MSUF.UFPreviewZoomPan or {}
 MSUF.UFPreviewZoomPan = ZoomPan
 local H = MSUF.MSUF2.PreviewHelpers

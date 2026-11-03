@@ -17,9 +17,12 @@ from its own sources indefinitely. This runs in the gate, on the working tree, f
 import csv
 import hashlib
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+from search_static_format import decode_context_rows
 MENU2 = ROOT / "MidnightSimpleUnitFrames_Options/Shell/Menu2"
 SEARCH = MENU2 / "Search"
 MAINLINE_INDEX = "Search/MSUF_Menu2_Search_StaticIndex_Data.lua"
@@ -133,6 +136,7 @@ for label, name, excluded in (
     # Nothing can hash a file into itself, so the blob gets a row-level integrity pass
     # instead: the runtime splits on the tab, routes on the identity and scores on the
     # normalized label, and every one of those has to hold for a row to be reachable.
+    rows = ["\t".join(row) for row in decode_context_rows(text, [row.split("\t") for row in rows])]
     seen = {}
     unit = chr(31)
     for row in rows:

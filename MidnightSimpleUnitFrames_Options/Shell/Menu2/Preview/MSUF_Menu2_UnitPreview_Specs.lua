@@ -1,6 +1,6 @@
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua
 --- Cold-path data specs for the MSUF2 unit frame preview.
-local MSUF = _G.MSUF
+local _, MSUF = ...
 local specs = MSUF.UFPreviewSpecs or {}
 MSUF.UFPreviewSpecs = specs
 local PipeRows = MSUF.MSUF2.PipeRows

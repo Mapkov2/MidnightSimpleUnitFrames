@@ -122,6 +122,24 @@ function Scheduler.ScheduleOnce(key, fn)
     QueueNextFrame(key, fn)
 end
 
+-- Cold preview work shares one slot per frame. An explicit owner key replaces
+-- stale pending work without adding queue entries. Rearm before invoking it.
+local workQueue, workPending = {}, {}
+local function RunNextWork()
+    local key = table.remove(workQueue, 1)
+    local callback = key and workPending[key]
+    if key then workPending[key] = nil end
+    if #workQueue > 0 then QueueNextFrame(RunNextWork, RunNextWork) end
+    if callback then callback() end
+end
+function Scheduler.RunWorkNextFrame(fn, key)
+    assert(type(fn) == "function", "MSUF scheduler requires a callback function")
+    key = key or fn
+    if not workPending[key] then workQueue[#workQueue + 1] = key end
+    workPending[key] = fn
+    QueueNextFrame(RunNextWork, RunNextWork)
+end
+
 --- Delayed keyed scheduling.
 ---
 --- 12.1.5 ships TimedSignalMap: one native callback map drives many keyed

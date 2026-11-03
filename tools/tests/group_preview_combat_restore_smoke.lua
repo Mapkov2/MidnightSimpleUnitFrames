@@ -28,7 +28,7 @@ GF.EnsureDB()
 local party = GF.GetConf("party")
 party.enabled, party.showPlayer, party.showSolo = true, true, false
 GF.RefreshHeaderLayout()
-h:RunTimers()
+h:RunDeferred()
 
 -- The Group page opens a preview while the player is solo (no live frames).
 h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
@@ -37,13 +37,13 @@ Check(GF.ShowPreview("party", 5) ~= false and GF._previewActive.party == true, "
 -- A party forms while the preview is up: the runtime keeps the header retired.
 h:SetRoster({ "player", "party1", "party2" })
 h:Event("GROUP_ROSTER_UPDATE")
-h:RunTimers()
+h:RunDeferred()
 local header = GF.headers.party
 Check(header == nil or not header.shown, "the preview no longer suppresses the live header (fixture premise)")
 
 -- Combat starts with the menu still open.
 h:EnterCombat()
-h:RunTimers()
+h:RunDeferred()
 Check(GF._previewActive.party ~= true, "combat did not hide the preview")
 header = GF.headers.party
 Check(header ~= nil and header.shown == true, "the live party header stayed retired into the fight")

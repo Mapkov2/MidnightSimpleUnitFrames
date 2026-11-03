@@ -73,6 +73,7 @@ Arena Frames are available on Midnight (3 opponents), TBC Anniversary and Mists 
 ## More included
 
 - Configurable Class Power displays, including an optional Guardian Druid Ironfur tracker
+- Resource marks can use a learned spell's minimum cost on Retail and WoW Forever: Class Resources > Extras > Resource marks and thresholds. Enter a spell ID, link or name. Costs refresh outside combat, including talent replacements; the displayed threshold stays fixed during combat.
 - SharedMedia textures and fonts and Clique compatibility
 - Searchable, load-on-demand options with guided setup and recovery tools
 - Twelve included locales: English, German, French, Spanish, Italian, Portuguese, Russian, Korean and Simplified/Traditional Chinese

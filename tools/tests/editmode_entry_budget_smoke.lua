@@ -19,7 +19,7 @@ local function Run()
         harness.env.geterrorhandler = function() return function(message) errors[#errors + 1] = tostring(message) end end
     end })
     assert(h.core.UF.Factory.SpawnAll())
-    h:RunTimers()
+    h:RunDeferred()
     -- The shared native-header fixture has no Blizzard AuraContainer implementation.
     -- Its one startup diagnostic is separate from errors during the measured operations.
     for _, message in ipairs(errors) do
@@ -84,18 +84,34 @@ local function Run()
         return vm, delta
     end
     assert(mw:Select("uf_player"))
-    mw:RunTimers()
+    h:RunDeferred()
     assert(mw:Select("home"))
-    mw:RunTimers()
-    Bench("page-switch-warm", function() assert(mw:Select("uf_player")) mw:RunTimers() end)
+    h:RunDeferred()
+    Bench("page-switch-warm", function() assert(mw:Select("uf_player")) h:RunDeferred() end)
     assert(mw:Select("home"))
-    mw:RunTimers()
+    h:RunDeferred()
     mw.M.HideSlashMenuAndMinibar(mw.win)
-    mw:RunTimers()
-    Bench("menu-reopen", function() assert(mw.M.Open("home") ~= false) mw:RunTimers() end)
+    h:RunDeferred()
+    Bench("menu-reopen", function() assert(mw.M.Open("home") ~= false) h:RunDeferred() end)
     captures = 0
     Bench("entry", function() assert(c.PublicGlobals.MSUF_SetMSUFEditModeDirect(true, "player")) end)
-    Bench("entry-deferred", function() mw:RunTimers() end)
+    Bench("entry-deferred", function()
+        local peak, previous, callbackPeak, callbackPrevious, callbackSource = 0, natives, 0, natives, ""
+        h:RunDeferred(1000, function()
+            peak = math.max(peak, natives - previous)
+            previous = natives
+        end, function(callback, turn, kind)
+            local used = natives - callbackPrevious
+            callbackPrevious = natives
+            if used > callbackPeak then
+                callbackPeak = used
+                local info = debug.getinfo(callback, "S")
+                callbackSource = kind .. " " .. tostring(info.source) .. ":" .. tostring(info.linedefined)
+            end
+        end)
+        print("A2 entry-deferred peak-native-turn=" .. peak)
+        print("A2 entry-deferred peak-native-callback=" .. callbackPeak .. " " .. callbackSource)
+    end)
     print("A2 entry history captures=" .. captures)
     -- Changed registrations synchronize at their return boundary. Batching listeners
     -- would absorb callback-tail writes and change the following undo/checkpoint.
@@ -107,7 +123,23 @@ local function Run()
     assert(H.Redo() and mw.env.MSUF_DB.player.offsetX == before + 10)
     assert(H.ResetHistorySession() and mw.env.MSUF_DB.player.offsetX == before)
     Bench("exit", function() em.State.Exit() end)
-    Bench("exit-deferred", function() mw:RunTimers() end)
+    Bench("exit-deferred", function()
+        local peak, previous, callbackPeak, callbackPrevious, callbackSource = 0, natives, 0, natives, ""
+        h:RunDeferred(1000, function()
+            peak = math.max(peak, natives - previous)
+            previous = natives
+        end, function(callback, turn, kind)
+            local used = natives - callbackPrevious
+            callbackPrevious = natives
+            if used > callbackPeak then
+                callbackPeak = used
+                local info = debug.getinfo(callback, "S")
+                callbackSource = kind .. " " .. tostring(info.source) .. ":" .. tostring(info.linedefined)
+            end
+        end)
+        print("A2 exit-deferred peak-native-turn=" .. peak)
+        print("A2 exit-deferred peak-native-callback=" .. callbackPeak .. " " .. callbackSource)
+    end)
     Bench("history-snapshot", function() assert(H.CaptureGuidedTourRestorePoint()) end)
     -- A callback that opens a history operation must see prior registration state.
     entryListenerActive = false

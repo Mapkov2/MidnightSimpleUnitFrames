@@ -1296,7 +1296,7 @@ local function InstallDriverColorMethod(frame)
         end
 
         local forcedNotInterruptible = self.isNotInterruptible == true
-        local castR, castG, castB, nonR, nonG, nonB = Utils.ResolveCastbarColors()
+        local castR, castG, castB, nonR, nonG, nonB = Utils.ResolveCastbarColors(self.unit)
         local rawApiNotInterruptible = self._msufApiNotInterruptibleRaw
         if forcedNotInterruptible then
             rawApiNotInterruptible = true

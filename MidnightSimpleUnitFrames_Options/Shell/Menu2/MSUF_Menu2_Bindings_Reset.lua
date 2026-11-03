@@ -163,7 +163,8 @@ local CASTBAR_GENERAL_KEYS = KSW [[
     showGCDBar showGCDBarTime showGCDBarSpell gcdBarDetached gcdBarIdle gcdBarCombatOnly gcdBarWidth gcdBarHeight gcdBarX gcdBarY gcdBarOpacity
 ]]
 local MODULES_GENERAL_KEYS = KS("styleEnabled")
-local COLOR_GENERAL_KEYS = KSW "playerCastbarOverrideEnabled playerCastbarOverrideMode npcClassColorBar npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
+local COLOR_GENERAL_KEYS = KSW [[focusCastbarOverrideEnabled playerCastbarOverrideEnabled playerCastbarOverrideMode
+    npcClassColorBar npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT]]
 local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
 local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode", "classPowerSlotColorModes", "classPowerFullColorEnabled")
 local GROUP_COLOR_KEYS = KSW [[

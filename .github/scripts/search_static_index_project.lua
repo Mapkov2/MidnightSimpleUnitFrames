@@ -697,18 +697,19 @@ local function SearchMetadata(M, Catalog, record)
     local widget = raw and raw.widget
     local meta = widget and (widget._msuf2SearchMeta or (widget._msuf2ControlSchema and widget._msuf2ControlSchema.meta)) or {}
     local parts, seen, localized, localeSeen = {}, {}, {}, {}
-    local function Add(text)
+    local function Add(text, limit, literal)
         if text == nil then return end
-        if type(text) == "string" and not localeSeen[text] then
+        if not literal and type(text) == "string" and not localeSeen[text] then
             localeSeen[text] = true
-            localized[#localized + 1] = text:gsub("[%%|\031\t\r\n]", function(char)
+            localized[#localized + 1] = (limit and ("!" .. limit .. "!") or "") .. text:gsub("[%%|\031\t\r\n]", function(char)
                 return string.format("%%%02X", char:byte())
             end)
         end
         local variants = {}
-        M.Search.Text.AddSearchText(variants, text)
+        if literal then variants[1] = text else M.Search.Text.AddSearchText(variants, text) end
         for i = 1, #variants do
             local normalized = M.Search.Text.NormalizeSearchText(variants[i])
+            if limit then normalized = M.Search.Text.Utf8BytePrefix(normalized, limit) end
             if normalized ~= "" and not seen[normalized] then
                 seen[normalized] = true
                 parts[#parts + 1] = normalized
@@ -730,6 +731,24 @@ local function SearchMetadata(M, Catalog, record)
             Add(item)
         end
     end
+    -- Internal context has no locale key. Keep only vocabulary absent from the
+    -- baked label/identity; repeating those words per control bloats the blob.
+    local contextBase = " " .. M.Search.Text.NormalizeSearchText(table.concat({
+        record.label or "", record.controlPath or "", record.settingKey or "",
+    }, " ")) .. " "
+    local function Context(value)
+        local words = {}
+        local text = M.Search.Text.NormalizeSearchText(M.Search.Text.ControlContext(value))
+        for word in text:gmatch("%S+") do
+            if not contextBase:find(" " .. word .. " ", 1, true) then
+                words[#words + 1] = word
+                contextBase = contextBase .. word .. " "
+            end
+        end
+        Add(table.concat(words, " "), nil, true)
+    end
+    Context(record.exactSectionId or record.sectionId)
+    Context(record.settingKey)
     local values = meta.values or (widget and widget.values)
     if type(values) == "function" then values = values() end
     if type(values) == "table" then
@@ -750,6 +769,10 @@ local function SearchMetadata(M, Catalog, record)
         Add(meta.keywords)
     end
     Add(meta.help or meta.description or record.help)
+    if widget then
+        Add(widget._msuf2SearchTooltipTitle, 96)
+        Add(widget._msuf2SearchTooltipBody, 320)
+    end
     return table.concat(parts, " ") .. "\031" .. table.concat(localized, "\031")
 end
 
@@ -802,7 +825,8 @@ local function Collect(M, Catalog, buildFailures)
             local pageKey = tostring(record.pageKey or "")
             local label = tostring(record.label or "")
             if pageKey ~= "" and pageKey ~= "search" and label ~= ""
-                and M.SupportsSearchTarget(pageKey, record.settingKey, record.searchPrepareKind, record.searchPrepareValue) then
+                and (record.settingKey == "general.kickReadyShowNameplates"
+                    or M.SupportsSearchTarget(pageKey, record.settingKey, record.searchPrepareKind, record.searchPrepareValue)) then
                 local controlPath = tostring(record.controlPath or "")
                 local settingKey = tostring(record.settingKey or "")
                 local actionKey = tostring(record.actionKey or "")
@@ -941,6 +965,37 @@ local function Render(lines)
         unique[#unique + 1] = row.line:match("^(.*)|[^|]*$") .. "|" .. row.metadata
     end
     table.sort(unique)
+    -- Repeated context is stored once; decoded rows keep their original fields.
+    local contextRows, contextIds = {}, {}
+    local contextColumns = { 1, 2, 3, 6, 7, 9, 10, 11 }
+    local function ContextId(value)
+        local id = contextIds[value]
+        if not id then id = #contextRows + 1; contextRows[id], contextIds[value] = value, id end
+        return id
+    end
+    for i, row in ipairs(unique) do
+        local fields = {}
+        for field in (row .. "\t"):gmatch("(.-)\t") do fields[#fields + 1] = field end
+        for _, column in ipairs(contextColumns) do
+            local value = fields[column]
+            if value ~= "" then
+                fields[column] = "@" .. ContextId(value)
+            end
+        end
+        local identity, at, edge = fields[8], 1, 0
+        for _ = 1, 4 do
+            local _, last = identity:find("%2E", at, true)
+            if not last then break end
+            edge, at = last, last + 1
+        end
+        if edge == 0 then edge = #identity end
+        fields[8] = "@" .. ContextId(identity:sub(1, edge)) .. ":" .. identity:sub(edge + 1)
+        local base, metadata = assert(fields[12]:match("^(.-)|(.*)$"))
+        local words = {}
+        for word in base:gmatch("%S+") do words[#words + 1] = ContextId(word) end
+        fields[12] = "@" .. table.concat(words, ",") .. "|" .. metadata
+        unique[i] = table.concat(fields, "\t")
+    end
     local localeKeys, localeIds = {}, {}
     for i, row in ipairs(unique) do
         -- Identities themselves use the separator: metadata follows the final
@@ -965,8 +1020,10 @@ local function Render(lines)
     end
     local metadataBlob = table.concat(metadataRows, "\n")
     local localeBlob = table.concat(localeKeys, "\n")
+    local contextBlob = table.concat(contextRows, "\n")
     local blob = table.concat(unique, "\n")
-    if blob:find("]==]", 1, true) or localeBlob:find("]==]", 1, true) or metadataBlob:find("]==]", 1, true) then Fail("blob would terminate its own long string") end
+    if blob:find("]==]", 1, true) or localeBlob:find("]==]", 1, true) or metadataBlob:find("]==]", 1, true)
+        or contextBlob:find("]==]", 1, true) then Fail("blob would terminate its own long string") end
 
     return #unique, table.concat({
         "-- Generated by .github/scripts/search_static_index_project.lua. Do not edit by hand.\n",
@@ -983,6 +1040,7 @@ local function Render(lines)
         "M.Search = Search\n",
         "Search.StaticIndexSourceSha256 = \"" .. SOURCE_SHA256 .. "\"\n",
         "Search.StaticIndexRecordCount = " .. tostring(#unique) .. "\n",
+        "Search.StaticIndexContextBlob = [==[" .. contextBlob .. "]==]\n",
         "Search.StaticIndexLocaleKeys = [==[" .. localeBlob .. "]==]\n",
         "Search.StaticIndexMetadataBlob = [==[" .. metadataBlob .. "]==]\n",
         "Search.StaticIndexBlob = [==[\n",

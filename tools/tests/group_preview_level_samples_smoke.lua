@@ -20,7 +20,7 @@ pet.level, target.level = 700, 1100
 pet:Show()
 target:Show()
 owner:Activate()
-h:RunTimers()
+h:RunDeferred()
 local frame = pet:Frame()
 if h.core.Client.SupportsPetHappiness then
     local cfg = assert(frame.MSUFSpec.status.petHappiness)

@@ -33,6 +33,7 @@
     <Script file="MSUF_Menu2_Preview_Input.lua"/>
     <Script file="MSUF_Menu2_Preview_Dock.lua"/>
     <Script file="MSUF_Menu2_Preview_Scenes.lua"/>
+    <Script file="MSUF_Menu2_PreviewContracts.lua"/>
     <Script file="MSUF_Menu2_PreviewSelectionBar.lua"/>
     <Script file="MSUF_Menu2_Dropdowns.lua"/>
     <Script file="MSUF_Menu2_ApplyService.lua"/>

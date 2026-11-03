@@ -501,6 +501,17 @@ Text.IsSearchLocaleKey = IsSearchLocaleKey
 Text.SearchEffectiveLocale = SearchEffectiveLocale
 Text.SearchLocaleTranslations = SearchLocaleTranslations
 Text.SearchDisplayText = SearchDisplayText
+-- Build-time context only: keep terse labels such as Enable searchable by
+-- their section and by readable words from the persisted setting path.
+function Text.ControlContext(value)
+    return type(value) == "string" and value:gsub("(%l)(%u)", "%1 %2"):gsub("(%u)(%u%l)", "%1 %2"):gsub("[_.]", " ") or ""
+end
+-- Preserve the full translation key, then bound each resolved description.
+function Text.AddSearchDescription(parts, text, limit)
+    local first = #parts + 1
+    AddSearchText(parts, text)
+    for i = first, #parts do parts[i] = Utf8BytePrefix(NormalizeSearchText(parts[i]), limit) end
+end
 Text.AddSearchText = AddSearchText
 Text.AddSearchTextVariants = AddSearchTextVariants
 Text.AddRawSearchText = AddRawSearchText

@@ -574,6 +574,45 @@ function Methods:RunTimers()
     return ran
 end
 
+-- Opt-in drain for workflows using both timers and the central frame scheduler.
+-- Snapshot both queues per turn: work enqueued from a callback is next-turn work.
+-- Timer deadlines are intentionally not simulated, matching RunTimers; tests of
+-- elapsed time should use their own clock. Errors remain in eventErrors.
+function Methods:RunDeferred(limit, afterTurn, afterCallback)
+    limit = limit or 1000
+    local ran = 0
+    for turn = 1, limit do
+        local timers = self.widgets.timers
+        local count = #timers
+        local scheduler = self.core and self.core.Scheduler
+        local frame = scheduler and scheduler.frame
+        local update = frame and frame:GetScript("OnUpdate")
+        if count == 0 and not update then return ran, turn - 1 end
+        for index = 1, count do
+            local entry = table.remove(timers, 1)
+            local callback = entry and not entry.cancelled and entry.callback
+            if type(callback) == "function" then
+                ran = ran + 1
+                if SourceIsGroupRuntime(callback) then
+                    self.RunInsecure(callback)
+                else
+                    local ok, err = pcall(self.RunInsecure, callback)
+                    if not ok then self.eventErrors[#self.eventErrors + 1] = "timer: " .. tostring(err) end
+                end
+                if afterCallback then afterCallback(callback, turn, "timer") end
+            end
+        end
+        if update and frame:GetScript("OnUpdate") == update then
+            ran = ran + 1
+            local ok, err = pcall(self.RunInsecure, update, frame, 1 / 60)
+            if not ok then self.eventErrors[#self.eventErrors + 1] = "scheduler: " .. tostring(err) end
+            if afterCallback then afterCallback(update, turn, "scheduler") end
+        end
+        if afterTurn then afterTurn(turn) end
+    end
+    error("RunDeferred exceeded its bounded timer/frame turn limit", 2)
+end
+
 function Methods:SetRoster(units)
     self.raid = false
     self.units = units

@@ -5,6 +5,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
 -- Reviewed Edit Mode, setup and client-capability labels.
+L["Focus override"] = "Fokus-Überschreibung"
+L["Focus interruptible cast color"] = "Farbe unterbrechbarer Fokuszauber"
 L["Player Name Position"] = "Position des Spielernamens"
 L["Target Name Position"] = "Position des Zielnamens"
 L["Focus Name Position"] = "Position des Fokusnamens"
@@ -7686,6 +7688,15 @@ L["Align"] = "Ausrichten"
 
 L["Right-click focus in combat"] = "Rechtsklick-Fokus im Kampf"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "Klicke im Kampf mit der rechten Maustaste auf diesen Einheitenframe, um diese Einheit als Fokus zu setzen. Außerhalb des Kampfes öffnet Rechtsklick das Kontextmenü."
+
+L["Guides preview layer"] = "Hilfslinien der Vorschau"
+L["Add custom group spell indicator"] = "Benutzerdefinierten Gruppenzauberindikator hinzufügen"
+
+L["Spell minimum cost (out of combat)"] = "Mindestkosten eines Zaubers (außerhalb des Kampfes)"
+L["Spell ID, link or name"] = "Zauber-ID, Link oder Name"
+L["Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."] = "Verwendet die Mindestkosten des erlernten Zaubers für die gewählte Leiste. Aktualisiert sich außerhalb des Kampfes nach Zauber- oder Talentänderungen sowie nach dem Kampf. Vorübergehende Kostenänderungen im Kampf werden nicht verfolgt. Bei nicht verfügbaren Kosten wird die Markierung ausgeblendet."
+L["No readable spell cost for this bar."] = "Keine lesbaren Zauberkosten für diese Leiste."
+L["Minimum cost: %s (%s)."] = "Mindestkosten: %s (%s)."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)

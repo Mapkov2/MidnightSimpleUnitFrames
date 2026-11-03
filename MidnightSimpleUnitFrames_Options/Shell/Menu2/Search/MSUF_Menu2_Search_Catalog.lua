@@ -170,11 +170,9 @@ local function StaticRowsWithoutClientSupport()
     local gcdHidden = gcdProbe ~= nil and not gcdProbe()
     -- Its interrupt indicator's nameplate switch is shown only where the MSUF
     -- Suite has nameplates (the same page's probe).
-    local nameplatesProbe = M.CastbarSuiteNameplatesSupported
-    local nameplatesHidden = nameplatesProbe ~= nil and not nameplatesProbe()
     staticRowsWithoutClientSupport.config = {
         clientOnly = clientOnly, built = built, supportsSetting = supportsSetting,
-        gcdHidden = gcdHidden, nameplatesHidden = nameplatesHidden,
+        gcdHidden = gcdHidden,
     }
     return staticRowsWithoutClientSupport
 end
@@ -187,13 +185,17 @@ local function AddStaticIndexSearchRecords(job, deadline)
     local staticRecords = staticIndex.GetRecords()
     local unsupported = StaticRowsWithoutClientSupport()
     local config = unsupported.config
+    if job.nameplatesHidden == nil then
+        local probe = M.CastbarSuiteNameplatesSupported
+        job.nameplatesHidden = probe ~= nil and not probe() or false
+    end
     local records, covered = job.records, job.covered
     for i = job.index, #staticRecords do
         local rec = staticRecords[i]
         local identity, key = rec.searchIdentity, staticIndex.TargetField(rec, "settingKey")
         local hidden = (key and config.clientOnly[key] and not config.built[key])
             or (config.gcdHidden and rec.key == "opt_castbar" and staticIndex.TargetField(rec, "sectionId") == "castbar_gcd")
-            or (config.nameplatesHidden and key == "general.kickReadyShowNameplates")
+            or (job.nameplatesHidden and key == "general.kickReadyShowNameplates")
             or (config.supportsSetting and not config.supportsSetting(key))
         if not covered[identity] and not unsupported[identity] and not hidden
             and M.SupportsSearchTarget(rec.key, key, staticIndex.TargetField(rec, "prepareKind"), staticIndex.TargetField(rec, "prepareValue")) then

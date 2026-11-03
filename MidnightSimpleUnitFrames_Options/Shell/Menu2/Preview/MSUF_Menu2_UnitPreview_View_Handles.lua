@@ -7,7 +7,7 @@
 --- Split from MSUF_Menu2_UnitPreview_View.lua, which keeps drag, nudge,
 --- refresh and construction; it loads before the view and publishes through
 --- MSUF.UFPreviewViewHandles (public routes stay on MSUF.UFPreview).
-local MSUF = _G.MSUF
+local _, MSUF = ...
 local FILE = "Menu2/UnitPreview_View_Handles"
 local ExportPublic = MSUF.ExportPublic
 local Preview = MSUF.UFPreview or {}

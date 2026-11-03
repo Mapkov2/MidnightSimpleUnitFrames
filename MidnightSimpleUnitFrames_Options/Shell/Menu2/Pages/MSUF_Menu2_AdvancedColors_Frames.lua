@@ -507,6 +507,23 @@ function Build.BarColors(ctx, b)
     })
 end
 
+local function BuildFocusCastbarColor(ctx, castbar)
+    local color = Owned(ColorValueAt(ctx, castbar, "Focus interruptible cast color", 300, -440,
+        function() return TableRGB(G(), "focusCastbarOverrideColor", 0.58, 0.52, 1) end,
+        function(r, g, blue)
+            SetTableRGB(G(), "focusCastbarOverrideColor", r, g, blue)
+            ApplyCastbarColors()
+        end, 230, nil, Meta("castbar.focus_override.custom_color"), { 0.58, 0.52, 1 }), "castbar")
+    local function Refresh() SetControlEnabled(color, G().focusCastbarOverrideEnabled == true) end
+    Owned(ValueSwitchAt(ctx, castbar, "Focus override", 12, -440, 260,
+        function() return G().focusCastbarOverrideEnabled == true end,
+        { write = { source = G, call = function(record, key, value)
+            record[key] = value and true or false
+            ApplyCastbarColors()
+        end, after = Refresh } }, Meta("castbar.focus_override.enabled")), "castbar")
+    M.TrackRefresh(ctx, Refresh)
+end
+
 function Build.Castbar(ctx, b)
     local castbar = ColorsSection(b, "colors_castbar", "Castbar Colors", 580, false)
     local castW = castbar._msuf2Width or ctx.width or 720
@@ -521,6 +538,7 @@ function Build.Castbar(ctx, b)
         { "Castbar border color", 360, -46, "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, nil, 1 },
         { "Castbar background color", 360, -82, "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10, 0.10, 0.10, nil, 0.85 },
     }, ApplyCastbarColors)) do Owned(control, "castbar") end
+    BuildFocusCastbarColor(ctx, castbar)
     LabelAt(castbar, "Player castbar override", 12, -170, 260, "GameFontNormal", T.colors.text)
     local overrideModeX, overrideModeW = 300, 190
     local overrideColorX = min(max(overrideModeX + overrideModeW + 36, floor(castW * 0.56)), castW - 236)
@@ -580,6 +598,8 @@ function Build.Castbar(ctx, b)
         ClearRGBs(g, "castbarInterruptible", "castbarNonInterruptible", "castbarInterruptFeedback", "castbarInterruptUnavailable")
         ClearRGB(g, "castbarTargetName")
         g.castbarInterruptUnavailableColor = nil
+        g.focusCastbarOverrideEnabled = false
+        g.focusCastbarOverrideColor = nil
         g.playerCastbarOverrideEnabled = false
         g.playerCastbarOverrideMode = "CLASS"
         ClearRGB(g, "playerCastbarOverride")

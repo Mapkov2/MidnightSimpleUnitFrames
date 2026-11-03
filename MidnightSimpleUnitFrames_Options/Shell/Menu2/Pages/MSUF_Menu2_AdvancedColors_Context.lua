@@ -746,6 +746,8 @@ local function RegisterCastContextFactories()
         { "castbarTargetNameR", "castbarTargetNameG", "castbarTargetNameB" })
     CastFactory("cast.player_override", "Player cast override", "GetPlayerCastbarOverrideColor", "SetPlayerCastbarOverrideColor", 0, 0.6, 1,
         { "playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB" })
+    TableFactory("cast.focus_override", "Focus interruptible cast color", G, "focusCastbarOverrideColor",
+        0.58, 0.52, 1, ApplyCastbarColors)
     -- Castbar border/background: an API color that falls back to General, with an opacity.
     local function CastBackdropFactory(id, label, getName, setName, prefix, dr, dg, db, alpha)
         FixedContextFactory(id, function()
@@ -1129,6 +1131,7 @@ for path, reference in pairs({
     ["general.castbarBorder"] = "cast.border",
     ["general.castbarBg"] = "cast.background",
     ["castbar.player_override.custom_color"] = "cast.player_override",
+    ["castbar.focus_override.custom_color"] = "cast.focus_override",
     ["table.kickReadyColor"] = "cast.kick_ready",
     ["table.kickNotReadyColor"] = "cast.kick_not_ready",
     ["api.SetInterruptUnavailableCastColor"] = "cast.interrupt_unavailable",

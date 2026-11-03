@@ -16,9 +16,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import unquote
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from search_static_format import decode_context_rows
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR_VERSION = "menu-schema-coverage/3"
@@ -66,7 +69,7 @@ def source_hash(root, include_indexes=True):
         paths.update(p for p in (root / directory).rglob("*") if p.suffix.lower() in {".lua", ".xml", ".toc"})
     paths.update(root / name for name in (
         "tools/menu_schema_coverage.py", "tools/menu_schema_project.lua", "tools/menu_schema_harness.lua",
-        "tools/menu_schema_capture.lua", "tools/search_catalog_harness.lua",
+        "tools/menu_schema_capture.lua", "tools/search_catalog_harness.lua", "tools/search_static_format.py",
         "tools/classic-client-matrix.tsv", "tools/load-graph.lock"))
     # Follow the generation harness' actual Lua helper references. Deleting an
     # unrelated frozen smoke cannot stale a declaration projection.
@@ -106,6 +109,7 @@ def index_data(root, name, current=True):
         raise ValueError("incomplete search inventory: " + name)
     if current and stamp[1] != menu_hash(root, name == INDEXES[0]):
         raise ValueError("stale search inventory: " + name)
+    rows = decode_context_rows(text, rows)
     return {"sourceSha256": stamp[1], "blobSha256": hashlib.sha256(blob[1].encode()).hexdigest(),
             "rowCount": len(rows), "identities": sorted(row[7] for row in rows)}, rows
 

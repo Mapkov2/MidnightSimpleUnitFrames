@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory(prefix="schema-order-") as directory:
     for name in ("MidnightSimpleUnitFrames/A.lua", "MidnightSimpleUnitFrames/a/b.lua",
                  "MidnightSimpleUnitFrames_Options/Z.lua", ".github/check.lua",
                  "tools/menu_schema_coverage.py", "tools/menu_schema_project.lua", "tools/menu_schema_harness.lua",
-                 "tools/menu_schema_capture.lua", "tools/search_catalog_harness.lua",
+                 "tools/menu_schema_capture.lua", "tools/search_catalog_harness.lua", "tools/search_static_format.py",
                  "tools/classic-client-matrix.tsv", "tools/load-graph.lock"):
         path = fixture / name
         path.parent.mkdir(parents=True, exist_ok=True)

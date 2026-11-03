@@ -319,7 +319,9 @@ local function MarkColorTarget(Bars,Apply)
 end
 
 -- Percent marks span 0-100; absolute marks retain the wide raw-power range.
-local function ValueMax(rule) return rule and rule.mode=="ABSOLUTE" and 10000000 or 100 end
+local function ValueMax(rule)
+    return rule and (rule.mode=="ABSOLUTE" or rule.mode=="SPELL") and 10000000 or 100
+end
 -- A readable player power maximum, or 0 while it is restricted or unavailable.
 local function PowerMax(power)
     if type(power)=="string" then power=Enum.PowerType[(power:lower():gsub("^%l",string.upper):gsub("_(%l)",string.upper))] end
@@ -362,6 +364,45 @@ local function SliderMax(rule)
     if maximum<=0 then maximum=100 end
     local stored=tonumber(rule.value)
     return stored and stored>maximum and math.min(ValueMax(rule),stored) or maximum
+end
+local function MarkModes()
+    local values={{value="PERCENT",text="Percent"},{value="ABSOLUTE",text="Absolute value"}}
+    if CLIENT.IsRetail then
+        values[#values+1]={value="SPELL",text="Spell minimum cost (out of combat)"}
+    end
+    return values
+end
+local function MarkCostText(rule)
+    if not rule or rule.mode~="SPELL" then return "" end
+    local power=UnitPowerType("player")
+    if rule.target=="ALTMANA" then power=0
+    elseif rule.target=="CLASS" then power=MSUF.CPBuilders.ClassPowerType()
+    elseif M.PreviewHelpers.PlayerManaSourceActive(M.EnsureDB().player) then power=0 end
+    local value=MSUF.CPBuilders.ResourceMarkCost(rule.spellID,power)
+    if value==nil then return M.Tr("No readable spell cost for this bar.") end
+    local info=C_Spell.GetSpellInfo(rule.spellID)
+    return M.Format("Minimum cost: %s (%s).",tostring(value),info and info.name or tostring(rule.spellID))
+end
+local function MarkRows()
+    local rows={
+        {"dropdown","target","PLAYER",{"Resource bar",{{value="PLAYER",text="Player power"},
+            {value="CLASS",text="Class resource"},{value="ALTMANA",text="Alternative mana"}},280}},
+        {"dropdown","resource","ALL",{"Power type",PowerTypeValues(),280}},
+        {"dropdown","mode","PERCENT",{"Value mode",MarkModes(),280}},
+        {"slider","value",MARK_DEFAULTS.value,{"Resource value",0,10000000,1,280}},
+        {"slider","width",MARK_DEFAULTS.width,{"Mark width",1,20,1,280}},
+        {"flowToggle","mark",MARK_DEFAULTS.mark,{"Show resource mark"}},
+        {"flowToggle","threshold",MARK_DEFAULTS.threshold,{"Change color at threshold"}},
+        {"dropdown","direction","ABOVE",{"Threshold direction",{{value="ABOVE",text="At or above"},
+            {value="BELOW",text="Below"}},280}},
+    }
+    if CLIENT.IsRetail then
+        table.insert(rows,4,{"textinput","spellID",0,{"Spell ID, link or name",280},commitOnBlur=true,
+            tip={"Spell minimum cost (out of combat)",
+                "Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. "
+                .. "Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."}})
+    end
+    return rows
 end
 function ResourceExtras.BuildMarks(page,Bars,Apply)
     local ctx=page.ctx
@@ -444,19 +485,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
             Refresh()
         end
     end)
-    local rows={
-        {"dropdown","target","PLAYER",{"Resource bar",{{value="PLAYER",text="Player power"},
-            {value="CLASS",text="Class resource"},{value="ALTMANA",text="Alternative mana"}},280}},
-        {"dropdown","resource","ALL",{"Power type",PowerTypeValues(),280}},
-        {"dropdown","mode","PERCENT",{"Value mode",{{value="PERCENT",text="Percent"},
-            {value="ABSOLUTE",text="Absolute value"}},280}},
-        {"slider","value",MARK_DEFAULTS.value,{"Resource value",0,10000000,1,280}},
-        {"slider","width",MARK_DEFAULTS.width,{"Mark width",1,20,1,280}},
-        {"flowToggle","mark",MARK_DEFAULTS.mark,{"Show resource mark"}},
-        {"flowToggle","threshold",MARK_DEFAULTS.threshold,{"Change color at threshold"}},
-        {"dropdown","direction","ABOVE",{"Threshold direction",{{value="ABOVE",text="At or above"},
-            {value="BELOW",text="Below"}},280}},
-    }
+    local rows=MarkRows()
     for i,row in ipairs(rows) do
         local key=row[2]
         row.meta,row.scope=Meta("marks."..key),"resourceMarks"
@@ -469,9 +498,14 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
             if row[1]=="flowToggle" then
                 return rule and rule[key]~=false and (key=="mark" or rule[key]==true) or false
             end
+            if key=="spellID" then return rule and rule.spellID and tostring(rule.spellID) or "" end
             return rule and rule[key] or row[3]
         end
-        if key=="mode" then
+        if key=="spellID" then
+            row.write={keyOnly=true,call=Write,
+                convert=function(value) return MSUF.CPBuilders.ResourceMarkSpellID(value) or 0 end,
+                after=Refresh}
+        elseif key=="mode" then
             row.customSetReason="Changes the value mode and clamps the stored resource value."
             row.set=function(value) Write(key,value) end
         else
@@ -486,12 +520,17 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
                 end
             } --[[schema setter: H4.ResourceExtras.3]]
         end
-        if key=="value" then
+        if key=="value" or key=="spellID" then
             row.beforeBind=function(widget)
+                if key=="spellID" then widget:SetMaxLetters(255) end
                 M.TrackRefresh(ctx,function()
-                    widget._msuf2Refreshing=true
-                    widget:SetMinMaxValues(0,SliderMax(Rule()))
-                    widget._msuf2Refreshing=nil
+                    local rule=Rule()
+                    AP.SetControlEnabled(widget,rule~=nil and (key=="spellID")== (rule.mode=="SPELL"))
+                    if key=="value" then
+                        widget._msuf2Refreshing=true
+                        widget:SetMinMaxValues(0,SliderMax(rule))
+                        widget._msuf2Refreshing=nil
+                    end
                 end)
             end
         end
@@ -500,8 +539,15 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         row[5]={32+column*(controlW+20),-268-index*58,row[1]=="flowToggle" and controlW-36 or controlW,"LEFT"}
     end
     Schema.Build(ctx,section,rows,ROW_OPTIONS)
+    if CLIENT.IsRetail then
+        local status=W.Text(section,"",32,-height+70,cardW-32,M.Theme.colors.muted)
+        M.TrackRefresh(ctx,function() status:SetText(MarkCostText(Rule())) end)
+    end
 end
-function ResourceExtras.MarksHeight(page) return page.width>=680 and 612 or 786 end
+function ResourceExtras.MarksHeight(page)
+    if CLIENT.IsRetail then return page.width>=680 and 654 or 886 end
+    return page.width>=680 and 612 or 786
+end
 local function BuildMarkColors(ctx,b,Bars,ColorValueAt,Apply)
     local section=b:CollapsibleSection("colors_resource_marks","Resource marks and thresholds",154,false)
     Schema.Section(section,"resourceMarks")

@@ -683,8 +683,10 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
   end
   local leaderCfg, assistCfg = status.leader, status.assist
   local leaderTex, assistTex = frame.leaderIcon or frame.LeaderIndicator, frame.assistIcon
-  local leader = sample.player == true and sample.leader == true
-  local assist = sample.player == true and (not leader or sample.statusSelection == "all") and sample.assist == true
+  local all = sample.statusSelection == "all"
+  local playerSample = sample.player == true or all
+  local leader = playerSample and sample.leader == true
+  local assist = playerSample and (not leader or all) and sample.assist == true
   if leaderTex then
     local show = leaderCfg and leaderCfg.enabled and leader
     if show then ApplyLeaderTexture(leaderTex, leaderCfg, status, false) end
@@ -697,7 +699,7 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
   end
   cfg, tex = status.elite, frame.eliteIcon
   if tex then
-    local state = cfg and cfg.enabled and sample.player ~= true and SAMPLE_ELITE_STATE[sample.classification or ""] or nil
+    local state = cfg and cfg.enabled and (sample.player ~= true or all) and SAMPLE_ELITE_STATE[sample.classification or ""] or nil
     if state == nil and cfg and cfg.enabled and sample.player ~= true and sample.level == -1 then state = "BOSS" end
     if state then
       if not ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
@@ -744,7 +746,7 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
   end
   cfg, tex = status.raidGroup, frame.raidGroupNameText
   if tex then
-    local subgroup = cfg and cfg.enabled and sample.player == true and sample.raidGroup or nil
+    local subgroup = cfg and cfg.enabled and playerSample and sample.raidGroup or nil
     if subgroup then SetText(tex, Runtime.RaidGroupText(cfg.style, subgroup)) end
     SetShown(tex, subgroup ~= nil)
   end

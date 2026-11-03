@@ -1,15 +1,15 @@
 --- Group preview render/composition.
 ---
---- Native creates the preview host and interaction handles; this module owns
---- the options composition path that binds engine regions to preview handles.
+--- Coordinates the ordered scene stages and per-host install state.
+--- Planning and presentation have dedicated owners; Native owns lifecycle.
 local _, MSUF = ...
 MSUF = MSUF or {}
 local FILE = "Menu2/GroupPreview_Render"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
--- Core exports the refresh path reads, resolved once (their providers load with the
--- core): the preview animation frame state and the status icon texture resolver.
+-- The animation owner and status icon provider load before the Options addon.
+local Animation = assert(MSUF.PreviewAnimation, "Group preview requires PreviewAnimation")
 local CoreExports = {
-    BuildAnimationFrameState = MSUF.Require("MSUF_BuildPreviewAnimationFrameState", FILE),
+    BuildAnimationFrameState = Animation.BuildFrameState,
     GetStatusIconTexture = MSUF.Require("MSUF_GetStatusIconTexture", FILE),
 }
 local M = MSUF.MSUF2 or {}
@@ -18,6 +18,7 @@ local EnsureDB = M.EnsureDB
 local Render = M.GroupPreviewRender or {}
 M.GroupPreviewRender = Render
 local Fallbacks = M.Fallbacks or {}
+local RequireFields = M.PreviewContracts.RequireFields
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local issecretvalue, wipe = issecretvalue, wipe
 local floor, max, min, ceil = math.floor, math.max, math.min, math.ceil
@@ -26,7 +27,6 @@ local SceneAuraLaneAvailable, SceneAuraLaneTextAvailable, PreviewIconScale, AURA
 local BuildSceneSpells, FinalizeSpellLevels, SuspendHandleEffects
 local TEXT_HANDLE_KEYS, TEXT_LEVEL_SPECS, TEXT_SLOT_HANDLE_KEYS, EMPTY_APPEARANCE, SELECTED_SPELL_PLACED_DEFAULT
 local MENU_EXTRA_OPTIONS = { position = false, sampleCount = 3 }
-local PREDICTION_BAR_FIELDS = { "_healPred", "_absorb", "_healAbsorb" }
 -- Blizzard's BackdropTemplateMixin:SetBackdrop skips a table it already holds
 -- (HasBackdropInfo compares identity), so each repaint passes the same table.
 local MOCK_BACKDROPS = {}
@@ -135,29 +135,7 @@ PreviewInteractionLevel = function(mock, layerAPI, extra)
     return SafePreviewFrameLevel(top + (tonumber(layerAPI and layerAPI.ELEMENT_LEVEL_STRIDE) or 32)
         + (tonumber(extra) or 0))
 end
--- Render state field and what stands in for an install dep that is missing (nothing, for the handles).
-local GROUP_RENDER_FALLBACKS = {
-    { "buffHandle" }, { "trackedBuffHandle" }, { "debuffHandle" }, { "externalHandle" }, { "powerBarHandle" },
-    { "portraitHandle" }, { "dispelSymbolHandle" }, { "spellHandle" }, { "ScaleValue" }, { "ConfigToOffset" },
-    { "CompiledSpec", Fallbacks.Nil }, { "CompiledAuraLane", DefaultCompiledAuraLane }, { "RuntimeStatusConfig", Fallbacks.Nil },
-    { "CurrentStatusSpec", Fallbacks.Nil }, { "StatusSpecEnabled", Fallbacks.False }, { "StatusSpecInMode", Fallbacks.False },
-    { "StatusSpecIsText", Fallbacks.False }, { "StatusText", Fallbacks.Empty }, { "StatusLabel", Fallbacks.Status },
-    { "CurrentSpellInfo", Fallbacks.Nil }, { "PreviewAllSpecSpellIcons", Fallbacks.False }, { "CurrentSpellConfig", Fallbacks.Nil },
-    { "CurrentSpellPlaced", Fallbacks.Nil }, { "CurrentSpellTexture", Fallbacks.QuestionIcon },
-    { "CurrentSpellColor", Fallbacks.WhiteRGB }, { "MockSpellTexture", Fallbacks.QuestionIcon }, { "Round", Fallbacks.Round },
-    { "ResolveDefaultZoomLock", Fallbacks.Noop }, { "UpdateZoomControls", Fallbacks.Noop }, { "SelectHandle", Fallbacks.Noop },
-    { "NudgeHandlePosition", Fallbacks.Noop }, { "RefreshHandleSelection", Fallbacks.Noop },
-    { "ClampZoom", function(value) return tonumber(value) or 1 end },
-    { "ClampLayer", function(value, fallback) return tonumber(value) or fallback or 0 end },
-    { "ClassColor", function(_, r, g, b) return r or 1, g or 1, b or 1 end },
-    { "AuraGrowth", function() return { px = 1, py = 0, sx = 0, sy = -1 } end },
-    { "Int", function(value, fallback, minValue, maxValue)
-        local n = floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
-        if minValue ~= nil and n < minValue then n = minValue end
-        if maxValue ~= nil and n > maxValue then n = maxValue end
-        return n
-    end },
-}
+
 -- A refresh first resolves immutable inputs into a scene. Render components then
 -- measure and paint that scene without reaching back through the install closure.
 -- The tracked lane is read into one table kept per preview box: every key is
@@ -179,239 +157,9 @@ local function SceneLayerAlpha(scene, key)
     return scene.soloLayer and scene.soloLayer ~= key and 0.15 or 1
 end
 
--- Scene field -> compiled spec section.
-local RUNTIME_SPEC_SECTIONS = {
-    runtimeText = "text", runtimePower = "power", runtimeHealth = "health", runtimeBorder = "border",
-    runtimeTempMaxHealth = "tempMaxHealth", runtimePrediction = "prediction", runtimeStatus = "status",
-}
+local BuildScene
 
-local function BuildSceneLayers(scene, box, kind, conf, runtimeSpec)
-    local RenderState, gf = scene.S, scene.gf
-    local statusAvailable = false
-    for i = 1, #RenderState.statusSpecs do
-        local spec = RenderState.statusSpecs[i]
-        if RenderState.StatusSpecInMode(spec, scene.statusSpec) and SceneStatusAvailable(scene, spec) then
-            statusAvailable = true
-            break
-        end
-    end
-    local aurasEnabled, powerTextEnabled
-    if scene.runtimeAuras then
-        local custom = false
-        for i = 1, #AURA_LANES do
-            if scene[AURA_LANES[i][3]].enabled == true then
-                custom = true
-                break
-            end
-        end
-        scene.customRenderer = custom
-        aurasEnabled = custom or scene.runtimeAuras.enabled == true
-    else
-        scene.customRenderer = true
-        aurasEnabled = scene.rawAuras.enabled ~= false
-    end
-    if runtimeSpec then
-        powerTextEnabled = runtimeSpec.showPowerText == true
-    else
-        powerTextEnabled = (gf and gf.IsPowerTextEnabled and gf.IsPowerTextEnabled(kind, conf))
-            or conf.showPowerText == true or conf.showPower == true
-    end
-    local customAuraText = false
-    for i = 1, #AURA_LANES do
-        local lane = AURA_LANES[i]
-        if SceneAuraLaneTextAvailable(scene, scene[lane[3]], lane[4]) then
-            customAuraText = true
-            break
-        end
-    end
-    local textAvailable
-    if runtimeSpec then
-        textAvailable = runtimeSpec.showName == true
-            or runtimeSpec.showHealthText == true or powerTextEnabled == true
-    else
-        textAvailable = conf.showName ~= false or conf.showHPText ~= false or powerTextEnabled == true
-    end
-    local selectedSpellAvailable = conf.spellIndicators and conf.spellIndicators.enabled == true
-        and (scene.selectedSpellPlacedEnabled or scene.selectedSpellNeedsPlacementPreview
-            or scene.selectedSpellEffectAvailable)
-    -- Same role-gated enablement the runtime uses: the layer is unavailable
-    -- (not merely hidden) when the bar is off for the preview role.
-    local powerAvailable
-    if runtimeSpec then
-        powerAvailable = scene.runtimePower and scene.runtimePower.enabled == true or false
-    else
-        powerAvailable = (tonumber(scene.H.MockPowerHeight(kind, conf, 1, 1)) or 0) > 0
-    end
-    local layerAvailable = box._msufGFLayerAvailableState
-    if not layerAvailable then
-        layerAvailable = {}
-        box._msufGFLayerAvailableState = layerAvailable
-    end
-    layerAvailable.guides, layerAvailable.bounds = true, true
-    layerAvailable.power = powerAvailable
-    layerAvailable.portrait = kind == "party" and runtimeSpec and runtimeSpec.portrait
-        and runtimeSpec.portrait.enabled == true or false
-    for i = 1, #AURA_LANES do
-        local lane = AURA_LANES[i]
-        layerAvailable[lane[1]] = SceneAuraLaneAvailable(scene, scene[lane[3]], lane[4])
-    end
-    layerAvailable.status = statusAvailable
-    layerAvailable.si = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.enabled == true
-        and (scene.runtimeSpellPlacedAvailable or scene.runtimeSpellEffectAvailable)
-        or selectedSpellAvailable or false
-    layerAvailable.auraText = aurasEnabled and customAuraText
-    layerAvailable.text = textAvailable
-    layerAvailable.dispelOverlay = runtimeSpec and runtimeSpec.group
-        and runtimeSpec.group.dispelOverlayEnabled == true or false
-    layerAvailable.dispelSymbol = runtimeSpec and runtimeSpec.dispelSymbol
-        and runtimeSpec.dispelSymbol.enabled == true or false
-    scene.layerAvailable = layerAvailable
-    box._layerAvailable = layerAvailable
-    if scene.soloLayer and layerAvailable[scene.soloLayer] == false then
-        scene.M.gfPreviewSoloLayer = nil
-        scene.soloLayer = nil
-    end
-end
-
-local function BuildScene(box, reason)
-    local RenderState = box._msufGFRenderState
-    local H, M, runtimeNS = RenderState.H, RenderState.M, RenderState.MSUF
-    local kind = H.CurrentScope()
-    local conf = H.Conf(kind)
-    local gf = runtimeNS and runtimeNS.GF
-    local previewAnimation = runtimeNS and runtimeNS.PreviewAnimation
-    local buildFrameState = previewAnimation and previewAnimation.BuildFrameState
-        or CoreExports.BuildAnimationFrameState
-    local animState = box._animationEnabled == true
-        and buildFrameState(box, 1, kind, box._msufGFMenuPreviewAnimState or {}, box._animationElapsed)
-    if animState then box._msufGFMenuPreviewAnimState = animState end
-    local runtimeSpec = RenderState.CompiledSpec(kind)
-    -- The group cell mirrors the player's current state (name, class, exact HP/power/absorb) so the preview matches
-    -- the live group frame. Pull-based only: sampled during this refresh, stylized values back any missing field.
-    -- The engine scene stays unit-free; this stage reads the unit and hands the scene a sample.
-    local preview = runtimeNS and runtimeNS.UFPreview
-    local liveData = preview and preview.LiveUnitData and preview.LiveUnitData("player") or nil
-    -- One scene table per preview box, emptied for each refresh, so a repaint
-    -- builds no new scene (review R7 item 9).
-    local scene = box._msufGFSceneState
-    if scene then wipe(scene) else
-        scene = {}
-        box._msufGFSceneState = scene
-    end
-    scene.S, scene.box, scene.reason, scene.H, scene.M, scene.MSUF = RenderState, box, reason, H, M, runtimeNS
-    scene.mock, scene.kind, scene.label, scene.conf, scene.gf = RenderState.mock, kind, H.PreviewScopeLabel(kind), conf, gf
-    scene.previewAnimation, scene.animState, scene.liveData = previewAnimation, animState, liveData
-    scene.hpPct = animState and max(0.02, min(0.98, tonumber(animState.hpPct) or 0.72)) or (liveData and liveData.hp) or 0.72
-    scene.powerPct = animState and max(0, min(1, tonumber(animState.powerPct) or 0.70)) or (liveData and liveData.power) or 0.70
-    scene.healPct = animState and max(0.01, min(0.24, tonumber(animState.healPct) or 0.12)) or 0.12
-    scene.absorbPct = animState and max(0.01, min(0.24, tonumber(animState.absorbPct) or 0.08)) or 0.08
-    scene.runtimeSpec = runtimeSpec
-    scene.runtimeAuras = runtimeSpec and runtimeSpec.auras
-    for field, section in pairs(RUNTIME_SPEC_SECTIONS) do
-        scene[field] = runtimeSpec and runtimeSpec[section] or {}
-    end
-    scene.focus = H.PreviewFocusForPage(RenderState.ctx.key)
-    scene.layerVisible = type(M.gfPreviewLayerVisible) == "table" and M.gfPreviewLayerVisible or {}
-    -- The sample-effect layers follow their open settings section on the Group Bars page (an edge, so a chip click sticks).
-    M.PreviewHelpers.SyncSampleLayerSections(M, scene.layerVisible, "gf_bars", Render.SAMPLE_LAYER_SECTIONS,
-        M.accordionState, M.activeKey)
-    scene.soloLayer = M.gfPreviewSoloLayer
-    scene.textHandles = box._textHandles or {}
-    scene.previewRole = H.PreviewRole and H.PreviewRole(kind) or RenderState.GF_PREVIEW_ROLE
-    BuildSceneAuraLanes(scene, box, kind, conf, runtimeSpec)
-    BuildSceneSpells(scene, box, kind, conf)
-    BuildSceneLayers(scene, box, kind, conf, runtimeSpec)
-    return scene
-end
-
-local function TextRegionList(box, key, a, b, c)
-    local lists = box._msufGFTextRegionLists
-    if not lists then
-        lists = {}
-        box._msufGFTextRegionLists = lists
-    end
-    local list = lists[key]
-    if not list then
-        list = {}
-        lists[key] = list
-    end
-    list[1], list[2], list[3] = a, b, c
-    return list
-end
--- Animation-tick path: the handle placements stay inline, one Lua call per handle and no wrapper.
-local function PlaceTextHandleGroup(scene, handles, groupKey, prefix, left, center, right)
-    local box, mock, H = scene.box, scene.mock, scene.H
-    local keys = TEXT_SLOT_HANDLE_KEYS[prefix]
-    if H.TextMovesTogether(scene.kind, prefix) then
-        handles[keys[1]]:Hide()
-        handles[keys[2]]:Hide()
-        handles[keys[3]]:Hide()
-        if not H.PlaceHandleAroundRegions(handles[groupKey], mock, TextRegionList(box, prefix, left, center, right), 3) then
-            handles[groupKey]:Hide()
-        end
-    else
-        handles[groupKey]:Hide()
-        if not H.PlaceHandleAroundRegions(handles[keys[1]], mock, TextRegionList(box, keys[1], left), 3) then
-            handles[keys[1]]:Hide()
-        end
-        if not H.PlaceHandleAroundRegions(handles[keys[2]], mock, TextRegionList(box, keys[2], center), 3) then
-            handles[keys[2]]:Hide()
-        end
-        if not H.PlaceHandleAroundRegions(handles[keys[3]], mock, TextRegionList(box, keys[3], right), 3) then
-            handles[keys[3]]:Hide()
-        end
-    end
-end
-local function PlaceTextHandles(scene)
-    local box, mock, H = scene.box, scene.mock, scene.H
-    local handles = scene.textHandles
-    for i = 1, #TEXT_HANDLE_KEYS do handles[TEXT_HANDLE_KEYS[i]]._previewScale = scene.previewScale end
-    -- With the Text layer off the cell draws no text, so there is nothing for a handle to wrap.
-    if not SceneLayerOn(scene, "text") then
-        for i = 1, #TEXT_HANDLE_KEYS do handles[TEXT_HANDLE_KEYS[i]]:Hide() end
-        H.ApplyTextFocus(box, mock)
-        return
-    end
-    -- Name is a natural-width FontString. Its actual region is the sole source
-    -- for glyph, grab-handle and focus geometry.
-    if not H.PlaceHandleAroundRegions(handles.name, mock, TextRegionList(box, "name", mock._nameFS), 3, "name") then handles.name:Hide() end
-    PlaceTextHandleGroup(scene, handles, "hpGroup", "hp", mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS)
-    PlaceTextHandleGroup(scene, handles, "powerGroup", "power", mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS)
-    H.ApplyTextFocus(box, mock)
-end
-
---- Strata of the preview host. Handles and effect roots stay on it: the live
---- runtime keeps every layer-aware element on its owning frame's strata, so
---- neither a live frame's strata nor a configured legacy strata applies here.
-local function PreviewHostStrata(scene)
-    local RenderState = scene.S
-    local host = scene.mock.GetFrameStrata and scene.mock:GetFrameStrata()
-    if RenderState.issecretvalue(host) == true or not host or host == "" then
-        host = scene.box.GetFrameStrata and scene.box:GetFrameStrata()
-        if RenderState.issecretvalue(host) == true or host == "" then host = nil end
-    end
-    return host
-end
-
-local function ApplyHandleStrata(scene, handle, host)
-    local RenderState = scene.S
-    if handle and handle.SetFrameStrata and host then
-        local current = handle.GetFrameStrata and handle:GetFrameStrata()
-        if RenderState.issecretvalue(current) == true or current ~= host then handle:SetFrameStrata(host) end
-    end
-end
-
-local function SyncIconDetailLevels(layers, handle)
-    if not (handle and handle.GetFrameLevel) then return end
-    layers = layers or {}
-    local baseLevel = handle:GetFrameLevel() or 0
-    SetPreviewFrameLevel(handle._iconDurationLayer,
-        baseLevel + (layers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
-    SetPreviewFrameLevel(handle._iconSwipeLayer,
-        baseLevel + (layers.AURA_COOLDOWN_LEVEL_OFFSET or 4))
-    SetPreviewFrameLevel(handle._iconTextLayer,
-        baseLevel + (layers.AURA_TEXT_LEVEL_OFFSET or 8))
-end
+local PlaceTextHandles, PreviewHostStrata, ApplyHandleStrata, SyncIconDetailLevels
 
 local function FinalizeLevels(scene, hostStrata)
     local RenderState, mock, conf = scene.S, scene.mock, scene.conf
@@ -454,93 +202,7 @@ local function FinalizeLevels(scene, hostStrata)
     end
 end
 
-local ENGINE_TEXT_FIELDS = { "nameText", "hpTextLeft", "hpTextCenter", "hpTextRight",
-    "powerTextLeft", "powerTextCenter", "powerTextRight" }
--- Shown state and layer alpha of the handles that follow a settings layer.
-local function FinalizeVisibility(scene)
-    local RenderState = scene.S
-    for i = 1, #AURA_LANES do
-        local lane = AURA_LANES[i]
-        local handle, key = RenderState[lane[2]], lane[1]
-        if handle then
-            handle:SetShown(scene.layerAvailable[key] and SceneLayerOn(scene, key))
-            handle:SetAlpha(SceneLayerAlpha(scene, key) * (scene.engineAlpha or 1))
-        end
-    end
-    for i = 1, #RenderState.statusHandles do
-        local handle = RenderState.statusHandles[i]
-        local spec = handle and handle._statusSpec
-        if handle then
-            handle:SetShown(RenderState.StatusSpecInMode(spec, scene.statusSpec)
-                and SceneStatusAvailable(scene, spec) and SceneLayerOn(scene, "status"))
-            handle:SetAlpha(SceneLayerAlpha(scene, "status") * (scene.engineAlpha or 1))
-        end
-    end
-    local spellVisible = scene.layerAvailable.si and SceneLayerOn(scene, "si")
-    local selectedEffectOwner = scene.box._msufGFSelectedSpellEffectOwner
-    if selectedEffectOwner then
-        selectedEffectOwner:SetShown(spellVisible and scene.selectedSpellEffectAvailable == true)
-    end
-    local selected = scene.selectedSpellCfg
-    RenderState.spellHandle:SetShown(spellVisible)
-    RenderState.spellHandle:SetAlpha(selected and selected.enabled == false and SceneLayerAlpha(scene, "si") * 0.45
-        or SceneLayerAlpha(scene, "si"))
-    for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
-        handle:SetShown(spellVisible)
-        handle:SetAlpha(SceneLayerAlpha(scene, "si"))
-    end
-    for i = 1, #TEXT_HANDLE_KEYS do scene.textHandles[TEXT_HANDLE_KEYS[i]]:SetAlpha(SceneLayerAlpha(scene, "text")) end
-    local frame, helpers = scene.mock._cell, M.PreviewHelpers
-    if frame then
-        local textAlpha = SceneLayerAlpha(scene, "text")
-        for i = 1, #ENGINE_TEXT_FIELDS do
-            helpers.ApplyGroupSceneLayerAlpha(scene.box, frame[ENGINE_TEXT_FIELDS[i]], textAlpha)
-        end
-        helpers.ApplyGroupSceneLayerAlpha(scene.box, frame.targetPowerBar, SceneLayerAlpha(scene, "power"))
-        local bar, trail = frame.targetPowerBar, frame.powerLossTrail
-        if bar and trail and bar._msufChunkedLoss then
-            local pool = trail._msufLossTrailPool
-            local alpha = bar:GetStatusBarTexture():GetAlpha() * bar:GetAlpha()
-            for i = 1, pool and #pool or 1 do
-                local snapshot = pool and pool[i] or trail
-                local fill = snapshot:GetStatusBarTexture()
-                if fill:GetAlpha() ~= alpha then fill:SetAlpha(alpha) end
-                if not bar:IsShown() then snapshot:Hide() end
-            end
-        end
-    end
-end
-
--- The out-of-range fade of the Options preview: whole frame, or the health bar and its prediction bars only.
-local function FinalizeRangeFade(scene)
-    local box, mock = scene.box, scene.mock
-    local rangeAlpha = tonumber(box._msuf2RangeFadePreviewAlpha)
-    if rangeAlpha ~= nil then rangeAlpha = max(0, min(1, rangeAlpha)) end
-    local rangeHealthOnly = rangeAlpha ~= nil and box._msuf2RangeFadePreviewLayerMode == "health"
-    local wholeFrameMul = rangeAlpha ~= nil and not rangeHealthOnly and rangeAlpha or 1
-    local healthMul = rangeHealthOnly and rangeAlpha or 1
-    if mock.SetAlpha then mock:SetAlpha(wholeFrameMul) end
-    if mock._health and mock._health.SetAlpha then mock._health:SetAlpha(healthMul) end
-    local trail = mock._cell and mock._cell.healthLossTrail
-    if trail and mock._health._msufChunkedLoss then
-        local fill = trail:GetStatusBarTexture()
-        local alpha = mock._health:GetStatusBarTexture():GetAlpha() * healthMul
-        if fill:GetAlpha() ~= alpha then
-            fill:SetAlpha(alpha)
-        end
-    end
-    -- The engine paints each prediction bar at its configured opacity (the bar's alpha): the range fade scales it.
-    for i = 1, #PREDICTION_BAR_FIELDS do
-        local bar = mock[PREDICTION_BAR_FIELDS[i]]
-        if bar and bar.SetAlpha then bar:SetAlpha((tonumber(bar._msufA) or 1) * healthMul) end
-    end
-    for i = 1, #(box._handleList or {}) do
-        local handle = box._handleList[i]
-        if handle and handle.SetAlpha and handle.GetParent and handle:GetParent() ~= mock then
-            handle:SetAlpha((handle.GetAlpha and handle:GetAlpha() or 1) * wholeFrameMul)
-        end
-    end
-end
+local FinalizeVisibility, FinalizeRangeFade
 
 local function FinalizeScene(scene)
     local RenderState, box = scene.S, scene.box
@@ -577,7 +239,7 @@ end
 
 -- Specialize owners at load; refresh and animation keep the original call graph.
 SceneAuraLaneAvailable, SceneAuraLaneTextAvailable, PreviewIconScale, AURA_LANES, BuildSceneAuraLanes, RenderAuras = M.GroupRenderFactories.Auras(
-    MSUF, M, wipe, max, Stage
+    { Core = MSUF, Menu = M, Wipe = wipe, Max = max }, { Stage = Stage }
 )
 TEXT_HANDLE_KEYS, TEXT_LEVEL_SPECS, TEXT_SLOT_HANDLE_KEYS, EMPTY_APPEARANCE, SELECTED_SPELL_PLACED_DEFAULT = M.GroupRenderFactories.Frame(
     { Core = MSUF, Menu = M, Exports = CoreExports, EnsureDB = EnsureDB, IsSecret = issecretvalue },
@@ -586,6 +248,18 @@ TEXT_HANDLE_KEYS, TEXT_LEVEL_SPECS, TEXT_SLOT_HANDLE_KEYS, EMPTY_APPEARANCE, SEL
     { PixelLayoutRegion = PixelLayoutRegion, Floor = floor, Max = max, Min = min },
     { API = Layers, SetFrameLevel = SetPreviewFrameLevel, ElementLevel = PreviewElementLevel, IsOn = SceneLayerOn, Alpha = SceneLayerAlpha }
 )
+local RequireFields = M.PreviewContracts.RequireFields
+local presentation = M.GroupRenderFactories.Presentation(
+    { Menu = M },
+    { SetFrameLevel = SetPreviewFrameLevel, TextHandleKeys = TEXT_HANDLE_KEYS,
+        TextSlotHandleKeys = TEXT_SLOT_HANDLE_KEYS, AuraLanes = AURA_LANES },
+    { IsOn = SceneLayerOn, Alpha = SceneLayerAlpha, StatusAvailable = SceneStatusAvailable }
+)
+RequireFields("GroupPreview.Presentation", presentation,
+    "PlaceTextHandles HostStrata ApplyHandleStrata SyncIconDetailLevels FinalizeVisibility FinalizeRangeFade")
+PlaceTextHandles, PreviewHostStrata = presentation.PlaceTextHandles, presentation.HostStrata
+ApplyHandleStrata, SyncIconDetailLevels = presentation.ApplyHandleStrata, presentation.SyncIconDetailLevels
+FinalizeVisibility, FinalizeRangeFade = presentation.FinalizeVisibility, presentation.FinalizeRangeFade
 BuildSceneSpells, FinalizeSpellLevels, SuspendHandleEffects = M.GroupRenderFactories.Spells(
     { Core = MSUF, Menu = M, Wipe = wipe },
     { PixelLayoutRegion = PixelLayoutRegion, Floor = floor, Max = max, Min = min, IconScale = PreviewIconScale },
@@ -594,6 +268,12 @@ BuildSceneSpells, FinalizeSpellLevels, SuspendHandleEffects = M.GroupRenderFacto
     { Finalize = FinalizeScene, Stage = Stage, EmptyAppearance = EMPTY_APPEARANCE, SelectedPlacedDefault = SELECTED_SPELL_PLACED_DEFAULT }
 )
 
+BuildScene = M.GroupRenderFactories.Plan(
+    { Exports = CoreExports, Wipe = wipe },
+    { AuraLanes = AURA_LANES, BuildAuraLanes = BuildSceneAuraLanes, BuildSpells = BuildSceneSpells,
+        StatusAvailable = SceneStatusAvailable, AuraAvailable = SceneAuraLaneAvailable,
+        AuraTextAvailable = SceneAuraLaneTextAvailable, SampleLayerSections = Render.SAMPLE_LAYER_SECTIONS }
+)
 Render.Components = { Plan = BuildScene, Auras = RenderAuras, Finalize = FinalizeScene }
 Render.ComponentOrder = { "Plan", "FrameAndText", "Auras", "Indicators", "Finalize" }
 local KEY_NUDGE = { LEFT = { -1, 0 }, RIGHT = { 1, 0 }, UP = { 0, 1 }, DOWN = { 0, -1 } }
@@ -603,8 +283,18 @@ local KEY_NUDGE = { LEFT = { -1, 0 }, RIGHT = { 1, 0 }, UP = { 0, 1 }, DOWN = { 
 --- from compiled group specs, visible layers, zoom state, and selected handles.
 function Render.Install(box, ctx, deps)
     if not box then return end
-    deps = deps or {}
-    local M = deps.M or M
+    local Config = RequireFields("GroupRender.Config", deps.Config,
+        "GF_PREVIEW_ROLE_DEFAULT StatusSpecs ScaleValue ConfigToOffset CompiledSpec CompiledAuraLane RuntimeStatusConfig CurrentStatusSpec "
+        .. "StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellInfo "
+        .. "PreviewAllSpecSpellIcons CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture "
+        .. "CurrentSpellColor MockSpellTexture Round ClampLayer ClassColor AuraGrowth Int")
+    local Selection = RequireFields("GroupRender.Selection", deps.Selection,
+        "RefreshHandleSelection Helpers")
+    local Interaction = RequireFields("GroupRender.Interaction", deps.Interaction,
+        "ResolveDefaultZoomLock UpdateZoomControls ClampZoom")
+    local Handles = RequireFields("GroupRender.Handles", deps.Handles,
+        "statusHandles SelectHandle NudgeHandlePosition")
+    local specs = deps.Specs
     local mock = deps.mock or box._mock
     local selectedSpellEffectOwner = box._msufGFSelectedSpellEffectOwner
     if not selectedSpellEffectOwner then
@@ -615,21 +305,54 @@ function Render.Install(box, ctx, deps)
     end
     local env = {
         floor = floor, max = max, min = min, ceil = ceil,
-        H = deps.H or {}, M = M, MSUF = deps.MSUF or MSUF or {}, T = deps.T or M.Theme or {},
+        H = Selection.Helpers, M = M, MSUF = MSUF, T = M.Theme,
         ctx = ctx, width = tonumber(deps.width) or 720, mock = mock,
-        WHITE8X8 = deps.WHITE8X8 or "Interface\\Buttons\\WHITE8X8",
-        GF_PREVIEW_NAMES = deps.NAMES or {}, GF_PREVIEW_CLASSES = deps.CLASSES or {},
-        GF_AURA_MOCK_ICON_IDS = deps.AURA_MOCK_ICON_IDS or {},
-        GF_PREVIEW_MIN_W = tonumber(deps.MIN_W) or 380, GF_PREVIEW_MIN_H = tonumber(deps.MIN_H) or 130,
-        GF_PREVIEW_ROLE = deps.ROLE or "HEALER", GF_PREVIEW_ANCHOR_FRAC = deps.ANCHOR_FRAC or {},
-        statusHandles = deps.statusHandles or {}, statusSpecs = deps.statusSpecs or {},
-        ApplyBoundsGuide = deps.ApplyBoundsGuide or Fallbacks.Noop,
+        WHITE8X8 = specs.WHITE8X8,
+        GF_PREVIEW_NAMES = specs.NAMES or {}, GF_PREVIEW_CLASSES = specs.CLASSES or {},
+        GF_AURA_MOCK_ICON_IDS = specs.AURA_MOCK_ICON_IDS or {},
+        GF_PREVIEW_MIN_W = tonumber(specs.MIN_W) or 380, GF_PREVIEW_MIN_H = tonumber(specs.MIN_H) or 130,
+        GF_PREVIEW_ROLE = Config.GF_PREVIEW_ROLE_DEFAULT, GF_PREVIEW_ANCHOR_FRAC = specs.ANCHOR_FRAC or {},
+        statusHandles = Handles.statusHandles, statusSpecs = Config.StatusSpecs(),
+        ApplyBoundsGuide = MSUF.UFPreviewCore.ApplyBoundsGuide,
         Layers = Layers, issecretvalue = issecretvalue, box = box, selectedSpellEffectOwner = selectedSpellEffectOwner,
     }
-    for i = 1, #GROUP_RENDER_FALLBACKS do
-        local row = GROUP_RENDER_FALLBACKS[i]
-        env[row[1]] = deps[row[1]] or row[2]
-    end
+    env.ScaleValue = Config.ScaleValue
+    env.ConfigToOffset = Config.ConfigToOffset
+    env.CompiledSpec = Config.CompiledSpec
+    env.CompiledAuraLane = Config.CompiledAuraLane
+    env.RuntimeStatusConfig = Config.RuntimeStatusConfig
+    env.CurrentStatusSpec = Config.CurrentStatusSpec
+    env.StatusSpecEnabled = Config.StatusSpecEnabled
+    env.StatusSpecInMode = Config.StatusSpecInMode
+    env.StatusSpecIsText = Config.StatusSpecIsText
+    env.StatusText = Config.StatusText
+    env.StatusLabel = Config.StatusLabel
+    env.CurrentSpellInfo = Config.CurrentSpellInfo
+    env.PreviewAllSpecSpellIcons = Config.PreviewAllSpecSpellIcons
+    env.CurrentSpellConfig = Config.CurrentSpellConfig
+    env.CurrentSpellPlaced = Config.CurrentSpellPlaced
+    env.CurrentSpellTexture = Config.CurrentSpellTexture
+    env.CurrentSpellColor = Config.CurrentSpellColor
+    env.MockSpellTexture = Config.MockSpellTexture
+    env.Round = Config.Round
+    env.ClampLayer = Config.ClampLayer
+    env.ClassColor = Config.ClassColor
+    env.AuraGrowth = Config.AuraGrowth
+    env.Int = Config.Int
+    env.RefreshHandleSelection = Selection.RefreshHandleSelection
+    env.ResolveDefaultZoomLock = Interaction.ResolveDefaultZoomLock
+    env.UpdateZoomControls = Interaction.UpdateZoomControls
+    env.ClampZoom = Interaction.ClampZoom
+    env.buffHandle = Handles.buffHandle
+    env.trackedBuffHandle = Handles.trackedBuffHandle
+    env.debuffHandle = Handles.debuffHandle
+    env.externalHandle = Handles.externalHandle
+    env.powerBarHandle = Handles.powerBarHandle
+    env.portraitHandle = Handles.portraitHandle
+    env.dispelSymbolHandle = Handles.dispelSymbolHandle
+    env.spellHandle = Handles.spellHandle
+    env.SelectHandle = Handles.SelectHandle
+    env.NudgeHandlePosition = Handles.NudgeHandlePosition
     box._msufGFRenderState = env
     function box:SuspendSpellPreviewEffects()
         for _, handle in pairs(self._spellIndicatorHandles or {}) do SuspendHandleEffects(env, handle) end

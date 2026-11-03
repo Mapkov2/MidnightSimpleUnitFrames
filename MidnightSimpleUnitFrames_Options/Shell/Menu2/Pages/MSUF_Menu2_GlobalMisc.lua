@@ -668,6 +668,9 @@ function MiscSection.BlizzardFrames(s)
     local resourcePing = BindMiscToggle(blizzard, "Enable native Player resource pings (12.1)",
         "playerResourcePingEnabled", true, "MSUF2_PLAYER_RESOURCE_PING", nil, nil, nil, PREVIEW_FALSE,
         function() Core.MSUF_RefreshPlayerResourcePing() end)
+    local pingMeta = resourcePing._msuf2SearchMeta
+    pingMeta.keywords = "ping system health mana pingsystem"
+    M.RegisterSearchWidget(resourcePing, pingMeta)
     M.AddTooltip(resourcePing, "Native Player resource pings",
         "Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate " ..
             "Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel.",

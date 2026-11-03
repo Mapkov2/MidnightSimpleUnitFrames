@@ -197,92 +197,93 @@
           1665
         ]
       ],
-      "source_sha256": "4a3a98362fc2f3e51a1be4999c2d2d00c9734b9f45f95f94118a731eae71a4d7",
+      "source_sha256": "9259cdc40b92cb2fae08302d53aa4e73eff1ecc68bcd986a10f3828c3cb9a4cb",
       "adapter_exclusions": [
         {
           "name": "HideMeterText",
-          "start": 136,
-          "end": 141,
+          "start": 151,
+          "end": 156,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "SpecToken",
-          "start": 200,
-          "end": 203,
+          "start": 215,
+          "end": 218,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "CPPreview.ContainerWidth",
-          "start": 505,
-          "end": 517,
+          "start": 520,
+          "end": 532,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "CPPreview.ContainerInsetX",
-          "start": 521,
-          "end": 524,
+          "start": 536,
+          "end": 539,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "HideBarOutline",
-          "start": 237,
-          "end": 243,
+          "start": 252,
+          "end": 258,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "RenderDetachedPower",
-          "start": 696,
-          "end": 722,
+          "start": 703,
+          "end": 729,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "RenderPlayerHP",
-          "start": 723,
-          "end": 734,
+          "start": 730,
+          "end": 741,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "RefreshClassPowerAnimation",
-          "start": 748,
-          "end": 774,
+          "start": 755,
+          "end": 781,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "Preview.RenderAlternativeMana",
-          "start": 786,
-          "end": 793,
+          "start": 793,
+          "end": 800,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "RenderExtraSamples",
-          "start": 822,
-          "end": 835,
+          "start": 829,
+          "end": 842,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "Preview.UpdateSampleThresholds",
-          "start": 836,
-          "end": 838,
+          "start": 843,
+          "end": 845,
           "reason": "reviewed runtime adapter / editor chrome"
         }
       ],
       "declaration_exclusions": [
         {
-          "line": 196,
+          "line": 211,
           "text": "local ResolveTexture = CPPreview.ResolveTexture",
           "reason": "sample metadata / shared provider / editor chrome"
         },
         {
-          "line": 197,
+          "line": 212,
           "text": "local PREVIEW_CLASS_BY_PREFIX = { deathknight = \"DEATHKNIGHT\", demonhunter = \"DEMONHUNTER\", druid = \"DRUID\", evoker = \"EVOKER\", hunter = \"HUNTER\",",
           "reason": "sample metadata / shared provider / editor chrome"
         },
         {
-          "line": 198,
+          "line": 213,
           "text": "    mage = \"MAGE\", monk = \"MONK\", paladin = \"PALADIN\", priest = \"PRIEST\", rogue = \"ROGUE\", shaman = \"SHAMAN\", warlock = \"WARLOCK\", warrior = \"WARRIOR\" }",
           "reason": "sample metadata / shared provider / editor chrome"
         }
-      ]
+      ],
+      "review_note": " 2026-11-01: reviewed current search-anchor-only changes; runtime scene owners retained, adapter/declaration locations synchronized."
     },
     {
       "file": "Preview/MSUF_Menu2_GroupPreview_Render.lua",
@@ -329,13 +330,13 @@
           1355
         ]
       ],
-      "source_sha256": "c55093d4f5674fd96e615c2afc81db44af10bb8943c711dbfb580208ad1e0c10",
+      "source_sha256": "05743a01ee8ec6f953d6f63aebb5e615c1d176960a43c34090651ad598f6718e",
       "adapter_exclusions": [
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
           "name": "ApplySpellEffectPreview",
-          "start": 251,
-          "end": 257,
+          "start": 261,
+          "end": 267,
           "reason": "reviewed runtime adapter / editor chrome; unchanged body moved to the spell owner"
         }
       ],
@@ -381,22 +382,74 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Auras.lua",
-          "source_sha256": "d9e69e79fff4d9eb65e5007eb54bac579a64318f08bd2897aa1323537639b1b9"
+          "source_sha256": "73c8a9cba8a7cc9ef33e5f7b57d95a635aee2a5d3d820662d74943597f37e6e7"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Frame.lua",
-          "source_sha256": "4f1132d835a12f0a0e56bceb6edf4e70f57c8be31f3ed4b14bdb87eb82737fdd"
+          "source_sha256": "8106a0728f8276e3c2d62cbe89fb2e83565c4c9da63bd16019b9cd82f9eae785"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
-          "source_sha256": "17a5415fa48c5b45a5d03e7b3635f531533cfc319279ef841778ba31d7232475"
+          "source_sha256": "8cc823455d038fb54543133613f161fa755276ab3a5de46a58981564467642af"
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText_NameSample.lua",
           "source_sha256": "6dd16d9530f0386f7586bdc9c86aa6d7d024e91b9285ff43143e914fdd838c97"
+        },
+        {
+          "file": "MSUF_Menu2_PreviewContracts.lua",
+          "source_sha256": "f8aedad9c6f37d6ea5037999cf69e5ee43728500eb7c42740e85e1225e08543e"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Plan.lua",
+          "source_sha256": "9d7e69a63a08bafdd089cd52aff3ee2f9541b7c6ee435eb90f36330101be9ac4"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Presentation.lua",
+          "source_sha256": "a8401798d7637330ee8e7d740b55c00eda5971a4205767b3bdceb3bfb249dacd"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Model.lua",
+          "source_sha256": "c4f5d8abaa128277633997f7a991ddf35721967a4b4f3ad3a082beca4e8ef775"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Chrome.lua",
+          "source_sha256": "47ea0e8d166fb5f7e5686e534528e1eadd6a64001050726fcd928263bc18ab04"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Selection.lua",
+          "source_sha256": "da592d0e4a21ebb496728a293ec2c88452004f82de2628eb44923f1d81c0244d"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Layers.lua",
+          "source_sha256": "50eda754f863ac8ddbe4d4b7931a7935d31afb2dbc7548d606c0bc8a2fcc90b2"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_View.lua",
+          "source_sha256": "8a734f66e90db82cb0c36ac7ce7d94a4774505b1a99efdd63657e423af8595d3"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Native.lua",
+          "source_sha256": "54ae90fa40b223b404724e70b99bd484b4c2421ecfb34ce3e5ec51c4d33bdc46"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_HandleStorage.lua",
+          "source_sha256": "2f2e3b371f13b70d61d483431e308209cd4a04f2753bd09b7dcf7d1d04c7a4f5"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_HandleDrag.lua",
+          "source_sha256": "3ef18f817ba645a2a2479958b506c851fc47fe2787080835afa04151e7f20ed3"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_HandleView.lua",
+          "source_sha256": "6040f484410e0dcf10b1cb7215e95208633f71431d86a484f7227d8060a61c07"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_GroupPreview_Handles.lua",
+          "source_sha256": "bfef09fcc6e5879e69ea073acae0a9f6297160c449ede71f6ed31802bb7a9b55"
         }
       ],
-      "review_note": "2026-10-25 K5: reviewed unchanged aura, spell and frame-owner extraction; new support sources pinned; historical counts retained."
+      "review_note": "2026-10-25 K5: reviewed unchanged aura, spell and frame-owner extraction; new support sources pinned; historical counts retained. 2026-11-01: reviewed GroupPreview_Frame forwarding of active animation state to runtime Power.PaintSample; no separate painter added. 2026-11-01: unchanged composition bodies split into named planning/layout/presentation owners; every added support source pinned; historical counts unchanged. 2026-11-01: host, model, interaction and layer owners split with explicit required interfaces; renderer remains runtime-owned."
     },
     {
       "file": "Pages/MSUF_Menu2_Auras_Preview.lua",
@@ -446,12 +499,12 @@
       ],
       "declaration_exclusions": [
         {
-          "line": 292,
+          "line": 285,
           "text": "local buffTex = { 135987, 136116, 135932, 136085, 132333, 135981, 136048 }",
           "reason": "sample metadata / shared provider / editor chrome"
         },
         {
-          "line": 293,
+          "line": 286,
           "text": "local debuffTex = { 136118, 136139, 136197, 135817, 132851, 136188, 136170 }",
           "reason": "sample metadata / shared provider / editor chrome"
         }
@@ -478,23 +531,84 @@
           252
         ]
       ],
-      "source_sha256": "8bd27fafbc899183d47ea8c7fac43f6d8e21f3d4673ed385dec17dea9827c88a",
+      "source_sha256": "40931a081fc3140c0380f37a4cb6fe87f70445eec144b3327198268be0d5a226",
       "adapter_exclusions": [
         {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
           "name": "ApplyGcdSample",
-          "start": 192,
-          "end": 217,
-          "reason": "reviewed runtime adapter / editor chrome"
+          "start": 225,
+          "end": 250,
+          "reason": "reviewed runtime adapter / editor chrome; unchanged body moved to the castbar scene owner"
         }
       ],
       "declaration_exclusions": [],
       "support_sources": [
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Model.lua",
-          "source_sha256": "069d512f0f4e24a8d3cba91053cd92542a64cb4bfe3fc7bb575aa0aa07c1480b"
+          "source_sha256": "7c9877719b853a259bf1b295e7620488efc0d674f7f1a2ef5a5106b5689a03bb"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
+          "source_sha256": "94c68c3a9831cbe90e8428304e1d98be8c3a5cf9a72d8f94b4e6ef6874f552bc"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_View.lua",
+          "source_sha256": "fe55ff335b72c34ae84b855ad5d0aeecef1c2064166fb64df4945295a47b3d2f"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Specs.lua",
+          "source_sha256": "bdee11b0ee1c21048f5cfa6224eb4d424650b67d4c9a9ec229e43cc230a56f58"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Runtime.lua",
+          "source_sha256": "bc1235b9d81877793b2598ae2f7a6eac15c65a634ce2ebf1b66da816577c9f24"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_ZoomPan.lua",
+          "source_sha256": "62a21ff22cffd477ae8c443c233da45e63d0168d86fc50020e58c3f2a27b9d35"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua",
+          "source_sha256": "d7884b92d2b72f79b3d00119a62062f0fbe05e68271b16e4b5db631fbfa39416"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_View_Handles.lua",
+          "source_sha256": "9a2fa4b030cbd61d0bd0b30817bd826a0fe5742e1e701321e3f4415a8e8dd717"
+        },
+        {
+          "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua",
+          "source_sha256": "8c5e435cee5267c4a368e861c9f7278e9394759c02afb96d79d0dfdf391ab25d"
+        },
+        {
+          "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
+          "source_sha256": "de8aedfdaaf41751d4013bdec85fe38971e80d34e505eeb66d837a93eee711b5"
+        },
+        {
+          "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",
+          "source_sha256": "f2cc70486adcd0a69b3d77b9841d0e457f8a4bd47d0fa6bb18e786e84f07ce3a"
+        },
+        {
+          "file": "MSUF_Menu2_PreviewContracts.lua",
+          "source_sha256": "f8aedad9c6f37d6ea5037999cf69e5ee43728500eb7c42740e85e1225e08543e"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Layout.lua",
+          "source_sha256": "3d2f639360e35592fec37ed1116de0f2d68332f4dfbc2d9a6f8e672981e3031b"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Presentation.lua",
+          "source_sha256": "630d337647183e4fa1632870f730497987cfd65e4f1b20874173f20cf45fae84"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Selection.lua",
+          "source_sha256": "fee603b23b67de256c82eb5252d890e291fb28d20c298360cac33f1f39b3b021"
+        },
+        {
+          "file": "Preview/MSUF_Menu2_UnitPreview_Input.lua",
+          "source_sha256": "56aa1bbfb19fe208e17cbf9d15bb2c5b209014b78b9b7f28f27b95ee0e14fdcd"
         }
       ],
-      "review_note": "K4: removed unreachable ApplyPreviewFont, SetTex and MakeFS plus their owned dependency/export wiring. Shared scene rendering remains unchanged; only reviewed K4 source hashes refreshed.",
+      "review_note": "2026-11-01: removed unused pre-scene colour/model graph; moved unchanged castbar composition to its existing owner; bound animation readers to the runtime namespace with forward-load handling. Historical render counts retained. 2026-11-01: target-name visibility getter shared with the footprint pass through the Castbar namespace. 2026-11-01: unchanged composition bodies split into named planning/layout/presentation owners; every added support source pinned; historical counts unchanged.",
       "retired_painters": {
         "baseline": "ce4767d344bdafc01685ef5299bca2e26735539d",
         "ranges": [
@@ -643,19 +757,20 @@
           1496
         ]
       ],
-      "source_sha256": "587f062d334aec8b48d5869b8af850be1e3f4cde5c1cb9fc7c11c4452b4c2791",
+      "source_sha256": "4d4126a112a2d0b6ef7a23feb6c0528443d8ab4095d8ff4390fb4206b5f0f2e4",
       "adapter_exclusions": [
         {
           "name": "M.RefreshHealthBackgroundInlinePreview",
-          "start": 306,
-          "end": 319,
+          "start": 309,
+          "end": 322,
           "reason": "reviewed runtime adapter / editor chrome"
         },
         {
           "name": "Build.Background",
-          "start": 1302,
-          "end": 1376,
-          "reason": "reviewed runtime adapter / editor chrome"
+          "start": 154,
+          "end": 226,
+          "reason": "reviewed runtime adapter / editor chrome",
+          "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua"
         }
       ],
       "declaration_exclusions": [],
@@ -666,14 +781,14 @@
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua",
-          "source_sha256": "db02eb1ea36b69ea1a6339e2f93cda35ea55aae92ec03d1a8c534814567c0af8"
+          "source_sha256": "f22a285dbef269d85cab64dc954d68f5d24a8ed583e25925a067e1800ed9e893"
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",
-          "source_sha256": "605d1f9d1fbb90ce9834fc7a7e7f44a13187ed8df68921e612e9b0f11e955024"
+          "source_sha256": "0da2900f46c1b09575cb1212e9927c92ba343cbd4620711bf1db24d613f39db6"
         }
       ],
-      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
+      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned. 2026-11-01: reviewed selector search metadata and shared host lifecycle; Background adapter lives in Frames, with runtime painting unchanged."
     },
     {
       "file": "Pages/MSUF_Menu2_ColorPainter.lua",
@@ -728,16 +843,17 @@
           1115
         ]
       ],
-      "source_sha256": "93d30e5b18c66eca0e1568ff3b1ae0ea657ce3bf72627a2d59e650d38653180e",
+      "source_sha256": "468365b6502db7ee082e5f68cbe0f5b88a80123bc6fbf69f28372c40e2755bc6",
       "adapter_exclusions": [
         {
           "name": "PainterBuild.ResourcesStrip",
-          "start": 1004,
-          "end": 1143,
+          "start": 1024,
+          "end": 1154,
           "reason": "reviewed runtime adapter / editor chrome"
         }
       ],
-      "declaration_exclusions": []
+      "declaration_exclusions": [],
+      "review_note": " 2026-11-01: reviewed category/focus handling and shared runtime sample/layer delegation; historical render totals retained."
     },
     {
       "file": "MSUF_Menu2_Dropdowns.lua",

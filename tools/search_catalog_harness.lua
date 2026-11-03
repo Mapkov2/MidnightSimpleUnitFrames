@@ -226,7 +226,7 @@ do
     MSUF.MSUF_ProfileIO_TranslateProfileToCurrent = translateProfile
     -- Preview consumers now share the shipped core mock painter. Load its
     -- actual namespace and shape owners before the menu, as every TOC does.
-    for _, name in ipairs({"Core", "IconShape", "MockAuraPainter"}) do
+    for _, name in ipairs({"Core", "IconShape"}) do
         local path = Join(CORE, "Auras3/MSUF_Auras3_" .. name .. ".lua")
         assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
     end
@@ -264,6 +264,9 @@ end
 -- Menu page request writers use the actual early core owners, even in this partial catalog world.
 assert(loadfile(Join(CORE, "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(Join(CORE, "UnitFrames/Engine/MSUF_UF_Preview.lua")))("MidnightSimpleUnitFrames", MSUF)
+-- The mock painter and Options bind the same animation namespace as the game.
+assert(loadfile(Join(CORE, "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile(Join(CORE, "Auras3/MSUF_Auras3_MockAuraPainter.lua")))("MidnightSimpleUnitFrames", MSUF)
 -- Status pages paint their samples through MSUF.UFStatusRuntime, which needs the
 -- whole unit-frame engine. Search rows come from controls and never read sample
 -- pixels, so this partial catalog world paints nothing. Menu tests on the full

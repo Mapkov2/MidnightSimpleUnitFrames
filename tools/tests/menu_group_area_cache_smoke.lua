@@ -34,7 +34,7 @@ local function OpenSections(entry)
     end
 end
 local function Catalog(entry)
-    local rows = {}
+    local rows, navigationRows = {}, 0
     for _, widget in ipairs(entry.searchWidgets) do
         local record, meta = widget._msuf2RuntimeControlRecord, widget._msuf2SearchMeta
         if record and meta then
@@ -45,9 +45,20 @@ local function Catalog(entry)
             for _, key in ipairs({ "searchPrepareKind", "searchPrepareValue", "searchSection", "searchSectionId" }) do
                 fields[#fields + 1] = tostring(meta[key] or "")
             end
-            rows[#rows + 1] = table.concat(fields, "\t")
+            local row = table.concat(fields, "\t")
+            if record.controlId == "menu2.gf_auras.group.spell.custom.add" then
+                assert(row == "menu2.gf_auras.group.spell.custom.add\t\tAdd custom group spell indicator\tbutton\t\t\t\t\t\t",
+                    "custom spell navigation identity changed")
+                assert(meta.classification == "navigation" and meta.searchIndexed == true
+                    and record.classification == "navigation" and record.searchIndexed == true,
+                    "custom spell editor is no longer searchable navigation")
+                navigationRows = navigationRows + 1
+            else rows[#rows + 1] = row end
         end
     end
+    -- One newly searchable shared editor is additive; all frozen rows and
+    -- geometry must still match the pre-area baseline for every selection.
+    assert(navigationRows == 1, "custom spell navigation row missing or duplicated")
     table.sort(rows)
     local hash = 0
     for _, row in ipairs(rows) do

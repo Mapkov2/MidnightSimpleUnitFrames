@@ -172,15 +172,16 @@ local function CreateDashboardAccordionTone(header, arrow)
         if headerOpenHighlight.SetColors then headerOpenHighlight:SetColors(headerActiveFrom, headerActiveTo) end
         headerOpenHighlight:SetShown(open)
         headerBg:SetAlpha(open and 0 or 1)
-        T.ApplyCollapseVisual(arrow, nil, open)
+        T.ApplyCollapseVisual(arrow, nil, open, true)
         if open then arrow:SetVertexColor(1, 1, 1, 0.98) end
         local color = hover and headerRaised or headerSurface
         headerBg:SetColorTexture(color[1], color[2], color[3], hover and 0.78 or 0.58)
     end
     return Refresh
 end
---- Dashboard disclosures change card heights, so they toggle by rebuilding the
---- whole page. Keep the viewport so the clicked header stays under the cursor.
+-- Disclosures keep their cached views; user clicks animate the expanded card
+-- before a closing transition switches to the collapsed view.
+local ToggleDashboardDisclosure
 local function RebuildDashboardPage()
     M.RebuildPageKeepingScroll("home")
 end
@@ -217,6 +218,7 @@ local function AccordionHead(parent, top, open, title)
     arrow:SetSize(10, 10)
     arrow:SetPoint("LEFT", head, "LEFT", 16, 0)
     arrow:SetTexture(T.media.collapseArrow)
+    parent._msuf2DashboardArrow = arrow
     local PaintHeaderTone = CreateDashboardAccordionTone(head, arrow)
     PaintHeaderTone(open, false)
     local label = T.Font(head, "GameFontNormal", title, T.colors.text)
@@ -348,29 +350,29 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     RegisterDashboardControl(header, DashboardMeta("changelog.disclosure", "ephemeral", {
         help = "Shows or hides the bundled MSUF release notes.",
     }), opts.title or "Changelog", "button")
-    local function PaintHeader(isOpen)
-        PaintHeaderTone(isOpen, false)
+    local function PaintHeader(isOpen, hover)
+        PaintHeaderTone(isOpen, hover)
         hint:SetText(isOpen and "Hide" or "View")
     end
     local function RefreshOpenState()
         M.SetMenuStateValue("dashboardChangelogOpen", open)
         scroll:SetShown(open)
-        PaintHeader(open)
+        PaintHeader(open, false)
         if open then
             if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
         elseif scroll._msuf2ScrollBar then
             scroll._msuf2ScrollBar:Hide()
         end
     end
+    parent._msuf2DashboardOpen, parent._msuf2PaintDisclosure = open, PaintHeader
     header:SetScript("OnClick", function()
-        M.SetMenuStateValue("dashboardChangelogOpen", not open)
-        if type(opts.onToggle) == "function" then opts.onToggle(not open) end
+        ToggleDashboardDisclosure("dashboardChangelogOpen")
     end)
     header:SetScript("OnEnter", function()
-        PaintHeaderTone(open, true)
+        PaintHeader(parent._msuf2DashboardOpen, true)
     end)
     header:SetScript("OnLeave", function()
-        PaintHeader(open)
+        PaintHeader(parent._msuf2DashboardOpen)
     end)
     RefreshOpenState()
 end
@@ -392,6 +394,87 @@ end
 -- share one per-build `state` table (helpers, geometry, disclosure flags) and run
 -- in the order the cards used to be built inline.
 local Dashboard = {}
+local DISCLOSURE_KEYS = { "dashboardChangelogOpen", "dashboardScalingOpen", "dashboardRecoveryOpen" }
+local dashboardMotion
+local function LayoutDashboardMotion(state, moving)
+    local top = state.changelogTop
+    for i = 1, #DISCLOSURE_KEYS do
+        local card = state.cards[DISCLOSURE_KEYS[i]]
+        local height = card.height
+        if moving and moving.card == card then
+            height = max(42, min(height, moving.channels[1].value))
+            card.frame._msuf2DashboardArrow:SetRotation((height - 42) / (card.height - 42) * math.pi * 0.5)
+        else
+            card.frame._msuf2DashboardArrow:SetRotation(card.open and math.pi * 0.5 or 0)
+        end
+        card.frame:SetHeight(height)
+        card.frame:ClearAllPoints()
+        card.frame:SetPoint("TOPLEFT", state.root, "TOPLEFT", state.x0, top)
+        top = top - height - 10
+    end
+    state.support:ClearAllPoints()
+    state.support:SetPoint("TOPLEFT", state.root, "TOPLEFT", state.x0, top)
+    -- A hidden cached view must restore its own size without resizing the page
+    -- the player navigated to while the motion was running.
+    local entry = state.ctx.entry
+    local hiddenBuild = entry.hiddenBuild
+    if not state.root:IsVisible() then entry.hiddenBuild = true end
+    state.ctx:SetContentHeight(math.abs(top - state.support:GetHeight()) + 42)
+    entry.hiddenBuild = hiddenBuild
+end
+local function PaintDashboardMotion(driver)
+    if not driver.active then return end
+    local state, card = driver.state, driver.card
+    if driver:GetScript("OnUpdate") then
+        LayoutDashboardMotion(state, driver)
+        return
+    end
+    driver.active = nil
+    if dashboardMotion == driver then dashboardMotion = nil end
+    card.frame:SetClipsChildren(card.clipped)
+    card.frame._msuf2DashboardOpen = card.open
+    card.frame._msuf2PaintDisclosure(card.open, false)
+    LayoutDashboardMotion(state)
+    if state.root:IsVisible() and M.activeKey == "home" and M[driver.key] ~= card.open then
+        RebuildDashboardPage()
+    end
+end
+ToggleDashboardDisclosure = function(key)
+    local driver = dashboardMotion
+    if driver and driver.key ~= key then
+        driver:Stop()
+        driver = nil
+    end
+    local open = M[key] ~= true
+    M.SetMenuStateValue(key, open)
+    if not driver then
+        if open or T.ReducedMotionEnabled() then RebuildDashboardPage() end
+        local entry = M.cache.home
+        local state = entry and entry.wrapper._msuf2DashboardState
+        if not state or not state.root:IsVisible() or T.ReducedMotionEnabled() then return end
+        driver = state.motion
+        if not driver then
+            driver = W.CreateLayoutMotion(state.root, PaintDashboardMotion)
+            driver.state = state
+            driver.channels[1] = { value = 0, velocity = 0, target = 0 }
+            state.motion = driver
+        end
+        driver.card, driver.key = state.cards[key], key
+        driver.channels[1].value = open and 42 or driver.card.height
+        driver.channels[1].velocity = 0
+    end
+    dashboardMotion, driver.active = driver, true
+    local card = driver.card
+    driver.channels[1].target = open and card.height or 42
+    card.frame:SetClipsChildren(true)
+    card.frame._msuf2DashboardOpen = open
+    card.frame._msuf2PaintDisclosure(open, false)
+    W.PlayLayoutMotion(driver)
+    if driver.active then LayoutDashboardMotion(driver.state, driver) end
+end
+local function RegisterDashboardCard(state, key, frame, height, open)
+    state.cards[key] = { frame = frame, height = height, open = open, clipped = frame:DoesClipChildren() }
+end
 local function Card(parent, title, x, y, w, h, bg, border)
     bg = bg or T.colors.panel2
     border = border or T.colors.cardBorder or T.colors.borderSoft
@@ -859,15 +942,15 @@ end
 local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
     local head, _, PaintHeaderTone = AccordionHead(parent, 0, open, title)
     if type(fillPills) == "function" then fillPills(head, width) end
+    parent._msuf2DashboardOpen, parent._msuf2PaintDisclosure = open, PaintHeaderTone
     head:SetScript("OnClick", function()
-        M.SetMenuStateValue(stateKey, not open)
-        RebuildDashboardPage()
+        ToggleDashboardDisclosure(stateKey)
     end)
     head:SetScript("OnEnter", function()
-        PaintHeaderTone(open, true)
+        PaintHeaderTone(parent._msuf2DashboardOpen, true)
     end)
     head:SetScript("OnLeave", function()
-        PaintHeaderTone(open, false)
+        PaintHeaderTone(parent._msuf2DashboardOpen, false)
     end)
     RegisterDashboardControl(head, DashboardMeta(semanticPath, "ephemeral", {
         help = M.Format("Shows or hides the %s dashboard section.", tostring(title)),
@@ -941,6 +1024,7 @@ function Dashboard.BuildRecoveryCard(state)
             W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
         end
     end
+    RegisterDashboardCard(state, "dashboardRecoveryOpen", recovery, recoveryH, recoveryOpen)
     state.g = g
 end
 function Dashboard.BuildScalingCard(state, ctx)
@@ -956,6 +1040,7 @@ function Dashboard.BuildScalingCard(state, ctx)
         Pill(scaleHead, M.Format("Frames %d%%", DirectPercent(g.msufUiScale, 1)), recoveryW - 98, -11, 84)
     end, "scaling.disclosure")
     if scalingOpen then Dashboard.BuildScalingColumns(state, ctx, scaling) end
+    RegisterDashboardCard(state, "dashboardScalingOpen", scaling, state.scalingH, scalingOpen)
 end
 --- One scale column: help line, status line, percent slider and an Apply / Revert pair.
 --- `spec` names the paths and bounds, the shared `pending` table with the column's `key`
@@ -1156,8 +1241,8 @@ function Dashboard.BuildChangelogCard(state)
         top = 0,
         bottom = 18,
         hideSummaryWhenClosed = true,
-        onToggle = RebuildDashboardPage,
     })
+    RegisterDashboardCard(state, "dashboardChangelogOpen", changelog, state.changelogH, state.changelogOpen)
 end
 local SUPPORT_LINKS = {
     { key = "discord", texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
@@ -1236,6 +1321,7 @@ function Dashboard.BuildSupportCard(state)
         end
         previous = btn
     end
+    state.support = support
     return supportH
 end
 function Dashboard.Build(ctx)
@@ -1243,7 +1329,11 @@ function Dashboard.Build(ctx)
     if M.BuildFirstLoadDashboardScene(ctx) == true then return end
     local x0, y0 = 12, -12
     local layoutW = max(1, (ctx.width or 760) - x0)
-    local state = { root = ctx.wrapper, x0 = x0, layoutW = layoutW, mainW = layoutW }
+    local state = { root = ctx.wrapper, ctx = ctx, cards = {}, x0 = x0, layoutW = layoutW, mainW = layoutW }
+    state.root._msuf2DashboardState = state
+    state.root:HookScript("OnHide", function()
+        if state.motion then state.motion:Stop() end
+    end)
     M.ToggleDashboardEditMode = ToggleEditMode
     M.dashboardEditModeButton = nil
     M.TrackRefresh(ctx, RefreshDashboardEditModeButtonSafe)

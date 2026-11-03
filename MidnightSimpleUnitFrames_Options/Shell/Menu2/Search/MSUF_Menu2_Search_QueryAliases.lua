@@ -154,6 +154,8 @@ animacion|animacao=bar animation|smooth fill
 doux|douce|morbido|morbida=smooth fill|soft fill|bar animation
 hp=health|health text|health bar|leben
 health=hp|health text|health bar|life|leben
+gesundheit=health|hp|leben
+ping|pings|pingen|pinge=ping|pings|native player resource pings
 leben=health|hp|health bar|health text
 name|names=name text|text|font|name shortening
 shorten|shortened|shortens|shortening|truncated|kuerzen|gekuerzt|namenskuerzung|namenskurzung|kuerzung=name shortening|short names|]] ..
@@ -468,6 +470,42 @@ local function AddAliasTerms(key, terms)
 end
 
 Data.CONTROL_QUERY_TARGETS = {
+    ["new ping system"] = { settingKey = "general.playerResourcePingEnabled" },
+    ["neues ping system"] = { settingKey = "general.playerResourcePingEnabled" },
+    ["put a line at 35 percent mana"] = { pageKey = "classpower", controlSuffix = ".marks.add" },
+    ["markierung bei 35 prozent mana"] = { pageKey = "classpower", controlSuffix = ".marks.add" },
+    ["resource threshold"] = { pageKey = "classpower", controlSuffix = ".marks.add" },
+    ["mana threshold"] = { pageKey = "classpower", controlSuffix = ".marks.add" },
+    ["ressourcenmarkierung"] = { pageKey = "classpower", controlSuffix = ".marks.add" },
+    ["mana markierung"] = { pageKey = "classpower", controlSuffix = ".marks.add" },
+    ["show the mana cost of my next spell"] = { settingKey = "bars.manaUpcomingCost" },
+    ["mana cost preview"] = { settingKey = "bars.manaUpcomingCost" },
+    ["next spell mana cost"] = { settingKey = "bars.manaUpcomingCost" },
+    ["manakosten des nächsten zaubers anzeigen"] = { settingKey = "bars.manaUpcomingCost" },
+    ["manakosten vorschau"] = { settingKey = "bars.manaUpcomingCost" },
+    ["manakosten"] = { settingKey = "bars.manaUpcomingCost" },
+    ["five second mana regeneration rule"] = { settingKey = "bars.manaRegenPause" },
+    ["five second rule"] = { settingKey = "bars.manaRegenPause" },
+    ["fünf sekunden manaregeneration"] = { settingKey = "bars.manaRegenPause" },
+    ["fünf sekunden regel"] = { settingKey = "bars.manaRegenPause" },
+    ["show healer mana in the raid"] = { pageKey = "gf_layout", controlSuffix = ".field.healermanaenabled",
+        querySettingKey = "gf_raid.healerManaEnabled" },
+    ["track which healers are out of mana"] = { pageKey = "gf_layout", controlSuffix = ".field.healermanaenabled" },
+    ["heilermana im raid anzeigen"] = { pageKey = "gf_layout", controlSuffix = ".field.healermanaenabled",
+        querySettingKey = "gf_raid.healerManaEnabled" },
+    ["welche heiler haben kein mana"] = { pageKey = "gf_layout", controlSuffix = ".field.healermanaenabled" },
+    ["healer mana"] = { pageKey = "gf_layout", controlSuffix = ".field.healermanaenabled" },
+    ["heilermana"] = { pageKey = "gf_layout", controlSuffix = ".field.healermanaenabled" },
+    ["which paladin blessing should each class have"] = { pageKey = "gf_layout", controlSuffix = ".field.buffcoverageblessingpriorities" },
+    ["welcher paladinsegen für welche klasse"] = { pageKey = "gf_layout", controlSuffix = ".field.buffcoverageblessingpriorities" },
+    ["blessing priorities"] = { pageKey = "gf_layout", controlSuffix = ".field.buffcoverageblessingpriorities" },
+    ["segensprioritäten"] = { pageKey = "gf_layout", controlSuffix = ".field.buffcoverageblessingpriorities" },
+    ["prioritize tank blessings"] = { pageKey = "gf_layout", controlSuffix = ".field.buffcoverageblessingtank1" },
+    ["segen für tanks priorisieren"] = { pageKey = "gf_layout", controlSuffix = ".field.buffcoverageblessingtank1" },
+    ["set boss focus with right click"] = { settingKey = "boss.rightClickFocusInCombat" },
+    ["boss mit rechtsklick als fokus setzen"] = { settingKey = "boss.rightClickFocusInCombat" },
+    ["right click arena enemy during combat"] = { settingKey = "arena.rightClickFocusInCombat" },
+    ["arenagegner im kampf fokussieren"] = { settingKey = "arena.rightClickFocusInCombat" },
     ["tracked buffs"] = { pageKey = "suite_cooldownManager" },
     ["received buffs"] = { pageKey = "suite_cooldownManager" },
     ["raid"] = { pageKey = "gf_layout" },
@@ -747,7 +785,7 @@ local HUMAN_DETAIL_WORDS = "buff|buffs|debuff|debuffs|aura|auras|portrait|portra
     .. "indicator|indicators|symbol|symbols|icon|icons|background|hintergrund"
 local HUMAN_OTHER_CONTEXT_WORDS = "chat|minimap|minikarte|nameplate|nameplates|name plate|namensplaketten|bags|bag|taschen|"
     .. "damage meter|dps meter|schadensmesser|action bar|action bars|aktionsleisten|cooldown|cooldowns|cdm|abklingzeiten|"
-    .. "quest|quests|tooltip|cursor|data texts|datatexts|rune|runes|combo|essence|klassenressourcen"
+    .. "quest|quests|tooltip|cursor|data texts|datatexts|rune|runes|combo|essence|klassenressourcen|ping|pings|pingen|pinge|pingsystem"
 local HUMAN_QUALIFIER_WORDS = "only|except|when|while|during|mine|not mine|filter|filters|friendly|enemy|combat|"
     .. "nur|ausser|ausgenommen|wenn|waehrend|meine buffs|meine debuffs|eigene|fremde|kampf|freundlich|feindlich"
 local HUMAN_RESOURCE_WORDS = "power|mana|resource|resources|ressource|ressourcen|energy|energie|rage|wut|focus power|fokusenergie"

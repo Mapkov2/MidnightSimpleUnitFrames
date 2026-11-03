@@ -7,6 +7,70 @@ local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_ResourceMarks.lua")
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
+
+-- Costs are an out-of-combat snapshot, never a live usability predicate.
+-- The native cost/known-spell providers are audited on Mainline and Forever.
+function MSUF.CPBuilders.ResourceMarkCostSupported()
+    return MSUF.Client.IsRetail == true
+end
+local function CostNumber(value)
+    return MSUF.Secrets.NotSecret(value) and type(value) == "number" and value == value
+        and value > -math.huge and value < math.huge
+end
+local function CostTable(value)
+    return MSUF.Secrets.NotSecret(value) and type(value) == "table"
+        and (not canaccesstable or canaccesstable(value))
+end
+function MSUF.CPBuilders.ResourceMarkSpellID(input)
+    if not MSUF.CPBuilders.ResourceMarkCostSupported() or not MSUF.Secrets.NotSecret(input) then return end
+    if not C_Spell or not C_Spell.GetSpellInfo or not C_Spell.GetSpellPowerCost
+        or not C_SpellBook or not C_SpellBook.IsSpellInSpellBook then return end
+    local id = input
+    if type(input) == "string" then id = tonumber(input:match("spell:(%d+)")) or tonumber(input) or input end
+    if type(id) ~= "number" and type(id) ~= "string" then return end
+    if type(id) == "number" and (not CostNumber(id) or id <= 0 or id >= 2147483647 or id % 1 ~= 0) then return end
+    if type(id) == "string" and (#id == 0 or #id > 255) then return end
+    local info = C_Spell.GetSpellInfo(id)
+    if not CostTable(info) or not CostNumber(info.spellID) then return end
+    local known = C_SpellBook.IsSpellInSpellBook(info.spellID, Enum.SpellBookSpellBank.Player, true)
+    if MSUF.Secrets.NotSecret(known) and known == true then return info.spellID end
+end
+-- A conditional cost is usable only in its active form. Multiple costs of the
+-- same power, restricted fields and ongoing drains have no unambiguous mark.
+local function ReadMarkCost(info, power)
+    if not CostTable(info) or not CostNumber(info.type) then return nil, true end
+    if info.type ~= power then return nil, false end
+    local required, present = info.requiredAuraID, info.hasRequiredAura
+    if not MSUF.Secrets.NotSecret(required) or not MSUF.Secrets.NotSecret(present) then return nil, true end
+    if required ~= nil and (not CostNumber(required) or required < 0) then return nil, true end
+    if required and required > 0 and present ~= true then return nil, false end
+    local drain = info.costPerSec
+    if not MSUF.Secrets.NotSecret(drain) then return nil, true end
+    if drain ~= nil and (not CostNumber(drain) or drain ~= 0) then return nil, true end
+    local value = info.minCost
+    if not MSUF.Secrets.NotSecret(value) then return nil, true end
+    if value == nil then value = info.cost end
+    if not CostNumber(value) or value < 0 then return nil, true end
+    return value, false
+end
+function MSUF.CPBuilders.ResourceMarkCost(spellID, power)
+    if not MSUF.CPBuilders.ResourceMarkCostSupported() or MSUF.Util.InCombat()
+        or not CostNumber(power) then return end
+    local id = MSUF.CPBuilders.ResourceMarkSpellID(spellID)
+    if not id then return end
+    if C_Spell.GetOverrideSpell then id = C_Spell.GetOverrideSpell(id) end
+    if not CostNumber(id) or id <= 0 or id >= 2147483647 or id % 1 ~= 0 then return end
+    local costs = C_Spell.GetSpellPowerCost(id)
+    if not CostTable(costs) then return end
+    local amount
+    for _, info in pairs(costs) do
+        local value, unavailable = ReadMarkCost(info, power)
+        if unavailable or value ~= nil and amount ~= nil then return end
+        if value ~= nil then amount = value end
+    end
+    return amount
+end
+
 -- Class resource pips draw one level above their container and its outline
 -- three levels above; marks go over both.
 local OVERLAY_LEVEL = 4
@@ -291,16 +355,19 @@ local function Refresh()
     local rules = E.db.bars.resourceMarks or {}
     local hostCounts = {}
     local powerUnits, maxUnits = {}, {}
-    local targetChanges = false
+    local targetChanges, spellCosts = false, false
     for _, rule in ipairs(rules) do
+        if rule.enabled ~= false and rule.mode == "SPELL" then spellCosts = true end
         local host, power, token, bars = Target(rule)
         if host and rule.enabled ~= false and (not rule.resource or rule.resource == "ALL" or rule.resource == token) then
             local unit = rule.target == "CLASS" and E.ClassPowerUnit and E.ClassPowerUnit() or "player"
             local powerEvent = rule.target == "CLASS" and E.ClassPowerEvent and E.ClassPowerEvent() or "UNIT_POWER_FREQUENT"
             local maximum = UnitPowerMax(unit, power)
             local value = tonumber(rule.value) or 0
-            local fraction = rule.mode == "ABSOLUTE" and Number(maximum) and maximum > 0 and value / maximum
-                or rule.mode ~= "ABSOLUTE" and value / 100
+            if rule.mode == "SPELL" then value = MSUF.CPBuilders.ResourceMarkCost(rule.spellID, power) end
+            local absolute = rule.mode == "ABSOLUTE" or rule.mode == "SPELL"
+            local fraction = Number(value) and (absolute and Number(maximum) and maximum > 0 and value / maximum
+                or not absolute and value / 100)
             local vertical, reverse, signed = Axis(rule, host)
             if fraction and fraction >= 0 and fraction <= 1 and vertical ~= nil then
                 local overlay = Overlay(host)
@@ -350,6 +417,12 @@ local function Refresh()
             Paint(view)
         end
     end
+    if spellCosts and not E.sample then
+        events:RegisterEvent("SPELLS_CHANGED")
+        events:RegisterEvent("PLAYER_REGEN_ENABLED")
+        events:RegisterEvent("PLAYER_ENTERING_WORLD")
+        if E.SupportsEvent and E.SupportsEvent("TRAIT_CONFIG_UPDATED") then events:RegisterEvent("TRAIT_CONFIG_UPDATED") end
+    end
     if #active > 0 then
         local function Bind(event, units)
             if units.player and units.vehicle then events:RegisterUnitEvent(event, "player", "vehicle")
@@ -391,6 +464,10 @@ local function PowerChanged()
     events:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 local function OnEvent(_, event, unit, token)
+        if event == "SPELLS_CHANGED" or event == "TRAIT_CONFIG_UPDATED" or event == "PLAYER_ENTERING_WORLD" then
+            if E.RequestRefresh then E.RequestRefresh() else Refresh() end
+            return
+        end
         if event == "PLAYER_REGEN_ENABLED" then
             events:UnregisterEvent("PLAYER_REGEN_ENABLED")
             Refresh()

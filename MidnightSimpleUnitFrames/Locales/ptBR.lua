@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ptBR")) or (MSUF.L or {})
 -- Reviewed Edit Mode, setup and client-capability labels.
+L["Focus override"] = "Substituição do foco"
+L["Focus interruptible cast color"] = "Cor dos lançamentos interrompíveis do foco"
 L["Player Name Position"] = "Posição do nome do jogador"
 L["Target Name Position"] = "Posição do nome do alvo"
 L["Focus Name Position"] = "Posição do nome do foco"
@@ -7516,6 +7518,15 @@ L["Align"] = "Alinhar"
 
 L["Right-click focus in combat"] = "Foco com clique direito em combate"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "Em combate, clique com o botão direito neste quadro de unidade para defini-la como foco. Fora de combate, o clique direito abre o menu de contexto."
+
+L["Guides preview layer"] = "Camada de guias da prévia"
+L["Add custom group spell indicator"] = "Adicionar indicador personalizado de feitiço de grupo"
+
+L["Spell minimum cost (out of combat)"] = "Custo mínimo do feitiço (fora de combate)"
+L["Spell ID, link or name"] = "ID, link ou nome do feitiço"
+L["Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."] = "Usa o custo mínimo do feitiço aprendido para a barra selecionada. Atualiza fora de combate após alterações de feitiços ou talentos e após o combate. Não acompanha alterações temporárias de custo em combate. Custos indisponíveis ocultam a marca."
+L["No readable spell cost for this bar."] = "Nenhum custo de feitiço legível para esta barra."
+L["Minimum cost: %s (%s)."] = "Custo mínimo: %s (%s)."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)

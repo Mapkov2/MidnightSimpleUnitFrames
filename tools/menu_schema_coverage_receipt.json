@@ -1,46 +1,46 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7079,
-      "initialDeclarations": 4768,
-      "profileControls": 3718,
-      "proven": 3718
+      "declarations": 7084,
+      "initialDeclarations": 4770,
+      "profileControls": 3723,
+      "proven": 3723
     },
     "Mainline": {
-      "declarations": 7625,
-      "initialDeclarations": 5001,
-      "profileControls": 4038,
-      "proven": 4038
+      "declarations": 7631,
+      "initialDeclarations": 5004,
+      "profileControls": 4044,
+      "proven": 4044
     },
     "Mists": {
-      "declarations": 7271,
-      "initialDeclarations": 4974,
-      "profileControls": 3759,
-      "proven": 3759
+      "declarations": 7277,
+      "initialDeclarations": 4977,
+      "profileControls": 3764,
+      "proven": 3764
     },
     "TBC": {
-      "declarations": 6654,
-      "initialDeclarations": 4579,
-      "profileControls": 3378,
-      "proven": 3378
+      "declarations": 6659,
+      "initialDeclarations": 4581,
+      "profileControls": 3382,
+      "proven": 3382
     },
     "Vanilla": {
-      "declarations": 5097,
-      "initialDeclarations": 3490,
-      "profileControls": 2440,
-      "proven": 2440
+      "declarations": 5101,
+      "initialDeclarations": 3491,
+      "profileControls": 2443,
+      "proven": 2443
     }
   },
   "generatorVersion": "menu-schema-coverage/3",
   "issueCount": 0,
-  "projectionSha256": "0a60bce70b2a4fb66b2a586b761916b690c583dc712318d601dec89c8e768294",
+  "projectionSha256": "caa397b93e19c7c4d603203d4e418c49ad4a2f1382b02b14fbcfa5636e31ca57",
   "projectionVersion": 2,
-  "sourceSha256": "55F4B45255A2EF3675228638974DBA618D34815C01FD434CA2D7A29144FC8A10",
+  "sourceSha256": "25573846DA0FC829413A89849823A25C567CA58978E8832A0F2ABEB3CAB92CB9",
   "totals": {
-    "declarations": 33726,
-    "initialDeclarations": 22812,
-    "profileControls": 17333,
-    "proven": 17333
+    "declarations": 33752,
+    "initialDeclarations": 22823,
+    "profileControls": 17356,
+    "proven": 17356
   },
   "version": 1
 }

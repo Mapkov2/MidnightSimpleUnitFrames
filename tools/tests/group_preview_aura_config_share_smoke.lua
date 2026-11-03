@@ -49,11 +49,11 @@ raid.spellIndicators.spec = specKey or "auto"
 if GF.InvalidateConfCache then GF.InvalidateConfCache() end
 if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs() end
 GF.RefreshHeaderLayout()
-h:RunTimers()
+h:RunDeferred()
 
 h.core.ExportPublic("MSUF2_GFPagePreviewActive", true)
 Check(GF.ShowPreview("raid", 20, { immediate = true }) ~= false, "the raid preview did not open")
-h:RunTimers()
+h:RunDeferred()
 local frames = GF._previewFrames.raid or {}
 Check(#frames == 20, "the raid preview built " .. #frames .. " rows, expected 20")
 
@@ -104,7 +104,7 @@ GF.HidePreview("raid")
 h.core.ExportPublic("MSUF2_GFPagePreviewActive", nil)
 h:SetRaid(20)
 h:Event("GROUP_ROSTER_UPDATE")
-h:RunTimers()
+h:RunDeferred()
 local live = 0
 GF.ForEachHeader("raid", function(header)
     for _, child in ipairs(h:Children(header)) do

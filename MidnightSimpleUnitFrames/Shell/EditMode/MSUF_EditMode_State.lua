@@ -24,6 +24,7 @@ local function PublishCompat(name, value)
     return ExportPublic(name, value)
 end
 local CALLER = "Shell/EditMode/MSUF_EditMode_State.lua"
+local RunNextFrame = MSUF.Require("MSUF_Scheduler", CALLER).RunWorkNextFrame
 local EM2 = MSUF.Require("MSUF_EM2", CALLER)
 local Util = EM2.Util
 
@@ -465,6 +466,7 @@ function State.Exit(source)
     if combatLocked then
         pendingCombatExitApply = true
     else
+        local applyPending = true
         local function RestoreAfterExitFrame()
             if enterGeneration ~= exitToken or active then return end
             --- Combat began before this frame ran: restore after combat.
@@ -473,13 +475,19 @@ function State.Exit(source)
                 if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
                 return
             end
-            ApplyAllSettingsSafe()
+            if applyPending then
+                applyPending = false
+                ApplyAllSettingsSafe()
+                if enterGeneration == exitToken and not active then RunNextFrame(RestoreAfterExitFrame, State) end
+                return
+            end
             RestoreRuntimeAfterEditModeExit()
         end
         if C_Timer and C_Timer.After then
-            C_Timer.After(0, RestoreAfterExitFrame)
+            RunNextFrame(RestoreAfterExitFrame, State)
         else
-            RestoreAfterExitFrame()
+            ApplyAllSettingsSafe()
+            RestoreRuntimeAfterEditModeExit()
         end
     end
 

@@ -3,12 +3,7 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 M.GroupRenderFactories = M.GroupRenderFactories or {}
 
-local function RequireFields(domain, values, fields)
-    assert(type(values) == "table", domain .. " interface is required")
-    for key in fields:gmatch("%S+") do
-        assert(values[key] ~= nil, domain .. "." .. key .. " is required")
-    end
-end
+local RequireFields = M.PreviewContracts.RequireFields
 
 M.GroupRenderFactories.Frame = function(runtime, scene, layout, layers)
     RequireFields("Frame.Runtime", runtime, "Core Menu Exports EnsureDB IsSecret")

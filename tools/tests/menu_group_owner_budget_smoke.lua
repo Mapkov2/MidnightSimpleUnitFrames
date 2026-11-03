@@ -15,6 +15,14 @@ local mw = MenuWorld.Open(root, flavor, { beforeOptions = function(world)
 end })
 local M, env, core = mw.M, mw.env, mw.core
 core.GF.EnsureDB()
+-- Keep the historical measured scene explicit. Default-All and preview-only
+-- out-of-context indicators have separate layer/status behavior coverage.
+M.gfStatusPreviewMode = "current"
+for _, scope in ipairs({ "party", "raid" }) do
+    local conf = core.GF.GetConf(scope)
+    conf.pvpIcon = core.GF.CompileSpec(scope).status.pvp.enabled == true
+    core.GF.InvalidateCompiledSpecs(scope)
+end
 -- Original ce4767d34 renderer, warmed real TOC/MenuWorld; allocations use the
 -- minimum of four 50-call windows (a 5-call window caught one-off table growth
 -- from unrelated load-time strings and tables, not per-refresh work).

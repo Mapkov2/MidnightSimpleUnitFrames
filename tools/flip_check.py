@@ -26,7 +26,7 @@ KNOWN = {
         (1, "Legacy fallback; arena frames are registered dynamically by their pool."),
     ("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua", "MSUF_ArenaCastbarPreview1", "GETGLOBAL"):
         (1, "Legacy fallback; arena preview names are constructed by their pool."),
-    ("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua", "MSUF_UFPreview_ActiveNudgeBox", "GETGLOBAL"):
+    ("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Selection.lua", "MSUF_UFPreview_ActiveNudgeBox", "GETGLOBAL"):
         (1, "Legacy optional nudge-box mirror; the namespace preview owner is the fallback."),
 }
 

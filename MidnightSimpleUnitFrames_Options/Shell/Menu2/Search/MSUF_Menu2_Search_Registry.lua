@@ -301,6 +301,20 @@ local function RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, 
     return result or nil
 end
 
+-- Store only static help. Dynamic hover callbacks and automatic search help
+-- never run or feed back into the index. A late tooltip invalidates one row.
+function M.SetSearchTooltipText(widget, title, body)
+    title = type(title) == "string" and title or nil
+    body = type(body) == "string" and body or nil
+    if widget._msuf2SearchTooltipTitle == title and widget._msuf2SearchTooltipBody == body then return end
+    widget._msuf2SearchTooltipTitle, widget._msuf2SearchTooltipBody = title, body
+    local id = widget._msuf2SearchRegistryId
+    if id and SEARCH_STATE.registry[id] then
+        SEARCH_STATE.registryRecords[id] = nil
+        MarkSearchIndexDirty()
+    end
+end
+
 function M.UnregisterSearchWidget(widget)
     if not widget then return false end
     local id, pageKey = widget._msuf2SearchRegistryId, widget._msuf2SearchRegistryPage
@@ -655,7 +669,19 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
             pageInfos[entry.pageKey] = info
         end
     end
+    local sectionId, parent = data[5], widget
+    while parent and not sectionId do
+        local section = parent._msuf2CollapsibleEntry
+        sectionId = parent._msuf2SectionId or (section and section.sectionId)
+        parent = parent.GetParent and parent:GetParent() or nil
+    end
     local extra = {}
+    -- Suite providers already own feature names and aliases; raw module IDs
+    -- must not turn every detail into a competing feature-switch match.
+    if entry.pageKey:sub(1, 6) ~= "suite_" then
+        AddSearchText(extra, SearchText.ControlContext(sectionId))
+        AddSearchText(extra, SearchText.ControlContext(setting))
+    end
     AddValuesSearchText(extra, data[1])
     if type(keywords) == "string" then
         AddSearchText(extra, keywords)
@@ -664,19 +690,15 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
     end
     AddControlQuestionSearchText(extra, entry.label, entry.kind, data[1])
     AddSearchText(extra, data[17])
+    if widget then
+        SearchText.AddSearchDescription(extra, widget._msuf2SearchTooltipTitle, 96)
+        SearchText.AddSearchDescription(extra, widget._msuf2SearchTooltipBody, 320)
+    end
     local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra,
         widget and widget._msuf2LiteralSearchLabel)
     if rec then
         rec.controlId, rec.controlPath, rec.actionKey = data[18], data[4], data[11]
-        rec.sectionId = data[5]
-        -- Unbound headings and section actions still have an exact accordion
-        -- owner. Its marker is set after construction-time search registration.
-        local parent = entry.widget
-        while parent and not rec.sectionId do
-            local section = parent._msuf2CollapsibleEntry
-            rec.sectionId = parent._msuf2SectionId or (section and section.sectionId)
-            parent = parent.GetParent and parent:GetParent() or nil
-        end
+        rec.sectionId = sectionId
         local controlId = tostring(data[18] or "")
         local controlPath = tostring(data[4] or "")
         local settingKey = tostring(setting or "")

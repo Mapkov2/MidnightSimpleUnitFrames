@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ruRU")) or (MSUF.L or {})
 -- Reviewed Edit Mode, setup and client-capability labels.
+L["Focus override"] = "Переопределение фокуса"
+L["Focus interruptible cast color"] = "Цвет прерываемого заклинания фокуса"
 L["Player Name Position"] = "Положение имени игрока"
 L["Target Name Position"] = "Положение имени цели"
 L["Focus Name Position"] = "Положение имени фокуса"
@@ -7510,6 +7512,15 @@ L["Align"] = "Выровнять"
 
 L["Right-click focus in combat"] = "Фокус правой кнопкой в бою"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "В бою щёлкните правой кнопкой мыши по этой рамке, чтобы запомнить её персонажа как цель. Вне боя щелчок правой кнопкой открывает контекстное меню."
+
+L["Guides preview layer"] = "Слой направляющих предпросмотра"
+L["Add custom group spell indicator"] = "Добавить индикатор пользовательского группового заклинания"
+
+L["Spell minimum cost (out of combat)"] = "Минимальная стоимость заклинания (вне боя)"
+L["Spell ID, link or name"] = "ID, ссылка или название заклинания"
+L["Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."] = "Использует минимальную стоимость изученного заклинания для выбранной полосы. Обновляется вне боя после изменения заклинаний или талантов и после боя. Временные изменения стоимости в бою не отслеживаются. Если стоимость недоступна, отметка скрывается."
+L["No readable spell cost for this bar."] = "Нет доступной стоимости заклинания для этой полосы."
+L["Minimum cost: %s (%s)."] = "Минимальная стоимость: %s (%s)."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)

@@ -120,7 +120,7 @@ function Surface.Paint(scene)
       text:Show()
     elseif text then text:Hide() end
   else
-    local r, green, b, nr, ng, nb = C.Utils.ResolveCastbarColors()
+    local r, green, b, nr, ng, nb = C.Utils.ResolveCastbarColors(scene.key)
     C.Utils.Castbar_ApplyNonInterruptibleTint(frame, frame.isNotInterruptible, nr, ng, nb, 1,
       r, green, b, 1, frame.isNotInterruptible)
   end

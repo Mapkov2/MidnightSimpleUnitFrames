@@ -2,10 +2,20 @@
     <Script file="MSUF_Menu2_GroupPreview_Specs.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_TextFocus.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_ZoomPan.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_HandleStorage.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_HandleDrag.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_HandleView.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Handles.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Auras.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Frame.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Spells.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Plan.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Presentation.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Render.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Model.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Chrome.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Selection.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Layers.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_View.lua"/>
     <Script file="MSUF_Menu2_GroupPreview_Native.lua"/>
 </Ui>

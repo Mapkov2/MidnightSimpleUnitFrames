@@ -279,6 +279,8 @@ function CastbarSection.Cards(s)
             if unit == "player" and general.playerCastbarOverrideEnabled == true then
                 local mode = tostring(general.playerCastbarOverrideMode or "CLASS"):upper()
                 refs[1] = mode == "CUSTOM" and "cast.player_override" or "unit.class.current"
+            elseif unit == "focus" and general.focusCastbarOverrideEnabled == true then
+                refs[1], refs[2] = "cast.focus_override", "cast.non_interruptible"
             else
                 refs[1], refs[2] = "cast.interruptible", "cast.non_interruptible"
             end

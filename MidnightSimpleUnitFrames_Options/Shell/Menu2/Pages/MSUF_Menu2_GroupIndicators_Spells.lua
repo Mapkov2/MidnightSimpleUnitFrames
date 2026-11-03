@@ -309,6 +309,9 @@ function SpellTileGrid.New(ctx, parent, x, y, width, refreshPage)
         hint = W.Text(parent, "Click: edit. Right-click: toggle. Drag: reorder or preview.", x, y + 27, width, T.colors.muted),
         tileSize = 52, gap = 8,
     }, SpellTileGrid)
+    -- The editor has a stable navigation identity; individual tile slots vary by spec.
+    RegisterControl(frame, ctx, "spell.custom.add", "Add custom group spell indicator", "button", "navigation",
+        { searchIndexed = true })
     self.perRow = max(1, floor((width + self.gap) / (self.tileSize + self.gap)))
     return self
 end

@@ -262,6 +262,7 @@ function Workspace.Bind(kind, ctx, widget, get, set, fallback, meta)
             or (widget._msuf2Title and widget._msuf2Title._msuf2SearchText)
     end
     if kind == "slider" then M.BindNumberWidget(ctx, widget, get, set, fallback, meta)
+    elseif kind == "textinput" then M.BindTextInput(ctx, widget, get, set, true, meta)
     else BINDERS[kind](ctx, widget, get, set, meta) end
     AP.RegisterControl(widget, meta, nil, kind)
     return widget

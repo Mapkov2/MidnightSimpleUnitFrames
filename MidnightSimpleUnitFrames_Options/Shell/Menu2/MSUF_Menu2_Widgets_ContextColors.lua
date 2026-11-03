@@ -46,8 +46,11 @@ local function AddThreeDotShortcutTextures(shortcut, colors)
     local dots = {}
     for i = 1, 3 do
         local color = colors[i] or LAYER_SHORTCUT_DOTS[i]
-        local dot = PixelLayoutRegion(shortcut:CreateTexture(nil, "ARTWORK", nil, 4))
+        local dot = PixelLayoutRegion(shortcut:CreateTexture(nil, "ARTWORK", nil, 4), true)
         dot:SetTexture(THREE_DOT_SHORTCUT_TEXTURE)
+        dot:SetTexCoord(0, 1, 0, 1)
+        if dot.SetSnapToPixelGrid then dot:SetSnapToPixelGrid(false) end
+        if dot.SetTexelSnappingBias then dot:SetTexelSnappingBias(0) end
         dot:SetSize(5, 5)
         dot:SetPoint("CENTER", shortcut, "CENTER", (i - 2) * 7, 0)
         dot:SetVertexColor(color[1], color[2], color[3], 1)

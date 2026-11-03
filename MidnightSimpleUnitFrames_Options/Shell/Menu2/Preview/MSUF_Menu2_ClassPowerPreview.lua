@@ -53,6 +53,21 @@ local function RegisterPreviewControl(ctx, widget, semanticPath, label, kind, cl
     M.RegisterSearchWidget(widget, payload)
     return widget
 end
+local PREVIEW_SETTINGS = {
+    guides = { "layer.guides", "Guides preview layer", "general.classPowerPreviewGuidesEnabled" },
+    animate = { "animation.toggle", "Animate Preview", "general.classPowerPreviewAnimate" },
+}
+local function RegisterPreviewSetting(ctx, widget, key)
+    local row = PREVIEW_SETTINGS[key]
+    return RegisterPreviewControl(ctx, widget, row[1], row[2], "toggle", "setting", { settingKey = row[3] })
+end
+function Preview.RegisterSearchSettings(ctx, parent)
+    for key in pairs(PREVIEW_SETTINGS) do
+        local widget = CreateFrame("Button", nil, parent)
+        widget:Hide()
+        RegisterPreviewSetting(ctx, widget, key)
+    end
+end
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -997,9 +1012,11 @@ local function CreateLayerSidebar(box, sideW)
         box.layerVisibility[def.key] = def.key ~= "guides" or PreviewGuidesEnabled()
         local btn = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
         local isGuides = def.key == "guides"
-        RegisterPreviewControl(box._catalogCtx, btn, "layer." .. tostring(def.key),
-            tostring(def.label or def.key) .. " preview layer", isGuides and "toggle" or "button", isGuides and "setting" or "ephemeral",
-            isGuides and { settingKey = "general.classPowerPreviewGuidesEnabled", help = def.tooltip } or { help = def.tooltip })
+        if isGuides then RegisterPreviewSetting(box._catalogCtx, btn, "guides")
+        else
+            RegisterPreviewControl(box._catalogCtx, btn, "layer." .. tostring(def.key),
+                tostring(def.label or def.key) .. " preview layer", "button", "ephemeral", { help = def.tooltip })
+        end
         box.layerButtons[#box.layerButtons + 1] = btn
     end
 end
@@ -1104,9 +1121,7 @@ function Anim.CreateButton(preview)
     M.AddTooltip(btn, "Animate Preview", "Animates Class Resource, Player Power, and HP fill values in this preview only.", { hook = true })
     btn._preview = preview
     preview.animateButton = btn
-    RegisterPreviewControl(preview._catalogCtx, btn, "animation.toggle", "Animate Preview", "button", "ephemeral", {
-        help = "Starts or stops preview-only Class Resource, Player Power, and HP fill animation.",
-    })
+    RegisterPreviewSetting(preview._catalogCtx, btn, "animate")
     Anim.RefreshButton(preview)
     return btn
 end

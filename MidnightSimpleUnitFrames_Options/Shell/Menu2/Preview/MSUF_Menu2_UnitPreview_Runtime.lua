@@ -7,7 +7,6 @@
 --- renderer's existing fallbacks until the runtime publishes them.
 
 local _, MSUF = ...
-MSUF = MSUF or _G.MSUF
 local Runtime = MSUF.UFPreviewRuntime or {}
 MSUF.UFPreviewRuntime = Runtime
 local CoreFrame = MSUF.UF.GetFrame

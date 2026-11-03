@@ -26,16 +26,15 @@ local function Read(rel)
     return text
 end
 local function Plain(rel) return (Read(rel):gsub("\r\n","\n")) end
+local StaticRows = assert(loadfile(root.."/tools/tests/search_static_rows.lua"))()
 local classResources,unitFrames,origin={},{},{}
 local function Add(set,key,where) if not set[key] then set[key]=true; origin[key]=origin[key] or where end end
 -- a. The search index (generated from the pages): the Class Resources page and
 -- the class resource colours of the Colors page; the unit pages and the Bars page.
 for _,rel in ipairs({OPTIONS.."Search/MSUF_Menu2_Search_StaticIndex_Data.lua",
     OPTIONS.."Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua"}) do
-    local blob=assert(Plain(rel):match("%[==%[\n?(.-)%]==%]"),rel..": no index blob")
-    for line in blob:gmatch("[^\n]+") do
-        local cols={}
-        for col in (line.."\t"):gmatch("([^\t]*)\t") do cols[#cols+1]=col end
+    local rows = StaticRows.Load(root, rel)
+    for _, cols in ipairs(rows) do
         local key=cols[4] and cols[4]:match("^bars%.([%a_][%w_]*)")
         if key then
             if cols[1]=="classpower" or (cols[1]=="opt_colors" and cols[9]=="colors_resource_extras") then

@@ -183,10 +183,10 @@ end
 -- This file is the only provider; its own writes below call the local.
 Utils.SetStatusBarColorIfChanged = SetStatusBarColorIfChangedImpl
 
--- Castbar colors are global settings, so all target/focus/boss bars can share
--- the same three ColorObjects. Keep only one object per semantic color and
--- replace it solely when that global color actually changes.
+-- Semantic colors share cached ColorObjects. Focus keeps its own normal
+-- color so alternating focus and target paints never rebuild their colors.
 local interruptibleColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
+local focusColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
 local nonInterruptibleColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
 local interruptUnavailableColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
 
@@ -249,7 +249,8 @@ local function ApplyNonInterruptibleTint(
     local usedBooleanTint = false
     if texture and texture.SetVertexColorFromBoolean and CreateColor then
         local nonColor = CachedColor(nonInterruptibleColorCache, nonR, nonG, nonB, nonA or 1)
-        local castColor = CachedColor(interruptibleColorCache, castR, castG, castB, castA or 1)
+        local normalCache = frame.unit == "focus" and focusColorCache or interruptibleColorCache
+        local castColor = CachedColor(normalCache, castR, castG, castB, castA or 1)
         local activeCastColor = castColor
         if useUnavailable then
             local unavailableColor = CachedColor(
@@ -431,7 +432,7 @@ Utils.GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 -- The custom colours come from this file's getters, the only owner of the
 -- public aliases (Runtime/MSUF_Colors.lua keeps its palette-fallback getters
 -- for the menu's MSUF._colorsAPI only).
-local function ResolveCastbarColors()
+local function ResolveCastbarColors(unit)
     local general = Config.Read().general or {}
 
     local castR, castG, castB = GetInterruptibleCastColor(general)
@@ -445,6 +446,16 @@ local function ResolveCastbarColors()
     end
     if not (castR and castG and castB) then castR, castG, castB = 0, 0.85, 0.85 end
 
+    if unit == "focus" and general.focusCastbarOverrideEnabled == true then
+        local color = general.focusCastbarOverrideColor
+        if type(color) == "table" then
+            castR = tonumber(color[1] or color.r or color["1"]) or 0.58
+            castG = tonumber(color[2] or color.g or color["2"]) or 0.52
+            castB = tonumber(color[3] or color.b or color["3"]) or 1
+        else
+            castR, castG, castB = 0.58, 0.52, 1
+        end
+    end
     local nonR, nonG, nonB = GetNonInterruptibleCastColor(general)
     if not (nonR and nonG and nonB) then
         local key = general.castbarNonInterruptibleColor or "red"

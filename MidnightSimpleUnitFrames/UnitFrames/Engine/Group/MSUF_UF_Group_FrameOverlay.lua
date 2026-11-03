@@ -99,6 +99,11 @@ function GF.ComputeFrameOverlay(kind, unitOrRole, metrics)
   spec.showPowerText = powerHeight > 0 and base.showPowerText == true
   local status = OverlayTable(metrics, "status", base.status)
   status.roleValue = role
+  if metrics.preview then
+    local pvp = OverlayTable(metrics, "pvp", base.status.pvp)
+    pvp.enabled = base.status.pvp.configuredEnabled == true
+    status.pvp, status.enabled = pvp, base.status.enabled or pvp.enabled
+  end
   spec.status = status
   PatchNameBarHeight(base, spec, metrics, conf, powerHeight)
   return spec

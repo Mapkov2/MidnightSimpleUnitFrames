@@ -21,7 +21,9 @@ The Options unit body is `root:Unit(unitKey):Frame()`. The stage owns only its p
 scale and position; engine regions own the health, power, prediction, texts, portraits,
 status, shapes, aura lanes, texture layers and dispel samples. Handles refer to these
 real regions. Castbar and ClassPower use their standalone engine surfaces and
-anchor to the scene body. Text focus, layer/solo controls, animation, background,
+anchor to the scene body. The Options castbar module owns its sample composition,
+GCD placement and interaction handles; its composition function and time-handle
+function are bound directly by the unit stage. No second castbar painter is installed. Text focus, layer/solo controls, animation, background,
 selection, guides and zoom/pan remain stage chrome. Drag deltas divide by each real
 region's effective-scale ratio to the outer stage before moving its anchors.
 
@@ -33,9 +35,65 @@ scaled after the runtime resolves the anchor offset, preserving fractional zoom.
 Menu health animation opts into discrete 0.8-second sample steps when Chunked Health Loss is enabled.
 Unit and group scenes send those samples through the native loss trail; static samples clear it.
 The shared animation clock retains its existing waveform for other preview owners.
+Internal scene and Options animation readers call `MSUF.PreviewAnimation` directly.
+Unit scenes resolve it at use time because their module loads before the animation
+provider; later core and Options consumers bind it at load. Compatibility exports
+remain available to external readers. Each isolated root still owns its clock.
 
 Chunked Power Loss uses the same 0.8-second sample cadence for embedded and detached power bars.
 Power sample writers retain native interpolation only while the owner clock animates; static samples clear loss snapshots.
+
+## Options preview composition owners
+
+The menu keeps one ordered refresh and animation path per preview. The parts below
+bind once at Options load through `PreviewContracts.RequireFields`; a missing owner
+or required field stops that composition with its domain and field name. Per-box
+scene, sample, selection and drag state remain on the same host as before.
+
+| Surface | Owner | Responsibility |
+| --- | --- | --- |
+| Unit | `UnitPreview_Render` | Scene inputs and the ordered refresh/animation calls |
+| Unit | `UnitPreview_Layout` | Frame/power geometry, measured footprint and canvas fit/zoom |
+| Unit | `UnitPreview_Presentation` | Runtime scene slots, text/status handles and layer presentation |
+| Unit | `UnitPreview_View` | Frame construction and composition of the interaction owners |
+| Unit | `UnitPreview_Selection` | Stored coordinates, exact moves, reset, history and selection/focus policy |
+| Unit | `UnitPreview_Input` | Mouse/keyboard/drag handlers and native interaction handles |
+| Group | `GroupPreview_Render` | Per-host installation, finalization order and refresh/animation coordination |
+| Group | `GroupPreview_Plan` | Compile/read the selected scope into its reused scene and layer availability |
+| Group | `GroupPreview_Presentation` | Text handles, strata, visibility and range alpha |
+| Group | `GroupPreview_Auras`, `_Frame`, `_Spells` | Existing aura, frame and indicator composition stages |
+| Group | `GroupPreview_Native` | Host lifecycle and explicit assembly of configuration, selection and interaction interfaces |
+| Group | `GroupPreview_Model` | Runtime configuration, scope, role, status and geometry readers |
+| Group | `GroupPreview_Chrome`, `_View`, `_Layers` | Header controls, host construction and layer-chip behavior |
+| Group | `GroupPreview_Selection` | Selection intent, stored coordinates and the exact offset controls |
+| Group | `GroupPreview_Handles` | Ordered installation of storage, drag and handle construction |
+| Group | `GroupPreview_HandleStorage`, `_HandleDrag`, `_HandleView` | History and writes, pointer gestures, and native handle construction |
+
+Composition captures direct functions; animation and drag do not gain wrapper
+calls or per-event dependency bags. Group spell-level finalization stays in the
+coordinator, preserving its position between aura/status and text levels. The
+public preview movement/refresh APIs and stored setting keys stay unchanged.
+The compiler-global guard rejects accidental free-helper lookups, and the owner
+contract smoke checks missing fields against the actual boot-time bindings.
+
+## Layer visibility and status samples
+
+Preview layer visibility is independent of whether the runtime configuration
+enables a feature. Unit scene chips query `HasLayerContent`, which includes
+regions temporarily hidden by that scene's layer filter. A disabled layer must
+remain available to turn back on. Group power uses the compiled power state;
+clearing Group text uses the runtime's cached text writer so restoring a layer
+repaints an unchanged value.
+
+Unit and Group status previews start in All mode. Every configured, supported
+status example is visible while its layer is on; Current and All remain explicit
+choices in the status accordion. Preview PvP follows configured enablement, while
+the live compiler retains its PvP-context gate. Private scene specs and overlays
+keep these sample decisions away from shared/live frame state.
+
+Hiding a selected unit handle releases its arrow bindings and keyboard capture.
+Tab and Shift-Tab propagate while an EditBox owns focus or configuration is
+combat-locked; ordinary preview selection keeps its existing behavior.
 
 ## Group preview scenes
 

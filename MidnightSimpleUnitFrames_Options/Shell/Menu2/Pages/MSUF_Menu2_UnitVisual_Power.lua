@@ -406,9 +406,9 @@ function PowerSection.Detached(pw)
         }).sync
     end
     local detachedFields = pw.BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "slider", "width", function() return ReadNumber(unit, "width", 250) end, { "Detached width", 20, 800, 1, 300 }, { 16, sliderTop,
+        { "slider", "width", function() return ReadNumber(unit, "width", 250) end, { "Detached width", 10, 800, 1, 300 }, { 16, sliderTop,
             detachedSliderW, "CENTER" }, key = "detachedPowerBarWidth", reason = "MSUF2_POWER_DETACHED_W", opts = DETACHED_POWER_OPTS },
-        { "slider", "height", 6, { "Detached height", 2, 80, 1, 300 }, { detachedRightX, sliderTop, detachedSliderW, "CENTER" },
+        { "slider", "height", 6, { "Detached height", 2, 800, 1, 300 }, { detachedRightX, sliderTop, detachedSliderW, "CENTER" },
             key = "detachedPowerBarHeight", reason = "MSUF2_POWER_DETACHED_H", opts = DETACHED_POWER_OPTS },
         { "slider", "detachedPowerBarFrameLevelOffset", 6, { "Detached layer", 0, 30, 1, 300 }, { 16, sliderTop - 66, detachedSliderW, "CENTER" },
             reason = "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },

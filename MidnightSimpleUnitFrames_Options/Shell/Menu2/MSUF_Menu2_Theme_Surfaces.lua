@@ -216,15 +216,15 @@ local function LayoutSuperellipseParts(parts, frame, inset, capW, rightPad)
     parts.L:ClearAllPoints()
     parts.M:ClearAllPoints()
     parts.R:ClearAllPoints()
-    -- Caps keep their texture aspect while the middle segment stretches to absorb row width.
+    -- Keep every slice tied to the owner while sibling texture bounds are still unresolved.
     parts.L:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
     parts.L:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inset, inset)
     parts.L:SetWidth(capW)
     parts.R:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inset - rightPad, -inset)
     parts.R:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset - rightPad, inset)
     parts.R:SetWidth(capW)
-    parts.M:SetPoint("TOPLEFT", parts.L, "TOPRIGHT", 0, 0)
-    parts.M:SetPoint("BOTTOMRIGHT", parts.R, "BOTTOMLEFT", 0, 0)
+    parts.M:SetPoint("TOPLEFT", frame, "TOPLEFT", inset + capW, -inset)
+    parts.M:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset - rightPad - capW, inset)
 end
 function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     if not (frame and frame.CreateTexture) then return nil, nil end

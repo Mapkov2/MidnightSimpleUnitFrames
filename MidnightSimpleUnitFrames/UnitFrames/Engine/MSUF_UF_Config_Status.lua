@@ -582,6 +582,7 @@ local function CompileUnitStatus(out, conf, general, key)
   end
 
   local pvp = status.pvp
+  pvp.configuredEnabled = pvp.enabled
   if IS_CLASSIC_FAMILY then
     pvp.contextGated = pvp.enabled == true or nil
   elseif pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then

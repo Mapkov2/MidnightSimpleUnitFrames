@@ -166,6 +166,7 @@ end
 local function AddTooltip(widget, title, body, opts)
     if not (widget and (widget.SetScript or widget.HookScript)) then return widget end
     opts = opts or {}
+    if not opts.autoHelp and M.SetSearchTooltipText then M.SetSearchTooltipText(widget, title, body) end
     local owner = opts.owner or "ANCHOR_RIGHT"
     local titleColor = opts.titleColor or { 1, 1, 1 }
     local bodyColor = opts.bodyColor or { 0.80, 0.86, 1.00 }

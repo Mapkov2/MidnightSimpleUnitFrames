@@ -436,6 +436,18 @@ local function ActiveCastBarIDMatches(frame, castBarID)
     return castBarID == frame._msufActiveCastBarID
 end
 
+-- Normal STOP belongs to one cast, as in Blizzard's HandleCastStop. Both
+-- castBarIDs are optional; only a readable GUID can settle their absence.
+-- nil means unknown and asks the existing resync to confirm the current API.
+local function ActiveStopIdentityMatches(frame, castGUID, castBarID)
+    local activeBarID = frame._msufActiveCastBarID
+    if castBarID ~= nil and activeBarID ~= nil then return castBarID == activeBarID end
+    local activeGUID = frame._msufActiveCastGUID
+    if issecretvalue(castGUID) or issecretvalue(activeGUID) then return nil end
+    if castGUID ~= nil and activeGUID ~= nil then return castGUID == activeGUID end
+    return nil
+end
+
 --- castGUID and spellID are SecretWhenUnitSpellCastRestricted in the payload
 --- and in the stored identity (castBarID is NeverSecret). Two values differ
 --- only when both are known and plain; a secret on either side is no
@@ -1114,9 +1126,13 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
                 and GetTime() < frame.interruptFeedbackEndTime then
                 return
             end
-            if not ActiveUnitMatches(frame, eventUnit) then return end
-            local castBarID = select(4, ...)
-            if not ActiveCastBarIDMatches(frame, castBarID) then return end
+            if frame.MSUF_isChanneled == true or not ActiveUnitMatches(frame, eventUnit) then return end
+            local matches = ActiveStopIdentityMatches(frame, select(2, ...), select(4, ...))
+            if matches == false then return end
+            if matches == nil then
+                if HasActivePlayerCast(frame) then ScheduleSoftResync(frame) end
+                return
+            end
             UnhaltedUpdate(frame, event)
             return
         elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then

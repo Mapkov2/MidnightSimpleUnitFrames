@@ -25,6 +25,7 @@ local RefreshSceneAuras = Auras.RefreshSceneAuras
 local Indicators = assert(GF.PreviewIndicators, "Group preview requires PreviewIndicators")
 local RefreshSceneSpellIndicators = Indicators.RefreshSceneSpellIndicators
 local C_Timer = C_Timer
+local RunNextFrame = MSUF.Require("MSUF_Scheduler", "UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Scenes.lua").RunWorkNextFrame
 local floor = math.floor
 local min = math.min
 local type = type
@@ -46,7 +47,6 @@ GF._previewBuildSerial = GF._previewBuildSerial or {}
 GF._previewFreeFrames = GF._previewFreeFrames or {}
 GF._previewFrameSerial = tonumber(GF._previewFrameSerial) or 0
 
-local PREVIEW_BUILD_SLICE_COUNT = 2
 local PREVIEW_BUILD_SLICE_THRESHOLD = 8
 local PREVIEW_KINDS = { "party", "raid", "mythicraid" }
 
@@ -180,6 +180,32 @@ function GF.SetPreviewLayerFilter(visible, solo)
   end
   return reseeded
 end
+-- Each scene owns one reusable runner in the shared preview-work queue.
+-- New inputs replace that scene's pending job; other scenes keep their turn.
+local function RunPreviewWork(scene)
+  local work = scene.work
+  scene.work = nil
+  if not work or InCombat() or CurrentSceneSerial(scene) ~= work.serial or not scene.t.active[scene.kind] then return end
+  local index = work.index
+  if work.frames then
+    ApplyPreviewData(work.frames[index], index, scene.kind, scene)
+  else
+    ApplyPreviewFrame(scene, index, work.reason, work.layout, work.w, work.h, work.spacing,
+      work.growth, work.upc, work.primary, work.blockW, work.blockH, work.dirtyMask, work.revision)
+  end
+  if scene.work or CurrentSceneSerial(scene) ~= work.serial or not scene.t.active[scene.kind] then return end
+  work.index = index + 1
+  if work.index <= work.count then
+    scene.work = work
+    RunNextFrame(scene.workRunner)
+  end
+end
+local function QueuePreviewWork(scene, work)
+  scene.work = work
+  if not scene.workRunner then scene.workRunner = function() RunPreviewWork(scene) end end
+  RunNextFrame(scene.workRunner)
+  return true
+end
 local function QueuePreviewBuild(scene, serial, visibleCount, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
   if not (C_Timer and C_Timer.After) then
     for i = 1, visibleCount do
@@ -187,40 +213,16 @@ local function QueuePreviewBuild(scene, serial, visibleCount, reason, layout, w,
     end
     return true
   end
-  local index = 1
-  local function Step()
-    if InCombat() then return end
-    if CurrentSceneSerial(scene) ~= serial then return end
-    if not scene.t.active[scene.kind] then return end
-    local limit = min(visibleCount, index + PREVIEW_BUILD_SLICE_COUNT - 1)
-    for i = index, limit do
-      ApplyPreviewFrame(scene, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH, dirtyMask, expectedRevision)
-    end
-    index = limit + 1
-    if index <= visibleCount then
-      C_Timer.After(0, Step)
-    end
-  end
-  C_Timer.After(0, Step)
-  return true
+  return QueuePreviewWork(scene, { serial = serial, index = 1, count = visibleCount, reason = reason,
+    layout = layout, w = w, h = h, spacing = spacing, growth = growth, upc = upc, primary = primary,
+    blockW = blockW, blockH = blockH, dirtyMask = dirtyMask, revision = expectedRevision })
 end
 local function QueuePreviewDataRefresh(scene, serial, frames, visibleCount)
-  local kind = scene.kind
   if not (C_Timer and C_Timer.After) then
-    for i = 1, visibleCount do ApplyPreviewData(frames[i], i, kind, scene) end
+    for i = 1, visibleCount do ApplyPreviewData(frames[i], i, scene.kind, scene) end
     return true
   end
-  local index = 1
-  local function Step()
-    if CurrentSceneSerial(scene) ~= serial then return end
-    if not scene.t.active[kind] then return end
-    local limit = min(visibleCount, index + PREVIEW_BUILD_SLICE_COUNT - 1)
-    for i = index, limit do ApplyPreviewData(frames[i], i, kind, scene) end
-    index = limit + 1
-    if index <= visibleCount then C_Timer.After(0, Step) end
-  end
-  C_Timer.After(0, Step)
-  return true
+  return QueuePreviewWork(scene, { serial = serial, index = 1, count = visibleCount, frames = frames })
 end
 local function ShowScene(scene, count, opts)
   local kind, t = scene.kind, scene.t

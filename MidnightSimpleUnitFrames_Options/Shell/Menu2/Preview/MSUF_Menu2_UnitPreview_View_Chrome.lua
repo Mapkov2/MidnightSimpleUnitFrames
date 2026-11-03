@@ -7,7 +7,7 @@
 --- which keeps drag, nudge, refresh and construction; it loads before the view
 --- and publishes through MSUF.UFPreviewViewChrome (public routes stay on
 --- MSUF.UFPreview).
-local MSUF = _G.MSUF
+local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2/UnitPreview_View_Chrome")
 local ExportPublic = MSUF.ExportPublic
 local TR = MSUF.MSUF2.PreviewHelpers.TranslateUnitPreview

@@ -72,6 +72,7 @@ DeclareGeneral("auraColors", "aurasOwnBuffHighlightColor aurasOwnDebuffHighlight
 -- The Colors page also owns the player castbar colour override switches and
 -- the custom channels the colour API (Runtime/MSUF_Colors.lua) stores.
 DeclareGeneral("castbarColors", [[
+    focusCastbarOverrideEnabled focusCastbarOverrideColor
     castbarInterruptColor castbarInterruptibleColor castbarNonInterruptibleColor empowerColorStages
     playerCastbarOverrideEnabled playerCastbarOverrideMode playerCastbarOverrideR playerCastbarOverrideG
     playerCastbarOverrideB castbarInterruptibleR castbarInterruptibleG castbarInterruptibleB

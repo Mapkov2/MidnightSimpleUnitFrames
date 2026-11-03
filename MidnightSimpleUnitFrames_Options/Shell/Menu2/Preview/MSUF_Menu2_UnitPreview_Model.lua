@@ -1,6 +1,6 @@
 -- Menu2 unit preview model: creates fake preview data and model state for unit pages.
 -- Preview-only state must not leak into live unit frames or profile runtime paths.
-local MSUF = _G.MSUF
+local _, MSUF = ...
 local FILE = "Menu2/UnitPreview_Model"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local M = MSUF.MSUF2 or {}
@@ -513,8 +513,6 @@ local function NormalizeStatusPreviewId(id)
     if id == "eliteicon" then return "elite" end
     return id
 end
-local ClassColor = MSUF.UF.Config.ClassColor
-local Clamp01 = M.Clamp01
 local SettingsCache = MSUF.Require("MSUF_UFCore_GetSettingsCache", FILE)
 -- Settings-cache switch of the NPC type tint per unit; units not listed always allow it.
 local NPC_TYPE_SWITCHES = {
@@ -527,34 +525,6 @@ local function PreviewNPCKind(key, data, cache, forText)
         if (not switch or cache[switch] ~= false) and data.npcKind then return data.npcKind end
     end
     return data.reactionKind or "enemy"
-end
--- One stops table, refilled on every call: the shared gradient evaluator
--- caches its colour curve on the table and checks it against these values, so
--- a repaint or an animation tick builds neither a table nor a curve.
-local function GradientPreviewColor(pct, health)
-    return MSUF.UFBarTextCommon.PreviewHealthGradientColor(health, Clamp01(pct, 0.75))
-end
-local ResolvePowerColor = MSUF.Require("MSUF_GetResolvedPowerColor", FILE)
-local function PowerColor(token)
-    local r, g, b = ResolvePowerColor(0, token or "MANA")
-    if r then return r, g, b end
-    if token == "ENERGY" then return 1, 0.82, 0.10 end
-    if token == "RAGE" then return 0.82, 0.12, 0.08 end
-    if token == "FOCUS" then return 0.95, 0.45, 0.10 end
-    return 0.10, 0.35, 0.95
-end
-local GetConfiguredFontColor = MSUF.MSUF_GetConfiguredFontColor or MSUF.Optional("MSUF_GetConfiguredFontColor")
-local function FontColor()
-    if GetConfiguredFontColor then
-        local r, g, b = GetConfiguredFontColor()
-        if r then return r, g, b end
-    end
-    local g = M.EnsureDB().general or {}
-    return g.fontColorR or 1, g.fontColorG or 1, g.fontColorB or 1
-end
-local function NormalizeToTInlineColorMode(value)
-    if value == "TOT_NAME" or value == "TARGET_NAME" or value == "NPC" or value == "DEFAULT" then return value end
-    return "AUTO"
 end
 local function ReadPowerBarEnabled(conf, key)
     conf = conf or {}
@@ -573,23 +543,10 @@ local function ReadPowerBarHeight(conf)
     if h < 1 then h = 1 elseif h > 20 then h = 20 end
     return h
 end
-local function ResolveNameAnchor(anchor, x)
-    anchor = tostring(anchor or "TOPLEFT"):upper()
-    x = tonumber(x) or 0
-    if anchor == "LEFT" then anchor = "TOPLEFT"
-    elseif anchor == "CENTER" then anchor = "TOP"
-    elseif anchor == "RIGHT" then anchor = "TOPRIGHT" end
-    if anchor == "TOPRIGHT" then return "TOPRIGHT", "TOPRIGHT", -x, "RIGHT" end
-    if anchor == "TOP" then return "TOP", "TOP", x, "CENTER" end
-    if anchor == "FRAMELEFT" then return "LEFT", "LEFT", x, "LEFT" end
-    if anchor == "FRAMECENTER" then return "CENTER", "CENTER", x, "CENTER" end
-    if anchor == "FRAMERIGHT" then return "RIGHT", "RIGHT", -x, "RIGHT" end
-    return "TOPLEFT", "TOPLEFT", x, "LEFT"
-end
 local function ResolveNameOffsetDelta(anchor, dx, dy)
     dx, dy = tonumber(dx) or 0, tonumber(dy) or 0
     -- Right-edge anchors store an inward-positive X offset and
-    -- ResolveNameAnchor negates it. Direct manipulation therefore mirrors the
+    -- the runtime negates it. Direct manipulation therefore mirrors the
     -- stored X delta so the text continues to follow the cursor on screen.
     anchor = tostring(anchor or "TOPLEFT"):upper()
     if anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "FRAMERIGHT" then dx = -dx end
@@ -627,14 +584,13 @@ M.Assign(Model, {
 })
 M.Assign(Model, {
     PortraitStyleGet = PortraitStyleGet, PortraitStyleSet = PortraitStyleSet, ApplyPortrait = ApplyPortrait,
-    NormalizeStatusPreviewId = NormalizeStatusPreviewId, ClassColor = ClassColor, Clamp01 = Clamp01,
-    SettingsCache = SettingsCache, PreviewNPCKind = PreviewNPCKind, GradientPreviewColor = GradientPreviewColor, PowerColor = PowerColor, FontColor = FontColor,
-    NormalizeToTInlineColorMode = NormalizeToTInlineColorMode,
+    NormalizeStatusPreviewId = NormalizeStatusPreviewId,
+    SettingsCache = SettingsCache, PreviewNPCKind = PreviewNPCKind,
 })
 M.Assign(Model, {
     ReadPowerBarEnabled = ReadPowerBarEnabled,
     CanDetachPowerBarKey = CanDetachPowerBarKey, ReadPowerBarHeight = ReadPowerBarHeight,
-    ResolveNameAnchor = ResolveNameAnchor, ResolveNameOffsetDelta = ResolveNameOffsetDelta, UnitPreviewText = UnitPreviewText, LiveUnitData = LiveUnitData,
+    ResolveNameOffsetDelta = ResolveNameOffsetDelta, UnitPreviewText = UnitPreviewText, LiveUnitData = LiveUnitData,
     LiveRaidSubgroup = LiveRaidSubgroup,
 })
 

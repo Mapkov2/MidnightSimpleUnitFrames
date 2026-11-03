@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("itIT")) or (MSUF.L or {})
 -- Reviewed Edit Mode, setup and client-capability labels.
+L["Focus override"] = "Sostituzione del focus"
+L["Focus interruptible cast color"] = "Colore dei lanci interrompibili del focus"
 L["Player Name Position"] = "Posizione del nome del giocatore"
 L["Target Name Position"] = "Posizione del nome del bersaglio"
 L["Focus Name Position"] = "Posizione del nome del focus"
@@ -7585,6 +7587,15 @@ L["Align"] = "Allinea"
 
 L["Right-click focus in combat"] = "Focus con clic destro in combattimento"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "In combattimento, fai clic destro su questo riquadro unità per impostarla come focus. Fuori dal combattimento, il clic destro apre il menu contestuale."
+
+L["Guides preview layer"] = "Livello delle guide dell’anteprima"
+L["Add custom group spell indicator"] = "Aggiungi un indicatore di incantesimo personalizzato per il gruppo"
+
+L["Spell minimum cost (out of combat)"] = "Costo minimo della magia (fuori dal combattimento)"
+L["Spell ID, link or name"] = "ID, collegamento o nome della magia"
+L["Uses the learned spell's minimum cost for the selected bar. Updates outside combat after spell or talent changes and after combat. Temporary cost changes during combat are not tracked. Unavailable costs hide the mark."] = "Usa il costo minimo della magia appresa per la barra selezionata. Si aggiorna fuori dal combattimento dopo modifiche a magie o talenti e dopo il combattimento. Le variazioni temporanee del costo in combattimento non vengono seguite. Se il costo non è disponibile, il segno viene nascosto."
+L["No readable spell cost for this bar."] = "Nessun costo della magia leggibile per questa barra."
+L["Minimum cost: %s (%s)."] = "Costo minimo: %s (%s)."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)

@@ -195,6 +195,8 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
         GetLiveRaidKind = function() return liveKind end,
         IsMythicRaidContext = function() return mythic == true end,
         GetAnchorPoint = function() return "TOPLEFT" end,
+        -- This fixture supplies the scope directly; no SavedVariables need repair.
+        EnsureDB = Noop,
         GetConf = function() return conf end,
         GroupFilterAllowsSubgroup = function(filter) return filter == nil end,
     }
@@ -213,14 +215,34 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
         GF._deferCalls = (GF._deferCalls or 0) + 1
     end
     MSUF.GF = GF
-    MSUF.UF = { IsUnitToken = function(unit) return type(unit) == "string" and unit ~= "" end }
+    local function UnexpectedVisualApply()
+        error("native-header fixture does not own MSUF visual frames", 2)
+    end
+    MSUF.UF = {
+        IsUnitToken = function(unit) return type(unit) == "string" and unit ~= "" end,
+        AttachFrame = UnexpectedVisualApply,
+        ApplySpec = UnexpectedVisualApply,
+    }
     -- The shipped Kernel API (export policy, registry, Require) in this client's globals.
     local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
     RequireFixture.InstallKernel(root, MSUF, env, loadfile)
+    -- Headers binds the shipped player-unit identity helper from Kernel Util.
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Geometry.lua", MSUF, env)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua", MSUF, env)
     MSUF.ExportPublic("MSUF_PixelLayoutRegion", function(region) return region end)
     MSUF.ExportPublic("MSUF_SetRoundLayoutToNearestPixel", Noop)
     -- The real shared anchor helpers (point fractions, on-screen clamp) the headers bind when they load.
     RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua", MSUF, env)
+    -- Keep the shipped rebind transaction and its error/cleanup boundary.
+    env.geterrorhandler = function() return function(message) error(message, 2) end end
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua", MSUF, env)
+    RequireFixture.LoadShipped(root, "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua", MSUF, env)
+    -- Native buttons have no MSUF visual layer here. Its scan boundary only
+    -- validates the requested header; native roster/layout assertions stay below.
+    GF.ScanHeader = function(key, kind)
+        Check(GF.headers[key] ~= nil and kind == liveKind, "unexpected native-header scan")
+        return false, true
+    end
     local function Defer(path)
         local file = assert(io.open(path, "rb"))
         RequireFixture.DeferRequired(MSUF, file:read("*a"), path, env)

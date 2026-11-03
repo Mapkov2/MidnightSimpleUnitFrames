@@ -15,7 +15,7 @@ host:SetSize(400, 300)
 local scene = GF.NewPreviewScene(host)
 scene:Activate()
 local group = scene:Group("party", 1, { immediate = true })
-h:RunTimers()
+h:RunDeferred()
 local frame = assert(group:Frames()[1])
 local slot = { enabled = true, visual = "icon", iconEffect = "glow", size = 24,
     color = { 0.2, 0.4, 0.6, 0.8 }, icon = 134400 }
