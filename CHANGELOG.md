@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-alpha4 - 2026-11-04
+
+### Unit frames and previews
+
+- Fixed the health bar for Pet Target, Target of Target and Focus Target. These frames now read their own unit's health, and their configured Smooth Fill and Chunked Health Loss apply to health changes.
+<!-- msuf-menu-link: none -->
+- Fixed the unit frame preview so a rise in sample health no longer hides the loss trail on the first damage step.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-alpha3 - 2026-11-03
 
 ### Resource bars and previews

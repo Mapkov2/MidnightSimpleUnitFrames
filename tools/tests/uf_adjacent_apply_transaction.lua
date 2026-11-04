@@ -26,7 +26,8 @@ for _, mode in ipairs(arg[3] and { arg[3] } or { "scene", "detach" }) do
                     local old = held == "true" and true or nil
                     if held == "false" then old = false end
                     local failure, reports, syncs = phase, 0, 0
-                    local frame = { _msufPixelLayoutTemplateVisited = true, MSUFUnitKey = "original",
+                    local originalUnit = mode == "detach" and "targettarget" or "original"
+                    local frame = { _msufPixelLayoutTemplateVisited = true, MSUFUnitKey = originalUnit,
                         _msufElementApplyBatch = old, _msufActiveElements = { First = true } }
                     local UF = { elements = {}, attachedFrames = { [frame] = true }, attachedFrameList = { frame },
                         _msufApplyingSpec = old }
@@ -36,7 +37,7 @@ for _, mode in ipairs(arg[3] and { arg[3] } or { "scene", "detach" }) do
                     local function Restored()
                         assert(UF._msufApplyingSpec == old, mode .. "/" .. phase .. ": global apply flag leaked")
                         assert(frame._msufElementApplyBatch == old, "previous element batch flag changed")
-                        assert(frame.MSUFUnitKey == "original", "scene enable check leaked its temporary unit key")
+                        assert(frame.MSUFUnitKey == originalUnit, "scene enable check leaked its temporary unit key")
                     end
                     local element = {
                         Create = function() Fail("Create") end,
@@ -63,6 +64,7 @@ for _, mode in ipairs(arg[3] and { arg[3] } or { "scene", "detach" }) do
                             f._msufActiveElements[name] = nil
                         end,
                         ClearFrameEvents = function() Fail("events") end,
+                        dependentUnitParents = { targettarget = "target" },
                         SyncGroupLifecycleDriver = function() Fail("lifecycle") end,
                         Compiler = { AfterApply = function() Fail("after") end },
                         SelectElementUpdate = function() return function() error("scene update ran") end end,

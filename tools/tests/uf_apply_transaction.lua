@@ -19,8 +19,8 @@ for _, phase in ipairs(phases) do
         local throwReporter
         local visits, updates = {}, 0
         local UF = { elements = {}, _msufApplyingSpec = old }
-        local frame = { MSUFUnitKey = "target", _msufElementApplyBatch = old,
-            _msufEventRouteUnit = "target", _msufElementEventRoutes = {}, _msufPixelLayoutTemplateVisited = true }
+        local frame = { MSUFUnitKey = "targettarget", _msufElementApplyBatch = old,
+            _msufEventRouteUnit = "targettarget", _msufElementEventRoutes = {}, _msufPixelLayoutTemplateVisited = true }
         local function Fail(at)
             if failure == at then error("injected " .. at) end
         end
@@ -41,6 +41,7 @@ for _, phase in ipairs(phases) do
         local env = setmetatable({
             UF = UF, MSUF = ns, elementOrder = { "First", "Second", "Third" }, scopedElementOrders = {}, Metadata = {},
             PixelLayoutRegion = function() end,
+            dependentUnitParents = { targettarget = "target" },
             ApplyElementAllowed = function() return true end,
             FrameDisableElement = function() end,
             SelectElementUpdate = function(element) return element.Update end,

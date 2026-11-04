@@ -2524,6 +2524,17 @@
         "Mists",
         "Forever"
       ]
+    },
+    {
+      "test": "tools/tests/pet_target_health_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     }
   ],
   "excluded": {

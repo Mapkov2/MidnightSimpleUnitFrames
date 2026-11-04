@@ -591,10 +591,11 @@ local function UpdateAbsolute(frame, event, unit)
   else
     maxHP = bar._msufHealthMax
   end
+  local animate = event == "UNIT_HEALTH" or event == "MSUF_DEPENDENT_TARGET_POLL"
   local value, maximum, percentReady, hpSecret, maxSecret =
-    UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, event == "UNIT_HEALTH")
+    UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, animate)
   if frame._msufHealthBackgroundNeedsValue == true then
-    SetHealthBackgroundValue(frame, unit, nil, nil, event == "UNIT_HEALTH")
+    SetHealthBackgroundValue(frame, unit, nil, nil, animate)
   end
   return value, maximum, percentReady, hpSecret, maxSecret
 end
@@ -682,12 +683,13 @@ if UnitHealthPercent and SCALE_100 then
     if not pctSecret and (type(pct) ~= "number" or pct ~= pct or (pct - pct) ~= 0) then pct = 0 end
     local bar = frame.hpBar
     local healthTick = event == "UNIT_HEALTH"
+    local animate = healthTick or event == "MSUF_DEPENDENT_TARGET_POLL"
     if bar._msufMinMax ~= 100 then
       bar:SetMinMaxValues(0, 100)
       bar._msufMinMax = 100
     end
     if pctSecret or bar._msufHealthPercentValue ~= pct or bar._msufHealthPercentUnit ~= unit then
-      local interp = healthTick and bar._msufSmoothInterp or nil
+      local interp = animate and bar._msufSmoothInterp or nil
       if interp then
         bar:SetValue(pct, interp)
         bar._msufInterpolating = true
@@ -702,7 +704,7 @@ if UnitHealthPercent and SCALE_100 then
       end
     end
     if frame._msufHealthBackgroundNeedsValue == true then
-      SetHealthBackgroundValue(frame, unit, pct, pctSecret, healthTick)
+      SetHealthBackgroundValue(frame, unit, pct, pctSecret, animate)
     end
     if rt and (not healthTick or frame._msufHealthDeferPercent ~= true)
       and frame._msufHealthPublishPercent == true then
@@ -1123,7 +1125,13 @@ end
 function Health.PaintSample(frame, unit, hp, hpMax, animate)
   local bar = frame and frame.hpBar
   if not bar then return false end
-  UpdateAbsoluteValues(frame, unit, hp, hpMax, true, animate == true)
+  local animateValue = animate == true
+  -- A synthetic gain must not claim the loss snapshot before real damage.
+  if animateValue and bar._msufChunkedLoss == true then
+    local previous = bar._msufHealthValue
+    animateValue = bar._msufHealthValueUnit == unit and previous ~= nil and hp < previous
+  end
+  UpdateAbsoluteValues(frame, unit, hp, hpMax, true, animateValue)
   if animate ~= true and bar._msufChunkedLoss then bar:SetValue(hp) end
   if frame._msufHealthBackgroundNeedsValue == true then
     SetHealthBackgroundValue(frame, unit, hp * 100 / hpMax, false, false)

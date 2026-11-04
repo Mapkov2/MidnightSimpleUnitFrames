@@ -8,55 +8,25 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "C4B58CA704C3CC31E1C0DDB39FD7FC516E8A25D854B0A0A631C5BC901B4413BD",
-    currentVersion = "7.0-alpha3",
+    sourceSha256 = "1A7B06997BE4B0B44FBD7D59CF85E758E90EC59BBCC5AEA04B7782564BB6C167",
+    currentVersion = "7.0-alpha4",
     historyFromVersion = "6.02",
     previousVersion = "6.50",
-    rangeLabel = "6.50 -> 7.0-alpha3",
+    rangeLabel = "6.50 -> 7.0-alpha4",
     entries = {
         {
-            version = "7.0-alpha3",
-            date = "2026-11-03",
+            version = "7.0-alpha4",
+            date = "2026-11-04",
             sections = {
                 {
-                    title = "Resource bars and previews",
+                    title = "Unit frames and previews",
                     bullets = {
                         {
-                            text = "Added resource marks based on a selected spell's resource cost, with matching options and previews.",
+                            text = "Fixed the health bar for Pet Target, Target of Target and Focus Target. These frames now read their own unit's health, and their configured Smooth Fill and Chunked Health Loss apply to health changes.",
                             linkless = true,
                         },
                         {
-                            text = "Expanded detached power-bar dimensions and corrected vertical and reversed preview fills.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Improved unit and group preview selection, resizing, layer order, status examples, aura placement and cleanup.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Castbars and interrupt readiness",
-                    bullets = {
-                        {
-                            text = "Fixed Warlock Spell Lock readiness with Grimoire of Sacrifice and switching back to the Felhunter.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed stale player cast-stop events and channel transitions, and corrected independent focus castbar colors and preview sizing.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Menu, search and compatibility",
-                    bullets = {
-                        {
-                            text = "Improved search results for scoped settings and dropdown choices, including links that open the correct menu context.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Improved Edit Mode and preview update scheduling, color shortcuts and frame-background updates.",
+                            text = "Fixed the unit frame preview so a rise in sample health no longer hides the loss trail on the first damage step.",
                             linkless = true,
                         },
                     },

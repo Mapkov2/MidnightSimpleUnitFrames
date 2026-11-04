@@ -108,9 +108,9 @@ health.Apply = apply
 -- Real teardown faults and nesting; ApplyButton is never replaced.
 local header = assert(GF.headers.raid)
 local auras = h.core.MSUF_Auras3
-for _, phase in ipairs({ "children", "aura-end", "driver", "nested", "element" }) do
+for _, phase in ipairs({ "children", "aura-end", "event-batch-end", "nested", "element" }) do
     for _, raises in ipairs({ false, true }) do
-        local children, sync = header.GetChildren, UF.SyncRuntimeDriver
+        local children, endBatch = header.GetChildren, UF.EndEventRegistrationBatch
         local auraEnd = auras and auras.EndTopologyBatch
         local beforeReports, fault, nested = reports, true, false
         throwing = raises
@@ -119,10 +119,10 @@ for _, phase in ipairs({ "children", "aura-end", "driver", "nested", "element" }
                 if fault then error("injected children") end
                 return children(self)
             end
-        elseif phase == "driver" then
-            UF.SyncRuntimeDriver = function(...)
-                if fault then error("injected driver") end
-                return sync(...)
+        elseif phase == "event-batch-end" then
+            UF.EndEventRegistrationBatch = function(...)
+                endBatch(...)
+                if fault then error("injected event batch teardown") end
             end
         elseif phase == "aura-end" and auraEnd then
             auras.EndTopologyBatch = function(...)
@@ -152,7 +152,7 @@ for _, phase in ipairs({ "children", "aura-end", "driver", "nested", "element" }
             if raises then assert(not ok and tostring(message):find("injected reporter", 1, true)) end
         end
         fault, throwing = false, false
-        header.GetChildren, UF.SyncRuntimeDriver = children, sync
+        header.GetChildren, UF.EndEventRegistrationBatch = children, endBatch
         if auras then auras.EndTopologyBatch = auraEnd end
         health.Apply = apply
         assert(GF.ScanHeader("raid", "raid"), "failed scan prevented a normal retry")
