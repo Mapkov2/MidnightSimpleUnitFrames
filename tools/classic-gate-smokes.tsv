@@ -616,3 +616,4 @@ clients+Forever	lua	tools/tests/menu_preview_power_loss_smoke.lua	{root} {flavor
 -	lua	tools/tests/forever_five_second_default_smoke.lua	{root}	Forever five-second rule default and one-time profile migration
 clients+Forever	lua	tools/tests/detached_power_geometry_smoke.lua	{root} {flavor}	Detached Power geometry, typed menu input and preview fill parity: {flavor}
 clients+Forever	lua	tools/tests/menu_color_shortcut_art_smoke.lua	{root} {flavor}	Context color shortcut art failed: {flavor}
+clients+Forever	lua	tools/tests/pet_target_health_smoke.lua	{root} {flavor}	Pet Target health isolation and lifecycle: {flavor}

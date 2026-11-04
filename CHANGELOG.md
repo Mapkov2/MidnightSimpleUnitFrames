@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.507 - 2026-11-04
+
+### Bug Fixes
+
+- Fixed health bars on Pet Target, Target of Target, and Focus Target jumping to unrelated units' health. Each frame now follows its own target and honors Smooth Fill and Chunked Health Loss.
+<!-- msuf-menu-link: none -->
+- Fixed the first damage step in the Unitframe preview losing its Chunked Health Loss trail after a sample health gain.
+<!-- msuf-menu-link: {"pageKey":"uf_targettarget","sectionId":"frame_basics","controlId":"menu2.uf_targettarget.unit.basics.chunked_fill","settingKey":"targettarget.chunkedFill","prepareKind":"","prepareValue":"","query":"chunked health loss","label":"Chunked health loss"} -->
+
 ## 6.506 - 2026-11-03
 
 Stable update for all supported clients, including the fixes tested in 6.506 Beta 1 and Beta 2 and the latest options and compatibility improvements.

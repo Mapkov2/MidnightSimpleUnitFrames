@@ -324,6 +324,12 @@ local function SetBarValuePlain(bar, value, animate)
   if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
     return false
   end
+  -- Preview samples can distinguish gains from damage. A gain must not
+  -- claim the single loss snapshot before the first visible damage step.
+  if animate and not valueSecret and bar._msufChunkedLoss == true
+    and not bar._msufLossTrail._msufLossTrailPool then
+    animate = bar._msufDirectValuePlain == true and value < bar._msufDirectValue
+  end
   local interp = animate and bar._msufSmoothInterp or nil
   if interp then
     bar:SetValue(value, interp)

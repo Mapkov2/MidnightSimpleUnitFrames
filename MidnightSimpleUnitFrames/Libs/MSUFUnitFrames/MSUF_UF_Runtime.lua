@@ -329,12 +329,49 @@ local function RunDependentUnits(parent)
   return a or b or c
 end
 
+-- Blizzard's TargetOfTargetMixin samples its own unit. Share one driver
+-- across the visible, enabled dependent frames, with no idle OnUpdate.
+local function PollDependentFrame(frame)
+  if frame and not frame._msufPreviewAnimUnitRestore then
+    UF.RunLeanIdentity(frame, "MSUF_DEPENDENT_TARGET_POLL")
+  end
+end
+
+local function DependentTargetsOnUpdate(driver, elapsed)
+  local passed = driver.elapsed + elapsed
+  if passed < 0.2 then
+    driver.elapsed = passed
+    return
+  end
+  driver.elapsed = 0
+  if UF.GetHostValue("MSUF_PreviewTestMode") == true then return end
+  PollDependentFrame(driver.targetTarget)
+  PollDependentFrame(driver.focusTarget)
+  PollDependentFrame(driver.petTarget)
+end
+
+local function VisibleDependentFrame(unit)
+  local frame = RuntimeFrame(unit)
+  if frame and frame._msufCoreVisible == true then return frame end
+end
+
 function UF.SyncRuntimeDriver()
+  local targetTarget = VisibleDependentFrame("targettarget")
+  local focusTarget = VisibleDependentFrame("focustarget")
+  local petTarget = VisibleDependentFrame("pettarget")
+  local active = targetTarget ~= nil or focusTarget ~= nil or petTarget ~= nil
   local driver = UF.driver
+  if active and not driver then
+    driver = CreateFrame("Frame")
+    UF.driver = driver
+  end
   if driver then
-    if driver.UnregisterAllEvents then driver:UnregisterAllEvents() end
-    if driver.SetScript then driver:SetScript("OnEvent", nil) end
-    UF.driver = nil
+    driver.targetTarget, driver.focusTarget, driver.petTarget = targetTarget, focusTarget, petTarget
+    if driver.active ~= active then
+      driver.active = active
+      driver.elapsed = 0
+      driver:SetScript("OnUpdate", active and DependentTargetsOnUpdate or nil)
+    end
   end
   return true
 end

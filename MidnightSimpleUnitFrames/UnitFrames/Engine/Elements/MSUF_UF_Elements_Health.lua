@@ -584,10 +584,11 @@ local function UpdateAbsolute(frame, event, unit)
   else
     maxHP = bar._msufHealthMax
   end
+  local animate = event == "UNIT_HEALTH" or event == "MSUF_DEPENDENT_TARGET_POLL"
   local value, maximum, percentReady, hpSecret, maxSecret =
-    UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, event == "UNIT_HEALTH")
+    UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, animate)
   if frame._msufHealthBackgroundNeedsValue == true then
-    SetHealthBackgroundValue(frame, unit, nil, nil, event == "UNIT_HEALTH")
+    SetHealthBackgroundValue(frame, unit, nil, nil, animate)
   end
   return value, maximum, percentReady, hpSecret, maxSecret
 end
@@ -665,21 +666,22 @@ if UnitHealthPercent and SCALE_100 then
       rt._dispatchHealthPercent = nil
       rt._dispatchHealthPercentReady = nil
     end
-    if not (frame and frame.hpBar and unit) then return end
+    local bar = frame and frame.hpBar
+    if not (bar and unit) then return end
     -- Keep the native percent write and its consumers in one pass. The group
     -- lane below owns its deferred-text contract; this lane must still hand
     -- the very same payload to immediate single-frame text consumers.
     local pct = UnitHealthPercent(unit, true, SCALE_100)
     local pctSecret = issecretvalue(pct) == true
     if not pctSecret and (type(pct) ~= "number" or pct ~= pct or (pct - pct) ~= 0) then pct = 0 end
-    local bar = frame.hpBar
     local healthTick = event == "UNIT_HEALTH"
+    local animate = healthTick or event == "MSUF_DEPENDENT_TARGET_POLL"
     if bar._msufMinMax ~= 100 then
       bar:SetMinMaxValues(0, 100)
       bar._msufMinMax = 100
     end
     if pctSecret or bar._msufHealthPercentValue ~= pct or bar._msufHealthPercentUnit ~= unit then
-      local interp = healthTick and bar._msufSmoothInterp or nil
+      local interp = animate and bar._msufSmoothInterp or nil
       if interp then
         bar:SetValue(pct, interp)
         bar._msufInterpolating = true
@@ -694,7 +696,7 @@ if UnitHealthPercent and SCALE_100 then
       end
     end
     if frame._msufHealthBackgroundNeedsValue == true then
-      SetHealthBackgroundValue(frame, unit, pct, pctSecret, healthTick)
+      SetHealthBackgroundValue(frame, unit, pct, pctSecret, animate)
     end
     if rt and (not healthTick or rt.healthDefersUnitHealthText ~= true)
       and (rt.healthNeedsPercent == true or rt.healthColorByHealth == true) then

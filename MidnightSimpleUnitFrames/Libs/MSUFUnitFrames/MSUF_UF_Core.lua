@@ -676,6 +676,7 @@ end
 
 local function FrameOnShow(frame)
   frame._msufCoreVisible = true
+  if UF.IsDependentUnit(frame.MSUFUnitKey) and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
   frame._msufCoreOnShowIdentityRefreshed = nil
   -- Restore the full event set suspended by the aggressive hidden-frame path.
   -- Re-registering from the recorded recipe reactivates every unit event; the
@@ -763,6 +764,7 @@ end
 
 local function FrameOnHide(frame)
   frame._msufCoreVisible = false
+  if UF.IsDependentUnit(frame.MSUFUnitKey) and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
   frame._msufCoreOnShowFollowupEvent = nil
   frame._msufCoreOnShowFollowupGUID = nil
   frame._msufCoreOnShowFollowupTime = nil
@@ -853,7 +855,8 @@ local function DependentSource(frame, event)
   if event == "UNIT_TARGET" then
     return frame and UF.ParentUnitForDependentUnit(frame.MSUFUnitKey)
   end
-  if event == "UNIT_PET" and frame and frame.MSUFUnitKey == "pet" then
+  if event == "UNIT_PET" and frame
+    and (frame.MSUFUnitKey == "pet" or frame.MSUFUnitKey == "pettarget") then
     return "player"
   end
   return nil
@@ -1796,12 +1799,22 @@ RegisterFrameEvent = function(frame, event, unitless)
     return
   end
   local source = DependentSource(frame, event) or frame.MSUFUnitKey
-  if not IsUnitToken(source) then
+  local dependent = UF.IsDependentUnit(source)
+  if dependent then
+    -- A portrait can change model without changing its unit identity. Its
+    -- two refresh events sample the bound unit, never the event payload.
+    if event ~= "UNIT_PORTRAIT_UPDATE" and event ~= "UNIT_MODEL_CHANGED" then
+      frame:UnregisterEvent(event)
+      return
+    end
+    frame:RegisterEvent(event)
+  elseif not IsUnitToken(source) then
     frame:RegisterEvent(event)
     return
+  else
+    frame:RegisterUnitEvent(event, source)
   end
-  frame:RegisterUnitEvent(event, source)
-  if source ~= frame.MSUFUnitKey then
+  if dependent or source ~= frame.MSUFUnitKey then
     frame._msufFrameUnitEvents = frame._msufFrameUnitEvents or {}
     frame._msufFrameUnitEventTargets = frame._msufFrameUnitEventTargets or {}
     frame._msufFrameUnitEvents[event] = source
@@ -2029,7 +2042,7 @@ local function AddIdentityLifecycleHandlers(frame)
     AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", QueueDependentIdentity, true)
     AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
   elseif unit == "pettarget" then
-    AddEventHandler(frame, "UNIT_PET", QueueDependentIdentity, true)
+    AddEventHandler(frame, "UNIT_PET", QueueDependentIdentity, false)
     AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
   elseif IsBossUnit(unit) then
     -- One Blizzard notification fans out to all five Boss frames. Merge repeat
@@ -3010,7 +3023,9 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
   local rebuilt = false
   if wasBatching ~= true then rebuilt = RefreshFrameRoutingAfterElementApply(frame) end
   UF._msufApplyingSpec = wasApplying
-  if rebuilt and wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  if (rebuilt or UF.IsDependentUnit(frame.MSUFUnitKey)) and wasApplying ~= true and UF.SyncRuntimeDriver then
+    UF.SyncRuntimeDriver()
+  end
   -- Menu dispel-overlay preview. The stand-in tint is MSUF-drawn and therefore
   -- outside the element/dirty-mask system, so re-stamp it here: this is the one
   -- funnel both full spec applies (UF.ApplySpec) and targeted element refreshes

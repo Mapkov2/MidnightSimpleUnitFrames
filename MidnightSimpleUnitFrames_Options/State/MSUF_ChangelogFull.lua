@@ -8,12 +8,38 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F051B7C939A313794B97374ADF913F21BB8754A5CBC3D1F099112CE99A19C1DF",
-    currentVersion = "6.506",
+    sourceSha256 = "ECD163D48DB8B591E8546B906676476105C6E8F839111BD9BC11C46DB0EB4625",
+    currentVersion = "6.507",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.506",
+    rangeLabel = "6.02 -> 6.507",
     entries = {
+        {
+            version = "6.507",
+            date = "2026-11-04",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed health bars on Pet Target, Target of Target, and Focus Target jumping to unrelated units' health. Each frame now follows its own target and honors Smooth Fill and Chunked Health Loss.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed the first damage step in the Unitframe preview losing its Chunked Health Loss trail after a sample health gain.",
+                            link = {
+                                pageKey = "uf_targettarget",
+                                query = "chunked health loss",
+                                label = "Chunked health loss",
+                                sectionId = "frame_basics",
+                                controlId = "menu2.uf_targettarget.unit.basics.chunked_fill",
+                                settingKey = "targettarget.chunkedFill",
+                            },
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.506",
             date = "2026-11-03",

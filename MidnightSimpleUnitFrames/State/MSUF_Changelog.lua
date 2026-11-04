@@ -8,12 +8,38 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F051B7C939A313794B97374ADF913F21BB8754A5CBC3D1F099112CE99A19C1DF",
-    currentVersion = "6.506",
-    historyFromVersion = "6.502",
-    previousVersion = "6.502",
-    rangeLabel = "6.502 -> 6.506",
+    sourceSha256 = "ECD163D48DB8B591E8546B906676476105C6E8F839111BD9BC11C46DB0EB4625",
+    currentVersion = "6.507",
+    historyFromVersion = "6.503",
+    previousVersion = "6.503",
+    rangeLabel = "6.503 -> 6.507",
     entries = {
+        {
+            version = "6.507",
+            date = "2026-11-04",
+            sections = {
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed health bars on Pet Target, Target of Target, and Focus Target jumping to unrelated units' health. Each frame now follows its own target and honors Smooth Fill and Chunked Health Loss.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed the first damage step in the Unitframe preview losing its Chunked Health Loss trail after a sample health gain.",
+                            link = {
+                                pageKey = "uf_targettarget",
+                                query = "chunked health loss",
+                                label = "Chunked health loss",
+                                sectionId = "frame_basics",
+                                controlId = "menu2.uf_targettarget.unit.basics.chunked_fill",
+                                settingKey = "targettarget.chunkedFill",
+                            },
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.506",
             date = "2026-11-03",
@@ -207,50 +233,6 @@ local data = {
                         },
                         {
                             text = "Arena party frames sorted by class priority within roles now update when a teammate's name arrives late.",
-                            linkless = true,
-                        },
-                    },
-                },
-            },
-        },
-        {
-            version = "6.502",
-            date = "2026-10-15",
-            sections = {
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        {
-                            text = "Raid slots and layouts now stay stable during combat, keeping displayed names and click targets aligned. Pending roster and layout changes are applied after combat.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Raid and Mythic Raid frames now refresh their member state when roster assignments change, including during combat, instead of retaining the previous occupant's name, class color or status.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Group Frame Reset Page now restores the complete factory configuration, including raid layout limits, aura settings and profile overrides, so old filters cannot leave groups hidden after a reset.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "raid frame width layout",
-                                label = "Group Frame settings",
-                                sectionId = "scaling",
-                                controlId = "menu2.gf_layout.group.field.width",
-                                settingKey = "gf_raid.width",
-                                prepareKind = "groupScope",
-                                prepareValue = "raid",
-                            },
-                        },
-                        {
-                            text = "Imports of old profiles preserve their existing group selection and offer one optional repair for ambiguous legacy filters. The repair changes only the affected filters and preserves explicit exclusions and profile variants.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Group aura edits made through Copy To, preview icon movement or a partial aura-settings import now activate the custom renderer when required. Reading settings no longer changes the renderer.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Player castbars now select an active channel when a channel starts while the outgoing cast is still reported, preventing the old cast from masking the channel.",
                             linkless = true,
                         },
                     },

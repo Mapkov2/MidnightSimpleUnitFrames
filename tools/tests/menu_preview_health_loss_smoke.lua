@@ -9,9 +9,13 @@ local failure = world:FirstFailure()
 assert(not failure, failure and (failure.file .. ": " .. failure.message))
 local env, MSUF, methods = world.env, world.core, world.widgets.Methods
 local valueWrites = setmetatable({}, { __mode = "k" })
+local smoothWrites = setmetatable({}, { __mode = "k" })
 local setValue = methods.SetValue
 methods.SetValue = function(self, value, interpolation)
     valueWrites[self] = (valueWrites[self] or 0) + 1
+    if interpolation ~= nil and interpolation == self._msufSmoothInterp then
+        smoothWrites[self] = (smoothWrites[self] or 0) + 1
+    end
     return setValue(self, value, interpolation)
 end
 -- The widget fixture records native animations but does not advance them.
@@ -46,7 +50,8 @@ local M, Preview = MSUF.MSUF2, MSUF.UFPreview
 local parent = env.CreateFrame("Frame", nil, env.UIParent)
 parent:SetSize(900, 400)
 local panel = env.CreateFrame("Frame", nil, env.UIParent)
-panel._msufGetCurrentKey = function() return "player" end
+local currentKey = "player"
+panel._msufGetCurrentKey = function() return currentKey end
 local unit = Preview._BuildPreview(parent, panel, 900, 400)
 unit:Show()
 unit.canvas:SetSize(400, 200)
@@ -56,15 +61,25 @@ local function Check(ok, message)
     assert(ok, flavor .. ": " .. message)
 end
 local function Exercise(box, conf, refresh, getBar, action, label)
+    local isUnit = box == unit
+    local function SetAnimation(enabled)
+        if isUnit then
+            local button = box.animateCombatButton
+            if action.get() ~= enabled then assert(button:GetScript("OnClick"))(button) end
+            return action.get() == enabled
+        end
+        return action.set(enabled)
+    end
     conf.chunkedFill, conf.smoothFill = true, false
     conf.hpBarAlpha, conf.frameBarShape = 0.35, "SQUARE"
     env.MSUF_DB.general.healthLossColorR = 0.8
     env.MSUF_DB.general.healthLossColorG = 0.4
     env.MSUF_DB.general.healthLossColorB = 0.1
     MSUF.UF.Config.Refresh()
-    if label ~= "unit" then MSUF.GF.InvalidateCompiledSpecs(label) end
+    if not isUnit then MSUF.GF.InvalidateCompiledSpecs(label) end
     refresh()
-    Check(action.set(true) == true, label .. ": animation did not start")
+    local staticValue = isUnit and getBar():GetValue()
+    Check(SetAnimation(true), label .. ": animation did not start")
     local tick = assert(box:GetScript("OnUpdate"))
     tick(box, 0.06)
     local bar = assert(getBar())
@@ -93,14 +108,15 @@ local function Exercise(box, conf, refresh, getBar, action, label)
     end
     Check(drops > 0 and stable > 80, label .. ": chunked sample should hold between discrete losses")
     Check((valueWrites[bar] or 0) - writes < 40, label .. ": unchanged chunks still write health every tick")
-    action.set(false)
+    Check(SetAnimation(false), label .. ": animation did not stop")
     refresh()
+    if isUnit then Check(getBar():GetValue() == staticValue, label .. ": chunked stop did not restore static health") end
     Check(trail._msufLossAnimating ~= true and not trail:IsShown(), label .. ": Stop left loss trail active")
     box._msuf2RangeFadePreviewAlpha, box._msuf2RangeFadePreviewLayerMode = 0.4, "health"
     refresh()
     Check(math.abs(trail:GetStatusBarTexture():GetAlpha() - bar:GetStatusBarTexture():GetAlpha() * bar:GetAlpha()) < 0.0001,
         label .. ": loss ignores health-only range fade")
-    if not bar._msufPreviewHealthLoss and label ~= "unit" then
+    if not bar._msufPreviewHealthLoss and not isUnit then
         local frame = box._msufGFRenderState.mock._cell
         MSUF.UF.elements.Alpha.SceneApply(frame, frame.MSUFSpec)
         refresh()
@@ -109,10 +125,10 @@ local function Exercise(box, conf, refresh, getBar, action, label)
     end
     box._msuf2RangeFadePreviewAlpha, box._msuf2RangeFadePreviewLayerMode = nil, nil
     conf.reverseFillBars, conf.reverseFill = true, true
-    conf.verticalFillBars = label == "unit"
+    conf.verticalFillBars = isUnit
     conf.frameBarShape = "ROUNDED"
     MSUF.UF.Config.Refresh()
-    if label ~= "unit" then MSUF.GF.InvalidateCompiledSpecs(label) end
+    if not isUnit then MSUF.GF.InvalidateCompiledSpecs(label) end
     refresh()
     Check((trail:GetOrientation() or "HORIZONTAL") == (bar:GetOrientation() or "HORIZONTAL"),
         label .. ": loss trail uses another fill axis")
@@ -122,23 +138,52 @@ local function Exercise(box, conf, refresh, getBar, action, label)
     end
     conf.frameBarShape = "SQUARE"
     MSUF.UF.Config.Refresh()
-    if label ~= "unit" then MSUF.GF.InvalidateCompiledSpecs(label) end
+    if not isUnit then MSUF.GF.InvalidateCompiledSpecs(label) end
     refresh()
     if bar._msufPreviewHealthLoss then
         Check(#trail:GetStatusBarTexture().masks == 1, label .. ": square loss trail retained a shape mask")
     end
     conf.chunkedFill, conf.smoothFill = false, true
     MSUF.UF.Config.Refresh()
-    if label ~= "unit" then MSUF.GF.InvalidateCompiledSpecs(label) end
+    if not isUnit then MSUF.GF.InvalidateCompiledSpecs(label) end
     refresh()
     Check(getBar()._msufChunkedLoss ~= true, label .. ": disabling chunked did not restore ordinary fill")
     Check(getBar()._msufSmoothInterp ~= nil, label .. ": smooth mode was lost when changing modes")
+    if isUnit then
+        local smoothStaticValue = getBar():GetValue()
+        Check(SetAnimation(true), label .. ": smooth animation did not start")
+        local smoothTick = assert(box:GetScript("OnUpdate"))
+        smoothTick(box, 0.06)
+        local smoothBar = assert(getBar())
+        local initialValue = smoothBar:GetValue()
+        local writesBefore = smoothWrites[smoothBar] or 0
+        local changed = false
+        for _ = 1, 40 do
+            Advance()
+            smoothTick(box, 0.06)
+            changed = changed or smoothBar:GetValue() ~= initialValue
+        end
+        Check(changed and (smoothWrites[smoothBar] or 0) > writesBefore,
+            label .. ": animated health changes bypassed native interpolation")
+        Check(SetAnimation(false), label .. ": smooth animation did not stop")
+        refresh()
+        Check(getBar():GetValue() == smoothStaticValue, label .. ": smooth stop did not restore static health")
+    end
     box:Hide()
 end
-Exercise(unit, env.MSUF_DB.player,
-    function() Preview.Refresh(unit, "HEALTH_LOSS_TEST") end,
-    function() return unit._unitScene and unit._unitScene:Frame().hpBar or unit.mock.healthBar end,
-    unit.animateCombatButton._msuf2CommandAction, "unit")
+for _, key in ipairs({ "player", "targettarget", "focustarget", "pettarget" }) do
+    if MSUF.Client.SupportsUnit(key) then
+        currentKey = key
+        unit:Show()
+        Exercise(unit, MSUF.UF.Config.GetUnitDB(key),
+            function()
+                Preview.Refresh(unit, "HEALTH_LOSS_TEST")
+                assert(unit.key == key, "preview did not select " .. key)
+            end,
+            function() return unit._unitScene and unit._unitScene:Frame().hpBar or unit.mock.healthBar end,
+            unit.animateCombatButton._msuf2CommandAction, key)
+    end
+end
 env.MSUF_ActiveProfile = "Default"
 env.MSUF_GlobalDB = { profiles = { Default = env.MSUF_DB }, char = {}, global = {} }
 MSUF.GF.EnsureDB()

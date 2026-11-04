@@ -1034,7 +1034,7 @@ local function UpdatePercent(frame, event, unit, animate)
   end
   local cachedPct = bar._msufPowerPercentValue
   if secret or cachedPct ~= pct then
-    SetPowerBarValue(bar, pct, animate)
+    SetPowerBarValue(bar, pct, animate or event == "MSUF_DEPENDENT_TARGET_POLL")
     if secret then
       bar._msufPowerPercentValue = nil
     else
@@ -1096,7 +1096,7 @@ local function UpdateAbsolute(frame, event, unit, animate)
   end
   local cachedValue = bar._msufPowerValue
   if valueSecret or cachedValue ~= value or bar._msufPowerValueUnit ~= unit then
-    SetPowerBarValue(bar, value, animate)
+    SetPowerBarValue(bar, value, animate or event == "MSUF_DEPENDENT_TARGET_POLL")
   end
   if valueSecret then
     bar._msufPowerValue = nil
@@ -1131,8 +1131,8 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
     and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
-  if not animate then
-    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" and SnapBarInterpolation then
+    SnapBarInterpolation(bar)
   end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if ok then
@@ -1160,8 +1160,8 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
     and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
-  if not animate then
-    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" and SnapBarInterpolation then
+    SnapBarInterpolation(bar)
   end
   local value, maxValue, powerType, token = UpdateAbsolute(frame, event, unit, animate)
   if not animate then SetColor(frame, false, powerType, token, true) end
@@ -1184,8 +1184,8 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
     and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
-  if not animate then
-    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" and SnapBarInterpolation then
+    SnapBarInterpolation(bar)
   end
   -- CURRENT-only text does not need a percent sample. Drive both the bar and
   -- text from one UnitPower read, with UnitPowerMax cached between its owned
@@ -1214,8 +1214,8 @@ local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
     and CachedDisplayPowerIdentityIsCurrent(bar, unit, eventPowerToken) then return nil, nil, nil, nil, nil, true end
-  if not animate then
-    if SnapBarInterpolation then SnapBarInterpolation(bar) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" and SnapBarInterpolation then
+    SnapBarInterpolation(bar)
   end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if not ok then
