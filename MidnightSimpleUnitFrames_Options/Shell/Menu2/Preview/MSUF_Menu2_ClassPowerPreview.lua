@@ -681,7 +681,7 @@ local function EnsurePlayerRuntime(preview, bars, player, spec)
     preview._runtimeBars, preview._runtimePlayer = bars, player
     local sample = surface.sample
     sample.class = preview._resourceExtraExample == "pain" and "WARRIOR"
-        or preview._resourceExtraExample == "arcane" and "MAGE" or PreviewClassToken(spec)
+        or (preview._resourceExtraExample == "arcane" or player._msufResourceExtraMana) and "MAGE" or PreviewClassToken(spec)
     sample.hp, sample.power, sample.powerType, sample.powerToken = .74, .72, CPPreview.PrimaryPower(spec, sample.class), nil
     local cp = preview.cpScene and preview.cpScene.CP
     if PlayerManaSourceActive(player, sample.class) or (cp and cp.visible and spec and spec.mode == "continuous"

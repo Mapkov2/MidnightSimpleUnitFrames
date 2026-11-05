@@ -16,7 +16,7 @@ end
 -- frame. The resource-extras lifecycle builds the one helper once per session.
 function MSUF.CPBuilders.ManaExtras(boundE)
 local E, state, events
-local Refresh
+local Refresh, StartTick
 local function Number(value) return E.NotSecret(value) and type(value)=="number" and value==value and value>-math.huge and value<math.huge end
 local function HidePrediction()
     if state.prediction then
@@ -39,12 +39,25 @@ local function HideTick()
 end
 -- One persistent callback per strip: a later start moves the deadline and
 -- the earlier callback finds it in the future. No timer objects.
-local function ExpireFive() if state.fiveUntil and GetTime()>=state.fiveUntil-.01 then HideFive() end end
-local function ExpireTick() if state.tickUntil and GetTime()>=state.tickUntil-.01 then HideTick() end end
+local function ExpireFive()
+    if state.fiveUntil and GetTime() >= state.fiveUntil - .01 then
+        HideFive()
+        if state.tickUntil then state.tick:Show() end
+    end
+end
+local function ExpireTick()
+    if state.tickUntil and GetTime() >= state.tickUntil - .01 then
+        HideTick()
+        StartTick(state.lastGainAt)
+    end
+end
 local function Color(bar,key,r,g,b)
     local color=E.db.bars[key]
     if type(color)=="table" then r,g,b=color[1],color[2],color[3] end
-    if bar.SetStatusBarColor then bar:SetStatusBarColor(r,g,b,1) else bar:SetVertexColor(r,g,b,1) end
+    if bar.markerStyle == "spark" then
+        bar.manaSpark:SetVertexColor(r,g,b,1)
+        bar.manaGlow:SetVertexColor(r,g,b,math.max(0,math.min(1,tonumber(E.db.bars.manaRegenSparkAlpha) or .35)))
+    elseif bar.SetStatusBarColor then bar:SetStatusBarColor(r,g,b,1) else bar:SetVertexColor(r,g,b,1) end
 end
 local function PublicRegion(region)
     if not E.NotSecret(region) or not region then return false end
@@ -53,6 +66,70 @@ local function PublicRegion(region)
         if not E.NotSecret(forbidden) or forbidden then return false end
     end
     return true
+end
+-- The native fill is invisible; its moving edge carries the marker inside Mana.
+-- Geometry is configured only by the out-of-combat host refresh.
+local function LayoutMarker(bar, host, key)
+    local width, height = host:GetWidth(), host:GetHeight()
+    local orientation, reverse = host:GetOrientation(), host:GetReverseFill()
+    bar.markerReady = false
+    if not Number(width) or width <= 0 or not Number(height) or height <= 0
+        or not E.NotSecret(orientation) or not E.NotSecret(reverse) then return end
+    bar:SetParent(host)
+    bar:ClearAllPoints()
+    bar:SetAllPoints(host)
+    bar:SetSize(width, height)
+    bar:SetFrameLevel(host:GetFrameLevel() + 2)
+    bar:SetOrientation(orientation)
+    bar:SetReverseFill(reverse)
+    local fill = bar:GetStatusBarTexture()
+    bar.markerStyle = E.db.bars.manaRegenStyle == "bars" and "bars" or "spark"
+    if bar.markerStyle == "bars" then
+        bar:ClearAllPoints()
+        local five = key == "five"
+        bar:SetPoint(five and "BOTTOMLEFT" or "TOPLEFT", host, five and "TOPLEFT" or "BOTTOMLEFT", 0, five and 1 or -1)
+        bar:SetPoint(five and "BOTTOMRIGHT" or "TOPRIGHT", host, five and "TOPRIGHT" or "BOTTOMRIGHT", 0, five and 1 or -1)
+        bar:SetHeight(five and 3 or 2)
+        bar:SetOrientation("HORIZONTAL")
+        bar:SetReverseFill(false)
+        fill:SetAlpha(1)
+        if bar.manaSpark then bar.manaSpark:Hide() bar.manaGlow:Hide() end
+        bar.markerReady = true
+        return
+    end
+    fill:SetAlpha(0)
+    if not bar.manaSpark then
+        bar.manaSpark = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY"))
+        bar.manaSpark:SetTexture("Interface\\Buttons\\WHITE8X8")
+        bar.manaGlow = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY"))
+        bar.manaGlow:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+        bar.manaGlow:SetBlendMode("ADD")
+        bar:EnableMouse(false)
+    end
+    local spark, vertical = bar.manaSpark, orientation == "VERTICAL"
+    spark:ClearAllPoints()
+    local edge = vertical and (reverse and "BOTTOM" or "TOP") or (reverse and "LEFT" or "RIGHT")
+    spark:SetPoint("CENTER", fill, edge)
+    local thickness = math.max(1, math.min(8, tonumber(E.db.bars.manaRegenSparkWidth) or 2))
+    spark:SetSize(vertical and width or math.min(thickness, width), vertical and math.min(thickness, height) or height)
+    local glow = bar.manaGlow
+    glow:ClearAllPoints()
+    glow:SetPoint("CENTER", spark, "CENTER")
+    glow:SetSize(vertical and width + 4 or thickness + 10, vertical and thickness + 10 or height + 4)
+    glow:Show()
+    spark:Show()
+    bar.markerReady = true
+end
+local function MarkerAlpha()
+    if not state.fullCurve or not UnitPowerPercent then return end
+    local alpha = UnitPowerPercent("player", 0, true, state.fullCurve)
+    if E.NotSecret(alpha) and type(alpha) ~= "number" then return end
+    for _, bar in ipairs(state.markers) do
+        if bar.markerStyle == "spark" then
+            bar.manaSpark:SetAlpha(alpha)
+            bar.manaGlow:SetAlpha(alpha)
+        else bar:GetStatusBarTexture():SetAlpha(alpha) end
+    end
 end
 local function Editing()
     if state.editActive ~= nil then return state.editActive end
@@ -70,6 +147,10 @@ local function PaintSampleBars(host)
     state.samples.five, state.samples.tick, state.samples.cost = state.five, state.tick, state.prediction
     Color(state.five, "manaRegenPauseColor", 1, .65, .2)
     Color(state.tick, "manaGainPulseColor", .3, 1, .7)
+    for _, bar in ipairs(state.markers) do
+        if bar.markerStyle == "spark" then bar.manaSpark:SetAlpha(1) bar.manaGlow:SetAlpha(1)
+        else bar:GetStatusBarTexture():SetAlpha(1) end
+    end
     state.five:SetMinMaxValues(0, 1)
     state.tick:SetMinMaxValues(0, 1)
     state.five:SetValue(.6)
@@ -225,6 +306,7 @@ local function Ensure(host)
     if not state.five then
         state.five=PixelLayoutRegion(CreateFrame("StatusBar",nil,host))
         state.tick=PixelLayoutRegion(CreateFrame("StatusBar",nil,host))
+        state.markers = {state.five, state.tick}
         for _,bar in ipairs({state.five,state.tick}) do
             bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
             bar:Hide()
@@ -239,50 +321,77 @@ local function Ensure(host)
         host._msufManaExtrasSizeHook=true
         host:HookScript("OnSizeChanged",function(self) if state.host==self and E.RequestRefresh then E.RequestRefresh() end end)
     end
-    for _,bar in ipairs({state.five,state.tick}) do
-        bar:SetParent(host)
-        bar:ClearAllPoints()
+    LayoutMarker(state.five, host, "five")
+    LayoutMarker(state.tick, host, "tick")
+    if not state.fullCurve and C_CurveUtil and C_CurveUtil.CreateCurve then
+        state.fullCurve = C_CurveUtil.CreateCurve()
+        state.fullCurve:SetType(Enum.LuaCurveType.Step)
+        state.fullCurve:AddPoint(0, 1)
+        state.fullCurve:AddPoint(1, 0)
     end
-    state.five:SetPoint("BOTTOMLEFT",host,"TOPLEFT",0,1)
-    state.five:SetPoint("BOTTOMRIGHT",host,"TOPRIGHT",0,1)
-    state.five:SetHeight(3)
-    state.tick:SetPoint("TOPLEFT",host,"BOTTOMLEFT",0,-1)
-    state.tick:SetPoint("TOPRIGHT",host,"BOTTOMRIGHT",0,-1)
-    state.tick:SetHeight(2)
     state.predictionReady=false
     EnsurePrediction(host)
 end
-local function Timer(bar,duration,seconds)
-    if not duration or not bar.SetTimerDuration then return false end
-    duration:SetTimeFromStart(GetTime(),seconds)
-    bar:SetTimerDuration(duration,Enum.StatusBarInterpolation.Immediate,Enum.StatusBarTimerDirection.RemainingTime)
+local function Timer(bar,duration,seconds,start)
+    if not bar.markerReady or not duration or not bar.SetTimerDuration then return false end
+    duration:SetTimeFromStart(start or GetTime(),seconds)
+    local direction = seconds == 2 and Enum.StatusBarTimerDirection.ElapsedTime or Enum.StatusBarTimerDirection.RemainingTime
+    bar:SetTimerDuration(duration,Enum.StatusBarInterpolation.Immediate,direction)
     bar:Show()
     return true
 end
-local function ObserveMana()
+StartTick = function(start)
+    if not state.ticks or not state.host or state.suspended or state.editActive or E.sample then return end
+    if state.host.IsVisible and not state.host:IsVisible() then return end
+    if state.last and state.maximum and state.last >= state.maximum then return end
+    local now = GetTime()
+    start = start or now
+    start = now - (now - start) % 2
+    if Timer(state.tick, state.tickDuration, 2, start) then
+        state.lastGainAt = start
+        state.tickUntil = start + 2
+        state.tick:SetShown(state.tick.markerStyle == "bars" or not state.fiveUntil)
+        C_Timer.After(state.tickUntil - now, ExpireTick)
+    end
+end
+-- Restricted mana cannot be compared. A public event timestamp supplies an
+-- estimated tick phase; an adjacent paid cast cancels that observation.
+local function ConfirmTick()
+    local at = state.pendingTickAt
+    if not at or GetTime() < at + .1 then return end
+    state.pendingTickAt = nil
+    if not state.lastSpendAt or math.abs(at - state.lastSpendAt) > .1 then StartTick(at) end
+end
+local function ObserveMana(event)
+    MarkerAlpha()
     if not state.ticks then
-        state.last=nil
-        state.maximum=nil
+        state.last, state.maximum = nil, nil
         return
     end
-    local now=GetTime()
-    local current,maximum=UnitPower("player",0),UnitPowerMax("player",0)
-    if not Number(current) or not Number(maximum) then
-        state.last=nil
-        state.maximum=nil
-        return
-    end
-    if state.last and state.maximum==maximum then
-        if current>state.last and state.ticks then
-            -- This is an observed mana gain, not a guessed server tick.
-            if Timer(state.tick,state.tickDuration,2) then
-                state.tickUntil=now+2
-                C_Timer.After(2,ExpireTick)
-            end
-            state.lastGainAt=now
+    local current, maximum = UnitPower("player", 0), UnitPowerMax("player", 0)
+    if not E.NotSecret(current) or not E.NotSecret(maximum) then
+        state.last, state.maximum = nil, nil
+        if event then
+            state.pendingTickAt = GetTime()
+            C_Timer.After(.11, ConfirmTick)
         end
+        return
     end
-    state.last,state.maximum=current,maximum
+    state.pendingTickAt = nil
+    if not Number(current) or not Number(maximum) or maximum <= 0 then
+        state.last, state.maximum = nil, nil
+        HideTick()
+        return
+    end
+    if current >= maximum then
+        HideTick()
+        if state.five then state.five:Hide() end
+    elseif state.last and state.maximum == maximum and current > state.last then
+        StartTick(GetTime())
+    elseif state.fiveUntil then
+        state.five:Show()
+    end
+    state.last, state.maximum = current, maximum
 end
 local function Prediction()
     if not state.preview or not state.host or not state.hasCost then return end
@@ -342,16 +451,22 @@ local function CastCost(spellID)
 end
 local function OnEvent(self,event,unit,powerToken,spellID)
     if unit~="player" or state.suspended then return end
-    if event=="UNIT_SPELLCAST_SUCCEEDED" and state.rule then
+    if event=="UNIT_SPELLCAST_SUCCEEDED" and (state.rule or state.ticks) then
         local cost=ManaCost(spellID)
-        if cost and cost>0 and Timer(state.five,state.fiveDuration,5) then
+        if cost and cost > 0 then
+            state.lastSpendAt = GetTime()
+            state.pendingTickAt = nil
+        end
+        if state.rule and cost and cost>0 and Timer(state.five,state.fiveDuration,5) then
             state.fiveUntil=GetTime()+5
+            if state.tick.markerStyle ~= "bars" then state.tick:Hide() end
+            MarkerAlpha()
             C_Timer.After(5,ExpireFive)
         end
     end
     if event=="UNIT_POWER_FREQUENT" or event=="UNIT_POWER_UPDATE" then
         if powerToken and powerToken~="MANA" then return end
-        ObserveMana()
+        ObserveMana(true)
     elseif event=="UNIT_MAXPOWER" then
         state.last=nil
         ObserveMana()
@@ -381,6 +496,7 @@ local function Disable()
     state.last=nil
     state.maximum=nil
     state.host=nil
+    state.pendingTickAt, state.lastGainAt, state.lastSpendAt = nil, nil, nil
     if state.predictionMask then state.predictionMask:Hide() end
     if state.shapeMask then state.shapeMask:Hide() end
     if not (InCombatLockdown and InCombatLockdown()) and state.prediction then
@@ -421,6 +537,7 @@ local function PowerChanged()
     if suspended then
         HideFive()
         HideTick()
+        state.pendingTickAt = nil
         HidePrediction()
     end
 end
@@ -461,15 +578,23 @@ Refresh = function()
     if not state.rule then HideFive() end
     if not state.ticks then HideTick() end
     if not state.preview then HidePrediction() end
-    if state.ticks then events:RegisterUnitEvent("UNIT_POWER_FREQUENT","player") end
+    if state.ticks then
+        events:RegisterUnitEvent("UNIT_POWER_FREQUENT","player")
+    end
+    if state.ticks or state.rule then events:RegisterUnitEvent("UNIT_POWER_UPDATE","player") end
     if state.ticks or state.preview then events:RegisterUnitEvent("UNIT_MAXPOWER","player") end
     if state.preview then
         for _,event in ipairs({"UNIT_SPELLCAST_START","UNIT_SPELLCAST_CHANNEL_START","UNIT_SPELLCAST_STOP",
             "UNIT_SPELLCAST_CHANNEL_STOP","UNIT_SPELLCAST_FAILED","UNIT_SPELLCAST_INTERRUPTED","UNIT_SPELLCAST_SUCCEEDED"}) do
             events:RegisterUnitEvent(event,"player")
         end
-    elseif state.rule then
+    elseif state.rule or state.ticks then
         events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED","player")
+    end
+    if Editing() then
+        HideFive()
+        HideTick()
+        state.pendingTickAt = nil
     end
     Samples(host)
     if MSUF.ResourceVisibility then

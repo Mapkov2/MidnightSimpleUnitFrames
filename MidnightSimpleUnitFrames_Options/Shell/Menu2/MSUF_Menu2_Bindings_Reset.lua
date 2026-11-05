@@ -268,6 +268,7 @@ end
 local CLASSPOWER_EXTRA_BARS_KEYS = KSW [[
     guardianIronfurShowHashLines resourceMarks showIgnorePain ignorePainTimeMarker showArcaneWindow
     arcaneWindowText arcaneWindowTextFrom arcaneWindowWarnSeconds arcaneWindowWarnLastGCD manaRegenPause manaGainPulse
+    manaRegenStyle manaRegenSparkWidth manaRegenSparkAlpha
 ]]
 local CLASSPOWER_BARS_PREFIXES = WL "classPower playerPower detachedPowerBar altMana playerHPBar resourceExtra"
 local CLASSPOWER_BARS_NAMES = KSW [[

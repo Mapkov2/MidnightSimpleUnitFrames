@@ -197,7 +197,7 @@
           1665
         ]
       ],
-      "source_sha256": "9259cdc40b92cb2fae08302d53aa4e73eff1ecc68bcd986a10f3828c3cb9a4cb",
+      "source_sha256": "e50b18aec69a28c61d017e03ad0bc1d064204c62e38faf691a4bfe1958fad65a",
       "adapter_exclusions": [
         {
           "name": "HideMeterText",
@@ -366,7 +366,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
-          "source_sha256": "6d94052c74e60117f6f1dcdd8b60f24ee51878eaca5fe102365b097442a7d541"
+          "source_sha256": "63e1fe0edcdf0b16257c51c7a28e6a1beed552aef7762f06a69ec795de99338c"
         },
         {
           "file": "Pages/MSUF_Menu2_GroupBars.lua",
@@ -374,7 +374,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "13ae8d05f3d2ca9cb4900971c5843056f8f2f9c9af7ce6bb61a49b761164ddff"
+          "source_sha256": "c4418aab0510ff2356f97ff20b0be87d5b88a041d11d0f1bb9c4cd573e519402"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",

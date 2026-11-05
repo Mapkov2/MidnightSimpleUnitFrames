@@ -118,4 +118,100 @@ for _, category in ipairs({ "unit", "cast", "group", "resources", "unit" }) do
     end
 end
 M.Widgets.FocusCollapsibleSection, M.Widgets.OpenColorContextPicker = focus, pick
+-- The selection has one moving surface. A black skin accent must not make
+-- its persistent cue disappear, and the stationary rows must not duplicate it.
+do
+    local theme, skin = M.Theme, mw.core.MenuSkin
+    local originalSkin, originalReduced = skin.Button, theme.ReducedMotionEnabled
+    local accent, title = theme.colors.accent, theme.colors.navTextActive
+    local savedAccent, savedTitle = { unpack(accent) }, { unpack(title) }
+    local function Cue(button)
+        local cue = assert(button._msuf2SkinnedSelectionCue, "selected surface has no persistent cue")
+        assert(cue.wash:IsShown() and cue.line:IsShown(), "selected surface cue is hidden")
+        local wash, line = cue.wash.colorTexture, cue.line.colorTexture
+        assert(wash[1] >= 0.8 and wash[2] >= 0.8 and wash[3] >= 0.8 and wash[4] >= 0.18,
+            "black accent hid the selection wash")
+        assert(line[1] >= 0.8 and line[2] >= 0.8 and line[3] >= 0.8 and line[4] >= 0.9,
+            "black accent hid the selection stripe")
+    end
+    local expectCue = false
+    local function OnlyMovingCue(key)
+        local button = assert(M.navButtons[key])
+        local selection = assert(button._msuf2SelectionMotion)
+        assert(selection.selected == button and selection.driver.art:IsShown(), "moving selection lost its owner")
+        if expectCue then Cue(selection.driver.art)
+        else
+            local nativeCue = selection.driver.art._msuf2SkinnedSelectionCue
+            assert(not nativeCue or not nativeCue.wash:IsShown(), "native skin retained an extra wash")
+        end
+        local cue = button._msuf2SkinnedSelectionCue
+        assert(not cue or (not cue.wash:IsShown() and not cue.line:IsShown()), "stationary row duplicates moving cue")
+        return selection
+    end
+    accent[1], accent[2], accent[3] = 0, 0, 0
+    title[1], title[2], title[3] = 0.94, 0.96, 1
+    for _, skinned in ipairs({ false, true, false, true }) do
+        expectCue = skinned
+        skin.Button = function() return skinned end
+        for _, reduced in ipairs({ false, true }) do
+            theme.ReducedMotionEnabled = function() return reduced end
+            Click("home")
+            local selection = OnlyMovingCue("home")
+            MW.FireScript(M.navButtons.home, "OnEnter")
+            OnlyMovingCue("home")
+            local feedback = M.navButtons.home._msuf2ButtonMotion
+            local hoverCue = feedback and feedback.art._msuf2SkinnedSelectionCue
+            assert(not hoverCue or not hoverCue.wash:IsShown(), "hover duplicates the selection cue")
+            MW.FireScript(M.navButtons.home, "OnMouseDown")
+            local pressCue = feedback and feedback.art._msuf2SkinnedSelectionCue
+            assert(not pressCue or not pressCue.line:IsShown(), "press duplicates the selection cue")
+            MW.FireScript(M.navButtons.home, "OnMouseUp")
+            MW.FireScript(M.navButtons.home, "OnLeave")
+            Click("opt_misc")
+            assert(OnlyMovingCue("opt_misc") == selection, "navigation replaced its reusable selection")
+            M.HideSlashMenuAndMinibar(mw.win)
+            Settle()
+            assert(M.Open("opt_misc"))
+            Settle()
+            OnlyMovingCue("opt_misc")
+        end
+    end
+    title[1], title[2], title[3] = 0.82, 0.84, 0.86
+    local selected = M.navButtons.opt_misc._msuf2SelectionMotion
+    M.Widgets.RefreshSelectionMotion(selected.owner, true)
+    Cue(selected.driver.art)
+    assert(selected.driver.art._msuf2SkinnedSelectionCue.line.colorTexture[1] == 0.82,
+        "theme repaint retained the old selection color")
+    -- Skinned segment choices use the same moving surface without adding a
+    -- second wash on the selected button. Static choices retain their cue.
+    skin.Button = function() return true end
+    local owner = mw.env.CreateFrame("Frame", nil, mw.win)
+    owner:SetPoint("TOPLEFT", mw.win, "TOPLEFT", 20, -20)
+    owner:SetSize(200, 28)
+    local choices = {}
+    for index = 1, 2 do
+        local button = theme.Button(owner, "Choice", 90, 24)
+        button:SetPoint("TOPLEFT", owner, "TOPLEFT", (index - 1) * 96, 0)
+        button._msuf2SegmentChoice = true
+        choices[index] = button
+    end
+    choices[1]:SetActive(true)
+    Cue(choices[1])
+    local selection = M.Widgets.AttachSelectionMotion(owner, choices, false, "selection-contrast")
+    Cue(selection.driver.art)
+    local attachedCue = choices[1]._msuf2SkinnedSelectionCue
+    assert(not attachedCue.wash:IsShown() and not attachedCue.line:IsShown(),
+        "preselected attachment duplicated the stationary cue")
+    choices[1]:SetActive(false)
+    choices[2]:SetActive(true)
+    Settle()
+    Cue(selection.driver.art)
+    local oldCue = choices[1]._msuf2SkinnedSelectionCue
+    assert(not oldCue.wash:IsShown() and not oldCue.line:IsShown(), "old segment kept its cue")
+    assert(not choices[2]._msuf2SkinnedSelectionCue, "moving segment duplicated its cue")
+    skin.Button, theme.ReducedMotionEnabled = originalSkin, originalReduced
+    for index = 1, 4 do accent[index], title[index] = savedAccent[index], savedTitle[index] end
+    owner:Hide()
+    Click("home")
+end
 print("menu_navigation_repaint_smoke: ok " .. flavor)

@@ -410,6 +410,7 @@ function Methods:Stop() self.playing = false end
 function Methods:Finish() self.playing = false end
 function Methods:IsPlaying() return self.playing == true end
 function Methods:SetLooping(looping) self.looping = looping end
+function Methods:SetDegrees(degrees) self.degrees = degrees end
 function Methods:SetDuration(duration) self.duration = duration end
 function Methods:GetDuration() return self.duration end
 function Methods:SetSmoothing(smoothing) self.smoothing = smoothing end

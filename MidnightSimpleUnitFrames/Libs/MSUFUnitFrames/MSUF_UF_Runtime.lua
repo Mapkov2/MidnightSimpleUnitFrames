@@ -319,9 +319,7 @@ local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
   return true
 end
 
-local function RuntimeFrame(unit)
-  if unit and issecretvalue(unit) == true then return nil end
-  local frame = unit and UF.frames[unit]
+local function RuntimeFrame(frame)
   if not frame then return nil end
   local spec = frame.MSUFSpec
   if spec and spec.enabled == false then return nil end
@@ -332,7 +330,8 @@ local function RuntimeFrame(unit)
 end
 
 local function RunIdentity(unit, reason)
-  local frame = RuntimeFrame(unit)
+  if unit and issecretvalue(unit) == true then return false end
+  local frame = RuntimeFrame(unit and UF.frames[unit])
   return frame and UF.RunLeanIdentity and UF.RunLeanIdentity(frame, reason or "MSUF_UNIT_IDENTITY") or false
 end
 
@@ -367,15 +366,14 @@ local function DependentTargetsOnUpdate(driver, elapsed)
   PollDependentFrame(driver.petTarget)
 end
 
-local function VisibleDependentFrame(unit)
-  local frame = RuntimeFrame(unit)
-  if frame and frame._msufCoreVisible == true then return frame end
+local function VisibleDependentFrame(frame)
+  if frame and frame._msufCoreVisible == true then return RuntimeFrame(frame) end
 end
 
 function UF.SyncRuntimeDriver()
-  local targetTarget = VisibleDependentFrame("targettarget")
-  local focusTarget = VisibleDependentFrame("focustarget")
-  local petTarget = VisibleDependentFrame("pettarget")
+  local targetTarget = VisibleDependentFrame(UF.frames.targettarget)
+  local focusTarget = VisibleDependentFrame(UF.frames.focustarget)
+  local petTarget = VisibleDependentFrame(UF.frames.pettarget)
   local active = targetTarget ~= nil or focusTarget ~= nil or petTarget ~= nil
   local driver = UF.driver
   if active and not driver then

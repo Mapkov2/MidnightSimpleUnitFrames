@@ -981,7 +981,9 @@ Schema.ReadDefaults = {
         rangeFadeLayerMode = "frame", rangeFadeUpdateRate = 0,
     },
     bars = {
-        arcaneWindowTextFrom = 0, arcaneWindowWarnLastGCD = false, manaGainPulse = false, manaRegenPause = false, manaUpcomingCost = false,
+        arcaneWindowTextFrom = 0, arcaneWindowWarnLastGCD = false, manaUpcomingCost = false,
+        manaGainPulse = MSUF.Client.IsForever == true, manaRegenPause = MSUF.Client.IsForever == true,
+        manaRegenStyle = "spark", manaRegenSparkWidth = 2, manaRegenSparkAlpha = .35,
         resourceExtraOffsetX = 0, showArcaneWindow = false, showIgnorePain = false,
     },
 }

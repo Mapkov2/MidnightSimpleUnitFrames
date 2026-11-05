@@ -96,7 +96,6 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["detached_power.text.powerTextRightHidePercentSymbol"] = "player.powerTextRightHidePercentSymbol",
     ["detached_power.text.right"] = "player.powerTextRight",
     ["detached_power.text.sep"] = "player.powerTextSeparator",
-    ["detached_power.text.size"] = "player.powerFontSize",
     ["detached_power.text.x"] = "player.powerOffsetX",
     ["detached_power.text.y"] = "player.powerOffsetY",
     ["detached_power.textures.outline"] = "bars.detachedPowerBarOutline",
@@ -163,6 +162,9 @@ local CLASSPOWER_ACTION_KEY_BY_PATH = {
     ["quick_setup.class_bar"] = "class_power_quick_setup",
 }
 local CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["detached_power.text.size"] = {
+        "player.powerFontSize", "player.powerTextLeftFontSize", "player.powerTextCenterFontSize", "player.powerTextRightFontSize",
+    },
     ["detached_power.text.preset"] = { "player.showPowerText", "player.powerTextMode" },
     ["detached_power.text.outline"] = {
         "player.fontOverride", "player.boldText", "player.noOutline",
@@ -806,9 +808,15 @@ local function HidePercentValue(source, key)
     local db = M.EnsureDB and M.EnsureDB()
     return db and db.general and db.general.hidePercentSymbol == true
 end
+Page.DetachedTextSlots = M.UnitSectionsShared.MakeTextSlotState(M, function() return "player" end,
+    "unitTextSlotSelection", "unitTextMoveTogether")
 local function CurrentDetachedTextSlot()
-    local slot = M.classPowerDetachedPowerTextSlot
-    return (slot == "left" or slot == "right") and slot or "center"
+    return Page.DetachedTextSlots.CurrentSlot("power")
+end
+function Page.DetachedTextFontSize()
+    local player, general = Player(), M.EnsureDB().general or {}
+    local fallback = tonumber(player.powerFontSize) or tonumber(general.powerFontSize) or tonumber(general.fontSize) or 14
+    return Page.DetachedTextSlots.FontSize("power", player, general, fallback)
 end
 local function DetachedTextOffsetKeys()
     if type(M.TextSlotOffsetKeys) == "function" then return M.TextSlotOffsetKeys("power", CurrentDetachedTextSlot()) end

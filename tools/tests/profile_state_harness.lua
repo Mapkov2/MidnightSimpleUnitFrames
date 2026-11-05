@@ -15,22 +15,34 @@
 
 local Harness = {}
 
-local function Literal(value)
+local function Literal(value, quotedKeys)
     local kind = type(value)
     if kind == "number" then return string.format("%.17g", value) end
     if kind == "boolean" then return value and "true" or "false" end
     if kind == "string" then return string.format("%q", value) end
-    local keys = {}
-    for key in pairs(value) do keys[#keys + 1] = key end
-    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    local keys, allStrings = {}, true
+    for key in pairs(value) do
+        keys[#keys + 1] = key
+        if type(key) ~= "string" then allStrings = false end
+    end
+    if allStrings then table.sort(keys)
+    else table.sort(keys, function(a, b) return tostring(a) < tostring(b) end) end
+    -- Repeated profile sections share key spellings. Cache only their immutable
+    -- quoted names, for this serialization; values are always read afresh.
+    quotedKeys = quotedKeys or {}
     local parts = {}
     for _, key in ipairs(keys) do
-        local name = type(key) == "string" and string.format("[%q]", key) or "[" .. Literal(key) .. "]"
-        parts[#parts + 1] = name .. "=" .. Literal(value[key])
+        local name
+        if type(key) == "string" then
+            name = quotedKeys[key]
+            if not name then name = string.format("[%q]", key); quotedKeys[key] = name end
+        else name = "[" .. Literal(key, quotedKeys) .. "]" end
+        parts[#parts + 1] = name .. "=" .. Literal(value[key], quotedKeys)
     end
     return "{" .. table.concat(parts, ",") .. "}"
 end
-Harness.Literal = Literal
+-- Public callers may forward multiple return values; only the value is input.
+function Harness.Literal(value) return Literal(value) end
 
 function Harness.Load(root, flavor)
     local classic = flavor ~= "Mainline"

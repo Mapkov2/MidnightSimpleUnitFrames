@@ -405,6 +405,11 @@
       ]
     },
     {
+      "test": "tools/tests/search_busy_indicator_smoke.lua",
+      "phase": "menu",
+      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"]
+    },
+    {
       "test": "tools/tests/search_entrypoint_slices.lua",
       "phase": "menu",
       "clients": [
@@ -1058,6 +1063,17 @@
       ]
     },
     {
+      "test": "tools/tests/power_text_slot_sync_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/menu_text_runtime_slots_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -1429,6 +1445,14 @@
         "Mists",
         "Forever"
       ]
+    },
+    {
+      "test": "tools/tests/castbar_hotpath_budget_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/castbar_idle_lifecycle_smoke.lua",
+      "phase": "runtime"
     },
     {
       "test": "tools/tests/castbar_runtime_providers.lua",
@@ -2526,6 +2550,17 @@
       ]
     },
     {
+      "test": "tools/tests/menu_toggle_segment_geometry_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/pet_target_health_smoke.lua",
       "phase": "runtime",
       "clients": [
@@ -2535,6 +2570,85 @@
         "Mists",
         "Forever"
       ]
+    },
+    {
+      "test": "tools/tests/profile_decompression_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_artwork_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/mana_regen_defaults_smoke.lua",
+      "phase": "profiles"
+    },
+    {
+      "test": "tools/tests/mana_regen_marker_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/mana_regen_search_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "enUS"
+      ]
+    },
+    {
+      "test": "tools/tests/mana_regen_search_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/mana_regen_preview_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Forever",
+        "Vanilla",
+        "TBC"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_literal_smoke.lua",
+      "phase": "profiles"
     }
   ],
   "excluded": {
@@ -2570,7 +2684,6 @@
     "tools/tests/aura_icon_skin_paint_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Aura icon skins: the painter and the compiler (Auras3/MSUF_Auras3_IconSkins.lua).",
     "tools/tests/aura_mock_painter_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Partial UI/math fixtures use the same mock painter owners as the TOCs.",
     "tools/tests/castbar_cast_path_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. castbar_cast_path_budget_smoke.lua <repoRoot> [print]",
-    "tools/tests/castbar_hotpath_budget_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. castbar_hotpath_budget_smoke.lua <repoRoot> [print]",
     "tools/tests/castbar_namespace_fixture.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. Partial castbar worlds bind their old fixture handles to the real namespace.",
     "tools/tests/castbar_pool_preview_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. castbar_pool_preview_smoke.lua <repoRoot>",
     "tools/tests/castbar_secret_world.lua": "Shared harness/fixture retained for focused diagnostic callers; no standalone release entry point. castbar_secret_world.lua -- the real Mainline core with every secret-capable",

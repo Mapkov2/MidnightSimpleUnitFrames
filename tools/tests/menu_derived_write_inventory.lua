@@ -44,7 +44,7 @@ assert(hand <= 110, "remaining J5 hand setter count grew: " .. hand .. " (budget
 print("PASS remaining scalar writes: " .. count .. " frozen policies; owned hand setters 116 -> " .. hand)
 -- A native owner may normalize away non-search metadata. It must preserve
 -- the declaration's physical companion writes when re-owning the same widget.
-local namespace = { MSUF2 = { Widgets = {} }, CPBuilders = { ExtraAuraDefaults = {} } }
+local namespace = { Client = { IsForever = false }, MSUF2 = { Widgets = {} }, CPBuilders = { ExtraAuraDefaults = {} } }
 assert(loadfile(arg[2] or root .. "/" .. base .. "MSUF_Menu2_ControlSchema.lua"))("Options", namespace)
 local schema = namespace.MSUF2.ControlSchema
 local widget = {

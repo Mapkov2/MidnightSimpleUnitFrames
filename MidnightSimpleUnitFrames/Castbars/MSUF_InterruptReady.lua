@@ -1719,8 +1719,26 @@ function KickReady.KickReady_ApplyLayout(frame)
 end
 
 function KickReady.KickReady_RefreshFrame(frame, castState)
+    if frame and frame._msufKickReadyDisabledRevision == Config.revision
+        and frame._msufKickReadyDisabledUnit == frame.unit and fillActiveFrameCount == 0 and activeConsumerCount == 0 then
+        state.cooldownDisplayReady = nil
+        return
+    end
+    local general = GeneralDB()
+    -- A disabled frame with no owned visuals has nothing to clear. Keep the
+    -- shared cooldown path while any fill or independent consumer needs it.
+    if frame and fillActiveFrameCount == 0 and activeConsumerCount == 0
+        and not ShouldShow(general, frame.unit) and not activeIndicatorFrames[frame]
+        and not frame.kickReadyBox and not frame._kickReadyBorderTinted and not frame._msufKickTimeProjections then
+        frame._msufKickReadyDisabledRevision = Config.revision
+        frame._msufKickReadyDisabledUnit = frame.unit
+        state.cooldownDisplayReady = nil
+        return
+    end
+    -- A different unit or enabled revision can acquire visuals before rebinding.
+    if frame then frame._msufKickReadyDisabledRevision = nil end
     local status = AcquireScratchStatus()
-    RefreshFrame(frame, castState, status)
+    RefreshFrame(frame, castState, status, general)
     ResolveFillStatus(status)
     -- One frame's paint cannot certify the readiness displayed by all frames.
     state.cooldownDisplayReady = nil

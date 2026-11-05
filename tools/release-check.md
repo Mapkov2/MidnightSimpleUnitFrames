@@ -37,15 +37,24 @@ One inventory runs locally and in push/nightly/release CI:
 | Namespace | Actual exports per client at core/login and Options boundaries; source-backed delayed exports. Negative probes remove a provider, keep only policy, use inactive clients/nil exports, cross phases, comment out a delayed publisher and exceed bounded legacy allowances. |
 | Group preview | Mainline/Vanilla/Forever lifecycle, engine ownership, supported scenes, combat suspend/restore and independent owners. |
 
+After intentional menu changes, `python tools/menu_schema_coverage.py --write
+--refresh-indexes --lua <lua51>` explicitly regenerates both shipped indexes and
+captures schema during those same page builds. Classic completes before the
+Mainline digest is computed. Ordinary `--ensure`/`--check` runs never write indexes.
+
 A missing/stale coverage projection needs a complete workspace build. This
 preparation has its own Lua slot and is timed explicitly. Capture writes changed
 serializable records after each page, retains only the bounded declaration union,
-and drops widget callbacks. Clients run in isolated children, flush/release their
-capture state and collect before the parent advances to the next client. Python
-folds the disk records with the same first-public/last-schema/set-union rules. The existing 300-second
-budget applies to fast-check plus behaviour contracts, excluding queue wait and
-projection preparation. All child output is retained; any failed contract fails
-the runner. Freshness failures remain failures while independent contracts continue.
+and drops widget callbacks. The two read-only index families run concurrently
+(at most four Lua processes),
+then all five initial-page projections run concurrently. Every client uses an
+isolated child and disjoint capture files; each phase joins completely. Python
+folds the disk records with the same first-public/last-schema/set-union rules.
+Both the existing contract-slot budget and the complete elapsed budget require
+strictly less than 300 seconds on the development machine. The latter includes
+tool setup, generated checks, queue wait, projection preparation, scorecard,
+all behaviour contracts and final freshness checks. All child output is retained;
+any failed contract fails the runner. Freshness failures remain failures while independent contracts continue.
 Namespace and Require readers share one source parse and bytecode inventory
 per content SHA256 within the run, across all five clients and both load
 phases. Compiler listings are collected in bounded batches; provider
@@ -67,8 +76,8 @@ starting workers, including for a capacity-one scheduler; its default mutex
 excludes another compact release run. `-ParallelContracts:$false` stays serial.
 Only the five initial control counts are decoded once from the complete validated
 projection; the full document is not repeatedly materialized as PowerShell objects.
-The 300-second budget measures fast-check plus elapsed contract-suite work,
-including the joins; no test or time is omitted from the receipt.
+The receipt reports contract-slot time, projection preparation and complete
+elapsed time separately; no test or preparation time is omitted from the total.
 
 `-Reproducible` additionally requires exact versions and immutable Blizzard refs
 from tools/check-pins.json, then runs the source audit against those commits.

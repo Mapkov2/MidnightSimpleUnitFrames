@@ -33,7 +33,8 @@ function W.SetControlShown(control, shown)
     end
     if control._msuf2ToggleRowHover then
         if not shown then control._msuf2ToggleRowHover:SetAlpha(0) end
-        control._msuf2ToggleRowHover:SetShown(shown)
+        control._msuf2ToggleRowHover:SetShown(shown and control._msuf2ToggleHovered == true
+            and (not control.IsEnabled or control:IsEnabled()))
     end
     if control.editBox then control.editBox:SetShown(shown) end
     if control._msuf2StepButtons then
@@ -313,7 +314,7 @@ end
 local function ClampPlacedControlWidth(widget, parent, x)
     if not (widget and parent and parent._msuf2Width) then return end
     local kind = widget._msuf2ControlKind
-    if kind ~= "slider" and kind ~= "dropdown" and kind ~= "textinput" then return end
+    if kind ~= "slider" and kind ~= "dropdown" and kind ~= "textinput" and kind ~= "segment" then return end
     local available = floor((parent._msuf2Width or 0) - (x or 0) - 18)
     if available <= 0 then return end
     if kind == "slider" and widget._msuf2SetLayoutWidth then

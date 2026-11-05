@@ -643,13 +643,15 @@ RunSearchInputQuery = function(query, openPage)
 
     if query == "" then
         SetSearchResults(nil, "")
-        if openPage then ShowSearchPageForQuery(query) end
+        if openPage then ShowSearchPageForQuery(query)
+        elseif M.activeKey == "search" then Search._Render.ShowSearchPage() end
         return
     end
 
     if SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then
         SetSearchResults(nil, query)
-        if openPage then ShowSearchPageForQuery(query) end
+        if openPage then ShowSearchPageForQuery(query)
+        elseif M.activeKey == "search" then Search._Render.ShowSearchPage() end
         return
     end
 
@@ -678,8 +680,7 @@ ScheduleSearchInputQuery = function(searchBox, query, openPage, onComplete)
     M.searchResultsPending = true
     M.searchResults = {}
     M.searchResultsQuery = query
-    if openPage and M.activeKey ~= "search" then
-        M.searchResults = {}
+    if openPage or M.activeKey == "search" then
         ShowSearchPageForQuery(query)
     end
 

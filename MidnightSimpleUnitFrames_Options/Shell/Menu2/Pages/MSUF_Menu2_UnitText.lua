@@ -222,6 +222,7 @@ function TextSection.PrepareSlotState(state, unit)
         widget:HookScript("OnLeave", RestorePreviewTextFocus)
     end
     state.tabValues, state.RaidGroupNameAllowed, state.PaintNamePreview = tabValues, RaidGroupNameAllowed, PaintNamePreview
+    state.textSlotState = textSlotState
     state.CurrentSlot, state.SetCurrentSlot, state.SlotFontSizeKey, state.MoveTogether, state.SetMoveTogether =
         CurrentSlot, SetCurrentSlot, SlotFontSizeKey, MoveTogether, SetMoveTogether
     state.FocusPreviewText, state.FocusActivePreviewText, state.HookPreviewTextFocus =
@@ -505,8 +506,7 @@ function TextSection.BuildValuePosition(state, ctx, unit, kind, tab, cfg, contro
         { "slider", "slotSize", 10, { "Selected slot size", 6, 48, 1, 260 }, { 16, -122, rightW - 58, "CENTER" },
             get = function()
                 local conf = GetConf(unit)
-                local value = tonumber(conf and conf[SlotFontSizeKey(kind)])
-                return value and value > 0 and value or EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey)
+                return state.textSlotState.FontSize(kind, conf, GetGeneral(), EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey))
             end,
             customSetReason = "Resolves the currently selected record or text slot at input time.", write = {
                 call = SetNumber, args = { cfg.slotSizeReason, { text = true, fonts = true, preview = true } },

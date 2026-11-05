@@ -221,9 +221,14 @@ local function StopCastbar(frame)
         return
     end
 
+    -- A completed stop token is reusable only while the bar stays hidden and
+    -- inactive. New casts and interrupt holds still require complete cleanup.
+    if frame._msufPoolStopToken ~= nil and frame._msufPoolStopToken == frame._msufHideToken
+        and frame.MSUF_castActive == false and not frame.interrupted and not frame:IsShown() then return end
     frame.interrupted = nil
 
     Runtime.CB_ResetStateOnStop(frame, "STOPPED")
+    frame._msufPoolStopToken = frame._msufHideToken
 end
 Pools.Stop = StopCastbar
 

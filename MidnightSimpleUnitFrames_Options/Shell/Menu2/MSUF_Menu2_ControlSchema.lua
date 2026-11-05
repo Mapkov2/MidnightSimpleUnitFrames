@@ -25,7 +25,9 @@ local UI_DEFAULTS = {
     },
     bars = {
         showIgnorePain = false, showArcaneWindow = false, arcaneWindowTextFrom = 0, arcaneWindowWarnLastGCD = false,
-        manaRegenPause = false, manaGainPulse = false, manaUpcomingCost = false, resourceExtraOffsetX = 0,
+        manaRegenPause = MSUF.Client.IsForever == true, manaGainPulse = MSUF.Client.IsForever == true,
+        manaRegenStyle = "spark", manaRegenSparkWidth = 2, manaRegenSparkAlpha = .35,
+        manaUpcomingCost = false, resourceExtraOffsetX = 0,
     },
 }
 local EXTRA_DEFAULTS = MSUF.CPBuilders.ExtraAuraDefaults

@@ -853,6 +853,10 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     local timeFontReady = ApplyTimeTextLayout(frame, g, unit, prefix)
     local spellFontReady = ApplySpellTextLayout(frame, g, unit, prefix)
     local targetFontReady = ApplyCastTargetTextLayout(frame, g, unit, prefix)
+    if g.castbarArtworkEnabled or frame._msufCastbarArtwork then
+        MSUF.MSUF_CastbarStyle:ApplyCastbarArtwork(frame, frame.statusBar, frame.castText,
+            ShowSpellForUnit(g, unit, prefix) and g[prefix .. "SpellNamePosition"] == "BELOW", g)
+    end
     frame._msufCastbarDetailLayoutUnit = unit
     frame._msufCastbarDetailLayoutFontEpoch = tonumber(MSUF_FontApplyEpoch) or 0
     frame._msufCastbarDetailLayoutVisualRev = tonumber(Config.styleRevision) or 1

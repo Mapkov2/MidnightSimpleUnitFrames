@@ -8,25 +8,46 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "1A7B06997BE4B0B44FBD7D59CF85E758E90EC59BBCC5AEA04B7782564BB6C167",
-    currentVersion = "7.0-alpha4",
+    sourceSha256 = "60462C25781FD81755992D191A0EDA72803750F237EDB34B698FF82B64A0F808",
+    currentVersion = "7.0-alpha5",
     historyFromVersion = "6.20",
     previousVersion = "6.50",
-    rangeLabel = "6.50 -> 7.0-alpha4",
+    rangeLabel = "6.50 -> 7.0-alpha5",
     entries = {
         {
-            version = "7.0-alpha4",
-            date = "2026-11-04",
+            version = "7.0-alpha5",
+            date = "2026-11-05",
             sections = {
                 {
-                    title = "Unit frames and previews",
+                    title = "Mana regeneration and castbars",
                     bullets = {
                         {
-                            text = "Fixed the health bar for Pet Target, Target of Target and Focus Target. These frames now read their own unit's health, and their configured Smooth Fill and Chunked Health Loss apply to health changes.",
+                            text = "Added mana regeneration markers with spark and bar display styles, width and opacity controls, and matching menu previews. Five-second-rule and mana-tick indicators are enabled by default on WoW Forever; later manual Off choices are preserved.",
                             linkless = true,
                         },
                         {
-                            text = "Fixed the unit frame preview so a rise in sample health no longer hides the loss trail on the first damage step.",
+                            text = "Added optional Blizzard-style castbar artwork, a name panel and a bundled fill texture, with matching previews and migration of the previous Suite artwork setting.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed castbar and interrupt-ready cleanup when casts end or frames become inactive.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Search, settings and profiles",
+                    bullets = {
+                        {
+                            text = "Added an animated loading indicator while settings search is running, including suggestions and the full results page. It respects reduced-motion settings and clears when the search completes or is cancelled.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Expanded mana-regeneration search terms and corrected navigation selection, toggle spacing and power-text setting synchronization.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed malformed compressed profile imports raising errors, while retaining size limits and retained the existing Pet Target, Target of Target and Focus Target health fixes.",
                             linkless = true,
                         },
                     },

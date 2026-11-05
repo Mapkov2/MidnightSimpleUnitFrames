@@ -184,7 +184,7 @@ local Position = assert(loadstring([[local GF = { GetGridMetrics = function(_, c
 local LEGACY_GRID_POSITION_MODE, STABLE_GRID_POSITION_MODE = "GRID_CENTER_V1", "STABLE_TEST"
 local function IsRaidLikeKind(kind) return kind == "raid" or kind == "mythicraid" end
 ]] .. positionSource .. "\nreturn GF.EnsureStableGridPosition"))()
-local ns = { Util = { IsSecret = function() return false end } }
+local ns = { Client = { IsForever = false }, Util = { IsSecret = function() return false end } }
 local schemaPath = root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua"
 local schemaDir = root .. "/MidnightSimpleUnitFrames/State/Defaults/"
 for _, name in ipairs({

@@ -7495,6 +7495,16 @@ L["Uses the learned spell's minimum cost for the selected bar. Updates outside c
 L["No readable spell cost for this bar."] = "이 막대의 주문 자원 소모량을 확인할 수 없습니다."
 L["Minimum cost: %s (%s)."] = "최소 소모량: %s (%s)."
 
+L["Castbar artwork"] = "시전 바 외형"
+L["Show dark cast name panel"] = "주문 이름에 어두운 배경 표시"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "마나 재생 표시"
+L["Glowing tick"] = "빛나는 틱"
+L["Separate timer bars"] = "별도 타이머 바"
+L["Mana tick width"] = "마나 틱 너비"
+L["Mana tick glow"] = "마나 틱 발광"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

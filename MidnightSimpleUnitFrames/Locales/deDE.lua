@@ -7698,6 +7698,16 @@ L["Uses the learned spell's minimum cost for the selected bar. Updates outside c
 L["No readable spell cost for this bar."] = "Keine lesbaren Zauberkosten für diese Leiste."
 L["Minimum cost: %s (%s)."] = "Mindestkosten: %s (%s)."
 
+L["Castbar artwork"] = "Zauberleisten-Design"
+L["Show dark cast name panel"] = "Dunkles Feld für den Zaubernamen anzeigen"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "Manaregenerations-Anzeige"
+L["Glowing tick"] = "Leuchtender Tick"
+L["Separate timer bars"] = "Separate Timerbalken"
+L["Mana tick width"] = "Mana-Tick-Breite"
+L["Mana tick glow"] = "Mana-Tick-Leuchten"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

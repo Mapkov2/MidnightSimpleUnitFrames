@@ -55,6 +55,10 @@ local CLIENT_EXTRAS={
     {wanted=RegenTimers,specs=function() return {
         {key="manaRegenPause",kind="toggle",labelKey="Regeneration pause after spending"},
         {key="manaGainPulse",kind="toggle",labelKey="Mana return pulse"},
+        {key="manaRegenStyle",kind="dropdown",labelKey="Mana regeneration display",
+            values={{value="spark",text="Glowing tick"},{value="bars",text="Separate timer bars"}}},
+        {key="manaRegenSparkWidth",kind="slider",labelKey="Mana tick width",range={1,8,1}},
+        {key="manaRegenSparkAlpha",kind="slider",labelKey="Mana tick glow",range={0,1,.05}},
     } end,colors={"manaRegenPauseColor","manaGainPulseColor"}},
     {wanted=ExtraAuras,specs=function() return {
         {key="resourceExtraWidth",kind="slider",labelKey="Resource bar width",range={40,1000,1}},
@@ -95,7 +99,8 @@ local GROUPS = {
         master="showIgnorePain", keys={"showIgnorePain","ignorePainTimeMarker"} },
     { key="arcane", id="classpower_resource_arcane", title="Arcane Window", wanted=ExtraAuras, master="showArcaneWindow",
         keys={"showArcaneWindow","arcaneWindowText","arcaneWindowTextFrom","arcaneWindowWarnSeconds","arcaneWindowWarnLastGCD"} },
-    { key="mana", id="classpower_resource_extras", title="Mana", keys={"manaUpcomingCost","manaRegenPause","manaGainPulse"} },
+    { key="mana", id="classpower_resource_extras", title="Mana", keys={"manaUpcomingCost","manaRegenPause","manaGainPulse",
+            "manaRegenStyle","manaRegenSparkWidth","manaRegenSparkAlpha"} },
     { key="layout", id="classpower_resource_layout", title="Size and position", wanted=ExtraAuras,
         keys={"resourceExtraWidth","resourceExtraHeight","resourceExtraOffsetX","resourceExtraOffsetY"} },
 }

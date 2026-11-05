@@ -180,7 +180,13 @@ local function PaintStatus(view, query, queryReady, results, visible, width)
         if SEARCH_STATE.indexing then second, secondY = "Indexing more menu pages in the background.", -62 end
     end
     local status = PooledText(view, "status", view.results, T.colors.muted)
-    PlaceText(status, 14, -44, width - 28)
+    local pending = queryReady and M.searchResultsPending == true
+    if not view.busyIndicator then
+        view.busyIndicator = M.CreateSearchBusyIndicator(view.results)
+        view.busyIndicator:SetPoint("TOPLEFT", view.results, "TOPLEFT", 14, -41)
+    end
+    view.busyIndicator:SetPending(pending)
+    PlaceText(status, pending and 42 or 14, -44, width - (pending and 56 or 28))
     SetPooledText(status, first, firstTranslated)
     status:Show()
     if second then
@@ -382,6 +388,10 @@ local function ReleaseResults()
     local variants = M._msuf2PageLayoutVariants.search or {}
     local function Release(entry)
         local view = entry and entry._msuf2SearchView
+        if view and view.busyIndicator then
+            view.busyIndicator:SetPending(false)
+            view.status:Hide()
+        end
         for _, row in ipairs(view and view.rows or {}) do
             row.rec, row.anchor, row.route = nil, nil, nil
             row.button:Hide()

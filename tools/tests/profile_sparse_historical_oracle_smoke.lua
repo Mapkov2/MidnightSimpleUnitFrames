@@ -24,7 +24,7 @@ for version = 2, 3 do
         signatures[key] = true
     end
 end
-local ns = { Util = { IsSecret = function() return false end } }
+local ns = { Client = { IsForever = false }, Util = { IsSecret = function() return false end } }
 for _, name in ipairs({ "Schema", "StorageData", "StorageCommon", "StorageV3", "Storage", "Recovery" }) do
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_" .. name .. ".lua"))("test", ns)
 end

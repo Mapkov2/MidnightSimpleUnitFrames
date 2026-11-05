@@ -699,6 +699,7 @@ do
         if not driver then
             driver = NewMotion(selection.owner, 4, button)
             driver.selection, driver.vertical = selection, selection.vertical
+            driver.art._msuf2SelectionSurface = true
             if not selection.vertical then driver.rate, driver.duration = TAB_RATE, TAB_DURATION end
             selection.driver = driver
         end
@@ -791,7 +792,10 @@ do
                 button._msuf2MotionSetActive, button.SetActive = button.SetActive, SelectionSetActive
                 button._msuf2SelectionMotion = selection
                 button._msuf2MotionSelected = button._msuf2Active or button._msuf2TopActive or false
-                if button._msuf2MotionSelected then selection.selected = button end
+                if button._msuf2MotionSelected then
+                    selection.selected = button
+                    button:_msuf2MotionSetActive(true)
+                end
                 W.AttachButtonMotion(button)
                 button:HookScript("OnShow", SelectionButtonShown)
                 button:HookScript("OnHide", SelectionButtonHidden)

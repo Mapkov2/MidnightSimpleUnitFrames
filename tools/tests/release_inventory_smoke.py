@@ -157,3 +157,40 @@ try {
             live.remove(pid)
     assert not live and 2 <= peak <= 6, (live, peak)
 print('release scheduling: shared six-worker queue; exact inventory; false fast-check completion rejected')
+
+# A batched syntax check must compile the exact shipped union, keep independent
+# Lua chunk limits and report every bad file even when the first batch aborts.
+import contextlib
+import io
+from types import SimpleNamespace
+sys.path.insert(0, str(ROOT / 'tools'))
+import check_ready as ready
+import quality_ratchet
+compiler = quality_ratchet.find_luac()
+with tempfile.TemporaryDirectory(prefix='syntax batches with spaces ') as directory:
+    root = Path(directory)
+    files = ['chunk %02d.lua' % index for index in range(70)]
+    for name in files:
+        (root / name).write_text("error('syntax checks must never execute chunks')\n", encoding='utf-8')
+    for name in files[:2]:
+        (root / name).write_text('local ' + ','.join('v%d' % i for i in range(190)) + '\n', encoding='utf-8')
+    original_run, calls = subprocess.run, []
+    def record(command, **options):
+        calls.append(command)
+        return original_run(command, **options)
+    with patch.object(ready.subprocess, 'run', record):
+        assert ready.compile_files(root, compiler, files) == 0
+    assert len(calls) == 3 and all(command[:2] == [compiler, '-p'] for command in calls)
+    assert [path for command in calls for path in command[2:]] == [str(root / name) for name in files]
+    (root / files[1]).write_text('not valid Lua syntax !', encoding='utf-8')
+    (root / files[-2]).write_text('local ' + ','.join('v%d' % i for i in range(201)) + '\n', encoding='utf-8')
+    (root / files[-1]).unlink()
+    diagnostics = io.StringIO()
+    with contextlib.redirect_stdout(diagnostics):
+        assert ready.compile_files(root, compiler, files) == 3
+    assert all(name in diagnostics.getvalue() for name in (files[1], files[-2], files[-1]))
+    def batch_fault(command, **options):
+        return SimpleNamespace(returncode=int(len(command) > 3), stderr='injected batch-only compiler failure')
+    with patch.object(ready.subprocess, 'run', batch_fault), contextlib.redirect_stdout(io.StringIO()):
+        assert ready.compile_files(root, compiler, files[:2]) == 1, 'batch-only tool failure became a pass'
+print('syntax batches: exact70-file inventory, independent local limits, all3 faults and batch-only tool failure checked')

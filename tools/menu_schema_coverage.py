@@ -3,12 +3,13 @@
   python tools/menu_schema_coverage.py --write --lua <lua51>
   python tools/menu_schema_coverage.py --check
 
-Generation runs the existing search commands, Classic first, with a tool-only
+Generation checks the two existing search families concurrently with a tool-only
 capture hook. Thus search and coverage use the same actual page builds and finite
 workspace states. Capture includes widgetless controls and declarations omitted
 from search. It does not execute setters or prove in-game rendering.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import csv
 import hashlib
 from functools import lru_cache
@@ -281,30 +282,44 @@ def load_stream(path):
     return rows
 
 
-def generate(root, lua):
+def generate(root, lua, refresh_indexes=False):
     before = source_hash(root, include_indexes=False)
     matrix = list(csv.DictReader(read(root / "tools/classic-client-matrix.tsv").splitlines(), delimiter="\t"))
-    baseline = {name: index_data(root, name)[0] for name in INDEXES}
+    baseline = {name: index_data(root, name, current=not refresh_indexes)[0] for name in INDEXES}
     evidence = {"version": 2, "clients": {}, "indexes": {}}
     with tempfile.TemporaryDirectory(prefix="menu-schema-") as directory:
-        env = dict(os.environ, LUA_INIT="@tools/menu_schema_harness.lua", MSUF_SCHEMA_CAPTURE_DIR=directory)
-        env.pop("MSUF_SCHEMA_CATALOG_SOURCE", None)
-        for classic, name in zip((True, False), INDEXES):
-            env["MSUF_SEARCH_SOURCE_SHA256"] = menu_hash(root, classic)
+        def check_index(item):
+            classic, name = item
+            env = dict(os.environ, LUA_INIT="@tools/menu_schema_harness.lua", MSUF_SCHEMA_CAPTURE_DIR=directory,
+                       MSUF_SEARCH_SOURCE_SHA256=menu_hash(root, classic))
+            env.pop("MSUF_SCHEMA_CATALOG_SOURCE", None)
             command = [lua, ".github/scripts/search_static_index_project.lua"]
             if classic:
                 command.extend(("--flavor", "Vanilla"))
-            command.append("--check")
+            if not refresh_indexes:
+                command.append("--check")
             print(" ".join(command), flush=True)
             subprocess.run(command, cwd=root, env=env, check=True)
             current, _ = index_data(root, name)
             lost = sorted(set(baseline[name]["identities"]) - set(current["identities"]))
-            evidence["indexes"][name] = current
             print("%s: %d -> %d rows; %d lost" % (name, baseline[name]["rowCount"], current["rowCount"], len(lost)), flush=True)
             if lost:
                 raise ValueError("search rows lost: " + repr(lost))
-        for flavor in [row["Suffix"] for row in matrix] + ["Forever"]:
-            controls = list(load_stream(Path(directory) / (flavor + ".ndjson")).values())
+            return name, current
+
+        # Read-only family checks capture disjoint clients. Two parents and
+        # their sequential children use at most four Lua processes.
+        # Explicit index generation must finish Classic before computing the
+        # Mainline digest, which includes the resulting Classic index.
+        if refresh_indexes:
+            for item in zip((True, False), INDEXES):
+                name, current = check_index(item)
+                evidence["indexes"][name] = current
+        else:
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                evidence["indexes"].update(workers.map(check_index, zip((True, False), INDEXES)))
+
+        def initial_projection(flavor):
             initial_env = dict(os.environ)
             initial_env.pop('LUA_INIT', None)
             initial_env['MSUF_SCHEMA_INITIAL_CAPTURE_DIR'] = directory
@@ -312,6 +327,14 @@ def generate(root, lua):
                                      cwd=root, env=initial_env, capture_output=True, text=True)
             if initial.returncode:
                 raise ValueError(flavor + ': initial schema projection failed: ' + initial.stderr)
+            return flavor
+
+        # Family children have all joined before these five independent worlds.
+        flavors = [row["Suffix"] for row in matrix] + ["Forever"]
+        with ThreadPoolExecutor(max_workers=5) as workers:
+            completed = list(workers.map(initial_projection, flavors))
+        for flavor in completed:
+            controls = list(load_stream(Path(directory) / (flavor + ".ndjson")).values())
             initial_controls = load_stream(Path(directory) / (flavor + "-initial.ndjson"))
             known = {row['controlId'] for row in controls}
             controls.extend(row for key, row in initial_controls.items() if key not in known)
@@ -332,11 +355,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lua", default="lua")
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--refresh-indexes", action="store_true", help="with --write only: regenerate both shipped indexes and capture schema in the same page builds")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--ensure", action="store_true", help="verify current projection, regenerate when missing or stale")
     parser.add_argument("--write-receipt", action="store_true", help="commit-sized evidence from a current, fully audited projection")
     parser.add_argument("--check-receipt", action="store_true", help="verify compact evidence read-only, without the projection")
     args = parser.parse_args()
+    if args.refresh_indexes and (not args.write or args.check or args.ensure or args.check_receipt or args.write_receipt):
+        parser.error("--refresh-indexes requires --write alone; checks never rewrite shipped indexes")
     if args.check_receipt:
         path = ROOT / RECEIPT
         receipt = json.loads(read(path)) if path.exists() else {}
@@ -354,7 +380,7 @@ def main():
         except (ValueError, KeyError, OSError):
             regenerate = True
     if regenerate:
-        evidence = generate(ROOT, args.lua)
+        evidence = generate(ROOT, args.lua, refresh_indexes=args.refresh_indexes)
     proven, total, issues = audit(evidence, ROOT)
     if regenerate:
         path.write_bytes((json.dumps(evidence, ensure_ascii=False, indent=2) + "\n").replace("\n", "\r\n").encode())

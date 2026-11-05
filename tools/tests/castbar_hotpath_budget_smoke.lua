@@ -126,7 +126,7 @@ Measure("target START", nil, function() world:Fire(target, "UNIT_SPELLCAST_START
 Measure("target DELAYED", nil, function() world:Fire(target, "UNIT_SPELLCAST_DELAYED") end)
 
 for _, unit in ipairs({ "boss1", "arena1" }) do
-    local pool = unit == "boss1" and _G.MSUF_BossCastbars or _G.MSUF_ArenaCastbars
+    local pool = world.ns.Castbars.Pools.live[unit == "boss1" and "boss" or "arena"]
     local bar = world:PoolCastbar(pool and pool[1])
     Measure(unit .. " START", function()
         world:StartCast(unit, "Shadow Bolt", 600, 9)

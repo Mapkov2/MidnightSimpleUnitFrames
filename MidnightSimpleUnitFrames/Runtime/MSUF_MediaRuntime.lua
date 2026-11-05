@@ -94,6 +94,7 @@ Media.ResolveStatusbarTextureKey = ResolveStatusbarTextureKey
 ExportPublic("MSUF_ResolveStatusbarTextureKey", Media.ResolveStatusbarTextureKey)
 
 Media.BUILTIN_BAR_TEXTURES = Media.BUILTIN_BAR_TEXTURES or {
+    ["MSUF Blizzard Cast"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Castbars\\CastFill.tga",
     Blizzard = "Interface\\TargetingFrame\\UI-StatusBar",
     Flat = "Interface\\Buttons\\WHITE8x8",
     ["MSUF Lucent"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\MSUF_Lucent_v2.tga",

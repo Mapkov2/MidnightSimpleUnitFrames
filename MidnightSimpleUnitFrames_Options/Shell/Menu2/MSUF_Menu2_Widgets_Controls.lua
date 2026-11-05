@@ -180,6 +180,11 @@ local TOGGLE_CONTROL_HOOKS = {
         if self._msuf2UpdateToggleProxyBounds then self:_msuf2UpdateToggleProxyBounds() end
         RefreshToggleControl(self)
     end,
+    OnHide = function(self)
+        self._msuf2ToggleHovered = nil
+        self._msuf2TogglePressed = nil
+        RefreshToggleControl(self)
+    end,
     OnEnter = function(self)
         self._msuf2ToggleHovered = true
         RefreshToggleControl(self, true, self._msuf2TogglePressed)
@@ -432,13 +437,13 @@ local function CreateToggle(section, label, x, y, labelWidth)
     hoverFill:SetAllPoints(boxFill)
     hoverFill:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
     hoverFill:SetAlpha(0)
-    hoverFill:Show()
+    hoverFill:Hide()
     local rowHover = PixelLayoutRegion(section:CreateTexture(nil, "BORDER", nil, 1))
     rowHover:SetTexture((T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
     if rowHover.SetTexCoord then rowHover:SetTexCoord(0, 1, 0, 1) end
     rowHover:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
     rowHover:SetAlpha(0)
-    rowHover:Show()
+    rowHover:Hide()
     btn._msuf2ToggleRowHover = rowHover
     btn._msuf2UpdateToggleProxyBounds = UpdateToggleProxyBounds
     local function SetToggleHoverVisual(self, show, down)
@@ -456,14 +461,14 @@ local function CreateToggle(section, label, x, y, labelWidth)
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
             if tex.SetVertexColor then tex:SetVertexColor(c[1], c[2], c[3], 1) end
             tex:SetAlpha(target)
-            if tex.Show then tex:Show() end
+            tex:SetShown(show and true or false)
         end
         if rowTex then
             if rowTex.SetTexture then rowTex:SetTexture((T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8") end
             if rowTex.SetTexCoord then rowTex:SetTexCoord(0, 1, 0, 1) end
             if rowTex.SetVertexColor then rowTex:SetVertexColor(c[1], c[2], c[3], 1) end
             rowTex:SetAlpha(rowTarget)
-            if rowTex.Show then rowTex:Show() end
+            rowTex:SetShown(show and true or false)
         end
     end
     local function RefreshToggleFeedback(self, hover, down)
@@ -1253,6 +1258,26 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     AttachLayerOverviewButton(section, slider, title, label, minVal, maxVal)
     return slider
 end
+-- Reflow the existing choices when a retained page or docked header changes width.
+local function LayoutSegment(holder)
+    local count = #holder.buttons
+    if count == 0 then return end
+    local width, gap = holder:GetWidth(), 8
+    local buttonWidth = math.max(1, math.floor((width - gap * (count - 1)) / count))
+    for i = 1, count do
+        local button = holder.buttons[i]
+        button:SetWidth(buttonWidth)
+        button:ClearAllPoints()
+        button:SetPoint("LEFT", holder, "LEFT", (i - 1) * (buttonWidth + gap), 0)
+    end
+    W.RefreshSelectionMotion(holder, true)
+end
+local function FitSegmentTabs(segment, parent, x, requested)
+    local available = parent:GetWidth() - x - 16
+    if available <= 0 then return end
+    local width = math.max(1, math.min(requested, available))
+    if segment:GetWidth() ~= width then segment:SetWidth(width) end
+end
 function W.Segment(section, label, values, width, opts)
     local x, y = NextRow(section, 48)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
@@ -1279,6 +1304,7 @@ function W.Segment(section, label, values, width, opts)
         btn._msuf2Value = item.value
         holder.buttons[i] = btn
     end
+    holder:HookScript("OnSizeChanged", LayoutSegment)
     function holder:SetValue(value)
         self.value = value
         for i = 1, #self.buttons do
@@ -1334,6 +1360,11 @@ function W.SegmentTabs(ctx, parent, opts)
     end
     segment = W.Segment(parent, opts.label, opts.values, opts.width)
     W.MoveWidget(segment, parent, opts.x or 0, opts.y or 0, opts.width, opts.titleJustify or "LEFT")
+    local requested = opts.width or 360
+    local function Fit() FitSegmentTabs(segment, parent, opts.x or 0, requested) end
+    parent:HookScript("OnSizeChanged", Fit)
+    segment:HookScript("OnShow", Fit)
+    Fit()
     M.BindSegment(ctx, segment, CurrentTab, SetTab)
     M.TrackRefresh(ctx, RefreshTabs)
     return segment, RefreshTabs, CurrentTab, SetTab

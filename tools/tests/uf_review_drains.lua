@@ -394,6 +394,9 @@ Case("castbar-pool-pass", function()
     assert(pcall(flush))
     assert(hits > before and Required(flush, "passPendingGeneration") == nil,
         "unchanged pool pass retry did not finish")
+    -- Reopen the bar so this pass must cross the native Hide boundary again.
+    -- A fully stopped hidden bar legitimately has no native work to reenter.
+    first:Show()
     local reentered = false
     first.Hide = function(self, ...)
         if not reentered then reentered = true; queue() end
@@ -401,6 +404,7 @@ Case("castbar-pool-pass", function()
     end
     queue()
     flush()
+    assert(reentered, "visible pool bar did not reach the reentrant native Hide")
     assert(Required(flush, "passPendingGeneration") ~= nil, "old pool pass consumed reentrant same-generation request")
     flush()
     assert(Required(flush, "passPendingGeneration") == nil)

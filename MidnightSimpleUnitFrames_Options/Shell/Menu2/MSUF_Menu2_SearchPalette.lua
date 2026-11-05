@@ -87,6 +87,39 @@ local function RefreshRowVisuals(self)
     end
 end
 
+-- Native rotation keeps pending feedback moving without a Lua update/timer.
+-- The same indicator serves suggestions and the full results page.
+function M.CreateSearchBusyIndicator(parent)
+    local indicator = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
+    indicator:SetSize(20, 20)
+    indicator:Hide()
+    local icon = indicator:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints()
+    icon:SetTexture("Interface\\COMMON\\StreamCircle")
+    local accent = T.colors.accent
+    icon:SetVertexColor(accent[1], accent[2], accent[3], 1)
+    local animation = T.TrackMenuAnimationGroup(icon:CreateAnimationGroup())
+    animation:SetLooping("REPEAT")
+    local rotation = animation:CreateAnimation("Rotation")
+    rotation:SetDegrees(-360)
+    rotation:SetDuration(1)
+    rotation:SetSmoothing("NONE")
+    indicator.animation = animation
+    indicator:SetScript("OnShow", function()
+        if not T.ReducedMotionEnabled() and not animation:IsPlaying() then animation:Play() end
+    end)
+    indicator:SetScript("OnHide", function() animation:Stop() end)
+    function indicator:SetPending(pending)
+        self:SetShown(pending == true)
+        if not pending or T.ReducedMotionEnabled() then
+            animation:Stop()
+        elseif not animation:IsPlaying() then
+            animation:Play()
+        end
+    end
+    return indicator
+end
+
 local function EnsurePalette(self, parent, searchBox)
     if self.frame then return self.frame end
     local popupParent = M.frame or parent
@@ -115,6 +148,8 @@ local function EnsurePalette(self, parent, searchBox)
     status:SetPoint("RIGHT", palette, "RIGHT", -12, 0)
     status:SetJustifyH("LEFT")
     status:Hide()
+    self.busyIndicator = M.CreateSearchBusyIndicator(palette)
+    self.busyIndicator:SetPoint("TOPLEFT", palette, "TOPLEFT", 12, -(HEADER_H + 7))
 
     self.rows = {}
     for i = 1, MAX_VISIBLE_RESULTS do
@@ -220,6 +255,7 @@ local function CreatePaletteController(parent, searchBox, standalone)
     end
 
     function controller:Hide()
+        if self.busyIndicator then self.busyIndicator:SetPending(false) end
         if self.frame then self.frame:Hide() end
         self.visibleResults = {}
         for _, row in ipairs(self.rows or {}) do row._msuf2PaletteResult = nil end
@@ -295,6 +331,8 @@ local function CreatePaletteController(parent, searchBox, standalone)
         local contentRows = math.max(1, visible)
         palette:SetHeight(HEADER_H + contentRows * ROW_H + FOOTER_H + PANEL_PAD * 2)
         self.status:SetShown(visible == 0)
+        self.busyIndicator:SetPending(pending and visible == 0)
+        self.status:SetPoint("TOPLEFT", palette, "TOPLEFT", pending and 40 or 12, -(HEADER_H + 10))
         if visible == 0 then
             self.status:SetText(pending and Tr("Searching settings...") or Tr("No exact setting found."))
         end

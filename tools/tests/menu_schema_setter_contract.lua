@@ -10,7 +10,7 @@ function M.DeepCopy(value)
     for key, item in pairs(value) do out[key] = M.DeepCopy(item) end
     return out
 end
-local namespace = { MSUF2 = M, CPBuilders = { ExtraAuraDefaults = {} } }
+local namespace = { Client = { IsForever = false }, MSUF2 = M, CPBuilders = { ExtraAuraDefaults = {} } }
 local schemaPath = arg[2] or (root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua")
 assert(loadfile(schemaPath))("Options", namespace)
 local S = M.ControlSchema

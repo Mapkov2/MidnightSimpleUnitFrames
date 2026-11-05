@@ -357,7 +357,8 @@ local ROLE_PAINT = {
 }
 local function SetSkinnedSelectionCue(btn, active)
     local cue = btn._msuf2SkinnedSelectionCue
-    if not active or btn._msuf2SelectionMotion or btn._msuf2MotionSurface then
+    if not active or btn._msuf2SelectionMotion
+        or (btn._msuf2MotionSurface and not btn._msuf2SelectionSurface) then
         if cue then
             cue.wash:Hide()
             cue.line:Hide()
@@ -377,9 +378,9 @@ local function SetSkinnedSelectionCue(btn, active)
         cue = { wash = wash, line = line }
         btn._msuf2SkinnedSelectionCue = cue
     end
-    local accent = T.colors.accent
-    cue.wash:SetColorTexture(accent[1], accent[2], accent[3], 0.22)
-    cue.line:SetColorTexture(accent[1], accent[2], accent[3], 0.94)
+    local contrast = T.colors.navTextActive
+    cue.wash:SetColorTexture(contrast[1], contrast[2], contrast[3], 0.22)
+    cue.line:SetColorTexture(contrast[1], contrast[2], contrast[3], 0.94)
     cue.wash:Show()
     cue.line:SetShown(not btn._msuf2SelectionMotion)
 end

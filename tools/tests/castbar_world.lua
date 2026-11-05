@@ -41,6 +41,13 @@ local BASE_FILES = {
     ["MSUF_Castbars_PublicAPI.lua"] = true,
     ["MSUF_Castbars_Backend.lua"] = true,
     ["MSUF_CastbarConfig.lua"] = true,
+    ["MSUF_CastbarAnchors.lua"] = true,
+    ["MSUF_Castbars_Core.lua"] = true,
+    ["MSUF_CastbarVisuals.lua"] = true,
+    ["MSUF_CastbarStyle.lua"] = true,
+    ["MSUF_InterruptReady.lua"] = true,
+    ["MSUF_InterruptReady_Consumers.lua"] = true,
+    ["MSUF_CastbarRounded.lua"] = true,
     ["MSUF_CastbarUtils.lua"] = true,
     ["MSUF_CastbarRuntime.lua"] = true,
     ["MSUF_CastbarEngine.lua"] = true,
@@ -80,13 +87,14 @@ function World.New(root, backend, options)
         exists = { target = true, focus = true, boss1 = true, arena1 = true },
     }, World)
 
-    -- Names the permissive widget answers with a no-op method. Rich widgets
-    -- skip all-caps prefixes ("MSUFSpec") so data fields read as nil.
+    -- Missing regions are data, not widget methods. Keep the original method
+    -- fallback cost for other names so the frozen instruction budgets compare.
     local methodPattern = options.richWidgets and "^%u%l%a*$" or "^%u%a*$"
+    local regionFields = { Icon = true, IconFrame = true, IconTexture = true, Text = true }
     local function NewWidget(kind, name)
         local widget = { kind = kind, name = name, scripts = {}, hooks = {}, shown = true, events = {} }
         setmetatable(widget, { __index = function(_, key)
-            if type(key) == "string" and key:match(methodPattern)
+            if type(key) == "string" and key:match(methodPattern) and not regionFields[key]
                 and key ~= "SetTimerDuration" and key ~= "ClearTimerDuration" then
                 return NoOp
             end
@@ -122,11 +130,24 @@ function World.New(root, backend, options)
         function widget:SetText(text) self.text = text end
         function widget:SetFormattedText(format, ...) self.text = string.format(format, ...) end
         function widget:GetText() return self.text end
-        function widget:GetWidth() return 200 end
-        function widget:GetHeight() return 18 end
+        function widget:GetFont() return self.fontPath or "Fonts\\FRIZQT__.TTF", self.fontSize or 12, self.fontFlags or "OUTLINE" end
+        function widget:SetFont(path, size, flags)
+            self.fontPath, self.fontSize, self.fontFlags = path, size, flags
+            return true
+        end
+        function widget:SetSize(width, height) self.width, self.height = width, height end
+        function widget:SetWidth(width) self.width = width end
+        function widget:SetHeight(height) self.height = height end
+        function widget:GetWidth() return self.width or 200 end
+        function widget:GetHeight() return self.height or 18 end
+        function widget:GetSize() return self:GetWidth(), self:GetHeight() end
         function widget:GetEffectiveScale() return 1 end
         function widget:GetFrameLevel() return 1 end
-        function widget:GetPoint() return nil end
+        function widget:SetPoint(point, relative, relativePoint, x, y)
+            self.point, self.relative, self.relativePoint, self.offsetX, self.offsetY = point, relative, relativePoint, x, y
+        end
+        function widget:GetPoint() return self.point, self.relative, self.relativePoint, self.offsetX, self.offsetY end
+        function widget:ClearAllPoints() self.point, self.relative, self.relativePoint, self.offsetX, self.offsetY = nil, nil, nil, nil, nil end
         function widget:CreateAnimationGroup() return NewWidget("AnimationGroup") end
         function widget:CreateAnimation() return NewWidget("Animation") end
         function widget:CreateTexture() return NewWidget("Texture") end
@@ -138,14 +159,6 @@ function World.New(root, backend, options)
                 self.statusBarTexture = self.statusBarTexture or NewWidget("Texture")
                 return self.statusBarTexture
             end
-            function widget:SetSize(width, height) self.width, self.height = width, height end
-            function widget:SetWidth(width) self.width = width end
-            function widget:SetHeight(height) self.height = height end
-            function widget:GetWidth() return self.width or 200 end
-            function widget:GetHeight() return self.height or 18 end
-            function widget:GetSize() return self:GetWidth(), self:GetHeight() end
-            function widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" end
-            function widget:SetFont() return true end
             function widget:GetStringWidth() return 40 end
             function widget:GetFrameStrata() return self.strata or "MEDIUM" end
             function widget:SetFrameStrata(strata) self.strata = strata end
@@ -255,6 +268,10 @@ function World.New(root, backend, options)
     local Fixture = assert(loadfile(root .. "/tools/tests/castbar_namespace_fixture.lua"))()
     Fixture.Providers(root, ns, _G, loadfile, { colors = false })
     world.ns = ns
+    -- Unit frames are outside this fixture; the driver still resolves their
+    -- real namespace contract and may anchor to a frame a smoke supplies.
+    ns.UF = { frames = {} }
+    function ns.UF.GetFrame(unit) return ns.UF.frames[unit] end
     -- Castbars/MSUF_CastbarFrames.lua is not loaded: World:Driver and
     -- World:PoolCastbar supply the regions its builder makes.
     _G.MSUF_BuildCastbarFrameElements = function() end
@@ -275,6 +292,10 @@ function World.New(root, backend, options)
             if name == "MSUF_Castbars_Core.lua" then
                 local mediaFixture = assert(loadfile(root .. "/tools/tests/runtime_media_fixture.lua"))()
                 mediaFixture.LoadFonts(root, ns)
+                -- Load State's real font-shadow policy after the font owner.
+                ns.DefaultsParts = { ExportPublic = ns.ExportPublic }
+                assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Migrations.lua"))(
+                    "MidnightSimpleUnitFrames", ns)
                 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_MediaRuntime.lua"))("MidnightSimpleUnitFrames", ns)
             end
             if name == "MSUF_Colors.lua" then
@@ -287,11 +308,11 @@ function World.New(root, backend, options)
                 assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
             end
             if name == "MSUF_EventBus.lua" then
-                local register = _G.MSUF_EventBus_Register
-                _G.MSUF_EventBus_Register = function(...)
+                local register = ns.Require("MSUF_EventBus_Register", "castbar_world")
+                ns.ExportPublic("MSUF_EventBus_Register", function(...)
                     if world.busRefuses then return false end
                     return register(...)
-                end
+                end)
             end
             if name == "MSUF_Castbars_PublicAPI.lua" then Fixture.Seed(ns) end
             if ns.Castbars then Fixture.Bind(ns) end
@@ -308,7 +329,7 @@ function World.New(root, backend, options)
     end
     ns._castbarFixtureAttached = true
     world.loaded = loaded
-    assert(type(_G.MSUF_ScheduleAfter) == "function", "Kernel scheduler did not load")
+    assert(type(ns.Require("MSUF_ScheduleAfter", "castbar_world")) == "function", "Kernel scheduler did not load")
     assert((backend == "signal") == (ns.Scheduler.signalMap ~= false),
         "scheduler picked the wrong delayed backend for " .. backend)
     world:Advance(0)

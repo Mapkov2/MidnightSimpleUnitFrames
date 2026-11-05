@@ -24,6 +24,7 @@ local KEY_EFFECT = {
     showArcaneWindow = "arcane", arcaneWindowText = "arcane", arcaneWindowTextFrom = "arcane",
     arcaneWindowWarnSeconds = "arcane", arcaneWindowWarnLastGCD = "arcane",
     manaUpcomingCost = "cost", manaRegenPause = "pause", manaGainPulse = "pulse",
+    manaRegenStyle = "pulse", manaRegenSparkWidth = "pulse", manaRegenSparkAlpha = "pulse",
 }
 local selected, scenario = nil, "active"
 local available, values

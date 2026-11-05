@@ -22,7 +22,7 @@ for _, name in ipairs({ "Schema", "StorageData", "StorageCommon", "StorageV3", "
 end
 local source = table.concat(pieces)
 local function Codec(text, secretCheck)
-    local ns = { Util = { IsSecret = secretCheck or function() return false end } }
+    local ns = { Client = { IsForever = false }, Util = { IsSecret = secretCheck or function() return false end } }
     assert(loadstring(text))(nil, ns)
     return ns.DefaultsSchema
 end

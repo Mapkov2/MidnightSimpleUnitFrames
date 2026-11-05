@@ -122,7 +122,10 @@ local function CancelSearchBackgroundIndex()
     -- A search cut off before it ran left an empty list labelled with its query.
     -- Forget the label, so the next paint searches again instead of showing
     -- "no match" for a query nobody answered.
-    if M.searchResultsPending then M.searchResultsQuery = nil end
+    if M.searchResultsPending then
+        M.searchResultsQuery = nil
+        Search._Render.ReleaseResults()
+    end
     M.searchResultsPending = nil
     SEARCH_STATE.indexing = false
     SEARCH_STATE.indexQueue = nil

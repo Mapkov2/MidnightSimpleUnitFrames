@@ -213,6 +213,10 @@ local function BuildTexturesSection(PageState, secBuilder)
                 local v = ReadG("castbarBackgroundTexture", nil)
                 return (type(v) == "string" and v ~= "") and v or ReadG("castbarTexture", "Blizzard")
             end },
+        Flow("castbarArtworkEnabled", false, "Castbar artwork", texLeftX, -152, 350,
+            "MSUF2_CASTBAR_ARTWORK", ApplyTexturesAndPreview),
+        Flow("castbarArtworkNamePanel", true, "Show dark cast name panel", texLeftX, -180, 350,
+            "MSUF2_CASTBAR_NAME_PANEL", ApplyTexturesAndPreview),
         Slider("castbarOutlineThickness", 1, "Outline thickness", 0, 6, 1, texRightX, -42, "MSUF2_CASTBAR_OUTLINE", ApplyTexturesAndPreview,
             "Width of the border around each castbar, in pixels; 0 removes it. The Interrupt " ..
                 "Ready border style colors this border, so keep it above 0 for that style."),
@@ -560,7 +564,11 @@ local function CreateCastbarPageState(ctx, b)
         Schema.Custom(castPreview, { id = "menu2.opt_castbar.preview", kind = "preview",
             scope = ctx.key, applyDomain = "preview", owner = castPreview })
     end
-    local function RefreshCastPreview() if castPreview and castPreview.Refresh then castPreview:Refresh() end end
+    local function RefreshCastPreview()
+        if not (castPreview and castPreview.Refresh) then return end
+        MSUF.Castbars.Config.Compile("style")
+        castPreview:Refresh()
+    end
     local castPreviewRefreshQueued = false
     local function RequestCastPreviewRefresh()
         if castPreviewRefreshQueued then return end
@@ -570,9 +578,7 @@ local function CreateCastbarPageState(ctx, b)
             RefreshCastPreview()
         end)
     end
-    -- Castbar uses the same bounded Preview slot as every other page-level
-    -- preview; only the settings sections below it participate in scrolling.
-    if castPreviewSection and fixedPreview then fixedPreview.onActivate = RequestCastPreviewRefresh end
+    if castPreviewSection and fixedPreview then fixedPreview.onActivate = RefreshCastPreview end
     local function ShakeCastPreview(strength) if castPreview and castPreview.PlayShake then castPreview:PlayShake(strength, false) end end
     local function ShowEmpoweredPreview() M.SetCastbarPreviewType("empowered", 0.62) end
     -- Only the castbar setting/apply policy is page-owned; native controls,
@@ -601,7 +607,10 @@ local function CreateCastbarPageState(ctx, b)
                     args = { reason, { castbar = true, preview = true } },
                     numberDefault = kind == "slider" and fallback or nil,
                     round = kind == "slider" and not row.precise,
-                    after = row.afterWrite and function(value) row.afterWrite(reason, value, true) end }
+                    after = function(value)
+                        RefreshCastPreview()
+                        if row.afterWrite then row.afterWrite(reason, value, true) end
+                    end }
                     --[[schema setter: GlobalCastbars.Rows]]
                 if kind == "dropdown" then row.write.fallback = default end
             end

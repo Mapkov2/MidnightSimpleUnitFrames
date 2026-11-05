@@ -79,6 +79,24 @@ MSUF.ProfileMigrations = (function()
         for _, key in ipairs(units) do Fill(profile[key], dragon) end
         if MSUF.Client.SupportsPetHappiness == true then Fill(profile.pet, happiness) end
     end
+    -- Per-client default updates are replayable across imported/current profiles.
+    -- The stamps preserve deliberate Off choices after each one-time update.
+    local function SeedManaIndicators(profile)
+        local bars = profile.bars
+        if type(bars) ~= "table" then return end
+        if bars.manaRegenStyle == nil then bars.manaRegenStyle = "spark" end
+        if bars.manaRegenSparkWidth == nil then bars.manaRegenSparkWidth = 2 end
+        if bars.manaRegenSparkAlpha == nil then bars.manaRegenSparkAlpha = .35 end
+        if not MSUF.Client.IsForever then return end
+        if profile._msufForeverFiveSecondDefault_v1 ~= true or bars.manaRegenPause == nil then
+            bars.manaRegenPause = true
+            profile._msufForeverFiveSecondDefault_v1 = true
+        end
+        if profile._msufForeverManaTickDefault_v1 ~= true or bars.manaGainPulse == nil then
+            bars.manaGainPulse = true
+            profile._msufForeverManaTickDefault_v1 = true
+        end
+    end
     local function StripGroupTooltips(profile)
         for _, key in ipairs(groups) do
             local scope = profile[key]
@@ -110,6 +128,7 @@ MSUF.ProfileMigrations = (function()
         { revision = 700, name = "retired_group_tooltips", apply = StripGroupTooltips },
         { revision = 700, replay = true, name = "revision_17_additions", apply = SeedAdditions },
         { revision = 700, replay = true, name = "group_buff_strata", apply = SeedTrackedStrata },
+        { revision = 700, replay = true, name = "mana_indicator_defaults", apply = SeedManaIndicators },
         { revision = 700, replay = true, name = "sparse_persistence_defaults", apply = MSUF.DefaultsSchema.FillMenuDefaults },
     }
     function Migrations.Apply(profile, skipMedia)

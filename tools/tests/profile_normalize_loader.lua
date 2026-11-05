@@ -28,6 +28,7 @@ Loader.FILES = {
 }
 
 function Loader.Install(root, ns)
+    ns.Client = ns.Client or { IsForever = false }
     root = tostring(root):gsub("\\", "/"):gsub("/+$", "")
     if type(ns.ProfileNormalize) == "table" then return ns end
     local lent = type(ns.ExportPublic) ~= "function"

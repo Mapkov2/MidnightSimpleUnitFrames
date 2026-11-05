@@ -62,9 +62,11 @@ end
 -- The spell-cost mark adds one Mainline text input and its mode option.
 -- Existing 4520 identities and all Classic rows were compared to the prior index.
 -- Focus color adds its switch and swatch; existing semantic rows are unchanged.
+-- Native artwork adds its two switches to both inventories; existing identities are preserved.
+-- 2026-11-05: add the three Mana display controls; retain the concurrent slot-font rows.
 local indexes = {
-    { "", 4523, 823652977 },
-    { "_Classic", 4098, 105715440 },
+    { "", 4528, 1627824837 },
+    { "_Classic", 4103, 2061289755 },
 }
 local moved = {
     { "edit_selection", "workbench_alignment", "multi", "bottom left right top horizontal vertical move open toggle" },

@@ -181,6 +181,11 @@ function Page.RowAccessors(page, row, source, apply)
         row.write = { source = source, call = WriteRecord, boolean = true, returns = true
         } --[[schema setter: J5.ClassPower.TextOnBar]]
         return function() return BoolValue(source(), key, default) end
+    elseif policy == "detachedTextSize" then
+        row.companionWrites = { "player.hpPowerTextOverride" }
+        row.write = { call = SetPlayerTextValue, keyOnly = true, args = { apply },
+            resolve = function() return "player." .. Page.DetachedTextSlots.SlotFontSizeKey("power") end }
+        return Page.DetachedTextFontSize
     elseif policy == "detachedTextPreset" then
         return function() return NormalizeDetachedPowerTextPreset(Player()) end,
             function(value)
@@ -678,7 +683,7 @@ function Page:BuildDetachedPowerText()
         { "dropdown", "center", "NONE", { "Center slot", DETACHED_POWER_SLOT_VALUES, 300 }, field = "powerTextCenter", apply = textStateRefresh,
             group = "detachedText" },
         { "dropdown", "sep", "", { "Delimiter", DETACHED_POWER_SEPARATORS, 180 }, field = "powerTextSeparator", group = "detachedText" },
-        { "slider", "size", 14, { "Power text size", 6, 48, 1, 300 }, field = "powerFontSize", group = "detachedText" },
+        { "slider", "size", 14, { "Power text size", 6, 48, 1, 300 }, policy = "detachedTextSize", group = "detachedText" },
         { "slider", "x", -4, { "Text X", -300, 300, 1, 300 }, field = "powerOffsetX", group = "detachedText" },
         { "slider", "y", 4, { "Text Y", -300, 300, 1, 300 }, field = "powerOffsetY", group = "detachedText" },
         { "slider", "layer", 2, { "Player Power text layer", 0, 30, 1, 300 }, field = "powerTextLayer", group = "detachedText" },
@@ -703,11 +708,10 @@ function Page:BuildDetachedPowerText()
         self.refresh()
     end } }, Page.RowOptions).outline
     RegisterSegment(fontOutline, "detached_power.text.outline", DETACHED_POWER_TEXT_OUTLINE_VALUES, "setting")
-    M.classPowerDetachedPowerTextSlot = M.classPowerDetachedPowerTextSlot or "center"
     local slot = Schema.Build(self.ctx, text, { { "segment", "slot", nil, { "Slot", TEXT_SLOT_VALUES, controlW },
         meta = Meta("detached_power.text.slot_selector", "ephemeral"), get = CurrentDetachedTextSlot,
             customSetReason = "Changes editor selection or input state rather than a fixed profile field.", set = function(value)
-        M.classPowerDetachedPowerTextSlot = value or "center"
+        Page.DetachedTextSlots.SetCurrentSlot("power", value)
         if M.RequestRefresh then M.RequestRefresh(self.ctx, "classpower-detached-power-text-slot") elseif M.Refresh then M.Refresh(self.ctx) end
     end } }, Page.RowOptions).slot
     RegisterSegment(slot, "detached_power.text.slot_selector", TEXT_SLOT_VALUES, "ephemeral")
@@ -731,6 +735,8 @@ function Page:BuildDetachedPowerText()
         .. "means the existing slot layout is kept until you choose a preset.")
     AddTooltip(self.dpbText.onBar, "Power Text On Bar",
         "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
+    AddTooltip(self.dpbText.size, "Selected slot size",
+        "Font size of the slot picked in Text slots only. Slots you never resize keep the normal text size.")
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
     AddTooltip(self.dpbText.layer, "Player Power Text Layer",
         "Orders only the normal Player Power text. The visible Essence count and Ebon Might time belong to Class Resource text.")

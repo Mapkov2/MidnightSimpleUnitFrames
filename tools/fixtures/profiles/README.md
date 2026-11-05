@@ -387,3 +387,26 @@ in the package's local `.checks/golden-path-changes.md`. Its audit refuses any
 changed pre-existing setting or unclassified delta. The 6.50 downgrade proof uses
 the frozen source and serialized scratch fixtures, with cold-load controls; it
 never writes real SavedVariables.
+
+## 7.0 Alpha 5 mana indicator defaults (2026-11-05)
+
+The 21 added golden lines record the reviewed mana-indicator migration:
+
+- The three `manaRegenStyle`, `manaRegenSparkWidth` and
+  `manaRegenSparkAlpha` lines in `factory`, `sv_anniversary_rev17`,
+  `sv_era_rev15` and `sv_retail_rev16_17` materialize the new spark display
+  defaults (`spark`, 2 pixels, 0.35 opacity). Other profile views inherit
+  those values through the existing corpus comparison references.
+- The two Forever migration stamps and the two enabled indicator defaults
+  in `factory` record the one-time Forever five-second-rule and mana-tick
+  defaults. The stamps travel in exports so a later deliberate Off choice
+  survives normalization, import and cross-client use.
+- `sv_forever_beta_rev17` records the Forever-only `manaGainPulse = true`
+  override for its stored false value. `sv_retail_rev16_17` records the
+  corresponding two Forever stamps and two enabled defaults.
+
+All five clients and every corpus entry were regenerated through the real
+profile lifecycle. No existing setting outside these seven mana fields,
+round-trip exception, fixture input or rejection rule changed. The focused
+`mana_regen_defaults_smoke.lua` also proves that later manual Off choices
+are retained.

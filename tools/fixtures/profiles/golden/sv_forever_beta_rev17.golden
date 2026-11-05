@@ -265,6 +265,7 @@ roundtrip.Profile01.excepted[".target.screenPositionHeight"] = "screenReference 
 roundtrip.Profile01.excepted[".targettarget.portraitBlizzardDirection"] = "filledOnImport added: nil -> \"AUTO\""
 roundtrip.Profile01.excepted[".targettarget.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 [Forever]
+profile["Profile01"].bars.manaGainPulse = true
 roundtrip.Profile01.excepted[".arena.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 [Mainline]
 profile["Profile01"].arena.offsetX = 457.5

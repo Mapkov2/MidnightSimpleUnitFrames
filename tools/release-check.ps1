@@ -7,6 +7,7 @@ param(
     [switch]$ProfilesOnly,
     [switch]$Reproducible
 )
+$wall = [Diagnostics.Stopwatch]::StartNew()
 # Compact offline release contracts. The frozen gate is never invoked.
 # Parallel mode shares one bounded queue for fast-check and behaviour contracts.
 $ErrorActionPreference = "Stop"
@@ -46,7 +47,6 @@ $oldPath = $env:PATH
 $env:PATH = (Split-Path -Parent $Python) + [IO.Path]::PathSeparator + $env:PATH
 $summary = New-Object 'System.Collections.Generic.List[string]'
 $failed = 0
-$wall = [Diagnostics.Stopwatch]::StartNew()
 $slotTime = 0.0
 $projectionTime = 0.0
 $suiteSlotHeld = $false
@@ -233,7 +233,7 @@ try {
         exit 1
     }
     # Projection preparation may rebuild every workspace on a clean checkout.
-    # Report that work separately from the bounded behaviour-contract suite.
+    # Report it separately, while keeping it inside the complete elapsed budget.
     Enter-CheckSlot $Slot $Owner
     $projectionTimer = [Diagnostics.Stopwatch]::StartNew()
     try {
@@ -363,6 +363,7 @@ try {
 # The budget measures the six-worker development machine; a reproducible CI
 # runner has other hardware, so it reports the time without gating on it.
 if (-not $Reproducible -and $slotTime -ge 300) { $failed++; Write-Output "FAIL time budget: must be under 300 s inside the Lua slot" }
+if (-not $Reproducible -and $wall.Elapsed.TotalSeconds -ge 300) { $failed++; Write-Output "FAIL complete time budget: must be under 300 s including preparation and all checks" }
 $final = "release-check: {0} failed; {1:F1} s contract slots; {2:F1} s projection preparation; {3:F1} s elapsed; log {4}" -f $failed, $slotTime, $projectionTime, $wall.Elapsed.TotalSeconds, $log
 [IO.File]::AppendAllText($log, ($summary -join $nl) + "$nl$final$nl", $utf8)
 Write-Output $final

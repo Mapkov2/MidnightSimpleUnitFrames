@@ -132,3 +132,85 @@ with tempfile.TemporaryDirectory(prefix="preview-census-") as directory:
         WriteProof(invalid)
         Reject()
 print("preview census: current review accepted; source drift, omitted scope, residue and invalid totals rejected")
+
+# Each generation phase must join every child, fail closed and retain per-client
+# capture isolation. Barriers also reject accidental serial scheduling.
+from threading import Barrier, Lock
+from unittest.mock import patch
+from types import SimpleNamespace
+import subprocess
+spec.loader.exec_module(coverage)
+with tempfile.TemporaryDirectory(prefix="schema-parallel-") as directory:
+    fixture = Path(directory)
+    (fixture / 'tools').mkdir()
+    (fixture / 'tools/classic-client-matrix.tsv').write_text('Suffix\nMainline\nVanilla\nTBC\nMists\n')
+    for failure in (None, 'index', 'initial', 'drift', 'lost', 'refresh', 'refresh-index', 'refresh-lost'):
+        refresh = failure in ('refresh', 'refresh-index', 'refresh-lost')
+        family_barrier, initial_barrier, lock = Barrier(2), Barrier(5), Lock()
+        calls, index_reads, hashes, finished = [], {}, [], set()
+        def hash_source(root, include_indexes=True):
+            hashes.append(include_indexes)
+            return 'changed' if failure == 'drift' and len(hashes) > 1 else 'source'
+        def read_index(root, name, current=True):
+            index_reads[name] = index_reads.get(name, 0) + 1
+            lost = failure in ('lost', 'refresh-lost') and index_reads[name] > 1
+            return dict(index, identities=[] if lost else ['retained']), []
+        def run(command, **kwargs):
+            env = kwargs['env']
+            with lock:
+                calls.append((list(command), dict(env)))
+            if command[1].endswith('search_static_index_project.lua'):
+                assert (command[-1] == '--check') == (not refresh) and kwargs['check']
+                classic = '--flavor' in command
+                assert env['MSUF_SEARCH_SOURCE_SHA256'] == ('C' if classic else 'M') * 64
+                assert env['LUA_INIT'] == '@tools/menu_schema_harness.lua'
+                if not refresh:
+                    family_barrier.wait(timeout=10)
+                elif classic:
+                    import time
+                    time.sleep(0.03)  # A parallel Mainline hash would run before this write finishes.
+                if failure in ('index', 'refresh-index') and classic:
+                    raise subprocess.CalledProcessError(1, command)
+                flavors = ('Vanilla', 'TBC', 'Mists') if classic else ('Mainline', 'Forever')
+                for flavor in flavors:
+                    (Path(env['MSUF_SCHEMA_CAPTURE_DIR']) / (flavor + '.ndjson')).write_text(json.dumps(control) + '\n')
+                with lock:
+                    finished.add(classic)
+            else:
+                assert finished == {True, False}, 'initial phase started before both family checks finished'
+                assert 'LUA_INIT' not in env
+                initial_barrier.wait(timeout=10)
+                flavor = command[-1]
+                if failure == 'initial' and flavor == 'TBC':
+                    return SimpleNamespace(returncode=1, stderr='injected initial failure')
+                (Path(env['MSUF_SCHEMA_INITIAL_CAPTURE_DIR']) / (flavor + '-initial.ndjson')).write_text(json.dumps(control) + '\n')
+            return SimpleNamespace(returncode=0, stderr='')
+        def menu_digest(root, classic):
+            if refresh and not classic:
+                assert finished == {True}, 'Mainline digest preceded the generated Classic index'
+            return ('C' if classic else 'M') * 64
+        with patch.object(coverage, 'source_hash', hash_source), patch.object(coverage, 'index_data', read_index), \
+                patch.object(coverage, 'menu_hash', menu_digest), \
+                patch.object(coverage.subprocess, 'run', run):
+            try:
+                projected = coverage.generate(fixture, 'lua-fixture', refresh_indexes=refresh)
+            except (ValueError, subprocess.CalledProcessError) as error:
+                assert failure, str(error)
+                expected = {'index': 'non-zero exit', 'initial': 'initial schema projection failed',
+                            'drift': 'sources changed', 'lost': 'search rows lost',
+                            'refresh-index': 'non-zero exit', 'refresh-lost': 'search rows lost'}[failure]
+                assert expected in str(error), str(error)
+            else:
+                assert failure in (None, 'refresh'), 'generation accepted ' + str(failure)
+                assert set(projected['clients']) == {'Mainline', 'Vanilla', 'TBC', 'Mists', 'Forever'}
+                assert set(projected['indexes']) == set(coverage.INDEXES)
+                for client in projected['clients'].values():
+                    assert client['controls'] == [control] and client['initialControls'] == [control]
+            assert len(calls) == (1 if failure in ('refresh-index', 'refresh-lost') else 2 if failure in ('index', 'lost') else 7), 'missing or extra child invocation'
+print('schema generation: bounded parallel phases retain every client and reject child failures, source drift and lost rows')
+
+# Ordinary check/ensure invocations cannot opt into index writes accidentally.
+for modes in (['--ensure'], ['--check'], ['--write', '--ensure'], ['--write', '--check'], ['--write', '--check-receipt']):
+    refused = subprocess.run([sys.executable, str(root / 'tools/menu_schema_coverage.py'), *modes, '--refresh-indexes'], capture_output=True, text=True)
+    assert refused.returncode != 0 and '--refresh-indexes requires --write alone' in refused.stderr
+print('schema generation: explicit index refresh preserves Classic-to-Mainline digest order; read-only checks reject refresh')

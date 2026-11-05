@@ -3,7 +3,7 @@ local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local profile = { player = {}, target = {} }
 local calls, after = {}, 0
 local M = { Widgets = {}, EnsureDB = function() return profile end }
-local ns = { MSUF2 = M, CPBuilders = { ExtraAuraDefaults = {} } }
+local ns = { Client = { IsForever = false }, MSUF2 = M, CPBuilders = { ExtraAuraDefaults = {} } }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))("Options", ns)
 local S = M.ControlSchema
 local selected = { key = "left", reason = "left-reason" }

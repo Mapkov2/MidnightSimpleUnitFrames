@@ -69,14 +69,9 @@ for _, case in ipairs(cases) do
     Check(found, "cold label missed " .. case.query)
 end
 Check(not M.cache.uf_player and not M.cache.gf_indicators, "cold label search constructed a destination")
-local function Serialize(value)
-    if type(value) ~= "table" then return type(value) .. ":" .. tostring(value) end
-    local keys, parts = {}, {}
-    for key in pairs(value) do keys[#keys + 1] = key end
-    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
-    for _, key in ipairs(keys) do parts[#parts + 1] = Serialize(key) .. "=" .. Serialize(value[key]) end
-    return "{" .. table.concat(parts, "|") .. "}"
-end
+-- Detached snapshots and complete deltas check the same profile values without
+-- sorting and formatting every leaf into a second serialized string.
+local Capture, _, _, Snapshot = assert(loadfile(root .. "/tools/tests/menu_schema_setter_parity_compare.lua"))()
 local warmed = {}
 -- Cold routes build their destination once; cached view changes must preserve
 -- the complete profile and reuse that tree while changing only menu selection.
@@ -91,7 +86,7 @@ for _, case in ipairs(cases) do
         M.gfScope, M.gfStatusIconSelection, M.gfStatusIconTabSelection[case.scope] = "party", "roleIcon", "advanced"
     end
     local viewKey = row.key .. ":" .. (case.scope or "")
-    local before = warmed[viewKey] and Serialize(mw.env.MSUF_DB)
+    local before = warmed[viewKey] and Snapshot(nil, mw.env.MSUF_DB)
     local wrapper = warmed[viewKey] and M.cache[row.key].wrapper
     local opened, anchor, matched = api.OpenSearchTarget(row.key, case.query, row.label, nil, nil, exact)
     Ready()
@@ -104,7 +99,7 @@ for _, case in ipairs(cases) do
             and M.gfStatusIconTabSelection[case.scope] == "basic", "group selection/tab wrong " .. exact.controlId)
     end
     if before then
-        Check(Serialize(mw.env.MSUF_DB) == before, "navigation changed profile " .. exact.controlId)
+        Check(Capture(before, mw.env.MSUF_DB) == nil, "navigation changed profile " .. exact.controlId)
         Check(M.cache[row.key].wrapper == wrapper, "navigation rebuilt cached page " .. exact.controlId)
     end
     warmed[viewKey] = true

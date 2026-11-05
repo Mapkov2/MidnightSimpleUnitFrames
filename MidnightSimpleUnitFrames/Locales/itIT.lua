@@ -7597,6 +7597,16 @@ L["Uses the learned spell's minimum cost for the selected bar. Updates outside c
 L["No readable spell cost for this bar."] = "Nessun costo della magia leggibile per questa barra."
 L["Minimum cost: %s (%s)."] = "Costo minimo: %s (%s)."
 
+L["Castbar artwork"] = "Aspetto delle barre di lancio"
+L["Show dark cast name panel"] = "Mostra un pannello scuro per il nome dell’incantesimo"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "Indicatore di rigenerazione del mana"
+L["Glowing tick"] = "Indicatore luminoso"
+L["Separate timer bars"] = "Barre del tempo separate"
+L["Mana tick width"] = "Larghezza dell’indicatore del mana"
+L["Mana tick glow"] = "Bagliore dell’indicatore del mana"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

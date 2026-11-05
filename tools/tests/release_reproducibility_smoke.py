@@ -131,3 +131,28 @@ with tempfile.TemporaryDirectory() as tmp:
                              str(root / 'tools/release-check.ps1')], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
 print('PASS bounded contract worker preserves all runs and rejects incomplete/failed receipts')
+
+# Execute the real elapsed-budget branch at the exact boundary. Preparation and
+# all freshness work must remain between the clock start and this check.
+runner = (root / 'tools/release-check.ps1').read_text(encoding='utf-8-sig')
+assert runner.index('$wall = [Diagnostics.Stopwatch]::StartNew()') < runner.index('Initialize-CheckTools')
+assert runner.index("Contract 'final freshness'") < runner.index('FAIL complete time budget:')
+script = r'''param($runner)
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($runner, [ref]$null, [ref]$null)
+$guard = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.IfStatementAst] -and
+    $node.Extent.Text -match 'FAIL complete time budget:'
+}, $true)
+if (-not $guard) { throw 'Complete elapsed-time guard missing' }
+foreach ($seconds in @(299.999, 300, 300.001)) {
+    $failed, $Reproducible = 0, $false
+    $wall = @{ Elapsed = @{ TotalSeconds = $seconds } }
+    Invoke-Expression $guard.Extent.Text | Out-Null
+    if ($failed -ne [int]($seconds -ge 300)) { throw "Complete elapsed boundary accepted $seconds" }
+}
+'''
+with tempfile.TemporaryDirectory(prefix='release-elapsed-') as directory:
+    probe = Path(directory) / 'probe.ps1'
+    probe.write_text(script, encoding='utf-8')
+    run_powershell(['-NoProfile', '-File', str(probe), str(root / 'tools/release-check.ps1')], check=True)
+print('PASS complete elapsed budget includes preparation and fails at 300 seconds')

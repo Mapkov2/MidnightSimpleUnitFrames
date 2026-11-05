@@ -1,7 +1,7 @@
 -- Custom actions publish physical writes; editor actions explicitly publish none.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local M = { Widgets = {} }
-local namespace = { MSUF2 = M, CPBuilders = { ExtraAuraDefaults = {} } }
+local namespace = { Client = { IsForever = false }, MSUF2 = M, CPBuilders = { ExtraAuraDefaults = {} } }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))("Options", namespace)
 local S = M.ControlSchema
 assert(S.Writes and S.MatchesWrite, "concrete schema write contracts missing (red baseline)")

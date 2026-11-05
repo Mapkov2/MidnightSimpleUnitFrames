@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-alpha5 - 2026-11-05
+
+### Mana regeneration and castbars
+
+- Added mana regeneration markers with spark and bar display styles, width and opacity controls, and matching menu previews. Five-second-rule and mana-tick indicators are enabled by default on WoW Forever; later manual Off choices are preserved.
+<!-- msuf-menu-link: none -->
+- Added optional Blizzard-style castbar artwork, a name panel and a bundled fill texture, with matching previews and migration of the previous Suite artwork setting.
+<!-- msuf-menu-link: none -->
+- Fixed castbar and interrupt-ready cleanup when casts end or frames become inactive.
+<!-- msuf-menu-link: none -->
+
+### Search, settings and profiles
+
+- Added an animated loading indicator while settings search is running, including suggestions and the full results page. It respects reduced-motion settings and clears when the search completes or is cancelled.
+<!-- msuf-menu-link: none -->
+- Expanded mana-regeneration search terms and corrected navigation selection, toggle spacing and power-text setting synchronization.
+<!-- msuf-menu-link: none -->
+- Fixed malformed compressed profile imports raising errors, while retaining size limits and retained the existing Pet Target, Target of Target and Focus Target health fixes.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-alpha4 - 2026-11-04
 
 ### Unit frames and previews

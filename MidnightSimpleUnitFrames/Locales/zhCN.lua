@@ -7658,6 +7658,16 @@ L["Uses the learned spell's minimum cost for the selected bar. Updates outside c
 L["No readable spell cost for this bar."] = "无法读取此资源条的法术消耗。"
 L["Minimum cost: %s (%s)."] = "最低消耗：%s（%s）。"
 
+L["Castbar artwork"] = "施法条外观"
+L["Show dark cast name panel"] = "显示深色法术名称背景"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "法力恢复显示"
+L["Glowing tick"] = "发光标记"
+L["Separate timer bars"] = "独立计时条"
+L["Mana tick width"] = "法力标记宽度"
+L["Mana tick glow"] = "法力标记光晕"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

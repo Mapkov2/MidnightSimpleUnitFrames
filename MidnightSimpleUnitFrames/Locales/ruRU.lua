@@ -7522,6 +7522,16 @@ L["Uses the learned spell's minimum cost for the selected bar. Updates outside c
 L["No readable spell cost for this bar."] = "Нет доступной стоимости заклинания для этой полосы."
 L["Minimum cost: %s (%s)."] = "Минимальная стоимость: %s (%s)."
 
+L["Castbar artwork"] = "Оформление полос применения"
+L["Show dark cast name panel"] = "Показывать тёмный фон названия заклинания"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "Отображение восстановления маны"
+L["Glowing tick"] = "Светящаяся отметка"
+L["Separate timer bars"] = "Отдельные полосы таймеров"
+L["Mana tick width"] = "Ширина отметки маны"
+L["Mana tick glow"] = "Свечение отметки маны"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

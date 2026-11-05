@@ -10,6 +10,10 @@ local path = root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core
 local source = Read(arg[2] or path)
 local first = assert(source:find("function UF.ApplyElementToFrame(", 1, true))
 local last = assert(source:find("\n--- IsEnabled for a scene frame:", first, true))
+-- Use the shipped dependency catalogue for both direct map reads and helper calls.
+local metadata = { Client = { MaxArenaOpponents = 3 }, PublicGlobals = {} }
+metadata.Require = function(name) assert(name == "MSUF"); return metadata end
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("test", metadata)
 local phases = { "spec", "Create", "Apply", "Enable", "Update", "routing", "driver", "after" }
 for _, phase in ipairs(phases) do
     for _, held in ipairs({ "nil", "false", "true" }) do
@@ -33,6 +37,8 @@ for _, phase in ipairs(phases) do
             }
         end
         UF.ElementEnabled = function() return true end
+        UF.dependentUnitParents = metadata.UF.dependentUnitParents
+        UF.IsDependentUnit = metadata.UF.IsDependentUnit
         UF.SetFrameSpec = function(f, spec) Fail("spec"); f.MSUFSpec = spec end
         UF.AttachFrame = function() end
         UF.FrameRuntimeUpdate = function() updates = updates + 1 end

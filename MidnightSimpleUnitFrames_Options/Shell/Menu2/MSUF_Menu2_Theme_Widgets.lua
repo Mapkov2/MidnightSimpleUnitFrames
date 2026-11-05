@@ -332,6 +332,10 @@ function T.StyleCheckmark(checkButton)
     end
     ApplyCheckTexture()
     HideQuietCheckboxNative()
+    if checkButton._msuf2RefreshToggleFeedback then
+        checkButton._msuf2ToggleVisualKey = nil
+        checkButton:_msuf2RefreshToggleFeedback(checkButton._msuf2ToggleHovered, checkButton._msuf2TogglePressed)
+    end
 end
 function T.Panel(parent, name, bg, border)
     local f = PixelLayoutRegion(CreateFrame("Frame", name, parent, Template()))
