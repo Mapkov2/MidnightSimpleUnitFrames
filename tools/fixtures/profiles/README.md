@@ -344,8 +344,8 @@ contract. The original inputs remain immutable.
   `screenPositionHeight` (`AdaptScreenPosition`, a write into the profile): the
   Forever factory string, stamped at 1440, comes out of an import on Mainline,
   TBC and Mists rescaled to the 1080 harness screen. Whether that frame step
-  gets so far depends on the harness (on Forever it does not), so these values
-  follow the fake client's frame path.
+  got so far depended on the historical harness (on Forever it did not). The
+  screen-anchor correction below records the current frame path.
 - A new or reset profile lacks `bars.classPowerSyncPlayerPowerOOC`, which the
   first-login Default has: the class power config writes it lazily on the
   login path, and the runtime apply after a profile change does not.
@@ -410,3 +410,64 @@ profile lifecycle. No existing setting outside these seven mana fields,
 round-trip exception, fixture input or rejection rule changed. The focused
 `mana_regen_defaults_smoke.lua` also proves that later manual Off choices
 are retained.
+
+## Screen-anchor reference adaptation (2026-11-05)
+
+`AdaptScreenPosition` now recognizes effective UIParent anchors, including
+`GLOBAL`, when `screenPositionMode = "relativeHeight"`. These profiles were
+authored at 1440 UI units; the corpus screen is 1080. Their `offsetX` and
+`offsetY` therefore multiply by `1080 / 1440 = 0.75`, and
+`screenPositionHeight` becomes 1080. Untagged manual coordinates and unit,
+custom-frame and cooldown-viewer anchors keep their existing behavior.
+
+Only four goldens were regenerated, with the documented writer and
+`all --write --entry <id>`, factory first. Each changed line belongs to one
+of the following cases:
+
+- `factory`: `Import base_forever_factory` adapts pet, player, target and
+  targettarget on all five clients; focus and focustarget additionally on
+  Mainline, Forever, TBC and Mists; boss additionally on Mainline, Forever
+  and Mists. The fake client's supported frame path determines this set.
+  These are 45 added coordinate/reference lines, shared where possible.
+- `factory`: Forever's Default and its new/reset profile descendants adapt
+  all seven units below. The seven reference heights and pet coordinates
+  change directly. The other six units' twelve old coordinates move out of
+  `[common]` into the four unchanged clients' sections; Forever records the
+  twelve scaled coordinates. This accounts for 69 added and 21 removed
+  lines without changing any other client's Default.
+- `factory`: historical imports keep their original coordinates. The
+  July 14 raw profile's player/target `offsetY = -135` now equals Forever's
+  Default, so its two common lines become eight lines on the other clients.
+  The January 18, May 27 and August 6 imports still use focustarget
+  `(260, 180)` on Forever; six explicit lines now preserve these untagged
+  values against the changed Default reference. These are comparison
+  representation changes, not adjustments to the historical profiles.
+- `sv_forever_beta_rev17`: Profile01 adapts the same seven units on both
+  Mainline and Forever. Its 21 new common lines record the coordinates
+  below and seven reference heights of 1080.
+- The 42 removed `screenReference changed: 1440 -> 1080` observations no
+  longer occur because adaptation happens before export: seven units in
+  factory's Default, Created and Reset Stored on Forever (21 lines),
+  Profile01 of `sv_forever_beta_rev17` on both clients (seven common lines),
+  and the replacement Default of `sv_pre6_feb` and `sv_pre6_mar` on Forever
+  (seven lines each). Pre-6 archives remain unchanged. The exception rules,
+  other observations and import rejection rules are unchanged.
+
+Every coordinate change in these files is specified here; each affected
+unit's reference height changes from 1440 to 1080:
+
+| Unit | Factory before | Factory after | Saved Profile01 before | Saved Profile01 after |
+| --- | --- | --- | --- | --- |
+| boss | (511, 370) | (383.25, 277.5) | (525, 377) | (393.75, 282.75) |
+| focus | (-373, -340) | (-279.75, -255) | (-495, -475) | (-371.25, -356.25) |
+| focustarget | (260, 180) | (195, 135) | (260, 180) | (195, 135) |
+| pet | (-785, -294) | (-588.75, -220.5) | (-548, -357) | (-411, -267.75) |
+| player | (-326, -180) | (-244.5, -135) | (-288, -135) | (-216, -101.25) |
+| target | (326, -180) | (244.5, -135) | (326, -180) | (244.5, -135) |
+| targettarget | (546, -180) | (409.5, -135) | (546, -180) | (409.5, -135) |
+
+The golden diff contains 149 added and 65 removed lines, all accounted for
+above. No identity, localization, group-frame setting, fixture input,
+payload fingerprint or harness allowance changes. The focused
+`unitframe_screen_position_anchor_smoke.lua` covers anchor precedence,
+excluded anchors, untagged coordinates and repeated compilation without drift.

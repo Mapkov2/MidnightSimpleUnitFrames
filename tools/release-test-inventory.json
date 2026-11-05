@@ -2,6 +2,34 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/unitframe_drag_offsets_budget_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/unitframe_editmode_movement_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/unitframe_clamped_drag_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/unitframe_screen_position_anchor_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
       "test": "tools/tests/menu_focus_color_smoke.lua",
       "phase": "menu",
       "clients": [

@@ -51,7 +51,7 @@ local function ResolveAnchor(spec, frame)
   end
   if type(name) == "string" and name ~= "" then
     local resolved, missing = ResolveNamedAnchor(name)
-    if resolved and resolved ~= frame then return resolved, nil, name end
+    if resolved and resolved ~= frame and AnchorHasResolvedCenter(resolved) then return resolved, nil, name end
     return anchor, missing or name, name
   end
   return anchor, nil, nil
@@ -169,7 +169,7 @@ ExportPublic("MSUF_UpdateAllExternalAnchorProxies", UpdateAllUnitExternalAnchorP
 -- Shared by unit frames, group frames, Edit Mode, and the anchor picker. Keep
 -- named custom anchors logical; only reject targets that would make SetPoint
 -- recurse through the frame being positioned.
-Factory.ResolveNamedAnchor = ResolveNamedAnchor
+Factory.ResolveNamedAnchor, Factory.ResolveAnchor = ResolveNamedAnchor, ResolveAnchor
 Factory.AnchorDependsOn = AnchorDependsOn
 Factory.AnchorWouldCreateCycle = AnchorWouldCreateCycle
 Factory.SnapshotFrameToUIParent = SnapshotFrameToUIParent

@@ -61,13 +61,6 @@ roundtrip.Default.excepted[".targettarget.screenPositionMode"] = "screenReferenc
 [Forever]
 login.rebindChangedPaths = 151
 roundtrip.Default.excepted[".arena.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
-roundtrip.Default.excepted[".boss.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
-roundtrip.Default.excepted[".focus.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
-roundtrip.Default.excepted[".focustarget.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Default.excepted[".gf_mythicraid.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Default.excepted[".gf_party.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
 roundtrip.Default.excepted[".gf_raid.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
-roundtrip.Default.excepted[".pet.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
-roundtrip.Default.excepted[".player.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
-roundtrip.Default.excepted[".target.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"
-roundtrip.Default.excepted[".targettarget.screenPositionHeight"] = "screenReference changed: 1440 -> 1080"

@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-alpha6 - 2026-11-05
+
+### Unit frame positioning
+
+- Fixed unit frames jumping back or moving unexpectedly in Edit Mode, including Suite profiles, clamped frames, moving or unavailable anchors, and UI scale changes.
+<!-- msuf-menu-link: none -->
+- Fixed saved screen positions for UIParent anchors and preserved frame positions when exiting Edit Mode while dragging.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-alpha5 - 2026-11-05
 
 ### Mana regeneration and castbars

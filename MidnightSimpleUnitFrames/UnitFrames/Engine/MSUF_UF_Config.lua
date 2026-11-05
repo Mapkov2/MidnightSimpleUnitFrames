@@ -1214,8 +1214,12 @@ end
 local function AdaptScreenPosition(conf, anchorFrameName, anchorToUnitframe)
   -- Only factory and explicitly tagged imports may adapt their positions.
   -- Existing MSUF profiles keep their saved offsets on scale changes.
-  if type(conf) ~= "table" or conf.screenPositionMode ~= "relativeHeight" or anchorToUnitframe then return end
-  if anchorFrameName and anchorFrameName ~= "" and anchorFrameName ~= "UIParent" then return end
+  if type(conf) ~= "table" or conf.screenPositionMode ~= "relativeHeight" then return end
+  if anchorFrameName and anchorFrameName ~= "" then
+    if anchorFrameName ~= "UIParent" then return end
+  elseif anchorToUnitframe and anchorToUnitframe ~= "" and anchorToUnitframe ~= "GLOBAL"
+      and anchorToUnitframe ~= "global" and anchorToUnitframe ~= "FREE"
+      and anchorToUnitframe ~= "UIParent" and anchorToUnitframe ~= "UI_Parent" then return end
   local height = UIParent and UIParent.GetHeight and UIParent:GetHeight()
   if type(height) ~= "number" or height < 400 or height > 10000 then return end
   local previous = tonumber(conf.screenPositionHeight)
@@ -1257,12 +1261,11 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
     out.point = conf.point or "CENTER"
     out.relativePoint = conf.relativePoint or out.point
   end
-  local x, y
+  local x, y = Number(conf.offsetX or conf.x, def.x), Number(conf.offsetY or conf.y, def.y)
+  out.offsetX, out.offsetY = x, y
   if bossIndex then
-    x, y = BossOffset(conf, tonumber(bossIndex) or 1, def)
-  else
-    x = Number(conf.offsetX or conf.x, def.x)
-    y = Number(conf.offsetY or conf.y, def.y)
+    local dx, dy = BossLayoutDelta(conf, tonumber(bossIndex) or 1, def)
+    x, y = x + dx, y + dy
   end
   if ecvRule then
     x = x + Number(ecvRule[3], 0)

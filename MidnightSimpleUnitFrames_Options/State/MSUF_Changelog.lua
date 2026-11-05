@@ -8,46 +8,25 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "60462C25781FD81755992D191A0EDA72803750F237EDB34B698FF82B64A0F808",
-    currentVersion = "7.0-alpha5",
+    sourceSha256 = "F68D459F8B23CAF3F0AE8B1941A2949D3C79C358334CCF945C993048B0F47E09",
+    currentVersion = "7.0-alpha6",
     historyFromVersion = "6.20",
     previousVersion = "6.50",
-    rangeLabel = "6.50 -> 7.0-alpha5",
+    rangeLabel = "6.50 -> 7.0-alpha6",
     entries = {
         {
-            version = "7.0-alpha5",
+            version = "7.0-alpha6",
             date = "2026-11-05",
             sections = {
                 {
-                    title = "Mana regeneration and castbars",
+                    title = "Unit frame positioning",
                     bullets = {
                         {
-                            text = "Added mana regeneration markers with spark and bar display styles, width and opacity controls, and matching menu previews. Five-second-rule and mana-tick indicators are enabled by default on WoW Forever; later manual Off choices are preserved.",
+                            text = "Fixed unit frames jumping back or moving unexpectedly in Edit Mode, including Suite profiles, clamped frames, moving or unavailable anchors, and UI scale changes.",
                             linkless = true,
                         },
                         {
-                            text = "Added optional Blizzard-style castbar artwork, a name panel and a bundled fill texture, with matching previews and migration of the previous Suite artwork setting.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed castbar and interrupt-ready cleanup when casts end or frames become inactive.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Search, settings and profiles",
-                    bullets = {
-                        {
-                            text = "Added an animated loading indicator while settings search is running, including suggestions and the full results page. It respects reduced-motion settings and clears when the search completes or is cancelled.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Expanded mana-regeneration search terms and corrected navigation selection, toggle spacing and power-text setting synchronization.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed malformed compressed profile imports raising errors, while retaining size limits and retained the existing Pet Target, Target of Target and Focus Target health fixes.",
+                            text = "Fixed saved screen positions for UIParent anchors and preserved frame positions when exiting Edit Mode while dragging.",
                             linkless = true,
                         },
                     },
