@@ -295,6 +295,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 clients	lua	tools/tests/menu2_explains_itself_smoke.lua	{root} {flavor}	Menu2 explains-itself smoke failed: {flavor}
 -	lua	tools/tests/castbar_detached_gcd_smoke.lua	{root}	Detached GCD bar smoke failed
 -	lua	tools/tests/castbar_combat_details_smoke.lua	{root}	Castbar combat detail smoke failed
+clients+Forever	lua	tools/tests/castbar_artwork_smoke.lua	{root} {flavor}	Native castbar artwork or immediate preview refresh failed: {flavor}
 -	lua	tools/tests/group_additional_frames_smoke.lua	{root}	Additional group frames smoke failed
 -	lua	tools/tests/group_additional_runtime_smoke.lua	{root}	Additional group runtime contracts failed
 -	lua	tools/tests/group_small_raid_party_smoke.lua	{root}	Small raid on the Party layout smoke failed
@@ -457,6 +458,7 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/host_api_smoke.lua	{root}	Host API v1 core setters smoke failed
 -	lua	tools/tests/host_page_reset_provider_smoke.lua	{root}	Host API v1 page-reset provider smoke failed
 -	lua	tools/tests/host_menu_protocol_smoke.lua	{root}	Host API v2 Menu2 widget protocol smoke failed
+clients+Forever	lua	tools/tests/host_page_extension_smoke.lua	{root} {flavor}	Host appended page provider smoke failed
 -	lua	tools/tests/host_suite_link_smoke.lua	{root}	Host API v2 Suite link smoke failed
 clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	Host API real-boot smoke failed: {flavor}
 -	lua	tools/tests/uf_sibling_called_exports_smoke.lua	{root}	An engine export a sibling addon tree still calls was removed
@@ -617,3 +619,11 @@ clients+Forever	lua	tools/tests/menu_preview_power_loss_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/detached_power_geometry_smoke.lua	{root} {flavor}	Detached Power geometry, typed menu input and preview fill parity: {flavor}
 clients+Forever	lua	tools/tests/menu_color_shortcut_art_smoke.lua	{root} {flavor}	Context color shortcut art failed: {flavor}
 clients+Forever	lua	tools/tests/pet_target_health_smoke.lua	{root} {flavor}	Pet Target health isolation and lifecycle: {flavor}
+clients+Forever	lua	tools/tests/power_text_slot_sync_smoke.lua	{root} {flavor}	Player and Class Resources power text slot sizes are not synchronized: {flavor}
+-	lua	tools/tests/mana_regen_defaults_smoke.lua	{root}	Forever mana defaults, reset and portable deliberate choices
+-	lua	tools/tests/mana_regen_marker_smoke.lua	{root}	Native mana marker rendering and secret-safe lifecycle
+clients+Forever	lua	tools/tests/mana_regen_search_smoke.lua	{root} {flavor} enUS	Mana MP5 search and exact navigation: {flavor} enUS
+clients+Forever	lua	tools/tests/mana_regen_search_smoke.lua	{root} {flavor} deDE	Mana MP5 search and exact navigation: {flavor} deDE
+-	lua	tools/tests/mana_regen_preview_smoke.lua	{root} Forever	Mana regeneration menu preview matches live style: Forever
+-	lua	tools/tests/mana_regen_preview_smoke.lua	{root} Vanilla	Mana regeneration menu preview matches live style: Vanilla
+-	lua	tools/tests/mana_regen_preview_smoke.lua	{root} TBC	Mana regeneration menu preview matches live style: TBC

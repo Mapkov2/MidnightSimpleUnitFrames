@@ -262,6 +262,7 @@ end
 local CLASSPOWER_EXTRA_BARS_KEYS = KSW [[
     guardianIronfurShowHashLines resourceMarks showIgnorePain ignorePainTimeMarker showArcaneWindow
     arcaneWindowText arcaneWindowTextFrom arcaneWindowWarnSeconds arcaneWindowWarnLastGCD manaRegenPause manaGainPulse
+    manaRegenStyle manaRegenSparkWidth manaRegenSparkAlpha
 ]]
 local function IsClassPowerBarsKey(key)
     if type(key) ~= "string" then return false end
@@ -719,12 +720,13 @@ function M.BuildPageResetWarning(pageKey)
             tostring(profileName)
         )
     end
-    return string.format(
+    local warning = string.format(
         M.Tr("Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
         tostring(title),
         tostring(info.summaryFormat and Fmt(info.summaryFormat, M.Tr(info.label or title))
             or (M.Tr and M.Tr(info.summary or title)) or info.summary or title)
     )
+    return M.AppendPageExtensionResetWarning and M.AppendPageExtensionResetWarning(pageKey, warning) or warning
 end
 function M.ResetPageToDefaults(pageKey)
     local provider = PageResetProviders[pageKey]
@@ -736,6 +738,7 @@ function M.ResetPageToDefaults(pageKey)
     -- The undo entry's name, like the provider path: "Reset %s" over the
     -- translated page title.
     local label = string.format(M.Tr("Reset %s"), M.Tr(tostring(info.label or pageKey)))
+    if M.HasPageExtension and M.HasPageExtension(pageKey) then return M.ResetExtendedPage(pageKey, ResetPageImpl, label) end
     return M.RunWithHistory(label, "page:reset:" .. tostring(pageKey), function()
         return ResetPageImpl(pageKey)
     end)

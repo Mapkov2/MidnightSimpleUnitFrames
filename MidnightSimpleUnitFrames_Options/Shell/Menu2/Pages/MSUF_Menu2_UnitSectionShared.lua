@@ -705,6 +705,9 @@ function Shared.MakeTextSlotState(owner, scopeKeyFn, slotTableName, moveTableNam
     function state.SlotFontSizeKey(kind)
         return M.TextSlotFontSizeKey(kind, state.CurrentSlot(kind))
     end
+    function state.FontSize(kind, conf, general, fallback)
+        return MSUF.UF.Shared.ResolveTextSlotFontSize(conf, general, state.SlotFontSizeKey(kind), fallback)
+    end
     function state.MoveTogether(kind)
         local byScope = owner[moveTableName][ScopeKey()]
         local value = byScope and byScope[kind]

@@ -1711,6 +1711,26 @@ local function MSUF_Defaults_MuteForeverHealth(profileDB, freshFactory)
     g._msufForeverMutedHealth_v1 = true
 end
 
+-- Owner default for Forever: lift existing Off profiles once, then keep
+-- later deliberate choices. The separate stamp also handles Retail imports.
+local function MSUF_Defaults_SeedManaIndicators(profile)
+    local bars = profile.bars
+    if bars.manaRegenStyle == nil then bars.manaRegenStyle = "spark" end
+    if bars.manaRegenSparkWidth == nil then bars.manaRegenSparkWidth = 2 end
+    if bars.manaRegenSparkAlpha == nil then bars.manaRegenSparkAlpha = .35 end
+    if MSUF.Client and MSUF.Client.IsForever then
+        if profile._msufForeverFiveSecondDefault_v1 ~= true or bars.manaRegenPause == nil then
+            bars.manaRegenPause = true
+            profile._msufForeverFiveSecondDefault_v1 = true
+        end
+        if profile._msufForeverManaTickDefault_v1 ~= true or bars.manaGainPulse == nil then
+            bars.manaGainPulse = true
+            profile._msufForeverManaTickDefault_v1 = true
+        end
+    end
+    return profile
+end
+
 local function MSUF_Defaults_CreateFactoryProfile()
     -- Prefer the shared codec once it has loaded: it inflates before CBOR, the
     -- same order Blizzard uses. The local decoder is only the pre-codec fallback.
@@ -1734,9 +1754,8 @@ local function MSUF_Defaults_CreateFactoryProfile()
         out.general.fontKey = MSUF_Defaults_GetGlobalFontDefault()
         out.general.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
         out.bars = out.bars or {}
-        out.bars.manaRegenPause = true
-        out._msufForeverFiveSecondDefault_v1 = true
-        return out
+        out._msufForeverFiveSecondDefault_v1, out._msufForeverManaTickDefault_v1 = nil, nil
+        return MSUF_Defaults_SeedManaIndicators(out)
     end
     local payload = MSUF_Defaults_GetProfilePayload(tbl)
     if type(payload) ~= "table" then  return nil end
@@ -2003,18 +2022,6 @@ local function MSUF_Defaults_RepairModernFactoryNamePresentation(db)
     return false
 end
 
--- Owner default for Forever: lift existing Off profiles once, then keep
--- later deliberate choices. The separate stamp also handles Retail imports.
-local function MSUF_Defaults_SeedForeverFiveSecondRule(profile)
-    if MSUF.Client and MSUF.Client.IsForever then
-        local bars = profile.bars
-        if profile._msufForeverFiveSecondDefault_v1 ~= true or bars.manaRegenPause == nil then
-            bars.manaRegenPause = true
-            profile._msufForeverFiveSecondDefault_v1 = true
-        end
-    end
-    return profile
-end
 
 local MSUF_DB_LastHeavyRun
 local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
@@ -3304,7 +3311,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     MSUF_Defaults_Stage_MigrateUnitTextModes(profileDB, g)
     MSUF_Defaults_Stage_SeedPredictionDefaults(g)
     MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
-    MSUF_Defaults_Stage_SeedBarsTableDefaults(MSUF_Defaults_SeedForeverFiveSecondRule(profileDB))
+    MSUF_Defaults_Stage_SeedBarsTableDefaults(MSUF_Defaults_SeedManaIndicators(profileDB))
     MSUF_Defaults_Stage_SeedGameplayDefaults(profileDB)
     --- 5.6 -> 6.0 shape repair for existing DBs and factory defaults.
     MSUF_Defaults_NormalizeProfileTo60Defaults(profileDB)
@@ -3361,8 +3368,12 @@ local function MSUF_Defaults_IsCurrentProfileDB(db)
             if type(owner) ~= "table" then return false end
         end
     end
+    if db.bars.manaRegenStyle == nil or db.bars.manaRegenSparkWidth == nil or db.bars.manaRegenSparkAlpha == nil then
+        return false
+    end
     if MSUF.Client and MSUF.Client.IsForever
-        and (db._msufForeverFiveSecondDefault_v1 ~= true or db.bars.manaRegenPause == nil) then
+        and (db._msufForeverFiveSecondDefault_v1 ~= true or db.bars.manaRegenPause == nil
+            or db._msufForeverManaTickDefault_v1 ~= true or db.bars.manaGainPulse == nil) then
         return false
     end
     local g = db.general

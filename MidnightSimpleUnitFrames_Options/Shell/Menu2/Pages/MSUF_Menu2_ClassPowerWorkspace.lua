@@ -58,7 +58,11 @@ end
 function Workspace.Decorate(exact, path)
     local kind = Workspace.KindForPath(path)
     exact.searchPrepareKind, exact.searchPrepareValue = "classPowerWorkspace", kind
-    exact.prepareExactSearchTarget = function()
+    exact.prepareExactSearchTarget = function(_, target)
+        if path == "detached_power.text.size" and target then
+            local slot = tostring(target.settingKey):match("^player%.powerText(%a+)FontSize$")
+            if slot and Workspace.current then Workspace.current.page.DetachedTextSlots.SetCurrentSlot("power", slot:lower()) end
+        end
         if kind == "extras" then M.ResourceExtrasPreview.FocusPath(path) end
         return Workspace.Select(kind)
     end
@@ -131,10 +135,15 @@ function UI:Copy(target, scopes)
                 for _, field in ipairs(category.fields) do
                     if source[field] and destination[field] then
                         local value = field == "width" and self:ResolvedWidth(db, self.selected) or Read(db, source[field])
+                        if field == "fontSize" and self.selected == "power" then value = self.page.DetachedTextFontSize() end
                         if value ~= nil then
                             local limits = LIMITS[target][field]
                             if limits then value = math.max(limits[1], math.min(limits[2], value)) end
-                            Write(db, destination[field], value)
+                            local path = destination[field]
+                            if field == "fontSize" and target == "power" then
+                                path = "player." .. self.page.DetachedTextSlots.SlotFontSizeKey("power")
+                            end
+                            Write(db, path, value)
                             if field == "width" then
                                 local modes = { class = "bars.classPowerWidthMode", power = "bars.detachedPowerBarWidthMode",
                                     hp = "bars.playerHPBarWidthMode", mana = "bars.altManaWidthMode" }
@@ -204,7 +213,9 @@ function Workspace.Attach(page, settingKeys)
     for _, kind in ipairs(ORDER) do ui.entries[kind], ui.keys[kind] = {}, {} end
     for path, key in pairs(settingKeys) do ui.keys[Workspace.KindForPath(path)][key] = true end
     ui.keys.power["player.detachedPowerBarShape"] = true
+    ui.keys.power["player.powerFontSize"] = true
     for _, slot in ipairs({ "Left", "Center", "Right" }) do
+        ui.keys.power["player.powerText" .. slot .. "FontSize"] = true
         ui.keys.power["player.powerText" .. slot .. "OffsetX"] = true
         ui.keys.power["player.powerText" .. slot .. "OffsetY"] = true
     end
@@ -269,7 +280,7 @@ function Workspace.BindColor(ctx, widget, get, set, meta)
     return Workspace.Bind("color", ctx, widget, get, set, nil, meta)
 end
 function Workspace.RegisterSpec(control, spec)
-    local kinds = { alpha = "slider", playerPowerOutline = "slider", detachedPowerWidth = "slider",
+    local kinds = { alpha = "slider", detachedTextSize = "slider", playerPowerOutline = "slider", detachedPowerWidth = "slider",
         comboColorMode = "dropdown", nilDefaultDropdown = "dropdown", detachedTextOnBar = "toggle", detachedTextPreset = "dropdown" }
     local kind = kinds[spec[2]] or spec[2]
     if kind == "dropdown" then control._msuf2StableSearchLabel = control._msuf2StableSearchLabel or spec[3] end

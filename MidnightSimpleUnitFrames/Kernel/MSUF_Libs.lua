@@ -768,6 +768,7 @@ end
 --- Returns LibSharedMedia entries with a texture path so the native dropdown can
 --- render a small statusbar preview for every texture.
 local FALLBACK_STATUSBAR_TEXTURES = {
+    { key = "MSUF Blizzard Cast", path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Castbars\\CastFill.tga" },
     { key = "Blizzard",      path = "Interface\\TargetingFrame\\UI-StatusBar" },
     { key = "Solid",         path = "Interface\\Buttons\\WHITE8X8" },
     { key = "MSUF Lucent",   path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\MSUF_Lucent_v2.tga" },

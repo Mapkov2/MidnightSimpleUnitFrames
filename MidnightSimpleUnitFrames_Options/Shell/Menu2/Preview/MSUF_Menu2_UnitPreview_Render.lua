@@ -890,6 +890,11 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
         gcd.icon:SetShown(g.showGCDBarSpell ~= false)
         gcd:Show()
     elseif samples.gcd then samples.gcd:Hide() end
+    if g.castbarArtworkEnabled or mock.cast._msufCastbarArtwork then
+        MSUF.MSUF_CastbarStyle:ApplyCastbarArtwork(mock.cast, surface, mock.cast.text,
+            CastbarPreview.ShowText(key, g) and CastbarPreview.ReadString(g, key,
+                "SpellNamePosition", "bossCastSpellNamePosition", "LEFT") == "BELOW", g, S(2))
+    end
 end
 
 --- Cast progress: the fill width and the time text. The full refresh and the

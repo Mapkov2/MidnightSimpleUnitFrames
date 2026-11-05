@@ -225,6 +225,48 @@ function Style:ApplyCastbarOutline(frame, force)
     if colorChanged then RefreshInterruptOutline(frame) end
 end
 
+-- Shared by live castbars, Edit Mode and both Menu2 previews. Regions are
+-- created once; text anchors keep the panel attached when fonts/offsets change.
+function Style:ApplyCastbarArtwork(frame, bar, name, below, general, padding)
+    if (frame.IsForbidden and frame:IsForbidden()) or (frame.IsProtected and frame:IsProtected()) then return end
+    local art = frame._msufCastbarArtwork
+    local enabled = general.castbarArtworkEnabled == true
+    if not enabled and not art then return end
+    if not art then
+        local path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Castbars\\"
+        -- Keep the plate below spell, time and latency text on every child layer.
+        art = { border = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY")),
+            name = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND")) }
+        art.border:SetTexture(path .. "CastFrame.tga")
+        art.border:SetAllPoints(frame)
+        art.name:SetTexture(path .. "CastName.tga")
+        frame._msufCastbarArtwork = art
+    end
+    if art.enabled ~= enabled then
+        art.border:SetShown(enabled)
+        art.enabled = enabled
+    end
+    local panel = enabled and name ~= nil and below == true and general.castbarArtworkNamePanel ~= false
+    if panel then
+        padding = padding or 2
+        if art.text ~= name or art.padding ~= padding then
+            art.name:ClearAllPoints()
+            art.name:SetPoint("TOP", name, "TOP", 0, padding)
+            art.name:SetPoint("BOTTOM", name, "BOTTOM", 0, -padding)
+            art.text, art.padding = name, padding
+        end
+        local width = frame:GetWidth()
+        if art.width ~= width then
+            art.name:SetWidth(width)
+            art.width = width
+        end
+    end
+    if art.panel ~= panel then
+        art.name:SetShown(panel)
+        art.panel = panel
+    end
+end
+
 ExportPublic("MSUF_ApplyCastbarOutline", function(frame, force)
     return Style:ApplyCastbarOutline(frame, force)
 end)

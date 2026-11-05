@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.508 - 2026-11-05
+
+### Improvements
+
+- Expanded the WoW Forever MP5/mana-regeneration tracker with a moving glow inside the mana bar or separate timer bars. Track the five-second rule and mana-return ticks, adjust marker width and glow, and preview the same display in the options menu. Both indicators are enabled once by default on Forever; later manual choices are preserved.
+<!-- msuf-menu-link: none -->
+- Added optional native Castbar artwork, a dark cast-name panel and the bundled MSUF Castbar fill texture. Artwork appears in live castbars, Edit Mode and menu previews, with immediate preview updates when settings change.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_textures","controlId":"menu2.opt.castbar.global.textures.castbar.artwork.enabled","settingKey":"general.castbarArtworkEnabled","prepareKind":"","prepareValue":"","query":"castbar artwork","label":"Castbar artwork"} -->
+- Improved search discovery for MP5, the five-second rule and mana-regeneration display settings.
+<!-- msuf-menu-link: none -->
+
+### Bug Fixes
+
+- Fixed Power text size controls in Class Resources when the Player frame uses text-slot overrides. Both menus now edit the same selected slot and keep font inheritance, previews, Copy and Reset consistent.
+<!-- msuf-menu-link: none -->
+- Fixed malformed or truncated compressed profile imports raising a Lua error instead of being rejected safely.
+<!-- msuf-menu-link: none -->
+- Improved the readability and refresh behavior of selected menu navigation entries.
+<!-- msuf-menu-link: none -->
+- Added host-page compatibility for Suite Gameplay controls and preserved legacy castbar fill paths when moving artwork settings into native MSUF.
+<!-- msuf-menu-link: none -->
+
 ## 6.507 - 2026-11-04
 
 ### Bug Fixes

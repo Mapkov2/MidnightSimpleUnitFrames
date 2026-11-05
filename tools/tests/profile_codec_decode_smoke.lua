@@ -65,9 +65,10 @@ C_EncodingUtil = {
         return assert(loadstring("return " .. blob:sub(5)))()
     end,
     CompressString = function(plain) return "Z" .. plain end,
-    -- Documented MayReturnNothing: a rejected stream returns nothing.
+    -- The client can raise on a truncated or malformed deflate stream.
     DecompressString = function(compressed)
         if type(compressed) == "string" and compressed:sub(1, 1) == "Z" then return compressed:sub(2) end
+        error("DecompressString(): internal decompression error")
     end,
     EncodeBase64 = EncodeBase64,
     DecodeBase64 = function(text) return DecodeBase64(text) end,
@@ -94,6 +95,13 @@ for _, case in ipairs(cases) do
     assert(result == nil, case[1] .. ": garbage decoded to a value")
 end
 assert(nativeRaises > 0, "no case reached the raising native decoder")
+
+-- A failed native inflate must still allow the historical raw CBOR transport.
+for _, prefix in ipairs({ "MSUF2:", "MSUF3:", "MSUF4:" }) do
+    local raw = prefix .. EncodeBase64(C_EncodingUtil.SerializeCBOR({ marker = "raw" }))
+    local value = MSUF_TryDecodeCompactString(raw)
+    assert(value and value.marker == "raw", prefix .. " lost its raw CBOR fallback")
+end
 
 -- Wave 4: neither inflater takes an output limit, so the size of a deflate
 -- stream is checked before it is inflated. A stream above the cap is never

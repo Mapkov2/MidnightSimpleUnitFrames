@@ -46,7 +46,7 @@
 --       (home) or the neutral (gameplay) icon color. A key that already has an
 --       icon or a color keeps it.
 --
--- Every function is cold menu code: one field access, nothing allocated.
+-- Widget accessors below are cold menu code and allocate nothing.
 local _, MSUF = ...
 local M = MSUF.MSUF2
 local T = M.Theme
@@ -199,4 +199,153 @@ function M.AddNavIcon(pageKey, spec)
         added = true
     end
     return added
+end
+
+------------------------------------------------------------------ page extensions
+-- Additive host API v2 capability. Page owners opt in by calling
+-- BuildPageExtensions(key, ctx, builder) before setting their final height.
+-- RegisterPageExtension(key, id, provider) keeps registration order; replacing
+-- an id replaces its callbacks, never the host page. No provider means no work.
+-- Required: build(ctx, builder). Optional: canReset(key), warning(key),
+-- prepare(key), reset(key), finish(key). Prepare/reset return true on success.
+-- canReset describes availability, not whether the current values are defaults.
+-- Reset steps join the host's single undo entry; finish runs after that entry.
+local extensions = {}
+local extensionCallbacks = { "build", "canReset", "warning", "prepare", "reset", "finish" }
+local RunExtensionStep = MSUF.RunHostAPIStep
+local ExtensionPlayerInCombat = MSUF.HostAPIPlayerInCombat
+
+local function SnapshotExtension(key, id, provider)
+    if type(key) ~= "string" or key == "" or type(id) ~= "string" or id == "" or type(provider) ~= "table" then
+        error("MSUF RegisterPageExtension: expected (pageKey, id, provider)", 3)
+    end
+    local copy = { id = id }
+    for i = 1, #extensionCallbacks do
+        local name = extensionCallbacks[i]
+        local callback = provider[name]
+        if (name == "build" or callback ~= nil) and type(callback) ~= "function" then
+            error("MSUF RegisterPageExtension: " .. name .. " must be a function", 3)
+        end
+        copy[name] = callback
+    end
+    return copy
+end
+
+local function SameExtension(a, b)
+    if not a then return false end
+    for i = 1, #extensionCallbacks do
+        local name = extensionCallbacks[i]
+        if a[name] ~= b[name] then return false end
+    end
+    return true
+end
+
+local function RefreshExtendedPage(key)
+    local page = M.pages and M.pages[key]
+    if page then page.version = (tonumber(page.version) or 0) + 1 end
+    if M.SearchBridge then M.SearchBridge.MarkSearchIndexDirty() end
+    -- A version change retires all cached layouts on the next selection.
+    -- Registration during combat must not touch even a cached preview frame.
+    if not ExtensionPlayerInCombat() and M.activeKey == key and M.RebuildPageKeepingScroll then
+        M.RebuildPageKeepingScroll(key)
+    end
+    if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
+end
+
+function M.RegisterPageExtension(key, id, provider)
+    local record = SnapshotExtension(key, id, provider)
+    local page = extensions[key]
+    if not page then
+        page = { records = {}, slots = {} }
+        extensions[key] = page
+    end
+    local slot = page.slots[id]
+    if slot and SameExtension(page.records[slot], record) then return true end
+    slot = slot or (#page.records + 1)
+    page.records[slot], page.slots[id] = record, slot
+    RefreshExtendedPage(key)
+    return true
+end
+
+function M.HasPageExtension(key, id)
+    local page = extensions[key]
+    return page ~= nil and (id == nil or page.slots[id] ~= nil)
+end
+
+function M.BuildPageExtensions(key, ctx, builder)
+    local page = extensions[key]
+    if not page then return false end
+    for i = 1, #page.records do
+        RunExtensionStep("page extension build", page.records[i].build, ctx, builder)
+    end
+    return true
+end
+
+local function ExtensionCanReset(record, key)
+    if not record.reset then return false end
+    if not record.canReset then return true end
+    local ran, allowed = RunExtensionStep("page extension canReset", record.canReset, key)
+    return ran and allowed == true
+end
+
+function M.AppendPageExtensionResetWarning(key, warning)
+    local page = extensions[key]
+    if not page then return warning end
+    for i = 1, #page.records do
+        local record = page.records[i]
+        if record.warning and ExtensionCanReset(record, key) then
+            local ran, extra = RunExtensionStep("page extension warning", record.warning, key)
+            if ran and type(extra) == "string" and extra ~= "" then warning = warning .. "\n\n" .. extra end
+        end
+    end
+    return warning
+end
+
+local function PrepareExtensionReset(key)
+    local selected = {}
+    local records = extensions[key].records
+    for i = 1, #records do
+        local record = records[i]
+        if ExtensionCanReset(record, key) then selected[#selected + 1] = record end
+    end
+    local prepared = false
+    for i = 1, #selected do
+        local record = selected[i]
+        if record.prepare then
+            local ran, result = RunExtensionStep("page extension prepare", record.prepare, key)
+            if not ran or result ~= true then return nil end
+            prepared = true
+        end
+    end
+    if prepared then M.SyncExternalHistoryState() end
+    return selected
+end
+
+-- Called by the host reset dispatcher after its normal combat and scope checks.
+-- Returning false from a history callback discards its snapshot, so a partially
+-- failed reset records every change first and reports failure after committing.
+function M.ResetExtendedPage(key, resetHost, label)
+    if ExtensionPlayerInCombat() then
+        M.ShowConfigCombatLockMessage()
+        return false
+    end
+    local selected = PrepareExtensionReset(key)
+    if not selected then return false end
+    local succeeded, attempted = true, false
+    local result = M.RunWithHistory(label, "page:reset:" .. key, function()
+        if resetHost(key) == false then return false end
+        attempted = true
+        for i = 1, #selected do
+            local ran, reset = RunExtensionStep("page extension reset", selected[i].reset, key)
+            if not ran or reset ~= true then succeeded = false end
+        end
+        return true
+    end)
+    if attempted then
+        for i = 1, #selected do
+            local finish = selected[i].finish
+            if finish then RunExtensionStep("page extension finish", finish, key) end
+        end
+    end
+    return result == true and succeeded
 end

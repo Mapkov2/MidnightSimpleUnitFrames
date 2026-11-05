@@ -347,13 +347,13 @@ do
         return decode_lsb(), decode_msb()
     end
     local TryDeserialize
-    -- Legacy format readers may reject bytes by returning nil. The native
-    -- decompressor and base64 decoder report rejection by returning nothing;
-    -- native CBOR raises and goes through the Kernel boundary below.
+    -- Legacy readers may reject bytes by returning nil. Native deflate and
+    -- CBOR can raise on malformed input; their Kernel boundaries return nil
+    -- so a rejected representation does not abort the import.
 
     local function TryBlizzardDecompress(E, compressed)
         if type(compressed) ~= "string" or #compressed > MSUF_PROFILE_IMPORT_LIMITS.compressedBytes then return nil end
-        local plain = E.DecompressString(compressed, Enum.CompressionMethod.Deflate)
+        local plain = MSUF.TryDecompressNativeProfile(E, compressed, Enum.CompressionMethod.Deflate)
         if type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return plain end
     end
     local function GetLibDeflate()
@@ -379,8 +379,8 @@ do
         return nil
     end
     --- Prefer the matching decompressor, while retaining the raw legacy path.
-    --- A decoder exception propagates; only explicit nil results permit
-    --- trying another supported legacy representation.
+    --- Native input rejection permits another supported legacy representation;
+    --- errors outside these narrow codec boundaries still propagate.
     local function TryDeserializeMaybeCompressed(E, payload)
         if type(payload) ~= "string" then return nil end
         if #payload > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end

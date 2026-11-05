@@ -53,6 +53,9 @@ end}
 C_Spell={GetSpellPowerCost=function() return {{type=0,cost=30}} end,
     DoesSpellExist=function(id) return flavor=="Mainline" and (id==190456 or id==365362 or id==451038) end}
 local methods={}
+function methods:SetAlpha(value) self.alpha=value end
+function methods:EnableMouse() end
+function methods:SetBlendMode(value) self.blend=value end
 function methods:SetScript(event,callback) self.scripts[event]=callback end
 function methods:RegisterEvent(event) self.events[event]=true end
 function methods:RegisterUnitEvent(event,...) self.events[event]=true;self.units=self.units or {};self.units[event]={...} end
@@ -226,16 +229,16 @@ mana=80;manaEvents.scripts.OnEvent(manaEvents,"UNIT_POWER_FREQUENT","player","MA
 if regen then
     assert(#timers==2 and timers[2].delay==2)
     local pulse
-    for _,frame in ipairs(frames) do if frame.kind=="StatusBar" and frame.parent==player.targetPowerBar and frame.height==2 then pulse=frame end end
-    assert(pulse and pulse.shown,"mana return pulse missing")
+    for _,frame in ipairs(frames) do if frame.kind=="StatusBar" and frame.parent==player.targetPowerBar and frame.markerReady and frame.duration and frame.duration.seconds==2 then pulse=frame end end
+    assert(pulse and not pulse.shown,"five-second rule must have priority over the tick")
     -- A second gain one second later moves the deadline: the first callback
     -- must leave the running pulse alone.
     now=now+1;mana=90;manaEvents.scripts.OnEvent(manaEvents,"UNIT_POWER_FREQUENT","player","MANA")
     assert(#timers==3 and timers[3].delay==2)
     now=now+1;timers[2].callback()
-    assert(pulse.shown,"an earlier callback hid a restarted pulse")
+    assert(not pulse.shown and pulse.duration.start==now-1,"an earlier callback changed the synchronized tick")
     now=now+1;timers[3].callback()
-    assert(not pulse.shown,"the pulse did not end at its deadline")
+    assert(not pulse.shown and pulse.duration.start==now,"the tick did not repeat behind the active spending rule")
     now=now-3;mana=80
 end
 manaEvents.scripts.OnEvent(manaEvents,"UNIT_SPELLCAST_START","player","cast",42)

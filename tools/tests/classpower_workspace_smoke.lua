@@ -76,7 +76,7 @@ Check(ui.keys.power["player.powerTextRightOffsetY"], "reset omits per-slot power
 local powerSize
 for _, widget in ipairs(mw.world.widgets.frames) do
     local command = widget._msuf2CommandAction
-    if command and command.settingKey == "player.powerFontSize" and widget._msuf2PrepareExactSearchTarget then powerSize = widget end
+    if command and command.controlId == "menu2.classpower.advanced.detached.power.text.size" and widget._msuf2PrepareExactSearchTarget then powerSize = widget end
 end
 Check(powerSize, "power text exact callback missing")
 for _, widget in ipairs(mw.world.widgets.frames) do

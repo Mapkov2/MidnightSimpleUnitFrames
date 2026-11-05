@@ -1220,9 +1220,9 @@ local function DetachedPowerWidth(preview, bars, player, classFrame)
     return Clamp(player.detachedPowerBarWidth, preview.playerW, 10, 800), shape
 end
 local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText, layout)
-    ApplyFont(frame.left, size)
-    ApplyFont(frame.center, size)
-    ApplyFont(frame.right, size)
+    ApplyFont(frame.left, layout and layout.leftSize or size)
+    ApplyFont(frame.center, layout and layout.centerSize or size)
+    ApplyFont(frame.right, layout and layout.rightSize or size)
     frame.left:SetText(leftText or "")
     frame.center:SetText(centerText or "")
     frame.right:SetText(rightText or "")
@@ -1261,7 +1261,12 @@ local function ResolvePlayerPowerTextLayout(player)
         return tonumber(player[key] or player[legacy] or general[key] or general[legacy]) or 0
     end
     baseY = baseY + baseline
+    local size = tonumber(player.powerFontSize) or tonumber(general.powerFontSize) or tonumber(general.fontSize) or 14
+    local resolve = MSUF.UF.Shared.ResolveTextSlotFontSize
     return {
+        leftSize = resolve(player, general, "powerTextLeftFontSize", size),
+        centerSize = resolve(player, general, "powerTextCenterFontSize", size),
+        rightSize = resolve(player, general, "powerTextRightFontSize", size),
         leftX = baseX + Side("Left", "X"), leftY = baseY + Side("Left", "Y"),
         centerX = baseX + Side("Center", "X"), centerY = baseY + Side("Center", "Y"),
         rightX = baseX + Side("Right", "X"), rightY = baseY + Side("Right", "Y"),
@@ -1779,17 +1784,41 @@ local function SampleMeter(preview, samples, bars, key, row, colorKey, fallback,
     frame:Show()
     return frame
 end
-local function SampleStrip(preview, samples, bars, powerFrame, key, height, anchor, offset, colorKey, fallback, fraction)
-    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key)
-    samples[key] = frame
-    frame:ClearAllPoints()
-    frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
-    RenderMeter(frame, nil, SAMPLE.MeterOpts(powerFrame:GetWidth(), height, fraction, WHITE8,
-        SAMPLE.Color(bars, colorKey, fallback)))
-    frame._sampleLayer = "power"
-    frame._sampleActive=true
-    frame:Show()
-    return frame
+function SAMPLE.PaintMana(preview, samples, bars, powerFrame, player)
+    local painter = preview.manaSamplePainter
+    local host = preview.manaSampleHost
+    if not painter then
+        host = PixelLayoutRegion(CreateFrame("StatusBar", nil, preview))
+        host:SetStatusBarTexture(WHITE8)
+        host:SetStatusBarColor(0, 0, 0, 0)
+        host:EnableMouse(false)
+        local environment = { sample = true, db = {}, AM = { visible = false },
+            NotSecret = function(value) return not (issecretvalue and issecretvalue(value)) end }
+        painter = MSUF.CPBuilders.ManaExtras(environment)
+        preview.manaSamplePainter, preview.manaSampleHost, preview.manaSampleEnvironment = painter, host, environment
+    end
+    preview.manaSampleEnvironment.db.bars = bars
+    host:SetParent(powerFrame)
+    host:ClearAllPoints()
+    host:SetAllPoints(powerFrame)
+    host:SetSize(powerFrame:GetWidth(), powerFrame:GetHeight())
+    host:SetFrameLevel(powerFrame:GetFrameLevel() + 2)
+    host:SetOrientation(powerFrame._msufCPPreviewShapeAxis == "VERTICAL" and "VERTICAL" or "HORIZONTAL")
+    host:SetReverseFill(player.reverseFillBars == true)
+    host._msufPowerShapeActive = powerFrame._msufCPPreviewHasShape == true
+    host._msufTexture = powerFrame.fill:GetTexture()
+    local vertical = powerFrame._msufCPPreviewShapeAxis == "VERTICAL"
+    local total = vertical and powerFrame:GetHeight() or powerFrame:GetWidth()
+    local current = vertical and powerFrame.fill:GetHeight() or powerFrame.fill:GetWidth()
+    host:SetMinMaxValues(0, 1)
+    host:SetValue(total > 0 and current / total or 0)
+    host:Show()
+    local painted = painter.PaintSample(host)
+    for key, frame in pairs(painted) do
+        samples[key == "five" and "FIVE" or key == "tick" and "TICK" or "COST"] = frame
+        frame.fill = frame:GetStatusBarTexture()
+        frame._sampleLayer, frame._sampleActive = "power", frame:IsShown()
+    end
 end
 -- The live power bar the marks sit on: the Mana display source, else the
 -- player's real power type (MSUF_CP_ResourceMarks Target), and its maximum for
@@ -1858,43 +1887,8 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
     -- The existing detached mock uses Energy unless its configured source is Mana.
     -- Alternate-mana has no mock host here and is therefore not misrepresented.
     local mana = powerFrame and PlayerManaSourceActive(player) and not PowerShowsEbonMight(bars, player, spec)
-    if mana then
-        local regenTimers = MSUF.CPBuilders and MSUF.CPBuilders.ManaRegenTimersSupported
-        regenTimers = regenTimers and regenTimers() or false
-        if regenTimers and bars.manaRegenPause == true then SampleStrip(preview, samples, bars, powerFrame, "FIVE",3,"BOTTOMLEFT",1,
-            "manaRegenPauseColor",SAMPLE.FIVE,.6) end
-        if regenTimers and bars.manaGainPulse == true then SampleStrip(preview, samples, bars, powerFrame, "TICK",2,"TOPLEFT",-1,
-            "manaGainPulseColor",SAMPLE.TICK,.5) end
-        if bars.manaUpcomingCost == true then
-            local frame=SampleStrip(preview, samples, bars, powerFrame, "COST",powerFrame:GetHeight(),"TOPLEFT",0,"manaCostColor",SAMPLE.COST,.18)
-            frame:ClearAllPoints()
-            frame:SetPoint("TOPRIGHT",powerFrame.fill,"TOPRIGHT")
-            frame:SetWidth(max(1,powerFrame:GetWidth()*.18))
-            frame.fill:SetWidth(frame:GetWidth())
-            if powerFrame._msufCPPreviewShapeAxis=="VERTICAL" then
-                frame:ClearAllPoints()
-                frame:SetPoint("BOTTOMLEFT",powerFrame.fill,"TOPLEFT",0,-powerFrame:GetHeight()*.18)
-                frame:SetSize(powerFrame:GetWidth(),max(1,powerFrame:GetHeight()*.18))
-                frame.fill:SetSize(frame:GetWidth(),frame:GetHeight())
-            end
-            frame.bg:Hide()
-            if powerFrame._msufCPPreviewHasShape then
-                local mask=frame.costMask
-                if not mask then
-                    mask=PixelLayoutRegion(powerFrame:CreateMaskTexture(nil,"OVERLAY"))
-                    frame.costMask=mask
-                end
-                if not frame.costMasked then
-                    frame.fill:AddMaskTexture(mask)
-                    frame.costMasked=true
-                end
-                mask:SetTexture(powerFrame.fill:GetTexture(),"CLAMPTOBLACKADDITIVE","CLAMPTOBLACKADDITIVE")
-                mask:ClearAllPoints()
-                mask:SetAllPoints(powerFrame)
-                mask:Show()
-            elseif frame.costMasked then frame.fill:RemoveMaskTexture(frame.costMask);frame.costMasked=false;frame.costMask:Hide() end
-        end
-    end
+    if preview.manaSamplePainter then preview.manaSamplePainter.HideSample() end
+    if mana then SAMPLE.PaintMana(preview, samples, bars, powerFrame, player) end
     preview.resourceSampleMarks = preview.resourceSampleMarks or {}
     for _, texture in ipairs(preview.resourceSampleMarks) do texture:Hide() end
     local thresholds = preview.resourceSampleThresholds or {}

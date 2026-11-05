@@ -5014,6 +5014,16 @@ L["Single color uses this layer's configured tint. Class color / NPC type uses p
 L["Right-click focus in combat"] = "Right-click focus in combat"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."
 
+L["Castbar artwork"] = "Castbar artwork"
+L["Show dark cast name panel"] = "Show dark cast name panel"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "Mana regeneration display"
+L["Glowing tick"] = "Glowing tick"
+L["Separate timer bars"] = "Separate timer bars"
+L["Mana tick width"] = "Mana tick width"
+L["Mana tick glow"] = "Mana tick glow"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

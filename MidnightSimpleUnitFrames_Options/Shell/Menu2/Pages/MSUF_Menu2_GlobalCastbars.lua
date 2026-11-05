@@ -215,6 +215,10 @@ local function BuildTexturesSection(PageState, secBuilder)
                 local v = ReadG("castbarBackgroundTexture", nil)
                 return (type(v) == "string" and v ~= "") and v or ReadG("castbarTexture", "Blizzard")
             end } },
+        { "toggle", "Castbar artwork", texLeftX, -152, 350, "castbarArtworkEnabled", false,
+            "MSUF2_CASTBAR_ARTWORK", ApplyTexturesAndPreview },
+        { "toggle", "Show dark cast name panel", texLeftX, -180, 350, "castbarArtworkNamePanel", true,
+            "MSUF2_CASTBAR_NAME_PANEL", ApplyTexturesAndPreview },
         { "slider", "Outline thickness", texRightX, -42, 320, 0, 6, 1, "castbarOutlineThickness", 1, "MSUF2_CASTBAR_OUTLINE", ApplyTexturesAndPreview },
         { "toggle", "Show castbar glow effect", texRightX, -96, 360, "castbarShowGlow", false, "MSUF2_CASTBAR_GLOW", ApplyTexturesAndPreview },
         { "toggle", "Show latency indicator", texRightX, -120, 360, "castbarShowLatency", true, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview },
@@ -539,9 +543,7 @@ local function CreateCastbarPageState(ctx, b)
             RefreshCastPreview()
         end)
     end
-    -- Castbar uses the same bounded Preview slot as every other page-level
-    -- preview; only the settings sections below it participate in scrolling.
-    if castPreviewSection and fixedPreview then fixedPreview.onActivate = RequestCastPreviewRefresh end
+    if castPreviewSection and fixedPreview then fixedPreview.onActivate = RefreshCastPreview end
     local function ShakeCastPreview(strength) if castPreview and castPreview.PlayShake then castPreview:PlayShake(strength, false) end end
     local function ShowEmpoweredPreview() M.SetCastbarPreviewType("empowered", 0.62) end
     local function MoveToggle(toggle, parent, x, y, labelWidth)
@@ -557,6 +559,7 @@ local function CreateCastbarPageState(ctx, b)
             opts.getValue or function() return ReadGBool(key, default) end,
             opts.setValue or function(v)
                 SetGBool(key, v, reason, { castbar = true, preview = true })
+                RefreshCastPreview()
                 if afterSet then afterSet(reason, v, true) end
             end,
             opts.meta)
@@ -575,6 +578,7 @@ local function CreateCastbarPageState(ctx, b)
                 local fallback = opts.setDefault ~= nil and opts.setDefault or default
                 local nextValue = opts.precise and (tonumber(v) or fallback) or floor((tonumber(v) or fallback) + 0.5)
                 SetG(key, nextValue, reason, { castbar = true, preview = true })
+                RefreshCastPreview()
                 if afterSet then afterSet(reason, nextValue, true) end
             end,
             opts.setDefault ~= nil and opts.setDefault or default, metadata)
@@ -589,6 +593,7 @@ local function CreateCastbarPageState(ctx, b)
                 local normalize = opts.normalize
                 local nextValue = normalize and normalize(v, default) or (v or default)
                 SetG(key, nextValue, reason, { castbar = true, preview = true })
+                RefreshCastPreview()
                 if afterSet then afterSet(reason, nextValue, true) end
             end
         end
@@ -637,10 +642,7 @@ local function CreateCastbarPageState(ctx, b)
         ApplyCastbarsIfNeeded(reason, nil, applyQueued)
         RequestCastPreviewRefresh()
     end
-    -- Sections route through the shared lazy-section registry: the open
-    -- Behavior section defers its content one frame behind its shell, closed
-    -- sections build on their first expand, and hidden search-index builds
-    -- stay synchronous inside BuildSectionLazy.
+    -- Lazy sections also support synchronous search-index builds.
     local function LazyCastbarSection(spec)
         local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy
         if type(buildLazy) == "function" then return buildLazy(ctx, b, nil, spec) end

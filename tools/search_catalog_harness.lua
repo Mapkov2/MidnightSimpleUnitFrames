@@ -73,6 +73,9 @@ assert(loadfile(Join(CORE, "Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames",
 local ProfileSlice = require("msuf_source_slice")
 local profilesPath = Join(CORE, "State/MSUF_Profiles.lua")
 assert(loadstring(ProfileSlice.Function(Read(profilesPath), "function MSUF_GetAllProfiles", profilesPath)))()
+-- Slot-size controls use the same font inheritance as the live spec compiler.
+assert(loadfile(Join(CORE, "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile(Join(CORE, "UnitFrames/Engine/MSUF_UF_Shared.lua")))("MidnightSimpleUnitFrames", MSUF)
 -- The Boss page shares its style and geometry owner with live unit frames.
 assert(loadfile(Join(CORE, "UnitFrames/Engine/Elements/MSUF_UF_BossTargetIndicator.lua")))(
     "MidnightSimpleUnitFrames", MSUF)

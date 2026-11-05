@@ -515,6 +515,18 @@ else
 end
 Check(nativeRejects > 0, "no failure case reached a native decoder")
 
+-- Deflate input errors are ordinary rejection through every import entry point,
+-- including the real page actions, with no profile or runtime mutation.
+for _, prefix in ipairs({ "MSUF2:", "MSUF3:", "MSUF4:" }) do
+    for _, entry in ipairs(entryPoints) do
+        NewSavedVariables()
+        local before = Capture()
+        local ok, result = pcall(entry[2], prefix .. EncodeBase64("invalid deflate stream"))
+        Check(ok and result ~= true, prefix .. entry[1] .. ": native inflate error escaped")
+        ExpectUntouched(prefix .. entry[1], before)
+    end
+end
+
 -- (1b) Rejection texts are the pre-transaction strings: the chat line printed by
 -- MSUF_ImportFromString and MSUF_ImportIntoNewProfile, the returned reason, and
 -- MSUF_ImportExternal's reason strings.

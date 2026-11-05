@@ -7046,6 +7046,16 @@ L["Single color uses this layer's configured tint. Class color / NPC type uses p
 L["Right-click focus in combat"] = "Foco con clic derecho en combate"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "En combate, haz clic derecho en este marco de unidad para establecer a esa unidad como foco. Fuera de combate, el clic derecho abre el menú contextual."
 
+L["Castbar artwork"] = "Diseño de barras de lanzamiento"
+L["Show dark cast name panel"] = "Mostrar panel oscuro para el nombre del hechizo"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "Indicador de regeneración de maná"
+L["Glowing tick"] = "Marca luminosa"
+L["Separate timer bars"] = "Barras de tiempo separadas"
+L["Mana tick width"] = "Ancho de la marca de maná"
+L["Mana tick glow"] = "Brillo de la marca de maná"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

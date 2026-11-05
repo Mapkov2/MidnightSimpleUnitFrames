@@ -59,6 +59,8 @@ function M:CreateFontString() return NewObject("FontString", self) end
 function M:SetColorTexture() end
 function M:SetTexture() end
 function M:SetVertexColor() end
+function M:SetAlpha(value) self.alpha = value end
+function M:SetBlendMode(value) self.blend = value end
 function M:SetFont() end
 function M:SetMinMaxValues() end
 function M:SetValue() end

@@ -8,12 +8,63 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "ECD163D48DB8B591E8546B906676476105C6E8F839111BD9BC11C46DB0EB4625",
-    currentVersion = "6.507",
-    historyFromVersion = "6.503",
-    previousVersion = "6.503",
-    rangeLabel = "6.503 -> 6.507",
+    sourceSha256 = "A54FD9B288FEC0520DE41905191AFC8E62BA928175BA728EBD24AA00488D61C5",
+    currentVersion = "6.508",
+    historyFromVersion = "6.505",
+    previousVersion = "6.505",
+    rangeLabel = "6.505 -> 6.508",
     entries = {
+        {
+            version = "6.508",
+            date = "2026-11-05",
+            sections = {
+                {
+                    title = "Improvements",
+                    bullets = {
+                        {
+                            text = "Expanded the WoW Forever MP5/mana-regeneration tracker with a moving glow inside the mana bar or separate timer bars. Track the five-second rule and mana-return ticks, adjust marker width and glow, and preview the same display in the options menu. Both indicators are enabled once by default on Forever; later manual choices are preserved.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Added optional native Castbar artwork, a dark cast-name panel and the bundled MSUF Castbar fill texture. Artwork appears in live castbars, Edit Mode and menu previews, with immediate preview updates when settings change.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "castbar artwork",
+                                label = "Castbar artwork",
+                                sectionId = "castbar_textures",
+                                controlId = "menu2.opt.castbar.global.textures.castbar.artwork.enabled",
+                                settingKey = "general.castbarArtworkEnabled",
+                            },
+                        },
+                        {
+                            text = "Improved search discovery for MP5, the five-second rule and mana-regeneration display settings.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "Fixed Power text size controls in Class Resources when the Player frame uses text-slot overrides. Both menus now edit the same selected slot and keep font inheritance, previews, Copy and Reset consistent.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed malformed or truncated compressed profile imports raising a Lua error instead of being rejected safely.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Improved the readability and refresh behavior of selected menu navigation entries.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Added host-page compatibility for Suite Gameplay controls and preserved legacy castbar fill paths when moving artwork settings into native MSUF.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.507",
             date = "2026-11-04",
@@ -185,54 +236,6 @@ local data = {
                     bullets = {
                         {
                             text = "The group name strip color is now edited through the section's ::: button, like other colors.",
-                            linkless = true,
-                        },
-                    },
-                },
-            },
-        },
-        {
-            version = "6.503",
-            date = "2026-10-17",
-            sections = {
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        {
-                            text = "Fixed extra or doubled stage markers on Evoker Empower castbars after a channeled spell, including Fire Breath and Eternity Surge.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Restored the player castbar channel-selection behavior from before 6.502.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed raid and Mythic raid frames showing only groups 1-3 with profiles carried over from older versions. Old profile strings import correctly again without a page reset.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Removed the group selection repair prompt after profile imports; it is no longer needed.",
-                            linkless = true,
-                        },
-                        {
-                            text = "The group frame preview now follows the sort settings, including sort mode, role order and class priority.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Dragging a class in the class priority list now inserts it at the drop position instead of swapping it with the class there.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "class priority sorting",
-                                label = "Use class priority",
-                                sectionId = "sorting",
-                                controlId = "menu2.gf_layout.group.field.sortclasspriority",
-                                settingKey = "gf_raid.sortClassPriority",
-                                prepareKind = "groupScope",
-                                prepareValue = "raid",
-                            },
-                        },
-                        {
-                            text = "Arena party frames sorted by class priority within roles now update when a teammate's name arrives late.",
                             linkless = true,
                         },
                     },

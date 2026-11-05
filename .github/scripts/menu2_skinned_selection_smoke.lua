@@ -19,7 +19,7 @@ local cueAndSkinBranch = themeSource:sub(cueStart, painterStart - 1)
     .. themeSource:sub(painterStart, nativePaintStart - 1)
     .. "\nend\nreturn ButtonVisual"
 
-local theme = { colors = { accent = { 0.32, 0.65, 0.94, 1 } } }
+local theme = { colors = { accent = { 0, 0, 0, 1 }, navTextActive = { 0.94, 0.96, 1, 1 } } }
 local skin = { owned = true }
 function skin.Button() return skin.owned end
 local factory = assert(loadstring("local T, MenuSkin, HideNavPillArt, SetNavActiveFX = ...\n"
@@ -55,10 +55,11 @@ assert(not nav._msuf2SkinnedSelectionCue, "idle Unitframes row allocated a selec
 paint(nav, true, false)
 assert(CueShown(nav) and #nav.textures == 2, "selected Unitframes row is not highlighted")
 assert(nav._msuf2SkinnedSelectionCue.line.width == 3, "selected rail marker lost its width")
-theme.colors.accent = { 0.90, 0.55, 0.26, 1 }
+assert(nav._msuf2SkinnedSelectionCue.line.color[1] >= 0.8, "black accent hides the selection marker")
+theme.colors.navTextActive = { 0.90, 0.95, 1, 1 }
 paint(nav, true, true)
 assert(#nav.textures == 2 and nav._msuf2SkinnedSelectionCue.line.color[1] == 0.90,
-    "accent refresh allocated art or kept the old selection color")
+    "theme refresh allocated art or kept the old selection color")
 paint(nav, false, false)
 assert(not CueShown(nav), "old Unitframes selection remains visible")
 

@@ -104,7 +104,10 @@ local function PathProof(flavor)
     local label = flavor .. " path"
 
     -- First login on a flat saved DB (the pre-profile layout): the DB becomes the Default profile.
-    env.MSUF_DB = { general = {}, player = { width = 150 }, bars = Former() }
+    -- This fixture tests a deliberate old choice after the one-time defaults update.
+    -- The separate mana-default contract covers the first unmigrated Forever login.
+    env.MSUF_DB = { general = {}, player = { width = 150 }, bars = Former(),
+        _msufForeverFiveSecondDefault_v1 = true, _msufForeverManaTickDefault_v1 = true }
     env.MSUF_GlobalDB = { profiles = {}, char = {} }
     env.MSUF_InitProfiles()
     Check(env.MSUF_ActiveProfile ~= nil and env.MSUF_DB.bars ~= nil, label .. ": first login bound no profile")

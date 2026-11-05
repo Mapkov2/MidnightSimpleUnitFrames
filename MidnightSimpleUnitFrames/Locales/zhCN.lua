@@ -7134,6 +7134,16 @@ L["Single color uses this layer's configured tint. Class color / NPC type uses p
 L["Right-click focus in combat"] = "战斗中右键设为焦点"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "战斗中右键点击此单位框体，将该单位设为焦点。非战斗状态下，右键点击打开快捷菜单。"
 
+L["Castbar artwork"] = "施法条外观"
+L["Show dark cast name panel"] = "显示深色法术名称背景"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "法力恢复显示"
+L["Glowing tick"] = "发光标记"
+L["Separate timer bars"] = "独立计时条"
+L["Mana tick width"] = "法力标记宽度"
+L["Mana tick glow"] = "法力标记光晕"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

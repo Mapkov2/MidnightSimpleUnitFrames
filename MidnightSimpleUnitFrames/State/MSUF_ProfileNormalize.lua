@@ -1254,8 +1254,31 @@ end
 
 --- Profile-side alias normalization pipeline (see the cross-reference note
 --- above MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION for its Defaults twin).
+-- Preserve the former Suite design when its artwork becomes native.
+-- Called on stored/imported frame profiles and by the Suite data handoff.
+local function MigrateSuiteCastbarArtwork(profile, legacy)
+    if type(profile) ~= "table" or type(profile.general) ~= "table" then return false, false end
+    local general, changed = profile.general, false
+    if general.castbarTexture == "Interface\\AddOns\\MSUF_Suite\\Media\\BlizzardFrames\\CastFill.tga" then
+        general.castbarTexture = "MSUF Blizzard Cast"
+        changed = true
+    end
+    if type(legacy) == "table" then
+        if general.castbarArtworkEnabled == nil then
+            general.castbarArtworkEnabled = legacy.enabled == true
+            changed = true
+        end
+        if general.castbarArtworkNamePanel == nil then
+            general.castbarArtworkNamePanel = legacy.namePanel ~= false
+            changed = true
+        end
+    end
+    return true, changed
+end
+
 MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     if type(profile) ~= "table" then return profile, false end
+    local _, artworkChanged = MigrateSuiteCastbarArtwork(profile)
     context = type(context) == "table" and context or {}
     --- Only internal callers operating on an already-stored profile may trust
     --- the persisted marker. Import payloads are deliberately never trusted:
@@ -1266,9 +1289,9 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
         and tonumber(profile._msufProfileNormalizationRevision) == MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION
         and type(profile.general) == "table"
         and not MSUF_ProfileIO_ProfileNeedsNormalization(profile) then
-        return profile, false
+        return profile, artworkChanged
     end
-    local changed = false
+    local changed = artworkChanged
     --- trustProfileMetadata: a local pass over a stored or factory profile (the
     --- defaults pass). It still runs every normalizer below, but the profile's
     --- own migration stamps and Menu2 choices are not import metadata.
@@ -1361,6 +1384,7 @@ MSUF_ProfileIO_TranslateProfilesToCurrent = function(profiles, source)
 end
 
 MSUF.ProfileNormalize = {
+    MigrateSuiteCastbarArtwork = MigrateSuiteCastbarArtwork,
     CURRENT_PROFILE_SCHEMA = MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA,
     UNIT_KEYS = MSUF_PROFILEIO_UNIT_KEYS,
     DeepCopy = MSUF_DeepCopy,

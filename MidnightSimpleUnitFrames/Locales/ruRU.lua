@@ -6998,6 +6998,16 @@ L["Single color uses this layer's configured tint. Class color / NPC type uses p
 L["Right-click focus in combat"] = "Фокус правой кнопкой в бою"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "В бою щёлкните правой кнопкой мыши по этой рамке, чтобы запомнить её персонажа как цель. Вне боя щелчок правой кнопкой открывает контекстное меню."
 
+L["Castbar artwork"] = "Оформление полос применения"
+L["Show dark cast name panel"] = "Показывать тёмный фон названия заклинания"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "Отображение восстановления маны"
+L["Glowing tick"] = "Светящаяся отметка"
+L["Separate timer bars"] = "Отдельные полосы таймеров"
+L["Mana tick width"] = "Ширина отметки маны"
+L["Mana tick glow"] = "Свечение отметки маны"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

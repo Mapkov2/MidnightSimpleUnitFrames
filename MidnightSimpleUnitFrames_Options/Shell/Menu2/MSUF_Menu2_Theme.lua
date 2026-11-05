@@ -2452,9 +2452,10 @@ local function SetSkinnedSelectionCue(btn, active)
         cue = { wash = wash, line = line }
         btn._msuf2SkinnedSelectionCue = cue
     end
-    local accent = T.colors.accent
-    cue.wash:SetColorTexture(accent[1], accent[2], accent[3], 0.22)
-    cue.line:SetColorTexture(accent[1], accent[2], accent[3], 0.94)
+    -- Text contrast is maintained across skins, even when their accent is black.
+    local contrast = T.colors.navTextActive
+    cue.wash:SetColorTexture(contrast[1], contrast[2], contrast[3], 0.22)
+    cue.line:SetColorTexture(contrast[1], contrast[2], contrast[3], 0.94)
     cue.wash:Show()
     cue.line:Show()
 end

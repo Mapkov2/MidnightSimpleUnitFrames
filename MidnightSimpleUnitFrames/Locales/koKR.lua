@@ -6971,6 +6971,16 @@ L["Single color uses this layer's configured tint. Class color / NPC type uses p
 L["Right-click focus in combat"] = "전투 중 우클릭 주시 설정"
 L["In combat, right-click this unit frame to set that unit as your focus. Out of combat, right-click opens the context menu."] = "전투 중 이 유닛 프레임을 우클릭하면 해당 유닛을 주시 대상으로 설정합니다. 전투 중이 아닐 때는 우클릭으로 상황별 메뉴를 엽니다."
 
+L["Castbar artwork"] = "시전 바 외형"
+L["Show dark cast name panel"] = "주문 이름에 어두운 배경 표시"
+
+-- Mana regeneration display options.
+L["Mana regeneration display"] = "마나 재생 표시"
+L["Glowing tick"] = "빛나는 틱"
+L["Separate timer bars"] = "별도 타이머 바"
+L["Mana tick width"] = "마나 틱 너비"
+L["Mana tick glow"] = "마나 틱 발광"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

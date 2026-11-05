@@ -205,6 +205,7 @@ function TextSection.PrepareSlotState(state, unit)
         widget:HookScript("OnLeave", RestorePreviewTextFocus)
     end
     state.tabValues, state.RaidGroupNameAllowed, state.NamePreviewText = tabValues, RaidGroupNameAllowed, NamePreviewText
+    state.textSlotState = textSlotState
     state.CurrentSlot, state.SetCurrentSlot, state.SlotFontSizeKey, state.MoveTogether, state.SetMoveTogether =
         CurrentSlot, SetCurrentSlot, SlotFontSizeKey, MoveTogether, SetMoveTogether
     state.FocusPreviewText, state.FocusActivePreviewText, state.HookPreviewTextFocus =
@@ -750,8 +751,7 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
     M.BindNumberWidget(ctx, controls.slotSize,
         function()
             local conf = GetConf(unit)
-            local value = tonumber(conf and conf[SlotFontSizeKey(kind)])
-            return value and value > 0 and value or EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey)
+            return state.textSlotState.FontSize(kind, conf, GetGeneral(), EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey))
         end,
         function(v)
             SetNumber(unit, SlotFontSizeKey(kind), v, cfg.slotSizeReason, { text = true, fonts = true, preview = true })

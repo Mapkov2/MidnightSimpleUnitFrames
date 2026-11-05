@@ -62,7 +62,8 @@ for _,flavor in ipairs({'Mainline','Forever','Vanilla','TBC','Mists'}) do
     env.MSUF_UnitEditModeActive=true;MSUF.EditModeAPI._BeginSession();helper.Refresh()
     helper.Disable()
     for _,bar in ipairs(samples) do assert(not bar:IsShown(),'disable left sample visible') end
-    assert(cost:GetStatusBarTexture():GetNumMaskTextures()==0,'disable sample cleanup failed')
+    -- Isolated native samples retain their own clipping mask; borrowed masks detach.
+    assert(cost:GetStatusBarTexture():GetNumMaskTextures()==1,'disable retained borrowed sample masks')
     assert(newTimers==0,'sample timer created')
     print('mana_extra_editmode_smoke '..flavor..': PASS')
 end

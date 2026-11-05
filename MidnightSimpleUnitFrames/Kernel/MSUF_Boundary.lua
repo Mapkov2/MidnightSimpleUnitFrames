@@ -18,6 +18,18 @@ local function TryDeserializeFactoryPayload(encoding, payload)
     return ok and type(value) == "table" and value or nil
 end
 
+-- Native deflate can raise on truncated or malformed profile input. Both
+-- factory seeding and imports use this boundary; legacy fallbacks remain available.
+local function TryDecompressNativeProfile(encoding, blob, method)
+    local inflated, payload
+    if method ~= nil then
+        inflated, payload = pcall(encoding.DecompressString, blob, method)
+    else
+        inflated, payload = pcall(encoding.DecompressString, blob)
+    end
+    return inflated and type(payload) == "string" and payload or nil
+end
+
 local function TryDecodeFactoryPayload(encoding, cleaned)
     if type(encoding) ~= "table" or type(encoding.DecodeBase64) ~= "function"
         or type(encoding.DeserializeCBOR) ~= "function" then return nil end
@@ -26,16 +38,9 @@ local function TryDecodeFactoryPayload(encoding, cleaned)
     -- Current exports are deflate(CBOR); older exports may contain raw CBOR.
     if type(encoding.DecompressString) == "function" then
         local method = _G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate
-        local inflated, payload
-        if method ~= nil then
-            inflated, payload = pcall(encoding.DecompressString, blob, method)
-        else
-            inflated, payload = pcall(encoding.DecompressString, blob)
-        end
-        if inflated then
-            local value = TryDeserializeFactoryPayload(encoding, payload)
-            if value then return value end
-        end
+        local payload = TryDecompressNativeProfile(encoding, blob, method)
+        local value = TryDeserializeFactoryPayload(encoding, payload)
+        if value then return value end
     end
     return TryDeserializeFactoryPayload(encoding, blob)
 end
@@ -45,6 +50,8 @@ MSUF.TryDecodeFactoryPayload = TryDecodeFactoryPayload
 -- payload must come back as a failed decode (an import message), never as a
 -- Lua error from inside the codec.
 MSUF.TryDeserializeNativeCBOR = TryDeserializeFactoryPayload
+
+MSUF.TryDecompressNativeProfile = TryDecompressNativeProfile
 
 -- A host API v1 step that the host runs inside its own state, so a raise must
 -- not leave that state half done: Menu2 runs a page-reset provider's prepare,

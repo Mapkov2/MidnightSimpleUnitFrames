@@ -563,6 +563,11 @@ local function RefreshPreviewTexts(self, unit, kind, g, S, barWLocal, progress, 
     else
         self.spell:SetText("")
     end
+    if g.castbarArtworkEnabled or self.bar._msufCastbarArtwork then
+        MSUF.MSUF_CastbarStyle:ApplyCastbarArtwork(self.bar, self.statusBar, self.spell,
+            showText and CastbarPreview.ReadString(g, unit, "SpellNamePosition",
+                "bossCastSpellNamePosition", "LEFT") == "BELOW", g, S(2))
+    end
 end
 local function PreviewRefresh(self)
     local typeButtons, unitButtons = self.typeButtons, self.unitButtons

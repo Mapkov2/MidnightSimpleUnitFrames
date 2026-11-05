@@ -410,17 +410,21 @@ do
         assert(box.resourceSampleMarks[1]:IsShown() and box.resourceSampleMarks[2]:IsShown(),"configured marks missing")
         local cost=box.resourceSamples.COST
         local additions,removals=0,0
-        cost.fill.AddMaskTexture=function() additions=additions+1 end
-        cost.fill.RemoveMaskTexture=function() removals=removals+1 end
+        local nativeAdd, nativeRemove = cost.fill.AddMaskTexture, cost.fill.RemoveMaskTexture
+        cost.fill.AddMaskTexture=function(self,mask) additions=additions+1;return nativeAdd(self,mask) end
+        cost.fill.RemoveMaskTexture=function(self,mask) removals=removals+1;return nativeRemove(self,mask) end
         power._msufCPPreviewHasShape=true;power._msufCPPreviewShapeAxis="VERTICAL"
         power.fill:SetTexture("Interface\\Buttons\\WHITE8X8")
         geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
-        assert(cost.costMasked and additions==1 and cost:GetWidth()==power:GetWidth(),"shaped cost sample mask/layout missing")
+        -- Samples now share the native runtime painter: one clipping mask and one
+        -- shape mask remain attached, with no duplicated or abandoned shape.
+        assert(cost.fill:GetNumMaskTextures()==2 and cost:GetWidth()==power:GetWidth(),"shaped cost sample mask/layout missing")
+        local shapeMask=cost.fill:GetMaskTexture(2)
         geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
-        assert(additions==1,"shape mask repeatedly reattached")
+        assert(cost.fill:GetNumMaskTextures()==2 and cost.fill:GetMaskTexture(2)==shapeMask,"native sample duplicated the shape mask")
         power._msufCPPreviewHasShape=false;power._msufCPPreviewShapeAxis=nil
         geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
-        assert(not cost.costMasked and removals==1,"shape mask leaked into normal host")
+        assert(cost.fill:GetNumMaskTextures()==1 and not shapeMask:IsShown(),"shape mask leaked into normal host")
         b.resourceMarks={{target="CLASS",mode="PERCENT",value=50,threshold=true,color={.2,.4,.6}}}
         geometry.samples(box,b,player,{key="mage_arcane",classToken="MAGE",mode="segmented",token="ARCANE_CHARGES",segments=4,value=3},classFrame,power)
         local first=classFrame.segments[1];local oldPaint=first.SetVertexColor;local painted

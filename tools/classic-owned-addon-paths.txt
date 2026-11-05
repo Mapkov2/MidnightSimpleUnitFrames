@@ -87,6 +87,9 @@ MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Text.lua
 MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Textures.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua
 MidnightSimpleUnitFrames/Media/Borders/msuf_portrait_ring_blizzard.tga
+MidnightSimpleUnitFrames/Media/Castbars/CastFill.tga
+MidnightSimpleUnitFrames/Media/Castbars/CastFrame.tga
+MidnightSimpleUnitFrames/Media/Castbars/CastName.tga
 MidnightSimpleUnitFrames/Media/Masks/portrait_blizzard_mask.tga
 MidnightSimpleUnitFrames/Media/Masks/portrait_blizzard_mask_bottomleft.tga
 MidnightSimpleUnitFrames/Media/Masks/portrait_blizzard_mask_topleft.tga

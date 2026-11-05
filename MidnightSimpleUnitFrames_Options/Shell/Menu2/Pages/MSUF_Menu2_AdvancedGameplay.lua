@@ -470,7 +470,6 @@ local function BuildGameplay(ctx)
         for i = 1, 4 do bars[i]:SetVertexColor(r or 1, gr or 0, b or 0, g.enableCombatCrosshair and 1 or 0.35) end
     end
     -- TotemFrame availability follows the same native frame as the runtime owner.
-    -- The remaining rows combine client availability and the user's master toggle.
     disabledRefresh = M.BindGateGroup(ctx, Gameplay, {
         { enable = timerEnable, controls = timerControls, on = function(g) return g.enableCombatTimer == true end },
         { enable = stateEnable, controls = stateControls, on = function(g) return g.enableCombatStateText == true end },
@@ -485,6 +484,7 @@ local function BuildGameplay(ctx)
         if previewRefresh then previewRefresh() end
         SyncTotemPreviewButton()
     end })
+    M.BuildPageExtensions("gameplay", ctx, b)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 10 })
+M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 11 })

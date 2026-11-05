@@ -500,6 +500,28 @@
    "evidence": "Owner request 2026-10-10: remove Color dragon by unit class from the Classic repository.",
    "reason": "Remove the unsupported portrait dragon class tint control, runtime option and translations; legacy profile values are ignored.",
    "date": "2026-10-10"
+  },
+  {
+   "category": "settings",
+   "items": [
+    "classic: player.powerFontSize",
+    "main: player.powerFontSize"
+   ],
+   "basis": "moved",
+   "evidence": "Owner bug request 2026-11-05; MSUF_Menu2_AdvancedClassPower.lua selected-slot binding, MSUF_Menu2_UnitText.lua and tools/tests/power_text_slot_sync_smoke.lua.",
+   "reason": "The existing Power text size slider now edits the selected Player power slot, matching Unit Frames, through powerTextLeft/Center/RightFontSize. The fixed-base catalog row is replaced by that dynamic binding. The player.powerFontSize key remains supported for legacy profiles, inherited size, scoped Reset and exact-search aliases; no visible control is removed.",
+   "date": "2026-11-05"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: classpower | Power > Text | Power text size | slider | player.powerFontSize | advanced.detached.power.text.size",
+    "main: classpower | Power > Text | Power text size | slider | player.powerFontSize | advanced.detached.power.text.size"
+   ],
+   "basis": "moved",
+   "evidence": "Owner bug request 2026-11-05; MSUF_Menu2_AdvancedClassPower.lua selected-slot binding, MSUF_Menu2_UnitText.lua and tools/tests/power_text_slot_sync_smoke.lua.",
+   "reason": "The existing Power text size slider now edits the selected Player power slot, matching Unit Frames, through powerTextLeft/Center/RightFontSize. The fixed-base catalog row is replaced by that dynamic binding. The player.powerFontSize key remains supported for legacy profiles, inherited size, scoped Reset and exact-search aliases; no visible control is removed.",
+   "date": "2026-11-05"
   }
  ]
 }

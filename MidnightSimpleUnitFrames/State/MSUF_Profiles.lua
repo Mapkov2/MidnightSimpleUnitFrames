@@ -1353,6 +1353,8 @@ local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS = {
     -- payload runs both dispel migrations again (TOP -> ALL, By me -> Dispel type).
     _msufDispelPriorityMigration = true,
     _msufNativeDispelTriggerMigration = true,
+    _msufForeverFiveSecondDefault_v1 = true,
+    _msufForeverManaTickDefault_v1 = true,
     arena = true,
     profileVariants = true,
     auras2 = true,

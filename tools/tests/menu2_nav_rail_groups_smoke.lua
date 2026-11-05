@@ -277,19 +277,44 @@ local function LocalizedTitle()
     assert(M.Tr("Off") ~= "Off" and badge:GetText() == M.Tr("Off"), "deDE: Off badge not translated: " .. tostring(badge:GetText()))
 end
 
-local function SkinnedSelection()
-    local world, env, M = Boot("Mainline")
+local function SkinnedSelection(flavor)
+    local world, env, M = Boot(flavor)
     local skin = assert(world.core.MenuSkin, "MenuSkin bridge missing")
     local originalButton = skin.Button
     skin.Button = function() return true end
+    -- Dark/custom skins may legitimately use black as their accent. A shown
+    -- black texture is still invisible on the sidebar; inspect rendered RGB.
+    M.Theme.colors.accent = { 0, 0, 0, 1 }
+    local function Readable(cue)
+        for _, region in ipairs({ cue.wash, cue.line }) do
+            local rgb = assert(region.colorTexture)
+            assert(math.min(rgb[1], rgb[2], rgb[3]) >= 0.6,
+                "selection cue disappears with a black skin accent")
+        end
+    end
 
     local parent = env.CreateFrame("Frame", nil, env.UIParent)
+    InsertAfterTitle(M.navItems, "combat", { key = "suite_nameplates", label = "Nameplates", group = "combat" })
+    InsertAfterTitle(M.navItems, "combat", { key = "suite_cooldownManager", label = "Cooldown manager", group = "combat" })
     M.BuildNavRail(parent)
+    for _, key in ipairs({ "suite_nameplates", "suite_cooldownManager", "opt_castbar" }) do
+        M.UpdateNav(key)
+        local button = assert(M.navButtons[key])
+        assert(button._msuf2Active and button._msuf2SkinnedSelectionCue.line:IsShown(), key .. ": selection is hidden")
+        Readable(button._msuf2SkinnedSelectionCue)
+        M.UpdateNav("home")
+        assert(not button._msuf2SkinnedSelectionCue.line:IsShown(), key .. ": old cue stayed visible")
+    end
     M.UpdateNav("uf_target")
     local nav = assert(M.navButtons.uf_player, "Unitframes nav row missing")
     local navCue = assert(nav._msuf2SkinnedSelectionCue, "selected skinned nav has no cue")
     assert(nav._msuf2Active and navCue.wash:IsShown() and navCue.line:IsShown(),
         "selected Unitframes nav cue is hidden")
+    Readable(navCue)
+    nav:GetScript("OnEnter")(nav)
+    nav:GetScript("OnLeave")(nav)
+    assert(navCue.line:IsShown(), "hover cleared the selected navigation cue")
+    Readable(navCue)
     M.UpdateNav("home")
     assert(not navCue.wash:IsShown() and not navCue.line:IsShown(), "old nav selection cue remains visible")
 
@@ -306,6 +331,7 @@ local function SkinnedSelection()
     local targetCue = assert(target._msuf2SkinnedSelectionCue, "selected skinned Target tab has no cue")
     assert(target._msuf2SegmentChoice and target._msuf2Active and targetCue.wash:IsShown()
         and targetCue.line:IsShown(), "selected Target tab cue is hidden")
+    Readable(targetCue)
     selected = "player"
     bar:Refresh()
     assert(not targetCue.wash:IsShown() and not targetCue.line:IsShown(), "old Target tab cue remains visible")
@@ -315,10 +341,13 @@ local function SkinnedSelection()
     skin.Button = function() return false end
     player:RefreshVisual()
     assert(not player._msuf2SkinnedSelectionCue.wash:IsShown(), "skin switch left a stale cue")
+    M.UpdateNav("uf_player")
+    assert(not nav._msuf2SkinnedSelectionCue.line:IsShown(), "native selection retained an extra cue")
+    M.UpdateNav("home")
     skin.Button = originalButton
 end
 
 for _, flavor in ipairs({ "Mainline", "Vanilla", "Forever" }) do RailFlavor(flavor) end
 LocalizedTitle()
-SkinnedSelection()
-print("menu2_nav_rail_groups_smoke: ok (3 clients, off reason, hidden rows, folding, breadcrumb title, skinned selection)")
+for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do SkinnedSelection(flavor) end
+print("menu2_nav_rail_groups_smoke: ok (3 rail clients, 5 selection clients, off reason, hidden rows, folding, breadcrumb title, skin contrast)")
