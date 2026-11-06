@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.509 - 2026-11-06
+
+### Unit frame positioning
+
+- Fixed drag and runtime layout using different anchors in Suite profiles, and preserved visible positions across UI scaling and screen-edge clamping.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_external_edit_mode","controlId":"menu2.opt.misc.global.setting.blizzard.edit.mode.integration","settingKey":"general.blizzardEditModeIntegration","prepareKind":"","prepareValue":"","query":"show blizzard frames in msuf edit mode","label":"Show Blizzard frames in MSUF Edit Mode"} -->
+- Fixed drag completion saving offsets against an outdated anchor when a provider appears, changes, or loses its position. Mouse release, closing Edit Mode during a drag, and external Edit Mode shells now preserve the final visible position in the current anchor space.
+<!-- msuf-menu-link: none -->
+- Fixed unfinished X/Y popup edits overwriting a later mouse drag. Typed edits and dragging retain separate Undo steps.
+<!-- msuf-menu-link: none -->
+
 ## 6.508 - 2026-11-05
 
 ### Improvements

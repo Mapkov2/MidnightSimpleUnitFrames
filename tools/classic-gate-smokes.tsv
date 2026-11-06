@@ -627,3 +627,6 @@ clients+Forever	lua	tools/tests/mana_regen_search_smoke.lua	{root} {flavor} deDE
 -	lua	tools/tests/mana_regen_preview_smoke.lua	{root} Forever	Mana regeneration menu preview matches live style: Forever
 -	lua	tools/tests/mana_regen_preview_smoke.lua	{root} Vanilla	Mana regeneration menu preview matches live style: Vanilla
 -	lua	tools/tests/mana_regen_preview_smoke.lua	{root} TBC	Mana regeneration menu preview matches live style: TBC
+-	lua	tools/tests/unitframe_screen_position_anchor_smoke.lua	{root}	Unitframe screen position anchors
+-	lua	tools/tests/unitframe_clamped_drag_smoke.lua	{root}	Clamped unit-frame drag must follow its visible origin
+-	lua	tools/tests/unitframe_editmode_movement_smoke.lua	{root}	Individual unit-frame drag follows cursor through anchors, scales and runtime refresh

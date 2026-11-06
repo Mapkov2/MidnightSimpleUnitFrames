@@ -478,9 +478,21 @@ function Undo.BeforeChange(category, key, debounce)
     return Undo.CommitPrepared(snap)
 end
 
+-- A zero-delay popup commit must precede a subsequent gesture, even when
+-- focus loss and mouse-down run in the same native input event.
+local function CommitPendingChanges()
+    for pending in pairs(pendingPreparedTimers) do
+        pending.active = false
+        if pending.timer and pending.timer.Cancel then pending.timer:Cancel() end
+        pendingPreparedTimers[pending] = nil
+        if IsCurrentProfile(pending.snap.profile) then Undo.CommitPrepared(pending.snap) end
+    end
+end
+
 function Undo.BeginChange(category, key, action)
     if _G.MSUF__UndoRestoring then return false end
     CommitSharedDebounce()
+    CommitPendingChanges()
     local history = SharedHistoryService()
     if history and type(history.BeginHistoryTransaction) == "function" then
         activeChangeUsesShared = history.BeginHistoryTransaction(

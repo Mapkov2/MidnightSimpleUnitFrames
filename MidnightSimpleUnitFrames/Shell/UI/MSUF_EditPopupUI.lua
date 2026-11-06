@@ -464,6 +464,14 @@ function Quick.HasEditedBox(...)
     return false
 end
 
+-- A mouse gesture owns the next position. Finish typed values before its
+-- baseline is captured so a later focus loss cannot replay pre-drag text.
+function Quick.CommitFocusedEdits()
+    for box in pairs(stepperBoxes) do
+        if box.HasFocus and box:HasFocus() then box:ClearFocus() end
+    end
+end
+
 --- Drops half-typed text instead of committing it: clears focus with the
 --- commit muted. Clearing focus fires OnEditFocusLost, and so does hiding a
 --- popup with a focused box, which would apply the text. Cancel All and the

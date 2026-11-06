@@ -893,9 +893,10 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
                     end
                 end
                 local drag = assert(env.MSUF_EM2.Ticker.BeginExternalDrag(mover, "player", cfg))
-                assert(drag.usesECV and drag.ecvRule[1] == player.point
-                    and drag.ecvRule[2] == player.relativePoint
-                    and drag.ecvRule[4] == player.y - db.player.offsetY,
+                assert(drag.anchor == frame and ns.UF.Factory.ResolveAnchor(player, bar) == frame
+                    and drag.point == player.point and drag.relativePoint == player.relativePoint
+                    and drag.unitBaseX == player.x - player.offsetX
+                    and drag.unitBaseY == player.y - player.offsetY,
                     flavor .. ": Edit Mode drag disagrees with the selected CDM anchor")
                 env.MSUF_EM2.Ticker.EndExternalDrag(drag, false)
             end
@@ -908,19 +909,29 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
                     -- Fixture frames have no health textures; only their geometry painter is cosmetic here.
                     env.MSUF_ApplyBossPhysicalBarGeometry = function() end
                     local stack, before = {}, {}
+                    local anchorX, anchorY = frame:GetCenter()
                     local count = family == "boss" and 5 or 3
                     for i = 1, count do
                         local spec = config.RefreshUnit(family .. i)
                         local f = env.CreateFrame("Frame", nil, env.UIParent)
                         f:SetSize(spec.width, spec.height)
-                        f.left, f.bottom = 100, 300 - i * 40
+                        assert(spec.point == "CENTER" and spec.relativePoint == "CENTER")
+                        -- The widget stub stores points separately from its rect; seed both from the runtime layout.
+                        f.left = anchorX + spec.x - spec.width / 2
+                        f.bottom = anchorY + spec.y - spec.height / 2
                         f:SetPoint(spec.point, frame, spec.relativePoint, spec.x, spec.y)
                         stack[i], before[i], ns.UF.frames[family .. i] = f, { f:GetPoint(1) }, f
                     end
                     local stackCfg = { getFrame = function() return stack[1] end,
                         getConf = function() return db[family] end }
                     local drag = assert(env.MSUF_EM2.Ticker.BeginExternalDrag(mover, family, stackCfg))
-                    assert(drag.usesECV and (drag.isBossLayout or drag.isArenaLayout))
+                    local firstSpec = config.GetSpec(family .. "1")
+                    assert(drag.anchor == frame and ns.UF.Factory.ResolveAnchor(firstSpec, stack[1]) == frame
+                        and drag.point == firstSpec.point and drag.relativePoint == firstSpec.relativePoint
+                        and drag.unitBaseX == firstSpec.x - firstSpec.offsetX
+                        and drag.unitBaseY == firstSpec.y - firstSpec.offsetY
+                        and (drag.isBossLayout or drag.isArenaLayout),
+                        flavor .. ": Edit Mode stack disagrees with the runtime CDM anchor")
                     mover.left, mover.bottom = mover.left + 20, mover.bottom + 10
                     assert(env.MSUF_EM2.Ticker.ApplyExternalDrag(drag), "stack drag did not apply")
                     for i = 1, count do

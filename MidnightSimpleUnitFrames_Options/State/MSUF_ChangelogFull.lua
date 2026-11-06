@@ -8,12 +8,42 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A54FD9B288FEC0520DE41905191AFC8E62BA928175BA728EBD24AA00488D61C5",
-    currentVersion = "6.508",
+    sourceSha256 = "754B6C29C3FAB34FD5EA950840341C8FD811526B5248F385368FDC38BC1965B3",
+    currentVersion = "6.509",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.508",
+    rangeLabel = "6.02 -> 6.509",
     entries = {
+        {
+            version = "6.509",
+            date = "2026-11-06",
+            sections = {
+                {
+                    title = "Unit frame positioning",
+                    bullets = {
+                        {
+                            text = "Fixed drag and runtime layout using different anchors in Suite profiles, and preserved visible positions across UI scaling and screen-edge clamping.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "show blizzard frames in msuf edit mode",
+                                label = "Show Blizzard frames in MSUF Edit Mode",
+                                sectionId = "misc_external_edit_mode",
+                                controlId = "menu2.opt.misc.global.setting.blizzard.edit.mode.integration",
+                                settingKey = "general.blizzardEditModeIntegration",
+                            },
+                        },
+                        {
+                            text = "Fixed drag completion saving offsets against an outdated anchor when a provider appears, changes, or loses its position. Mouse release, closing Edit Mode during a drag, and external Edit Mode shells now preserve the final visible position in the current anchor space.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed unfinished X/Y popup edits overwriting a later mouse drag. Typed edits and dragging retain separate Undo steps.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.508",
             date = "2026-11-05",

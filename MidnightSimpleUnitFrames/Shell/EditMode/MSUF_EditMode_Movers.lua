@@ -143,6 +143,12 @@ Movers.RefreshUFPreview = RefreshUFPreview
 local IsConfigCombatLocked = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 
+local function PrepareMoverInput()
+    if BlockConfigCombatLocked() then return false end
+    EM2.QuickPopup.CommitFocusedEdits()
+    return true
+end
+
 local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
 
 local function ExpandBounds(bounds, l, r, t, b)
@@ -403,7 +409,7 @@ local function CreateMover(key, cfg)
         if button and button ~= "LeftButton" then return end
         StopPendingDrag(self)
         if self._dragging then return true end
-        if BlockConfigCombatLocked() then return end
+        if not PrepareMoverInput() then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         local externalHistoryStarted = false
         if cfg.externalPublicElement == true then

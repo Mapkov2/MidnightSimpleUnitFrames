@@ -8,12 +8,42 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A54FD9B288FEC0520DE41905191AFC8E62BA928175BA728EBD24AA00488D61C5",
-    currentVersion = "6.508",
-    historyFromVersion = "6.505",
-    previousVersion = "6.505",
-    rangeLabel = "6.505 -> 6.508",
+    sourceSha256 = "754B6C29C3FAB34FD5EA950840341C8FD811526B5248F385368FDC38BC1965B3",
+    currentVersion = "6.509",
+    historyFromVersion = "6.506",
+    previousVersion = "6.506",
+    rangeLabel = "6.506 -> 6.509",
     entries = {
+        {
+            version = "6.509",
+            date = "2026-11-06",
+            sections = {
+                {
+                    title = "Unit frame positioning",
+                    bullets = {
+                        {
+                            text = "Fixed drag and runtime layout using different anchors in Suite profiles, and preserved visible positions across UI scaling and screen-edge clamping.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "show blizzard frames in msuf edit mode",
+                                label = "Show Blizzard frames in MSUF Edit Mode",
+                                sectionId = "misc_external_edit_mode",
+                                controlId = "menu2.opt.misc.global.setting.blizzard.edit.mode.integration",
+                                settingKey = "general.blizzardEditModeIntegration",
+                            },
+                        },
+                        {
+                            text = "Fixed drag completion saving offsets against an outdated anchor when a provider appears, changes, or loses its position. Mouse release, closing Edit Mode during a drag, and external Edit Mode shells now preserve the final visible position in the current anchor space.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed unfinished X/Y popup edits overwriting a later mouse drag. Typed edits and dragging retain separate Undo steps.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.508",
             date = "2026-11-05",
@@ -157,85 +187,6 @@ local data = {
                         },
                         {
                             text = "Specific Paladin-blessing checks now hide while WoW Forever aura data is restricted.",
-                            linkless = true,
-                        },
-                    },
-                },
-            },
-        },
-        {
-            version = "6.505",
-            date = "2026-10-31",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Added \"Right-click focus in combat\" to Boss Frames and Arena Frames under General > Frame Basics. When enabled, right-clicking a frame sets that unit as your focus during combat and opens its context menu outside combat. Each frame type has its own toggle, disabled by default.",
-                            link = {
-                                pageKey = "uf_boss",
-                                query = "right click focus combat",
-                                label = "Right-click focus in combat",
-                                sectionId = "frame_basics",
-                                controlId = "menu2.uf_boss.unit.basics.right_click_focus_in_combat",
-                                settingKey = "boss.rightClickFocusInCombat",
-                            },
-                        },
-                        {
-                            text = "Texture layers have a new \"Class color / NPC type\" color mode: players use their class color and NPCs their NPC type color, independent of the health bar color.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "texture layer color mode",
-                                label = "Color mode",
-                                sectionId = "texture_layer",
-                                controlId = "menu2.uf_player.unit.texture_layer.colormode",
-                                settingKey = "player.texLayerColorMode",
-                                prepareKind = "unitTextureLayer",
-                                prepareValue = "1_setup",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        {
-                            text = "Fixed Health Chunks in animated unit and group previews: health loss now shows the same fading chunks as the live frames, including their colors, opacity and rounded shapes.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "chunked health loss",
-                                label = "Chunked health loss",
-                                sectionId = "frame_basics",
-                                controlId = "menu2.uf_player.unit.basics.chunked_fill",
-                                settingKey = "player.chunkedFill",
-                            },
-                        },
-                        {
-                            text = "Fixed Power Chunks in animated unit and group previews, including detached power bars: spent power now leaves the correct fading chunks, and stopping or hiding the preview clears them.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "chunked power loss",
-                                label = "Chunked power loss",
-                                sectionId = "power_bar",
-                                controlId = "menu2.uf_player.unit.power.powerchunkedfill",
-                                settingKey = "player.powerChunkedFill",
-                            },
-                        },
-                        {
-                            text = "Fixed raid frames keeping OFFLINE, dead or AFK status, raid markers or range fading from the previous member after members swapped raid groups out of combat.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Searching the options for a word such as \"pandemic\" now lists the options containing that word before related matches.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        {
-                            text = "The group name strip color is now edited through the section's ::: button, like other colors.",
                             linkless = true,
                         },
                     },

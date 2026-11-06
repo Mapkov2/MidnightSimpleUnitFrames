@@ -27,8 +27,8 @@ $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace 
 # revert, 6.21 legacy raid group filters) and the group sort preview fixes.
 # 6.50 is the stable release of the 6.5 line (two-digit minor, so it never
 # collides with 6.05 and ranks above 6.20). 6.501, 6.502 and 6.503 are its maintenance releases.
-if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cnotin @('6.50', '6.501', '6.502', '6.503', '6.505', '6.506', '6.507', '6.508') -and $normalizedVersion -cnotmatch '^6\.(?:502|503|504|505|506)-beta[1-9][0-9]*$') {
-    throw "Classic release-line contract covers 6.5 alpha/beta and stable 6.50/6.501/6.502/6.503/6.505/6.506/6.507/6.508 and 6.502-6.506 betas only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
+if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cnotin @('6.50', '6.501', '6.502', '6.503', '6.505', '6.506', '6.507', '6.508', '6.509') -and $normalizedVersion -cnotmatch '^6\.(?:502|503|504|505|506)-beta[1-9][0-9]*$') {
+    throw "Classic release-line contract covers 6.5 alpha/beta and stable 6.50/6.501/6.502/6.503/6.505/6.506/6.507/6.508/6.509 and 6.502-6.506 betas only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
 }
 
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()

@@ -46,13 +46,6 @@ EM2.Ticker = Ticker
 
 local format = string.format
 
--- The runtime compiler owns the CDM edge rules; drag offsets use the same
--- selected position so moving a frame never jumps between coordinate spaces.
-local function CooldownAnchorRule(key, conf)
-    local config = MSUF.UF.Config
-    return config.CooldownAnchorRule(key, conf, config.GetDB().general)
-end
-
 local function PointXY(fr, p)
     if not fr or not p then return nil, nil end
     if p == "CENTER" then return fr:GetCenter() end
@@ -113,77 +106,6 @@ local function UnitFrameRelativePoint(conf, point)
     local relativePoint = conf and conf.relativePoint or point or "CENTER"
     if not VALID_UNIT_POINTS[relativePoint] then relativePoint = point or "CENTER" end
     return relativePoint
-end
-
-local EDIT_COOLDOWN_ANCHORS = {
-    EssentialCooldownViewer = true,
-    UtilityCooldownViewer = true,
-    BuffIconCooldownViewer = true,
-}
-
-local function ResolveNamedEditAnchor(name)
-    if type(name) ~= "string" or name == "" then return nil end
-    if EDIT_COOLDOWN_ANCHORS[name] then
-        local cooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", CALLER)(name) or _G[name]
-        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-        return type(getSize) == "function" and getSize(cooldownFrame) ~= nil and cooldownFrame or nil
-    end
-    local UF = MSUF and MSUF.UF
-    if UF and type(UF.GetFrame) == "function" then
-        local frame = UF.GetFrame(name)
-        if frame then return frame end
-    end
-    local uf = UF and UF.frames
-    if uf and uf[name] then return uf[name] end
-    return _G[name] or _G["MSUF_" .. name]
-end
-
-local function UnitCooldownAnchorName(conf)
-    local cn = conf and conf.anchorFrameName
-    if EDIT_COOLDOWN_ANCHORS[cn] then return cn end
-    if type(cn) == "string" and cn ~= "" then return nil end
-
-    local atv = conf and conf.anchorToUnitframe
-    if EDIT_COOLDOWN_ANCHORS[atv] then return atv end
-    if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "global" and atv ~= "FREE" then return nil end
-
-    local db = _G.MSUF_DB
-    local general = db and db.general
-    local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
-    -- The Integrations module answers first; without it the client model does.
-    -- The C_CooldownViewer namespace is never the signal: the shared engine
-    -- exposes it on every client, while only the Mainline family ships
-    -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
-    local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
-        and isCooldownAnchorEnabled(general) == true
-        or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
-            and general and general.anchorToCooldown == true)
-    if cooldownAnchorEnabled then return "EssentialCooldownViewer" end
-    local globalAnchor = general and general.anchorName
-    if EDIT_COOLDOWN_ANCHORS[globalAnchor] then return globalAnchor end
-    return nil
-end
-
-local function ResolveAnchor(key, conf)
-    local anchorFn = _G.MSUF_GetAnchorFrame
-    local anchor = (type(anchorFn) == "function" and anchorFn()) or UIParent
-    if not conf then return anchor end
-    local cn = conf.anchorFrameName
-    if type(cn) == "string" and cn ~= "" then
-        local cf = ResolveNamedEditAnchor(cn)
-        if cf and cf ~= UIParent and cf ~= WorldFrame then return cf end
-    end
-    local atv = conf.anchorToUnitframe
-    if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
-        local rel = ResolveNamedEditAnchor(atv)
-        if rel and rel ~= UIParent and rel ~= WorldFrame then return rel end
-    end
-    local cooldownAnchorName = UnitCooldownAnchorName(conf)
-    if cooldownAnchorName then
-        local cooldownAnchor = ResolveNamedEditAnchor(cooldownAnchorName)
-        if cooldownAnchor and cooldownAnchor ~= UIParent and cooldownAnchor ~= WorldFrame then return cooldownAnchor end
-    end
-    return anchor
 end
 
 local function ApplyFramePoint(frame, point, anchor, relativePoint, x, y)
@@ -302,18 +224,61 @@ local function SetArenaPreviewPosition(point, anchor, relativePoint, x, y, conf,
         point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
 end
 
-local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
+local function UnitDragOffsets(d, centerX, centerY, uiScale, frameScale)
+    local ax, ay = PointXY(d.anchor, d.relativePoint)
+    local fallback = ax == nil or ay == nil
+    if fallback then
+        ax, ay = d.unitAnchorPX, d.unitAnchorPY
+    else
+        local anchorScale = d.anchor == UIParent and uiScale or (d.anchor.GetEffectiveScale and d.anchor:GetEffectiveScale()) or 1
+        ax, ay = ax * anchorScale, ay * anchorScale
+        d.unitAnchorPX, d.unitAnchorPY = ax, ay
+    end
+    local dx, dy = 0, 0
+    if d.point ~= "CENTER" then
+        dx, dy = PointOffsetFromCenter(d.point, d.bar:GetWidth(), d.bar:GetHeight())
+    end
+    local x = (centerX * uiScale - ax) / frameScale
+        + d.unitCenterDX + dx - d.unitBaseX + d.unitBiasX
+    local y = (centerY * uiScale - ay) / frameScale
+        + d.unitCenterDY + dy - d.unitBaseY + d.unitBiasY
+    return d.unitStartX + round(x - d.unitStartX), d.unitStartY + round(y - d.unitStartY), fallback
+end
+
+-- Clicking to select must not snap or save a frame before the pointer moves.
+local function UnitDragHasCursorMotion(d, x, y)
+    if d.unitCursorMoved ~= false then return true end
+    if abs(x - d.unitCursorPX) <= 4 and abs(y - d.unitCursorPY) <= 4 then return false end
+    d.unitCursorMoved = true
+    return true
+end
+
+local function UpdateUnitDragBounds(d, uiScale)
+    if d.unitGeometryScale == nil then return nil end
+    local scale = d.bar:GetEffectiveScale()
+    if not scale or scale <= 0 then return nil end
+    local relativeScale = scale / uiScale
+    if relativeScale ~= d.unitGeometryScale then
+        local ratio = relativeScale / d.unitGeometryScale
+        d.halfW, d.halfH = d.halfW * ratio, d.halfH * ratio
+        d.mover:SetSize(d.halfW * 2, d.halfH * 2)
+        d.unitGeometryScale = relativeScale
+    end
+    return scale
+end
+
+local function ApplyUnitDragPosition(d, centerX, centerY, uiScale, frameScale)
     if not (d and d.bar and d.conf and d.anchor) then return false end
-    local frameScale = d.bar.GetEffectiveScale and (d.bar:GetEffectiveScale() or 1) or 1
+    frameScale = frameScale or (d.bar.GetEffectiveScale and d.bar:GetEffectiveScale()) or 1
     if frameScale <= 0 then frameScale = 1 end
     uiScale = tonumber(uiScale) or 1
     if uiScale <= 0 then uiScale = 1 end
 
     local currentCX = tonumber(centerX) or d.startCX or 0
     local currentCY = tonumber(centerY) or d.startCY or 0
-    local nextX = (d.unitStartX or 0) + round((currentCX - (d.startCX or currentCX)) * uiScale / frameScale)
-    local nextY = (d.unitStartY or 0) + round((currentCY - (d.startCY or currentCY)) * uiScale / frameScale)
-    if d.lastUnitX == nextX and d.lastUnitY == nextY then return true end
+    local nextX, nextY, fallback = UnitDragOffsets(d, currentCX, currentCY, uiScale, frameScale)
+    if nextX == nil then return false end
+    if d.lastUnitX == nextX and d.lastUnitY == nextY and d.unitAnchorFallback == fallback then return true end
 
     local previousX = d.lastUnitX
     local previousY = d.lastUnitY
@@ -321,10 +286,10 @@ local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
     if previousY == nil then previousY = d.unitStartY or 0 end
 
     local point, anchor, relativePoint = d.point, d.anchor, d.relativePoint
-    local baseX, extraY = 0, 0
-    if d.usesECV and d.ecvFrame and d.ecvRule then
-        point, anchor, relativePoint = d.ecvRule[1], d.ecvFrame, d.ecvRule[2]
-        baseX, extraY = d.ecvRule[3] or 0, d.ecvRule[4] or 0
+    local baseX, extraY = d.unitBaseX, d.unitBaseY
+    if fallback then
+        anchor, relativePoint = UIParent, "BOTTOMLEFT"
+        baseX, extraY = baseX + d.unitAnchorPX / frameScale, extraY + d.unitAnchorPY / frameScale
     end
     local placedX, placedY = baseX + nextX, extraY + nextY
     local rollbackX, rollbackY = baseX + previousX, extraY + previousY
@@ -347,6 +312,11 @@ local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
 
     d.conf.offsetX = nextX
     d.conf.offsetY = nextY
+    d.unitPositionChanged, d.unitAnchorFallback = true, fallback
+    if d.anchor == UIParent and d.conf.screenPositionMode == "relativeHeight" then
+        local height = UIParent:GetHeight()
+        if height >= 400 and height <= 10000 then d.conf.screenPositionHeight = height end
+    end
     d.lastUnitX = nextX
     d.lastUnitY = nextY
     return true
@@ -677,6 +647,8 @@ local function OnUpdate(self, elapsed)
         if sc <= 0 then sc = 1 end
         local mx, my = GetCursorPosition()
         if type(mx) ~= "number" or type(my) ~= "number" then return end
+        if not UnitDragHasCursorMotion(d, mx, my) then return end
+        local frameScale = UpdateUnitDragBounds(d, sc)
 
         local rawCX = (mx + (d.offPX or 0)) / sc
         local rawCY = (my + (d.offPY or 0)) / sc
@@ -703,7 +675,7 @@ local function OnUpdate(self, elapsed)
         elseif d.isGroupFrame then
             positioned = ApplyGroupDragPosition(d, snapCX, snapCY)
         else
-            positioned = ApplyUnitDragPosition(d, snapCX, snapCY, sc)
+            positioned = ApplyUnitDragPosition(d, snapCX, snapCY, sc, frameScale)
         end
         --- The mover is only feedback. Never let it outrun the real preview or
         --- leave a detached overlay behind when a protected/runtime move fails.
@@ -771,6 +743,69 @@ local function OnUpdate(self, elapsed)
     end
 end
 
+-- Share the runtime compiler's anchor precedence, aliases and cooldown margins.
+local function ResolveDragLayout(bar, key, conf, isCastbar, isGroupFrame, groupOwner, isSubframe)
+    local point = UnitFramePoint(conf)
+    local relativePoint = UnitFrameRelativePoint(conf, point)
+    if isGroupFrame then return ResolveGroupAnchor(conf, groupOwner), point, relativePoint, 0, 0 end
+    if isCastbar or isSubframe then return UIParent, point, relativePoint, 0, 0 end
+    local unit = bar.MSUFUnitKey or (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
+    local spec = MSUF.UF.Config.RefreshUnit(unit)
+    local factory = MSUF.UF.Factory
+    local anchor, missing = factory.ResolveAnchor(spec, bar)
+    relativePoint = spec.relativePoint
+    if anchor == bar or factory.AnchorWouldCreateCycle(bar, anchor) then
+        anchor, relativePoint = UIParent, spec.point
+    end
+    return anchor, spec.point, relativePoint,
+        spec.x - spec.offsetX, spec.y - spec.offsetY, spec.offsetX, spec.offsetY, missing
+end
+
+-- Commit the visible fallback once, before runtime can replay its screen cache.
+local function CacheDraggedUnitPosition(key)
+    local uf = MSUF.UF
+    local units = uf.UnitsForConfigKey(key)
+    for i = 1, #units do
+        local frame = uf.frames[units[i]]
+        if frame then
+            local spec = uf.Config.GetSpec(units[i])
+            local _, missing = uf.Factory.ResolveAnchor(spec, frame)
+            if missing then
+                MSUF.Require("MSUF_CacheUnitFrameScreenPosition", CALLER)(frame, key, units[i], spec.point)
+            end
+        end
+    end
+end
+
+-- Capture the real root/mover geometry once. Each tick converts the desired
+-- screen position into the current anchor space, even if either scale changes.
+local function PrepareUnitDrag(drag, start)
+    if drag.isCastbar or drag.isSubframe or drag.isGroupFrame then return drag end
+    local frame = drag.bar
+    local scale = frame:GetEffectiveScale()
+    local x, y = PointXY(frame, drag.point)
+    local cx, cy = frame:GetCenter()
+    local ax, ay = PointXY(drag.anchor, drag.relativePoint)
+    if not (scale and scale > 0 and x and y and cx and cy and ax and ay) then return nil end
+    local anchorScale = drag.anchor.GetEffectiveScale and drag.anchor:GetEffectiveScale() or 1
+    x = x - ax * anchorScale / scale - drag.unitBaseX
+    y = y - ay * anchorScale / scale - drag.unitBaseY
+    if not start then
+        if abs(x - drag.unitStartX) * scale > 1 then drag.unitStartX = x end
+        if abs(y - drag.unitStartY) * scale > 1 then drag.unitStartY = y end
+    end
+    drag.unitBiasX, drag.unitBiasY = drag.unitStartX - x, drag.unitStartY - y
+    drag.unitCenterDX = cx - drag.startCenterPX / scale
+    drag.unitCenterDY = cy - drag.startCenterPY / scale
+    drag.lastUnitX, drag.lastUnitY = drag.unitStartX, drag.unitStartY
+    drag.unitPositionChanged, drag.unitAnchorFallback = false, false
+    drag.unitAnchorPX, drag.unitAnchorPY = ax * anchorScale, ay * anchorScale
+    drag.unitGeometryScale = scale / drag.uiScale
+    drag.unitCursorPX, drag.unitCursorPY = GetCursorPosition()
+    drag.unitCursorMoved = false
+    return drag
+end
+
 local function BuildDrag(mover, key, cfg, start)
     if not mover or type(cfg) ~= "table" then return nil end
     local bar = type(start) == "table" and start.bar or (cfg.getFrame and cfg.getFrame())
@@ -836,16 +871,8 @@ local function BuildDrag(mover, key, cfg, start)
         or (key == "gf_priority" and "priority")
         or (bar and bar._msufGFKind)
     local groupOwner = isGroupFrame and bar and (bar._msufGFLiveAnchor or bar._msufGFLogicalAnchor or bar) or nil
-    local anchor = isCastbar and UIParent or (isGroupFrame and ResolveGroupAnchor(conf, groupOwner)) or ResolveAnchor(key, conf)
-    local point = UnitFramePoint(conf)
-    local relativePoint = UnitFrameRelativePoint(conf, point)
-    local factory = MSUF and MSUF.UF and MSUF.UF.Factory
-    if not isCastbar and not isGroupFrame and (anchor == bar
-        or (factory and type(factory.AnchorWouldCreateCycle) == "function"
-            and factory.AnchorWouldCreateCycle(bar, anchor))) then
-        anchor = UIParent
-        relativePoint = point
-    end
+    local anchor, point, relativePoint, unitBaseX, unitBaseY, unitStartX, unitStartY =
+        ResolveDragLayout(bar, key, conf, isCastbar, isGroupFrame, groupOwner, isSubframe)
 
     local barCenterDX, barCenterDY = 0, 0
     if isGroupFrame then
@@ -853,21 +880,6 @@ local function BuildDrag(mover, key, cfg, start)
         if bCX and bCY then
             barCenterDX = bCX - mCX
             barCenterDY = bCY - mCY
-        end
-    end
-
-    local ecvRule = not (isCastbar or isGroupFrame or isSubframe) and CooldownAnchorRule(key, conf) or nil
-    local usesECV = false
-    local ecvFrame
-    if (not isCastbar) and ecvRule and conf then
-        local cooldownAnchorName = UnitCooldownAnchorName(conf)
-        -- Utility/Buff viewer offsets from 5.77 are CENTER-to-CENTER. Mirror
-        -- the runtime compiler and reserve these edge rules for Essential.
-        local ecv = cooldownAnchorName == "EssentialCooldownViewer"
-            and (ResolveNamedEditAnchor(cooldownAnchorName) or anchor) or nil
-        if ecv and anchor == ecv then
-            usesECV = true
-            ecvFrame = ecv
         end
     end
 
@@ -903,7 +915,8 @@ local function BuildDrag(mover, key, cfg, start)
         bar          = bar,
         conf         = conf,
         anchor       = anchor,
-        ecvRule      = ecvRule,
+        unitBaseX    = unitBaseX,
+        unitBaseY    = unitBaseY,
         offPX        = mCX * uiScale - cursorPX,
         offPY        = mCY * uiScale - cursorPY,
         startCX      = mCX,
@@ -934,12 +947,10 @@ local function BuildDrag(mover, key, cfg, start)
         uiScale      = uiScale,
         point        = point,
         relativePoint = relativePoint,
-        unitStartX   = tonumber(conf and conf.offsetX) or 0,
-        unitStartY   = tonumber(conf and conf.offsetY) or 0,
+        unitStartX   = unitStartX or tonumber(conf and conf.offsetX) or 0,
+        unitStartY   = unitStartY or tonumber(conf and conf.offsetY) or 0,
         barCenterDX  = barCenterDX,
         barCenterDY  = barCenterDY,
-        usesECV      = usesECV,
-        ecvFrame     = ecvFrame,
     }
     if type(start) == "table" then
         local centerX = tonumber(start.centerX)
@@ -961,7 +972,42 @@ local function BuildDrag(mover, key, cfg, start)
         drag.castbarStartX = tonumber(start.castbarX) or drag.castbarStartX
         drag.castbarStartY = tonumber(start.castbarY) or drag.castbarStartY
     end
-    return drag
+    return PrepareUnitDrag(drag, start)
+end
+
+local function CommitUnitDragPosition(d, cx, cy, uiScale)
+    if IsConfigCombatLocked() then return false end
+    -- Providers can appear, disappear or change identity while the mouse is
+    -- held. Commit the last mover target in the runtime's current anchor space.
+    local anchor, point, relativePoint, baseX, baseY, _, _, missing = ResolveDragLayout(d.bar, d.key, d.conf)
+    -- A missing provider is temporary. Retain its known coordinate space so
+    -- the screen-cache fallback does not turn into a second offset on return.
+    if missing then anchor = d.anchor end
+    if d.anchor ~= anchor or d.point ~= point or d.relativePoint ~= relativePoint
+        or d.unitBaseX ~= baseX or d.unitBaseY ~= baseY then
+        d.lastUnitX, d.lastUnitY = nil, nil
+    end
+    d.anchor, d.point, d.relativePoint = anchor, point, relativePoint
+    d.unitBaseX, d.unitBaseY = baseX, baseY
+    SetActiveDragFlags(d, true)
+    local positioned = ApplyUnitDragPosition(d, cx, cy, uiScale)
+    SetActiveDragFlags(d, false)
+    if not positioned then return false end
+    CacheDraggedUnitPosition(d.key)
+    return true
+end
+
+local function FinishUnitDrag(d, cx, cy, uiScale)
+    if not CommitUnitDragPosition(d, cx, cy, uiScale) then return false end
+    ApplySettingsForKeySafe(d.key)
+    C_Timer.After(0.06, function()
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    end)
+    if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
+    if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
+    RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
+    return true
 end
 
 function Ticker.BeginDrag(mover, key, cfg)
@@ -1003,7 +1049,19 @@ end
 
 function Ticker.EndExternalDrag(drag, applyFinal)
     if not drag then return false end
-    local moved = applyFinal ~= false and Ticker.ApplyExternalDrag(drag) or false
+    local moved = false
+    if applyFinal ~= false and not IsConfigCombatLocked() then
+        if drag.unitPositionChanged ~= nil then
+            local _, cx, _, _, cy = GetFrameEdgesUI(drag.mover)
+            local scale = UIParent:GetEffectiveScale()
+            if cx and cy and (drag.unitPositionChanged
+                or abs(cx * scale - drag.startCenterPX) > 0.5 or abs(cy * scale - drag.startCenterPY) > 0.5) then
+                moved = CommitUnitDragPosition(drag, cx, cy, scale)
+            end
+        else
+            moved = Ticker.ApplyExternalDrag(drag)
+        end
+    end
     SetActiveDragFlags(drag, false)
     return moved
 end
@@ -1029,6 +1087,7 @@ function Ticker.EndDrag()
     if uiScale <= 0 then uiScale = 1 end
     local moved = abs(cx * uiScale - (d.startCenterPX or cx * uiScale)) > 0.5
         or abs(cy * uiScale - (d.startCenterPY or cy * uiScale)) > 0.5
+        or d.unitPositionChanged == true
 
     if moved then
         if d.externalPublicElement then
@@ -1081,14 +1140,7 @@ function Ticker.EndDrag()
             MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
             if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
         else
-            ApplySettingsForKeySafe(d.key)
-            C_Timer.After(0.06, function()
-                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            end)
-            if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
-            if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
-            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
-            RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
+            moved = FinishUnitDrag(d, cx, cy, uiScale)
         end
         if moved then NotifyGuidedEditModeMoved(d.key) end
     end
@@ -1140,7 +1192,15 @@ end
 --- and its provider persists it on "commit". The combat exit runs this inside
 --- PLAYER_REGEN_DISABLED, before lockdown, and defers nothing; a provider
 --- that refuses gets its start state back.
-local function CommitExternalDragOnStop(d)
+local function CommitHeldDragOnStop(d)
+    if d and d.unitPositionChanged then
+        local _, cx, _, _, cy = GetFrameEdgesUI(d.mover)
+        if cx and cy and not IsConfigCombatLocked() then
+            CommitUnitDragPosition(d, cx, cy, UIParent:GetEffectiveScale())
+        else
+            CacheDraggedUnitPosition(d.key)
+        end
+    end
     if not (d and d.externalPublicElement and d.mover) then return end
     local _, cx, _, _, cy = GetFrameEdgesUI(d.mover)
     if cx == nil or cy == nil then return end
@@ -1158,7 +1218,7 @@ end
 function Ticker.Stop(commitHeldDrag)
     tickerActive = false
     if activeDrag then
-        if commitHeldDrag == true then CommitExternalDragOnStop(activeDrag) end
+        if commitHeldDrag == true then CommitHeldDragOnStop(activeDrag) end
         SetActiveDragFlags(activeDrag, false)
     end
     activeDrag = nil

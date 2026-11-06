@@ -187,6 +187,15 @@ local function ResolveNamedAnchor(name)
   return nil, name
 end
 
+local function AnchorHasResolvedCenter(anchor)
+  local readable, getCenter = true, anchor.GetCenter
+  if not readable or type(getCenter) ~= "function" then return false end
+  local x, y = getCenter(anchor)
+  if x == nil or y == nil then return false end
+  if issecretvalue and (issecretvalue(x) or issecretvalue(y)) then return false end
+  return true
+end
+
 local function ResolveAnchor(spec, frame)
   local anchor = UIParent
   local name = CanonicalAnchorFrameName(spec and spec.anchorFrameName)
@@ -198,7 +207,7 @@ local function ResolveAnchor(spec, frame)
   end
   if type(name) == "string" and name ~= "" then
     local resolved, missing = ResolveNamedAnchor(name)
-    if resolved and resolved ~= frame then return resolved, nil, name end
+    if resolved and resolved ~= frame and AnchorHasResolvedCenter(resolved) then return resolved, nil, name end
     return anchor, missing or name, name
   end
   return anchor, nil, nil
@@ -324,15 +333,6 @@ end
 -- materialized on UIParent, regardless of the number of unit consumers.
 local unitExternalAnchorProxies = {}
 
-local function AnchorHasResolvedCenter(anchor)
-  local readable, getCenter = true, anchor.GetCenter
-  if not readable or type(getCenter) ~= "function" then return false end
-  local x, y = getCenter(anchor)
-  if x == nil or y == nil then return false end
-  if issecretvalue and (issecretvalue(x) or issecretvalue(y)) then return false end
-  return true
-end
-
 local function UnitExternalAnchorProxyKey(requestedAnchor, anchor)
   if type(requestedAnchor) == "string" and requestedAnchor ~= "" then return requestedAnchor end
   return anchor
@@ -408,7 +408,7 @@ ExportPublic("MSUF_UpdateAllExternalAnchorProxies", UpdateAllUnitExternalAnchorP
 -- Shared by unit frames, group frames, Edit Mode, and the anchor picker. Keep
 -- named custom anchors logical; only reject targets that would make SetPoint
 -- recurse through the frame being positioned.
-Factory.ResolveNamedAnchor = ResolveNamedAnchor
+Factory.ResolveNamedAnchor, Factory.ResolveAnchor = ResolveNamedAnchor, ResolveAnchor
 Factory.AnchorDependsOn = AnchorDependsOn
 Factory.AnchorWouldCreateCycle = AnchorWouldCreateCycle
 Factory.SnapshotFrameToUIParent = SnapshotFrameToUIParent

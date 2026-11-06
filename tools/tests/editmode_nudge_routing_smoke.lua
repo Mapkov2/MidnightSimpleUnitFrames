@@ -95,7 +95,9 @@ MSUF_GetCastbarDefaultOffsets = function(unit) if unit == "player" then return 0
 local castbarSyncs = 0
 MSUF_SyncCastbarPositionPopup = function() castbarSyncs = castbarSyncs + 1 end
 MSUF_EM_UndoBeforeChange = function() end
+local focusedEditsSettled = 0
 MSUF_EM2 = {
+    QuickPopup = { CommitFocusedEdits = function() focusedEditsSettled = focusedEditsSettled + 1 end },
     Util = {
         Round = function(v) return v >= 0 and math.floor(v + 0.5) or -math.floor(-v + 0.5) end,
         RefreshUFPreview = function() end,
@@ -318,6 +320,7 @@ EM2.Movers.Show()
 local targetMover = assert(EM2.Movers.Get("target"), "no Target mover")
 -- Press on the Target mover, move the cursor 60 px, release: the click that follows is suppressed.
 targetMover.scripts.OnMouseDown(targetMover, "LeftButton")
+assert(focusedEditsSettled == 1, "drag did not settle pending popup input")
 cursorX = cursorX + 60
 targetMover.scripts.OnMouseUp(targetMover, "LeftButton")
 targetMover.scripts.OnClick(targetMover, "LeftButton")
