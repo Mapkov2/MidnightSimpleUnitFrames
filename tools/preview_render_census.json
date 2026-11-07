@@ -47,7 +47,7 @@
           314
         ]
       ],
-      "source_sha256": "ea692c102a4deebd7d75e10a9d957599e7466248b9062402c441efc9766f77a6",
+      "source_sha256": "c9906589a0e2eb4b27768633d60e9e317dde9be39c6b554d607fba4e1a0b6a55",
       "adapter_exclusions": [
         {
           "name": "CP.ResolveDetachedPowerWidth",
@@ -197,7 +197,7 @@
           1665
         ]
       ],
-      "source_sha256": "e50b18aec69a28c61d017e03ad0bc1d064204c62e38faf691a4bfe1958fad65a",
+      "source_sha256": "74b2a6e4893542665d1e9fb6179018e7764917045986003c8aab6ff3e7fbd280",
       "adapter_exclusions": [
         {
           "name": "HideMeterText",
@@ -358,11 +358,11 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "fc140867bb318b0aec34ffffa28aa14385442026f15717b162a1d17ad3ce0264"
+          "source_sha256": "bb7cde008bf5f1779cb4fe88dec4d18e730ee28587d1bc09acf725ae13b450a7"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "794ea8d6b050cfbe97706b300517d46abed5aba14717e2065648402d3f86f19a"
+          "source_sha256": "7eb01d1a6d2af5ca16c10ebffdaaf45b9ee4b14a66257e33ba67179f60f18a20"
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
@@ -374,7 +374,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "c4418aab0510ff2356f97ff20b0be87d5b88a041d11d0f1bb9c4cd573e519402"
+          "source_sha256": "b8cb90d84619a17ce6491f14fcfa1ec361d67084750fd6fd2ec11fe16b916261"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
@@ -781,7 +781,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua",
-          "source_sha256": "223db088ec0bbb3cd989d273042ed7bbc47298210c13d929ef4920a5389907d2"
+          "source_sha256": "0d92e8290b0281435fbb97650b9bc70328da3e726b6af0cec43019103c1a9a9f"
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",
