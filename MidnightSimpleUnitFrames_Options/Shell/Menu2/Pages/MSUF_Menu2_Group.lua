@@ -452,6 +452,9 @@ local GF_COPY_EXCLUDE = M.KeySetFromWords [[
 ]]
 local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
+    healthGradientLowR healthGradientLowG healthGradientLowB
+    healthGradientMidR healthGradientMidG healthGradientMidB
+    healthGradientHighR healthGradientHighG healthGradientHighB barBgFillMode barBgColorMode
     gfUnifiedR gfUnifiedG gfUnifiedB bgR bgG bgB deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
     debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
     hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA

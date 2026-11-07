@@ -90,7 +90,9 @@ end
 
 local function _ApplyTexCached(sb, tex)
     if not sb or not tex then return false end
-    if sb.MSUF_cachedStatusbarTexture ~= tex then
+    -- Full frame applies paint through the element cache. A preset switch can
+    -- therefore leave the global cache at an older texture.
+    if sb.MSUF_cachedStatusbarTexture ~= tex or sb._msufTexture ~= tex then
         sb:SetStatusBarTexture(tex)
         sb.MSUF_cachedStatusbarTexture = tex
         sb._msufTexture = tex

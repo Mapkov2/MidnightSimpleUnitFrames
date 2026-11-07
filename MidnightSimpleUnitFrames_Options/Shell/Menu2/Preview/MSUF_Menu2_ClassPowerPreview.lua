@@ -18,9 +18,6 @@ local CPPreview = M.ClassPowerPreview or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local PreviewCore = MSUF.UFPreviewCore or {}
 local Helpers = M.PreviewHelpers or {}
-local function PlayerManaSourceActive(player)
-    return player and player._msufResourceExtraMana == true or (Helpers.PlayerManaSourceActive or M.Fallbacks.False)(player)
-end
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- animation driver's OnUpdate disabled.
 local ONUPDATE_MODE_DISABLED = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.Disabled) or 0
@@ -260,13 +257,42 @@ local function ClassColor(dr, dg, db, spec)
     if c then return c.r, c.g, c.b end
     return dr or 0.95, dg or 0.82, db or 0.10
 end
-local function PowerColor(player)
-    local pbc = _G.PowerBarColor
-    local explicitMana = PlayerManaSourceActive(player)
-    local sample = player and player._msufResourceExtraPower
-    local c = pbc and ((sample and pbc[sample]) or (explicitMana and pbc.MANA) or pbc.ENERGY or pbc.MANA)
-    if c then return c.r or c[1] or 1, c.g or c[2] or 0.82, c.b or c[3] or 0.10 end
-    return 1.00, 0.86, 0.12
+local PowerSample = {
+    primary = { WARRIOR = "RAGE", ROGUE = "ENERGY", DEATHKNIGHT = "RUNIC_POWER", MONK = "ENERGY", DEMONHUNTER = "FURY" },
+    hunterUsesFocus = MSUF.Client.IsMists or (MSUF.Client.IsRetail and not MSUF.Client.IsForever),
+}
+function PowerSample.HasMana(class)
+    return class == "MONK" or not (PowerSample.primary[class] or (class == "HUNTER" and PowerSample.hunterUsesFocus))
+end
+function PowerSample.UsesManaSource(player, spec)
+    return player._msufResourceExtraMana == true
+        or (player.playerPowerSource == "MANA" and PowerSample.HasMana(PreviewClassToken(spec)))
+end
+function PowerSample.ClassResourceEnabled(bars, spec)
+    return (spec.token ~= "INSANITY" or bars.showShadowMana == true)
+        and (spec.token ~= "MAELSTROM" or bars.showEleMaelstrom == true)
+end
+function PowerSample.Token(bars, player, spec)
+    if player._msufResourceExtraPower then return player._msufResourceExtraPower end
+    if PowerSample.UsesManaSource(player, spec) then return "MANA" end
+    local class = PreviewClassToken(spec)
+    if class == "HUNTER" and PowerSample.hunterUsesFocus then return "FOCUS" end
+    local key = spec and spec.key
+    if key == "druid_feral" then return "ENERGY" end
+    if key == "druid_guardian" then return "RAGE" end
+    if key == "druid_balance" and MSUF.Client.IsRetail and not MSUF.Client.IsForever then return "LUNAR_POWER" end
+    if spec and spec.mode == "continuous" and (spec.token == "INSANITY" or spec.token == "MAELSTROM")
+        and (bars.showClassPower == false or not PowerSample.ClassResourceEnabled(bars, spec)) then return spec.token end
+    return PowerSample.primary[class] or "MANA"
+end
+local function PowerColor(spec, token)
+    local power = MSUF.UF.Config.specs.player
+    power = power and power.power
+    if power then
+        if power.mode == "class" then return ClassColor(nil, nil, nil, spec) end
+        if power.mode ~= "power" then return power.r, power.g, power.b end
+    end
+    return MSUF.UFBarTextCommon.PowerColor(nil, nil, nil, token, true)
 end
 local function CPToken(spec, value)
     if CPPreview.TokenForValue then return CPPreview.TokenForValue(spec, value) end
@@ -294,16 +320,19 @@ local function CPBgColor(token)
     if CPPreview.ColorOverride then return CPPreview.ColorOverride("classPowerBgColorOverrides", token) end
     return nil
 end
-local function HPColor(bars, spec)
+local function HPColor(bars, spec, fraction)
     local mode = tostring(bars and bars.playerHPBarColorMode or "GLOBAL"):upper()
     if mode == "DARK" then
         return Helpers.DarkBarColor(type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil)
     end
-    if mode == "GRADIENT" then
-        local pct = 0.74
-        local r = pct > 0.5 and (1 - (pct - 0.5) * 2) or 1
-        local g = pct > 0.5 and 1 or (pct * 2)
-        return r, g, 0
+    local unitSpec = MSUF.UF.Config.specs.player
+    local health = unitSpec and unitSpec.health
+    if mode == "GRADIENT" or (mode == "GLOBAL" and health and health.mode == "gradient") then
+        local r, g, b = MSUF.UFBarTextCommon.PreviewHealthGradientColor(health, fraction)
+        return r, g, b, health or false
+    end
+    if mode == "GLOBAL" and health and health.mode ~= "class" then
+        return health.r, health.g, health.b
     end
     return ClassColor(0.20, 0.78, 0.26, spec)
 end
@@ -886,13 +915,14 @@ end
 --- does at runtime.
 local function PowerShowsEbonMight(bars, player, spec)
     return IsAugCompositePreviewSpec(spec)
-        and not PlayerManaSourceActive(player)
-        and bars.showEbonMight ~= false
+        and not PowerSample.UsesManaSource(player, spec)
+        and bars.showClassPower ~= false and bars.showEbonMight ~= false
 end
 
 local function ClassPowerPreviewState(bars, spec)
     if bars and bars.showClassPower == false then return false, "settings" end
     if not spec or spec.enabled == false or spec.mode == "none" then return false, "resource" end
+    if spec.mode == "continuous" and not PowerSample.ClassResourceEnabled(bars, spec) then return false, "settings" end
     return true
 end
 
@@ -1197,8 +1227,11 @@ local function RenderSecondaryClassTimer(preview)
     return HideSecondaryClassTimer(preview)
 end
 
-local function DetachedPowerShown(player)
-    return player.powerBarDetached == true and player.detachedPowerBarAnchorToClassPower == true
+local function DetachedPowerShown(bars, player)
+    if player.powerBarDetached ~= true then return false end
+    if player.showPowerBar ~= nil then return player.showPowerBar ~= false end
+    if bars.showPlayerPowerBar ~= nil then return bars.showPlayerPowerBar ~= false end
+    return player.showPowerText ~= nil or player.showPower ~= false
 end
 local function DetachedPowerWidth(preview, bars, player, classFrame)
     local shape = ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars.classPowerShape)
@@ -1283,7 +1316,7 @@ end
 --- it can attach to ClassPower, but no live player power events are involved.
 local function RenderDetachedPower(preview, bars, player, classFrame, spec)
     local frame = EnsureMeter(preview, "detachedPower")
-    if not DetachedPowerShown(player) then
+    if not DetachedPowerShown(bars, player) then
         SetRoundedPowerPreview(frame, false)
         frame:Hide()
         HideBarOutline(frame)
@@ -1299,7 +1332,7 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
     local shapeInfo = POWER_SHAPES[shape]
     local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 800)
     local x, y = tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4
-    local pr, pg, pb = PowerColor(player)
+    local pr, pg, pb = PowerColor(spec, PowerSample.Token(bars, player, spec))
     -- The detached bar follows the normal power-texture precedence (per-unit
     -- Player value -> shared bars value -> global bar texture); there is no
     -- separate Class Resources texture anymore (see UF config).
@@ -1325,7 +1358,7 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
         if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
     end
     frame:ClearAllPoints()
-    if classFrame and classFrame.IsShown and classFrame:IsShown() then
+    if player.detachedPowerBarAnchorToClassPower == true and classFrame and classFrame:IsShown() then
         frame:SetPoint("TOP", classFrame, "BOTTOM", x, y)
     elseif tostring(player.detachedPowerBarAnchorMode or ""):upper() == "LEGACY_TOPLEFT" then
         frame:SetPoint("TOPLEFT", preview.playerRef, "BOTTOMLEFT", x, y)
@@ -1422,12 +1455,9 @@ local function HPWidth(preview, bars, classFrame, powerFrame)
 end
 local function PlaceHP(frame, preview, bars, classFrame, powerFrame, classBottomFrame)
     local mode = tostring(bars.playerHPBarAnchor or "CLASS_TOP"):upper()
-    local anchor = (mode == "POWER_TOP" or mode == "POWER_BOTTOM") and powerFrame or classFrame
-    if mode == "CLASS_BOTTOM" and classBottomFrame then anchor = classBottomFrame end
-    if not (anchor and anchor.IsShown and anchor:IsShown()) then
-        anchor = ((mode == "CLASS_BOTTOM" or mode == "POWER_BOTTOM") and classBottomFrame)
-            or classFrame or preview.playerRef
-    end
+    if not powerFrame and (mode == "POWER_TOP" or mode == "POWER_BOTTOM") then mode = "CLASS_TOP" end
+    local anchor = (mode == "POWER_TOP" or mode == "POWER_BOTTOM") and powerFrame
+        or (mode == "CLASS_BOTTOM" and classBottomFrame) or classFrame or preview.playerRef
     local x = tonumber(bars.playerHPBarOffsetX) or 0
     local y = tonumber(bars.playerHPBarOffsetY) or 0
     local gap = Clamp(bars.playerHPBarGap, 2, 0, 60)
@@ -1484,10 +1514,11 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
     local orbSize = followPower and Clamp(player.detachedPowerOrbSize, 54, 20, 160) or Clamp(bars.playerHPBarOrbSize, 54, 20, 160)
     local width = shape == "ORB" and orbSize or HPWidth(preview, bars, classFrame, powerFrame)
     local height = shape == "ORB" and width or Clamp(bars.playerHPBarHeight, 6, 2, 80)
-    local hr, hg, hb = HPColor(bars, spec)
     local fgTex = ResolveTexture(bars.playerHPBarTexture)
     local bgTex = ResolveTexture(bars.playerHPBarBgTexture, fgTex)
     local fraction = AnimatedMeterFraction(preview, 0.74, 0.34, 0.18, 1.00)
+    local hr, hg, hb, gradient = HPColor(bars, spec, fraction)
+    frame._msufCPPreviewHealthGradient = gradient
     PlaceHP(frame, preview, bars, classFrame, powerFrame, classBottomFrame)
     RenderMeter(frame, shapeInfo, {
         width = width,
@@ -1630,6 +1661,11 @@ local function UpdatePlayerHPAnimation(preview, frame, bars, player)
     if frame.IsShown and not frame:IsShown() then return true end
     local fraction = AnimatedMeterFraction(preview, 0.74, 0.34, 0.18, 1.00)
     UpdateMeterFill(frame, fraction)
+    local gradient = frame._msufCPPreviewHealthGradient
+    if gradient ~= nil then
+        local r, g, b = MSUF.UFBarTextCommon.PreviewHealthGradientColor(gradient, fraction)
+        frame.fill:SetVertexColor(r, g, b, 1)
+    end
     if bars.playerHPBarTextEnabled ~= false then
         local leftMode, centerMode, rightMode, delimiter, hideLeft, hideCenter, hideRight = HPTextConfig(bars, player)
         local maxValue = 1000000
@@ -1665,10 +1701,12 @@ local function CreatePlayerReference(preview)
     preview.playerRef = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview)))
     preview.playerRef:EnableMouse(false)
 end
-function Preview.RenderAlternativeMana(preview, bars)
-    if bars.showAltMana ~= true then
+function Preview.RenderAlternativeMana(preview, bars, player, spec)
+    if bars.showAltMana ~= true or not PowerSample.HasMana(PreviewClassToken(spec))
+        or (PowerSample.Token(bars, player, spec) == "MANA" and not PowerShowsEbonMight(bars, player, spec)) then
         SetShownSafe(preview.altMana, false)
-        return
+        PlaceHandle(preview.handleMana)
+        return false
     end
     local frame = EnsureMeter(preview, "altMana")
     local width = bars.altManaWidthMode == "custom" and tonumber(bars.altManaWidth) or nil
@@ -1687,7 +1725,7 @@ function Preview.RenderAlternativeMana(preview, bars)
         preview.handleMana = MakeHandle(preview, "alternativeMana", "bars", "altManaOffsetX", "altManaOffsetY",
             0, -2, "Alternative Mana", { .45, .7, 1 }, "mana", "mana", 0)
     end
-    PlaceHandle(preview.handleMana, frame, 5)
+    return PlaceHandle(preview.handleMana, frame, 5)
 end
 local function EnsureBound(preview, key, label, color)
     preview.bounds = preview.bounds or {}
@@ -1820,20 +1858,18 @@ function SAMPLE.PaintMana(preview, samples, bars, powerFrame, player)
         frame._sampleLayer, frame._sampleActive = "power", frame:IsShown()
     end
 end
--- The live power bar the marks sit on: the Mana display source, else the
--- player's real power type (MSUF_CP_ResourceMarks Target), and its maximum for
--- ABSOLUTE marks. Secret or missing values leave the maximum unknown.
-local function SamplePowerTarget(mana)
-    local power, token
-    if mana then
-        power, token = 0, "MANA"
+function PowerSample.Maximum(token)
+    local power, liveToken
+    if token == "MANA" then
+        power = 0
     elseif type(UnitPowerType) == "function" then
-        power, token = UnitPowerType("player")
+        power, liveToken = UnitPowerType("player")
+        if (issecretvalue and issecretvalue(liveToken)) or liveToken ~= token then return 100 end
     end
-    if type(power) ~= "number" or (issecretvalue and issecretvalue(power)) then return token, nil end
+    if type(power) ~= "number" or (issecretvalue and issecretvalue(power)) then return 100 end
     local maximum = type(UnitPowerMax) == "function" and UnitPowerMax("player", power) or nil
-    if type(maximum) ~= "number" or (issecretvalue and issecretvalue(maximum)) then maximum = nil end
-    return token, maximum
+    if type(maximum) ~= "number" or (issecretvalue and issecretvalue(maximum)) or maximum <= 0 then return 100 end
+    return maximum
 end
 function SAMPLE.PaintArcane(preview, samples, bars)
     -- Reuse the duration bar sample painter for both phases of the live window.
@@ -1884,9 +1920,9 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
         frame.marker:SetShown(bars.ignorePainTimeMarker ~= false)
     end
     if arcane then SAMPLE.PaintArcane(preview, samples, bars) end
-    -- The existing detached mock uses Energy unless its configured source is Mana.
-    -- Alternate-mana has no mock host here and is therefore not misrepresented.
-    local mana = powerFrame and PlayerManaSourceActive(player) and not PowerShowsEbonMight(bars, player, spec)
+    local powerToken = PowerSample.Token(bars, player, spec)
+    local ebon = PowerShowsEbonMight(bars, player, spec)
+    local mana = powerFrame and powerToken == "MANA" and not ebon
     if preview.manaSamplePainter then preview.manaSamplePainter.HideSample() end
     if mana then SAMPLE.PaintMana(preview, samples, bars, powerFrame, player) end
     preview.resourceSampleMarks = preview.resourceSampleMarks or {}
@@ -1896,18 +1932,14 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
     local thresholdCount = 0
     local count=0
     local marks = bars.resourceMarks or SAMPLE.NO_MARKS
-    -- The power bar's type and maximum are read only once a mark sits on it.
-    local powerToken, powerMaximum, powerResolved
+    local powerMaximum
     for i=1,min(#marks,256) do
         local rule=marks[i]
         local host,token,maximum
         if rule.target=="CLASS" and classFrame and spec and spec.mode~="aura_segmented" then
             host,token,maximum=classFrame,spec.token,tonumber(spec.segments)
-        elseif rule.target~="CLASS" and rule.target~="ALTMANA" and powerFrame then
-            if not powerResolved then
-                powerToken, powerMaximum = SamplePowerTarget(mana)
-                powerResolved = true
-            end
+        elseif rule.target~="CLASS" and rule.target~="ALTMANA" and powerFrame and not ebon then
+            if rule.mode == "ABSOLUTE" and not powerMaximum then powerMaximum = PowerSample.Maximum(powerToken) end
             host,token,maximum=powerFrame,powerToken,powerMaximum
         end
         local value=tonumber(rule.value)
@@ -2438,7 +2470,7 @@ function Preview.Create(ctx, builder)
         local profileBars = bars
         bars, player, spec = M.ResourceExtrasPreview.Config(box, bars, player, spec)
         PaintPlayerReference(box)
-        Preview.RenderAlternativeMana(box, bars)
+        local manaAvailable = Preview.RenderAlternativeMana(box, bars, player, spec)
         local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
         local ebonFrame = RenderSecondaryClassTimer(box)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then
@@ -2466,7 +2498,7 @@ function Preview.Create(ctx, builder)
         box.layerAvailable = {
             guides = true,
             border = true,
-            mana = bars.showAltMana == true,
+            mana = manaAvailable,
             class = classFrame ~= nil,
             classText = classFrame ~= nil and (bars.classPowerShowText == true
                 or (spec and spec.secondaryTimer and spec.secondaryTimer.nativeDurationText == true)),

@@ -113,6 +113,7 @@ player.detachedPowerBarTextOnBar = true
 local box = ui.page.ctx.entry.classPowerPreview
 db.general.classPowerPreviewGuidesEnabled = false
 box.layerVisibility.guides = false
+M.SetClassPowerPreviewSpecKey("druid_feral")
 box:Refresh()
 Check(#box.playerRef.regions == 0 and #box.playerRef.children == 0, "player reference artwork remains")
 Check(not box.bounds.reference and box.layerVisibility.reference == nil, "player reference participates in bounds/layers")

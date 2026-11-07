@@ -8,12 +8,70 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "754B6C29C3FAB34FD5EA950840341C8FD811526B5248F385368FDC38BC1965B3",
-    currentVersion = "6.509",
+    sourceSha256 = "BB1CECB7F28443C2B42AA9DF8BC1A7900D7125D3CE1AB075A780F434A1FB30A4",
+    currentVersion = "6.510",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.509",
+    rangeLabel = "6.02 -> 6.510",
     entries = {
+        {
+            version = "6.510",
+            date = "2026-11-07",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Party, Raid and Mythic Raid frames can each use their own health gradient and bar background. Configure the gradient stops, background color mode and whether the background fills the bar or only shows missing health.",
+                            linkless = true,
+                        },
+                        {
+                            text = "WoW Forever swing timers now show draggable bars in Edit Mode. The options preview lets you inspect individual layers, jump to their settings, and see the out-of-range color and opacity for each weapon slot.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Menu appearance presets now apply to the MSUF menu when MapkoSkin is installed. Pick MapkoSkin from the same list to switch back to its look.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "menu appearance preset",
+                                label = "Menu appearance preset",
+                                sectionId = "misc_menu_behavior",
+                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
+                                settingKey = "general.menuAppearancePreset",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes and polish",
+                    bullets = {
+                        {
+                            text = "Fixed health bars retaining the old texture after switching away from the Blizzard preset.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Choosing the global health bar color mode now clears preset overrides on individual unit frames, so the chosen mode takes effect immediately.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "bar mode",
+                                label = "Bar mode",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.bar.mode",
+                                settingKey = "general.barMode",
+                            },
+                        },
+                        {
+                            text = "The compact color picker now shows opacity for colors that support it, so you can restore a tint saved at 0% opacity.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Improved the Class Resources preview for alternative mana and player health colors. Refined selected tabs, sidebar markers and window buttons, and made section actions appear when you hover over or focus the header.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.509",
             date = "2026-11-06",

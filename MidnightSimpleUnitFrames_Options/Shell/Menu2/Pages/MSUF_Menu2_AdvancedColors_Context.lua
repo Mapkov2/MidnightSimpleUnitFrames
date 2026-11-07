@@ -252,6 +252,57 @@ local function ContextValue(value, context)
     if type(value) == "function" then return value(context) end
     return value
 end
+local CONTEXT_COLOR_FACTORIES
+local function ContextGroupScope(context)
+    local scope = ContextValue(context and context.scope, context)
+    if context and context.group == true then
+        for i = 1, #GROUP_COLOR_DB_KEYS do
+            if scope == GROUP_COLOR_DB_KEYS[i] then return scope end
+        end
+    end
+end
+local function ContextGroupColor(context, id, label, prefix, dr, dg, db, gradient)
+    local scope = ContextGroupScope(context)
+    if not scope then
+        local target = ContextGroup(id, label, prefix, dr, dg, db)
+        if gradient then target.getRGB = function() return CP.GroupGradientRGB(prefix, dr, dg, db) end end
+        return target
+    end
+    local function Conf() return DB()[scope] or {} end
+    local target = ContextTarget(id .. "." .. scope, label,
+        function()
+            local conf, general = Conf(), gradient and G() or {}
+            return conf[prefix .. "R"] or general[prefix .. "R"] or dr,
+                conf[prefix .. "G"] or general[prefix .. "G"] or dg,
+                conf[prefix .. "B"] or general[prefix .. "B"] or db
+        end,
+        function(r, g, b)
+            local conf = Conf()
+            conf[prefix .. "R"], conf[prefix .. "G"], conf[prefix .. "B"] = r, g, b
+            CP.RequestGroupColorApply("MSUF2_GROUP_COLORS", "visual")
+        end)
+    local state = ContextStoredState(Conf, { prefix .. "R", prefix .. "G", prefix .. "B" }, ApplyColors)
+    target.captureState, target.restoreState = state.captureState, state.restoreState
+    return target
+end
+local function ContextHealthGradient(context)
+    local group = context and context.group == true
+    local targets = {}
+    for _, row in ipairs({
+        { "low", "Low", "Health gradient - low", 1, 0, 0 },
+        { "mid", "Mid", "Health gradient - middle", 1, 1, 0 },
+        { "high", "High", "Health gradient - high", 0, 1, 0 },
+    }) do
+        local id = "health.gradient." .. row[1]
+        if group then
+            targets[#targets + 1] = ContextGroupColor(context, "group." .. id, row[3],
+                "healthGradient" .. row[2], row[4], row[5], row[6], true)
+        else
+            targets[#targets + 1] = CONTEXT_COLOR_FACTORIES[id]()
+        end
+    end
+    return targets
+end
 local function ContextUnit(context)
     local unit = ContextValue(context and context.unit, context)
     return type(unit) == "string" and unit ~= "" and unit or "player"
@@ -311,7 +362,6 @@ local function ContextClassToken(context)
     end
     return type(token) == "string" and token ~= "" and token or "WARRIOR"
 end
-local CONTEXT_COLOR_FACTORIES
 local function ContextReactionKind(context)
     local kind = ContextValue(context and context.reaction, context)
     if kind == "friendly" or kind == "neutral" or kind == "enemy" or kind == "dead" then return kind end
@@ -560,14 +610,10 @@ local function RegisterBarContextFactories()
     FixedContextFactory("health.gradient.high", function() return ContextGeneral("health.gradient.high", "Health gradient - high", "healthGradientHigh", 0, 1,
         0, ApplyUnitframeColorWithReload) end)
     ContextFactory("health.background.current", function(context)
-        local mode = M.ColorsBackgroundMode.GetColor()
-        if mode == "health_gradient" then
-            return {
-                CONTEXT_COLOR_FACTORIES["health.gradient.low"](),
-                CONTEXT_COLOR_FACTORIES["health.gradient.mid"](),
-                CONTEXT_COLOR_FACTORIES["health.gradient.high"](),
-            }
-        end
+        local scope = ContextGroupScope(context)
+        local conf = scope and DB()[scope]
+        local mode = conf and conf.barBgColorMode or M.ColorsBackgroundMode.GetColor()
+        if mode == "health_gradient" then return ContextHealthGradient(context) end
         if mode ~= "custom" then return nil end
         local id = context and context.group == true and "group.background" or "bar.background_tint"
         local factory = CONTEXT_COLOR_FACTORIES[id]
@@ -575,13 +621,7 @@ local function RegisterBarContextFactories()
     end)
     ContextFactory("health.current", function(context)
         local mode = ContextHealthMode(context)
-        if mode == "gradient" then
-            return {
-                CONTEXT_COLOR_FACTORIES["health.gradient.low"](),
-                CONTEXT_COLOR_FACTORIES["health.gradient.mid"](),
-                CONTEXT_COLOR_FACTORIES["health.gradient.high"](),
-            }
-        end
+        if mode == "gradient" then return ContextHealthGradient(context) end
         if mode == "unified" then return CONTEXT_COLOR_FACTORIES["health.unified"]() end
         if mode == "class" then
             local unit, key = ContextUnit(context), ContextUnitKey(context)
@@ -975,7 +1015,9 @@ local function RegisterGroupContextFactories()
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
-    FixedContextFactory("group.background", function() return ContextGroup("group.background", "Group bar background", "bg", 0.10, 0.10, 0.10) end)
+    ContextFactory("group.background", function(context)
+        return ContextGroupColor(context, "group.background", "Group bar background", "bg", 0.10, 0.10, 0.10)
+    end)
     FixedContextFactory("group.dead", function() return ContextGroup("group.dead", "Dead / offline background", "deadBg", 0.60, 0.05,
         0.05, "deadBgA", 0.90) end)
     FixedContextFactory("group.debuff_stripe", function() return ContextGroup("group.debuff_stripe", "Debuff stripe", "debuffStripeColor", 0.80, 0.20, 0.20,

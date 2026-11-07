@@ -235,6 +235,7 @@ clients+Forever	lua	tools/tests/menu_history_setter_only_smoke.lua	{root} {flavo
 clients+Forever	lua	tools/tests/menu_page_reset_catalog_smoke.lua	{root} {flavor}	A page reset leaves a setting its page shows at the user value: {flavor}
 clients+Forever	lua	tools/tests/menu_locale_key_tracking_smoke.lua	{root} {flavor}	Composed menu text became a tracked locale key: {flavor}
 -	lua	tools/tests/menu_color_picker_class_names_smoke.lua	{root}	The colour picker class swatches show raw class tokens
+clients+Forever	lua	tools/tests/menu_color_picker_opacity_smoke.lua	{root} {flavor}	Compact color picker opacity and profile recovery failed: {flavor}
 clients+Forever	lua	tools/tests/menu_composed_labels_locale_smoke.lua	{root} {flavor}	A composed menu label is glued from translated fragments: {flavor}
 clients+Forever	lua	tools/tests/menu_page_reset_scope_smoke.lua	{root} {flavor}	Page resets restore only what the page owns: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
@@ -479,6 +480,7 @@ classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {
 -	lua+driver	tools/tests/aura_native_container_growth_smoke.lua	{root/}	Native AuraContainers grow with menu edits instead of being parked and reused
 -	lua	tools/tests/secret_guard_order_smoke.lua	{root}	A secret-capable value is compared before issecretvalue (texture layer, name clip, identity follow-up, legacy name truncation)
 clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	Class Resources selection, exact search, preview navigation or scoped copy/reset drifted: {flavor}
+clients+Forever	lua	tools/tests/classpower_auxiliary_preview_smoke.lua	{root} {flavor}	Class Resources auxiliary previews: {flavor}
 -	lua	tools/tests/version_check_login_smoke.lua	{root}	Version check does not start at login or ignores its off switch
 -	lua	tools/tests/classic_toc_notes_smoke.lua	{root}	A shipped TOC note is missing or still calls the release a prototype
 -	lua	tools/tests/power_loss_trail_pool_range_smoke.lua	{root}	Chunked Player power loss-trail pool range smoke failed
@@ -630,3 +632,6 @@ clients+Forever	lua	tools/tests/mana_regen_search_smoke.lua	{root} {flavor} deDE
 -	lua	tools/tests/unitframe_screen_position_anchor_smoke.lua	{root}	Unitframe screen position anchors
 -	lua	tools/tests/unitframe_clamped_drag_smoke.lua	{root}	Clamped unit-frame drag must follow its visible origin
 -	lua	tools/tests/unitframe_editmode_movement_smoke.lua	{root}	Individual unit-frame drag follows cursor through anchors, scales and runtime refresh
+clients+Forever	lua	tools/tests/menu_global_color_mode_smoke.lua	{root} {flavor}	Global color selection must supersede individual frame modes: {flavor}
+clients+Forever	lua	tools/tests/menu_group_color_independence_smoke.lua	{root} {flavor}	Group health and background colors must be independent of unitframe settings: {flavor}
+clients+Forever	lua	tools/tests/blizzard_preset_texture_smoke.lua	{root} {flavor}	Blizzard preset texture reselection regression: {flavor}

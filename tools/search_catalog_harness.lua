@@ -61,6 +61,16 @@ local CORE = Join(ROOT, "MidnightSimpleUnitFrames")
 local OPTIONS = Join(ROOT, "MidnightSimpleUnitFrames_Options")
 local MSUF = assert(_G.MSUF_NS, "WoW stubs did not create MSUF_NS")
 local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")
+-- The menu observes scale changes on owned windows and UIParent.
+_G.hooksecurefunc = function(owner, method, callback)
+    if type(owner) == "string" then owner, method, callback = _G, owner, method end
+    local original = assert(owner[method], "cannot hook missing method " .. method)
+    owner[method] = function(...)
+        local a, b, c, d = original(...)
+        callback(...)
+        return a, b, c, d
+    end
+end
 -- The shipped core loads its dependency resolver (MSUF.Require/Optional) before
 -- any defaults or engine file that resolves a provider through it.
 if not MSUF.Require then
@@ -68,6 +78,7 @@ if not MSUF.Require then
 end
 -- Load the shared specialization provider before pages query it.
 assert(loadfile(Join(CORE, "Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile(Join(CORE, "Kernel/MSUF_EventBus.lua")))("MidnightSimpleUnitFrames", MSUF)
 -- The synchronization selector reads actual named profile storage. Reuse the
 -- pure shipped accessor rather than introducing a generator-only replacement.
 local ProfileSlice = require("msuf_source_slice")

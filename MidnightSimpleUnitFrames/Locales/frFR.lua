@@ -6087,8 +6087,11 @@ L["Click to open settings. Move resources in Edit Mode."] = "Cliquez pour ouvrir
 -- Forever Swing Timer module.
 L["Show the off-hand timer as a lane in the main-hand bar"] = "Afficher le minuteur de la main gauche en bande dans la barre de la main droite"
 L["Grey out while the target is out of reach"] = "Griser tant que la cible est hors de portée"
+L["Grey out while the target is out of range"] = "Griser tant que la cible est hors de portée"
 L["Out-of-reach opacity (%)"] = "Opacité hors de portée (%)"
+L["Out-of-range opacity (%)"] = "Opacité hors de portée (%)"
 L["Out-of-reach color"] = "Couleur hors de portée"
+L["Out-of-range color"] = "Couleur hors de portée"
 L["Next-swing cue color"] = "Couleur de l'indication du prochain coup"
 L["Next-swing attacks"] = "Attaques au prochain coup"
 L["Show the queued next-swing attack"] = "Afficher l'attaque en attente pour le prochain coup"

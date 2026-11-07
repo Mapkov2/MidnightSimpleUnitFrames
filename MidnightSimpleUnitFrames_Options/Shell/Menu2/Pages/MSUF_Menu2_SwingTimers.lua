@@ -9,7 +9,7 @@ local LABELS = { main = "Main Hand", off = "Off Hand", ranged = "Ranged" }
 local COLORS = {
     { "color", "Bar color" }, { "backgroundColor", "Background color" },
     { "borderColor", "Border color" }, { "textColor", "Text color" },
-    { "reachColor", "Out-of-reach color" }, { "nextSwingColor", "Next-swing cue color" },
+    { "reachColor", "Out-of-range color" }, { "nextSwingColor", "Next-swing cue color" },
 }
 local function Meta(path, key, classification, prepare)
     return AP.ControlMeta("swingtimers", "swing", path, classification or "setting", {
@@ -50,8 +50,8 @@ local SPECS = {
             "AUTO", "Automatic", "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right") end },
     { "textX", "number", "Timer text X offset", -300, 300 },
     { "textY", "number", "Timer text Y offset", -200, 200 },
-    { "reachCheck", "boolean", "Grey out while the target is out of reach" },
-    { "reachOpacity", "number", "Out-of-reach opacity (%)", 0, 100 },
+    { "reachCheck", "boolean", "Grey out while the target is out of range" },
+    { "reachOpacity", "number", "Out-of-range opacity (%)", 0, 100 },
 }
 local GROUPS = {
     { key = "behavior", title = false, indices = { 1, 2 } },
@@ -59,7 +59,7 @@ local GROUPS = {
     { key = "appearance", title = "Appearance", indices = { 6, 9, 10, 11, 12, 13, 14 },
         colors = { 1, 2, 3 } },
     { key = "text", title = "Text", indices = { 15, 16, 17, 18, 19, 20, 21, 22 }, colors = { 4 } },
-    { key = "reach", title = "Out of reach", indices = { 24 }, colors = { 5 } },
+    { key = "reach", title = "Out of range", indices = { 24 }, colors = { 5 } },
 }
 local COPY_CATEGORIES = {
     { key = "layout", label = "Size", fields = { "width", "height", "scale" } },
@@ -82,7 +82,7 @@ local function AttachColors(section, hand, indices, ui)
                     getRGB = function() return unpack(Swing.Get(hand, key)) end,
                     setRGB = function(r, g, blue)
                         Swing.Set(hand, key, { r, g, blue })
-                        ui.Paint()
+                        if key == "reachColor" then ui.SetRangePreview(hand, true) else ui.Paint() end
                     end,
                 }
             end
@@ -108,7 +108,7 @@ local function BindSetting(ctx, section, hand, spec, ui, layout, index)
     end
     local function Set(value)
         Swing.Set(hand, key, value)
-        ui.Paint()
+        if key == "reachOpacity" then ui.SetRangePreview(hand, true) else ui.Paint() end
     end
     local widget
     if kind == "number" then
@@ -132,7 +132,10 @@ local function BindHeader(ctx, section, hand, key, label, ui)
     local meta = Meta(hand .. "." .. key, "swingTimers." .. hand .. "." .. key, nil,
         function() ui.SelectHand(hand) return true end)
     M.BindBoolWidget(ctx, toggle, function() return Swing.Get(hand, key) end,
-        function(value) Swing.Set(hand, key, value) ui.Paint() end, meta)
+        function(value)
+            Swing.Set(hand, key, value)
+            if key == "reachCheck" then ui.SetRangePreview(hand, value) else ui.Paint() end
+        end, meta)
     AP.RegisterControl(toggle, meta, label, "toggle")
 end
 local function AddHandSection(ctx, b, hand, id, title, height, open, ui)
@@ -151,11 +154,11 @@ local function BuildHand(ctx, b, hand, ui, layout)
         local section = AddHandSection(ctx, b, hand, id, group.title or LABELS[hand],
             50 + math.ceil(count / layout.columns) * 58, i == 1, ui)
         if group.colors then AttachColors(section, hand, group.colors, ui) end
-        if group.key == "appearance" then ui.sections[hand] = section end
+        ui.handSections[hand][group.key] = section
         if group.key == "behavior" then
             BindHeader(ctx, section, hand, "enabled", LABELS[hand], ui)
         elseif group.key == "reach" then
-            BindHeader(ctx, section, hand, "reachCheck", "Grey out while the target is out of reach", ui)
+            BindHeader(ctx, section, hand, "reachCheck", "Grey out while the target is out of range", ui)
         end
         for j = 1, #group.indices do
             BindSetting(ctx, section, hand, SPECS[group.indices[j]], ui, layout, j)

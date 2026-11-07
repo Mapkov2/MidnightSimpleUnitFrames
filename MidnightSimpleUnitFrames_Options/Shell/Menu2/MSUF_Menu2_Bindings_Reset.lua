@@ -154,6 +154,9 @@ local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
 local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode", "classPowerSlotColorModes", "classPowerFullColorEnabled")
 local GROUP_COLOR_KEYS = KSW [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
+    healthGradientLowR healthGradientLowG healthGradientLowB
+    healthGradientMidR healthGradientMidG healthGradientMidB
+    healthGradientHighR healthGradientHighG healthGradientHighB barBgFillMode barBgColorMode
     gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture barBackgroundTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
     tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
     alphaExcludeTextPortrait alphaExcludePredictionBars deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA

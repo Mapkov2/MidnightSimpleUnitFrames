@@ -672,6 +672,7 @@ function Picker.BuildAdvancedCard(panel)
     for i = 1, #tabSpecs do
         local spec = tabSpecs[i]
         local tab = T.Button(advancedCard, spec[2], 78, 20)
+        tab._msuf2SegmentChoice = true
         if tab._msuf2Label then tab._msuf2Label:SetJustifyH("CENTER") end
         tab._msuf2SkipHistoryCheckpoint = true
         tab._msuf2PaletteKey = spec[1]
@@ -918,19 +919,22 @@ function Picker.DefineLayout(panel)
     function panel:Layout()
         local advanced = self.advanced == true
         local hasClassMode = self.owner and type(self.owner._msuf2GetColorByClass) == "function" or false
+        local hasOpacity = self.owner and self.owner._msuf2ColorHasOpacity == true or false
         self.classColorMode:SetShown(hasClassMode)
-        if self._layoutAdvanced == advanced and self._layoutClassMode == hasClassMode then
+        if self._layoutAdvanced == advanced and self._layoutClassMode == hasClassMode and self._layoutOpacity == hasOpacity then
             self:ClampPosition()
             return
         end
         self._layoutAdvanced = advanced
         self._layoutClassMode = hasClassMode
+        self._layoutOpacity = hasOpacity
+        local opacityHeight = not advanced and hasOpacity and 52 or 0
         local modeHeight = hasClassMode and 28 or 0
         local width = advanced and ADVANCED_WIDTH or SIMPLE_WIDTH
         local height = advanced and ADVANCED_HEIGHT or SIMPLE_HEIGHT
         local previewWidth = (width - PICKER_PAD * 2 - PICKER_GAP) * 0.5
         local selectorWidth = width - PICKER_PAD * 2
-        self:SetSize(width, height + modeHeight)
+        self:SetSize(width, height + modeHeight + opacityHeight)
         self.selector:SetWidth(selectorWidth)
         self.original:SetWidth(previewWidth)
         self.current:SetWidth(previewWidth)
@@ -939,7 +943,7 @@ function Picker.DefineLayout(panel)
         self.wheelCard:SetPoint("TOPLEFT", PICKER_PAD, -133 - modeHeight)
         self.advancedCard:ClearAllPoints()
         self.advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133 - modeHeight)
-        self.wheelCard:SetSize(advanced and LEFT_CARD_WIDTH or selectorWidth, advanced and 227 or 138)
+        self.wheelCard:SetSize(advanced and LEFT_CARD_WIDTH or selectorWidth, (advanced and 227 or 138) + opacityHeight)
         self.colorSelect:ClearAllPoints()
         local wheelSize = advanced and 126 or 102
         self.colorSelect:SetPoint("TOPLEFT", advanced and 28 or 80, advanced and -30 or -27)
@@ -956,11 +960,16 @@ function Picker.DefineLayout(panel)
         self.compactHexTitle:SetPoint("BOTTOMLEFT", self.compactHex, "TOPLEFT", 0, 3)
         self.compactHexTitle:SetShown(not advanced)
         self.compactHex:SetShown(not advanced)
+        -- Saved transparent colors must expose their opacity without opening
+        -- the advanced editor. Re-anchor when switching targets or layouts.
+        self.opacityLabel:ClearAllPoints()
+        self.opacityLabel:SetPoint("TOPLEFT", 12, advanced and -171 or -143)
+        self.opacity:ClearAllPoints()
+        self.opacity:SetPoint("TOPLEFT", 12, advanced and -190 or -162)
+        self.opacityValue:ClearAllPoints()
+        self.opacityValue:SetPoint("LEFT", self.opacity, "RIGHT", 8, 0)
         if not self._advancedChildLayout then
             self._advancedChildLayout = true
-            self.opacityLabel:SetPoint("TOPLEFT", 12, -171)
-            self.opacity:SetPoint("TOPLEFT", 12, -190)
-            self.opacityValue:SetPoint("LEFT", self.opacity, "RIGHT", 8, 0)
             for i = 1, #self.paletteTabs do
                 self.paletteTabs[i]:SetPoint("TOPLEFT", 12 + (i - 1) * 82, -35)
             end
@@ -995,7 +1004,7 @@ function Picker.DefineLayout(panel)
             self.copy:SetPoint("LEFT", self.hex, "RIGHT", 6, 0)
             self.save:SetPoint("LEFT", self.copy, "RIGHT", 6, 0)
         end
-        local showOpacity = advanced and self.owner and self.owner._msuf2ColorHasOpacity == true
+        local showOpacity = hasOpacity
         self.opacityLabel:SetShown(showOpacity)
         self.opacity:SetShown(showOpacity)
         self.opacityValue:SetShown(showOpacity)
@@ -1110,7 +1119,7 @@ function Picker.DefineReadout(panel)
         end
     end
     function panel:RefreshOpacity(alpha)
-        alpha = alpha == nil and OwnerOpacity(self.owner) or Clamp01(alpha)
+        if alpha == nil then alpha = OwnerOpacity(self.owner) else alpha = Clamp01(alpha) end
         local hasOpacity = type(alpha) == "number"
         if hasOpacity then
             self._syncingOpacity = true
@@ -1118,7 +1127,7 @@ function Picker.DefineReadout(panel)
             self._syncingOpacity = nil
             self.opacityValue:SetText(string.format("%d%%", floor(alpha * 100 + 0.5)))
         end
-        local showOpacity = self.advanced and hasOpacity
+        local showOpacity = hasOpacity
         self.opacityLabel:SetShown(showOpacity)
         self.opacity:SetShown(showOpacity)
         self.opacityValue:SetShown(showOpacity)

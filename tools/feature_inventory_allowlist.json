@@ -4,6 +4,21 @@
   {
    "category": "rows",
    "items": [
+    "main: swingtimers | Main > Reach | Grey out while the target is out of reach | toggle | swingTimers.main.reachCheck | swing.main.reach.check",
+    "main: swingtimers | Main > Reach | Out-of-reach opacity (%) | slider | swingTimers.main.reachOpacity | swing.main.reach.opacity",
+    "main: swingtimers | Off > Reach | Grey out while the target is out of reach | toggle | swingTimers.off.reachCheck | swing.off.reach.check",
+    "main: swingtimers | Off > Reach | Out-of-reach opacity (%) | slider | swingTimers.off.reachOpacity | swing.off.reach.opacity",
+    "main: swingtimers | Ranged > Reach | Grey out while the target is out of reach | toggle | swingTimers.ranged.reachCheck | swing.ranged.reach.check",
+    "main: swingtimers | Ranged > Reach | Out-of-reach opacity (%) | slider | swingTimers.ranged.reachOpacity | swing.ranged.reach.opacity"
+   ],
+   "basis": "moved",
+   "evidence": "Swing Timers Out of range wording request (2026-11-07)",
+   "reason": "The three range switches and opacity sliders use the Out of range wording on the same routes with the same saved keys.",
+   "date": "2026-11-07"
+  },
+  {
+   "category": "rows",
+   "items": [
     "classic: gf_layout | Layout > Color | Text color | color | no key | group.color.healermanatext",
     "main: gf_layout | Layout > Color | Text color | color | no key | group.color.healermanatext"
    ],

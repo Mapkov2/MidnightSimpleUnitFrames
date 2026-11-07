@@ -328,19 +328,47 @@ local function SkinnedSelection(flavor)
         setValue = function(value) selected = value end,
     })
     local player, target = bar.buttons[1], bar.buttons[2]
-    local targetCue = assert(target._msuf2SkinnedSelectionCue, "selected skinned Target tab has no cue")
-    assert(target._msuf2SegmentChoice and target._msuf2Active and targetCue.wash:IsShown()
-        and targetCue.line:IsShown(), "selected Target tab cue is hidden")
-    Readable(targetCue)
-    selected = "player"
-    bar:Refresh()
-    assert(not targetCue.wash:IsShown() and not targetCue.line:IsShown(), "old Target tab cue remains visible")
-    assert(player._msuf2Active and player._msuf2SkinnedSelectionCue.wash:IsShown(),
-        "new Player tab cue is hidden")
-
+    -- Suite receives the same tab classification. Check the real native fallback here.
+    assert(not target._msuf2TabOutline and not target._msuf2SkinnedSelectionCue, "skinned tab drew duplicate art")
     skin.Button = function() return false end
     player:RefreshVisual()
-    assert(not player._msuf2SkinnedSelectionCue.wash:IsShown(), "skin switch left a stale cue")
+    target:RefreshVisual()
+    local function Outline(button, shown)
+        assert(not button._msuf2SkinnedSelectionCue and not button._msuf2TabOutline,
+            "a tab created a second selection cue")
+        local outline, fill = button._msuf2Edge, button._msuf2Fill
+        local tint = shown and M.Theme.colors.navTextActive
+        for _, key in ipairs({ "L", "M", "R" }) do
+            local edge = outline[key]
+            local layer, sublevel = edge:GetDrawLayer()
+            assert(layer == "BACKGROUND" and sublevel == -1 and edge:GetTexture() == fill[key]:GetTexture(),
+                "tab rim does not share the fill shape and sit behind it")
+            if tint then
+                assert(edge.vertexColor[1] == tint[1] and edge.vertexColor[4] >= 0.8, "tab rim lost its contrast")
+            else
+                assert(edge.vertexColor[1] < M.Theme.colors.navTextActive[1], "deselected tab kept its bright rim")
+            end
+        end
+        return outline
+    end
+    assert(target._msuf2Active, "scope selected the wrong tab")
+    local targetOutline = Outline(target, true)
+    target:GetScript("OnEnter")(target)
+    assert(Outline(target, true) == targetOutline, "hover replaced the selected rim")
+    target:GetScript("OnLeave")(target)
+    selected = "player"
+    bar:Refresh()
+    Outline(target, false)
+    Outline(player, true)
+
+    local segment = M.Widgets.Segment(section, "General settings",
+        { { value = "general", text = "General settings" }, { value = "look", text = "Appearance" } }, 280)
+    segment:SetValue("general")
+    Outline(segment.buttons[1], true)
+    segment:SetValue("look")
+    Outline(segment.buttons[1], false)
+    Outline(segment.buttons[2], true)
+
     M.UpdateNav("uf_player")
     assert(not nav._msuf2SkinnedSelectionCue.line:IsShown(), "native selection retained an extra cue")
     M.UpdateNav("home")

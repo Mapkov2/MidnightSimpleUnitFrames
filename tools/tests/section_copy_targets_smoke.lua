@@ -73,6 +73,7 @@ local W = {
         return dropdown
     end,
     MoveWidget = noop,
+    AttachSectionActionVisibility = noop,
     SetControlEnabled = function(control, enabled) control.enabled = enabled and true or false end,
 }
 local T = {
@@ -100,6 +101,8 @@ _G.UIParent = NewFrame()
 -- Menu files require their core collaborators at load (M.RequireGlobals).
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 local sharedNamespace = RequireFixture.Install(root, { MSUF2 = M }, M)
+assert(loadfile(root .. "/" .. OPTIONS .. "../MSUF_Menu2_HostProtocol.lua"))(
+    "MidnightSimpleUnitFrames_Options", sharedNamespace)
 RequireFixture.StubRequirements(root, { OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua", OPTIONS .. "MSUF_Menu2_Unit.lua" })
 assert(loadstring(Read(OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua"), "@MSUF_Menu2_UnitSectionShared.lua"))(
     "MidnightSimpleUnitFrames_Options", sharedNamespace)

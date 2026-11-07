@@ -172,13 +172,13 @@ local function GlobalHealthMode(cache, general)
   return mode
 end
 
-local function BackgroundFillMode(cache, general)
-  local mode = cache and cache.barBgFillMode or general and general.barBgFillMode
+local function BackgroundFillMode(conf, cache, general)
+  local mode = conf.barBgFillMode or cache and cache.barBgFillMode or general and general.barBgFillMode
   return mode == "missing" and "missing" or "full"
 end
 
-local function BackgroundColorMode(cache, general)
-  local mode = cache and cache.barBgColorMode or general and general.barBgColorMode
+local function BackgroundColorMode(conf, cache, general)
+  local mode = conf.barBgColorMode or cache and cache.barBgColorMode or general and general.barBgColorMode
   if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
     return mode
   end
@@ -214,8 +214,8 @@ local function ResolveHealthVisual(conf)
   if not mode then
     mode = GlobalHealthMode(cache, general) or NormalizeHealthMode(conf.healthColorMode) or "class"
   end
-  local backgroundFillMode = BackgroundFillMode(cache, general)
-  local backgroundColorMode = BackgroundColorMode(cache, general)
+  local backgroundFillMode = BackgroundFillMode(conf, cache, general)
+  local backgroundColorMode = BackgroundColorMode(conf, cache, general)
 
   local out = {
     mode = mode == "custom" and "unified" or mode,
@@ -230,15 +230,15 @@ local function ResolveHealthVisual(conf)
     backgroundMatchHealth = backgroundColorMode == "match_health",
     backgroundClassColor = backgroundColorMode == "class",
     npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false,
-    gradientLowR = Num(cache and cache.healthGradientLowR or general and general.healthGradientLowR, 1),
-    gradientLowG = Num(cache and cache.healthGradientLowG or general and general.healthGradientLowG, 0),
-    gradientLowB = Num(cache and cache.healthGradientLowB or general and general.healthGradientLowB, 0),
-    gradientMidR = Num(cache and cache.healthGradientMidR or general and general.healthGradientMidR, 1),
-    gradientMidG = Num(cache and cache.healthGradientMidG or general and general.healthGradientMidG, 1),
-    gradientMidB = Num(cache and cache.healthGradientMidB or general and general.healthGradientMidB, 0),
-    gradientHighR = Num(cache and cache.healthGradientHighR or general and general.healthGradientHighR, 0),
-    gradientHighG = Num(cache and cache.healthGradientHighG or general and general.healthGradientHighG, 1),
-    gradientHighB = Num(cache and cache.healthGradientHighB or general and general.healthGradientHighB, 0),
+    gradientLowR = Num(conf.healthGradientLowR, Num(cache and cache.healthGradientLowR or general and general.healthGradientLowR, 1)),
+    gradientLowG = Num(conf.healthGradientLowG, Num(cache and cache.healthGradientLowG or general and general.healthGradientLowG, 0)),
+    gradientLowB = Num(conf.healthGradientLowB, Num(cache and cache.healthGradientLowB or general and general.healthGradientLowB, 0)),
+    gradientMidR = Num(conf.healthGradientMidR, Num(cache and cache.healthGradientMidR or general and general.healthGradientMidR, 1)),
+    gradientMidG = Num(conf.healthGradientMidG, Num(cache and cache.healthGradientMidG or general and general.healthGradientMidG, 1)),
+    gradientMidB = Num(conf.healthGradientMidB, Num(cache and cache.healthGradientMidB or general and general.healthGradientMidB, 0)),
+    gradientHighR = Num(conf.healthGradientHighR, Num(cache and cache.healthGradientHighR or general and general.healthGradientHighR, 0)),
+    gradientHighG = Num(conf.healthGradientHighG, Num(cache and cache.healthGradientHighG or general and general.healthGradientHighG, 1)),
+    gradientHighB = Num(conf.healthGradientHighB, Num(cache and cache.healthGradientHighB or general and general.healthGradientHighB, 0)),
   }
   if mode == "dark" or mode == "unified" then
     ApplyFixedBarColor(out, conf, cache, general, mode)

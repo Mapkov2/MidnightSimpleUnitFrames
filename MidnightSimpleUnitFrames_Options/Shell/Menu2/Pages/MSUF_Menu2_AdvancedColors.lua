@@ -1386,6 +1386,20 @@ local function BuildBarGradientColors(ctx, b, CH)
     end, "bar_gradient.reset")
 end
 
+-- An explicit global choice supersedes the individual modes carried by presets.
+-- Individual frame controls can opt out again after this user action.
+function CP.SetGlobalBarMode(mode)
+    local db = DB()
+    local g = db.general
+    g.barMode = mode
+    g.darkMode = (mode == "dark")
+    g.useClassColors = (mode == "class")
+    for unit in pairs(M.UNIT_KEYS) do
+        local conf = db[unit]
+        if conf then conf.healthColorMode = nil end
+    end
+end
+
 local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     if part ~= "appearance" then
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 332, false)
@@ -1493,10 +1507,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         return mode
     end
     local function SetBarMode(mode)
-        local g = G()
-        g.barMode = mode
-        g.darkMode = (mode == "dark")
-        g.useClassColors = (mode == "class")
+        CP.SetGlobalBarMode(mode)
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
         if M.RequestRefresh then M.RequestRefresh(ctx, "colors-bar-mode") end
@@ -1518,7 +1529,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     end
     local modeRow = W.Segment(appearance, "Bar mode", modeValues, modeRowW)
     MoveWidget(modeRow, appearance, 12, -10, modeRowW)
-    M.BindSegment(ctx, modeRow, CurrentBarMode, SetBarMode, Meta("appearance.bar_mode"))
+    M.BindSegment(ctx, modeRow, CurrentBarMode, SetBarMode, Meta("appearance.bar_mode", nil, { reapplySelection = true }))
     for i = 1, #BAR_MODE_CARDS do
         local btn = modeRow.buttons[i]
         if btn and M.AddTooltip then M.AddTooltip(btn, TrText(BAR_MODE_CARDS[i].title), TrText(BAR_MODE_CARDS[i].desc), { hook = true }) end

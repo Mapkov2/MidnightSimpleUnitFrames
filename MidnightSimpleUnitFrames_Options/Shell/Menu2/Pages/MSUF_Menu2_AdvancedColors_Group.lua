@@ -96,6 +96,27 @@ end
 local function GroupRGB(prefix, dr, dg, db)
     return GroupNum(prefix .. "R", dr), GroupNum(prefix .. "G", dg), GroupNum(prefix .. "B", db)
 end
+local function GroupGradientRGB(prefix, dr, dg, db)
+    local general = G()
+    return GroupNum(prefix .. "R", general[prefix .. "R"] or dr),
+        GroupNum(prefix .. "G", general[prefix .. "G"] or dg),
+        GroupNum(prefix .. "B", general[prefix .. "B"] or db)
+end
+local function BuildGroupGradientColors(ctx, health, width)
+    local columnWidth = max(92, floor((width - 24) / 3))
+    W.LabelAt(health, "Health gradient stops", 12, -104, width - 24, "GameFontNormalSmall", M.Theme.colors.muted)
+    for i, row in ipairs({
+        { "Low", "healthGradientLow", 1, 0, 0 },
+        { "Mid", "healthGradientMid", 1, 1, 0 },
+        { "High", "healthGradientHigh", 0, 1, 0 },
+    }) do
+        local label, prefix, dr, dg, db = unpack(row)
+        ColorValueAt(ctx, health, label, 12 + (i - 1) * columnWidth, -140,
+            function() return GroupGradientRGB(prefix, dr, dg, db) end,
+            function(r, g, b) SetGroupRGB(prefix, r, g, b, "MSUF2_GROUP_GRADIENT", "visual") end,
+            min(58, columnWidth - 46), 34, Meta("group_frame.color." .. prefix), { dr, dg, db })
+    end
+end
 local function GroupColorAt(ctx, section, label, x, y, prefix, dr, dg, db, labelWidth, swatchWidth)
     return ColorValueAt(ctx, section, label, x, y,
         function() return GroupRGB(prefix, dr, dg, db) end,
@@ -174,8 +195,8 @@ end
 local function BuildGroupFrameColors(ctx, b)
     local pageW = b.width or ctx.width or 720
     local cardW = max(320, pageW - 32)
-    local health = b:CollapsibleSection("colors_group_frames", "Health Bars", 112, true)
-    local background = b:CollapsibleSection("colors_group_frames_background", "Bar Background", 112, false)
+    local health = b:CollapsibleSection("colors_group_frames", "Health Bars", 184, true)
+    local background = b:CollapsibleSection("colors_group_frames_background", "Bar Background", 220, false)
     local state = b:CollapsibleSection("colors_group_frames_state", "State Tints", 242, false)
     local highlights = b:CollapsibleSection("colors_group_frames_highlights", "Group Highlights", 220, false)
     local healerMana = b:CollapsibleSection("colors_group_frames_healer_mana", "Healer mana bars", 80, false)
@@ -202,8 +223,20 @@ local function BuildGroupFrameColors(ctx, b)
     local healthColor = ColorValueAt(ctx, health, "Health bar color", 12, -64, GroupHealthBarRGB, SetGroupHealthBarRGB,
         nil, nil, Meta("group_frame.health.color"))
 
-    GroupColorAt(ctx, background, "Background Color", 12, -10, "bg", 0.10, 0.10, 0.10)
-    ValueDropdownAt(ctx, background, "Health color fallback", 12, -56, GROUP_HEALTH_MODES, min(360, cardW - 32),
+    BuildGroupGradientColors(ctx, health, cardW)
+    ValueDropdownAt(ctx, background, "Background Fill", 12, -10,
+        ValueTextPairs "GLOBAL=Follow Global Style|full=Full bar|missing=Missing health only", min(360, cardW - 32),
+        function() return GroupRead("barBgFillMode", "GLOBAL") end,
+        function(value) SetGroupValue("barBgFillMode", value ~= "GLOBAL" and value or nil) end,
+        Meta("group_frame.background.fill_mode"))
+    ValueDropdownAt(ctx, background, "Background Color", 12, -64,
+        ValueTextPairs "GLOBAL=Follow Global Style|custom=Custom tint|match_health=Match health bar|class=Class color|health_gradient=Health gradient",
+        min(360, cardW - 32),
+        function() return GroupRead("barBgColorMode", "GLOBAL") end,
+        function(value) SetGroupValue("barBgColorMode", value ~= "GLOBAL" and value or nil) end,
+        Meta("group_frame.background.color_mode"))
+    GroupColorAt(ctx, background, "Background Color", 12, -118, "bg", 0.10, 0.10, 0.10)
+    ValueDropdownAt(ctx, background, "Health color fallback", 12, -164, GROUP_HEALTH_MODES, min(360, cardW - 32),
         function() return GroupRead("healthColorMode", "CLASS") or "CLASS" end,
         function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end,
         Meta("group_frame.health.fallback_mode"))
@@ -241,8 +274,10 @@ end
 -- Published for the context-color registry sibling and the page's lazy
 -- category builders.
 CP.GROUP_COLOR_DB_KEYS = GROUP_COLOR_DB_KEYS
+CP.RequestGroupColorApply = RequestGroupColorApply
 CP.GroupNum = GroupNum
 CP.GroupRGB = GroupRGB
+CP.GroupGradientRGB = GroupGradientRGB
 CP.SetGroupRGB = SetGroupRGB
 CP.SetGroupRGBA = SetGroupRGBA
 CP.GroupHealthBarRGB = GroupHealthBarRGB

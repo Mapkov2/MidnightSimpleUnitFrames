@@ -1116,6 +1116,7 @@ function W.Segment(section, label, values, width)
         else btn._msuf2ControlPartOf = holder end
         btn:SetPoint("LEFT", holder, "LEFT", (i - 1) * (bw + gap), 0)
         btn._msuf2Value = item.value
+        btn._msuf2SegmentChoice = true
         holder.buttons[i] = btn
     end
     function holder:SetValue(value)

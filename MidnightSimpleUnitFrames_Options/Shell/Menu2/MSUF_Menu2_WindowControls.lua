@@ -1,9 +1,8 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2 window control buttons.
 ---
---- The main shell uses one authored segmented-control texture and a separate
---- four-cell glyph atlas. Runtime work is limited to swapping atlas coordinates
---- on direct hover/state changes; there are no timers or animation drivers.
+--- Classic Glass uses pixel-rounded caption art at the current menu scale.
+--- The other looks retain the authored segmented control and glyph atlas.
 local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -128,8 +127,73 @@ local function PaintStandaloneSurface(btn, hover, down, close, alpha)
     end
 end
 
+-- Each bar is a filled, pixel-rounded rectangle. The diagonals of the
+-- close glyph use the existing antialiased icon cell.
+local CAPTION_BARS = {
+    minimize = { { -4, -2, 4, -2 } },
+    maximize = { { -4, -4, 4, -4 }, { 4, -4, 4, 4 }, { 4, 4, -4, 4 }, { -4, 4, -4, -4 } },
+    restore = { { -5, -5, 2, -5 }, { 2, -5, 2, 2 }, { 2, 2, -5, 2 }, { -5, 2, -5, -5 },
+        { -2, 2, -2, 5 }, { -2, 5, 5, 5 }, { 5, 5, 5, -2 }, { 5, -2, 2, -2 } },
+}
+local PhysicalPixel, CaptionPixelLayout
+
+local function PaintCaptionControl(button, hover, down)
+    local enabled = not button.IsEnabled or button:IsEnabled()
+    local active = enabled and (hover or down)
+    local fill = button._msuf2CaptionFill
+    if active and button._msuf2ControlKind == "close" then
+        fill:SetColorTexture(down and 0.69 or 0.77, 0.17, 0.24, 1)
+    else
+        fill:SetColorTexture(1, 1, 1, active and (down and 0.17 or 0.10) or 0)
+    end
+    local color = T.colors.text
+    local alpha = enabled and 1 or 0.42
+    for _, glyph in ipairs(button._msuf2CaptionGlyphs) do
+        glyph:SetVertexColor(color[1], color[2], color[3], alpha)
+    end
+end
+
+local function LayoutCaptionGlyph(button)
+    local kind = button._msuf2ControlKind
+    local glyphs = button._msuf2CaptionGlyphs
+    local pixel = PhysicalPixel(button, 1)
+    if kind == "close" then
+        local icon = glyphs[1]
+        if not icon then
+            icon = CaptionPixelLayout(button:CreateTexture(nil, "OVERLAY"))
+            icon:SetTexture(T.media.windowControlIcons)
+            SetIconAtlasCell(icon, "close")
+            icon:SetPoint("CENTER", button, "CENTER", 0, 0)
+            glyphs[1] = icon
+        end
+        local size = max(1, math.floor(12 / pixel + 0.5)) * pixel
+        icon:SetSize(size, size)
+        return
+    end
+
+    local bars = CAPTION_BARS[kind]
+    local unit = max(1, math.floor(1 / pixel + 0.5)) * pixel
+    unit = min(unit, (min(button:GetWidth(), button:GetHeight()) - pixel) / 10)
+    for index, bar in ipairs(bars) do
+        local texture = glyphs[index]
+        if not texture then
+            texture = CaptionPixelLayout(button:CreateTexture(nil, "OVERLAY"))
+            texture:SetColorTexture(1, 1, 1, 1)
+            glyphs[index] = texture
+        end
+        local left, right = min(bar[1], bar[3]) * unit, max(bar[1], bar[3]) * unit
+        local bottom, top = min(bar[2], bar[4]) * unit, max(bar[2], bar[4]) * unit
+        texture:ClearAllPoints()
+        texture:SetPoint("TOPLEFT", button, "CENTER", left - pixel / 2, top + pixel / 2)
+        texture:SetSize(right - left + pixel, top - bottom + pixel)
+        texture:Show()
+    end
+    for index = #bars + 1, #glyphs do glyphs[index]:Hide() end
+end
+
 local function PaintWindowControlButton(btn, hover, down)
     if not btn then return end
+    if btn._msuf2CaptionGlyphs then return PaintCaptionControl(btn, hover, down) end
     if MSUF.MenuSkin and MSUF.MenuSkin.WindowAction(btn, btn._msuf2ControlKind,
         PaintWindowControlButton, hover, down) then return end
     local alpha = (btn.IsEnabled and not btn:IsEnabled()) and 0.42 or 1
@@ -164,6 +228,10 @@ end
 local function SetWindowControlIcon(btn, kind)
     if not btn then return end
     btn._msuf2ControlKind = kind
+    if btn._msuf2CaptionGlyphs then
+        LayoutCaptionGlyph(btn)
+        return PaintCaptionControl(btn, btn._msuf2ControlHover, btn._msuf2ControlDown)
+    end
     if not btn._msuf2ControlIcon then
         local path = T and T.media and T.media.windowControlIcons
         local shadow = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 0))
@@ -188,6 +256,13 @@ local function CreateWindowControlGroup(parent, segmentCount)
     group:SetSize(SEGMENT_WIDTH * segmentCount, CONTROL_HEIGHT)
     group._msuf2WindowControlGroup = true
     group._msuf2ControlSegmentCount = segmentCount
+    if T.classicAtlas then
+        PhysicalPixel = PhysicalPixel or MSUF.Require("MSUF_GetPhysicalPixelSize", "Menu2 window controls")
+        CaptionPixelLayout = CaptionPixelLayout or MSUF.Require("MSUF_PixelLayoutRegion", "Menu2 window controls")
+        CaptionPixelLayout(group)
+        group._msuf2CaptionGroup = true
+        return group
+    end
     local base = PixelLayoutRegion(group:CreateTexture(nil, "BACKGROUND", nil, 0))
     base:SetPoint("TOPLEFT", group, "TOPLEFT", -3, -1)
     base:SetPoint("BOTTOMRIGHT", group, "BOTTOMRIGHT", 3, 1)
@@ -214,6 +289,13 @@ local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText
         local count = parent._msuf2ControlSegmentCount or 3
         btn._msuf2ControlGroup = parent
         btn._msuf2ControlSegmentIndex = min(count, max(1, tonumber(segmentIndex) or 1))
+        if parent._msuf2CaptionGroup then
+            CaptionPixelLayout(btn)
+            local fill = CaptionPixelLayout(btn:CreateTexture(nil, "BACKGROUND"))
+            fill:SetAllPoints(btn)
+            btn._msuf2CaptionFill = fill
+            btn._msuf2CaptionGlyphs = {}
+        end
     else
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Control", 2, "BACKGROUND", "BORDER")
         btn._msuf2ControlFill = fill
@@ -257,6 +339,10 @@ local function RefreshWindowControls(frame)
     if frame.closeButton and frame.closeButton.SetFrameLevel then frame.closeButton:SetFrameLevel(buttonLevel) end
     if frame.maximizeButton and frame.maximizeButton.SetFrameLevel then frame.maximizeButton:SetFrameLevel(buttonLevel) end
     if frame.minimizeButton and frame.minimizeButton.SetFrameLevel then frame.minimizeButton:SetFrameLevel(buttonLevel) end
+    if frame.windowControls and frame.windowControls._msuf2CaptionGroup then
+        if frame.minimizeButton then LayoutCaptionGlyph(frame.minimizeButton) end
+        if frame.closeButton then LayoutCaptionGlyph(frame.closeButton) end
+    end
     if frame.maximizeButton and frame.maximizeButton.SetWindowControlIcon then
         frame.maximizeButton:SetWindowControlIcon(frame._msuf2WindowState == "maximized" and "restore" or "maximize")
     end

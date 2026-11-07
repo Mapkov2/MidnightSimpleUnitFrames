@@ -5977,8 +5977,11 @@ L["Click to open settings. Move resources in Edit Mode."] = "點擊開啟設定�
 -- Forever Swing Timer module.
 L["Show the off-hand timer as a lane in the main-hand bar"] = "在主手條內以細條顯示副手計時"
 L["Grey out while the target is out of reach"] = "目標超出攻擊距離時變灰"
+L["Grey out while the target is out of range"] = "目標超出攻擊距離時變灰"
 L["Out-of-reach opacity (%)"] = "超出距離時的不透明度（%）"
+L["Out-of-range opacity (%)"] = "超出距離時的不透明度（%）"
 L["Out-of-reach color"] = "超出距離顏色"
+L["Out-of-range color"] = "超出距離顏色"
 L["Next-swing cue color"] = "下一擊提示顏色"
 L["Next-swing attacks"] = "下一擊攻擊"
 L["Show the queued next-swing attack"] = "顯示已排隊的下一擊攻擊"

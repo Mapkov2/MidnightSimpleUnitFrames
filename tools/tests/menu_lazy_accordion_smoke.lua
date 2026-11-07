@@ -76,9 +76,66 @@ function Methods:Show()
     self.shown = true
     if Visible(self) then FireShown(self) end
 end
-function Methods:Hide() self.shown = false end
+function Methods:Hide()
+    local visible = Visible(self)
+    self.shown = false
+    local onHide = self.scripts and self.scripts.OnHide
+    if visible and onHide then onHide(self) end
+end
 function Methods:SetShown(shown) if shown then self:Show() else self:Hide() end end
 function Methods:IsVisible() return Visible(self) end
+
+local function CheckSectionActions(entry)
+    local header = entry.header
+    local button = W.TopButton(header, "...", 24, 22)
+    M.ReserveSectionActions(entry, button, 34, true)
+    W.SectionSwitch(entry.body, "Enable")
+    local function Hover(frame, inside, event)
+        header.mouseOver = inside
+        frame:GetScript(event)(frame)
+    end
+
+    Hover(header, true, "OnEnter")
+    Check(not button:IsShown(), "a closed section exposed its actions on hover")
+    entry.SetOpenByUser(true)
+    Check(button:IsShown(), "opening under the pointer did not reveal the actions")
+    Hover(button, true, "OnEnter")
+    Check(button:IsShown(), "entering the action button hid it")
+    Hover(entry.featureSwitch, false, "OnLeave")
+    Check(not button:IsShown(), "leaving the header switch kept the actions visible")
+    W.SetCollapsibleCustomBadge(entry.body, true)
+    local badge = entry._msuf2CustomBadge
+    local tooltip = env.GameTooltip
+    env.GameTooltip = nil
+    Hover(badge, true, "OnEnter")
+    Check(button:IsShown(), "entering the Custom badge did not reveal the actions")
+    Hover(badge, false, "OnLeave")
+    env.GameTooltip = tooltip
+    Check(not button:IsShown(), "leaving the Custom badge kept the actions visible")
+
+    local navigation = mw.core.PadNavigation
+    local selected
+    mw.core.PadNavigation = { IsSelectionIn = function(frame) return frame == header and selected end }
+    selected = true
+    header:GetScript("OnEnter")(header, false)
+    Check(button:IsShown(), "controller focus did not reveal the actions")
+    selected = false
+    header:GetScript("OnLeave")(header)
+    Check(not button:IsShown(), "leaving controller focus kept the actions visible")
+    mw.core.PadNavigation = navigation
+
+    local popup = env.CreateFrame("Frame", nil, env.UIParent)
+    popup:Hide()
+    M.SetSectionPopupGetter(button, function() return popup end, popup)
+    popup:Show()
+    Check(button:IsShown(), "an open popup did not hold the action button visible")
+    popup:Hide()
+    Check(not button:IsShown(), "closing the popup did not restore hover visibility")
+    popup:Show()
+    entry.SetOpenByUser(false)
+    Check(not button:IsShown() and not popup:IsShown(), "collapsing left the section menu open")
+    Check(entry._msuf2ActionReserve == 34, "visibility changes removed the reserved header space")
+end
 
 local errors = {}
 env.geterrorhandler = function() return function(message) errors[#errors + 1] = tostring(message) end end
@@ -367,6 +424,7 @@ M.Search.ApplyRoute(KEY, { accordion = { [KEY .. ":route_open"] = true } })
 mw:Select(KEY)
 Check(Count("route_open") == 1 and lab.flags.route_open.incomplete == true, "the route-opened section did not build in the page build")
 Check(Count("closed_c") == 0, "a route rebuild built a closed section")
+CheckSectionActions(M.GetSectionEntry(lab.bodies.after_a))
 ClearAccordion()
 
 print("menu_lazy_accordion_smoke: ok (" .. flavor .. "; shells on the cold frame, synchronous open/eager/proxy/hidden builds,"

@@ -521,7 +521,7 @@ function M.BindSegment(ctx, segment, getValue, setValue, metadata)
         local btn = segment.buttons[i]
         btn:SetScript("OnClick", function(self)
             if BlockCombatAndRefresh(ctx) then return end
-            if getValue() == self._msuf2Value then
+            if getValue() == self._msuf2Value and not (metadata and metadata.reapplySelection) then
                 segment:SetValue(self._msuf2Value)
                 return
             end

@@ -311,6 +311,17 @@ function MiscSection.MenuBehavior(s)
     s.hasAppearancePresets, s.menuBehavior, s.menuBehaviorW = hasAppearancePresets, menuBehavior, menuBehaviorW
     s.menuFontRightX, s.menuFontW = menuFontRightX, menuFontW
 end
+local function MenuSkinAvailable()
+    return MSUF.MenuSkin and MSUF.MenuSkin.IsAvailable()
+end
+
+local function AppearancePresetValues()
+    local values = VT("classicGlass", "MSUF Forever", "midnight", "Midnight Blue", "midnightDark", "Midnight Dark",
+        "class", "Class color", "ember", "Ember", "jade", "Jade", "violet", "Violet", "custom", "Custom")
+    if MenuSkinAvailable() then values[#values + 1] = { value = "mapkoSkin", text = "MapkoSkin" } end
+    return values
+end
+
 function MiscSection.MenuAccent(s)
     local ctx, BindMiscToggle, BindMiscDropdown = s.ctx, s.BindMiscToggle, s.BindMiscDropdown
     local hasAppearancePresets, menuBehavior, menuBehaviorW = s.hasAppearancePresets, s.menuBehavior, s.menuBehaviorW
@@ -407,12 +418,9 @@ function MiscSection.MenuAccent(s)
             or -330, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     if hasAppearancePresets then
-        BindMiscDropdown(menuBehavior, "Menu appearance preset",
-            VT("classicGlass", "MSUF Forever", "midnight", "Midnight Blue",
-                "midnightDark", "Midnight Dark",
-                "class", "Class color", "ember", "Ember", "jade", "Jade", "violet", "Violet", "custom", "Custom"),
-            250, 14, -244,
+        BindMiscDropdown(menuBehavior, "Menu appearance preset", AppearancePresetValues, 250, 14, -244,
             function()
+                if ReadGBool("mapkoSkinMenus", true) and MenuSkinAvailable() then return "mapkoSkin" end
                 local accent = ReadAccentMode()
                 return accent ~= "midnight" and accent or T.GetMenuAppearancePreset(M.GetGeneralDB())
             end,
@@ -421,19 +429,15 @@ function MiscSection.MenuAccent(s)
                     SetG("menuAppearancePreset", value, "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
                     SetG("menuAccent", "midnight", "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
                     SetG("menuAccentTintSurfaces", false, "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
-                    local skin = _G.MapkoSkin
-                    if skin and skin.addonName == "MSUF_Suite_Skin"
-                        and skin.Theme and skin.Theme.ApplyLook then
-                        local look = value == "classicGlass" and "foreverGlass" or value
-                        skin.Theme.ApplyLook(look)
-                    end
                 elseif IsAccentMode(value) then
                     -- Legacy color presets keep the chosen materials and saved custom color.
                     SetG("menuAccent", value, "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
-                else
+                elseif value ~= "mapkoSkin" or not MenuSkinAvailable() then
                     return
                 end
-                RefreshAccentSwatchEnabled()
+                -- Use the MSUF-only skin switch so the chosen material can paint after reload.
+                SetG("mapkoSkinMenus", value == "mapkoSkin", "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
+                M.Refresh(ctx)
                 M.ShowPrompt("MSUF2_APPEARANCE_RELOAD_REQUIRED", {
                     text = M.Tr("Reload the UI to apply the menu appearance preset?"),
                     accept = RELOADUI or M.Tr("Reload"),
@@ -459,7 +463,10 @@ function MiscSection.Integrations(s)
     local mapkoSkin = b:CollapsibleSection("misc_mapkoskin", "MapkoSkin", 108, true)
     BindMiscToggle(mapkoSkin, "Use MapkoSkin for MSUF menus", "mapkoSkinMenus", true,
         "MSUF2_MAPKOSKIN_MENUS", 14, -42, 360, MENU_WRITE_OPTS,
-        function() if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end end)
+        function()
+            if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end
+            M.Refresh(ctx)
+        end)
     W.Text(mapkoSkin, "Requires MapkoSkin API 2.1. Disabling restores the MSUF look; unit frames and profile colors are unchanged.",
         30, -76, menuBehaviorW - 70, T.colors.muted)
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)

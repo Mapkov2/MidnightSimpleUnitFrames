@@ -1,5 +1,5 @@
 -- Exercise the Menu2 painter when an external skin owns its button material.
--- The selected rail entry and selected unit tab need an MSUF-owned cue.
+-- The rail owns its stripe. The tab uses the surface provided by its skin.
 local root = assert(arg[1], "Classic repository root required")
 local function Read(path)
     local file = assert(io.open(root .. "/" .. path, "rb"))
@@ -8,8 +8,9 @@ local function Read(path)
     return content
 end
 
-local themeSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua")
-local cueStart = assert(themeSource:find("local function SetSkinnedSelectionCue", 1, true),
+local themeFile = arg[2] or "MSUF_Menu2_Theme.lua"
+local themeSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/" .. themeFile)
+local cueStart = assert(themeSource:find("local function SetNavStripe", 1, true),
     "skinned selection cue missing")
 local painterStart = assert(themeSource:find("local function ButtonVisual", cueStart, true),
     "Menu2 button painter missing")
@@ -22,6 +23,7 @@ local cueAndSkinBranch = themeSource:sub(cueStart, painterStart - 1)
 local theme = { colors = { accent = { 0, 0, 0, 1 }, navTextActive = { 0.94, 0.96, 1, 1 } } }
 local skin = { owned = true }
 function skin.Button() return skin.owned end
+
 local factory = assert(loadstring("local T, MenuSkin, HideNavPillArt, SetNavActiveFX = ...\n"
     .. "local PixelLayoutRegion = function(region) return region end\n"
     .. cueAndSkinBranch))
@@ -33,12 +35,15 @@ local function NewButton(role)
     function button:CreateTexture(_, layer, _, sublevel)
         local texture = { layer = layer, sublevel = sublevel, shown = false }
         function texture:SetTexture(path) self.path = path end
-        function texture:SetPoint() end
+        function texture:SetPoint(point, owner, relativePoint, x, y)
+            self[point] = { owner, relativePoint, x or 0, y or 0 }
+        end
         function texture:SetWidth(width) self.width = width end
         function texture:SetColorTexture(r, g, b, a) self.color = { r, g, b, a } end
         function texture:Show() self.shown = true end
         function texture:Hide() self.shown = false end
         function texture:IsShown() return self.shown end
+        function texture:SetShown(shown) self.shown = shown end
         self.textures[#self.textures + 1] = texture
         return texture
     end
@@ -71,16 +76,14 @@ assert(widgetsSource:sub(barStart, barEnd - 1):find("btn._msuf2SegmentChoice = t
     "unit tabs are not marked as selectable")
 local target = NewButton("_msuf2SegmentChoice")
 paint(target, true, false)
-assert(CueShown(target), "selected Target tab is not highlighted")
+
+assert(#target.textures == 0 and not target._msuf2SkinnedSelectionCue,
+    "selected tab painted separate art over the external skin")
 paint(target, false, false)
-assert(not CueShown(target), "old Target tab selection remains visible")
-paint(target, true, false)
-skin.owned = false
-paint(target, true, false)
-assert(not CueShown(target), "switching back to native skin kept the external selection cue")
+assert(#target.textures == 0, "deselecting allocated overlay art")
 
 local ordinary = NewButton("_msuf2OrdinaryButton")
 skin.owned = true
 paint(ordinary, true, false)
-assert(not ordinary._msuf2SkinnedSelectionCue, "ordinary active button got a navigation cue")
+assert(not ordinary._msuf2SkinnedSelectionCue and not ordinary._msuf2TabOutline, "ordinary button got a selection cue")
 print("menu2_skinned_selection_smoke: Unitframes and Target selection transitions passed")

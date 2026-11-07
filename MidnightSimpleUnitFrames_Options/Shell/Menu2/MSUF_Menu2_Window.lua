@@ -2105,6 +2105,7 @@ ApplyMenuFrameScale = function(frame)
     local previousW = frame.GetWidth and frame:GetWidth() or WINDOW_W
     local previousH = frame.GetHeight and frame:GetHeight() or WINDOW_H
     frame:SetScale(EffectiveMenuScale(g.slashMenuScale))
+    if frame.windowControls and frame.windowControls._msuf2CaptionGroup then RefreshWindowControls(frame) end
     ApplyWindowResizeBounds(frame)
     ClampWindowSize(frame)
     local currentW = frame.GetWidth and frame:GetWidth() or WINDOW_W

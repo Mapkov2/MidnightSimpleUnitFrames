@@ -185,6 +185,7 @@ end
             local btn = T.CenterButtonLabel(T.Button(holder, spec.text, buttonW, 24))
             T.FitButtonWidth(btn, buttonW)
             local value = spec.key
+            btn._msuf2SegmentChoice = true
             btn._msuf2AllowCombatClick = true
             btn._msuf2SkipHistoryCheckpoint = true
             btn:SetPoint("LEFT", holder, "LEFT", width, 0)

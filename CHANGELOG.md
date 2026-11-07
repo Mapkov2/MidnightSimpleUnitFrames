@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.510 - 2026-11-07
+
+### Highlights
+
+- Party, Raid and Mythic Raid frames can each use their own health gradient and bar background. Configure the gradient stops, background color mode and whether the background fills the bar or only shows missing health.
+<!-- msuf-menu-link: none -->
+- WoW Forever swing timers now show draggable bars in Edit Mode. The options preview lets you inspect individual layers, jump to their settings, and see the out-of-range color and opacity for each weapon slot.
+<!-- msuf-menu-link: none -->
+- Menu appearance presets now apply to the MSUF menu when MapkoSkin is installed. Pick MapkoSkin from the same list to switch back to its look.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.menu.appearance.preset","settingKey":"general.menuAppearancePreset","prepareKind":"","prepareValue":"","query":"menu appearance preset","label":"Menu appearance preset"} -->
+
+### Fixes and polish
+
+- Fixed health bars retaining the old texture after switching away from the Blizzard preset.
+<!-- msuf-menu-link: none -->
+- Choosing the global health bar color mode now clears preset overrides on individual unit frames, so the chosen mode takes effect immediately.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_appearance","controlId":"menu2.opt.colors.advanced.appearance.bar.mode","settingKey":"general.barMode","prepareKind":"","prepareValue":"","query":"bar mode","label":"Bar mode"} -->
+- The compact color picker now shows opacity for colors that support it, so you can restore a tint saved at 0% opacity.
+<!-- msuf-menu-link: none -->
+- Improved the Class Resources preview for alternative mana and player health colors. Refined selected tabs, sidebar markers and window buttons, and made section actions appear when you hover over or focus the header.
+<!-- msuf-menu-link: none -->
+
 ## 6.509 - 2026-11-06
 
 ### Unit frame positioning

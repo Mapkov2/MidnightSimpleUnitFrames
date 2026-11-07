@@ -6,6 +6,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
     if type(policy) == "string" then return region[policy](region, ...) end
     return region
 end
+local InCombatLockdown = _G.InCombatLockdown
 local Swing = {}
 MSUF.SwingTimer = Swing
 local HANDS = { "main", "off", "ranged" }
@@ -36,7 +37,7 @@ local LIMITS = {
     reachOpacity = { 0, 100 },
 }
 local frames, byType = {}, {}
-local active, preview, driver, nativeEnabled, formatter
+local active, preview, manualPreview, editPreview, driver, nativeEnabled, formatter
 -- Attacks that replace the next melee swing, by class. The client answers by
 -- spell name, so every rank matches.
 local NEXT_SWING = { WARRIOR = { 78, 845 }, DRUID = { 6807 }, HUNTER = { 2973 } }
@@ -163,11 +164,16 @@ local function Start(frame, duration)
     BindTimer(frame)
 end
 local function OnDragStart(frame)
-    if preview and not _G.InCombatLockdown() then frame:StartMoving() end
+    if preview and not InCombatLockdown() then
+        frame.dragging = true
+        frame:StartMoving()
+    end
 end
 local function OnDragStop(frame)
+    if not frame.dragging then return end
+    frame.dragging = nil
     frame:StopMovingOrSizing()
-    if not preview then return end
+    if not preview or InCombatLockdown() then return end
     local x, y = frame:GetCenter()
     local parentX, parentY = _G.UIParent:GetCenter()
     local scale = frame:GetScale()
@@ -180,11 +186,11 @@ local function OnDragStop(frame)
     end
 end
 
-local function CreateSurface(frame)
+local function CreateSurface(frame, backgroundParent)
     local bar = PixelLayoutRegion(_G.CreateFrame("StatusBar", nil, frame))
     bar:SetMinMaxValues(0, 1)
-    bar.Background = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
-    bar.Background:SetAllPoints()
+    bar.Background = PixelLayoutRegion((backgroundParent or bar):CreateTexture(nil, "BACKGROUND"))
+    bar.Background:SetAllPoints(bar)
     return bar
 end
 
@@ -220,7 +226,11 @@ local function CreateBar(hand, parent)
         frame:SetScript("OnDragStart", OnDragStart)
         frame:SetScript("OnDragStop", OnDragStop)
     end
-    frame.Bar = CreateSurface(frame)
+    if sample then
+        frame.PreviewBorder = PixelLayoutRegion(_G.CreateFrame("Frame", nil, frame, "BackdropTemplate"))
+        frame.PreviewBorder:SetAllPoints()
+    end
+    frame.Bar = CreateSurface(frame, sample and frame)
     frame.Text = PixelLayoutRegion(_G.CreateFrame("Frame", nil, frame))
     frame.Text:SetAllPoints()
     frame.Text:SetFrameLevel(frame.Bar:GetFrameLevel() + 2)
@@ -353,13 +363,18 @@ end
 
 -- Out of reach: the bar fades to the chosen opacity and takes the reach
 -- colour. Written only when the state flips; the lane inherits main's alpha.
+local function StyleReach(frame, outside)
+    local c = frame.config
+    frame:SetAlpha(c.opacity / 100 * (outside and c.reachOpacity / 100 or 1))
+    frame.Bar:SetStatusBarColor(unpack(outside and c.reachColor or c.color))
+end
+
 local function PaintReach(frame)
     local c = frame.config
     local outside = c.reachCheck == true and frame.outside == true and not preview
     if frame.reachShown == outside then return end
     frame.reachShown = outside
-    frame:SetAlpha(c.opacity / 100 * (outside and c.reachOpacity / 100 or 1))
-    frame.Bar:SetStatusBarColor(unpack(outside and c.reachColor or c.color))
+    StyleReach(frame, outside)
 end
 -- C_SwingTimer.EnableRangeCheck is one switch per hand shared with Blizzard's
 -- bars, which turn it off when their CVar drops: force re-asserts it.
@@ -510,20 +525,31 @@ function Swing.ApplyFonts()
     end
 end
 
+local function Place(frame)
+    local cfg, scale = frame.config, frame:GetScale()
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", _G.UIParent, "CENTER", cfg.x / scale, cfg.y / scale)
+end
+
+local function CancelDrag(frame)
+    if not frame.dragging then return end
+    frame.dragging = nil
+    frame:StopMovingOrSizing()
+    Place(frame)
+end
+
 local function Style(frame, cfg, sample)
     frame.config = cfg
     frame:SetSize(cfg.width, cfg.height)
     frame:SetScale(cfg.scale / 100)
     frame:SetAlpha(cfg.opacity / 100)
-    if not sample then
-        frame:ClearAllPoints()
-        frame:SetPoint("CENTER", _G.UIParent, "CENTER", cfg.x / frame:GetScale(), cfg.y / frame:GetScale())
-    end
+    if not sample then Place(frame) end
     local inset = math.min(cfg.borderSize, (cfg.height - 1) / 2, (cfg.width - 1) / 2)
-    PixelLayoutRegion(frame, "SetBackdrop", cfg.display == "bar" and cfg.borderSize > 0 and {
+    local border = frame.PreviewBorder or frame
+    PixelLayoutRegion(border, "SetBackdrop", cfg.display == "bar" and cfg.borderSize > 0 and {
         edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = inset,
     } or nil)
-    frame:SetBackdropBorderColor(unpack(cfg.borderColor))
+    border:SetBackdropBorderColor(unpack(cfg.borderColor))
     frame.inset = inset
     frame.texture = Swing.ResolveTexture(cfg.texture, "Interface\\TargetingFrame\\UI-StatusBar")
     StyleSurface(frame.Bar, cfg, inset, frame.texture)
@@ -558,7 +584,7 @@ function Swing.CreateMenuPreview(parent, hand)
     return CreateBar(hand, parent)
 end
 
-function Swing.PaintMenuPreview(samples)
+function Swing.PaintMenuPreview(samples, outsideHand)
     local db = ProfileDB()
     local cfg = db and db.swingTimers
     for i = 1, #HANDS do
@@ -568,7 +594,9 @@ function Swing.PaintMenuPreview(samples)
         local values = frame.previewConfig
         Style(frame, values, true)
         frame.Bar:SetShown(values.display == "bar")
+        frame.Bar.Background:SetShown(values.display == "bar")
         frame.Bar:SetValue(values.fill == "remaining" and 0.35 or 0.65)
+        if hand == outsideHand then StyleReach(frame, true) end
         frame.Time:SetText("1.2")
     end
     local main, off = samples.main, samples.off
@@ -577,6 +605,24 @@ function Swing.PaintMenuPreview(samples)
         off.Lane:SetShown(main.config.offhandLane and main.config.display == "bar" and off.config.enabled)
         off.Lane:SetValue(main.config.fill == "remaining" and 0.35 or 0.65)
     end
+end
+
+local function SyncPreview()
+    local wanted = active == true and (manualPreview == true or editPreview == true)
+    if wanted == (preview == true) then return end
+    preview = wanted
+    for i = 1, #HANDS do
+        local frame = frames[HANDS[i]]
+        if wanted then Stop(frame) else CancelDrag(frame) end
+    end
+    RefreshVisibility()
+    SyncRanges()
+    UpdateCue()
+end
+
+local function EditModeChanged(value)
+    editPreview = value == true
+    SyncPreview()
 end
 
 local function OnEvent(_, event, a, b, c)
@@ -611,15 +657,9 @@ local function OnEvent(_, event, a, b, c)
         end
     else
         if event == "PLAYER_REGEN_DISABLED" and preview then
-            -- Combat ends the preview, also mid-drag: the drop is not saved,
-            -- so a dragged bar stops and goes back to its saved place.
-            preview = false
-            for i = 1, #HANDS do
-                local frame = frames[HANDS[i]]
-                frame:StopMovingOrSizing()
-                frame:ClearAllPoints()
-                frame:SetPoint("CENTER", frame.config.x / frame:GetScale(), frame.config.y / frame:GetScale())
-            end
+            manualPreview, editPreview = false, false
+            SyncPreview()
+            return
         end
         RefreshVisibility()
         SyncRanges()
@@ -668,14 +708,16 @@ local function Enable()
     driver:RegisterEvent("PLAYER_LOGOUT")
     driver:RegisterUnitEvent("UNIT_ATTACK_SPEED", "player")
     Swing.Apply()
+    SyncPreview()
 end
 local function Disable()
     if not active then return end
-    active, preview = false, false
+    active, preview, manualPreview = false, false, false
     driver:UnregisterAllEvents()
     driver.listening, cueEventsBound, reachEventsBound = nil, false, false
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
+        CancelDrag(frame)
         Stop(frame)
         frame:Hide()
         frame:EnableMouse(false)
@@ -692,7 +734,7 @@ local function Disable()
 end
 function Swing.SetEnabled(value)
     local cfg = DB()
-    if not cfg or _G.InCombatLockdown() then return false end
+    if not cfg or InCombatLockdown() then return false end
     cfg.enabled = value == true
     MSUF.MSUF_ApplyModules()
     return true
@@ -726,15 +768,12 @@ function Swing.Set(hand, key, value)
     return true
 end
 function Swing.SetPreview(value)
-    if value and (not active or _G.InCombatLockdown()) then return false end
-    preview = value == true
-    if preview then
-        for i = 1, #HANDS do Stop(frames[HANDS[i]]) end
-    end
-    if active then RefreshVisibility(); SyncRanges(); UpdateCue() end
+    if value and (not active or InCombatLockdown()) then return false end
+    manualPreview = value == true
+    SyncPreview()
     return true
 end
-function Swing.GetPreview() return preview == true end
+function Swing.GetPreview() return manualPreview == true end
 -- The next-swing attacks with a cue text, in menu order: spell ID, the
 -- client's spell name (nil when the client has none) and the setting key.
 function Swing.CueAttacks()
@@ -755,6 +794,11 @@ MSUF.MSUF_RegisterModule("SwingTimers", {
     order = 75, IsEnabled = Swing.GetEnabled, Enable = Enable, Disable = Disable,
     RefreshSettings = Swing.Apply, Shutdown = Disable,
 })
+
+do
+    local register = _G.MSUF_RegisterAnyEditModeListener
+    if register then register(EditModeChanged) end
+end
 
 -- Initial profile binding does not run the profile-change module fanout. Start
 -- once after PLAYER_LOGIN has bound the profile, also on /reload. Reuse the

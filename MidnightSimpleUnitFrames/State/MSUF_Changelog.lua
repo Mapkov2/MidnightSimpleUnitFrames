@@ -8,12 +8,70 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "754B6C29C3FAB34FD5EA950840341C8FD811526B5248F385368FDC38BC1965B3",
-    currentVersion = "6.509",
-    historyFromVersion = "6.506",
-    previousVersion = "6.506",
-    rangeLabel = "6.506 -> 6.509",
+    sourceSha256 = "BB1CECB7F28443C2B42AA9DF8BC1A7900D7125D3CE1AB075A780F434A1FB30A4",
+    currentVersion = "6.510",
+    historyFromVersion = "6.507",
+    previousVersion = "6.507",
+    rangeLabel = "6.507 -> 6.510",
     entries = {
+        {
+            version = "6.510",
+            date = "2026-11-07",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Party, Raid and Mythic Raid frames can each use their own health gradient and bar background. Configure the gradient stops, background color mode and whether the background fills the bar or only shows missing health.",
+                            linkless = true,
+                        },
+                        {
+                            text = "WoW Forever swing timers now show draggable bars in Edit Mode. The options preview lets you inspect individual layers, jump to their settings, and see the out-of-range color and opacity for each weapon slot.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Menu appearance presets now apply to the MSUF menu when MapkoSkin is installed. Pick MapkoSkin from the same list to switch back to its look.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "menu appearance preset",
+                                label = "Menu appearance preset",
+                                sectionId = "misc_menu_behavior",
+                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
+                                settingKey = "general.menuAppearancePreset",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes and polish",
+                    bullets = {
+                        {
+                            text = "Fixed health bars retaining the old texture after switching away from the Blizzard preset.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Choosing the global health bar color mode now clears preset overrides on individual unit frames, so the chosen mode takes effect immediately.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "bar mode",
+                                label = "Bar mode",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.bar.mode",
+                                settingKey = "general.barMode",
+                            },
+                        },
+                        {
+                            text = "The compact color picker now shows opacity for colors that support it, so you can restore a tint saved at 0% opacity.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Improved the Class Resources preview for alternative mana and player health colors. Refined selected tabs, sidebar markers and window buttons, and made section actions appear when you hover over or focus the header.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.509",
             date = "2026-11-06",
@@ -116,78 +174,6 @@ local data = {
                                 controlId = "menu2.uf_targettarget.unit.basics.chunked_fill",
                                 settingKey = "targettarget.chunkedFill",
                             },
-                        },
-                    },
-                },
-            },
-        },
-        {
-            version = "6.506",
-            date = "2026-11-03",
-            sections = {
-                {
-                    title = "Improvements",
-                    bullets = {
-                        {
-                            text = "Expanded detached power-bar dimensions to widths of 10-800 and heights of 2-800, with matching vertical and reversed preview fills.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "detached power width",
-                                label = "Power width",
-                                sectionId = "classpower_detached_power",
-                                controlId = "menu2.classpower.advanced.detached.power.layout.width",
-                                settingKey = "player.detachedPowerBarWidth",
-                                prepareKind = "classPowerWorkspace",
-                                prepareValue = "power",
-                            },
-                        },
-                        {
-                            text = "On WoW Forever, choose preferred Paladin blessings by class and role in group Buff coverage.",
-                            linkless = true,
-                        },
-                        {
-                            text = "On WoW Forever, the five-second mana-rule indicator is enabled by default. The one-time update preserves later deliberate changes, and the setting is easier to find in search.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Added support for preset-controlled combat-timer retention and padded minutes.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        {
-                            text = "Fixed Warlock Spell Lock readiness staying red after sacrificing a Felhunter with Grimoire of Sacrifice. Readiness follows the granted player spell and switches back when the Felhunter is summoned again.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "show on target castbar",
-                                label = "Show on Target castbar",
-                                sectionId = "castbar_interrupt_ready",
-                                controlId = "menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target",
-                                settingKey = "general.kickReadyShowTarget",
-                            },
-                        },
-                        {
-                            text = "Fixed normal player casts disappearing after a late stop event from an earlier cast.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed synchronization of older saved profile groups that have no exclusion list.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Preserve explicit unit and group health-background colors during texture and palette refreshes.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed dropdown middle-texture anchoring, color-shortcut artwork and overlapping text in selected-unitframe profile exports.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Specific Paladin-blessing checks now hide while WoW Forever aura data is restricted.",
-                            linkless = true,
                         },
                     },
                 },

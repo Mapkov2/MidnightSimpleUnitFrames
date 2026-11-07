@@ -140,27 +140,29 @@ function Skin.Button(button, selected, hover, paint)
     local record = Record(button, "button", paint, selected, hover)
     if not record or not active then return false end
     local nav = button._msuf2NavItem == true
+    local tab = button._msuf2SegmentChoice == true and not nav
+    local enabled = not button.IsEnabled or button:IsEnabled()
+    local surfaceSelected = selected == true and (not tab or enabled)
     local role = (button._msuf2Danger or button._msufUIDanger) and "buttonDanger"
         or (button._msuf2Success or button._msufUISuccess) and "buttonSuccess"
         or (button._msuf2Primary or button._msufUIPrimary) and "buttonPrimary"
         or nav and "navigation" or "button"
-    if not record.skinned or record.role ~= role or record.nav ~= nav then
+    if not record.skinned or record.role ~= role or record.nav ~= nav or record.tab ~= tab then
         -- Menu2 T.Button (the only setter of _msuf2RawSetScript) builds plain
         -- Buttons: no template, native state textures, Icon/Checked fields,
         -- dropdown mixin or Blizzard-gold text, and its pages never add them.
-        local ok, reason = client:SkinButton(button, { role = role, activeRole = nav and "button" or role,
-            useControlShape = true, active = selected == true, listItem = nav,
-            ownedArt = button._msuf2RawSetScript ~= nil })
+        local ok, reason = client:SkinButton(button, { role = role, activeRole = tab and "buttonPrimary" or nav and "button" or role,
+            useControlShape = true, active = surfaceSelected, listItem = nav,
+            selectionEdge = tab, ownedArt = button._msuf2RawSetScript ~= nil })
         if not ok or reason ~= "applied" then return false end
-        record.skinned, record.role, record.nav, record.selected = true, role, nav, selected == true
-    elseif record.selected ~= (selected == true) then
-        client:SetActive(button, selected == true)
-        record.selected = selected == true
+        record.skinned, record.role, record.nav, record.tab, record.selected = true, role, nav, tab, surfaceSelected
+    elseif record.selected ~= surfaceSelected then
+        client:SetActive(button, surfaceSelected)
+        record.selected = surfaceSelected
     end
     Suppress(button, record, buttonKeys)
     local label = button._msuf2Label or button._label
     if label and label.SetTextColor then
-        local enabled = not button.IsEnabled or button:IsEnabled()
         local token = not enabled and "disabled" or role == "buttonDanger" and "danger"
             or role == "buttonSuccess" and "success" or "text"
         label:SetTextColor(api:GetColor(token))
@@ -217,6 +219,7 @@ function Skin.BindColors(colors)
         end
     end
 end
+function Skin.IsAvailable() return api ~= nil and api:IsEnabled() end
 function Skin.IsActive() return active == true end
 function Skin.Owns(target) return active == true and records[target] and records[target].skinned == true end
 
@@ -272,10 +275,14 @@ local function Connect()
 end
 Connect()
 events = CreateFrame("Frame")
+events:RegisterEvent("PLAYER_LOGIN")
 if not api then events:RegisterEvent("ADDON_LOADED") end
 if Skin.pending then events:RegisterEvent("PLAYER_REGEN_ENABLED") end
 events:SetScript("OnEvent", function(_, event, name)
-    if event == "ADDON_LOADED" and (name == "MapkoSkin" or name == "MSUF_Suite_Skin") then
+    if event == "PLAYER_LOGIN" then
+        events:UnregisterEvent(event)
+        Skin.Refresh()
+    elseif event == "ADDON_LOADED" and (name == "MapkoSkin" or name == "MSUF_Suite_Skin") then
         Connect()
         if api then events:UnregisterEvent("ADDON_LOADED") end
     elseif event == "PLAYER_REGEN_ENABLED" and Skin.pending then Skin.Refresh() end

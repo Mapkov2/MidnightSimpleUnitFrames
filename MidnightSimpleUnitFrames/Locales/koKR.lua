@@ -5986,8 +5986,11 @@ L["Click to open settings. Move resources in Edit Mode."] = "클릭하여 설정
 -- Forever Swing Timer module.
 L["Show the off-hand timer as a lane in the main-hand bar"] = "보조장비 타이머를 주장비 바 안의 줄로 표시"
 L["Grey out while the target is out of reach"] = "대상이 사거리 밖이면 회색으로 표시"
+L["Grey out while the target is out of range"] = "대상이 사거리 밖이면 회색으로 표시"
 L["Out-of-reach opacity (%)"] = "사거리 밖 불투명도 (%)"
+L["Out-of-range opacity (%)"] = "사거리 밖 불투명도 (%)"
 L["Out-of-reach color"] = "사거리 밖 색상"
+L["Out-of-range color"] = "사거리 밖 색상"
 L["Next-swing cue color"] = "다음 공격 표시 색상"
 L["Next-swing attacks"] = "다음 공격 시 발동 기술"
 L["Show the queued next-swing attack"] = "대기 중인 다음 공격 기술 표시"

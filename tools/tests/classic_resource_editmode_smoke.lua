@@ -373,7 +373,8 @@ do
         local power=env.CreateFrame("Frame",nil,box.stage);power:SetSize(220,8)
         power.fill=power:CreateTexture();power.fill:SetSize(158,8)
         local classFrame=box._msufCPPreviewAnim.classFrame
-        env.MSUF_PlayerPowerManaOverrideActive=true;player.playerPowerSource="MANA"
+        -- Force a Mana example to exercise its painter alongside the Warrior samples.
+        player._msufResourceExtraMana = true
         env.UnitClass=function() return "Warrior","WARRIOR" end
         -- The sample reads the specialization like the live builder does
         -- (C_SpecializationInfo first). The deprecated global exists only with
@@ -480,19 +481,19 @@ do
         b.arcaneWindowColor,b.arcaneWindowWarnColor,b.arcaneWindowWarnSeconds=nil,nil,nil
         env.UnitClass=function() return "Warrior","WARRIOR" end;liveSpec=3
         do
-            -- Resource marks on the power bar follow the live target: the
-            -- player's real power type and its maximum for ABSOLUTE marks,
-            -- drawn on OVERLAY sublevel 7 like MSUF_CP_ResourceMarks.
-            player.playerPowerSource="AUTO";env.MSUF_PlayerPowerManaOverrideActive=nil
+            -- Resource marks follow the previewed type and read the live maximum
+            -- for an ABSOLUTE mark when it matches the preview.
+            player._msufResourceExtraMana = nil
             env.UnitPowerType=function(unit) assert(unit=="player");return 1,"RAGE" end
             env.UnitPowerMax=function(unit,power) assert(unit=="player" and power==1);return 120 end
             b.resourceMarks={{target="PRIMARY",resource="RAGE",mode="PERCENT",value=50,mark=true,color={.3,.3,.3}},
                 {target="PRIMARY",resource="ENERGY",mode="PERCENT",value=40,mark=true,color={.4,.4,.4}},
                 {target="PRIMARY",mode="ABSOLUTE",value=30,mark=true,color={.5,.5,.5}}}
-            geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+            local warrior = { key = "warrior_whirlwind", classToken = "WARRIOR" }
+            geometry.samples(box,b,player,warrior,classFrame,power)
             local shown=0
             for _,texture in ipairs(box.resourceSampleMarks) do if texture:IsShown() then shown=shown+1 end end
-            assert(shown==2,flavor..": power marks did not follow the real power type (Rage + an ABSOLUTE mark expected, "..shown.." shown)")
+            assert(shown==2,flavor..": power marks did not follow the previewed power type (Rage + an ABSOLUTE mark expected, "..shown.." shown)")
             local rage,absolute=box.resourceSampleMarks[1],box.resourceSampleMarks[2]
             local _,_,_,rageX=rage:GetPoint(1)
             assert(math.abs((tonumber(rageX) or -1)-power:GetWidth()*.5)<.01,flavor..": the Rage mark is not at 50%")
@@ -500,8 +501,13 @@ do
             assert(math.abs((tonumber(absoluteX) or -1)-power:GetWidth()*30/120)<.01,flavor..": the ABSOLUTE mark ignored UnitPowerMax")
             local layer,sublevel=rage:GetDrawLayer()
             assert(layer=="OVERLAY" and sublevel==7,flavor..": power marks are not on OVERLAY sublevel 7 ("..tostring(layer).." "..tostring(sublevel)..")")
+            geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+            local _, _, _, energyX = box.resourceSampleMarks[1]:GetPoint(1)
+            local _, _, _, sampleAbsoluteX = box.resourceSampleMarks[2]:GetPoint(1)
+            assert(math.abs(energyX - power:GetWidth() * .4) < .01, flavor .. ": Energy mark did not follow the Rogue preview")
+            assert(math.abs(sampleAbsoluteX - power:GetWidth() * .3) < .01, flavor .. ": Rogue sample used the live Rage maximum")
             env.UnitPowerType,env.UnitPowerMax=nil,nil
-            player.playerPowerSource="MANA";env.MSUF_PlayerPowerManaOverrideActive=true
+            player._msufResourceExtraMana = true
         end
         b.manaUpcomingCost=false;b.manaRegenPause=false;b.manaGainPulse=false;b.showArcaneWindow=false;b.resourceMarks={}
         geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
@@ -560,7 +566,8 @@ do
         b.manaUpcomingCost=true
         geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
         assert(box.resourceSamples.COST==cost and cost:IsShown(),"sample was reallocated instead of reused")
-        player.playerPowerSource="AUTO";env.MSUF_PlayerPowerManaOverrideActive=nil;b.manaUpcomingCost=false
+        player._msufResourceExtraMana = nil
+        b.manaUpcomingCost = false
         box:Refresh()
         assert(not box.dragFrame and not box.zoomBar and not box:GetScript("OnKeyDown"),
             flavor .. ": preview still captures movement or manual camera input")

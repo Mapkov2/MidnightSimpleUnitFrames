@@ -1694,16 +1694,6 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     local col, row = grid[1], grid[2]
     if icon.SetTexCoord then icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8) end
     btn._msuf2NavIconColor = color
-    if not btn._msuf2NavStripe then
-        local stripe = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 6))
-        stripe:SetTexture("Interface\\Buttons\\WHITE8X8")
-        stripe:SetWidth(3)
-        stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
-        stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 1, 4)
-        stripe:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1.00)
-        stripe:Hide()
-        btn._msuf2NavStripe = stripe
-    end
     T.SetNavIconVisible(btn, visible ~= false)
 end
 local function HideNativeSliderTexture(region, keep)
@@ -2430,6 +2420,25 @@ local function SetNavActiveFX(btn, active, hover)
     SetSuperellipsePartsShown(fx.sheenFill, true)
     SetSuperellipsePartsShown(fx.sheenEdge, false)
 end
+-- Keep the rail marker independent of icons and of the selection's owner.
+local function SetNavStripe(btn, shown)
+    local stripe = btn._msuf2NavStripe
+    if not shown then
+        if stripe then stripe:Hide() end
+        return
+    end
+    if not stripe then
+        stripe = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 6))
+        stripe:SetWidth(3)
+        stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
+        stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 1, 4)
+        btn._msuf2NavStripe = stripe
+    end
+    local color = T.colors.navTextActive
+    stripe:SetColorTexture(color[1], color[2], color[3], 0.94)
+    stripe:Show()
+end
+
 local function SetSkinnedSelectionCue(btn, active)
     local cue = btn._msuf2SkinnedSelectionCue
     if not active then
@@ -2460,19 +2469,27 @@ local function SetSkinnedSelectionCue(btn, active)
     cue.line:Show()
 end
 local function ButtonVisual(btn, active, hover)
-    if MenuSkin and MenuSkin.Button(btn, active, hover, ButtonVisual) then
+    local skinned = MenuSkin and MenuSkin.Button(btn, active, hover, ButtonVisual)
+    local enabled = not (btn.IsEnabled and not btn:IsEnabled())
+    local selected = enabled and active
+    SetNavStripe(btn, not skinned and selected and btn._msuf2NavItem)
+    if skinned then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
-        if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
-        SetSkinnedSelectionCue(btn,
-            active and (btn._msuf2NavItem or btn._msuf2SegmentChoice))
+        SetSkinnedSelectionCue(btn, active and btn._msuf2NavItem)
         return
     end
     SetSkinnedSelectionCue(btn, false)
     local c = T.colors
     local fill = btn._msuf2Fill
     local edge = btn._msuf2Edge
-    local enabled = not (btn.IsEnabled and not btn:IsEnabled())
+    if btn._msuf2SegmentChoice and not T.classicAtlas and not btn._msuf2TabRim then
+        -- The outer silhouette is solid. Let the inset fill cover its center.
+        edge.L:SetDrawLayer("BACKGROUND", -1)
+        edge.M:SetDrawLayer("BACKGROUND", -1)
+        edge.R:SetDrawLayer("BACKGROUND", -1)
+        btn._msuf2TabRim = true
+    end
     -- Opt-in text-only hover (Edit Mode toolbar): the label is the entire hover
     -- affordance and the pill stays at its resting paint, whatever the state.
     -- Declared up here because the role branches below return early -- a primary
@@ -2556,7 +2573,6 @@ local function ButtonVisual(btn, active, hover)
             local bg = hover and c.navPillHover or c.navPillActive
             local br = hover and c.navPillEdgeHover or c.navPillEdgeActive
             local tx = hover and (c.navHeaderHover or c.navTextActive) or c.navTextActive
-            if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
             if SetNavPillArt(btn, "active", bg, hover and 0.20 or 0.17, -0.20) then
                 SetNavActiveFX(btn, false)
                 SetLabelColor(btn._msuf2Label, tx)
@@ -2571,7 +2587,6 @@ local function ButtonVisual(btn, active, hover)
         elseif hover then
             local bg, br, tx = c.navPillHover, c.navPillEdgeHover, c.navHeaderHover or c.navText
             SetNavActiveFX(btn, false)
-            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             if SetNavPillArt(btn, "hover", bg, 0.14, -0.22) then
                 SetLabelColor(btn._msuf2Label, c.navHeaderHover or tx, 1)
             else
@@ -2584,7 +2599,6 @@ local function ButtonVisual(btn, active, hover)
         else
             local tx = c.navText
             SetNavActiveFX(btn, false)
-            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             HideNavPillArt(btn)
             SetLabelColor(btn._msuf2Label, tx)
             PaintNavIcon(btn, tx[1], tx[2], tx[3], tx[4] or 1)
@@ -2594,18 +2608,16 @@ local function ButtonVisual(btn, active, hover)
     HideNavPillArt(btn)
     SetNavActiveFX(btn, false)
     if active then
-        if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
-        local bg, br, tx = c.pillActive, c.pillEdgeActive, c.pillTextActive
+        local br = btn._msuf2SegmentChoice and c.navTextActive or c.pillEdgeActive
+        local bg, tx = c.pillActive, c.pillTextActive
         if textOnlyHover then tx = c.navHeaderHover or tx end
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.16, -0.15)
         PaintStoredNavIcon(btn, 1.00)
     elseif hover and not textOnlyHover then
-        if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br = c.pillHover, c.pillEdgeHover
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, c.text, 0.14, -0.18, 1)
         PaintStoredNavIcon(btn, 0.85)
     else
-        if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br = c.pillBase, c.pillEdge
         local tx = textOnlyHover and (c.navHeaderHover or c.text) or c.pillText
         if btn._msuf2SolidPill then bg = c.pillBaseSolid end

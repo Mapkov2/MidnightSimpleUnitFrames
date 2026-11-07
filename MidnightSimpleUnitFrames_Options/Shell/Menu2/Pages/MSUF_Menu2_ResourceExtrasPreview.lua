@@ -154,6 +154,7 @@ function Extras.Config(preview, bars, player, spec)
     sampleBars.manaRegenPause, sampleBars.manaGainPulse = effect == "pause", effect == "pulse"
     sampleBars.resourceMarks = nil
     -- One subdued Player Power bar makes duration-bar offsets observable in auto-fit.
+    samplePlayer.showPowerBar = true
     samplePlayer.powerBarDetached = true
     samplePlayer.detachedPowerBarAnchorToClassPower = true
     samplePlayer.playerPowerSource = "MANA"

@@ -6,6 +6,8 @@ chunk("MidnightSimpleUnitFrames", ns)
 assert(ns.SwingTimer == nil, "other clients must have no module or events")
 
 local now, combat, native = 100, false, true
+local editModeChanged
+_G.MSUF_RegisterAnyEditModeListener = function(callback) editModeChanged = callback end
 local offSpeed, rangedSpeed = 2.5, 2.8
 local objects, named, driver = {}, {}
 local function noop() end
@@ -14,7 +16,8 @@ for _, name in ipairs({
     "SetMovable", "SetClampedToScreen", "RegisterForDrag", "SetAllPoints",
     "SetJustifyH", "SetBackdropBorderColor", "ClearAllPoints", "SetTextColor", "SetWidth",
     "StopMovingOrSizing", "StartMoving", "SetUpdateInterval", "SetExpiredText", "SetZeroDurationText",
-    "SetTexCoord", "SetHeight", "SetClipsChildren",
+    "SetTexCoord", "SetHeight", "SetClipsChildren", "RegisterForClicks",
+    "SetColorTexture", "SetBackdropColor",
 }) do methods[name] = noop end
 function methods:SetMinMaxValues(a,b) self.minimum,self.maximum=a,b end
 function methods:GetFrameLevel() return self.level or 1 end
@@ -25,6 +28,7 @@ function methods:SetHorizTile(v) self.horizTile=v end
 function methods:SetVertTile(v) self.vertTile=v end
 function methods:GetStatusBarTexture() return self end
 function methods:IsVisible() return self:IsShown() and (not self.parent or self.parent:IsVisible()) end
+function methods:GetWidth() return self.width or 1 end
 function methods:SetSize(w,h) self.width, self.height = w,h end
 function methods:SetScale(v) self.scale = v end
 function methods:GetScale() return self.scale or 1 end
@@ -262,12 +266,28 @@ assert(main.binding.enabled and main.duration.endTime==104 and main.Bar.timer.en
 assert(swing.Set("main","display","bar") and main.Bar.timer.endTime==104)
 assert(main.Bar:IsVisible() and not main.Time:IsShown() and main.Title:IsVisible(), "bar mode restores existing title/time choices")
 assert(swing.Set("main","time",true))
-assert(swing.SetPreview(true))
+assert(not swing.GetPreview())
+editModeChanged(true)
+assert(main.mouse and main.PreviewBar:IsShown() and not driver.events.PLAYER_SWING,
+    "Edit Mode must show the static draggable Swing preview")
+assert(not swing.GetPreview(), "automatic preview must not change the manual toggle")
+assert(swing.SetPreview(false) and main.mouse, "closing Swing settings must keep the Edit Mode preview")
+editModeChanged(false)
+assert(not main.mouse and driver.events.PLAYER_SWING, "leaving Edit Mode must resume gameplay")
+editModeChanged(true)
 assert(swing.Set("main","scale",150))
 main.centerX,main.centerY=400,300
+main.scripts.OnDragStart(main)
 main.scripts.OnDragStop(main)
 assert(swing.Get("main","x")==100 and swing.Get("main","y")==50, "drag persists screen offsets at custom scale")
 
+assert(swing.SetPreview(true))
+editModeChanged(false)
+assert(swing.GetPreview() and main.mouse, "leaving Edit Mode must keep a requested manual preview")
+assert(swing.SetPreview(false) and not main.mouse and driver.events.PLAYER_SWING,
+    "turning off manual preview must resume gameplay")
+editModeChanged(true)
+assert(swing.SetPreview(true))
 -- A drag still running when combat starts: the drop is not saved, so the bar
 -- stops moving and goes back to its saved place instead of staying dropped.
 main.StartMoving = function(self) self.moving = true; self.point = { "DRAGGED" } end
@@ -280,7 +300,7 @@ assert(not swing.GetPreview() and not main.mouse, "combat ends interactive previ
 main.scripts.OnDragStop(main)
 assert(not main.moving, "combat start left the bar following the cursor")
 assert(swing.Get("main","x")==100 and swing.Get("main","y")==50, "a drop after combat started was saved")
-assert(main.point[1]=="CENTER" and math.abs(main.point[2]-100/1.5)<1e-9 and math.abs(main.point[3]-50/1.5)<1e-9,
+assert(main.point[1]=="CENTER" and math.abs(main.point[4]-100/1.5)<1e-9 and math.abs(main.point[5]-50/1.5)<1e-9,
     "a bar dropped after combat started stays where it was dropped instead of its saved place")
 combat=false
 -- All three disabled: no PLAYER_SWING subscriber, while ownership remains active.
@@ -342,7 +362,7 @@ end
 function W.Toggle() return object() end
 W.SectionSwitch=W.Toggle
 function W.Segment() local widget=object();widget._msuf2Title=object();return widget end
-function W.FixedPreviewSection() return object() end
+function W.FixedPreviewSection() return object(), object() end
 function W.Slider() return object() end
 function W.Dropdown(_,_,values) local widget=object(); widget.values=values; return widget end
 function W.Color() error("inline swing color widgets must not be allocated") end
@@ -350,7 +370,17 @@ function W.AttachContextColorShortcut(section,options) shortcuts[section]=option
 local page
 ns.Require=function(name) assert(name=="MSUF_PixelLayoutRegion");return function(region) return region end end
 ns.MSUF2={
-    Widgets=W, Theme={Button=function() return object() end},
+    Widgets=W, Theme={colors={accent={0.2,0.5,1}}, Button=function() return object() end},
+    Tr=function(label) return label end,
+    AlphaLabel=function(label) return label end,
+    PreviewHelpers={
+        LayerChipButtonOpts=function(_,_,_,opts) return opts end,
+        PreviewChromePalette=function() return {} end,
+        CreateLayerButton=function() local chip=object(); chip.Refresh=noop; return chip end,
+        FlowLayerChips=function() return 24 end,
+        ApplyPreviewChrome=noop,
+        StylePreviewPillButton=function(button) button.MSUF2RefreshPreviewPill=noop end,
+    },
     UnitSectionsShared={MakeScopeCopyPopup=function() return {Show=noop,Hide=noop} end},
     AdvancedPage={MoveWidget=noop, RegisterControl=noop, ControlMeta=function(_,_,path) return {path=path} end},
     StatusBarTextureItems=ns.UI.StatusBarTextureItems,

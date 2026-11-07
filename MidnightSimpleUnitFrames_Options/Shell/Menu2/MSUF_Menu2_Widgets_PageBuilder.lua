@@ -307,10 +307,42 @@ function W.RegisterGuidedRegion(ctx, frame, title, stableId)
     return RegisterGuidedTourRegion(ctx, frame, title, stableId)
 end
 
+local function WatchSectionActionHover(frame, refresh)
+    if not frame or frame._msuf2RefreshSectionAction == refresh then return end
+    frame._msuf2RefreshSectionAction = refresh
+    frame:HookScript("OnEnter", refresh)
+    frame:HookScript("OnLeave", refresh)
+end
+
+-- The button keeps its header space even when hidden. A pointer over a
+-- header child or a controller selection on that child also counts.
+function W.AttachSectionActionVisibility(entry, button)
+    local header = entry.header
+    local function Refresh()
+        local popup = button._msuf2GetSectionPopup and button._msuf2GetSectionPopup()
+        local popupOpen = popup and popup:IsShown()
+        if not entry.open and popupOpen then popup:Hide() end
+        local navigation = MSUF.PadNavigation
+        local shown = entry.open and (popupOpen or header:IsMouseOver()
+            or (navigation and navigation.IsSelectionIn(header)))
+        button:SetShown(shown == true)
+    end
+    entry._msuf2RefreshSectionAction = Refresh
+    WatchSectionActionHover(header, Refresh)
+    WatchSectionActionHover(button, Refresh)
+    header:HookScript("OnShow", Refresh)
+    Refresh()
+end
+
 --- Header layout for one collapsible entry: the UX summary, the badge row, or
 --- the hint. Shared by every accordion instead of one closure body per section;
 --- the section's wrapper hands in the regions it captured at creation.
 function PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, label, arrow, builder)
+    local actionRefresh = entry._msuf2RefreshSectionAction
+    if actionRefresh then
+        WatchSectionActionHover(entry.featureSwitch, actionRefresh)
+        WatchSectionActionHover(entry._msuf2CustomBadge, actionRefresh)
+    end
     local headerW = (header.GetWidth and header:GetWidth()) or builder.width or 240
     local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
     local swatchReserve = (tonumber(entry._msuf2ColorSwatchReserve) or 0)
@@ -478,6 +510,7 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                     T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
                     if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
                     if entry._msuf2RefreshColorSwatchVisibility then entry._msuf2RefreshColorSwatchVisibility() end
+                    if entry._msuf2RefreshSectionAction then entry._msuf2RefreshSectionAction() end
                     PageBuilderStages.NotifyCollapsibleSectionState(entry, open)
                 end
                 local refreshState = entry._msuf2RefreshState
