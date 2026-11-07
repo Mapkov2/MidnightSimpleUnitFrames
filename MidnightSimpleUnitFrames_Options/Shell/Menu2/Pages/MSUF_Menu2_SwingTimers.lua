@@ -10,7 +10,7 @@ local LABELS = { main = "Main Hand", off = "Off Hand", ranged = "Ranged" }
 local COLORS = {
     { "color", "Bar color" }, { "backgroundColor", "Background color" },
     { "borderColor", "Border color" }, { "textColor", "Text color" },
-    { "reachColor", "Out-of-reach color" }, { "nextSwingColor", "Next-swing cue color" },
+    { "reachColor", "Out-of-range color" }, { "nextSwingColor", "Next-swing cue color" },
 }
 local function Meta(path, key, classification, prepare)
     return AP.ControlMeta("swingtimers", "swing", path, classification or "setting", {
@@ -55,8 +55,8 @@ local SPECS = {
             "AUTO", "Automatic", "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right") end },
     { key = "textX", kind = "slider", labelKey = "Timer text X offset", range = { -300, 300, 1 } },
     { key = "textY", kind = "slider", labelKey = "Timer text Y offset", range = { -200, 200, 1 } },
-    { key = "reachCheck", kind = "toggle", labelKey = "Grey out while the target is out of reach" },
-    { key = "reachOpacity", kind = "slider", labelKey = "Out-of-reach opacity (%)", range = { 0, 100, 1 } },
+    { key = "reachCheck", kind = "toggle", labelKey = "Grey out while the target is out of range" },
+    { key = "reachOpacity", kind = "slider", labelKey = "Out-of-range opacity (%)", range = { 0, 100, 1 } },
 }
 local GROUPS = {
     { key = "behavior", title = false, indices = { 1, 2 } },
@@ -64,7 +64,7 @@ local GROUPS = {
     { key = "appearance", title = "Appearance", indices = { 6, 9, 10, 11, 12, 13, 14 },
         colors = { 1, 2, 3 } },
     { key = "text", title = "Text", indices = { 15, 16, 17, 18, 19, 20, 21, 22 }, colors = { 4 } },
-    { key = "reach", title = "Out of reach", indices = { 24 }, colors = { 5 } },
+    { key = "reach", title = "Out of range", indices = { 24 }, colors = { 5 } },
 }
 local COPY_CATEGORIES = {
     { key = "layout", label = "Size", fields = { "width", "height", "scale" } },
@@ -87,7 +87,7 @@ local function AttachColors(section, hand, indices, ui)
                     getRGB = function() return unpack(Swing.Get(hand, key)) end,
                     setRGB = function(r, g, blue)
                         Swing.Set(hand, key, { r, g, blue })
-                        ui.Paint()
+                        if key == "reachColor" then ui.SetRangePreview(hand, true) else ui.Paint() end
                     end,
                 }
             end
@@ -105,6 +105,12 @@ local function Position(index, layout)
     return { 28 + column * (layout.controlWidth + 36), -44 - row * 58, layout.controlWidth }
 end
 local function HandRow(hand, key, kind, args, ui, placement)
+    local after = ui.Paint
+    if key == "reachOpacity" then
+        after = function() ui.SetRangePreview(hand, true) end
+    elseif key == "reachCheck" then
+        after = function(value) ui.SetRangePreview(hand, value) end
+    end
     return { kind, key, Swing.Get(hand, key), args, placement,
         meta = Meta(hand .. "." .. key, "swingTimers." .. hand .. "." .. key, nil,
             function() ui.SelectHand(hand) return true end),
@@ -116,7 +122,7 @@ local function HandRow(hand, key, kind, args, ui, placement)
             end
             return value
         end,
-        write = { call = Swing.Set, parent = true, after = ui.Paint } --[[schema setter: SwingTimers.1]],
+        write = { call = Swing.Set, parent = true, after = after } --[[schema setter: SwingTimers.1]],
     }
 end
 local function SettingRow(hand, spec, ui, layout, index)
@@ -151,11 +157,11 @@ local function BuildHand(ctx, b, hand, ui, layout)
         local section = AddHandSection(ctx, b, hand, id, group.title or LABELS[hand],
             50 + math.ceil(count / layout.columns) * 58, i == 1, ui)
         if group.colors then AttachColors(section, hand, group.colors, ui) end
-        if group.key == "appearance" then ui.sections[hand] = section end
+        ui.handSections[hand][group.key] = section
         if group.key == "behavior" then
             BindHeader(ctx, section, hand, "enabled", LABELS[hand], ui)
         elseif group.key == "reach" then
-            BindHeader(ctx, section, hand, "reachCheck", "Grey out while the target is out of reach", ui)
+            BindHeader(ctx, section, hand, "reachCheck", "Grey out while the target is out of range", ui)
         end
         local rows = {}
         for j = 1, #group.indices do

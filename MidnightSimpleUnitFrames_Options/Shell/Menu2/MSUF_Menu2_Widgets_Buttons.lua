@@ -308,13 +308,14 @@ function W.SetCollapsibleCustomBadge(section, shown)
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() else badge:SetShown(shown) end
 end
 
--- Selection/hover move only skin surfaces; rail folding moves complete rows.
--- A critically damped spring preserves position and velocity when retargeted.
+-- Control feedback uses a critically damped spring. Folds use the same
+-- native ease-out as Suite Skin: reverse playback of a 167 ms ease-in.
 -- Drivers have no OnUpdate script once settled.
 do
     local exp, abs = math.exp, math.abs
     local SPRING_RATE, CLICK_DURATION, HOVER_DURATION = 80, 0.14, 0.12
     local TAB_RATE, TAB_DURATION = 65, 0.16
+    local FOLD_DURATION = 0.150
     local carry = T.TrackMenuAnimationGroup({ channels = {}, Stop = function(self) self.key = nil end })
     function W.BeginSelectionMotion(owner, value)
         carry.key = nil
@@ -389,6 +390,7 @@ do
     end
     local function SettleMotion(driver, clear)
         driver:SetScript("OnUpdate", nil)
+        if driver.foldGroup then driver.foldGroup:Stop() end
         for i = 1, #driver.channels do
             local c = driver.channels[i]
             if clear then c.target = 0 end
@@ -428,7 +430,25 @@ do
             SettleMotion(driver)
         end
     end
-    function W.CreateLayoutMotion(parent, paint)
+    local function StepFold(driver)
+        if not driver:IsVisible() or T.ReducedMotionEnabled() or not driver.foldGroup:IsPlaying() then
+            SettleMotion(driver)
+            return
+        end
+        local remaining = driver.foldClock:GetSmoothProgress()
+        for i = 1, #driver.channels do
+            local channel = driver.channels[i]
+            if channel.target ~= channel.endpoint then
+                channel.start, channel.endpoint = channel.value, channel.target
+                channel.segmentRemaining = driver.foldRemaining
+            end
+            local fraction = channel.segmentRemaining > 0 and remaining / channel.segmentRemaining or 0
+            channel.value = channel.endpoint + (channel.start - channel.endpoint) * fraction
+        end
+        driver.foldRemaining = remaining
+        PaintMotion(driver)
+    end
+    local function NewDriver(parent, paint)
         local driver = PixelLayoutRegion(CreateFrame("Frame", nil, parent), true)
         driver:SetAllPoints(parent)
         driver:EnableMouse(false)
@@ -439,8 +459,17 @@ do
         T.TrackMenuAnimationGroup(driver)
         return driver
     end
+    function W.CreateLayoutMotion(parent, paint)
+        local driver = NewDriver(parent, paint)
+        local group = driver:CreateAnimationGroup()
+        local animation = group:CreateAnimation("Animation")
+        animation:SetDuration(FOLD_DURATION)
+        animation:SetSmoothing("IN")
+        driver.foldGroup, driver.foldClock = group, animation
+        return driver
+    end
     local function NewMotion(parent, count, button)
-        local driver = W.CreateLayoutMotion(parent)
+        local driver = NewDriver(parent)
         driver:SetFrameLevel(button:GetFrameLevel() + 1)
         driver.art = T.Button(driver, "", button:GetWidth(), button:GetHeight(), { history = false, noSearch = true })
         driver.art._msuf2MotionSurface = true
@@ -458,7 +487,20 @@ do
             driver:SetScript("OnUpdate", StepMotion)
         end
     end
-    W.PlayLayoutMotion = StartMotion
+    function W.PlayLayoutMotion(driver, snap)
+        if snap or T.ReducedMotionEnabled() or not driver:IsVisible() then
+            SettleMotion(driver)
+            return
+        end
+        for i = 1, #driver.channels do
+            local channel = driver.channels[i]
+            channel.start, channel.endpoint, channel.segmentRemaining = channel.value, channel.target, 1
+        end
+        driver.foldRemaining = 1
+        driver.foldGroup:Stop()
+        driver.foldGroup:Play(true)
+        driver:SetScript("OnUpdate", StepFold)
+    end
     -- Small control transitions use the same interruptible spring. Capture the
     -- current skin paint, let its owner choose the destination, then interpolate
     -- only the existing regions. Initial/hidden/reduced-motion paint stays exact.
@@ -533,7 +575,7 @@ do
         end
         if before == nil then return end
         if not driver then
-            driver = W.CreateLayoutMotion(button, PaintSwitch)
+            driver = NewDriver(button, PaintSwitch)
             driver.owner, driver.duration = button, 0.12
             button._msuf2SwitchMotion = driver
         end
@@ -583,7 +625,7 @@ do
             chevron._msuf2DisclosureMotion = driver
         end
         SetChannel(driver, 1, target)
-        StartMotion(driver, snap)
+        W.PlayLayoutMotion(driver, snap)
     end
     local function PaintLayer(driver)
         PaintColor(driver.owner.bg, driver.channels, 1, true)
@@ -602,7 +644,7 @@ do
         end
         if before == nil or (before == state and not (driver and driver:GetScript("OnUpdate"))) then return end
         if not driver then
-            driver = W.CreateLayoutMotion(button, PaintLayer)
+            driver = NewDriver(button, PaintLayer)
             driver.owner, driver.duration, driver.rate = button, 0.10, 100
             button._msuf2LayerMotion = driver
         end

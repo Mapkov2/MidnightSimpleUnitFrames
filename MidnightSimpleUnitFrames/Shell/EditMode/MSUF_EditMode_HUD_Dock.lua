@@ -88,16 +88,14 @@ function DockUI.ScheduleLayoutSettle()
         if generation ~= DockUI.layoutGeneration then return end
         if not (hudFrame and hudFrame:IsShown()) then return end
         if InCombatLockdown and InCombatLockdown() then return end
-        --- The entry slide owns the anchor from the moment it is armed until it
-        --- lands; FinishDockIntro re-arms this settle so the measured widths
-        --- still get applied.
+        --- Let the entry finish before settling the measured dock widths.
         if DockUI.introPlaying or DockUI.introArmed then return end
         ApplyDockLayout()
     end)
 end
 
 SetDockExpanded = function(expanded)
-    if not hudFrame then return end
+    if not hudFrame or DockUI.introArmed then return end
     local state = EnsureDockState()
     --- Both dropdowns hang off UIParent, so the pointer sitting in one of them no
     --- longer counts as hovering the toolbar. Without this the dock fades out from
@@ -148,12 +146,8 @@ end
 
 --- Dock anchor and entry slide
 ---
---- One authority places the toolbar against its screen edge.  The entry slide
---- reuses it with a displaced start offset, so the animation can never drift
---- away from the layout geometry - and FREE (a dragged, undocked bar) keeps its
---- own centre offsets.
-DockUI.introTravel = 34
-DockUI.introDuration = 0.34
+--- The dock stays anchored at its final position during the entry slide.
+local INTRO_TRAVEL = 8
 
 DockUI.AnchorDock = function(dock, edge, offsetX, offsetY)
     if not (hudFrame and UIParent) then return end
@@ -178,7 +172,7 @@ end
 --- Where the bar starts before sliding home: outward, past its docked edge.
 --- An undocked bar has no edge to come from and only fades.
 DockUI.IntroOffset = function(dock)
-    local travel = tonumber(DockUI.introTravel) or 0
+    local travel = INTRO_TRAVEL
     if dock == "BOTTOM" then return 0, -travel end
     if dock == "LEFT" then return -travel, 0 end
     if dock == "RIGHT" then return travel, 0 end
@@ -186,28 +180,21 @@ DockUI.IntroOffset = function(dock)
     return 0, travel
 end
 
---- Restores the toolbar's own anchor, clamping and alpha authority.  Kept
---- idempotent because both OnFinished and an explicit Stop() land here.
+--- Return auto-hide and deferred layout to the dock when the intro ends.
 DockUI.FinishDockIntro = function()
     if not DockUI.introPlaying then return end
     DockUI.introPlaying = nil
     if not hudFrame then return end
-    if DockUI.introUnclamped then
-        DockUI.introUnclamped = nil
-        hudFrame:SetClampedToScreen(true)
-    end
-    local state = EnsureDockState()
-    DockUI.AnchorDock(state.dock, state.edgeOffset)
     if hudFrame:IsShown() then
         SetDockExpanded(true)
         ScheduleDockAutoHide()
-        --- The settle relayout skips itself while the slide owns the anchor,
-        --- so re-arm it now that the measured widths matter again.
+        --- The settle relayout waits until the slide finishes.
         DockUI.ScheduleLayoutSettle()
     end
 end
 
 DockUI.StopDockIntro = function()
+    if DockUI.introArmed and hudFrame then hudFrame:SetAlpha(1) end
     DockUI.introArmed = nil
     local group = DockUI.introGroup
     if group and DockUI.introPlaying then group:Stop() end
@@ -221,25 +208,13 @@ end
 DockUI.PlayDockIntro = function()
     local group = DockUI.introGroup
     if not (group and hudFrame and hudFrame:IsShown()) then return false end
-    if InCombatLockdown and InCombatLockdown() then return false end
-    local db = MSUF_DB
-    local general = type(db) == "table" and db.general or nil
-    if type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) then
-        return false
-    end
-    local state = EnsureDockState()
-    local offsetX, offsetY = DockUI.IntroOffset(state.dock)
+    hudFrame:SetAlpha(1)
+    if MSUF.Util.InCombat() or not EM2.Util.EntryMotionEnabled() then return false end
+    local offsetX, offsetY = DockUI.IntroOffset(EnsureDockState().dock)
     if DockUI.introPlaying then group:Stop() end
     DockUI.introPlaying = true
-    --- Clamping is derived from the anchor, so a start point past the screen
-    --- edge would be pulled back before the slide could play.
-    if not DockUI.introUnclamped then
-        DockUI.introUnclamped = true
-        hudFrame:SetClampedToScreen(false)
-    end
-    DockUI.AnchorDock(state.dock, state.edgeOffset, offsetX, offsetY)
-    if DockUI.introSlide then DockUI.introSlide:SetOffset(-offsetX, -offsetY) end
-    group:Play()
+    DockUI.introSlide:SetOffset(offsetX, offsetY)
+    group:Play(true)
     return true
 end
 
@@ -250,10 +225,11 @@ end
 --- the bar is fully assembled.  Cost is one zero-delay timer per Edit Mode
 --- entry, and combat cannot reach any of it.
 DockUI.ArmDockIntro = function()
-    if not (DockUI.introGroup and hudFrame and hudFrame:IsShown()) then return false end
+    if not (DockUI.introGroup and hudFrame and hudFrame:IsShown() and EM2.Util.EntryMotionEnabled()) then return false end
     if not (C_Timer and C_Timer.After) then return DockUI.PlayDockIntro() end
-    DockUI.introArmed = (DockUI.introArmed or 0) + 1
-    local token = DockUI.introArmed
+    local token = (DockUI.introSerial or 0) + 1
+    DockUI.introSerial, DockUI.introArmed = token, token
+    hudFrame:SetAlpha(0)
     C_Timer.After(0, function()
         if token ~= DockUI.introArmed then return end
         DockUI.introArmed = nil

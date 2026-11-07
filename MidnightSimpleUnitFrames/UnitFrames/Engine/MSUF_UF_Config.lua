@@ -614,7 +614,10 @@ local function ResolveNameShortening(db, general, conf, unit, text)
     maskPx = 80
   end
 
-  text.nameShorten = shorten == true
+  local format = general and general.nameFormat
+  if conf and conf.fontOverride == true and conf.nameFormat ~= nil then format = conf.nameFormat end
+  text.nameFormat = format and MSUF.UFText.ResolveNameFormat(format) or nil
+  text.nameShorten = shorten == true and text.nameFormat == nil
   text.nameShortenMax = maxChars
   text.nameShortenSide = side
   text.nameShortenDots = dots == true
@@ -1809,6 +1812,47 @@ Config.specs = Config.specs or {}
 
 local function ConfigInCombat()
   return InCombatLockdown and InCombatLockdown()
+end
+
+-- Shared typography for optional text consumers; use the unit compiler's
+-- getters so font flags, shadow metrics and legacy name formats stay identical.
+function Config.ResolveSharedFont(out, scope)
+  local db = EnsureDB()
+  local general = db.general or {}
+  local conf = scope == "nameplates" and db.nameplates or nil
+  out.font, out.fontFlags = FontFromGlobal(), ResolveFontFlags(general, conf)
+  out.characterNameParts = general.characterNameParts
+  out.fontBaselineOffset = Number(conf and conf.fontOverride and conf.fontBaselineOffset, Number(general.fontBaselineOffset, 0))
+  out.fontSize = Number(general.fontSize, 12)
+  out.nameFontSize = Number(general.nameFontSize, out.fontSize)
+  out.fontTextAlpha = ResolveFontTextAlpha(general, conf)
+  out.fontShadow, out.fontShadowAlpha, out.fontShadowX, out.fontShadowY = ResolveFontShadow(general, conf, out.fontFlags)
+  ResolveNameShortening(db, general, conf, "nameplates", out)
+  local mode = out.nameFormat or (out.nameShorten and "CUT" or "FULL")
+  out.nameDisplayFormat, out.nameDisplayMax, out.nameDisplayDots, out.nameDisplaySide =
+    MSUF.UFText.DescribeNameFormat(mode, out.nameShortenMax, out.nameShortenDots, out.nameShortenSide)
+  out.textColor = out.textColor or {}
+  ResolveTextColor(general, out.textColor)
+  out.textColor.a = out.fontTextAlpha
+  out.text = out.text or {}
+  local text = out.text
+  ApplyNpcTypeFlags(text, general, "npcTypeColorText", "nameplates")
+  out.key, out.health = "nameplates", out.health or {}
+  local r, g, b
+  text.nameClassColor, text.nameNpcColor, text.nameNpcClassColor, r, g, b = ResolveNameColorFlags(general, conf)
+  if r then
+    text.nameCustomColor = text.nameCustomColor or {}
+    CopyColor(text.nameCustomColor, r, g, b, out.fontTextAlpha)
+    text.nameColor = text.nameCustomColor
+    text.npcTypeColorText = false
+  else
+    text.nameCustomColor, text.nameColor = nil, nil
+  end
+  return out
+end
+
+function Config.ResolveNameplateFont(out)
+  return Config.ResolveSharedFont(out, "nameplates")
 end
 
 function Config.BossLayoutDelta(conf, index)

@@ -102,7 +102,7 @@ local Auxiliary = {}
 Auxiliary.__index = Auxiliary
 local function NoSampleEvent() end
 local SAMPLE_MANA_CLASSES = { DRUID = true, MONK = true, PALADIN = true, PRIEST = true, SHAMAN = true,
-    MAGE = true, WARLOCK = true, EVOKER = true, HUNTER = MSUF.Client.IsClassic or MSUF.Client.IsForever }
+    MAGE = true, WARLOCK = true, EVOKER = true, HUNTER = MSUF.Client.IsVanilla or MSUF.Client.IsTBC or MSUF.Client.IsForever }
 function MSUF.CPBuilders.SampleHasMana(class) return SAMPLE_MANA_CLASSES[class] == true end
 local SAMPLE_EVENTS = { RegisterEvent = NoSampleEvent, RegisterUnitEvent = NoSampleEvent,
     UnregisterAllEvents = NoSampleEvent, UnregisterEvent = NoSampleEvent, SetScript = NoSampleEvent }
@@ -110,7 +110,8 @@ local function SampleFrame(kind, _, parent, template) return CreateFrame(kind, n
 function MSUF.CPBuilders.NewAuxiliarySurface(owner)
     local self = setmetatable({ owner = owner, CP = {}, PHP = {}, AM = {}, db = {}, sample = {}, auraSamples = {}, ownership = {} }, Auxiliary)
     local constants = MSUF.Require("MSUF_CP_CONST", "ClassPower/ResourceExtras")
-    local powerColor = MSUF.Require("MSUF_GetPowerBarColor", "ClassPower/ResourceExtras")
+    local core = constants.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+    self.colors = core.CONTROLLER_COLORS({ scene = true, _cpDB = self.db, POWER_TYPE_TOKENS = constants.POWER_TYPE_TOKENS })
     local common = MSUF.UFBarTextCommon
     local sampleCommon = setmetatable({}, { __index = common })
     sampleCommon.ClassColor = function() return common.ClassColorForToken(self.class, true) end
@@ -142,7 +143,7 @@ function MSUF.CPBuilders.NewAuxiliarySurface(owner)
             local lo, hi = view.bar:GetMinMaxValues()
             return (view.bar:GetValue() - lo) / math.max(1, hi - lo)
         end,
-        ResolveClassPowerColor = function() return powerColor(0, "MANA") end,
+        ResolveClassPowerColor = self.colors.ResolveClassPowerColor,
         GetBarTexture = function() return MSUF.ClassPowerConfig.ResolveTexture(nil) end,
         GetSpec = function() return self.specIndex end,
     }
@@ -157,7 +158,6 @@ function MSUF.CPBuilders.NewAuxiliarySurface(owner)
     end
     self.compileConfig = MSUF.ClassPowerConfig.CreateCompiler(self.db)
     self.env = env
-    local core = constants.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
     self.health, self.mana = core.PLAYER_HP_VISUAL(env), core.ALT_MANA(env)
     self.manaExtras, self.marks = MSUF.CPBuilders.ManaExtras(env), MSUF.CPBuilders.ResourceMarks(env)
     return self
@@ -172,7 +172,7 @@ function Auxiliary:Configure(owner, cp, bars, player, class, specIndex, count, m
     if outline == false then copy.playerHPBarOutline = 0 end
     self.db.bars = copy
     self.db.colorByType = bars.classPowerColorByType ~= false
-    if self.ebonColors then self.ebonColors.InvalidateCaches() end
+    self.colors.InvalidateCaches()
     if self.ebonCP then self.ebonCP._pf, self.ebonCP.container = owner, self.CP.container end
     for key in pairs(self.CP) do self.CP[key] = nil end
     for key, value in pairs(cp or {}) do self.CP[key] = value end
@@ -247,9 +247,7 @@ function Auxiliary:PaintEbon(enabled, remaining, duration)
         local cp = { _pf = owner, container = self.CP.container }
         self.ebonCP, self.ebonSample = cp, { duration = duration, remaining = remaining }
         cp.GetEbonTextLevel = MSUF.ClassPowerConfig.CreatePowerTextLevel(cp)
-        local colors = core.CONTROLLER_COLORS({ scene = true, _cpDB = self.db, POWER_TYPE_TOKENS = constants.POWER_TYPE_TOKENS })
-        self.ebonColors = colors
-        local style = core.CREATE_EBON_STYLE(cp, self.db, colors.ResolveClassPowerColor)
+        local style = core.CREATE_EBON_STYLE(cp, self.db, self.colors.ResolveClassPowerColor)
         self.ebon = core.EBON_MIGHT({ sample = true, CP = cp, EBON = constants.EBON, CreateFrame = SampleFrame,
             GetHost = function() return self.owner.targetPowerBar end, GetStyle = style, GetTextLevel = cp.GetEbonTextLevel,
             CreateSensor = function(parent, _, _, initialize)

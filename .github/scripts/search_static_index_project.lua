@@ -383,6 +383,8 @@ local function InstallClientFacts(target)
     if isForever then
         namespace.MSUF_RegisterModule = namespace.MSUF_RegisterModule or function() end
         _G.GetCVarBool = _G.GetCVarBool or function() return false end
+        -- The catalog builds settings only and never runs an Edit Mode session.
+        _G.MSUF_RegisterAnyEditModeListener = _G.MSUF_RegisterAnyEditModeListener or function() end
         assert(loadfile("MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"))("MidnightSimpleUnitFrames", namespace)
         -- The catalog fixture supplies methods for unknown frame fields. Native
         -- optional surfaces are absent until the runtime creates them.

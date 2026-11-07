@@ -96,6 +96,12 @@ end
 local function GroupRGB(prefix, dr, dg, db)
     return GroupNum(prefix .. "R", dr), GroupNum(prefix .. "G", dg), GroupNum(prefix .. "B", db)
 end
+local function GroupGradientRGB(prefix, dr, dg, db)
+    local general = G()
+    return GroupNum(prefix .. "R", general[prefix .. "R"] or dr),
+        GroupNum(prefix .. "G", general[prefix .. "G"] or dg),
+        GroupNum(prefix .. "B", general[prefix .. "B"] or db)
+end
 local function HealerManaTextRGB() return GroupRGB("healerManaText", 1, 1, 1) end
 local function SetHealerManaTextRGB(r, g, b)
     SetGroupRGB("healerManaText", r, g, b, "MSUF2_GROUP_HEALER_MANA_TEXT", "rebuild")
@@ -134,6 +140,7 @@ end
 local GroupRows = { bind = function(ctx, control, row, kind)
     local key, default = row[2], row[3]
     local function get()
+        if row.inheritGradient then return GroupGradientRGB(key, default[1], default[2], default[3]) end
         if row.get then return row.get() end
         if kind == "color" then return GroupRGB(key, default[1], default[2], default[3]) end
         if kind == "slider" then return GroupNum(key, default) end
@@ -146,6 +153,7 @@ local GroupRows = { bind = function(ctx, control, row, kind)
         if kind == "slider" then value = Clamp01(value, default)
         elseif kind == "toggle" then value = value and true or false
         else value = value or default end
+        if row.inheritGlobal and value == "GLOBAL" then value = nil end
         SetGroupValue(key, value, row.reason or "MSUF2_GROUP_COLORS", "visual")
         if row.after then row.after() end
     end
@@ -167,6 +175,21 @@ local GroupRows = { bind = function(ctx, control, row, kind)
         M.BindSliderLiveLabel(ctx, control, get, function(value) return PercentLabel(row.label, value) end, true)
     end
 end }
+local function BuildGroupGradientColors(ctx, health, width)
+    local columnWidth = max(92, floor((width - 24) / 3))
+    M.Widgets.LabelAt(health, "Health gradient stops", 12, -104, width - 24, "GameFontNormalSmall", M.Theme.colors.muted)
+    local rows = {}
+    for i, row in ipairs({
+        { "Low", "healthGradientLow", 1, 0, 0 },
+        { "Mid", "healthGradientMid", 1, 1, 0 },
+        { "High", "healthGradientHigh", 0, 1, 0 },
+    }) do
+        rows[i] = { "color", row[2], { row[3], row[4], row[5] }, { row[1] }, inheritGradient = true,
+            position = { 12 + (i - 1) * columnWidth, -140, min(58, columnWidth - 46), 34 },
+            reason = "MSUF2_GROUP_GRADIENT" }
+    end
+    Schema.Build(ctx, health, rows, GroupRows)
+end
 local function CurrentGlobalBarColor()
     local getCache = Opt.MSUF_UFCore_GetSettingsCache
     local cache = (type(getCache) == "function") and getCache() or nil
@@ -202,8 +225,8 @@ end
 local function BuildGroupFrameColors(ctx, b)
     local pageW = b.width or ctx.width or 720
     local cardW = max(320, pageW - 32)
-    local health = Schema.Section(b:CollapsibleSection("colors_group_frames", "Health Bars", 112, true), "colors")
-    local background = Schema.Section(b:CollapsibleSection("colors_group_frames_background", "Bar Background", 112, false), "colors")
+    local health = Schema.Section(b:CollapsibleSection("colors_group_frames", "Health Bars", 184, true), "colors")
+    local background = Schema.Section(b:CollapsibleSection("colors_group_frames_background", "Bar Background", 220, false), "colors")
     local state = Schema.Section(b:CollapsibleSection("colors_group_frames_state", "State Tints", 242, false), "colors")
     local highlights = Schema.Section(b:CollapsibleSection("colors_group_frames_highlights", "Group Highlights", 220, false), "colors")
     local healerMana = Schema.Section(b:CollapsibleSection("colors_group_frames_healer_mana", "Healer mana bars", 80, false), "colors")
@@ -232,10 +255,17 @@ local function BuildGroupFrameColors(ctx, b)
         { "color", "health", nil, { "Health bar color" }, position = { 12, -64 }, path = "group_frame.health.color",
             get = GroupHealthBarRGB, customSetReason = "Writes group color channels and the selected scope override together.", set = SetGroupHealthBarRGB },
     }, GroupRows)
+    BuildGroupGradientColors(ctx, health, cardW)
     Schema.Build(ctx, background, {
-        { "color", "bg", { 0.10, 0.10, 0.10 }, { "Background Color" }, position = { 12, -10 } },
+        { "dropdown", "barBgFillMode", "GLOBAL", { "Background Fill",
+            ValueTextPairs "GLOBAL=Follow Global Style|full=Full bar|missing=Missing health only", min(360, cardW - 32) },
+            position = { 12, -10 }, path = "group_frame.background.fill_mode", inheritGlobal = true },
+        { "dropdown", "barBgColorMode", "GLOBAL", { "Background Color",
+            ValueTextPairs "GLOBAL=Follow Global Style|custom=Custom tint|match_health=Match health bar|class=Class color|health_gradient=Health gradient",
+            min(360, cardW - 32) }, position = { 12, -64 }, path = "group_frame.background.color_mode", inheritGlobal = true },
+        { "color", "bg", { 0.10, 0.10, 0.10 }, { "Background Color" }, position = { 12, -118 } },
         { "dropdown", "healthColorMode", "CLASS", { "Health color fallback", GROUP_HEALTH_MODES, min(360, cardW - 32) },
-            position = { 12, -56 }, path = "group_frame.health.fallback_mode", reason = "MSUF2_GROUP_HEALTH_FALLBACK" },
+            position = { 12, -164 }, path = "group_frame.health.fallback_mode", reason = "MSUF2_GROUP_HEALTH_FALLBACK" },
     }, GroupRows)
     local RefreshStateTintControls = M.RefreshProxy()
     Schema.Build(ctx, state, {
@@ -269,8 +299,10 @@ end
 -- Published for the context-color registry sibling and the page's lazy
 -- category builders.
 CP.GROUP_COLOR_DB_KEYS = GROUP_COLOR_DB_KEYS
+CP.RequestGroupColorApply = RequestGroupColorApply
 CP.GroupNum = GroupNum
 CP.GroupRGB = GroupRGB
+CP.GroupGradientRGB = GroupGradientRGB
 CP.SetGroupRGB = SetGroupRGB
 CP.SetGroupRGBA = SetGroupRGBA
 CP.GroupHealthBarRGB = GroupHealthBarRGB

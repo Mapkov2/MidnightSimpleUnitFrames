@@ -1,46 +1,46 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7089,
-      "initialDeclarations": 4772,
-      "profileControls": 3728,
-      "proven": 3728
+      "declarations": 7104,
+      "initialDeclarations": 4778,
+      "profileControls": 3735,
+      "proven": 3735
     },
     "Mainline": {
-      "declarations": 7632,
-      "initialDeclarations": 5006,
-      "profileControls": 4046,
-      "proven": 4046
+      "declarations": 7648,
+      "initialDeclarations": 5012,
+      "profileControls": 4053,
+      "proven": 4053
     },
     "Mists": {
-      "declarations": 7279,
-      "initialDeclarations": 4979,
-      "profileControls": 3766,
-      "proven": 3766
+      "declarations": 7294,
+      "initialDeclarations": 4985,
+      "profileControls": 3773,
+      "proven": 3773
     },
     "TBC": {
-      "declarations": 6664,
-      "initialDeclarations": 4583,
-      "profileControls": 3387,
-      "proven": 3387
+      "declarations": 6679,
+      "initialDeclarations": 4589,
+      "profileControls": 3394,
+      "proven": 3394
     },
     "Vanilla": {
-      "declarations": 5106,
-      "initialDeclarations": 3493,
-      "profileControls": 2448,
-      "proven": 2448
+      "declarations": 5121,
+      "initialDeclarations": 3499,
+      "profileControls": 2455,
+      "proven": 2455
     }
   },
   "generatorVersion": "menu-schema-coverage/3",
   "issueCount": 0,
-  "projectionSha256": "b4210c112e1480db622a57a3fb7f49efdf1f854f46469f5a61a99bb2960e0fc6",
+  "projectionSha256": "caf2cf99181da2037dbc34f8a7c7fe87e1876d162fc73f6b65c9cc9b06034996",
   "projectionVersion": 2,
-  "sourceSha256": "5F8DA19BCDF99C51704B58DD36561B5F99C9ACA2FFDC792F69E97F3EF2442A65",
+  "sourceSha256": "4828D38C2F9AE56C38BF127967D1C252CE5BD021CE6A2444756F00B47AB69063",
   "totals": {
-    "declarations": 33770,
-    "initialDeclarations": 22833,
-    "profileControls": 17375,
-    "proven": 17375
+    "declarations": 33846,
+    "initialDeclarations": 22863,
+    "profileControls": 17410,
+    "proven": 17410
   },
   "version": 1
 }

@@ -91,10 +91,6 @@ end
 
 local function ApplyDockLayout()
     if not (hudFrame and UIParent) then return end
-    --- A relayout re-anchors the frame, and a running Translation renders
-    --- relative to that anchor - so land the entry slide first, or the toolbar
-    --- would jump by whatever travel was left.
-    if DockUI.introPlaying then DockUI.StopDockIntro() end
     local state = EnsureDockState()
     local dock = state.dock
     local vertical = IsVerticalDock(dock)
@@ -260,15 +256,15 @@ local function BuildDockFrame()
     if hudFrame.CreateAnimationGroup then
         local intro = hudFrame:CreateAnimationGroup()
         local slide = intro:CreateAnimation("Translation")
-        slide:SetDuration(DockUI.introDuration)
+        slide:SetDuration(EM2.Util.ENTRY_MOTION_DURATION)
         slide:SetOrder(1)
-        slide:SetSmoothing("OUT")
+        slide:SetSmoothing("IN")
         local fade = intro:CreateAnimation("Alpha")
-        fade:SetFromAlpha(0)
-        fade:SetToAlpha(1)
-        fade:SetDuration(DockUI.introDuration)
+        fade:SetFromAlpha(1)
+        fade:SetToAlpha(0)
+        fade:SetDuration(EM2.Util.ENTRY_MOTION_DURATION)
         fade:SetOrder(1)
-        fade:SetSmoothing("OUT")
+        fade:SetSmoothing("IN")
         intro:SetScript("OnFinished", function() DockUI.FinishDockIntro() end)
         intro:SetScript("OnStop", function() DockUI.FinishDockIntro() end)
         DockUI.introGroup = intro
@@ -976,8 +972,7 @@ function HUD.Hide()
     if hudFrame then
         hudFrame:Hide()
     end
-    --- After the Hide: the slide gives back the anchor and clamping without
-    --- reviving alpha or auto-hide work for a toolbar that just left.
+    --- Stop after hiding so completion cannot schedule more dock work.
     DockUI.StopDockIntro()
     if DockUI.positionPopup then DockUI.positionPopup:Hide() end
     HUD.CloseFramePicker()

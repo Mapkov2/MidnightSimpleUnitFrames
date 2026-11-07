@@ -35,7 +35,7 @@ local function FormatValues(label, x, y, width, height)
 end
 
 local function ApplyPosition(axis, box)
-    if Blocked() or not (frame and frame._key) then return end
+    if Blocked() or not (frame and frame._key) or frame._syncing then return end
     EM2.Ticker.SetExternalPosition(frame._key, axis, box:GetText())
     Popup.Sync()
 end
@@ -56,22 +56,34 @@ end
 local CONTROLS_TOP, CONTROL_ROW_H, BUTTONS_TOP, BASE_HEIGHT = -144, 40, -150, 264
 
 local function ApplyNumberControl(id, box)
-    if Blocked() or not (frame and frame._key) then return end
+    if Blocked() or not (frame and frame._key) or frame._syncing then return end
     local fallback = tonumber(External.GetControlValue(frame._key, id)) or 0
     External.ApplyControl(frame._key, id, Quick.San(box:GetText(), fallback))
     Popup.Sync()
 end
 
 local function ApplyToggleControl(id, checked)
-    if Blocked() or not (frame and frame._key) then return end
+    if Blocked() or not (frame and frame._key) or frame._syncing then return end
     External.ApplyControl(frame._key, id, checked == true)
     Popup.Sync()
+end
+
+local function OwnerPositionControls(controls)
+    local x, y
+    for i = 1, #(controls or {}) do
+        local spec = controls[i]
+        if spec.kind == "number" then
+            if spec.positionAxis == "x" then x = true end
+            if spec.positionAxis == "y" then y = true end
+        end
+    end
+    return x and y or false
 end
 
 local function ControlSignature(controls)
     local parts = {}
     for i = 1, #controls do
-        parts[i] = ("%s:%s:%s"):format(controls[i].kind, controls[i].id, controls[i].label)
+        parts[i] = ("%s:%s:%s:%s"):format(controls[i].kind, controls[i].id, controls[i].label, controls[i].positionAxis or "")
     end
     return table.concat(parts, "|")
 end
@@ -95,6 +107,7 @@ end
 
 local function BuildControlSet(controls)
     local set = { rows = {}, numbers = {}, toggles = {}, height = 0 }
+    local top = CONTROLS_TOP + (OwnerPositionControls(controls) and CONTROL_ROW_H or 0)
     local numbers, toggles = {}, {}
     for i = 1, #controls do
         local spec = controls[i]
@@ -104,7 +117,7 @@ local function BuildControlSet(controls)
     local index = 1
     while index <= #numbers do
         rowIndex = rowIndex + 1
-        local y = CONTROLS_TOP - (rowIndex - 1) * CONTROL_ROW_H
+        local y = top - (rowIndex - 1) * CONTROL_ROW_H
         local first, second = numbers[index], numbers[index + 1]
         if second and LabelWidth(first.label) + LabelWidth(second.label) > PAIR_LABEL_BUDGET then
             second = nil
@@ -133,7 +146,7 @@ local function BuildControlSet(controls)
     index = 1
     while index <= #toggles do
         rowIndex = rowIndex + 1
-        local y = CONTROLS_TOP - (rowIndex - 1) * CONTROL_ROW_H
+        local y = top - (rowIndex - 1) * CONTROL_ROW_H
         local first, second = toggles[index], toggles[index + 1]
         local btnA = Quick.ToggleAt(frame, first.label, 20, y, second and 184 or 200, 32, function(checked)
             ApplyToggleControl(first.id, checked)
@@ -236,12 +249,15 @@ function Popup.Sync()
         frame:Hide()
         return false
     end
+    frame._syncing = true
     frame._titleFS:SetText(label)
     local title, x, y, width, height = External.GetInspectorValues(frame._key)
     frame._summaryFS:SetText(FormatValues(title, x, y, width, height))
     Quick.SetBoxText(frame.xBox, x ~= nil and x or "")
     Quick.SetBoxText(frame.yBox, y ~= nil and y or "")
-    local enabled = External.GetPositionFrame(frame._key) ~= nil
+    local ownedPosition = OwnerPositionControls(External.GetControls(frame._key))
+    frame._positionRow:SetShown(not ownedPosition)
+    local enabled = not ownedPosition and External.GetPositionFrame(frame._key) ~= nil
     frame._positionRow:SetAlpha(enabled and 1 or 0.42)
     for _, child in ipairs({ frame._positionRow:GetChildren() }) do
         child:EnableMouse(enabled)
@@ -253,7 +269,7 @@ function Popup.Sync()
     end
     local set = LayoutControls(frame._key)
     SyncControlValues(set, frame._key)
-    local extra = set and set.height or 0
+    local extra = (set and set.height or 0) - (ownedPosition and CONTROL_ROW_H or 0)
     frame._settingsBtn:ClearAllPoints()
     frame._settingsBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, BUTTONS_TOP - extra)
     frame._resetBtn:ClearAllPoints()
@@ -264,6 +280,7 @@ function Popup.Sync()
     SetButtonEnabled(frame._settingsBtn, canSettings)
     SetButtonEnabled(frame._resetBtn, canReset)
     if frame._refreshUndoRedo then frame._refreshUndoRedo() end
+    frame._syncing = nil
     return true
 end
 

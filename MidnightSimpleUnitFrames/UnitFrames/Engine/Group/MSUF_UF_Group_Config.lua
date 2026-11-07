@@ -177,13 +177,8 @@ local function GlobalHealthMode(cache, general)
   return mode
 end
 
-local function BackgroundFillMode(cache, general)
-  local mode = cache and cache.barBgFillMode or general and general.barBgFillMode
-  return mode == "missing" and "missing" or "full"
-end
-
-local function BackgroundColorMode(cache, general)
-  local mode = cache and cache.barBgColorMode or general and general.barBgColorMode
+local function BackgroundColorMode(conf, cache, general)
+  local mode = conf.barBgColorMode or cache and cache.barBgColorMode or general and general.barBgColorMode
   if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
     return mode
   end
@@ -219,8 +214,10 @@ local function ResolveHealthVisual(conf)
   if not mode then
     mode = GlobalHealthMode(cache, general) or NormalizeHealthMode(conf.healthColorMode) or "class"
   end
-  local backgroundFillMode = BackgroundFillMode(cache, general)
-  local backgroundColorMode = BackgroundColorMode(cache, general)
+  local gradient = cache or general or conf
+  local fillMode = conf.barBgFillMode or cache and cache.barBgFillMode or general and general.barBgFillMode
+  local backgroundFillMode = fillMode == "missing" and "missing" or "full"
+  local backgroundColorMode = BackgroundColorMode(conf, cache, general)
 
   local out = {
     mode = mode == "custom" and "unified" or mode,
@@ -235,15 +232,15 @@ local function ResolveHealthVisual(conf)
     backgroundMatchHealth = backgroundColorMode == "match_health",
     backgroundClassColor = backgroundColorMode == "class",
     npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false,
-    gradientLowR = Num(cache and cache.healthGradientLowR or general and general.healthGradientLowR, 1),
-    gradientLowG = Num(cache and cache.healthGradientLowG or general and general.healthGradientLowG, 0),
-    gradientLowB = Num(cache and cache.healthGradientLowB or general and general.healthGradientLowB, 0),
-    gradientMidR = Num(cache and cache.healthGradientMidR or general and general.healthGradientMidR, 1),
-    gradientMidG = Num(cache and cache.healthGradientMidG or general and general.healthGradientMidG, 1),
-    gradientMidB = Num(cache and cache.healthGradientMidB or general and general.healthGradientMidB, 0),
-    gradientHighR = Num(cache and cache.healthGradientHighR or general and general.healthGradientHighR, 0),
-    gradientHighG = Num(cache and cache.healthGradientHighG or general and general.healthGradientHighG, 1),
-    gradientHighB = Num(cache and cache.healthGradientHighB or general and general.healthGradientHighB, 0),
+    gradientLowR = Num(conf.healthGradientLowR or gradient.healthGradientLowR, 1),
+    gradientLowG = Num(conf.healthGradientLowG or gradient.healthGradientLowG, 0),
+    gradientLowB = Num(conf.healthGradientLowB or gradient.healthGradientLowB, 0),
+    gradientMidR = Num(conf.healthGradientMidR or gradient.healthGradientMidR, 1),
+    gradientMidG = Num(conf.healthGradientMidG or gradient.healthGradientMidG, 1),
+    gradientMidB = Num(conf.healthGradientMidB or gradient.healthGradientMidB, 0),
+    gradientHighR = Num(conf.healthGradientHighR or gradient.healthGradientHighR, 0),
+    gradientHighG = Num(conf.healthGradientHighG or gradient.healthGradientHighG, 1),
+    gradientHighB = Num(conf.healthGradientHighB or gradient.healthGradientHighB, 0),
   }
   if mode == "dark" or mode == "unified" then
     ApplyFixedBarColor(out, conf, cache, general, mode)
@@ -1450,6 +1447,19 @@ local function ReplaceTableContents(dst, src)
 end
 
 local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOptions)
+  local format = general and general.nameFormat
+  if conf.fontOverride == true and conf.nameFormat ~= nil then format = conf.nameFormat end
+  format = format and MSUF.UFText.ResolveNameFormat(format) or nil
+  local formatMax
+  local nameSide, nameDots = nameTextOptions.nameShortenSide, nameTextOptions.nameShortenDots
+  if format == "CUT" or format == "ABBREV_CUT" then
+    if conf.fontOverride == true then
+      formatMax, nameSide, nameDots = Num(conf.nameMaxChars, 6), conf.nameClipSide or "RIGHT", conf.nameNoEllipsis ~= true
+    else
+      formatMax = Num(general.shortenNameMaxChars, 6)
+      nameSide, nameDots = general.shortenNameClipSide or "LEFT", general.shortenNameShowDots ~= false
+    end
+  end
   local healthLeft, healthCenter, healthRight = TextSlots(conf)
   local hpX = Num(conf.hpOffsetX, 0)
   local hpY = Num(conf.hpOffsetY, 0) + baselineOffset
@@ -1472,10 +1482,11 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     nameY = conf.nameBarEnabled == true and (-math.max(0, NameBarHeight(kind, conf) - Num(conf.nameFontSize,
         12)) / 2 + baselineOffset) or Num(conf.nameOffsetY, 0) + baselineOffset,
     nameLayer = Layer(conf.nameTextLayer, 5),
-    nameShorten = nameTextOptions.nameShorten == true,
-    nameShortenMax = nameTextOptions.nameShortenMax,
-    nameShortenSide = nameTextOptions.nameShortenSide,
-    nameShortenDots = nameTextOptions.nameShortenDots,
+    nameFormat = format,
+    nameShorten = nameTextOptions.nameShorten == true and format == nil,
+    nameShortenMax = formatMax or nameTextOptions.nameShortenMax,
+    nameShortenSide = nameSide,
+    nameShortenDots = nameDots,
     hideNameOnDeadOffline = nameTextOptions.hideNameOnDeadOffline == true,
     healthColorByHealth = nameTextOptions.healthColorByHealth == true,
     healthColorByClass = nameTextOptions.healthColorByClass == true,

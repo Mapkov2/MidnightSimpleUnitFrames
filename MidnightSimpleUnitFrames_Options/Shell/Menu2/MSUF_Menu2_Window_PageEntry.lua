@@ -189,7 +189,11 @@ local function ResponsiveLayoutClass(key)
     if key == "home" then
         local cardWidth = width - 44
         return (width < 744 and "intro-small" or "intro-large")
+            .. (cardWidth < 390 and "/tall-hero" or "/hero")
+            .. (cardWidth < 420 and "/reset-wrap" or "/reset")
+            .. (cardWidth < 458 and "/suite-stack" or "/suite-row")
             .. (cardWidth < 520 and "/plain" or "/pill")
+            .. (cardWidth < 560 and "/stack" or cardWidth < 800 and "/bottom" or "/inline")
             .. (cardWidth < 590 and "/wrapped" or "/row")
             .. (cardWidth < 680 and "/one" or cardWidth < 960 and "/two" or "/three")
     elseif key == "classpower" then

@@ -130,13 +130,13 @@ local BARS_TABLE_KEYS = KSW [[
 local FONT_GENERAL_KEYS = KSW [[
     fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha
     fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth shortenNameClipSide
-    shortenNameMaxChars shortenNameShowDots nameColorMode nameColorR nameColorG nameColorB characterNameParts
+    shortenNameMaxChars shortenNameShowDots nameFormat nameColorMode nameColorR nameColorG nameColorB characterNameParts
 ]]
 local FONT_SCOPE_KEYS = KSW [[
     fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha
     fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
     fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide
-    nameMaxChars nameNoEllipsis shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
+    nameMaxChars nameNoEllipsis nameFormat shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
 ]]
 local FONT_ROOT_KEYS = KS("shortenNames", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots")
 local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget focus pet pettarget boss arena gf_party gf_raid gf_mythicraid]]
@@ -169,6 +169,9 @@ local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
 local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode", "classPowerSlotColorModes", "classPowerFullColorEnabled")
 local GROUP_COLOR_KEYS = KSW [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
+    healthGradientLowR healthGradientLowG healthGradientLowB
+    healthGradientMidR healthGradientMidG healthGradientMidB
+    healthGradientHighR healthGradientHighG healthGradientHighB barBgFillMode barBgColorMode
     gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture barBackgroundTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
     tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
     alphaExcludeTextPortrait alphaExcludePredictionBars deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
@@ -326,6 +329,7 @@ local function ResetBarsPage(db, defaults)
     RetireLegacyUnitAliases(db)
 end
 local function ResetFontsPage(db, defaults)
+    ResetUnitFiltered(db, defaults, "nameplates", function(key) return FONT_SCOPE_KEYS[key] == true end)
     ResetRootFiltered(db, defaults, "general", function(key) return FONT_GENERAL_KEYS[key] == true end)
     ResetKeySet(db, defaults, FONT_ROOT_KEYS)
     for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do

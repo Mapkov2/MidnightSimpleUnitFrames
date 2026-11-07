@@ -141,7 +141,7 @@ local function InstallStickyHeaderActivation(scroll, pageHeaderHost, LayoutPageH
     end
     --- Re-drive the slot after a docked panel changed its own height, without
     --- re-parenting anything: only the stack offsets and the host height move.
-    function M.RelayoutPageHeaderHost()
+    function M.RelayoutPageHeaderHost(geometryOnly)
         local list = scroll._msuf2StickyPageHeaders
         if type(list) ~= "table" or #list == 0 then return false end
         local stackOffset = 0
@@ -153,7 +153,7 @@ local function InstallStickyHeaderActivation(scroll, pageHeaderHost, LayoutPageH
             end
         end
         LayoutPageHeaderHost()
-        RefreshPinnedHeaderGeometry()
+        if not geometryOnly then RefreshPinnedHeaderGeometry() end
         return true
     end
 

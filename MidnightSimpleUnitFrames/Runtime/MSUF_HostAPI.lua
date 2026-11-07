@@ -247,6 +247,42 @@ local function GetIconSkins()
     return skins and skins.Host or nil
 end
 
+-- Plain name formatting is shared with optional Suite consumers. Resolve only
+-- after core load; the text engine loads after this host facade.
+local nameFormatter
+local function SampleNameColor(state, npcKind)
+    local spec = state.MSUFSpec
+    local text = spec.text
+    if npcKind then
+        if text.nameColor then
+            local color = text.nameColor
+            return color.r, color.g, color.b, color.a
+        end
+        local typeColor = text.npcColorMode == "type" and text.npcTypeColorText ~= false
+        if typeColor or text.nameNpcColor or text.nameNpcClassColor then
+            local r, g, b = MSUF.UFText.NPCColor(typeColor and "npcCaster" or npcKind)
+            return r, g, b, spec.textColor.a
+        end
+        local color = spec.textColor
+        return color.r, color.g, color.b, color.a
+    end
+    return MSUF.UFText.NameTextColor(state)
+end
+local function NameplateDisplayName(value, unit)
+    local names = MSUF.CharacterNames
+    if names then return names.Compose(unit, value) end
+    return value
+end
+local function GetNameFormatter()
+    if not nameFormatter then
+        nameFormatter = { version = 1, Resolve = MSUF.UFText.ResolveNameFormat,
+            Format = MSUF.UFText.FormatName, Shared = MSUF.UF.Config.ResolveSharedFont, Nameplates = MSUF.UF.Config.ResolveNameplateFont,
+            NameColor = MSUF.UFText.NameTextColor,
+            SampleColor = SampleNameColor, DisplayName = NameplateDisplayName, ApplyScale = MSUF.Require("MSUF_ApplyFontScaleAnimationMode", HOST_API_FILE) }
+    end
+    return nameFormatter
+end
+
 local API = {
     version = 1,
     ApplyUIScaleProfile = ApplyUIScaleProfile,
@@ -254,6 +290,7 @@ local API = {
     GetResourceStack = GetResourceStack,
     GetKickReady = GetKickReady,
     GetIconSkins = GetIconSkins,
+    GetNameFormatter = GetNameFormatter,
     GetProfileWorkbench = function() return MSUF.ProfileWorkbench end,
 }
 MSUF.HostAPI = API

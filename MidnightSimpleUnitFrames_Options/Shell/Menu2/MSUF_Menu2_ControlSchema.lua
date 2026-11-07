@@ -159,7 +159,7 @@ function Schema.SetSetting(widget, setting)
 end
 local UNIT_SCOPE_ROOTS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
 local GROUP_SCOPE_ROOTS = { "gf_party", "gf_raid", "gf_mythicraid" }
-function Schema.ScopedFields(fields, shared, flag, groupFields)
+function Schema.ScopedFields(fields, shared, flag, groupFields, extraRoots)
     local keys = {}
     local function Add(root, names, scoped)
         for _, field in ipairs(names) do
@@ -174,6 +174,7 @@ function Schema.ScopedFields(fields, shared, flag, groupFields)
         if scoped and flag then keys[#keys + 1] = root .. "." .. flag end
     end
     if shared then Add(shared, fields, false) end
+    for _, root in ipairs(extraRoots or {}) do Add(root, fields, true) end
     for _, root in ipairs(UNIT_SCOPE_ROOTS) do Add(root, fields, true) end
     for _, root in ipairs(GROUP_SCOPE_ROOTS) do Add(root, groupFields or fields, true) end
     return Schema.Family(keys)
@@ -397,7 +398,9 @@ local function ActionDeclaration(spec, meta)
     if key == "reset_selected_group_status_icon" then return StatusResetTargets(true) end
     if key == "reset_unit_status_indicator" then return StatusResetTargets(false, spec.scope) end
     if key and key:match("^first_load%.") then paths = { "MSUF_GlobalDB.global.firstLoad6" } end
-    if key == "reset_all_scoped_global_font_overrides" then return Schema.ScopedFields({ "fontOverride" }) end
+    if key == "reset_all_scoped_global_font_overrides" then
+        return Schema.ScopedFields({ "fontOverride" }, nil, nil, nil, { "nameplates" })
+    end
     if key == "reset_all_scoped_global_bars_overrides" then
         return Schema.ScopedFields({ "hlOverride", "slantedBarDirection" }, nil, nil,
             { "hlOverride", "slantedBarDirection", "barTextureOverride" })

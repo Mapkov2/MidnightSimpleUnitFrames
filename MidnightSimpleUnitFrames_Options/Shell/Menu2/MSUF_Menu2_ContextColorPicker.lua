@@ -690,12 +690,18 @@ function Picker.BuildAdvancedCard(panel)
     panel.paletteLookups = { quick = {}, class = {}, recent = {}, saved = {} }
     panel.paletteTabs = {}
     local tabSpecs = { { "quick", "Quick" }, { "class", "Class" }, { "recent", "Recent" }, { "saved", "Saved" } }
-    for i = 1, #tabSpecs do
-        local spec = tabSpecs[i]
-        local tab = T.Button(advancedCard, spec[2], 78, 20)
-        tab:SetPoint("TOPLEFT", 12 + (i - 1) * 82, -35)
-        tab._msuf2SegmentChoice, tab._msuf2Value = true, spec[1]
-        if tab._msuf2Label then tab._msuf2Label:SetJustifyH("CENTER") end
+    local widths, total = {}, 0
+    for i, spec in ipairs(tabSpecs) do
+        widths[i] = T.MeasureTabWidth(M.Tr(spec[2]))
+        total = total + widths[i]
+    end
+    local x, fit = 12, math.min(1, (advancedCard:GetWidth() - 48) / total)
+    for i, spec in ipairs(tabSpecs) do
+        local width = math.floor(widths[i] * fit)
+        local tab = T.StyleTabButton(T.Button(advancedCard, spec[2], width, 24))
+        tab:SetPoint("TOPLEFT", x, -35)
+        x = x + width + 8
+        tab._msuf2Value = spec[1]
         tab._msuf2SkipHistoryCheckpoint = true
         tab._msuf2PaletteKey = spec[1]
         tab:SetScript("OnClick", function(self) panel:SetPaletteTab(self._msuf2PaletteKey) end)

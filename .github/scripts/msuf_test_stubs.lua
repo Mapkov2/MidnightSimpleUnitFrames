@@ -405,7 +405,7 @@ function Methods:CreateAnimation(kind, name)
 end
 
 -- Animations -----------------------------------------------------------
-function Methods:Play() self.playing = true end
+function Methods:Play(reverse) self.playing, self.reverse = true, reverse end
 function Methods:Stop() self.playing = false end
 function Methods:Finish() self.playing = false end
 function Methods:IsPlaying() return self.playing == true end

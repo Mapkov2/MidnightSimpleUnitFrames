@@ -621,15 +621,10 @@ function W.SectionSwitch(section, label, displayLabel)
     if M.AddTooltip then M.AddTooltip(button, label, nil, { hook = true }) end
     return button
 end
-local function ScopeButtonWidth(item)
-    if item and item.width then return item.width end
-    local value = item and item.value
-    local text = tostring(Tr((item and (item.text or item.label)) or value or ""))
-    if value == "shared" then return 72 end
-    if value == "targettarget" then return 58 end
-    if value == "focustarget" then return 92 end
-    if text:match("^Boss [1-5]$") then return 74 end
-    return math.max(54, math.min(96, 28 + (#text * 7)))
+local function ScopeButtonWidth(item, overrides)
+    local text = Tr(item.text or item.label or tostring(item.value or ""))
+    if overrides and item.value ~= "shared" then text = text .. " *" end
+    return T.MeasureTabWidth(text, item.width or 56)
 end
 local function MeasureScopeOverrideLayout(values, opts)
     opts = opts or {}
@@ -638,7 +633,7 @@ local function MeasureScopeOverrideLayout(values, opts)
     local labelX = opts.labelX or 14
     local labelW = opts.labelWidth or 64
     local gap = opts.gap or 8
-    local buttonH = opts.buttonHeight or 24
+    local buttonH = opts.buttonHeight or 26
     local rowStep = opts.rowStep or (buttonH + 6)
     local sectionW = opts.width or (opts.ctx and opts.ctx.width) or 720
     local maxRight = opts.maxRight or (sectionW - 14)
@@ -646,7 +641,7 @@ local function MeasureScopeOverrideLayout(values, opts)
     local x, y = startX, centerY
     local rows = 1
     for i = 1, #values do
-        local width = ScopeButtonWidth(values[i])
+        local width = math.min(math.max(1, maxRight - startX), ScopeButtonWidth(values[i], opts.hasOverride))
         if x > startX and x + width > maxRight then
             x = startX
             y = y - rowStep
@@ -679,10 +674,14 @@ end
 local function ShiftBelowScopeBar(section, bar, bottomY, dy)
     local skip = { [bar] = true, [bar.label] = true }
     for i = 1, #bar.buttons do skip[bar.buttons[i]] = true end
-    local objects, placed = { section:GetChildren() }, {}
+    local objects, placed, shiftedBars = { section:GetChildren() }, {}, {}
     for _, region in ipairs({ section:GetRegions() }) do objects[#objects + 1] = region end
     for i = 1, #objects do
         local object = objects[i]
+        local scopeLayout = object._msuf2ScopeLayout
+        if object ~= bar and scopeLayout and scopeLayout.centerY < bottomY then
+            shiftedBars[#shiftedBars + 1] = object
+        end
         if skip[object] then
             -- The bar's own parts are placed by the reflow.
         elseif object._msuf2ContextLayoutParent == section then
@@ -713,6 +712,17 @@ local function ShiftBelowScopeBar(section, bar, bottomY, dy)
             for _, button in ipairs(widget._msuf2StepButtons or {}) do button:Hide() end
         end
     end
+    for _, shifted in ipairs(shiftedBars) do
+        local layout = shifted._msuf2ScopeLayout
+        local metrics = layout.metrics
+        layout.centerY = layout.centerY + dy
+        metrics.centerY = layout.centerY
+        metrics.bottomY = metrics.bottomY + dy
+        metrics.lastRowCenterY = metrics.lastRowCenterY + dy
+        shifted._msuf2BottomY, shifted._msuf2LastRowCenterY = metrics.bottomY, metrics.lastRowCenterY
+        shifted:SetHeight(math.abs(metrics.bottomY) + 6)
+        W.RefreshSelectionMotion(shifted, true)
+    end
 end
 -- Gives a section the height its scope bar gained or lost and lets the
 -- builder that stacks it restack what follows.
@@ -740,16 +750,18 @@ end
 -- A retained page only reflows on a resize, so a scope bar wraps its buttons
 -- again for its new width, and its section grows or shrinks by the rows it
 -- gained or lost.
-local function ReflowScopeBar(ctx, section, bar, layout)
+local function ReflowScopeBar(ctx, section, bar, layout, measure)
     local width = bar:GetWidth()
-    if width == layout.width then return end
+    if not measure and width == layout.width then return end
     layout.width = width
     local startX, gap, rowStep = layout.startX, layout.gap, layout.rowStep
     local maxRight = width - layout.inset
     local x, y, rows = startX, layout.centerY, 1
     for i = 1, #bar.buttons do
         local btn = bar.buttons[i]
-        local buttonW = btn._msuf2BaseWidth
+        if measure then btn._msuf2BaseWidth = ScopeButtonWidth(bar.values[i], layout.hasOverride) end
+        local buttonW = math.min(math.max(1, maxRight - startX), btn._msuf2BaseWidth)
+        btn:SetWidth(buttonW)
         if x > startX and x + buttonW > maxRight then
             x = startX
             y = y - rowStep
@@ -778,7 +790,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
     local labelX = opts.labelX or 14
     local labelW = opts.labelWidth or 64
     local gap = opts.gap or 8
-    local buttonH = opts.buttonHeight or 24
+    local buttonH = opts.buttonHeight or 26
     local sectionW = opts.width or section._msuf2Width or (ctx and ctx.width) or (section.GetWidth and section:GetWidth()) or 720
     local maxRight = opts.maxRight or (sectionW - 14)
     local startX = opts.startX or (labelX + labelW + 8)
@@ -793,6 +805,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
         width = sectionW,
         maxRight = maxRight,
         startX = startX,
+        hasOverride = opts.hasOverride,
     })
     local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", opts.label or "Editing:", opts.labelColor or T.colors.text, "control")
     SetSearchText(label, opts.label or "Editing:")
@@ -814,21 +827,20 @@ function W.ScopeOverrideBar(ctx, section, opts)
     local x, y = startX, centerY
     for i = 1, #values do
         local item = values[i]
-        local width = ScopeButtonWidth(item)
+        local preferred = ScopeButtonWidth(item, opts.hasOverride)
+        local width = math.min(math.max(1, maxRight - startX), preferred)
         if x > startX and x + width > maxRight then
             x = startX
             y = y - rowStep
         end
-        local btn = T.Button(section, item.text or item.label or item.value or "", width, buttonH, { history = false })
-        btn._msuf2SegmentChoice = true
+        local btn = T.StyleTabButton(T.Button(section, item.text or item.label or item.value or "", width, buttonH, { history = false }))
         -- The logical ScopeOverrideBar owns search/catalog identity and values.
         -- Child buttons are implementation details; registering both creates
         -- duplicate/unknown controls for one selection.
         MarkControlPart(btn, bar)
         btn:SetPoint("LEFT", section, "TOPLEFT", x, y)
         btn._msuf2Value = item.value
-        btn._msuf2BaseWidth = width
-        T.CenterButtonLabel(btn)
+        btn._msuf2BaseWidth = preferred
         if btn.RefreshVisual then btn:RefreshVisual() end
         -- A scope switch the page stores in the profile stays undoable; a
         -- click on the scope already shown records nothing.
@@ -848,8 +860,10 @@ function W.ScopeOverrideBar(ctx, section, opts)
     end
     if ctx and ctx.AddResizeCallback then
         local layout = { width = sectionW, inset = sectionW - maxRight, startX = startX, gap = gap, rowStep = rowStep,
-            centerY = centerY, buttonHeight = buttonH, metrics = metrics }
+            centerY = centerY, buttonHeight = buttonH, metrics = metrics, hasOverride = opts.hasOverride }
+        bar._msuf2ScopeLayout = layout
         ctx:AddResizeCallback(function() ReflowScopeBar(ctx, section, bar, layout) end)
+        T.TrackTabLayout(bar, function() ReflowScopeBar(ctx, section, bar, layout, true) end)
     end
     function bar:GetValue()
         if type(opts.getValue) == "function" then return opts.getValue() end
@@ -1263,14 +1277,31 @@ local function LayoutSegment(holder)
     local count = #holder.buttons
     if count == 0 then return end
     local width, gap = holder:GetWidth(), 8
-    local buttonWidth = math.max(1, math.floor((width - gap * (count - 1)) / count))
+    local available = math.max(count, math.floor(width - gap * (count - 1)))
+    local natural = holder._msuf2TabNaturalWidth
+    local extra = not holder._msuf2CompactTabs and math.max(0, available - natural) or 0
+    local squeeze = math.min(1, available / natural)
+    local used, desired = 0, 0
     for i = 1, count do
         local button = holder.buttons[i]
-        button:SetWidth(buttonWidth)
+        desired = desired + button._msuf2TabPreferredWidth * squeeze + extra / count
+        local edge = math.max(used + 1, math.floor(desired + 0.001))
+        button:SetWidth(edge - used)
         button:ClearAllPoints()
-        button:SetPoint("LEFT", holder, "LEFT", (i - 1) * (buttonWidth + gap), 0)
+        button:SetPoint("LEFT", holder, "LEFT", used + (i - 1) * gap, 0)
+        used = edge
     end
     W.RefreshSelectionMotion(holder, true)
+end
+local function MeasureSegmentTabs(holder)
+    local total = 0
+    for i, button in ipairs(holder.buttons) do
+        local preferred = T.MeasureTabWidth(button:GetText(), holder.values[i].width)
+        button._msuf2TabPreferredWidth = preferred
+        total = total + preferred
+    end
+    holder._msuf2TabNaturalWidth = total
+    LayoutSegment(holder)
 end
 local function FitSegmentTabs(segment, parent, x, requested)
     local available = parent:GetWidth() - x - 16
@@ -1279,31 +1310,30 @@ local function FitSegmentTabs(segment, parent, x, requested)
     if segment:GetWidth() ~= width then segment:SetWidth(width) end
 end
 function W.Segment(section, label, values, width, opts)
-    local x, y = NextRow(section, 48)
+    local x, y = NextRow(section, 50)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     local holder = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     RegisterSearchObject(holder, label, "segment", { anchor = title, values = values })
     holder:SetPoint("TOPLEFT", x, y - 24)
-    holder:SetSize(width or 360, 24)
+    holder:SetSize(width or 360, 26)
     holder._msuf2ControlKind = "segment"
     holder._msuf2Title = title
     holder.buttons = {}
     holder.values = values or {}
-    local count = #holder.values
-    local gap = 8
-    local bw = count > 0 and math.floor(((width or 360) - gap * (count - 1)) / count) or 80
-    for i = 1, count do
-        local item = holder.values[i]
-        local btn = T.Button(holder, item.text or tostring(item.value), bw, 24, { history = false })
+    holder._msuf2CompactTabs = opts and opts.compact
+    for i, item in ipairs(holder.values) do
+        local caption = item.text or tostring(item.value)
+        local btn = T.StyleTabButton(T.Button(holder, caption, item.width, 26, { history = false }))
         -- A Segment is one logical control. Its option buttons are visual
         -- parts and must not become duplicate catalog records.
         MarkControlPart(btn, holder)
-        btn:SetPoint("LEFT", holder, "LEFT", (i - 1) * (bw + gap), 0)
         btn._msuf2Value = item.value
         holder.buttons[i] = btn
     end
+    MeasureSegmentTabs(holder)
+    T.TrackTabLayout(holder, MeasureSegmentTabs)
     holder:HookScript("OnSizeChanged", LayoutSegment)
     function holder:SetValue(value)
         self.value = value
@@ -1358,7 +1388,7 @@ function W.SegmentTabs(ctx, parent, opts)
             RefreshTabs(true)
         end }
     end
-    segment = W.Segment(parent, opts.label, opts.values, opts.width)
+    segment = W.Segment(parent, opts.label, opts.values, opts.width, opts)
     W.MoveWidget(segment, parent, opts.x or 0, opts.y or 0, opts.width, opts.titleJustify or "LEFT")
     local requested = opts.width or 360
     local function Fit() FitSegmentTabs(segment, parent, opts.x or 0, requested) end

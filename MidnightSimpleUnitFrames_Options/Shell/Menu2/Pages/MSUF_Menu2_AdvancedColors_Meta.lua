@@ -245,6 +245,11 @@ local COLOR_STORAGE_FIELDS = {
 }
 local function ColorStorageSetting(path)
     local schema, keys = M.ControlSchema, {}
+    if path == "appearance.bar_mode" then
+        for _, field in ipairs(COLOR_STORAGE_FIELDS[path]) do keys[#keys + 1] = "general." .. field end
+        for unit in pairs(M.UNIT_KEYS) do keys[#keys + 1] = unit .. ".healthColorMode" end
+        return schema.Family(keys)
+    end
     if COLOR_STORAGE_FIELDS[path] then return schema.Fields({ "general" }, COLOR_STORAGE_FIELDS[path]) end
     local mirroredPrefix = ({ ["portrait.background_color"] = "portraitBgColor", ["portrait.border_color"] = "portraitBorderColor",
         ["texture_layer.color"] = "texLayerColor", ["texture_layer.gradient_color"] = "texLayerGradient2",

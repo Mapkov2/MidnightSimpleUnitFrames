@@ -107,7 +107,7 @@ local function ScopeDBKeys(scope)
     scope = NormalizeScopeKey(scope)
     if scope == "gf_party" then return { "gf_party" } end
     if scope == "gf_raid" then return { "gf_raid", "gf_mythicraid" } end
-    if UNIT_SCOPE_KEYS[scope] then return { scope } end
+    if UNIT_SCOPE_KEYS[scope] or scope == "nameplates" then return { scope } end
     return nil
 end
 local function ScopeHasOverride(scope, flag)
@@ -223,6 +223,7 @@ local function CurrentFontScope()
     local g = G()
     local raw = g._fontScopeKey
     local scope = NormalizeScopeKey(raw or "shared")
+    if scope == "nameplates" and not MSUF.SuiteLink.HasNameplateFonts() then return "shared" end
     if raw ~= scope then g._fontScopeKey = scope end
     return scope
 end

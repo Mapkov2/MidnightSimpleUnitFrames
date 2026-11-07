@@ -325,17 +325,21 @@ end
 --- Public API
 function Grid.Show()
     EnsureGridFrame()
+    local entering = not gridFrame:IsShown()
     local th = T()
     bgTex:SetColorTexture(th.bgR, th.bgG, th.bgB, GetBgAlpha())
     RebuildLines()
     gridFrame:Show()
+    if entering then EM2.Util.PlayEntryFade(gridFrame) end
     C_Timer.After(0, function()
         if gridFrame and gridFrame:IsShown() then RebuildLines() end
     end)
 end
 
 function Grid.Hide()
-    if gridFrame then gridFrame:Hide() end
+    if not gridFrame then return end
+    EM2.Util.StopEntryFade(gridFrame)
+    gridFrame:Hide()
 end
 
 function Grid.IsShown()

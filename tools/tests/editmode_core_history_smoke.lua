@@ -255,7 +255,7 @@ for _, flavor in ipairs(arg[2] and { arg[2] } or { "Mainline", "Forever", "Vanil
         popupType = "unit", getConf = function() return env.MSUF_DB.player end,
     }, { bar = bar }), "real unit drag refused")
     Check(strategy:applyDrag(drag, drag.startCX + 17, drag.startCY, 1), "real unit drag did not apply")
-    Check(strategy:commit(drag), "real unit drag did not finish")
+    Check(strategy:commit(drag, drag.startCX + 17, drag.startCY, 1), "real unit drag did not finish")
     em.Undo.CommitChange()
     Check(H.GetHistoryState().undoCount == 1, "drag did not record one diff")
     Check(em.Undo.DoUndo() and env.MSUF_DB.player.offsetX == initial, "core-only undo failed")

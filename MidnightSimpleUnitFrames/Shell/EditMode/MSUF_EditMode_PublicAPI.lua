@@ -157,6 +157,8 @@ local CALLBACKS = {
 --- popup. Each spec is { id, label, kind = "number"|"toggle", get, set } with
 --- min/max required for numbers. Values flow through get/set only; MSUF never
 --- touches the owner's storage.
+--- Numeric controls may declare positionAxis (x/y); a complete pair supplies
+--- the popup coordinates in place of the generic screen-position fields.
 local function PrepareControls(list, owner)
     if list == nil then return nil end
     if type(list) ~= "table" then return nil, "invalid_extraControls" end
@@ -186,6 +188,8 @@ local function PrepareControls(list, owner)
             get = spec.get, set = spec.set, min = minValue, max = maxValue,
             step = (spec.kind == "number" and Finite(stepValue) and stepValue > 0) and stepValue or nil,
             transient = spec.transient == true,
+            positionAxis = spec.kind == "number" and (spec.positionAxis == "x" or spec.positionAxis == "y")
+                and spec.positionAxis or nil,
         }
     end
     if #prepared == 0 then return nil end

@@ -679,6 +679,7 @@ RebuildActivePageForResize = function(frame, options)
     if selected and restoreExpanded then
         M.RestoreFixedPreview(key, M.cache and M.cache[key], {
             autoCompactIfNoFit = autoCompactIfNoFit,
+            animate = options.animatePreview,
             reason = options.source == "resize-grip" and "WINDOW_RESIZE_RESTORE" or "WINDOW_LAYOUT_RESTORE",
         })
     end
@@ -1037,7 +1038,7 @@ end
 -- An explicit Expand must produce a real full canvas even when the user is at
 -- the compact minimum window height. Grow only by the measured shortfall; the
 -- ensuing normal layout rebuild captures/restores the expanded state.
-function M.EnsureFixedPreviewExpansionRoom(expander)
+function M.EnsureFixedPreviewExpansionRoom(expander, animate)
     local frame = M.frame
     if not (frame and expander and type(expander.GetPreferredExpansionShortfall) == "function")
         or frame._msuf2GrowingForFixedPreview
@@ -1064,7 +1065,7 @@ function M.EnsureFixedPreviewExpansionRoom(expander)
     if targetH <= currentH + 0.5 then return false end
     layout.h = targetH
     frame._msuf2GrowingForFixedPreview = true
-    local applied = ApplyWindowLayout(frame, layout, true, { source = "preview-expand" })
+    local applied = ApplyWindowLayout(frame, layout, true, { source = "preview-expand", animatePreview = animate })
     frame._msuf2GrowingForFixedPreview = nil
     return applied == true
 end
@@ -1074,6 +1075,7 @@ ApplyMenuFrameScale = function(frame)
     local previousW = frame.GetWidth and frame:GetWidth() or WINDOW_W
     local previousH = frame.GetHeight and frame:GetHeight() or WINDOW_H
     frame:SetScale(EffectiveMenuScale(g.slashMenuScale))
+    if frame.windowControls and frame.windowControls._msuf2CaptionGroup then RefreshWindowControls(frame) end
     ApplyWindowResizeBounds(frame)
     ClampWindowSize(frame)
     local currentW = frame.GetWidth and frame:GetWidth() or WINDOW_W

@@ -160,10 +160,11 @@ local function RestoreExpandedFixedPreview(key, entry, serial, options)
         end
         if expander.expanded == true then
             resolved = true
-            if options.ensureRoom == true and type(M.EnsureFixedPreviewExpansionRoom) == "function" then
-                M.EnsureFixedPreviewExpansionRoom(expander)
-            end
-        elseif expander:Open(options.reason or "WINDOW_LAYOUT_RESTORE", { preserveExpandedZoom = true }) then
+            local grew = options.ensureRoom == true and M.EnsureFixedPreviewExpansionRoom(expander, options.animate)
+            if options.animate and not grew then expander:AnimateExpansion() end
+        elseif expander:Open(options.reason or "WINDOW_LAYOUT_RESTORE", {
+            preserveExpandedZoom = true, animate = options.animate,
+        }) then
             resolved = true
         elseif pendingIntent and not frame._msuf2PendingFixedPreviewExpand
             and pendingIntent.serial == fixedPreviewExpandIntentSerial
@@ -214,6 +215,7 @@ function M.ResolvePendingFixedPreviewExpansion(frame)
     RestoreExpandedFixedPreview(key, entry, fixedPreviewRestoreSerial, {
         reason = "DEFERRED_EXPLICIT_EXPAND",
         ensureRoom = true,
+        animate = true,
         pendingIntent = pending,
     })
     return true

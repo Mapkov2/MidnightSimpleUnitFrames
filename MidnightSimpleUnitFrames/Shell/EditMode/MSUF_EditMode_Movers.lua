@@ -439,6 +439,7 @@ local function CreateMover(key, cfg)
         StopPendingDrag(self)
         if self._dragging then return true end
         if BlockConfigCombatLocked() then return end
+        EM2.QuickPopup.CommitFocusedEdits()
         ClearPreviewNudgeTarget()
         local externalHistoryStarted = false
         if cfg.externalPublicElement == true then
@@ -578,6 +579,7 @@ local function SyncRegisteredMovers(reg)
 end
 
 function Movers.Show()
+    local entering = not moverParent or not moverParent:IsShown()
     if not moverParent then
         moverParent = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_MoverParent", UIParent), true)
         moverParent:SetAllPoints(UIParent)
@@ -587,11 +589,15 @@ function Movers.Show()
     local reg = EM2.Registry and EM2.Registry.All()
     if not reg then return end
     SyncRegisteredMovers(reg)
+    if entering then U.PlayEntryFade(moverParent) end
 end
 
 function Movers.Hide()
     HideGuidedPlacementCue()
-    if moverParent then moverParent:Hide() end
+    if moverParent then
+        U.StopEntryFade(moverParent)
+        moverParent:Hide()
+    end
     for _, m in pairs(movers) do m:Hide() end
 end
 function Movers.IsShown() return moverParent and moverParent:IsShown() or false end

@@ -91,7 +91,8 @@ end
 
 function Build.BarGradients(ctx, b)
     local values, sectionW = GP.SCOPE_VALUES or {}, ctx.width or 720
-    local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(values, { width = sectionW })
+    local function HasOverride(value) return value ~= "shared" and ScopeHasOverride(value, "hlOverride") end
+    local scopeMetrics = W.MeasureScopeOverrideBar(values, { width = sectionW, hasOverride = HasOverride })
     local scopeBottom = (scopeMetrics and scopeMetrics.bottomY) or -40
     local colorY = math.min(-104, scopeBottom - 54)
     local compact = sectionW < 560
@@ -110,7 +111,7 @@ function Build.BarGradients(ctx, b)
     local scopeBar = W.ScopeOverrideBar(ctx, section, {
         values = values, width = sectionW, getValue = CurrentBarsScope,
         setValue = scopeSpec.set,
-        hasOverride = function(value) return value ~= "shared" and ScopeHasOverride(value, "hlOverride") end,
+        hasOverride = HasOverride,
     })
     RegisterControl(scopeBar, Meta("bar_gradient.scope.selector", "ephemeral"), "Editing:", "segment", values)
     Schema.ScopeOwner(scopeBar, "colors", nil, "general.hpPowerTextSelectedKey")
@@ -152,7 +153,7 @@ function Build.BarGradients(ctx, b)
 end
 
 function Build.Background(ctx, b)
-    local background = ColorsSection(b, "colors_background", "Bar Background Tint", 332, false)
+    local background = ColorsSection(b, "colors_background", "Bar Background Tint", 384, false)
     LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660,
         "GameFontHighlightSmall", T.colors.muted)
     LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660, "GameFontHighlightSmall",
@@ -187,7 +188,29 @@ function Build.Background(ctx, b)
     local previewState = { mode = previewMode, healthFraction = .62 }
     previewState.surface = M.PreviewHelpers.NewRuntimeUnitSurface(previewTrack, "player", { hp = .62 })
 
+    local opacityWarning = LabelAt(background,
+        "Background opacity is set to 0%.\nColor changes are invisible. Increase Opacity under More Options in the tint color picker.",
+        12, -222, previewWidth, "GameFontHighlightSmall", T.colors.warning)
+    opacityWarning:SetHeight(42)
+    local backgroundEntry = background._msuf2CollapsibleEntry
+    local warningVisible, warningSummary
     refreshBackgroundPreview = function()
+        local _, _, _, alpha = ApiRGB("GetClassBarBgColor", 0, 0, 0)
+        local transparent = alpha == 0
+        if warningVisible ~= transparent then
+            warningVisible = transparent
+            opacityWarning:SetShown(transparent)
+            if transparent then
+                backgroundEntry._msuf2UXSummary = warningSummary
+                W.SetCollapsibleSummary(background, TrText("Background opacity is set to 0%."))
+                warningSummary = backgroundEntry._msuf2UXSummary
+                warningSummary:SetTextColor(T.colors.warning[1], T.colors.warning[2], T.colors.warning[3])
+            elseif warningSummary then
+                warningSummary:Hide()
+                backgroundEntry._msuf2UXSummary = nil
+                backgroundEntry._msuf2RefreshLayout()
+            end
+        end
         if previewPanel.IsVisible and not previewPanel:IsVisible() then return false end
         return M.RefreshHealthBackgroundInlinePreview(previewState)
     end
@@ -208,12 +231,12 @@ function Build.Background(ctx, b)
             refreshBackgroundPreview()
         end,
         nil, nil, Meta("general.classBarBg"), { 0, 0, 0 }), "unitColors")
-    ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -228,
+    ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -280,
         function() return G().darkBgCustomColor == true end,
         { write = { source = G, boolean = true, after = ApplyBackgroundColorPreview
         } --[[schema setter: J5.Colors.DarkBackground]] },
         Meta("background.dark_mode_custom_color"))
-    Owned(ButtonAt(background, "Reset to black", 12, -274, 140, function()
+    Owned(ButtonAt(background, "Reset to black", 12, -326, 140, function()
         if not ApiCall("ResetClassBarBgColor") then
             ClearRGB(G(), "classBarBg")
             ApplyUnitframeColorWithReload()
@@ -224,6 +247,20 @@ function Build.Background(ctx, b)
     elseif M.TrackRefresh then M.TrackRefresh(ctx, refreshBackgroundPreview) end
     if ctx.entry then ctx.entry._msuf2HealthBackgroundInlinePreviewRefresh = refreshBackgroundPreview end
 end
+-- An explicit global choice supersedes the individual modes carried by presets.
+-- Individual frame controls can opt out again after this user action.
+local function SetGlobalBarMode(mode)
+    local db = DB()
+    local g = db.general
+    g.barMode = mode
+    g.darkMode = (mode == "dark")
+    g.useClassColors = (mode == "class")
+    for unit in pairs(M.UNIT_KEYS) do
+        local conf = db[unit]
+        if conf then conf.healthColorMode = nil end
+    end
+end
+
 function Build.Appearance(ctx, b)
     local appearance = ColorsSection(b, "colors_appearance", "Unitframe Global Coloring", 290, true)
     local refreshBarModeControls
@@ -234,10 +271,7 @@ function Build.Appearance(ctx, b)
         return mode
     end
     local function SetBarMode(mode)
-        local g = G()
-        g.barMode = mode
-        g.darkMode = (mode == "dark")
-        g.useClassColors = (mode == "class")
+        SetGlobalBarMode(mode)
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
         if M.RequestRefresh then M.RequestRefresh(ctx, "colors-bar-mode") end
@@ -257,7 +291,7 @@ function Build.Appearance(ctx, b)
     end
     local modeRow = W.Segment(appearance, "Bar mode", modeValues, modeRowW)
     MoveWidget(modeRow, appearance, 12, -10, modeRowW)
-    local modeMeta = Meta("appearance.bar_mode")
+    local modeMeta = Meta("appearance.bar_mode", nil, { reapplySelection = true })
     Schema.Bind(ctx, modeRow, { id = modeMeta.controlId, kind = "segment", labelKey = "Bar mode", scope = "colors",
         applyDomain = "unitColors", settingPath = modeMeta.settingKey, meta = modeMeta,
         get = CurrentBarMode,

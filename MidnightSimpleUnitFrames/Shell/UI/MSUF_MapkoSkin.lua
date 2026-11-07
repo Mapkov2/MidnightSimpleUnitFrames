@@ -140,20 +140,23 @@ end
 function Skin.Button(button, selected, hover, paint)
     local record = Record(button, "button", paint, selected, hover)
     if not record or not active then return false end
-    local surfaceSelected = selected == true and not button._msuf2SelectionMotion
     local nav = button._msuf2NavItem == true
+    local tab = button._msuf2SegmentChoice == true and not nav
+        and (not button._msuf2MotionSurface or button._msuf2SelectionSurface == true)
+    local enabled = not button.IsEnabled or button:IsEnabled()
+    local surfaceSelected = selected == true and (not tab or enabled) and not button._msuf2SelectionMotion
     local role = (button._msuf2Danger or button._msufUIDanger) and "buttonDanger"
         or (button._msuf2Success or button._msufUISuccess) and "buttonSuccess"
         or (button._msuf2Primary or button._msufUIPrimary) and "buttonPrimary"
         or nav and "navigation" or "button"
-    if not record.skinned or record.role ~= role or record.nav ~= nav then
+    if not record.skinned or record.role ~= role or record.nav ~= nav or record.tab ~= tab then
         -- Native button ownership: docs/MENU_SKIN_BRIDGE.md.
         local ok, reason = client:SkinButton(button, { role = role,
             activeRole = nav and "button" or role == "button" and "buttonPrimary" or role,
             useControlShape = true, active = surfaceSelected, listItem = nav, paletteMotion = true,
-            ownedArt = button._msuf2RawSetScript ~= nil })
+            selectionEdge = tab, ownedArt = button._msuf2RawSetScript ~= nil })
         if not ok or reason ~= "applied" then return false end
-        record.skinned, record.role, record.nav, record.selected = true, role, nav, surfaceSelected
+        record.skinned, record.role, record.nav, record.tab, record.selected = true, role, nav, tab, surfaceSelected
     elseif record.selected ~= surfaceSelected then
         client:SetActive(button, surfaceSelected)
         record.selected = surfaceSelected
@@ -161,7 +164,6 @@ function Skin.Button(button, selected, hover, paint)
     Suppress(button, record, buttonKeys)
     local label = button._msuf2Label or button._label
     if label and label.SetTextColor then
-        local enabled = not button.IsEnabled or button:IsEnabled()
         local token = not enabled and "disabled" or role == "buttonDanger" and "danger"
             or role == "buttonSuccess" and "success" or "text"
         label:SetTextColor(api:GetColor(token))
@@ -218,6 +220,7 @@ function Skin.BindColors(colors)
         end
     end
 end
+function Skin.IsAvailable() return api ~= nil and api:IsEnabled() end
 function Skin.IsActive() return active == true end
 function Skin.MotionReduced()
     return active == true and (appearance.menuAnimations == false or appearance.reduceMotion == true)

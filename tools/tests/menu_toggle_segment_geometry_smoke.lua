@@ -59,4 +59,50 @@ for _,width in ipairs({600,900,500,1020}) do
     end
     assert(tabs.buttons==buttons and tabs:GetValue()=="a", "resize replaced choices or changed selection")
 end
+-- A caller's preferred width is a minimum. A translated caption and its
+-- padding must fit inside the selected outline, even when the choices wrap.
+local long = "Cleanse Color Overlay"
+local captions = { { value = "a", text = "Layout", width = 64 },
+    { value = "b", text = long, width = 106 }, { value = "c", text = "Blizzard player auras", width = 94 } }
+local scopeOptions = { values = captions, width = 318, label = "", labelWidth = 0, startX = 14, centerY = -80 }
+local scope = W.ScopeOverrideBar(ctx, section, scopeOptions)
+local metrics = W.MeasureScopeOverrideBar(captions, scopeOptions)
+assert(metrics.rows == 2 and scope:GetLayoutMetrics().bottomY == metrics.bottomY, "scope measurement and layout disagree")
+local function CheckLabel(choice)
+    local label = choice._msuf2Label
+    assert(label._msuf2FontRole == "control" and label:GetJustifyH() == "CENTER", "tab still uses the small action font")
+    local left, owner, _, x = label:GetPoint(1)
+    local right, other, _, edge = label:GetPoint(2)
+    assert(left == "LEFT" and right == "RIGHT" and owner == choice and other == choice and x == 10 and edge == -10,
+        "tab label is not bounded by its button")
+    assert(choice:GetWidth() >= label:GetStringWidth() + 20, "tab has no room for its caption")
+end
+for _, choice in ipairs(scope.buttons) do CheckLabel(choice) end
+local strip = W.SegmentTabs(ctx, section, { label = "", values = captions, width = 440, compact = true, defaultTab = "a" })
+for _, choice in ipairs(strip.buttons) do CheckLabel(choice) end
+assert(strip.buttons[2]:GetWidth() > strip.buttons[1]:GetWidth(), "unequal captions still use equal-width tabs")
+local _, _, _, lastX = strip.buttons[3]:GetPoint()
+assert(lastX + strip.buttons[3]:GetWidth() < strip:GetWidth() - 30, "short captions stretched to fill the strip")
+local resize = {}
+ctx.AddResizeCallback = function(_, callback) resize[#resize + 1] = callback end
+local stacked = env.CreateFrame("Frame", nil, env.UIParent)
+stacked:SetSize(660, 280)
+local first = W.ScopeOverrideBar(ctx, stacked, { values = captions, width = 660, labelWidth = 0, startX = 14, centerY = -28 })
+local second = W.ScopeOverrideBar(ctx, stacked, { values = { captions[1] }, width = 660, labelWidth = 0, startX = 14, centerY = -64 })
+for _, width in ipairs({ 318, 660, 318 }) do
+    first:SetWidth(width)
+    second:SetWidth(width)
+    for _, callback in ipairs(resize) do callback() end
+    local _, _, _, _, center = second.buttons[1]:GetPoint()
+    assert(center == second:GetLayoutMetrics().centerY and center + 13 < first:GetLayoutMetrics().bottomY,
+        "wrapping the upper bar overlaps the lower selector")
+end
+local before = strip.buttons[2]:GetWidth()
+local glyphWidth = mw.world.widgets.Methods.GetStringWidth
+mw.world.widgets.Methods.GetStringWidth = function(self) return glyphWidth(self) * 1.2 end
+T.RefreshMenuFonts()
+assert(strip.buttons[2]:GetWidth() > before, "retained tab did not remeasure after a font change")
+mw.world.widgets.Methods.GetStringWidth = glyphWidth
+T.RefreshMenuFonts()
+assert(strip.buttons[2]:GetWidth() == before, "restoring the menu font kept the wider tab")
 print("menu_toggle_segment_geometry_smoke " .. flavor .. ": pass")

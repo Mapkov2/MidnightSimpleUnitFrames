@@ -959,7 +959,7 @@ local SIG_POWER_KEYS = {
 local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer",
   "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
-  "nameShortenMaskPx",
+  "nameShortenMaskPx", "nameFormat",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY", "directNameWidth",
   "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
   "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftFontSize", "healthCenterFontSize",
@@ -982,7 +982,7 @@ local SIG_TEXT_KEYS = {
 }
 local SIG_INLINE_KEYS = {
   "enabled", "separator", "unit", "colorMode", "targetNameClassColor", "targetNameNpcColor",
-  "targetNameNpcClassColor", "totNameClassColor", "totNameNpcColor", "totNameNpcClassColor", "nameShorten",
+  "targetNameNpcClassColor", "totNameClassColor", "totNameNpcColor", "totNameNpcClassColor", "nameShorten", "nameFormat",
   "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth",
 }
 local SIG_PARTS = {}

@@ -314,10 +314,10 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
     return card
 end
 
-local function CreateFooterButton(parent, T, label, x, top, width, onClick, id)
+local function CreateFooterButton(parent, T, label, point, x, top, width, onClick, id)
     local button = T.Button(parent, label, width, 24)
     button._msuf2SkipHistoryCheckpoint = true
-    button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top)
+    button:SetPoint(point, parent, "TOP", x, top)
     if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
     button:SetScript("OnClick", function()
         if BlockedByCombat() then return end
@@ -325,6 +325,15 @@ local function CreateFooterButton(parent, T, label, x, top, width, onClick, id)
     end)
     RegisterControl(button, id, label, "action")
     return button
+end
+
+function M.PromptSkipGuidedSetup(onAccept)
+    return M.ShowPrompt("MSUF2_GUIDED_SETUP_SKIP_CONFIRM", {
+        text = Tr("Skip Guided Setup? You can start it again from the Dashboard at any time."),
+        accept = Tr("Skip Guided Setup"),
+        showAlert = true,
+        onAccept = onAccept,
+    })
 end
 
 local function OpenProfileImport(firstLoad)
@@ -399,6 +408,14 @@ function M.ExecuteFirstLoadDashboardAction(action)
         InvalidateHomeCache()
         CloseMenu()
         return true, Tr("Closed the first-time setup. Start Guided Setup from the Dashboard anytime.")
+    elseif action == "skip_guided_setup" then
+        if BlockedByCombat() then return false end
+        M.PromptSkipGuidedSetup(function()
+            if BlockedByCombat() or not FirstLoadActionAvailability(firstLoad) then return end
+            CallLifecycle(firstLoad, "Dismiss", "skip_guided_setup")
+            InvalidateHome()
+        end)
+        return true
     elseif action == "full_settings" then
         CallLifecycle(firstLoad, "Dismiss", "full_settings")
         InvalidateHome()
@@ -418,6 +435,7 @@ local FIRST_LOAD_VIRTUAL_ACTIONS = {
     { suffix = "whats_new", label = "What is new in 6.0" },
     { suffix = "not_now", label = "Not now" },
     { suffix = "full_settings", label = "Open full settings" },
+    { suffix = "skip_guided_setup", label = "Skip Guided Setup" },
 }
 
 local function FirstLoadVirtualSetter(suffix)
@@ -457,27 +475,29 @@ end
 
 RegisterFirstLoadVirtualControls()
 
-local function CreateFooterButtons(scene, T, contentWidth, sceneWidth, footerTop, compact)
+local function CreateFooterButtons(scene, T, contentWidth, footerTop, compact)
     local footerButtons = {
         { "What is new in 6.0", 132, ActionRunner("whats_new"), "whats_new" },
         { "Not now", 74, ActionRunner("not_now"), "not_now" },
         { "Open full settings", 126, ActionRunner("full_settings"), "full_settings" },
+        { "Skip Guided Setup", 168, ActionRunner("skip_guided_setup"), "skip_guided_setup" },
     }
     local footerHeight
     if compact then
         local buttonWidth = min(220, contentWidth)
-        local buttonX = floor((sceneWidth - buttonWidth) / 2)
         for i = 1, #footerButtons do
             local item = footerButtons[i]
-            CreateFooterButton(scene, T, item[1], buttonX, footerTop - ((i - 1) * 32), buttonWidth, item[3], item[4])
+            local y = footerTop - (i - 1) * 32
+            CreateFooterButton(scene, T, item[1], "TOP", 0, y, buttonWidth, item[3], item[4])
         end
-        footerHeight = 88
+        footerHeight = (#footerButtons - 1) * 32 + 24
     else
-        local total = footerButtons[1][2] + footerButtons[2][2] + footerButtons[3][2] + 16
-        local x = floor((sceneWidth - total) / 2)
+        local total = (#footerButtons - 1) * 8
+        for i = 1, #footerButtons do total = total + footerButtons[i][2] end
+        local x = -floor(total / 2)
         for i = 1, #footerButtons do
             local item = footerButtons[i]
-            CreateFooterButton(scene, T, item[1], x, footerTop, item[2], item[3], item[4])
+            CreateFooterButton(scene, T, item[1], "TOPLEFT", x, footerTop, item[2], item[3], item[4])
             x = x + item[2] + 8
         end
         footerHeight = 24
@@ -583,7 +603,7 @@ function M.BuildFirstLoadDashboardScene(ctx)
 
     local routeGridHeight = compact and ((cardHeight * 3) + (cardGap * 2)) or cardHeight
     local footerTop = routeTop - routeGridHeight - 18
-    local footerHeight = CreateFooterButtons(scene, T, contentWidth, sceneWidth, footerTop, compact)
+    local footerHeight = CreateFooterButtons(scene, T, contentWidth, footerTop, compact)
 
     local footnoteTop = footerTop - footerHeight - 14
     local footnoteText = installKind == "upgrade"

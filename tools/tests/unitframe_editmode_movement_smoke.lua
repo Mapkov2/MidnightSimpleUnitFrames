@@ -1,9 +1,21 @@
 -- Unit-frame drags preserve the visible cursor contract across anchor resolution,
--- runtime refresh, snapping and UI/frame scale changes. Real Forever load graph.
+-- runtime refresh, snapping and UI/frame scale changes. Real Mainline/Forever load graphs.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
-local world = World.New(root, "Forever")
+local world = World.New(root, arg[2] or "Forever")
 local env, core = world.env, world.core
+-- Native EditBoxes fire focus loss synchronously when ClearFocus is called.
+for _, name in ipairs({ "EnableKeyboard", "SetPropagateKeyboardInput", "SetNumeric", "SetTextInsets",
+    "SetMaxLetters", "SetCursorPosition", "HighlightText", "SetAutoFocus" }) do
+    world.widgets.Methods[name] = function() end
+end
+world.widgets.Methods.HasFocus = function(self) return self.focused == true end
+world.widgets.Methods.ClearFocus = function(self)
+    local focused = self.focused
+    self.focused = false
+    local callback = self:GetScript("OnEditFocusLost")
+    if focused and callback then callback(self) end
+end
 env.MAX_BOSS_FRAMES = 5
 env.TotemFrame = false
 env.UnitClass = function() return "Hunter", "HUNTER", 3 end
@@ -165,7 +177,36 @@ local rectless=env.CreateFrame("Frame","MovementRectlessAnchor",ui)
 for _,method in ipairs({"GetCenter","GetLeft","GetRight","GetTop","GetBottom"}) do
     rectless[method]=function() return nil,nil end
 end
+local replacement=env.CreateFrame("Frame","MovementReplacementAnchor",ui)
+replacement:SetSize(300,100)
+replacement:SetPoint("CENTER",ui,"CENTER",280,330)
+NativeGeometry(replacement)
 local cases={}
+for _,key in ipairs(UNIT_KEYS) do
+    cases[#cases+1]={name=key.." provider returns after release",key=key,movingAnchor=true,vanishAtRelease=true,returnAfterRelease=true}
+    for _,transition in ipairs({"recoverAtRelease","replaceAtRelease","moveAtRelease","loseAtRelease"}) do
+        local case={name=key.." held stop "..transition,key=key,stopHeld=true}
+        case[transition]=true
+        case.missingAnchor=transition=="recoverAtRelease"
+        case.movingAnchor=not case.missingAnchor
+        cases[#cases+1]=case
+    end
+end
+for _,key in ipairs(UNIT_KEYS) do
+    cases[#cases+1]={name=key.." missing anchor recovers at release",key=key,missingAnchor=true,recoverAtRelease=true}
+    cases[#cases+1]={name=key.." anchor replaced at release",key=key,movingAnchor=true,replaceAtRelease=true}
+    cases[#cases+1]={name=key.." anchor moves after last tick",key=key,movingAnchor=true,moveAtRelease=true}
+    cases[#cases+1]={name=key.." anchor loses rect after last tick",key=key,movingAnchor=true,loseAtRelease=true}
+end
+for _,key in ipairs(UNIT_KEYS) do
+    for _,transition in ipairs({"recoverAtRelease","replaceAtRelease","moveAtRelease","loseAtRelease"}) do
+        local case={name=key.." external shell "..transition,key=key,externalShell=true}
+        case[transition]=true
+        case.missingAnchor=transition=="recoverAtRelease"
+        case.movingAnchor=not case.missingAnchor
+        cases[#cases+1]=case
+    end
+end
 for index,key in ipairs(UNIT_KEYS) do
     cases[#cases+1]={name=key .. " preset snap/runtime refresh",key=key,snap=true,
         uiScale=index%2==0 and .8 or 1,frameScale=index%3==0 and 1.25 or (index%3==1 and .8 or 1)}
@@ -189,6 +230,14 @@ cases[#cases+1]={name="provider disappears mid-drag",key="pet",movingAnchor=true
 cases[#cases+1]={name="provider loses geometry mid-drag",key="pet",movingAnchor=true,losesGeometry=true}
 cases[#cases+1]={name="provider recovers geometry mid-drag",key="pet",movingAnchor=true,losesGeometry=true,recovers=true}
 cases[#cases+1]={name="held missing-anchor drag Stop(true)",key="pet",missingAnchor=true,stopHeld=true}
+for _,key in ipairs(UNIT_KEYS) do
+    cases[#cases+1]={name=key.." cooldown provider replaced at release",key=key,cooldown=true,replaceAtRelease=true}
+end
+cases[#cases+1]={name="scaled corner anchor replaced",key="player",movingAnchor=true,replaceAtRelease=true,
+    uiScale=.8,frameScale=1.25,point="BOTTOMRIGHT",relativePoint="TOPLEFT"}
+cases[#cases+1]={name="scaled rectless anchor at release",key="pet",movingAnchor=true,loseAtRelease=true,
+    uiScale=.8,frameScale=.8,point="RIGHT",relativePoint="BOTTOMLEFT"}
+cases[#cases+1]={name="compiled anchor points change at release",key="focus",movingAnchor=true,pointsAtRelease=true}
 for _,case in ipairs(cases) do
     local key=case.key
     NativeGeometry(external)
@@ -241,8 +290,14 @@ for _,case in ipairs(cases) do
     local mover=EM2.Movers.Get(key)
     cursorX,cursorY=Physical(mover)
     mouseDown=true
-    Check(mover:GetScript("OnMouseDown")(mover,"LeftButton")==true,case.name .. ": drag rejected")
-    mover:GetScript("OnDragStart")(mover,"LeftButton")
+    local externalDrag
+    if case.externalShell then
+        externalDrag=EM2.Ticker.BeginExternalDrag(mover,key,EM2.Registry.Get(key))
+        Check(externalDrag~=nil,case.name .. ": external drag rejected")
+    else
+        Check(mover:GetScript("OnMouseDown")(mover,"LeftButton")==true,case.name .. ": drag rejected")
+        mover:GetScript("OnDragStart")(mover,"LeftButton")
+    end
     local firstX,firstY=Physical(frame)
     local stack={}
     if key=="boss" then
@@ -274,7 +329,11 @@ for _,case in ipairs(cases) do
         end
         expectedX,expectedY=expectedX*ui:GetEffectiveScale(),expectedY*ui:GetEffectiveScale()
         local update=ticker:GetScript("OnUpdate")
-        if update then update(ticker,.016) end
+        if externalDrag then
+            mover:ClearAllPoints()
+            mover:SetPoint("CENTER",ui,"BOTTOMLEFT",expectedX/ui:GetEffectiveScale(),expectedY/ui:GetEffectiveScale())
+            Check(EM2.Ticker.ApplyExternalDrag(externalDrag),case.name .. ": external tick rejected")
+        elseif update then update(ticker,.016) end
         local actualX,actualY=Physical(frame)
         Check(Near(actualX,expectedX) and Near(actualY,expectedY),case.name .. ": tick "..step.." lost cursor placement")
         for _,token in ipairs(core.UF.UnitsForConfigKey(key)) do core.UF.Config.RefreshUnit(token) end
@@ -290,7 +349,28 @@ for _,case in ipairs(cases) do
         end
     end
     local lastX,lastY=Physical(frame)
+    if case.vanishAtRelease then env.MovementGlobalAnchor=false end
+    if case.recoverAtRelease then env.MovementGlobalAnchor=external end
+    if case.replaceAtRelease then
+        if case.cooldown then env.EssentialCooldownViewer=replacement else env.MovementGlobalAnchor=replacement end
+    end
+    if case.pointsAtRelease then conf.point,conf.relativePoint="TOPRIGHT","BOTTOMLEFT" end
+    if case.moveAtRelease then
+        external:ClearAllPoints()
+        external:SetPoint("CENTER",ui,"CENTER",330,330)
+    end
+    if case.loseAtRelease then
+        for _,method in ipairs({"GetCenter","GetLeft","GetRight","GetTop","GetBottom"}) do
+            external[method]=rectless[method]
+        end
+    end
     -- Release outside the mover: the driver owns the fallback mouse-up.
+    if externalDrag then
+        EM2.Ticker.EndExternalDrag(externalDrag,true)
+        for _,token in ipairs(core.UF.UnitsForConfigKey(key)) do core.UF.Config.RefreshUnit(token) end
+        core.UF.Factory.Apply(key)
+        EM2.Movers.SyncKey(key)
+    end
     if case.stopHeld then
         EM2.Ticker.Stop(true)
         for _,token in ipairs(core.UF.UnitsForConfigKey(key)) do core.UF.Config.RefreshUnit(token) end
@@ -310,6 +390,15 @@ for _,case in ipairs(cases) do
     core.UF.Factory.ForceReanchor(key)
     local replayX,replayY=Physical(frame)
     Check(Near(lastX,replayX) and Near(lastY,replayY),case.name .. ": later runtime apply lost the saved drag position")
+    if case.returnAfterRelease then
+        env.MovementGlobalAnchor=external
+        core.UF.Factory.ForceReanchor(key)
+        local returnedX,returnedY=Physical(frame)
+        Check(Near(lastX,returnedX) and Near(lastY,returnedY),case.name .. ": provider return reinterpreted saved offsets")
+    end
+    for _,token in ipairs(core.UF.UnitsForConfigKey(key)) do
+        Check(core.UF.frames[token]._msufDragActive~=true,case.name .. ": final apply left drag ownership active")
+    end
     if case.stopHeld then
         mover:GetScript("OnMouseUp")(mover,"LeftButton")
         EM2.Ticker.Start()
@@ -355,5 +444,96 @@ Check(moved==false,"stationary click committed a drag")
 world.widgets:RunTimers()
 local afterX,afterY=Physical(frame)
 Check(Near(afterX,stationaryX) and Near(afterY,stationaryY),"stationary click retained an unsolicited position change")
+-- A stationary external-shell click has no final position to persist.
+local stationaryDrag=assert(EM2.Ticker.BeginExternalDrag(mover,"pet",EM2.Registry.Get("pet")))
+Check(EM2.Ticker.EndExternalDrag(stationaryDrag,true)==false,"stationary external click committed a drag")
+Check(conf.offsetX==offsetX and conf.offsetY==offsetY,"stationary external click rewrote saved offsets")
+-- The event-derived combat edge precedes native lockdown. No close path may
+-- perform the new final SetPoint while that configuration guard is active.
+db.general.editModeSnapEnabled=false
+for _,method in ipairs({"mouse","stop","external"}) do
+    EM2.Movers.SyncKey("pet")
+    cursorX,cursorY=Physical(mover)
+    mouseDown=true
+    local drag
+    if method=="external" then
+        drag=assert(EM2.Ticker.BeginExternalDrag(mover,"pet",EM2.Registry.Get("pet")))
+        mover:ClearAllPoints()
+        mover:SetPoint("CENTER",ui,"BOTTOMLEFT",cursorX+40,cursorY+20)
+        Check(EM2.Ticker.ApplyExternalDrag(drag),"combat external preview refused")
+    else
+        Check(mover:GetScript("OnMouseDown")(mover,"LeftButton")==true,"combat drag refused")
+        cursorX,cursorY=cursorX+40,cursorY+20
+        ticker:GetScript("OnUpdate")(ticker,.016)
+    end
+    local savedX,savedY=conf.offsetX,conf.offsetY
+    local writes,oldSetPoint=0,frame.SetPoint
+    frame.SetPoint=function(self,...) writes=writes+1; return oldSetPoint(self,...) end
+    Check(Public("MSUF_IsConfigCombatLocked")("PLAYER_REGEN_DISABLED"),"combat edge not locked")
+    Check(not env.InCombatLockdown(),"combat edge fixture entered native lockdown too early")
+    if method=="stop" then EM2.Ticker.Stop(true)
+    elseif method=="external" then EM2.Ticker.EndExternalDrag(drag,true)
+    else mover:GetScript("OnMouseUp")(mover,"LeftButton") end
+    Check(writes==0,method..": combat completion wrote protected position")
+    Check(conf.offsetX==savedX and conf.offsetY==savedY,method..": combat completion changed saved offsets")
+    frame.SetPoint=oldSetPoint
+    Public("MSUF_IsConfigCombatLocked")("PLAYER_REGEN_ENABLED")
+    mover:GetScript("OnMouseUp")(mover,"LeftButton")
+    EM2.Ticker.Start()
+    world.widgets:RunTimers()
+end
+-- A pending numeric edit must settle before a new mouse gesture captures its
+-- position. Otherwise a later native blur overwrites the completed drag.
+db.general.editModeSnapEnabled=false
+for _, key in ipairs({ "player", "target", "focus", "pet", "pettarget", "targettarget", "focustarget", "boss" }) do
+    for _, axis in ipairs({ "xBox", "yBox" }) do
+        frame,conf=core.UF.frames[UnitToken(key)],db[key]
+        frame:SetScale(1)
+        conf.point,conf.relativePoint,conf.anchorToUnitframe="CENTER","CENTER","GLOBAL"
+        conf.anchorFrameName,conf.screenPositionMode=nil,nil
+        conf.offsetX,conf.offsetY=-200,-80
+        core.UF.Config.RefreshUnit(UnitToken(key))
+        core.UF.Factory.ForceReanchor(key)
+        EM2.Movers.SyncKey(key)
+        mover=EM2.Movers.Get(key)
+        EM2.UnitPopup.Open(key,mover)
+        local popup
+        for _, candidate in ipairs(world.widgets.frames) do
+            if candidate.frameName=="MSUF_EM2_UnitPopup" then popup=candidate end
+        end
+        local box=assert(popup and popup[axis])
+        EM2.Undo.Clear()
+        local initialX,initialY=conf.offsetX,conf.offsetY
+        box.focused=true
+        box:SetText(tostring(tonumber(box:GetText())+50))
+        cursorX,cursorY=Physical(mover)
+        mouseDown=true
+        Check(mover:GetScript("OnMouseDown")(mover,"LeftButton")==true,key.." "..axis..": focused drag rejected")
+        Check(not box:HasFocus(),key.." "..axis..": pending input survived drag start")
+        local typedX,typedY=conf.offsetX,conf.offsetY
+        local startX,startY=Physical(frame)
+        cursorX,cursorY=cursorX+100,cursorY+40
+        ticker:GetScript("OnUpdate")(ticker,.06)
+        world.widgets:RunTimers()
+        local dragX,dragY=Physical(frame)
+        Check(Near(dragX,startX+100) and Near(dragY,startY+40),key.." "..axis..": drag lost settled starting position")
+        mouseDown=false
+        mover:GetScript("OnMouseUp")(mover,"LeftButton")
+        mover:GetScript("OnDragStop")(mover,"LeftButton")
+        world.widgets:RunTimers()
+        local savedX,savedY=conf.offsetX,conf.offsetY
+        box:ClearFocus()
+        world.widgets:RunTimers()
+        core.UF.Factory.ForceReanchor(key)
+        local replayX,replayY=Physical(frame)
+        Check(Near(dragX,replayX) and Near(dragY,replayY),key.." "..axis..": native blur snapped back the drag")
+        Check(conf.offsetX==savedX and conf.offsetY==savedY,key.." "..axis..": native blur rewrote saved X/Y")
+        Check(EM2.Undo.DoUndo() and conf.offsetX==typedX and conf.offsetY==typedY,key.." "..axis..": Undo did not preserve typed edit")
+        Check(EM2.Undo.DoUndo() and conf.offsetX==initialX and conf.offsetY==initialY,key.." "..axis..": typed edit lacked its own Undo")
+        Check(EM2.Undo.DoRedo() and conf.offsetX==typedX and conf.offsetY==typedY,key.." "..axis..": typed edit Redo failed")
+        Check(EM2.Undo.DoRedo() and conf.offsetX==savedX and conf.offsetY==savedY,key.." "..axis..": drag Redo failed")
+        EM2.UnitPopup.Close()
+    end
+end
 assert(#failures==0,"unitframe_editmode_movement_smoke failed:\n"..table.concat(failures,"\n"))
 print("unitframe_editmode_movement_smoke: PASS ("..checks.." checks)")

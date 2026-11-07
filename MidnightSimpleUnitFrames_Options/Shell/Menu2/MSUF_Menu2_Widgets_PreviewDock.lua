@@ -355,14 +355,50 @@ local function ExpanderSetCompactToolbarVisible(self, visible)
     end
 end
 
-local function ExpanderRelayoutHeader(self)
+local function ExpanderRelayoutHeader(self, moving)
     local header = self.fixedHeaderRecord
     if header and header.active and not header.disposed
         and not header._activating and not header._deactivating
         and type(M.RelayoutPageHeaderHost) == "function"
     then
-        M.RelayoutPageHeaderHost()
+        M.RelayoutPageHeaderHost(moving)
     end
+end
+
+-- The renderer is already laid out at full size. Only the clipped section and
+-- the settings viewport move, so painting the scene stays off the motion tick.
+local function PaintExpanderMotion(driver)
+    local self = driver.expander
+    if not self.motionClipping then return end
+    local moving = driver:GetScript("OnUpdate") ~= nil
+    local section = self.section
+    if not moving then
+        section:SetClipsChildren(self.motionClipping == "clipped")
+        self.motionClipping = nil
+    end
+    if self.expanded and ExpanderOwnsBox(self) then
+        local height = driver.channels[1].value
+        section._msuf2FixedPreviewActiveHeight = height
+        section:SetHeight(height)
+        ExpanderRelayoutHeader(self, moving)
+    end
+end
+
+local function BeginExpanderMotion(self)
+    if not self.expanded or self.motionClipping or not ExpanderOwnsBox(self) or T.ReducedMotionEnabled()
+        or not self.section:IsVisible() or self.preferredExpandedSectionHeight <= self.compactSectionHeight then return end
+    local driver = self.motion
+    if not driver then
+        driver = W.CreateLayoutMotion(self.section, PaintExpanderMotion)
+        driver.expander, driver.channels[1] = self, {}
+        self.motion = driver
+    end
+    local channel = driver.channels[1]
+    channel.value, channel.target = self.compactSectionHeight, self.preferredExpandedSectionHeight
+    self.motionClipping = self.section:DoesClipChildren() and "clipped" or "open"
+    self.section:SetClipsChildren(true)
+    W.PlayLayoutMotion(driver)
+    PaintExpanderMotion(driver)
 end
 
 -- Height the expanded preview needs against the room the header host has left;
@@ -429,8 +465,9 @@ local function ExpanderRelayout(self, reason)
     if box.ApplyCompactPreviewPresentation then box:ApplyCompactPreviewPresentation(false) end
     box:Show()
     self.sectionWidth = tonumber(section.GetWidth and section:GetWidth()) or self.sectionWidth
-    section._msuf2FixedPreviewActiveHeight = activeSectionHeight
-    if section.SetHeight then section:SetHeight(activeSectionHeight) end
+    local height = self.motionClipping and self.motion.channels[1].value or activeSectionHeight
+    section._msuf2FixedPreviewActiveHeight = height
+    if section.SetHeight then section:SetHeight(height) end
     ExpanderRelayoutHeader(self)
     local activeWidth = tonumber(box.GetWidth and box:GetWidth()) or 0
     if self.activeHeight ~= activeBoxHeight or self.activeSectionHeight ~= activeSectionHeight
@@ -466,13 +503,12 @@ local function ExpanderOpen(self, reason, openOptions)
         self:Close("FIXED_PREVIEW_EXPAND_FAILED")
         return false
     end
-    if reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND" then
-        M.SetFixedPreviewExpandedPreference(true)
-    end
+    local userToggle = reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND"
+    if userToggle then M.SetFixedPreviewExpandedPreference(true) end
     if type(opts.onStateChanged) == "function" then opts.onStateChanged(true, box) end
-    if type(M.EnsureFixedPreviewExpansionRoom) == "function" then
-        M.EnsureFixedPreviewExpansionRoom(self)
-    end
+    local animate = userToggle or reason == "DEFERRED_EXPLICIT_EXPAND" or (openOptions and openOptions.animate)
+    local restored = M.EnsureFixedPreviewExpansionRoom and M.EnsureFixedPreviewExpansionRoom(self, animate)
+    if animate and not restored then BeginExpanderMotion(self) end
     return true
 end
 
@@ -487,6 +523,7 @@ local function ExpanderClose(self, reason)
         M.SetFixedPreviewExpandedPreference(false)
     end
     self.expanded = nil
+    if self.motionClipping then self.motion:Stop() end
     self.activeHeight = nil
     self.activeSectionHeight = nil
     self.activeWidth = nil
@@ -593,6 +630,7 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         CanFitPreferredExpansion = ExpanderCanFit,
         GetPreferredExpansionShortfall = ExpanderShortfall,
         Relayout = ExpanderRelayout,
+        AnimateExpansion = BeginExpanderMotion,
         Open = ExpanderOpen,
         Close = ExpanderClose,
         Toggle = ExpanderToggle,

@@ -757,6 +757,10 @@ function Text.UpdateInline(frame, event, unit)
   else
     name = ReadDisplayName(inlineUnit)
   end
+  if inline.nameFormat then
+    name = Text.FormatName(frame.totInlineText, name, inline.nameFormat,
+      inline.nameFormatMax, inline.nameFormatDots, inline.nameShortenSide)
+  end
   SetTextCached(frame.totInlineText, name)
   if AnchorInlineToName then
     AnchorInlineToName(frame)
@@ -780,6 +784,10 @@ function Text.PaintSampleInline(frame, name)
   end
   SetTextCached(frame.totInlineSep, inline.separator)
   frame._msufInlineStamp = inline.stamp
+  if inline.nameFormat then
+    name = Text.FormatName(frame.totInlineText, name, inline.nameFormat,
+      inline.nameFormatMax, inline.nameFormatDots, inline.nameShortenSide)
+  end
   SetTextCached(frame.totInlineText, name)
   if AnchorInlineToName then AnchorInlineToName(frame) end
   SetShownCached(frame.totInlineSep, true)
@@ -809,7 +817,8 @@ function Text.UpdateName(frame, event, unit)
       frame.nameText._msufShown = nil
       SetShownCached(frame.nameText, true)
       if rt and rt.nameLegacyTruncation == true then
-        previewName = TruncateName(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+        previewName = rt.nameFormatter(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots,
+            rt.nameShortenSide, frame, rt.nameFormat)
       end
       SetNameTextCached(frame, previewName)
       frame._msufNameTextUnit = unit
@@ -874,7 +883,8 @@ function Text.UpdateName(frame, event, unit)
         displayName = ReadDisplayName(unit)
       end
       if rt and rt.nameLegacyTruncation == true then
-        displayName = TruncateName(displayName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+        displayName = rt.nameFormatter(displayName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots,
+            rt.nameShortenSide, frame, rt.nameFormat)
       end
       SetNameTextCached(frame, displayName)
       frame._msufNameTextUnit = unit
@@ -904,7 +914,8 @@ function Text.PaintSampleName(frame, previewName)
   nameText._msufShown = nil
   SetShownCached(nameText, true)
   if rt and rt.nameLegacyTruncation == true then
-    previewName = TruncateName(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots, rt.nameShortenSide)
+    previewName = rt.nameFormatter(previewName, rt.nameLegacyShortenMax, rt.nameLegacyShortenDots,
+            rt.nameShortenSide, frame, rt.nameFormat)
   end
   SetNameTextCached(frame, previewName)
   ApplyNameTextColor(frame, nil)

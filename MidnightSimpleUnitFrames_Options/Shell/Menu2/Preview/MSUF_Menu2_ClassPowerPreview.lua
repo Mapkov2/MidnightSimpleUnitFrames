@@ -76,8 +76,7 @@ local PREVIEW_BORDER_COLOR = { 1.00, 0.02, 0.02, 1.00 }
 local CP_PREVIEW_ANIMATION_INTERVAL = 0.05
 local HAS_EXTRA_AURAS = MSUF.Client.IsRetail == true and MSUF.Client.IsForever ~= true
 local FALLBACK_FONT = "Fonts\\FRIZQT__.TTF"
--- Core-addon providers (all load before the options addon), resolved once. Only the class power
--- constants table is an optional collaborator.
+-- Core-addon providers (all load before the options addon), resolved once.
 local Core = {
     SetFontChecked = MSUF.Require("MSUF_SetFontChecked", "Menu2/ClassPowerPreview"),
     GetFontPath = MSUF.Require("MSUF_GetFontPath", "Menu2/ClassPowerPreview"),
@@ -86,7 +85,6 @@ local Core = {
     GetGlobalFontSettings = MSUF.Require("MSUF_GetGlobalFontSettings", "Menu2/ClassPowerPreview"),
     ResolveFontShadowMetrics = MSUF.Require("MSUF_ResolveFontShadowMetrics", "Menu2/ClassPowerPreview"),
     GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", "Menu2/ClassPowerPreview"),
-    CPConst = MSUF.Optional("MSUF_CP_CONST"),
 }
 local function TR(text)
     return (M.Tr and M.Tr(text)) or text
@@ -624,7 +622,7 @@ local function RenderSecondaryClassTimer(preview)
 end
 
 local function DetachedPowerShown(player)
-    return player.powerBarDetached == true and player.detachedPowerBarAnchorToClassPower == true
+    return player.powerBarDetached == true
 end
 local function PlayerPowerTextShown(player)
     player = player or {}
@@ -635,7 +633,7 @@ end
 -- Anchors the detached power bar under the class resource when it shows, else under the player stand-in.
 local function AnchorDetachedPower(preview, frame, player, classFrame, x, y)
     frame:ClearAllPoints()
-    if classFrame and classFrame.IsShown and classFrame:IsShown() then
+    if player.detachedPowerBarAnchorToClassPower == true and classFrame and classFrame:IsShown() then
         frame:SetPoint("TOP", classFrame, "BOTTOM", x, y)
     elseif tostring(player.detachedPowerBarAnchorMode or ""):upper() == "LEGACY_TOPLEFT" then
         frame:SetPoint("TOPLEFT", preview.playerRef, "BOTTOMLEFT", x, y)
@@ -648,7 +646,7 @@ end
 
 --- Detached power preview follows the same anchoring relationship as runtime:
 --- it can attach to ClassPower, but no live player power events are involved.
-local function EnsurePlayerRuntime(preview, bars, player, spec)
+local function EnsurePlayerRuntime(preview, bars, player, spec, classFrame)
     local surface = preview.playerRuntime
     if not surface then
         surface = Helpers.NewRuntimeUnitSurface(preview.playerRef, "player", {})
@@ -658,7 +656,7 @@ local function EnsurePlayerRuntime(preview, bars, player, spec)
         surface.layout = function(frame)
             local player = preview._runtimePlayer
             if frame.targetPowerBar and DetachedPowerShown(player) then
-                AnchorDetachedPower(preview, frame.targetPowerBar, player, preview.cpScene and preview.cpScene.CP.container,
+                AnchorDetachedPower(preview, frame.targetPowerBar, player, preview._runtimeClassFrame,
                     tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4)
             end
         end
@@ -667,7 +665,8 @@ local function EnsurePlayerRuntime(preview, bars, player, spec)
             config.width, config.height = preview.playerW, preview.playerH
             local power = config.power
             local bars, player = preview._runtimeBars, preview._runtimePlayer
-            local class = preview.cpScene and preview.cpScene.CP.container
+            if preview._resourceExtraExample then power.enabled, power.detached = true, true end
+            local class = preview._runtimeClassFrame
             power.detachedWidthExplicit = CPPreview.ResolveDetachedPowerWidth({
                 frameWidth = preview.playerW, syncClass = player.detachedPowerBarSyncClassPower ~= false,
                 classWidth = class and class:GetWidth(), classFallbackWidth = power.detachedClassWidth,
@@ -678,22 +677,21 @@ local function EnsurePlayerRuntime(preview, bars, player, spec)
             if not Wanted(preview, "border") then power.detachedOutline, power.borderThickness = 0, 0 end
         end
     end
-    preview._runtimeBars, preview._runtimePlayer = bars, player
+    preview._runtimeBars, preview._runtimePlayer, preview._runtimeClassFrame = bars, player, classFrame
     local sample = surface.sample
     sample.class = preview._resourceExtraExample == "pain" and "WARRIOR"
         or (preview._resourceExtraExample == "arcane" or player._msufResourceExtraMana) and "MAGE" or PreviewClassToken(spec)
-    sample.hp, sample.power, sample.powerType, sample.powerToken = .74, .72, CPPreview.PrimaryPower(spec, sample.class), nil
-    local cp = preview.cpScene and preview.cpScene.CP
-    if PlayerManaSourceActive(player, sample.class) or (cp and cp.visible and spec and spec.mode == "continuous"
-        and (spec.token == "INSANITY" or spec.token == "MAELSTROM")) then sample.powerType = 0 end
-    sample.powerToken = player._msufResourceExtraPower
-    if not sample.powerToken then sample.powerToken = Core.CPConst.POWER_TYPE_TOKENS[sample.powerType] end
-    for key, token in pairs(Core.CPConst.POWER_TYPE_TOKENS) do if token == sample.powerToken then sample.powerType = key break end end
+    sample.hp, sample.power = .74, .72
+    sample.powerType = CPPreview.PrimaryPower(spec, sample.class)
+    local classOwnsPower = bars.showClassPower ~= false and spec and spec.mode == "continuous"
+        and ((spec.token == "INSANITY" and bars.showShadowMana) or (spec.token == "MAELSTROM" and bars.showEleMaelstrom))
+    if PlayerManaSourceActive(player, sample.class) or classOwnsPower then sample.powerType = 0 end
+    sample.powerToken = CPPreview.PrimaryPowerToken(sample.powerType)
     surface.layerVisible.power = DetachedPowerShown(player)
     local frame = surface:Refresh(sample)
     if not frame then return nil end
     if not preview.auxiliary then preview.auxiliary = MSUF.CPBuilders.NewAuxiliarySurface(frame) end
-    local cp = preview.cpScene and preview.cpScene.CP
+    local cp = classFrame and preview.cpScene.CP
     local count = preview.cpSample and preview.cpSample.count or 0
     local maximum = preview.cpSample and preview.cpSample.maximum or 1
     preview.auxiliary:Configure(frame, cp, bars, player, sample.class, spec and spec.specIndex or 1,
@@ -701,9 +699,9 @@ local function EnsurePlayerRuntime(preview, bars, player, spec)
     return frame
 end
 local function RenderDetachedPower(preview, bars, player, classFrame, spec)
-    local owner = EnsurePlayerRuntime(preview, bars, player, spec)
+    local owner = EnsurePlayerRuntime(preview, bars, player, spec, classFrame)
     local frame = owner and owner.targetPowerBar
-    if not frame or not DetachedPowerShown(player) then
+    if not frame or not DetachedPowerShown(player) or not owner.MSUFSpec.power.enabled then
         preview._sampleEbonEnabled = false
         if preview.auxiliary then preview.auxiliary:PaintEbon(false) end
         if frame then frame:Hide() end
@@ -790,13 +788,16 @@ local function CreatePlayerReference(preview)
     preview.playerRef = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview)))
     preview.playerRef:EnableMouse(false)
 end
-function Preview.RenderAlternativeMana(preview, bars)
-    if not preview.auxiliary then return end
-    local frame = preview.auxiliary:PaintMana(AnimatedMeterFraction(preview, .68, .36, .15, .96))
+function Preview.RenderAlternativeMana(preview)
+    local auxiliary = preview.auxiliary
+    local frame = auxiliary and auxiliary:PaintMana(AnimatedMeterFraction(preview, .68, .36, .15, .96))
     preview.altMana = frame
-    if not frame then return end
+    if not frame then
+        PlaceHandle(preview.handleMana)
+        return false
+    end
     if not preview.handleMana then preview.handleMana = MakeHandle(preview, HANDLE_DEFS.mana) end
-    PlaceHandle(preview.handleMana, frame, 5)
+    return PlaceHandle(preview.handleMana, frame, 5)
 end
 
 local function EnsureBound(preview, key, label, color)
@@ -1281,7 +1282,7 @@ function Box.Refresh(box)
         box.noResource:Show()
     end
     local powerFrame = RenderDetachedPower(box, bars, player, classFrame, spec)
-    Preview.RenderAlternativeMana(box, bars)
+    local manaAvailable = Preview.RenderAlternativeMana(box)
     local hpFrame = RenderPlayerHP(box, bars, player, classFrame, powerFrame, spec, ebonFrame)
     RenderExtraSamples(box, bars, player, spec, classFrame, powerFrame)
     box._msufCPPreviewAnim = {
@@ -1298,7 +1299,7 @@ function Box.Refresh(box)
     box.layerAvailable = {
         guides = true,
         border = true,
-        mana = bars.showAltMana == true,
+        mana = manaAvailable,
         class = classFrame ~= nil,
         classText = classFrame ~= nil and (bars.classPowerShowText == true
             or (spec and spec.secondaryTimer and spec.secondaryTimer.nativeDurationText == true)),

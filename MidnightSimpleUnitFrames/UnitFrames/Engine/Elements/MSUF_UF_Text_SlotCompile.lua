@@ -349,6 +349,9 @@ local function CompileTextRuntime(frame, spec, text)
     frame._msufTextRuntime = rt
   end
   text = text or {}
+  rt.nameFormat = text.nameFormat and Text.ResolveNameFormat(text.nameFormat) or nil
+  rt.nameFormatMax = rt.nameFormat and text.nameShortenMax or nil
+  rt.nameFormatter = rt.nameFormat and Text.NameFormatter or Text.TruncateName
   rt.showName = spec and spec.showName ~= false and frame.nameText ~= nil or false
   rt.hideNameOnDeadOffline = text.hideNameOnDeadOffline == true
   local configuredNameShortenMax = text.nameShorten == true and (tonumber(text.nameShortenMax) or 6) or 0
@@ -363,8 +366,8 @@ local function CompileTextRuntime(frame, spec, text)
   local nameAnchor = text.nameAnchor or "LEFT"
   rt.nameShortenDots = text.nameShortenDots ~= false
     and (nameAnchor == "LEFT" or nameAnchor == "TOPLEFT" or nameAnchor == "FRAMELEFT")
-  rt.nameLegacyTruncation = text.nameLegacyTruncation == true
-  rt.nameLegacyShortenMax = rt.nameLegacyTruncation and configuredNameShortenMax or 0
+  rt.nameLegacyTruncation = text.nameLegacyTruncation == true or rt.nameFormat ~= nil
+  rt.nameLegacyShortenMax = rt.nameFormatMax or (rt.nameLegacyTruncation and configuredNameShortenMax or 0)
   rt.nameLegacyShortenDots = text.nameShortenDots ~= false
   rt.nameShortenStamp = rt.nameShortenMax > 0 and (rt.nameShortenMax .. ":" .. rt.nameShortenSide .. ":" .. (rt.nameShortenDots and "1" or "0")) or false
   local inline = text.inlineToT
@@ -374,6 +377,9 @@ local function CompileTextRuntime(frame, spec, text)
       inlineRt = {}
       rt.inlineToT = inlineRt
     end
+    inlineRt.nameFormat = inline.nameFormat and Text.ResolveNameFormat(inline.nameFormat) or nil
+    inlineRt.nameFormatMax = inlineRt.nameFormat and inline.nameShortenMax or nil
+    inlineRt.nameFormatDots = inlineRt.nameFormat and inline.nameShortenDots ~= false
     inlineRt.unit = inline.unit or "targettarget"
     inlineRt.separator = inline.separator or " | "
     inlineRt.colorMode = inline.colorMode or "AUTO"

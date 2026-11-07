@@ -36,13 +36,16 @@ local function API()
     return api
 end
 
+local function OptionalFunction(value)
+    if type(value) == "function" then return value end
+    return nil
+end
+
 -- The function at suite[owner][name] of an older Suite, else nil.
 local function LegacyFunction(owner, name)
     local suite = Suite()
     local holder = suite and suite[owner]
-    local fn = type(holder) == "table" and holder[name] or nil
-    if type(fn) == "function" then return fn end
-    return nil
+    return OptionalFunction(type(holder) == "table" and holder[name])
 end
 
 ------------------------------------------------------------------ dashboard
@@ -131,14 +134,16 @@ function Link.NotifyProfileChanged(name, reason)
     if suite and type(suite.OnMSUFProfileChanged) == "function" then suite.OnMSUFProfileChanged(name, reason) end
 end
 
-function Link.ApplyFonts()
+function Link.HasNameplateFonts()
     local current = API()
-    if current then
-        current.ApplyFontsFromMSUF()
-        return
-    end
-    local apply = rawget(_G, "MSUFSuite_ApplyFontsFromMSUF")
-    if type(apply) == "function" then apply() end
+    local hasFonts = OptionalFunction(current and current.HasNameplateFonts)
+    return hasFonts ~= nil and hasFonts() == true
+end
+function Link.ApplyFonts(force)
+    local current = API()
+    local apply = OptionalFunction(current and current.ApplyFontsFromMSUF)
+        or OptionalFunction(rawget(_G, "MSUFSuite_ApplyFontsFromMSUF"))
+    if apply then apply(force) end
 end
 
 ------------------------------------------------------------------ cooldown anchor

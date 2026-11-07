@@ -95,6 +95,20 @@ local function Run()
     Bench("menu-reopen", function() assert(mw.M.Open("home") ~= false) h:RunDeferred() end)
     captures = 0
     Bench("entry", function() assert(c.PublicGlobals.MSUF_SetMSUFEditModeDirect(true, "player")) end)
+    local function NamedFrame(name)
+        for _, frame in ipairs(mw.world.widgets.frames) do
+            if frame:GetName() == name then return frame end
+        end
+        error("missing Edit Mode frame " .. name)
+    end
+    local hud = NamedFrame("MSUF_EM2_HUD")
+    local grid = NamedFrame("MSUF_EM2_Grid")
+    assert(hud:GetAlpha() == 0 and em.HUDDock.introArmed and not em.HUDDock.introPlaying,
+        "toolbar was visible before its deferred entry motion")
+    em.HUD.Show()
+    assert(hud:GetAlpha() == 0, "reentrant HUD show flashed before its entry motion")
+    assert(grid._msufEditEntryFade and grid._msufEditEntryFade:IsPlaying(),
+        "Edit Mode grid must fade in on entry")
     Bench("entry-deferred", function()
         local peak, previous, callbackPeak, callbackPrevious, callbackSource = 0, natives, 0, natives, ""
         h:RunDeferred(1000, function()
@@ -112,6 +126,14 @@ local function Run()
         print("A2 entry-deferred peak-native-turn=" .. peak)
         print("A2 entry-deferred peak-native-callback=" .. callbackPeak .. " " .. callbackSource)
     end)
+    local moverParent = NamedFrame("MSUF_EM2_MoverParent")
+    local intro = em.HUDDock.introGroup
+    assert(hud:GetAlpha() == 1 and intro.reverse and intro:IsPlaying(),
+        "toolbar did not start the eased motion from its final anchor")
+    em.HUD.Show()
+    assert(intro:IsPlaying(), "reentrant HUD layout cut off the running entrance")
+    assert(moverParent._msufEditEntryFade and moverParent._msufEditEntryFade:IsPlaying(),
+        "Edit Mode movers must fade in with their native entry")
     print("A2 entry history captures=" .. captures)
     -- Changed registrations synchronize at their return boundary. Batching listeners
     -- would absorb callback-tail writes and change the following undo/checkpoint.
@@ -123,6 +145,9 @@ local function Run()
     assert(H.Redo() and mw.env.MSUF_DB.player.offsetX == before + 10)
     assert(H.ResetHistorySession() and mw.env.MSUF_DB.player.offsetX == before)
     Bench("exit", function() em.State.Exit() end)
+    assert(not intro:IsPlaying() and not grid._msufEditEntryFade:IsPlaying()
+        and not moverParent._msufEditEntryFade:IsPlaying(),
+        "Edit Mode exit leaked entry fades")
     Bench("exit-deferred", function()
         local peak, previous, callbackPeak, callbackPrevious, callbackSource = 0, natives, 0, natives, ""
         h:RunDeferred(1000, function()

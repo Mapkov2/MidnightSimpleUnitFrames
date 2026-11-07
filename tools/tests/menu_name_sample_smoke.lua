@@ -14,6 +14,7 @@ local mw = MenuWorld.Open(root, flavor, { beforeOptions = function(world)
     end
 end })
 local M, core = mw.M, mw.core
+local expectedName = flavor == "Forever" and "Alexandriana Brightwhisper" or "Alexandriana"
 local paints = {}
 local paint = core.UFText.PaintSampleName
 core.UFText.PaintSampleName = function(frame, value)
@@ -30,22 +31,22 @@ M.Refresh()
 assert(#paints > 0, "name example bypassed runtime text state (red baseline)")
 local sample
 for _, call in ipairs(paints) do
-    if call.value == "Mapko" then sample = call.frame end
+    if call.value == expectedName then sample = call.frame end
 end
 assert(sample and sample._msufTextRuntime, "page name has no runtime text state")
 local conf = M.EnsureDB().player
 local statuses = core.UFStatusRuntime
-for _, case in ipairs({ { "PAREN", "Mapko (2)" }, { "BRACKET", "Mapko [2]" }, { "NONE", "Mapko 2" }, { "other", "Mapko (2)" } }) do
+for _, case in ipairs({ { "PAREN", expectedName .. " (2)" }, { "BRACKET", expectedName .. " [2]" }, { "NONE", expectedName .. " 2" }, { "other", expectedName .. " (2)" } }) do
     conf.showRaidGroupInName, conf.raidGroupNameStyle = true, case[1]
     M.Refresh()
     assert(sample.nameText:GetText() == case[2], "name/group sample changed for " .. case[1])
-    assert(sample.nameText:GetText() == "Mapko " .. statuses.RaidGroupText(case[1], 2), "group sample bypassed runtime formatting")
+    assert(sample.nameText:GetText() == expectedName .. " " .. statuses.RaidGroupText(case[1], 2), "group sample bypassed runtime formatting")
 end
 conf.showRaidGroupInName = false
 M.Refresh()
-assert(sample.nameText:GetText() == "Mapko", "disabled group suffix survived refresh")
+assert(sample.nameText:GetText() == expectedName, "disabled group suffix survived refresh")
 assert(mw:Select("uf_target"))
 assert(mw:Select("uf_player"))
 M.Refresh()
-assert(sample.nameText:GetText() == "Mapko", "cached page retained stale name sample")
+assert(sample.nameText:GetText() == expectedName, "cached page retained stale name sample")
 print("PASS runtime name sample, group styles, refresh and page re-entry " .. flavor)

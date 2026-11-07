@@ -35,9 +35,9 @@
 --   M.SetSectionEnsureVisible(entry, fn|nil) / M.GetSectionEnsureVisible(entry)
 --   M.SetSectionRefreshState(entry, fn|nil) / M.GetSectionRefreshState(entry)
 --   M.SetMissingSectionResolver(entry, fn|nil) / M.GetMissingSectionResolver(entry)
---   M.ReserveSectionActions(entry, button, width)   a header "..." button
+--   M.ReserveSectionActions(entry, button, width[, revealOnInteraction])
 --   M.RefreshSectionLayout(entry)                   re-runs the header layout
---   M.SetSectionPopupGetter(button, fn)             the "..." popup, once built
+--   M.SetSectionPopupGetter(button, fn[, popup])    pass popup when first built
 --
 --   Navigation:
 --   M.AddNavIcon(pageKey, { icon = cell, hdIcon = cell|nil, accent = bool })
@@ -46,7 +46,7 @@
 --       (home) or the neutral (gameplay) icon color. A key that already has an
 --       icon or a color keeps it.
 --
--- Every function is cold menu code: one field access, nothing allocated.
+-- Widget accessors run on cold menu paths.
 local _, MSUF = ...
 local M = MSUF.MSUF2
 local T = M.Theme
@@ -121,12 +121,13 @@ M.GetMissingSectionResolver = Getter("_msuf2ResolveMissingSection")
 -- The header layout (RefreshCollapsibleHeaderLayout) keeps width px right of
 -- the feature switch for the button. A header without a summary row places
 -- the switch by the color swatch reserve alone, so the button joins that.
-function M.ReserveSectionActions(entry, button, width)
+function M.ReserveSectionActions(entry, button, width, revealOnInteraction)
     entry._msuf2SectionActions = button
     entry._msuf2ActionReserve = width
     if not entry._msuf2UXSummary then
         entry._msuf2ColorSwatchReserve = (entry._msuf2ColorSwatchReserve or 0) + width
     end
+    if revealOnInteraction then M.Widgets.AttachSectionActionVisibility(entry, button) end
 end
 
 function M.RefreshSectionLayout(entry)
@@ -134,7 +135,15 @@ function M.RefreshSectionLayout(entry)
     if refresh then refresh() end
 end
 
-M.SetSectionPopupGetter = Setter("_msuf2GetSectionPopup")
+function M.SetSectionPopupGetter(button, getPopup, popup)
+    button._msuf2GetSectionPopup = getPopup
+    local refresh = button._msuf2RefreshSectionAction
+    if popup and refresh then
+        popup:HookScript("OnShow", refresh)
+        popup:HookScript("OnHide", refresh)
+        refresh()
+    end
+end
 
 ------------------------------------------------------------------ navigation
 function M.AddNavIcon(pageKey, spec)

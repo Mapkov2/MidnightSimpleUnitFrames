@@ -150,6 +150,11 @@ local function BuildMenuBasicsPage(ctx, T, W)
         { value = "all", text = "Everything", icon = "home" },
     })
     InfoCard(b, T, "Quick Setup stays focused", "It shows only the essential choices. The Complete Tour keeps every advanced checkpoint available.", "home", 82)
+    local footer = b:Section("", 48)
+    local skip = T.Button(footer, "Skip Guided Setup", 168, 26)
+    skip:SetPoint("LEFT", footer, "LEFT", 16, 0)
+    T.CenterButtonLabel(skip)
+    skip:SetScript("OnClick", M.ConfirmSkipActiveGuidedTour)
     return math.abs(b.y) + 34
 end
 

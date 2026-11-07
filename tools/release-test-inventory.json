@@ -2,6 +2,72 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/classpower_auxiliary_preview_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/dashboard_setup_resize_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_background_opacity_warning_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/unit_name_format_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_group_color_independence_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/blizzard_preset_texture_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
       "test": "tools/tests/unitframe_drag_offsets_budget_smoke.lua",
       "phase": "runtime",
       "arguments": [
@@ -27,6 +93,24 @@
       "phase": "runtime",
       "arguments": [
         "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/forever_profile_identity_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_appearance_presets_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
       ]
     },
     {
@@ -435,7 +519,13 @@
     {
       "test": "tools/tests/search_busy_indicator_smoke.lua",
       "phase": "menu",
-      "clients": ["Mainline", "Vanilla", "TBC", "Mists", "Forever"]
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/search_entrypoint_slices.lua",
@@ -2677,6 +2767,17 @@
     {
       "test": "tools/tests/profile_literal_smoke.lua",
       "phase": "profiles"
+    },
+    {
+      "test": "tools/tests/menu_global_color_mode_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     }
   ],
   "excluded": {

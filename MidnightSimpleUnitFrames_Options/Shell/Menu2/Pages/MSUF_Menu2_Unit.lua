@@ -393,7 +393,7 @@ local COPY_TEXT_FIELDS = WL [[
     fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset
     useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameClassColor npcNameRed nameNpcClassColor
     colorPowerTextByType colorHealthTextByHealth
-    nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis
+    nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis nameFormat
     shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
     hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize
     powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize

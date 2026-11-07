@@ -41,12 +41,14 @@ local FontTextColorModeSetFor, NormalizeFontKey, FontValues, FontKeyGet = GP.Fon
 local FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts = GP.FontKeySet, GP.SetControlEnabled, GP.SetControlsEnabled, GP.ApplyFonts
 local ControlMeta = GP.ControlMeta
 local FONT_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["name_shortening.format"] = { "gf_party.nameFormat", "gf_raid.nameFormat", "gf_mythicraid.nameFormat" },
     ["name_shortening.enabled"] = { "gf_party.nameShortenEnabled", "gf_raid.nameShortenEnabled" },
     ["name_shortening.style"] = { "gf_party.nameClipSide", "gf_raid.nameClipSide" },
     ["name_shortening.max_length"] = { "gf_party.nameMaxChars", "gf_raid.nameMaxChars" },
     ["name_shortening.no_ellipsis"] = { "gf_party.nameNoEllipsis", "gf_raid.nameNoEllipsis" },
 }
 local FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH = {
+    ["name_shortening.format"] = { "nameFormat" },
     ["scope.override.enabled"] = { "override" },
     ["text_style.outline"] = { "outline" },
     ["text_style.rendering"] = { "fontMonochrome", "fontSlug" },
@@ -64,7 +66,11 @@ local FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH = {
     ["name_shortening.max_length"] = { "shortenNameMaxChars" },
     ["name_shortening.no_ellipsis"] = { "shortenNameNoEllipsis" },
 }
+local FONT_EXTRA_SCOPES = { "nameplates" }
 local FONT_STORAGE_FIELDS = {
+    ["name_shortening.format"] = { { "nameFormat", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots" },
+        "general", "fontOverride", { "nameFormat", "nameClipSide", "nameMaxChars", "nameNoEllipsis",
+            "nameShortenOverride", "_msufGFNameTruncationOverride" } },
     ["scope.override.enabled"] = { { "fontOverride" }, false, nil,
         { "fontOverride", "nameShortenEnabled", "nameClipSide", "nameNoEllipsis", "nameMaxChars",
             "nameShortenOverride", "_msufGFNameTruncationOverride" } },
@@ -76,12 +82,15 @@ local FONT_STORAGE_FIELDS = {
     ["colors.player_name"] = { { "nameColorMode", "nameClassColor" }, "general", "fontOverride", { "nameColorMode" } },
     ["name_shortening.enabled"] = { { "shortenNames" }, "", "fontOverride",
         { "nameShortenEnabled", "nameMaxChars", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
-    ["name_shortening.style"] = { { "shortenNameClipSide" }, "general", "fontOverride",
-        { "nameClipSide", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
-    ["name_shortening.max_length"] = { { "shortenNameMaxChars" }, "general", "fontOverride",
-        { "nameMaxChars", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
-    ["name_shortening.no_ellipsis"] = { { "shortenNameShowDots" }, "general", "fontOverride",
-        { "nameNoEllipsis", "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+    ["name_shortening.style"] = { { "nameFormat", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots" },
+        "general", "fontOverride", { "nameFormat", "nameClipSide", "nameMaxChars", "nameNoEllipsis",
+            "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+    ["name_shortening.max_length"] = { { "nameFormat", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots" },
+        "general", "fontOverride", { "nameFormat", "nameClipSide", "nameMaxChars", "nameNoEllipsis",
+            "nameShortenOverride", "_msufGFNameTruncationOverride" } },
+    ["name_shortening.no_ellipsis"] = { { "nameFormat", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots" },
+        "general", "fontOverride", { "nameFormat", "nameClipSide", "nameMaxChars", "nameNoEllipsis",
+            "nameShortenOverride", "_msufGFNameTruncationOverride" } },
 }
 local function Meta(path, classification, exact)
     local resolved = {}
@@ -106,10 +115,10 @@ local function Meta(path, classification, exact)
     end
     if (classification or "setting") == "setting" then
         local storage = FONT_STORAGE_FIELDS[path]
-        if storage then resolved.setting = Schema.ScopedFields(storage[1], storage[2], storage[3], storage[4])
-        elseif path == "font.family" then resolved.setting = Schema.ScopedFields({ "fontKey" }, "general")
+        if storage then resolved.setting = Schema.ScopedFields(storage[1], storage[2], storage[3], storage[4], FONT_EXTRA_SCOPES)
+        elseif path == "font.family" then resolved.setting = Schema.ScopedFields({ "fontKey" }, "general", nil, nil, FONT_EXTRA_SCOPES)
         elseif FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH[path] then
-            resolved.setting = Schema.ScopedFields(FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH[path], "general", "fontOverride")
+            resolved.setting = Schema.ScopedFields(FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH[path], "general", "fontOverride", nil, FONT_EXTRA_SCOPES)
         end
     end
     return ControlMeta("opt_fonts", "global", path, classification, resolved)
@@ -131,6 +140,7 @@ if MSUF.Client.HasCharacterSurnames == true then
             G().characterNameParts = (value == "FIRST" or value == "SURNAME") and value or nil
             local names = MSUF.CharacterNames
             if names and type(names.Refresh) == "function" then names.Refresh() end
+            MSUF.SuiteLink.ApplyFonts(true)
         end,
     }
 end
@@ -415,6 +425,21 @@ end
 local function GFNameUsesLocalScope()
     return IsGFScope(CurrentFontScope()) and ScopeHasOverride(CurrentFontScope(), "fontOverride")
 end
+local NAME_LENGTH_PRESETS = { VERYSHORT = 4, SHORT = 10, MEDIUM = 15,
+    ABBREV_VERYSHORT = 4, ABBREV_SHORT = 10, ABBREV_MEDIUM = 15 }
+local function NameFormatSelection(legacyEnabled)
+    local mode = FontScopeGet("nameFormat", "LEGACY")
+    if mode == "FULL" or mode == "CUT" or mode == "ABBREV" or mode == "ABBREV_CUT" then return mode end
+    if NAME_LENGTH_PRESETS[mode] then return mode:sub(1, 7) == "ABBREV_" and "ABBREV_CUT" or "CUT" end
+    return legacyEnabled and "CUT" or "FULL"
+end
+local function NameFormatHasLimit(legacyEnabled)
+    local mode = NameFormatSelection(legacyEnabled)
+    return mode == "CUT" or mode == "ABBREV_CUT"
+end
+local function NameFormatLimitReason()
+    return M.Tr("Select a name format with a length limit to change this setting.")
+end
 local function SeedGFNameShorteningFromShared()
     if not IsGFScope(CurrentFontScope()) then return end
     if GFNameScopeGet("nameShortenEnabled", nil) == nil then GFNameScopeSet("nameShortenEnabled", SharedNameShorteningEnabled()) end
@@ -452,7 +477,7 @@ end
 --- font scope. Split from BuildFonts, which hands in its row builder.
 local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
     local names = Schema.Section(b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-        288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
+        420 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
     names._msuf2CursorY = -40
     local shorten, side, chars, noEllipsis
     local function RefreshGFNameShorteningUI()
@@ -506,15 +531,16 @@ local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fon
     shorten, side, chars, noEllipsis = controls.shorten, controls.side, controls.chars, controls.noEllipsis
     local scopeNotice, gfNameShorteningControls = controls.scopeNotice, { side, chars, noEllipsis }
     if fontScopeReason and W.SetControlsDisabledReason then
-        local shortenReason = W.TurnOnReason("Shorten group names", function()
+        local function LimitReason()
+            local enabled = SharedNameShorteningEnabled()
             if GFNameUsesLocalScope() then
-                return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
+                enabled = GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0)
             end
-            return SharedNameShorteningEnabled()
-        end)
+            return not NameFormatHasLimit(enabled) and NameFormatLimitReason() or nil
+        end
         W.SetControlDisabledReason(shorten, fontScopeReason)
         W.SetControlsDisabledReason(gfNameShorteningControls, function(control)
-            return fontScopeReason(control) or shortenReason(control)
+            return fontScopeReason(control) or LimitReason()
         end)
     end
     local function RefreshGFNameShorteningControls()
@@ -526,7 +552,7 @@ local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fon
             enabled = SharedNameShorteningEnabled()
         end
         SetControlEnabled(shorten, canEdit)
-        SetControlsEnabled(gfNameShorteningControls, canEdit and enabled)
+        SetControlsEnabled(gfNameShorteningControls, canEdit and NameFormatHasLimit(enabled))
         if GFNameUsesLocalScope() then
             scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
         else
@@ -534,6 +560,7 @@ local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fon
                 "settings above only when group names need different truncation.")
         end
     end
+    controls.editor.RefreshControls = RefreshGFNameShorteningControls
     M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
 end
 
@@ -543,7 +570,7 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
         BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
     else
         local names = Schema.Section(b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-            294 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
+            426 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
         local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
         local function CanEditNameShortening()
             return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
@@ -555,8 +582,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
             local canEdit = CanEditNameShortening()
             local enabled = NameShorteningEnabled()
             SetControlEnabled(shorten, canEdit)
-            SetControlsEnabled(nameShorteningControls, canEdit and enabled)
-            SetControlEnabled(noEllipsis, canEdit)
+            SetControlsEnabled(nameShorteningControls, canEdit and NameFormatHasLimit(enabled))
+            SetControlEnabled(noEllipsis, canEdit and NameFormatHasLimit(enabled))
             if scopeNotice then
                 local current = CurrentFontScope()
                 if current == "shared" then
@@ -603,19 +630,26 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
             end)
         shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis,
             controls.scopeNotice
-        nameShorteningControls = { side, chars }
+        nameShorteningControls = { side, chars, noEllipsis }
         if fontScopeReason and W.SetControlsDisabledReason then
-            local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
+            local function LimitReason()
+                return not NameFormatHasLimit(NameShorteningEnabled()) and NameFormatLimitReason() or nil
+            end
             W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)
             W.SetControlsDisabledReason(nameShorteningControls, function(control)
-                return fontScopeReason(control) or shortenReason(control)
+                return fontScopeReason(control) or LimitReason()
             end)
         end
+        controls.editor.RefreshControls = RefreshNameShorteningControls
         M.TrackRefresh(ctx, RefreshNameShorteningControls)
     end
 end
 local function BuildFontsScope(ctx, b)
-    local scopeValues = GP.SCOPE_VALUES
+    local scopeValues = {}
+    for i, item in ipairs(GP.SCOPE_VALUES) do scopeValues[i] = item end
+    if MSUF.SuiteLink.HasNameplateFonts() then
+        scopeValues[#scopeValues + 1] = { value = "nameplates", text = "Nameplates" }
+    end
     local function ActiveFontOverrideLabels(filter)
         local active = {}
         for i = 1, #scopeValues do
@@ -826,37 +860,130 @@ local function BuildFontBaseline(ctx, text)
     }, ROW_OPTIONS)["text_style.baseline"]
 end
 
+-- Four methods share one length/side/ellipsis editor; old presets remain readable.
+local function NameFormatEditor(getEnabled, getSide, getChars, getNoEllipsis)
+    local editor = {}
+    function editor.GetMode() return NameFormatSelection(getEnabled()) end
+    function editor.GetMax()
+        local value = NAME_LENGTH_PRESETS[FontScopeGet("nameFormat", "LEGACY")] or tonumber(getChars()) or 6
+        return value > 0 and value or 6
+    end
+    function editor.GetSide()
+        return NAME_LENGTH_PRESETS[FontScopeGet("nameFormat", "LEGACY")] and "RIGHT" or getSide()
+    end
+    function editor.GetNoEllipsis()
+        if NAME_LENGTH_PRESETS[FontScopeGet("nameFormat", "LEGACY")] then return true end
+        return getNoEllipsis()
+    end
+    local function Write(key, value, groupKey)
+        if IsGFScope(CurrentFontScope()) then GFNameScopeSet(groupKey or key, value)
+        else ScopeWrite(CurrentFontScope(), "fontOverride", G(), key, value) end
+    end
+    local function Commit(mode, chars, side, noEllipsis)
+        if not CurrentFontScopeCanEdit() then return end
+        if mode == "CUT" or mode == "ABBREV_CUT" then
+            Write("shortenNameMaxChars", chars, "nameMaxChars")
+            Write("shortenNameClipSide", side, "nameClipSide")
+            if IsGFScope(CurrentFontScope()) then GFNameScopeSet("nameNoEllipsis", noEllipsis)
+            else Write("shortenNameShowDots", not noEllipsis) end
+        end
+        Write("nameFormat", mode)
+        ApplyNameShortening("MSUF2_NAME_FORMAT")
+        if editor.Refresh then editor.Refresh() end
+        if editor.RefreshControls then editor.RefreshControls() end
+    end
+    function editor.SetMode(mode) Commit(mode, editor.GetMax(), editor.GetSide(), editor.GetNoEllipsis()) end
+    function editor.SetMax(value) Commit(editor.GetMode(), value, editor.GetSide(), editor.GetNoEllipsis()) end
+    function editor.SetSide(value) Commit(editor.GetMode(), editor.GetMax(), value, editor.GetNoEllipsis()) end
+    function editor.SetNoEllipsis(value) Commit(editor.GetMode(), editor.GetMax(), editor.GetSide(), value) end
+    return editor
+end
+
+local function BuildNameFormatPreview(ctx, parent, editor)
+    local y = parent._msuf2CursorY or -100
+    local original = Schema.Custom(W.Text(parent, "Example name", 14, y, ctx.width - 56, T.colors.muted),
+        { id = "menu2.opt_fonts.name_shortening.source", kind = "preview", scope = ctx.key, applyDomain = "preview" })
+    Schema.Build(ctx, parent, {
+        { "text", "menu2.opt_fonts.name_shortening.resultLabel", nil, { "Shown as", 14, y - 26, 112, T.colors.muted } },
+    })
+    local value = Schema.Custom(W.Text(parent, "Name preview", 136, y - 26, ctx.width - 178, T.colors.text),
+        { id = "menu2.opt_fonts.name_shortening.preview", kind = "preview", scope = ctx.key, applyDomain = "preview" })
+    original:SetHeight(20)
+    value:SetHeight(28)
+    original:SetWordWrap(false)
+    value:SetWordWrap(false)
+    parent._msuf2CursorY = y - 76
+    parent._msufNameFormatPreview = { original = original, value = value }
+    editor.Refresh = function()
+        local name = M.UnitNameSample.Name()
+        original:SetText(string.format(M.Tr("Example name: %s"), name))
+        ApplyPreviewFont(value)
+        local mode = editor.GetMode()
+        local cap = (mode == "CUT" or mode == "ABBREV_CUT") and editor.GetMax() or 0
+        M.UnitNameSample.PaintFormat(value, name, mode, cap, not editor.GetNoEllipsis(), editor.GetSide())
+    end
+    M.TrackRefresh(ctx, editor.Refresh)
+    editor.Refresh()
+end
+
 local function FontNameControls(ctx, parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide,
     getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
-    local rows = {
+    local editor = NameFormatEditor(getEnabled, getSide, getChars, getNoEllipsis)
+    local format = Schema.Build(ctx, parent, {
+        { "dropdown", "name_shortening.format", nil, { "Name format", VT(
+            "FULL", "Full name", "CUT", "Shorten to length",
+            "ABBREV", "Abbreviate words", "ABBREV_CUT", "Abbreviate and shorten"), 430 },
+            get = editor.GetMode, set = editor.SetMode,
+            customSetReason = "Updates the name format and its length, clipping and ellipsis settings together.",
+            meta = Meta("name_shortening.format"), domain = "global" },
+    }, ROW_OPTIONS)["name_shortening.format"]
+    BuildNameFormatPreview(ctx, parent, editor)
+    local beforeLegacy = parent._msuf2CursorY
+    local legacy = Schema.Build(ctx, parent, {
         { "flowToggle", "name_shortening.enabled", nil, { label },
             get = getEnabled, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
                 set = setEnabled, meta = Meta("name_shortening.enabled"), domain = "global" },
+    }, ROW_OPTIONS)["name_shortening.enabled"]
+    W.SetControlShown(legacy, false)
+    parent._msuf2CursorY = beforeLegacy
+    local rows = {
         { "segment", "name_shortening.style", nil,
             { "Truncation style", VT("LEFT", "Keep end (last letters)", "RIGHT", "Keep start (first letters)"), 430 },
-            get = getSide, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.", set = setSide,
+            get = editor.GetSide, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.", set = editor.SetSide,
                 meta = Meta("name_shortening.style"), domain = "global" },
         { "slider", "name_shortening.max_length", minChars or 4, { "Max name length", minChars or 4, 30, 1, 300 },
-            get = getChars, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.", set = setChars,
+            get = editor.GetMax, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.", set = editor.SetMax,
             meta = Meta("name_shortening.max_length", "setting", { step = 1, roundStep = true }), domain = "global",
             beforeBind = function(widget)
                 if formatChars then widget:SetValueFormatter(formatChars) end
             end },
         { "flowToggle", "name_shortening.no_ellipsis", nil, { "No Ellipsis (truncate without ..)" },
-            get = getNoEllipsis, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
-                set = setNoEllipsis, meta = Meta("name_shortening.no_ellipsis"), domain = "global" },
+            get = editor.GetNoEllipsis, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
+                set = editor.SetNoEllipsis, meta = Meta("name_shortening.no_ellipsis"), domain = "global" },
     }
     if CharacterNameParts then
         rows[#rows + 1] = { "segment", "name_shortening.character_name_parts", nil,
             { "Character names (all frames)", CharacterNameParts.values, 430 },
             get = CharacterNameParts.Get, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
-                set = CharacterNameParts.Set,
+                set = function(value)
+                    CharacterNameParts.Set(value)
+                    editor.Refresh()
+                end,
             meta = Meta("name_shortening.character_name_parts"), domain = "global" }
     end
     local built = Schema.Build(ctx, parent, rows, ROW_OPTIONS)
-    local controls = { shorten = built["name_shortening.enabled"], side = built["name_shortening.style"],
+    local controls = { editor = editor, shorten = legacy, side = built["name_shortening.style"],
         chars = built["name_shortening.max_length"], noEllipsis = built["name_shortening.no_ellipsis"],
         nameParts = built["name_shortening.character_name_parts"] }
+    if W.SetControlDisabledReason and W.TurnOnReason then
+        W.SetControlDisabledReason(format, W.TurnOnReason("Use custom settings for this scope", CurrentFontScopeCanEdit))
+    end
+    M.TrackRefresh(ctx, function() SetControlEnabled(format, CurrentFontScopeCanEdit()) end)
+    if M.AddControlTooltip then
+        M.AddControlTooltip(format, "Name format",
+            "Choose a method, then use Max name length for limited names. Abbreviated words keep the last word. The preview follows every change.",
+            { hook = true })
+    end
     local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
     controls.scopeNotice = Schema.Build(ctx, parent, {
         { "text", "menu2.opt_fonts.name_shortening.scopeNotice", nil, { "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted } },
@@ -946,8 +1073,11 @@ local function BuildFonts(ctx)
     local colors = Schema.Section(b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true), ctx.key)
     local nameColor = BindFontColorModeDropdown(colors, "Player Name Color", NameColorValues, "name", "colors.player_name")
     local npcColor = BindFontColorModeDropdown(colors, "NPC / Boss Name Color", NPCColorValues, "npc", "colors.npc_name")
-    local healthColor = BindFontColorModeDropdown(colors, "HP Text Color", HealthColorValues, "hp", "colors.colorHealthTextByHealth")
-    local powerColor = BindFontColorModeDropdown(colors, "Power Text Color", PowerColorValues, "power", "colors.colorPowerTextByType")
+    local healthColor, powerColor
+    if CurrentFontScope() ~= "nameplates" then
+        healthColor = BindFontColorModeDropdown(colors, "HP Text Color", HealthColorValues, "hp", "colors.colorHealthTextByHealth")
+        powerColor = BindFontColorModeDropdown(colors, "Power Text Color", PowerColorValues, "power", "colors.colorPowerTextByType")
+    end
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(colors, { "font.default.current" }, {
             title = "Default Font Color",
@@ -956,7 +1086,9 @@ local function BuildFonts(ctx)
             context = function() return { scope = CurrentFontScope() } end,
         })
     end
-    local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
+    local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor }
+    if healthColor then scopedFontControls[#scopedFontControls + 1] = healthColor end
+    if powerColor then scopedFontControls[#scopedFontControls + 1] = powerColor end
     if M.AddControlTooltip then
         local tip = { hook = true }
         M.AddControlTooltip(outline, "Outline",
@@ -971,8 +1103,9 @@ local function BuildFonts(ctx)
         M.AddControlTooltip(npcColor, "NPC / Boss Name Color",
             "Colors names of non-player units. NPC / Reaction uses hostile, neutral and " ..
                 "friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
-        M.AddControlTooltip(healthColor, "HP Text Color",
+        if healthColor then M.AddControlTooltip(healthColor, "HP Text Color",
             "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
+        end
     end
     -- Hover reasons: a scope without its own settings locks this page; the
     -- shadow sliders also wait for Text shadow (Slug is explained on hover).

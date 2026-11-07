@@ -22,6 +22,36 @@ local Util = EM2.Util
 if type(Util) ~= "table" then Util = {} end
 EM2.Util = Util
 
+Util.ENTRY_MOTION_DURATION = 0.18
+
+function Util.EntryMotionEnabled()
+    local db = MSUF_DB
+    local general = db and db.general
+    if general and (general.reduceMotion == true or general.reducedMotion == true) then return false end
+    local skin = MSUF.MenuSkin
+    return not skin or not skin.MotionReduced()
+end
+
+function Util.PlayEntryFade(frame)
+    if not Util.EntryMotionEnabled() then return end
+    local group = frame._msufEditEntryFade
+    if not group then
+        group = frame:CreateAnimationGroup()
+        local fade = group:CreateAnimation("Alpha")
+        fade:SetDuration(Util.ENTRY_MOTION_DURATION)
+        fade:SetSmoothing("OUT")
+        fade:SetFromAlpha(0)
+        fade:SetToAlpha(1)
+        frame._msufEditEntryFade = group
+    end
+    group:Play()
+end
+
+function Util.StopEntryFade(frame)
+    local group = frame._msufEditEntryFade
+    if group then group:Stop() end
+end
+
 --- Edit Mode 2 version tag.
 EM2.VERSION = "2.0.0"
 

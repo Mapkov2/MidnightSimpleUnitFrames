@@ -227,23 +227,16 @@ local function AccordionHead(parent, top, open, title)
 end
 -- Release notes are long-form prose, so they run on the shared type roles (body/card/
 -- section) with real line spacing instead of the smallest Blizzard template. Roles keep
--- the sizes identical at every UI and menu scale. Returns the final vertical offset.
+-- the sizes identical at every UI and menu scale. The retained rows rewrap on resize.
 local function FillChangelog(child, scrollW, entries)
-    local y = 0
+    local rows = {}
     local bodyColor = { T.colors.text[1], T.colors.text[2], T.colors.text[3], 0.94 }
     local function AddText(text, fontObject, color, indent, gap, translate, role)
         local rawText = tostring(text or "")
         if translate then rawText = M.Tr(rawText) end
         local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0, role or "body")
         indent = indent or 0
-        fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
-        WrapLeft(fs, max(40, scrollW - indent - 4))
-        fs:SetText(rawText)
-        -- GetStringHeight is the wrapped height; keep GetHeight in the mix so the added line
-        -- spacing can never be measured away and let a long bullet collide with the next one.
-        local h = StringHeight(fs)
-        if h < 12 then h = 14 end
-        y = y - h - (gap or 4)
+        rows[#rows + 1] = { text = fs, indent = indent, gap = gap or 4 }
         return fs
     end
     local function AddBullet(value, dotColor, textColor)
@@ -258,18 +251,16 @@ local function FillChangelog(child, scrollW, entries)
         textColor = textColor or bodyColor
         local dot = PixelLayoutRegion(child:CreateTexture(nil, "ARTWORK"))
         dot:SetSize(5, 5)
-        dot:SetPoint("TOPLEFT", child, "TOPLEFT", 9, y - 6)
         dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.95)
-        if not link then return AddText(text, "GameFontHighlightSmall", textColor, 22, 9, true, "body") end
+        if not link then
+            AddText(text, "GameFontHighlightSmall", textColor, 22, 9, true, "body")
+            rows[#rows].dot = dot
+            return
+        end
         local button = PixelLayoutRegion(CreateFrame("Button", nil, child))
-        button:SetPoint("TOPLEFT", child, "TOPLEFT", 22, y)
-        local linkWidth = max(40, scrollW - 32)
-        button:SetWidth(linkWidth)
         local fs = RawFont(button, "GameFontHighlightSmall", M.Tr(text), T.colors.accent2 or T.colors.warning, 0, "body")
         fs:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
-        WrapLeft(fs, linkWidth)
-        local h = max(StringHeight(fs), 14)
-        button:SetHeight(h)
+        rows[#rows + 1] = { text = fs, button = button, dot = dot, indent = 22, gap = 9 }
         local PaintFeatureLink = T.StyleFeatureLink(button, fs) or nil
         button:SetScript("OnClick", function()
             if type(M.OpenChangelogMenuLink) == "function" then M.OpenChangelogMenuLink(link) end
@@ -280,8 +271,7 @@ local function FillChangelog(child, scrollW, entries)
         button:SetScript("OnLeave", function()
             if PaintFeatureLink then PaintFeatureLink(false) end
         end)
-        y = y - h - 9
-        return button
+
     end
     for entryIndex = 1, min(#entries, 4) do
         local entry = entries[entryIndex]
@@ -290,13 +280,10 @@ local function FillChangelog(child, scrollW, entries)
             local date = tostring(entry.date or "")
             local heading = (date ~= "" and (version .. " - " .. date)) or version
             if entryIndex > 1 then
-                y = y - 10
                 local rule = PixelLayoutRegion(child:CreateTexture(nil, "ARTWORK"))
-                rule:SetPoint("TOPLEFT", child, "TOPLEFT", 0, y)
-                rule:SetPoint("TOPRIGHT", child, "TOPRIGHT", -4, y)
                 rule:SetHeight(1)
                 rule:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.55)
-                y = y - 13
+                rows[#rows + 1] = { rule = rule }
             end
             AddText(heading, "GameFontNormal", T.colors.accent, 0, 10, false, "section")
             local sections = entry.sections
@@ -304,10 +291,10 @@ local function FillChangelog(child, scrollW, entries)
                 for sectionIndex = 1, #sections do
                     local section = sections[sectionIndex]
                     if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
-                        if sectionIndex > 1 then y = y - 8 end
                         local sectionTitle = tostring(section.title or "")
                         local isHighlights = sectionTitle == "Highlights"
                         AddText(sectionTitle, "GameFontNormalSmall", isHighlights and T.colors.accent or T.colors.accent2, 0, 7, true, "card")
+                        if sectionIndex > 1 then rows[#rows].before = 8 end
                         for bulletIndex = 1, #section.bullets do
                             AddBullet(section.bullets[bulletIndex], isHighlights and T.colors.accent2 or nil, isHighlights and T.colors.text or nil)
                         end
@@ -316,9 +303,38 @@ local function FillChangelog(child, scrollW, entries)
             end
         end
     end
-    return y
+    local function Layout(width)
+        local y = 0
+        child:SetWidth(width)
+        for i = 1, #rows do
+            local row = rows[i]
+            if row.rule then
+                row.rule:ClearAllPoints()
+                row.rule:SetPoint("TOPLEFT", child, "TOPLEFT", 0, y - 10)
+                row.rule:SetPoint("TOPRIGHT", child, "TOPRIGHT", -4, y - 10)
+                y = y - 23
+            else
+                y = y - (row.before or 0)
+                local anchor = row.button or row.text
+                anchor:ClearAllPoints()
+                anchor:SetPoint("TOPLEFT", child, "TOPLEFT", row.indent, y)
+                if row.dot then
+                    row.dot:ClearAllPoints()
+                    row.dot:SetPoint("TOPLEFT", child, "TOPLEFT", 9, y - 6)
+                end
+                local textWidth = max(40, width - row.indent - (row.button and 10 or 4))
+                WrapLeft(row.text, textWidth)
+                local height = max(14, StringHeight(row.text))
+                if row.button then row.button:SetSize(textWidth, height) end
+                y = y - height - row.gap
+            end
+        end
+        child:SetHeight(max(1, -y + 8))
+    end
+    Layout(scrollW)
+    return Layout
 end
-local function BuildDashboardChangelog(parent, cardWidth, opts)
+local function BuildDashboardChangelog(parent, cardWidth, opts, ctx)
     opts = opts or {}
     local data = GetBundledChangelog()
     local top = opts.top or -130
@@ -344,9 +360,18 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     local child = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
     child:SetSize(scrollW, 1)
     scroll:SetScrollChild(child)
-    child:SetHeight(max(1, math.abs(FillChangelog(child, scrollW, data.entries)) + 8))
+    local layout = FillChangelog(child, scrollW, data.entries)
     T.StyleScrollFrame(scroll, parent)
     local open = M.dashboardChangelogOpen == true
+    if open then
+        ctx:AddResizeCallback(function()
+            local width = max(80, ctx.width - 72)
+            if width ~= scrollW then
+                scrollW = width
+                layout(width)
+            end
+        end)
+    end
     RegisterDashboardControl(header, DashboardMeta("changelog.disclosure", "ephemeral", {
         help = "Shows or hides the bundled MSUF release notes.",
     }), opts.title or "Changelog", "button")
@@ -396,6 +421,11 @@ end
 local Dashboard = {}
 local DISCLOSURE_KEYS = { "dashboardChangelogOpen", "dashboardScalingOpen", "dashboardRecoveryOpen" }
 local dashboardMotion
+local function AnchorCard(card, root, x, y)
+    card:ClearAllPoints()
+    card:SetPoint("TOPLEFT", root, "TOPLEFT", x, y)
+    card:SetPoint("TOPRIGHT", root, "TOPRIGHT", -20, y)
+end
 local function LayoutDashboardMotion(state, moving)
     local top = state.changelogTop
     for i = 1, #DISCLOSURE_KEYS do
@@ -408,12 +438,10 @@ local function LayoutDashboardMotion(state, moving)
             card.frame._msuf2DashboardArrow:SetRotation(card.open and math.pi * 0.5 or 0)
         end
         card.frame:SetHeight(height)
-        card.frame:ClearAllPoints()
-        card.frame:SetPoint("TOPLEFT", state.root, "TOPLEFT", state.x0, top)
+        AnchorCard(card.frame, state.root, state.x0, top)
         top = top - height - 10
     end
-    state.support:ClearAllPoints()
-    state.support:SetPoint("TOPLEFT", state.root, "TOPLEFT", state.x0, top)
+    AnchorCard(state.support, state.root, state.x0, top)
     -- A hidden cached view must restore its own size without resizing the page
     -- the player navigated to while the motion was running.
     local entry = state.ctx.entry
@@ -484,8 +512,8 @@ local function Card(parent, title, x, y, w, h, bg, border)
     elseif T.ApplySurface then
         T.ApplySurface(card, "card")
     end
-    card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     card:SetSize(w, h)
+    AnchorCard(card, parent, x, y)
     if title and title ~= "" then
         local label = T.Font(card, "GameFontNormal", title, T.colors.text)
         label:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
@@ -563,15 +591,19 @@ local function Button(parent, text, x, y, w, h, onClick, skin, semanticPath, cla
     if tip then AddTooltip(btn, text, tip) end
     return btn
 end
+local function AnchorRight(frame, parent, inset, y)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -inset, y)
+end
 local function Kicker(parent, text, x, y, color)
     local fs = T.Font(parent, "GameFontDisableSmall", "", color or T.colors.accent)
     T.SetTranslatedText(fs, string.upper(M.Tr(text or "")))
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -16)
     return fs
 end
-local function Pill(parent, text, x, y, w, color)
+local function Pill(parent, text, inset, y, w, color)
     local pill = T.Panel(parent, nil, T.colors.pillBaseSolid, T.colors.pillEdge)
-    pill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    AnchorRight(pill, parent, inset, y)
     pill:SetSize(w or 82, 20)
     local label = T.Font(pill, "GameFontDisableSmall", text or "", color or T.colors.muted)
     label:SetPoint("CENTER", pill, "CENTER", 0, 0)
@@ -629,7 +661,6 @@ local function HideSliderValueBox(slider)
             slider._msuf2StepButtons[i]:Hide()
         end
     end
-    if slider and slider._msuf2Title then T.StyleFontString(slider._msuf2Title, T.colors.text, 3) end
 end
 local function EnablePercentWheel(slider, minPct, maxPct, stepPct)
     if not slider then return end
@@ -662,8 +693,16 @@ end
 --- Kicker, title and action label of the setup launcher for the tour status.
 local function LauncherTexts(active, completed)
     if active then return "GUIDED SETUP IN PROGRESS", "Continue your MSUF setup", "Resume setup" end
-    if completed then return "GUIDED SETUP COMPLETE", "Review or run setup again", "Run setup again" end
+    if completed then return "GUIDED SETUP COMPLETE", "Review or run setup again", "Start Quick Setup" end
     return "GUIDED SETUP", "Get the essentials right in a few minutes", "Start Quick Setup"
+end
+local function OpenSuiteSetup()
+    if M.BlockCombatAction and M.BlockCombatAction() then return end
+    if MSUF.SuiteLink.OpenInstaller() == true then
+        M.HideSlashMenuAndMinibar(M.frame)
+    elseif M.ShowStatusFeedback then
+        M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4, true)
+    end
 end
 function Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
     local root, x0, mainW = state.root, state.x0, state.mainW
@@ -679,20 +718,23 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
     local highlightGuidedSetup = type(firstLoad) == "table"
         and type(firstLoad.ShouldHighlightGuidedSetup) == "function"
         and firstLoad:ShouldHighlightGuidedSetup()
-    local launcherNarrow = mainW < 520
-    -- The Wago button rides along with the setup action: narrow stacks it below,
-    -- wide seats it left of the action, so both reserve room in the same card.
-    local launcherH = launcherNarrow and 162 or 78
+    local canOpenSuite = MSUF.SuiteLink.CanOpenInstaller()
+    local wide = mainW >= 800
+    local wrapWago = canOpenSuite and mainW < 560
+    local launcherH = wide and 92 or (wrapWago and 174 or 136)
     local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
     local kickerText, launcherTitle, actionText = LauncherTexts(tourActive, tourCompleted)
     local kicker = Kicker(launcher, kickerText, 16, -14)
-    local title = Label(launcher, "GameFontNormal", launcherTitle, T.colors.text, 16, -36,
-        max(120, mainW - (launcherNarrow and 32 or 388)), "LEFT")
-    local step = Label(launcher, "GameFontDisableSmall", "", T.colors.muted, 16, launcherNarrow and -72 or -56)
-    local actionX = launcherNarrow and 16 or (mainW - 196)
-    local actionY = launcherNarrow and -92 or -27
-    local actionW = launcherNarrow and min(196, mainW - 32) or 180
-    local action = Button(launcher, actionText, actionX, actionY, actionW, 30, function()
+    local actionW, suiteW, wagoW, gap = 168, 168, 150, 8
+    local rowW = actionW + wagoW + gap + (canOpenSuite and suiteW + gap or 0)
+    local titleInset = wide and rowW + 32 or 16
+    local title = Label(launcher, "GameFontNormal", launcherTitle, T.colors.text, 16, -34,
+        mainW - 16 - titleInset, "LEFT")
+    title:SetPoint("TOPRIGHT", launcher, "TOPRIGHT", -titleInset, -34)
+    WordWrap(title)
+    local step = Label(launcher, "GameFontDisableSmall", "", T.colors.muted, 16, -68)
+    local actionY = wide and -31 or -88
+    local action = Button(launcher, actionText, 16, actionY, actionW, 34, function()
         if M.BlockCombatAction and M.BlockCombatAction() then return end
         if tourActive and type(M.ResumeGuidedTour) == "function" then
             M.ResumeGuidedTour()
@@ -703,15 +745,28 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
         end
     end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
     T.AttachNavIcon(action, "home", false, true)
+    WordWrap(action._msuf2Label)
+    if wide then AnchorRight(action, launcher, 16 + rowW - actionW, actionY) end
+    local suite
+    if canOpenSuite then
+        suite = Button(launcher, "MSUF Suite Setup", 16 + actionW + gap, actionY, suiteW, 34,
+            OpenSuiteSetup, nil, "suite.setup", "ephemeral",
+            { help = "Opens the MSUF Suite setup: profile, modules and UI scaling." },
+            "Opens the MSUF Suite setup: profile, modules and UI scaling.")
+        suite._msuf2Label:SetWidth(suiteW - 16)
+        WordWrap(suite._msuf2Label)
+        if wide then AnchorRight(suite, launcher, 16 + wagoW + gap, actionY) end
+    end
     local wago = Button(launcher, "Wago Profiles",
-        launcherNarrow and actionX or (mainW - 354),
-        launcherNarrow and -126 or -27,
-        launcherNarrow and actionW or 150, 30,
+        wrapWago and 16 or 16 + rowW - wagoW,
+        wrapWago and -126 or actionY,
+        wagoW, 34,
         function() CopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end,
         nil, "guided_setup.browse_wago_profiles", "action",
         { actionKey = "copy_wago_profiles_link",
           keywords = { "Browse Wago profiles", "Wago profile imports" },
           help = "Opens a copyable link to the MSUF profile imports on Wago." }, "Browse Wago profiles")
+    if wide then AnchorRight(wago, launcher, 16, actionY) end
     local wagoIcon = PixelLayoutRegion(wago:CreateTexture(nil, "ARTWORK", nil, 3))
     wagoIcon:SetTexture(ICON_DIR .. "Wago.png")
     wagoIcon:SetSize(22, 22)
@@ -721,6 +776,7 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
         wago._msuf2Label:SetPoint("LEFT", wagoIcon, "RIGHT", 6, 0)
         wago._msuf2Label:SetPoint("RIGHT", wago, "RIGHT", -10, 0)
         wago._msuf2Label:SetJustifyH("CENTER")
+        WordWrap(wago._msuf2Label)
     end
     local function RefreshLauncher()
         local currentState = tour and tour:GetState()
@@ -730,6 +786,10 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
         T.SetTranslatedText(kicker, string.upper(M.Tr(kickerNow)))
         T.SetTranslatedText(title, M.Tr(titleNow))
         action:SetText(M.Tr(actionNow), true)
+        if suite then
+            local overview = M.GetSuiteOverview()
+            suite:SetText(M.Tr(overview and overview.needsSetup == false and "Redo Suite Setup" or "MSUF Suite Setup"), true)
+        end
         local highlighted = firstLoad and firstLoad.ShouldHighlightGuidedSetup and firstLoad:ShouldHighlightGuidedSetup()
         T.ApplyButtonRole(action, highlighted and "success" or "primary")
         step:SetShown(tourActive == true)
@@ -866,11 +926,13 @@ function Dashboard.BuildSearchHero(state, mainTop, ctx)
     W.Text(hero, "Search enabled features in your own words.", 22, -72, mainW - 44, T.colors.muted)
     local submitW = 96
     local inputY = -heroH + 52
-    local _, submit = Dashboard.BuildSearchInput(hero, 22, inputY, max(120, mainW - 54 - submitW), 30)
-    Button(hero, "Search", mainW - 22 - submitW, inputY, submitW, 30, function()
+    local input, submit = Dashboard.BuildSearchInput(hero, 22, inputY, mainW - 54 - submitW, 30)
+    input:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -32 - submitW, inputY)
+    local search = Button(hero, "Search", 0, inputY, submitW, 30, function()
         if DirectCombatLocked() then return end
         submit()
     end, "primary", "search.open", "navigation", { navigationKey = "search" })
+    AnchorRight(search, hero, 22, inputY)
     return heroH
 end
 --- Compact MSUF Suite card between the search hero and the collapsed cards.
@@ -881,63 +943,50 @@ function Dashboard.BuildSuiteCard(state, ctx, top)
     if not overview then return 0 end
     local root, x0, mainW = state.root, state.x0, state.mainW
     local pageKey = M.GetSuiteModulesPageKey(overview)
-    local needsSetup = overview.needsSetup == true
-    local openW, setupW, gap = 170, 130, 10
-    local both = pageKey ~= nil and needsSetup
-    local rowW = (pageKey and openW or 0) + (needsSetup and setupW or 0) + (both and gap or 0)
-    local textW = mainW - 32 - (rowW > 0 and (rowW + 16) or 0)
-    -- Wide cards seat the buttons right of the text; narrow ones move them
-    -- below it, one per line when the pair does not fit side by side.
-    local stacked = rowW > 0 and textW < 240
-    local column = stacked and both and rowW > mainW - 32
-    if stacked then textW = mainW - 32 end
-    textW = max(120, textW)
+    local openW = 170
+    local stacked = pageKey and mainW < 458
+    local right = pageKey and not stacked and (openW + 32) or 16
+    local textW = mainW - 16 - right
     local card = Card(root, "", x0, top, mainW, 100, T.colors.panel2, T.colors.borderSoft)
     Kicker(card, "MSUF SUITE", 16, -14)
     local title = Label(card, "GameFontNormal", "", T.colors.text, 16, -34, textW, "LEFT")
     local status = Label(card, "GameFontHighlightSmall", "", T.colors.ok or T.colors.accent, 16, -56, textW, "LEFT")
     local about = W.Text(card, "Optional modules beyond unit frames: action bars, bags, chat, minimap and more.", 16, -74, textW, T.colors.muted)
-    if about.SetWordWrap then about:SetWordWrap(true) end
-    local aboutH = max(12, (about.GetStringHeight and about:GetStringHeight()) or 0)
-    local textBottom = 74 + aboutH
-    local buttonY = stacked and -(textBottom + 12) or -34
-    local cardH = max(100, stacked and (textBottom + 12 + (column and 62 or 28) + 14) or (textBottom + 16))
-    card:SetHeight(cardH)
-    local openX = (not stacked) and (mainW - 16 - openW) or ((both and not column) and (16 + setupW + gap) or 16)
-    local openY = column and (buttonY - 34) or buttonY
-    local setup
-    if needsSetup then
-        setup = Button(card, "Set up Suite", stacked and 16 or (mainW - 16 - rowW), buttonY, setupW, 28, function()
-            if M.BlockCombatAction and M.BlockCombatAction() then return end
-            -- The setup window shares the menu's strata below its content, so
-            -- the menu steps aside once the Suite confirms the window opened.
-            if MSUF.SuiteLink.OpenInstaller() == true then
-                M.HideSlashMenuAndMinibar(M.frame)
-            elseif M.ShowStatusFeedback then
-                M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4, true)
-            end
-        end, "primary", "suite.setup", "ephemeral",
-            { help = "Opens the MSUF Suite setup: profile, modules and UI scaling." },
-            "Opens the MSUF Suite setup: profile, modules and UI scaling.")
-    end
+    title:SetPoint("TOPRIGHT", card, "TOPRIGHT", -right, -34)
+    status:SetPoint("TOPRIGHT", card, "TOPRIGHT", -right, -56)
+    about:SetPoint("TOPRIGHT", card, "TOPRIGHT", -right, -74)
+    WordWrap(about)
+    local modules
     if pageKey then
-        Button(card, "Open Suite Modules", openX, openY, openW, 28, function()
+        modules = Button(card, "Open Suite Modules", 16, -34, openW, 28, function()
             if M.BlockCombatAction and M.BlockCombatAction() then return end
             M.SelectPage(pageKey)
-        end, (not needsSetup) and "primary" or nil, "suite.open_modules", "navigation",
+        end, "primary", "suite.open_modules", "navigation",
             { navigationKey = pageKey, help = "Shows the Suite page that switches each optional module on or off." },
             "Shows the Suite page that switches each optional module on or off.")
+        if not stacked then AnchorRight(modules, card, 16, -34) end
     end
+    local function Layout(width)
+        about:SetWidth(width - 16 - right)
+        local textBottom = 74 + max(12, StringHeight(about))
+        local height = max(100, textBottom + (stacked and 54 or 16))
+        if stacked then
+            modules:ClearAllPoints()
+            modules:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -(textBottom + 12))
+        end
+        card:SetHeight(height)
+        return height
+    end
+    state.layoutSuiteCard = Layout
     local function Refresh()
         local live = M.GetSuiteOverview() or overview
         title:SetText(M.FormatSuiteTitle(live))
         local total, enabled = tonumber(live.total), tonumber(live.enabled)
         status:SetText((total and enabled) and M.Format("%d of %d modules on", floor(enabled), floor(total)) or "")
-        if setup then setup:SetShown(live.needsSetup == true) end
     end
     Refresh()
     M.TrackRefresh(ctx, Refresh)
-    return cardH
+    return Layout(mainW)
 end
 local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
     local head, _, PaintHeaderTone = AccordionHead(parent, 0, open, title)
@@ -994,7 +1043,7 @@ function Dashboard.BuildRecoveryCard(state)
     local recovery = Card(state.root, "", state.x0, recoveryTop, recoveryW, recoveryH, T.colors.panel2, T.colors.borderSoft)
     local g = M.GetGeneralDB and M.GetGeneralDB() or {}
     DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
-        if recoveryW >= 520 then Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2) end
+        if recoveryW >= 520 then Pill(head, "Factory reset hidden", 14, -11, 110, T.colors.accent2) end
     end, "display_recovery.disclosure")
     if recoveryOpen then
         W.Text(recovery, state.hasSuiteReset and "Fix positions, print help, or reset MSUF or Suite."
@@ -1008,18 +1057,19 @@ function Dashboard.BuildRecoveryCard(state)
         Button(recovery, "Print Help", 146, -94, 86, 22, function()
             FeedbackUnless(DirectRunSlash("help all"), "Help unavailable")
         end, nil, "display_recovery.print_help", nil, nil, "Lists every MSUF slash command in chat, diagnostics included.")
-        local msufX = recoveryWrap and 16 or (recoveryW - (state.hasSuiteReset and 336 or 168))
-        Button(recovery, "MSUF Factory Reset", msufX, factoryY, 156, 22, function()
+        local msufReset = Button(recovery, "MSUF Factory Reset", 16, factoryY, 156, 22, function()
             FeedbackUnless(ShowFactoryResetConfirm("msuf"), "Reset unavailable")
         end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true },
             "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept.")
+        if not recoveryWrap then AnchorRight(msufReset, recovery, state.hasSuiteReset and 180 or 12, factoryY) end
         if state.hasSuiteReset then
-            local suiteX = state.recoveryStacked and 16 or (recoveryWrap and 180 or (recoveryW - 168))
+            local suiteX = state.recoveryStacked and 16 or 180
             local suiteY = state.recoveryStacked and -158 or factoryY
-            Button(recovery, "Suite Factory Reset", suiteX, suiteY, 156, 22, function()
+            local suiteReset = Button(recovery, "Suite Factory Reset", suiteX, suiteY, 156, 22, function()
                 FeedbackUnless(ShowFactoryResetConfirm("suite"), "Reset unavailable")
             end, "danger", "display_recovery.suite_factory_reset", "action", { confirmRequired = true },
                 "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact.")
+            if not recoveryWrap then AnchorRight(suiteReset, recovery, 12, suiteY) end
         elseif recoveryWrap then
             W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
         end
@@ -1035,9 +1085,9 @@ function Dashboard.BuildScalingCard(state, ctx)
         if recoveryW < 520 then return end
         local _, ui = GlobalState()
         local uiValue = ui.Enabled and M.Format("%d%%", DirectPercent(ui.Scale, 1)) or M.Tr("Off")
-        Pill(scaleHead, M.Format("UI %s", uiValue), recoveryW - 250, -11, 64)
-        Pill(scaleHead, M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)), recoveryW - 180, -11, 76)
-        Pill(scaleHead, M.Format("Frames %d%%", DirectPercent(g.msufUiScale, 1)), recoveryW - 98, -11, 84)
+        Pill(scaleHead, M.Format("UI %s", uiValue), 186, -11, 64)
+        Pill(scaleHead, M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)), 104, -11, 76)
+        Pill(scaleHead, M.Format("Frames %d%%", DirectPercent(g.msufUiScale, 1)), 14, -11, 84)
     end, "scaling.disclosure")
     if scalingOpen then Dashboard.BuildScalingColumns(state, ctx, scaling) end
     RegisterDashboardCard(state, "dashboardScalingOpen", scaling, state.scalingH, scalingOpen)
@@ -1047,22 +1097,34 @@ end
 --- (and `enableKey` for the global on/off choice), and either selected() -> selected on,
 --- selected scale, applied on, applied scale (the global column) or applied() and
 --- current() -> scale (the percent columns); apply(); revert(). `presets` ({ text, dx,
---- width, key, run }) and `extra(buttonsTop, Refresh)` add the global column's own buttons.
+--- width, key, run }) and `extra(column, buttonsTop, Refresh)` add the global column's own buttons.
 --- The refresh and the drag hook read and write those directly: a slider drag step makes
 --- no call through a spec wrapper.
 local function BuildScaleColumn(scaling, colW, spec)
-    local x, top, minPct, maxPct, stepPct = spec.x, spec.top, spec.minPct, spec.maxPct, spec.stepPct
-    W.Text(scaling, spec.help, x, top - 20, colW, T.colors.muted)
-    local status = W.Text(scaling, "", x, top - 40, colW, T.colors.muted)
-    local slider = W.Slider(scaling, spec.label, minPct, maxPct, stepPct, colW)
-    HideSliderValueBox(slider)
+    local column = PixelLayoutRegion(CreateFrame("Frame", nil, scaling))
+    column:SetHeight(146)
+    local minPct, maxPct, stepPct = spec.minPct, spec.maxPct, spec.stepPct
+    local help = W.Text(column, spec.help, 0, -20, colW, T.colors.muted)
+    local status = W.Text(column, "", 0, -40, colW, T.colors.muted)
+    local slider = W.Slider(column, spec.label, minPct, maxPct, stepPct, colW)
+    slider:HookScript("OnShow", HideSliderValueBox)
     slider:ClearAllPoints()
-    slider:SetPoint("TOPLEFT", scaling, "TOPLEFT", x, top - 64)
-    if slider._msuf2SetLayoutWidth then slider:_msuf2SetLayoutWidth(colW) end
-    if slider._msuf2Title then
-        slider._msuf2Title:ClearAllPoints()
-        slider._msuf2Title:SetPoint("TOPLEFT", scaling, "TOPLEFT", x, top)
-        slider._msuf2Title:SetWidth(colW)
+    slider:SetPoint("TOPLEFT", column, "TOPLEFT", 0, -64)
+    local title = slider._msuf2Title
+    if title then
+        title:ClearAllPoints()
+        title:SetPoint("TOPLEFT", column, "TOPLEFT", 0, 0)
+        T.StyleFontString(title, T.colors.text, 3)
+    end
+    local function Layout(width, gap)
+        column:ClearAllPoints()
+        column:SetPoint("TOPLEFT", scaling, "TOPLEFT", 16 + spec.index * (width + gap), spec.top)
+        column:SetWidth(width)
+        help:SetWidth(width)
+        status:SetWidth(width)
+        if slider._msuf2SetLayoutWidth then slider:_msuf2SetLayoutWidth(width) end
+        HideSliderValueBox(slider)
+        if title then title:SetWidth(width) end
     end
     EnablePercentWheel(slider, minPct, maxPct, stepPct)
     RegisterDashboardControl(slider, DashboardMeta(spec.semanticPath .. ".percent", spec.settingKey and "setting" or "ephemeral", {
@@ -1106,36 +1168,38 @@ local function BuildScaleColumn(scaling, colW, spec)
     local presets = spec.presets or {}
     for i = 1, #presets do
         local preset = presets[i]
-        Button(scaling, preset[1], x + preset[2], top - 100, preset[3], 20, function()
+        Button(column, preset[1], preset[2], -100, preset[3], 20, function()
             preset[5]()
             Refresh()
         end, nil, spec.semanticPath .. ".preset." .. preset[4])
     end
-    local buttonsTop = top - (#presets > 0 and 126 or 100)
-    apply = Button(scaling, "Apply", x, buttonsTop, 72, 20, function()
+    local buttonsTop = #presets > 0 and -126 or -100
+    apply = Button(column, "Apply", 0, buttonsTop, 72, 20, function()
         spec.apply()
         Refresh()
     end, "primary", spec.semanticPath .. ".apply")
-    revert = Button(scaling, "Revert", x + 82, buttonsTop, 72, 20, function()
+    revert = Button(column, "Revert", 82, buttonsTop, 72, 20, function()
         spec.revert()
         Refresh()
     end, nil, spec.semanticPath .. ".revert_pending", "ephemeral")
-    if spec.extra then spec.extra(buttonsTop, Refresh) end
-    return Refresh
+    if spec.extra then spec.extra(column, buttonsTop, Refresh) end
+    return Refresh, Layout
 end
 function Dashboard.BuildScalingColumns(state, ctx, scaling)
     local recoveryW, scalingColumns = state.recoveryW, state.scalingColumns
-    scaling._msuf2ResizeGrid = { count = scalingColumns, gap = 24 }
-    W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active " ..
+    local description = W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active " ..
         "value.", 16, -60, recoveryW - 32, T.colors.muted)
+    description:SetPoint("TOPRIGHT", scaling, "TOPRIGHT", -16, -60)
     -- The selections not applied yet: globalEnabled, global, msuf and menu.
     local pending = {}
     local colGap = 24
-    local colW = (scalingColumns == 3) and floor((recoveryW - 32 - (colGap * 2)) / 3)
-        or ((scalingColumns == 2) and floor((recoveryW - 32 - colGap) / 2) or (recoveryW - 32))
-    local msufX = scalingColumns >= 2 and (16 + colW + colGap) or 16
+    local function ColumnWidth(width)
+        return floor((width - 32 - colGap * (scalingColumns - 1)) / scalingColumns)
+    end
+    local colW = ColumnWidth(recoveryW)
+    local msufIndex = scalingColumns >= 2 and 1 or 0
     local msufTop = scalingColumns >= 2 and -94 or -242
-    local menuX = (scalingColumns == 3) and (16 + ((colW + colGap) * 2)) or 16
+    local menuIndex = scalingColumns == 3 and 2 or 0
     local menuTop = (scalingColumns == 3) and -94 or ((scalingColumns == 2) and -242 or -390)
     local function SelectedGlobalScale()
         local _, ui = GlobalState()
@@ -1171,8 +1235,8 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
         end
         if M.RequestGeneralDomains then M.RequestGeneralDomains("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
     end
-    local RefreshGlobalScale = BuildScaleColumn(scaling, colW, {
-        x = 16, top = -94, label = "Global UI Scale", settingKey = "general.globalUiScale",
+    local RefreshGlobalScale, LayoutGlobalScale = BuildScaleColumn(scaling, colW, {
+        index = 0, top = -94, label = "Global UI Scale", settingKey = "general.globalUiScale",
         help = "Changes the global WoW UI scale through MSUF presets.",
         semanticPath = "scaling.global_ui", minPct = 30, maxPct = 150, stepPct = 1,
         pending = pending, key = "global", enableKey = "globalEnabled", selected = SelectedGlobalScale,
@@ -1187,15 +1251,15 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             { "4K", 120, 42, "4k", function() ApplyGlobalScale(true, 768 / 2160, "4k") end },
             { "Pixel", 170, 52, "pixel", function() ApplyGlobalScale(true, PixelScale(), "pixel") end },
         },
-        extra = function(buttonsTop, Refresh)
-            Button(scaling, "Off", 16 + 164, buttonsTop, 52, 20, function()
+        extra = function(column, buttonsTop, Refresh)
+            Button(column, "Off", 164, buttonsTop, 52, 20, function()
                 pending.globalEnabled = false
                 Refresh()
             end, nil, "scaling.global_ui.select_off", "ephemeral")
         end,
     })
-    local RefreshMsufScale = BuildScaleColumn(scaling, colW, {
-        x = msufX, top = msufTop, label = "MSUF Frame Scale", settingKey = "general.msufUiScale", help = "Changes the actual MSUF unit frames in-game.",
+    local RefreshMsufScale, LayoutMsufScale = BuildScaleColumn(scaling, colW, {
+        index = msufIndex, top = msufTop, label = "MSUF Frame Scale", settingKey = "general.msufUiScale", help = "Changes the actual MSUF unit frames in-game.",
         semanticPath = "scaling.msuf_frames",
         minPct = MSUF_SCALE_MIN_PERCENT, maxPct = MSUF_SCALE_MAX_PERCENT, stepPct = MSUF_SCALE_STEP_PERCENT,
         pending = pending, key = "msuf", applied = AppliedMsufScale, current = PendingMsufScale,
@@ -1210,8 +1274,9 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             end
         end,
     })
-    local RefreshMenuScale = BuildScaleColumn(scaling, colW, {
-        x = menuX, top = menuTop, label = "MSUF Menu Scale", settingKey = "general.slashMenuScale", help = "Changes only this configuration menu window.",
+    local RefreshMenuScale, LayoutMenuScale = BuildScaleColumn(scaling, colW, {
+        index = menuIndex, top = menuTop, label = "MSUF Menu Scale", settingKey = "general.slashMenuScale",
+        help = "Changes only this configuration menu window.",
         semanticPath = "scaling.menu",
         minPct = MENU_SCALE_MIN_PERCENT, maxPct = MENU_SCALE_MAX_PERCENT, stepPct = MENU_SCALE_STEP_PERCENT,
         pending = pending, key = "menu", applied = AppliedMenuScale, current = PendingMenuScale,
@@ -1228,6 +1293,14 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             end
         end,
     })
+    local function Layout()
+        local width = ColumnWidth(ctx.width - state.x0)
+        LayoutGlobalScale(width, colGap)
+        LayoutMsufScale(width, colGap)
+        LayoutMenuScale(width, colGap)
+    end
+    Layout()
+    ctx:AddResizeCallback(Layout)
     M.TrackRefresh(ctx, RefreshGlobalScale)
     M.TrackRefresh(ctx, RefreshMsufScale)
     M.TrackRefresh(ctx, RefreshMenuScale)
@@ -1241,7 +1314,7 @@ function Dashboard.BuildChangelogCard(state)
         top = 0,
         bottom = 18,
         hideSummaryWhenClosed = true,
-    })
+    }, state.ctx)
     RegisterDashboardCard(state, "dashboardChangelogOpen", changelog, state.changelogH, state.changelogOpen)
 end
 local SUPPORT_LINKS = {
@@ -1279,12 +1352,21 @@ function Dashboard.BuildSupportCard(state)
         local displayVersion = aboutVer:match("^%d") and ("v" .. aboutVer) or aboutVer
         aboutText = M.Format(M.Tr("%s  -  by Mapko with the help from R41z0r, Lead QA: Aur0r4"), displayVersion)
     end
-    local aboutY = -44 - WrappedHeight(supportDesc) - 4
-    local supportAbout = W.Text(support, aboutText, 16, aboutY, supportTextW, T.colors.muted)
+    local supportAbout = W.Text(support, aboutText, 16, -60, supportTextW, T.colors.muted)
     WordWrap(supportAbout)
-    local supportTextBottom = math.abs(aboutY - WrappedHeight(supportAbout))
-    supportH = max(supportH, floor(supportTextBottom + (supportCompact and 48 or 14)))
-    support:SetHeight(supportH)
+    local function Layout(width)
+        local textWidth = max(160, width - (supportCompact and 32 or 230))
+        supportDesc:SetWidth(textWidth)
+        supportAbout:SetWidth(textWidth)
+        local aboutY = -48 - WrappedHeight(supportDesc)
+        supportAbout:ClearAllPoints()
+        supportAbout:SetPoint("TOPLEFT", support, "TOPLEFT", 16, aboutY)
+        local textBottom = WrappedHeight(supportAbout) - aboutY
+        local height = max(supportH, floor(textBottom + (supportCompact and 48 or 14)))
+        support:SetHeight(height)
+        return height
+    end
+    state.layoutSupportCard = Layout
     local iconRow = PixelLayoutRegion(CreateFrame("Frame", nil, support))
     iconRow:SetSize(168, 24)
     if supportCompact then
@@ -1322,7 +1404,7 @@ function Dashboard.BuildSupportCard(state)
         previous = btn
     end
     state.support = support
-    return supportH
+    return Layout(recoveryW)
 end
 function Dashboard.Build(ctx)
     if M.BuildUpgradeHighlightDashboardScene(ctx) == true then return end
@@ -1351,6 +1433,18 @@ function Dashboard.Build(ctx)
     local supportH = Dashboard.BuildSupportCard(state)
     local bottom = state.supportTop - supportH
     ctx:SetContentHeight(math.abs(bottom) + 42)
+    ctx:AddResizeCallback(function()
+        local width = ctx.width - x0
+        if width == state.mainW then return end
+        state.mainW = width
+        if state.layoutSuiteCard then
+            local height = state.layoutSuiteCard(width)
+            state.changelogTop = state.changelogTop + suiteH - height
+            suiteH = height
+        end
+        state.layoutSupportCard(width)
+        LayoutDashboardMotion(state)
+    end)
 end
 -- Each combination of open disclosures is one cached Dashboard view, so a
 -- disclosure toggle switches views instead of building a new frame tree

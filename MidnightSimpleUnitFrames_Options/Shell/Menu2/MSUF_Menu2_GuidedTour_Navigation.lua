@@ -316,23 +316,37 @@ local function SetStage(stage, resetCursor)
     return SelectExpectedPage(stage)
 end
 
-local function CompleteTour()
+local function CloseTour(skipped)
     ClearSectionEmphasis()
-    Invoke(Tour(), "Complete")
-    Invoke(FirstLoad(), "Complete", "guided_tour")
+    if skipped then
+        Invoke(Tour(), "Dismiss")
+        local firstLoad = FirstLoad()
+        if firstLoad and not firstLoad:IsTerminal() then Invoke(firstLoad, "Dismiss", "skip_guided_setup") end
+    else
+        Invoke(Tour(), "Complete")
+        Invoke(FirstLoad(), "Complete", "guided_tour")
+    end
     Runtime.warning = nil
     Runtime.manualAway = nil
     Runtime.touchedSignature = nil
     Runtime.lastVisualSignature = nil
-    M.RefreshGuidedTourChrome("COMPLETE")
+    M.RefreshGuidedTourChrome(skipped and "DISMISS" or "COMPLETE")
     RefreshTourDashboard()
     M.SelectPage("home")
     return true
 end
 
+function M.ConfirmSkipActiveGuidedTour()
+    if BlockedByCombat() or not TourIsActive() or CurrentStage().id ~= "menu_basics" then return false end
+    M.PromptSkipGuidedSetup(function()
+        if not BlockedByCombat() and TourIsActive() and CurrentStage().id == "menu_basics" then CloseTour(true) end
+    end)
+    return true
+end
+
 local function AdvanceStage(stage, resetCursor)
     local current, total, stages = ActiveStagePosition(stage)
-    if current >= total then return CompleteTour() end
+    if current >= total then return CloseTour() end
     return SetStage(stages[current + 1], resetCursor ~= false)
 end
 
@@ -469,7 +483,7 @@ local function AdvanceCurrent(result)
     local position = CurrentPosition(stage)
     result = ResultName(result)
 
-    if stage.id == "final_review" then return CompleteTour() end
+    if stage.id == "final_review" then return CloseTour() end
     if stage.special then
         Invoke(Tour(), "RecordStage", stage.id, result)
         return AdvanceStage(stage, true)

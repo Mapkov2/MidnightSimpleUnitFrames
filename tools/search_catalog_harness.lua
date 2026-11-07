@@ -64,6 +64,16 @@ local CORE = Join(ROOT, "MidnightSimpleUnitFrames")
 local OPTIONS = Join(ROOT, "MidnightSimpleUnitFrames_Options")
 local MSUF = assert(_G.MSUF_NS, "WoW stubs did not create MSUF_NS")
 local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")
+-- The menu observes scale changes on owned windows and UIParent.
+_G.hooksecurefunc = function(owner, method, callback)
+    if type(owner) == "string" then owner, method, callback = _G, owner, method end
+    local original = assert(owner[method], "cannot hook missing method " .. method)
+    owner[method] = function(...)
+        local a, b, c, d = original(...)
+        callback(...)
+        return a, b, c, d
+    end
+end
 -- Reproduce the real locale namespace before any Options module captures it.
 local localePath = Join(CORE, "Locales/MSUF_Localization.lua")
 assert(loadfile(localePath))("MidnightSimpleUnitFrames", MSUF)

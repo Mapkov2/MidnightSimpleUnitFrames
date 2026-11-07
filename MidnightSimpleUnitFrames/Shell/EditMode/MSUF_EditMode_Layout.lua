@@ -828,9 +828,14 @@ local function ResolveDragLayout(bar, key, conf, isCastbar, isGroupFrame, groupO
     if isCastbar or isSubframe then return UIParent, point, relativePoint, 0, 0 end
     local unit = bar.MSUFUnitKey or (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     local spec = MSUF.UF.Config.RefreshUnit(unit)
-    local anchor = MSUF.UF.Factory.ResolveAnchor(spec, bar)
-    return anchor, spec.point, spec.relativePoint,
-        spec.x - spec.offsetX, spec.y - spec.offsetY, spec.offsetX, spec.offsetY
+    local factory = MSUF.UF.Factory
+    local anchor, missing = factory.ResolveAnchor(spec, bar)
+    relativePoint = spec.relativePoint
+    if anchor == bar or factory.AnchorWouldCreateCycle(bar, anchor) then
+        anchor, relativePoint = UIParent, spec.point
+    end
+    return anchor, spec.point, relativePoint,
+        spec.x - spec.offsetX, spec.y - spec.offsetY, spec.offsetX, spec.offsetY, missing
 end
 
 -- Commit the visible fallback once, before runtime can replay its screen cache.
@@ -925,13 +930,6 @@ local function BuildDrag(mover, key, cfg, start)
     local groupOwner = isGroupFrame and bar and (bar._msufGFLiveAnchor or bar._msufGFLogicalAnchor or bar) or nil
     local anchor, point, relativePoint, unitBaseX, unitBaseY, unitStartX, unitStartY =
         ResolveDragLayout(bar, key, conf, isCastbar, isGroupFrame, groupOwner, isSubframe)
-    local factory = MSUF and MSUF.UF and MSUF.UF.Factory
-    if not isCastbar and not isGroupFrame and (anchor == bar
-        or (factory and type(factory.AnchorWouldCreateCycle) == "function"
-            and factory.AnchorWouldCreateCycle(bar, anchor))) then
-        anchor = UIParent
-        relativePoint = point
-    end
 
     local barCenterDX, barCenterDY = 0, 0
     if isGroupFrame then
@@ -1009,8 +1007,30 @@ local function ScheduleMoverSyncAfterDrag()
     end)
 end
 
-local function FinishUnitDrag(d)
+local function CommitUnitDragPosition(d, cx, cy, uiScale)
+    if IsConfigCombatLocked() then return false end
+    -- Providers can appear, disappear or change identity while the mouse is
+    -- held. Commit the last mover target in the runtime's current anchor space.
+    local anchor, point, relativePoint, baseX, baseY, _, _, missing = ResolveDragLayout(d.bar, d.key, d.conf)
+    -- A missing provider is temporary. Retain its known coordinate space so
+    -- the screen-cache fallback does not turn into a second offset on return.
+    if missing then anchor = d.anchor end
+    if d.anchor ~= anchor or d.point ~= point or d.relativePoint ~= relativePoint
+        or d.unitBaseX ~= baseX or d.unitBaseY ~= baseY then
+        d.lastUnitX, d.lastUnitY = nil, nil
+    end
+    d.anchor, d.point, d.relativePoint = anchor, point, relativePoint
+    d.unitBaseX, d.unitBaseY = baseX, baseY
+    SetActiveDragFlags(d, true)
+    local positioned = ApplyUnitDragPosition(d, cx, cy, uiScale, "commit")
+    SetActiveDragFlags(d, false)
+    if not positioned then return false end
     CacheDraggedUnitPosition(d.key)
+    return true
+end
+
+local function FinishUnitDrag(d, cx, cy, uiScale)
+    if not CommitUnitDragPosition(d, cx, cy, uiScale) then return false end
     ApplySettingsForKeySafe(d.key)
     ScheduleMoverSyncAfterDrag()
     MSUF.Require("MSUF_SyncUnitPositionPopup", CALLER)()
@@ -1167,7 +1187,19 @@ end
 
 function Ticker.EndExternalDrag(drag, applyFinal)
     if not drag then return false end
-    local moved = applyFinal ~= false and Ticker.ApplyExternalDrag(drag) or false
+    local moved = false
+    if applyFinal ~= false and not IsConfigCombatLocked() then
+        if drag.unitPositionChanged ~= nil then
+            local _, cx, _, _, cy = GetFrameEdgesUI(drag.mover)
+            local scale = UIParent:GetEffectiveScale()
+            if cx and cy and (drag.unitPositionChanged
+                or abs(cx * scale - drag.startCenterPX) > 0.5 or abs(cy * scale - drag.startCenterPY) > 0.5) then
+                moved = CommitUnitDragPosition(drag, cx, cy, scale)
+            end
+        else
+            moved = Ticker.ApplyExternalDrag(drag)
+        end
+    end
     SetActiveDragFlags(drag, false)
     return moved
 end
@@ -1245,7 +1277,14 @@ end
 --- PLAYER_REGEN_DISABLED, before lockdown, and defers nothing; a provider
 --- that refuses gets its start state back.
 local function CommitHeldDragOnStop(d)
-    if d and d.unitPositionChanged then CacheDraggedUnitPosition(d.key) end
+    if d and d.unitPositionChanged then
+        local _, cx, _, _, cy = GetFrameEdgesUI(d.mover)
+        if cx and cy and not IsConfigCombatLocked() then
+            CommitUnitDragPosition(d, cx, cy, UIParent:GetEffectiveScale())
+        else
+            CacheDraggedUnitPosition(d.key)
+        end
+    end
     if not (d and d.externalPublicElement and d.mover) then return end
     local _, cx, _, _, cy = GetFrameEdgesUI(d.mover)
     if cx == nil or cy == nil then return end

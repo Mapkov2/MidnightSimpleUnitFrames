@@ -8,25 +8,80 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F68D459F8B23CAF3F0AE8B1941A2949D3C79C358334CCF945C993048B0F47E09",
-    currentVersion = "7.0-alpha6",
+    sourceSha256 = "A535577BD7DB86873A086C7A5BCE77E916E99A2F2ED03A4E81732BF5B5F44561",
+    currentVersion = "7.0-beta1",
     historyFromVersion = "6.02",
     previousVersion = "6.50",
-    rangeLabel = "6.50 -> 7.0-alpha6",
+    rangeLabel = "6.50 -> 7.0-beta1",
     entries = {
         {
-            version = "7.0-alpha6",
-            date = "2026-11-05",
+            version = "7.0-beta1",
+            date = "2026-11-07",
             sections = {
                 {
                     title = "Unit frame positioning",
                     bullets = {
                         {
-                            text = "Fixed unit frames jumping back or moving unexpectedly in Edit Mode, including Suite profiles, clamped frames, moving or unavailable anchors, and UI scale changes.",
+                            text = "Fixed drag completion saving offsets against an outdated anchor when a provider appears, changes, or loses its position. Mouse release, closing Edit Mode during a drag, and external Edit Mode shells now preserve the final visible position in the current anchor space.",
                             linkless = true,
                         },
                         {
-                            text = "Fixed saved screen positions for UIParent anchors and preserved frame positions when exiting Edit Mode while dragging.",
+                            text = "Fixed unfinished X/Y popup edits overwriting a later mouse drag. Typed edits and dragging retain separate Undo steps.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Unit frames and colors",
+                    bullets = {
+                        {
+                            text = "Party, Raid and Mythic Raid frames can each set their own health gradient and bar background. Choose the gradient colors, background color mode and whether the background fills the bar or shows missing health.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Added name formatting presets and a live example in Fonts. Choose full names, abbreviations, a character limit, or abbreviated names with a limit. Individual unit frames can override the shared format.",
+                            linkless = true,
+                        },
+                        {
+                            text = "When supported by MSUF Suite, nameplate fonts appear as a scope on the standard Fonts page.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Fixed health bars retaining the old texture after switching away from the Blizzard preset. Choosing a global health bar color mode now clears conflicting per-frame preset overrides.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Opacity is visible in the compact color picker for supported colors. The background tint settings now show a warning when saved opacity is 0%.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "WoW Forever",
+                    bullets = {
+                        {
+                            text = "Swing timers can be positioned in Edit Mode. The options preview lets you inspect individual layers, jump to their settings and preview out-of-range color and opacity.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Character profile selection now uses the shared character identity key, with guards for cases where the client has not supplied the name yet.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Menu and Edit Mode",
+                    bullets = {
+                        {
+                            text = "Improved Dashboard resizing, Quick Setup and Suite Setup access. Refined selected tabs, window controls and the Class Resources preview, including alternative mana.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Menu appearance presets apply to the MSUF menu when MapkoSkin is available. You can choose the MapkoSkin look from the same list.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Edit Mode panels and grid fade in when opened and respect reduced-motion settings.",
                             linkless = true,
                         },
                     },

@@ -6,6 +6,8 @@ chunk("MidnightSimpleUnitFrames", ns)
 assert(ns.SwingTimer == nil, "other clients must have no module or events")
 
 local now, combat, native = 100, false, true
+local editModeChanged
+_G.MSUF_RegisterAnyEditModeListener = function(callback) editModeChanged = callback end
 local offSpeed, rangedSpeed = 2.5, 2.8
 local objects, named, driver = {}, {}
 local function noop() end
@@ -14,7 +16,8 @@ for _, name in ipairs({
     "SetMovable", "SetClampedToScreen", "RegisterForDrag", "SetAllPoints",
     "SetJustifyH", "SetBackdropBorderColor", "ClearAllPoints", "SetTextColor", "SetWidth",
     "StopMovingOrSizing", "StartMoving", "SetUpdateInterval", "SetExpiredText", "SetZeroDurationText",
-    "SetTexCoord", "SetHeight", "SetClipsChildren",
+    "SetTexCoord", "SetHeight", "SetClipsChildren", "RegisterForClicks",
+    "SetColorTexture", "SetBackdropColor",
 }) do methods[name] = noop end
 function methods:SetMinMaxValues(a,b) self.minimum,self.maximum=a,b end
 function methods:GetFrameLevel() return self.level or 1 end
@@ -25,6 +28,8 @@ function methods:SetHorizTile(v) self.horizTile=v end
 function methods:SetVertTile(v) self.vertTile=v end
 function methods:GetStatusBarTexture() return self end
 function methods:IsVisible() return self:IsShown() and (not self.parent or self.parent:IsVisible()) end
+function methods:GetParent() return self.parent end
+function methods:GetWidth() return self.width or 1 end
 function methods:SetSize(w,h) self.width, self.height = w,h end
 function methods:SetScale(v) self.scale = v end
 function methods:GetScale() return self.scale or 1 end
@@ -173,6 +178,7 @@ _G.MSUF_PixelLayoutRegion=function(region,policy,...)
     return region
 end
 assert(loadfile(root.."/tools/tests/runtime_media_fixture.lua"))().LoadFonts(root, ns)
+assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Modules.lua"))("MSUF",ns)
 _G.MSUF_DB={}
 chunk("MSUF",ns)
@@ -287,12 +293,28 @@ assert(main.binding.enabled and main.duration.endTime==104 and main.Bar.timer.en
 assert(swing.Set("main","display","bar") and main.Bar.timer.endTime==104)
 assert(main.Bar:IsVisible() and not main.Time:IsShown() and main.Title:IsVisible(), "bar mode restores existing title/time choices")
 assert(swing.Set("main","time",true))
-assert(swing.SetPreview(true))
+assert(not swing.GetPreview())
+editModeChanged(true)
+assert(main.mouse and main.PreviewBar:IsShown() and not driver.events.PLAYER_SWING,
+    "Edit Mode must show the static draggable Swing preview")
+assert(not swing.GetPreview(), "automatic preview must not change the manual toggle")
+assert(swing.SetPreview(false) and main.mouse, "closing Swing settings must keep the Edit Mode preview")
+editModeChanged(false)
+assert(not main.mouse and driver.events.PLAYER_SWING, "leaving Edit Mode must resume gameplay")
+editModeChanged(true)
 assert(swing.Set("main","scale",150))
 main.centerX,main.centerY=400,300
+main.scripts.OnDragStart(main)
 main.scripts.OnDragStop(main)
 assert(swing.Get("main","x")==100 and swing.Get("main","y")==50, "drag persists screen offsets at custom scale")
 
+assert(swing.SetPreview(true))
+editModeChanged(false)
+assert(swing.GetPreview() and main.mouse, "leaving Edit Mode must keep a requested manual preview")
+assert(swing.SetPreview(false) and not main.mouse and driver.events.PLAYER_SWING,
+    "turning off manual preview must resume gameplay")
+editModeChanged(true)
+assert(swing.SetPreview(true))
 -- A drag still running when combat starts: the drop is not saved, so the bar
 -- stops moving and goes back to its saved place instead of staying dropped.
 main.StartMoving = function(self) self.moving = true; self.point = { "DRAGGED" } end
@@ -305,7 +327,7 @@ assert(not swing.GetPreview() and not main.mouse, "combat ends interactive previ
 main.scripts.OnDragStop(main)
 assert(not main.moving, "combat start left the bar following the cursor")
 assert(swing.Get("main","x")==100 and swing.Get("main","y")==50, "a drop after combat started was saved")
-assert(main.point[1]=="CENTER" and math.abs(main.point[2]-100/1.5)<1e-9 and math.abs(main.point[3]-50/1.5)<1e-9,
+assert(main.point[1]=="CENTER" and math.abs(main.point[4]-100/1.5)<1e-9 and math.abs(main.point[5]-50/1.5)<1e-9,
     "a bar dropped after combat started stays where it was dropped instead of its saved place")
 combat=false
 -- All three disabled: no PLAYER_SWING subscriber, while ownership remains active.
@@ -371,7 +393,7 @@ end
 function W.Toggle() return object() end
 W.SectionSwitch=W.Toggle
 function W.Segment() local widget=object();widget._msuf2Title=object();return widget end
-function W.FixedPreviewSection() return object() end
+function W.FixedPreviewSection() return object(), object() end
 function W.Slider() return object() end
 function W.Dropdown(_,_,values) local widget=object(); widget.values=values; return widget end
 function W.TextInput(parent,label,width)
@@ -400,10 +422,20 @@ ns.Require=function(name,...)
     return function(region) return region end
 end
 ns.MSUF2={
-    Widgets=W, Theme={Button=function() return object() end},
+    Widgets=W, Theme={colors={accent={0.2,0.5,1}}, Button=function() return object() end},
+    Tr=function(label) return label end,
+    AlphaLabel=function(label) return label end,
+    PreviewHelpers={
+        LayerChipButtonOpts=function(_,_,_,opts) return opts end,
+        PreviewChromePalette=function() return {} end,
+        CreateLayerButton=function() local chip=object(); chip.Refresh=noop; return chip end,
+        FlowLayerChips=function() return 24 end,
+        ApplyPreviewChrome=noop,
+        StylePreviewPillButton=function(button) button.MSUF2RefreshPreviewPill=noop end,
+    },
     UnitSectionsShared={MakeScopeCopyPopup=function() return {Show=noop,Hide=noop} end},
-    AdvancedPage={MoveWidget=noop, RegisterControl=noop, ControlMeta=function(_,_,path)
-        return {path=path,controlId="menu2.swingtimers.swing."..path}
+    AdvancedPage={MoveWidget=noop, RegisterControl=noop, ControlMeta=function(_,_,path,classification,options)
+        return {path=path,controlId="menu2.swingtimers.swing."..path, classification=classification, settingKey=options.settingKey}
     end},
     RegisterControlMetadata=noop,
     StatusBarTextureItems=ns.UI.StatusBarTextureItems,
@@ -447,7 +479,7 @@ for _, widget in ipairs(objects) do
     if spec and spec.id == "menu2.swingtimers.swing.copy.button" then copyButton = widget break end
 end
 assert(copyButton, "minimal fixture lost actual Copy To owner")
-assert(loadfile(root .. "/tools/tests/menu_button_owner_assert.lua"))().Button(copyButton, copyButton._msuf2ControlSchema)
+assert(copyButton._msuf2ControlSchema.owner == copyButton, "Copy To action must have its real button owner")
 local copyHooks = 0
 copyButton:HookScript("OnClick", function(self) assert(self == copyButton); copyHooks = copyHooks + 1 end)
 copyButton:SetScript("OnClick", function(self, button, down) return self, button, down end)
@@ -501,6 +533,7 @@ print("PASS Swing menu: scoped appearance, text, reach and main-hand cue color m
 assert(swing.SetEnabled(false))
 local disabledNS={Client={IsForever=true},LSM=ns.LSM,UI=ns.UI}
 assert(loadfile(root.."/tools/tests/require_fixture.lua"))().InstallKernel(root,disabledNS)
+assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua"))("MSUF",disabledNS)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Modules.lua"))("MSUF",disabledNS)
 _G.MSUF_DB={swingTimers={enabled=false}}
 chunk("MSUF",disabledNS)

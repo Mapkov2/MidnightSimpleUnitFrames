@@ -78,7 +78,7 @@ local RUNE_PREVIEW_READY_HOLD = 1.2
 --- once; SceneValues writes the count, partial and rune states a wave tick changes, without allocating after
 --- its first call. Runtime gates retain the saved settings in every sample.
 local SAMPLE_PRIMARY_POWER = { WARRIOR = 1, ROGUE = 3, DEATHKNIGHT = 6, MONK = 3, DEMONHUNTER = 17 }
-local HUNTER_USES_FOCUS = MSUF.Client.IsRetail and not MSUF.Client.IsForever
+local HUNTER_USES_FOCUS = MSUF.Client.IsMists or (MSUF.Client.IsRetail and not MSUF.Client.IsForever)
 function CP.PrimaryPower(spec, class)
     if spec and spec.primaryPower ~= nil then return spec.primaryPower end
     if class == "HUNTER" then return HUNTER_USES_FOCUS and 2 or 0 end
@@ -86,6 +86,12 @@ function CP.PrimaryPower(spec, class)
     if class == "SHAMAN" and spec and spec.mode == "continuous" then return 11 end
     return SAMPLE_PRIMARY_POWER[class] or 0
 end
+local SAMPLE_POWER_TOKENS = { [0] = "MANA", [1] = "RAGE", [2] = "FOCUS", [3] = "ENERGY",
+    [6] = "RUNIC_POWER", [8] = "LUNAR_POWER", [11] = "MAELSTROM", [13] = "INSANITY", [17] = "FURY" }
+function CP.PrimaryPowerToken(powerType)
+    return SAMPLE_POWER_TOKENS[powerType]
+end
+
 function CP.SceneStatic(sample, spec, class)
     sample.class, sample.spec, sample.primaryPower, sample.time = class, spec.specIndex or 1, CP.PrimaryPower(spec, class), 100
     sample.charged = spec.chargedSlots

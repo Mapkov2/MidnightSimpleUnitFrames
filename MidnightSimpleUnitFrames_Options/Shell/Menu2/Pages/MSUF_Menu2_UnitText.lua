@@ -128,22 +128,12 @@ end
 function TextSection.PrepareSlotState(state, unit)
     local CurrentTextTab, RefreshTextControlState = state.CurrentTextTab, state.RefreshTextControlState
     local tabValues = VT("name", "Name", "hp", "HP Text", "power", "Power Text", "advanced", "Advanced")
-    local sampleNames = {
-        player = "Mapko",
-        target = "Astral Warden",
-        targettarget = "Moonlit Tank",
-        focustarget = "Marked Add",
-        focus = "Voidcaller",
-        boss = "Boss Preview",
-        pet = "Companion",
-        pettarget = "Hunted Foe",
-    }
     local function RaidGroupNameAllowed(unitKey)
         return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget"
             or unitKey == "pettarget" or unitKey == "focus"
     end
     local function PaintNamePreview(value)
-        M.UnitNameSample.Paint(value, unit, sampleNames[unit] or UnitTopLabel(unit), RaidGroupNameAllowed(unit))
+        M.UnitNameSample.Paint(value, unit, M.UnitNameSample.Name(), RaidGroupNameAllowed(unit))
     end
     M.unitTextSlotSelection = M.unitTextSlotSelection or {}
     M.unitTextMoveTogether = M.unitTextMoveTogether or {}

@@ -220,8 +220,8 @@ function Shared.AttachSectionUX(ctx, opts, root)
                 more:SetPoint("RIGHT", entry.header, "RIGHT", -10, 0)
                 more:SetFrameLevel(entry.header:GetFrameLevel() + 4)
                 more._msuf2SkipHistoryCheckpoint = true
-                entry._msuf2ActionReserve = 34
-                entry._msuf2SectionActions = more
+                M.ReserveSectionActions(entry, more, 34, true)
+                local function GetPopup() return popup end
                 local function Change(target)
                     if M.BlockCombatAction() or popupSource ~= opts.scope() then return false end
                     local gate = ctx.entry._msuf2FrameGate
@@ -277,7 +277,10 @@ function Shared.AttachSectionUX(ctx, opts, root)
                         return
                     end
                     popupSource = opts.scope()
-                    if not popup then popup = CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices) end
+                    if not popup then
+                        popup = CreateSectionActionPopup(ctx, spec, Close, Change, TargetChoices)
+                        M.SetSectionPopupGetter(more, GetPopup, popup)
+                    end
                     popup.RefreshTargets()
                     T.SetTranslatedText(popup.title, opts.label(popupSource) .. " · " .. (entry.label:GetText() or id))
                     popup:ClearAllPoints()
@@ -285,7 +288,7 @@ function Shared.AttachSectionUX(ctx, opts, root)
                     M.ApplyPopupFramePriority(popup)
                     popup:Show()
                 end)
-                more._msuf2GetSectionPopup = function() return popup end
+                M.SetSectionPopupGetter(more, GetPopup)
                 if M.AddTooltip then M.AddTooltip(more, "Section actions", nil, { hook = true }) end
             end
             Refresh()

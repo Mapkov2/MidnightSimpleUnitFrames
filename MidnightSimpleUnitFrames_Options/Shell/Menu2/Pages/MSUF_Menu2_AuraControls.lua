@@ -634,41 +634,8 @@ local function ConfigureMaxDurationSlider(slider)
     return slider
 end
 
-local UNIT_AURA_WORKSPACE_TAB_STYLE = {
-    bg = { 0.012, 0.025, 0.052, 0.90 },
-    border = { 0.070, 0.130, 0.235, 0.52 },
-    textColor = { 0.78, 0.86, 0.97, 0.96 },
-    hoverBg = { 0.024, 0.052, 0.100, 0.96 },
-    hoverBorder = { 0.120, 0.245, 0.455, 0.78 },
-    activeBg = { 0.032, 0.090, 0.205, 0.97 },
-    activeBorder = { 0.150, 0.385, 0.760, 0.92 },
-    activeTextColor = { 0.94, 0.98, 1.00, 1.00 },
-}
-
-local function UnitAuraWorkspaceTabButton(parent, item, width)
-    -- Midnight is the authored reference and must keep its exact tuned values.
-    -- Other menu accents resolve from the live token family so Preview-as and
-    -- Sample/Live do not retain the blue literals baked when this file loaded.
-    if T.MenuAccentActive and T.MenuAccentActive() then
-        local colors = T.colors or {}
-        local style = UNIT_AURA_WORKSPACE_TAB_STYLE
-        local function SetColor(target, source)
-            target[1], target[2], target[3] = source[1], source[2], source[3]
-        end
-        SetColor(style.bg, colors.coreShadow or style.bg)
-        SetColor(style.border, colors.coreRim or style.border)
-        SetColor(style.textColor, colors.pillText or style.textColor)
-        SetColor(style.hoverBg, colors.coreSurface or style.hoverBg)
-        SetColor(style.hoverBorder, colors.coreGlow or style.hoverBorder)
-        SetColor(style.activeBg, colors.pillActive or colors.coreBlue or style.activeBg)
-        SetColor(style.activeBorder, colors.pillEdgeActive or colors.coreHot or style.activeBorder)
-        SetColor(style.activeTextColor, colors.pillTextActive or style.activeTextColor)
-    end
-    return W.TopButton(parent, item.text, width, 24, UNIT_AURA_WORKSPACE_TAB_STYLE)
-end
-
 -- schemaScope opts the tab buttons into a schema declaration (ephemeral menu state).
-local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory, catalogPath, schemaScope)
+local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, catalogPath, schemaScope)
     gap = gap or 6
     local count = #values
     local bw = max(56, floor(((width or 720) - gap * (count - 1)) / count))
@@ -676,10 +643,7 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
     local RefreshButtons
     for i = 1, count do
         local item = values[i]
-        -- Tab rows show a selection, so they default to the workspace tab
-        -- style: the plain action-button style draws its active state exactly
-        -- like its idle one, so a selected chip would look unselected.
-        local btn = (buttonFactory and buttonFactory(parent, item, bw)) or UnitAuraWorkspaceTabButton(parent, item, bw)
+        local btn = T.StyleTabButton(T.Button(parent, item.text, bw, 26))
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (bw + gap), y)
         btn._msuf2Value = item.value
         btn:SetScript("OnClick", function()
@@ -856,7 +820,7 @@ local function BuildLaneTabs(ctx, parent, stateKey, x, y, width, schemaScope)
     BuildActionTabs(ctx, parent, LANE_VALUES, x, y, width, function() return CurrentLane(stateKey, "debuff") end, function(value)
         SetCurrentLane(stateKey, value)
         Rebuild(ctx)
-    end, nil, nil, "workspace.lane-selector." .. AuraCatalogToken(stateKey, "lane"), schemaScope)
+    end, nil, "workspace.lane-selector." .. AuraCatalogToken(stateKey, "lane"), schemaScope)
 end
 
 M.AuraControls = {

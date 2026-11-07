@@ -200,6 +200,7 @@ function T.RefreshMenuFonts(root, force, preserveCache)
     end
     RefreshMenuFonts(M.frame, seen, force == true)
     RefreshMenuFonts(M.minimizedBar, seen, force == true)
+    if T.RefreshTabLayouts then T.RefreshTabLayouts() end
 end
 function T.RefreshMenuFontStrings(fontStrings, force, preserveCache)
     if preserveCache ~= true then T.ClearMenuFontCache() end

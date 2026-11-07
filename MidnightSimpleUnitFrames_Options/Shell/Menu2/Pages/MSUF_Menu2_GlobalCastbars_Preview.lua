@@ -132,10 +132,10 @@ local function PreviewButtonGroup(parent, specs, buttonW, gap, onClick, semantic
     local width = 0
     for i = 1, #specs do
         local spec = specs[i]
-        local btn = T.CenterButtonLabel(T.Button(holder, spec.text, buttonW, 24))
-        T.FitButtonWidth(btn, buttonW)
+        local preferred = T.MeasureTabWidth(M.Tr(spec.text), buttonW)
+        local btn = T.StyleTabButton(T.Button(holder, spec.text, preferred, 24))
         local value = spec.key
-        btn._msuf2Value, btn._msuf2SegmentChoice = value, true
+        btn._msuf2Value = value
         ordered[i] = btn
         btn._msuf2AllowCombatClick = true
         btn._msuf2SkipHistoryCheckpoint = true

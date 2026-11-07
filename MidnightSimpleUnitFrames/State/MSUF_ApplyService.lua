@@ -701,6 +701,10 @@ local function PushVisualUpdates()
 end
 local function ApplyFontRuntime(opt, unitFramesApplied, castbarRefreshPending, classPowerRefreshPending)
     local scope = opt and opt.fontScope
+    if scope == "nameplates" then
+        MSUF.SuiteLink.ApplyFonts(true)
+        return
+    end
     local globalScope = IsGlobalApplyScope(scope)
     local kindA = GroupKindsForScope(scope)
     local unitScope = (not globalScope and not kindA) and NormalizeApplyScope(scope) or nil

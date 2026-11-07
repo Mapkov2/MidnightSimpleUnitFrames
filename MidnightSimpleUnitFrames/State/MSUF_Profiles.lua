@@ -113,11 +113,7 @@ end
 --- slash handlers, and legacy callers, so the public surface stays global even
 --- though the implementation is isolated in this State module.
 function MSUF.PublicGlobals.MSUF_GetCharKey()
-    -- A client without realms may report no realm name. Coerce it to "" so the
-    -- key stays stable and profile bootstrap never concatenates nil.
-    local realm = GetRealmName()
-    if type(realm) ~= "string" then realm = "" end
-    return UnitName("player") .. "-" .. realm
+    return MSUF.GetCharacterProfileKey()
 end
 ExportPublic("MSUF_GetCharKey", MSUF.PublicGlobals.MSUF_GetCharKey)
 local function MSUF_ProfileIO_EnsureProfileRoots()
@@ -194,6 +190,7 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
     local charKey = GetCharKey()
+    if not charKey then return false, "character identity unavailable" end
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     local active = char.activeProfile
@@ -360,10 +357,11 @@ function MSUF_SwitchProfile(name)
         ProfileChat("error", "Unknown profile: %s", tostring(name))
         return false, "unknown profile"
     end
-    local prepared,why=BeforeProfileSwitch()
-    if not prepared then return false,why end
     GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
     local charKey = GetCharKey()
+    if not charKey then return false, "character identity unavailable" end
+    local prepared,why=BeforeProfileSwitch()
+    if not prepared then return false,why end
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     if MSUF_ProfileIO_TranslateProfileToCurrent then
@@ -688,6 +686,7 @@ local function MSUF_GetCharMeta()
     local _, chars = MSUF_ProfileIO_EnsureProfileRoots()
     GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
     local charKey = GetCharKey()
+    if not charKey then return nil end
     local char = chars[charKey]
     if type(char) ~= "table" then
         char = {}
@@ -703,11 +702,13 @@ local function MSUF_GetCharMeta()
 end
 function MSUF.PublicGlobals.MSUF_IsSpecAutoSwitchEnabled()
     local char = MSUF_GetCharMeta()
+    if not char then return false end
     return (char.specAutoSwitch == true)
 end
 ExportPublic("MSUF_IsSpecAutoSwitchEnabled", MSUF.PublicGlobals.MSUF_IsSpecAutoSwitchEnabled)
 function MSUF.PublicGlobals.MSUF_SetSpecAutoSwitchEnabled(enabled)
     local char = MSUF_GetCharMeta()
+    if not char then return false end
     char.specAutoSwitch = (enabled == true)
     if char.specAutoSwitch then
         if MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled then
@@ -718,6 +719,7 @@ function MSUF.PublicGlobals.MSUF_SetSpecAutoSwitchEnabled(enabled)
 ExportPublic("MSUF_SetSpecAutoSwitchEnabled", MSUF.PublicGlobals.MSUF_SetSpecAutoSwitchEnabled)
 function MSUF.PublicGlobals.MSUF_GetSpecProfile(specID)
     local char = MSUF_GetCharMeta()
+    if not char then return nil end
     if type(specID) ~= "number" then  return nil end
     local v = char.specProfileMap[specID]
     if type(v) ~= "string" or v == "" then
@@ -728,6 +730,7 @@ end
 ExportPublic("MSUF_GetSpecProfile", MSUF.PublicGlobals.MSUF_GetSpecProfile)
 function MSUF.PublicGlobals.MSUF_SetSpecProfile(specID, profileName)
     local char = MSUF_GetCharMeta()
+    if not char then return false end
     if type(specID) ~= "number" then  return end
     --- "None" clears unless a real profile owns the name (the contract of
     --- MSUF_SetDefaultProfileForNewCharacters).
@@ -791,6 +794,7 @@ local function MSUF_RunAfterCombat_SpecProfile(fn)
  end
 function MSUF.PublicGlobals.MSUF_ApplySpecProfileIfEnabled(reason)
     local char = MSUF_GetCharMeta()
+    if not char then return end
     if char.specAutoSwitch ~= true then  return end
     GetPlayerSpecID = GetPlayerSpecID or MSUF.Require("MSUF_GetPlayerSpecID", "State/MSUF_Profiles.lua")
     local specID = GetPlayerSpecID()

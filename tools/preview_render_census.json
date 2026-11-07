@@ -362,11 +362,11 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "63d1d9c029a40cdf3d34838eadcd25b4193478deab1824b8c0b9181411c4c4d9"
+          "source_sha256": "794ea8d6b050cfbe97706b300517d46abed5aba14717e2065648402d3f86f19a"
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
-          "source_sha256": "63e1fe0edcdf0b16257c51c7a28e6a1beed552aef7762f06a69ec795de99338c"
+          "source_sha256": "8eccbdf50550ee234d32dbb25370f37220beca006aad1849216ebabd8c9d8e7e"
         },
         {
           "file": "Pages/MSUF_Menu2_GroupBars.lua",
@@ -394,7 +394,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText_NameSample.lua",
-          "source_sha256": "6dd16d9530f0386f7586bdc9c86aa6d7d024e91b9285ff43143e914fdd838c97"
+          "source_sha256": "d8cffd2b8e55c432c4550496de1733b98801fc9cdb064cc4d80ed6df82679f4c"
         },
         {
           "file": "MSUF_Menu2_PreviewContracts.lua",
@@ -781,14 +781,14 @@
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua",
-          "source_sha256": "f22a285dbef269d85cab64dc954d68f5d24a8ed583e25925a067e1800ed9e893"
+          "source_sha256": "223db088ec0bbb3cd989d273042ed7bbc47298210c13d929ef4920a5389907d2"
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",
           "source_sha256": "0da2900f46c1b09575cb1212e9927c92ba343cbd4620711bf1db24d613f39db6"
         }
       ],
-      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned. 2026-11-01: reviewed selector search metadata and shared host lifecycle; Background adapter lives in Frames, with runtime painting unchanged."
+      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned. 2026-11-01: reviewed selector search metadata and shared host lifecycle; Background adapter lives in Frames, with runtime painting unchanged. 2026-11-05: reviewed explicit global color-mode setter and reapply metadata; Background adapter and runtime painting unchanged."
     },
     {
       "file": "Pages/MSUF_Menu2_ColorPainter.lua",

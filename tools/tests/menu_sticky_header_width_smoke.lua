@@ -68,9 +68,33 @@ end
 local entry = Select()
 Check(entry, "initial wide")
 local expander = assert(entry.pageHeaders[2].section._msuf2FixedPreviewExpanderRecord)
+-- The explicit expansion must animate even if the menu first has to grow.
+local availableHeight, previousWindowHeight = M.GetPageHeaderAvailableHeight, mw.win:GetHeight()
+M.Theme.ReducedMotionEnabled = function() return false end
+M.frame.host:SetHeight(420)
+M.frame.status:SetHeight(20)
+M.GetPageHeaderAvailableHeight = function() return 390 + mw.win:GetHeight() - previousWindowHeight end
+expander.button:Click()
+entry = M.cache.uf_player
+expander = assert(M._msuf2ActiveFixedPreviewExpander)
+local driver = assert(expander.motion, "expanding after window growth snapped to its final height")
+assert(mw.win:GetHeight() > previousWindowHeight and driver:GetScript("OnUpdate"), "fixture missed the animated grow path")
+assert(expander.section:GetHeight() == expander.compactSectionHeight and expander.section:DoesClipChildren(),
+    "expanded preview must begin at its compact height with clipping")
+driver.foldClock.GetSmoothProgress = function() return 0.5 end
+MenuWorld.FireScript(driver, "OnUpdate", 0)
+local height = expander.section:GetHeight()
+assert(height > expander.compactSectionHeight and height < expander.preferredExpandedSectionHeight,
+    "preview reveal has no intermediate height")
+assert(expander.box:GetHeight() == expander.preferredExpandedHeight, "the preview renderer resized during a motion tick")
+expander.button:Click()
+assert(not expander.expanded and not driver:GetScript("OnUpdate") and not expander.section:DoesClipChildren(),
+    "closing during the reveal retained a motion or clip")
+M.GetPageHeaderAvailableHeight = availableHeight
+M.Theme.ReducedMotionEnabled = function() return true end
 expander.button:Click()
 Settle()
-assert(expander.expanded, "full preview must be active before resizing")
+assert(expander.expanded and not driver:GetScript("OnUpdate"), "reduced-motion preview expansion must settle immediately")
 -- The public builder can reflow a retained entry while its stack is hosted.
 width = 900
 assert(M.BuildPageEntry("uf_player", false) == entry, "same layout slot rebuilt the page")

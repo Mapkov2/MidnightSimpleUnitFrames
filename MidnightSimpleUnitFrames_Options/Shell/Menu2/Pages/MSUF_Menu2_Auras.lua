@@ -455,11 +455,8 @@ local function BuildAuraStyleNav(ctx, b, scope)
         or ((not IsGroupScope(scope))
             and (scope == "player" and UNIT_STYLE_CONTAINER_VALUES_PLAYER or UNIT_STYLE_CONTAINER_VALUES)
             or LANE_VALUES)
-    local h = 56
-    if scope == "appearance" and next(appearanceTypes) then
-        local metrics = W.MeasureScopeOverrideBar(values, { width = b.width, labelWidth = 88, centerY = -28 })
-        h = max(h, abs(metrics.bottomY) + 16)
-    end
+    local metrics = W.MeasureScopeOverrideBar(values, { width = b.width, labelWidth = 88, centerY = -28 })
+    local h = max(56, abs(metrics.bottomY) + 16)
     local section = T.Panel(b.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
     T.ApplySurface(section, "card")
     section:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)

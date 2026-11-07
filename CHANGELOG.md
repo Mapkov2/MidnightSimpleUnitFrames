@@ -1,5 +1,43 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta1 - 2026-11-07
+
+### Unit frame positioning
+
+- Fixed drag completion saving offsets against an outdated anchor when a provider appears, changes, or loses its position. Mouse release, closing Edit Mode during a drag, and external Edit Mode shells now preserve the final visible position in the current anchor space.
+<!-- msuf-menu-link: none -->
+- Fixed unfinished X/Y popup edits overwriting a later mouse drag. Typed edits and dragging retain separate Undo steps.
+<!-- msuf-menu-link: none -->
+
+### Unit frames and colors
+
+- Party, Raid and Mythic Raid frames can each set their own health gradient and bar background. Choose the gradient colors, background color mode and whether the background fills the bar or shows missing health.
+<!-- msuf-menu-link: none -->
+- Added name formatting presets and a live example in Fonts. Choose full names, abbreviations, a character limit, or abbreviated names with a limit. Individual unit frames can override the shared format.
+<!-- msuf-menu-link: none -->
+- When supported by MSUF Suite, nameplate fonts appear as a scope on the standard Fonts page.
+<!-- msuf-menu-link: none -->
+- Fixed health bars retaining the old texture after switching away from the Blizzard preset. Choosing a global health bar color mode now clears conflicting per-frame preset overrides.
+<!-- msuf-menu-link: none -->
+- Opacity is visible in the compact color picker for supported colors. The background tint settings now show a warning when saved opacity is 0%.
+<!-- msuf-menu-link: none -->
+
+### WoW Forever
+
+- Swing timers can be positioned in Edit Mode. The options preview lets you inspect individual layers, jump to their settings and preview out-of-range color and opacity.
+<!-- msuf-menu-link: none -->
+- Character profile selection now uses the shared character identity key, with guards for cases where the client has not supplied the name yet.
+<!-- msuf-menu-link: none -->
+
+### Menu and Edit Mode
+
+- Improved Dashboard resizing, Quick Setup and Suite Setup access. Refined selected tabs, window controls and the Class Resources preview, including alternative mana.
+<!-- msuf-menu-link: none -->
+- Menu appearance presets apply to the MSUF menu when MapkoSkin is available. You can choose the MapkoSkin look from the same list.
+<!-- msuf-menu-link: none -->
+- Edit Mode panels and grid fade in when opened and respect reduced-motion settings.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-alpha6 - 2026-11-05
 
 ### Unit frame positioning

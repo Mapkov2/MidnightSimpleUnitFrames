@@ -64,9 +64,11 @@ end
 -- Focus color adds its switch and swatch; existing semantic rows are unchanged.
 -- Native artwork adds its two switches to both inventories; existing identities are preserved.
 -- 2026-11-05: add the three Mana display controls; retain the concurrent slot-font rows.
+-- 2026-11-06: five independent group color controls; both generated indexes retained every prior identity.
+-- 2026-11-06: opt-in name format adds one control in each Fonts scope; prior search identities remain.
 local indexes = {
-    { "", 4528, 1627824837 },
-    { "_Classic", 4103, 2061289755 },
+    { "", 4534, 1283045421 },
+    { "_Classic", 4109, 176808554 },
 }
 local moved = {
     { "edit_selection", "workbench_alignment", "multi", "bottom left right top horizontal vertical move open toggle" },

@@ -88,16 +88,36 @@ function MSUF.ResolveStartupProfile(globalDB, legacyDB, charKey)
     return active, first and profiles[first] or nil
 end
 
+-- Profile ownership uses the full character identity, independently of the
+-- display-name setting. Forever returns a surname where other clients return
+-- a realm; their ordinary name-realm keys therefore stay unchanged.
+function MSUF.GetCharacterProfileKey()
+    local name, second = UnitName("player")
+    local realm = GetRealmName()
+    if issecretvalue and (issecretvalue(name) or issecretvalue(realm)) then return nil end
+    if type(name) ~= "string" or name == "" then return nil end
+    if MSUF.Client.HasCharacterSurnames then
+        if issecretvalue and issecretvalue(second) then return nil end
+        if type(second) ~= "string" then second = "" end
+    else second = "" end
+    if second ~= "" then
+        local separators = Constants and Constants.CharacterNameSeparatorConsts
+        local separator = separators and separators.CHARACTERNAME_SURNAME_SEPARATOR
+        if type(separator) ~= "string" then return nil end
+        name = name .. separator .. second
+    end
+    if type(realm) ~= "string" then realm = "" end
+    return name .. "-" .. realm
+end
+
 local function ActiveProfileLocale()
     local globalDB = rawget(_G, "MSUF_GlobalDB")
     local unitName = _G.UnitName
     local getRealmName = _G.GetRealmName
     if type(unitName) ~= "function" or type(getRealmName) ~= "function" then return nil end
-    local name = unitName("player")
-    local realm = getRealmName()
-    if type(name) ~= "string" or name == "" then return nil end
-    if type(realm) ~= "string" then realm = "" end
-    local _, profile = MSUF.ResolveStartupProfile(globalDB, rawget(_G, "MSUF_DB"), name .. "-" .. realm)
+    local key = MSUF.GetCharacterProfileKey()
+    if not key then return nil end
+    local _, profile = MSUF.ResolveStartupProfile(globalDB, rawget(_G, "MSUF_DB"), key)
     return LocaleFromDB(profile)
 end
 

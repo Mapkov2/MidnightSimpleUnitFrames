@@ -484,7 +484,7 @@ local function BuildGallery(P, section, width, top)
     local values = {}
     for i = 1, #FAMILIES do
         local family = FAMILIES[i]
-        values[i] = { value = family, text = family == "ALL" and "All" or family }
+        values[i] = { value = family, text = family == "ALL" and "All" or family, width = 46 }
     end
     Row(ctx, section, { "segment", nil, nil, { "Family", values, width - 48 }, { 24, top, width - 48 },
         get = function() return P.family end,
