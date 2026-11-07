@@ -82,12 +82,116 @@ for _, revision in ipairs({ 16, 17 }) do
     assert(normal.env.MSUF_GlobalDB._newerRevisionBackups == nil, "ordinary revision created backup state")
     assert(normal.env.MSUF_DB._msufDefaultsRevision == 17, "ordinary normalization changed")
 end
+do
+    local function FullRevision18()
+        local profile = Serial(source.env.MSUF_DB)
+        profile._msufDefaultsRevision = 18
+        profile._msufStateSchema = nil
+        profile._msufForeverFiveSecondDefault_v1 = true
+        profile.bars.manaRegenPause = false
+        profile.player.width = 341
+        profile.player.portraitDragonArtwork = nil
+        profile.retainedData = { enabled = false, offset = 0, list = { "keep", false } }
+        return profile
+    end
+
+    local direct = FullRevision18()
+    local expected = Serial(direct)
+    expected._msufDefaultsRevision = 17
+    local changed, status = ns.DefaultsSchema.RestorePersistence(direct)
+    assert(changed and status == "restored" and H.Literal(direct) == H.Literal(expected),
+        "decoding a full 6.5 revision-18 profile must only change its defaults revision")
+
+    local active, inactive = FullRevision18(), FullRevision18()
+    inactive._msufStateSchema = 700 -- Profile already seen by an earlier 7.0 login.
+    local activeBytes, inactiveBytes = H.Literal(active), H.Literal(inactive)
+    local history = { Other = Serial(first) }
+    local historyBytes = H.Literal(history)
+    local account = {
+        profiles = { Default = active, Inactive = inactive },
+        char = { ["Tester-Realm"] = { activeProfile = "Default", specProfileMap = { "Inactive" } } },
+        _newerRevisionBackups = history,
+    }
+    local function CheckUserSettings(profile)
+        assert(profile.player.width == 341 and profile.bars.manaRegenPause == false,
+            "revision-18 upgrade overwrote user settings")
+        assert(profile._msufForeverFiveSecondDefault_v1 == true, "upgrade lost the 6.5 Forever mana stamp")
+        assert(profile.player.portraitDragonArtwork == false, "upgrade skipped the 7.0 portrait defaults")
+        assert(H.Literal(profile.retainedData) == H.Literal(expected.retainedData),
+            "revision-18 upgrade changed opaque data")
+    end
+    local function CheckLogin(w)
+        local saved = w.env.MSUF_GlobalDB
+        assert(w.core.Lifecycle.Bound and w.env.MSUF_DB == saved.profiles.Default, "7.0 login did not bind the selected profile")
+        assert(saved.char["Tester-Realm"].specProfileMap[1] == "Inactive", "upgrade changed a character's profile mapping")
+        for _, profile in pairs(saved.profiles) do
+            assert(profile._msufDefaultsRevision == 17, "a full revision-18 profile would retry the upgrade")
+            CheckUserSettings(profile)
+        end
+        assert(H.Literal(saved._newerRevisionBackups) == historyBytes, "upgrade changed the existing recovery history")
+        local snapshot = assert(saved._pre70ProfileBackup)
+        assert(H.Literal(snapshot.profiles.Default) == activeBytes and H.Literal(snapshot.profiles.Inactive) == inactiveBytes,
+            "the rollback snapshot must retain the original revision-18 profiles")
+    end
+    local upgraded = C.NewWorld(root, flavor, "Tester-Realm")
+    C.Login(upgraded, { MSUF_GlobalDB = account }, true)
+    CheckLogin(upgraded)
+    upgraded:FireEvent("PLAYER_LOGOUT")
+    local secondLogin = C.NewWorld(root, flavor, "Tester-Realm")
+    C.Login(secondLogin, { MSUF_GlobalDB = Serial(account) }, true)
+    CheckLogin(secondLogin)
+
+    local legacyOnly = C.NewWorld(root, flavor, "Tester-Realm")
+    C.Login(legacyOnly, { MSUF_DB = FullRevision18() }, true)
+    assert(legacyOnly.core.Lifecycle.Bound and legacyOnly.env.MSUF_DB._msufDefaultsRevision == 17)
+    assert(legacyOnly.env.MSUF_GlobalDB._newerRevisionBackups == nil)
+    CheckUserSettings(legacyOnly.env.MSUF_DB)
+
+    local legacyAccount = legacyOnly.env.MSUF_GlobalDB
+    local legacySchema = legacyOnly.core.DefaultsSchema
+    assert(legacySchema.RestoreRollbackBackup(legacyAccount))
+    assert(legacyAccount.profiles.Default._msufDefaultsRevision == 18)
+    assert(legacySchema.PersistCompat(legacyAccount), "cannot write restored 6.5 data in the full compatibility format")
+    assert(legacyAccount.profiles.Default._msufDefaultsRevision == 17)
+    CheckUserSettings(legacyAccount.profiles.Default)
+
+    for _, invalid in ipairs({
+        function(profile) profile._msufDefaultsRevision = "18" end,
+        function(profile) profile._msufProfileSchema = nil end,
+        function(profile) profile._msufProfileSchema = 601 end,
+        function(profile) profile._msufStateSchema = 701 end,
+        function(profile) profile.player = false end,
+        function(profile) profile._msufSparseDefaultsV3 = "unknown" end,
+    }) do
+        local profile = FullRevision18()
+        invalid(profile)
+        local bytes = H.Literal(profile)
+        local persisted = legacyOnly.env.MSUF_GlobalDB
+        persisted.profiles.Unknown = profile
+        legacyOnly.core.DefaultsSchema.RestorePersistence(profile)
+        local backup = assert(persisted._newerRevisionBackups and persisted._newerRevisionBackups.Unknown,
+            "unknown revision-18 data bypassed recovery")
+        assert(H.Literal(backup.data) == bytes, "recovery backup changed original data")
+        assert(profile._msufDefaultsRevision ~= 17, "unknown revision-18 data was marked current")
+    end
+end
+
 -- Revision rejection remains secret-safe before the backup decision.
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
 local secret = Secrets.New("number")
 ns.Util.IsSecret = Secrets.IsSecret
-local stop = Secrets.Watch({ root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Schema.lua" }, { strict = true })
+local defaultsPath = root .. "/MidnightSimpleUnitFrames/State/Defaults/"
+local stop = Secrets.Watch({
+    defaultsPath .. "MSUF_Defaults_Schema.lua",
+    defaultsPath .. "MSUF_Defaults_Storage.lua",
+}, { strict = true })
 assert(ns.DefaultsSchema.RestorePersistence({ _msufDefaultsRevision = secret }) == false)
+for _, key in ipairs({ "_msufProfileSchema", "_msufStateSchema", "_msufSparseDefaultsV2", "_msufSparseDefaultsV3" }) do
+    local profile = Serial(source.env.MSUF_DB)
+    profile._msufDefaultsRevision = 18
+    profile[key] = secret
+    assert(ns.DefaultsSchema.RestorePersistence(profile) == false and profile._msufDefaultsRevision == 18)
+end
 local violations = stop()
 assert(#violations == 0, table.concat(violations, "\n"))
 print("PASS profile_newer_revision_backup_smoke " .. flavor)

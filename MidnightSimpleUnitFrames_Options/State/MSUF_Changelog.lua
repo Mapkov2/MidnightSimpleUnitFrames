@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "36D0B03EC36BE9B9D3E384ACBF7732020C41F14DE986C561CBAA2BA8920FED3F",
+    sourceSha256 = "5ECE6D2D60B6C45F6D31FE16EC5346557C893C1C93279E4E9D06C674D1C5FCB8",
     currentVersion = "7.0-beta1",
     historyFromVersion = "6.21",
     previousVersion = "6.510",
@@ -99,11 +99,11 @@ local data = {
                             linkless = true,
                         },
                         {
-                            text = "7.0 makes a safety copy of existing profile data before conversion. Rejected or newer-format profiles have separate recovery histories so you can inspect and recover them.",
+                            text = "7.0 makes a safety copy before conversion and carries over full 6.510 profiles with their settings and character assignments. Rejected or newer-format profiles have separate recovery histories so you can inspect and recover them.",
                             linkless = true,
                         },
                         {
-                            text = "Before returning to 6.510, run /msuf compatsave and then log out or /reload while still on 7.0. Replace the addon only after that save completes. See the profile storage guide below.",
+                            text = "Before returning to 6.510, run /msuf compatsave and then log out or /reload while still on 7.0. Replace the addon only after that save completes. See the linked profile storage guide.",
                             linkless = true,
                         },
                         {

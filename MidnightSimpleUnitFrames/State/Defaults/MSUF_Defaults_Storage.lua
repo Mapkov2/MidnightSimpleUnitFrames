@@ -161,15 +161,30 @@ local function RestoreSparseV2(profile, prepared)
     return true
 end
 
+-- Revision 18 is reserved for the full 6.5 profile format. Its Forever mana
+-- default is already covered by 7.0's per-client migrations. Early 7.0 may
+-- have stamped its state schema without updating the defaults revision.
+local function IsLegacyFullRevision18(profile, marker, extension)
+    local schema, state = profile._msufProfileSchema, profile._msufStateSchema
+    local IsSecret = MSUF.Util.IsSecret
+    if IsSecret(marker) or IsSecret(extension) or IsSecret(schema) or IsSecret(state) then return false end
+    return marker == nil and extension == nil and schema == 600 and (state == nil or state == 700)
+        and Plain(profile.general) and Plain(profile.bars) and Plain(profile.player) and Plain(profile.target)
+end
+
 -- The second distinguishes ordinary full data from an undecodable envelope.
 function Schema.RestorePersistence(profile)
     if not Plain(profile) or MSUF.Util.IsSecret(profile._msufDefaultsRevision) then return false, "rejected" end
     if Schema.IsQuarantinedProfile(profile) then return false, "rejected" end
-    if not Schema.BackupNewerRevision(profile) then return false, "rejected" end
     local marker = profile[sparseV2Marker]
     local extension = profile[sparseV3.Marker]
-    if MSUF.Util.IsSecret(marker) or MSUF.Util.IsSecret(extension) then return false, "rejected" end
     local revision = profile._msufDefaultsRevision
+    if revision == 18 and IsLegacyFullRevision18(profile, marker, extension) then
+        profile._msufDefaultsRevision = 17
+        return true, "restored"
+    end
+    if not Schema.BackupNewerRevision(profile) then return false, "rejected" end
+    if MSUF.Util.IsSecret(marker) or MSUF.Util.IsSecret(extension) then return false, "rejected" end
     local stale = (marker ~= nil or extension ~= nil) and (revision == nil or (type(revision) == "number" and revision < sparseToken)
         or (revision ~= sparseToken and type(marker) ~= "string" and type(extension) ~= "string"))
     if stale then

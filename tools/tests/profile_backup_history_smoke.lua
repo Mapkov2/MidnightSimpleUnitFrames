@@ -8,7 +8,8 @@ local world = C.NewWorld(root, flavor, "Tester-Realm")
 C.Login(world, {})
 local schema, account = world.core.DefaultsSchema, world.env.MSUF_GlobalDB
 local originals, snapshots = {}, {}
-for index, revision in ipairs({ 18, 19, 19, 20 }) do
+-- Revision 18 belongs to the full 6.5 format; use later revisions for new history.
+for index, revision in ipairs({ 19, 20, 20, 21 }) do
     local profile = Copy(world.env.MSUF_DB)
     profile._msufDefaultsRevision = revision
     profile.future = { version = index, zero = 0, flag = false, text = "future\nbytes", list = { 1, true, {} } }

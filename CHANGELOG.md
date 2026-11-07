@@ -25,9 +25,9 @@ Full changes in MSUF 7.0 Beta 1 compared with the current stable 6.5x release, 6
 
 - Profiles save using the new sparse format. 7.0 reconstructs values inherited from defaults while keeping explicit overrides, including false, zero and empty strings.
 <!-- msuf-menu-link: none -->
-- 7.0 makes a safety copy of existing profile data before conversion. Rejected or newer-format profiles have separate recovery histories so you can inspect and recover them.
+- 7.0 makes a safety copy before conversion and carries over full 6.510 profiles with their settings and character assignments. Rejected or newer-format profiles have separate recovery histories so you can inspect and recover them.
 <!-- msuf-menu-link: none -->
-- Before returning to 6.510, run `/msuf compatsave` and then log out or `/reload` while still on 7.0. Replace the addon only after that save completes. See the profile storage guide below.
+- Before returning to 6.510, run `/msuf compatsave` and then log out or `/reload` while still on 7.0. Replace the addon only after that save completes. See the linked profile storage guide.
 <!-- msuf-menu-link: none -->
 - Menu undo and redo can step through a sequence of scoped and nested edits. Profile restores and history also include supported Suite settings while preserving profile variant overrides.
 <!-- msuf-menu-link: none -->
