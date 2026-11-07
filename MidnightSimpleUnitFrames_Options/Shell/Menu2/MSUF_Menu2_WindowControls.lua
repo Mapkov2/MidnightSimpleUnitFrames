@@ -135,7 +135,7 @@ local CAPTION_BARS = {
     restore = { { -5, -5, 2, -5 }, { 2, -5, 2, 2 }, { 2, 2, -5, 2 }, { -5, 2, -5, -5 },
         { -2, 2, -2, 5 }, { -2, 5, 5, 5 }, { 5, 5, 5, -2 }, { 5, -2, 2, -2 } },
 }
-local PhysicalPixel, CaptionPixelLayout
+local PhysicalPixel
 
 local function PaintCaptionControl(button, hover, down)
     local enabled = not button.IsEnabled or button:IsEnabled()
@@ -160,7 +160,7 @@ local function LayoutCaptionGlyph(button)
     if kind == "close" then
         local icon = glyphs[1]
         if not icon then
-            icon = CaptionPixelLayout(button:CreateTexture(nil, "OVERLAY"))
+            icon = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
             icon:SetTexture(T.media.windowControlIcons)
             SetIconAtlasCell(icon, "close")
             icon:SetPoint("CENTER", button, "CENTER", 0, 0)
@@ -177,7 +177,7 @@ local function LayoutCaptionGlyph(button)
     for index, bar in ipairs(bars) do
         local texture = glyphs[index]
         if not texture then
-            texture = CaptionPixelLayout(button:CreateTexture(nil, "OVERLAY"))
+            texture = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
             texture:SetColorTexture(1, 1, 1, 1)
             glyphs[index] = texture
         end
@@ -258,8 +258,8 @@ local function CreateWindowControlGroup(parent, segmentCount)
     group._msuf2ControlSegmentCount = segmentCount
     if T.classicAtlas then
         PhysicalPixel = PhysicalPixel or MSUF.Require("MSUF_GetPhysicalPixelSize", "Menu2 window controls")
-        CaptionPixelLayout = CaptionPixelLayout or MSUF.Require("MSUF_PixelLayoutRegion", "Menu2 window controls")
-        CaptionPixelLayout(group)
+        PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2 window controls")
+        PixelLayoutRegion(group)
         group._msuf2CaptionGroup = true
         return group
     end
@@ -290,8 +290,8 @@ local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText
         btn._msuf2ControlGroup = parent
         btn._msuf2ControlSegmentIndex = min(count, max(1, tonumber(segmentIndex) or 1))
         if parent._msuf2CaptionGroup then
-            CaptionPixelLayout(btn)
-            local fill = CaptionPixelLayout(btn:CreateTexture(nil, "BACKGROUND"))
+            PixelLayoutRegion(btn)
+            local fill = PixelLayoutRegion(btn:CreateTexture(nil, "BACKGROUND"))
             fill:SetAllPoints(btn)
             btn._msuf2CaptionFill = fill
             btn._msuf2CaptionGlyphs = {}
