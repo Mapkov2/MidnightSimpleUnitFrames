@@ -231,6 +231,7 @@ function Convert-ChangelogSectionToHtml {
     $inList = $false
     function Encode-Inline([string]$Value) {
         $encoded = [Net.WebUtility]::HtmlEncode($Value.Trim())
+        $encoded = [regex]::Replace($encoded, '\[([^\[\]]+)\]\((https://[^\s()<>"]+)\)', '<a href="$2">$1</a>')
         $encoded = [regex]::Replace($encoded, '\*\*(.+?)\*\*', '<strong>$1</strong>')
         $encoded = [regex]::Replace($encoded, '`([^`]+)`', '<code>$1</code>')
         return $encoded

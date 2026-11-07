@@ -22,6 +22,8 @@ if layout == "wide" then
     mw.win._msuf2WindowState = "maximized"
 end
 local expected = not capture and assert(loadfile(root .. "/tools/tests/menu_group_area_baseline.lua"))()[flavor][layout]
+-- The 26 px tabs add 2 px to the aura section and its parent page.
+local AURA_TAB_HEIGHT_DELTA = 2
 local snapshots, first, shared, preview = {}, nil, nil, nil
 local function Settle() mw:RunTimers() M.Theme.StopAllMenuAnimations() end
 local function OpenSections(entry)
@@ -106,7 +108,8 @@ local function Walk()
                 if not capture then
                     local old = assert(expected[id], "missing baseline " .. id)
                     for i, value in ipairs(snapshots[id]) do
-                        assert(value == old[i], id .. " baseline field " .. i .. ": " .. value .. " ~= " .. old[i])
+                        local target = old[i] + (i <= 2 and AURA_TAB_HEIGHT_DELTA or 0)
+                        assert(value == target, id .. " baseline field " .. i .. ": " .. value .. " ~= " .. target)
                     end
                     first = first or entry
                     assert(entry == first, "selection retained another whole page tree: " .. id)

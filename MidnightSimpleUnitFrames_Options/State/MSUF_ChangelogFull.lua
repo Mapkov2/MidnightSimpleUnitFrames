@@ -8,50 +8,216 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A535577BD7DB86873A086C7A5BCE77E916E99A2F2ED03A4E81732BF5B5F44561",
+    sourceSha256 = "36D0B03EC36BE9B9D3E384ACBF7732020C41F14DE986C561CBAA2BA8920FED3F",
     currentVersion = "7.0-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.50",
-    rangeLabel = "6.50 -> 7.0-beta1",
+    previousVersion = "6.510",
+    rangeLabel = "6.510 -> 7.0-beta1",
     entries = {
         {
             version = "7.0-beta1",
             date = "2026-11-07",
             sections = {
                 {
-                    title = "Unit frame positioning",
+                    title = "Highlights",
                     bullets = {
                         {
-                            text = "Fixed drag completion saving offsets against an outdated anchor when a provider appears, changes, or loses its position. Mouse release, closing Edit Mode during a drag, and external Edit Mode shells now preserve the final visible position in the current anchor space.",
+                            text = "Profile workbench. Save named restore points, inspect changed settings and their sources, and restore a previous state from Profiles.",
+                            link = {
+                                pageKey = "profiles",
+                                query = "save restore point",
+                                label = "Save restore point",
+                                sectionId = "workbench_versions",
+                                controlId = "menu2.profile.tools.profiles.version.save",
+                                settingKey = "",
+                            },
+                        },
+                        {
+                            text = "Review before importing. Compare incoming profile settings, then apply the changes you choose.",
+                            link = {
+                                pageKey = "profiles",
+                                query = "review changes",
+                                label = "Review changes",
+                                sectionId = "profiles_io",
+                                controlId = "menu2.profiles.advanced.import.review",
+                                settingKey = "",
+                            },
+                        },
+                        {
+                            text = "Edit several frames together. The Edit Mode Selection workspace lets you select, move and align multiple elements in one operation.",
+                            link = {
+                                pageKey = "edit_selection",
+                                query = "select remove element",
+                                label = "Select / remove element",
+                                sectionId = "workbench_alignment",
+                                controlId = "menu2.profile.tools.profiles.multi.toggle",
+                                settingKey = "",
+                            },
+                        },
+                        {
+                            text = "Layouts for different displays. Record frame positions and relative scale into a layout variant and give it display conditions.",
+                            link = {
+                                pageKey = "profiles",
+                                query = "record a layout for this display",
+                                label = "Record a layout for this display",
+                                sectionId = "workbench_display",
+                                controlId = "menu2.profile.tools.profiles.display.record",
+                                settingKey = "",
+                            },
+                        },
+                        {
+                            text = "Accessibility and visibility. Preview and review color-vision changes in Colors. The contextual Why is this hidden? card explains selected aura visibility.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "review accessibility changes",
+                                label = "Review accessibility changes",
+                                sectionId = "workbench_accessibility",
+                                controlId = "menu2.profile.tools.profiles.accessibility.review",
+                                settingKey = "",
+                                prepareKind = "colorsPainterCategory",
+                                prepareValue = "accessibility",
+                            },
+                        },
+                        {
+                            text = "Name formatting. Fonts has a live example and formats for full names, abbreviations, length limits, and abbreviations with limits. Individual unit frames can override the shared format.",
+                            link = {
+                                pageKey = "opt_fonts",
+                                query = "name format",
+                                label = "Name format",
+                                sectionId = "fonts_name_shortening",
+                                controlId = "menu2.opt.fonts.global.name.shortening.format",
+                                settingKey = "",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Profiles, recovery and switching versions",
+                    bullets = {
+                        {
+                            text = "Profiles save using the new sparse format. 7.0 reconstructs values inherited from defaults while keeping explicit overrides, including false, zero and empty strings.",
                             linkless = true,
                         },
                         {
-                            text = "Fixed unfinished X/Y popup edits overwriting a later mouse drag. Typed edits and dragging retain separate Undo steps.",
+                            text = "7.0 makes a safety copy of existing profile data before conversion. Rejected or newer-format profiles have separate recovery histories so you can inspect and recover them.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Before returning to 6.510, run /msuf compatsave and then log out or /reload while still on 7.0. Replace the addon only after that save completes. See the profile storage guide below.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Menu undo and redo can step through a sequence of scoped and nested edits. Profile restores and history also include supported Suite settings while preserving profile variant overrides.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Profile sync accepts older groups with no exclusion list. Import and reset retain supported legacy group filters and handle rejected profile data without replacing the original.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Unit frames and colors",
+                    title = "Menu, search and previews",
                     bullets = {
                         {
-                            text = "Party, Raid and Mythic Raid frames can each set their own health gradient and bar background. Choose the gradient colors, background color mode and whether the background fills the bar or shows missing health.",
+                            text = "The Dashboard adapts to narrow and wide windows, and puts Quick Setup, Suite Setup, search, recovery and display scaling within reach.",
                             linkless = true,
                         },
                         {
-                            text = "Added name formatting presets and a live example in Fonts. Choose full names, abbreviations, a character limit, or abbreviated names with a limit. Individual unit frames can override the shared format.",
+                            text = "Settings search finds more scoped controls and opens the relevant tab or section. Suggestions and results show a loading indicator while the search runs, with reduced-motion support.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "reduce menu motion",
+                                label = "Reduce menu motion",
+                                sectionId = "misc_menu_behavior",
+                                controlId = "menu2.opt.misc.global.setting.reduce.motion",
+                                settingKey = "general.reduceMotion",
+                            },
+                        },
+                        {
+                            text = "Unit, group, castbar and Class Resources previews use the same rendering rules as the live displays. Health and power loss, auras, status text, portraits and cast feedback follow the selected sample and settings.",
                             linkless = true,
                         },
                         {
-                            text = "When supported by MSUF Suite, nameplate fonts appear as a scope on the standard Fonts page.",
+                            text = "The Class Resources preview handles detached power, alternative mana and Player HP more consistently. Hunter samples use the resource that belongs to their client.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "show mana bar dual resource",
+                                label = "Show mana bar (dual resource)",
+                                sectionId = "classpower_alt_mana",
+                                controlId = "menu2.classpower.advanced.alternative.mana.enabled",
+                                settingKey = "bars.showAltMana",
+                                prepareKind = "classPowerWorkspace",
+                                prepareValue = "mana",
+                            },
+                        },
+                        {
+                            text = "Menu navigation, tabs, section folds and Edit Mode entry animate with reduced-motion support. Section actions appear when the header is hovered or focused.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "reduce menu motion",
+                                label = "Reduce menu motion",
+                                sectionId = "misc_menu_behavior",
+                                controlId = "menu2.opt.misc.global.setting.reduce.motion",
+                                settingKey = "general.reduceMotion",
+                            },
+                        },
+                        {
+                            text = "Core, Options and Locales ship together. The startup locale loads on demand, and the language selector remains in Misc.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "menu language",
+                                label = "Menu language",
+                                sectionId = "misc_language",
+                                controlId = "menu2.opt.misc.global.language.selection",
+                                settingKey = "general.menuLocale",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Unit frames, castbars and resources",
+                    bullets = {
+                        {
+                            text = "Raid status and name updates handle a unit token changing occupants, and frame refreshes and late-anchor updates keep failed work queued for retry.",
                             linkless = true,
                         },
                         {
-                            text = "Fixed health bars retaining the old texture after switching away from the Blizzard preset. Choosing a global health bar color mode now clears conflicting per-frame preset overrides.",
+                            text = "The Priority Frames and Gameplay position popups have Edit Mode placement controls. Typed position edits and drags each retain their own history step.",
                             linkless = true,
                         },
                         {
-                            text = "Opacity is visible in the compact color picker for supported colors. The background tint settings now show a warning when saved opacity is 0%.",
+                            text = "Resource marks can follow the cost of a selected spell. Find marks and thresholds in Class Resources > Extras.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "add resource mark",
+                                label = "Add resource mark",
+                                sectionId = "classpower_resource_marks",
+                                controlId = "menu2.classpower.advanced.resource.extras.marks.add",
+                                settingKey = "bars.resourceMarks",
+                                prepareKind = "classPowerWorkspace",
+                                prepareValue = "extras",
+                            },
+                        },
+                        {
+                            text = "Castbar updates handle cast-to-channel transitions, empower endings, interrupted casts and global-cooldown spell attribution more consistently. Focus castbars restore their range-fade state when a cast is released.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Texture and portrait settings refresh more consistently, and the compact background tint editor warns when saved opacity is 0%.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "background color",
+                                label = "Background Color",
+                                sectionId = "colors_background",
+                                controlId = "menu2.opt.colors.advanced.background.color.mode",
+                                settingKey = "general.barBgColorMode",
+                                prepareKind = "colorsPainterCategory",
+                                prepareValue = "unit",
+                            },
+                        },
+                        {
+                            text = "With a compatible MSUF Suite build, Nameplates is available as a scope on the standard Fonts page.",
                             linkless = true,
                         },
                     },
@@ -60,28 +226,126 @@ local data = {
                     title = "WoW Forever",
                     bullets = {
                         {
-                            text = "Swing timers can be positioned in Edit Mode. The options preview lets you inspect individual layers, jump to their settings and preview out-of-range color and opacity.",
+                            text = "Character profile selection uses the full character identity. Two characters with the same first name and different surnames have separate profile keys.",
                             linkless = true,
                         },
                         {
-                            text = "Character profile selection now uses the shared character identity key, with guards for cases where the client has not supplied the name yet.",
+                            text = "Use Character names in Fonts to control which parts of a character's name appear on frames.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Swing timer placement and the layer-based preview from 6.510 are included. In Swing Timers, select a weapon slot to preview its out-of-range color and opacity.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Menu and Edit Mode",
+                    title = "Recent 6.5x improvements included in Beta 1",
                     bullets = {
                         {
-                            text = "Improved Dashboard resizing, Quick Setup and Suite Setup access. Refined selected tabs, window controls and the Class Resources preview, including alternative mana.",
+                            text = "6.510's independent Party, Raid and Mythic Raid health gradients and background modes are included, along with its Blizzard preset texture and global color mode fixes.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "background color",
+                                label = "Background Color",
+                                sectionId = "colors_group_frames_background",
+                                controlId = "menu2.opt.colors.advanced.group.frame.background.color.mode",
+                                settingKey = "gf_party.barBgColorMode",
+                                prepareKind = "colorsPainterCategory",
+                                prepareValue = "group",
+                            },
+                        },
+                        {
+                            text = "6.510's MapkoSkin appearance selection and visible opacity in the compact picker are included.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "menu appearance preset",
+                                label = "Menu appearance preset",
+                                sectionId = "misc_menu_behavior",
+                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
+                                settingKey = "general.menuAppearancePreset",
+                            },
+                        },
+                        {
+                            text = "The recent unit-frame drag fixes are included. Dropping a frame preserves its visible position when anchors or UI scale change.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "show blizzard frames in msuf edit mode",
+                                label = "Show Blizzard frames in MSUF Edit Mode",
+                                sectionId = "misc_external_edit_mode",
+                                controlId = "menu2.opt.misc.global.setting.blizzard.edit.mode.integration",
+                                settingKey = "general.blizzardEditModeIntegration",
+                            },
+                        },
+                        {
+                            text = "The recent mana regeneration tracker, castbar artwork, dependent-frame health fixes and safer compressed profile imports are included.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "castbar artwork",
+                                label = "Castbar artwork",
+                                sectionId = "castbar_textures",
+                                controlId = "menu2.opt.castbar.global.textures.castbar.artwork.enabled",
+                                settingKey = "general.castbarArtworkEnabled",
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        {
+            version = "6.510",
+            date = "2026-11-07",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Party, Raid and Mythic Raid frames can each use their own health gradient and bar background. Configure the gradient stops, background color mode and whether the background fills the bar or only shows missing health.",
                             linkless = true,
                         },
                         {
-                            text = "Menu appearance presets apply to the MSUF menu when MapkoSkin is available. You can choose the MapkoSkin look from the same list.",
+                            text = "WoW Forever swing timers now show draggable bars in Edit Mode. The options preview lets you inspect individual layers, jump to their settings, and see the out-of-range color and opacity for each weapon slot.",
                             linkless = true,
                         },
                         {
-                            text = "Edit Mode panels and grid fade in when opened and respect reduced-motion settings.",
+                            text = "Menu appearance presets now apply to the MSUF menu when MapkoSkin is installed. Pick MapkoSkin from the same list to switch back to its look.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "menu appearance preset",
+                                label = "Menu appearance preset",
+                                sectionId = "misc_menu_behavior",
+                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
+                                settingKey = "general.menuAppearancePreset",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes and polish",
+                    bullets = {
+                        {
+                            text = "Fixed health bars retaining the old texture after switching away from the Blizzard preset.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Choosing the global health bar color mode now clears preset overrides on individual unit frames, so the chosen mode takes effect immediately.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "bar mode",
+                                label = "Bar mode",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.bar.mode",
+                                settingKey = "general.barMode",
+                                prepareKind = "colorsPainterCategory",
+                                prepareValue = "unit",
+                            },
+                        },
+                        {
+                            text = "The compact color picker now shows opacity for colors that support it, so you can restore a tint saved at 0% opacity.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Improved the Class Resources preview for alternative mana and player health colors. Refined selected tabs, sidebar markers and window buttons, and made section actions appear when you hover over or focus the header.",
                             linkless = true,
                         },
                     },

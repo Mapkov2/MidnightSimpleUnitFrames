@@ -1,44 +1,44 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7104,
-      "initialDeclarations": 4778,
+      "declarations": 7105,
+      "initialDeclarations": 4779,
       "profileControls": 3735,
       "proven": 3735
     },
     "Mainline": {
-      "declarations": 7648,
-      "initialDeclarations": 5012,
+      "declarations": 7649,
+      "initialDeclarations": 5013,
       "profileControls": 4053,
       "proven": 4053
     },
     "Mists": {
-      "declarations": 7294,
-      "initialDeclarations": 4985,
+      "declarations": 7295,
+      "initialDeclarations": 4986,
       "profileControls": 3773,
       "proven": 3773
     },
     "TBC": {
-      "declarations": 6679,
-      "initialDeclarations": 4589,
+      "declarations": 6680,
+      "initialDeclarations": 4590,
       "profileControls": 3394,
       "proven": 3394
     },
     "Vanilla": {
-      "declarations": 5121,
-      "initialDeclarations": 3499,
+      "declarations": 5122,
+      "initialDeclarations": 3500,
       "profileControls": 2455,
       "proven": 2455
     }
   },
   "generatorVersion": "menu-schema-coverage/3",
   "issueCount": 0,
-  "projectionSha256": "caf2cf99181da2037dbc34f8a7c7fe87e1876d162fc73f6b65c9cc9b06034996",
+  "projectionSha256": "d34c0237d4b9e282e5b88ebfb5c6daafa7ff0d4f5473662e842557af456bb349",
   "projectionVersion": 2,
-  "sourceSha256": "4828D38C2F9AE56C38BF127967D1C252CE5BD021CE6A2444756F00B47AB69063",
+  "sourceSha256": "405E9CA3AE9AA0C62C41C9DE9B50F1F79442A2D24352821CF0A3A9BD9D445519",
   "totals": {
-    "declarations": 33846,
-    "initialDeclarations": 22863,
+    "declarations": 33851,
+    "initialDeclarations": 22868,
     "profileControls": 17410,
     "proven": 17410
   },

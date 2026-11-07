@@ -374,10 +374,19 @@ do
         { "scaling.disclosure", "dashboardScalingOpen" },
         { "display_recovery.disclosure", "dashboardRecoveryOpen" },
     }
+    local function FixtureFoldProgress(clock) return clock.fixtureRemaining end
     local function Tick(elapsed)
         for frame in pairs(M.Theme._menuAnimationGroups) do
             local update = frame.channels and frame.GetScript and frame:GetScript("OnUpdate")
-            if update and frame:IsVisible() then update(frame, elapsed) end
+            if update and frame:IsVisible() then
+                local clock, group = frame.foldClock, frame.foldGroup
+                if group and group:IsPlaying() then
+                    clock.GetSmoothProgress = FixtureFoldProgress
+                    clock.fixtureRemaining = math.max(0, frame.foldRemaining - elapsed / clock:GetDuration())
+                    if clock.fixtureRemaining == 0 then group:Finish() end
+                end
+                update(frame, elapsed)
+            end
         end
     end
     local function RawClick(path)

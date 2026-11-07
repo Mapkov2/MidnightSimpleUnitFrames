@@ -158,7 +158,7 @@ function ConvertFrom-MenuLinkComment {
     if ($controlId -notmatch '^menu2\.[A-Za-z0-9_.-]+$') {
         throw "Invalid msuf-menu-link controlId '$controlId' at $sourceName line $SourceLine."
     }
-    if ($settingKey -notmatch '^[A-Za-z0-9_.-]+$') {
+    if ($null -eq $settingKeyProperty -or ($settingKey -ne "" -and $settingKey -notmatch '^[A-Za-z0-9_.-]+$')) {
         throw "Invalid msuf-menu-link settingKey '$settingKey' at $sourceName line $SourceLine."
     }
     if ([string]::IsNullOrWhiteSpace($prepareKind) -ne [string]::IsNullOrWhiteSpace($prepareValue)) {

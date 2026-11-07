@@ -66,9 +66,10 @@ end
 -- 2026-11-05: add the three Mana display controls; retain the concurrent slot-font rows.
 -- 2026-11-06: five independent group color controls; both generated indexes retained every prior identity.
 -- 2026-11-06: opt-in name format adds one control in each Fonts scope; prior search identities remain.
+-- Beta 1 regenerates both families with the new menu context; all prior identities remain.
 local indexes = {
-    { "", 4534, 1283045421 },
-    { "_Classic", 4109, 176808554 },
+    { "", 4535, 3925939725 },
+    { "_Classic", 4110, 3624943510 },
 }
 local moved = {
     { "edit_selection", "workbench_alignment", "multi", "bottom left right top horizontal vertical move open toggle" },

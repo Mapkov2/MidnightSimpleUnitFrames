@@ -6,6 +6,8 @@ local mw = Open(root, flavor, { page = "home", clientScriptBindings = true })
 local M, key = mw.M, "uf_" .. unit
 local FRAME_BUDGET = 4500 -- Entire unit page, all 34 aura subviews and three texture subviews.
 local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit, true)
+-- The selected-tab style increases the workspace header from 24 to 26 px.
+local AURA_TAB_HEIGHT_DELTA = 2
 local function Settle() mw:RunTimers() M.Theme.StopAllMenuAnimations() end
 M.unitAuraTabSelection, M.unitAuraToolSelection = {}, {}
 M.unitTexLayerSlot = {}
@@ -44,9 +46,10 @@ local function Walk()
                     local entry = assert(M.cache[key])
                     OpenSections(entry)
                     local height = entry.sections.auras._msuf2CollapsibleEntry.outer:GetHeight()
-                    assert(height == Expected(lane, tool.value, slot), string.format(
+                    local expectedHeight = Expected(lane, tool.value, slot) + AURA_TAB_HEIGHT_DELTA
+                    assert(height == expectedHeight, string.format(
                         "%s %s:%s slot %d: outer height %d differs from reviewed contextual baseline (%d)",
-                        unit, lane, tool.value, slot, height, Expected(lane, tool.value, slot)))
+                        unit, lane, tool.value, slot, height, expectedHeight))
                     local diagnostic = entry.sections.workbench_visibility
                     local hasDiagnostic = unit == "player" and lane == "custom4"
                         or unit ~= "player" and (lane == "buff" or lane == "debuff")

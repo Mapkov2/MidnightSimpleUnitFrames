@@ -2,41 +2,87 @@
 
 ## 7.0-beta1 - 2026-11-07
 
-### Unit frame positioning
+Full changes in MSUF 7.0 Beta 1 compared with the current stable 6.5x release, 6.510. The beta supports Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
 
-- Fixed drag completion saving offsets against an outdated anchor when a provider appears, changes, or loses its position. Mouse release, closing Edit Mode during a drag, and external Edit Mode shells now preserve the final visible position in the current anchor space.
+[6.510 release](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases/tag/v6.510) | [Compare 6.510 with 7.0 Beta 1](https://github.com/Mapkov2/MidnightSimpleUnitFrames/compare/v6.510..classic-v7.0-beta1) | [Profile storage, recovery and downgrade guide](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta1/docs/PROFILE_STORAGE.md) | [Report an issue](https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new)
+
+### Highlights
+
+- **Profile workbench.** Save named restore points, inspect changed settings and their sources, and restore a previous state from Profiles.
+<!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"workbench_versions","controlId":"menu2.profile.tools.profiles.version.save","settingKey":"","prepareKind":"","prepareValue":"","query":"save restore point","label":"Save restore point"} -->
+- **Review before importing.** Compare incoming profile settings, then apply the changes you choose.
+<!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"profiles_io","controlId":"menu2.profiles.advanced.import.review","settingKey":"","prepareKind":"","prepareValue":"","query":"review changes","label":"Review changes"} -->
+- **Edit several frames together.** The Edit Mode Selection workspace lets you select, move and align multiple elements in one operation.
+<!-- msuf-menu-link: {"pageKey":"edit_selection","sectionId":"workbench_alignment","controlId":"menu2.profile.tools.profiles.multi.toggle","settingKey":"","prepareKind":"","prepareValue":"","query":"select remove element","label":"Select / remove element"} -->
+- **Layouts for different displays.** Record frame positions and relative scale into a layout variant and give it display conditions.
+<!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"workbench_display","controlId":"menu2.profile.tools.profiles.display.record","settingKey":"","prepareKind":"","prepareValue":"","query":"record a layout for this display","label":"Record a layout for this display"} -->
+- **Accessibility and visibility.** Preview and review color-vision changes in Colors. The contextual Why is this hidden? card explains selected aura visibility.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"workbench_accessibility","controlId":"menu2.profile.tools.profiles.accessibility.review","settingKey":"","prepareKind":"colorsPainterCategory","prepareValue":"accessibility","query":"review accessibility changes","label":"Review accessibility changes"} -->
+- **Name formatting.** Fonts has a live example and formats for full names, abbreviations, length limits, and abbreviations with limits. Individual unit frames can override the shared format.
+<!-- msuf-menu-link: {"pageKey":"opt_fonts","sectionId":"fonts_name_shortening","controlId":"menu2.opt.fonts.global.name.shortening.format","settingKey":"","prepareKind":"","prepareValue":"","query":"name format","label":"Name format"} -->
+
+### Profiles, recovery and switching versions
+
+- Profiles save using the new sparse format. 7.0 reconstructs values inherited from defaults while keeping explicit overrides, including false, zero and empty strings.
 <!-- msuf-menu-link: none -->
-- Fixed unfinished X/Y popup edits overwriting a later mouse drag. Typed edits and dragging retain separate Undo steps.
+- 7.0 makes a safety copy of existing profile data before conversion. Rejected or newer-format profiles have separate recovery histories so you can inspect and recover them.
+<!-- msuf-menu-link: none -->
+- Before returning to 6.510, run `/msuf compatsave` and then log out or `/reload` while still on 7.0. Replace the addon only after that save completes. See the profile storage guide below.
+<!-- msuf-menu-link: none -->
+- Menu undo and redo can step through a sequence of scoped and nested edits. Profile restores and history also include supported Suite settings while preserving profile variant overrides.
+<!-- msuf-menu-link: none -->
+- Profile sync accepts older groups with no exclusion list. Import and reset retain supported legacy group filters and handle rejected profile data without replacing the original.
 <!-- msuf-menu-link: none -->
 
-### Unit frames and colors
+### Menu, search and previews
 
-- Party, Raid and Mythic Raid frames can each set their own health gradient and bar background. Choose the gradient colors, background color mode and whether the background fills the bar or shows missing health.
+- The Dashboard adapts to narrow and wide windows, and puts Quick Setup, Suite Setup, search, recovery and display scaling within reach.
 <!-- msuf-menu-link: none -->
-- Added name formatting presets and a live example in Fonts. Choose full names, abbreviations, a character limit, or abbreviated names with a limit. Individual unit frames can override the shared format.
+- Settings search finds more scoped controls and opens the relevant tab or section. Suggestions and results show a loading indicator while the search runs, with reduced-motion support.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.reduce.motion","settingKey":"general.reduceMotion","prepareKind":"","prepareValue":"","query":"reduce menu motion","label":"Reduce menu motion"} -->
+- Unit, group, castbar and Class Resources previews use the same rendering rules as the live displays. Health and power loss, auras, status text, portraits and cast feedback follow the selected sample and settings.
 <!-- msuf-menu-link: none -->
-- When supported by MSUF Suite, nameplate fonts appear as a scope on the standard Fonts page.
+- The Class Resources preview handles detached power, alternative mana and Player HP more consistently. Hunter samples use the resource that belongs to their client.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_alt_mana","controlId":"menu2.classpower.advanced.alternative.mana.enabled","settingKey":"bars.showAltMana","prepareKind":"classPowerWorkspace","prepareValue":"mana","query":"show mana bar dual resource","label":"Show mana bar (dual resource)"} -->
+- Menu navigation, tabs, section folds and Edit Mode entry animate with reduced-motion support. Section actions appear when the header is hovered or focused.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.reduce.motion","settingKey":"general.reduceMotion","prepareKind":"","prepareValue":"","query":"reduce menu motion","label":"Reduce menu motion"} -->
+- Core, Options and Locales ship together. The startup locale loads on demand, and the language selector remains in Misc.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_language","controlId":"menu2.opt.misc.global.language.selection","settingKey":"general.menuLocale","prepareKind":"","prepareValue":"","query":"menu language","label":"Menu language"} -->
+
+### Unit frames, castbars and resources
+
+- Raid status and name updates handle a unit token changing occupants, and frame refreshes and late-anchor updates keep failed work queued for retry.
 <!-- msuf-menu-link: none -->
-- Fixed health bars retaining the old texture after switching away from the Blizzard preset. Choosing a global health bar color mode now clears conflicting per-frame preset overrides.
+- The Priority Frames and Gameplay position popups have Edit Mode placement controls. Typed position edits and drags each retain their own history step.
 <!-- msuf-menu-link: none -->
-- Opacity is visible in the compact color picker for supported colors. The background tint settings now show a warning when saved opacity is 0%.
+- Resource marks can follow the cost of a selected spell. Find marks and thresholds in Class Resources > Extras.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_marks","controlId":"menu2.classpower.advanced.resource.extras.marks.add","settingKey":"bars.resourceMarks","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"add resource mark","label":"Add resource mark"} -->
+- Castbar updates handle cast-to-channel transitions, empower endings, interrupted casts and global-cooldown spell attribution more consistently. Focus castbars restore their range-fade state when a cast is released.
+<!-- msuf-menu-link: none -->
+- Texture and portrait settings refresh more consistently, and the compact background tint editor warns when saved opacity is 0%.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_background","controlId":"menu2.opt.colors.advanced.background.color.mode","settingKey":"general.barBgColorMode","prepareKind":"colorsPainterCategory","prepareValue":"unit","query":"background color","label":"Background Color"} -->
+- With a compatible MSUF Suite build, Nameplates is available as a scope on the standard Fonts page.
 <!-- msuf-menu-link: none -->
 
 ### WoW Forever
 
-- Swing timers can be positioned in Edit Mode. The options preview lets you inspect individual layers, jump to their settings and preview out-of-range color and opacity.
+- Character profile selection uses the full character identity. Two characters with the same first name and different surnames have separate profile keys.
 <!-- msuf-menu-link: none -->
-- Character profile selection now uses the shared character identity key, with guards for cases where the client has not supplied the name yet.
+- Use Character names in Fonts to control which parts of a character's name appear on frames.
+<!-- msuf-menu-link: none -->
+- Swing timer placement and the layer-based preview from 6.510 are included. In Swing Timers, select a weapon slot to preview its out-of-range color and opacity.
 <!-- msuf-menu-link: none -->
 
-### Menu and Edit Mode
+### Recent 6.5x improvements included in Beta 1
 
-- Improved Dashboard resizing, Quick Setup and Suite Setup access. Refined selected tabs, window controls and the Class Resources preview, including alternative mana.
-<!-- msuf-menu-link: none -->
-- Menu appearance presets apply to the MSUF menu when MapkoSkin is available. You can choose the MapkoSkin look from the same list.
-<!-- msuf-menu-link: none -->
-- Edit Mode panels and grid fade in when opened and respect reduced-motion settings.
-<!-- msuf-menu-link: none -->
+- 6.510's independent Party, Raid and Mythic Raid health gradients and background modes are included, along with its Blizzard preset texture and global color mode fixes.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_group_frames_background","controlId":"menu2.opt.colors.advanced.group.frame.background.color.mode","settingKey":"gf_party.barBgColorMode","prepareKind":"colorsPainterCategory","prepareValue":"group","query":"background color","label":"Background Color"} -->
+- 6.510's MapkoSkin appearance selection and visible opacity in the compact picker are included.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.menu.appearance.preset","settingKey":"general.menuAppearancePreset","prepareKind":"","prepareValue":"","query":"menu appearance preset","label":"Menu appearance preset"} -->
+- The recent unit-frame drag fixes are included. Dropping a frame preserves its visible position when anchors or UI scale change.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_external_edit_mode","controlId":"menu2.opt.misc.global.setting.blizzard.edit.mode.integration","settingKey":"general.blizzardEditModeIntegration","prepareKind":"","prepareValue":"","query":"show blizzard frames in msuf edit mode","label":"Show Blizzard frames in MSUF Edit Mode"} -->
+- The recent mana regeneration tracker, castbar artwork, dependent-frame health fixes and safer compressed profile imports are included.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_textures","controlId":"menu2.opt.castbar.global.textures.castbar.artwork.enabled","settingKey":"general.castbarArtworkEnabled","prepareKind":"","prepareValue":"","query":"castbar artwork","label":"Castbar artwork"} -->
 
 ## 7.0-alpha6 - 2026-11-05
 
@@ -169,6 +215,28 @@ The first alpha of MSUF 7.0 for Midnight, WoW Forever, Classic Era, TBC and Mist
 - **Less to load at startup:** only the client's language pack loads at login, greatly reducing startup bytes. Other menu languages remain available through the optional MidnightSimpleUnitFrames_Locales folder.
 <!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_language","controlId":"menu2.opt.misc.global.language.selection","settingKey":"general.menuLocale","prepareKind":"","prepareValue":"","query":"menu language","label":"Menu language"} -->
 - **More compact profiles:** profiles are stored with less duplicated data while retaining old profiles and import strings. Downgrading to the 6.50 line preserves your settings losslessly.
+<!-- msuf-menu-link: none -->
+
+## 6.510 - 2026-11-07
+
+### Highlights
+
+- Party, Raid and Mythic Raid frames can each use their own health gradient and bar background. Configure the gradient stops, background color mode and whether the background fills the bar or only shows missing health.
+<!-- msuf-menu-link: none -->
+- WoW Forever swing timers now show draggable bars in Edit Mode. The options preview lets you inspect individual layers, jump to their settings, and see the out-of-range color and opacity for each weapon slot.
+<!-- msuf-menu-link: none -->
+- Menu appearance presets now apply to the MSUF menu when MapkoSkin is installed. Pick MapkoSkin from the same list to switch back to its look.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.menu.appearance.preset","settingKey":"general.menuAppearancePreset","prepareKind":"","prepareValue":"","query":"menu appearance preset","label":"Menu appearance preset"} -->
+
+### Fixes and polish
+
+- Fixed health bars retaining the old texture after switching away from the Blizzard preset.
+<!-- msuf-menu-link: none -->
+- Choosing the global health bar color mode now clears preset overrides on individual unit frames, so the chosen mode takes effect immediately.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_appearance","controlId":"menu2.opt.colors.advanced.appearance.bar.mode","settingKey":"general.barMode","prepareKind":"colorsPainterCategory","prepareValue":"unit","query":"bar mode","label":"Bar mode"} -->
+- The compact color picker now shows opacity for colors that support it, so you can restore a tint saved at 0% opacity.
+<!-- msuf-menu-link: none -->
+- Improved the Class Resources preview for alternative mana and player health colors. Refined selected tabs, sidebar markers and window buttons, and made section actions appear when you hover over or focus the header.
 <!-- msuf-menu-link: none -->
 
 ## 6.50 - 2026-10-13

@@ -126,6 +126,8 @@ local function InSection(widget, entry)
     end
     return false
 end
+local portraitSegments = { ["unit/portrait/workspace_tab"] = true,
+    ["unit/portrait/portraitsizemode"] = true, ["unit/portrait/position"] = true }
 local function Receipt(page, tab)
     local entry, rows = M.cache[page], {}
     for _, record in ipairs(M.RuntimeControlCatalog.GetRecords()) do
@@ -146,9 +148,15 @@ local function Receipt(page, tab)
                 assert(low == 2 and high == (arg[3] and 80 or 800), "detached height bounds changed unexpectedly")
                 high = 80
             end
+            local height = widget:GetHeight()
+            if portraitSegments[record.controlPath] then
+                -- These three segments deliberately gained 2 px in the selected-tab design.
+                assert(height == 26 or (observe and height == 24), "portrait segment height changed")
+                height = 24
+            end
             rows[#rows + 1] = Encode({ record, values, command and command.get and command.get(), low, high,
                 widget.valueStep, widget._msuf2SearchMeta, widget._msuf2ExactTargetContracts, widget:IsShown(), widget:IsEnabled(),
-                widget:GetWidth(), widget:GetHeight() })
+                widget:GetWidth(), height })
         end
     end
     assert(#rows > 0, page .. " did not build portrait/power controls")

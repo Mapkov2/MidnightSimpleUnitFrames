@@ -106,12 +106,38 @@ $staticIndexContent = Get-Content -LiteralPath $stagedStaticIndexPath -Raw
 if ($staticIndexContent.IndexOf("Search.StaticIndexSourceSha256 = `"$staticIndexSourceHash`"", [System.StringComparison]::Ordinal) -lt 0) {
     throw "Menu2 static control index is stale. Regenerate it after the latest Menu2 changes before pushing the release."
 }
-$staticRowsByIdentity = @{}
-foreach ($staticLine in ($staticIndexContent -split '\r?\n')) {
-    $fields = @($staticLine -split "`t", 12)
-    if ($fields.Count -ne 12 -or -not $fields[7].StartsWith("id$([char]31)", [System.StringComparison]::Ordinal)) {
-        continue
+$staticBlob = [regex]::Match($staticIndexContent, '(?s)Search\.StaticIndexBlob = \[==\[(.*?)\]==\]')
+if (-not $staticBlob.Success) { throw "Missing Menu2 static index rows." }
+$contextBlob = [regex]::Match($staticIndexContent, '(?s)Search\.StaticIndexContextBlob = \[==\[(.*?)\]==\]')
+$staticContext = if ($contextBlob.Success) {
+    @($contextBlob.Groups[1].Value.TrimEnd([char[]]"`r`n") -split '\r?\n')
+} else { @() }
+
+function Resolve-StaticSearchContext {
+    param([string]$Value, [switch]$Identity)
+    if ($Value -eq "") { return "" }
+    $pattern = if ($Identity) { '^@(\d+):(.*)$' } else { '^@(\d+)$' }
+    $reference = [regex]::Match($Value, $pattern)
+    if (-not $reference.Success) { throw "Invalid Menu2 static context reference '$Value'." }
+    $index = [int]$reference.Groups[1].Value
+    if ($index -lt 1 -or $index -gt $staticContext.Count) {
+        throw "Menu2 static context reference is outside the dictionary: '$Value'."
     }
+    return $staticContext[$index - 1] + $reference.Groups[2].Value
+}
+
+$staticRowsByIdentity = @{}
+foreach ($staticLine in ($staticBlob.Groups[1].Value -split '\r?\n')) {
+    if ($staticLine -eq "") { continue }
+    $fields = @($staticLine -split "`t", 12)
+    if ($fields.Count -ne 12) { throw "Menu2 static index row must have 12 fields." }
+    if ($contextBlob.Success) {
+        foreach ($column in @(0, 8, 9, 10)) {
+            $fields[$column] = Resolve-StaticSearchContext $fields[$column]
+        }
+        $fields[7] = Resolve-StaticSearchContext $fields[7] -Identity
+    }
+    if (-not $fields[7].StartsWith("id$([char]31)", [System.StringComparison]::Ordinal)) { continue }
     if ($staticRowsByIdentity.ContainsKey($fields[7])) {
         throw "Menu2 static control index contains duplicate exact identity: $($fields[7])"
     }
@@ -176,14 +202,15 @@ for ($lineIndex = $currentReleaseStart + 1; $lineIndex -lt $changelogLines.Count
         $inHighlights = $Matches[1] -match '(?i)^Highlights$'
         continue
     }
-    if (-not $inHighlights -or $line -notmatch '^\s*-\s+(.+?)\s*$') { continue }
+    if ($line -notmatch '^\s*-\s+(.+?)\s*$') { continue }
     $bulletText = $Matches[1]
     $nextLine = if (($lineIndex + 1) -lt $changelogLines.Count) { $changelogLines[$lineIndex + 1] } else { "" }
     if ($nextLine -match '^\s*<!--\s*msuf-menu-link:\s*none\s*-->\s*$') {
         continue
     }
     if ($nextLine -notmatch '^\s*<!--\s*msuf-menu-link:\s*(\{.+\})\s*-->\s*$') {
-        throw "Current Highlights bullet has no explicit msuf-menu-link route policy: $bulletText"
+        if ($inHighlights) { throw "Current Highlights bullet has no explicit msuf-menu-link route policy: $bulletText" }
+        continue
     }
     try {
         $menuLink = $Matches[1] | ConvertFrom-Json -ErrorAction Stop
@@ -203,13 +230,13 @@ for ($lineIndex = $currentReleaseStart + 1; $lineIndex -lt $changelogLines.Count
         [string]::IsNullOrWhiteSpace($label) -or
         [string]::IsNullOrWhiteSpace($sectionId) -or
         [string]::IsNullOrWhiteSpace($controlId) -or
-        [string]::IsNullOrWhiteSpace($settingKey)) {
+        $null -eq $menuLink.PSObject.Properties["settingKey"]) {
         throw "Current Highlights msuf-menu-link requires pageKey, query, label, sectionId, controlId, and settingKey near CHANGELOG.md line $($lineIndex + 2)."
     }
     if ($pageKey -notmatch '^[A-Za-z0-9_.-]+$' -or
         $sectionId -notmatch '^[A-Za-z0-9_.-]+$' -or
         $controlId -notmatch '^menu2\.[A-Za-z0-9_.-]+$' -or
-        $settingKey -notmatch '^[A-Za-z0-9_.-]+$') {
+        ($settingKey -ne "" -and $settingKey -notmatch '^[A-Za-z0-9_.-]+$')) {
         throw "Current Highlights msuf-menu-link has an invalid exact target identifier near CHANGELOG.md line $($lineIndex + 2)."
     }
     if ([string]::IsNullOrWhiteSpace($prepareKind) -ne [string]::IsNullOrWhiteSpace($prepareValue)) {
@@ -230,7 +257,7 @@ for ($lineIndex = $currentReleaseStart + 1; $lineIndex -lt $changelogLines.Count
     if ($staticRow.SettingKey -and $staticRow.SettingKey -cne $settingKey) {
         throw "Current Highlights setting mismatch for '$controlId': changelog '$settingKey', runtime '$($staticRow.SettingKey)'."
     }
-    if (-not $staticRow.SettingKey -and [string]::IsNullOrWhiteSpace($prepareKind)) {
+    if (-not $staticRow.SettingKey -and ($settingKey -or $staticRow.PrepareKinds) -and -not $prepareKind) {
         throw "Current Highlights dynamic control '$controlId' requires an explicit prepareKind/prepareValue contract."
     }
     if (-not [string]::IsNullOrWhiteSpace($prepareKind)) {
@@ -240,7 +267,9 @@ for ($lineIndex = $currentReleaseStart + 1; $lineIndex -lt $changelogLines.Count
         }
         $expectedPrepareContract = "$prepareKind=$prepareValue=$settingKey"
         $supportedPrepareContracts = @($staticRow.PrepareContracts -split '\|' | Where-Object { $_ })
-        if ($expectedPrepareContract -cnotin $supportedPrepareContracts) {
+        $wildcardPrepareContract = "$prepareKind=$prepareValue=*"
+        $allowsStaticKey = $staticRow.SettingKey -ceq $settingKey -and $wildcardPrepareContract -cin $supportedPrepareContracts
+        if ($expectedPrepareContract -cnotin $supportedPrepareContracts -and -not $allowsStaticKey) {
             throw "Current Highlights subcategory contract '$expectedPrepareContract' is not supported by runtime control '$controlId'."
         }
     }
