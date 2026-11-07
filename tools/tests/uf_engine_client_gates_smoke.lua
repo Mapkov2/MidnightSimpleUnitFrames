@@ -8,12 +8,9 @@
 -- read once at load. A Retail sync rebases those hunks, so this smoke boots the
 -- flavor's real load graph and pins both sides of every gate:
 --
---   PvP context   Classic has no War Mode: the context follows the player's PvP
---                 flag, the driver listens to the flag events, the unit and group
---                 compilers build the indicator whenever it is configured and a
---                 context flip repaints it in place, in combat too (a recompile
---                 would wait for combat to end). Mainline keeps Retail's War Mode
---                 driver, which never recompiles in combat.
+--   PvP context   Classic and Forever follow the player's PvP flag and repaint
+--                 configured indicators in combat. Retail follows the flag on
+--                 the player frame and keeps the War Mode gate for other units.
 --   Unit support  Classic compiles a unit its client cannot produce disabled;
 --                 Mainline compiles every unit as configured.
 --   Raid manager  Classic's hidden-by-default manager parents the raid container,
@@ -46,7 +43,7 @@ ResetPvP()
 -- Units other than the player that exist and are PvP-flagged (the indicator
 -- section below fills it); the core captures both APIs at load.
 local flaggedUnits = {}
-env.UnitExists = function(unit) return flaggedUnits[unit] == true end
+env.UnitExists = function(unit) return unit == "player" or flaggedUnits[unit] == true end
 env.UnitIsPVP = function(unit) return (unit == "player" and pvp.flagged) or flaggedUnits[unit] == true end
 env.UnitIsPVPFreeForAll = function(unit) return unit == "player" and pvp.ffa end
 env.IsPVPTimerRunning = function() return pvp.timer end
@@ -77,6 +74,7 @@ Check(failure == nil, "load failed in " .. tostring(failure and failure.file) ..
 local client = assert(world.core.Client, "no MSUF.Client")
 local classic = client.Family == "Classic"
 Check(classic == (world.client.isClassic == true), "client family " .. tostring(client.Family) .. " does not match the matrix")
+local followsFlag = classic or client.IsForever == true
 local UF = assert(world.core.UF, "no MSUF.UF")
 local Config = assert(UF.Config, "no UF.Config")
 
@@ -119,17 +117,27 @@ local registered = {}
 for event in pairs(driver.events) do registered[#registered + 1] = event end
 table.sort(registered)
 local registeredText = table.concat(registered, ",")
-if classic then
-    local expected = { "PLAYER_ENTERING_WORLD", "PLAYER_FLAGS_CHANGED", "UNIT_FACTION", "ZONE_CHANGED_NEW_AREA" }
+if followsFlag then
+    local expected = { "PLAYER_ENTERING_WORLD", "UNIT_FACTION", "ZONE_CHANGED_NEW_AREA" }
+    if classic then
+        expected[#expected + 1] = "PLAYER_FLAGS_CHANGED"
+    else
+        expected[#expected + 1] = "ACTIVE_GAME_MODE_UPDATED"
+        expected[#expected + 1] = "PLAYER_PVP_FLAG_CHANGED"
+        expected[#expected + 1] = "WAR_MODE_STATUS_UPDATE"
+    end
     if client.SupportsEvent("PVP_TIMER_UPDATE") then expected[#expected + 1] = "PVP_TIMER_UPDATE" end
     table.sort(expected)
     Check(registeredText == table.concat(expected, ","),
-        "the Classic PvP context driver registers " .. registeredText .. ", expected the flag events " .. table.concat(expected, ","))
+        "the flag-based PvP context driver registers " .. registeredText .. ", expected the flag events " .. table.concat(expected, ","))
     Check(unitFilters[driver] and unitFilters[driver].UNIT_FACTION == "player",
-        "the Classic PvP context driver must watch UNIT_FACTION for the player only")
+        "the flag-based PvP context driver must watch UNIT_FACTION for the player only")
 else
-    Check(registeredText == "ACTIVE_GAME_MODE_UPDATED,PLAYER_ENTERING_WORLD,WAR_MODE_STATUS_UPDATE,ZONE_CHANGED_NEW_AREA",
-        "the Mainline PvP context driver must keep Retail's War Mode events, registers " .. registeredText)
+    Check(registeredText
+        == "ACTIVE_GAME_MODE_UPDATED,PLAYER_ENTERING_WORLD,PLAYER_FLAGS_CHANGED,WAR_MODE_STATUS_UPDATE,ZONE_CHANGED_NEW_AREA",
+        "the Mainline PvP context driver must watch War Mode and flag confirmation, registers " .. registeredText)
+    Check(unitFilters[driver] and unitFilters[driver].PLAYER_FLAGS_CHANGED == "player",
+        "the Mainline PvP context driver must watch PLAYER_FLAGS_CHANGED for the player only")
 end
 
 local function Context()
@@ -140,12 +148,11 @@ end
 ResetPvP()
 Check(Context() == false, "an unflagged player outside PvP content must have no PvP context")
 pvp.flagged = true
-Check(Context() == classic, classic and "Classic must follow the player's PvP flag"
-    or "Mainline must ignore the PvP flag outside War Mode")
+Check(Context() == followsFlag, "only flag-based clients open the shared context on a player flag")
 ResetPvP(); pvp.ffa = true
-Check(Context() == classic, "free-for-all PvP must count on Classic only")
+Check(Context() == followsFlag, "free-for-all PvP must open the shared context only on flag-based clients")
 ResetPvP(); pvp.timer = true
-Check(Context() == classic, "the PvP flag timer must count on Classic only")
+Check(Context() == followsFlag, "the PvP flag timer must open the shared context only on flag-based clients")
 ResetPvP(); pvp.warMode = true
 Check(Context() == true, "War Mode must open the PvP context")
 ResetPvP(); pvp.instance = "arena"
@@ -153,8 +160,8 @@ Check(Context() == true, "arenas must open the PvP context")
 ResetPvP(); pvp.instance = "party"; pvp.flagged = true
 Check(Context() == false, "dungeons must close the PvP context even when flagged")
 
--- Driver reaction: the flag flips mid-combat on Classic, so its driver
--- refreshes the context there; Retail's driver never refreshes in combat.
+-- Flag-based drivers update the shared context in combat. Retail's driver
+-- only recompiles other units outside combat.
 -- refreshes counts context refreshes that did work.
 local refreshes = 0
 local refreshContext = UF.RefreshPVPIndicatorContext
@@ -168,19 +175,22 @@ ResetPvP()
 Context()
 pvp.flagged = true
 world.widgets:SetCombat(true)
-handler(driver, classic and "UNIT_FACTION" or "ZONE_CHANGED_NEW_AREA", classic and "player" or nil)
+handler(driver, followsFlag and "UNIT_FACTION" or "ZONE_CHANGED_NEW_AREA", followsFlag and "player" or nil)
 world.widgets:SetCombat(false)
-if classic then
+if followsFlag then
     Check(refreshes == 1 and UF.PVPIndicatorContextActive() == true,
-        "getting flagged in combat must refresh the Classic PvP context at once")
+        "getting flagged in combat must refresh the PvP context at once")
+    handler(driver, "UNIT_FACTION", "player")
+    Check(refreshes == 1, "an unchanged context must skip the frame repaint")
     refreshes = 0
     pvp.flagged = false
-    handler(driver, "PLAYER_FLAGS_CHANGED", "party1")
+    local flagEvent = classic and "PLAYER_FLAGS_CHANGED" or "UNIT_FACTION"
+    handler(driver, flagEvent, "party1")
     Check(refreshes == 0 and UF.PVPIndicatorContextActive() == true,
-        "another unit's flag change must not touch the Classic PvP context")
-    handler(driver, "PLAYER_FLAGS_CHANGED", "player")
+        "another unit's flag change must not touch the flag-based PvP context")
+    handler(driver, flagEvent, "player")
     Check(refreshes == 1 and UF.PVPIndicatorContextActive() == false,
-        "the player's own flag change must refresh the Classic PvP context")
+        "the player's own flag change must refresh the flag-based PvP context")
 else
     Check(refreshes == 0, "the Mainline PvP context driver must never recompile in combat")
 end
@@ -202,7 +212,7 @@ for _, login in ipairs({ { true, false, "the initial login" }, { false, true, "a
         .. ") must force one PvP context refresh, counted " .. refreshes)
 end
 -- Every other event keeps its unit filter: only the player matters.
-if classic then
+if followsFlag then
     ResetPvP()
     Context()
     refreshes = 0
@@ -240,9 +250,9 @@ do
     UF.ApplySpec(target, spec, nil, { StatusIndicators = true, PVPIndicator = true })
     local icon = target.pvpIndicatorIcon
     local pvpSpec = spec.status and spec.status.pvp
-    if classic then
+    if followsFlag then
         Check(pvpSpec and pvpSpec.enabled == true and pvpSpec.contextGated == true,
-            "Classic must compile the target PvP indicator outside the PvP context (context-gated at runtime)")
+            "Flag-based clients must compile the target PvP indicator outside the PvP context (context-gated at runtime)")
         Check(icon ~= nil and icon:IsShown() ~= true, "the target PvP icon must stay hidden outside the PvP context")
     else
         Check(pvpSpec and pvpSpec.enabled == false and pvpSpec.contextGated == nil,
@@ -251,22 +261,26 @@ do
 
     local GF = world.core.GF
     local party
-    if classic and GF and type(GF.CompileSpec) == "function" then
+    if followsFlag and GF and type(GF.CompileSpec) == "function" then
         party = env.CreateFrame("Button", nil, env.UIParent)
         party.MSUFUnitKey = "party1"
         local partySpec = GF.CompileSpec("party", party, "party1")
         local partyPvp = partySpec and partySpec.status and partySpec.status.pvp
         Check(partyPvp and partyPvp.enabled == true and partyPvp.contextGated == true
             and partySpec.status.runtimePVP == true,
-            "Classic must compile the party PvP icon outside the PvP context (context-gated at runtime)")
+            "Flag-based clients must compile the party PvP icon outside the PvP context (context-gated at runtime)")
         UF.ApplySpec(party, partySpec, nil, GF.GROUP_APPLY_MASK)
     end
 
     -- PLAYER_REGEN_DISABLED, then lockdown, then the flag flips mid-fight.
     world.widgets:SetCombat(true)
     pvp.flagged = true
-    handler(driver, classic and "UNIT_FACTION" or "ZONE_CHANGED_NEW_AREA", classic and "player" or nil)
-    if classic then
+    if client.IsForever then
+        world:FireEvent("PLAYER_PVP_FLAG_CHANGED", true)
+    else
+        handler(driver, followsFlag and "UNIT_FACTION" or "ZONE_CHANGED_NEW_AREA", followsFlag and "player" or nil)
+    end
+    if followsFlag then
         Check(icon:IsShown() == true, "getting flagged in combat must show the target PvP icon at once")
         if party then
             Check(party.pvpIndicatorIcon and party.pvpIndicatorIcon:IsShown() == true,
@@ -274,7 +288,11 @@ do
         end
         Check(deferred == 0, "the Classic context flip must not queue a recompile for after combat")
         pvp.flagged = false
-        handler(driver, "PLAYER_FLAGS_CHANGED", "player")
+        if client.IsForever then
+            world:FireEvent("PLAYER_PVP_FLAG_CHANGED", false)
+        else
+            handler(driver, "UNIT_FACTION", "player")
+        end
         Check(icon:IsShown() ~= true, "losing the flag in combat must hide the target PvP icon at once")
         if party then
             Check(party.pvpIndicatorIcon:IsShown() ~= true, "losing the flag in combat must hide the party PvP icon")
@@ -283,6 +301,107 @@ do
     world.widgets:SetCombat(false)
     UF.RefreshElements = refreshElements
     flaggedUnits.target, flaggedUnits.party1 = nil, nil
+    ResetPvP()
+    Context()
+end
+
+-- Apply the option while the player's live flag is already set, then exercise
+-- the native unit event on the same frame without a spec refresh.
+do
+    local db = env.MSUF_EnsureDB()
+    local saved = db.player.showPvpIndicator
+    local player = env.CreateFrame("Button", nil, env.UIParent)
+    player.MSUFUnitKey = "player"
+    local prior = UF.frames.player
+    local index = #UF.frameList + 1
+    UF.frames.player, UF.frameList[index] = player, player
+    db.player.showPvpIndicator = false
+    UF.Config.RefreshUnit("player")
+    UF.ApplySpec(player, UF.Config.GetSpec("player"), nil, { StatusIndicators = true, PVPIndicator = true })
+
+    pvp.flagged = true
+    if not followsFlag then
+        pvp.warMode = true
+        handler(driver, "WAR_MODE_STATUS_UPDATE", true)
+    end
+    world:FireEvent("UNIT_FACTION", "player")
+    Check(not (player.pvpIndicatorIcon and player.pvpIndicatorIcon:IsShown()), "disabled option must hide the PvP icon")
+    db.player.showPvpIndicator = true
+    env.MSUF_RequestStatusPvpIndicatorRefresh("player")
+    local icon = player.pvpIndicatorIcon
+    Check(icon and icon:IsShown(), "enabling the option while flagged must show the player PvP icon immediately")
+
+    db.player.showPvpIndicator = false
+    env.MSUF_RequestStatusPvpIndicatorRefresh("player")
+    Check(not icon:IsShown(), "disabling the option must hide the icon while the player is still flagged")
+    db.player.showPvpIndicator = true
+    env.MSUF_RequestStatusPvpIndicatorRefresh("player")
+    Check(icon:IsShown(), "re-enabling the option must show the icon while still flagged")
+
+    pvp.flagged = false
+    world:FireEvent("PVP_TIMER_UPDATE", "player")
+    Check(not icon:IsShown(), "the player icon must hide when the native PvP timer event clears the flag")
+    world.widgets:SetCombat(true)
+    pvp.flagged = true
+    world:FireEvent("UNIT_FACTION", "player")
+    Check(icon and icon:IsShown(), "UNIT_FACTION must show the player PvP icon immediately in combat")
+    world.widgets:SetCombat(false)
+    if client.IsForever then
+        -- The battleground keeps the context active so this checks the player
+        -- event independently of a shared context repaint.
+        pvp.instance = "pvp"
+        pvp.flagged = false
+        world:FireEvent("PLAYER_PVP_FLAG_CHANGED", false)
+        Check(UF.PVPIndicatorContextActive() and not icon:IsShown(),
+            "the Forever player must repaint on the native flag event even if the context is unchanged")
+        pvp.flagged = true
+        world:FireEvent("PLAYER_PVP_FLAG_CHANGED", true)
+        Check(icon:IsShown(), "the Forever player must show the flag on its native event")
+
+        pvp.instance, pvp.flagged = "none", false
+        world:FireEvent("PLAYER_PVP_FLAG_CHANGED", false)
+        pvp.flagged = true
+        player:GetScript("OnEvent")(player, "PLAYER_PVP_FLAG_CHANGED", true)
+        Check(not icon:IsShown(), "the player-first dispatch must still see the old context")
+        handler(driver, "PLAYER_PVP_FLAG_CHANGED", true)
+        Check(icon:IsShown(), "the driver must repaint the player if its listener runs second")
+    elseif not classic then
+        Check(unitFilters[player] and unitFilters[player].PLAYER_FLAGS_CHANGED == "player",
+            "Retail must register the confirmed flag event for the player only")
+        Check(icon:IsShown(), "confirmed War Mode must show the player's PvP flag")
+        handler(driver, "WAR_MODE_STATUS_UPDATE", false)
+        Check(not icon:IsShown(), "War Mode off must hide a PvP flag that is still set")
+        pvp.warMode = false
+        for _, event in ipairs({ "PLAYER_FLAGS_CHANGED", "UNIT_FACTION", "PVP_TIMER_UPDATE" }) do
+            world:FireEvent(event, "player")
+            Check(not icon:IsShown(), event .. " must not restore the badge after War Mode off")
+        end
+
+        local reloaded = env.CreateFrame("Button", nil, env.UIParent)
+        reloaded.MSUFUnitKey = "player"
+        Context()
+        UF.Config.RefreshUnit("player")
+        UF.ApplySpec(reloaded, UF.Config.GetSpec("player"), nil, { StatusIndicators = true, PVPIndicator = true })
+        Check(not (reloaded.pvpIndicatorIcon and reloaded.pvpIndicatorIcon:IsShown()),
+            "a fresh player frame after reload must hide the residual PvP flag")
+
+        pvp.warMode, pvp.flagged = true, false
+        handler(driver, "WAR_MODE_STATUS_UPDATE", true)
+        Check(not icon:IsShown(), "War Mode on must wait for an actual PvP flag")
+        pvp.flagged = true
+        world:FireEvent("PLAYER_FLAGS_CHANGED", "player")
+        Check(icon:IsShown(), "player flags must paint the badge even when the context is already open")
+
+        pvp.warMode = false
+        world:FireEvent("PLAYER_FLAGS_CHANGED", "player")
+        Check(not icon:IsShown(), "player flags must close the context when Blizzard confirms War Mode off")
+        pvp.instance = "pvp"
+        handler(driver, "ZONE_CHANGED_NEW_AREA")
+        Check(icon:IsShown(), "a PvP instance must show the flag with War Mode off")
+    end
+    db.player.showPvpIndicator = saved
+    UF.frames.player = prior
+    table.remove(UF.frameList, index)
     ResetPvP()
     Context()
 end

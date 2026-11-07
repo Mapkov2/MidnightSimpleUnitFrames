@@ -44,10 +44,8 @@ local ABSORB_DISPLAY = GF.ABSORB_DISPLAY_MODES
 local function PVPIndicatorContextActive()
   return UF and type(UF.PVPIndicatorContextActive) == "function" and UF.PVPIndicatorContextActive() == true
 end
--- Classic's PvP context follows the player's own flag, which flips in combat:
--- compile the icon whenever configured and let Runtime.UpdatePVP gate it on the
--- cached context (pvp.contextGated, MSUF_UF_Config.lua).
-local PVP_CONTEXT_GATED = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+-- Flag-based clients keep PvP textures ready for an in-combat flag change.
+local PVP_CONTEXT_GATED = MSUF.Client ~= nil and (MSUF.Client.Family == "Classic" or MSUF.Client.IsForever == true)
 
 local function Layer(value, fallback)
   value = floor((tonumber(value) or fallback or 5) + 0.5)
