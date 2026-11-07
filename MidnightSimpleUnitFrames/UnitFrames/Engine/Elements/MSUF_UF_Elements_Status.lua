@@ -843,6 +843,20 @@ Runtime.COMBAT_PLAYER_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED"
 Runtime.RESTING_PLAYER_EVENTS = { "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD" }
 Runtime.INCOMING_RES_EVENTS = { "INCOMING_RESURRECT_CHANGED" }
 Runtime.PVP_EVENTS = { "UNIT_FACTION" }
+-- These native events update only the opted-in player indicator.
+do
+  local client = MSUF.Client
+  local events = { "UNIT_FACTION" }
+  if client.SupportsEvent("PVP_TIMER_UPDATE") then events[#events + 1] = "PVP_TIMER_UPDATE" end
+  if client.IsRetail and not client.IsForever and client.SupportsEvent("PLAYER_FLAGS_CHANGED") then
+    -- Retail's War Mode button uses this event to reconcile its predicted toggle.
+    events[#events + 1] = "PLAYER_FLAGS_CHANGED"
+  end
+  Runtime.PVP_PLAYER_EVENTS = events
+  if client.IsRetail and client.SupportsEvent("PLAYER_PVP_FLAG_CHANGED") then
+    Runtime.PVP_PLAYER_UNITLESS_EVENTS = { "PLAYER_PVP_FLAG_CHANGED" }
+  end
+end
 
 local function StatusEnabled(spec, key)
   local status = spec and spec.status
@@ -934,8 +948,9 @@ function Runtime.StatusTextUnitlessEvents(spec, frame)
   return EMPTY_EVENTS
 end
 
-function Runtime.PVPEvents(spec)
-  return StatusEnabled(spec, "pvp") and Runtime.PVP_EVENTS or EMPTY_EVENTS
+function Runtime.PVPEvents(spec, frame)
+  if not StatusEnabled(spec, "pvp") then return EMPTY_EVENTS end
+  return frame and frame.MSUFUnitKey == "player" and Runtime.PVP_PLAYER_EVENTS or Runtime.PVP_EVENTS
 end
 
 function Runtime.CombatEvents(spec, frame)
@@ -1061,7 +1076,7 @@ local STATUS_INDICATOR_DEFS = {
   { name = "IncomingResIndicator", routes = { events = true, identity = true }, key = "incomingRes", events = Runtime.INCOMING_RES_EVENTS,
     update = Runtime.UpdateIncomingRes, hide = "incomingResIndicatorIcon", noGroup = true },
   { name = "PVPIndicator", routes = { events = true, identity = true }, key = "pvp", update = Runtime.UpdatePVP, hide = "pvpIndicatorIcon",
-    noGroup = true, getEvents = Runtime.PVPEvents },
+    noGroup = true, getEvents = Runtime.PVPEvents, playerUnitlessEvents = Runtime.PVP_PLAYER_UNITLESS_EVENTS },
   -- Stance text events fire only on user action or a stance-bar rebuild
   -- (talents, level-up, loading screen). Never add
   -- UPDATE_SHAPESHIFT_COOLDOWN - it fires with practically every GCD and

@@ -110,9 +110,7 @@ local function ComputePVPIndicatorContextActive(warModeOverride)
 
   local cpvp = C_PvP
   if not cpvp then return false end
-  -- This indicator is intentionally a PvP-mode feature, not a general
-  -- UnitIsPVP flag display. Outside War Mode, arenas and battlegrounds its
-  -- complete UF/GF runtime stays uncompiled even when the profile enables it.
+  -- Outside PvP instances the Retail badge follows the War Mode setting.
   if type(cpvp.IsWarModeDesired) == "function" then
     return APIBool(cpvp.IsWarModeDesired)
   end
@@ -132,7 +130,7 @@ function UF.PVPIndicatorContextActive()
 end
 
 local PVP_CONTEXT_REFRESH_ELEMENTS = { "StatusIndicators", "PVPIndicator", "GroupStatusRuntime" }
--- Classic only (assigned below): repaint the context-gated indicators in place.
+-- Assigned on clients that repaint the context-gated indicators in place.
 local RepaintPVPIndicators
 local PVP_CONTEXT_FORCE_EVENTS = {
   ACTIVE_GAME_MODE_UPDATED = true,
@@ -161,9 +159,7 @@ function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride, startupEn
   if force ~= true and oldKnown and oldActive == active then
     return false
   end
-  -- Classic compiles the indicators whenever configured and gates them on this
-  -- cached context at runtime, so a context flip, mid-combat included, is only
-  -- a repaint; a recompile would wait for combat to end.
+  -- A flag-based context flip only repaints the prepared textures, even in combat.
   if RepaintPVPIndicators then
     RepaintPVPIndicators()
     return true
@@ -189,17 +185,12 @@ local function RegisterPVPContextEvent(frame, event)
   frame:RegisterEvent(event)
 end
 
---- Classic flavors (Vanilla, TBC, Mists) compile through this file too. Their few
---- differences are gated on this fact, read once at load; Mainline never enters them.
-local IS_CLASSIC_FAMILY = MSUF.Client.Family == "Classic"
+local IS_FOREVER = MSUF.Client.IsForever == true
+local PVP_CONTEXT_GATED = IS_FOREVER or MSUF.Client.Family == "Classic"
 
---- Classic clients have no War Mode: the context follows the player's own PvP flag
---- (UnitIsPVP, free-for-all, the flag timer), which also flips mid-combat. The
---- unit and group compilers therefore build the indicator whenever it is
---- configured (pvp.contextGated), Runtime.UpdatePVP hides it outside the context,
---- and a context flip repaints the indicators in place, in combat too. Claiming
---- the driver slot here skips the Mainline driver below.
-if IS_CLASSIC_FAMILY then
+-- Classic and Forever follow the player's PvP flag. Keep configured indicators
+-- ready so a flag change in combat only updates textures.
+if PVP_CONTEXT_GATED then
   RepaintPVPIndicators = function()
     local runtime = MSUF.UFStatusRuntime
     local update = runtime and runtime.UpdatePVP
@@ -216,6 +207,7 @@ if IS_CLASSIC_FAMILY then
   end
   local UnitIsPVP, UnitIsPVPFreeForAll, IsPVPTimerRunning = UnitIsPVP, UnitIsPVPFreeForAll, IsPVPTimerRunning
   ComputePVPIndicatorContextActive = function()
+    if IS_FOREVER and UnitFramePVPContextualDisabled() then return false end
     local instanceType = CurrentInstanceType()
     if instanceType == "pvp" or instanceType == "arena" then
       return true
@@ -233,18 +225,13 @@ if IS_CLASSIC_FAMILY then
   if not UF.pvpIndicatorContextDriver then
     local pvpDriver = CreateFrame("Frame")
     pvpDriver:SetScript("OnEvent", function(_, event, unit)
-      -- PLAYER_ENTERING_WORLD's first payload argument is isInitialLogin, a
-      -- boolean, not a unit token. Filtering it like a unit swallowed the one
-      -- forced refresh at the initial login, which is the only pass that seeds
-      -- the PvP context before the first frame apply.
-      local forced = event == "PLAYER_ENTERING_WORLD"
-      if not forced and unit and unit ~= "player" then
-        return
-      end
-      UF.RefreshPVPIndicatorContext("MSUF_PVP_CONTEXT_" .. tostring(event), forced)
+      local forced = PVP_CONTEXT_FORCE_EVENTS[event] == true
+      -- The native flag event carries a boolean, independently of the unit events.
+      if not forced and event ~= "PLAYER_PVP_FLAG_CHANGED" and unit and unit ~= "player" then return end
+      UF.RefreshPVPIndicatorContext(nil, forced)
     end)
     local supportsEvent = MSUF.Client.SupportsEvent
-    local function RegisterClassicPVPContextEvent(event, unit)
+    local function RegisterFlagContextEvent(event, unit)
       if not supportsEvent(event) then return end
       if unit then
         pvpDriver:RegisterUnitEvent(event, unit)
@@ -252,12 +239,17 @@ if IS_CLASSIC_FAMILY then
         pvpDriver:RegisterEvent(event)
       end
     end
-    RegisterClassicPVPContextEvent("PLAYER_ENTERING_WORLD")
-    RegisterClassicPVPContextEvent("ZONE_CHANGED_NEW_AREA")
-    RegisterClassicPVPContextEvent("PVP_TIMER_UPDATE")
-    RegisterClassicPVPContextEvent("PLAYER_FLAGS_CHANGED")
-    RegisterClassicPVPContextEvent("WAR_MODE_STATUS_UPDATE")
-    RegisterClassicPVPContextEvent("UNIT_FACTION", "player")
+    RegisterFlagContextEvent("PLAYER_ENTERING_WORLD")
+    RegisterFlagContextEvent("ZONE_CHANGED_NEW_AREA")
+    RegisterFlagContextEvent("PVP_TIMER_UPDATE")
+    if IS_FOREVER then
+      RegisterFlagContextEvent("ACTIVE_GAME_MODE_UPDATED")
+      RegisterFlagContextEvent("PLAYER_PVP_FLAG_CHANGED")
+      RegisterFlagContextEvent("WAR_MODE_STATUS_UPDATE")
+    else
+      RegisterFlagContextEvent("PLAYER_FLAGS_CHANGED")
+    end
+    RegisterFlagContextEvent("UNIT_FACTION", "player")
     UF.pvpIndicatorContextDriver = pvpDriver
   end
 end
@@ -269,6 +261,10 @@ if not UF.pvpIndicatorContextDriver then
     -- native per-frame event routing, so never query context or rebuild UF/GF
     -- specs in combat.
     if InCombatLockdown and InCombatLockdown() then
+      return
+    end
+    if event == "PLAYER_FLAGS_CHANGED" then
+      if arg1 == "player" then UF.RefreshPVPIndicatorContext() end
       return
     end
     local force = PVP_CONTEXT_FORCE_EVENTS[event] == true
@@ -293,6 +289,7 @@ if not UF.pvpIndicatorContextDriver then
   RegisterPVPContextEvent(pvpDriver, "PLAYER_ENTERING_WORLD")
   RegisterPVPContextEvent(pvpDriver, "ZONE_CHANGED_NEW_AREA")
   RegisterPVPContextEvent(pvpDriver, "WAR_MODE_STATUS_UPDATE")
+  pvpDriver:RegisterUnitEvent("PLAYER_FLAGS_CHANGED", "player")
   UF.pvpIndicatorContextDriver = pvpDriver
 end
 
@@ -583,9 +580,9 @@ local function CompileUnitStatus(out, conf, general, key)
 
   local pvp = status.pvp
   pvp.configuredEnabled = pvp.enabled
-  if IS_CLASSIC_FAMILY then
+  if PVP_CONTEXT_GATED then
     pvp.contextGated = pvp.enabled == true or nil
-  elseif pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
+  elseif pvp.enabled and not UF.PVPIndicatorContextActive() then
     pvp.enabled = false
     pvp.contextDisabled = true
   end
