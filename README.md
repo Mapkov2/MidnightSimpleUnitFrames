@@ -1,10 +1,10 @@
 <div align="center">
   <img src="MidnightSimpleUnitFrames/Media/MSUF_EditModeIcon.png" width="150" alt="Midnight Simple Unit Frames logo">
 
-  <h1>Midnight Simple Unit Frames</h1>
+  <h1>Midnight Simple Unit Frames (MSUF)</h1>
 
   <p>
-    Bleeding-edge unit and group frames with Arena Frames, Pet Frames and Pet Target for World of Warcraft: Midnight, WoW Forever, Classic Era, The Burning Crusade Anniversary and Mists of Pandaria Classic.
+    A customizable unit frame addon for all five supported World of Warcraft clients: WoW Forever, WoW Midnight (Retail), Classic Era, The Burning Crusade Classic Anniversary, and Mists of Pandaria Classic.
   </p>
 
   <p>
@@ -20,19 +20,29 @@
   </p>
 </div>
 
-> **Arena Frames, Pet Frames and Pet Target are built in.** Customize them alongside your unit and group frames in one consistent interface.
+## Supported WoW versions
+
+| WoW client | Interface versions | Frame availability |
+| --- | --- | --- |
+| **WoW Forever** | 16001 | Unit, party and raid frames |
+| **WoW Midnight (Retail)** | 12.0.7, 12.1.0, 12.1.5 | Unit, party, raid, Mythic Raid and arena frames |
+| **WoW Classic Era (Vanilla)** | 1.15.9 | Unit, party and raid frames. Focus and boss frames are unavailable. |
+| **The Burning Crusade Classic Anniversary** | 2.5.6 | Unit, party, raid and arena frames. Boss frames are unavailable. |
+| **Mists of Pandaria Classic** | 5.5.4 | Unit, party, raid and arena frames |
+
+One MSUF package covers all five clients. Player, Target, Pet, Pet Target, Party and Raid frames are available on each. Download MSUF on [CurseForge](https://www.curseforge.com/wow/addons/midnightsimpleunitframes) or [Wago Addons](https://addons.wago.io/addons/midnightsimpleunitframes). For a manual installation, download the packaged ZIP from [GitHub Releases](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases/latest). Type `/msuf` in game to set up your frames.
 
 ## What is MSUF?
 
-Midnight Simple Unit Frames (MSUF) is a complete, customizable replacement for Blizzard's unit and group frames. It brings player, target, focus, focus-target, pet, pet-target, target-of-target, boss, arena, party and raid frames together with castbars, auras and class resources in one consistent interface.
+Midnight Simple Unit Frames (MSUF) replaces Blizzard's unit and group frames with layouts you can customize. Set up your player, target, pet, party and raid frames, then adjust their castbars, auras, health bars, colors and fonts. Focus, boss, arena and Mythic Raid frames depend on your WoW client.
 
 MSUF is made for players who want clear combat information, extensive visual control and a lightweight event-driven runtime. The full configuration UI loads only when requested.
 
-> **Signature per-frame Fill Direction:** MSUF lets each Unit Frame fill its Health and Power bars horizontally from left to right or right to left, or vertically from bottom to top or top to bottom. This per-frame combination of vertical and mirrored bar layouts is a level of control not currently offered by other unit-frame addons.
+> **Signature per-frame Fill Direction:** MSUF lets each Unit Frame fill its Health and Power bars horizontally from left to right or right to left, or vertically from bottom to top or top to bottom. You can mirror your Player and Target frames or give each frame a different layout.
 
 ## Basic features
 
-- **Arena Frames, dedicated Pet Frames and Pet Target**
+- **Dedicated Pet and Pet Target frames on all five clients**
 - Custom Player, Target, Focus, Focus Target, Pet, Pet Target, Target-of-Target, Boss and Arena frames
 - Party, Raid and Mythic Raid group frames
 - Configurable health, power, absorb and heal-absorb displays
@@ -84,9 +94,7 @@ The Core addon runs normally without opening Options; the Options companion is l
 
 | | |
 | --- | --- |
-| **Game** | World of Warcraft: Midnight, WoW Forever, Classic Era, The Burning Crusade Anniversary and Mists of Pandaria Classic |
-| **Interface versions** | Midnight 12.0.7, 12.1.0 and 12.1.5; WoW Forever 16001; Classic Era 1.15.9; TBC Anniversary 2.5.6; Mists Classic 5.5.4 (`tools/classic-client-matrix.tsv` is the list) |
-| **Client differences** | Classic Era has no focus, boss or arena frames and TBC Anniversary no boss frames; arena frames exist on Midnight, TBC Anniversary and Mists Classic, Mythic Raid group frames on Midnight only |
+| **WoW clients** | See [Supported WoW versions](#supported-wow-versions) and the [client matrix](tools/classic-client-matrix.tsv). |
 | **Version** | 6.5, shared by all supported clients |
 | **Main command** | `/msuf` |
 | **Optional integrations** | LibSharedMedia, Clique and WagoAnalytics |
