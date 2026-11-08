@@ -250,6 +250,35 @@ local function SetWindowControlIcon(btn, kind)
     PaintWindowControlButton(btn, btn._msuf2ControlHover, btn._msuf2ControlDown)
 end
 
+local function RelayoutCaptionGroup(group)
+    for _, button in ipairs(group._msuf2CaptionButtons) do LayoutCaptionGlyph(button) end
+end
+
+local function OnCaptionScaleProbeSizeChanged(probe)
+    RelayoutCaptionGroup(probe._msuf2CaptionGroupOwner)
+end
+
+local function OnCaptionScaleProbeEvent(probe)
+    local group = probe._msuf2CaptionGroupOwner
+    if group:IsVisible() then RelayoutCaptionGroup(group) end
+end
+
+-- Caption bars are one physical pixel at the effective scale of their last
+-- layout. UIParent scale changes (Global UI Scale, Blizzard's UI scale, a
+-- profile switch) bypass the menu-scale path; the stale pixel then falls below
+-- one device pixel and the rounded layout erases some bars. A probe spanning
+-- UIParent changes its local size exactly when the effective scale changes,
+-- and DISPLAY_SIZE_CHANGED covers a new physical pixel at an unchanged scale.
+local function CreateCaptionScaleProbe(group)
+    local probe = CreateFrame("Frame", nil, group)
+    probe:SetAllPoints(UIParent)
+    probe._msuf2CaptionGroupOwner = group
+    probe:SetScript("OnSizeChanged", OnCaptionScaleProbeSizeChanged)
+    probe:SetScript("OnEvent", OnCaptionScaleProbeEvent)
+    probe:RegisterEvent("DISPLAY_SIZE_CHANGED")
+    group._msuf2CaptionScaleProbe = probe
+end
+
 local function CreateWindowControlGroup(parent, segmentCount)
     segmentCount = max(1, tonumber(segmentCount) or 3)
     local group = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
@@ -261,6 +290,8 @@ local function CreateWindowControlGroup(parent, segmentCount)
         CaptionPixelLayout = CaptionPixelLayout or MSUF.Require("MSUF_PixelLayoutRegion", "Menu2 window controls")
         CaptionPixelLayout(group)
         group._msuf2CaptionGroup = true
+        group._msuf2CaptionButtons = {}
+        CreateCaptionScaleProbe(group)
         return group
     end
     local base = PixelLayoutRegion(group:CreateTexture(nil, "BACKGROUND", nil, 0))
@@ -295,6 +326,8 @@ local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText
             fill:SetAllPoints(btn)
             btn._msuf2CaptionFill = fill
             btn._msuf2CaptionGlyphs = {}
+            local buttons = parent._msuf2CaptionButtons
+            buttons[#buttons + 1] = btn
         end
     else
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Control", 2, "BACKGROUND", "BORDER")

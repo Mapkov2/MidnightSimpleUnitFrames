@@ -73,7 +73,7 @@ end
 
 function Link.GetChangelog()
     local current = API()
-    if current then return current.GetChangelog() end
+    if current and current.GetChangelog then return current.GetChangelog() end
     local suite = Suite()
     return suite and suite.Changelog or nil
 end

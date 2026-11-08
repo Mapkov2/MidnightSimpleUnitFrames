@@ -37,6 +37,11 @@ local LIMITS = {
 }
 local frames, byType = {}, {}
 local active, preview, manualPreview, editPreview, driver, nativeEnabled, formatter
+local rangedSpellID, rangedRangeTicker
+local RANGED_RANGE_INTERVAL = 0.2
+-- Same equipped-weapon shots as Blizzard's Forever hostile targeting bar.
+local AUTO_SHOT = 75
+local WEAPON_SHOTS = { Bows = 2480, Guns = 7918, Thrown = 2764, Crossbow = 7919, Wand = 5019 }
 -- Attacks that replace the next melee swing, by class. The client answers by
 -- spell name, so every rank matches.
 local NEXT_SWING = { WARRIOR = { 78, 845 }, DRUID = { 6807 }, HUNTER = { 2973 } }
@@ -318,9 +323,30 @@ local function SuppressNative()
         end
     end
 end
+local function ResolveRangedSpell()
+    local cfg = frames.ranged.config
+    if not (equippedRanged and cfg.enabled and cfg.reachCheck) then return end
+    local book, spell, item, timer = C_SpellBook, C_Spell, C_Item, C_Timer
+    if not (book and book.IsSpellKnown and spell and spell.IsSpellInRange and item and item.GetItemInfoInstant
+        and timer and timer.NewTicker and GetInventoryItemID and INVSLOT_RANGED) then return end
+    local weapon = GetInventoryItemID("player", INVSLOT_RANGED)
+    if not (Public(weapon) and weapon) then return end
+    local _, class = UnitClass("player")
+    if class == "HUNTER" then
+        if book.IsSpellKnown(AUTO_SHOT) then return AUTO_SHOT end
+        return
+    end
+    local _, _, _, _, _, itemClass, subclass = item.GetItemInfoInstant(weapon)
+    if itemClass ~= Enum.ItemClass.Weapon or not subclass then return end
+    for weaponType, spellID in pairs(WEAPON_SHOTS) do
+        if subclass == Enum.ItemWeaponSubclass[weaponType] and book.IsSpellKnown(spellID) then return spellID end
+    end
+end
+
 local function RefreshVisibility()
     local main, off, ranged = UnitAttackSpeed("player")
     equippedOff, equippedRanged = Equipped(off), Equipped(ranged)
+    rangedSpellID = ResolveRangedSpell()
     local listen = false
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
@@ -383,6 +409,46 @@ local function PaintReach(frame)
     frame.reachShown = outside
     StyleReach(frame, outside)
 end
+local function StopRangedRangeTicker()
+    if not rangedRangeTicker then return end
+    rangedRangeTicker:Cancel()
+    rangedRangeTicker = nil
+end
+
+local function SampleRangedRange(frame)
+    if not (active and frame.rangeEnabled and frame:IsShown() and rangedSpellID) then return end
+    local attackable = UnitCanAttack("player", "target")
+    if not (Public(attackable) and attackable) then return end
+    local dead = UnitIsDeadOrGhost("target")
+    if not Public(dead) then return end
+    if dead then return end
+    return true, C_Spell.IsSpellInRange(rangedSpellID)
+end
+
+local PollRangedRange
+local function UpdateReach(frame, range)
+    local readable = frame.rangeEnabled and Public(range)
+    if frame.hand == "ranged" then
+        -- The idle swing API can return nil even for a hostile target.
+        local sampled
+        if readable and range == nil then sampled, range = SampleRangedRange(frame) end
+        if sampled then
+            readable = Public(range)
+            if not rangedRangeTicker then rangedRangeTicker = C_Timer.NewTicker(RANGED_RANGE_INTERVAL, PollRangedRange) end
+        else
+            StopRangedRangeTicker()
+        end
+    end
+    frame.outside = readable and range == false
+    PaintReach(frame)
+end
+
+PollRangedRange = function()
+    local frame = frames.ranged
+    local range = frame.rangeEnabled and C_SwingTimer.IsTargetWithinSwingRange(Enum.PlayerSwingType.Ranged)
+    UpdateReach(frame, range)
+end
+
 -- C_SwingTimer.EnableRangeCheck is one switch per hand shared with Blizzard's
 -- bars, which turn it off when their CVar drops: force re-asserts it.
 local function SyncRanges(force)
@@ -395,11 +461,22 @@ local function SyncRanges(force)
             C_SwingTimer.EnableRangeCheck(swingType, enabled)
         end
         local range = enabled and C_SwingTimer.IsTargetWithinSwingRange(swingType)
-        frame.outside = enabled and Public(range) and range == false or false
-        PaintReach(frame)
+        UpdateReach(frame, range)
     end
 end
 local function SyncReachEvents()
+    local ranged = frames.ranged.config
+    if ranged.enabled and ranged.reachCheck then
+        driver:RegisterEvent("SPELLS_CHANGED")
+        driver:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+        driver:RegisterUnitEvent("UNIT_FACTION", "target")
+        driver:RegisterUnitEvent("UNIT_FLAGS", "target")
+    else
+        driver:UnregisterEvent("SPELLS_CHANGED")
+        driver:UnregisterEvent("PLAYER_EQUIPMENT_CHANGED")
+        driver:UnregisterEvent("UNIT_FACTION")
+        driver:UnregisterEvent("UNIT_FLAGS")
+    end
     local want = false
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
@@ -640,6 +717,7 @@ local function OnEvent(_, event, a, b, c)
         local frame = byType[b]
         if frame and frame.handlesSwings then Start(frame, a) end
     elseif event == "PLAYER_LOGOUT" then
+        StopRangedRangeTicker()
         -- Restore the account CVar before a reload as well as when disabling.
         active = false
         SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
@@ -652,10 +730,15 @@ local function OnEvent(_, event, a, b, c)
         if a == "Blizzard_SwingTimer" then SuppressNative() end
     elseif event == "PLAYER_SWING_RANGE_UPDATE" then
         local frame = byType[a]
-        if frame then
-            frame.outside = frame.rangeEnabled == true and Public(c) and c == true and Public(b) and b == false or false
-            PaintReach(frame)
+        if frame and Public(c) then
+            if c then UpdateReach(frame, b) else UpdateReach(frame, nil) end
         end
+    elseif event == "SPELLS_CHANGED" or event == "PLAYER_EQUIPMENT_CHANGED" then
+        if event == "PLAYER_EQUIPMENT_CHANGED" and a ~= INVSLOT_RANGED then return end
+        rangedSpellID = ResolveRangedSpell()
+        SyncRanges()
+    elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
+        PollRangedRange()
     elseif event == "PLAYER_TARGET_CHANGED" then
         SyncRanges()
     elseif event == "CURRENT_SPELL_CAST_CHANGED" or event == "ACTIONBAR_UPDATE_STATE" then
@@ -726,6 +809,7 @@ end
 local function Disable()
     if not active then return end
     active, preview, manualPreview = false, false, false
+    StopRangedRangeTicker()
     driver:UnregisterAllEvents()
     driver.listening, cueEventsBound, reachEventsBound = nil, false, false
     for i = 1, #HANDS do

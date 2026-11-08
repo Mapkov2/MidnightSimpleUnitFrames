@@ -67,9 +67,10 @@ end
 -- 2026-11-06: five independent group color controls; both generated indexes retained every prior identity.
 -- 2026-11-06: opt-in name format adds one control in each Fonts scope; prior search identities remain.
 -- Beta 1 regenerates both families with the new menu context; all prior identities remain.
+-- Beta 2 adds Mute MSUF menu sounds in both families and the Target/Focus faction switches in Mainline.
 local indexes = {
-    { "", 4535, 3925939725 },
-    { "_Classic", 4110, 3624943510 },
+    { "", 4538, 3308702204 },
+    { "_Classic", 4111, 599502379 },
 }
 local moved = {
     { "edit_selection", "workbench_alignment", "multi", "bottom left right top horizontal vertical move open toggle" },

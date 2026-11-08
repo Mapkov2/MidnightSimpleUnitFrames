@@ -11,7 +11,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- one-shot repair; current profiles can then be repaired exactly once again.
 --- Alias rules and their context differences live in StateHelpers.AliasMigrations.
 --- This marker owns broad default filling; the shared alias ledger owns translation.
---- Revision 18 is reserved for full 6.5 profiles in RestorePersistence.
+--- Revision 18 is reserved for the 6.5 release line in RestorePersistence.
 local MSUF_DEFAULTS_CURRENT_REVISION = 17
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 

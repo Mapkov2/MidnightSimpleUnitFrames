@@ -28,6 +28,7 @@ function Widget:SetTexture(value)
   Check(Secrets.IsSecret(value) or type(value) ~= "string" or not value:match("^RTPortrait"), "render target replay")
   self.image = value
 end
+function Widget:SetAtlas(atlas) self.atlas = atlas end
 function Widget:SetTexCoord(l, r, t, b) self.l, self.r, self.t, self.b = l, r, t, b end
 function Widget:SetSize(width, height) self.width, self.height = width, height end
 function Widget:GetWidth() return self.width end
@@ -36,7 +37,7 @@ function Widget:GetFrameLevel() return self.level end
 function Widget:SetFrameLevel(level) self.level = level end
 function Widget:GetTexture() error("portrait render targets must not be read back") end
 for _, name in ipairs({ "EnableMouse", "SetAllPoints", "SetVertexColor", "ClearAllPoints", "SetPoint", "SetAlpha",
-  "RegisterEvent", "UnregisterEvent", "SetSnapToPixelGrid", "SetTexelSnappingBias" }) do Widget[name] = Noop end
+  "RegisterEvent", "UnregisterEvent", "SetSnapToPixelGrid", "SetTexelSnappingBias", "SetDrawLayer" }) do Widget[name] = Noop end
 local function NewWidget(parent)
   return setmetatable({ parent = parent, scripts = {}, hooks = {}, shown = true, width = 200, height = 40, level = 1 },
     { __index = Widget })
@@ -54,6 +55,12 @@ env.UnitGUID = function() state.guidReads = state.guidReads + 1 return state.gui
 env.UnitExists = function() return state.exists end
 env.UnitIsConnected = function() return state.connected end
 env.UnitIsVisible = function() return state.visible end
+env.UnitIsPlayer = function(unit)
+  if unit == "player" then return true end
+  return state.targetIsPlayer
+end
+env.UnitClassification = function() return state.classification end
+env.C_Texture = { GetAtlasInfo = function() return { width = 64, height = 64 } end }
 env.UnitClass = function() return "Mage", "MAGE" end
 env.UnitCastingInfo = function() state.castReads = state.castReads + 1 return state.castName, nil, state.castIcon end
 env.UnitChannelInfo = function() state.channelReads = state.channelReads + 1 return state.channelName, nil, state.channelIcon end
@@ -65,11 +72,9 @@ env.SetPortraitTexture = function(texture, unit, bust)
   texture.l, texture.r, texture.t, texture.b = 0, 1, 0, 1
 end
 local events, dependencies = {}, {}
-local core = { Client = { IsVanilla = flavor == "Vanilla" }, PublicGlobals = {}, UF = {} }
+local core = { Client = { IsVanilla = flavor == "Vanilla", IsForever = flavor == "Forever" }, PublicGlobals = {}, UF = {} }
 core.ExportPublic = function(name, value) dependencies[name] = value end
 core.Require = function(name) return assert(dependencies[name], "missing provider " .. name) end
-core.PortraitDetails = { ApplyShadow = Noop, DragonAllowed = function() return false end,
-  UnitlessEvents = function(events) return events end }
 local classVisual = { texture = "class:MAGE" }
 core.PortraitMedia = { ResolveClassPortrait = function() return classVisual end }
 core.UFVisuals = { UF = core.UF, SetShown = function(region, shown)
@@ -89,6 +94,7 @@ local function Load(path)
   chunk("MidnightSimpleUnitFrames", core)
 end
 Load("MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua")
+Load("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua")
 local owned = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua"
 Load("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua")
 local stopSecrets = Secrets.Watch(owned, { strict = true })
@@ -279,6 +285,44 @@ for _, event in ipairs({ "UNIT_CONNECTION", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED
   before = state.calls
   Fire(vehicle, event)
   Check(state.calls == before + 1, event .. " must remain immediate")
+end
+if flavor == "Forever" then
+  local target = NewFrame("target")
+  local p = target.MSUFSpec.portrait
+  p.shape, p.blizzardElite = "BLIZZARD", true
+  state.classification = "elite"
+  Fire(target, "UNIT_CLASSIFICATION_CHANGED")
+  local dragon = target.MSUFPortraitHolder.blizzElite
+  Check(dragon and dragon:IsShown(), "elite NPC must show the dragon")
+  state.targetIsPlayer, state.guid = true, "player-target"
+  Fire(target, "PLAYER_TARGET_CHANGED")
+  Check(not dragon:IsShown(), "Forever player must clear the automatic dragon even when classified elite")
+
+  core.UF.ForEachFrame = function(callback) callback(target) end
+  Check(Portrait.SetClassificationPreview("target", "rare"), "explicit dragon preview did not start")
+  Check(dragon:IsShown(), "explicit dragon preview must work on players")
+  Portrait.SetClassificationPreview(nil)
+  Check(not dragon:IsShown(), "clearing the preview must restore the player portrait")
+  p.dragonArtwork = true
+  Fire(target, "UNIT_CLASSIFICATION_CHANGED")
+  Check(dragon:IsShown(), "explicit fixed artwork must work on players")
+
+  p.dragonArtwork = false
+  Fire(target, "UNIT_CLASSIFICATION_CHANGED")
+  Check(not dragon:IsShown(), "turning off fixed artwork must restore the player portrait")
+  state.targetIsPlayer, state.guid = false, "elite-target"
+  Fire(target, "PLAYER_TARGET_CHANGED")
+  Check(dragon:IsShown(), "returning to an elite NPC must restore the automatic dragon")
+
+  local player = NewFrame("player")
+  local playerPortrait = player.MSUFSpec.portrait
+  playerPortrait.shape, playerPortrait.blizzardElite = "BLIZZARD", true
+  Fire(player, "UNIT_CLASSIFICATION_CHANGED")
+  Check(not player.MSUFPortraitHolder.blizzElite, "the player frame must never create an automatic dragon in Forever")
+
+  state.targetIsPlayer, state.classification = Secrets.New("boolean"), Secrets.New("string")
+  Fire(target, "UNIT_CLASSIFICATION_CHANGED")
+  Check(not dragon:IsShown(), "restricted classification must clear the previous dragon")
 end
 local violations = stopSecrets()
 Check(#violations == 0, "secret misuse: " .. table.concat(violations, "\n"))

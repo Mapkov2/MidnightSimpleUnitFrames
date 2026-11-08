@@ -172,8 +172,8 @@ PLAYER_SWING and weapon/combat events follow upstream/forever
 Blizzard_SwingTimer/Blizzard_SwingTimer.lua. StatusBar:SetTimerDuration and duration
 text bindings follow Blizzard_AuraContainer/Blizzard_CustomAuraButton.lua. Vertical
 status bars follow Blizzard_UIWidgets/Blizzard_UIWidgetTemplateFillUpFrames.xml
-and Blizzard_OverrideActionBar/OverrideActionBar.xml on the same branch. No Lua
-OnUpdate, polling or Combat Log parser is used. The dedicated Swing Timer smoke
+and Blizzard_OverrideActionBar/OverrideActionBar.xml on the same branch. Swing
+progress runs natively, with no Lua OnUpdate or Combat Log parser. The dedicated Swing Timer smoke
 checks ownership, concurrent hands, duration delivery, equipment, profile changes,
 real media-choice paths, preview isolation, number-only display and fill direction.
 Offline tests do not establish live visuals, taint safety or measured performance.
@@ -188,7 +188,11 @@ Settings saved under the former extras names move to the current ones once.
 C_SwingTimer.EnableRangeCheck
 is one switch per hand shared with Blizzard's bars, which drop it when their
 CVar turns off, so the module re-asserts it after that CVar changes and on every
-apply. A target change only re-reads the range of checked hands, a haste proc
+apply. If the native Ranged result is unavailable, a visible Ranged bar with
+range fading enabled checks the equipped weapon attack every 0.2 seconds while
+the target is alive and attackable. The spell selection follows Forever\x27s
+Blizzard_GamepadActionBars/TargetActionBars/HostileTargetingActionBar.lua.
+A target change only re-reads the range of checked hands, a haste proc
 does nothing unless a weapon was equipped or removed, and spell-state events are
 registered only for classes with next-swing attacks.
 

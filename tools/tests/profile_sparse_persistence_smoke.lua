@@ -183,7 +183,7 @@ for _, bad in ipairs({ false, 0, "", "future", {}, string.rep("0", #mask), strin
     assert(not ns.DefaultsSchema.RestorePersistence(broken), "invalid V2 metadata accepted")
     assert(H.Literal(broken) == text, "invalid V2 metadata changed values or fell back to V1")
 end
-for _, edit in ipairs({ function(p) p.general = nil end, function(p) p._msufDefaultsRevision = 18 end }) do
+for _, edit in ipairs({ function(p) p.general = nil end, function(p) p._msufDefaultsRevision = 19 end }) do
     local broken = Serial(sparseTemplate)
     edit(broken)
     local text = H.Literal(broken)

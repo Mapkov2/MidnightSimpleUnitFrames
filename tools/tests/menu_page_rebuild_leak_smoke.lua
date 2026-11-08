@@ -10,9 +10,8 @@
 --      default, and undoing the reset brings the edit back;
 --   3. a page that rebuilt itself while on screen (its structure follows its
 --      data) is still built again on undo, so its rows never go stale;
---   4. the Dashboard keys a cached view by its open disclosures and the
---      changelog page by its selected release: toggling between views that
---      were built once creates nothing.
+--   4. the Dashboard keeps its page as its cards open and close. The
+--      changelog page caches its views by release.
 -- Pass "report" to print the frame counts per trigger, including the search
 -- results (built once, then repainted in place: search_results_repaint_smoke)
 -- and repeated resize commits, which must reuse their frame trees.
@@ -248,36 +247,26 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 4. Declared views switch between cached entries
+-- 4. Dashboard state changes update the retained page
 ---------------------------------------------------------------------------
 do
     local entry = Select("home")
-    Check(entry.layoutSlot:find("|", 1, true), "the Dashboard entry is not keyed by its view")
     local function Toggle(field)
         M.SetMenuStateValue(field, not (M[field] == true))
-        Check(M.RebuildPageKeepingScroll("home"), "the Dashboard did not switch views")
+        Check(M.RebuildPageKeepingScroll("home"), "the Dashboard did not update its disclosures")
         Settle()
-        return M.cache.home
+        Check(M.cache.home == entry and entry.wrapper.shown, "updating disclosures replaced the Dashboard")
     end
-    local views = {}
     local fields = { "dashboardScalingOpen", "dashboardRecoveryOpen", "dashboardChangelogOpen" }
-    -- First pass: every field on and off once builds each view at most once.
     for _, field in ipairs(fields) do
-        local opened = Toggle(field)
-        views[opened.layoutSlot] = views[opened.layoutSlot] or opened
-        local closed = Toggle(field)
-        views[closed.layoutSlot] = views[closed.layoutSlot] or closed
+        Toggle(field)
+        Toggle(field)
     end
     local first = WidgetCount()
     for _ = 1, CYCLES do
         for _, field in ipairs(fields) do
-            local opened = Toggle(field)
-            Check(views[opened.layoutSlot] == opened, "a Dashboard view built before was built again")
-            Check(opened.wrapper.shown == true, "the switched-to Dashboard view is hidden")
-            Check(M.activeKey == "home", "a Dashboard view switch left the page")
-            local closed = Toggle(field)
-            Check(views[closed.layoutSlot] == closed, "the closed Dashboard view was built again")
-            Check(opened.wrapper.shown == false, "the switched-from Dashboard view stayed visible")
+            Toggle(field)
+            Toggle(field)
         end
     end
     Check(WidgetCount() == first, CYCLES .. " Dashboard disclosure cycles created " .. (WidgetCount() - first) .. " widgets")
@@ -288,14 +277,19 @@ do
         "a Dashboard repaint rebuilt the view")
 end
 
--- 4b. Real disclosure clicks must preserve every cached Dashboard view.
+-- 4b. Real disclosure clicks must keep the visible Dashboard and viewport.
 do
     core.FirstLoad6:Complete("fixture")
     M.InvalidatePage("home")
     M.SetMenuStateValue("dashboardChangelogOpen", false)
     M.SetMenuStateValue("dashboardScalingOpen", false)
     M.SetMenuStateValue("dashboardRecoveryOpen", false)
-    Select("home")
+    local uiScale, menuScale = env.UIParent:GetScale(), M.frame:GetScale()
+    env.UIParent:SetScale(0.53)
+    M.frame:SetScale(M.GetEffectiveMenuScale(0.8 * 1.4))
+    local dashboard = Select("home")
+    local hides = 0
+    dashboard.wrapper:HookScript("OnHide", function() hides = hides + 1 end)
     local function Header(entry, path)
         local identity = "menu2.home.dashboard." .. M.NormalizeControlPath(path)
         for _, frame in ipairs(widgets.frames) do
@@ -316,26 +310,21 @@ do
             if region:GetObjectType() == "FontString" and (region.text == "Hide" or region.text == "View") then hint = region end
             if region:GetObjectType() == "Texture" and region.texture == M.Theme.media.collapseArrow then arrow = region end
         end
-        for _, child in ipairs(card.children or {}) do
+        local body = entry.wrapper._msuf2DashboardState.cards.dashboardChangelogOpen.body
+        for _, child in ipairs(body.children or {}) do
             if child:GetObjectType() == "ScrollFrame" then scroll = child end
         end
         Check(hint and hint.text == (open and "Hide" or "View"), "cached Changelog hint disagrees with its card height")
         Check(arrow and arrow.rotation == (open and math.pi * 0.5 or 0), "cached Changelog arrow disagrees with its card height: " .. tostring(arrow and arrow.rotation) .. " open=" .. tostring(open))
-        Check(scroll and scroll:IsShown() == open, "cached Changelog content disagrees with its card height")
+        Check(scroll and body:IsShown() == open, "cached Changelog content disagrees with its card height")
         Check(scroll:GetScrollChild() and scroll:GetScrollChild():GetHeight() > 1, "bundled release notes are missing")
         head:GetScript("OnEnter")(head)
         head:GetScript("OnLeave")(head)
         Check(hint.text == (open and "Hide" or "View"), "hover changed the cached Changelog disclosure state")
     end
-    local views, count = {}, 0
     local function Remember()
-        local entry = M.cache.home
-        if not views[entry] then
-            views[entry] = { open = M.dashboardChangelogOpen == true }
-            count = count + 1
-        end
-        Check(entry.wrapper.shown == true, "the clicked Dashboard view is hidden")
-        for cached, state in pairs(views) do CheckChangelog(cached, state.open) end
+        Check(M.cache.home == dashboard and dashboard.wrapper.shown == true, "disclosure replaced the visible Dashboard")
+        CheckChangelog(dashboard, M.dashboardChangelogOpen == true)
     end
     local paths = { "changelog.disclosure", "scaling.disclosure", "changelog.disclosure", "display_recovery.disclosure",
         "changelog.disclosure", "scaling.disclosure", "changelog.disclosure", "display_recovery.disclosure" }
@@ -347,7 +336,7 @@ do
     end
     Remember()
     Cycle()
-    Check(count == 8, "real disclosure clicks did not visit all eight Dashboard views")
+    Check(hides == 0, "disclosure hid the Dashboard during layout")
     local first = WidgetCount()
     for _ = 1, 20 do
         Click(Header(M.cache.home, "changelog.disclosure"))
@@ -366,7 +355,7 @@ do
         Remember()
     end
     Check(WidgetCount() == first, "warm Dashboard clicks allocated new frames or regions")
-    Note("home real clicks, all 8 views x" .. CYCLES, "consistent disclosures; 0 widgets")
+    Note("home real clicks, all 8 combinations x" .. CYCLES, "one Dashboard; 0 widgets")
     -- Clicks must animate the actual card stack in both directions. Reusing
     -- cached views alone does not prove visible intermediate geometry.
     local disclosures = {
@@ -398,6 +387,9 @@ do
         local path, key = disclosure[1], disclosure[2]
         Check(not M[key], "motion fixture must start collapsed")
         local card = RawClick(path)
+        local body = dashboard.wrapper._msuf2DashboardState.cards[key].body
+        local bodyHeight = body:GetHeight()
+        Check(body:IsShown() and bodyHeight > 42, path .. " opened with a collapsed body")
         Check(card:GetHeight() == 42, path .. " opening jumped to its final height")
         Tick(0.01)
         local openingHeight = card:GetHeight()
@@ -405,6 +397,7 @@ do
         Check(arrow.rotation > 0 and arrow.rotation < math.pi * 0.5, path .. " arrow did not follow opening")
         Check(card:DoesClipChildren(), path .. " moving content is not clipped")
         Check(openingHeight > 42, path .. " opening never advanced")
+        Check(body:GetHeight() == bodyHeight, path .. " resized the body during opening")
         Tick(0.2)
         local expanded = card:GetHeight()
         Check(expanded > openingHeight, path .. " opening has no intermediate height")
@@ -414,6 +407,7 @@ do
         Tick(0.01)
         local closingHeight = card:GetHeight()
         Check(closingHeight > 42 and closingHeight < expanded, path .. " closing has no intermediate height")
+        Check(body:IsShown() and body:GetHeight() == bodyHeight, path .. " changed the body before closing finished")
         local reversed = RawClick(path)
         Check(reversed == card and card:GetHeight() == closingHeight, path .. " rapid reversal jumped or replaced its card")
         Tick(0.2)
@@ -421,6 +415,7 @@ do
         RawClick(path)
         Tick(0.2)
         Check(Header(M.cache.home, path).parent:GetHeight() == 42, path .. " did not settle closed")
+        Check(not body:IsShown(), path .. " kept its body visible after closing")
         Settle()
     end
     env.MSUF_DB.general.reduceMotion = true
@@ -458,6 +453,8 @@ do
     M.frame:Show()
     Select("home")
     CheckChangelog(M.cache.home, false)
+    env.UIParent:SetScale(uiScale)
+    M.frame:SetScale(menuScale)
     Note("home disclosure motion", "open/close, reversal, reduced motion, navigation and shutdown")
 end
 

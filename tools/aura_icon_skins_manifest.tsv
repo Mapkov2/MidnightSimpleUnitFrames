@@ -23,6 +23,7 @@ msuf_skin_glass_gloss	quad			0
 msuf_skin_ring_segmented	quad			4
 msuf_skin_ring_simple	quad			4
 msuf_skin_shadow_round	quad			5
+msuf_skin_shadow3_circle	quad			4
 msuf_skin_gear_ring	quad			6
 msuf_skin_orb_ring	quad			4
 msuf_skin_orb_thin	quad			4

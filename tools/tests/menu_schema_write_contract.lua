@@ -65,12 +65,19 @@ spec = Declare({ actionKey = "reset_selected_group_status_icon" })
 assert(S.MatchesWrite(spec, "gf_raid.roleIconSize") and not S.MatchesWrite(spec, "gf_raid.unrelated"),
     "group status reset escaped its finite field list")
 M.UnitPage = { STATUS_CONTROLS = { { x = "restingX", colorPrefix = "threatIndicator" } } }
-S.Custom(widget, { id = "contract.unit.reset", kind = "button", scope = "uf_player", applyDomain = "unit",
-    actionKey = "reset_unit_status_indicator" })
-spec = widget._msuf2ControlSchema
-assert(S.MatchesWrite(spec, "player.restingX") and S.MatchesWrite(spec, "player.threatIndicatorColorR")
-    and not S.MatchesWrite(spec, "player.unrelated") and not S.MatchesWrite(spec, "0.restingX"),
-    "unit status reset escaped its finite physical fields")
+namespace.UF = { Config = { Status = {
+    SupportsPVPFactionBadge = function(unit) return unit == "target" or unit == "focus" end,
+} } }
+for _, unit in ipairs({ "player", "target", "focus" }) do
+    S.Custom(widget, { id = "contract.unit.reset", kind = "button", scope = "uf_" .. unit, applyDomain = "unit",
+        actionKey = "reset_unit_status_indicator" })
+    spec = widget._msuf2ControlSchema
+    assert(S.MatchesWrite(spec, unit .. ".restingX") and S.MatchesWrite(spec, unit .. ".threatIndicatorColorR")
+        and not S.MatchesWrite(spec, unit .. ".unrelated") and not S.MatchesWrite(spec, "0.restingX"),
+        "unit status reset escaped its finite physical fields")
+    assert(S.MatchesWrite(spec, unit .. ".pvpIndicatorShowOpenWorldFaction") == (unit ~= "player"),
+        "unit status reset must cover the faction switch only on target and focus")
+end
 local calls = 0
 local refuse = S.Setter({ id = "contract.refusal", setting = "general.selection", write = {
     keyOnly = true, accept = function(value) return value ~= "refuse" end, refused = false,

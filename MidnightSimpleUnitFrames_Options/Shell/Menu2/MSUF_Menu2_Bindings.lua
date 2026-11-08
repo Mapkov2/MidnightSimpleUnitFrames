@@ -173,7 +173,7 @@ end
 function M.StageFactoryReset()
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     MSUF.Require("MSUF_DoFullReset", FILE)({ skipReload = true })
-    M.SetFixedPreviewExpandedPreference(false)
+    M.fixedPreviewExpanded = nil
     return true
 end
 local function BlockCombatAndRefresh(ctx)

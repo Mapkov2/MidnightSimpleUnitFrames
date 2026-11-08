@@ -471,3 +471,40 @@ above. No identity, localization, group-frame setting, fixture input,
 payload fingerprint or harness allowance changes. The focused
 `unitframe_screen_position_anchor_smoke.lua` covers anchor precedence,
 excluded anchors, untagged coordinates and repeated compilation without drift.
+
+
+## Preserve existing 6.5 choices on upgrade (2026-11-07)
+
+The upgrade policy now gives stored positions priority over ambiguous legacy
+screen-height tags on the first 7.0 load. Only recognized full revision-17/18
+profiles without the 7.0 state stamp receive this cold migration, after their
+untouched recovery snapshot. Valid old height references become absent;
+existing variant height overrides become ordinary remove patches. The runtime
+adopts the real reference after the effective UI scale settles, without changing
+offsets. Later resizing, new factories and imported profile strings retain the
+normal 7.0 path. This supersedes the stored-profile part of the November 5
+screen-anchor decision above; its factory and import expectations remain.
+
+Explicit mana Off values also survive when older profiles lack the later
+migration stamps. Current Forever factories continue to enable both indicators.
+This supersedes the November 5 stored-false override described above.
+
+Only `sv_forever_beta_rev17.golden` was regenerated with
+`lua tools/profile_corpus_golden.lua <root> all --write --entry sv_forever_beta_rev17`.
+Every changed expectation belongs to one of these reviewed cases:
+
+- Removed `offsetX`/`offsetY` deltas for the nine unit owners now equal the
+  unchanged input fixture, instead of multiplying its coordinates by 0.75.
+- Reference-height observations reflect first-use adoption or continued absence
+  for inactive/unsupported unit and group owners. They are storage metadata,
+  and do not change the stored position offsets.
+- Round-trip `screenReference` observations follow those absent references and
+  ordinary export/import adoption; no exception rule was broadened.
+- The Forever `manaGainPulse = true` delta is removed because the fixture's
+  explicit false value now survives.
+
+The input fixture, identity, character mappings, archive contents, payload
+fingerprints and harness-error allowances are unchanged. Dedicated upgrade
+smokes independently cover native positions, delayed/combat scale application,
+variants, old revision-18 data and repeated saving; the historical expected
+file is not the only correctness oracle.

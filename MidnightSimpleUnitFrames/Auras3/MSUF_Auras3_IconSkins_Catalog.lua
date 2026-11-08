@@ -49,6 +49,12 @@ Skins.Register("SHADOW3", {
         { kind = "band", file = "msuf_skin_shadow_outer", outer = 4, inner = 0 },
         { kind = "band", file = "msuf_skin_shadow_hard", outer = 0, inner = 13 },
     },
+    variants = {
+        CIRCLE = {
+            gloss = { file = GLOSS_DOME.file, enabled = false },
+            layers = { { kind = "quad", file = "msuf_skin_shadow3_circle", extent = 4 } },
+        },
+    },
 })
 Skins.Register("SHADOW4", {
     text = "Shadow 4",

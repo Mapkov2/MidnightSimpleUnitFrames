@@ -142,12 +142,16 @@ function M.FormatSuiteTitle(overview)
     return M.Format("MSUF Suite %s", version:match("^%d") and ("v" .. version) or version)
 end
 
-local function GetBundledChangelog()
+local function ChangelogEntries(data)
+    local entries = type(data) == "table" and data.entries
+    if type(entries) == "table" and type(entries[1]) == "table" then return entries end
+end
+
+local function GetBundledChangelogEntries()
     -- Changelog data is bundled as static state. The dashboard renders it read-only and should
     -- tolerate older builds where no changelog table exists.
     local data = MSUF.MSUF_Changelog or MSUF.Require("MSUF_Changelog", FILE)
-    if type(data.entries) ~= "table" or type(data.entries[1]) ~= "table" then return nil end
-    return data
+    return ChangelogEntries(data)
 end
 local function ThemeColor(name, fallback)
     local color = T and T.colors and T.colors[name]
@@ -182,9 +186,6 @@ end
 -- Disclosures keep their cached views; user clicks animate the expanded card
 -- before a closing transition switches to the collapsed view.
 local ToggleDashboardDisclosure
-local function RebuildDashboardPage()
-    M.RebuildPageKeepingScroll("home")
-end
 local function RawFont(parentFrame, template, text, color, bump, role)
     local fs = PixelLayoutRegion(parentFrame:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall"))
     if T.StyleFontString then
@@ -334,60 +335,110 @@ local function FillChangelog(child, scrollW, entries)
     Layout(scrollW)
     return Layout
 end
-local function BuildDashboardChangelog(parent, cardWidth, opts, ctx)
+local function BuildChangelogTabs(body, scroll, child, msufEntries, suiteEntries, ctx, top, bottom)
+    local tabOptions = { history = false, noSearch = true }
+    local msuf = T.StyleTabButton(T.Button(body, "MSUF Changelog", 120, 28, tabOptions))
+    local suite = T.StyleTabButton(T.Button(body, "Suite Changelog", 120, 28, tabOptions))
+    local current
+    local function NewPane(entries)
+        local pane = PixelLayoutRegion(CreateFrame("Frame", nil, child))
+        pane:SetPoint("TOPLEFT")
+        return { frame = pane, layout = FillChangelog(pane, child:GetWidth(), entries) }
+    end
+    local msufPane = NewPane(msufEntries)
+    local suitePane
+    local function LayoutNotes(width)
+        child:SetWidth(width)
+        current.layout(width)
+        child:SetHeight(current.frame:GetHeight())
+    end
+    local function SelectPane(pane)
+        if current == pane then return end
+        if current then current.frame:Hide() end
+        current = pane
+        current.frame:Show()
+        LayoutNotes(child:GetWidth())
+        msuf:SetActive(pane == msufPane)
+        suite:SetActive(pane == suitePane)
+        scroll:SetVerticalScroll(0)
+    end
+    msuf:SetScript("OnClick", function() SelectPane(msufPane) end)
+    suite:SetScript("OnClick", function()
+        if not suitePane then suitePane = NewPane(suiteEntries) end
+        SelectPane(suitePane)
+    end)
+    local function LayoutTabs()
+        local msufW = T.MeasureTabWidth(msuf:GetText(), 120)
+        local suiteW = T.MeasureTabWidth(suite:GetText(), 120)
+        local stacked = msufW + suiteW + 10 > ctx.width - 44
+        msuf:SetWidth(msufW)
+        suite:SetWidth(suiteW)
+        msuf:ClearAllPoints()
+        suite:ClearAllPoints()
+        msuf:SetPoint("TOPLEFT", body, "TOPLEFT", 16, top)
+        suite:SetPoint("TOPLEFT", body, "TOPLEFT", stacked and 16 or 26 + msufW, stacked and top - 36 or top)
+        scroll:ClearAllPoints()
+        scroll:SetPoint("TOPLEFT", body, "TOPLEFT", 16, top - (stacked and 74 or 38))
+        scroll:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -36, bottom)
+    end
+    SelectPane(msufPane)
+    LayoutTabs()
+    ctx:AddResizeCallback(LayoutTabs)
+    T.TrackTabLayout(body, LayoutTabs)
+    return LayoutNotes
+end
+
+local function BuildDashboardChangelog(parent, body, cardWidth, opts, ctx)
     opts = opts or {}
-    local data = GetBundledChangelog()
+    local msufEntries = GetBundledChangelogEntries()
     local top = opts.top or -130
     local headerH = 44
-    local scrollW = max(80, max(120, cardWidth or 420) - 60)
+    local scrollW = max(80, (cardWidth or 420) - 60)
+    local contentTop = top - headerH - 12
+    local bottom = opts.bottom or 72
     local header, arrow, PaintHeaderTone, title = AccordionHead(parent, top, false, opts.title or "Changelog")
     title:SetPoint("RIGHT", header, "RIGHT", -94, 0)
     title:SetJustifyH("LEFT")
     local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.muted, "caption")
     hint:SetPoint("RIGHT", header, "RIGHT", -16, 0)
     hint:SetJustifyH("RIGHT")
-    if not data then
+    if not msufEntries then
         header:EnableMouse(false)
         hint:SetText("")
         RawFont(parent, "GameFontHighlightSmall", M.Tr("No release notes bundled with this build."), T.colors.muted, 0, "body")
             :SetPoint("TOPLEFT", parent, "TOPLEFT", 16, top - headerH - 8)
         if arrow.SetVertexColor then arrow:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.55) end
+        parent._msuf2PaintDisclosure = PaintHeaderTone
         return
     end
-    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, parent))
-    scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, top - headerH - 12)
-    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -36, opts.bottom or 72)
+    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, body))
+    scroll:SetPoint("TOPLEFT", body, "TOPLEFT", 16, contentTop)
+    scroll:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -36, bottom)
     local child = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
     child:SetSize(scrollW, 1)
     scroll:SetScrollChild(child)
-    local layout = FillChangelog(child, scrollW, data.entries)
-    T.StyleScrollFrame(scroll, parent)
-    local open = M.dashboardChangelogOpen == true
-    if open then
-        ctx:AddResizeCallback(function()
-            local width = max(80, ctx.width - 72)
-            if width ~= scrollW then
-                scrollW = width
-                layout(width)
-            end
-        end)
+    local suiteEntries = ChangelogEntries(MSUF.SuiteLink.GetChangelog())
+    local layout
+    if suiteEntries then
+        layout = BuildChangelogTabs(body, scroll, child, msufEntries, suiteEntries, ctx, contentTop, bottom)
+    else
+        layout = FillChangelog(child, scrollW, msufEntries)
     end
+    T.StyleScrollFrame(scroll, body)
+    local open = M.dashboardChangelogOpen == true
+    ctx:AddResizeCallback(function()
+        local width = max(80, ctx.width - 72)
+        if width ~= scrollW then
+            scrollW = width
+            layout(width)
+        end
+    end)
     RegisterDashboardControl(header, DashboardMeta("changelog.disclosure", "ephemeral", {
         help = "Shows or hides the bundled MSUF release notes.",
     }), opts.title or "Changelog", "button")
     local function PaintHeader(isOpen, hover)
         PaintHeaderTone(isOpen, hover)
         hint:SetText(isOpen and "Hide" or "View")
-    end
-    local function RefreshOpenState()
-        M.SetMenuStateValue("dashboardChangelogOpen", open)
-        scroll:SetShown(open)
-        PaintHeader(open, false)
-        if open then
-            if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
-        elseif scroll._msuf2ScrollBar then
-            scroll._msuf2ScrollBar:Hide()
-        end
     end
     parent._msuf2DashboardOpen, parent._msuf2PaintDisclosure = open, PaintHeader
     header:SetScript("OnClick", function()
@@ -399,7 +450,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts, ctx)
     header:SetScript("OnLeave", function()
         PaintHeader(parent._msuf2DashboardOpen)
     end)
-    RefreshOpenState()
+    PaintHeader(open, false)
 end
 local function StartGuidedSetupFromDashboard(restart)
     if type(M.StartGuidedTour) ~= "function" then return false end
@@ -420,8 +471,9 @@ end
 -- in the order the cards used to be built inline.
 local Dashboard = {}
 local DISCLOSURE_KEYS = { "dashboardChangelogOpen", "dashboardScalingOpen", "dashboardRecoveryOpen" }
-local dashboardMotion
 local function AnchorCard(card, root, x, y)
+    if card._msuf2DashboardTop == y then return end
+    card._msuf2DashboardTop = y
     card:ClearAllPoints()
     card:SetPoint("TOPLEFT", root, "TOPLEFT", x, y)
     card:SetPoint("TOPRIGHT", root, "TOPRIGHT", -20, y)
@@ -430,14 +482,14 @@ local function LayoutDashboardMotion(state, moving)
     local top = state.changelogTop
     for i = 1, #DISCLOSURE_KEYS do
         local card = state.cards[DISCLOSURE_KEYS[i]]
-        local height = card.height
+        local height = card.open and card.height or 42
         if moving and moving.card == card then
-            height = max(42, min(height, moving.channels[1].value))
+            height = max(42, min(card.height, moving.channels[1].value))
             card.frame._msuf2DashboardArrow:SetRotation((height - 42) / (card.height - 42) * math.pi * 0.5)
         else
             card.frame._msuf2DashboardArrow:SetRotation(card.open and math.pi * 0.5 or 0)
         end
-        card.frame:SetHeight(height)
+        M.SetFrameHeightIfChanged(card.frame, height)
         AnchorCard(card.frame, state.root, state.x0, top)
         top = top - height - 10
     end
@@ -447,8 +499,31 @@ local function LayoutDashboardMotion(state, moving)
     local entry = state.ctx.entry
     local hiddenBuild = entry.hiddenBuild
     if not state.root:IsVisible() then entry.hiddenBuild = true end
-    state.ctx:SetContentHeight(math.abs(top - state.support:GetHeight()) + 42)
+    local height = math.abs(top - state.support:GetHeight()) + 42
+    if state.ctx.entry.contentHeight ~= height then state.ctx:SetContentHeight(height) end
     entry.hiddenBuild = hiddenBuild
+end
+local function CreateDashboardBody(card)
+    local body = PixelLayoutRegion(CreateFrame("Frame", nil, card.frame))
+    body:SetPoint("TOPLEFT", card.frame, "TOPLEFT", 0, 0)
+    body:SetPoint("TOPRIGHT", card.frame, "TOPRIGHT", 0, 0)
+    body:SetHeight(card.height)
+    return body
+end
+local function ShowDashboardBody(card, shown)
+    if shown and card.build then
+        -- Keep the body's geometry fixed. Only the outer card clips during
+        -- the fold, so its sliders and the changelog scroll do not resize.
+        card.body = CreateDashboardBody(card)
+        card.build(card.body)
+        card.build = nil
+    end
+    if card.body then card.body:SetShown(shown) end
+end
+local function PaintDashboardDisclosure(card, open)
+    card.open = open
+    card.frame._msuf2DashboardOpen = open
+    card.frame._msuf2PaintDisclosure(open, false)
 end
 local function PaintDashboardMotion(driver)
     if not driver.active then return end
@@ -458,50 +533,59 @@ local function PaintDashboardMotion(driver)
         return
     end
     driver.active = nil
-    if dashboardMotion == driver then dashboardMotion = nil end
+    ShowDashboardBody(card, card.open)
     card.frame:SetClipsChildren(card.clipped)
-    card.frame._msuf2DashboardOpen = card.open
-    card.frame._msuf2PaintDisclosure(card.open, false)
     LayoutDashboardMotion(state)
-    if state.root:IsVisible() and M.activeKey == "home" and M[driver.key] ~= card.open then
-        RebuildDashboardPage()
-    end
 end
 ToggleDashboardDisclosure = function(key)
-    local driver = dashboardMotion
-    if driver and driver.key ~= key then
-        driver:Stop()
-        driver = nil
-    end
-    local open = M[key] ~= true
+    local entry = M.cache.home
+    local state = entry and entry.wrapper._msuf2DashboardState
+    if not state or not state.root:IsVisible() or M.BlockCombatAction() then return end
+    local card, driver = state.cards[key], state.motion
+    if driver and driver.active and driver.card ~= card then driver:Stop() end
+    local open = not card.open
     M.SetMenuStateValue(key, open)
-    if not driver then
-        if open or T.ReducedMotionEnabled() then RebuildDashboardPage() end
-        local entry = M.cache.home
-        local state = entry and entry.wrapper._msuf2DashboardState
-        if not state or not state.root:IsVisible() or T.ReducedMotionEnabled() then return end
-        driver = state.motion
-        if not driver then
-            driver = W.CreateLayoutMotion(state.root, PaintDashboardMotion)
-            driver.state = state
-            driver.channels[1] = { value = 0, velocity = 0, target = 0 }
-            state.motion = driver
-        end
-        driver.card, driver.key = state.cards[key], key
-        driver.channels[1].value = open and 42 or driver.card.height
-        driver.channels[1].velocity = 0
+    PaintDashboardDisclosure(card, open)
+    W.PlayMenuClickSound()
+    if T.ReducedMotionEnabled() then
+        if driver and driver.active then driver:Stop() end
+        ShowDashboardBody(card, open)
+        LayoutDashboardMotion(state)
+        return
     end
-    dashboardMotion, driver.active = driver, true
-    local card = driver.card
+    if not driver then
+        driver = W.CreateLayoutMotion(state.root, PaintDashboardMotion)
+        driver.state = state
+        driver.channels[1] = { value = 0, velocity = 0, target = 0 }
+        state.motion = driver
+    end
+    driver.card, driver.active = card, true
+    driver.channels[1].value = card.frame:GetHeight()
     driver.channels[1].target = open and card.height or 42
     card.frame:SetClipsChildren(true)
-    card.frame._msuf2DashboardOpen = open
-    card.frame._msuf2PaintDisclosure(open, false)
+    ShowDashboardBody(card, true)
     W.PlayLayoutMotion(driver)
     if driver.active then LayoutDashboardMotion(driver.state, driver) end
 end
-local function RegisterDashboardCard(state, key, frame, height, open)
-    state.cards[key] = { frame = frame, height = height, open = open, clipped = frame:DoesClipChildren() }
+local function RegisterDashboardCard(state, key, frame, height, build)
+    local card = { frame = frame, height = height, open = M[key] == true, clipped = frame:DoesClipChildren(), build = build }
+    state.cards[key] = card
+    ShowDashboardBody(card, card.open)
+    return card
+end
+local function RefreshDashboardDisclosures(state)
+    local changed
+    for i = 1, #DISCLOSURE_KEYS do
+        local key = DISCLOSURE_KEYS[i]
+        local card, open = state.cards[key], M[key] == true
+        if card.open ~= open then
+            if state.motion and state.motion.active then state.motion:Stop() end
+            PaintDashboardDisclosure(card, open)
+            ShowDashboardBody(card, open)
+            changed = true
+        end
+    end
+    if changed then LayoutDashboardMotion(state) end
 end
 local function Card(parent, title, x, y, w, h, bg, border)
     bg = bg or T.colors.panel2
@@ -1015,82 +1099,93 @@ function Dashboard.ResolveCardStack(state, featureBlockBottom)
     -- cannot hold both without colliding with Print Help.
     local recoveryWrap = recoveryW < (hasSuiteReset and 590 or 420)
     local recoveryStacked = hasSuiteReset and recoveryW < 352
-    local recoveryH = recoveryOpen and (recoveryStacked and 186 or (recoveryWrap and 154 or 122)) or 42
+    local recoveryH = recoveryStacked and 186 or (recoveryWrap and 154 or 122)
     local changelogOpen = M.dashboardChangelogOpen == true
-    local changelogH = changelogOpen and 420 or 42
     local scalingOpen = M.dashboardScalingOpen == true
     local scalingColumns = (recoveryW >= 960) and 3 or ((recoveryW >= 680) and 2 or 1)
-    local scalingH = scalingOpen and ((scalingColumns == 3) and 250 or ((scalingColumns == 2) and 382 or 548)) or 42
+    local scalingH = (scalingColumns == 3) and 250 or ((scalingColumns == 2) and 382 or 548)
     --- Card order top to bottom: Changelog, Scaling, Display & recovery, Support. The
     --- cards are still built in their old order below, so the whole top chain has to be
     --- resolved here where every height is known.
     local changelogTop = featureBlockBottom - 16
-    local scalingTop = changelogTop - changelogH - 10
-    local recoveryTop = scalingTop - scalingH - 10
-    local supportTop = recoveryTop - recoveryH - 10
+    local scalingTop = changelogTop - (changelogOpen and 420 or 42) - 10
+    local recoveryTop = scalingTop - (scalingOpen and scalingH or 42) - 10
+    local supportTop = recoveryTop - (recoveryOpen and recoveryH or 42) - 10
     state.recoveryW, state.recoveryOpen, state.recoveryWrap, state.recoveryH, state.hasSuiteReset, state.recoveryStacked =
         recoveryW, recoveryOpen, recoveryWrap, recoveryH, hasSuiteReset, recoveryStacked
-    state.changelogOpen, state.changelogH, state.scalingOpen, state.scalingColumns, state.scalingH =
-        changelogOpen, changelogH, scalingOpen, scalingColumns, scalingH
+    state.changelogOpen, state.scalingOpen, state.scalingColumns, state.scalingH =
+        changelogOpen, scalingOpen, scalingColumns, scalingH
     state.changelogTop, state.scalingTop, state.recoveryTop, state.supportTop = changelogTop, scalingTop, recoveryTop, supportTop
 end
 local function FeedbackUnless(ok, text)
     if not ok and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(text), "danger", 1.4, true) end
 end
-function Dashboard.BuildRecoveryCard(state)
-    local recoveryTop, recoveryW, recoveryH, recoveryOpen = state.recoveryTop, state.recoveryW, state.recoveryH, state.recoveryOpen
+function Dashboard.BuildRecoveryBody(state, recovery)
+    local recoveryW = state.ctx.width - state.x0
     local recoveryWrap = state.recoveryWrap
-    local recovery = Card(state.root, "", state.x0, recoveryTop, recoveryW, recoveryH, T.colors.panel2, T.colors.borderSoft)
-    local g = M.GetGeneralDB and M.GetGeneralDB() or {}
-    DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
-        if recoveryW >= 520 then Pill(head, "Factory reset hidden", 14, -11, 110, T.colors.accent2) end
-    end, "display_recovery.disclosure")
-    if recoveryOpen then
-        W.Text(recovery, state.hasSuiteReset and "Fix positions, print help, or reset MSUF or Suite."
-            or "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
-        Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
-            FeedbackUnless(DirectRunSlash("reset"), "Reset unavailable")
-        end, "primary", "display_recovery.reset_positions", nil, nil, "Runs /msuf reset for frame positions and visibility.")
-        local factoryY = recoveryWrap and -126 or -94
-        --- "all" includes the diagnostic commands: someone who opened this card
-        --- is usually troubleshooting and wants the complete list, not a subset.
-        Button(recovery, "Print Help", 146, -94, 86, 22, function()
-            FeedbackUnless(DirectRunSlash("help all"), "Help unavailable")
-        end, nil, "display_recovery.print_help", nil, nil, "Lists every MSUF slash command in chat, diagnostics included.")
-        local msufReset = Button(recovery, "MSUF Factory Reset", 16, factoryY, 156, 22, function()
-            FeedbackUnless(ShowFactoryResetConfirm("msuf"), "Reset unavailable")
-        end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true },
-            "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept.")
-        if not recoveryWrap then AnchorRight(msufReset, recovery, state.hasSuiteReset and 180 or 12, factoryY) end
-        if state.hasSuiteReset then
-            local suiteX = state.recoveryStacked and 16 or 180
-            local suiteY = state.recoveryStacked and -158 or factoryY
-            local suiteReset = Button(recovery, "Suite Factory Reset", suiteX, suiteY, 156, 22, function()
-                FeedbackUnless(ShowFactoryResetConfirm("suite"), "Reset unavailable")
-            end, "danger", "display_recovery.suite_factory_reset", "action", { confirmRequired = true },
-                "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact.")
-            if not recoveryWrap then AnchorRight(suiteReset, recovery, 12, suiteY) end
-        elseif recoveryWrap then
-            W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
-        end
+    W.Text(recovery, state.hasSuiteReset and "Fix positions, print help, or reset MSUF or Suite."
+        or "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
+    Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
+        FeedbackUnless(DirectRunSlash("reset"), "Reset unavailable")
+    end, "primary", "display_recovery.reset_positions", nil, nil, "Runs /msuf reset for frame positions and visibility.")
+    local factoryY = recoveryWrap and -126 or -94
+    --- "all" includes the diagnostic commands: someone who opened this card
+    --- is usually troubleshooting and wants the complete list, not a subset.
+    Button(recovery, "Print Help", 146, -94, 86, 22, function()
+        FeedbackUnless(DirectRunSlash("help all"), "Help unavailable")
+    end, nil, "display_recovery.print_help", nil, nil, "Lists every MSUF slash command in chat, diagnostics included.")
+    local msufReset = Button(recovery, "MSUF Factory Reset", 16, factoryY, 156, 22, function()
+        FeedbackUnless(ShowFactoryResetConfirm("msuf"), "Reset unavailable")
+    end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true },
+        "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept.")
+    if not recoveryWrap then AnchorRight(msufReset, recovery, state.hasSuiteReset and 180 or 12, factoryY) end
+    if state.hasSuiteReset then
+        local suiteX = state.recoveryStacked and 16 or 180
+        local suiteY = state.recoveryStacked and -158 or factoryY
+        local suiteReset = Button(recovery, "Suite Factory Reset", suiteX, suiteY, 156, 22, function()
+            FeedbackUnless(ShowFactoryResetConfirm("suite"), "Reset unavailable")
+        end, "danger", "display_recovery.suite_factory_reset", "action", { confirmRequired = true },
+            "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact.")
+        if not recoveryWrap then AnchorRight(suiteReset, recovery, 12, suiteY) end
+    elseif recoveryWrap then
+        W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
     end
-    RegisterDashboardCard(state, "dashboardRecoveryOpen", recovery, recoveryH, recoveryOpen)
-    state.g = g
+end
+function Dashboard.BuildRecoveryCard(state)
+    local width, height, open = state.recoveryW, state.recoveryH, state.recoveryOpen
+    local recovery = Card(state.root, "", state.x0, state.recoveryTop, width, open and height or 42)
+    DashboardDisclosure(recovery, "Display & recovery", open, "dashboardRecoveryOpen", width, function(head)
+        if width >= 520 then Pill(head, "Factory reset hidden", 14, -11, 110, T.colors.accent2) end
+    end, "display_recovery.disclosure")
+    RegisterDashboardCard(state, "dashboardRecoveryOpen", recovery, height, function(body)
+        Dashboard.BuildRecoveryBody(state, body)
+    end)
+end
+local function RefreshScalePills(state)
+    local pills = state.scalePills
+    if not pills then return end
+    local g, ui = GlobalState()
+    local uiValue = ui.Enabled and M.Format("%d%%", DirectPercent(ui.Scale, 1)) or M.Tr("Off")
+    T.SetTranslatedText(pills[1], M.Format("UI %s", uiValue))
+    T.SetTranslatedText(pills[2], M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)))
+    T.SetTranslatedText(pills[3], M.Format("Frames %d%%", DirectPercent(g.msufUiScale, 1)))
 end
 function Dashboard.BuildScalingCard(state, ctx)
-    local g = state.g
     local recoveryW, scalingOpen = state.recoveryW, state.scalingOpen
-    local scaling = Card(state.root, "", state.x0, state.scalingTop, recoveryW, state.scalingH, T.colors.panel2, T.colors.borderSoft)
+    local scaling = Card(state.root, "", state.x0, state.scalingTop, recoveryW, scalingOpen and state.scalingH or 42)
     DashboardDisclosure(scaling, "Scaling", scalingOpen, "dashboardScalingOpen", recoveryW, function(scaleHead)
         if recoveryW < 520 then return end
-        local _, ui = GlobalState()
-        local uiValue = ui.Enabled and M.Format("%d%%", DirectPercent(ui.Scale, 1)) or M.Tr("Off")
-        Pill(scaleHead, M.Format("UI %s", uiValue), 186, -11, 64)
-        Pill(scaleHead, M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)), 104, -11, 76)
-        Pill(scaleHead, M.Format("Frames %d%%", DirectPercent(g.msufUiScale, 1)), 14, -11, 84)
+        state.scalePills = {
+            Pill(scaleHead, "", 186, -11, 64)._msuf2Label,
+            Pill(scaleHead, "", 104, -11, 76)._msuf2Label,
+            Pill(scaleHead, "", 14, -11, 84)._msuf2Label,
+        }
+        RefreshScalePills(state)
+        M.TrackRefresh(ctx, function() RefreshScalePills(state) end)
     end, "scaling.disclosure")
-    if scalingOpen then Dashboard.BuildScalingColumns(state, ctx, scaling) end
-    RegisterDashboardCard(state, "dashboardScalingOpen", scaling, state.scalingH, scalingOpen)
+    RegisterDashboardCard(state, "dashboardScalingOpen", scaling, state.scalingH, function(body)
+        Dashboard.BuildScalingColumns(state, ctx, body)
+    end)
 end
 --- One scale column: help line, status line, percent slider and an Apply / Revert pair.
 --- `spec` names the paths and bounds, the shared `pending` table with the column's `key`
@@ -1234,6 +1329,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             MSUF.Require("MSUF_ResetGlobalUiScale", FILE)(true)
         end
         if M.RequestGeneralDomains then M.RequestGeneralDomains("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
+        RefreshScalePills(state)
     end
     local RefreshGlobalScale, LayoutGlobalScale = BuildScaleColumn(scaling, colW, {
         index = 0, top = -94, label = "Global UI Scale", settingKey = "general.globalUiScale",
@@ -1272,6 +1368,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             if M.RequestGeneralDomains then
                 M.RequestGeneralDomains("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
             end
+            RefreshScalePills(state)
         end,
     })
     local RefreshMenuScale, LayoutMenuScale = BuildScaleColumn(scaling, colW, {
@@ -1291,6 +1388,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
                 local storedScale = dbScale.slashMenuScale
                 M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(storedScale)) or storedScale)
             end
+            RefreshScalePills(state)
         end,
     })
     local function Layout()
@@ -1301,21 +1399,29 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
     end
     Layout()
     ctx:AddResizeCallback(Layout)
-    M.TrackRefresh(ctx, RefreshGlobalScale)
-    M.TrackRefresh(ctx, RefreshMsufScale)
-    M.TrackRefresh(ctx, RefreshMenuScale)
+    local function Refresh()
+        RefreshGlobalScale()
+        RefreshMsufScale()
+        RefreshMenuScale()
+    end
+    M.TrackRefresh(ctx, Refresh)
+    -- A page originally built by search may now be visible when this body is first opened.
+    if ctx.hiddenBuild and not ctx.entry.hiddenBuild then Refresh() end
 end
 function Dashboard.BuildChangelogCard(state)
     local recoveryW = state.recoveryW
-    local changelog = Card(state.root, "", state.x0, state.changelogTop, recoveryW, state.changelogH, T.colors.panel2, T.colors.borderSoft)
-    BuildDashboardChangelog(changelog, recoveryW, {
+    local height = state.changelogOpen and 420 or 42
+    local changelog = Card(state.root, "", state.x0, state.changelogTop, recoveryW, height, T.colors.panel2, T.colors.borderSoft)
+    local card = RegisterDashboardCard(state, "dashboardChangelogOpen", changelog, 420)
+    card.body = CreateDashboardBody(card)
+    card.body:SetShown(card.open)
+    BuildDashboardChangelog(changelog, card.body, recoveryW, {
         title = "Changelog",
         sectionHeader = true,
         top = 0,
         bottom = 18,
         hideSummaryWhenClosed = true,
     }, state.ctx)
-    RegisterDashboardCard(state, "dashboardChangelogOpen", changelog, state.changelogH, state.changelogOpen)
 end
 local SUPPORT_LINKS = {
     { key = "discord", texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
@@ -1443,16 +1549,8 @@ function Dashboard.Build(ctx)
             suiteH = height
         end
         state.layoutSupportCard(width)
-        LayoutDashboardMotion(state)
+        LayoutDashboardMotion(state, state.motion and state.motion.active and state.motion or nil)
     end)
+    M.TrackRefresh(ctx, function() RefreshDashboardDisclosures(state) end)
 end
--- Each combination of open disclosures is one cached Dashboard view, so a
--- disclosure toggle switches views instead of building a new frame tree
--- (review C5.2). Index bits: recovery 1, changelog 2, scaling 4.
-local DASHBOARD_VIEWS = { [0] = "---", "r--", "-c-", "rc-", "--s", "r-s", "-cs", "rcs" }
-local function DashboardViewKey()
-    return DASHBOARD_VIEWS[(M.dashboardRecoveryOpen == true and 1 or 0)
-        + (M.dashboardChangelogOpen == true and 2 or 0)
-        + (M.dashboardScalingOpen == true and 4 or 0)]
-end
-M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 10, variantKey = DashboardViewKey })
+M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 10, refreshInPlace = true })

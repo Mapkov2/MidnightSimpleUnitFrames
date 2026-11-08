@@ -41,6 +41,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     dashboardChangelogOpen = false,
     dashboardRecoveryOpen = false,
     dashboardScalingOpen = false,
+    fixedPreviewExpanded = "auto",
     lastPandemicMode = "PULSE",
 }
 local MenuCharKey = MSUF.Require("MSUF_GetCharKey", "Shell/Menu2/MSUF_Menu2_State.lua")

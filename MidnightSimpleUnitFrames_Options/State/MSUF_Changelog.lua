@@ -8,285 +8,78 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "5ECE6D2D60B6C45F6D31FE16EC5346557C893C1C93279E4E9D06C674D1C5FCB8",
-    currentVersion = "7.0-beta1",
+    sourceSha256 = "8F4800B6003FA68396320E27D75EC2B9CCA7C29199A53D0A4F2E72213AA8C6FD",
+    currentVersion = "7.0-beta2",
     historyFromVersion = "6.21",
     previousVersion = "6.510",
-    rangeLabel = "6.510 -> 7.0-beta1",
+    rangeLabel = "6.510 -> 7.0-beta2",
     entries = {
         {
-            version = "7.0-beta1",
-            date = "2026-11-07",
+            version = "7.0-beta2",
+            date = "2026-11-08",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Profile workbench. Save named restore points, inspect changed settings and their sources, and restore a previous state from Profiles.",
-                            link = {
-                                pageKey = "profiles",
-                                query = "save restore point",
-                                label = "Save restore point",
-                                sectionId = "workbench_versions",
-                                controlId = "menu2.profile.tools.profiles.version.save",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "Review before importing. Compare incoming profile settings, then apply the changes you choose.",
-                            link = {
-                                pageKey = "profiles",
-                                query = "review changes",
-                                label = "Review changes",
-                                sectionId = "profiles_io",
-                                controlId = "menu2.profiles.advanced.import.review",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "Edit several frames together. The Edit Mode Selection workspace lets you select, move and align multiple elements in one operation.",
-                            link = {
-                                pageKey = "edit_selection",
-                                query = "select remove element",
-                                label = "Select / remove element",
-                                sectionId = "workbench_alignment",
-                                controlId = "menu2.profile.tools.profiles.multi.toggle",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "Layouts for different displays. Record frame positions and relative scale into a layout variant and give it display conditions.",
-                            link = {
-                                pageKey = "profiles",
-                                query = "record a layout for this display",
-                                label = "Record a layout for this display",
-                                sectionId = "workbench_display",
-                                controlId = "menu2.profile.tools.profiles.display.record",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "Accessibility and visibility. Preview and review color-vision changes in Colors. The contextual Why is this hidden? card explains selected aura visibility.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "review accessibility changes",
-                                label = "Review accessibility changes",
-                                sectionId = "workbench_accessibility",
-                                controlId = "menu2.profile.tools.profiles.accessibility.review",
-                                settingKey = "",
-                                prepareKind = "colorsPainterCategory",
-                                prepareValue = "accessibility",
-                            },
-                        },
-                        {
-                            text = "Name formatting. Fonts has a live example and formats for full names, abbreviations, length limits, and abbreviations with limits. Individual unit frames can override the shared format.",
-                            link = {
-                                pageKey = "opt_fonts",
-                                query = "name format",
-                                label = "Name format",
-                                sectionId = "fonts_name_shortening",
-                                controlId = "menu2.opt.fonts.global.name.shortening.format",
-                                settingKey = "",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Profiles, recovery and switching versions",
-                    bullets = {
-                        {
-                            text = "Profiles save using the new sparse format. 7.0 reconstructs values inherited from defaults while keeping explicit overrides, including false, zero and empty strings.",
-                            linkless = true,
-                        },
-                        {
-                            text = "7.0 makes a safety copy before conversion and carries over full 6.510 profiles with their settings and character assignments. Rejected or newer-format profiles have separate recovery histories so you can inspect and recover them.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Before returning to 6.510, run /msuf compatsave and then log out or /reload while still on 7.0. Replace the addon only after that save completes. See the linked profile storage guide.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Menu undo and redo can step through a sequence of scoped and nested edits. Profile restores and history also include supported Suite settings while preserving profile variant overrides.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Profile sync accepts older groups with no exclusion list. Import and reset retain supported legacy group filters and handle rejected profile data without replacing the original.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Menu, search and previews",
-                    bullets = {
-                        {
-                            text = "The Dashboard adapts to narrow and wide windows, and puts Quick Setup, Suite Setup, search, recovery and display scaling within reach.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Settings search finds more scoped controls and opens the relevant tab or section. Suggestions and results show a loading indicator while the search runs, with reduced-motion support.",
+                            text = "Menu sound effects. The MSUF window and menu navigation now have audio feedback. Use Mute MSUF menu sounds under Misc to silence these effects.",
                             link = {
                                 pageKey = "opt_misc",
-                                query = "reduce menu motion",
-                                label = "Reduce menu motion",
+                                query = "mute msuf menu sounds",
+                                label = "Mute MSUF menu sounds",
                                 sectionId = "misc_menu_behavior",
-                                controlId = "menu2.opt.misc.global.setting.reduce.motion",
-                                settingKey = "general.reduceMotion",
+                                controlId = "menu2.opt.misc.global.setting.mute.menu.sounds",
+                                settingKey = "general.muteMenuSounds",
                             },
                         },
                         {
-                            text = "Unit, group, castbar and Class Resources previews use the same rendering rules as the live displays. Health and power loss, auras, status text, portraits and cast feedback follow the selected sample and settings.",
-                            linkless = true,
-                        },
-                        {
-                            text = "The Class Resources preview handles detached power, alternative mana and Player HP more consistently. Hunter samples use the resource that belongs to their client.",
+                            text = "Open-world faction badges. On Retail and WoW Forever, Target and Focus can optionally show the faction symbol for unflagged players in the open world, including on PvE realms. The option is off by default.",
                             link = {
-                                pageKey = "classpower",
-                                query = "show mana bar dual resource",
-                                label = "Show mana bar (dual resource)",
-                                sectionId = "classpower_alt_mana",
-                                controlId = "menu2.classpower.advanced.alternative.mana.enabled",
-                                settingKey = "bars.showAltMana",
-                                prepareKind = "classPowerWorkspace",
-                                prepareValue = "mana",
-                            },
-                        },
-                        {
-                            text = "Menu navigation, tabs, section folds and Edit Mode entry animate with reduced-motion support. Section actions appear when the header is hovered or focused.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "reduce menu motion",
-                                label = "Reduce menu motion",
-                                sectionId = "misc_menu_behavior",
-                                controlId = "menu2.opt.misc.global.setting.reduce.motion",
-                                settingKey = "general.reduceMotion",
-                            },
-                        },
-                        {
-                            text = "Core, Options and Locales ship together. The startup locale loads on demand, and the language selector remains in Misc.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "menu language",
-                                label = "Menu language",
-                                sectionId = "misc_language",
-                                controlId = "menu2.opt.misc.global.language.selection",
-                                settingKey = "general.menuLocale",
+                                pageKey = "uf_target",
+                                query = "faction symbol without pvp flag",
+                                label = "Faction Symbol Without PvP Flag",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_target.unit.status.pvp.open_world_faction",
+                                settingKey = "target.pvpIndicatorShowOpenWorldFaction",
+                                prepareKind = "unitStatus",
+                                prepareValue = "statusPvp",
                             },
                         },
                     },
                 },
                 {
-                    title = "Unit frames, castbars and resources",
+                    title = "Improvements and bug fixes",
                     bullets = {
                         {
-                            text = "Raid status and name updates handle a unit token changing occupants, and frame refreshes and late-anchor updates keep failed work queued for retry.",
+                            text = "PvP icons refresh on flag changes without a reload. Target and Focus follow their own PvP flag, and on Retail the Player icon clears when War Mode is turned off.",
                             linkless = true,
                         },
                         {
-                            text = "The Priority Frames and Gameplay position popups have Edit Mode placement controls. Typed position edits and drags each retain their own history step.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Resource marks can follow the cost of a selected spell. Find marks and thresholds in Class Resources > Extras.",
+                            text = "Added a round Shadow 3 option to the Icon Skins gallery and refined how that skin paints and previews.",
                             link = {
-                                pageKey = "classpower",
-                                query = "add resource mark",
-                                label = "Add resource mark",
-                                sectionId = "classpower_resource_marks",
-                                controlId = "menu2.classpower.advanced.resource.extras.marks.add",
-                                settingKey = "bars.resourceMarks",
-                                prepareKind = "classPowerWorkspace",
-                                prepareValue = "extras",
+                                pageKey = "icon_skins",
+                                query = "default skin",
+                                label = "Default Skin",
+                                sectionId = "icon_skins_default",
+                                controlId = "menu2.icon_skins.icon_skins.default-skin.skin",
+                                settingKey = "auras3.shared.iconSkinDefault.styleSkin",
                             },
                         },
                         {
-                            text = "Castbar updates handle cast-to-channel transitions, empower endings, interrupted casts and global-cooldown spell attribution more consistently. Focus castbars restore their range-fade state when a cast is released.",
+                            text = "Improved profile upgrades from 6.5x and earlier 7.0 builds. Unit and group frame positions are restored once display scaling is ready, and recovery copies are available when a profile needs protection.",
                             linkless = true,
                         },
                         {
-                            text = "Texture and portrait settings refresh more consistently, and the compact background tint editor warns when saved opacity is 0%.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "background color",
-                                label = "Background Color",
-                                sectionId = "colors_background",
-                                controlId = "menu2.opt.colors.advanced.background.color.mode",
-                                settingKey = "general.barBgColorMode",
-                                prepareKind = "colorsPainterCategory",
-                                prepareValue = "unit",
-                            },
-                        },
-                        {
-                            text = "With a compatible MSUF Suite build, Nameplates is available as a scope on the standard Fonts page.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "WoW Forever",
-                    bullets = {
-                        {
-                            text = "Character profile selection uses the full character identity. Two characters with the same first name and different surnames have separate profile keys.",
+                            text = "Improved Dashboard setup shortcuts and resizing, dropdown scrolling, preview sizing and the window controls.",
                             linkless = true,
                         },
                         {
-                            text = "Use Character names in Fonts to control which parts of a character's name appear on frames.",
+                            text = "On WoW Forever, automatic portrait decoration follows the new target and leaves player portraits clear of NPC elite dragons.",
                             linkless = true,
                         },
                         {
-                            text = "Swing timer placement and the layer-based preview from 6.510 are included. In Swing Timers, select a weapon slot to preview its out-of-range color and opacity.",
+                            text = "Improved the WoW Forever swing timer's cast and swing tracking.",
                             linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Recent 6.5x improvements included in Beta 1",
-                    bullets = {
-                        {
-                            text = "6.510's independent Party, Raid and Mythic Raid health gradients and background modes are included, along with its Blizzard preset texture and global color mode fixes.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "background color",
-                                label = "Background Color",
-                                sectionId = "colors_group_frames_background",
-                                controlId = "menu2.opt.colors.advanced.group.frame.background.color.mode",
-                                settingKey = "gf_party.barBgColorMode",
-                                prepareKind = "colorsPainterCategory",
-                                prepareValue = "group",
-                            },
-                        },
-                        {
-                            text = "6.510's MapkoSkin appearance selection and visible opacity in the compact picker are included.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "menu appearance preset",
-                                label = "Menu appearance preset",
-                                sectionId = "misc_menu_behavior",
-                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
-                                settingKey = "general.menuAppearancePreset",
-                            },
-                        },
-                        {
-                            text = "The recent unit-frame drag fixes are included. Dropping a frame preserves its visible position when anchors or UI scale change.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "show blizzard frames in msuf edit mode",
-                                label = "Show Blizzard frames in MSUF Edit Mode",
-                                sectionId = "misc_external_edit_mode",
-                                controlId = "menu2.opt.misc.global.setting.blizzard.edit.mode.integration",
-                                settingKey = "general.blizzardEditModeIntegration",
-                            },
-                        },
-                        {
-                            text = "The recent mana regeneration tracker, castbar artwork, dependent-frame health fixes and safer compressed profile imports are included.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "castbar artwork",
-                                label = "Castbar artwork",
-                                sectionId = "castbar_textures",
-                                controlId = "menu2.opt.castbar.global.textures.castbar.artwork.enabled",
-                                settingKey = "general.castbarArtworkEnabled",
-                            },
                         },
                     },
                 },

@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta2 - 2026-11-08
+
+Changes since 7.0 Beta 1 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Highlights
+
+- **Menu sound effects.** The MSUF window and menu navigation now have audio feedback. Use Mute MSUF menu sounds under Misc to silence these effects.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.mute.menu.sounds","settingKey":"general.muteMenuSounds","prepareKind":"","prepareValue":"","query":"mute msuf menu sounds","label":"Mute MSUF menu sounds"} -->
+- **Open-world faction badges.** On Retail and WoW Forever, Target and Focus can optionally show the faction symbol for unflagged players in the open world, including on PvE realms. The option is off by default.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.pvp.open_world_faction","settingKey":"target.pvpIndicatorShowOpenWorldFaction","prepareKind":"unitStatus","prepareValue":"statusPvp","query":"faction symbol without pvp flag","label":"Faction Symbol Without PvP Flag"} -->
+
+### Improvements and bug fixes
+
+- PvP icons refresh on flag changes without a reload. Target and Focus follow their own PvP flag, and on Retail the Player icon clears when War Mode is turned off.
+<!-- msuf-menu-link: none -->
+- Added a round Shadow 3 option to the Icon Skins gallery and refined how that skin paints and previews.
+<!-- msuf-menu-link: {"pageKey":"icon_skins","sectionId":"icon_skins_default","controlId":"menu2.icon_skins.icon_skins.default-skin.skin","settingKey":"auras3.shared.iconSkinDefault.styleSkin","prepareKind":"","prepareValue":"","query":"default skin","label":"Default Skin"} -->
+- Improved profile upgrades from 6.5x and earlier 7.0 builds. Unit and group frame positions are restored once display scaling is ready, and recovery copies are available when a profile needs protection.
+<!-- msuf-menu-link: none -->
+- Improved Dashboard setup shortcuts and resizing, dropdown scrolling, preview sizing and the window controls.
+<!-- msuf-menu-link: none -->
+- On WoW Forever, automatic portrait decoration follows the new target and leaves player portraits clear of NPC elite dragons.
+<!-- msuf-menu-link: none -->
+- Improved the WoW Forever swing timer's cast and swing tracking.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-beta1 - 2026-11-07
 
 Full changes in MSUF 7.0 Beta 1 compared with the current stable 6.5x release, 6.510. The beta supports Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
@@ -8,6 +34,8 @@ Full changes in MSUF 7.0 Beta 1 compared with the current stable 6.5x release, 6
 
 ### Highlights
 
+- **Icon Skins.** Choose a shared icon look in the Icon Skins gallery, with live previews and per-area overrides. Apply frames, shadows and gloss to auras and supported castbar or tracker icons. Compatible MSUF Suite modules can use the same skins on cooldowns and action bars.
+<!-- msuf-menu-link: {"pageKey":"icon_skins","sectionId":"icon_skins_default","controlId":"menu2.icon_skins.icon_skins.default-skin.skin","settingKey":"auras3.shared.iconSkinDefault.styleSkin","prepareKind":"","prepareValue":"","query":"default skin","label":"Default Skin"} -->
 - **Profile workbench.** Save named restore points, inspect changed settings and their sources, and restore a previous state from Profiles.
 <!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"workbench_versions","controlId":"menu2.profile.tools.profiles.version.save","settingKey":"","prepareKind":"","prepareValue":"","query":"save restore point","label":"Save restore point"} -->
 - **Review before importing.** Compare incoming profile settings, then apply the changes you choose.

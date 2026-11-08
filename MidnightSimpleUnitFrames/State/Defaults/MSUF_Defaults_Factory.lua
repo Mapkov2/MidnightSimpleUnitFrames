@@ -256,6 +256,9 @@ local function MSUF_Defaults_CreateFactoryProfile()
         out.general._msufFactoryProfileApplied = true
         out.general.fontKey = MSUF_Defaults_GetGlobalFontDefault()
         out.general.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
+        -- Current factory choices must not be replayed against stored profiles.
+        out.bars = out.bars or {}
+        out.bars.manaRegenPause, out.bars.manaGainPulse = true, true
         return MSUF.ProfileMigrations.Apply(out)
     end
     local payload = MSUF_Defaults_GetProfilePayload(tbl)

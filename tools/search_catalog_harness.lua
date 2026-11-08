@@ -135,7 +135,7 @@ do
             if absentDataMember[key] then return nil end
             if key == "GetFrameLevel" or key == "GetScale" or key == "GetEffectiveScale"
                 or key == "GetAlpha" or key == "GetValue" or key == "GetVerticalScroll"
-                or key == "GetStringHeight" or key == "GetStringWidth"
+                or key == "GetStringHeight" or key == "GetStringWidth" or key == "GetUnboundedStringWidth"
             then
                 return function() return 1 end
             end

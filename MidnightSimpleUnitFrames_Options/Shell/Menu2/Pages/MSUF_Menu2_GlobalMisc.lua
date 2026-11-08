@@ -282,7 +282,7 @@ end
 function MiscSection.MenuBehavior(s)
     local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
     local hasAppearancePresets = type(T.GetMenuAppearancePreset) == "function"
-    local menuBehavior = Schema.Section(b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 508 or 380, true), ctx.key)
+    local menuBehavior = Schema.Section(b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 542 or 414, true), ctx.key)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil,
         nil, nil, MENU_WRITE_OPTS)
@@ -297,6 +297,8 @@ function MiscSection.MenuBehavior(s)
     BindMiscToggle(menuBehavior, "Show MSUF button in game menu", "showGameMenuButton", true, "MSUF2_GAME_MENU_BUTTON", 14, -178, 320, MENU_WRITE_OPTS,
         function(v) Core.MSUF_SetGameMenuButtonEnabled(v) end)
     BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -208, 280, MENU_WRITE_OPTS)
+    BindMiscToggle(menuBehavior, "Mute MSUF menu sounds", "muteMenuSounds", false,
+        "MSUF2_MUTE_MENU_SOUNDS", 14, -238, 280, MENU_WRITE_OPTS)
     local menuFontRightX = max(350, floor(menuBehaviorW * 0.52))
     local menuFontW = max(250, min(340, menuBehaviorW - menuFontRightX - 30))
     BindMiscToggle(menuBehavior, "Show preview drag hint animation", "previewDragHintAnimationEnabled", true,
@@ -392,7 +394,7 @@ function MiscSection.MenuAccent(s)
         VT("midnight", hasAppearancePresets and "Preset accent (default)" or "Midnight (default)", "class", "Class color",
             "ember", "Ember", "jade", "Jade", "violet", "Violet",
             "custom", "Custom"),
-        hasAppearancePresets and menuFontW or 250, hasAppearancePresets and menuFontRightX or 14, -244,
+        hasAppearancePresets and menuFontW or 250, hasAppearancePresets and menuFontRightX or 14, -278,
         ReadAccentMode,
         { write = { call = SetG, keyOnly = true, args = { "MSUF2_MENU_ACCENT", MENU_WRITE_OPTS },
             convert = function(value) return IsAccentMode(value) and value or "midnight" end,
@@ -414,13 +416,13 @@ function MiscSection.MenuAccent(s)
     }, ROW_OPTIONS)["setting.menuAccentColor"]
     if accentSwatch._msuf2Title then
         accentSwatch._msuf2Title:ClearAllPoints()
-        accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, hasAppearancePresets and -312 or -256)
+        accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, hasAppearancePresets and -346 or -290)
         accentSwatch._msuf2Title:SetWidth(170)
     end
     accentSwatch:ClearAllPoints()
-    accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, hasAppearancePresets and -310 or -254)
+    accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, hasAppearancePresets and -344 or -288)
     accentTint = BindMiscToggle(menuBehavior, "Tint menu surfaces", "menuAccentTintSurfaces", false,
-        "MSUF2_MENU_ACCENT_TINT", 14, hasAppearancePresets and -308 or -292, 320, MENU_WRITE_OPTS, AccentReloadCheck)
+        "MSUF2_MENU_ACCENT_TINT", 14, hasAppearancePresets and -342 or -326, 320, MENU_WRITE_OPTS, AccentReloadCheck)
     -- One string literal, not a concatenation: the locale coverage gate reads
     -- literals, so a split body would demand a key per fragment.
     M.AddTooltip(accentTint, "Tint menu surfaces",
@@ -433,9 +435,9 @@ function MiscSection.MenuAccent(s)
     HelpText(ctx, menuBehavior, "menu2.opt_misc.menuBehavior.accentHelp", hasAppearancePresets
         and "Background opacity changes the MSUF Forever background only; text stays fully opaque."
         or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.",
-        30, hasAppearancePresets and -450 or -330, menuBehaviorW - 70)
+        30, hasAppearancePresets and -484 or -364, menuBehaviorW - 70)
     if hasAppearancePresets then
-        BindMiscDropdown(menuBehavior, "Menu appearance preset", AppearancePresetValues, 250, 14, -244,
+        BindMiscDropdown(menuBehavior, "Menu appearance preset", AppearancePresetValues, 250, 14, -278,
             function()
                 if ReadGBool("mapkoSkinMenus", true) and MenuSkinAvailable() then return "mapkoSkin" end
                 local accent = ReadAccentMode()
@@ -468,7 +470,7 @@ function MiscSection.MenuAccent(s)
                     if opacity.SetValueFormatter then opacity:SetValueFormatter(function(v) return M.Format("%d%%", v) end) end
                 end },
         }, ROW_OPTIONS)["setting.menuBackgroundOpacity"]
-        W.MoveWidget(opacity, menuBehavior, 14, -372, 250, "LEFT")
+        W.MoveWidget(opacity, menuBehavior, 14, -406, 250, "LEFT")
         W.SetControlEnabled(opacity, T.classicAtlas == true)
     end
 end

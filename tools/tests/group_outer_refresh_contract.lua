@@ -116,6 +116,19 @@ Budget("scan5", function() GF.ScanHeader("raid", "raid") end)
 Budget("visual5", function() GF.RefreshVisuals("raid", GF.DIRTY_COLOR) end)
 Budget("roster5", function() h:Event("GROUP_ROSTER_UPDATE"); h:RunTimers() end)
 if measure then return end
+if flavor == "Forever" then
+    local icon = assert(frame.pvpIndicatorIcon, "Forever group PvP texture was not prepared")
+    local conf = GF.GetConf("raid")
+    local previous = conf.pvpIconX
+    conf.pvpIconX = (icon._msufStatusX or 0) + 5
+    GF.InvalidateCompiledSpecs("raid")
+    GF.RefreshVisuals("raid", GF.DIRTY_COLOR)
+    assert(frame.pvpIndicatorIcon == icon and icon._msufStatusX == conf.pvpIconX,
+        "a changed PvP layout must invalidate the retained geometry")
+    conf.pvpIconX = previous
+    GF.InvalidateCompiledSpecs("raid")
+    GF.RefreshVisuals("raid", GF.DIRTY_COLOR)
+end
 local failures = {}
 local function Case(name, fn)
     local ok, why = pcall(fn)

@@ -262,16 +262,19 @@ end
 
 -- Small examples retain engine scenes. Native frame scaling is only the
 -- viewport transform; every texture, layout and colour remains runtime-owned.
-function H.NewRuntimeUnitSurface(parent, unit, sample, configure)
+local BAR_UNIT_OPTIONS = { barOnly = true }
+local BAR_GROUP_LAYERS = { text = false, status = false, si = false, buff = false,
+    trackedBuff = false, debuff = false, external = false }
+function H.NewRuntimeUnitSurface(parent, unit, sample, configure, barOnly)
     local root = MSUF.GF.NewPreviewScene(parent)
     local surface = { root = root, sample = sample, configure = configure, fit = true }
     local function UnitScene(key)
-        local scene = root:Unit(key)
+        local scene = root:Unit(key, barOnly and BAR_UNIT_OPTIONS or nil)
         if not scene._msufMenuSurface then
             scene._msufMenuSurface = surface
             local compile, refresh = scene.Compile, scene.Refresh
             function scene:Compile()
-                self.spec = nil
+                if surface.configure and not barOnly then self.spec = nil end
                 local spec = compile(self)
                 if surface.configure then surface.configure(spec, self) end
                 return spec
@@ -293,11 +296,12 @@ function H.NewRuntimeUnitSurface(parent, unit, sample, configure)
         local scene = root:Group(key)
         if not scene._msufMenuSurface then
             scene._msufMenuSurface = surface
+            scene.barOnly = barOnly
             local show = scene.Show
             function scene:Show(...)
                 local result = show(self, ...)
                 local frame = self:Frames()[1]
-                if frame and surface.fit then
+                if result and frame and surface.fit then
                     self:SetScale(math.min(1, parent:GetWidth() / math.max(1, frame:GetWidth()),
                         parent:GetHeight() / math.max(1, frame:GetHeight())))
                 end
@@ -318,14 +322,16 @@ function H.NewRuntimeUnitSurface(parent, unit, sample, configure)
         end
         local scene = self.scene
         if not group then scene.layerVisible = self.layerVisible end
-        root:Activate()
         if group then
-            scene:Configure({ fit = true, ignoreOocFade = true, sample = self.sample })
+            scene:Configure({ fit = true, ignoreOocFade = true, sample = self.sample,
+                bodyOnly = barOnly, layerVisible = barOnly and BAR_GROUP_LAYERS or nil })
             scene:Show(1)
+            root:Activate()
             return scene:Frames()[1]
         end
-        scene:SetSample(self.sample, true)
+        if not barOnly or scene.override ~= self.sample then scene:SetSample(self.sample, true) end
         scene:Show()
+        root:Activate()
         return scene:Frame()
     end
     parent:HookScript("OnHide", function() root:Deactivate() end)

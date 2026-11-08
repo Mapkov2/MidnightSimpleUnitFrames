@@ -1,6 +1,9 @@
 local root = assert(arg[1], "repository root required")
 local path = root .. "/MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"
 local chunk = assert(loadfile(path))
+local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
+Secrets.Install()
+Secrets.GUARD_NAMES.truthy.Public = true
 local ns = { Client = { IsForever = false } }
 chunk("MidnightSimpleUnitFrames", ns)
 assert(ns.SwingTimer == nil, "other clients must have no module or events")
@@ -82,7 +85,7 @@ function methods:Hide() self.shown = false end
 function methods:SetShown(v) if v then self:Show() else self:Hide() end end
 function methods:IsShown() return self.shown == true end
 function methods:RegisterEvent(e) self.events[e] = true end
-function methods:RegisterUnitEvent(e,u) assert(u == "player"); self.events[e] = true end
+function methods:RegisterUnitEvent(e,u) assert(u == "player" or u == "target"); self.events[e] = true end
 function methods:UnregisterEvent(e) self.events[e] = nil end
 function methods:UnregisterAllEvents() self.events = {} end
 function methods:SetTimerDuration(d, interpolation, direction)
@@ -134,12 +137,44 @@ _G.C_DurationUtil = {
 }
 _G.C_StringUtil = { CreateNumericRuleFormatter=function() return {SetBreakpoints=noop} end }
 -- Native Forever surfaces used by the range/queued-attack presentation.
+local attackable, targetDead, knowsShoot = true, false, true
+local nativeRanged, spellRange, spellRangeCalls = nil, false, 0
+local equippedRangedItem, rangedSubclass, playerClass = 1000, 19, "WARRIOR"
+local rangeTicker
+_G.INVSLOT_RANGED = 18
+_G.Enum.ItemClass = { Weapon = 2 }
+_G.Enum.ItemWeaponSubclass = { Bows = 2, Guns = 3, Thrown = 16, Crossbow = 18, Wand = 19 }
+_G.GetInventoryItemID = function(unit, slot)
+    assert(unit == "player" and slot == INVSLOT_RANGED)
+    return equippedRangedItem
+end
+_G.C_Item = { GetItemInfoInstant = function(id)
+    assert(id == equippedRangedItem)
+    return nil, nil, nil, nil, nil, 2, rangedSubclass
+end }
+_G.C_SpellBook = { IsSpellKnown = function() return knowsShoot end }
+_G.UnitCanAttack = function() return attackable end
+_G.UnitIsDeadOrGhost = function() return targetDead end
+_G.UnitClass = function() return playerClass, playerClass end
+_G.C_Timer = { NewTicker = function(interval, callback)
+    assert(interval >= 0.2 and (not rangeTicker or rangeTicker.cancelled), "at most one bounded range ticker")
+    rangeTicker = { Tick = callback, Cancel = function(self) self.cancelled = true end }
+    return rangeTicker
+end }
 local nativeRangeChecks={}
 _G.C_SwingTimer={
     EnableRangeCheck=function(hand,enabled) nativeRangeChecks[hand]=enabled end,
-    IsTargetWithinSwingRange=function() return nil end,
+    IsTargetWithinSwingRange=function(hand)
+        if hand == 2 then return nativeRanged end
+    end,
 }
 _G.C_Spell={
+    IsSpellInRange=function(id)
+        local expected = playerClass == "HUNTER" and 75 or (rangedSubclass == 19 and 5019 or 7918)
+        assert(id == expected, "range fallback must use the attack for the equipped ranged weapon")
+        spellRangeCalls = spellRangeCalls + 1
+        return spellRange
+    end,
     GetSpellName=function(id) return ({[78]="Heroic Strike",[845]="Cleave",[6807]="Maul"})[id] end,
     IsCurrentSpell=function() return false end,
 }
@@ -237,6 +272,98 @@ event("PLAYER_IN_COMBAT_CHANGED")
 assert(not main:IsShown())
 assert(swing.Set("ranged","enabled",true))
 assert(ranged:IsShown())
+-- Native Forever range can be unavailable with a valid idle target.
+assert(swing.Set("ranged","reachOpacity",25))
+assert(swing.Set("ranged","reachCheck",true))
+assert(nativeRangeChecks[2] and ranged.alpha == 0.25 and ranged.Time.text == "0.0",
+    "an idle ranged bar fades when the equipped Shoot spell is out of range")
+assert(rangeTicker and not rangeTicker.cancelled, "track movement with an unknown native swing range")
+local ticker = rangeTicker
+spellRange = true
+rangeTicker:Tick()
+assert(ranged.alpha == 1 and rangeTicker == ticker, "walking into range restores opacity without a target change")
+spellRange = false
+rangeTicker:Tick()
+assert(ranged.alpha == 0.25, "walking out of range fades the whole bar again")
+nativeRanged = true
+event("PLAYER_SWING_RANGE_UPDATE",2,true,true)
+assert(ranged.alpha == 1 and ticker.cancelled, "a valid swing range takes precedence and stops fallback polling")
+nativeRanged = nil
+event("PLAYER_SWING_RANGE_UPDATE",2,false,false)
+assert(ranged.alpha == 0.25 and not rangeTicker.cancelled, "invalid swing events fall back to the equipped spell")
+attackable = false
+local lastCalls = spellRangeCalls
+event("PLAYER_TARGET_CHANGED")
+assert(ranged.alpha == 1 and rangeTicker.cancelled and spellRangeCalls == lastCalls, "skip friendly or cleared targets")
+attackable, targetDead = true, true
+event("PLAYER_TARGET_CHANGED")
+assert(ranged.alpha == 1 and rangeTicker.cancelled and spellRangeCalls == lastCalls, "skip dead targets")
+targetDead = false
+event("UNIT_FLAGS","target")
+assert(ranged.alpha == 0.25 and not rangeTicker.cancelled, "the same target reviving restarts fallback")
+attackable = false
+event("UNIT_FACTION","target")
+assert(ranged.alpha == 1 and rangeTicker.cancelled, "the same target becoming friendly stops fallback")
+attackable = true
+event("UNIT_FACTION","target")
+assert(ranged.alpha == 0.25 and not rangeTicker.cancelled, "the same target becoming hostile restarts fallback")
+spellRange = nil
+rangeTicker:Tick()
+assert(ranged.alpha == 1, "an unknown spell range is neutral")
+spellRange = false
+local secret = Secrets.New("boolean")
+local stopWatching = Secrets.Watch(path, { strict = true })
+spellRange = secret
+rangeTicker:Tick()
+assert(ranged.alpha == 1, "a secret spell range is neutral")
+spellRange = false
+attackable = secret
+event("UNIT_FACTION","target")
+assert(ranged.alpha == 1 and rangeTicker.cancelled, "a secret reaction does not drive the fade")
+attackable = true
+targetDead = secret
+event("UNIT_FLAGS","target")
+assert(ranged.alpha == 1 and rangeTicker.cancelled, "a secret death state does not drive the fade")
+targetDead = false
+nativeRanged = secret
+event("PLAYER_SWING_RANGE_UPDATE",2,secret,true)
+assert(ranged.alpha == 1 and rangeTicker.cancelled, "a secret native range is neutral")
+nativeRanged = nil
+local violations = stopWatching()
+assert(#violations == 0, table.concat(violations, "\n"))
+knowsShoot = false
+event("SPELLS_CHANGED")
+assert(ranged.alpha == 1 and rangeTicker.cancelled, "skip an unlearned ranged attack")
+knowsShoot = true
+event("SPELLS_CHANGED")
+assert(ranged.alpha == 0.25 and not rangeTicker.cancelled, "recheck when the shot becomes known")
+rangedSubclass = 3
+event("PLAYER_EQUIPMENT_CHANGED",INVSLOT_RANGED,true)
+assert(ranged.alpha == 0.25, "a weapon change uses its own shot")
+playerClass = "HUNTER"
+event("WEAPON_SLOT_CHANGED")
+assert(ranged.alpha == 0.25, "Hunter uses Auto Shot for a gun")
+rangedSpeed, equippedRangedItem = nil, nil
+event("WEAPON_SLOT_CHANGED")
+assert(not ranged:IsShown() and rangeTicker.cancelled and not nativeRangeChecks[2], "unequipping stops fallback")
+rangedSpeed, equippedRangedItem = 2.8, 1000
+event("WEAPON_SLOT_CHANGED")
+assert(ranged:IsShown() and ranged.alpha == 0.25 and not rangeTicker.cancelled, "equipping reseeds fallback")
+assert(swing.SetPreview(true))
+assert(rangeTicker.cancelled and ranged.alpha == 1, "in-world preview suspends live range checks")
+assert(swing.SetPreview(false))
+assert(ranged.alpha == 0.25 and not rangeTicker.cancelled, "exiting preview restores live range checks")
+assert(swing.Set("ranged","visibility","combat"))
+assert(rangeTicker.cancelled and not ranged:IsShown(), "combat-only bar does no fallback work while hidden")
+combat = true
+event("PLAYER_IN_COMBAT_CHANGED")
+assert(ranged:IsShown() and ranged.alpha == 0.25, "combat-only bar seeds range on show")
+combat = false
+event("PLAYER_IN_COMBAT_CHANGED")
+assert(swing.Set("ranged","visibility","always"))
+assert(swing.Set("ranged","reachCheck",false))
+assert(rangeTicker.cancelled and not nativeRangeChecks[2] and ranged.alpha == 1, "disabling fade stops both checks")
+playerClass, rangedSubclass = "WARRIOR", 19
 event("PLAYER_SWING",4,2)
 assert(ranged.endsAt==104)
 assert(swing.Set("main","visibility","always"))
@@ -367,7 +494,7 @@ assert(swing.SetEnabled(true))
 event("PLAYER_LOGOUT")
 assert(native, "reload restores the original account CVar")
 local source=assert(io.open(path,"rb")):read("*a")
-assert(not source:find('OnUpdate',1,true) and not source:find('C_Timer',1,true), "native duration animation only")
+assert(not source:find('OnUpdate',1,true), "native duration animation only")
 local profile=assert(io.open(root.."/MidnightSimpleUnitFrames/State/MSUF_ProfileRuntime.lua","rb")):read("*a")
 assert(profile:find("MSUF.SwingTimer.Apply()",1,true), "profile fanout includes enabled modules")
 print("PASS Forever Swing Timer module: simultaneous hands, native ownership, equipment, native timers, appearance and profile lifecycle")

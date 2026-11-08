@@ -115,7 +115,8 @@ function SceneRoot:Group(kind, count, opts)
 end
 
 --- The static unit scene of a unit key (docs/PREVIEW_RUNTIME_RULES.md, "Unit preview scenes"); nil when this client has
---- no such frame. opts.sample overrides fields of the unit's sample, opts.show shows it at once.
+--- no such frame. opts.sample overrides sample fields, opts.show shows it at once and opts.barOnly
+--- selects the bar elements when a scene is first created.
 function SceneRoot:Unit(unitKey, opts)
   local UnitScene = Dep("MSUF").UF.UnitScene
   assert(UnitScene, "MSUF: missing required dependency 'UF.UnitScene' required by UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
@@ -124,7 +125,7 @@ function SceneRoot:Unit(unitKey, opts)
   opts = type(opts) == "table" and opts or nil
   local scene = self.units[unit]
   if not scene then
-    scene = UnitScene.New(self, unit, opts and opts.sample)
+    scene = UnitScene.New(self, unit, opts and opts.sample, opts and opts.barOnly)
     self.units[unit] = scene
   elseif opts and opts.sample ~= nil then
     scene:SetSample(opts.sample)

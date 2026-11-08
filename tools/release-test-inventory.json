@@ -386,6 +386,28 @@
       ]
     },
     {
+      "test": "tools/tests/profile_65_upgrade_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_65_position_upgrade_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/profile_recovery_account_budget_smoke.lua",
       "phase": "profiles",
       "clients": [
@@ -442,7 +464,11 @@
     },
     {
       "test": "tools/tests/portrait_model_refresh_smoke.lua",
-      "phase": "runtime"
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/castbar_interrupt_ready_geometry.lua",

@@ -163,4 +163,24 @@ do
     assert(square[8]:IsShown(), "maximized window has no overlapping restore glyph")
     maximize:SetWindowControlIcon("maximize")
     assert(not square[8]:IsShown(), "restore glyph leaked into maximize state")
+
+    -- A UIParent scale change (Global UI Scale, Blizzard's UI scale, profile
+    -- switch) bypasses the menu-scale path. Bars sized for the old scale drop
+    -- below one device pixel and the rounded layout erases some of them.
+    local UIParent = world.env.UIParent
+    local oldScale = UIParent:GetScale()
+    UIParent:SetScale((oldScale or 1) * 0.6)
+    local shrunk = world.core.Require("MSUF_GetPhysicalPixelSize")(maximize, 1)
+    assert(shrunk ~= pixel and square[1]:GetHeight() == pixel, "fixture did not change the effective scale")
+    local probe = assert(group._msuf2CaptionScaleProbe, "caption glyphs never relayout on a UI scale change")
+    probe:GetScript("OnSizeChanged")(probe)
+    assert(dash[1]:GetHeight() == shrunk and square[1]:GetHeight() == shrunk and square[3]:GetHeight() == shrunk,
+        "horizontal caption bars kept the stale pixel after a UI scale change")
+    assert(square[2]:GetWidth() == shrunk and square[4]:GetWidth() == shrunk,
+        "vertical caption bars kept the stale pixel after a UI scale change")
+    UIParent:SetScale(oldScale)
+    assert(probe:IsEventRegistered("DISPLAY_SIZE_CHANGED"), "caption probe does not watch display size")
+    probe:GetScript("OnEvent")(probe, "DISPLAY_SIZE_CHANGED")
+    assert(dash[1]:GetHeight() == pixel and square[1]:GetHeight() == pixel,
+        "caption bars kept the stale pixel after a display size change")
 end

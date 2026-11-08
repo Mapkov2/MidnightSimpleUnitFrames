@@ -45,6 +45,11 @@ function Skins.Register(id, def)
     if not registry[id] then order[#order + 1] = id end
     def.id = id
     def.shape = def.shape or Shape.RECTANGLE
+    if def.variants then
+        for shape, variant in pairs(def.variants) do
+            variant.id, variant.shape = id, shape
+        end
+    end
     registry[id] = def
     return true
 end
@@ -53,8 +58,10 @@ local function Available(def)
     return def ~= nil and (def.atlas == nil or Shape.AtlasKnown(def.atlas))
 end
 
-function Skins.Get(id)
+-- A fixed-shape consumer can request alternate art for the same skin id.
+function Skins.Get(id, shape)
     local def = registry[id]
+    if def and shape and def.shape ~= shape then def = def.variants and def.variants[shape] end
     return Available(def) and def or nil
 end
 
@@ -319,13 +326,15 @@ end
 
 --- Compile the preview skin; full contract: docs/ICON_SKINS.md.
 local NO_LOOK = {}
-function Skins.AttachPreview(style, source, defaults)
+function Skins.AttachPreview(style, source, defaults, shape)
     if type(style) ~= "table" then return style end
     if type(defaults) ~= "table" then defaults = nil end
     -- Every compile passes here; a profile without a skin leaves at once.
     local id = type(source) == "table" and source.styleSkin or nil
     if id == nil or id == DEFAULT then id = defaults and defaults.styleSkin end
     local def = id and id ~= CUSTOM and registry[id] or nil
+    local variant = shape and def and def.shape ~= shape
+    if variant then def = def.variants and def.variants[shape] end
     if not (def and Available(def)) then
         style.skin = nil
         return style
@@ -345,6 +354,7 @@ function Skins.AttachPreview(style, source, defaults)
     }
     skin.signature = table.concat({ "K", id, skin.override and "O" or "o", skin.r, skin.g, skin.b, skin.a,
         skin.gloss and "G" or "g", skin.gr, skin.gg, skin.gb, skin.ga }, ":")
+    if variant then skin.signature = skin.signature .. ":" .. def.shape end
     style.skin = skin
     if style.signature then style.signature = style.signature .. ":" .. skin.signature end
     return style

@@ -611,6 +611,32 @@ local function ApplyConfiguredRegion(frame, spec, status, def)
   if key == "level" then Runtime.ApplyForeverLevelBadge(frame, spec, cfg) end
 end
 
+local function ApplyConfiguredPVP(frame, spec, status)
+  local cfg = status.pvp
+  if not (cfg and cfg.enabled) then
+    HideField(frame, "pvpIcon")
+    HideField(frame, "pvpIndicatorIcon")
+    return
+  end
+  local field = status.group and "pvpIcon" or "pvpIndicatorIcon"
+  -- Live group specs are stable between color refreshes. Preview scenes can
+  -- reuse mutable overlay records, so layout those every time.
+  local cacheLayout = status.group and not frame._msufGFIsPreviewFrame
+  local icon, levelBase = frame[field], frame._msufPreviewLevelBase
+  if cacheLayout and icon and icon._msufGroupPVPConfig == cfg and icon._msufGroupPVPLevelBase == levelBase then return end
+  icon = EnsureTexture(frame, field, cfg.layer)
+  frame.pvpIcon, frame.pvpIndicatorIcon = icon, icon
+  LayoutRegion(icon, frame, spec, cfg, false)
+  if cacheLayout and cfg.anchor ~= "NAMELEFT" and cfg.anchor ~= "NAMERIGHT" then
+    icon._msufGroupPVPConfig, icon._msufGroupPVPLevelBase = cfg, levelBase
+  end
+end
+
+local APPLY_CONFIGURED_REGION = {}
+for i = 1, #CONFIGURED_REGION_DEFS do
+  APPLY_CONFIGURED_REGION[i] = CONFIGURED_REGION_DEFS[i][1] == "pvp" and ApplyConfiguredPVP or ApplyConfiguredRegion
+end
+
 local function ApplyConfiguredRegions(frame, spec)
   local status = spec and spec.status
   if not status then
@@ -639,7 +665,7 @@ local function ApplyConfiguredRegions(frame, spec)
     end
   end
   for i = 1, #CONFIGURED_REGION_DEFS do
-    ApplyConfiguredRegion(frame, spec, status, CONFIGURED_REGION_DEFS[i])
+    APPLY_CONFIGURED_REGION[i](frame, spec, status, CONFIGURED_REGION_DEFS[i])
   end
 end
 

@@ -108,6 +108,9 @@ end
 
 local mw=MW.Open(root,flavor,{open=false,clientScriptBindings=true,beforeCore=Install,beforeOptions=NativeMethods})
 local M=mw.M
+-- Keep the compact preview preference measured by the original navigation receipt.
+-- Expanded preview layout and reuse are checked by menu_sticky_header_width_smoke.
+M.SetFixedPreviewExpandedPreference(false)
 -- The fixture defaults to no addons loaded; this world has just loaded Options.
 mw.env.C_AddOns.IsAddOnLoaded=function() return true,true end
 local function Settle() mw:RunTimers(); M.Theme.StopAllMenuAnimations() end

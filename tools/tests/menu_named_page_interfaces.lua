@@ -226,7 +226,9 @@ for _, scope in ipairs({ "party", "raid" }) do
     -- Freeze that visible input; preview-only PvP is covered separately.
     local conf = mw.core.GF.GetConf(scope)
     local pvp = conf.pvpIcon
-    conf.pvpIcon = mw.core.GF.CompileSpec(scope).status.pvp.enabled == true
+    local pvpSpec = mw.core.GF.CompileSpec(scope).status.pvp
+    conf.pvpIcon = pvpSpec.enabled == true
+        and (flavor ~= "Forever" or mw.core.UF.PVPIndicatorContextActive())
     mw.core.GF.InvalidateCompiledSpecs(scope)
     local box = M.GroupPreview.CreateNative(mw.env.UIParent, { width = 760, key = "gf_layout" })
     box:Show()

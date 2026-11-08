@@ -97,8 +97,8 @@ end
 for _, edit in ipairs({
     function(t) t.player = nil end,
     function(t) t._msufSparseDefaultsV2 = nil end,
-    function(t) t._msufDefaultsRevision = 18 end,
-    function(t) t._msufDefaultsRevision = 18; t._msufSparseDefaultsV2 = nil end,
+    function(t) t._msufDefaultsRevision = 19 end,
+    function(t) t._msufDefaultsRevision = 19; t._msufSparseDefaultsV2 = nil end,
     function(t) t.auras3 = t.player end,
 }) do
     local broken = Serial(encoded)

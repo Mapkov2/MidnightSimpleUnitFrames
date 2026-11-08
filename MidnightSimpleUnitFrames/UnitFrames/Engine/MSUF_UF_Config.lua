@@ -1226,6 +1226,10 @@ local function AdaptScreenPosition(conf, anchorFrameName, anchorToUnitframe)
   local height = UIParent and UIParent.GetHeight and UIParent:GetHeight()
   if type(height) ~= "number" or height < 400 or height > 10000 then return end
   local previous = tonumber(conf.screenPositionHeight)
+  if not (previous and previous >= 400 and previous <= 10000) then
+    local settled = Config.ScreenPositionScaleSettled
+    if settled == nil or not settled() then return end
+  end
   if previous and previous >= 400 and previous <= 10000 and math.abs(previous - height) > 0.01 then
     local factor = height / previous
     for _, field in ipairs({ "offsetX", "offsetY", "x", "y" }) do
@@ -1235,6 +1239,34 @@ local function AdaptScreenPosition(conf, anchorFrameName, anchorToUnitframe)
   conf.screenPositionHeight = height
 end
 Config.AdaptScreenPosition = AdaptScreenPosition
+
+-- Adopt a local upgrade's reference only after its effective UI scale settles.
+-- Nil already means no previous reference; no offsets or anchor choices change.
+local function ClearUpgradeReference(owner)
+  local height = type(owner) == "table" and tonumber(owner.screenPositionHeight)
+  if height and height >= 400 and height <= 10000 then owner.screenPositionHeight = nil end
+end
+
+function Config.PreserveUpgradePositions(profile)
+  for key in pairs(DEFAULTS) do ClearUpgradeReference(profile[key]) end
+  for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do ClearUpgradeReference(profile[key]) end
+  local variants = type(profile.profileVariants) == "table" and profile.profileVariants.entries
+  for _, entry in ipairs(type(variants) == "table" and variants or {}) do
+    local patch = type(entry) == "table" and entry.patch
+    if type(patch) == "table" and MSUF.ProfileFields.ValidatePatch(patch) then
+      for _, field in ipairs(patch) do
+        local path = field.path
+        local scope = path[1]
+        if DEFAULTS[scope] or scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid" then
+          if #path == 2 and path[2] == "screenPositionHeight" and field.remove ~= true then
+            local height = tonumber(field.value)
+            if height and height >= 400 and height <= 10000 then field.value, field.remove = nil, true end
+          end
+        end
+      end
+    end
+  end
+end
 
 local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   out.unit = unit

@@ -101,6 +101,7 @@ local SCENE_ELEMENTS = {
 local SCENE_MASK = {}
 for i = 1, #SCENE_ELEMENTS do SCENE_MASK[SCENE_ELEMENTS[i]] = true end
 UnitScene.ELEMENTS = SCENE_ELEMENTS
+local BAR_MASK = { Health = true, TempMaxHealth = true, Power = true, Prediction = true, Borders = true, Alpha = true }
 -- The elements with a sample mode of their own (status.testMode).
 local TEST_MODE_ELEMENTS = { "ThreatIndicator", "PetHappinessIndicator", "PetXPBar" }
 
@@ -211,7 +212,7 @@ local function PaintTestModeElements(frame, unit)
 end
 
 --- Paint the sample into one applied frame; the window is open.
-local function PaintSample(frame, unit, sample, layout, animate)
+local function PaintSample(frame, unit, sample, layout, animate, barOnly)
   local elements = UF.elements
   local active = frame._msufActiveElements or {}
   local hpMax = sample.hpMax or UnitScene.HEALTH_MAX
@@ -236,6 +237,7 @@ local function PaintSample(frame, unit, sample, layout, animate)
   if tempMax and active.TempMaxHealth == true then
     tempMax.Update(frame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", unit, sample.reducedMax or 0)
   end
+  if barOnly then return end
   local text = MSUF.UFText
   if frame.nameText and frame.nameText:IsShown() then
     frame._msufPreviewNameText = Translate(sample.name)
@@ -260,8 +262,6 @@ local function PaintSample(frame, unit, sample, layout, animate)
   if portrait and portrait.PaintSample and active.Portrait == true then portrait.PaintSample(frame, sample) end
   PaintTestModeElements(frame, unit)
   if sample.bossTargetPreview then elements.Borders.PaintScene(frame, unit) end
-
-
 end
 
 local LAYER_REGIONS = {
@@ -461,7 +461,8 @@ local function RefreshScene(self)
   -- A paint that failed left its window open; the apply must not hold the unit.
   CloseWindow(frame)
   frame._msufPreviewLevelBase = UF.Layers.ELEMENT_LEVEL_BASE + (self.level or 0)
-  if UF.ApplySceneSpec(frame, spec, SCENE_MASK, "single", unit, FinishSceneRefresh, self) ~= true then
+  local mask = self.barOnly and BAR_MASK or SCENE_MASK
+  if UF.ApplySceneSpec(frame, spec, mask, "single", unit, FinishSceneRefresh, self) ~= true then
     return false
   end
   local rounded = UF.Decorators.RoundedFrames
@@ -501,7 +502,7 @@ function Scene:RefreshData(layout)
     sample = animated
   end
   local auraEnabled = spec.auras and spec.auras.enabled == true or false
-  if layout == true or (layout ~= false and self.auraEnabled ~= auraEnabled) then
+  if not self.barOnly and (layout == true or (layout ~= false and self.auraEnabled ~= auraEnabled)) then
     self.auraEnabled = auraEnabled
     local gf = MSUF.GF
     if gf and gf.PreviewUnitFrameAuras then gf.PreviewUnitFrameAuras(frame, unit, spec, 1) end
@@ -525,7 +526,7 @@ function Scene:RefreshData(layout)
       frame._msufSceneDispelSymbol = frame._msufA3ClassicDispelSymbolHost
     end
   end
-  if layout ~= false then
+  if not self.barOnly and layout ~= false then
     local auras = MSUF.MSUF_Auras3
     local effects = auras and auras.SpellIndicators
     local owner = frame._msufSceneEffectOwner
@@ -542,11 +543,11 @@ function Scene:RefreshData(layout)
     elseif effects and owner then effects.HidePreviewFrameEffect(owner) end
   end
   OpenWindow(frame, unit, sample)
-  PaintSample(frame, unit, sample, layout, layout == false and self.root.animating == true)
+  PaintSample(frame, unit, sample, layout, layout == false and self.root.animating == true, self.barOnly)
   local gf = MSUF.GF
-  if gf and gf.AnimateUnitFrameAuras then gf.AnimateUnitFrameAuras(frame, self.root.animating and self.root.elapsed or nil) end
+  if not self.barOnly and gf and gf.AnimateUnitFrameAuras then gf.AnimateUnitFrameAuras(frame, self.root.animating and self.root.elapsed or nil) end
   CloseWindow(frame)
-  if MSUF.TextureLayer and MSUF.TextureLayer.PaintSample then
+  if not self.barOnly and MSUF.TextureLayer and MSUF.TextureLayer.PaintSample then
     MSUF.TextureLayer.PaintSample(frame, unit, sample.hpCur or (sample.hp or 1) * (sample.hpMax or UnitScene.HEALTH_MAX),
       sample.hpMax or UnitScene.HEALTH_MAX, sample.class)
   end
@@ -609,8 +610,8 @@ function Scene:Release()
   self:Hide()
 end
 
-function UnitScene.New(root, unit, sample)
-  local scene = setmetatable({ root = root, unit = unit }, Scene)
+function UnitScene.New(root, unit, sample, barOnly)
+  local scene = setmetatable({ root = root, unit = unit, barOnly = barOnly }, Scene)
   scene.sample = Merge(SAMPLES[FamilyOf(unit)], sample)
   scene.override = sample
   return scene

@@ -754,6 +754,20 @@ local function SceneAlphaLane(frame, spec, ignoreOocFade)
   own.oocFade = false
 end
 
+-- Shape swatches fit one frame, including its power bar, inside the card.
+local function EmbeddedBarPreviewSpec(frame, spec)
+  local preview = frame._msufGFBarPreviewSpec
+  if not preview then
+    local power = setmetatable({ detached = false, embed = true }, {})
+    preview = setmetatable({ power = power }, {})
+    frame._msufGFBarPreviewSpec = preview
+  end
+  getmetatable(preview).__index = spec
+  getmetatable(preview.power).__index = spec.power
+  preview.power.height = math.max(1, math.min(spec.power.height, spec.height - 1))
+  return preview
+end
+
 --- A preview scene frame is a paint target that holds no unit: it compiles for its sample role, applies the
 --- element layout and never subscribes to, registers with or queries the live roster (see GF.NewPreviewScene).
 --- ignoreOocFade: the owner's window is always open out of combat, so the scene shows no out-of-combat fade.
@@ -762,6 +776,8 @@ function GF.ApplySceneButton(frame, kind, dirtyMask, ignoreOocFade)
   local spec = GF.CompileSpec(kind, frame, GF.PreviewSampleRole(frame))
   if not spec then return false end
   SceneAlphaLane(frame, spec, ignoreOocFade)
+  local owner = frame._msufPreviewScene
+  if owner and owner.barOnly then spec = EmbeddedBarPreviewSpec(frame, spec) end
   frame._msufIsGroupFrame = true
   frame._msufGFKind = kind
   UF.SetFrameSpec(frame, spec)

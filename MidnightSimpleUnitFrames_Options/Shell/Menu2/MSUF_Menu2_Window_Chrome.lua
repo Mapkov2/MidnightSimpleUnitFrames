@@ -757,6 +757,7 @@ local function InstallWindowLifecycle(state)
             self:Hide()
             return
         end
+        W.PlayMenuSound("IG_CHARACTER_INFO_OPEN")
         -- A monotonic, runtime-only token lets expensive-setting warnings show
         -- once per real Menu2 visit without persisting acknowledgement state.
         M._msuf2MenuSessionSerial = (tonumber(M._msuf2MenuSessionSerial) or 0) + 1

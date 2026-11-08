@@ -350,7 +350,7 @@
       "support_sources": [
         {
           "file": "MSUF_Menu2_Preview_Scenes.lua",
-          "source_sha256": "df47254302976c4728bc576ba9d2a90d5a0e8ca4ffad8f83bbb078c6ae684524"
+          "source_sha256": "f07d51585b11018bf63f77f4b9fb31850d0beb52f299545b41e5f35b00eafef5"
         },
         {
           "file": "MSUF_Menu2_Preview_Rendering.lua",
@@ -358,7 +358,7 @@
         },
         {
           "file": "MSUF_Menu2_PageLifecycle.lua",
-          "source_sha256": "bb7cde008bf5f1779cb4fe88dec4d18e730ee28587d1bc09acf725ae13b450a7"
+          "source_sha256": "a8ef093065334c70b782a317a289354b7b4934ce5924c0b3ee27848fffd768c6"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
@@ -577,7 +577,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua",
-          "source_sha256": "8c5e435cee5267c4a368e861c9f7278e9394759c02afb96d79d0dfdf391ab25d"
+          "source_sha256": "a94c78d486aeb0b4eef82b3b8c9ccf7809eadec0fe6345ade1b5a99555fe8471"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
@@ -696,7 +696,7 @@
           1934
         ]
       ],
-      "source_sha256": "8e99b0b950a650b6d371502e25e6cd87fb5910d75aa9105fb1d43cefccfd363a",
+      "source_sha256": "e7c1b2fa0a643fea20ec5072ea72eb39c730d059354cabc41975d667c23df2d4",
       "adapter_exclusions": [
         {
           "name": "CreateRoundedTexturePreview",
@@ -715,7 +715,7 @@
       "support_sources": [
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Textures.lua",
-          "source_sha256": "3cd2650bbd52e76370695461c36460b9f2bb4b30c8d9dad72d7be6068131ac3c"
+          "source_sha256": "0b4d51654dead5cdd8c0aa72ba900545ad079c160745362158214462208d8a71"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
@@ -884,7 +884,7 @@
           800
         ]
       ],
-      "source_sha256": "8cab7694a93045a51bdb346b7158189e02116e53513c7d7b0d66caab7abda14f",
+      "source_sha256": "002a88e9d9e9eca6e1ad15565c990e8aa847d2d14606252c280cb6c57a156ce4",
       "adapter_exclusions": [
         {
           "name": "AddDropdownBarPreviewLane",

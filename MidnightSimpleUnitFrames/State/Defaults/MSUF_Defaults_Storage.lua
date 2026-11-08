@@ -142,8 +142,8 @@ local function ApplySparseV2(restore)
     return count
 end
 
-local function RestoreSparseV2(profile, prepared)
-    if profile._msufDefaultsRevision ~= sparseToken or not ReadSparseV2Mask(profile[sparseV2Marker]) then return false end
+local function RestoreSparseV2(profile, prepared, revision)
+    if profile._msufDefaultsRevision ~= (revision or sparseToken) or not ReadSparseV2Mask(profile[sparseV2Marker]) then return false end
     if not prepared then
         local ok = CountTables(profile, scratchRefs, scratchPath, 0, scratchLists)
             and ResolveSparseV2Owners(profile, scratchRefs, scratchLists)
@@ -161,15 +161,35 @@ local function RestoreSparseV2(profile, prepared)
     return true
 end
 
--- Revision 18 is reserved for the full 6.5 profile format. Its Forever mana
--- default is already covered by 7.0's per-client migrations. Early 7.0 may
--- have stamped its state schema without updating the defaults revision.
-local function IsLegacyFullRevision18(profile, marker, extension)
+-- Revision 18 belongs to 6.5. A 6.510 login may keep 7.0's state stamp and
+-- sparse masks while replacing only the defaults revision.
+local function IsLegacyProfileShape(profile)
+    if not Plain(profile) then return false end
     local schema, state = profile._msufProfileSchema, profile._msufStateSchema
     local IsSecret = MSUF.Util.IsSecret
-    if IsSecret(marker) or IsSecret(extension) or IsSecret(schema) or IsSecret(state) then return false end
-    return marker == nil and extension == nil and schema == 600 and (state == nil or state == 700)
+    if IsSecret(schema) or IsSecret(state) then return false end
+    return schema == 600 and (state == nil or state == 700)
         and Plain(profile.general) and Plain(profile.bars) and Plain(profile.player) and Plain(profile.target)
+end
+
+function Schema.IsLegacyFullProfile(profile)
+    if not IsLegacyProfileShape(profile) then return false end
+    local marker, extension = profile[sparseV2Marker], profile[sparseV3.Marker]
+    if MSUF.Util.IsSecret(marker) or MSUF.Util.IsSecret(extension) then return false end
+    return marker == nil and extension == nil
+end
+
+local function RestoreRevision18(profile, marker, extension)
+    if not IsLegacyProfileShape(profile) or MSUF.Util.IsSecret(marker) or MSUF.Util.IsSecret(extension) then return false end
+    if marker == nil and extension == nil then
+        profile._msufDefaultsRevision = 17
+        return true
+    end
+    if type(marker) ~= "string" or (extension ~= nil and type(extension) ~= "string") then return false end
+    InitializeSparse()
+    local restored = RestoreSparseV2(profile, false, 18)
+    ReleaseSparseV2(false)
+    return restored
 end
 
 -- The second distinguishes ordinary full data from an undecodable envelope.
@@ -179,8 +199,7 @@ function Schema.RestorePersistence(profile)
     local marker = profile[sparseV2Marker]
     local extension = profile[sparseV3.Marker]
     local revision = profile._msufDefaultsRevision
-    if revision == 18 and IsLegacyFullRevision18(profile, marker, extension) then
-        profile._msufDefaultsRevision = 17
+    if revision == 18 and RestoreRevision18(profile, marker, extension) then
         return true, "restored"
     end
     if not Schema.BackupNewerRevision(profile) then return false, "rejected" end

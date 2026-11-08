@@ -132,6 +132,7 @@ local areas, areaByKey = {}, {}
 ---   shape  optional function() -> the icon shape these icons have (RECTANGLE)
 ---   setShape optional function(shape): a skin for another shape sets it, as for
 ---          auras; without it the row offers only skins drawn on its shape
+---   skinVariants optional true: a fixed-shape area draws alternate art for that shape
 ---   refresh optional function(reason): runs after any change on this page (the
 ---          default skin or look changed), so the module repaints its icons
 ---   icon   optional texture: the row also gets a sample in "Your Icons"
@@ -182,6 +183,11 @@ local function Fits(shape, wanted)
     return shape == wanted or (wanted == RECTANGLE and shape == FOLLOW_PORTRAIT)
 end
 
+local function SkinFits(area, shape, id)
+    if area and area.skinVariants then return Skins().Get(id, shape) ~= nil end
+    return Fits(shape, Skins().ShapeOf(id))
+end
+
 --- A skin made for a round, rounded or hex icon sets that shape; a square skin
 --- replaces a fixed shape it cannot draw on (Follow Portrait stays: a square
 --- portrait shows the skin). An area without setShape keeps its shape.
@@ -198,7 +204,7 @@ end
 --- True while the effective skin draws these icons (its shape matches).
 function Page.SkinDraws(key)
     local skin = Page.EffectiveSkin(key)
-    return skin ~= CUSTOM and Fits(Page.ProductShape(key), Skins().ShapeOf(skin))
+    return skin ~= CUSTOM and SkinFits(areaByKey[key], Page.ProductShape(key), skin)
 end
 
 local refreshers = setmetatable({}, { __mode = "k" })
@@ -248,7 +254,7 @@ function Page.ProductValues(key)
     local shape = area and not area.setShape and Page.ProductShape(key) or nil
     for i = 1, #list do
         local item = list[i]
-        if not shape or item.value == CUSTOM or Fits(shape, Skins().ShapeOf(item.value)) then items[#items + 1] = item end
+        if not shape or item.value == CUSTOM or SkinFits(area, shape, item.value) then items[#items + 1] = item end
     end
     return items
 end
@@ -266,11 +272,13 @@ function Page.PaintSample(icon, key, size, skinId)
     if shape == FOLLOW_PORTRAIT then shape = RECTANGLE end
     A3.IconShape.ApplyIconShape(icon, shape, nil, false, icon.tex)
     local style, auras = nil, M.AurasPage
-    if not skinId and not areaByKey[key] then
+    local area = areaByKey[key]
+    if not skinId and not area then
         style = auras and auras.ProductIconStyle and auras.ProductIconStyle(key) or nil
     else
         local id = skinId or Page.EffectiveSkin(key)
-        style = id ~= CUSTOM and Skins().AttachPreview({}, { styleSkin = id }, Page.Look()) or nil
+        local variantShape = not skinId and area and area.skinVariants and shape or nil
+        style = id ~= CUSTOM and Skins().AttachPreview({}, { styleSkin = id }, Page.Look(), variantShape) or nil
     end
     A3.ApplyIconStyleSkinned(icon, style, size, shape)
 end

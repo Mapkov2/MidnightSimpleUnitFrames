@@ -92,7 +92,7 @@ The adjacent query capability rows continue to cover the unit Threat % Color by 
 -- MSUF's skins on its cooldown manager and action bar icons with it; the
 -- contract is the 2026-10-17 icon skin addendum of HOST_API_SPEC.md.
 --
---   Compile(choice, shape) -> look | nil
+--   Compile(choice, shape, allowVariant) -> look | nil
 --       choice: "DEFAULT" (or nil) for the default skin of the Icon Skins page,
 --       "CUSTOM" for no skin, or a skin id. shape: the icon shape the caller
 --       draws ("RECTANGLE" when nil, or "CIRCLE" for an icon it masks round).
@@ -100,7 +100,9 @@ The adjacent query capability rows continue to cover the unit Threat % Color by 
 --       (Skins.CommittedDefault): a default edited in combat reaches these
 --       icons when it reaches MSUF's auras, at combat end. nil when no skin
 --       draws: CUSTOM, an unknown or unavailable id, or a skin made for
---       another icon shape. look.signature is a string; two looks with the
+--       another icon shape. A fixed-shape surface can pass allowVariant=true
+--       to use alternate art for that shape under the same skin ID. Cache
+--       those results separately. look.signature is a string; two looks with the
 --       same signature paint the same pixels at the same size.
 --   WithGlossStrength(look, strength) -> look | nil
 --       Optional additive capability: a new immutable look with reflected RGB

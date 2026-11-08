@@ -34,7 +34,7 @@ local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need e
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
 local ROUNDED_STRENGTH_APPLY_DELAY = 0.12
-local ROUNDED_SECTION_HEIGHT = 310
+local ROUNDED_SECTION_HEIGHT = 320
 local SLANTED_PRESET_UNITS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget", "boss", "arena" }
 local SLANTED_PRESET_GROUPS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local SLANTED_DIRECTION_VALUES = VT(
@@ -625,11 +625,26 @@ local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, 
     M.RegisterSearchWidget(control, payload)
 end
 
+local function ShapePreviewScope()
+    local scope = CurrentBarsScope()
+    if scope == "gf_party" then return "party" end
+    if scope == "gf_raid" then return "raid" end
+    return scope
+end
+
+local function ConfigureShapePreview(spec)
+    local power = spec.power
+    power.detached, power.embed = false, true
+    power.height = max(1, min(power.height, spec.height - 1))
+end
+
 local function ShapePreviewSurface(card, width, height)
     local host = PixelLayoutRegion(CreateFrame("Frame", nil, card))
-    host:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -40)
+    host:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -36)
     host:SetSize(width, height)
-    local surface = M.PreviewHelpers.NewRuntimeUnitSurface(host, CurrentBarsScope, { hp = .78, power = .66, hpPct = .78, powerPct = .66 })
+    local sample = { hp = .78, power = .66, hpPct = .78, powerPct = .66,
+        incoming = 0, absorb = 0, healAbsorb = 0, reducedMax = 0 }
+    local surface = M.PreviewHelpers.NewRuntimeUnitSurface(host, ShapePreviewScope, sample, ConfigureShapePreview, true)
     card._msuf2RoundedPreviewSample = surface
     return surface
 end

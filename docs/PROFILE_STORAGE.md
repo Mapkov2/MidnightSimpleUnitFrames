@@ -80,8 +80,14 @@ restore formerly elided markers; new encodings retain them.
 Both masks and every referenced owner are validated before restoration writes.
 A malformed current mask fails closed without partial writes. A string mask
 owned by a newer revision remains unchanged, including an orphan V3 string.
-A profile materialised by an older loader at an older revision has its stale
-V2/V3 masks discarded without inventing leaves or changing that revision.
+A profile materialised by a revision-16/17 loader has its stale V2/V3 masks
+discarded without inventing leaves or changing that revision. Revision 18 is
+reserved for 6.5: recognized full schema-600 profiles migrate to revision 17.
+When 6.510 restamps a 7.0 sparse profile as 18, the existing decoder validates
+both masks and all referenced owners before restoring only still-absent leaves.
+Values written by 6.510 win, and the profile remains attached to saved storage.
+Malformed masks, unknown shapes and future revisions still retain recovery
+protection; they are never relabelled as a successful upgrade.
 V3 without its V2 envelope at revision 17.5 is rejected. V2-only decoding does
 not validate unrelated V3-only owners; old legal alias arrangements still load.
 
@@ -89,6 +95,32 @@ New V3 saves require a V3-capable loader. Neither unchanged 6.50 nor a V2-only
 loader is guaranteed to reconstruct them. Stale-mask cleanup cannot recover
 values already lost by an earlier loader. Use the explicit full-save path below
 before returning to unchanged 6.50x; copying an ordinary sparse save is unsafe.
+
+
+### First upgrade from 6.5
+
+The original account snapshot precedes migration. Existing explicit mana Off
+choices remain Off even without later migration stamps; new Forever factories
+keep their current defaults. Full revision-17/18 profiles with no 7.0 state
+stamp also discard stale screen-height references while retaining their offsets
+and anchor choices. The runtime adopts the reference on first use after the
+actual global UI scale, including active variants, has settled. Inactive
+profiles and variant reference removals can remain pending across sessions.
+Once adopted, ordinary 7.0 resizing resumes. Fresh profiles and profile-string
+imports retain the existing resolution-transfer behavior.
+
+The profile graph checks cover 6.50, 6.509 and 6.510 inputs on every supported
+client, plus an unprepared 7.0-to-6.510-to-7.0 return. Recovering valid remaining
+masks on that return does not make 6.510 a sparse reader and cannot undo values
+already overwritten there; compatibility save remains the supported downgrade
+path.
+
+One downgrade limit remains for an upgraded profile that has never been active
+in 7.0: its absent screen-height reference is intentional. The unchanged 6.510
+loader can adopt that reference before applying the profile's UI scale and then
+rescale its offsets. A full compatibility save preserves the absent reference;
+it does not change that older startup order. Forward upgrade checks do not
+claim position preservation for this dormant-profile downgrade case.
 
 ### Returning to unchanged 6.50x (E5, 2026-10-24)
 

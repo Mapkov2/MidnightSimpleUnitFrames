@@ -1,4 +1,4 @@
--- Forever defaults remain portable while later deliberate Off choices survive.
+-- Forever factory defaults remain portable; every stored Off choice survives.
 local root = assert(arg[1]):gsub("\\", "/")
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 local checked, failures = 0, {}
@@ -27,7 +27,7 @@ for _, flavor in ipairs({ "Forever", "Mainline", "Vanilla", "TBC", "Mists" }) do
         Check(profile.bars.manaRegenStyle == "spark" and profile.bars.manaRegenSparkWidth == 2
             and profile.bars.manaRegenSparkAlpha == .35, flavor .. ": mana style defaults missing")
         for key, stamp in pairs(stamps) do
-            Check((profile.bars[key] == true) == (forever or old == "on"), flavor .. ": initial " .. old .. " " .. key)
+            Check((profile.bars[key] == true) == ((forever and old == "missing") or old == "on"), flavor .. ": initial " .. old .. " " .. key)
             Check((profile[stamp] == true) == forever, flavor .. ": stamp leaked " .. key)
             profile.bars[key] = false
         end
@@ -42,7 +42,7 @@ for _, flavor in ipairs({ "Forever", "Mainline", "Vanilla", "TBC", "Mists" }) do
             for key, stamp in pairs(stamps) do
                 profile[stamp] = nil
                 normalize(profile, false, true)
-                Check(profile.bars[key] == true, "current cross-client profile skipped " .. key)
+                Check(profile.bars[key] == false, "unstamped cross-client Off overwritten " .. key)
                 profile.bars[key] = nil
                 normalize(profile, false, true)
                 Check(profile.bars[key] == true, "missing default not restored " .. key)
@@ -51,12 +51,12 @@ for _, flavor in ipairs({ "Forever", "Mainline", "Vanilla", "TBC", "Mists" }) do
         end
     end
     if forever then
-        -- The old FSR migration already recorded a user's deliberate Off.
+        -- A missing pulse stamp cannot override its earlier explicit Off.
         local previous = { bars = { manaRegenPause = false, manaGainPulse = false },
             _msufForeverFiveSecondDefault_v1 = true }
         normalize(previous, true)
         Check(previous.bars.manaRegenPause == false, "the pulse update overwrote the earlier FSR choice")
-        Check(previous.bars.manaGainPulse == true, "the earlier FSR stamp skipped the new pulse default")
+        Check(previous.bars.manaGainPulse == false, "the pulse migration overwrote an unstamped Off")
         env.MSUF_TryDecodeCompactString = function()
             return { addon = "MSUF", fmt = 2, msuf6 = { schema = 600,
                 payload = { general = {}, bars = { manaRegenPause = false, manaGainPulse = false } } } }

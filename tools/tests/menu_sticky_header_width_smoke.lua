@@ -68,6 +68,14 @@ end
 local entry = Select()
 Check(entry, "initial wide")
 local expander = assert(entry.pageHeaders[2].section._msuf2FixedPreviewExpanderRecord)
+assert(expander.expanded, "the first unit preview must open expanded")
+assert(M.EnsurePersistentMenuState().fixedPreviewExpanded == "auto", "opening recorded a manual preference")
+expander.button:Click()
+assert(not expander.expanded and not M.ShouldExpandFixedPreview(), "Compact did not record the user choice")
+M.fixedPreviewExpanded, M._persistentMenuStateLoaded = nil, nil
+assert(M.EnsurePersistentMenuState().fixedPreviewExpanded == false, "Compact did not survive reloading menu state")
+assert(M.SelectPage("home"))
+assert(Select() == entry and not expander.expanded, "returning to a preview ignored the saved Compact choice")
 -- The explicit expansion must animate even if the menu first has to grow.
 local availableHeight, previousWindowHeight = M.GetPageHeaderAvailableHeight, mw.win:GetHeight()
 M.Theme.ReducedMotionEnabled = function() return false end
@@ -88,8 +96,26 @@ assert(height > expander.compactSectionHeight and height < expander.preferredExp
     "preview reveal has no intermediate height")
 assert(expander.box:GetHeight() == expander.preferredExpandedHeight, "the preview renderer resized during a motion tick")
 expander.button:Click()
-assert(not expander.expanded and not driver:GetScript("OnUpdate") and not expander.section:DoesClipChildren(),
-    "closing during the reveal retained a motion or clip")
+assert(not expander.expanded and driver:GetScript("OnUpdate") and expander.section:DoesClipChildren(),
+    "Compact must reverse the in-progress reveal")
+assert(expander.section:GetHeight() == height, "Compact jumped away from the current height")
+assert(driver.foldClock:GetDuration() == 0.150, "Compact must use a 150ms clock")
+driver.foldClock.GetSmoothProgress = function() return 0.5 end
+MenuWorld.FireScript(driver, "OnUpdate", 0)
+local shrinkingHeight = expander.section:GetHeight()
+assert(shrinkingHeight > expander.compactSectionHeight and shrinkingHeight < height,
+    "Compact has no intermediate height")
+expander.button:Click()
+assert(expander.expanded and driver.foldClock:GetDuration() > 0.150
+    and expander.section:GetHeight() == shrinkingHeight, "Expand must reverse smoothly and take longer")
+driver:Stop()
+assert(expander.section:GetHeight() == expander.preferredExpandedSectionHeight and not expander.section:DoesClipChildren())
+expander.button:Click()
+driver.foldGroup:Stop()
+MenuWorld.FireScript(driver, "OnUpdate", 0)
+assert(not expander.expanded and not driver:GetScript("OnUpdate") and not expander.section:DoesClipChildren()
+    and expander.section:GetHeight() == expander.compactSectionHeight
+    and expander.box:GetHeight() == expander.compactHeight, "Compact did not settle at its exact layout")
 M.GetPageHeaderAvailableHeight = availableHeight
 M.Theme.ReducedMotionEnabled = function() return true end
 expander.button:Click()
@@ -152,5 +178,19 @@ mw.win.maximizeButton:Click()
 Settle()
 assert(mw.win._msuf2WindowState == "normal", "restore command did not run")
 Check(entry, "restored cached normal slot")
+-- A grip shrink that cannot fit the preview keeps the requested window size.
+mw.win:SetHeight(850)
+local beforeGrip = mw.win:GetHeight()
+local cursorY = 400
+mw.env.GetCursorPosition = function() return 300, cursorY end
+M.GetPageHeaderAvailableHeight = function() return 390 end
+MenuWorld.FireScript(mw.win.resizeGrip, "OnMouseDown", "LeftButton")
+assert(mw.win._msuf2ResizeState, "the resize grip did not start")
+cursorY = cursorY + 180
+MenuWorld.FireScript(mw.win.resizeGrip, "OnMouseUp", "LeftButton")
+Settle()
+assert(mw.win:GetHeight() < beforeGrip and not M._msuf2ActiveFixedPreviewExpander,
+    "the default preview reopened before the grip shrink could check its fit")
+assert(M.ShouldExpandFixedPreview(), "automatic layout compaction changed the saved preference")
 assert(sizeEvents > 0, "native size callbacks were not exercised")
 print("menu_sticky_header_width_smoke " .. flavor .. ": resize, relayout, cached return, reopen and maximize/restore pass")

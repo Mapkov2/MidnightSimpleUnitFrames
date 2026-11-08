@@ -113,7 +113,7 @@ function M.ConsumeFixedPreviewExpansionForSelection(pageKey)
         or fixedPreviewRebuildExpandPageKey == pageKey
         or (M.ShouldExpandFixedPreview())
     fixedPreviewRebuildExpandPageKey = nil
-    return restore == true
+    return restore == true and not M._msuf2DeferPreviewExpansionForResize
 end
 local function FixedPreviewExpanderForEntry(entry)
     local records = type(entry) == "table" and entry.pageHeaders or nil

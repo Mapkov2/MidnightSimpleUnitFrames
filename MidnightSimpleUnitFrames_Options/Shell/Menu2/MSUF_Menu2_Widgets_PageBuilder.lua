@@ -812,7 +812,9 @@ function PageBuilderStages.WireAccordionHeader(entry, ctx, title, collapseHintCl
         local threshold = tonumber(T.collapseHintClickHideThreshold) or 8
         collapseHintClickState.total = math.min((tonumber(collapseHintClickState.total) or 0) + 1, threshold)
         RefreshCollapseHintSuppression(entry)
-        entry.SetOpenByUser(nextOpen)
+        if entry.SetOpenByUser(nextOpen) then
+            W.PlayMenuClickSound()
+        end
     end)
     header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
     header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)

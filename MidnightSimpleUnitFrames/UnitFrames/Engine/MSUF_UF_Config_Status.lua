@@ -92,6 +92,43 @@ local function UnitFramePVPContextualDisabled()
     and APIBool(gameRules.IsGameRuleActive, rule)
 end
 
+local function SupportsPVPFactionBadge(unit)
+  return MSUF.Client.IsRetail and (unit == "target" or unit == "focus")
+end
+
+local targetPVPAllowed, targetPVPOpenWorld
+local TARGET_PVP_SCOPE_EVENTS = { PLAYER_ENTERING_WORLD = true, ZONE_CHANGED_NEW_AREA = true, ACTIVE_GAME_MODE_UPDATED = true }
+
+local function ReadTargetPVPScope()
+  local allowed = not UnitFramePVPContextualDisabled()
+  return allowed, allowed and CurrentInstanceType() == "none"
+end
+
+function UF.TargetPVPScope()
+  if targetPVPAllowed == nil then
+    targetPVPAllowed, targetPVPOpenWorld = ReadTargetPVPScope()
+  end
+  return targetPVPAllowed, targetPVPOpenWorld
+end
+
+local function RepaintTargetPVP(frame, allowedChanged)
+  local status = frame and frame._msufStatusIndicatorStatus
+  local pvp = status and status.pvp
+  if pvp and pvp.enabled and pvp.followsTarget and (allowedChanged or pvp.showOpenWorldFaction) then
+    MSUF.UFStatusRuntime.UpdatePVP(frame, status)
+  end
+end
+
+local function RefreshTargetPVPScope()
+  if targetPVPAllowed == nil then return end
+  local allowed, openWorld = ReadTargetPVPScope()
+  local allowedChanged = allowed ~= targetPVPAllowed
+  if not allowedChanged and openWorld == targetPVPOpenWorld then return end
+  targetPVPAllowed, targetPVPOpenWorld = allowed, openWorld
+  RepaintTargetPVP(UF.frames.target, allowedChanged)
+  RepaintTargetPVP(UF.frames.focus, allowedChanged)
+end
+
 local function ComputePVPIndicatorContextActive(warModeOverride)
   if UnitFramePVPContextualDisabled() then return false end
   local instanceType = CurrentInstanceType()
@@ -228,6 +265,7 @@ if PVP_CONTEXT_GATED then
       local forced = PVP_CONTEXT_FORCE_EVENTS[event] == true
       -- The native flag event carries a boolean, independently of the unit events.
       if not forced and event ~= "PLAYER_PVP_FLAG_CHANGED" and unit and unit ~= "player" then return end
+      if TARGET_PVP_SCOPE_EVENTS[event] then RefreshTargetPVPScope() end
       UF.RefreshPVPIndicatorContext(nil, forced)
     end)
     local supportsEvent = MSUF.Client.SupportsEvent
@@ -257,6 +295,7 @@ end
 if not UF.pvpIndicatorContextDriver then
   local pvpDriver = CreateFrame("Frame")
   pvpDriver:SetScript("OnEvent", function(_, event, arg1, arg2)
+    if TARGET_PVP_SCOPE_EVENTS[event] then RefreshTargetPVPScope() end
     -- This driver owns cold recompilation only. PvP textures already have their
     -- native per-frame event routing, so never query context or rebuild UF/GF
     -- specs in combat.
@@ -351,15 +390,18 @@ end
 --- Unlike StatusNumber this read is nil-preserving on purpose: an unset triple
 --- has to keep inheriting the frame's resolved font color, so profiles that
 --- never picked a color are not silently pinned to white.
-local function ApplyStatusColor(entry, conf, general, colorPrefix)
+local function StatusColorKeys(prefix)
+  return { prefix .. "ColorR", prefix .. "ColorG", prefix .. "ColorB" }
+end
+
+local function ApplyStatusColor(entry, conf, general, colorKeys)
   local r, g, b
-  if colorPrefix then
-    r = conf and conf[colorPrefix .. "ColorR"]
-    if r == nil then r = general and general[colorPrefix .. "ColorR"] end
-    g = conf and conf[colorPrefix .. "ColorG"]
-    if g == nil then g = general and general[colorPrefix .. "ColorG"] end
-    b = conf and conf[colorPrefix .. "ColorB"]
-    if b == nil then b = general and general[colorPrefix .. "ColorB"] end
+  if colorKeys then
+    local rk, gk, bk = colorKeys[1], colorKeys[2], colorKeys[3]
+    r, g, b = conf[rk], conf[gk], conf[bk]
+    if r == nil then r = general[rk] end
+    if g == nil then g = general[gk] end
+    if b == nil then b = general[bk] end
     r, g, b = tonumber(r), tonumber(g), tonumber(b)
   end
   if r and g and b then
@@ -376,7 +418,7 @@ local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, an
     id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault,
     layerKey, layerDefault,
     style = style, symbol = symbol, customIcon = customIcon, legacyLayerKey = legacyLayerKey,
-    colorPrefix = colorPrefix,
+    colorKeys = colorPrefix and StatusColorKeys(colorPrefix),
   }
 end
 
@@ -438,6 +480,12 @@ local UNIT_STATUS_TEXT_STATE_DEFS = {
   { "statusDNDText", "statusDNDTextEnabled", "showDND", false, "statusDNDText" },
 }
 
+for i = 1, #UNIT_STATUS_TEXT_STATE_DEFS do
+  local def = UNIT_STATUS_TEXT_STATE_DEFS[i]
+  def.colorKeys = StatusColorKeys(def[5])
+end
+local AFK_TIMER_COLOR_KEYS = StatusColorKeys("statusAFKTimer")
+
 local function CompileUnitStatusTextState(status, conf, general, def, fallbackSize)
   local id, showKey, legacyStateKey, defaultShow, prefix = def[1], def[2], def[3], def[4], def[5]
   local entry = status[id] or {}
@@ -458,7 +506,7 @@ local function CompileUnitStatusTextState(status, conf, general, def, fallbackSi
   entry.x = StatusNumber(conf, general, prefix .. "OffsetX", 0, legacyPrefix and (legacyPrefix .. "OffsetX"))
   entry.y = StatusNumber(conf, general, prefix .. "OffsetY", 0, legacyPrefix and (legacyPrefix .. "OffsetY"))
   entry.layer = ClampStatusLayer(StatusNumber(conf, general, prefix .. "Layer", 7, legacyPrefix and (legacyPrefix .. "Layer")), 7)
-  ApplyStatusColor(entry, conf, general, prefix)
+  ApplyStatusColor(entry, conf, general, def.colorKeys)
   return entry
 end
 
@@ -478,7 +526,7 @@ local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSi
   if customIcon then
     entry.customIcon = StatusString(conf, general, customIcon[1], customIcon[2])
   end
-  ApplyStatusColor(entry, conf, general, def.colorPrefix)
+  ApplyStatusColor(entry, conf, general, def.colorKeys)
   return entry
 end
 
@@ -573,27 +621,30 @@ local function CompileUnitStatus(out, conf, general, key)
   afkTimer.x = StatusNumber(conf, general, "statusAFKTimerOffsetX", 0)
   afkTimer.y = StatusNumber(conf, general, "statusAFKTimerOffsetY", -14)
   afkTimer.layer = ClampStatusLayer(StatusNumber(conf, general, "statusAFKTimerLayer", 7), 7)
-  ApplyStatusColor(afkTimer, conf, general, "statusAFKTimer")
+  ApplyStatusColor(afkTimer, conf, general, AFK_TIMER_COLOR_KEYS)
   if afkTimer.colorR == nil then
     afkTimer.colorR, afkTimer.colorG, afkTimer.colorB = afkText.colorR, afkText.colorG, afkText.colorB
   end
 
   local pvp = status.pvp
   pvp.configuredEnabled = pvp.enabled
-  if PVP_CONTEXT_GATED then
+  if SupportsPVPFactionBadge(key) then
+    pvp.followsTarget = true
+    pvp.showOpenWorldFaction = conf and conf.pvpIndicatorShowOpenWorldFaction == true
+  elseif PVP_CONTEXT_GATED then
     pvp.contextGated = pvp.enabled == true or nil
   elseif pvp.enabled and not UF.PVPIndicatorContextActive() then
     pvp.enabled = false
     pvp.contextDisabled = true
   end
 
-  local statusEnabled = false
+  status.enabled = true
+  if statusText.enabled then return end
   for i = 1, #UNIT_STATUS_ENTRY_DEFS do
     local entry = status[UNIT_STATUS_ENTRY_DEFS[i][1]]
-    statusEnabled = statusEnabled or (entry and entry.enabled == true)
+    if entry and entry.enabled == true then return end
   end
-  statusEnabled = statusEnabled or statusText.enabled
-  status.enabled = statusEnabled
+  status.enabled = false
 end
 
 --- The status compiler and the one layer clamp the text and power compilers
@@ -601,4 +652,5 @@ end
 Config.Status = {
   ClampLayer = ClampStatusLayer,
   CompileUnit = CompileUnitStatus,
+  SupportsPVPFactionBadge = SupportsPVPFactionBadge,
 }

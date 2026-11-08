@@ -235,7 +235,10 @@ function W.AttachStickyPageHeader(section, opts)
             local current = section._msuf2StickyPageHeaderRecord
             local active = current and current.active and not current.disposed
                 and not current._activating and not current._deactivating
-            if active and type(M.RelayoutPageHeaderHost) == "function" then M.RelayoutPageHeaderHost() end
+            local expander = section._msuf2FixedPreviewExpanderRecord
+            if active and not (expander and expander.motionClipping) and M.RelayoutPageHeaderHost then
+                M.RelayoutPageHeaderHost()
+            end
         end)
     end
     -- A freshly built page wrapper is hidden until SelectPage commits it.
@@ -252,13 +255,12 @@ end
 local FIXED_PREVIEW_MAX_HEIGHT = 180
 W.FIXED_PREVIEW_MAX_HEIGHT = FIXED_PREVIEW_MAX_HEIGHT
 
--- Start with a compact reference so settings remain in view. An explicit
--- Expand action carries across pages for the rest of the UI session.
+-- Save explicit Expand and Compact actions for the character.
 function M.SetFixedPreviewExpandedPreference(expanded)
-    M._msuf2FixedPreviewExpandedPreference = expanded ~= false
+    M.SetMenuStateValue("fixedPreviewExpanded", expanded ~= false)
 end
 function M.ShouldExpandFixedPreview()
-    return M._msuf2FixedPreviewExpandedPreference == true
+    return M.fixedPreviewExpanded ~= false and not M._msuf2DeferPreviewExpansionForResize
 end
 
 function W.FixedPreviewSection(ctx, builder, spec)
@@ -375,8 +377,12 @@ local function PaintExpanderMotion(driver)
     if not moving then
         section:SetClipsChildren(self.motionClipping == "clipped")
         self.motionClipping = nil
+        if self.compacting then
+            self:Close("FIXED_PREVIEW_COMPACT")
+            return
+        end
     end
-    if self.expanded and ExpanderOwnsBox(self) then
+    if (self.expanded or self.compacting) and ExpanderOwnsBox(self) then
         local height = driver.channels[1].value
         section._msuf2FixedPreviewActiveHeight = height
         section:SetHeight(height)
@@ -384,9 +390,10 @@ local function PaintExpanderMotion(driver)
     end
 end
 
-local function BeginExpanderMotion(self)
-    if not self.expanded or self.motionClipping or not ExpanderOwnsBox(self) or T.ReducedMotionEnabled()
+local function BeginExpanderMotion(self, startHeight, compacting)
+    if not self.expanded or not ExpanderOwnsBox(self) or T.ReducedMotionEnabled()
         or not self.section:IsVisible() or self.preferredExpandedSectionHeight <= self.compactSectionHeight then return end
+    if not startHeight and self.motionClipping then return end
     local driver = self.motion
     if not driver then
         driver = W.CreateLayoutMotion(self.section, PaintExpanderMotion)
@@ -394,11 +401,21 @@ local function BeginExpanderMotion(self)
         self.motion = driver
     end
     local channel = driver.channels[1]
-    channel.value, channel.target = self.compactSectionHeight, self.preferredExpandedSectionHeight
-    self.motionClipping = self.section:DoesClipChildren() and "clipped" or "open"
-    self.section:SetClipsChildren(true)
+    channel.value = startHeight or self.compactSectionHeight
+    channel.target = compacting and self.compactSectionHeight or self.preferredExpandedSectionHeight
+    driver.foldGroup:Stop()
+    driver.foldClock:SetDuration(compacting and 0.150 or 0.200)
+    if not self.motionClipping then
+        self.motionClipping = self.section:DoesClipChildren() and "clipped" or "open"
+        self.section:SetClipsChildren(true)
+    end
+    if compacting then
+        self.expanded, self.compacting = nil, true
+        ExpanderRefreshButton(self)
+    end
     W.PlayLayoutMotion(driver)
     PaintExpanderMotion(driver)
+    return true
 end
 
 -- Height the expanded preview needs against the room the header host has left;
@@ -484,6 +501,17 @@ end
 local function ExpanderOpen(self, reason, openOptions)
     if self.disposed or self.expanded or not ExpanderOwnsBox(self)
         or not PageOwnsFrame(self.pageKey, self.pageWrapper, self.section) then return false end
+    local userToggle = reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND"
+    if self.compacting then
+        self.expanded, self.compacting = true, nil
+        if userToggle then M.SetFixedPreviewExpandedPreference(true) end
+        ExpanderRefreshButton(self)
+        if not BeginExpanderMotion(self, self.section:GetHeight()) then
+            self.motion:Stop()
+            self:Relayout(reason)
+        end
+        return true
+    end
     local box, opts = self.box, self.opts
     openOptions = type(openOptions) == "table" and openOptions or nil
     local active = M._msuf2ActiveFixedPreviewExpander
@@ -503,7 +531,6 @@ local function ExpanderOpen(self, reason, openOptions)
         self:Close("FIXED_PREVIEW_EXPAND_FAILED")
         return false
     end
-    local userToggle = reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND"
     if userToggle then M.SetFixedPreviewExpandedPreference(true) end
     if type(opts.onStateChanged) == "function" then opts.onStateChanged(true, box) end
     local animate = userToggle or reason == "DEFERRED_EXPLICIT_EXPAND" or (openOptions and openOptions.animate)
@@ -513,7 +540,7 @@ local function ExpanderOpen(self, reason, openOptions)
 end
 
 local function ExpanderClose(self, reason)
-    local wasExpanded = self.expanded == true
+    local wasExpanded = self.expanded == true or self.compacting == true
     local ownsPreviewBox = ExpanderOwnsBox(self)
     local section, box, inset = self.section, self.box, self.horizontalInset
     if reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND" then
@@ -522,7 +549,9 @@ local function ExpanderClose(self, reason)
         end
         M.SetFixedPreviewExpandedPreference(false)
     end
-    self.expanded = nil
+    if reason == "FIXED_PREVIEW_BUTTON" and self.expanded
+        and BeginExpanderMotion(self, section:GetHeight(), true) then return true end
+    self.expanded, self.compacting = nil, nil
     if self.motionClipping then self.motion:Stop() end
     self.activeHeight = nil
     self.activeSectionHeight = nil

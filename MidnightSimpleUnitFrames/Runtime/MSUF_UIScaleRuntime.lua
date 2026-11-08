@@ -550,11 +550,13 @@ UpdateGlobalScaleEvents = function()
 end
 local startupScaleApplyQueued
 local startupScaleNeedsGlobalCVar
+local startupScaleFlushed = false
 local function FlushStartupScaleApply()
     local needsGlobalCVar = startupScaleNeedsGlobalCVar
     startupScaleApplyQueued = nil
     startupScaleNeedsGlobalCVar = nil
     ApplySavedScaleState(needsGlobalCVar)
+    startupScaleFlushed = true
 end
 local function QueueStartupScaleApply(applyGlobalCVar)
     startupScaleNeedsGlobalCVar = startupScaleNeedsGlobalCVar or applyGlobalCVar == true
@@ -571,3 +573,16 @@ startupScaleEvents:SetScript("OnEvent", function(self, event)
     QueueStartupScaleApply(event == "PLAYER_LOGIN")
     UpdateGlobalScaleEvents()
 end)
+
+-- Read the effective profile (including active variants) without EnsureDB or
+-- scale writes. Owners with no reference wait until startup/combat deferral ends.
+function MSUF.UF.Config.ScreenPositionScaleSettled()
+    if not startupScaleFlushed or pendingGlobalScale ~= nil or pendingDisableScaling ~= nil then return false end
+    local general = type(MSUF_DB) == "table" and MSUF_DB.general
+    local ui = type(general) == "table" and general.UIScale
+    if type(ui) ~= "table" or ui.Enabled ~= true then return true end
+    local wanted = tonumber(ui.Scale)
+    if general.globalUiScalePreset == "pixel" then wanted = GetPixelPerfectScale() end
+    local current = GetCurrentGlobalUiScale()
+    return wanted ~= nil and current ~= nil and abs(current - Clamp(wanted, 0.3, 1.5)) <= 0.001
+end

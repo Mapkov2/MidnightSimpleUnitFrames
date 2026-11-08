@@ -57,7 +57,7 @@ local DROPDOWN_TEXTURE_TEXT_LEFT = 92
 local DROPDOWN_BAR_PREVIEW_W = 132
 local DROPDOWN_BAR_PREVIEW_H = 8
 local DROPDOWN_BAR_PREVIEW_RIGHT = 24
-local DROPDOWN_BAR_PREVIEW_TEXT_RIGHT = -(DROPDOWN_BAR_PREVIEW_W + DROPDOWN_BAR_PREVIEW_RIGHT + 42)
+local DROPDOWN_BAR_PREVIEW_LABEL_GAP = 22
 local DROPDOWN_BAR_PREVIEW_ROW_H = 38
 local DROPDOWN_ABSORB_EDGE_TEXTURE = "Interface\\RaidFrame\\Shield-Overshield"
 local DROPDOWN_SCROLLBAR_W = 12
@@ -644,77 +644,76 @@ local function SetDropdownIconTexture(texture, icon)
     texture:SetVertexColor(1, 1, 1, 1)
     texture:Show()
 end
-local function HideBarPreviewLane(lane)
-    if not lane then return end
-    lane.host:Hide()
-    lane.surface.root:Deactivate()
-end
-
 local function HideDropdownBarPreview(frame)
     local preview = frame and frame._msuf2BarPreview
     if not preview then return end
-    for i = 1, #preview do HideBarPreviewLane(preview[i]) end
+    for i = 1, #preview do preview[i].host:Hide() end
 end
-local function AddDropdownBarPreviewLane(frame)
-    local host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
-    host:SetSize(DROPDOWN_BAR_PREVIEW_W, DROPDOWN_BAR_PREVIEW_H)
-    local surface = M.PreviewHelpers.NewRuntimeUnitSurface(host, "player", { hp = .68 })
-    surface.fit = false
-    return { host = host, surface = surface }
+
+local DEFAULT_OVERLAY_COLOR = { 1, 1, 1, .82 }
+local function ConfigureBarPreview(spec, lane)
+    local config = lane.config
+    spec.width, spec.height = lane.width, DROPDOWN_BAR_PREVIEW_H
+    spec.health.reverse, spec.health.vertical, spec.health.topInset = lane.reverse, false, 0
+    spec.health.texture, spec.health.backgroundTexture = config.healthTexture, config.backgroundTexture
+    spec.power.enabled = false
+    spec.border = nil
+    local p, c = spec.prediction, config.overlayColor or DEFAULT_OVERLAY_COLOR
+    p.enabled, p.test = true, false
+    p.heal, p.absorb, p.healAbsorb = config.category == "heal", config.category == "absorb", config.category == "negative"
+    p.healAnchorMode, p.absorbAnchorMode, p.healAbsorbAnchorMode = config.mode, config.mode, config.mode
+    p.texture, p.absorbTexture, p.healAbsorbTexture = config.overlayTexture, config.overlayTexture, config.overlayTexture
+    p.healHeight, p.absorbHeight, p.healAbsorbHeight = 0, 0, 0
+    p.healOffsetY, p.absorbOffsetY, p.healAbsorbOffsetY = 0, 0, 0
+    p.healR, p.healG, p.healB, p.healA = c[1], c[2], c[3], c[4]
+    p.absorbR, p.absorbG, p.absorbB, p.absorbA = c[1], c[2], c[3], c[4]
+    p.healAbsorbR, p.healAbsorbG, p.healAbsorbB, p.healAbsorbA = c[1], c[2], c[3], c[4]
+    p.fullHealthAbsorbStripe = config.showAbsorbEdgeGlow == true
 end
-local function AddDropdownBarPreviewAssets(frame)
+
+local function PaintDropdownBarPreviewLane(frame, index, config, sample, width, reverse, y)
     local preview = frame._msuf2BarPreview
-    if not preview then
-        preview = { AddDropdownBarPreviewLane(frame), AddDropdownBarPreviewLane(frame) }
-        frame._msuf2BarPreview = preview
+    local lane = preview[index]
+    if not lane then
+        local host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
+        host:Hide()
+        lane = { host = host }
+        lane.surface = M.PreviewHelpers.NewRuntimeUnitSurface(host, "player", nil,
+            function(spec) ConfigureBarPreview(spec, lane) end, true)
+        lane.surface.fit = false
+        preview[index] = lane
     end
-    return preview
-end
-local function PaintDropdownBarPreviewLane(frame, lane, config, reverse, y)
     local host = lane.host
-    host:ClearAllPoints()
-    host:SetPoint("RIGHT", frame, "RIGHT", -DROPDOWN_BAR_PREVIEW_RIGHT, y or 0)
-    host:Show()
-    lane.surface.configure = function(spec)
-        spec.width, spec.height = DROPDOWN_BAR_PREVIEW_W, DROPDOWN_BAR_PREVIEW_H
-        spec.health.reverse, spec.health.topInset = reverse, 0
-        spec.health.texture, spec.health.backgroundTexture = config.healthTexture, config.backgroundTexture
-        spec.power.enabled = false
-        local p, c = spec.prediction, config.overlayColor or { 1, 1, 1, .82 }
-        p.enabled, p.test = true, false
-        p.heal, p.absorb, p.healAbsorb = config.category == "heal", config.category == "absorb", config.category == "negative"
-        p.healAnchorMode, p.absorbAnchorMode, p.healAbsorbAnchorMode = config.mode, config.mode, config.mode
-        p.texture, p.absorbTexture, p.healAbsorbTexture = config.overlayTexture, config.overlayTexture, config.overlayTexture
-        p.healR, p.healG, p.healB, p.healA = c[1], c[2], c[3], c[4]
-        p.absorbR, p.absorbG, p.absorbB, p.absorbA = c[1], c[2], c[3], c[4]
-        p.healAbsorbR, p.healAbsorbG, p.healAbsorbB, p.healAbsorbA = c[1], c[2], c[3], c[4]
-        p.fullHealthAbsorbStripe = config.showAbsorbEdgeGlow == true
+    if lane.y ~= y then
+        lane.y = y
+        host:ClearAllPoints()
+        host:SetPoint("RIGHT", frame, "RIGHT", -DROPDOWN_BAR_PREVIEW_RIGHT, y)
     end
-    local amount = tonumber(config.overlayFraction) or .2
-    local sample = { hp = tonumber(config.healthFraction) or .68,
-        incoming = config.category == "heal" and amount or 0,
-        absorb = config.category == "absorb" and amount or 0,
-        healAbsorb = config.category == "negative" and amount or 0 }
-    local rendered = lane.surface:Refresh(sample)
-    if rendered then
-        lane.surface.scene:SetLayerFilter({ nameText = false, hpText = false, power = false, powerText = false,
-            portrait = false, status = false, auras = false, dispelOverlay = false, dispelSymbol = false, texLayer = false })
+    if lane.width ~= width then
+        lane.width = width
+        host:SetSize(width, DROPDOWN_BAR_PREVIEW_H)
+    end
+    lane.config, lane.reverse, lane.surface.sample = config, reverse, sample
+    if host:IsShown() then
+        lane.surface:Refresh()
+    else
+        host:Show()
     end
 end
 
-local function PaintDropdownBarPreview(frame, config)
-    if not (frame and type(config) == "table") then
-        HideDropdownBarPreview(frame)
-        return
-    end
-    local preview = AddDropdownBarPreviewAssets(frame)
-    local frameHeight = frame.GetHeight and frame:GetHeight() or 0
-    local dualDirection = config.dualDirection == true and frameHeight >= 30
-    PaintDropdownBarPreviewLane(frame, preview[1], config, false, dualDirection and 7 or 0)
+local function PaintDropdownBarPreview(frame, config, width)
+    if not frame._msuf2BarPreview then frame._msuf2BarPreview = {} end
+    local amount = tonumber(config.overlayFraction) or .2
+    local sample = { hp = tonumber(config.healthFraction) or .68, reducedMax = 0,
+        incoming = config.category == "heal" and amount or 0,
+        absorb = config.category == "absorb" and amount or 0,
+        healAbsorb = config.category == "negative" and amount or 0 }
+    local dualDirection = config.dualDirection == true and frame:GetHeight() >= 30
+    PaintDropdownBarPreviewLane(frame, 1, config, sample, width, false, dualDirection and 7 or 0)
     if dualDirection then
-        PaintDropdownBarPreviewLane(frame, preview[2], config, true, -7)
-    else
-        HideBarPreviewLane(preview[2])
+        PaintDropdownBarPreviewLane(frame, 2, config, sample, width, true, -7)
+    elseif frame._msuf2BarPreview[2] then
+        frame._msuf2BarPreview[2].host:Hide()
     end
 end
 -- The leading-edge parts of a choice row or field (icon, swatch with its border,
@@ -728,8 +727,16 @@ local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInse
         if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
         if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
         if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
-        PaintDropdownBarPreview(frame, barPreview)
-        rightInset = min(rightInset or -8, DROPDOWN_BAR_PREVIEW_TEXT_RIGHT)
+        local inset = DROPDOWN_BAR_PREVIEW_RIGHT + DROPDOWN_BAR_PREVIEW_LABEL_GAP
+        local textWidth = label.GetUnboundedStringWidth and label:GetUnboundedStringWidth() or label:GetStringWidth()
+        local available = floor(frame:GetWidth() - left - inset - textWidth)
+        local width = min(DROPDOWN_BAR_PREVIEW_W, available)
+        if width >= 48 then
+            PaintDropdownBarPreview(frame, barPreview, width)
+            rightInset = min(rightInset or -8, -inset - width)
+        else
+            HideDropdownBarPreview(frame)
+        end
     else
         HideDropdownBarPreview(frame)
         if statusbarTexture and frame._msuf2TexturePreview then
@@ -1102,7 +1109,6 @@ function W.Dropdown(section, label, values, width)
         local statusbarTexture = DropdownItemStatusbarTexture(selectedItem)
         local barPreview = DropdownItemBarPreview(selectedItem)
         local sr, sg, sb, sa = DropdownItemSwatch(selectedItem)
-        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26, statusbarTexture, barPreview)
         RestoreDropdownDefaultFont(self._msuf2Label)
         if selectedItem then
             self:SetText(DropdownItemText(selectedItem), true)
@@ -1111,6 +1117,7 @@ function W.Dropdown(section, label, values, width)
             self:SetText(item and DropdownItemText(item) or tostring(value or ""))
         end
         if DropdownItemHasFontPreview(selectedItem) then ApplyDropdownItemFont(self._msuf2Label, selectedItem) end
+        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26, statusbarTexture, barPreview)
         local meta = self._msuf2SearchMeta
         if meta and dynamic then M.RegisterSearchWidget(self, meta) end
     end

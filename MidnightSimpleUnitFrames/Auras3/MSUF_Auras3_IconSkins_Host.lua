@@ -18,12 +18,12 @@ local tostring, concat = tostring, table.concat
 -- The source a compile reads its skin id from; one table, refilled per call.
 local SOURCE = {}
 
-local function Compile(choice, shape)
+local function Compile(choice, shape, allowVariant)
     if choice == CUSTOM then return nil end
     shape = shape or RECTANGLE
     local _, shared = A3.EnsureDB()
     SOURCE.styleSkin = choice
-    local look = Skins.AttachPreview({}, SOURCE, Skins.CommittedDefault(shared))
+    local look = Skins.AttachPreview({}, SOURCE, Skins.CommittedDefault(shared), allowVariant and shape or nil)
     SOURCE.styleSkin = nil
     local skin = look.skin
     if not skin or skin.def.shape ~= shape then return nil end

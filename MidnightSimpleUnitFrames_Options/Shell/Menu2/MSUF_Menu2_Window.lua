@@ -667,15 +667,17 @@ RebuildActivePageForResize = function(frame, options)
     local restoreExpanded = activeExpander and activeExpander.expanded == true
         and not activeExpander.disposed
         and (not activeExpander.pageKey or activeExpander.pageKey == key)
-    local autoCompactIfNoFit = restoreExpanded
-        and options.allowAutoCompact == true and options.shrinking == true
+    local autoCompactIfNoFit = options.allowAutoCompact == true and options.shrinking == true
     SaveWindowSize(frame)
     -- Page selection reflows the retained entry for the new metrics. Its
     -- discrete layout slot changes only when the page needs another structure.
     M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
     M.SetActivePageHeader(nil)
     M.activeKey = nil
+    -- The resize restore below checks the new header geometry before expanding.
+    M._msuf2DeferPreviewExpansionForResize = autoCompactIfNoFit or nil
     local selected = M.SelectPage and frame and frame:IsShown() and M.SelectPage(key)
+    M._msuf2DeferPreviewExpansionForResize = nil
     if selected and restoreExpanded then
         M.RestoreFixedPreview(key, M.cache and M.cache[key], {
             autoCompactIfNoFit = autoCompactIfNoFit,

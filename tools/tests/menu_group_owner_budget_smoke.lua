@@ -20,7 +20,9 @@ core.GF.EnsureDB()
 M.gfStatusPreviewMode = "current"
 for _, scope in ipairs({ "party", "raid" }) do
     local conf = core.GF.GetConf(scope)
-    conf.pvpIcon = core.GF.CompileSpec(scope).status.pvp.enabled == true
+    local pvpSpec = core.GF.CompileSpec(scope).status.pvp
+    conf.pvpIcon = pvpSpec.enabled == true
+        and (flavor ~= "Forever" or core.UF.PVPIndicatorContextActive())
     core.GF.InvalidateCompiledSpecs(scope)
 end
 -- Original ce4767d34 renderer, warmed real TOC/MenuWorld; allocations use the

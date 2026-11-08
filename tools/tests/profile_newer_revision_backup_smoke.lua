@@ -10,7 +10,7 @@ local store = { profiles = { Default = Serial(source.env.MSUF_DB) } }
 assert(source.core.DefaultsSchema.Persist(store))
 local newer = store.profiles.Default
 assert(type(newer._msufSparseDefaultsV2) == "string" and type(newer._msufSparseDefaultsV3) == "string")
-newer._msufDefaultsRevision = 18
+newer._msufDefaultsRevision = 19
 newer.general.barBgFillMode = "future-value"
 newer.future = { [0] = false, nested = { empty = {}, zero = 0, text = "future\nbytes" }, list = { 1, false, "" } }
 local original = H.Literal(newer)
@@ -18,6 +18,13 @@ store.profiles.Inactive = Serial(newer)
 local world = C.NewWorld(root, flavor, "Tester-Realm")
 C.Login(world, { MSUF_GlobalDB = store })
 local env, ns = world.env, world.core
+do
+    local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Migrations.lua", "rb"))
+    local defaults = file:read("*a")
+    file:close()
+    local revision = assert(tonumber(defaults:match("local MSUF_DEFAULTS_CURRENT_REVISION = (%d+)")))
+    assert(revision ~= 18, "defaults revision 18 is reserved for the 6.5 release line")
+end
 local backups = assert(env.MSUF_GlobalDB._newerRevisionBackups, "newer revision has no backup")
 local function NoticeCount()
     local count = 0
@@ -30,7 +37,7 @@ local entries = 0
 for name, backup in pairs(backups) do
     entries = entries + 1
     assert(name == "Default" or name == "Inactive", "unexpected profile backup")
-    assert(backup.revision == 18 and H.Literal(backup.data) == original, "backup differs from untouched revision 18")
+    assert(backup.revision == 19 and H.Literal(backup.data) == original, "backup differs from untouched revision 19")
     assert(backup.data ~= env.MSUF_GlobalDB.profiles[name], "backup aliases the working profile")
     assert(backup.data.general ~= env.MSUF_GlobalDB.profiles[name].general, "backup aliases a working owner")
 end
@@ -67,7 +74,7 @@ for _, mode in ipairs({ "standalone", "empty-pool", "missing-active" }) do
     local account = standalone.env.MSUF_GlobalDB
     local profileName = mode == "missing-active" and "Missing" or "Default"
     local backup = account._newerRevisionBackups and account._newerRevisionBackups[profileName]
-    assert(backup and backup.revision == 18 and H.Literal(backup.data) == original,
+    assert(backup and backup.revision == 19 and H.Literal(backup.data) == original,
         mode .. " newer profile has no untouched backup")
     standalone:FireEvent("PLAYER_LOGOUT")
     assert(standalone.env.MSUF_DB == nil and H.Literal(backup.data) == original,
@@ -82,6 +89,49 @@ for _, revision in ipairs({ 16, 17 }) do
     assert(normal.env.MSUF_GlobalDB._newerRevisionBackups == nil, "ordinary revision created backup state")
     assert(normal.env.MSUF_DB._msufDefaultsRevision == 17, "ordinary normalization changed")
 end
+do
+    -- 6.510 stamps a loaded sparse 7.0 profile as revision 18 without clearing
+    -- either mask. Its edits stay authoritative when the missing leaves decode.
+    local restamped = { profiles = { Default = Serial(source.env.MSUF_DB) } }
+    assert(ns.DefaultsSchema.Persist(restamped))
+    restamped.profiles.Default._msufDefaultsRevision = 18
+    restamped.profiles.Default.player.width = 347
+    restamped.profiles.Default.player.showHP = false
+    restamped.profiles.Default.player.nameOffsetX = 0
+    restamped.profiles.Inactive = Serial(restamped.profiles.Default)
+    local expected = Serial(restamped.profiles.Default)
+    expected._msufDefaultsRevision = 17.5
+    assert(ns.DefaultsSchema.RestorePersistence(expected))
+    local direct = Serial(restamped.profiles.Default)
+    local accepted, status = ns.DefaultsSchema.RestorePersistence(direct)
+    assert(accepted and status == "restored" and H.Literal(direct) == H.Literal(expected),
+        "a 6.510 restamp must decode the old mask without overwriting its edits")
+    for _, marker in ipairs({ "_msufSparseDefaultsV2", "_msufSparseDefaultsV3" }) do
+        local broken = Serial(restamped.profiles.Default)
+        broken[marker] = broken[marker]:sub(2)
+        local bytes = H.Literal(broken)
+        assert(not ns.DefaultsSchema.RestorePersistence(broken) and H.Literal(broken) == bytes,
+            "a malformed revision-18 mask bypassed validation or partly decoded")
+    end
+    local back = C.NewWorld(root, flavor, "Tester-Realm")
+    C.Login(back, { MSUF_GlobalDB = restamped }, true)
+    assert(back.core.Lifecycle.Bound and back.env.MSUF_DB == restamped.profiles.Default,
+        "return from 6.510 detached the active profile, so later edits would be lost")
+    for _, profile in pairs(restamped.profiles) do
+        assert(profile.player.width == 347 and profile.player.showHP == false and profile.player.nameOffsetX == 0)
+        assert(profile._msufDefaultsRevision == 17 and profile._msufSparseDefaultsV2 == nil
+            and profile._msufSparseDefaultsV3 == nil, "inactive 6.510 restamp did not decode")
+    end
+    assert(restamped._newerRevisionBackups == nil, "known 6.510 data entered future-revision recovery")
+    back.env.MSUF_DB.player.width = 359
+    back:FireEvent("PLAYER_LOGOUT")
+    local reloaded = C.NewWorld(root, flavor, "Tester-Realm")
+    C.Login(reloaded, { MSUF_GlobalDB = Serial(restamped) }, true)
+    assert(reloaded.env.MSUF_DB == reloaded.env.MSUF_GlobalDB.profiles.Default
+        and reloaded.env.MSUF_DB.player.width == 359, "post-return edit was lost at the next login")
+    assert(reloaded.core.DefaultsSchema.PersistCompat(reloaded.env.MSUF_GlobalDB), "post-return compatibility save failed")
+end
+
 do
     local function FullRevision18()
         local profile = Serial(source.env.MSUF_DB)

@@ -34,6 +34,18 @@ local W = M.Widgets or {}
 M.Widgets = W
 W.spacing = T and T.spacing or W.spacing
 W.Space = T and T.Space or W.Space
+
+function W.PlayMenuSound(soundKey)
+    local sound = SOUNDKIT and SOUNDKIT[soundKey]
+    if PlaySound and sound and M.GetGeneralDB().muteMenuSounds ~= true then
+        PlaySound(sound)
+    end
+end
+
+function W.PlayMenuClickSound()
+    W.PlayMenuSound("IG_MAINMENU_OPTION_CHECKBOX_ON")
+end
+
 local floor = math.floor
 local max = math.max
 local min = math.min

@@ -316,6 +316,13 @@ def shadow_round(x, y):
     return 0.85 * ramp(1 - d / 5.0, 1.6), 0.0
 
 
+def shadow3_circle(x, y):
+    d = circle_d(x, y)
+    if d >= 0:
+        return 0.85 * ramp(1 - d / 4.0, 1.6), 1.0
+    return 0.75 * ramp(1 + d / 13.0, 2.6), 1.0
+
+
 def gear_ring(x, y):
     d = circle_d(x, y)
     angle = (math.degrees(math.atan2(y, x)) + 360) % 22.5
@@ -364,6 +371,7 @@ QUADS = {
     "msuf_skin_ring_segmented": Quad(4.0, ring_segmented),
     "msuf_skin_ring_simple": Quad(4.0, ring_simple),
     "msuf_skin_shadow_round": Quad(5.0, shadow_round),
+    "msuf_skin_shadow3_circle": Quad(4.0, shadow3_circle),
     "msuf_skin_gear_ring": Quad(6.0, gear_ring),
     "msuf_skin_orb_ring": Quad(4.0, orb_ring),
     "msuf_skin_orb_thin": Quad(4.0, orb_thin),

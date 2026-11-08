@@ -42,7 +42,15 @@ local function Catalog(entry)
         if record and meta then
             local fields = {}
             for _, key in ipairs({ "controlId", "settingKey", "label", "kind", "scope", "applyDomain" }) do
-                fields[#fields + 1] = tostring(record[key] or "")
+                local value = record[key]
+                if key == "label" and record.controlId == "menu2.gf_auras.group.preview.height.toggle" then
+                    assert(value == "Expand Group Preview" or value == "Compact Preview", "invalid preview height label")
+                    value = "Expand Group Preview"
+                elseif key == "label" and record.controlId == "menu2.gf_auras.group.preview.layers.popover" then
+                    assert(value == "Preview Layers", "preview layer control lost its label")
+                    value = "Group Preview Layers"
+                end
+                fields[#fields + 1] = tostring(value or "")
             end
             for _, key in ipairs({ "searchPrepareKind", "searchPrepareValue", "searchSection", "searchSectionId" }) do
                 fields[#fields + 1] = tostring(meta[key] or "")

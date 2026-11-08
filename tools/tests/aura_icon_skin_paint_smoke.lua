@@ -113,20 +113,18 @@ local PROVIDERS = {
     MSUF_IsKnownFileAsset = function() return nil end,
     -- Game/Classic/Auras/MSUF_Auras3_Visuals.lua reads the general settings through it.
     MSUF_GetGeneralDB = Shipped("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua", "local function GetGeneralDB", "GetGeneralDB"),
-    -- Auras3/MSUF_Auras3_MockAuraPainter.lua binds the preview sample builders at load (the TOC
-    -- loads the preview animation first). The skin-layer checks never build a sample: a call is
-    -- a harness error, not a silent answer.
-    MSUF_BuildPreviewAnimationAuraState = function()
-        error("fixture: the preview sample builders are not modeled by this harness", 2)
-    end,
-    MSUF_GetPreviewAnimationAuraState = function()
-        error("fixture: the preview sample builders are not modeled by this harness", 2)
-    end,
 }
 -- The shipped namespace API (ExportPublic with the keep policy, the registries); the strict
 -- Require below replaces the shipped one so only the listed providers resolve.
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
-local namespace = { MSUF_Auras3 = {} }
+-- The painter binds the shipped animation namespace. Sample generation is outside this fixture.
+local function UnexpectedSample()
+    error("fixture: the preview sample builders are not modeled by this harness", 2)
+end
+local namespace = {
+    MSUF_Auras3 = {},
+    PreviewAnimation = { BuildAuraState = UnexpectedSample, AuraState = UnexpectedSample },
+}
 RequireFixture.InstallKernel(root, namespace)
 function namespace.Require(name)
     return assert(PROVIDERS[name], "unexpected dependency " .. tostring(name))
@@ -260,25 +258,31 @@ do
         end
     end
     handle:close()
-    for i = 2, #ids do
-        local def = Skins.Get(ids[i])
+    local function CheckMedia(def)
         for _, layer in ipairs(def.layers) do
             if layer.file then
                 local entry = manifest[layer.file]
-                Check(entry, ids[i] .. ": the generator does not build " .. layer.file)
+                Check(entry, def.id .. ": the generator does not build " .. layer.file)
                 used[layer.file] = true
                 if layer.kind == "band" then
                     Check(entry.kind == "band" and entry.outer == layer.outer and entry.inner == layer.inner,
-                        ("%s: %s spans %s/%s in the catalog"):format(ids[i], layer.file, layer.outer, layer.inner))
+                        ("%s: %s spans %s/%s in the catalog"):format(def.id, layer.file, layer.outer, layer.inner))
                 else
                     Check(entry.kind == "quad" and entry.extent == layer.extent,
-                        ("%s: %s extent %s in the catalog"):format(ids[i], layer.file, tostring(layer.extent)))
+                        ("%s: %s extent %s in the catalog"):format(def.id, layer.file, tostring(layer.extent)))
                 end
             end
         end
         if def.gloss and def.gloss.file then
-            Check(manifest[def.gloss.file], ids[i] .. ": missing gloss texture " .. def.gloss.file)
+            Check(manifest[def.gloss.file], def.id .. ": missing gloss texture " .. def.gloss.file)
             used[def.gloss.file] = true
+        end
+    end
+    for i = 2, #ids do
+        local def = Skins.Get(ids[i])
+        CheckMedia(def)
+        if def.variants then
+            for _, variant in pairs(def.variants) do CheckMedia(variant) end
         end
     end
     for name in pairs(manifest) do Check(used[name], "no skin uses the generated texture " .. name) end

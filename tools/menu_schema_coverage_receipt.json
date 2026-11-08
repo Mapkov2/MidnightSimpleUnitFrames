@@ -1,46 +1,46 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7105,
-      "initialDeclarations": 4779,
-      "profileControls": 3735,
-      "proven": 3735
+      "declarations": 7108,
+      "initialDeclarations": 4782,
+      "profileControls": 3738,
+      "proven": 3738
     },
     "Mainline": {
-      "declarations": 7649,
-      "initialDeclarations": 5013,
-      "profileControls": 4053,
-      "proven": 4053
+      "declarations": 7652,
+      "initialDeclarations": 5016,
+      "profileControls": 4056,
+      "proven": 4056
     },
     "Mists": {
-      "declarations": 7294,
-      "initialDeclarations": 4986,
-      "profileControls": 3773,
-      "proven": 3773
+      "declarations": 7296,
+      "initialDeclarations": 4987,
+      "profileControls": 3774,
+      "proven": 3774
     },
     "TBC": {
-      "declarations": 6680,
-      "initialDeclarations": 4590,
-      "profileControls": 3394,
-      "proven": 3394
+      "declarations": 6681,
+      "initialDeclarations": 4591,
+      "profileControls": 3395,
+      "proven": 3395
     },
     "Vanilla": {
-      "declarations": 5122,
-      "initialDeclarations": 3500,
-      "profileControls": 2455,
-      "proven": 2455
+      "declarations": 5123,
+      "initialDeclarations": 3501,
+      "profileControls": 2456,
+      "proven": 2456
     }
   },
   "generatorVersion": "menu-schema-coverage/3",
   "issueCount": 0,
-  "projectionSha256": "70b646736799853e29502b2c182c7b5467572373e65b8f0b28de91d1af7aec55",
+  "projectionSha256": "56ff2829e4af79989673e2a73f09d81f283dc9adf08d34ecebf6f7e2e6bffbcd",
   "projectionVersion": 2,
-  "sourceSha256": "C6058263C5F5099585C4AEAFDB49272E1A2939C18E6EE12271F849242BE35C08",
+  "sourceSha256": "9AC2155ADBFB5A4E160A2D56B652FC3D76D1A2253EBB9997CCD6EEAE93BBB4F4",
   "totals": {
-    "declarations": 33850,
-    "initialDeclarations": 22868,
-    "profileControls": 17410,
-    "proven": 17410
+    "declarations": 33860,
+    "initialDeclarations": 22877,
+    "profileControls": 17419,
+    "proven": 17419
   },
   "version": 1
 }

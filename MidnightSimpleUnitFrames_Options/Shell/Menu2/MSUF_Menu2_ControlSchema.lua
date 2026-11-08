@@ -371,6 +371,9 @@ local function StatusResetTargets(group, scope)
     local names = group and { "levelTextDifficultyColor", "threatTextColorCurve", "threatTextBackground" }
         or { "raidGroupNameStyle", "levelIndicatorDifficultyColor", "levelIndicatorForeverBadge",
             "threatIndicatorColorCurve", "threatIndicatorBackground" }
+    if not group and MSUF.UF.Config.Status.SupportsPVPFactionBadge(roots[1]) then
+        names[#names + 1] = "pvpIndicatorShowOpenWorldFaction"
+    end
     for _, selected in ipairs(specs) do
         for _, field in ipairs(fields) do
             if selected[field] then names[#names + 1] = selected[field] end

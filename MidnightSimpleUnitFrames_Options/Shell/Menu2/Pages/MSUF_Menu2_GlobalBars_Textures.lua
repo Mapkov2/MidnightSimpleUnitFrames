@@ -491,9 +491,9 @@ function GP.BuildAbsorbTabs(ctx, b)
     local section = Rows.Schema.Section(b:CollapsibleSection("bars_absorb", "Absorb Display", 414, true), "bars")
     local sectionW = section._msuf2Width or ctx.width or 720
     local leftX = 30
-    local rightX = max(430, min(560, floor(sectionW * 0.52)))
-    local leftW = max(300, min(380, rightX - leftX - 58))
-    local rightW = max(300, min(420, sectionW - rightX - 42))
+    local rightX = min(560, floor(sectionW * 0.54))
+    local leftW = min(380, rightX - leftX - 30)
+    local rightW = min(420, sectionW - rightX - 32)
     local tabFrames = {}
     local tabValues = VT(
         "positive", "Absorb (positive)",

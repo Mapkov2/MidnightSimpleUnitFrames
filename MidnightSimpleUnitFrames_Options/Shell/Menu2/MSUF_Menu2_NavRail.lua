@@ -296,8 +296,11 @@ local function CreateNavButton(parent, key, label, indent, availability)
         btn._msuf2Label:SetFontObject(GameFontHighlight)
     end
     T.StyleFontString(btn._msuf2Label, T.colors.text, 0, "navigation")
-    btn:SetScript("OnClick", function(self)
-        M.SelectPage(ResolveNavClickTarget(key))
+    btn:SetScript("OnClick", function()
+        local previousKey = M.activeKey
+        if M.SelectPage(ResolveNavClickTarget(key)) and M.activeKey ~= previousKey then
+            M.Widgets.PlayMenuClickSound()
+        end
     end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(btn, "navigation." .. tostring(key), label, "navigation",
@@ -389,10 +392,14 @@ end
 local function NavTitleOnEnter(row) NavTitleHover(row, true) end
 local function NavTitleOnLeave(row) NavTitleHover(row, false) end
 local function NavTitleOnClick(row)
-    M.SetNavGroupOpen(row._msuf2NavTitleId, nil)
+    if M.SetNavGroupOpen(row._msuf2NavTitleId, nil) then
+        M.Widgets.PlayMenuClickSound()
+    end
 end
 local function NavHeaderOnClick(row)
-    M.SetNavHeaderOpen(row._msuf2NavHeaderId, nil)
+    if M.SetNavHeaderOpen(row._msuf2NavHeaderId, nil) then
+        M.Widgets.PlayMenuClickSound()
+    end
 end
 local function NavTitleTooltip(row)
     return M.navHeaderState and M.navHeaderState[row._msuf2NavTitleId] == false and "Expand" or "Collapse"

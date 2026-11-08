@@ -79,8 +79,8 @@ MSUF.ProfileMigrations = (function()
         for _, key in ipairs(units) do Fill(profile[key], dragon) end
         if MSUF.Client.SupportsPetHappiness == true then Fill(profile.pet, happiness) end
     end
-    -- Per-client default updates are replayable across imported/current profiles.
-    -- The stamps preserve deliberate Off choices after each one-time update.
+    -- Stored and imported Off choices predate the migration stamps too.
+    -- Only absent values inherit current defaults; factory creation seeds its own.
     local function SeedManaIndicators(profile)
         local bars = profile.bars
         if type(bars) ~= "table" then return end
@@ -88,14 +88,10 @@ MSUF.ProfileMigrations = (function()
         if bars.manaRegenSparkWidth == nil then bars.manaRegenSparkWidth = 2 end
         if bars.manaRegenSparkAlpha == nil then bars.manaRegenSparkAlpha = .35 end
         if not MSUF.Client.IsForever then return end
-        if profile._msufForeverFiveSecondDefault_v1 ~= true or bars.manaRegenPause == nil then
-            bars.manaRegenPause = true
-            profile._msufForeverFiveSecondDefault_v1 = true
-        end
-        if profile._msufForeverManaTickDefault_v1 ~= true or bars.manaGainPulse == nil then
-            bars.manaGainPulse = true
-            profile._msufForeverManaTickDefault_v1 = true
-        end
+        if bars.manaRegenPause == nil then bars.manaRegenPause = true end
+        if bars.manaGainPulse == nil then bars.manaGainPulse = true end
+        profile._msufForeverFiveSecondDefault_v1 = true
+        profile._msufForeverManaTickDefault_v1 = true
     end
     local function StripGroupTooltips(profile)
         for _, key in ipairs(groups) do

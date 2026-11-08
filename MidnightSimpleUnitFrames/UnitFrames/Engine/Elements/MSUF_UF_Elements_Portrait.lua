@@ -10,6 +10,7 @@ local RunNextFrame = MSUF.Require("MSUF_RunNextFrame", "MSUF_UF_Elements_Portrai
 -- The client model owns the answer: WoW Forever runs the Mainline PlayerFrame
 -- whatever project ID it reports, so the raw project is never asked here.
 local LEGACY_BLIZZARD_PORTRAIT = MSUF.Client.IsVanilla == true
+local IS_FOREVER = MSUF.Client.IsForever == true
 
 local Visuals = MSUF.UFVisuals or {}
 local UF = Visuals.UF or MSUF.UF
@@ -25,6 +26,7 @@ local UnitGUID = Visuals.UnitGUID or UnitGUID
 local UnitExists = Visuals.UnitExists or UnitExists
 local UnitIsConnected = Visuals.UnitIsConnected or UnitIsConnected
 local UnitIsVisible = Visuals.UnitIsVisible or UnitIsVisible
+local UnitIsPlayer = UnitIsPlayer
 local UnitCastingInfo = Visuals.UnitCastingInfo or UnitCastingInfo
 local UnitChannelInfo = Visuals.UnitChannelInfo or UnitChannelInfo
 local SetPortraitTexture = Visuals.SetPortraitTexture or SetPortraitTexture
@@ -1646,7 +1648,10 @@ local function UpdatePortraitClassification(frame, p)
   if enabled and p.dragonArtwork ~= true and unit then
     classification = Portrait.GetClassificationPreview(frame.MSUFSpec and frame.MSUFSpec.key or unit)
     if not classification and BossPreviewActive(unit, frame) then classification = "worldboss" end
-    if not classification and UnitClassification then classification = UnitClassification(unit) end
+    if not classification and UnitClassification then
+      local foreverPlayer = IS_FOREVER and (unit == "player" or PlainUnitBool(UnitIsPlayer, unit, false))
+      if not foreverPlayer then classification = UnitClassification(unit) end
+    end
   end
   Portrait.PaintClassification(frame.MSUFPortraitHolder, enabled, classification, nil, nil, nil, p, unit)
 end

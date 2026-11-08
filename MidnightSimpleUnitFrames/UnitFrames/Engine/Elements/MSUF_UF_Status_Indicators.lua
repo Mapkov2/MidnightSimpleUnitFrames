@@ -70,15 +70,18 @@ local function PVPFallbackTextureForAtlas(atlas)
   return Media.PVP_TEXTURE_BY_ATLAS[atlas]
 end
 
-local function ResolvePVPAtlas(frame, unit, unitState)
+local function ResolvePVPAtlas(frame, unit, unitState, showFaction)
   if not (unit and UnitExistsRuntime(unit, unitState, frame)) then
     return nil
   end
   if UnitIsPVPFreeForAll and BoolTrue(UnitIsPVPFreeForAll(unit)) then
     return Media.PVP_FFA_ATLAS
   end
-  if not (UnitIsPVP and UnitFactionGroup and BoolTrue(UnitIsPVP(unit))) then
-    return nil
+  if not (UnitIsPVP and UnitFactionGroup) then return nil end
+  local flagged = UnitIsPVP(unit)
+  if issecretvalue(flagged) == true then return nil end
+  if flagged ~= true and flagged ~= 1 then
+    if not (showFaction and flagged == false and UnitIsPlayerRuntime(unit, unitState, frame)) then return nil end
   end
   local factionGroup = UnitFactionGroup(unit)
   if issecretvalue(factionGroup) == true or not factionGroup or factionGroup == "Neutral" then
@@ -646,16 +649,22 @@ function Runtime.UpdatePVP(frame, status)
     SetShown(tex, false)
     return
   end
-  -- Classic compiles the indicator whenever it is configured (contextGated, see
-  -- MSUF_UF_Config.lua): the player's PvP context flips in combat, where no
-  -- recompile can run, so it is read here from the cached context instead.
-  if cfg.contextGated == true and status.testMode ~= true
-    and not (UF.PVPIndicatorContextActive and UF.PVPIndicatorContextActive()) then
-    SetShown(tex, false)
-    return
+  local showFaction
+  if status.testMode ~= true then
+    if cfg.followsTarget then
+      local allowed, openWorld = UF.TargetPVPScope()
+      if not allowed then
+        SetShown(tex, false)
+        return
+      end
+      showFaction = cfg.showOpenWorldFaction and openWorld
+    elseif cfg.contextGated == true and not (UF.PVPIndicatorContextActive and UF.PVPIndicatorContextActive()) then
+      SetShown(tex, false)
+      return
+    end
   end
   local unitState = FreshUnitState(frame, unit)
-  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(frame, unit, unitState)
+  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(frame, unit, unitState, showFaction)
   if atlas and ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) then
     SetShown(tex, true)
   elseif ApplyPVPTexture(tex, atlas) then

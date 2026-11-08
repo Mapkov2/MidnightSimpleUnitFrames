@@ -11,6 +11,7 @@ local T = M.Theme
 local Schema = M.ControlSchema
 local ROW_OPTIONS = Schema.UnitOptions()
 local UP = M.UnitPage or {}
+local SupportsPVPFactionBadge = MSUF.UF.Config.Status.SupportsPVPFactionBadge
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
 local RestingFlipbook = MSUF.UFRestingFlipbook or {}
@@ -662,6 +663,15 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
         scope = unit }})["status.identity_warning"]
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
     state.AttachStatusExactTarget = AttachStatusExactTarget
+    if SupportsPVPFactionBadge(unit) then
+        state.pvpFaction = StatusSection.OptionToggle(state, ctx, unit, {
+            path = "status.pvp.open_world_faction", label = "Faction Symbol Without PvP Flag", y = -165,
+            key = "pvpIndicatorShowOpenWorldFaction", reason = "MSUF2_STATUS_PVP_OPEN_WORLD_FACTION", exact = "statusPvp",
+            get = function() return GetConf(unit).pvpIndicatorShowOpenWorldFaction == true end,
+            searchLabel = "Faction Symbol Without PvP Flag", keywords = { "faction", "horde", "alliance", "pve", "open world" },
+            help = "Show the faction symbol for unflagged players in the open world.",
+        })
+    end
     StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
     state.previewLabel, state.midnight, state.identityRestrictionWarning = previewLabel, midnight, identityRestrictionWarning
 end
@@ -894,6 +904,8 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
             end
             if spec.value == "statusThreat" then
                 conf.threatIndicatorColorCurve, conf.threatIndicatorBackground = nil, nil
+            elseif spec.value == "statusPvp" and SupportsPVPFactionBadge(unit) then
+                conf.pvpIndicatorShowOpenWorldFaction = nil
             end
             if spec.colorPrefix then
                 conf[spec.colorPrefix .. "ColorR"] = nil
@@ -1103,6 +1115,11 @@ function StatusSection.BindRefreshState(state, ctx, unit)
             SetControlEnabled(threatColorCurve, spec and spec.value == "statusThreat" and isEnabled)
             ShowControl(threatBackground, spec and spec.value == "statusThreat")
             SetControlEnabled(threatBackground, spec and spec.value == "statusThreat" and isEnabled)
+        end
+        if state.pvpFaction then
+            local isPvP = spec and spec.value == "statusPvp"
+            ShowControl(state.pvpFaction, isPvP)
+            SetControlEnabled(state.pvpFaction, isPvP and isEnabled)
         end
         ShowControl(raidGroupStyle, inlineName)
         if petXPWidth then ShowControl(petXPWidth, spec and spec.value == "statusPetXP") end

@@ -60,7 +60,7 @@ DeclareGeneral("profile", [[
     flashFullW flashFullH flashFullPoint flashFullRelPoint flashFullX flashFullY flashFullXpx flashFullYpx
     msuf2WindowW msuf2WindowH dropdownStyleMode pendingDropdownStyleMode tipCycleIndex
     unitPreviewGuidesEnabled classPowerPreviewGuidesEnabled previewDragHintAnimationEnabled
-    showNavigationIcons reduceMotion hpPowerTextSelectedKey
+    showNavigationIcons reduceMotion muteMenuSounds hpPowerTextSelectedKey
 ]])
 -- MSUF Edit Mode preferences: grid, snapping, popup and the Blizzard Edit Mode link.
 DeclareGeneral("profile", [[
