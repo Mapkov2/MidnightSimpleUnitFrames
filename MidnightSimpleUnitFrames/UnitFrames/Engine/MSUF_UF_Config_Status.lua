@@ -88,6 +88,43 @@ local function UnitFramePVPContextualDisabled()
     and APIBool(gameRules.IsGameRuleActive, rule)
 end
 
+local function SupportsPVPFactionBadge(unit)
+  return MSUF.Client and MSUF.Client.IsRetail and (unit == "target" or unit == "focus")
+end
+
+local targetPVPAllowed, targetPVPOpenWorld
+local TARGET_PVP_SCOPE_EVENTS = { PLAYER_ENTERING_WORLD = true, ZONE_CHANGED_NEW_AREA = true, ACTIVE_GAME_MODE_UPDATED = true }
+
+local function ReadTargetPVPScope()
+  local allowed = not UnitFramePVPContextualDisabled()
+  return allowed, allowed and CurrentInstanceType() == "none"
+end
+
+function UF.TargetPVPScope()
+  if targetPVPAllowed == nil then
+    targetPVPAllowed, targetPVPOpenWorld = ReadTargetPVPScope()
+  end
+  return targetPVPAllowed, targetPVPOpenWorld
+end
+
+local function RepaintTargetPVP(frame, allowedChanged)
+  local status = frame and frame._msufStatusIndicatorStatus
+  local pvp = status and status.pvp
+  if pvp and pvp.enabled and pvp.followsTarget and (allowedChanged or pvp.showOpenWorldFaction) then
+    MSUF.UFStatusRuntime.UpdatePVP(frame, status)
+  end
+end
+
+local function RefreshTargetPVPScope()
+  if targetPVPAllowed == nil then return end
+  local allowed, openWorld = ReadTargetPVPScope()
+  local allowedChanged = allowed ~= targetPVPAllowed
+  if not allowedChanged and openWorld == targetPVPOpenWorld then return end
+  targetPVPAllowed, targetPVPOpenWorld = allowed, openWorld
+  RepaintTargetPVP(UF.frames.target, allowedChanged)
+  RepaintTargetPVP(UF.frames.focus, allowedChanged)
+end
+
 local function ComputePVPIndicatorContextActive(warModeOverride)
   if UnitFramePVPContextualDisabled() then return false end
   local instanceType = CurrentInstanceType()
@@ -214,6 +251,7 @@ if PVP_CONTEXT_GATED then
       local forced = PVP_CONTEXT_FORCE_EVENTS[event] == true
       -- The native flag event carries a boolean, independently of the unit events.
       if not forced and event ~= "PLAYER_PVP_FLAG_CHANGED" and unit and unit ~= "player" then return end
+      if TARGET_PVP_SCOPE_EVENTS[event] then RefreshTargetPVPScope() end
       UF.RefreshPVPIndicatorContext(nil, forced)
     end)
     local supportsEvent = MSUF.Client.SupportsEvent
@@ -243,6 +281,7 @@ end
 if not UF.pvpIndicatorContextDriver then
   local pvpDriver = CreateFrame("Frame")
   pvpDriver:SetScript("OnEvent", function(_, event, arg1)
+    if TARGET_PVP_SCOPE_EVENTS[event] then RefreshTargetPVPScope() end
     -- This driver owns cold recompilation only. PvP textures already have their
     -- native per-frame event routing, so never query context or rebuild UF/GF
     -- specs in combat.
@@ -554,7 +593,10 @@ local function CompileUnitStatus(out, conf, general, key)
   end
 
   local pvp = status.pvp
-  if PVP_CONTEXT_GATED then
+  if SupportsPVPFactionBadge(key) then
+    pvp.followsTarget = true
+    pvp.showOpenWorldFaction = conf and conf.pvpIndicatorShowOpenWorldFaction == true
+  elseif PVP_CONTEXT_GATED then
     pvp.contextGated = pvp.enabled == true or nil
   elseif pvp.enabled and not UF.PVPIndicatorContextActive() then
     pvp.enabled = false

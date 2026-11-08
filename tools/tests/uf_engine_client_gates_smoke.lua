@@ -8,9 +8,8 @@
 -- read once at load. A Retail sync rebases those hunks, so this smoke boots the
 -- flavor's real load graph and pins both sides of every gate:
 --
---   PvP context   Classic and Forever follow the player's PvP flag and repaint
---                 configured indicators in combat. Retail follows the flag on
---                 the player frame and keeps the War Mode gate for other units.
+--   PvP context   Retail and Forever target/focus follow each unit's flag.
+--                 Classic frames and Forever groups still use the player's context.
 --   Unit support  Classic compiles a unit its client cannot produce disabled;
 --                 Mainline compiles every unit as configured.
 --   Raid manager  Classic's hidden-by-default manager parents the raid container,
@@ -36,18 +35,33 @@ local env = world.env
 -- Client PvP state, installed before the graph loads: the config compiler
 -- captures some of these functions into upvalues at load.
 local pvp = {}
+local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
+local issecretvalue = env.issecretvalue
+env.issecretvalue = function(value) return Secrets.IsSecret(value) or issecretvalue(value) end
+local pvpRuleDisabled = false
+env.Enum = setmetatable({ GameRule = { UnitFramePvPContextualDisabled = 1 } }, { __index = env.Enum })
+env.C_GameRules = { IsGameRuleActive = function(rule) return rule == 1 and pvpRuleDisabled end }
 local function ResetPvP()
     pvp.flagged, pvp.ffa, pvp.timer, pvp.instance, pvp.warMode = false, false, false, "none", false
 end
 ResetPvP()
 -- Units other than the player that exist and are PvP-flagged (the indicator
 -- section below fills it); the core captures both APIs at load.
-local flaggedUnits = {}
-env.UnitExists = function(unit) return unit == "player" or flaggedUnits[unit] == true end
-env.UnitIsPVP = function(unit) return (unit == "player" and pvp.flagged) or flaggedUnits[unit] == true end
+local flaggedUnits, unitPlayers = {}, {}
+local instanceReads = 0
+env.UnitExists = function(unit) return unit == "player" or flaggedUnits[unit] ~= nil end
+env.UnitIsPlayer = function(unit) return unit == "player" or unitPlayers[unit] == true end
+env.UnitFactionGroup = function(unit) return unit == "player" and "Alliance" or "Horde" end
+env.UnitIsPVP = function(unit)
+    if unit == "player" then return pvp.flagged end
+    return flaggedUnits[unit]
+end
 env.UnitIsPVPFreeForAll = function(unit) return unit == "player" and pvp.ffa end
 env.IsPVPTimerRunning = function() return pvp.timer end
-env.IsInInstance = function() return pvp.instance ~= "none", pvp.instance end
+env.IsInInstance = function()
+    instanceReads = instanceReads + 1
+    return pvp.instance ~= "none", pvp.instance
+end
 env.GetInstanceInfo = function() return "Zone", pvp.instance end
 env.C_PvP = {
     IsWarModeDesired = function() return pvp.warMode end,
@@ -250,13 +264,14 @@ do
     UF.ApplySpec(target, spec, nil, { StatusIndicators = true, PVPIndicator = true })
     local icon = target.pvpIndicatorIcon
     local pvpSpec = spec.status and spec.status.pvp
-    if followsFlag then
+    if client.IsRetail then
+        Check(pvpSpec and pvpSpec.enabled and pvpSpec.followsTarget and not pvpSpec.showOpenWorldFaction,
+            "Mainline target must follow its own flag with the optional faction badge off")
+        Check(icon and icon:IsShown(), "a flagged target must show independently of the player's flag")
+    else
         Check(pvpSpec and pvpSpec.enabled == true and pvpSpec.contextGated == true,
             "Flag-based clients must compile the target PvP indicator outside the PvP context (context-gated at runtime)")
         Check(icon ~= nil and icon:IsShown() ~= true, "the target PvP icon must stay hidden outside the PvP context")
-    else
-        Check(pvpSpec and pvpSpec.enabled == false and pvpSpec.contextGated == nil,
-            "Mainline keeps Retail's compile: no PvP indicator outside the PvP context")
     end
 
     local GF = world.core.GF
@@ -293,7 +308,7 @@ do
         else
             handler(driver, "UNIT_FACTION", "player")
         end
-        Check(icon:IsShown() ~= true, "losing the flag in combat must hide the target PvP icon at once")
+        Check(icon:IsShown() == client.IsRetail, "only a player-context target may lose its icon when the player unflags")
         if party then
             Check(party.pvpIndicatorIcon:IsShown() ~= true, "losing the flag in combat must hide the party PvP icon")
         end
@@ -303,6 +318,65 @@ do
     flaggedUnits.target, flaggedUnits.party1 = nil, nil
     ResetPvP()
     Context()
+end
+
+if client.IsRetail then
+    local db = env.MSUF_EnsureDB()
+    for _, unit in ipairs({ "target", "focus" }) do
+        flaggedUnits[unit], unitPlayers[unit] = false, true
+        local frame = env.CreateFrame("Button", nil, env.UIParent)
+        frame.MSUFUnitKey = unit
+        local previousFrame = UF.frames[unit]
+        UF.frames[unit] = frame
+        local conf = db[unit]
+        local savedEnabled, savedFaction = conf.showPvpIndicator, conf.pvpIndicatorShowOpenWorldFaction
+        conf.showPvpIndicator, conf.pvpIndicatorShowOpenWorldFaction = true, nil
+        local mask = { StatusIndicators = true, PVPIndicator = true }
+        Config.Refresh()
+        UF.ApplySpec(frame, Config.GetSpec(unit), nil, mask)
+        local icon = assert(frame.pvpIndicatorIcon)
+        Check(not icon:IsShown(), unit .. " must hide an unflagged player by default")
+        local event = assert(frame:GetScript("OnEvent"))
+        local before = instanceReads
+        flaggedUnits[unit] = true
+        event(frame, "UNIT_FACTION", unit)
+        Check(icon:IsShown(), unit .. " must show on flag gain without the player's PvP context")
+        flaggedUnits[unit] = false
+        event(frame, "UNIT_FACTION", unit)
+        Check(not icon:IsShown(), unit .. " must hide on flag loss")
+        Check(instanceReads == before, unit .. " flag updates must use the cached zone scope")
+
+        conf.pvpIndicatorShowOpenWorldFaction = true
+        Config.Refresh()
+        UF.ApplySpec(frame, Config.GetSpec(unit), nil, mask)
+        Check(icon:IsShown(), unit .. " must show an unflagged player with the faction option on")
+        pvp.instance = "party"
+        handler(driver, "ZONE_CHANGED_NEW_AREA")
+        Check(not icon:IsShown(), unit .. " must hide the faction badge in a dungeon")
+        flaggedUnits[unit] = true
+        event(frame, "UNIT_FACTION", unit)
+        Check(icon:IsShown(), unit .. " must still show a real PvP flag inside an instance")
+        pvpRuleDisabled = true
+        handler(driver, "ACTIVE_GAME_MODE_UPDATED", 1)
+        Check(not icon:IsShown(), unit .. " must obey Blizzard's PvP context rule")
+        flaggedUnits[unit], pvpRuleDisabled, pvp.instance = false, false, "none"
+        handler(driver, "ZONE_CHANGED_NEW_AREA")
+        Check(icon:IsShown(), unit .. " must restore the faction badge in open world")
+        flaggedUnits[unit] = Secrets.New("boolean")
+        local stopWatch = Secrets.Watch(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua",
+            { strict = true })
+        event(frame, "UNIT_FACTION", unit)
+        local violations = stopWatch()
+        Check(#violations == 0, "PvP renderer must guard restricted flags: " .. table.concat(violations, ", "))
+        Check(not icon:IsShown(), unit .. " must hide a restricted flag")
+        flaggedUnits[unit] = false
+        unitPlayers[unit] = false
+        event(frame, "UNIT_FACTION", unit)
+        Check(not icon:IsShown(), unit .. " must hide the faction badge for an unflagged NPC")
+        conf.showPvpIndicator, conf.pvpIndicatorShowOpenWorldFaction = savedEnabled, savedFaction
+        flaggedUnits[unit], unitPlayers[unit] = nil, nil
+        UF.frames[unit] = previousFrame
+    end
 end
 
 -- Apply the option while the player's live flag is already set, then exercise

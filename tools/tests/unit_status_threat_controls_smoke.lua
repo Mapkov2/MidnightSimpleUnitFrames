@@ -91,11 +91,15 @@ local function FromSection()
     return info ~= nil and info.source:gsub("\\", "/"):find(SECTION, 1, true) ~= nil
 end
 local toggles, buttons, tooltips, sectionRefresh = {}, {}, {}, nil
-local THREAT_TOGGLES = { ["Color by threat"] = true, Background = true }
+local STATUS_TOGGLES = {
+    ["Color by threat"] = true,
+    Background = true,
+    ["Faction Symbol Without PvP Flag"] = true,
+}
 local ToggleAt, Button, AddTooltip, TrackCollapsibleRefresh = W.ToggleAt, W.Button, M.AddTooltip, M.TrackCollapsibleRefresh
 W.ToggleAt = function(parent, label, ...)
     local control = ToggleAt(parent, label, ...)
-    if FromSection() and THREAT_TOGGLES[label] then
+    if FromSection() and STATUS_TOGGLES[label] then
         Check(toggles[label] == nil, "the status section builds two toggles labelled " .. label)
         toggles[label] = control
     end
@@ -135,14 +139,6 @@ Check(type(sectionRefresh) == "function", "the status section tracks no refresh"
 local reset = buttons["Reset selected"]
 Check(reset ~= nil and type(reset:GetScript("OnClick")) == "function", "the status section has no Reset selected button")
 
-local curve, background = toggles["Color by threat"], toggles.Background
-if not supportsThreat then
-    Check(curve == nil and background == nil, "a client without the threat text builds the Threat % toggles")
-    print(string.format("unit_status_threat_controls_smoke: ok (%s, no Threat %% controls)", flavor))
-    return
-end
-Check(curve ~= nil and background ~= nil, "the Target status section lost its Color by threat or Background toggle")
-
 local DB = env.MSUF_DB
 local target = DB.target
 local function Select(value)
@@ -161,6 +157,38 @@ local function Compiled()
     MSUF.UF.Config.Refresh()
     return MSUF.UF.Config.GetSpec("target").status.threat
 end
+
+local faction = toggles["Faction Symbol Without PvP Flag"]
+Check((faction ~= nil) == MSUF.Client.IsRetail, "the faction toggle must exist only on Retail and Forever")
+if faction then
+    Select("level")
+    Check(not Shown(faction), "the faction toggle must only be visible in the PvP editor")
+    local exact = { prepareKind = "unitStatus", prepareValue = "statusPvp",
+        settingKey = "target.pvpIndicatorShowOpenWorldFaction" }
+    Check(faction:_msuf2PrepareExactSearchTarget(exact), "exact navigation must select the PvP editor")
+    RefreshPage()
+    Check(Shown(faction) and Enabled(faction) and faction:GetChecked() ~= true, "the PvP editor must show an opt-in toggle")
+    Click(faction)
+    Check(target.pvpIndicatorShowOpenWorldFaction == true, "clicking the faction toggle must save the option")
+    Check(M.UnitPage.CopyUnitSettings("target", "focus", { status = true }) == true,
+        "copying status icons to focus must succeed")
+    Check(DB.focus.pvpIndicatorShowOpenWorldFaction == true, "status copy must include the faction toggle")
+    DB.focus.pvpIndicatorShowOpenWorldFaction = nil
+    target.showPvpIndicator = false
+    Select("statusPvp")
+    Check(Shown(faction) and not Enabled(faction), "the faction toggle must follow the master PvP setting")
+    target.showPvpIndicator = nil
+    Click(reset)
+    Check(target.pvpIndicatorShowOpenWorldFaction == nil, "reset must clear the faction toggle")
+end
+
+local curve, background = toggles["Color by threat"], toggles.Background
+if not supportsThreat then
+    Check(curve == nil and background == nil, "a client without the threat text builds the Threat % toggles")
+    print(string.format("unit_status_threat_controls_smoke: ok (%s, no Threat %% controls)", flavor))
+    return
+end
+Check(curve ~= nil and background ~= nil, "the Target status section lost its Color by threat or Background toggle")
 
 -- 1. Threat % selected: both toggles shown and enabled, on by default.
 Select("statusThreat")

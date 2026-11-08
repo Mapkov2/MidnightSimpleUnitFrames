@@ -10,6 +10,7 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local UP = M.UnitPage or {}
+local SupportsPVPFactionBadge = UP.SupportsPVPFactionBadge
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
 local CreateFrame = _G.CreateFrame
@@ -277,6 +278,32 @@ function StatusSection.PrepareBinders(state, ctx, unit)
     state.StatusPreviewButton, state.SetPreviewCurrentVisual, state.RefreshStatusSectionState, state.BindStatusSpecDropdown =
         StatusPreviewButton, SetPreviewCurrentVisual, RefreshStatusSectionState, BindStatusSpecDropdown
 end
+local function BuildPVPFactionToggle(state, ctx, unit)
+    if not (SupportsPVPFactionBadge and SupportsPVPFactionBadge(unit)) then return end
+    local key = "pvpIndicatorShowOpenWorldFaction"
+    local setting = unit .. "." .. key
+    local label = "Faction Symbol Without PvP Flag"
+    local help = "Show the faction symbol for unflagged players in the open world."
+    local toggle = W.ToggleAt(state.selectedCard, label, 16, -165, state.selectedControlW)
+    M.BindBoolWidget(ctx, toggle, function() return GetConf(unit)[key] == true end, function(value)
+        SetBool(unit, key, value, "MSUF2_STATUS_PVP_OPEN_WORLD_FACTION", { preview = true })
+        RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+    end)
+    toggle._msuf2ExactTargetKinds = { unitStatus = true }
+    toggle._msuf2ExactTargetContracts = { unitStatus = { statusPvp = setting } }
+    toggle._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitStatus"
+            or exactTarget.prepareValue ~= "statusPvp" or exactTarget.settingKey ~= setting then return false end
+        return state.enabled._msuf2PrepareExactSearchTarget(state.enabled, {
+            prepareKind = "unitStatus", prepareValue = "statusPvp", settingKey = unit .. ".showPvpIndicator",
+        })
+    end
+    state.RegisterStatusSearch(toggle, label, { "faction", "horde", "alliance", "pve", "open world" },
+        nil, help, "status.pvp.open_world_faction", nil, { settingKey = setting })
+    if M.AddTooltip then M.AddTooltip(toggle, label, help, { hook = true }) end
+    state.pvpFaction = toggle
+end
+
 function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     local sec, selectedCard, previewCard, selectedControlW = state.sec, state.selectedCard, state.previewCard, state.selectedControlW
     local previewControlW, leftW = state.previewControlW, state.leftW
@@ -848,6 +875,8 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
             end
             if spec.value == "statusThreat" then
                 conf.threatIndicatorColorCurve, conf.threatIndicatorBackground = nil, nil
+            elseif spec.value == "statusPvp" and state.pvpFaction then
+                conf.pvpIndicatorShowOpenWorldFaction = nil
             end
             if spec.colorPrefix then
                 conf[spec.colorPrefix .. "ColorR"] = nil
@@ -1061,6 +1090,11 @@ function StatusSection.BindRefreshState(state, ctx, unit)
             ShowControl(threatBackground, spec and spec.value == "statusThreat")
             SetControlEnabled(threatBackground, spec and spec.value == "statusThreat" and isEnabled)
         end
+        if state.pvpFaction then
+            local isPvP = spec and spec.value == "statusPvp"
+            ShowControl(state.pvpFaction, isPvP)
+            SetControlEnabled(state.pvpFaction, isPvP and isEnabled)
+        end
         ShowControl(raidGroupStyle, inlineName)
         if petXPWidth then ShowControl(petXPWidth, spec and spec.value == "statusPetXP") end
         ShowControl(test, showTestMode)
@@ -1090,6 +1124,7 @@ function StatusSection.Build(ctx, builder, unit)
     StatusSection.OpenSection(state, ctx, builder, unit)
     StatusSection.PrepareBinders(state, ctx, unit)
     StatusSection.BuildIndicatorSelector(state, ctx, unit)
+    BuildPVPFactionToggle(state, ctx, unit)
     StatusSection.PrepareIconResolvers(state, unit)
     StatusSection.BuildIconStyleControls(state, ctx, unit)
     StatusSection.BuildPlacementCard(state, ctx, unit)

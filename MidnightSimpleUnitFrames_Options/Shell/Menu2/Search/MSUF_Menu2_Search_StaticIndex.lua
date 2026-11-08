@@ -127,7 +127,7 @@ end
 -- Contracts carry exact view identities. A multi-view selector without one
 -- matching setting is deliberately ambiguous and must not guess a destination.
 local PREPARE_KINDS = { groupSizingTab = true, groupScope = true, groupAuraWorkspace = true,
-    unitAuraWorkspace = true, unitAlphaTab = true }
+    unitAuraWorkspace = true, unitAlphaTab = true, unitStatus = true }
 local function ConsiderPreparation(kind, value, score, ambiguous, k, v, setting, settingKey)
     if not PREPARE_KINDS[k] then return kind, value, score, ambiguous end
     local rank = settingKey and settingKey ~= "" and setting == settingKey and 2

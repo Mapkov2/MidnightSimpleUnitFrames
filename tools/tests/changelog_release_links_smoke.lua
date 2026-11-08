@@ -35,6 +35,7 @@ local CLIENTS = { "Mainline", "Forever", "Vanilla", "TBC", "Mists" }
 -- Controls a client does not build, keyed "pageKey controlId" or
 -- "pageKey controlId prepareValue". Facts about the menu, not about one release.
 local ABSENT = {
+    ["uf_target menu2.uf_target.unit.status.pvp.open_world_faction"] = { Vanilla = true, TBC = true, Mists = true },
     -- Arena Frames: Midnight (arena1-3), TBC and Mists (arena1-5).
     ["uf_arena menu2.uf_arena.unit.basics.enabled"] = { Vanilla = true, Forever = true },
     ["uf_arena menu2.uf_arena.unit.castbar.feature.msuf2_castbar_icon"] = { Vanilla = true, Forever = true },

@@ -8,12 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "BB1CECB7F28443C2B42AA9DF8BC1A7900D7125D3CE1AB075A780F434A1FB30A4",
-    currentVersion = "6.510",
-    historyFromVersion = "6.507",
-    previousVersion = "6.507",
-    rangeLabel = "6.507 -> 6.510",
+    sourceSha256 = "79F5B238A00C6D9EE2E9D05B3D8FC3B2F6CABA3C1EEE52A3085F8CAD889C478F",
+    currentVersion = "6.511",
+    historyFromVersion = "6.508",
+    previousVersion = "6.508",
+    rangeLabel = "6.508 -> 6.511",
     entries = {
+        {
+            version = "6.511",
+            date = "2026-11-08",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Open-world faction badges. On Retail and WoW Forever, Target and Focus can optionally show the faction symbol for unflagged players in the open world, including on PvE realms. The option is off by default.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "faction symbol without pvp flag",
+                                label = "Faction Symbol Without PvP Flag",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_target.unit.status.pvp.open_world_faction",
+                                settingKey = "target.pvpIndicatorShowOpenWorldFaction",
+                                prepareKind = "unitStatus",
+                                prepareValue = "statusPvp",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Bug Fixes",
+                    bullets = {
+                        {
+                            text = "PvP icons refresh on flag changes without a reload. Target and Focus follow their own PvP flag, and on Retail the Player icon clears when War Mode is turned off.",
+                            linkless = true,
+                        },
+                    },
+                },
+            },
+        },
         {
             version = "6.510",
             date = "2026-11-07",
@@ -148,32 +181,6 @@ local data = {
                         {
                             text = "Added host-page compatibility for Suite Gameplay controls and preserved legacy castbar fill paths when moving artwork settings into native MSUF.",
                             linkless = true,
-                        },
-                    },
-                },
-            },
-        },
-        {
-            version = "6.507",
-            date = "2026-11-04",
-            sections = {
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        {
-                            text = "Fixed health bars on Pet Target, Target of Target, and Focus Target jumping to unrelated units' health. Each frame now follows its own target and honors Smooth Fill and Chunked Health Loss.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Fixed the first damage step in the Unitframe preview losing its Chunked Health Loss trail after a sample health gain.",
-                            link = {
-                                pageKey = "uf_targettarget",
-                                query = "chunked health loss",
-                                label = "Chunked health loss",
-                                sectionId = "frame_basics",
-                                controlId = "menu2.uf_targettarget.unit.basics.chunked_fill",
-                                settingKey = "targettarget.chunkedFill",
-                            },
                         },
                     },
                 },

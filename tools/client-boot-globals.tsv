@@ -84,7 +84,7 @@ IsAltKeyDown	*	api	Blizzard client API the harness does not model
 IsControlKeyDown	*	api	Blizzard client API the harness does not model
 IsInGuild	*	api	Blizzard client API the harness does not model
 IsMouseButtonDown	*	api	Blizzard client API the harness does not model
-IsPVPTimerRunning	Vanilla,Mists,TBC	api	Blizzard client API the harness does not model
+IsPVPTimerRunning	Vanilla,Mists,TBC,Forever	api	Blizzard client API the harness does not model
 IsPlayerSpell	*	api	Blizzard client API the harness does not model
 IsResting	*	api	Blizzard client API the harness does not model
 IsShiftKeyDown	*	api	Blizzard client API the harness does not model

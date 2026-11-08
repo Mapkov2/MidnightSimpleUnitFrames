@@ -76,6 +76,22 @@ local portrait=FirstControl("2D portrait",function(row) return row.exactTarget a
 assert(F.Equal(snapshot,e.MSUF_DB),"cold search wrote saved configuration")
 assert(portrait.exactTarget.controlId,"cold static search lost its declared ID")
 Navigate(portrait)
+local factionRows = {}
+for _, row in ipairs(Search("Faction Symbol Without PvP Flag")) do
+    local exact = row.exactTarget
+    if exact and Ends(exact.settingKey, ".pvpIndicatorShowOpenWorldFaction") then
+        factionRows[exact.settingKey] = row
+    end
+end
+for _, unit in ipairs({ "target", "focus" }) do
+    local row = factionRows[unit .. ".pvpIndicatorShowOpenWorldFaction"]
+    assert((row ~= nil) == n.Client.IsRetail, "unexpected faction badge search availability for " .. unit)
+    if row then
+        local _, widget = Navigate(row)
+        assert(widget:IsShown() and M.unitStatusSelection[unit] == "statusPvp",
+            "exact search must select and reveal the PvP option for " .. unit)
+    end
+end
 local dragon=FirstControl("Drachen spiegeln",function(row) return row.exactTarget and Ends(row.exactTarget.settingKey,".portraitDragonFlip") end)
 Navigate(dragon)
 local cost=FirstControl("Mana-Vorschau",function(row) return row.exactTarget and row.exactTarget.settingKey=="bars.manaUpcomingCost" end)

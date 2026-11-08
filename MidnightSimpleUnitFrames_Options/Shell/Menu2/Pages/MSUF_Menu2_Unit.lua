@@ -789,6 +789,9 @@ local function CompleteUnitCopy(callback, applied, result)
     if type(callback) == "function" then callback(applied == true, result) end
     return applied == true, result
 end
+local function SupportsPVPFactionBadge(unit)
+    return MSUF.Client and MSUF.Client.IsRetail and (unit == "target" or unit == "focus")
+end
 local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     local profileDB = M.EnsureDB()
     profileDB.general = profileDB.general or {}
@@ -856,6 +859,9 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
         if scopes.status then
             CopyFields(dst, src, COPY_INDICATOR_FIELDS)
             CopyFields(dst, src, COPY_STATUSICON_FIELDS)
+            if SupportsPVPFactionBadge(srcKey) and SupportsPVPFactionBadge(dstKey) then
+                dst.pvpIndicatorShowOpenWorldFaction = src.pvpIndicatorShowOpenWorldFaction
+            end
         end
         if result.castbarRequested and result.castbarSupported then
             dst.showInterrupt = src.showInterrupt
@@ -1376,6 +1382,7 @@ M.Assign(UnitPage, {
     NewCopyScopeDefaults = NewCopyScopeDefaults,
     ConfirmCopyToAll = ConfirmCopyToAll,
     CopyUnitSettings = CopyUnitSettings,
+    SupportsPVPFactionBadge = SupportsPVPFactionBadge,
     ToggleEditMode = ToggleEditMode,
     IsEditModeActive = IsEditModeActive,
     SetBossPagePreviewActive = SetBossPagePreviewActive,

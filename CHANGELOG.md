@@ -1,5 +1,17 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.511 - 2026-11-08
+
+### Highlights
+
+- **Open-world faction badges.** On Retail and WoW Forever, Target and Focus can optionally show the faction symbol for unflagged players in the open world, including on PvE realms. The option is off by default.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.pvp.open_world_faction","settingKey":"target.pvpIndicatorShowOpenWorldFaction","prepareKind":"unitStatus","prepareValue":"statusPvp","query":"faction symbol without pvp flag","label":"Faction Symbol Without PvP Flag"} -->
+
+### Bug Fixes
+
+- PvP icons refresh on flag changes without a reload. Target and Focus follow their own PvP flag, and on Retail the Player icon clears when War Mode is turned off.
+<!-- msuf-menu-link: none -->
+
 ## 6.510 - 2026-11-07
 
 ### Highlights
