@@ -8,21 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "1AA4579797D444A2B43A92E1CE2E96C057D7DAD75249882A0D02566003B42C2A",
-    currentVersion = "7.0-beta5",
+    sourceSha256 = "D5E33B372EB65156CF1D26A031F7FA04A3C9DA19C98A7F9A3836013184D354CC",
+    currentVersion = "7.0-beta6",
     historyFromVersion = "6.02",
-    previousVersion = "6.510",
-    rangeLabel = "6.510 -> 7.0-beta5",
+    previousVersion = "7.0-beta5",
+    rangeLabel = "7.0-beta5 -> 7.0-beta6",
     entries = {
         {
-            version = "7.0-beta5",
+            version = "7.0-beta6",
             date = "2026-11-09",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Melee Swing Timer range on WoW Forever. The Main Hand and Off Hand range warnings now check the current target when the native swing API provides no range. Both hands share one short-distance check every 200 ms while needed. The fallback uses duel interaction distance, which approximates weapon reach.",
+                            text = "Portraits on WoW Forever. Clear the automatic elite dragon when the game restricts whether a unit is a player. Readable NPC classifications still show their configured decoration.",
                             linkless = true,
                         },
                     },

@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta6 - 2026-11-09
+
+Changes since 7.0 Beta 5.
+
+### Highlights
+
+- **Portraits on WoW Forever.** Clear the automatic elite dragon when the game restricts whether a unit is a player. Readable NPC classifications still show their configured decoration.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-beta5 - 2026-11-09
 
 Changes since 7.0 Beta 4.

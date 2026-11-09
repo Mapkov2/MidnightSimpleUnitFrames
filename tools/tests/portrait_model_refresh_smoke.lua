@@ -320,7 +320,15 @@ if flavor == "Forever" then
   Fire(player, "UNIT_CLASSIFICATION_CHANGED")
   Check(not player.MSUFPortraitHolder.blizzElite, "the player frame must never create an automatic dragon in Forever")
 
-  state.targetIsPlayer, state.classification = Secrets.New("boolean"), Secrets.New("string")
+  state.targetIsPlayer = Secrets.New("boolean")
+  Fire(target, "PLAYER_TARGET_CHANGED")
+  Check(not dragon:IsShown(), "unreadable Forever player identity must clear the automatic dragon")
+
+  state.targetIsPlayer = false
+  Fire(target, "UNIT_CLASSIFICATION_CHANGED")
+  Check(dragon:IsShown(), "readable elite NPC must restore the automatic dragon")
+
+  state.classification = Secrets.New("string")
   Fire(target, "UNIT_CLASSIFICATION_CHANGED")
   Check(not dragon:IsShown(), "restricted classification must clear the previous dragon")
 end

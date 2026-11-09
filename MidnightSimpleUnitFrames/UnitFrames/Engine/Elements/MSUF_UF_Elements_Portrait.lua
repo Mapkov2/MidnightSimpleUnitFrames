@@ -1649,8 +1649,8 @@ local function UpdatePortraitClassification(frame, p)
     classification = Portrait.GetClassificationPreview(frame.MSUFSpec and frame.MSUFSpec.key or unit)
     if not classification and BossPreviewActive(unit, frame) then classification = "worldboss" end
     if not classification and UnitClassification then
-      local foreverPlayer = IS_FOREVER and (unit == "player" or PlainUnitBool(UnitIsPlayer, unit, false))
-      if not foreverPlayer then classification = UnitClassification(unit) end
+      local skipClassification = IS_FOREVER and (unit == "player" or PlainUnitBool(UnitIsPlayer, unit, true))
+      if not skipClassification then classification = UnitClassification(unit) end
     end
   end
   Portrait.PaintClassification(frame.MSUFPortraitHolder, enabled, classification, nil, nil, nil, p, unit)
