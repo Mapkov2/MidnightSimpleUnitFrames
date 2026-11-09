@@ -8,21 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "08888BA70F62DE98741058FB07FE21B2CA1EDD5D6C584CB2ACBDD305D5A28EA8",
-    currentVersion = "7.0-beta3",
+    sourceSha256 = "033D70CDE0A6A09970FD20A74B92B24198BE209F60AA006A94B581083A382C6E",
+    currentVersion = "7.0-beta4",
     historyFromVersion = "6.02",
     previousVersion = "6.510",
-    rangeLabel = "6.510 -> 7.0-beta3",
+    rangeLabel = "6.510 -> 7.0-beta4",
     entries = {
         {
-            version = "7.0-beta3",
+            version = "7.0-beta4",
             date = "2026-11-09",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Eating / Drinking Text on WoW Forever. Enable this status separately for Player, Target, Focus, Party and Raid. It is off by default and each scope has its own layout. The text clears when the aura ends or the client restricts its data. Combined food-and-drink auras show Drinking.",
+                            text = "Open-world group updates on Retail and WoW Forever. Party and Raid frames update when the roster changes during combat outside instances. This includes the first Party invite and refreshes stale names and status text on visible frames. Layout changes that require protected updates apply after combat.",
                             linkless = true,
                         },
                     },

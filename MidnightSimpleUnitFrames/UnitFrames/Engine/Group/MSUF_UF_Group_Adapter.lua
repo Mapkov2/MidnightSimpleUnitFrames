@@ -832,6 +832,10 @@ local function RunChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
   end
 
   if not (visual and visual.MSUFSpec) then
+    if GF._openWorldCombatRoster and InCombat() and not IsPriorityFrame(visual) then
+      GF.QueueCombatRosterBinding(self, kind or "party")
+      return
+    end
     ApplyUnitFrame(self, kind or "party", rawUnit, "UNIT_CHANGED")
     return
   end

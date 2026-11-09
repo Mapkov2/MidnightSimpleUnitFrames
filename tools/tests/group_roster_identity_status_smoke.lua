@@ -18,6 +18,7 @@ local EMPTY_AURAS = {}
 -- members[unit][3] == false marks that occupant offline; transientOffline models
 -- UnitIsConnected answering false for every token while the roster is in flux.
 local transientOffline = false
+local instanceType, runtimeZoneReads = "raid", 0
 local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.type, h.env.issecretvalue = type, issecretvalue
     h.env.GetNumClasses = function() return 13 end
@@ -29,6 +30,13 @@ local h = Harness.New(root, flavor, { beforeBoot = function(h)
             return helpfulAuras[unit] or EMPTY_AURAS
         end
         return EMPTY_AURAS
+    end
+    h.env.IsInInstance = function()
+        local caller = debug.getinfo(2, "S")
+        if caller and caller.source:find("MSUF_UF_Group_Runtime.lua", 1, true) then
+            runtimeZoneReads = runtimeZoneReads + 1
+        end
+        return instanceType ~= "none", instanceType
     end
     h.env.GetRaidDifficultyID = function() return kind == "mythicraid" and 16 or 14 end
     h.env.UnitName = function(unit)
@@ -392,14 +400,213 @@ h:Event("GROUP_ROSTER_UPDATE")
 transientOffline = false
 h:RunTimers()
 CheckStatus("disconnected read during the roster update")
+-- A new slot must be born in the same native dispatch in the open world.
+-- The addon must still defer its protected layout pass until regen.
+local liveOpenWorld = flavor == "Mainline" or flavor == "Forever"
+local function EnterZone(location, event)
+    instanceType = location
+    h:Event(event or "ZONE_CHANGED_NEW_AREA")
+    h:RunTimers()
+end
+-- Reproduce the visible native button whose cached OnShow state is still false
+-- when the cold live structure attaches in combat.
+local attach = h.UF.AttachFrame
+h.UF.AttachFrame = function(frame, options)
+    local result = attach(frame, options)
+    if instanceType == "none" and h.env.InCombatLockdown() and frame.MSUFUnitKey and options and options.scope == "group" then
+        frame._msufCoreVisible = false
+        frame._msufCoreEventsSuspended = true
+    end
+    return result
+end
+local function AssertCombatPaint(unit, memberName)
+    local child = assert(GF.FrameForUnit(unit), "combat join was not bound")
+    assert(child:GetAttribute("unit") == unit and child.MSUFUnitKey == unit, "visual/click unit mismatch")
+    assert(child:IsVisible() and child._msufCoreVisible == true and not child._msufCoreEventsSuspended,
+        "visible combat slot kept stale show state")
+    assert(child.hpBar, "new combat slot has no health bar")
+    assert(child.nameText and child.nameText:GetText() == memberName,
+        flavor .. ": new combat slot has no painted name")
+    if memberName ~= "Joiner" then
+        local hp = child.hpTextLeft or child.hpTextCenter or child.hpTextRight
+        assert(hp and type(hp:GetText()) == "string" and hp:GetText() ~= "", "new Party slot has no painted HP text")
+    end
+    assert(h.env.InCombatLockdown() == true and #h.violations == 0, "combat join wrote protected state")
+    return child
+end
+members.raid3 = { "Joiner", "MAGE", false }
+conf.sortMode, conf.showPlayer = "INDEX", true
+for _, location in ipairs({ "none", "raid", "party", "pvp", "arena", "scenario", "none" }) do
+    EnterZone(location, location == "raid" and "PLAYER_ENTERING_WORLD" or nil)
+    h:SetRaid(2)
+    Roster()
+    local beforePull = runtimeZoneReads
+    h:EnterCombat(function()
+        assert(GF._raidRosterCombatActive, "pre-lockdown layout guard was not armed")
+    end)
+    local immediate = liveOpenWorld and location == "none"
+    assert(runtimeZoneReads == beforePull + (immediate and 1 or 0), flavor .. "/" .. location .. ": wrong zone reads at pull")
+    local reused = assert(GF.FrameForUnit("raid1"))
+    if immediate then
+        reused._msufCoreVisible = false
+        reused._msufCoreEventsSuspended = true
+    end
+    local beforeZoneReads = runtimeZoneReads
+    h:SetRaid(3)
+    h:Event("GROUP_ROSTER_UPDATE")
+    local child = GF.headers.raid:GetAttribute("child3")
+    assert((child ~= nil and child:GetAttribute("unit") == "raid3") == immediate,
+        flavor .. "/" .. location .. ": wrong secure Raid join timing")
+    h:RunTimers()
+    if immediate then
+        local frame = AssertCombatPaint("raid3", "Joiner")
+        assert(frame._msufStatusTextValue == "OFFLINE", "combat join did not paint status text")
+        assert(reused._msufCoreVisible == true and not reused._msufCoreEventsSuspended,
+            "already bound slot did not recover after native show")
+    else
+        assert(runtimeZoneReads == beforeZoneReads, "instance or Classic roster polled the zone")
+        assert(GF.FrameForUnit("raid3") == nil, "instance or Classic raid updated before regen")
+    end
+    assert(#h.violations == 0, "join wrote protected state: " .. tostring(h.violations[1]))
+    h:LeaveCombat()
+    h:RunTimers()
+    assert(GF.FrameForUnit("raid3"), "regen failed to catch up the raid roster")
+end
 
+-- Raid-wide roles can assign a player from subgroup 2 to block 1. Switching
+-- to native subgroup membership here would remove an existing member.
+instanceType = "none"
+conf.preserveRaidGroups, conf.sortRolesAcrossRaid, conf.maxColumns = true, true, 1
+conf.sortMode = "ROLE"
+h:SetRaid(2)
+Roster()
+local roleBlock = assert(GF.headers.raid)
+local roleList = assert(roleBlock:GetAttribute("nameList"), "raid-wide roles need a name list")
+h:EnterCombat()
+assert(roleBlock:GetAttribute("nameList") == roleList, "combat changed raid-wide role block membership")
+h:LeaveCombat()
+h:RunTimers()
+
+-- Party normally has no secure header while solo. Prepare one before
+-- lockdown only outdoors, and keep the existing instance behavior.
 local party = GF.GetConf("party")
 party.enabled, party.showSolo, party.showPlayer = true, false, false
 party.sortMode = "INDEX"
-members.party1 = { "PartyOne", "MAGE" }
-GF.InvalidateCompiledSpecs("party")
-h:SetRoster({ "player", "party1" })
-Roster()
+members.party1, members.party2 = { "PartyOne", "MAGE" }, { "PartyTwo", "WARRIOR" }
+for _, location in ipairs({ "none", "party" }) do
+    EnterZone(location)
+    h:SetRoster({ "player" })
+    Roster()
+    assert(GF.headers.party == nil, "solo should not start with a Party header")
+    h:EnterCombat()
+    local immediate = liveOpenWorld and location == "none"
+    assert((GF.headers.party ~= nil) == immediate, "wrong Party standby scope")
+    assert(GF.FrameForUnit("player") == nil, "standby displayed the solo player")
+    if immediate then
+        h:LeaveCombat()
+        h:RunTimers()
+        assert(GF.headers.party == nil, "unused Party standby survived combat")
+        h:EnterCombat()
+    end
+    -- With Show Player off, the first join fills the header's hidden standby slot.
+    local standby = immediate and GF.headers.party:GetAttribute("child1")
+    if immediate then assert(standby and not standby:IsShown(), "standby slot should begin hidden") end
+    h:SetRoster({ "player", "party1" })
+    h:Event("GROUP_ROSTER_UPDATE")
+    if immediate then
+        h:SetRoster({ "player" })
+        h:Event("GROUP_ROSTER_UPDATE")
+        h:RunTimers()
+        assert(not GF.FrameForUnit("party1"), "left member was bound from a pending slot")
+        h:SetRoster({ "player", "party1" })
+        h:Event("GROUP_ROSTER_UPDATE")
+    end
+    h:RunTimers()
+    if immediate then
+        assert(AssertCombatPaint("party1", "PartyOne") == standby, "first join did not reuse the hidden standby slot")
+    else
+        assert(GF.FrameForUnit("party1") == nil, "wrong first Party join timing")
+    end
+    h:LeaveCombat()
+    h:RunTimers()
+    assert(GF.FrameForUnit("party1"), "regen failed to catch up the Party roster")
+end
+
 CheckConsumption("party", "party1")
+
+-- The ordinary Party event already works with a native sort. A custom order
+-- using a static name filter needs a live sort in combat and restoration
+-- after regen, including a fight with no roster changes.
+EnterZone("none")
+party.sortMode, party.playerFirstInRole = "ROLE", true
+Roster()
+local partyHeader = assert(GF.headers.party)
+assert(partyHeader:GetAttribute("nameList"), "Party name-list fixture missing")
+h:EnterCombat()
+assert((partyHeader:GetAttribute("nameList") == nil) == liveOpenWorld, "wrong Party live sort scope")
+h:LeaveCombat()
+h:RunTimers()
+assert(partyHeader:GetAttribute("nameList"), "regen did not restore Party sort")
+h:EnterCombat()
+h:SetRoster({ "player", "party1", "party2" })
+h:Event("GROUP_ROSTER_UPDATE")
+h:RunTimers()
+if liveOpenWorld then
+    AssertCombatPaint("party2", "PartyTwo")
+else
+    assert(GF.FrameForUnit("party2") == nil, "wrong custom Party join timing")
+end
+h:LeaveCombat()
+h:RunTimers()
+assert(GF.FrameForUnit("party2") and partyHeader:GetAttribute("nameList"), "Party sort or roster not restored")
+assert(#h.violations == 0, "join wrote protected state: " .. tostring(h.violations[1]))
+
+if liveOpenWorld then
+    -- An already active instance Party keeps its existing roster route.
+    EnterZone("party")
+    party.sortMode, party.playerFirstInRole = "INDEX", false
+    Roster()
+    h:EnterCombat()
+    local instanced = assert(GF.FrameForUnit("party1"))
+    instanced._msufCoreVisible = false
+    local before = runtimeZoneReads
+    Roster()
+    assert(instanced._msufCoreVisible == false, "open-world reconciliation ran in an instance")
+    assert(runtimeZoneReads == before, "instance Party polled the zone")
+    h:LeaveCombat()
+    h:RunTimers()
+
+    -- A loading screen invalidates the open-world selection before entry.
+    EnterZone("none")
+    h:Event("PLAYER_LEAVING_WORLD")
+    instanceType = "party"
+    local beforePull = runtimeZoneReads
+    h:EnterCombat()
+    assert(runtimeZoneReads == beforePull and not GF._openWorldCombatRoster, "loading transition retained the world handler")
+    h:LeaveCombat()
+    h:RunTimers()
+
+    -- A stale world selection may check the location, but must freeze as usual.
+    EnterZone("none")
+    instanceType = "party"
+    beforePull = runtimeZoneReads
+    h:EnterCombat()
+    assert(runtimeZoneReads == beforePull + 1 and not GF._openWorldCombatRoster, "stale world handler did not fall back")
+    h:LeaveCombat()
+    h:RunTimers()
+
+    -- A queued world binding cannot drain after an instance transition.
+    EnterZone("none")
+    members.party3 = { "LateJoin", "MAGE" }
+    h:EnterCombat()
+    h:SetRoster({ "player", "party1", "party2", "party3" })
+    h:Event("GROUP_ROSTER_UPDATE")
+    assert(not GF.FrameForUnit("party3"), "new unit should still be queued before settle")
+    instanceType = "party"
+    h:RunTimers()
+    assert(not GF.FrameForUnit("party3") and not GF._openWorldCombatRoster, "world queue leaked into an instance")
+    h:LeaveCombat()
+    h:RunTimers()
+end
 
 print("group_roster_identity_status_smoke: PASS (" .. flavor .. "/" .. kind .. ": names/bar/background colors, OFFLINE status, roster ordering, coalesced bursts, combat, GUID-free roster path, hidden/preview, recycle)")

@@ -665,7 +665,7 @@ local function FrameOnShow(frame)
       frame._msufGFHeaderOnShowDeferred = true
     else
       frame._msufGFHeaderOnShowDeferred = nil
-      RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
+      return RefreshGroupFrameState(frame, "MSUF_GF_ONSHOW")
     end
   elseif UF.RunLeanIdentity then
     -- Identity events can arrive while target/focus/dependent frames are
@@ -677,6 +677,14 @@ local function FrameOnShow(frame)
       MarkOnShowIdentityFollowup(frame)
     end
   end
+end
+
+-- A secure roster transition can show a child without our OnShow hook
+-- reconciling its cached state. Reuse the normal show lifecycle to restore
+-- suspended events and repaint; the roster owner calls this after dispatch.
+function UF.ReconcileGroupFrameShow(frame)
+  if frame._msufCoreScope ~= "group" or frame._msufCoreVisible ~= false or not frame:IsVisible() then return false end
+  return FrameOnShow(frame) == true
 end
 
 -- Zero-overhead-while-hidden: a hidden frame keeps receiving every registered

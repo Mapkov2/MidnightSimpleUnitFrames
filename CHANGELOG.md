@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta4 - 2026-11-09
+
+Changes since 7.0 Beta 3.
+
+### Highlights
+
+- **Open-world group updates on Retail and WoW Forever.** Party and Raid frames update when the roster changes during combat outside instances. This includes the first Party invite and refreshes stale names and status text on visible frames. Layout changes that require protected updates apply after combat.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-beta3 - 2026-11-09
 
 Changes since 7.0 Beta 2.

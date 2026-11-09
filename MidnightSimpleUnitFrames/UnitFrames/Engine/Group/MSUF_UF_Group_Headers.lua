@@ -989,9 +989,14 @@ local function ResolveSortMode(key, conf)
   return mode
 end
 
-local function BuildPreservedRaidSortSnapshot(kind, conf)
+local function BuildPreservedRaidSortSnapshot(kind, conf, liveRoster)
   local mode = ResolveSortMode("raid", conf)
-  local entries, groupCount = BuildRaidFreezeEntries(kind, conf, mode, conf.sortDescending == true, true)
+  local entries, groupCount
+  if liveRoster then
+    groupCount = PreservedRaidGroupLimit(conf) or 8
+  else
+    entries, groupCount = BuildRaidFreezeEntries(kind, conf, mode, conf.sortDescending == true, true)
+  end
   local nameLists
   if entries then
     nameLists = {}
@@ -1098,7 +1103,7 @@ end
 
 --- SecureGroupHeader supplies native roster sorting: one grouping
 --- dimension (GROUP, CLASS or ASSIGNEDROLE with a groupingOrder), INDEX or NAME
---- inside a group, and DESC over the whole list. Dedicated raid headers pause
+--- inside a group, and DESC over the whole list. Raid headers can pause
 --- these updates in combat. A NAMELIST is an OOC membership filter, so it is
 --- used only for orders native attributes cannot
 --- express: player first inside a role, the flat Group + Role raid order, class
@@ -1129,12 +1134,12 @@ local function NativeSortState(key, mode, conf)
   return sortMethod, groupBy, groupingOrder
 end
 
-local function BuildSortState(key, kind, conf)
+local function BuildSortState(key, kind, conf, liveRoster)
   local mode = ResolveSortMode(key, conf)
   local smallRaidParty = key == "party" and SmallRaidParty(kind)
   local sortMethod, groupBy, groupingOrder, nameList = "INDEX", nil, nil, nil
 
-  if NeedsNameList(mode, conf, smallRaidParty) then
+  if not liveRoster and NeedsNameList(mode, conf, smallRaidParty) then
     if key ~= "party" or smallRaidParty then
       nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true)
     else
@@ -1552,14 +1557,14 @@ local function HeaderValues(header)
   return values
 end
 
-local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex, preservedSortSnapshot)
+local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex, preservedSortSnapshot, liveRoster)
   local growth = GF.ResolveLayoutGrowth and GF.ResolveLayoutGrowth(kind, conf) or conf.growth
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(growth, spacing, conf.groupGrowth)
   local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
   local columns = preservedGroupIndex and floor((5 + upc - 1) / upc)
     or RequiredHeaderColumns(kind, conf, layoutCount)
   local sortState = preservedGroupIndex and BuildPreservedSortState(conf, preservedGroupIndex, preservedSortSnapshot)
-    or BuildSortState(key, kind, conf)
+    or BuildSortState(key, kind, conf, liveRoster)
   local groupFilter
   if sortState.sortMethod ~= "NAMELIST" and LiveGroupKind() ~= nil then
     if key ~= "party" then groupFilter = ResolveGroupFilter(conf) end
@@ -1859,7 +1864,7 @@ local function CompleteHeaderLayoutRebind(header, active, previousHeader, previo
   return scanHandled
 end
 
-function GF.SetupHeader(key, kind)
+function GF.SetupHeader(key, kind, liveRoster)
   if GF._raidRosterCombatActive or InCombatLockdown() then
     Defer("setup")
     return nil
@@ -1870,7 +1875,7 @@ function GF.SetupHeader(key, kind)
   -- Reuse its roster-derived block count for layout as well as name sorting so
   -- no second GetRaidRosterInfo sweep is hidden in the geometry helpers.
   local preservedSortSnapshot = key == "raid" and LiveGroupKind() ~= nil and conf.preserveRaidGroups == true
-    and BuildPreservedRaidSortSnapshot(kind, conf) or nil
+    and BuildPreservedRaidSortSnapshot(kind, conf, liveRoster) or nil
   local layoutCount = ConfiguredCount(kind, conf)
   if GF.EnsureStableGridPosition then
     GF.EnsureStableGridPosition(kind, layoutCount, conf,
@@ -1913,7 +1918,8 @@ function GF.SetupHeader(key, kind)
     newHeader = true
   end
 
-  local attrChanged, wasHiddenForLayout = ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
+  local attrChanged, wasHiddenForLayout = ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount,
+    nil, nil, liveRoster)
   header._msufGFKind = kind
   header._msufGFKey = key
   if header:GetParent() ~= anchor then

@@ -11,12 +11,15 @@ local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
 local IsInRaid = IsInRaid
+local IS_MAINLINE = MSUF.Client.IsRetail == true
 local pairs = pairs
 local tonumber = tonumber
 local tostring = tostring
 local type = type
 
 local eventFrame
+local freezeRaidRosterForPull = GF.SetRaidRosterFrozen
+local SelectPullRosterHandler
 local runtimeObservers = {}
 local dirtyApplyMaskCache = {}
 local appliedLayoutScaleByKind = {}
@@ -24,6 +27,11 @@ local appliedLayoutWidthByKind, appliedLayoutHeightByKind = {}, {}
 
 local function InCombat()
   return GF._raidRosterCombatActive or InCombatLockdown()
+end
+
+local function IsOpenWorldRosterLocation()
+  local inInstance, instanceType = IsInInstance()
+  return inInstance == false and instanceType == "none"
 end
 
 local function SyncCombatState(inCombat)
@@ -44,7 +52,7 @@ end
 -- previews and geometry queries are allowed to update that config cache without
 -- touching live children. A changed live scale must drop the compiled base spec
 -- before SetupHeader scans its existing SecureGroupHeader children.
-local function SetupLiveHeader(key, kind)
+local function SetupLiveHeader(key, kind, liveRoster)
   local setup = GF.SetupHeader
 
   GF.EnsureDB()
@@ -57,7 +65,7 @@ local function SetupLiveHeader(key, kind)
     GF.InvalidateCompiledSpecs(kind)
   end
 
-  local header, scanned, success = setup(key, kind)
+  local header, scanned, success = setup(key, kind, liveRoster)
   if header and desiredScale ~= nil then
     appliedLayoutScaleByKind[kind] = desiredScale
   end
@@ -81,9 +89,16 @@ local function RefreshRosterStateFrame(frame, _, kind, reason, refreshOverlay)
   return did
 end
 
-local function RefreshVisibleRosterState(reason)
+local function RefreshOpenWorldRosterStateFrame(frame, unit, kind, reason, refreshOverlay)
+  if frame._msufCoreVisible == false and not frame._msufGFIsPreviewFrame and not GF.IsPriorityFrame(frame) then
+    UF.ReconcileGroupFrameShow(frame)
+  end
+  return RefreshRosterStateFrame(frame, unit, kind, reason, refreshOverlay)
+end
 
-  return GF.ForEachFrame(RefreshRosterStateFrame, false, reason, InCombat())
+local function RefreshVisibleRosterState(reason)
+  local refresh = GF._openWorldCombatRoster and RefreshOpenWorldRosterStateFrame or RefreshRosterStateFrame
+  return GF.ForEachFrame(refresh, false, reason, InCombat())
 end
 
 --- The settled roster repaints as an identity change, not as the raw event:
@@ -212,6 +227,8 @@ local RUNTIME_EVENTS = {
   "PLAYER_REGEN_DISABLED",
   "PLAYER_REGEN_ENABLED",
 }
+if IS_MAINLINE then RUNTIME_EVENTS[#RUNTIME_EVENTS + 1] = "PLAYER_LEAVING_WORLD" end
+
 -- Walking onto or off a plot changes C_Housing.IsInsideHouseOrPlot without a
 -- zone change; Blizzard_HousingControls follows these two events for it.
 -- Registered only while a scope has Hide in Housing on, where the API exists
@@ -278,6 +295,8 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
   if state.enabled == enabled and state.regenOnly == regenOnly
     and state.matchEvents == matchEvents and state.nameEvents == nameEvents
     and sceneEventsOn == sceneEvents and housingEventsOn == housingEvents then return end
+  -- Disabled frames miss zone events, so sample the location before resubscribing.
+  if active and (not state.enabled or state.regenOnly) then SelectPullRosterHandler() end
   state.enabled, state.regenOnly = enabled, regenOnly
   state.matchEvents, state.nameEvents = matchEvents, nameEvents
   sceneEventsOn, housingEventsOn = sceneEvents, housingEvents
@@ -676,25 +695,61 @@ end
 local SETTLE = { LAYOUT = 0, ROLES = 1, ROSTER = 2 }
 local headerLayoutSettlePending = false
 local headerLayoutSettleState = SETTLE.LAYOUT
+local pendingCombatBindings
 local difficultyLayoutPending = false
 local difficultyLayoutGroupKind, difficultyLayoutRaidKind
+
+local function FinishCombatRosterBinding(succeeded, _, kind)
+  if not succeeded then GF.DeferGroupRuntime("roster", kind) end
+end
+
+local function FlushCombatRosterBindings(bindings)
+  local did = false
+  for child, kind in pairs(bindings) do
+    -- The native header may have recycled the slot before the timer ran.
+    -- ApplyButton reads its current secure unit and ignores an unbound child.
+    if child:IsShown() then
+      local ok, applied = MSUF.RunUnitFrameApply(GF.ApplyButton, FinishCombatRosterBinding, child, kind, ROSTER_IDENTITY_REASON)
+      if ok and applied == true then
+        if child._msufCoreVisible == false and not UF.ReconcileGroupFrameShow(child) then
+          UF.RefreshGroupFrameState(child, ROSTER_IDENTITY_REASON)
+        end
+        did = true
+      end
+    end
+  end
+  return did
+end
 
 local function FlushHeaderLayoutSettle()
   local state = headerLayoutSettleState
   headerLayoutSettlePending = false
   difficultyLayoutPending = false
 
-  if not AnyGroupFrameEnabled() then return false end
+  if not AnyGroupFrameEnabled() then
+    pendingCombatBindings = nil
+    return false
+  end
+  if GF._openWorldCombatRoster and not IsOpenWorldRosterLocation() then
+    GF._openWorldCombatRoster = nil
+    pendingCombatBindings = nil
+  end
   local did
   if GF._raidRosterCombatActive or InCombatLockdown() then
-    -- Raid slots/layout are frozen, but raidN occupants can still change. Keep
+    -- Protected layout waits for regen, but raidN occupants can still change. Keep
     -- the coalesced identity repaint aligned with the secure click unit.
     did = GF.DeferGroupRuntime(state ~= SETTLE.LAYOUT and "roster" or "layout")
   else
+    pendingCombatBindings = nil
     did = GF.RefreshHeaderLayout()
     did = RefreshStartupVisuals() or did
   end
   if state == SETTLE.ROSTER then did = RefreshVisibleRosterState(ROSTER_IDENTITY_REASON) or did end
+  if pendingCombatBindings then
+    local bindings = pendingCombatBindings
+    pendingCombatBindings = nil
+    if GF._openWorldCombatRoster then did = FlushCombatRosterBindings(bindings) or did end
+  end
   if state ~= SETTLE.LAYOUT then did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did end
   if headerLayoutSettleState == state then headerLayoutSettleState = SETTLE.LAYOUT end
   return did
@@ -710,6 +765,14 @@ local function ScheduleHeaderLayoutSettle(state)
     FlushHeaderLayoutSettle()
   end
   return true
+end
+
+-- New combat children get their secure unit immediately. Build their visual
+-- structure once the native header has finished positioning and showing them.
+function GF.QueueCombatRosterBinding(child, kind)
+  if not pendingCombatBindings then pendingCombatBindings = {} end
+  pendingCombatBindings[child] = kind
+  ScheduleHeaderLayoutSettle(SETTLE.ROSTER)
 end
 
 -- UNIT_NAME_UPDATE can arrive in a burst while a group roster is initializing.
@@ -967,12 +1030,56 @@ local function FlushDeferred()
   return did, success
 end
 
+local function UsesNameList(header)
+  return header:GetAttribute("nameList") ~= nil
+end
+
+local function PrepareOpenWorldCombatRoster(key, kind)
+  local conf = Conf(kind)
+  if not (conf and conf.enabled == true) or PreviewSuppressesHeader(key) or HiddenByEnvironment(kind) then return end
+  local header = GF.headers[key]
+  if header then
+    if not GF.ForEachHeader(key, UsesNameList) then return end
+    -- Keep filters that a native raid header cannot reproduce, and keep the
+    -- existing preserved block assignments when they are roster-dependent.
+    if IsInRaid() and (conf.showPlayer == false or type(conf.groupFilter) == "string") then return end
+    if header._msufRaidGroupIndex and (conf.sortRolesAcrossRaid == true or conf.collapseEmptyGroups == true
+      or tonumber(conf.maxColumns) ~= 8 or conf.hideMythicGroupsFiveToEight == true) then return end
+  elseif key ~= "party" or GF.headers.raid or LiveGroupKind() ~= nil then
+    return
+  end
+  -- Seed an empty Party header for the first invite, or switch a fixed
+  -- name list to Blizzard's live sort for this fight. Restore the saved
+  -- layout on regen even if no roster event followed.
+  header = SetupLiveHeader(key, kind, true)
+  if header then GF.ShowHeaders(key) end
+  GF.DeferGroupRuntime("layout", kind)
+end
+
+local function StartOpenWorldRosterCombat()
+  -- A seamless transfer can leave the selected callback stale until the next zone event.
+  if not IsOpenWorldRosterLocation() then return GF.SetRaidRosterFrozen(true) end
+  PrepareOpenWorldCombatRoster("party", "party")
+  if GF.headers.raid then PrepareOpenWorldCombatRoster("raid", GF.headers.raid._msufGFKind) end
+  GF._openWorldCombatRoster = true
+  -- Refuse protected layout as usual, while Blizzard keeps its roster events.
+  GF._raidRosterCombatActive = true
+end
+
+SelectPullRosterHandler = function()
+  freezeRaidRosterForPull = IS_MAINLINE and IsOpenWorldRosterLocation()
+    and StartOpenWorldRosterCombat or GF.SetRaidRosterFrozen
+end
+
 local function RuntimeOnEvent(self, event, unit)
   if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
   -- SavedVariables/config caches are only reliable at the startup event
   -- boundary. Handle it before the disabled fast-exit so a cold cache cannot
   -- unregister the very events that perform the first live header setup.
   if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+    if event == "PLAYER_ENTERING_WORLD" then SelectPullRosterHandler() end
+    GF._openWorldCombatRoster = nil
+    pendingCombatBindings = nil
     SyncCombatState()
     GF.RefreshHeaderLayout()
     if event == "PLAYER_ENTERING_WORLD" then
@@ -989,6 +1096,11 @@ local function RuntimeOnEvent(self, event, unit)
   end
   if event == "PLAYER_REGEN_ENABLED" then
     SyncCombatState(false)
+    GF._openWorldCombatRoster = nil
+    if pendingCombatBindings then
+      pendingCombatBindings = nil
+      GF.DeferGroupRuntime("roster")
+    end
     local refreshEvents = GF._pendingGroupRuntime or runtimeEventState.regenOnly
     GF.SetRaidRosterFrozen(false)
     if GF._pendingGroupRuntime then FlushDeferred() end
@@ -1008,7 +1120,7 @@ local function RuntimeOnEvent(self, event, unit)
     if GF.HidePreviewsForCombat() == true then
       SetupWantedHeaders()
     end
-    GF.SetRaidRosterFrozen(true)
+    freezeRaidRosterForPull(true)
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     GF.InvalidateLayoutRoster()
@@ -1065,6 +1177,7 @@ local function RuntimeOnEvent(self, event, unit)
     end
     ScheduleHeaderLayoutSettle()
   elseif event == "ZONE_CHANGED_NEW_AREA" then
+    SelectPullRosterHandler()
     -- HeaderScope() is nil for this event, so an inline pass would be an exact
     -- duplicate of the settle's own RefreshHeaderLayout(). Rebuilding every raid
     -- button twice inside the post-loading-screen frame is what tripped the
@@ -1078,6 +1191,8 @@ local function RuntimeOnEvent(self, event, unit)
       GF.UpdateGroupVisibility()
       if GF.RequestAdditionalGroupsRefresh then GF.RequestAdditionalGroupsRefresh() end
     end
+  elseif event == "PLAYER_LEAVING_WORLD" then
+    freezeRaidRosterForPull = GF.SetRaidRosterFrozen
   end
 end
 
