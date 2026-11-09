@@ -253,10 +253,11 @@ if observe then print("GROUP_DRAWING " .. flavor .. " " .. #drawing .. " " .. st
 -- Both positional and named owners now delegate to the same runtime painter.
 -- Compared with the original G1 receipt: 84 aura levels keep the +403 band,
 -- 12 repeated health/power SetValue calls are cached, and six bar colors pass
--- RGB with the default alpha of 1. All other drawing calls remain identical.
+-- RGB with the default alpha of 1. Forever adds four calls per pass to
+-- bind and hide its consumption handle. Existing drawing calls are unchanged.
 local drawingPins = {
     Mainline = { 1875, 1291751023 }, Vanilla = { 1915, 3837208654 }, TBC = { 1915, 3837208654 },
-    Mists = { 1899, 400976151 }, Forever = { 1891, 64773348 },
+    Mists = { 1899, 400976151 }, Forever = { 1907, 3518574703 },
 }
 if not observe then
     local pin = assert(drawingPins[flavor], "missing positional drawing receipt")

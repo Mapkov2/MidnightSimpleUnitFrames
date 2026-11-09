@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta3 - 2026-11-09
+
+Changes since 7.0 Beta 2.
+
+### Highlights
+
+- **Eating / Drinking Text on WoW Forever.** Enable this status separately for Player, Target, Focus, Party and Raid. It is off by default and each scope has its own layout. The text clears when the aura ends or the client restricts its data. Combined food-and-drink auras show Drinking.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-beta2 - 2026-11-08
 
 Changes since 7.0 Beta 1 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.

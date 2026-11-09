@@ -76,6 +76,14 @@ specs.StatusPreview = StatusRows(table.concat({
     "stance|showStanceIndicator|stanceIndicatorSize|stanceIndicatorAnchor|stanceIndicatorOffsetX|stanceIndicatorOffsetY|stanceIndicatorLayer|"
         .. "7|12|TOP|0|-2|Stance|0.45,0.70,1.0|Stance text|MSUF_RequestStatusIconsRefreshForCurrent|false|player|",
 }, "\n"))
+if MSUF.Client.IsForever == true then
+    local consumption = StatusRows(
+        "statusConsumptionText|statusConsumptionTextEnabled|statusConsumptionTextSize|statusConsumptionTextAnchor|"
+            .. "statusConsumptionTextOffsetX|statusConsumptionTextOffsetY|statusConsumptionTextLayer|"
+            .. "7|16|CENTER|0|0|DRINKING|0.68,0.70,0.74|Eating / Drinking Text|MSUF_RequestStatusTextRefresh|false|player target focus|")
+    consumption[1].defaultShow = false
+    table.insert(specs.StatusPreview, #specs.StatusPreview, consumption[1])
+end
 -- The threat percentage text exists on Classic Era, TBC and WoW Forever only,
 -- before the stance text row. Its sample glyph comes from the status text table
 -- in the preview status module. Inserted before the Pet Happiness row below, so

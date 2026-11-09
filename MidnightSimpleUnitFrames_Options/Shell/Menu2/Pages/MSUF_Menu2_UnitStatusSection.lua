@@ -507,6 +507,7 @@ local STATUS_SEARCH_TERMS = {
     statusCombat = { "status icons", "combat icon", "Kampfsymbol" },
     statusResting = { "status icons", "resting icon", "rested icon", "Ruhesymbol" },
     leader = { "status icons", "leader icon", "Gruppenleiter" },
+    statusConsumptionText = { "status icons", "food", "drink", "eating", "drinking" },
 }
 local VIRTUAL_INDICATORS = {
     { "statusPetHappiness", "status.indicator.pet_happiness" },

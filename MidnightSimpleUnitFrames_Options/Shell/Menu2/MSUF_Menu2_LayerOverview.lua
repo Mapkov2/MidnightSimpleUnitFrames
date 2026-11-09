@@ -482,7 +482,7 @@ local function GroupProfileRows(sink, g, statusSpecs)
         local spec = statusSpecs[j]
         if type(spec) == "table" and type(spec.layer) == "string" and spec.layer ~= "" then
             GroupRow(sink, g, "Layer", "Group Status", spec.layer, spec.text or spec.layer, conf[spec.layer],
-                spec.defaultLayer or 7, on and BoolValue(conf[spec.enabled], true))
+                spec.defaultLayer or 7, on and BoolValue(conf[spec.enabled], spec.defaultEnabled ~= false))
         end
     end
     for j = 1, #GROUP_PROFILE_ROWS do

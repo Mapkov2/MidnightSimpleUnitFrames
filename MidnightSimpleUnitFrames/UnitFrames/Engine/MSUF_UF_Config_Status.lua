@@ -485,6 +485,8 @@ for i = 1, #UNIT_STATUS_TEXT_STATE_DEFS do
   def.colorKeys = StatusColorKeys(def[5])
 end
 local AFK_TIMER_COLOR_KEYS = StatusColorKeys("statusAFKTimer")
+local CONSUMPTION_TEXT_DEF = { "statusConsumptionText", "statusConsumptionTextEnabled", nil, false, "statusConsumptionText" }
+CONSUMPTION_TEXT_DEF.colorKeys = StatusColorKeys(CONSUMPTION_TEXT_DEF[5])
 
 local function CompileUnitStatusTextState(status, conf, general, def, fallbackSize)
   local id, showKey, legacyStateKey, defaultShow, prefix = def[1], def[2], def[3], def[4], def[5]
@@ -500,7 +502,7 @@ local function CompileUnitStatusTextState(status, conf, general, def, fallbackSi
   else
     entry.enabled = Bool(explicit, defaultShow)
   end
-  local legacyPrefix = prefix ~= "statusText" and "statusText" or nil
+  local legacyPrefix = legacyStateKey and prefix ~= "statusText" and "statusText" or nil
   entry.size = StatusNumber(conf, general, prefix .. "Size", fallbackSize, legacyPrefix and (legacyPrefix .. "Size"))
   entry.anchor = StatusString(conf, general, prefix .. "Anchor", "CENTER", legacyPrefix and (legacyPrefix .. "Anchor"))
   entry.x = StatusNumber(conf, general, prefix .. "OffsetX", 0, legacyPrefix and (legacyPrefix .. "OffsetX"))
@@ -608,6 +610,12 @@ local function CompileUnitStatus(out, conf, general, key)
   statusText.showDead, statusText.showGhost = deadText.enabled, ghostText.enabled
   statusText.showAFK, statusText.showDND = afkText.enabled, dndText.enabled
   statusText.dead, statusText.ghost, statusText.afk, statusText.dnd = deadText, ghostText, afkText, dndText
+  if IS_FOREVER and (key == "player" or key == "target" or key == "focus") then
+    local consumption = CompileUnitStatusTextState(status, conf, general, CONSUMPTION_TEXT_DEF, 16)
+    statusText.consumption = consumption
+    statusText.showConsumption = consumption.enabled
+    statusText.enabled = statusText.enabled or consumption.enabled
+  end
 
   -- AFK duration has independent visibility and placement.
   local afkTimer = statusText.afkTimer or {}

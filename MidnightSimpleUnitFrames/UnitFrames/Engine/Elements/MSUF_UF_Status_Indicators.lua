@@ -357,6 +357,61 @@ local function SeedHealthDeadOverride(seedHP)
   return seedHP <= 0
 end
 
+local IS_FOREVER = MSUF.Client.IsForever == true
+local GetConsumptionText
+if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
+  local GetUnitAuras = C_UnitAuras.GetUnitAuras
+  -- Forever 1.60.1.70862 SpellEffect and SpellInterrupts data. These are the
+  -- seated regeneration auras, including food and drink combined.
+  local DRINK_AURAS = {
+    [430] = true, [431] = true, [432] = true, [833] = true, [1133] = true, [1135] = true,
+    [1137] = true, [2639] = true, [10250] = true, [18140] = true, [22734] = true, [23698] = true,
+    [24355] = true, [24707] = true, [25696] = true, [25990] = true, [26261] = true, [26263] = true,
+    [26402] = true, [26473] = true, [26475] = true, [29007] = true, [29055] = true, [446714] = true,
+    [461632] = true, [468767] = true, [1226808] = true, [1269354] = true, [1291782] = true, [1312719] = true,
+  }
+  local FOOD_AURAS = {
+    [433] = true, [434] = true, [435] = true, [1127] = true, [1129] = true, [1131] = true,
+    [5004] = true, [5005] = true, [5006] = true, [5007] = true, [6410] = true, [7737] = true,
+    [10256] = true, [10257] = true, [18124] = true, [18229] = true, [18230] = true, [18231] = true,
+    [18232] = true, [18233] = true, [18234] = true, [21149] = true, [22731] = true, [24005] = true,
+    [24800] = true, [24869] = true, [25660] = true, [25695] = true, [25700] = true, [25702] = true,
+    [25886] = true, [25888] = true, [26030] = true, [26260] = true, [26401] = true, [26472] = true,
+    [26474] = true, [28616] = true, [29008] = true, [29073] = true, [446713] = true, [470362] = true,
+    [470369] = true, [1225769] = true, [1225771] = true, [1225772] = true, [1225774] = true,
+  }
+
+  local function ClassifyConsumption(auras)
+    if issecretvalue(auras) or type(auras) ~= "table" then return nil end
+    local eating
+    for i = 1, #auras do
+      local aura = auras[i]
+      if not issecretvalue(aura) and type(aura) == "table" then
+        local spellID = aura.spellId
+        if not issecretvalue(spellID) and type(spellID) == "number" then
+          if DRINK_AURAS[spellID] then return "DRINKING" end
+          if FOOD_AURAS[spellID] then eating = "EATING" end
+        end
+      end
+    end
+    return eating
+  end
+
+  GetConsumptionText = function(unit, previous, update)
+    -- When no consumption aura was visible, a pure addition/removal only
+    -- needs the new auras. Refresh on updates because visibility can change.
+    if not previous and not issecretvalue(update) and type(update) == "table" then
+      local full = update.isFullUpdate
+      local updated = update.updatedAuraInstanceIDs
+      if not issecretvalue(full) and full == false and not issecretvalue(updated)
+        and (updated == nil or #updated == 0) then
+        return ClassifyConsumption(update.addedAuras)
+      end
+    end
+    return ClassifyConsumption(GetUnitAuras(unit, "HELPFUL"))
+  end
+end
+
 local function StatusText(frame, cfg, unitState, seedHP)
   local unit = frame.MSUFUnitKey
   local healthDead = SeedHealthDeadOverride(seedHP)
@@ -394,6 +449,9 @@ local function StatusText(frame, cfg, unitState, seedHP)
     if BoolTrue(dnd) then
       return "DND", "dnd"
     end
+  end
+  if cfg and cfg.showConsumption then
+    return frame._msufConsumptionText, "consumption"
   end
   return nil
 end
@@ -474,6 +532,7 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
   local fs = frame.statusIndicatorText
   local unit = frame.MSUFUnitKey
   if not (cfg and cfg.enabled and fs) then
+    frame._msufConsumptionText = nil
     ClearStatusText(frame, fs)
     return
   end
@@ -496,9 +555,19 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
     return
   end
   if not UnitExistsRuntime(unit, unitState, frame) then
+    frame._msufConsumptionText = nil
     ClearStatusText(frame, fs)
     return
   end
+  if event ~= "UNIT_HEALTH" and event ~= "MSUF_AFK_TIMER_TICK" then
+    if cfg.showConsumption and GetConsumptionText and not status.testMode then
+      local update = event == "UNIT_AURA" and seedHP
+      frame._msufConsumptionText = GetConsumptionText(unit, frame._msufConsumptionText, update)
+    else
+      frame._msufConsumptionText = nil
+    end
+  end
+  if event == "UNIT_AURA" then seedHP = nil end
   local text, state
   if status.testMode then
     if cfg.showDead then
@@ -509,6 +578,8 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
       text, state = "AFK", "afk"
     elseif cfg.showDND then
       text, state = "DND", "dnd"
+    elseif cfg.showConsumption then
+      text, state = "DRINKING", "consumption"
     end
   end
   if not text then
@@ -522,6 +593,8 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
       layout = cfg.afk
     elseif state == "dnd" and cfg.dnd then
       layout = cfg.dnd
+    elseif state == "consumption" and cfg.consumption then
+      layout = cfg.consumption
     elseif cfg.dead then
       layout = cfg.dead
     end
@@ -545,7 +618,7 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
       AdoptRegion(frame, fs, layout.layer)
     end
     LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
-    -- text stays the state token (DEAD, GHOST, OFFLINE, AFK, DND) that the
+    -- text stays the state token that the
     -- health element compares; only the font string gets the translation.
     SetText(fs, MSUF.Translate(text))
     SetShown(fs, true)
@@ -767,6 +840,9 @@ local SCENE_STATUS_TEXTS = {
   { "statusText", "dead", "showDead", "DEAD" }, { "statusGhostText", "ghost", "showGhost", "GHOST" },
   { "statusAFKText", "afk", "showAFK", "AFK" }, { "statusDNDText", "dnd", "showDND", "DND" },
 }
+if IS_FOREVER then
+  SCENE_STATUS_TEXTS[#SCENE_STATUS_TEXTS + 1] = { "statusConsumptionText", "consumption", "showConsumption", "DRINKING" }
+end
 local SCENE_STATUS_FIELDS = {
   { "raidmarker", "raidTargetIcon" },
   { "leader", "leaderIcon" },

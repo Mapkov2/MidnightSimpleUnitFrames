@@ -128,6 +128,15 @@ threatText|Threat %|threatText|0|threatTextSize|threatTextAnchor|threatTextX|thr
     threat[1].isText = true
     Specs.GF_STATUS_ICON_SPECS[#Specs.GF_STATUS_ICON_SPECS + 1] = threat[1]
 end
+if MSUF.Client.IsForever == true then
+    local consumption = StatusIconSpecs [[
+statusConsumptionText|Eating / Drinking Text|statusConsumptionText|0|statusConsumptionTextSize|statusConsumptionTextAnchor|
+statusConsumptionOffsetX|statusConsumptionOffsetY|statusConsumptionTextLayer|14|CENTER|7|0
+]]
+    consumption[1].isText = true
+    consumption[1].defaultEnabled = false
+    Specs.GF_STATUS_ICON_SPECS[#Specs.GF_STATUS_ICON_SPECS + 1] = consumption[1]
+end
 Specs.GF_STATUS_ICON_VALUES = {}
 for i = 1, #Specs.GF_STATUS_ICON_SPECS do
     Specs.GF_STATUS_ICON_VALUES[i] = { value = Specs.GF_STATUS_ICON_SPECS[i].value, text = Specs.GF_STATUS_ICON_SPECS[i].text }

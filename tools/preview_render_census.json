@@ -386,7 +386,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Frame.lua",
-          "source_sha256": "8106a0728f8276e3c2d62cbe89fb2e83565c4c9da63bd16019b9cd82f9eae785"
+          "source_sha256": "b1d47e9e4c881ea9b6de865313bbffd2423d84926bc854e22626291801276724"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
@@ -410,7 +410,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Model.lua",
-          "source_sha256": "c4f5d8abaa128277633997f7a991ddf35721967a4b4f3ad3a082beca4e8ef775"
+          "source_sha256": "3791957f6dd07ab59b975a3f6778b2322be8daf30096e5610839007ba9a31161"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Chrome.lua",
@@ -531,7 +531,7 @@
           252
         ]
       ],
-      "source_sha256": "40931a081fc3140c0380f37a4cb6fe87f70445eec144b3327198268be0d5a226",
+      "source_sha256": "0570e9244f3d94a659a92ead4bc8e3a22792f50949c9a9d92c7e290ea50a7332",
       "adapter_exclusions": [
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
@@ -557,7 +557,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Specs.lua",
-          "source_sha256": "bdee11b0ee1c21048f5cfa6224eb4d424650b67d4c9a9ec229e43cc230a56f58"
+          "source_sha256": "0cc21a1078f9142ccf4d92ddf326e0dbaa6d0d0af36ba98dc1f541763f565d03"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Runtime.lua",
@@ -577,7 +577,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua",
-          "source_sha256": "a94c78d486aeb0b4eef82b3b8c9ccf7809eadec0fe6345ade1b5a99555fe8471"
+          "source_sha256": "2b23f30c2f8b4b74ba8cdcada087a1e599d9b993b82a4961d19278570c0b6cb8"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",

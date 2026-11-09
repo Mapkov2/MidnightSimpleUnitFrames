@@ -454,6 +454,7 @@ statusGhostText=ghost|ghost text
 statusAFKText=afk|afk text
 statusAFKTimer=afk timer|afk duration|afk time
 statusDNDText=dnd|dnd text|do not disturb
+statusConsumptionText=eating|drinking|food|drink
 statusPetHappiness=pet happiness|happiness
 stance=stance|stance text|stance indicator|shapeshift form|warrior stance|druid form|paladin aura
 eliteicon=elite|rare|elite icon|rare icon
@@ -483,6 +484,7 @@ statusText=dead|offline
 statusAFKText=afk
 statusAFKTimer=afk timer|afk duration
 statusDNDText=dnd|do not disturb
+statusConsumptionText=eating|drinking|food|drink
 roleIcon=role icon|tank|healer|dps
 ]]
 

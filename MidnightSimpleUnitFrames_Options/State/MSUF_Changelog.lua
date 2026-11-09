@@ -8,77 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "8F4800B6003FA68396320E27D75EC2B9CCA7C29199A53D0A4F2E72213AA8C6FD",
-    currentVersion = "7.0-beta2",
+    sourceSha256 = "08888BA70F62DE98741058FB07FE21B2CA1EDD5D6C584CB2ACBDD305D5A28EA8",
+    currentVersion = "7.0-beta3",
     historyFromVersion = "6.21",
     previousVersion = "6.510",
-    rangeLabel = "6.510 -> 7.0-beta2",
+    rangeLabel = "6.510 -> 7.0-beta3",
     entries = {
         {
-            version = "7.0-beta2",
-            date = "2026-11-08",
+            version = "7.0-beta3",
+            date = "2026-11-09",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Menu sound effects. The MSUF window and menu navigation now have audio feedback. Use Mute MSUF menu sounds under Misc to silence these effects.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "mute msuf menu sounds",
-                                label = "Mute MSUF menu sounds",
-                                sectionId = "misc_menu_behavior",
-                                controlId = "menu2.opt.misc.global.setting.mute.menu.sounds",
-                                settingKey = "general.muteMenuSounds",
-                            },
-                        },
-                        {
-                            text = "Open-world faction badges. On Retail and WoW Forever, Target and Focus can optionally show the faction symbol for unflagged players in the open world, including on PvE realms. The option is off by default.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "faction symbol without pvp flag",
-                                label = "Faction Symbol Without PvP Flag",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_target.unit.status.pvp.open_world_faction",
-                                settingKey = "target.pvpIndicatorShowOpenWorldFaction",
-                                prepareKind = "unitStatus",
-                                prepareValue = "statusPvp",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Improvements and bug fixes",
-                    bullets = {
-                        {
-                            text = "PvP icons refresh on flag changes without a reload. Target and Focus follow their own PvP flag, and on Retail the Player icon clears when War Mode is turned off.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Added a round Shadow 3 option to the Icon Skins gallery and refined how that skin paints and previews.",
-                            link = {
-                                pageKey = "icon_skins",
-                                query = "default skin",
-                                label = "Default Skin",
-                                sectionId = "icon_skins_default",
-                                controlId = "menu2.icon_skins.icon_skins.default-skin.skin",
-                                settingKey = "auras3.shared.iconSkinDefault.styleSkin",
-                            },
-                        },
-                        {
-                            text = "Improved profile upgrades from 6.5x and earlier 7.0 builds. Unit and group frame positions are restored once display scaling is ready, and recovery copies are available when a profile needs protection.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Improved Dashboard setup shortcuts and resizing, dropdown scrolling, preview sizing and the window controls.",
-                            linkless = true,
-                        },
-                        {
-                            text = "On WoW Forever, automatic portrait decoration follows the new target and leaves player portraits clear of NPC elite dragons.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Improved the WoW Forever swing timer's cast and swing tracking.",
+                            text = "Eating / Drinking Text on WoW Forever. Enable this status separately for Player, Target, Focus, Party and Raid. It is off by default and each scope has its own layout. The text clears when the aura ends or the client restricts its data. Combined food-and-drink auras show Drinking.",
                             linkless = true,
                         },
                     },

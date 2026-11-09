@@ -929,12 +929,7 @@ function Runtime.IdentityTextUnitlessEvents(spec, frame)
   return EMPTY_EVENTS
 end
 
-function Runtime.StatusTextEvents(spec, frame)
-  if not StatusEnabled(spec, "statusText") then
-    return EMPTY_EVENTS
-  end
-  local cfg = spec.status.statusText
-  local player = frame and frame.MSUFUnitKey == "player"
+local function BaseStatusTextEvents(cfg, player)
   local needsConnection = cfg.showDead == true and player ~= true
   local needsFlags = cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
     or (cfg.afkTimer and cfg.afkTimer.enabled == true)
@@ -952,6 +947,21 @@ function Runtime.StatusTextEvents(spec, frame)
     return Runtime.STATUS_TEXT_FLAGS_AFK_EVENTS
   end
   return needsFlags and Runtime.STATUS_TEXT_FLAGS_EVENTS or EMPTY_EVENTS
+end
+
+local statusConsumptionEventLists = {}
+function Runtime.StatusTextEvents(spec, frame)
+  if not StatusEnabled(spec, "statusText") then return EMPTY_EVENTS end
+  local cfg = spec.status.statusText
+  local base = BaseStatusTextEvents(cfg, frame and frame.MSUFUnitKey == "player")
+  if not cfg.showConsumption then return base end
+  local events = statusConsumptionEventLists[base]
+  if not events then
+    events = { "UNIT_AURA" }
+    for i = 1, #base do events[i + 1] = base[i] end
+    statusConsumptionEventLists[base] = events
+  end
+  return events
 end
 
 function Runtime.StatusTextUnitlessEvents(spec, frame)

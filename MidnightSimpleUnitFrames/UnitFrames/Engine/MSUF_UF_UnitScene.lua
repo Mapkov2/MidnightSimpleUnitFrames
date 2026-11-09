@@ -276,7 +276,7 @@ local LAYER_REGIONS = {
     "raidGroupNameText", "bossNumberText", "statusAFKTimerText", "combatStateIndicatorIcon",
     "restingIndicatorIcon", "incomingResIndicatorIcon", "pvpIndicatorIcon",
     "petHappinessIndicatorHolder", "petXPBar", "threatIndicatorHolder", "stanceIndicatorText", "_msufScene_statusText", "_msufScene_statusGhostText",
-    "_msufScene_statusAFKText", "_msufScene_statusDNDText" },
+    "_msufScene_statusAFKText", "_msufScene_statusDNDText", "_msufScene_statusConsumptionText" },
 }
 -- Layer chips ask whether runtime content exists, independently of the filter
 -- that temporarily hides it. The scene owns both the regions and that filter.

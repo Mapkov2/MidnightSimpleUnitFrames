@@ -153,7 +153,10 @@ local function CompiledAuraLane(auras, key, fallback, out)
     out.behindBar = alpha < 1
     return out
 end
-local STATUS_TEXT_SUBKEYS = { statusGhostText = "ghost", statusAFKText = "afk", statusAFKTimer = "afkTimer", statusDNDText = "dnd" }
+local STATUS_TEXT_SUBKEYS = {
+    statusGhostText = "ghost", statusAFKText = "afk", statusAFKTimer = "afkTimer", statusDNDText = "dnd",
+    statusConsumptionText = "consumption",
+}
 local function RuntimeStatusConfig(status, spec)
     if type(status) ~= "table" or type(spec) ~= "table" then return nil end
     local value = spec.value
@@ -369,6 +372,7 @@ local function StatusText(spec, runtimeCfg, conf)
     if value == "statusAFKText" then return "AFK" end
     if value == "statusAFKTimer" then return "5m" end
     if value == "statusDNDText" then return "DND" end
+    if value == "statusConsumptionText" then return MSUF.Translate("DRINKING") end
     if value == "threatText" then return "85%" end
     if value == "levelText" then
         local level = UnitLevel and tonumber(UnitLevel("player")) or nil
@@ -397,7 +401,9 @@ end
 local function StatusSpecEnabled(conf, spec)
     if not spec then return false end
     conf = conf or {}
-    return conf[spec.enabled] ~= false
+    local enabled = conf[spec.enabled]
+    if enabled == nil then return spec.defaultEnabled ~= false end
+    return enabled ~= false
 end
 local function StatusSpecInMode(spec, selectedSpec)
     -- Entries with no slot in the Status Icons dropdown can never be the

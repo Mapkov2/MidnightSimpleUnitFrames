@@ -108,6 +108,7 @@ local STATUS_REGIONS = {
     statusResting = "restingIndicatorIcon", statusIncomingRes = "incomingResIndicatorIcon", statusPvp = "pvpIndicatorIcon",
     statusText = "_msufScene_statusText", statusGhostText = "_msufScene_statusGhostText",
     statusAFKText = "_msufScene_statusAFKText", statusDNDText = "_msufScene_statusDNDText",
+    statusConsumptionText = "_msufScene_statusConsumptionText",
     statusPetHappiness = "petHappinessIndicatorHolder", statusThreat = "threatIndicatorHolder", statusPetXP = "petXPBar",
     stance = "stanceIndicatorText",
 }
@@ -384,7 +385,7 @@ function Render.Install(Preview, deps)
         raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level",
         raceText = "race", classText = "classText",
         elite = "elite", statusText = "statusDeadText", statusGhostText = "statusGhostText",
-        statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
+        statusAFKText = "statusAFKText", statusDNDText = "statusDNDText", statusConsumptionText = "statusConsumptionText",
         statusCombat = "combat", statusResting = "resting",
         statusIncomingRes = "incomingRes", statusPvp = "pvp",
         statusPetHappiness = "petHappiness", statusThreat = "threat",

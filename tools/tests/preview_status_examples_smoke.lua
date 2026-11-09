@@ -6,9 +6,22 @@ local targetFlagged, focusFlagged, targetFFA, targetIsPlayer = false, false, fal
 local instanceType, instanceReads, pvpBadgesDisabled = "none", 0, false
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
 local secretFlag = Secrets.New("boolean")
+local helpfulAuras, consumptionReads = {}, 0
+local EMPTY_AURAS = {}
 local mw = MenuWorld.Open(root, flavor, { page = 'uf_target', clientScriptBindings = true,
     tocMetadata = true, beforeCore = function(world)
         MenuWorld.InstallNativeUnitInputs(world)
+        world.env.C_UnitAuras = setmetatable({
+            GetUnitAuras = function(unit, filter)
+                local source = debug.getinfo(2, "S").source
+                if source:find("MSUF_UF_Status_Indicators.lua", 1, true) then
+                    assert(filter == "HELPFUL", "unexpected consumption aura filter")
+                    consumptionReads = consumptionReads + 1
+                    return helpfulAuras[unit] or EMPTY_AURAS
+                end
+                return EMPTY_AURAS
+            end,
+        }, { __index = world.env.C_UnitAuras })
         local unitExists = world.env.UnitExists
         world.env.UnitExists = function(unit)
             return unit == "player" or unit == "target" or unit == "focus" or unitExists(unit)
@@ -17,6 +30,12 @@ local mw = MenuWorld.Open(root, flavor, { page = 'uf_target', clientScriptBindin
             if unit == "target" then return targetIsPlayer end
             return unit == "player" or unit == "focus"
         end
+        world.env.UnitIsConnected = world.env.UnitExists
+        world.env.UnitIsDeadOrGhost = function() return false end
+        world.env.UnitIsDead = function() return false end
+        world.env.UnitIsGhost = function() return false end
+        world.env.UnitIsAFK = function() return false end
+        world.env.UnitIsDND = function() return false end
         world.env.UnitIsPVP = function(unit)
             if unit == "target" then return targetFlagged end
             if unit == "focus" then return focusFlagged end
@@ -299,6 +318,122 @@ do
     db.player.showPvpIndicator = saved
     UF.frames.player = prior
     table.remove(UF.frameList, index)
+end
+
+-- Apply the same status element and unit-event dispatch as a live unit frame.
+do
+    local db = M.EnsureDB()
+    local element = UF.elements.StatusTextIndicator
+    local fullUpdate = { isFullUpdate = true }
+    local renderer = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Indicators.lua"
+    local stopWatch = Secrets.Watch(renderer, { strict = true })
+    for _, unit in ipairs({ "player", "target" }) do
+        local liveFrame = mw.env.CreateFrame("Button", nil, mw.env.UIParent)
+        liveFrame.MSUFUnitKey = unit
+        local prior = UF.frames[unit]
+        local conf = db[unit]
+        local oldToggle = conf.statusConsumptionTextEnabled
+        local oldAnchor, oldOffset = conf.statusTextAnchor, conf.statusTextOffsetX
+        conf.statusTextAnchor, conf.statusTextOffsetX = "TOP", 20
+        UF.frames[unit] = liveFrame
+        local function Apply(enabled)
+            db[unit].statusConsumptionTextEnabled = enabled
+            UF.Config.RefreshUnit(unit)
+            UF.ApplySpec(liveFrame, UF.Config.GetSpec(unit), nil, { StatusIndicators = true, StatusTextIndicator = true })
+        end
+        local function CheckRoute(expected)
+            local hasAura = false
+            for _, event in ipairs(element.GetEvents(liveFrame, liveFrame.MSUFSpec)) do
+                if event == "UNIT_AURA" then hasAura = true end
+            end
+            check(hasAura == expected, unit .. " consumption UNIT_AURA route")
+        end
+        local function CheckText(expected)
+            local text = liveFrame.statusIndicatorText
+            check(liveFrame._msufStatusTextValue == expected,
+                unit .. " consumption state expected " .. tostring(expected) .. ", got " .. tostring(liveFrame._msufStatusTextValue))
+            check(not not shown(text) == (expected ~= nil), unit .. " consumption text visibility")
+            if expected then
+                check(text and text:GetText() == mw.core.Translate(expected), unit .. " translated " .. expected)
+            end
+        end
+        local function FullUpdate(auras)
+            helpfulAuras[unit] = auras
+            mw.world:FireEvent("UNIT_AURA", unit, fullUpdate)
+        end
+
+        local before = consumptionReads
+        helpfulAuras[unit] = { { spellId = 433 } }
+        Apply(nil)
+        CheckRoute(false)
+        mw.world:FireEvent("UNIT_AURA", unit, fullUpdate)
+        CheckText(nil)
+        check(consumptionReads == before, unit .. " default-off status read helpful auras")
+
+        Apply(true)
+        local forever = flavor == "Forever"
+        CheckRoute(forever)
+        if forever then
+            local layout = liveFrame.MSUFSpec.status.statusText.consumption
+            check(layout.anchor == "CENTER" and layout.x == 0, unit .. " consumption inherited legacy Dead Text layout")
+            CheckText("EATING")
+            FullUpdate({ { spellId = 433 }, { spellId = 430 } })
+            CheckText("DRINKING")
+            before = consumptionReads
+            element.Update(liveFrame, "UNIT_HEALTH", unit, 100)
+            check(consumptionReads == before, unit .. " health dispatch read helpful auras")
+            mw.core.UFStatusRuntime.UpdateStatusText(liveFrame, liveFrame.MSUFSpec.status, "MSUF_AFK_TIMER_TICK")
+            check(consumptionReads == before, unit .. " AFK timer tick read helpful auras")
+            CheckText("DRINKING")
+            FullUpdate({ Secrets.New("table"), { spellId = Secrets.New("number") }, { spellId = 433 } })
+            CheckText("EATING")
+            FullUpdate({ { spellId = 14823 }, { spellId = 18125 }, { spellId = Secrets.New("number") } })
+            CheckText(nil)
+            FullUpdate(Secrets.New("table"))
+            CheckText(nil)
+            before = consumptionReads
+            local otherAura = { spellId = 6673, auraInstanceID = 12 }
+            helpfulAuras[unit] = { otherAura }
+            mw.world:FireEvent("UNIT_AURA", unit, { isFullUpdate = false, addedAuras = { otherAura } })
+            CheckText(nil)
+            check(consumptionReads == before, unit .. " unrelated aura delta read the aura list")
+
+            local drink = { spellId = 430, auraInstanceID = 13 }
+            helpfulAuras[unit] = { otherAura, drink }
+            mw.world:FireEvent("UNIT_AURA", unit, { isFullUpdate = false, addedAuras = { drink } })
+            CheckText("DRINKING")
+            check(consumptionReads == before, unit .. " new drink delta read the aura list")
+            helpfulAuras[unit] = { otherAura }
+            mw.world:FireEvent("UNIT_AURA", unit, { isFullUpdate = false, removedAuraInstanceIDs = { 13 } })
+            CheckText(nil)
+            check(consumptionReads == before + 1, unit .. " active aura removal must reconcile once")
+            FullUpdate({ { spellId = 430 } })
+            CheckText("DRINKING")
+            if unit == "target" then
+                helpfulAuras.target = EMPTY_AURAS
+                mw.world:FireEvent("PLAYER_TARGET_CHANGED")
+                CheckText(nil)
+                FullUpdate({ { spellId = 430 } })
+                CheckText("DRINKING")
+            end
+            Apply(false)
+            CheckRoute(false)
+            CheckText(nil)
+            before = consumptionReads
+            mw.world:FireEvent("UNIT_AURA", unit, fullUpdate)
+            check(consumptionReads == before, unit .. " disabled status still read helpful auras")
+        else
+            CheckText(nil)
+            check(consumptionReads == before, unit .. " non-Forever client read consumption auras")
+        end
+        helpfulAuras[unit] = nil
+        conf.statusTextAnchor, conf.statusTextOffsetX = oldAnchor, oldOffset
+        Apply(oldToggle)
+        UF.frames[unit] = prior
+        liveFrame:Hide()
+    end
+    local violations = stopWatch()
+    check(#violations == 0, "consumption renderer used restricted aura data: " .. table.concat(violations, ", "))
 end
 
 print(string.format('status examples %s: %d checks, %d failures', flavor, checks, #failures))

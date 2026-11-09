@@ -13,12 +13,23 @@ local colors = { MAGE = { r = .1, g = .6, b = 1 }, WARRIOR = { r = .8, g = .5, b
 local guidReads, nameReads = 0, 0
 local rosterGuidReads, elementGuidReads = 0, 0
 local secret = false
+local helpfulAuras, consumptionReads = {}, 0
+local EMPTY_AURAS = {}
 -- members[unit][3] == false marks that occupant offline; transientOffline models
 -- UnitIsConnected answering false for every token while the roster is in flux.
 local transientOffline = false
 local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.type, h.env.issecretvalue = type, issecretvalue
     h.env.GetNumClasses = function() return 13 end
+    h.env.C_UnitAuras.GetUnitAuras = function(unit, filter)
+        local source = debug.getinfo(2, "S").source
+        if source:find("MSUF_UF_Status_Indicators.lua", 1, true) then
+            assert(filter == "HELPFUL", "unexpected consumption aura filter")
+            consumptionReads = consumptionReads + 1
+            return helpfulAuras[unit] or EMPTY_AURAS
+        end
+        return EMPTY_AURAS
+    end
     h.env.GetRaidDifficultyID = function() return kind == "mythicraid" and 16 or 14 end
     h.env.UnitName = function(unit)
         nameReads = nameReads + 1
@@ -101,6 +112,91 @@ local function Swap()
     members.raid1, members.raid2 = members.raid2, members.raid1
 end
 Check("initial")
+
+local function CheckConsumption(scope, unit)
+    local frame = assert(GF.FrameForUnit(unit))
+    local settings = GF.GetConf(scope)
+    local oldToggle = settings.statusConsumptionText
+    local fullUpdate = { isFullUpdate = true }
+    local function Apply(enabled)
+        settings.statusConsumptionText = enabled
+        GF.InvalidateCompiledSpecs(scope)
+        assert(GF.ApplyButton(frame, scope, "MSUF_GF_APPLY_CONSUMPTION_TEST"))
+    end
+    local function HasAuraRoute()
+        for _, event in ipairs(frame.MSUFSpec.status.groupRuntimeEvents or {}) do
+            if event == "UNIT_AURA" then return true end
+        end
+        return false
+    end
+    local function CheckText(expected)
+        assert(frame._msufStatusTextValue == expected,
+            unit .. " must render " .. tostring(expected) .. ", got " .. tostring(frame._msufStatusTextValue))
+        local text = frame.statusIndicatorText
+        assert(text and text:IsShown() == (expected ~= nil), unit .. " consumption text visibility")
+        if expected then
+            assert(text:GetText() == h.core.Translate(expected), unit .. " translation did not reach the font string")
+        end
+    end
+
+    local before = consumptionReads
+    helpfulAuras[unit] = { { spellId = 433 } }
+    Apply(nil)
+    assert(not HasAuraRoute(), unit .. " consumption event is registered by default")
+    h:Event("UNIT_AURA", unit, fullUpdate)
+    CheckText(nil)
+    assert(consumptionReads == before, unit .. " default-off consumption read helpful auras")
+
+    Apply(true)
+    local forever = flavor == "Forever"
+    assert(HasAuraRoute() == forever, unit .. " must gate its consumption aura route on Forever")
+    if forever then
+        CheckText("EATING")
+        helpfulAuras[unit] = { { spellId = 430 } }
+        h:Event("UNIT_AURA", unit, fullUpdate)
+        CheckText("DRINKING")
+        before = consumptionReads
+        h.UF.elements.GroupStatusRuntime.UpdateState(frame, "UNIT_HEALTH", unit, 100)
+        assert(consumptionReads == before, unit .. " health event read helpful auras")
+        CheckText("DRINKING")
+
+        h:EnterCombat()
+        local protectedWrites = #h.violations
+        helpfulAuras[unit] = { { spellId = Secrets.New("number") } }
+        local renderer = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Indicators.lua"
+        local stopWatch = Secrets.Watch(renderer, { strict = true })
+        h:Event("UNIT_AURA", unit, fullUpdate)
+        local violations = stopWatch()
+        assert(#violations == 0, unit .. " touched restricted aura data: " .. table.concat(violations, ", "))
+        CheckText(nil)
+        assert(#h.violations == protectedWrites, unit .. " consumption aura update touched protected state")
+        h:LeaveCombat()
+        h:RunTimers()
+
+        before = consumptionReads
+        local otherAura = { spellId = 6673, auraInstanceID = 12 }
+        helpfulAuras[unit] = { otherAura }
+        h:Event("UNIT_AURA", unit, { isFullUpdate = false, addedAuras = { otherAura } })
+        CheckText(nil)
+        assert(consumptionReads == before, unit .. " unrelated aura delta read the aura list")
+
+        local drink = { spellId = 430, auraInstanceID = 13 }
+        helpfulAuras[unit] = { drink }
+        h:Event("UNIT_AURA", unit, { isFullUpdate = false, addedAuras = { drink } })
+        CheckText("DRINKING")
+        assert(consumptionReads == before, unit .. " new drink delta read the aura list")
+        Apply(false)
+        assert(not HasAuraRoute(), unit .. " disabling consumption did not remove its event")
+        CheckText(nil)
+    else
+        CheckText(nil)
+        assert(consumptionReads == before, unit .. " non-Forever consumption read helpful auras")
+    end
+    helpfulAuras[unit] = nil
+    Apply(oldToggle)
+end
+
+CheckConsumption(kind, "raid1")
 secret = true
 -- Moving subgroup rows can rewrite different tokens; this existing path is green.
 h.units[1], h.units[2] = h.units[2], h.units[1]
@@ -296,4 +392,14 @@ h:Event("GROUP_ROSTER_UPDATE")
 transientOffline = false
 h:RunTimers()
 CheckStatus("disconnected read during the roster update")
+
+local party = GF.GetConf("party")
+party.enabled, party.showSolo, party.showPlayer = true, false, false
+party.sortMode = "INDEX"
+members.party1 = { "PartyOne", "MAGE" }
+GF.InvalidateCompiledSpecs("party")
+h:SetRoster({ "player", "party1" })
+Roster()
+CheckConsumption("party", "party1")
+
 print("group_roster_identity_status_smoke: PASS (" .. flavor .. "/" .. kind .. ": names/bar/background colors, OFFLINE status, roster ordering, coalesced bursts, combat, GUID-free roster path, hidden/preview, recycle)")

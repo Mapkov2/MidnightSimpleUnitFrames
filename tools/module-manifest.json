@@ -295,15 +295,15 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2 [AllowLoadGameType standard]\n"
+          "## Version: 7.0-beta3 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0-beta2 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0-beta3 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
-          "## X-MSUF-Version-Forever: 7.0-beta2\n"
+          "## X-MSUF-Version-Forever: 7.0-beta3\n"
         ],
         [
           9,
@@ -613,7 +613,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -923,7 +923,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -1233,7 +1233,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -1623,11 +1623,11 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2 [AllowLoadGameType standard]\n"
+          "## Version: 7.0-beta3 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0-beta2 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0-beta3 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
@@ -1677,7 +1677,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -1731,7 +1731,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -1785,7 +1785,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -1959,11 +1959,11 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2 [AllowLoadGameType standard]\n"
+          "## Version: 7.0-beta3 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0-beta2 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0-beta3 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
@@ -2013,7 +2013,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -2067,7 +2067,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,
@@ -2121,7 +2121,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta2\n"
+          "## Version: 7.0-beta3\n"
         ],
         [
           7,

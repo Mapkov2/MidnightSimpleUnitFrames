@@ -60,11 +60,14 @@ local pins = {
         ["raid.refresh"] = { 66902, 2710, 34.838496 },
         ["raid.animate"] = { 38584, 1364, 23.510469 },
     },
+    -- The Forever editor owns one more status handle. Compared with Beta 2,
+    -- refresh adds 526 VM instructions and 21 C calls, animation adds 413 and 17.
+    -- Paired warm allocations match Beta 2, and their ceilings stay unchanged.
     Forever = {
-        ["party.refresh"] = { 64349, 2536, 34.074434 },
-        ["party.animate"] = { 38208, 1352, 23.185469 },
-        ["raid.refresh"] = { 65097, 2559, 34.650996 },
-        ["raid.animate"] = { 38440, 1351, 23.416719 },
+        ["party.refresh"] = { 64758, 2545, 34.074434 },
+        ["party.animate"] = { 38602, 1366, 23.185469 },
+        ["raid.refresh"] = { 65500, 2568, 34.650996 },
+        ["raid.animate"] = { 38831, 1365, 23.416719 },
     },
 }
 local function Measure(fn)

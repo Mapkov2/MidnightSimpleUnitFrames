@@ -68,8 +68,9 @@ end
 -- 2026-11-06: opt-in name format adds one control in each Fonts scope; prior search identities remain.
 -- Beta 1 regenerates both families with the new menu context; all prior identities remain.
 -- Beta 2 adds Mute MSUF menu sounds in both families and the Target/Focus faction switches in Mainline.
+-- Beta 3 adds five Forever consumption selectors and refreshes their status control metadata.
 local indexes = {
-    { "", 4538, 3308702204 },
+    { "", 4543, 3662680171 },
     { "_Classic", 4111, 599502379 },
 }
 local moved = {

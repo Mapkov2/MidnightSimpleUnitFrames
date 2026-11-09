@@ -256,6 +256,14 @@ local STATUS_CONTROLS = {
         or unit == "pettarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD",
         customIcon = "pvpIndicatorCustomIcon" }),
 }
+if MSUF.Client.IsForever == true then
+    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusConsumptionText", "Eating / Drinking Text",
+        "statusConsumptionTextEnabled", false, "statusConsumptionText", 16, "CENTER", STATUS_CORNER_ANCHORS, 0, 0, 7,
+        "MSUF_RequestStatusTextRefresh", {
+            allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" end,
+            statusRuntime = true, statusTextState = "DRINKING", colorPrefix = "statusConsumptionText",
+        })
+end
 -- Hunter pet happiness exists again on WoW Forever, Classic Era and TBC, which
 -- all load this page. Midnight and Mists have none, so the control is only
 -- added where the client supports it.
@@ -418,7 +426,7 @@ local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader ass
     "show iconStyle customIcon x y anchor size layer symbol")
 local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS,
     "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat "
-        .. "statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance",
+        .. "statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat statusConsumptionText stance",
     "stateIconsTestMode statusIconsTestMode stateIconsAlpha statusIconsAlpha statusTextEnabled "
         .. "levelIndicatorDifficultyColor levelIndicatorForeverBadge threatIndicatorColorCurve threatIndicatorBackground",
     "show iconStyle customIcon x y anchor size layer symbol")

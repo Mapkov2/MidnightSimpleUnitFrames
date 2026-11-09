@@ -44,6 +44,7 @@ local function PVPIndicatorContextActive()
   return UF and UF.PVPIndicatorContextActive() == true
 end
 -- Flag-based clients keep PvP textures ready for an in-combat flag change.
+local IS_FOREVER = MSUF.Client.IsForever == true
 local PVP_CONTEXT_GATED = (MSUF.Client.Family == "Classic" or MSUF.Client.IsForever == true)
 
 local function Layer(value, fallback)
@@ -489,6 +490,8 @@ local GROUP_STATUS_REGIONS = {
   statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY",
       -10, "statusAFKTimerTextLayer", 7 },
   statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
+  consumption = { "statusConsumptionTextSize", 14, "statusConsumptionTextAnchor", "CENTER",
+      "statusConsumptionOffsetX", 0, "statusConsumptionOffsetY", 0, "statusConsumptionTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
   level = { "levelTextSize", 10, "levelTextAnchor", "BOTTOMLEFT", "levelTextX", 2, "levelTextY", 2, "levelTextLayer", 7 },
   threat = { "threatTextSize", 9, "threatTextAnchor", "TOP", "threatTextX", 0, "threatTextY", -1, "threatTextLayer", 7 },
@@ -515,7 +518,8 @@ local function CompileStatus(kind, conf)
   local statusConnectionTextEnabled = conf.statusText == true
   local statusPlayerFlagTextEnabled = conf.statusAFKText == true or conf.statusAFKTimerText == true or conf.statusDNDText == true
   local statusFlagTextEnabled = statusDeadGhostTextEnabled or statusPlayerFlagTextEnabled
-  local statusTextEnabled = statusConnectionTextEnabled or statusFlagTextEnabled
+  local consumptionEnabled = IS_FOREVER and conf.statusConsumptionText == true
+  local statusTextEnabled = statusConnectionTextEnabled or statusFlagTextEnabled or consumptionEnabled
   local raidGroupEnabled = conf.showGroupNumber == true
   local levelEnabled = conf.levelText == true
   local levelColored = levelEnabled and conf.levelTextDifficultyColor ~= false
@@ -524,6 +528,7 @@ local function CompileStatus(kind, conf)
     raidMarkerEnabled, raidGroupEnabled, statusFlagTextEnabled, statusPlayerFlagTextEnabled, incomingResEnabled, pvpEnabled,
     levelEnabled, levelColored
   )
+  if consumptionEnabled then runtimeEvents = AddEvent(runtimeEvents, "UNIT_AURA") end
   local runtimeEnabled = roleEnabled or leaderEnabled or assistEnabled
     or readyCheckEnabled or summonEnabled or phaseEnabled
     or raidMarkerEnabled or raidGroupEnabled or statusTextEnabled or incomingResEnabled or pvpEnabled
@@ -546,6 +551,10 @@ local function CompileStatus(kind, conf)
   statusText.showGhost = conf.statusGhostText == true
   statusText.showAFK = conf.statusAFKText == true
   statusText.showDND = conf.statusDNDText == true
+  if IS_FOREVER then
+    statusText.showConsumption = consumptionEnabled
+    statusText.consumption = StatusRegionDef(conf, consumptionEnabled, "consumption", resize)
+  end
   statusText.dead = StatusRegionDef(conf, conf.statusText == true, "statusText", resize)
   statusText.ghost = StatusRegionDef(conf, conf.statusGhostText == true, "statusGhost", resize)
   statusText.afk = StatusRegionDef(conf, conf.statusAFKText == true, "statusAFK", resize)
