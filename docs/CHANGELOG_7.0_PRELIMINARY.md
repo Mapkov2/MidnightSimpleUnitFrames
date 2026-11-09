@@ -1,113 +1,148 @@
-# Midnight Simple Unit Frames 7.0 Preliminary Full Changelog
+# MSUF 7.0 Preliminary Full Changelog
 
-**Snapshot from November 9, 2026 · 6.511 to 7.0 Beta 6**
+**6.511 → 7.0 Beta 6 · November 9, 2026**
 
-MSUF 7.0 adds an Icon Skins gallery, a profile workbench, display-specific layouts, and multi-selection in Edit Mode. It also changes how profiles are saved, how menu changes reach the runtime, and how previews are rendered. The five supported clients are Midnight (Retail), WoW Forever, Classic Era, Burning Crusade Anniversary, and Mists of Pandaria Classic. Individual options depend on the client. [6.511 release](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases/tag/v6.511) · [7.0 Beta 6 release](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases/tag/classic-v7.0-beta6) · [Client matrix](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/classic-client-matrix.tsv)
+- Baseline is 6.511 (`ffb3ca48d`). Target is 7.0 Beta 6 (`3a480dcfe`). [6.511 release](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases/tag/v6.511) · [Beta 6 release](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases/tag/classic-v7.0-beta6)
+- Supported clients are Midnight (Retail), WoW Forever, Classic Era, Burning Crusade Anniversary, and Mists of Pandaria Classic. Options vary by client. [Client matrix](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/classic-client-matrix.tsv)
 
-The comparison uses the tags `v6.511` (`ffb3ca48d`) and `classic-v7.0-beta6` (`3a480dcfe`). If you are upgrading from the original 6.50, see the 6.5x section for the changes that shipped between 6.50 and 6.511. Suite coverage is limited to integrations exposed by MSUF 7.0. [6.5x changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/v6.511/CHANGELOG.md) · [7.0 beta changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md)
-
-## 1. Features and visible changes
+## 1. Features and fixes
 
 ### Icon Skins
 
-- **Gallery with live previews.** Set a shared look using frames, shadows, rings, and gloss. Supported areas can inherit that look, select a different skin, or use their manual appearance settings. The gallery includes a round Shadow 3 variant.
-- **Supported icons.** The system covers auras and selected castbar and tracker icons. Compatible MSUF Suite modules can use the same skins for cooldown and action bar icons. Round and rectangular surfaces use artwork suited to their shape. [Icon skin system](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/ICON_SKINS.md)
+- Added an Icon Skins gallery with live previews for frames, shadows, rings, and gloss.
+- Set a shared skin or override it per supported area. Choose Custom to use your manual appearance settings.
+- Added a round Shadow 3 variant.
+- Skins work on auras and supported castbar and tracker icons. Compatible Suite modules can use them on cooldown and action bar icons. [Icon Skins](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/ICON_SKINS.md)
 
-### Profiles and Edit Mode
+### Profiles
 
-- **Profile workbench.** Create named restore points and return to them later. The settings inspector shows what changed and where a value comes from, such as a profile or a variant.
-- **Review before importing.** Compare incoming settings with your current setup. Choose which changes to apply and which current settings to keep.
-- **Multi-step undo and redo.** Step through successive menu edits, including changes to individual scopes and nested settings. Supported Suite settings can take part in shared history and profile restores.
-- **Multi-selection.** Select, move, and align supported elements together in Edit Mode. Related layout changes are recorded as a group in history. Priority Frames and Gameplay positions get additional placement controls. Typed coordinates and subsequent dragging remain separate undo steps.
-- **Display layouts.** Record frame positions and relative UI scale into a profile variant. Set width and aspect-ratio conditions to select the layout for a different display. [Profile workbench](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/State/MSUF_ProfileWorkbench.lua) · [Display rules and inspector](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/State/MSUF_ProfileWorkbenchTools.lua) · [Edit Mode changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/EDITMODE_ENGINE_DELTA.md)
+- Save, inspect, and restore named restore points.
+- See what changed and whether a setting comes from the profile or a variant. [Profile workbench](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/State/MSUF_ProfileWorkbench.lua)
+- Review profile imports and choose which incoming changes to apply.
+- Undo and redo several edits in order, including nested settings and changes to individual scopes. Supported Suite settings can be included in history and restores.
+- Record frame positions and relative UI scale in a profile variant. Set width and aspect-ratio conditions for when it applies. [Display rules](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/State/MSUF_ProfileWorkbenchTools.lua)
+
+### Edit Mode
+
+- **Multi-select.** Hold **Ctrl** and click the frame movers. Ctrl-click again to remove a frame from the selection. [Mover controls](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua#L533-L542)
+- **Move and align.** Open **Layout → Align**. Enter **Move X** and **Move Y**, then click **Move together**, or choose an alignment action. You can also add or remove frames in this panel. Edge alignment uses the first selected frame in the list. Equal spacing requires at least three frames. [Align button](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua#L575-L579) · [Selection panel](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_MultiSelection.lua) · [Alignment rules](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_MultiSelection.lua)
+- Undo a group move or alignment in one step.
+- Added placement controls for Priority Frames and Gameplay positions. Typed coordinates and dragging have separate undo steps. [Edit Mode changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/EDITMODE_ENGINE_DELTA.md)
 
 ### Menu, search, and previews
 
-- **Dashboard and navigation.** The Dashboard adapts to narrow and wide windows and brings Quick Setup, Suite Setup, search, recovery, and display scaling together. Window resizing, dropdown scrolling, and window controls have been refined.
-- **More precise search results.** Search covers more options, scope-specific settings, and dropdown choices. Results can open the relevant tab, section, or subview. A busy indicator appears in suggestions and full results while search is running.
-- **Motion and sound.** Navigation, tabs, collapsible sections, and Edit Mode entry use animation. The reduced-motion setting also applies to the search indicator. Window and navigation sounds can be muted under Misc.
-- **Previews that follow live rendering.** Unit frames, group frames, castbars, and class resources use the live rendering rules for sample data. This includes health and power loss, auras, status indicators, portraits, cast feedback, alternative mana, and detached resource bars. Hunter samples use the resource appropriate to the client.
-- **Accessibility and visibility.** Review palettes for deuteranopia, protanopia, and tritanopia in Colors. The changes cover areas such as castbar, threat, and NPC colors and group dispel symbols. The contextual “Why is this hidden?” card shows the configuration and filters for selected aura lanes. The compact tint editor flags saved background opacity of 0%. [Beta changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md) · [Preview rendering rules](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PREVIEW_RUNTIME_RULES.md) · [Accessibility and visibility tools](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/State/MSUF_ProfileWorkbenchTools.lua)
+- The Dashboard adapts to window width. It includes Quick Setup, Suite Setup, search, recovery, and display scaling.
+- Updated window resizing, window controls, and dropdown scrolling.
+- Search covers more settings and dropdown choices. Results can open the matching tab, section, or subview.
+- Added a busy indicator to search suggestions and results.
+- Added animations for navigation, tabs, collapsible sections, and opening Edit Mode. Reduced motion also applies to the search indicator.
+- Mute window and navigation sounds under **Misc**. [Beta changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md)
+- Unit frames, group frames, castbars, and class resources use live rendering rules in their previews. This covers health and power loss, auras, status indicators, portraits, cast feedback, alternative mana, and detached resource bars. Hunter samples use the resource for their client. [Preview rendering](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PREVIEW_RUNTIME_RULES.md)
+- **Colors** offers palettes for deuteranopia, protanopia, and tritanopia. These cover castbar, threat, and NPC colors and group dispel symbols.
+- **Why is this hidden?** shows the settings and filters for selected aura lanes.
+- The compact tint editor flags backgrounds with saved opacity of 0%. [Color and visibility tools](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/State/MSUF_ProfileWorkbenchTools.lua)
 
 ### Unit frames, auras, castbars, and resources
 
-- **Name formatting.** Fonts shows a live example for full names, abbreviations, length limits, and abbreviations with limits. Individual unit frames can override the shared format. A compatible Suite build can expose a Nameplates scope on the same Fonts page.
-- **Open-world roster updates during combat.** On Retail and WoW Forever, Party and Raid frames update when membership changes in open-world combat. This includes the first Party invite while solo and repaints stale names and status text. Protected layout changes apply after combat. [Beta 4 group update](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/b95219ca4dff5c599ef5acbb716a2b9b9d2973de)
-- **Aura and dispel updates.** 7.0 carries forward native aura container creation and reuse changes from the 6.504 betas, including a rebuild path for containers that stop receiving updates. Unit buff lanes and dispel detection have separate owners. These aura changes were reverted on the stable 6.5 line before 6.505. [Aura container runtime](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua)
-- **Castbar fixes.** Improved cast-to-channel transitions, empower endings, and interrupt or cancellation feedback. The GCD display retains its attribution to the triggering spell more reliably. Focus castbars restore their range fade when released, and disabled boss and arena castbars are cleaned up. [Castbar changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md)
-- **Resource marks based on spell cost.** On Retail and Forever, a threshold under Class Resources → Extras can follow the minimum cost of a learned spell. Enter a spell ID, link, or name. Talent and cost changes are picked up outside combat. [Resource marks](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/README.md)
+- **Fonts.** Preview full names, abbreviations, and length limits. Each unit frame can override the shared format. Compatible Suite builds can add a **Nameplates** scope. [Beta changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md)
+- **Party and Raid on Retail and Forever.** Frames update when membership changes during open-world combat, including the first Party invite while solo. Names and status text refresh for the new member. Protected layout changes apply after combat. [Beta 4 group changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/b95219ca4dff5c599ef5acbb716a2b9b9d2973de)
+- **Auras.** Brought back the native aura container changes tested in the 6.504 betas and reverted before 6.505. Containers can be reused or rebuilt if they stop updating. Unit buff lanes and dispel detection are handled separately. [Aura container runtime](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua)
+- **Castbar transitions.** Improved cast-to-channel transitions, empower endings, and interrupt or cancellation feedback.
+- **Castbar state.** Improved GCD spell tracking, restored range fade on released Focus castbars, and fixed cleanup for disabled Boss and Arena castbars. [Castbar changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md)
+- **Retail and Forever resource marks.** Under **Class Resources → Extras**, set a mark to the minimum cost of a learned spell by ID, link, or name. Costs refresh outside combat. [Resource marks](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/README.md)
 
 ### WoW Forever
 
 | Area | Change since 6.511 |
 | --- | --- |
-| Character profiles | Profile assignment uses the full character identity. Characters with the same first name and different surnames can have separate assignments. Displaying the first name, surname, or full name on frames was already available in 6.50. |
-| Eating and Drinking | Optional status text for Player, Target, Focus, Party, and Raid. Each scope has its own layout and starts disabled. A combined regeneration aura shows “Drinking.” The text clears when the aura ends or its data becomes restricted. |
-| Swing Timer | Updated cast and swing tracking. When the native melee range query supplies no result, Main Hand and Off Hand share one target check every 200 ms while needed. Duel interaction distance approximates weapon reach. |
-| Portraits | Automatic elite decoration follows the current target. Player portraits stay clear of the NPC dragon. If the game restricts player classification, the automatic dragon is cleared. Readable NPC classifications can still show their configured decoration. |
+| Character profiles | Profile assignment uses the full character identity, so characters with the same first name and different surnames can have separate assignments. Frame name display options already shipped in 6.50. |
+| Eating and Drinking | Optional status text for Player, Target, Focus, Party, and Raid. Each scope starts off and has its own layout. Combined auras show “Drinking.” The text clears when the aura ends or its data is restricted. |
+| Swing Timer | Updated cast and swing tracking. If native melee range is unavailable, both hands share one target check every 200 ms while needed. Duel interaction distance approximates weapon reach. |
+| Portraits | Elite decoration follows the current target. The automatic dragon clears on players and when player classification is restricted. Readable NPC classifications can still show their configured decoration. |
 
-[Beta 2 through Beta 6](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md) · [MSUF Swing Timer](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua) · [Blizzard's Forever Swing Timer](https://github.com/Gethe/wow-ui-source/blob/9dc84f0d3bbae1768ac3405b3716000bd93eda06/Interface/AddOns/Blizzard_SwingTimer/Blizzard_SwingTimer.lua)
+[Forever changes in the beta changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md) · [Swing Timer code](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua) · [Blizzard's Forever Swing Timer](https://github.com/Gethe/wow-ui-source/blob/9dc84f0d3bbae1768ac3405b3716000bd93eda06/Interface/AddOns/Blizzard_SwingTimer/Blizzard_SwingTimer.lua)
 
-## 2. Backend and architecture
+## 2. Backend changes
 
-### Profile storage, defaults, and migration
+### Profile storage and migration
 
-- **One persisted profile store.** The active profile is a complete Lua table at runtime. In normal operation, `MSUF_DB` points to the active entry in `MSUF_GlobalDB.profiles`. The separate alias is cleared at terminal save to avoid serializing another full copy of the active profile.
-- **Sparse storage at logout.** The V3 codec elides eligible default values when saving and reconstructs them when loading. It covers 6,622 defined paths. Explicit overrides, including `false`, `0`, and empty strings, are preserved along with unknown keys. A value elided because it matched the default can follow a future change to that default. V1 and V2 retain their own read paths, and exports still use wire schema 600.
-- **Validation and rollback.** The decoder validates presence masks and referenced tables before reconstruction. The save path verifies reconstruction using the decoder and can roll back incomplete compaction. Profiles unsuitable for compaction are saved in full. Rejected and newer-format profiles can be retained separately in recovery histories.
-- **Separate recovery budgets.** The one-time pre-upgrade account backup has an 8 MiB limit. The recovery histories for rejected and newer-format profiles share a separate 2 MiB budget. `/msuf recovery list` shows entries and storage use. `/msuf restorebackup` starts the recovery flow for account profiles and character assignments.
-- **Separate profile responsibilities.** Factory defaults, repair, migration, binding, import, projection, and snapshots have their own modules. Media paths are repaired at profile boundaries. Variants and sync are settled in a defined order before the final save. [Profile storage and upgrade](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md) · [Recovery budget](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/profile-recovery-budget.md)
+- Save one profile store. Clear the separate `MSUF_DB` reference at logout so the active profile is saved once.
+- V3 skips eligible default values at logout across 6,622 defined paths and fills them in on load. Matching defaults can follow future default changes.
+- Keep explicit overrides such as `false`, `0`, and empty strings. Keep unknown keys.
+- Keep the V1 and V2 readers and export schema 600.
+- Validate saved masks and referenced tables before loading. Verify that compacted profiles can be rebuilt before saving. Save in full if compaction fails or the profile is ineligible.
+- Keep a pre-upgrade account backup up to 8 MiB. Rejected or newer-format profiles share a separate 2 MiB recovery budget.
+- Use `/msuf recovery list` to list recovery entries and storage use. Use `/msuf restorebackup` to start account profile and assignment recovery.
+- Split defaults, repair, migration, binding, import, projection, and snapshots into separate modules.
+- Repair media paths when handling profiles. Settle variants and sync before the final save. [Profile storage](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md) · [Recovery budget](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/profile-recovery-budget.md)
 
-### Configuration, menu, and preview engine
+### Menu and previews
 
-- **Declarative control schema.** Profile-writing controls declare their identity, profile path, scope, and apply route. Simple setters can be derived from those declarations. Specialized controls retain their own apply logic. The bindings support history, copy, reset, and targeted refresh.
-- **Shared history and scoped application.** A settings change is routed to the responsible runtime, such as unit frames, auras, or resources. Geometry, width, and frame updates remain pending when a write fails, so they can be retried. A failure in one path can be reported while other pending work stays intact.
-- **Engine-owned preview scenes.** Options supplies samples, selection, layers, and controls. The runtime painters render dedicated scenes for unit frames, group frames, castbars, and class resources. Preview data and scene state are isolated from live units. Shared preview requests coordinate activation, suspension, and cleanup.
-- **Search and menu lifecycle.** Search uses a more compact index, builds FAQ and alias data on demand, and carries more precise navigation targets. Pages and controls are reused where possible when switching scopes or slots. Window chrome, theme, page entry, and the preview dock have separate owners. The earlier internal skin bridge was retired, with MapkoSkin and the Suite skin bridge handling their respective integrations. [Menu control schema](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/MENU_CONTROL_SCHEMA.md) · [Preview requests](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PREVIEW_REQUESTS.md) · [Search memory](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/search-memory-budget.md) · [Skin bridge ownership](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/MENU_SKIN_BRIDGE.md)
+- Controls that write to profiles declare their ID, profile path, scope, and how to apply the change.
+- Generate simple setters from those declarations. Keep custom handlers for specialized controls.
+- Use shared bindings for history, copy, reset, and refresh. Apply each change through the relevant system, such as unit frames, auras, or resources.
+- Keep failed geometry, width, and frame updates queued for retry. [Menu control schema](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/MENU_CONTROL_SCHEMA.md)
+- Keep preview samples separate from live units. Use the same renderers for both.
+- Use shared preview requests to start, pause, and clean up scenes. [Preview requests](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PREVIEW_REQUESTS.md)
+- Use a smaller search index. Build FAQ and alias data on demand. Reuse pages and controls when switching scopes or slots where possible. [Search memory](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/search-memory-budget.md)
+- Split window controls, theme, page entry, and the preview dock. MapkoSkin and Suite handle their own skin integrations. [Skin integration](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/MENU_SKIN_BRIDGE.md)
 
-### Runtime, client boundaries, and integrations
+### Runtime and startup
 
-- **Unit-frame engine.** Status regions, indicators, text formatting and queues, prediction, spawning, anchoring, and width calculation have distinct owners. Group frames share text formatting and parts of the rendering path with the engine. A different member taking over the same unit token triggers an identity refresh so the displayed name, color, and status match the new occupant. [Unit-frame responsibilities](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/uf-responsibility-split.md) · [Shared text formatting](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/UNITFRAME_TEXT_CONTRACT.md)
-- **Secure group headers.** Header configuration, layout, and overlay updates are separated. A hidden Party slot can be prepared before lockdown for the first invite during open-world combat. Native headers provide member assignments. MSUF refreshes the display and replays protected layout work after combat. [MSUF group runtime](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua) · [Blizzard Retail headers](https://github.com/Gethe/wow-ui-source/blob/297d7aaaa736f346b3e036f38ee088eaf7f8c07f/Interface/AddOns/Blizzard_RestrictedAddOnEnvironment/SecureGroupHeaders.lua) · [Blizzard Forever headers](https://github.com/Gethe/wow-ui-source/blob/9dc84f0d3bbae1768ac3405b3716000bd93eda06/Interface/AddOns/Blizzard_RestrictedAddOnEnvironment/SecureGroupHeaders.lua)
-- **Auras3 and the icon skin host.** The host API, configuration signatures, identity changes, and world transitions have separate owners. Both aura backends can use the shared skin renderer. Compiled looks carry signatures for reuse. A versioned host interface lets Suite compile, paint, and measure skin layers. Changes to the shared style during combat take effect at the same boundary for auras and connected icons. [Icon skin runtime contract](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/ICON_SKINS.md) · [Host API](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua)
-- **Edit Mode lifecycle.** One drag driver coordinates multiple frame types. Session and layout state are restored at the appropriate boundaries when cancelling, entering combat, or reopening. Releasing a Gameplay drag after cancellation cannot overwrite the restored position. [Edit Mode lifecycle](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/EDITMODE_ENGINE_DELTA.md)
-- **Castbars and class resources.** Cast configuration and interrupt-readiness consumers are separated from presentation. Resource construction, layout, and display modes live in their own modules. Optional Player HP uses the unit-frame engine. Timers with fixed deadlines share the scheduler. [Castbars](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/classic-v7.0-beta6/MidnightSimpleUnitFrames/Castbars) · [Class resources](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/classic-v7.0-beta6/MidnightSimpleUnitFrames/ClassPower) · [Scheduler](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua)
-- **Startup and load on demand.** Options continues to load on demand. TOC conditions select the required language files and aura alias data at login. Other menu languages load as needed from the bundled Locales addon. The compact in-game changelog loads with Options. A generated load-graph lock records the five clients' load paths and order, and a generated allowlist tracks required compatibility globals. [6.511 Mainline TOC](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/v6.511/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc) · [7.0 Mainline TOC](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc) · [Load-graph lock](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/load-graph.lock)
+- Split the unit-frame code for status, indicators, text and update queues, prediction, spawning, anchors, and width. Share text formatting and some rendering with group frames.
+- Refresh names, colors, and status when a different member takes over the same unit token. [Unit-frame code](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/uf-responsibility-split.md) · [Shared text formatting](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/UNITFRAME_TEXT_CONTRACT.md)
+- Separate group header settings, layout, and overlays. Prepare a hidden Party slot for the first open-world combat invite. Use native headers for member assignments and apply queued protected layout changes after combat. [Group runtime](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua)
+- Split Auras3 host API, configuration signatures, identity changes, and world transitions.
+- Share the skin renderer across both aura backends. Suite can compile, draw, and measure skins through a versioned API. Apply shared style changes made during combat together. [Icon skin API](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/ICON_SKINS.md) · [Host API](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua)
+- Share one drag handler across Edit Mode frame types. Restore session and layout state on cancel or combat entry. Ignore late Gameplay drag releases after cancellation. [Edit Mode runtime](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/EDITMODE_ENGINE_DELTA.md)
+- Separate castbar settings and interrupt readiness from rendering. Split class resource construction, layout, and display modes. Optional Player HP uses the unit-frame engine. Timers with fixed deadlines share the scheduler. [Castbars](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/classic-v7.0-beta6/MidnightSimpleUnitFrames/Castbars) · [Class resources](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/classic-v7.0-beta6/MidnightSimpleUnitFrames/ClassPower) · [Scheduler](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua)
+- Load Options on demand, along with the compact in-game changelog. TOC conditions load the required language files and aura alias data at login. Other languages load from the bundled Locales addon when needed.
+- Record file load order for all five clients in a generated lockfile. Generate the list of required compatibility globals. [6.511 TOC](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/v6.511/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc) · [7.0 TOC](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc) · [Load order](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/load-graph.lock)
 
-## 3. Performance and verification
+## 3. Performance and testing
 
-- **Less repeated work.** The runtime skips redundant aura alpha, portrait, and interrupt-readiness writes when the relevant display state is unchanged. Menu transitions and previews reuse existing widgets and scenes where possible. Failed unit updates can be retried for the affected unit without recompiling every unit specification. The Forever swing-range fallback runs only while needed. [Runtime write reductions](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/27a05e03f) · [Targeted unit retries](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/733f9d195) · [Menu transitions](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/768914da6)
-- **Profile storage measurements.** In the documented offline corpus, one Forever profile used 195,663 bytes as a complete serialized table after login and 23,984 bytes in V3 format. V3 was 12.3% of the full serialized size for that sample. Runtime profiles still use materialized tables. [Profile storage measurements](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md#c11-byte-measurements-2026-10-24)
-- **Release checks.** The compact release check uses an explicit test inventory and pinned runtimes and Blizzard source revisions. Coverage includes client boot, historical profile fixtures, expected decoder output, menu declarations, search targets, preview lifecycles, and missing or incorrectly loaded providers. A separate audit follows the current Blizzard branch tips. The Beta 6 schema report accounts for 17,419 profile-writing control declarations across five client graphs, counting shared controls per client. [Release check](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/release-check.md) · [Offline evidence](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/RELEASE_EVIDENCE.md) · [Schema report](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/menu_schema_coverage_receipt.json)
-- **Targeted Beta 6 checks.** All 16 targeted offline runs passed. These included profile migration and position adoption on each of the five clients, the workbench on Retail and Forever, roster identity on Retail and Forever, and Forever portrait and swing timer behavior. The roster tests cover the first Party invite and Raid membership changes. The migration fixtures include historical profiles through 6.510. The full release check and in-game validation are separate from these runs. Live rendering, combat and taint behavior, and comparative in-game performance remain open.
+- Skip repeat aura alpha, portrait, and interrupt readiness writes when the display state is unchanged. [Runtime changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/27a05e03f)
+- Reuse widgets and previews where possible. Retry a failed unit update without rebuilding all unit settings. Run the Forever swing range fallback only while needed. [Menu changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/768914da6) · [Unit update retries](https://github.com/Mapkov2/MidnightSimpleUnitFrames/commit/733f9d195)
+- One offline Forever profile sample used **195,663 bytes** in full and **23,984 bytes** in V3, or **12.3%** of the full save size. Runtime profiles are still loaded as complete tables. [Profile storage measurements](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md#c11-byte-measurements-2026-10-24)
+- Release checks cover client boot, historical profiles, decoder output, menu declarations, search targets, preview lifecycle, and missing or incorrectly loaded providers. The checks pin runtime versions and Blizzard sources. A separate audit tracks current Blizzard branch tips. [Release check](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/release-check.md) · [Offline evidence](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/RELEASE_EVIDENCE.md)
+- Beta 6 records **17,419** profile-writing control declarations across the five client graphs. Shared controls count per client. [Schema report](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/tools/menu_schema_coverage_receipt.json)
+- **16 targeted Beta 6 offline runs passed.** Coverage included profile migration and position adoption on all five clients, the workbench and roster updates on Retail and Forever, and Forever portraits and swing timers. Roster tests include the first Party invite and Raid membership changes. Migration fixtures include profiles through 6.510.
+- Full release checks, live rendering, combat and taint behavior, and comparative in-game performance require separate validation.
 
 ## 4. Upgrading and returning to 6.5
 
-7.0 carries over complete 6.5x profiles and their character assignments. One-time migrations retain explicit choices, such as disabling Forever mana regeneration indicators. On first use of an upgraded layout, 7.0 adopts the screen-height reference after the actual UI scale has settled. The stored anchor choices and offsets are retained. [Upgrade behavior](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md#first-upgrade-from-65)
+- 7.0 carries over full 6.5x profiles and character assignments. Explicit choices such as disabled Forever mana regeneration indicators are kept.
+- On first use of an upgraded layout, 7.0 waits for UI scale to settle before adopting the screen-height reference. Anchors and offsets are kept. [Upgrade behavior](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md#first-upgrade-from-65)
 
-**Before returning to 6.5, run `/msuf compatsave` while still on 7.0.** Log out or run `/reload` under 7.0 to complete the save, then switch addon versions. This writes full tables for every profile, including inactive ones. A profile that has never been active in 7.0 can still be positioned differently when first loaded under 6.5, because the older version may adopt its screen-height reference before applying its final UI scale. [Downgrade procedure and position limitation](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md#compatibility-and-downgrade-boundaries)
+**Returning to 6.5**
 
-## 5. Already available in stable 6.5x
+1. Run `/msuf compatsave` in 7.0.
+2. Log out or run `/reload` while still on 7.0. This saves all profiles in full, including inactive ones.
+3. Install 6.5 after the save.
 
-| Version | Changes already available in 6.5 |
+A profile that has never been active in 7.0 may move on first load in 6.5. The older version can read the screen-height reference before applying the final UI scale. [Downgrade steps and position limitation](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/PROFILE_STORAGE.md#compatibility-and-downgrade-boundaries)
+
+## 5. Already in stable 6.5x
+
+| Version | Changes |
 | --- | --- |
-| 6.50 | Shared multi-client Core, Arena Frames on supported clients, Pet Target and pet auras, Slanted Frames, cosmetic texture layers, and expanded group layouts. |
-| 6.501–6.503 | Fixes for delayed group names, boss resources, Raid membership and old group filters, resets, preview sorting, and player channel and empower transitions. |
-| 6.505–6.506 | Combat right-click focus for supported Boss and Arena frames, class and NPC colors for texture layers, Health and Power Chunks in previews, larger detached power bars, Forever Paladin blessing priorities, and fixes for Spell Lock after Grimoire of Sacrifice and late cast-stop events. |
-| 6.507–6.509 | Correct health on dependent target frames, Forever mana regeneration with the five-second rule, optional castbar artwork and a dark spell-name panel, safer compressed imports, and more reliable positioning when dragging frames. |
-| 6.510–6.511 | Separate health gradients and backgrounds by group type, draggable Forever Swing Timers with layer previews, MapkoSkin preset selection, opacity in the compact picker, PvP flag refreshes, and optional open-world faction badges for Target and Focus. |
+| 6.50 | Shared Core across clients, Arena Frames on supported clients, Pet Target and pet auras, Slanted Frames, texture layers, and more group layouts. |
+| 6.501–6.503 | Fixes for delayed group names, boss resources, Raid membership, old group filters, resets, preview sorting, channels, and empower transitions. |
+| 6.505–6.506 | Right-click focus in combat for supported Boss and Arena frames, class and NPC texture colors, Health and Power Chunks in previews, larger detached power bars, Forever Paladin blessing priorities, Spell Lock after Grimoire of Sacrifice, and late cast-stop fixes. |
+| 6.507–6.509 | Correct health on dependent target frames, Forever mana regeneration and the five-second rule, optional castbar artwork and dark name panel, safer compressed imports, and drag position fixes. |
+| 6.510–6.511 | Group health gradients and backgrounds, draggable Forever Swing Timers with layer previews, MapkoSkin preset, opacity in the compact picker, PvP flag updates, and optional open-world faction badges for Target and Focus. |
 
 [Stable 6.5x changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/v6.511/CHANGELOG.md)
 
 ## 6. Beta timeline
 
-| Build | Focus |
+| Build | Changes |
 | --- | --- |
-| Beta 1 · November 7 | Icon Skins, workbench, import review, multi-selection, display variants, menu improvements, runtime previews, and migration of full 6.5x profiles. |
-| Beta 2 · November 8 | Menu sounds, round Shadow 3, more robust profile and position migration, and Dashboard and Forever fixes. Also includes the PvP changes from 6.511. |
-| Beta 3 · November 9 | Eating and Drinking status text on Forever. |
-| Beta 4 · November 9 | Party and Raid roster changes during open-world combat on Retail and Forever. |
-| Beta 5 · November 9 | Shared melee range fallback for both hands on Forever. |
-| Beta 6 · November 9 | Automatic elite portrait decoration on Forever when player classification is restricted. |
+| Beta 1 · Nov 7 | Icon Skins, profile workbench and import review, multi-selection, display variants, menu and preview changes, full 6.5x profile migration. |
+| Beta 2 · Nov 8 | Menu sounds, round Shadow 3, migration and position fixes, Dashboard and Forever fixes. Includes the 6.511 PvP changes. |
+| Beta 3 · Nov 9 | Eating and Drinking status on Forever. |
+| Beta 4 · Nov 9 | Party and Raid updates during open-world combat on Retail and Forever. |
+| Beta 5 · Nov 9 | Shared melee range fallback for both hands on Forever. |
+| Beta 6 · Nov 9 | Automatic elite portrait decoration fix on Forever when player classification is restricted. |
 
 [Tagged beta changelog](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/CHANGELOG.md)
