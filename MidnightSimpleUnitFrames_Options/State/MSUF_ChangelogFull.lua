@@ -8,21 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "033D70CDE0A6A09970FD20A74B92B24198BE209F60AA006A94B581083A382C6E",
-    currentVersion = "7.0-beta4",
+    sourceSha256 = "1AA4579797D444A2B43A92E1CE2E96C057D7DAD75249882A0D02566003B42C2A",
+    currentVersion = "7.0-beta5",
     historyFromVersion = "6.02",
     previousVersion = "6.510",
-    rangeLabel = "6.510 -> 7.0-beta4",
+    rangeLabel = "6.510 -> 7.0-beta5",
     entries = {
         {
-            version = "7.0-beta4",
+            version = "7.0-beta5",
             date = "2026-11-09",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Open-world group updates on Retail and WoW Forever. Party and Raid frames update when the roster changes during combat outside instances. This includes the first Party invite and refreshes stale names and status text on visible frames. Layout changes that require protected updates apply after combat.",
+                            text = "Melee Swing Timer range on WoW Forever. The Main Hand and Off Hand range warnings now check the current target when the native swing API provides no range. Both hands share one short-distance check every 200 ms while needed. The fallback uses duel interaction distance, which approximates weapon reach.",
                             linkless = true,
                         },
                     },

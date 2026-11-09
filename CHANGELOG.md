@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta5 - 2026-11-09
+
+Changes since 7.0 Beta 4.
+
+### Highlights
+
+- **Melee Swing Timer range on WoW Forever.** The Main Hand and Off Hand range warnings now check the current target when the native swing API provides no range. Both hands share one short-distance check every 200 ms while needed. The fallback uses duel interaction distance, which approximates weapon reach.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-beta4 - 2026-11-09
 
 Changes since 7.0 Beta 3.

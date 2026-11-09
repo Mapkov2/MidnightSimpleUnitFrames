@@ -3,7 +3,7 @@ local path = root .. "/MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"
 local chunk = assert(loadfile(path))
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
 Secrets.Install()
-Secrets.GUARD_NAMES.truthy.Public = true
+Secrets.GUARD_NAMES.falsy.Public = true
 local ns = { Client = { IsForever = false } }
 chunk("MidnightSimpleUnitFrames", ns)
 assert(ns.SwingTimer == nil, "other clients must have no module or events")
@@ -138,7 +138,10 @@ _G.C_DurationUtil = {
 _G.C_StringUtil = { CreateNumericRuleFormatter=function() return {SetBreakpoints=noop} end }
 -- Native Forever surfaces used by the range/queued-attack presentation.
 local attackable, targetDead, knowsShoot = true, false, true
-local nativeRanged, spellRange, spellRangeCalls = nil, false, 0
+local nativeMain, nativeOff, nativeRanged
+local nativeMeleeCalls = 0
+local spellRange, spellRangeCalls = false, 0
+local meleeRange, meleeRangeCalls = false, 0
 local equippedRangedItem, rangedSubclass, playerClass = 1000, 19, "WARRIOR"
 local rangeTicker
 _G.INVSLOT_RANGED = 18
@@ -153,6 +156,11 @@ _G.C_Item = { GetItemInfoInstant = function(id)
     return nil, nil, nil, nil, nil, 2, rangedSubclass
 end }
 _G.C_SpellBook = { IsSpellKnown = function() return knowsShoot end }
+_G.CheckInteractDistance = function(target, interaction)
+    assert(target == "target" and interaction == 3)
+    meleeRangeCalls = meleeRangeCalls + 1
+    return meleeRange
+end
 _G.UnitCanAttack = function() return attackable end
 _G.UnitIsDeadOrGhost = function() return targetDead end
 _G.UnitClass = function() return playerClass, playerClass end
@@ -165,6 +173,11 @@ local nativeRangeChecks={}
 _G.C_SwingTimer={
     EnableRangeCheck=function(hand,enabled) nativeRangeChecks[hand]=enabled end,
     IsTargetWithinSwingRange=function(hand)
+        if hand < 2 then
+            nativeMeleeCalls = nativeMeleeCalls + 1
+            if hand == 0 then return nativeMain end
+            return nativeOff
+        end
         if hand == 2 then return nativeRanged end
     end,
 }
@@ -363,6 +376,132 @@ event("PLAYER_IN_COMBAT_CHANGED")
 assert(swing.Set("ranged","visibility","always"))
 assert(swing.Set("ranged","reachCheck",false))
 assert(rangeTicker.cancelled and not nativeRangeChecks[2] and ranged.alpha == 1, "disabling fade stops both checks")
+-- A staff-wielding Priest needs a melee check without a class melee spell.
+playerClass, rangedSubclass, offSpeed = "PRIEST", 19, nil
+event("WEAPON_SLOT_CHANGED")
+assert(swing.Set("main","visibility","always"))
+assert(swing.Set("main","reachOpacity",25))
+assert(swing.Set("main","reachCheck",true))
+assert(main.alpha == 0.25 and not off:IsShown() and not rangeTicker.cancelled,
+    "an idle Priest with a staff fades against a target outside melee range")
+local meleeTicker = rangeTicker
+meleeRange = true
+meleeTicker:Tick()
+assert(main.alpha == 1 and rangeTicker == meleeTicker, "entering melee range restores the staff bar")
+meleeRange = false
+
+-- Dual-wield and a ranged weapon share a timer and have separate range probes.
+playerClass, rangedSubclass, offSpeed = "WARRIOR", 3, 2.5
+event("WEAPON_SLOT_CHANGED")
+assert(swing.Set("off","reachOpacity",40))
+assert(swing.Set("off","reachCheck",true))
+assert(swing.Set("ranged","reachCheck",true))
+local previousMeleeCalls, previousSpellCalls = meleeRangeCalls, spellRangeCalls
+rangeTicker:Tick()
+assert(main.alpha == 0.25 and off.alpha == 0.4 and ranged.alpha == 0.25
+    and meleeRangeCalls == previousMeleeCalls + 1 and spellRangeCalls == previousSpellCalls + 1
+    and rangeTicker == meleeTicker, "both melee bars share one target probe and the ranged ticker")
+previousMeleeCalls, previousSpellCalls = meleeRangeCalls, spellRangeCalls
+event("PLAYER_SWING_RANGE_UPDATE",0,false,false)
+event("PLAYER_SWING_RANGE_UPDATE",1,false,false)
+assert(meleeRangeCalls == previousMeleeCalls and spellRangeCalls == previousSpellCalls,
+    "repeat invalid native events do not resample an already pending range")
+do
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local before = collectgarbage("count")
+    for _ = 1, 10000 do meleeTicker:Tick() end
+    local growth = collectgarbage("count") - before
+    collectgarbage("restart")
+    assert(growth < 1, "stable fallback polls allocated " .. growth .. " KiB")
+    assert(meleeRangeCalls == previousMeleeCalls + 10000 and spellRangeCalls == previousSpellCalls + 10000,
+        "each stable tick issues only one melee probe and one ranged probe")
+    print("Swing range fallback allocation smoke: 10000 ticks, " .. growth .. " KiB growth (offline stubs)")
+end
+nativeMain = true
+event("PLAYER_SWING_RANGE_UPDATE",0,true,true)
+assert(main.alpha == 1 and off.alpha == 0.4 and not rangeTicker.cancelled,
+    "a readable main-hand result wins while the off-hand still needs fallback")
+nativeOff = false
+event("PLAYER_SWING_RANGE_UPDATE",1,false,true)
+previousMeleeCalls = meleeRangeCalls
+rangeTicker:Tick()
+assert(off.alpha == 0.4 and meleeRangeCalls == previousMeleeCalls,
+    "the ranged timer must not sample melee when both native results are readable")
+assert(swing.Set("ranged","reachCheck",false))
+assert(rangeTicker.cancelled, "readable native results stop the last fallback ticker")
+
+nativeMain, nativeOff = nil, nil
+event("PLAYER_TARGET_CHANGED")
+assert(main.alpha == 0.25 and off.alpha == 0.4 and not rangeTicker.cancelled)
+previousMeleeCalls = meleeRangeCalls
+attackable = false
+event("UNIT_FACTION","target")
+assert(main.alpha == 1 and off.alpha == 1 and rangeTicker.cancelled and meleeRangeCalls == previousMeleeCalls,
+    "the same target becoming friendly stops both melee fallbacks")
+attackable, targetDead = true, true
+event("UNIT_FLAGS","target")
+assert(main.alpha == 1 and off.alpha == 1 and meleeRangeCalls == previousMeleeCalls, "skip dead targets")
+targetDead = false
+event("UNIT_FLAGS","target")
+assert(main.alpha == 0.25 and off.alpha == 0.4 and not rangeTicker.cancelled, "reviving resumes melee fallback")
+
+meleeRange = nil
+rangeTicker:Tick()
+assert(main.alpha == 1 and off.alpha == 1 and rangeTicker.cancelled,
+    "a missing melee result is neutral and stops the fallback ticker")
+meleeRange = false
+event("PLAYER_TARGET_CHANGED")
+assert(not rangeTicker.cancelled, "recheck melee range after changing targets")
+stopWatching = Secrets.Watch(path, { strict = true })
+meleeRange = secret
+rangeTicker:Tick()
+assert(main.alpha == 1 and off.alpha == 1 and rangeTicker.cancelled,
+    "a secret melee result is neutral and stops the fallback ticker")
+meleeRange, nativeMain, nativeOff = false, secret, secret
+previousMeleeCalls = meleeRangeCalls
+event("PLAYER_TARGET_CHANGED")
+assert(main.alpha == 1 and off.alpha == 1 and rangeTicker.cancelled and meleeRangeCalls == previousMeleeCalls,
+    "secret native melee results must not fall back")
+violations = stopWatching()
+assert(#violations == 0, table.concat(violations, "\n"))
+nativeMain, nativeOff = nil, nil
+assert(swing.Set("main","visibility","combat"))
+assert(swing.Set("off","visibility","combat"))
+previousMeleeCalls = meleeRangeCalls
+local previousNativeMeleeCalls = nativeMeleeCalls
+event("PLAYER_TARGET_CHANGED")
+assert(not main:IsShown() and not off:IsShown() and rangeTicker.cancelled
+    and meleeRangeCalls == previousMeleeCalls and nativeMeleeCalls == previousNativeMeleeCalls,
+    "hidden melee bars do neither native nor fallback polling")
+combat = true
+event("PLAYER_IN_COMBAT_CHANGED")
+assert(main.alpha == 0.25 and off.alpha == 0.4 and not rangeTicker.cancelled,
+    "combat-only melee bars seed their range when shown")
+combat = false
+event("PLAYER_IN_COMBAT_CHANGED")
+assert(swing.Set("main","reachCheck",false))
+assert(swing.Set("off","reachCheck",false))
+assert(swing.Set("off","visibility","always"))
+assert(rangeTicker.cancelled and not nativeRangeChecks[0] and not nativeRangeChecks[1],
+    "disabled melee checks leave no polling")
+
+assert(swing.Set("main","visibility","always"))
+assert(swing.Set("main","offhandLane",true))
+assert(swing.Set("off","reachColor",{0.1,0.2,0.3}))
+assert(swing.Set("off","reachCheck",true))
+assert(not off:IsShown() and off.Lane:IsShown() and nativeRangeChecks[1]
+    and main.alpha == 1 and off.Lane:GetAlpha() == 0.4 and off.Lane.color[1] == 0.1,
+    "the visible off-hand lane warns independently of the main hand")
+meleeRange = true
+rangeTicker:Tick()
+assert(off.Lane:GetAlpha() == 1 and off.Lane.color[1] == off.config.color[1],
+    "the off-hand lane restores its normal opacity and color when in range")
+meleeRange = false
+assert(swing.Set("off","reachCheck",false))
+assert(swing.Set("main","offhandLane",false))
+assert(off:IsShown() and not off.Lane:IsShown() and rangeTicker.cancelled)
+
 playerClass, rangedSubclass = "WARRIOR", 19
 event("PLAYER_SWING",4,2)
 assert(ranged.endsAt==104)

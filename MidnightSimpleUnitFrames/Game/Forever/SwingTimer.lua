@@ -37,8 +37,13 @@ local LIMITS = {
 }
 local frames, byType = {}, {}
 local active, preview, manualPreview, editPreview, driver, nativeEnabled, formatter
-local rangedSpellID, rangedRangeTicker
-local RANGED_RANGE_INTERVAL = 0.2
+local rangedSpellID, rangeTicker
+local RANGE_INTERVAL = 0.2
+-- Duel interaction distance is a short-range fallback when auto-attack range is unavailable.
+local DUEL_DISTANCE = 3
+local CheckInteractDistance = CheckInteractDistance
+local NewTicker = C_Timer and C_Timer.NewTicker
+local meleeRangeUnavailable
 -- Same equipped-weapon shots as Blizzard's Forever hostile targeting bar.
 local AUTO_SHOT = 75
 local WEAPON_SHOTS = { Bows = 2480, Guns = 7918, Thrown = 2764, Crossbow = 7919, Wand = 5019 }
@@ -326,9 +331,9 @@ end
 local function ResolveRangedSpell()
     local cfg = frames.ranged.config
     if not (equippedRanged and cfg.enabled and cfg.reachCheck) then return end
-    local book, spell, item, timer = C_SpellBook, C_Spell, C_Item, C_Timer
+    local book, spell, item = C_SpellBook, C_Spell, C_Item
     if not (book and book.IsSpellKnown and spell and spell.IsSpellInRange and item and item.GetItemInfoInstant
-        and timer and timer.NewTicker and GetInventoryItemID and INVSLOT_RANGED) then return end
+        and NewTicker and GetInventoryItemID and INVSLOT_RANGED) then return end
     local weapon = GetInventoryItemID("player", INVSLOT_RANGED)
     if not (Public(weapon) and weapon) then return end
     local _, class = UnitClass("player")
@@ -395,7 +400,7 @@ local function RefreshVisibility()
 end
 
 -- Out of reach: the bar fades to the chosen opacity and takes the reach
--- colour. Written only when the state flips; the lane inherits main's alpha.
+-- colour. Written only when the state flips.
 local function StyleReach(frame, outside)
     local c = frame.config
     frame:SetAlpha(c.opacity / 100 * (outside and c.reachOpacity / 100 or 1))
@@ -408,74 +413,129 @@ local function PaintReach(frame)
     if frame.reachShown == outside then return end
     frame.reachShown = outside
     StyleReach(frame, outside)
-end
-local function StopRangedRangeTicker()
-    if not rangedRangeTicker then return end
-    rangedRangeTicker:Cancel()
-    rangedRangeTicker = nil
-end
-
-local function SampleRangedRange(frame)
-    if not (active and frame.rangeEnabled and frame:IsShown() and rangedSpellID) then return end
-    local attackable = UnitCanAttack("player", "target")
-    if not (Public(attackable) and attackable) then return end
-    local dead = UnitIsDeadOrGhost("target")
-    if not Public(dead) then return end
-    if dead then return end
-    return true, C_Spell.IsSpellInRange(rangedSpellID)
-end
-
-local PollRangedRange
-local function UpdateReach(frame, range)
-    local readable = frame.rangeEnabled and Public(range)
-    if frame.hand == "ranged" then
-        -- The idle swing API can return nil even for a hostile target.
-        local sampled
-        if readable and range == nil then sampled, range = SampleRangedRange(frame) end
-        if sampled then
-            readable = Public(range)
-            if not rangedRangeTicker then rangedRangeTicker = C_Timer.NewTicker(RANGED_RANGE_INTERVAL, PollRangedRange) end
-        else
-            StopRangedRangeTicker()
-        end
+    local main, off = frames.main, frames.off
+    if frame.Lane then frame.Lane:SetStatusBarColor(unpack(outside and c.reachColor or c.color)) end
+    if off.Lane and frame ~= frames.ranged then
+        -- The lane already inherits the main-hand fade. Apply its own opacity only
+        -- if the main hand is not faded, so the two range settings never stack.
+        local fadeLane = off.reachShown and not main.reachShown
+        off.Lane:SetAlpha(fadeLane and off.config.reachOpacity / 100 or 1)
     end
-    frame.outside = readable and range == false
+end
+local function StopRangeTicker()
+    if not rangeTicker then return end
+    rangeTicker:Cancel()
+    rangeTicker = nil
+end
+
+local function CanSampleTarget()
+    local attackable = UnitCanAttack("player", "target")
+    if not (Public(attackable) and attackable) then return false end
+    local dead = UnitIsDeadOrGhost("target")
+    return Public(dead) and not dead
+end
+
+local function SetReach(frame, outside)
+    frame.outside = outside
     PaintReach(frame)
 end
 
-PollRangedRange = function()
-    local frame = frames.ranged
-    local range = frame.rangeEnabled and C_SwingTimer.IsTargetWithinSwingRange(Enum.PlayerSwingType.Ranged)
-    UpdateReach(frame, range)
+local function UpdateNativeReach(frame, range)
+    if not frame.rangeEnabled or not Public(range) then
+        frame.rangeFallback = false
+        SetReach(frame, false)
+        return
+    end
+    local fallback
+    if frame.hand == "ranged" then
+        fallback = rangedSpellID ~= nil
+    else
+        fallback = CheckInteractDistance ~= nil and NewTicker ~= nil and not meleeRangeUnavailable
+    end
+    frame.rangeFallback = range == nil and fallback
+    if not frame.rangeFallback then SetReach(frame, range == false) end
+end
+
+local PollRanges
+local function SampleFallbackRanges()
+    local main, off, ranged = frames.main, frames.off, frames.ranged
+    local melee = main.rangeFallback or off.rangeFallback
+    if not (melee or ranged.rangeFallback) then
+        StopRangeTicker()
+        return
+    end
+
+    local target = CanSampleTarget()
+    local poll = false
+    if melee then
+        local outside = false
+        if target then
+            local range = CheckInteractDistance("target", DUEL_DISTANCE)
+            if Public(range) then
+                poll = range ~= nil
+                outside = range == false
+            end
+        end
+        if main.rangeFallback then SetReach(main, outside) end
+        if off.rangeFallback then SetReach(off, outside) end
+        if target and not poll then
+            -- No answer for this target. A target or state event can retry it.
+            meleeRangeUnavailable = true
+            main.rangeFallback, off.rangeFallback = false, false
+        end
+    end
+    if ranged.rangeFallback then
+        local outside = false
+        if target then
+            local range = C_Spell.IsSpellInRange(rangedSpellID)
+            outside = Public(range) and range == false
+            poll = true
+        end
+        SetReach(ranged, outside)
+    end
+    if poll then
+        if not rangeTicker then rangeTicker = NewTicker(RANGE_INTERVAL, PollRanges) end
+    else
+        StopRangeTicker()
+    end
+end
+
+PollRanges = function()
+    for i = 1, #HANDS do
+        local frame = frames[HANDS[i]]
+        if frame.rangeFallback then
+            UpdateNativeReach(frame, C_SwingTimer.IsTargetWithinSwingRange(Enum.PlayerSwingType[NAMES[frame.hand]]))
+        end
+    end
+    SampleFallbackRanges()
 end
 
 -- C_SwingTimer.EnableRangeCheck is one switch per hand shared with Blizzard's
 -- bars, which turn it off when their CVar drops: force re-asserts it.
 local function SyncRanges(force)
+    meleeRangeUnavailable = nil
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
-        local enabled = (active and frame.handlesSwings and frame.config.reachCheck and not preview) and true or false
+        local shown = frame:IsShown() or (frame.Lane and frame.Lane:IsShown())
+        local enabled = (active and shown and frame.config.reachCheck and not preview) and true or false
         local swingType = Enum.PlayerSwingType[NAMES[frame.hand]]
         if force or enabled ~= frame.rangeEnabled then
             frame.rangeEnabled = enabled
             C_SwingTimer.EnableRangeCheck(swingType, enabled)
         end
         local range = enabled and C_SwingTimer.IsTargetWithinSwingRange(swingType)
-        UpdateReach(frame, range)
+        UpdateNativeReach(frame, range)
     end
+    SampleFallbackRanges()
 end
 local function SyncReachEvents()
     local ranged = frames.ranged.config
     if ranged.enabled and ranged.reachCheck then
         driver:RegisterEvent("SPELLS_CHANGED")
         driver:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
-        driver:RegisterUnitEvent("UNIT_FACTION", "target")
-        driver:RegisterUnitEvent("UNIT_FLAGS", "target")
     else
         driver:UnregisterEvent("SPELLS_CHANGED")
         driver:UnregisterEvent("PLAYER_EQUIPMENT_CHANGED")
-        driver:UnregisterEvent("UNIT_FACTION")
-        driver:UnregisterEvent("UNIT_FLAGS")
     end
     local want = false
     for i = 1, #HANDS do
@@ -487,9 +547,13 @@ local function SyncReachEvents()
     if want then
         driver:RegisterEvent("PLAYER_TARGET_CHANGED")
         driver:RegisterEvent("PLAYER_SWING_RANGE_UPDATE")
+        driver:RegisterUnitEvent("UNIT_FACTION", "target")
+        driver:RegisterUnitEvent("UNIT_FLAGS", "target")
     else
         driver:UnregisterEvent("PLAYER_TARGET_CHANGED")
         driver:UnregisterEvent("PLAYER_SWING_RANGE_UPDATE")
+        driver:UnregisterEvent("UNIT_FACTION")
+        driver:UnregisterEvent("UNIT_FLAGS")
     end
 end
 -- Spell names and icons are static: read once per apply, never per event.
@@ -717,7 +781,7 @@ local function OnEvent(_, event, a, b, c)
         local frame = byType[b]
         if frame and frame.handlesSwings then Start(frame, a) end
     elseif event == "PLAYER_LOGOUT" then
-        StopRangedRangeTicker()
+        StopRangeTicker()
         -- Restore the account CVar before a reload as well as when disabling.
         active = false
         SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
@@ -727,19 +791,28 @@ local function OnEvent(_, event, a, b, c)
             SyncRanges(true)
         end
     elseif event == "ADDON_LOADED" then
-        if a == "Blizzard_SwingTimer" then SuppressNative() end
+        if a == "Blizzard_SwingTimer" then
+            SuppressNative()
+            SyncRanges(true)
+        end
     elseif event == "PLAYER_SWING_RANGE_UPDATE" then
-        local frame = byType[a]
-        if frame and Public(c) then
-            if c then UpdateReach(frame, b) else UpdateReach(frame, nil) end
+        local frame = Public(a) and byType[a]
+        if frame and frame.rangeEnabled then
+            local wasFallback = frame.rangeFallback
+            if not Public(c) then
+                UpdateNativeReach(frame, c)
+            elseif c then
+                UpdateNativeReach(frame, b)
+            else
+                UpdateNativeReach(frame, nil)
+            end
+            if wasFallback ~= frame.rangeFallback then SampleFallbackRanges() end
         end
     elseif event == "SPELLS_CHANGED" or event == "PLAYER_EQUIPMENT_CHANGED" then
         if event == "PLAYER_EQUIPMENT_CHANGED" and a ~= INVSLOT_RANGED then return end
         rangedSpellID = ResolveRangedSpell()
         SyncRanges()
-    elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
-        PollRangedRange()
-    elseif event == "PLAYER_TARGET_CHANGED" then
+    elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" or event == "PLAYER_TARGET_CHANGED" then
         SyncRanges()
     elseif event == "CURRENT_SPELL_CAST_CHANGED" or event == "ACTIONBAR_UPDATE_STATE" then
         UpdateCue()
@@ -809,7 +882,7 @@ end
 local function Disable()
     if not active then return end
     active, preview, manualPreview = false, false, false
-    StopRangedRangeTicker()
+    StopRangeTicker()
     driver:UnregisterAllEvents()
     driver.listening, cueEventsBound, reachEventsBound = nil, false, false
     for i = 1, #HANDS do
@@ -819,7 +892,7 @@ local function Disable()
         frame:Hide()
         frame:EnableMouse(false)
         if frame.rangeEnabled then C_SwingTimer.EnableRangeCheck(Enum.PlayerSwingType[NAMES[frame.hand]], false) end
-        frame.rangeEnabled, frame.outside, frame.reachShown = false, false, nil
+        frame.rangeEnabled, frame.rangeFallback, frame.outside, frame.reachShown = false, false, false, nil
         if frame.Lane then frame.Lane:Hide() end
     end
     if frames.main and frames.main.Cue then frames.main.Cue:Hide() end
