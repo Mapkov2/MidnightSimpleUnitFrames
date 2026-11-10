@@ -71,6 +71,80 @@ local settingKinds = { toggle = true, checkbox = true, slider = true, dropdown =
     segment = true, color = true, textinput = true, editbox = true, input = true }
 local declarations = setmetatable({}, { __mode = "k" })
 local declaredSchemas = setmetatable({}, { __mode = "k" })
+-- Decorative rows repeat across selectors (one class name per drag row, for
+-- example). Their widgets can be collected before the next inventory pass.
+-- Keep only data, retain every distinct label/scope pair, and use one pair
+-- as the deterministic representative expected by existing evidence readers.
+local presentation = {}
+local pendingPresentation = {}
+local candidates, candidateByWidget, candidateWidgets = {}, setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "v" })
+local nextCandidate = 0
+local function IsPresentation(spec)
+    return spec and spec.applyDomain == "presentation" and (spec.kind == "font" or spec.kind == "text")
+        and not (spec.setting or spec.set or spec.settingPath or spec.ephemeralReason)
+end
+local function QueuePresentation(widget, spec, page)
+    -- A generic font can become a catalog control or be redeclared as a preview
+    -- while the same build is still in progress. Only its last declaration at
+    -- the observation boundary counts.
+    local old = candidateByWidget[widget]
+    if old then candidates[old], candidateWidgets[old], candidateByWidget[widget] = nil, nil, nil end
+    if not page or not IsPresentation(spec) or widget._msuf2RuntimeControlRecord then return end
+    nextCandidate = nextCandidate + 1
+    candidateWidgets[nextCandidate], candidateByWidget[widget] = widget, nextCandidate
+    candidates[nextCandidate] = { page = page, id = spec.id, kind = spec.kind, scope = spec.scope,
+        labelKey = Plain(spec.labelKey), applyDomain = spec.applyDomain }
+end
+local function ObservePresentation(widget, spec, page)
+    if not page or not IsPresentation(spec) then return false end
+    local snapshot = widget and declaredSchemas[widget] and declaredSchemas[widget][spec.id]
+    if snapshot and snapshot._presentationPage == page and type(spec.labelKey) ~= "table"
+        and snapshot.kind == spec.kind and snapshot.scope == spec.scope and snapshot.labelKey == spec.labelKey then
+        return true
+    end
+    local id = "schema:" .. page .. ":" .. spec.id
+    local group = presentation[id]
+    if not group then
+        group = { id = spec.id, page = page, variants = {}, count = 0 }
+        presentation[id] = group
+    end
+    local label = spec.labelKey or ""
+    local variant = { kind = spec.kind, scope = spec.scope, label = label }
+    local encoded = Json(variant)
+    if not group.variants[encoded] then
+        -- Stub values sometimes stand in for unavailable localized labels.
+        -- Preserve their JSON form, and prefer an observed real label for display.
+        variant.label = Plain(label)
+        group.variants[encoded] = variant
+        group.count = group.count + 1
+        local rank = type(label) == "string" and label ~= "" and 0 or 1
+        if not group.bestKey or rank < group.rank or (rank == group.rank and encoded < group.bestKey) then
+            group.bestKey, group.rank = encoded, rank
+        end
+        pendingPresentation[id] = group
+    end
+    if snapshot then snapshot._presentationPage = page end
+    return true
+end
+local function PublishPresentation()
+    -- Surviving widgets were inspected with their final catalog/preview state
+    -- just above this boundary. A collected widget cannot be inspected now.
+    for index, candidate in pairs(candidates) do
+        if not candidateWidgets[index] then ObservePresentation(nil, candidate, candidate.page) end
+    end
+    candidates, candidateByWidget, candidateWidgets = {}, setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "v" })
+    nextCandidate = 0
+    for key, group in pairs(pendingPresentation) do
+        local best = group.variants[group.bestKey]
+        local row = projected[key] or { controlId = key, pageKey = group.page, classification = "unindexed",
+            settingKey = "", controlPath = "", schemaId = group.id, applyDomain = "presentation" }
+        row.kind, row.schemaKind, row.label, row.scope = best.kind, best.kind, best.label, best.scope
+        if group.count > 1 then row.presentationVariants = group.variants end
+        projected[key] = row
+        if stream then dirty[key] = true end
+    end
+    pendingPresentation = {}
+end
 local function Remember(widget, spec)
     local variants = declaredSchemas[widget]
     if not variants then variants = {}; declaredSchemas[widget] = variants end
@@ -100,12 +174,14 @@ _G.__MSUF_WatchSchema = function(M)
         local result = bind(ctx, widget, spec)
         Remember(widget, widget._msuf2ControlSchema)
         declarations[widget] = ctx and ctx.key or M.PageKeyForWidget(widget) or M.activeKey
+        QueuePresentation(widget, widget._msuf2ControlSchema, declarations[widget])
         return result
     end
     schema.Custom = function(widget, spec)
         local result = custom(widget, spec)
         Remember(widget, widget._msuf2ControlSchema)
         declarations[widget] = M.PageKeyForWidget(widget) or M.activeKey
+        QueuePresentation(widget, widget._msuf2ControlSchema, declarations[widget])
         return result
     end
 end
@@ -219,10 +295,13 @@ _G.__MSUF_ProjectSchema = function(M, Catalog)
         for widget, page in pairs(declarations) do
             if not widget._msuf2RuntimeControlRecord then
                 local spec = widget._msuf2ControlSchema
-                Project({ controlId = "schema:" .. page .. ":" .. spec.id, pageKey = page,
-                    kind = spec.kind, label = spec.labelKey or "", classification = spec.setting and "setting" or "unindexed" }, widget)
+                if not ObservePresentation(widget, spec, page) then
+                    Project({ controlId = "schema:" .. page .. ":" .. spec.id, pageKey = page,
+                        kind = spec.kind, label = spec.labelKey or "", classification = spec.setting and "setting" or "unindexed" }, widget)
+                end
             end
         end
+        PublishPresentation()
         Flush()
     end
     assert(watched, "schema declaration hook did not install")
@@ -265,7 +344,7 @@ return {
             Flush()
             stream:close()
             stream, dirty = nil, nil
-            projected, settingFingerprints = {}, {}
+            projected, settingFingerprints, presentation, pendingPresentation = {}, {}, {}, {}
             declarations, declaredSchemas = nil, nil
             collectgarbage("collect")
             return

@@ -689,6 +689,16 @@ local function VisitWorkspaceStates(M, capture)
         Visit("home")
         M.dashboardRecoveryOpen, M.dashboardScalingOpen = recoveryOpen, scalingOpen
     end
+    -- The Suite exposes the scoped nameplate typography controls on these clients.
+    -- Only the capability is supplied here; the real page builds their records.
+    if pages.opt_fonts and (namespace.Client.IsRetail or namespace.Client.IsForever) then
+        local link, general = namespace.SuiteLink, _G.MSUF_DB.general
+        local probe, selected = link.HasNameplateFonts, general._fontScopeKey
+        link.HasNameplateFonts = function() return true end
+        general._fontScopeKey = "nameplates"
+        Visit("opt_fonts")
+        general._fontScopeKey, link.HasNameplateFonts = selected, probe
+    end
     return visited
 end
 

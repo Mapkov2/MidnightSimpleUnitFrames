@@ -205,7 +205,7 @@ end
 
 --- Resolve the effective health-color model once per compile. Runtime visual
 --- code receives concrete mode/color fields instead of profile fallback logic.
-local function ResolveHealthVisual(conf)
+local function ResolveHealthVisual(conf, out)
   conf = conf or {}
   local cache = SettingsCache()
   local general = GeneralDB()
@@ -218,29 +218,28 @@ local function ResolveHealthVisual(conf)
   local backgroundFillMode = fillMode == "missing" and "missing" or "full"
   local backgroundColorMode = BackgroundColorMode(conf, cache, general)
 
-  local out = {
-    mode = mode == "custom" and "unified" or mode,
-    r = Num(conf.healthCustomR, 0.2),
-    g = Num(conf.healthCustomG, 0.8),
-    b = Num(conf.healthCustomB, 0.2),
-    lossR = Clamp01(general and general.healthLossColorR, 1),
-    lossG = Clamp01(general and general.healthLossColorG, 0.55),
-    lossB = Clamp01(general and general.healthLossColorB, 0.08),
-    backgroundFillMode = backgroundFillMode,
-    backgroundColorMode = backgroundColorMode,
-    backgroundMatchHealth = backgroundColorMode == "match_health",
-    backgroundClassColor = backgroundColorMode == "class",
-    npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false,
-    gradientLowR = Num(conf.healthGradientLowR or gradient.healthGradientLowR, 1),
-    gradientLowG = Num(conf.healthGradientLowG or gradient.healthGradientLowG, 0),
-    gradientLowB = Num(conf.healthGradientLowB or gradient.healthGradientLowB, 0),
-    gradientMidR = Num(conf.healthGradientMidR or gradient.healthGradientMidR, 1),
-    gradientMidG = Num(conf.healthGradientMidG or gradient.healthGradientMidG, 1),
-    gradientMidB = Num(conf.healthGradientMidB or gradient.healthGradientMidB, 0),
-    gradientHighR = Num(conf.healthGradientHighR or gradient.healthGradientHighR, 0),
-    gradientHighG = Num(conf.healthGradientHighG or gradient.healthGradientHighG, 1),
-    gradientHighB = Num(conf.healthGradientHighB or gradient.healthGradientHighB, 0),
-  }
+  out = out or {}
+  out.mode = mode == "custom" and "unified" or mode
+  out.r = Num(conf.healthCustomR, 0.2)
+  out.g = Num(conf.healthCustomG, 0.8)
+  out.b = Num(conf.healthCustomB, 0.2)
+  out.lossR = Clamp01(general and general.healthLossColorR, 1)
+  out.lossG = Clamp01(general and general.healthLossColorG, 0.55)
+  out.lossB = Clamp01(general and general.healthLossColorB, 0.08)
+  out.backgroundFillMode = backgroundFillMode
+  out.backgroundColorMode = backgroundColorMode
+  out.backgroundMatchHealth = backgroundColorMode == "match_health"
+  out.backgroundClassColor = backgroundColorMode == "class"
+  out.npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false
+  out.gradientLowR = Num(conf.healthGradientLowR or gradient.healthGradientLowR, 1)
+  out.gradientLowG = Num(conf.healthGradientLowG or gradient.healthGradientLowG, 0)
+  out.gradientLowB = Num(conf.healthGradientLowB or gradient.healthGradientLowB, 0)
+  out.gradientMidR = Num(conf.healthGradientMidR or gradient.healthGradientMidR, 1)
+  out.gradientMidG = Num(conf.healthGradientMidG or gradient.healthGradientMidG, 1)
+  out.gradientMidB = Num(conf.healthGradientMidB or gradient.healthGradientMidB, 0)
+  out.gradientHighR = Num(conf.healthGradientHighR or gradient.healthGradientHighR, 0)
+  out.gradientHighG = Num(conf.healthGradientHighG or gradient.healthGradientHighG, 1)
+  out.gradientHighB = Num(conf.healthGradientHighB or gradient.healthGradientHighB, 0)
   if mode == "dark" or mode == "unified" then
     ApplyFixedBarColor(out, conf, cache, general, mode)
   elseif mode == "gradient" or mode == "class" then
@@ -493,6 +492,8 @@ local GROUP_STATUS_REGIONS = {
   consumption = { "statusConsumptionTextSize", 14, "statusConsumptionTextAnchor", "CENTER",
       "statusConsumptionOffsetX", 0, "statusConsumptionOffsetY", 0, "statusConsumptionTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
+  layerStatus = { "layerStatusTextSize", 10, "layerStatusTextAnchor", "TOP", "layerStatusTextX", 0,
+      "layerStatusTextY", -2, "layerStatusTextLayer", 7 },
   level = { "levelTextSize", 10, "levelTextAnchor", "BOTTOMLEFT", "levelTextX", 2, "levelTextY", 2, "levelTextLayer", 7 },
   threat = { "threatTextSize", 9, "threatTextAnchor", "TOP", "threatTextX", 0, "threatTextY", -1, "threatTextLayer", 7 },
 }
@@ -514,6 +515,7 @@ local function CompileStatus(kind, conf)
   local incomingResEnabled = conf.resurrectIcon == true
   local pvpEnabled = conf.pvpIcon == true and (PVP_CONTEXT_GATED or PVPIndicatorContextActive())
   local phaseEnabled = conf.phaseIcon == true
+  local layerEnabled = IS_FOREVER and conf.layerStatusText == true
   local statusDeadGhostTextEnabled = conf.statusText == true or conf.statusGhostText == true
   local statusConnectionTextEnabled = conf.statusText == true
   local statusPlayerFlagTextEnabled = conf.statusAFKText == true or conf.statusAFKTimerText == true or conf.statusDNDText == true
@@ -524,13 +526,22 @@ local function CompileStatus(kind, conf)
   local levelEnabled = conf.levelText == true
   local levelColored = levelEnabled and conf.levelTextDifficultyColor ~= false
   local runtimeEvents, runtimeUnitlessEvents = CompileStatusRuntimeEvents(
-    leaderEnabled, assistEnabled, readyCheckEnabled, summonEnabled, phaseEnabled,
+    leaderEnabled, assistEnabled, readyCheckEnabled, summonEnabled, phaseEnabled or layerEnabled,
     raidMarkerEnabled, raidGroupEnabled, statusFlagTextEnabled, statusPlayerFlagTextEnabled, incomingResEnabled, pvpEnabled,
     levelEnabled, levelColored
   )
   if consumptionEnabled then runtimeEvents = AddEvent(runtimeEvents, "UNIT_AURA") end
+  if layerEnabled then
+    if runtimeEvents == EMPTY_EVENTS then runtimeEvents = nil end
+    if runtimeUnitlessEvents == EMPTY_EVENTS then runtimeUnitlessEvents = nil end
+    runtimeEvents = AddEvent(runtimeEvents, "UNIT_FLAGS")
+    runtimeEvents = AddEvent(runtimeEvents, "UNIT_CTR_OPTIONS")
+    for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "ZONE_CHANGED_NEW_AREA", "SHARD_TRANSFER" }) do
+      runtimeUnitlessEvents = AddEvent(runtimeUnitlessEvents, event)
+    end
+  end
   local runtimeEnabled = roleEnabled or leaderEnabled or assistEnabled
-    or readyCheckEnabled or summonEnabled or phaseEnabled
+    or readyCheckEnabled or summonEnabled or phaseEnabled or layerEnabled
     or raidMarkerEnabled or raidGroupEnabled or statusTextEnabled or incomingResEnabled or pvpEnabled
     or levelEnabled
 
@@ -602,7 +613,7 @@ local function CompileStatus(kind, conf)
   return {
     enabled = roleEnabled or raidMarkerEnabled or leaderEnabled or assistEnabled
       or readyCheckEnabled or summonEnabled or incomingResEnabled
-      or pvpEnabled or phaseEnabled or statusTextEnabled or raidGroupEnabled or levelEnabled,
+      or pvpEnabled or phaseEnabled or layerEnabled or statusTextEnabled or raidGroupEnabled or levelEnabled,
     group = true,
     groupRuntimeEnabled = runtimeEnabled,
     groupRuntimeEvents = runtimeEvents,
@@ -610,7 +621,8 @@ local function CompileStatus(kind, conf)
     runtimeLeaderPair = leaderEnabled or assistEnabled,
     runtimeReadyCheck = readyCheckEnabled,
     runtimeSummon = summonEnabled,
-    runtimePhase = phaseEnabled,
+    runtimePhase = phaseEnabled or layerEnabled,
+    runtimeLayerStatus = layerEnabled,
     runtimeRaidMarker = raidMarkerEnabled,
     runtimeRaidGroup = raidGroupEnabled,
     runtimeLevel = levelEnabled,
@@ -630,6 +642,7 @@ local function CompileStatus(kind, conf)
     incomingRes = incomingRes,
     pvp = pvp,
     phase = phase,
+    layerStatus = IS_FOREVER and StatusRegionDef(conf, layerEnabled, "layerStatus", resize) or nil,
     statusText = statusText,
     raidGroup = raidGroup,
     level = level,
@@ -637,7 +650,7 @@ local function CompileStatus(kind, conf)
   }
 end
 
-local function CompilePrediction(kind, conf, texture)
+local function CompilePrediction(kind, conf, texture, out)
   local general = ProfileSection("general") or {}
   local absorbEnabled = ScopedValue(conf, general, "enableAbsorbBar", nil)
   if absorbEnabled == nil and conf and conf.hlOverride == true and conf.absorbEnabled ~= nil then
@@ -663,31 +676,30 @@ local function CompilePrediction(kind, conf, texture)
     if value > high then return high end
     return value
   end
-  local out = {
-    enabled = heal == true or absorb == true or healAbsorb == true,
-    heal = heal == true,
-    healAllHealers = ScopedValue(conf, general, "healPredAllHealers", false) == true,
-    absorb = absorb == true,
-    healAbsorb = healAbsorb == true,
-    test = test == true,
-    healTest = healTest == true,
-    absorbTest = absorbTest == true,
-    healAbsorbTest = healAbsorbTest == true,
-    healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
-    absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", PREDICTION_ANCHOR.RIGHT), PREDICTION_ANCHOR.RIGHT),
-    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
-    healHeight = Geometry("healPredictionBarHeight", 0, 0, 100),
-    healOffsetY = Geometry("healPredictionBarOffsetY", 0, -100, 100),
-    absorbHeight = Geometry("absorbBarHeight", 0, 0, 100),
-    absorbOffsetY = Geometry("absorbBarOffsetY", 0, -100, 100),
-    healAbsorbHeight = Geometry("healAbsorbBarHeight", 0, 0, 100),
-    healAbsorbOffsetY = Geometry("healAbsorbBarOffsetY", 0, -100, 100),
-    overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true,
-    fullHealthAbsorbStripe = ScopedValue(conf, general, "fullHealthAbsorbStripe", false) == true,
-    texture = ScopedValue(conf, general, "healPredictionBarTexture", texture),
-    absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil),
-    healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil),
-  }
+  out = out and wipe(out) or {}
+  out.enabled = heal == true or absorb == true or healAbsorb == true
+  out.heal = heal == true
+  out.healAllHealers = ScopedValue(conf, general, "healPredAllHealers", false) == true
+  out.absorb = absorb == true
+  out.healAbsorb = healAbsorb == true
+  out.test = test == true
+  out.healTest = healTest == true
+  out.absorbTest = absorbTest == true
+  out.healAbsorbTest = healAbsorbTest == true
+  out.healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH)
+  out.absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", PREDICTION_ANCHOR.RIGHT), PREDICTION_ANCHOR.RIGHT)
+  out.healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH)
+  out.healHeight = Geometry("healPredictionBarHeight", 0, 0, 100)
+  out.healOffsetY = Geometry("healPredictionBarOffsetY", 0, -100, 100)
+  out.absorbHeight = Geometry("absorbBarHeight", 0, 0, 100)
+  out.absorbOffsetY = Geometry("absorbBarOffsetY", 0, -100, 100)
+  out.healAbsorbHeight = Geometry("healAbsorbBarHeight", 0, 0, 100)
+  out.healAbsorbOffsetY = Geometry("healAbsorbBarOffsetY", 0, -100, 100)
+  out.overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true
+  out.fullHealthAbsorbStripe = ScopedValue(conf, general, "fullHealthAbsorbStripe", false) == true
+  out.texture = ScopedValue(conf, general, "healPredictionBarTexture", texture)
+  out.absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil)
+  out.healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil)
   FillPredictionColors(out, general, conf, ScopedValue, Num)
   return out
 end
@@ -767,18 +779,44 @@ local function NameBarHeight(kind, conf)
   return math.max(1, math.min(Num(conf.nameBarHeight, 14), math.max(1, height - 5)))
 end
 
-local function CompileGroupVisuals(kind, conf)
-  local general = ProfileSection("general")
+local function FillGroupColors(group, conf, general)
   local hoverR, hoverG, hoverB = ResolveHighlightRGB()
-  local hoverSize = general and general.highlightThickness
-  if hoverSize == nil then
-    hoverSize = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlHoverSize") or conf.hlHoverSize
-  end
   local frameHighlightEnabled = not (general and general.highlightEnabled == false)
   if general and general.highlightEnabled == nil and general.enableHighlightOnHover ~= nil then
     frameHighlightEnabled = general.enableHighlightOnHover == true
   end
-  return {
+  group.deadBgEnabled = conf.deadBgEnabled == true
+  group.deadBgOffline = conf.deadBgOffline ~= false
+  group.deadBgR = Num(conf.deadBgR, 0.60)
+  group.deadBgG = Num(conf.deadBgG, 0.05)
+  group.deadBgB = Num(conf.deadBgB, 0.05)
+  group.deadBgA = Clamp01(conf.deadBgA, 0.90)
+  group.hpBarAlpha = Clamp01(conf.hpBarAlpha, 1)
+  group.hpBgAlpha = Clamp01(conf.hpBgAlpha, 0.85)
+  group.hoverHighlightEnabled = frameHighlightEnabled
+  group.hoverHighlightR = hoverR
+  group.hoverHighlightG = hoverG
+  group.hoverHighlightB = hoverB
+  group.targetR = Num(conf.targetR, 1)
+  group.targetG = Num(conf.targetG, 1)
+  group.targetB = Num(conf.targetB, 1)
+  group.focusR = Num(conf.hlFocusColorR, 0.5)
+  group.focusG = Num(conf.hlFocusColorG, 0.5)
+  group.focusB = Num(conf.hlFocusColorB, 1)
+  group.dispelOverlayAlpha = Clamp01(conf.dispelOverlayAlpha, 0.35)
+  group.debuffStripeAlpha = Clamp01(conf.debuffStripeAlpha, 0.6)
+  group.debuffStripeColorR = Num(conf.debuffStripeColorR, 0.8)
+  group.debuffStripeColorG = Num(conf.debuffStripeColorG, 0.2)
+  group.debuffStripeColorB = Num(conf.debuffStripeColorB, 0.2)
+end
+
+local function CompileGroupVisuals(kind, conf)
+  local general = ProfileSection("general")
+  local hoverSize = general and general.highlightThickness
+  if hoverSize == nil then
+    hoverSize = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlHoverSize") or conf.hlHoverSize
+  end
+  local group = {
     kind = kind,
     nameBarEnabled = conf.nameBarEnabled == true,
     nameBarHeight = NameBarHeight(kind, conf),
@@ -795,32 +833,13 @@ local function CompileGroupVisuals(kind, conf)
     healthFadeEnabled = conf.healthFadeEnabled == true,
     healthFadeThreshold = Num(conf.healthFadeThreshold, 95),
     healthFadeAlpha = Clamp01(conf.healthFadeAlpha, 0.45),
-    deadBgEnabled = conf.deadBgEnabled == true,
-    deadBgOffline = conf.deadBgOffline ~= false,
-    deadBgR = Num(conf.deadBgR, 0.60),
-    deadBgG = Num(conf.deadBgG, 0.05),
-    deadBgB = Num(conf.deadBgB, 0.05),
-    deadBgA = Clamp01(conf.deadBgA, 0.90),
-    hpBarAlpha = Clamp01(conf.hpBarAlpha, 1),
-    hpBgAlpha = Clamp01(conf.hpBgAlpha, 0.85),
-    hoverHighlightEnabled = frameHighlightEnabled,
     hoverHighlightSize = Num(hoverSize, 1),
-    hoverHighlightR = hoverR,
-    hoverHighlightG = hoverG,
-    hoverHighlightB = hoverB,
     targetIndicator = conf.targetIndicator ~= false,
-    targetR = Num(conf.targetR, 1),
-    targetG = Num(conf.targetG, 1),
-    targetB = Num(conf.targetB, 1),
     focusIndicator = conf.hlFocusEnabled ~= false,
-    focusR = Num(conf.hlFocusColorR, 0.5),
-    focusG = Num(conf.hlFocusColorG, 0.5),
-    focusB = Num(conf.hlFocusColorB, 1),
     focusSize = Num(conf.hlFocusSize, 2),
     focusOffset = Num(conf.hlFocusOffset, 0),
     dispelOverlayEnabled = (not DISPEL_OVERLAY_121_PTR_DISABLED) and conf.dispelOverlayEnabled == true,
     dispelOverlayStyle = NormalizeDispelOverlayStyle(conf.dispelOverlayStyle),
-    dispelOverlayAlpha = Clamp01(conf.dispelOverlayAlpha, 0.35),
     dispelOverlayTrigger = NormalizeDispelOverlayTrigger(conf.dispelOverlayTrigger),
     dispelOverlayOnHealth = conf.dispelOverlayOnHealth ~= false,
     dispelOverlayLayer = Layer(conf.dispelOverlayLayer, 0),
@@ -828,11 +847,9 @@ local function CompileGroupVisuals(kind, conf)
     debuffStripeEnabled = conf.debuffStripeEnabled == true,
     debuffStripeEdge = conf.debuffStripeEdge or "BOTTOM",
     debuffStripeHeight = Num(conf.debuffStripeHeight, 3),
-    debuffStripeAlpha = Clamp01(conf.debuffStripeAlpha, 0.6),
-    debuffStripeColorR = Num(conf.debuffStripeColorR, 0.8),
-    debuffStripeColorG = Num(conf.debuffStripeColorG, 0.2),
-    debuffStripeColorB = Num(conf.debuffStripeColorB, 0.2),
   }
+  FillGroupColors(group, conf, general)
+  return group
 end
 
 local function SplitAuraGrowth(value, fallback)
@@ -1828,14 +1845,6 @@ local function RefreshFontDomain(kind, base, conf)
   BumpSpecDomain(base, "_msufTextColorRevision")
 end
 
-local GROUP_COLOR_KEYS = {
-  "deadBgEnabled", "deadBgOffline", "hoverHighlightEnabled",
-  "deadBgR", "deadBgG", "deadBgB", "deadBgA", "hpBarAlpha", "hpBgAlpha",
-  "hoverHighlightR", "hoverHighlightG", "hoverHighlightB",
-  "targetR", "targetG", "targetB", "focusR", "focusG", "focusB",
-  "dispelOverlayAlpha", "debuffStripeAlpha", "debuffStripeColorR", "debuffStripeColorG", "debuffStripeColorB",
-}
-
 local function RefreshColorDomain(kind, base, conf)
   local general = GeneralDB() or {}
   local texture = ResolveTexture(GF.ResolveBarTexture, kind)
@@ -1843,24 +1852,12 @@ local function RefreshColorDomain(kind, base, conf)
   base.texture = texture
   base.backgroundTexture = backgroundTexture
   base.backgroundAlpha = Num(conf.hpBgAlpha, 0.85)
-  local healthVisual = ResolveHealthVisual(conf)
-  local health = base.health or {}
+  local health = ResolveHealthVisual(conf, base.health)
   base.health = health
   health.topInset = conf.nameBarEnabled == true and math.min(Num(conf.nameBarHeight, 14), math.max(1, base.height - 5)) or 0
   health.texture = texture
   health.backgroundTexture = backgroundTexture
-  health.mode = healthVisual.mode
-  health.r, health.g, health.b = healthVisual.r, healthVisual.g, healthVisual.b
-  health.lossR, health.lossG, health.lossB = healthVisual.lossR, healthVisual.lossG, healthVisual.lossB
-  health.gradientLowR, health.gradientLowG, health.gradientLowB = healthVisual.gradientLowR, healthVisual.gradientLowG, healthVisual.gradientLowB
-  health.gradientMidR, health.gradientMidG, health.gradientMidB = healthVisual.gradientMidR, healthVisual.gradientMidG, healthVisual.gradientMidB
-  health.gradientHighR, health.gradientHighG, health.gradientHighB = healthVisual.gradientHighR, healthVisual.gradientHighG, healthVisual.gradientHighB
   health.background = CompileBarBackground(conf)
-  health.backgroundFillMode = healthVisual.backgroundFillMode
-  health.backgroundColorMode = healthVisual.backgroundColorMode
-  health.backgroundMatchHealth = healthVisual.backgroundMatchHealth == true
-  health.backgroundClassColor = healthVisual.backgroundClassColor == true
-  health.npcClassColorBar = healthVisual.npcClassColorBar == true
   CompileBarMaterials(health, conf, general, "health")
 
   local power = base.power or {}
@@ -1902,18 +1899,14 @@ local function RefreshColorDomain(kind, base, conf)
   end
 
   base.tempMaxHealth = ReplaceTableContents(base.tempMaxHealth, CompileTempMaxHealth(kind, conf, texture))
-  base.prediction = ReplaceTableContents(base.prediction, CompilePrediction(kind, conf, texture))
+  base.prediction = CompilePrediction(kind, conf, texture, base.prediction)
   base.dispel = ReplaceTableContents(base.dispel, CompileDispelVisual(kind, conf))
   base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, general))
-  base.alpha = ReplaceTableContents(base.alpha, Shared.CompileAlpha({}, conf, true))
+  base.alpha = Shared.CompileAlpha(base.alpha and wipe(base.alpha) or {}, conf, true)
 
-  local nextGroup = CompileGroupVisuals(kind, conf)
   local group = base.group or {}
   base.group = group
-  for i = 1, #GROUP_COLOR_KEYS do
-    local key = GROUP_COLOR_KEYS[i]
-    group[key] = nextGroup[key]
-  end
+  FillGroupColors(group, conf, general)
 
   if GF.CompileCornerIndicators then
     base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf, kind))

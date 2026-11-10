@@ -82,6 +82,7 @@ function Note($action) {
 Note 'start'
 try {
     Start-Sleep -Milliseconds 700
+    if ($Bad -eq 'exit3') { exit 3 }
     if ($Phase -eq 'setter parity') {
         Write-Output 'PASS schema setters Mainline: complete'
         Write-Output 'PASS compound/temporary write contracts Mainline: complete'
@@ -95,7 +96,7 @@ $ErrorActionPreference = 'Stop'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $Repository 'tools/release-check.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors) { throw $errors[0] }
-foreach ($name in @('Order-ContractRuns', 'Start-ContractWorker', 'Invoke-Check')) {
+foreach ($name in @('Order-ContractRuns', 'Start-ContractWorker', 'Receive-ContractReceipts', 'Invoke-ContractWorkers', 'Invoke-Check')) {
     $node = $ast.Find({ param($item) $item -is [Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq $name }, $true)
     if (-not $node) { throw "Missing worker function $name" }
     Invoke-Expression $node.Extent.Text
@@ -118,34 +119,35 @@ try {
 $queue = Join-Path $Fixture 'probe.queue'; $events = Join-Path $Fixture 'events.log'
 [IO.File]::WriteAllText($queue, '0')
 $runs = @()
-foreach ($id in 0..7) {
+foreach ($id in 0..9) {
     $phase = if ($id -lt 5) { 'setter parity' } elseif ($id -eq 6) { 'namespace' } else { 'fast-check' }
-    $bad = if ($id -eq 7) { 'yes' } else { 'no' }
-    $runs += @{ Id = $id; Phase = $phase; Client = 'Mainline'; Label = "probe-$id"; Exe = $PowerShell;
+    if ($id -ge 8) { $phase = 'menu' }
+    $bad = if ($id -eq 9) { 'exit3' } elseif ($id -eq 7) { 'yes' } else { 'no' }
+    $test = if ($id -ge 8) { 'tools/tests/search_static_heap.lua' } else { 'tools/tests/other.lua' }
+    $runs += @{ Id = $id; Test = $test; Phase = $phase; Client = 'Mainline'; Label = "probe-$id"; Exe = $PowerShell;
         Args = @('-NoProfile', '-File', (Join-Path $Fixture 'leaf.ps1'), $phase, $bad, $events) }
 }
 $runs = @(Order-ContractRuns $runs)
 if (($runs[0..5].Id -join ',') -ne '0,1,2,3,4,5') { throw 'Fast-check did not share the first six slots' }
-$workers = @(); $receipts = @()
-try {
-    foreach ($number in 1..6) { $workers += Start-ContractWorker "probe-$number" $runs $queue }
-    foreach ($worker in $workers) {
-        $result = @($worker.Job | Wait-Job | Receive-Job | Where-Object { $_.PSObject.Properties['Receipts'] })
-        if ($result.Count -ne 1) { throw 'Incomplete scheduling receipt' }
-        $receipts += @($result[0].Receipts)
-    }
-    $receipts | ConvertTo-Json -Depth 5 -Compress | Write-Output
-} finally {
-    foreach ($worker in $workers) { $worker.Job | Remove-Job -Force -ErrorAction SilentlyContinue }
+# Keep the probe's mutexes separate from an active gate on the same machine.
+$startWorker = ${function:Start-ContractWorker}
+function Start-ContractWorker($Name, $Runs, $Queue, $Epoch) {
+    & $startWorker ((Split-Path -Leaf $Fixture) + '-' + $Name) $Runs $Queue $Epoch
 }
+$receipts = @(Invoke-ContractWorkers $runs $queue $true)
+if (Test-Path -LiteralPath $queue) { throw 'Controller retained its queue' }
+$receipts | ConvertTo-Json -Depth 5 -Compress | Write-Output
 """
     (root / 'probe.ps1').write_text(probe, encoding='utf-8')
     result = run_powershell(['-NoProfile', '-File', str(root / 'probe.ps1'), str(ROOT), str(root), sys.executable],
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     rows = json.loads(next(line for line in result.stdout.splitlines() if line.startswith('[{')))
-    assert sorted(row['Id'] for row in rows) == list(range(8)), rows
-    assert all(row['Ok'] == (row['Id'] != 7) for row in rows), rows
+    assert sorted(row['Id'] for row in rows) == list(range(10)), rows
+    assert all(row['Ok'] == (row['Id'] not in (7, 9)) for row in rows), rows
+    indexed = {row['Id']: row for row in rows}
+    assert indexed[9]['Code'] == 3 and indexed[8]['Finished'] <= indexed[9]['Started'], rows
+    assert indexed[9]['Finished'] <= min(indexed[i]['Started'] for i in range(8)), rows
     live, peak = set(), 0
     for line in (root / 'events.log').read_text().splitlines():
         action, pid = line.split()
@@ -156,7 +158,7 @@ try {
         else:
             live.remove(pid)
     assert not live and 2 <= peak <= 6, (live, peak)
-print('release scheduling: shared six-worker queue; exact inventory; false fast-check completion rejected')
+print('release scheduling: isolated Windows wall-time probes then shared six-worker queue; exact inventory; false fast-check completion rejected')
 
 # A batched syntax check must compile the exact shipped union, keep independent
 # Lua chunk limits and report every bad file even when the first batch aborts.

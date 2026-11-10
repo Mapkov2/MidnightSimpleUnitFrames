@@ -63,6 +63,32 @@ assert(P.MSUF_SwitchProfile("Release A") and env.MSUF_DB.player.width == 317, "s
 assert(P.MSUF_DeleteProfile("Release B") and not env.MSUF_GlobalDB.profiles["Release B"], "delete retained profile")
 assert(P.MSUF_SwitchProfile(original), "return to original refused")
 
+do
+    local api, active = P, original
+    local W = ns.ProfileWorkbench
+    assert(W.Checkpoint("Unrelated version"))
+    assert(api.MSUF_CreateProfile("Raid setup"))
+    assert(api.MSUF_SwitchProfile("Raid setup"))
+    local ok, id = W.Checkpoint("Before raid")
+    assert(ok and W.Points()[1].id == id)
+    -- Released builds deleted the profile table and kept its Workbench row.
+    local disk = Serial(env.MSUF_GlobalDB)
+    disk.profiles["Raid setup"] = nil
+    disk.char["Tester-Realm"].activeProfile = active
+    local upgraded, _, upgradedNS = World({ MSUF_GlobalDB = disk })
+    local upgradedAPI, upgradedW = upgraded.core.PublicGlobals, upgradedNS.ProfileWorkbench
+    assert(upgradedW.Points()[1].label == "Unrelated version", "upgrade lost a valid owner's restore point")
+    assert(upgradedAPI.MSUF_CreateProfile("Raid setup") and upgradedAPI.MSUF_SwitchProfile("Raid setup"))
+    assert(#upgradedW.Points() == 0 and not upgradedW.Restore(id), "fresh profile inherited a deleted legacy profile's settings")
+    assert(api.MSUF_RenameProfile("Raid setup", "Progress"))
+    assert(W.Points()[1] and W.Points()[1].id == id and W.Restore(id), "rename lost the profile's restore point")
+    assert(api.MSUF_CreateProfile("Raid setup") and api.MSUF_SwitchProfile("Raid setup"))
+    assert(#W.Points() == 0 and not W.Restore(id), "fresh profile inherited another profile's restore point")
+    assert(api.MSUF_DeleteProfile("Progress") and api.MSUF_CreateProfile("Progress") and api.MSUF_SwitchProfile("Progress"))
+    assert(#W.Points() == 0 and not W.Restore(id), "reusing a deleted profile name adopted its restore points")
+    assert(api.MSUF_SwitchProfile(active) and W.Points()[1].label == "Unrelated version", "another profile's points changed")
+end
+
 -- Drive the real native event listener, including the combat deferral.
 local active = 1
 if flavor == "Vanilla" or flavor == "TBC" then

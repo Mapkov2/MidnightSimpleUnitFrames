@@ -25,7 +25,6 @@ local UnitHasIncomingResurrection = UnitHasIncomingResurrection
 local UnitLevel = UnitLevel
 local UnitRace = UnitRace
 local UnitClassification = UnitClassification or GetUnitClassification
-local UnitIsPlayer = UnitIsPlayer
 local UnitIsPVP = UnitIsPVP
 local UnitIsPVPFreeForAll = UnitIsPVPFreeForAll
 local UnitFactionGroup = UnitFactionGroup
@@ -86,13 +85,13 @@ local function UnitExistsRuntime(unit, state, frame)
   local exists = ReadUnitExistsCached(frame, unit)
   return exists == true
 end
-local function UnitIsPlayerRuntime(unit, state, frame)
+local function UnitIsPlayerRuntime(unit, state, frame, unknownFallback)
   if state and state.isPlayerKnown == true then
     return state.isPlayer == true
   end
   local isPlayer, known = ReadUnitIsPlayerCached(frame, unit)
   if known == true then return isPlayer == true end
-  return UnitIsPlayer and false or nil
+  return unknownFallback
 end
 local Apply = MSUF.Apply or {}
 local ApplyTexture = Apply.Texture
@@ -552,6 +551,7 @@ local CONFIGURED_REGION_DEFS = {
   { "readyCheck", "readyCheckIcon" },
   { "summon", "summonIcon", nil, nil, nil, nil, nil, nil, true },
   { "phase", "phaseIcon", nil, nil, nil, Media.PHASE_TEXTURE, nil, nil, nil, true },
+  { "layerStatus", "layerStatusText", nil, nil, nil, nil, true },
 }
 
 local NAME_FONT_STATUS = {
@@ -853,7 +853,7 @@ Runtime.IDENTITY_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTIO
 Runtime.IDENTITY_NAME_EVENTS = { "UNIT_NAME_UPDATE" }
 Runtime.IDENTITY_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_LEVEL" }
 Runtime.RAID_GROUP_EVENTS = { "GROUP_ROSTER_UPDATE" }
-Runtime.ELITE_EVENTS = { "UNIT_CLASSIFICATION_CHANGED", "UNIT_LEVEL" }
+Runtime.ELITE_EVENTS = MSUF.Client.IsForever and { "UNIT_CLASSIFICATION_CHANGED" } or { "UNIT_CLASSIFICATION_CHANGED", "UNIT_LEVEL" }
 Runtime.STATUS_TEXT_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
 Runtime.STATUS_TEXT_CONNECTION_EVENTS = { "UNIT_CONNECTION" }
 Runtime.STATUS_TEXT_FLAGS_EVENTS = { "UNIT_FLAGS" }

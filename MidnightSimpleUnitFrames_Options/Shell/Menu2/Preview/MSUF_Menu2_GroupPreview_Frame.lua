@@ -495,7 +495,7 @@ local ENGINE_STATUS_FIELDS = {
     pvpIcon = "pvpIndicatorIcon", phaseIcon = "phaseIcon", showGroupNumber = "raidGroupNameText", levelText = "levelText",
     statusText = "_msufScene_statusText", statusGhostText = "_msufScene_statusGhostText",
     statusAFKText = "_msufScene_statusAFKText", statusDNDText = "_msufScene_statusDNDText",
-    statusConsumptionText = "_msufScene_statusConsumptionText",
+    statusConsumptionText = "_msufScene_statusConsumptionText", layerStatusText = "layerStatusText",
     statusAFKTimer = "statusAFKTimerText", threatText = "threatIndicatorText",
 }
 -- Retained public sample values cross the scene boundary before it paints. Handles only adopt regions.

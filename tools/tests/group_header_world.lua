@@ -48,10 +48,17 @@ local PROTECTED_GLOBALS = {
 -- RestrictedFrames.lua scrub(): only plain values cross into CallMethod.
 local SCRUB_TYPES = { string = true, number = true, boolean = true }
 
+-- Reused event and timer handlers keep the same Lua source across dispatches.
+-- Weak keys let one-shot callbacks disappear with the simulated timer queue.
+local groupRuntimeSource = setmetatable({}, { __mode = "k" })
 local function SourceIsGroupRuntime(fn)
+    local known = groupRuntimeSource[fn]
+    if known ~= nil then return known end
     local info = debug.getinfo(fn, "S")
     local source = info and info.source or ""
-    return source:find("Engine/Group/", 1, true) ~= nil or source:find("GroupFrames/", 1, true) ~= nil
+    local isGroup = source:find("Engine/Group/", 1, true) ~= nil or source:find("GroupFrames/", 1, true) ~= nil
+    groupRuntimeSource[fn] = isGroup
+    return isGroup
 end
 
 local Methods = {}

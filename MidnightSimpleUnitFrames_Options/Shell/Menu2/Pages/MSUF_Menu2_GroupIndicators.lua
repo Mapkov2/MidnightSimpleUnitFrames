@@ -366,7 +366,7 @@ function StatusIcons.IsTextSpec(spec)
     local value = spec and spec.value
     return value == "statusText" or value == "statusGhostText"
         or value == "statusAFKText" or value == "statusAFKTimer" or value == "statusDNDText"
-        or value == "levelText" or value == "threatText" or value == "statusConsumptionText"
+        or value == "levelText" or value == "threatText" or value == "statusConsumptionText" or value == "layerStatusText"
 end
 function StatusIcons.SpecDefault(spec, value)
     if type(value) == "function" then return value(spec) end

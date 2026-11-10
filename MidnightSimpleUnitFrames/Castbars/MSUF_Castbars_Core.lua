@@ -219,9 +219,8 @@ Core.BUILTIN_BAR_TEXTURES = Require("MSUF_BUILTIN_BAR_TEXTURES", FILE)
 MSUF.Castbars._GetFontPath = Core.GetFontPath
 MSUF.Castbars._GetFontFlags = Core.GetFontFlags
 
-local function GetCastbarTexture()
-    local db = EnsureDB()
-    local general = db.general
+local function GetCastbarTexture(general)
+    general = general or EnsureDB().general
     local castbarKey = general and general.castbarTexture or nil
     local barKey = general and general.barTexture or nil
 

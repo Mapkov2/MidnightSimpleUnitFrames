@@ -3,9 +3,9 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: MSUF
-## Version: 7.0-beta6 [AllowLoadGameType standard]
-## Version: 7.0-beta6 [ExcludeLoadGameType standard]
-## X-MSUF-Version-Forever: 7.0-beta6
+## Version: 7.0-beta7 [AllowLoadGameType standard]
+## Version: 7.0-beta7 [ExcludeLoadGameType standard]
+## X-MSUF-Version-Forever: 7.0-beta7
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI, Grid2, Details, MapkoSkin
@@ -285,6 +285,7 @@ Integrations\MSUF_Integration_EllesmereUnlock.lua
 # is loaded synchronously on first configuration demand. Only runtime contracts
 # that already apply before the menu opens stay in the main addon.
 Runtime\MSUF_UIScaleRuntime.lua
+Runtime\MSUF_NameplateSettings.lua
 Runtime\MSUF_HostAPI.lua
 Runtime\MSUF_WelcomeMessage.lua
 Runtime\MSUF_TooltipSpellIDs.lua
@@ -300,6 +301,8 @@ UnitFrames\Effects\MSUF_UF_RoundedSurface.lua
 UnitFrames\Effects\MSUF_UF_RoundedResources.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
 Castbars\MSUF_CastbarRounded.lua
+Castbars\MSUF_TimerBars.lua
+Castbars\MSUF_TimerBarVisuals.lua
 UnitFrames\Effects\MSUF_UF_TextureLayer.lua
 
 State\MSUF_ApplyService.lua

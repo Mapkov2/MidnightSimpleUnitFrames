@@ -493,6 +493,20 @@ assert(swing.Set("off","reachCheck",true))
 assert(not off:IsShown() and off.Lane:IsShown() and nativeRangeChecks[1]
     and main.alpha == 1 and off.Lane:GetAlpha() == 0.4 and off.Lane.color[1] == 0.1,
     "the visible off-hand lane warns independently of the main hand")
+assert(swing.Set("off","visibility","combat"))
+assert(not combat and main:IsShown() and not off:IsShown() and not off.Lane:IsShown(),
+    "an embedded combat-only off-hand timer must stay hidden out of combat")
+assert(not nativeRangeChecks[1] and rangeTicker.cancelled, "a hidden combat-only lane must stop its range checks")
+combat = true
+event("PLAYER_IN_COMBAT_CHANGED")
+assert(off.Lane:IsShown() and not off:IsShown() and nativeRangeChecks[1] and not rangeTicker.cancelled,
+    "combat starts the selected off-hand lane and its range checks")
+combat = false
+event("PLAYER_IN_COMBAT_CHANGED")
+assert(not off.Lane:IsShown() and not nativeRangeChecks[1], "leaving combat must hide just the off-hand lane")
+assert(swing.Set("off","visibility","always"))
+assert(off.Lane:IsShown() and nativeRangeChecks[1] and not rangeTicker.cancelled,
+    "changing the off-hand timer back to always restores the lane and its range checks")
 meleeRange = true
 rangeTicker:Tick()
 assert(off.Lane:GetAlpha() == 1 and off.Lane.color[1] == off.config.color[1],

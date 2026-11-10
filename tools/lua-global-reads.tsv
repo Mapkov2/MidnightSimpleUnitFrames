@@ -406,4 +406,13 @@ secureexecuterange	api	Blizzard client API (Blizzard_SharedXMLBase CallbackRegis
 strmatch	luaenv	string.match, which WoW also publishes as a global
 time	luaenv	WoW's time() global (there is no os table in the client)
 wipe	luaenv	WoW's table-clearing global
+GetInventoryItemID	api	Blizzard inventory lookup used by upstream/forever:Blizzard_GamepadActionBars/TargetActionBars/HostileTargetingActionBar.lua:101
+INVSLOT_RANGED	constant	Blizzard ranged equipment slot used by upstream/forever:Blizzard_GamepadActionBars/TargetActionBars/HostileTargetingActionBar.lua:101
 UnregisterAttributeDriver	api	Blizzard secure attribute-driver API paired with RegisterAttributeDriver; removes the owned boss/arena right-click driver outside combat
+GetMirrorTimerInfo	api	Native mirror timer snapshot; verified loaded MirrorTimer.lua on all client branches (2026-11-10)
+GetMirrorTimerProgress	api	Native remaining mirror time; checked for secret and nonfinite values before arithmetic
+MirrorTimerContainer	frame	Mainline and Forever native timer container; optional on Classic, only individual timer alpha is changed
+MirrorTimer1	frame	Classic native mirror timer 1; optional on Mainline, alpha retained in side table
+MirrorTimer2	frame	Classic native mirror timer 2; optional on Mainline, alpha retained in side table
+MirrorTimer3	frame	Classic native mirror timer 3; optional on Mainline, alpha retained in side table
+TimerTracker	frame	Native countdown timer list on all client branches; only the matching unprotected bar child is hidden

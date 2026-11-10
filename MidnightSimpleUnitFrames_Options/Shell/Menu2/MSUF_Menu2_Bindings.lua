@@ -370,6 +370,7 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         actionKey = command.actionKey,
         actionInputArg = opts.actionInputArg,
         actionFixedArgs = opts.actionFixedArgs,
+        anchor = opts.anchor,
         navigationKey = command.navigationKey,
         searchSettingKeys = command.searchSettingKeys,
         searchSettingKeyPatterns = command.searchSettingKeyPatterns,
@@ -419,7 +420,12 @@ function M.RefreshVisibleSliders(reason)
     return refreshed
 end
 local function RefreshValueControl(control, getValue) control:SetValue(getValue()) end
-local function RefreshTextInput(editBox, getValue) if not editBox:HasFocus() then editBox:SetText(tostring(getValue() or "")) end end
+local function RefreshTextInput(editBox, getValue)
+    if editBox:HasFocus() then return end
+    local text = tostring(getValue() or "")
+    if editBox._msuf2RefreshTextOnChange and editBox:GetText() == text then return end
+    editBox:SetText(text)
+end
 function M.BindToggle(ctx, widget, getValue, setValue, metadata)
     if not widget then return end
     AttachCommandAction(ctx, widget, "toggle", getValue, setValue, metadata)

@@ -35,7 +35,7 @@ local function Meta(path, classification, exact)
     resolved.actionKey = resolved.actionKey or CASTBAR_ACTION_BY_PATH[path]
     return ControlMeta("opt_castbar", "global", path, classification, resolved)
 end
-local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss arena"
+local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss arena timers"
 -- Empowered casts are an Evoker mechanic, Midnight only: the same client gate as
 -- the castbar page's Empowered Casts section (MSUF.Client.HasEmpoweredCasts).
 local CASTBAR_PREVIEW_EMPOWERED = MSUF.Client.HasEmpoweredCasts ~= false and MSUF.Client.IsClassic ~= true
@@ -62,6 +62,7 @@ local function ScheduleCastbarPageWork(key, delay, fn)
 end
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
+    if unit == "timers" then return unit end
     if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
     if unit == "arena1" or unit == "arenas" or unit == "arena frames" then unit = "arena" end
     if M.SupportsUnitPage and not M.SupportsUnitPage("uf_" .. unit) then return "player" end
@@ -89,7 +90,7 @@ function M.SetCastbarPreviewUnit(unit)
     -- The out-of-menu castbar preview follows the selected unit while the
     -- castbar page is open (boss borrows the boss frame preview for anchoring).
     if M.activeKey == "opt_castbar" and type(M.RequestBossPagePreviewForKey) == "function" then
-        M.RequestBossPagePreviewForKey("opt_castbar", true)
+        M.RequestBossPagePreviewForKey("opt_castbar", unit ~= "timers")
     end
     return true, unit
 end
@@ -270,6 +271,7 @@ end
 --- An animation tick moves the fill and the time text only; a change of unit, type or interrupt, and the empower
 --- stage blink, repaint the scene.
 local function PreviewAnimate(self)
+    if self.layoutUnit == "timers" then M.TimerBarPreview.Animate(self) return end
     local now = GetTime and GetTime() or 0
     local kind = self.castType or "normal"
     local scene = self.scene
@@ -281,6 +283,7 @@ local function PreviewAnimate(self)
     self:Refresh()
 end
 local function PreviewRefresh(self)
+    if M.TimerBarPreview.Refresh(self) then return end
     local typeButtons, unitButtons = self.typeButtons, self.unitButtons
     local now = GetTime and GetTime() or 0
     local kind = self.castType or "normal"
@@ -339,13 +342,15 @@ local function BuildCastbarPagePreview(ctx, b)
         shakeStrength = tonumber(ReadG("castbarShakeStrength", 8)) or 8,
     }
     ResetEmpowerBlinkState(preview)
-    local unitButtons, unitHolder = PreviewButtonGroup(toolbar, (M.FilterSupportedUnitValues or function(values) return values end)({
+    local unitValues = M.FilterSupportedUnitValues({
         { key = "player", text = "Player" },
         { key = "target", text = "Target" },
         { key = "focus", text = "Focus" },
         { key = "boss", text = "Boss" },
             { key = "arena", text = "Arena" },
-        }), 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
+        })
+    unitValues[#unitValues + 1] = { key = "timers", text = "Timer Bars" }
+    local unitButtons, unitHolder = PreviewButtonGroup(toolbar, unitValues, 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
     local buttonGap, interruptW = 6, 90
     local typeValues = { { key = "normal", text = "Normal" }, { key = "channel", text = "Channel" } }
     if CASTBAR_PREVIEW_EMPOWERED then typeValues[3] = { key = "empowered", text = "Empowered" } end
@@ -378,13 +383,17 @@ local function BuildCastbarPagePreview(ctx, b)
     box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, compactControls and -82 or -52)
     box:SetSize(innerW, 78)
     BuildPreviewCastRow(box, preview, min(720, max(280, innerW - 36)), 18)
+    preview.box, preview.section, preview.compactControls = box, section, compactControls
+    preview.typeHolder, preview.interruptButton = typeHolder, interrupt
+    M.TimerBarPreview.Build(preview, toolbar, PreviewButtonGroup)
     preview.PlayShake = PreviewPlayShake
     preview.SetRowOffset = PreviewSetRowOffset
     preview.Refresh = PreviewRefresh
     preview.Animate = PreviewAnimate
     box:SetScript("OnUpdate", function(_, elapsed)
         elapsed = tonumber(elapsed) or 0
-        preview.progress = (preview.progress or 0) + (elapsed / CastDuration(preview.castType or "normal"))
+        local duration = preview.layoutUnit == "timers" and 10 or CastDuration(preview.castType or "normal")
+        preview.progress = (preview.progress or 0) + (elapsed / duration)
         if preview.progress > 1 then preview.progress = preview.progress - floor(preview.progress) end
         local now = GetTime and GetTime() or 0
         if now < (preview.shakeUntil or 0) then

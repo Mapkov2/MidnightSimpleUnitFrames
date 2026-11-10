@@ -307,8 +307,13 @@ local Methods = {}
 Methods.__index = Methods
 
 -- Load a chunk into this world's namespace. Returns ok, message.
-function Methods:LoadFile(path, addonName, namespace)
-    local chunk, compileError = loadfile(path)
+function Methods:LoadFile(path, addonName, namespace, source)
+    local chunk, compileError
+    if source then
+        chunk, compileError = loadstring(source, "@" .. path)
+    else
+        chunk, compileError = loadfile(path)
+    end
     if chunk == nil then return false, "does not compile: " .. tostring(compileError) end
     setfenv(chunk, self.env)
     self.loading = path

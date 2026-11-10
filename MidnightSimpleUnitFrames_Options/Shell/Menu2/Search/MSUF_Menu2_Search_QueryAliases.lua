@@ -469,7 +469,17 @@ local function AddAliasTerms(key, terms)
     aliasAdditions[#aliasAdditions + 1] = terms
 end
 
+local MAIL_INDICATOR_TARGET = { settingKey = "msufsuite.minimap.showMail" }
 Data.CONTROL_QUERY_TARGETS = {
+    ["mail"] = MAIL_INDICATOR_TARGET,
+    ["mail button"] = MAIL_INDICATOR_TARGET,
+    ["mail indicator"] = MAIL_INDICATOR_TARGET,
+    ["minimap mail"] = MAIL_INDICATOR_TARGET,
+    ["show mail"] = MAIL_INDICATOR_TARGET,
+    ["minimap show mail"] = MAIL_INDICATOR_TARGET,
+    ["post"] = MAIL_INDICATOR_TARGET,
+    ["postanzeige"] = MAIL_INDICATOR_TARGET,
+    ["postknopf"] = MAIL_INDICATOR_TARGET,
     ["new ping system"] = { settingKey = "general.playerResourcePingEnabled" },
     ["neues ping system"] = { settingKey = "general.playerResourcePingEnabled" },
     ["put a line at 35 percent mana"] = { pageKey = "classpower", controlSuffix = ".marks.add" },

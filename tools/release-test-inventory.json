@@ -2,6 +2,28 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/group_layer_status_smoke.lua",
+      "phase": "apply",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/classpower_druid_form_outline_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/classpower_auxiliary_preview_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -101,6 +123,13 @@
     },
     {
       "test": "tools/tests/unitframe_screen_position_anchor_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": ".github/quality/forever_swing_timer_settings_smoke.lua",
       "phase": "runtime",
       "arguments": [
         "{root}"
@@ -2734,6 +2763,17 @@
       ]
     },
     {
+      "test": "tools/tests/profile_aura_roundtrip_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/profile_decompression_smoke.lua",
       "phase": "profiles",
       "clients": [
@@ -2822,10 +2862,46 @@
         "Mists",
         "Forever"
       ]
+    },
+    {
+      "test": ".github/quality/timer_bars_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
+      "test": ".github/quality/timer_bars_menu_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
+      "phase": "profiles",
+      "test": "tools/tests/nameplate_settings_smoke.lua"
+    },
+    {
+      "phase": "menu",
+      "test": "tools/tests/nameplate_font_scope_smoke.lua",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/nameplate_native_consumer_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline"
+      ]
     }
   ],
   "excluded": {
-    ".github/quality/forever_swing_timer_settings_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. local root = assert(arg[1], \"repository root required\")",
     ".github/quality/menu_search_skin_lifecycle_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. The navigation search input acquires rounded chrome after its first skin paint.",
     ".github/scripts/arena_postbase_integration_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. arena_postbase_integration_smoke.lua",
     ".github/scripts/arena_restoration_gaps_smoke.lua": "Frozen reference contract excluded by PLAN-10 rule 9; retained for focused diagnostics, not counted as executed. Focused Arena restoration coverage for profile payloads, UI scale, and rounded castbars.",

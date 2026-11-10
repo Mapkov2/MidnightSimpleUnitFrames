@@ -3,6 +3,10 @@
 local root, flavor = assert(arg[1]), assert(arg[2])
 local initial = assert(loadfile(root .. "/tools/menu_schema_initial.lua"))()(root, flavor)
 local mw, M = initial.world, initial.menu
+if flavor == "Forever" then
+    local swing = assert(M.navButtons.swingtimers, "missing Swing Timers navigation button")
+    assert(swing._msuf2NavIcon, "Swing Timers navigation button has no icon")
+end
 local pages, failures, projected = initial.pages, initial.failures, initial.count
 local expected = assert(tonumber(arg[3]), "exact schema projection count required")
 assert(projected == expected, string.format("schema projection count: expected %d, built %d", expected, projected))

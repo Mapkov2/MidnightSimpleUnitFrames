@@ -89,6 +89,7 @@ builders.LAYOUT = function(E)
                 or ((playerFrame:GetFrameLevel() or 0) + levelOffset)
             if CP.container._msufFrameLevelStamp ~= targetLevel then
                 CP.container:SetFrameLevel(targetLevel)
+                if CP.druidVisual then CP.druidVisual:SetFrameLevel(targetLevel) end
                 CP.container._msufFrameLevelStamp = targetLevel
             end
         end
@@ -295,7 +296,7 @@ builders.LAYOUT = function(E)
         elseif outlineThick > 0 and CP._msufRoundedOutlineSuppressed ~= true then
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
-                local ol = PixelLayoutRegion(CreateFrame("Frame", nil, CP.container, tpl))
+                local ol = PixelLayoutRegion(CreateFrame("Frame", nil, CP.druidVisual or CP.container, tpl))
                 ol:EnableMouse(false)
                 CP._outline = ol
                 CP._outlineEdge = -1

@@ -50,8 +50,6 @@ $failed = 0
 $slotTime = 0.0
 $projectionTime = 0.0
 $suiteSlotHeld = $false
-$contractJobs = @()
-$contractQueue = $null
 function Invoke-Check([string]$Name, [string]$Executable, [string[]]$Arguments) {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $previous = $ErrorActionPreference
@@ -138,7 +136,7 @@ function Get-InventoryRuns([string]$Phase) {
                 $arguments += [string]$count
             }
             $exe = if ($entry.test.EndsWith('.py')) { $Python } else { $Lua }
-            $runs += @{ Label = "$($entry.test)/$flavor/$($entry.arguments -join ' ')"; Exe = $exe; Args = $arguments; Client = $flavor }
+            $runs += @{ Test = $entry.test; Label = "$($entry.test)/$flavor/$($entry.arguments -join ' ')"; Exe = $exe; Args = $arguments; Client = $flavor }
         }
     }
     return $runs
@@ -204,6 +202,42 @@ function Start-ContractWorker([string]$Name, [object[]]$Runs, [string]$QueuePath
         [pscustomobject]@{ Name = $name; Receipts = $receipts.ToArray() }
     }
     return @{ Job = $job; Name = $Name; Runs = $Runs }
+}
+function Receive-ContractReceipts($Worker) {
+    $result = @($Worker.Job | Wait-Job | Receive-Job | Where-Object { $_.PSObject.Properties['Receipts'] })
+    if ($result.Count -ne 1 -or $result[0].Name -cne $Worker.Name) {
+        throw "Incomplete contract worker receipt: $($Worker.Name)"
+    }
+    $result[0].Receipts
+}
+function Invoke-ContractWorkers([object[]]$Runs, [string]$Queue, [bool]$WindowsHost) {
+    $workers = @()
+    $parallel = $Runs
+    $timed = @()
+    if ($WindowsHost) {
+        # Windows Lua measures elapsed wall time. Run these probes before other workers can preempt them.
+        $timed, $parallel = $Runs.Where({ $_.Test -eq 'tools/tests/search_static_heap.lua' }, 'Split')
+    }
+    $epoch = [Diagnostics.Stopwatch]::GetTimestamp()
+    try {
+        if ($timed.Count) {
+            $workers = @(Start-ContractWorker 'search-timing' $timed '' $epoch)
+            Receive-ContractReceipts $workers[0]
+            $workers[0].Job | Remove-Job -Force
+            $workers = @()
+        }
+        [IO.File]::WriteAllText($Queue, '0')
+        foreach ($number in 1..6) {
+            $workers += (Start-ContractWorker "worker-$number" $parallel $Queue $epoch)
+        }
+        foreach ($worker in $workers) { Receive-ContractReceipts $worker }
+    } finally {
+        foreach ($worker in $workers) {
+            if ($worker.Job.State -notin @('Completed', 'Failed', 'Stopped')) { $worker.Job | Stop-Job }
+            $worker.Job | Remove-Job -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath $Queue -Force -ErrorAction SilentlyContinue
+    }
 }
 if ($ProfilesOnly) {
     Push-Location $root
@@ -296,33 +330,12 @@ try {
             # External schedulers own capacity. Release the parent's slot before
             # the workers acquire theirs, including with a capacity-one scheduler.
             if ($Slot) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
-            $allRuns = @(Order-ContractRuns $allRuns)
-            $contractQueue = "$log.queue"
-            [IO.File]::WriteAllText($contractQueue, '0')
-            # Five setter worlds and the complete fast-check lead the queue.
-            # Any free worker then claims namespace and remaining contracts.
-            # Every original inventory ID still runs exactly once.
-            $epoch = [Diagnostics.Stopwatch]::GetTimestamp()
-            foreach ($number in 1..6) {
-                $contractJobs += (Start-ContractWorker "worker-$number" $allRuns $contractQueue $epoch)
-            }
-            $receipts = @()
-            foreach ($worker in $contractJobs) {
-                $result = @($worker.Job | Wait-Job | Receive-Job | Where-Object { $_.PSObject.Properties['Receipts'] })
-                if ($result.Count -ne 1 -or $result[0].Name -cne $worker.Name) {
-                    throw "Incomplete contract worker receipt: $($worker.Name)"
-                }
-                $receipts += @($result[0].Receipts)
-                $worker.Job | Remove-Job -Force
-            }
-            $contractJobs = @()
+            $receipts = @(Invoke-ContractWorkers (Order-ContractRuns $allRuns) "$log.queue" ([Environment]::OSVersion.Platform -eq 'Win32NT'))
             $expectedIds = @($allRuns | ForEach-Object { $_.Id } | Sort-Object)
             $actualIds = @($receipts | ForEach-Object { $_.Id } | Sort-Object)
             if ($receipts.Count -ne $allRuns.Count -or (Compare-Object $expectedIds $actualIds)) {
                 throw 'Contract worker inventory changed: missing, duplicate or unknown run ID'
             }
-            Remove-Item -LiteralPath $contractQueue -Force
-            $contractQueue = $null
             foreach ($phase in $phaseNames) {
                 $items = @($receipts | Where-Object { $_.Phase -eq $phase })
                 $bad = @($items | Where-Object { -not $_.Ok })
@@ -349,16 +362,8 @@ try {
     if ($suiteSlotHeld) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
     $slotTime += $suiteTime.Elapsed.TotalSeconds
 } finally {
-    try {
-        foreach ($worker in $contractJobs) {
-            if ($worker.Job.State -notin @('Completed', 'Failed', 'Stopped')) { $worker.Job | Stop-Job }
-            $worker.Job | Remove-Job -Force -ErrorAction SilentlyContinue
-        }
-        if ($contractQueue) { Remove-Item -LiteralPath $contractQueue -Force -ErrorAction SilentlyContinue }
-    } finally {
-        try { if ($suiteSlotHeld) { Exit-CheckSlot $Slot $Owner } }
-        finally { Pop-Location; $env:PATH = $oldPath }
-    }
+    try { if ($suiteSlotHeld) { Exit-CheckSlot $Slot $Owner } }
+    finally { Pop-Location; $env:PATH = $oldPath }
 }
 # The budget measures the six-worker development machine; a reproducible CI
 # runner has other hardware, so it reports the time without gating on it.

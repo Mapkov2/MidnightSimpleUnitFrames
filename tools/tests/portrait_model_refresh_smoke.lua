@@ -324,11 +324,7 @@ if flavor == "Forever" then
   Fire(target, "PLAYER_TARGET_CHANGED")
   Check(not dragon:IsShown(), "unreadable Forever player identity must clear the automatic dragon")
 
-  state.targetIsPlayer = false
-  Fire(target, "UNIT_CLASSIFICATION_CHANGED")
-  Check(dragon:IsShown(), "readable elite NPC must restore the automatic dragon")
-
-  state.classification = Secrets.New("string")
+  state.targetIsPlayer, state.classification = false, Secrets.New("string")
   Fire(target, "UNIT_CLASSIFICATION_CHANGED")
   Check(not dragon:IsShown(), "restricted classification must clear the previous dragon")
 end

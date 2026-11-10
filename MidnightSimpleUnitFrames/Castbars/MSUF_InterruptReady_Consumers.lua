@@ -2,6 +2,8 @@ local _, MSUF = ...
 local KickReady = MSUF.Require("MSUF", "Castbars/MSUF_InterruptReady_Consumers.lua").Castbars.KickReady
 -- Public consumer look and native color selectors. The engine supplies its
 -- private resolved slots and callbacks once at load; no profile is read here.
+-- Consumers draw with the castbar menu's own look: one general table serves
+-- MSUF's castbars and the Suite's nameplates.
 -- v1 consumers retain their nameplate-switch lifecycle and aggregate selector.
 -- v2 cooldown consumers explicitly opt in independently and select one slot.
 function KickReady.CreateConsumerAPI(engine)
@@ -20,11 +22,11 @@ function KickReady.CreateConsumerAPI(engine)
         look.boxOffsetX = tonumber(general.kickReadyOffsetX) or 4
         look.boxOffsetY = tonumber(general.kickReadyOffsetY) or 0
         local texture = MSUF.Public.GetCastbarTexture
-        look.texture = texture and texture() or "Interface\\TargetingFrame\\UI-StatusBar"
+        look.texture = texture and texture(general) or "Interface\\TargetingFrame\\UI-StatusBar"
         return look
     end
     local function RGBA(rawNotInterruptible)
-        return engine.EvaluateRGBA(engine.Status(), rawNotInterruptible)
+        return engine.EvaluateRGBA(engine.Status(), rawNotInterruptible, GeneralDB())
     end
     local function FillColor(cache, red, green, blue)
         if cache.r ~= red or cache.g ~= green or cache.b ~= blue or not cache.color then
@@ -35,8 +37,9 @@ function KickReady.CreateConsumerAPI(engine)
     end
     local function FillColors()
         local public = MSUF.Public
-        local castR, castG, castB, nonR, nonG, nonB = public.ResolveCastbarColors()
-        local red, green, blue = public.ResolveInterruptUnavailableCastColor()
+        local general = GeneralDB()
+        local castR, castG, castB, nonR, nonG, nonB = public.ResolveCastbarColors(nil, general)
+        local red, green, blue = public.ResolveInterruptUnavailableCastColor(general)
         return FillColor(fillColors[1], castR, castG, castB), FillColor(fillColors[2], nonR, nonG, nonB),
             FillColor(fillColors[3], red, green, blue)
     end

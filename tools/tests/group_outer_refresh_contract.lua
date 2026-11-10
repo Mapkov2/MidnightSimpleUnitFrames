@@ -1,5 +1,6 @@
 -- <root> <client> [source fixture directory or -] [measure]: real outer refresh/replay.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
+local addonSource = "@" .. root .. "/MidnightSimpleUnitFrames/"
 local flavor = assert(arg[2])
 local measure = arg[4] == "measure"
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
@@ -87,9 +88,9 @@ local function Budget(label, operation)
     debug.sethook(function(event)
         local info = debug.getinfo(2, "Sf")
         if event == "count" then
-            if info.source:find("MidnightSimpleUnitFrames/", 1, true) then vm = vm + 1 end
+            if info.source:find(addonSource, 1, true) == 1 then vm = vm + 1 end
         elseif event == "call" then
-            if info.source:find("MidnightSimpleUnitFrames/", 1, true) then calls = calls + 1 end
+            if info.source:find(addonSource, 1, true) == 1 then calls = calls + 1 end
             if native[info.func] then natives = natives + 1 end
         end
     end, "c", 1)

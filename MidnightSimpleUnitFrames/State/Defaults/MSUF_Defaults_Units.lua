@@ -55,7 +55,7 @@ local function MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
     MSUF.DefaultsSchema.Fill(arena, MSUF.DefaultsSchema.Values.UnitsRangeFadeCastbar004)
 end
 
-local function MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB)
+local function MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB, keepUnitOverrides)
     --- One-shot migration: old invertBossOrder checkbox - new bossLayoutMode dropdown.
     --- Runs once on first login with v4.0 Beta 5+; converts legacy saved setting.
     if profileDB.boss._bossLayoutMigrated ~= true then
@@ -67,6 +67,7 @@ local function MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB)
     --- Range fade: also fade castbar / auras when boss is out of range (off by default).
     MSUF.DefaultsSchema.Fill(profileDB.boss, MSUF.DefaultsSchema.Values.UnitsRangeFadeCastbar)
     MSUF.DefaultsSchema.Fill(profileDB.general, MSUF.DefaultsSchema.Values.UnitsRangeFadeEnabled006)
+    if keepUnitOverrides then return end
     for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
         profileDB[unitKey] = profileDB[unitKey] or {}
         MSUF.DefaultsSchema.Fill(profileDB[unitKey], MSUF.DefaultsSchema.Values.UnitsRangeFadeEnabled)

@@ -496,7 +496,53 @@ function SearchIndexBuild.QueryContext(query)
         requiredMatches = requiredMatches }
 end
 
+-- The search input accepts 60 letters, up to four UTF-8 bytes each.
+local RECENT_QUERY_LIMIT, RECENT_QUERY_MAX_BYTES = 3, 240
+
+function SearchIndexBuild.RecentQueries()
+    local recent = SEARCH_STATE.recentQueries
+    if recent and recent.serial == SEARCH_STATE.dirtySerial then return recent end
+end
+
+function SearchIndexBuild.ReuseResults(query, page)
+    local recent = SearchIndexBuild.RecentQueries()
+    if not recent then return nil end
+    for i = 1, #recent do
+        local entry = recent[i]
+        if entry.query == query and entry.page == page then
+            if i > 1 then table.insert(recent, 1, table.remove(recent, i)) end
+            local results, ranks = entry.results, entry.ranks
+            for row = 1, #results do
+                local rec, at = results[row], (row - 1) * 4
+                rec.score, rec.exactQueryHit = ranks[at + 1], ranks[at + 2]
+                rec.matchedClauses, rec.missedClauses = ranks[at + 3], ranks[at + 4]
+                rec.queryClauseCount = entry.clauseCount
+            end
+            return results
+        end
+    end
+end
+
+function SearchIndexBuild.RememberResults(query, page, results)
+    if type(query) ~= "string" or #query > RECENT_QUERY_MAX_BYTES then return end
+    local recent = SearchIndexBuild.RecentQueries() or { serial = SEARCH_STATE.dirtySerial }
+    local entry = recent[RECENT_QUERY_LIMIT] or { ranks = {} }
+    entry.query, entry.page, entry.results = query, page, results
+    entry.clauseCount = results[1] and results[1].queryClauseCount
+    -- Index records are shared. Preserve this query's ranking fields without copying rows.
+    local ranks = entry.ranks
+    for row = 1, #results do
+        local rec, at = results[row], (row - 1) * 4
+        ranks[at + 1], ranks[at + 2] = rec.score, rec.exactQueryHit
+        ranks[at + 3], ranks[at + 4] = rec.matchedClauses, rec.missedClauses
+    end
+    recent[RECENT_QUERY_LIMIT] = nil
+    table.insert(recent, 1, entry)
+    SEARCH_STATE.recentQueries = recent
+end
+
 function SearchPages(query, job, deadline)
+    local input = query
     query = TrimText(query)
     if SearchCombatLocked() or SearchMenuClosed() then
         CancelSearchBackgroundIndex()
@@ -509,8 +555,20 @@ function SearchPages(query, job, deadline)
         if job then return nil end
         return EMPTY_SEARCH_RECORDS
     end
+    if not job then
+        local request = SEARCH_STATE.request
+        -- Direct searches update the same record scores as the sliced scorer.
+        -- A partial scan must restart before those scores reach its sort.
+        if request and request.job and request.job.index > 1 then request.job = nil end
+    end
+    -- Keep the same originating page throughout a sliced query.
+    local currentPageKey = M.activeKey == "search" and M.searchReturnKey or M.activeKey
+    if job then currentPageKey = job.sourcePage end
+    if currentPageKey == "home" or currentPageKey == "search" then currentPageKey = nil end
     local context = job and job.context
     if not context then
+        local cached = SearchIndexBuild.ReuseResults(input, currentPageKey)
+        if cached then return cached end
         context = SearchIndexBuild.QueryContext(query)
         if job then job.context = context return nil end
     end
@@ -523,10 +581,6 @@ function SearchPages(query, job, deadline)
     local results = job and job.results or {}
     local namedPageKey = SearchNaming.Page(normalized)
     local fuzzyDistanceCache = job and job.fuzzy or {}
-    -- The page the user searched from ranks first. While results show, the
-    -- active page is the search page itself and that page is searchReturnKey.
-    local currentPageKey = job and job.sourcePage or (M.activeKey == "search" and M.searchReturnKey or M.activeKey)
-    if currentPageKey == "home" or currentPageKey == "search" then currentPageKey = nil end
     for i = job and job.index or 1, #records do
         local rec = records[i]
         local score = 0
@@ -612,7 +666,9 @@ function SearchPages(query, job, deadline)
         if (a.order or 0) ~= (b.order or 0) then return (a.order or 0) < (b.order or 0) end
         return tostring(a.label) < tostring(b.label)
     end)
-    return CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
+    local curated = CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
+    SearchIndexBuild.RememberResults(input, currentPageKey, curated)
+    return curated
 end
 
 SetSearchResults = function(results, query)

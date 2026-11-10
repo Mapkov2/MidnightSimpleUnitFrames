@@ -470,6 +470,25 @@ MSUF.ClassPowerConfig.ResolveHeight = CP_ResolveClassPowerHeight
 --- controller resolves itself (constants, player class, spec API, secret guard)
 --- plus a getter for the AltMana builder binding, which the controller rebinds
 --- after this builder has run.
+-- Blizzard_FrameXMLBase Constants: Bear uses 5 or 8 across the supported
+-- clients (including Dire Bear); Moonkin has two native form IDs.
+local DRUID_FORM_FIELDS = {
+    [0] = "classPowerCasterVisibility",
+    [1] = "classPowerCatVisibility",
+    [5] = "classPowerBearVisibility",
+    [8] = "classPowerBearVisibility",
+    [31] = "classPowerMoonkinVisibility",
+    [35] = "classPowerMoonkinVisibility",
+}
+
+local function DruidFormVisibility()
+    if not GetShapeshiftFormID or not _cpDB.bars then return 1 end
+    local form = GetShapeshiftFormID()
+    if not NotSecret(form) then return 1 end
+    local field = DRUID_FORM_FIELDS[form or 0]
+    return field and _cpDB.bars[field] or 1
+end
+
 builders.CONTROLLER_CONFIG = function(boundE)
     E = boundE
     CPConst, CPK, PT, TIP = E.CPConst, E.CPK, E.PT, E.TIP
@@ -488,6 +507,7 @@ builders.CONTROLLER_CONFIG = function(boundE)
         AnyFeatureEnabled = CP_ConfigAnyFeatureEnabled,
         EnsureDefaults = EnsureDefaults,
         GetClassPowerType = GetClassPowerType,
+        DruidFormVisibility = DruidFormVisibility,
         GetModeEventProfile = CP_GetModeEventProfile,
         ComputeStructuralSignature = CP_ComputeStructuralSignature,
         ResolveTexture = CP_ResolveTexture,

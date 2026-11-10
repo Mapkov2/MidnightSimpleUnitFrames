@@ -394,7 +394,7 @@ local function SearchTermRows(text)
 end
 
 local GROUP_SCOPE_TERMS = SearchTermRows [[
-party=mythic plus|myhtic plus|keystone|schluesselstein|schlÃ¼sselstein|dungeon
+party=mythic plus|myhtic plus|keystone|schluesselstein|schlÃƒÂ¼sselstein|dungeon
 mythicraid=mythic raid|mythicraid|mythic
 raid=raid|raids
 party=party|group|groups
@@ -475,6 +475,7 @@ readyCheckIcon=ready check
 summonIcon=summon|summoning
 resurrectIcon=resurrect|resurrection|rez|ress
 pvpIcon=pvp|pvp flag|pvp icon|pvp indicator|pvp status|war mode|flagged
+layerStatusText=layer status|different layer|different phase|layerstatus|anderer layer|andere phase
 phaseIcon=phase|phased
 statusGhostText=ghost
 leaderIcon=leader
@@ -1200,6 +1201,10 @@ local function SearchRouteExactView(route, pageKey, exactTarget)
     elseif kind == "auraStyleContainer" then
         route = type(route) == "table" and route or {}
         if pageKey == "auras3_styling" and value == "buff" then SearchRouteSetState(route, "auraAppearanceContainer", value) end
+        return route
+    elseif kind == "fontScope" then
+        route = type(route) == "table" and route or {}
+        if pageKey == "opt_fonts" and value == "nameplates" then SearchRouteSetGeneral(route, "_fontScopeKey", value) end
         return route
     elseif kind == "barsScope" then
         route = type(route) == "table" and route or {}

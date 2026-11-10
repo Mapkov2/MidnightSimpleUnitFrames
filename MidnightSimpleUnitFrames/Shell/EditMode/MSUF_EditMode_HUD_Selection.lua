@@ -175,6 +175,10 @@ end
     end
     if frame then
         local x, y, width, height = U.FramePositionValues(frame)
+        if groupKind and groupKind ~= "priority" and conf and frame._msufGFOffsetKeyX then
+            x = tonumber(conf[frame._msufGFOffsetKeyX]) or x
+            y = tonumber(conf[frame._msufGFOffsetKeyY]) or y
+        end
         if x ~= nil then return label, x, y, width, height end
     end
     if not conf then return label end
@@ -185,12 +189,16 @@ end
     return label, x, y, w and floor(w + 0.5), h and floor(h + 0.5)
 end
 
-local function FormatSelectionSummary(label, x, y, w, h)
+local function FormatSelectionSummary(label, x, y, w, h, key)
     if x == nil or y == nil then return label end
+    local kind = GROUP_KEY_TO_KIND[key]
+    local anchorOffsets = kind and kind ~= "priority"
     if w and h then
-        return string.format("%s   X %d   Y %d   W %d   H %d", label, x, y, w, h)
+        local pattern = anchorOffsets and "%s   X %s   Y %s   W %d   H %d" or "%s   X %d   Y %d   W %d   H %d"
+        return string.format(pattern, label, x, y, w, h)
     end
-    return string.format("%s   X %d   Y %d", label, x, y)
+    local pattern = anchorOffsets and "%s   X %s   Y %s" or "%s   X %d   Y %d"
+    return string.format(pattern, label, x, y)
 end
 
 local function DefaultHintText(hasSelection)

@@ -571,10 +571,19 @@ local function ClearUFFontKeyOverrides()
     end
 end
 local function FontKeyGet()
+    if CurrentFontScope() == "nameplates" then
+        return FontSelectionValue(FontScopeGetFor("nameplates", "fontKey", "FRIZQT"))
+    end
     return FontSelectionValue(ReadG("fontKey", "FRIZQT"))
 end
 local function FontKeySet(value)
     value = FontSelectionValue(value)
+    if CurrentFontScope() == "nameplates" then
+        if ScopeHasOverride("nameplates", "fontOverride") then
+            FontScopeSetFor("nameplates", "fontKey", value, "MSUF2_FONT_KEY", nil, true)
+        end
+        return
+    end
     G().fontKey = value or FontSelectionValue("FRIZQT", "Fonts\\FRIZQT___CYR.TTF")
     ClearUFFontKeyOverrides()
 end

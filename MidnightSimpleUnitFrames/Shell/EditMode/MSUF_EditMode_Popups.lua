@@ -141,6 +141,12 @@ function Popups.Open(key, anchorFrame)
     end
     local opened = Popups.IsAnyOpen and Popups.IsAnyOpen() or false
     if opened then
+        local db = DB()
+        local general = db and db.general
+        local sound = SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN
+        if PlaySound and sound and (not general or general.muteMenuSounds ~= true) then
+            PlaySound(sound)
+        end
         if EM2.State then EM2.State.SetPopupOpen(true) end
         if EM2.Focus and EM2.Focus.SetPopupFocus then EM2.Focus.SetPopupFocus(key, anchorFrame) end
         NotifyGuidedPopupOpened(key)

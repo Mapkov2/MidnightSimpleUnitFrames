@@ -399,7 +399,7 @@ function Quick.Box(parent, width, opts)
     b:SetAutoFocus(false)
     b:SetNumeric(false)
     b:SetJustifyH("CENTER")
-    b:SetMaxLetters(7)
+    b:SetMaxLetters(opts and opts.maxLetters or 7)
     local ui = MSUF.UI
     if ui and ui.ApplyFontRole then
         ui.ApplyFontRole(b, "body", FONT, "")
@@ -460,14 +460,18 @@ function Quick.DiscardFocusedEdits()
     discardingEdits = false
 end
 
-function Quick.WireStepper(minus, box, plus, cb)
+function Quick.WireStepper(minus, box, plus, cb, onStep)
     stepperBoxes[box] = true
     --- Enter and focus loss commit typed text only: a blur on an unchanged
     --- box must not open an undo entry. Enter clears focus first, so the
     --- second check also keeps it from committing the same text twice. A box
     --- no popup syncs keeps committing on every blur.
     local function commitTyped()
-        if cb and not discardingEdits and (box._msufShownText == nil or Quick.IsBoxEdited(box)) then cb() end
+        if cb and not discardingEdits and (box._msufShownText == nil or Quick.IsBoxEdited(box)) then
+            local applied = cb()
+            -- A relative step can follow a blur before the popup repaints.
+            if onStep and applied ~= false then box._msufShownText = box:GetText() end
+        end
     end
     local function commit(delta)
         --- A control with a fixed native step (box._msufStep, e.g. Blizzard
@@ -482,7 +486,12 @@ function Quick.WireStepper(minus, box, plus, cb)
         else
             step = GetStep()
         end
-        box:SetText(tostring(Quick.San(box:GetText(), 0) + ((delta or 0) * step)))
+        local amount = delta * step
+        if onStep then
+            if Quick.IsBoxEdited(box) then commitTyped() end
+            return onStep(amount)
+        end
+        box:SetText(tostring(Quick.San(box:GetText(), 0) + amount))
         if cb then cb() end
     end
     minus:SetScript("OnClick", function() commit(-1) end)
@@ -599,7 +608,7 @@ function Quick.ValueCard(owner, parent, x, y, width, title, rows, opts)
         box:SetPoint("RIGHT", plus, "LEFT", -(opts.controlGap or 4), 0)
         local minus = Quick.Button(row, "-", opts.stepWidth or 32, opts.controlHeight or 32, nil, opts)
         minus:SetPoint("RIGHT", box, "LEFT", -(opts.controlGap or 4), 0)
-        Quick.WireStepper(minus, box, plus, spec.onChanged)
+        Quick.WireStepper(minus, box, plus, spec.onChanged, spec.onStep)
         owner[spec.key] = box
     end
 
@@ -636,9 +645,9 @@ function Quick.ClearFocusedBoxes(...)
     end
 end
 
-function Quick.SetBoxText(box, value)
+function Quick.SetBoxText(box, value, committed)
     if not (box and box.SetText) then return end
-    if box.HasFocus and box:HasFocus() then return end
+    if not committed and box.HasFocus and box:HasFocus() then return end
     local text = tostring(value or 0)
     box:SetText(text)
     box._msufShownText = text

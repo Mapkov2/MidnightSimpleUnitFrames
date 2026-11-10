@@ -302,6 +302,17 @@ for _, file in ipairs({ "MSUF_EditMode_Core.lua", "MSUF_EditMode_Registry.lua", 
 end
 assert(loadfile(Join(OPTIONS, "MSUF_OptionsLOD_Bootstrap.lua")))("MidnightSimpleUnitFrames_Options", MSUF)
 
+-- Timer settings use the shipped read-only defaults even in this partial world.
+-- No timers are active here; real native events are exercised by the runtime smoke.
+_G.GetMirrorTimerInfo = function() return "UNKNOWN" end
+_G.GetMirrorTimerProgress = function() return 0 end
+_G.Enum.StartTimerType = { PvPBeginTimer = "PvPBeginTimer", PlayerCountdown = "PlayerCountdown" }
+if not MSUF.MSUF_RegisterModule then
+    assert(loadfile(Join(CORE, "Kernel/MSUF_Modules.lua")))("MidnightSimpleUnitFrames", MSUF)
+end
+assert(loadfile(Join(CORE, "Castbars/MSUF_TimerBars.lua")))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile(Join(CORE, "Castbars/MSUF_TimerBarVisuals.lua")))("MidnightSimpleUnitFrames", MSUF)
+
 -- Load the real Menu2 product modules in their shipped XML order.  No catalog
 -- records are invented by this audit.  A caller that audits a non-Mainline client
 -- publishes that flavor's manifest list (read from its Options TOC) first; with no

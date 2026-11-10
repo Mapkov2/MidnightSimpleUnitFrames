@@ -72,6 +72,12 @@ function Variants.Validate(schema)
             if (display.minWidth or 0) > (display.maxWidth or 32000)
                 or (display.minAspect or 0) > (display.maxAspect or 8) then return nil, "invalid display range" end
         end
+        if input.inputMode ~= nil then
+            if input.inputMode ~= "gamepad" and input.inputMode ~= "keyboard" then
+                return nil, "invalid input mode condition"
+            end
+            condition.inputMode = input.inputMode
+        end
         condition.manual = input.manual == true
         if input.specs ~= nil then
             if type(input.specs) ~= "table" then return nil, "invalid specialization group" end
@@ -118,7 +124,7 @@ function Variants.Source(path)
         if Fields.Overlaps(record.path, path) then return record.owner end
     end
 end
-local function MatchValues(entry, location, spec, dark)
+local function MatchValues(entry, location, spec, dark, inputMode)
     if type(entry) ~= "table" or entry.enabled == false then return false end
     local c = type(entry.conditions) == "table" and entry.conditions or NO_CONDITIONS
     if c.display then
@@ -129,12 +135,13 @@ local function MatchValues(entry, location, spec, dark)
     end
     if c.manual and entry.name ~= manual then return false end
     if c.context and c.context ~= location then return false end
+    if c.inputMode and c.inputMode ~= inputMode then return false end
     if c.dark ~= nil and c.dark ~= dark then return false end
     if type(c.specs) == "table" and next(c.specs) and not c.specs[tostring(spec or "")] then return false end
     return true
 end
 local function Matches(entry, context)
-    return MatchValues(entry, context.location, context.spec, context.dark)
+    return MatchValues(entry, context.location, context.spec, context.dark, context.inputMode)
 end
 
 -- Capture edits of an overlaid setting back into its owning variant. An ordinary
@@ -261,9 +268,18 @@ function Variants.ContextValues(db)
     if record then dark=record.base==true end
     return location, spec, dark
 end
+local function InputMode()
+    local client, input = MSUF.Client, InputUtil
+    if not (client and client.IsForever and input and input.IsGamepadUIEnabled) then return nil end
+    local active = input.IsGamepadUIEnabled()
+    if MSUF.Util.IsSecret(active) or type(active) ~= "boolean" then return nil end
+    return active and "gamepad" or "keyboard"
+end
+
 function Variants.Context(db)
     local location, spec, dark = Variants.ContextValues(db)
-    return { location=location, spec=spec, dark=dark }
+    local _, _, _, input = Variants.ConditionKinds(db)
+    return { location=location, spec=spec, dark=dark, inputMode=input and InputMode() or nil }
 end
 -- Which entries match right now, as a bit set (at most 16 entries). The
 -- overlay is fully decided by it, so an unchanged set needs no apply.
@@ -271,9 +287,12 @@ function Variants.MatchSignature(db)
     local entries = Entries(db)
     if not entries then return 0 end
     local location, spec, dark = Variants.ContextValues(db)
-    local signature, bit = 0, 1
+    local signature, bit, inputMode = 0, 1, nil
     for i = 1, #entries do
-        if MatchValues(entries[i], location, spec, dark) then signature = signature + bit end
+        local entry = entries[i]
+        local condition = inputMode == nil and type(entry) == "table" and entry.conditions
+        if type(condition) == "table" and condition.inputMode then inputMode = InputMode() or false end
+        if MatchValues(entry, location, spec, dark, inputMode) then signature = signature + bit end
         bit = bit * 2
     end
     return signature
@@ -281,16 +300,17 @@ end
 -- Whether any entry depends on the location or the specialization: only
 -- those conditions need game events.
 function Variants.ConditionKinds(db)
-    local location, spec, display = false, false, false
+    local location, spec, display, input = false, false, false, false
     for _, entry in ipairs(Entries(db) or NO_ENTRIES) do
         local c = type(entry) == "table" and entry.conditions
         if type(c) == "table" then
             if c.context ~= nil then location = true end
             if c.display ~= nil then display = true end
+            if c.inputMode ~= nil then input = true end
             if type(c.specs) == "table" and next(c.specs) then spec = true end
         end
     end
-    return location, spec, display
+    return location, spec, display, input
 end
 
 -- Project one external base into a caller-owned deep copy. The journal stays

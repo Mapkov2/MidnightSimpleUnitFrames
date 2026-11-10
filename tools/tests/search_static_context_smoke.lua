@@ -29,7 +29,10 @@ local function Signature(index, row)
     return table.concat(values, "\031")
 end
 local first, expected = Decode(), {}
-for i, row in ipairs(first.GetRecords()) do expected[i] = Signature(first, row) end
+for i, row in ipairs(first.GetRecords()) do
+    assert(row[1] == i, "static row ID changed at " .. i)
+    expected[i] = Signature(first, row)
+end
 local encoded, dictionary = data.StaticIndexBlob, data.StaticIndexContextBlob
 data.StaticIndexBlob, data.StaticIndexContextBlob = inline, nil
 local second = Decode()
@@ -47,5 +50,20 @@ for _, mutation in ipairs({ { 8, "@0:broken" }, { 8, "@bad:broken" }, { 12, "@0|
     columns[mutation[1]] = mutation[2]
     data.StaticIndexBlob = table.concat(columns, "\t") .. tail
     assert(not pcall(Decode), "invalid identity/text reference accepted")
+end
+-- One navigation contract can select a different view for each setting key.
+local contract = "scope=party=foo|scope=raid=bar"
+local function ContractRow(setting, kinds)
+    return table.concat({ "sample", "Label", "control", setting, "", "", "label",
+        "id\031sample\031" .. setting, "", kinds, contract, "label" }, "\t")
+end
+data.StaticIndexContextBlob = nil
+data.StaticIndexBlob = table.concat({ ContractRow("foo", "scope"), ContractRow("bar", "scope"),
+    ContractRow("foo", "scope|view"), ContractRow("foo", "") }, "\n")
+local shared = Decode()
+for i, expectedView in ipairs({ "party", "raid", "party", "party" }) do
+    local target = shared.GetRecords()[i].exactTarget
+    assert(target.prepareContracts == contract and target.prepareKind == "scope" and target.prepareValue == expectedView)
+    assert(target.prepareKinds == (i == 3 and "scope|view" or "scope"))
 end
 print("search_static_context_smoke " .. flavor .. ": " .. #expected .. " rows preserve every field; invalid references rejected")

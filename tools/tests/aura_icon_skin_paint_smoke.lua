@@ -113,18 +113,20 @@ local PROVIDERS = {
     MSUF_IsKnownFileAsset = function() return nil end,
     -- Game/Classic/Auras/MSUF_Auras3_Visuals.lua reads the general settings through it.
     MSUF_GetGeneralDB = Shipped("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua", "local function GetGeneralDB", "GetGeneralDB"),
+    -- Auras3/MSUF_Auras3_MockAuraPainter.lua binds the preview sample builders at load (the TOC
+    -- loads the preview animation first). The skin-layer checks never build a sample: a call is
+    -- a harness error, not a silent answer.
+    MSUF_BuildPreviewAnimationAuraState = function()
+        error("fixture: the preview sample builders are not modeled by this harness", 2)
+    end,
+    MSUF_GetPreviewAnimationAuraState = function()
+        error("fixture: the preview sample builders are not modeled by this harness", 2)
+    end,
 }
 -- The shipped namespace API (ExportPublic with the keep policy, the registries); the strict
 -- Require below replaces the shipped one so only the listed providers resolve.
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
--- The painter binds the shipped animation namespace. Sample generation is outside this fixture.
-local function UnexpectedSample()
-    error("fixture: the preview sample builders are not modeled by this harness", 2)
-end
-local namespace = {
-    MSUF_Auras3 = {},
-    PreviewAnimation = { BuildAuraState = UnexpectedSample, AuraState = UnexpectedSample },
-}
+local namespace = { MSUF_Auras3 = {} }
 RequireFixture.InstallKernel(root, namespace)
 function namespace.Require(name)
     return assert(PROVIDERS[name], "unexpected dependency " .. tostring(name))

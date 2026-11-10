@@ -182,3 +182,48 @@ end
 DerivedSetters(false)
 DerivedSetters(true)
 print("PASS schema capture: explicit/derived setters, reused bindings and released callback cycles")
+
+-- Runtime class-order controls reuse the dragrow declaration ID. Their visible
+-- labels depend on the class, and a transient page may release the widgets
+-- before the inventory visits them. Both orders must preserve the same evidence.
+local function PresentationOrder(reverse)
+    local capture = assert(loadfile(root .. "/tools/menu_schema_capture.lua"))()
+    local menu = { activeKey = "page", ControlSchema = {} }
+    function menu.ControlSchema.Custom(control, spec) control._msuf2ControlSchema = spec; return control end
+    function menu.PageKeyForWidget() return "page" end
+    __MSUF_WatchSchema(menu)
+    local labels = { { "Paladin", "player" }, { "Priest", "focus" }, { {}, "target" } }
+    local widgets = setmetatable({}, { __mode = "v" })
+    for index = 1, #labels do
+        local values = labels[reverse and #labels + 1 - index or index]
+        local widget = {}
+        widgets[index] = widget
+        menu.ControlSchema.Custom(widget, { id = "dragrow.label", kind = "font", applyDomain = "presentation",
+            labelKey = values[1], scope = values[2] })
+    end
+    local registered, redeclared = {}, {}
+    menu.ControlSchema.Custom(registered, { id = "registered", kind = "font", scope = "player",
+        applyDomain = "presentation", labelKey = "Font" })
+    registered._msuf2RuntimeControlRecord = { controlId = "registered" }
+    menu.ControlSchema.Custom(redeclared, { id = "preliminary", kind = "font", scope = "player",
+        applyDomain = "presentation", labelKey = "Preview" })
+    menu.ControlSchema.Custom(redeclared, { id = "final", kind = "preview", scope = "player",
+        applyDomain = "preview", ephemeralReason = "Preview only" })
+    collectgarbage("collect")
+    assert(next(widgets) == nil, "retained visual widget")
+    capture.Start(menu, { Get = function() end, GetRecords = function() return {} end })
+    assert(not capture.Data()["schema:page:registered"], "registered widget reported as unindexed")
+    assert(not capture.Data()["schema:page:preliminary"], "superseded helper reported as a control")
+    assert(capture.Data()["schema:page:final"], "final preview declaration lost")
+    local row = assert(capture.Data()["schema:page:dragrow.label"], "collected presentation declaration was lost")
+    assert(row.scope == "player" and row.label == "Paladin", "representative must be an observed label and scope")
+    local count = 0
+    for key, variant in pairs(row.presentationVariants) do
+        assert(key == capture.Json(variant), "variant key or data changed")
+        count = count + 1
+    end
+    assert(count == #labels, "deduplication lost a distinct visual declaration")
+    return capture.Json(row)
+end
+assert(PresentationOrder(false) == PresentationOrder(true), "rendered evidence depends on construction order")
+print("PASS schema capture: collected visual declarations and all label/scope variants survive either build order")

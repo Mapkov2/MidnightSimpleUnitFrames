@@ -11,6 +11,11 @@ channel resolver selects alpha, and release tags keep the
 codebase got here (the Retail mirror era, the 2026-10-13 cutover and the 7.0
 split) is recorded in `docs/HISTORY.md`; nothing there is an instruction.
 
+Forever Party and Raid frames offer optional Layer Status Text under Status Icons.
+The native phase reason supplies the mismatch; the text is hidden inside
+instances and when no public mismatch is known. Runtime and preview use one
+painter. The local world-map GUID observation is not a per-member layer ID.
+
 In file and test names, "Retail" means the Midnight (Mainline) client or code
 that was first written for it. It does not name a second repository.
 
@@ -1402,3 +1407,7 @@ refresh functions retain their identities across preview lifecycle changes;
 the Options addon no longer scans or replaces them. The existing refresh
 delays and combat predicate remain in the preview API. Explicit requests still
 defer to combat exit, while settings notifications remain suppressed in combat.
+
+## Timer bars in 7.0
+
+Optional mirror timers and countdowns use the shared Player castbar painter on all five clients. Native mirror and TimerTracker events own their timing; enabled, unpaused timers alone run the bounded updater. The independent Castbar menu sample does not enable a live timer. Edit Mode moves each enabled bar and stores positions with the castbar profile settings. [Timer-bar ownership and client evidence](docs/TIMER_BARS.md) includes the inspected Blizzard branches and remaining live acceptance.

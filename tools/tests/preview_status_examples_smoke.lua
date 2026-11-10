@@ -3,6 +3,11 @@ local root, flavor = assert(arg[1]):gsub('\\','/'), arg[2] or 'Mainline'
 local MenuWorld = assert(loadfile(root .. '/tools/tests/menu_core_world.lua'))()
 local flagged, warMode = false, false
 local targetFlagged, focusFlagged, targetFFA, targetIsPlayer = false, false, false, true
+local eliteUnits = {
+    target = { classification = "normal", level = 30, player = false },
+    focus = { classification = "normal", level = 30, player = false },
+}
+local eliteClassReads, eliteLevelReads = 0, 0
 local instanceType, instanceReads, pvpBadgesDisabled = "none", 0, false
 local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))()
 local secretFlag = Secrets.New("boolean")
@@ -27,8 +32,32 @@ local mw = MenuWorld.Open(root, flavor, { page = 'uf_target', clientScriptBindin
             return unit == "player" or unit == "target" or unit == "focus" or unitExists(unit)
         end
         world.env.UnitIsPlayer = function(unit)
+            local eliteUnit = eliteUnits[unit]
+            if eliteUnit and eliteUnit.active then return eliteUnit.player end
             if unit == "target" then return targetIsPlayer end
             return unit == "player" or unit == "focus"
+        end
+        local unitLevel = world.env.UnitLevel
+        world.env.UnitLevel = function(unit)
+            local eliteUnit = eliteUnits[unit]
+            if eliteUnit and eliteUnit.active then
+                if debug.getinfo(2, "S").source:find("MSUF_UF_Status_Indicators.lua", 1, true) then
+                    eliteLevelReads = eliteLevelReads + 1
+                end
+                return eliteUnit.level
+            end
+            if unitLevel then return unitLevel(unit) end
+            return 30
+        end
+        world.env.UnitClassification = function(unit)
+            local eliteUnit = eliteUnits[unit]
+            if eliteUnit and eliteUnit.active then
+                if debug.getinfo(2, "S").source:find("MSUF_UF_Status_Indicators.lua", 1, true) then
+                    eliteClassReads = eliteClassReads + 1
+                end
+                return eliteUnit.classification
+            end
+            return "normal"
         end
         world.env.UnitIsConnected = world.env.UnitExists
         world.env.UnitIsDeadOrGhost = function() return false end
@@ -112,12 +141,56 @@ if targetDriven then
         UF.frames[unit] = unitFrame
         db[unit].showPvpIndicator = true
         UF.Config.RefreshUnit(unit)
-        UF.ApplySpec(unitFrame, UF.Config.GetSpec(unit), nil, { StatusIndicators = true, PVPIndicator = true })
+        UF.ApplySpec(unitFrame, UF.Config.GetSpec(unit), nil, { StatusIndicators = true, PVPIndicator = true, EliteIndicator = true })
         return unitFrame
     end
     local target, focus = Spawn("target"), Spawn("focus")
     local targetIcon, focusIcon = target.pvpIndicatorIcon, focus.pvpIndicatorIcon
     check(not shown(targetIcon) and not shown(focusIcon), "the faction option must default off for unflagged players")
+
+    if flavor == "Forever" then
+        local renderer = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Indicators.lua"
+        local stopWatch = Secrets.Watch(renderer, { strict = true })
+        for _, unit in ipairs({ "target", "focus" }) do
+            local unitFrame = UF.frames[unit]
+            local icon = assert(unitFrame.eliteIcon)
+            local data = eliteUnits[unit]
+            local changeEvent = unit == "target" and "PLAYER_TARGET_CHANGED" or "PLAYER_FOCUS_CHANGED"
+            data.active = true
+            for _, classification in ipairs({ "elite", "rareelite", "rare", "worldboss" }) do
+                data.classification = classification
+                mw.world:FireEvent("UNIT_CLASSIFICATION_CHANGED", unit)
+                check(shown(icon), unit .. " must show " .. classification)
+            end
+            data.classification, data.level = "normal", -1
+            local beforeLevels, beforeClasses = eliteLevelReads, eliteClassReads
+            for _ = 1, 4 do mw.world:FireEvent("UNIT_CLASSIFICATION_CHANGED", unit) end
+            check(not shown(icon), unit .. " normal skull-level NPC must clear the elite icon")
+            check(eliteClassReads - beforeClasses == 4 and eliteLevelReads == beforeLevels,
+                unit .. " elite refresh must read classification once and skip level reads")
+
+            data.classification = "elite"
+            mw.world:FireEvent(changeEvent)
+            check(shown(icon), unit .. " must repaint an elite NPC on identity change")
+            data.player = Secrets.New("boolean")
+            beforeClasses = eliteClassReads
+            mw.world:FireEvent(changeEvent)
+            check(not shown(icon) and eliteClassReads == beforeClasses, unit .. " unknown identity must clear the elite icon")
+            data.player = true
+            mw.world:FireEvent(changeEvent)
+            check(not shown(icon), unit .. " player must never inherit an elite icon")
+            data.player, data.classification = false, Secrets.New("string")
+            mw.world:FireEvent("UNIT_CLASSIFICATION_CHANGED", unit)
+            check(not shown(icon), unit .. " restricted classification must keep the elite icon hidden")
+            data.classification = "elite"
+            mw.world:FireEvent(changeEvent)
+            check(shown(icon), unit .. " must show a newly selected elite NPC")
+            data.active = false
+            mw.world:FireEvent(changeEvent)
+        end
+        local violations = stopWatch()
+        check(#violations == 0, "elite indicator secret violations: " .. table.concat(violations, "\n"))
+    end
 
     local baselineReads = instanceReads
     targetFlagged, focusFlagged = true, true

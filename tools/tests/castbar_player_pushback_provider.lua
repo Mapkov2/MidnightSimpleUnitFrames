@@ -99,9 +99,12 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     assert(player.MSUF_castActive == true and player:IsShown(), flavor .. " player cast did not start")
     local initial = player._msufPushbackMS
     assert(initial == expectedInitial, flavor .. " initial delay changed")
-    cast.startMS, cast.endMS, cast.delayMS = cast.startMS + 250, cast.endMS + 250, 400
+    -- Request an unambiguous tenth on both CRTs. Platforms can render the
+    -- exact tie at 250 ms as 0.2 or 0.3; the bound-provider case below still
+    -- checks that exact 250 ms value independently of display formatting.
+    cast.startMS, cast.endMS, cast.delayMS = cast.startMS + 260, cast.endMS + 260, 400
     Fire("UNIT_SPELLCAST_DELAYED")
-    assert(player._msufPushbackMS == (legacy and 250 or 400), flavor .. " real resolver lost pushback")
+    assert(player._msufPushbackMS == (legacy and 260 or 400), flavor .. " real resolver lost pushback")
     assert(player.castText:GetText():find(legacy and "+0.3" or "+0.4", 1, true), flavor .. " pushback text missing")
     local budgets = VM[legacy and "legacy" or "modern"]
     for index, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_DELAYED" }) do

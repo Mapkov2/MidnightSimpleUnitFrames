@@ -366,9 +366,9 @@ local function RefreshVisibility()
         -- The off-hand lane draws the off-hand timer inside the main-hand bar.
         local lane = frame.hand == "off" and frames.main.config.offhandLane == true
             and frames.main.config.display == "bar" and frames.main.handlesSwings == true
+        if frame.Lane then frame.Lane:SetShown(lane and shown and frame.handlesSwings and frames.main:IsShown() or false) end
         if lane then shown = false end
         frame:SetShown(shown == true)
-        if frame.Lane then frame.Lane:SetShown(lane and frame.handlesSwings and frames.main:IsShown() or false) end
         frame:EnableMouse(preview == true and cfg.enabled)
         if not cfg.enabled or not equipped then Stop(frame) end
         local barShown = cfg.display == "bar"

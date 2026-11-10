@@ -289,6 +289,7 @@ local API = {
     SetResourceStack = SetResourceStack,
     GetResourceStack = GetResourceStack,
     GetKickReady = GetKickReady,
+    GetNameplateSettings = function() return MSUF.NameplateSettings end,
     GetIconSkins = GetIconSkins,
     GetNameFormatter = GetNameFormatter,
     GetProfileWorkbench = function() return MSUF.ProfileWorkbench end,

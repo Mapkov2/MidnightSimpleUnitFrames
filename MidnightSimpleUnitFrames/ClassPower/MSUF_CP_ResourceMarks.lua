@@ -286,6 +286,14 @@ local function Overlay(host)
         overlay:SetAllPoints(host)
         if overlay.EnableMouse then overlay:EnableMouse(false) end
         overlay.marks = {}
+        if host == E.CP.druidVisual then
+            -- BindExtra can move the overlay away from the bar. Keep its
+            -- form alpha separate from the overlay's other visibility rules.
+            local visual = CreateFrame("Frame", nil, overlay)
+            visual:SetAllPoints(overlay)
+            visual:SetAlpha(host:GetAlpha())
+            overlay.formVisual, E.CP.druidMarkVisual = visual, visual
+        end
         overlays[host] = overlay
         if host.HookScript then
             host:HookScript("OnSizeChanged", function()
@@ -294,7 +302,9 @@ local function Overlay(host)
         end
     end
     if Visibility then Visibility.BindExtra(overlay, host, E.db.bars) end
-    overlay:SetFrameLevel(host:GetFrameLevel() + OVERLAY_LEVEL)
+    local level = host:GetFrameLevel() + OVERLAY_LEVEL
+    overlay:SetFrameLevel(level)
+    if overlay.formVisual then overlay.formVisual:SetFrameLevel(level) end
     return overlay
 end
 -- Fill axis of a host: a vertical bar fills upward, reverse fill starts at
@@ -337,7 +347,7 @@ local function Target(rule)
     local player = E.GetPlayerFrame()
     if rule.target == "CLASS" then
         if E.CP.isAuraPower or not E.CP.visible or type(E.CP.powerType) ~= "number" or not E.CP.bars[1] then return end
-        return E.CP.container, E.CP.powerType, E.CP.powerToken, E.CP.bars
+        return E.CP.druidVisual or E.CP.container, E.CP.powerType, E.CP.powerToken, E.CP.bars
     elseif rule.target == "ALTMANA" then
         if E.AM.visible then return E.AM.bar, 0, "MANA" end
     elseif player and player.targetPowerBar and not E.CP.augCompositeActive then
@@ -375,7 +385,7 @@ local function Refresh()
                 hostCounts[host] = count
                 local texture = overlay.marks[count]
                 if not texture then
-                    texture = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY", nil, 7))
+                    texture = PixelLayoutRegion((overlay.formVisual or overlay):CreateTexture(nil, "OVERLAY", nil, 7))
                     overlay.marks[count] = texture
                 end
                 local color = rule.color or { 1, 1, 1 }

@@ -183,3 +183,5 @@ issecure	*	secret	12.x secret-value API the harness does not model
 secureexecuterange	*	api	Blizzard client API the harness does not model; the EventBus and the Scheduler isolate every callback with it
 GetInternalFontPathByKey	*	namespace	Optional existing legacy font alias, preferred before publishing the real MSUF_GetInternalFontPathByKey provider
 canaccessvalue	*	secret	Optional access check cached by Theme; guarded by type before use, with issecretvalue fallback
+GetMirrorTimerInfo	*	api	MirrorTimer source: verified loaded native call sites on live, forever, classic_era, classic_anniversary and classic (2026-11-10)
+GetMirrorTimerProgress	*	api	MirrorTimer source: verified loaded native call sites on all five client branches (2026-11-10)

@@ -8,21 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "D5E33B372EB65156CF1D26A031F7FA04A3C9DA19C98A7F9A3836013184D354CC",
-    currentVersion = "7.0-beta6",
+    sourceSha256 = "F27CF3025EDF24C3E6FD82EE86CA2C285851F3BE3597858729F19674F71E62B8",
+    currentVersion = "7.0-beta7",
     historyFromVersion = "6.21",
-    previousVersion = "7.0-beta5",
-    rangeLabel = "7.0-beta5 -> 7.0-beta6",
+    previousVersion = "7.0-beta6",
+    rangeLabel = "7.0-beta6 -> 7.0-beta7",
     entries = {
         {
-            version = "7.0-beta6",
-            date = "2026-11-09",
+            version = "7.0-beta7",
+            date = "2026-11-10",
             sections = {
                 {
-                    title = "Highlights",
+                    title = "Features and improvements",
                     bullets = {
                         {
-                            text = "Portraits on WoW Forever. Clear the automatic elite dragon when the game restricts whether a unit is a player. Readable NPC classifications still show their configured decoration.",
+                            text = "Timer Bars. Add optional Breath, Fatigue, Feign Death, Battle Start and Group Countdown bars with independent placement and appearance. [Timer Bars guide](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta7/docs/TIMER_BARS.md)",
+                            linkless = true,
+                        },
+                        {
+                            text = "Profile imports. Preserve supported aura settings from older Retail profiles when you select Old profile is from Retail for a full import. Profiles opens the Import & Export panel from a dedicated shortcut and explains which options apply to the pasted string.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Nameplates. Add shared settings for compatible Suite nameplate customization, profiles and fonts.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Group frames and Edit Mode. Show a separate Different layer or Different phase status on WoW Forever. Edit the shown group layout's offsets and size independently, with status and layout changes reflected in the previews.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Class resources and castbars. Respect Druid form visibility on resource bars and outlines. Update interrupt readiness visuals shared with Suite nameplates and refine the WoW Forever off-hand swing timer display.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Improve settings search, previews and profile management across supported clients.",
                             linkless = true,
                         },
                     },

@@ -16,6 +16,10 @@ scheduler, pass `-Slot <scheduler.ps1>` or set `MSUF_LUA_SLOT`; child fast-check
 uses the same scheduler. Logs default to ignored dist/checks (`-LogDirectory`
 overrides this). The fast runner remains usable by parallel development lanes.
 
+On Windows, release-check runs the static search index wall-time probes one at a
+time before it starts its six-worker queue. Each client and locale keeps its
+original inventory ID, arguments and time budget.
+
 `tools/release-test-inventory.json` is the single test inventory for fast-check
 and release-check. Each executable row declares its phase, clients and arguments.
 `python tools/release_test_inventory.py --check` fails for a tracked or pending

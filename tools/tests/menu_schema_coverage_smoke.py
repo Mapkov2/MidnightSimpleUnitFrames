@@ -43,6 +43,19 @@ with tempfile.TemporaryDirectory(prefix='schema-fold-') as directory:
     assert not any(key in row for key in ('ephemeralReason', 'schemaSettingPath', '_schemaAssigned')), 'stream failed to clear absent fields'
     for key in ('resolvedPaths', 'observationIssues', 'settingDeclarations'):
         assert row[key] == dict(first[key], **second[key]), key + ': stream lost union evidence'
+    # Shared presentation IDs retain all observed variants and their chosen
+    # representative across disk flushes, even when its label first appears late.
+    drag = {'controlId': 'schema:gf_layout:dragrow.label', 'kind': 'font',
+            'schemaKind': 'font', '_schemaAssigned': True}
+    tank = {'kind': 'font', 'label': 'Tank', 'scope': 'party'}
+    dps = {'kind': 'font', 'label': 'DPS', 'scope': 'raid'}
+    variants = {json.dumps(v, sort_keys=True, separators=(',', ':')): v for v in (tank, dps)}
+    latest = dict(drag, **dps, presentationVariants=variants)
+    for first_variant in (tank, dps):
+        path.write_text(json.dumps(dict(drag, **first_variant)) + '\n' + json.dumps(latest), encoding='utf-8')
+        visual = coverage.load_stream(path)[drag['controlId']]
+        assert (visual['kind'], visual['label'], visual['scope']) == ('font', 'DPS', 'raid')
+        assert visual['presentationVariants'] == variants, 'stream lost a shared visual declaration'
     sys.path.insert(0, str(root / 'tools'))
     import scorecard
     original = scorecard.ratchet.strip_source

@@ -295,15 +295,15 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6 [AllowLoadGameType standard]\n"
+          "## Version: 7.0-beta7 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0-beta6 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0-beta7 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
-          "## X-MSUF-Version-Forever: 7.0-beta6\n"
+          "## X-MSUF-Version-Forever: 7.0-beta7\n"
         ],
         [
           9,
@@ -613,7 +613,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -923,7 +923,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -1233,7 +1233,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -1623,11 +1623,11 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6 [AllowLoadGameType standard]\n"
+          "## Version: 7.0-beta7 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0-beta6 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0-beta7 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
@@ -1677,7 +1677,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -1731,7 +1731,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -1785,7 +1785,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -1959,11 +1959,11 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6 [AllowLoadGameType standard]\n"
+          "## Version: 7.0-beta7 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0-beta6 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0-beta7 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
@@ -2013,7 +2013,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -2067,7 +2067,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -2121,7 +2121,7 @@
         ],
         [
           6,
-          "## Version: 7.0-beta6\n"
+          "## Version: 7.0-beta7\n"
         ],
         [
           7,
@@ -6769,7 +6769,13 @@
           "flavors": "*",
           "reason": "WoW Forever independent Swing Timer module uses native PLAYER_SWING events; Classic flavors do not load the Forever runtime"
         }
-      ]
+      ],
+      "reviews": {
+        "tools/lua-global-reads.tsv": [
+          "GetInventoryItemID\tapi\tBlizzard inventory lookup used by upstream/forever:Blizzard_GamepadActionBars/TargetActionBars/HostileTargetingActionBar.lua:101",
+          "INVSLOT_RANGED\tconstant\tBlizzard ranged equipment slot used by upstream/forever:Blizzard_GamepadActionBars/TargetActionBars/HostileTargetingActionBar.lua:101"
+        ]
+      }
     },
     {
       "path": "MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua",
@@ -17315,6 +17321,65 @@
           "line": "    <Script file=\"{file}\"/>\n"
         }
       ]
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/Castbars/MSUF_TimerBars.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua",
+      "reviews": {
+        "tools/client-boot-globals.tsv": [
+          "GetMirrorTimerInfo\t*\tapi\tMirrorTimer source: verified loaded native call sites on live, forever, classic_era, classic_anniversary and classic (2026-11-10)",
+          "GetMirrorTimerProgress\t*\tapi\tMirrorTimer source: verified loaded native call sites on all five client branches (2026-11-10)"
+        ],
+        "tools/lua-global-reads.tsv": [
+          "GetMirrorTimerInfo\tapi\tNative mirror timer snapshot; verified loaded MirrorTimer.lua on all client branches (2026-11-10)",
+          "GetMirrorTimerProgress\tapi\tNative remaining mirror time; checked for secret and nonfinite values before arithmetic",
+          "MirrorTimerContainer\tframe\tMainline and Forever native timer container; optional on Classic, only individual timer alpha is changed",
+          "MirrorTimer1\tframe\tClassic native mirror timer 1; optional on Mainline, alpha retained in side table",
+          "MirrorTimer2\tframe\tClassic native mirror timer 2; optional on Mainline, alpha retained in side table",
+          "MirrorTimer3\tframe\tClassic native mirror timer 3; optional on Mainline, alpha retained in side table",
+          "TimerTracker\tframe\tNative countdown timer list on all client branches; only the matching unprotected bar child is hidden"
+        ]
+      }
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/Castbars/MSUF_TimerBarVisuals.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/Castbars/MSUF_TimerBars.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_TimerBars.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars_Preview.lua"
+    },
+    {
+      "path": "MidnightSimpleUnitFrames/Runtime/MSUF_NameplateSettings.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua"
     }
   ],
   "reviewed_lists": {

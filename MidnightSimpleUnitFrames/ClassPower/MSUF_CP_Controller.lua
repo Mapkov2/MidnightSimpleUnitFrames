@@ -125,7 +125,8 @@ local CPFeatureBuilders = CPConst.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 -- instance on first enabled refresh, preserving the default-off frame budget.
 local CP_BuilderContracts = {
     CONTROLLER_CONFIG = "_cpDB:table RefreshConfig ClassPowerEnabled PlayerHPBarEnabled PlayerManaOverrideEnabled "
-        .. "AnyFeatureEnabled EnsureDefaults GetClassPowerType GetModeEventProfile ComputeStructuralSignature ResolveTexture ResolveClassPowerHeight",
+        .. "AnyFeatureEnabled EnsureDefaults GetClassPowerType GetModeEventProfile ComputeStructuralSignature "
+        .. "ResolveTexture ResolveClassPowerHeight DruidFormVisibility",
     CONTROLLER_COLORS = "ResolveMWAbove5Color ResolveClassPowerColor ResolveClassPowerBgColor InvalidateCaches ResetTokens "
         .. "ResolveChargedColor ResolveSlotColorMode ResolveSlotColor ResolveFullResourceColor",
     CONTROLLER_AURAS = "Get Rebuild ProcessUnitAuraUpdate RefreshActive bySpell:table",
@@ -371,6 +372,7 @@ do
     local build = CP_CallBuilder(CPCoreBuilders, "BUILD", {
             CP = CP,
             _cpDB = _cpDB,
+            PLAYER_CLASS = PLAYER_CLASS,
             CreateFrame = CreateFrame,
             CP_ResolveTexture = CPConfig.ResolveTexture,
         })
@@ -399,6 +401,20 @@ local function CP_SyncPlayerPowerOOC(hidden)
     CP._playerPowerOocHidden = hidden
     CP._playerPowerOocFrame = frame
     sync(frame, hidden)
+end
+
+-- Form rules compose with the container's normal Auto-Hide rules. Their
+-- two owned child layers never need a power event or an OnUpdate.
+function CP.RefreshDruidFormVisibility(editMode)
+    if not CP.druidVisual then return end
+    if editMode == nil then editMode = MSUF_UnitEditModeActive == true end
+    local mode = (editMode or CP.isVehicle == true) and 1 or CPConfig.DruidFormVisibility()
+    if CP.druidVisibilityMode == mode then return end
+    CP.druidVisibilityMode = mode
+    local barAlpha = (mode == 2 or mode == 4) and 0 or 1
+    CP.druidVisual:SetAlpha(barAlpha)
+    if CP.druidMarkVisual then CP.druidMarkVisual:SetAlpha(barAlpha) end
+    if CP.textFrame then CP.textFrame:SetAlpha((mode == 3 or mode == 4) and 0 or 1) end
 end
 
 local function CP_CheckAutoHide(cur, maxP)
@@ -1082,6 +1098,7 @@ function Refresh.ShowClassPower(playerFrame, b, cpHeight, powerType, renderMode,
 
     --- Reset container alpha before update (auto-hide in updateFn may override)
     CP.container:SetAlpha(1)
+    CP.RefreshDruidFormVisibility()
 
     if CP.ironfur and CP.ironfur.SetActive then
         CP.ironfur.SetActive(powerType == "IRONFUR")
@@ -1507,6 +1524,7 @@ local function ClassPowerOnRareEvent(event, arg1)
     or event == "UPDATE_SHAPESHIFT_FORM"
     then
         if event == "PLAYER_SPECIALIZATION_CHANGED" and arg1 ~= "player" then return end
+        if event == "UPDATE_SHAPESHIFT_FORM" then CP.RefreshDruidFormVisibility() end
         CP_HandleRareStructuralEvent(true)
         return
     end
@@ -1963,6 +1981,7 @@ do
             if playerFrame then Refresh.ApplyAltMana(playerFrame, true, false) end
         end
         if not (CP.visible and CP.container) then return end
+        CP.RefreshDruidFormVisibility(active == true)
         if active == true then
             CP.container:SetAlpha(1)
             if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end

@@ -269,20 +269,28 @@ local function Conditions(state,section,entry,schema,width,specs)
         P.BindBool(state.ctx,enabled,function() return entry.enabled~=false end,
             function(value) entry.enabled=value==true end,P.Meta("profiles_variants","variant.enabled"))
     end })
+    local inputRow = MSUF.Client.IsForever and 72 or 0
+    if inputRow > 0 then
+        P.Drop(state,section,"Input mode","variant.condition.inputMode",{
+            {value="any",text="Any state"},{value="gamepad",text="Gamepad"},
+            {value="keyboard",text="Mouse and keyboard"},
+        },function() return c.inputMode or "any" end,
+            function(value) c.inputMode=value~="any" and value or nil end,left,-414,width)
+    end
     P.Row(nil, section, { "text", "profilevariants.text.6", nil,
         { "Specializations: none selected means all. Matching conditions are combined; later variants take priority.",
-        20,-414,state.contentW-40,T.colors.muted } })
+        20,-414-inputRow,state.contentW-40,T.colors.muted } })
     c.specs=c.specs or {}
     for i,spec in ipairs(specs) do
         local id=tostring(spec.id)
         local toggle=P.Row(nil, section, { "switch", "profilevariants.toggle.7", nil, poolKey="variant.spec."..i,
-            { spec.name,20+((i-1)%2)*(width+10),-454-math.floor((i-1)/2)*32,width },
+            { spec.name,20+((i-1)%2)*(width+10),-454-inputRow-math.floor((i-1)/2)*32,width },
             bind = function(toggle)
                 P.BindBool(state.ctx,toggle,function() return c.specs[id]==true end,
                     function(value) c.specs[id]=value and true or nil end,P.Meta("profiles_variants","variant.spec."..i))
             end })
     end
-    return -464-math.ceil(#specs/2)*32
+    return -464-inputRow-math.ceil(#specs/2)*32
 end
 local function DrawVariants(state,specs)
     if not Variants then return end
@@ -296,7 +304,7 @@ local function DrawVariants(state,specs)
     end
     M.ProfileSearch.Selecting("variant",selected)
     local width=math.max(180,math.floor((state.contentW-50)/2))
-    local section=P.Section(state,"profiles_variants","Profile variants",entry and (850+math.ceil(#specs/2)*32) or 250,true)
+    local section=P.Section(state,"profiles_variants","Profile variants",entry and (850+math.ceil(#specs/2)*32+(MSUF.Client.IsForever and 72 or 0)) or 250,true)
     M.ControlSchema.Section(section, "profiles")
     P.Row(nil, section, { "text", "profilevariants.text.8", nil,
         { "Override individual settings or layouts for several specializations, a location or a hotkey. The base profile stays intact.",

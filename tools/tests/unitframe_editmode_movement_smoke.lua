@@ -4,6 +4,14 @@ local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 local world = World.New(root, arg[2] or "Forever")
 local env, core = world.env, world.core
+local inRaid = false
+env.IsInRaid = function() return inRaid end
+env.IsInGroup = function() return inRaid end
+env.GetNumGroupMembers = function() return inRaid and 10 or 0 end
+env.GetRaidRosterInfo = function(index)
+    if not inRaid or index > 10 then return nil end
+    return "Member" .. index, 0, math.floor((index - 1) / 5) + 1, 60, "WARRIOR", "WARRIOR", "zone", true, false, nil, nil, "DAMAGER"
+end
 -- Native EditBoxes fire focus loss synchronously when ClearFocus is called.
 for _, name in ipairs({ "EnableKeyboard", "SetPropagateKeyboardInput", "SetNumeric", "SetTextInsets",
     "SetMaxLetters", "SetCursorPosition", "HighlightText", "SetAutoFocus" }) do
@@ -534,6 +542,212 @@ for _, key in ipairs({ "player", "target", "focus", "pet", "pettarget", "targett
         Check(EM2.Undo.DoRedo() and conf.offsetX==savedX and conf.offsetY==savedY,key.." "..axis..": drag Redo failed")
         EM2.UnitPopup.Close()
     end
+end
+
+-- A wide raid block must move by one unit across X = 0, even while its
+-- bounds still span the screen center. Drive the real popup's +/- callbacks.
+do
+    env.IsShiftKeyDown = function() return false end
+    env.IsControlKeyDown = function() return false end
+    env.IsAltKeyDown = function() return false end
+    ui:SetScale(0.8)
+    local GF = core.GF
+    GF.EnsureDB()
+    local raid = GF.GetConf("raid")
+    raid.enabled, raid.width, raid.height, raid.spacing = true, 150, 50, 4
+    raid.unitsPerColumn, raid.maxColumns = 5, 2
+    raid.preserveRaidGroups, raid.layoutTiersEnabled = false, false
+    raid.point, raid.relativePoint, raid.growth = "CENTER", "CENTER", "DOWN"
+    raid.anchorFrameName, raid.screenPositionMode = nil, nil
+    raid.offsetX, raid.offsetY, raid.positionMode = 0, -220, "GRID_BOUNDS_V2"
+
+    for _, candidate in ipairs(world.widgets.frames) do
+        local handler = candidate:GetScript("OnEvent")
+        if candidate:IsEventRegistered("PLAYER_LOGIN") and handler
+            and debug.getinfo(handler, "S").source:find("Group_EM2", 1, true) then
+            handler(candidate, "PLAYER_LOGIN")
+        end
+    end
+    world.widgets:RunTimers()
+    Public("MSUF_GF_EM2_ShowPreview")()
+    world.widgets:RunTimers()
+    local registry = assert(EM2.Registry.Get("gf_raid"), "raid mover missing")
+    local groupMover = assert(registry.getFrame(), "raid mover has no frame")
+    local logical = assert(groupMover._msufGFLogicalAnchor, "standalone raid preview anchor missing")
+    NativeGeometry(logical)
+    NativeGeometry(groupMover)
+    NativeGeometry(GF._previewContainer.raid)
+    NativeGeometry(GF._previewLayoutFrame.raid)
+    for _, sample in ipairs(GF._previewFrames.raid) do NativeGeometry(sample) end
+
+    Public("MSUF_EM2_ShowGFPopup")("raid")
+    local popup
+    for _, candidate in ipairs(world.widgets.frames) do
+        if candidate.frameName == "MSUF_EM2_GFPopup_raid" then popup = candidate end
+    end
+    assert(popup and popup.xBox and popup.yBox, "raid position boxes missing")
+    local xBox, yBox = popup.xBox, popup.yBox
+    local summarize = EM2.HUDSelection.FormatSelectionSummary
+    Check(summarize("Raid", -0.25, 0.25, 304, 266, "gf_raid") == "Raid   X -0.25   Y 0.25   W 304   H 266",
+        "compact group summary lost fractional offsets")
+    Check(summarize("External", -0.25, 0.25, 304, 266, "external:test")
+        == string.format("%s   X %d   Y %d   W %d   H %d", "External", -0.25, 0.25, 304, 266),
+        "compact external summary changed its coordinate format")
+    local function FindSteps(box)
+        local _, plus = box:GetPoint()
+        local minus
+        for _, candidate in ipairs(world.widgets.frames) do
+            local _, relative = candidate:GetPoint()
+            if relative == box and candidate:GetScript("OnClick") then minus = candidate end
+        end
+        assert(minus and plus and plus:GetScript("OnClick"), "raid step buttons missing")
+        return minus, plus
+    end
+    local xMinus, xPlus = FindSteps(xBox)
+    local yMinus, yPlus = FindSteps(yBox)
+    local function Click(button)
+        button:GetScript("OnClick")(button)
+    end
+    local function Enter(box, value)
+        box:SetText(tostring(value))
+        box:GetScript("OnEnterPressed")(box)
+        world.widgets:RunTimers()
+    end
+    local function CheckRaidSteps(label, anchor, sample)
+        popup.Sync()
+        local savedX, savedY = raid.offsetX, raid.offsetY
+        local startX, startY = CenterUI(anchor)
+        Check(tonumber(xBox:GetText()) == savedX and tonumber(yBox:GetText()) == savedY,
+            label .. ": displayed position is not the saved anchor offset")
+        Public("MSUF_EM2_HideGFPopup")("raid")
+        Public("MSUF_EM2_ShowGFPopup")("raid")
+        Enter(popup.wBox, 155)
+        local unchangedX, unchangedY = CenterUI(anchor)
+        Check(raid.offsetX == savedX and raid.offsetY == savedY and unchangedX == startX and unchangedY == startY,
+            label .. ": opening, reopening or resizing moved a saved position")
+        Enter(popup.wBox, 150)
+
+        for _, offsets in ipairs({ { -240, 110 }, { 260, -160 }, { 0, 0 } }) do
+            local oldY = raid.offsetY
+            Enter(xBox, offsets[1])
+            Check(raid.offsetX == offsets[1] and raid.offsetY == oldY, label .. ": typed X changed the wrong offset")
+            Enter(yBox, offsets[2])
+            local x, y = CenterUI(anchor)
+            local screenX, screenY = ui:GetCenter()
+            Check(raid.offsetX == offsets[1] and raid.offsetY == offsets[2],
+                label .. ": typed Y changed the wrong offset")
+            Check(math.abs(x - screenX - offsets[1]) < 0.001 and math.abs(y - screenY - offsets[2]) < 0.001,
+                label .. ": typed offsets missed their target on screen")
+            Check(tonumber(xBox:GetText()) == offsets[1] and tonumber(yBox:GetText()) == offsets[2],
+                label .. ": the readout differs from the typed offsets")
+        end
+
+        local centerX, centerY = CenterUI(anchor)
+        local sampleX, sampleY
+        if sample then sampleX, sampleY = CenterUI(sample) end
+        for _, step in ipairs({ { xMinus, -1, 0 }, { yPlus, -1, 1 }, { xPlus, 0, 1 },
+            { xPlus, 1, 1 }, { yMinus, 1, 0 }, { xMinus, 0, 0 } }) do
+            Click(step[1])
+            Check(tonumber(xBox:GetText()) == step[2] and tonumber(yBox:GetText()) == step[3],
+                label .. ": the readout did not advance immediately")
+            world.widgets:RunTimers()
+            local _, hudX, hudY = EM2.HUDSelection.SelectionValues("gf_raid")
+            Check(hudX == step[2] and hudY == step[3], label .. ": the HUD still shows edge coordinates")
+            local x, y = CenterUI(anchor)
+            Check(raid.offsetX == step[2] and raid.offsetY == step[3]
+                and math.abs(x - centerX - step[2]) < 0.001 and math.abs(y - centerY - step[3]) < 0.001,
+                label .. ": a step did not move the requested axis by one")
+            if sample then
+                local sx, sy = CenterUI(sample)
+                Check(math.abs(sx - sampleX - step[2]) < 0.001 and math.abs(sy - sampleY - step[3]) < 0.001,
+                    label .. ": visible preview did not follow the new position")
+            end
+        end
+
+        xBox.focused = true
+        xBox:SetText("-55")
+        Click(xPlus)
+        Click(xPlus)
+        Check(xBox:GetText() == "-53", label .. ": focused readout failed to show two steps")
+        xBox:ClearFocus()
+        world.widgets:RunTimers()
+        Check(raid.offsetX == -53 and raid.offsetY == 0, label .. ": blur replayed a pending position")
+
+        EM2.Undo.Clear()
+        xBox.focused = true
+        Click(xPlus)
+        world.widgets:RunTimers(300)
+        EM2.Undo.DoUndo()
+        world.widgets:RunTimers(300)
+        Check(raid.offsetX == -53 and xBox:GetText() == "-53" and xBox:HasFocus(),
+            label .. ": focused X did not reflect Undo")
+        EM2.Undo.DoRedo()
+        world.widgets:RunTimers(300)
+        Check(raid.offsetX == -52 and xBox:GetText() == "-52" and xBox:HasFocus(),
+            label .. ": focused X did not reflect Redo")
+        xBox:SetText("-60")
+        EM2.Undo.DoUndo()
+        world.widgets:RunTimers(300)
+        Check(raid.offsetX == -53 and xBox:GetText() == "-60", label .. ": history discarded an active draft")
+        EM2.QuickPopup.DiscardFocusedEdits()
+        popup.Sync()
+        Enter(xBox, "1e300")
+        Check(raid.offsetX == -53 and xBox:GetText() == "-53", label .. ": invalid offset replaced the saved position")
+
+        world.widgets:SetCombat(true)
+        xBox.focused = true
+        xBox:SetText("-123")
+        xBox:ClearFocus()
+        Check(raid.offsetX == -53 and xBox._msufShownText == "-53", label .. ": combat acknowledged an uncommitted draft")
+        world.widgets:SetCombat(false)
+        popup.Sync()
+
+        local tier = sample and "tier40" or "tier10"
+        raid.layoutTiersEnabled = true
+        raid[tier .. "Position"] = false
+        popup.Sync()
+        xBox.focused = true
+        xBox:SetText("777")
+        raid[tier .. "Position"], raid[tier .. "X"], raid[tier .. "Y"] = true, 22.25, -15.25
+        popup.Sync()
+        xBox:ClearFocus()
+        Check(xBox:GetText() == "22.25" and yBox:GetText() == "-15.25"
+            and raid[tier .. "X"] == 22.25 and raid.offsetX == -53,
+            label .. ": a focused base-layout draft was replayed into a different tier")
+        Enter(xBox, 18)
+        Check(raid[tier .. "X"] == 18 and raid[tier .. "Y"] == -15.25 and raid.offsetX == -53 and raid.offsetY == 0,
+            label .. ": typed tier X wrote into the base layout or the other axis")
+        EM2.Undo.Clear()
+        xBox.focused = true
+        xBox:SetText("777")
+        raid.layoutTiersEnabled = false
+        xBox:ClearFocus()
+        world.widgets:RunTimers(300)
+        Check(raid.offsetX == -53 and raid[tier .. "X"] == 18 and not EM2.Undo.CanUndo(),
+            label .. ": stale draft changed a tier or added Undo")
+        popup.Sync()
+
+        raid.offsetX, raid.offsetY = -2000.25, 0.25
+        popup.Sync()
+        Check(xBox:GetText() == "-2000.25" and yBox:GetText() == "0.25", label .. ": saved fractions were hidden")
+        Click(xMinus)
+        Click(xMinus)
+        world.widgets:RunTimers()
+        Check(raid.offsetX == -2002.25 and raid.offsetY == 0.25,
+            label .. ": stepping rounded or reset a saved offset")
+    end
+    CheckRaidSteps("raid preview", logical, GF._previewFrames.raid[1])
+    raid.offsetX, raid.offsetY = 0, -220
+    inRaid = true
+    GF.InvalidateLayoutRoster()
+    assert(GF.SetupHeader("raid", "raid"), "live raid header missing")
+    local live = assert(GF.anchors.raid, "live raid anchor missing")
+    NativeGeometry(live)
+    Public("MSUF_GF_EM2_ShowPreview")()
+    world.widgets:RunTimers()
+    Check(registry.getFrame()._msufGFLiveAnchor == live, "raid popup did not switch to live bounds")
+    CheckRaidSteps("live raid", live)
+    Public("MSUF_EM2_HideGFPopup")("raid")
 end
 assert(#failures==0,"unitframe_editmode_movement_smoke failed:\n"..table.concat(failures,"\n"))
 print("unitframe_editmode_movement_smoke: PASS ("..checks.." checks)")

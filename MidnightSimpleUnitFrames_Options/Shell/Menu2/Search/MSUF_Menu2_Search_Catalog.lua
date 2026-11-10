@@ -188,6 +188,7 @@ local function AddStaticIndexSearchRecords(job, deadline)
     if job.nameplatesHidden == nil then
         local probe = M.CastbarSuiteNameplatesSupported
         job.nameplatesHidden = probe ~= nil and not probe() or false
+        job.nameplateFontsHidden = not MSUF.SuiteLink.HasNameplateFonts()
     end
     local records, covered = job.records, job.covered
     for i = job.index, #staticRecords do
@@ -196,6 +197,7 @@ local function AddStaticIndexSearchRecords(job, deadline)
         local hidden = (key and config.clientOnly[key] and not config.built[key])
             or (config.gcdHidden and rec.key == "opt_castbar" and staticIndex.TargetField(rec, "sectionId") == "castbar_gcd")
             or (job.nameplatesHidden and key == "general.kickReadyShowNameplates")
+            or (job.nameplateFontsHidden and key and key:match("^nameplates%."))
             or (config.supportsSetting and not config.supportsSetting(key))
         if not covered[identity] and not unsupported[identity] and not hidden
             and M.SupportsSearchTarget(rec.key, key, staticIndex.TargetField(rec, "prepareKind"), staticIndex.TargetField(rec, "prepareValue")) then

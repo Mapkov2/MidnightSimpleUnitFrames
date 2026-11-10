@@ -1,46 +1,46 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7131,
-      "initialDeclarations": 4797,
-      "profileControls": 3738,
-      "proven": 3738
+      "declarations": 7210,
+      "initialDeclarations": 4873,
+      "profileControls": 3791,
+      "proven": 3791
     },
     "Mainline": {
-      "declarations": 7655,
-      "initialDeclarations": 5018,
-      "profileControls": 4056,
-      "proven": 4056
+      "declarations": 7728,
+      "initialDeclarations": 5090,
+      "profileControls": 4109,
+      "proven": 4109
     },
     "Mists": {
-      "declarations": 7299,
-      "initialDeclarations": 4989,
-      "profileControls": 3774,
-      "proven": 3774
+      "declarations": 7370,
+      "initialDeclarations": 5061,
+      "profileControls": 3825,
+      "proven": 3825
     },
     "TBC": {
-      "declarations": 6684,
-      "initialDeclarations": 4593,
-      "profileControls": 3395,
-      "proven": 3395
+      "declarations": 6755,
+      "initialDeclarations": 4665,
+      "profileControls": 3446,
+      "proven": 3446
     },
     "Vanilla": {
-      "declarations": 5126,
-      "initialDeclarations": 3503,
-      "profileControls": 2456,
-      "proven": 2456
+      "declarations": 5197,
+      "initialDeclarations": 3575,
+      "profileControls": 2507,
+      "proven": 2507
     }
   },
-  "generatorVersion": "menu-schema-coverage/3",
+  "generatorVersion": "menu-schema-coverage/4",
   "issueCount": 0,
-  "projectionSha256": "2432326f2aee61e928670707bcef68d4909e3e33646d15c6acc5c240c1b3dc9d",
+  "projectionSha256": "30088c63df7556cbe3cef9039ca4ca5790862f4482c09166f076ce730b450e6c",
   "projectionVersion": 2,
-  "sourceSha256": "05BCC207560A3B170B8112F66A98746112A48A5470C1FF70606BDFDCE5DBA07C",
+  "sourceSha256": "DAB64D5C29EE89FA4B04E678B0BFC8B69FAD5A81F6DDFB96E0A04E0C2CBF4CC4",
   "totals": {
-    "declarations": 33895,
-    "initialDeclarations": 22900,
-    "profileControls": 17419,
-    "proven": 17419
+    "declarations": 34260,
+    "initialDeclarations": 23264,
+    "profileControls": 17678,
+    "proven": 17678
   },
   "version": 1
 }

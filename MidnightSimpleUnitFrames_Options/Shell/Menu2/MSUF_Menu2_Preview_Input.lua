@@ -42,33 +42,29 @@ end
 local function InCombatLocked()
     return (InCombatLockdown and InCombatLockdown()) and true or false
 end
-local function ForEachPreviewKeyboardFrame(owner, callback)
-    if not (owner and type(callback) == "function") then return end
-    local seen = {}
-    local function Visit(frame)
+-- Reuse the set between releases. A hooked keyboard setter can enter this path
+-- again while an outer release is still visiting its handles.
+local idleKeyboardSet
+local function ReleaseHandles(handles, seen)
+    if type(handles) ~= "table" then return end
+    for i = 1, #handles do
+        local frame = handles[i]
         if frame and not seen[frame] then
             seen[frame] = true
-            callback(frame)
-        end
-    end
-    Visit(owner)
-    local handles = owner.handles
-    if type(handles) == "table" then
-        for i = 1, #handles do
-            Visit(handles[i])
-        end
-    end
-    handles = owner._handleList
-    if type(handles) == "table" then
-        for i = 1, #handles do
-            Visit(handles[i])
+            SetKeyboardPropagate(frame, true)
         end
     end
 end
 function H.ReleaseKeyboardCapture(owner)
-    ForEachPreviewKeyboardFrame(owner, function(frame)
-        SetKeyboardPropagate(frame, true)
-    end)
+    if not owner then return end
+    local seen = idleKeyboardSet or {}
+    idleKeyboardSet = nil
+    seen[owner] = true
+    SetKeyboardPropagate(owner, true)
+    ReleaseHandles(owner.handles, seen)
+    ReleaseHandles(owner._handleList, seen)
+    wipe(seen)
+    idleKeyboardSet = seen
 end
 function H.FocusKeyboardTarget(owner, handle, defer, opts)
     if not owner then return end

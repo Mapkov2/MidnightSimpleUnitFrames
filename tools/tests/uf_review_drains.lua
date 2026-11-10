@@ -2,6 +2,7 @@
 -- Execute with the lane Lua slot. Each case loads the actual shipped modules;
 -- injected failures sit at native frame methods or an existing consumer callback.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
+local addonSource = "@" .. root .. "/MidnightSimpleUnitFrames/"
 local flavor = arg[2] or "Mainline"
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local MenuWorld = dofile(root .. "/tools/tests/menu_core_world.lua")
@@ -74,7 +75,7 @@ local function Budget(label, fn)
     for _ = 1, 25 do fn() end
     local vm, calls = 0, 0
     debug.sethook(function(event)
-        if debug.getinfo(2, "S").source:find("MidnightSimpleUnitFrames/", 1, true) then
+        if debug.getinfo(2, "S").source:find(addonSource, 1, true) == 1 then
             if event == "count" then vm = vm + 1 else calls = calls + 1 end
         end
     end, "c", 1)

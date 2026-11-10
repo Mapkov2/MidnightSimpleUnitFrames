@@ -85,6 +85,25 @@ for _, case in ipairs(routes) do
     end
     end
 end
+local hasLayerStatus = false
+for _, spec in ipairs(M.GroupSpecs.GF_STATUS_ICON_SPECS) do
+    if spec.value == "layerStatusText" then hasLayerStatus = true end
+end
+Check(hasLayerStatus == (flavor == "Forever"), "layer status client availability")
+if flavor == "Forever" then
+    local queries = { "party layer status", "raid layer status" }
+    if locale == "deDE" then queries[#queries + 1] = "party Layerstatus" end
+    for _, query in ipairs(queries) do
+        local row = Find(query, "gf_indicators")
+        Check(row ~= nil, "layer status search: " .. query)
+        if row then
+            local opened, anchor, exact = api.OpenSearchTarget(row.key, query, row.label, nil, row.route, row.exactTarget)
+            Ready()
+            Check(opened and anchor and exact, "layer status navigation: " .. query)
+            Check(M.gfStatusIconSelection == "layerStatusText", "layer status selection: " .. query)
+        end
+    end
+end
 for _, failure in ipairs(failures) do print("FAIL: " .. failure) end
 assert(#failures == 0, #failures .. " search regressions")
 print("search_status_findability_smoke " .. flavor .. " " .. locale .. ": " .. checked .. " checks")

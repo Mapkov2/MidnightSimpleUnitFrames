@@ -605,6 +605,14 @@ local PARTY_DEFAULTS = {
     sortRolesAcrossRaid = false,
     sortAlphabeticalWithinRole = false,
 }
+if MSUF.Client.IsForever == true then
+    PARTY_DEFAULTS.layerStatusText = false
+    PARTY_DEFAULTS.layerStatusTextSize = 10
+    PARTY_DEFAULTS.layerStatusTextAnchor = "TOP"
+    PARTY_DEFAULTS.layerStatusTextX = 0
+    PARTY_DEFAULTS.layerStatusTextY = -2
+    PARTY_DEFAULTS.layerStatusTextLayer = 7
+end
 MSUF.StateHelpers.SeedTextOffsets(PARTY_DEFAULTS)
 
 local RAID_DEFAULTS = {}

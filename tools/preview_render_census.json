@@ -362,7 +362,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "7eb01d1a6d2af5ca16c10ebffdaaf45b9ee4b14a66257e33ba67179f60f18a20"
+          "source_sha256": "9a02964528fb2560df0377695a838fc930827e5a7349fd4bbbd2f73b4bc700f6"
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
@@ -386,7 +386,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Frame.lua",
-          "source_sha256": "b1d47e9e4c881ea9b6de865313bbffd2423d84926bc854e22626291801276724"
+          "source_sha256": "7ddf8ee6792fd2a8c16e568225c82a806e263ed86d4c1f64bd14edaad80726d3"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
@@ -410,7 +410,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Model.lua",
-          "source_sha256": "3791957f6dd07ab59b975a3f6778b2322be8daf30096e5610839007ba9a31161"
+          "source_sha256": "b7c7dccb1c15fbb81199a5e051143eea38924385f16c9d05366d1e26dfd46a9e"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Chrome.lua",
@@ -581,7 +581,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
-          "source_sha256": "de8aedfdaaf41751d4013bdec85fe38971e80d34e505eeb66d837a93eee711b5"
+          "source_sha256": "8bba53e418ef62e2190eb69c59533621e94fd677fb35ec348d2ade3205a78f12"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",

@@ -16,20 +16,34 @@ local function Load(world)
 end
 -- Full-event baselines in L2: repeat CAST/CHANNEL 2178/2644 modern,
 -- 2110/2171 Classic; distinct 2184/2650 modern, 2157/2173 Classic.
--- Distinct costs include the existing native text/timer fixture allocations;
--- the same before/after fixture keeps those allocations and native counts equal.
-local function Budget(world, label, fire, maxVM, maxKB, maxNatives)
+-- Reserve native timer storage before heap sampling. All actual timer calls,
+-- their state, and the mock native text-formatting costs remain in the sample.
+-- Lua 5.1 strings have the same payload but a 16- or 24-byte header. Each
+-- distinct channel second produces ten timer display strings in this fixture.
+-- Each distinct Classic cast also produces ten suffixes and ten composed names.
+-- The x86 limits below already charge the 16-byte header on every string.
+string.rep("b", 129) -- Warm the calibration call before counting its payload.
+collectgarbage("stop")
+local stringBefore = collectgarbage("count")
+local headerProbe = string.rep("q", 257)
+local stringHeader = (collectgarbage("count") - stringBefore) * 1024 - #headerProbe - 1
+collectgarbage("restart")
+assert(stringHeader == 16 or stringHeader == 24, "unexpected Lua string header: " .. stringHeader)
+local function Budget(world, label, fire, maxVM, maxKB, maxNatives, strings)
     for _ = 1, 30 do fire() end
     local vm = world:AddonInstructions(fire)
     local before = {}
     for key, value in pairs(world.counts) do before[key] = value end
+    local timerCount = world.timerCount
     fire()
+    local timersPerEvent = world.timerCount - timerCount
     local natives = 0
     for key, value in pairs(world.counts) do natives = natives + value - (before[key] or 0) end
     local minimum = math.huge
     for _ = 1, 2 do
         collectgarbage("collect")
         for _ = 1, 30 do fire() end
+        if timersPerEvent > 0 then world:ReserveTimerEntries(1000 * timersPerEvent) end
         collectgarbage("stop")
         local kb = collectgarbage("count")
         for _ = 1, 1000 do fire() end
@@ -37,7 +51,8 @@ local function Budget(world, label, fire, maxVM, maxKB, maxNatives)
         collectgarbage("restart")
     end
     print(string.format("%s: %d VM/event, %.3f KB/1000, %d counted natives", label, vm, minimum, natives))
-    assert(minimum <= maxKB + .001, label .. " allocation budget exceeded")
+    local comparableKB = minimum - (strings or 0) * (stringHeader - 16) / 1024
+    assert(comparableKB <= maxKB + .001, label .. " allocation budget exceeded")
     assert(natives == maxNatives, label .. " native call budget changed")
     if not measure then assert(vm <= maxVM, label .. " VM budget exceeded") end
     return vm, natives
@@ -86,7 +101,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         Fire("UNIT_SPELLCAST_START")
     end
     local distinctCastVM = Budget(world, flavor .. " CAST distinct", DistinctCast,
-        legacy and 2157 or 2150, legacy and .771484375 or 179.25, legacy and 3 or 5)
+        legacy and 2157 or 2150, legacy and .771484375 or 0, legacy and 3 or 5, legacy and 30 or 0)
     world.casting.player = nil
     local channel = world:StartChannel("player", "Provider channel", 600, id)
     Fire("UNIT_SPELLCAST_CHANNEL_START")
@@ -99,7 +114,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         Fire("UNIT_SPELLCAST_CHANNEL_START")
     end
     local distinctChannelVM = Budget(world, flavor .. " CHANNEL distinct", DistinctChannel,
-        legacy and 2173 or 2614, .21484375, legacy and 3 or 4)
+        legacy and 2173 or 2614, .21484375, legacy and 3 or 4, 10)
     assert(castNative == (legacy and 3 or 4) and channelNative == (legacy and 3 or 4), "native budget changed")
     -- Frozen before/after ceilings are filled from the real baseline measurement.
     if not measure then

@@ -3,7 +3,7 @@
 ## Notes: Mists Classic client support.
 ## Author: Mapko
 ## Category: Combat
-## Version: 7.0-beta6
+## Version: 7.0-beta7
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, MapkoSkin
@@ -247,6 +247,7 @@ Game\Mists\UnitFrames\GroupFrames.xml
 # is loaded synchronously on first configuration demand. Only runtime contracts
 # that already apply before the menu opens stay in the main addon.
 Runtime\MSUF_UIScaleRuntime.lua
+Runtime\MSUF_NameplateSettings.lua
 Runtime\MSUF_HostAPI.lua
 Runtime\MSUF_WelcomeMessage.lua
 Kernel\MSUF_OptionsLoader.lua
@@ -261,6 +262,8 @@ UnitFrames\Effects\MSUF_UF_RoundedSurface.lua
 UnitFrames\Effects\MSUF_UF_RoundedResources.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
 Castbars\MSUF_CastbarRounded.lua
+Castbars\MSUF_TimerBars.lua
+Castbars\MSUF_TimerBarVisuals.lua
 Game\Classic\Castbars\MSUF_CastbarVisualCompat.lua
 UnitFrames\Effects\MSUF_UF_TextureLayer.lua
 

@@ -179,7 +179,7 @@ do
     assert(square[2]:GetWidth() == shrunk and square[4]:GetWidth() == shrunk,
         "vertical caption bars kept the stale pixel after a UI scale change")
     UIParent:SetScale(oldScale)
-    assert(probe:IsEventRegistered("DISPLAY_SIZE_CHANGED"), "caption probe does not watch display size")
+    assert(probe:IsEventRegistered("DISPLAY_SIZE_CHANGED"), "caption has no display-size listener")
     probe:GetScript("OnEvent")(probe, "DISPLAY_SIZE_CHANGED")
     assert(dash[1]:GetHeight() == pixel and square[1]:GetHeight() == pixel,
         "caption bars kept the stale pixel after a display size change")

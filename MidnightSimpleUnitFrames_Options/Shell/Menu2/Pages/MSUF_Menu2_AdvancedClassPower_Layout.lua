@@ -524,6 +524,21 @@ function Page:BuildClassVisibility()
         applyRefresh, Meta("visibility.independent")))
 end
 
+function Page:BuildDruidFormVisibility()
+    local section = self:Section("classpower_druid_forms", "Druid Forms", 328, false)
+    local width = min(560, (section._msuf2Width or self.width) - 28)
+    Card(section, "Druid Forms",
+        "Applies to the Class Resource in each form when that form has a Class Resource.", 14, -54, width, 250)
+    local choices = VT(1, "Show bar and text", 2, "Hide bar", 3, "Hide text", 4, "Hide bar and text")
+    local controls = self:Controls(section, Bars, ApplyClassPower, "druid_forms", {
+        { "dropdown", "caster", 1, { "Caster Form", choices, width - 48 }, field = "classPowerCasterVisibility" },
+        { "dropdown", "cat", 1, { "Cat Form", choices, width - 48 }, field = "classPowerCatVisibility" },
+        { "dropdown", "bear", 1, { "Bear Form", choices, width - 48 }, field = "classPowerBearVisibility" },
+        { "dropdown", "moonkin", 1, { "Moonkin Form", choices, width - 48 }, field = "classPowerMoonkinVisibility" },
+    })
+    PlaceColumn(section, 32, -119, 45, width - 48, "LEFT", controls.caster, controls.cat, controls.bear, controls.moonkin)
+end
+
 function Page:BuildResourceVisibility(id, path, prefix, group, apply, combatOnly)
     local section = self:Section(id, "Auto-Hide", combatOnly and 184 or 248, false)
     local width = min(560, (section._msuf2Width or self.width) - 28)
@@ -1121,6 +1136,7 @@ function Page:Build()
     self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
     self:LazySection("classpower_visuals", "Appearance", 482, Page.BuildClassStyle)
     self:LazySection("classpower_visibility", "Auto-Hide", 280, Page.BuildClassVisibility)
+    self:LazySection("classpower_druid_forms", "Druid Forms", 328, Page.BuildDruidFormVisibility)
     self:LazySection("classpower_detached_power", "Layout", function() return self.width < 680 and 932 or 600 end, Page.BuildDetachedPower)
     self:LazySection("classpower_detached_power_textures", "Appearance", 240, Page.BuildDetachedPowerTextures)
     self:LazySection("classpower_detached_power_text", "Text", function() return self.width < 680 and 1020 or 700 end, Page.BuildDetachedPowerText)

@@ -1,5 +1,6 @@
 -- <root> <client> [baseline directory or -] [case filter or measure].
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
+local addonSource = "@" .. root .. "/MidnightSimpleUnitFrames/"
 local flavor = assert(arg[2])
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local Menu = dofile(root .. "/tools/tests/menu_core_world.lua")
@@ -66,7 +67,7 @@ local function Budget(label, fn)
     for _ = 1, 20 do fn() end
     local vm, calls = 0, 0
     debug.sethook(function(event)
-        if debug.getinfo(2, "S").source:find("MidnightSimpleUnitFrames/", 1, true) then
+        if debug.getinfo(2, "S").source:find(addonSource, 1, true) == 1 then
             if event == "count" then vm = vm + 1 else calls = calls + 1 end
         end
     end, "c", 1)

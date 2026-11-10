@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta7 - 2026-11-10
+
+Changes since 7.0 Beta 6.
+
+[Compare Beta 6 and Beta 7](https://github.com/Mapkov2/MidnightSimpleUnitFrames/compare/classic-v7.0-beta6...classic-v7.0-beta7) · [Full 7.0 changelog through Beta 6](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta7/docs/CHANGELOG_7.0_PRELIMINARY.md)
+
+### Features and improvements
+
+- **Timer Bars.** Add optional Breath, Fatigue, Feign Death, Battle Start and Group Countdown bars with independent placement and appearance. [Timer Bars guide](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta7/docs/TIMER_BARS.md)
+<!-- msuf-menu-link: none -->
+- **Profile imports.** Preserve supported aura settings from older Retail profiles when you select **Old profile is from Retail** for a full import. Profiles opens the Import & Export panel from a dedicated shortcut and explains which options apply to the pasted string.
+<!-- msuf-menu-link: none -->
+- **Nameplates.** Add shared settings for compatible Suite nameplate customization, profiles and fonts.
+<!-- msuf-menu-link: none -->
+- **Group frames and Edit Mode.** Show a separate Different layer or Different phase status on WoW Forever. Edit the shown group layout's offsets and size independently, with status and layout changes reflected in the previews.
+<!-- msuf-menu-link: none -->
+- **Class resources and castbars.** Respect Druid form visibility on resource bars and outlines. Update interrupt readiness visuals shared with Suite nameplates and refine the WoW Forever off-hand swing timer display.
+<!-- msuf-menu-link: none -->
+- Improve settings search, previews and profile management across supported clients.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-beta6 - 2026-11-09
 
 Changes since 7.0 Beta 5.

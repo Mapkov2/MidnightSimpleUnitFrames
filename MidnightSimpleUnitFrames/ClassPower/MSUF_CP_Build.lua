@@ -27,6 +27,7 @@ builders.BUILD = function(E)
         if tf.SetFrameStrata and c.GetFrameStrata then tf:SetFrameStrata(c:GetFrameStrata()) end
         if tf.EnableMouse then tf:EnableMouse(false) end
         CP.textFrame = tf
+        CP.druidVisibilityMode = nil
         return tf
     end
 
@@ -79,7 +80,7 @@ builders.BUILD = function(E)
         local fgPath, bgPath = CP_ResolveBarPaths(b, CP_ResolveTexture)
 
         for i = CP.maxBars + 1, count do
-            local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, CP.container))
+            local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, CP.druidVisual or CP.container))
 
             bar:SetStatusBarTexture(fgPath)
             bar._msufCPTexturePath = fgPath
@@ -102,7 +103,7 @@ builders.BUILD = function(E)
         --- Tick separators (between bars)
         for i = math_max(1, CP.maxBars), count - 1 do
             if not CP.ticks[i] then
-                local tick = PixelLayoutRegion(CP.container:CreateTexture(nil, "OVERLAY"))
+                local tick = PixelLayoutRegion((CP.druidVisual or CP.container):CreateTexture(nil, "OVERLAY"))
 
                 tick:SetTexture("Interface\\Buttons\\WHITE8x8")
                 tick:SetVertexColor(0, 0, 0, 1)
@@ -131,8 +132,17 @@ builders.BUILD = function(E)
         c:Hide()
         CP.container = c
 
+        -- Only druids need separate alpha for bar art and its text.
+        local visual = c
+        if E.PLAYER_CLASS == "DRUID" then
+            visual = CreateFrame("Frame", nil, c)
+            visual:SetAllPoints(c)
+            visual:SetFrameLevel(c:GetFrameLevel())
+            CP.druidVisual = visual
+        end
+
         --- Background
-        local bg = PixelLayoutRegion(c:CreateTexture(nil, "BACKGROUND"))
+        local bg = PixelLayoutRegion(visual:CreateTexture(nil, "BACKGROUND"))
         bg:SetTexture("Interface\\Buttons\\WHITE8x8")
         bg:SetAllPoints(c)
         bg:SetVertexColor(0, 0, 0, 0.3)

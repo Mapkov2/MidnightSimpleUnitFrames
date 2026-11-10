@@ -817,7 +817,7 @@ function HUD.RefreshControls(force)
     RefreshPreviewCluster()
     local key, component, slot = CurrentFocusSelection()
     local label, x, y, w, h = SelectionValues(key, component, slot)
-    local text = DockUI.inspectorCompact and FormatSelectionSummary(label, x, y, w, h) or label
+    local text = DockUI.inspectorCompact and FormatSelectionSummary(label, x, y, w, h, key) or label
     if selectionLastText ~= text then
         selectionFS:SetText(text)
         selectionLastText = text

@@ -167,7 +167,7 @@ end)()
 --- Main DB repair pass. This is deliberately broad and cold: it may normalize
 --- several systems in one run, but it is protected by MSUF_DB_LastHeavyRun in
 --- the public wrapper below so normal callers do not pay for it repeatedly.
-local function MSUF_EnsureDB_Heavy(profileDB)
+local function MSUF_EnsureDB_Heavy(profileDB, keepUnitOverrides)
     if type(profileDB) ~= "table" then
         profileDB = {}
     end
@@ -212,7 +212,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     MSUF_Defaults_Stage_SeedPortraitBaselineDefaults(profileDB, g)
     MSUF_Defaults_Stage_MigrateUnitTextModes(profileDB, g)
     MSUF_Defaults_Stage_SeedPredictionDefaults(g)
-    MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
+    MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g, keepUnitOverrides)
     MSUF_Defaults_Stage_SeedBarsTableDefaults(profileDB)
     MSUF_Defaults_Stage_SeedGameplayDefaults(profileDB)
     --- 5.6 -> 6.0 shape repair for existing DBs and factory defaults.
@@ -220,7 +220,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     --- Root toggle: Shorten unit names (Frames -> General)
     MSUF.DefaultsSchema.Fill(profileDB, MSUF.DefaultsSchema.Values.CoreShortenNames)
     MSUF_Defaults_Stage_SeedAuraDefaults(profileDB)
-    MSUF_Defaults_Stage_FillUnitDefaults(profileDB, g, legacyPortraitOverrideState)
+    MSUF_Defaults_Stage_FillUnitDefaults(profileDB, g, legacyPortraitOverrideState, keepUnitOverrides)
     MSUF_Defaults_Stage_MigrateUnifiedAlpha(profileDB, g)
     MSUF_Defaults_MuteForeverHealth(profileDB, false)
     for _, key in ipairs({
@@ -291,17 +291,18 @@ end
 --- A private copy (export, import candidate) goes through
 --- MSUF_NormalizeProfileDefaults, which never touches that session cache.
 MSUF.DefaultsSchema.IsCurrentProfile = MSUF_Defaults_IsCurrentProfileDB
-local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
+local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath, keepUnitOverrides)
     assert(type(profile) == "table", "MSUF profile must be a table")
     local _, status = MSUF.DefaultsSchema.RestorePersistence(profile)
     if status == "rejected" then return MSUF.DefaultsSchema.QuarantineProfile(profile) end
     MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall(profile)
     MSUF.ProfileMigrations.Apply(profile)
     MSUF_Defaults_PruneRetiredClassPowerTextFields(profile)
-    if force ~= true and allowPersistedFastPath == true and MSUF_Defaults_IsCurrentProfileDB(profile) then
+    local current = MSUF_Defaults_IsCurrentProfileDB(profile)
+    if force ~= true and allowPersistedFastPath == true and current then
         return profile
     end
-    return MSUF_EnsureDB_Heavy(profile)
+    return MSUF_EnsureDB_Heavy(profile, current or keepUnitOverrides)
 end
 ExportPublic("MSUF_NormalizeProfileDefaults", MSUF_NormalizeProfileDefaults)
 function MSUF.DefaultsSchema.BuildRecoveryDefaults()

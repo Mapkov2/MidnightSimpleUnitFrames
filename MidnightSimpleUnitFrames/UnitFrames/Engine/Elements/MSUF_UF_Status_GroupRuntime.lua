@@ -1,5 +1,8 @@
 -- UF responsibility owner; dependencies bind once before runtime.
 local _, MSUF = ...
+local IS_FOREVER = MSUF.Client.IsForever == true
+local IsInInstance = IsInInstance
+local SHARD_REASON = IS_FOREVER and Enum.PhaseReason.Sharding
 MSUF.UFModuleFactories = MSUF.UFModuleFactories or {}
 
 MSUF.UFModuleFactories.StatusGroupRuntime = function(
@@ -194,21 +197,49 @@ function Runtime.UpdateSummon(frame, status)
   end
 end
 
-function Runtime.UpdatePhase(frame, status)
+-- Shared text and painter for live frames and the two group preview surfaces.
+function Runtime.LayerStatusText(isPhase)
+  return MSUF.Translate(isPhase and "Different phase" or "Different layer")
+end
+
+function Runtime.PaintLayerStatus(frame, status, shown, isPhase)
+  local cfg = status and status.layerStatus
+  local text = frame and frame.layerStatusText
+  if not (IS_FOREVER and cfg and cfg.enabled and text and shown) then
+    SetShown(text, false)
+    return
+  end
+  SetText(text, Runtime.LayerStatusText(isPhase))
+  SetShown(text, true)
+end
+
+function Runtime.UpdatePhase(frame, status, event)
   local cfg = status and status.phase
   local tex = frame and frame.phaseIcon
   local unit = frame and frame.MSUFUnitKey
-  if not (cfg and cfg.enabled and tex and unit) then
+  local iconEnabled = cfg and cfg.enabled and tex
+  local layer = status and status.layerStatus
+  local layerEnabled = IS_FOREVER and layer and layer.enabled and frame.layerStatusText
+  if not (unit and (iconEnabled or layerEnabled)) then
     SetShown(tex, false)
+    Runtime.PaintLayerStatus(frame, status, false)
     return
   end
-  local reason
-  local unitState = FreshUnitState(frame, unit)
-  local isPlayer = UnitIsPlayerRuntime(unit, unitState, frame)
-  if isPlayer == true and UnitPhaseReason then
-    reason = UnitPhaseReason(unit)
+  local outdoor = false
+  if layerEnabled and event ~= "PLAYER_LEAVING_WORLD" then
+    local inside = IsInInstance()
+    outdoor = issecretvalue(inside) ~= true and inside == false
   end
-  if issecretvalue(reason) ~= true and reason then
+  local reason
+  if event ~= "PLAYER_LEAVING_WORLD" and (iconEnabled or outdoor) then
+    local unitState = FreshUnitState(frame, unit)
+    local isPlayer = UnitIsPlayerRuntime(unit, unitState, frame)
+    if isPlayer == true and UnitPhaseReason then reason = UnitPhaseReason(unit) end
+  end
+  if issecretvalue(reason) == true then reason = nil end
+  local connected = outdoor and MSUF.UF.ReadConnectedCached(frame, unit)
+  Runtime.PaintLayerStatus(frame, status, outdoor and connected == true and reason ~= nil, reason ~= SHARD_REASON)
+  if iconEnabled and reason then
     if not ApplyStatusIconPackTexture(tex, cfg, status, "phase", reason) then
       SetTexture(tex, Media.PHASE_TEXTURE)
       SetTexCoord(tex, 0, 1, 0, 1)

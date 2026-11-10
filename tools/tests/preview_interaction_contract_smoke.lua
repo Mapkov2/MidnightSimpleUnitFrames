@@ -162,6 +162,23 @@ local arrow, arrowX, arrowY = group:NudgeHandleExact(name._key, 0, 0)
 assert(arrow and arrowX == x + 6 and arrowY == y - 3, "group arrow nudge result")
 assert(group:GetScript("OnKeyDown"))(group, "TAB")
 assert(group._selectedHandle and group._selectedHandle ~= name, "group Tab did not cycle selection")
+-- Native keyboard setters can be hooked. Both releases must visit shared
+-- handles once per invocation, even when one setter initiates another release.
+do
+    local calls, nestedCalls = 0, 0
+    local handle = { SetPropagateKeyboardInput = function(_, propagate)
+        assert(propagate == true)
+        calls = calls + 1
+    end }
+    local nested = { handles = { handle, handle }, SetPropagateKeyboardInput = function()
+        nestedCalls = nestedCalls + 1
+    end }
+    local owner = { handles = { handle }, _handleList = { handle } }
+    owner.SetPropagateKeyboardInput = function() M.PreviewHelpers.ReleaseKeyboardCapture(nested) end
+    owner._handleList[2] = owner
+    for i = 1, 2 do M.PreviewHelpers.ReleaseKeyboardCapture(owner) end
+    assert(calls == 4 and nestedCalls == 2, "duplicate or skipped keyboard release")
+end
 local schema = M.EnsureDB()
 local marker = schema.player.nameOffsetX
 group:Hide()

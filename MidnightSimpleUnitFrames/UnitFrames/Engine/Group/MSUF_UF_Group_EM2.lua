@@ -16,9 +16,6 @@ local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 or not EM2.Registry then return end
 
 local Reg = EM2.Registry
-local EditUtil = EM2.Util or {}
-local FramePositionValues = EditUtil.FramePositionValues
-local TranslateFramePosition = EditUtil.TranslateFramePosition
 local C_Timer = C_Timer
 local CreateFrame = CreateFrame
 local GetNumGroupMembers = GetNumGroupMembers
@@ -1311,12 +1308,6 @@ local function InstallCombatHooks()
   SyncCombatHooks(_em2Active)
 end
 
-local function San(v, d)
-  v = tonumber(v) or d or 0
-  if v ~= v or v > 4096 or v < -4096 then v = d or 0 end
-  return floor(v + 0.5)
-end
-
 local GROUP_COPY_TARGETS = {
   { "party", "Party" },
   { "raid", "Raid" },
@@ -1465,43 +1456,78 @@ function GroupPopup.NotifyMoved(mode)
   end
 end
 
---- Writes the boxes back: position through the frame's display translation,
---- size into the shown tier's keys (a tier's own override keeps its 20-500 by
---- 10-200 range).
-function GroupPopup.Apply(popup)
-  if BlockConfigLocked() then return end
+--- Position edits target the shown tier's saved anchor offset. Size edits
+--- keep both offsets intact and use the shown tier's own size keys.
+function GroupPopup.Apply(popup, positionBox, step)
+  if BlockConfigLocked() then return false end
   local mode = popup._msufGFMode
   local conf = GetConf(mode)
-  if not conf then return end
-  Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
+  if not conf then return false end
 
-  -- Convert before reading the current offsets: they feed TranslateFramePosition
-  -- below, so reading them in legacy semantics and stamping V2 afterwards would
-  -- persist the legacy numbers under the converted label.
+  local positionKey, isX
+  if positionBox then
+    local xKey, yKey = PositionKeys(mode, conf)
+    isX = positionBox == popup.xBox
+    positionKey = isX and xKey or yKey
+    if not step and positionBox._msufGFOffsetKey ~= positionKey then
+      GroupPopup.Sync(popup)
+      return false
+    end
+  end
+
+  -- Keep the existing grid conversion ahead of any position writes.
   if mode ~= "priority" then
     local applyGF = GF()
     if applyGF and type(applyGF.EnsureStableGridPosition) == "function" then
       applyGF.EnsureStableGridPosition(mode, GetPositionCount(mode), conf)
     end
   end
-  local xKey, yKey = PositionKeys(mode, conf)
-  local widthKey, heightKey = SizeKeys(mode, conf)
-  local currentX = San(conf[xKey], 0)
-  local currentY = San(conf[yKey], 0)
-  local displayX = popup.xBox and tonumber(popup.xBox:GetText())
-  local displayY = popup.yBox and tonumber(popup.yBox:GetText())
+
+  local value
+  if positionKey then
+    local defaultX, defaultY = GetDefaultCenter(mode)
+    local current = tonumber(conf[positionKey]) or (isX and defaultX or defaultY)
+    value = step and (current + step) or tonumber(positionBox:GetText())
+    local valid = value and value > -math.huge and value < math.huge
+    if valid and not step then
+      -- Accept any on-screen offset and the existing magnitude of a saved
+      -- position, while keeping arbitrary out-of-range typed values out.
+      local span = isX and UIParent:GetWidth() or UIParent:GetHeight()
+      valid = math.abs(value) <= max(4096, span or 0, math.abs(current))
+    end
+    if not valid then
+      GroupPopup.QuickPopup().SetBoxText(positionBox, current, true)
+      return false
+    end
+  end
+
+  Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
   conf.positionMode = STABLE_GRID_POSITION_MODE
-
-  local w = popup.wBox and tonumber(popup.wBox:GetText())
-  if w then conf[widthKey] = GroupPopup.ClampWidth(widthKey, w) end
-  local h = popup.hBox and tonumber(popup.hBox:GetText())
-  if h then conf[heightKey] = GroupPopup.ClampHeight(heightKey, h) end
-
-  local frame = SyncContainer(mode)
-  conf[xKey], conf[yKey] = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+  if positionKey then
+    conf[positionKey] = value
+    positionBox._msufGFOffsetKey = positionKey
+    GroupPopup.QuickPopup().SetBoxText(positionBox, value, true)
+  else
+    local widthKey, heightKey = SizeKeys(mode, conf)
+    local w = popup.wBox and tonumber(popup.wBox:GetText())
+    if w then conf[widthKey] = GroupPopup.ClampWidth(widthKey, w) end
+    local h = popup.hBox and tonumber(popup.hBox:GetText())
+    if h then conf[heightKey] = GroupPopup.ClampHeight(heightKey, h) end
+  end
 
   GroupPopup.RefreshAfterPopupApply(mode)
   GroupPopup.NotifyMoved(mode)
+  return true
+end
+
+function GroupPopup.SyncOffsetBox(quick, box, key, value)
+  local changedKey = box._msufGFOffsetKey ~= key
+  local text = tostring(value)
+  local hasDraft = quick.IsBoxEdited(box)
+  if changedKey or box._msufShownText ~= text or hasDraft then
+    quick.SetBoxText(box, text, changedKey or not hasDraft)
+  end
+  box._msufGFOffsetKey = key
 end
 
 --- Repaints the boxes from the shown frame and the shown tier's keys.
@@ -1509,28 +1535,23 @@ function GroupPopup.Sync(popup)
   local mode = popup._msufGFMode
   local conf = GetConf(mode)
   if not conf then return end
-  -- SetBoxText records the shown text so Escape restores it and a blur on an
-  -- unedited box does not commit.
-  local setBoxText = GroupPopup.QuickPopup().SetBoxText
-  local function S(box, value)
-    if setBoxText then setBoxText(box, value)
-    elseif box and box.SetText then box:SetText(tostring(value or 0)) end
-  end
+  local quick = GroupPopup.QuickPopup()
 
-  local x, y = FramePositionValues(SyncContainer(mode))
+  SyncContainer(mode)
+  local defaultX, defaultY = GetDefaultCenter(mode)
   local isRaid = mode == "raid" or mode == "mythicraid"
   local xKey, yKey = PositionKeys(mode, conf)
   local widthKey, heightKey = SizeKeys(mode, conf)
-  S(popup.xBox, x ~= nil and x or San(conf[xKey], 0))
-  S(popup.yBox, y ~= nil and y or San(conf[yKey], 0))
-  S(popup.wBox, conf[widthKey] or (isRaid and 80 or 120))
-  S(popup.hBox, conf[heightKey] or (isRaid and 32 or 40))
+  GroupPopup.SyncOffsetBox(quick, popup.xBox, xKey, tonumber(conf[xKey]) or defaultX)
+  GroupPopup.SyncOffsetBox(quick, popup.yBox, yKey, tonumber(conf[yKey]) or defaultY)
+  quick.SetBoxText(popup.wBox, conf[widthKey] or (isRaid and 80 or 120))
+  quick.SetBoxText(popup.hBox, conf[heightKey] or (isRaid and 32 or 40))
 end
 
 --- Applies, selects the matching component and opens its Menu2 page and section.
 function GroupPopup.OpenMenu2Page(popup, pageKey)
   local mode = popup._msufGFMode
-  GroupPopup.Apply(popup)
+  GroupPopup.QuickPopup().CommitFocusedEdits()
   local M = MSUF.Optional("MSUF2") or MSUF.MSUF2
   local key = KIND_TO_KEY[mode]
   pageKey = pageKey or "gf_layout"
@@ -1650,12 +1671,13 @@ end
 --- copy buttons and the shared footer.
 function GroupPopup.BuildControls(popup)
   local mode = popup._msufGFMode
-  local function Apply() GroupPopup.Apply(popup) end
+  local function ApplyX(step) return GroupPopup.Apply(popup, popup.xBox, step) end
+  local function ApplyY(step) return GroupPopup.Apply(popup, popup.yBox, step) end
   local Q = GroupPopup.QuickPopup()
   Q.ValueCard(popup, popup, 20, -58, 208, "Position", {
-    { label = "X", key = "xBox", onChanged = Apply },
-    { label = "Y", key = "yBox", onChanged = Apply },
-  }, { height = 132, boxWidth = 64, hoverWash = true })
+    { label = "X", key = "xBox", onChanged = ApplyX, onStep = ApplyX },
+    { label = "Y", key = "yBox", onChanged = ApplyY, onStep = ApplyY },
+  }, { height = 132, boxWidth = 64, maxLetters = 24, hoverWash = true })
   local sizeCard = Q.ValueCard(popup, popup, 240, -58, 300, "Size", {
     { label = "Width", key = "wBox", onChanged = function() GroupPopup.ApplySize(popup, "width") end },
     { label = "Height", key = "hBox", onChanged = function() GroupPopup.ApplySize(popup, "height") end },

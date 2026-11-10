@@ -12,6 +12,9 @@ MSUF.UFModuleFactories.StatusIndicatorArt = function(
 )
 local ApplyRoleTexture = StatusApplyRoleTexture
 local ApplyStatusIconPackTexture = StatusApplyStatusIconPackTexture
+local IS_FOREVER = MSUF.Client.IsForever == true
+-- A skull level on Forever can also mean a high-level normal NPC.
+local EliteFallbackUnitLevel = not IS_FOREVER and UnitLevel
 
 local function SymbolPath(symbol, useMidnight)
   if type(symbol) ~= "string" or symbol == "" or symbol == "DEFAULT" then
@@ -291,6 +294,8 @@ local function EliteAtlas(state)
   return "nameplates-icon-elite-gold"
 end
 
+local ELITE_STATE_BY_CLASSIFICATION = { worldboss = "BOSS", rareelite = "RAREELITE", rare = "RARE", elite = "ELITE" }
+
 local function EliteState(frame, unit, unitState)
   local exists = UnitExistsRuntime(unit, unitState, frame)
   if not (UnitClassification and exists) then
@@ -300,20 +305,10 @@ local function EliteState(frame, unit, unitState)
   if issecretvalue(class) == true then
     return nil
   end
-  if class == "worldboss" then
+  local state = ELITE_STATE_BY_CLASSIFICATION[class]
+  if state then return state end
+  if EliteFallbackUnitLevel and SafeNumber(EliteFallbackUnitLevel(unit)) == -1 then
     return "BOSS"
-  elseif class == "rareelite" then
-    return "RAREELITE"
-  elseif class == "rare" then
-    return "RARE"
-  elseif class == "elite" then
-    return "ELITE"
-  end
-  if UnitLevel then
-    local level = UnitLevel(unit)
-    if SafeNumber(level) == -1 then
-      return "BOSS"
-    end
   end
   return nil
 end
@@ -325,11 +320,10 @@ function Runtime.UpdateElite(frame, status)
     SetShown(tex, false)
     return
   end
-  -- Opposite gate: only NPCs are elite/rare/boss classifications, so a PLAYER
-  -- target can never show this. Skip the classification query for players.
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
-  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState, frame) == true then
+  -- On Forever, require a known NPC before showing an automatic badge.
+  if status.testMode ~= true and UnitIsPlayerRuntime(unit, unitState, frame, IS_FOREVER) == true then
     SetShown(tex, false)
     return
   end
@@ -357,7 +351,6 @@ local function SeedHealthDeadOverride(seedHP)
   return seedHP <= 0
 end
 
-local IS_FOREVER = MSUF.Client.IsForever == true
 local GetConsumptionText
 if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
   local GetUnitAuras = C_UnitAuras.GetUnitAuras
@@ -747,7 +740,6 @@ function Runtime.UpdatePVP(frame, status)
   end
 end
 
-local SAMPLE_ELITE_STATE = { worldboss = "BOSS", rareelite = "RAREELITE", rare = "RARE", elite = "ELITE" }
 
 --- Scene form of the indicator updates: the sample's flags into the regions StatusIndicators laid out, behind the live gates.
 function Runtime.PaintSampleIndicators(frame, status, sample)
@@ -781,8 +773,8 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
   end
   cfg, tex = status.elite, frame.eliteIcon
   if tex then
-    local state = cfg and cfg.enabled and (sample.player ~= true or all) and SAMPLE_ELITE_STATE[sample.classification or ""] or nil
-    if state == nil and cfg and cfg.enabled and sample.player ~= true and sample.level == -1 then state = "BOSS" end
+    local state = cfg and cfg.enabled and (sample.player ~= true or all) and ELITE_STATE_BY_CLASSIFICATION[sample.classification] or nil
+    if not IS_FOREVER and state == nil and cfg and cfg.enabled and sample.player ~= true and sample.level == -1 then state = "BOSS" end
     if state then
       if not ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
         if tex.SetAtlas then

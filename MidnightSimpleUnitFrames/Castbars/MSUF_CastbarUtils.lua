@@ -432,8 +432,8 @@ Utils.GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 -- The custom colours come from this file's getters, the only owner of the
 -- public aliases (Runtime/MSUF_Colors.lua keeps its palette-fallback getters
 -- for the menu's MSUF._colorsAPI only).
-local function ResolveCastbarColors(unit)
-    local general = Config.Read().general or {}
+local function ResolveCastbarColors(unit, general)
+    general = general or Config.Read().general or {}
 
     local castR, castG, castB = GetInterruptibleCastColor(general)
     if not (castR and castG and castB) then
@@ -522,8 +522,8 @@ local function PlayCastbarShake(frame)
 end
 Utils.PlayCastbarShake = PlayCastbarShake
 
-local function GetInterruptUnavailableCastColor()
-    local general = (Config.Read().general) or {}
+local function GetInterruptUnavailableCastColor(general)
+    general = general or Config.Read().general or {}
     local red = tonumber(general.castbarInterruptUnavailableR)
     local green = tonumber(general.castbarInterruptUnavailableG)
     local blue = tonumber(general.castbarInterruptUnavailableB)
@@ -605,12 +605,12 @@ local function ShouldUseInterruptUnavailableColor(frame)
 end
 Utils.Castbar_ShouldUseInterruptUnavailableColor = ShouldUseInterruptUnavailableColor
 
-local function ResolveInterruptUnavailableCastColor()
-    local general = (Config.Read().general) or {}
+local function ResolveInterruptUnavailableCastColor(general)
+    general = general or Config.Read().general or {}
     local red, green, blue
 
     -- This file's getter (the public alias's only owner).
-    red, green, blue = GetInterruptUnavailableCastColor()
+    red, green, blue = GetInterruptUnavailableCastColor(general)
 
     if not (red and green and blue) then
         local key = general.castbarInterruptUnavailableColor

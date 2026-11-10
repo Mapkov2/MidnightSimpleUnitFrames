@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from search_static_format import decode_context_rows
 
 ROOT = Path(__file__).resolve().parents[1]
-GENERATOR_VERSION = "menu-schema-coverage/3"
+GENERATOR_VERSION = "menu-schema-coverage/4"
 RECEIPT = "tools/menu_schema_coverage_receipt.json"
 MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 INDEXES = ("Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua",
@@ -273,8 +273,12 @@ def load_stream(path):
                 for key in ("schemaId", "schemaKind", "scope", "applyDomain", "schemaSettingPath", "ephemeralReason"):
                     previous.pop(key, None)
             for key, value in row.items():
-                if key in {"observationIssues", "resolvedPaths", "settingDeclarations"}:
+                if key in {"observationIssues", "resolvedPaths", "settingDeclarations", "presentationVariants"}:
                     previous.setdefault(key, {}).update(value)
+                elif key in {"label", "kind"} and "presentationVariants" in row:
+                    # A later page can establish a new representative for a shared visual ID.
+                    # Keep its label, kind and scope from the same observed declaration.
+                    previous[key] = value
                 elif key in {"controlId", "pageKey", "kind", "label", "classification", "settingKey", "controlPath", "actionKey"}:
                     previous.setdefault(key, value)
                 else:

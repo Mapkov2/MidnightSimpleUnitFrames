@@ -33,6 +33,7 @@ local STATUS_EVENT_KIND = {
   INCOMING_SUMMON_CHANGED = 5,
   INCOMING_RESURRECT_CHANGED = 6,
   UNIT_PHASE = 7,
+  UNIT_CTR_OPTIONS = 7,
   UNIT_OTHER_PARTY_CHANGED = 7,
   UNIT_HEALTH = 8,
   UNIT_CONNECTION = 8,
@@ -178,12 +179,15 @@ local function RunLevel(frame, status)
   UpdateLevel(frame, status)
 end
 
-local function RunPhase(frame, status)
-  UpdatePhase(frame, status)
+local function RunPhase(frame, status, event)
+  UpdatePhase(frame, status, event)
 end
 
 local function RunStatusText(frame, status, event, seedHP)
-  UpdateStatusText(frame, status, event, seedHP)
+  if status.runtimeStatusText == true then UpdateStatusText(frame, status, event, seedHP) end
+  if status.runtimeLayerStatus == true and event ~= "UNIT_HEALTH" and event ~= "UNIT_AURA" then
+    UpdatePhase(frame, status, event)
+  end
 end
 
 local function RunStatusApply(frame, status, event)
@@ -200,7 +204,7 @@ local function RunStatusApply(frame, status, event)
     UpdateSummon(frame, status)
   end
   if status.runtimePhase == true then
-    UpdatePhase(frame, status)
+    UpdatePhase(frame, status, event)
   end
   if status.runtimeIncomingRes == true then
     UpdateIncomingRes(frame, status)
@@ -259,7 +263,7 @@ local function CompileStatusDispatch(status)
   if status.runtimePhase == true then
     dispatch[7] = RunPhase
   end
-  if status.runtimeStatusText == true then
+  if status.runtimeStatusText == true or status.runtimeLayerStatus == true then
     dispatch[8] = RunStatusText
   end
   if status.runtimePVP == true then
@@ -565,9 +569,10 @@ end
 
 function GroupStatusRuntime.UpdateState(frame, event, unit, seedHP)
   local status = frame and frame._msufGFStatusRuntimeStatus or (frame and frame.MSUFSpec and frame.MSUFSpec.status)
-  if not (status and status.runtimeStatusText == true) then return end
+  if not (status and (status.runtimeStatusText == true or status.runtimeLayerStatus == true)) then return end
   BindStatusRuntime()
-  if not UpdateStatusText then return end
+  if status.runtimeStatusText == true and not UpdateStatusText then return end
+  if status.runtimeLayerStatus == true and not UpdatePhase then return end
   RunStatusText(frame, status, event, seedHP)
 end
 

@@ -80,6 +80,7 @@ local SEARCH_STATE = {
 M.searchRegistry = SEARCH_STATE.registry
 
 local function MarkSearchIndexDirty()
+    SEARCH_STATE.recentQueries = nil
     SEARCH_STATE.recordsDirty = true
     SEARCH_STATE.recordsReady = false
     SEARCH_STATE.dirtySerial = SEARCH_STATE.dirtySerial + 1

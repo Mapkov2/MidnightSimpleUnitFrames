@@ -19,7 +19,6 @@ end
 
 local function Run(oracle)
     local writes, flip, trail = 0, {}, {}
-    local oraclePath
     local h = Harness.New(root, "Mainline", { beforeBoot = function(h)
         local loadGraph = h.world.LoadGraph
         function h.world:LoadGraph(addon, ...)
@@ -42,18 +41,16 @@ local function Run(oracle)
             return setAlpha(self, alpha)
         end
         if oracle then
-            oraclePath = os.tmpname()
-            local file = assert(io.open(oraclePath, "wb"))
-            file:write(OracleSource())
-            file:close()
+            local oracleSource = OracleSource()
             local loadFile = h.world.LoadFile
             function h.world:LoadFile(path, addon, namespace)
-                if path:gsub("\\", "/"):find("MSUF_Auras3_Runtime_Identity.lua", 1, true) then path = oraclePath end
+                if path:gsub("\\", "/"):find("MSUF_Auras3_Runtime_Identity.lua", 1, true) then
+                    return loadFile(self, path, addon, namespace, oracleSource)
+                end
                 return loadFile(self, path, addon, namespace)
             end
         end
     end })
-    if oraclePath then os.remove(oraclePath) end
 
     -- The next-frame scheduler carries every reveal; unrelated queued features may trip over the offline stubs.
     local function Pump()

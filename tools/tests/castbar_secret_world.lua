@@ -406,6 +406,16 @@ local function InstallClient(world, env)
     -- Fields are reset to false, never nil: a cleared key that the collector
     -- marks dead makes its table grow again when it is set.
     local timers, pool, poolCount = world.timers, {}, 0
+    local function NewQueueEntry()
+        return { due = 0, fn = false, handle = false, period = false, sequence = 0 }
+    end
+    -- Preserve existing deadlines and measure only the addon's allocation when
+    -- a stopped-clock benchmark queues many native timers without firing them.
+    function world:ReserveTimerEntries(count)
+        for index = poolCount + 1, count do pool[index] = NewQueueEntry() end
+        poolCount = math.max(poolCount, count)
+        for index = self.timerCount + 1, self.timerCount + count do timers[index] = false end
+    end
     local function Queue(delay, fn, handle, period)
         world.timerSequence = world.timerSequence + 1
         local entry
@@ -414,7 +424,7 @@ local function InstallClient(world, env)
             pool[poolCount] = false
             poolCount = poolCount - 1
         else
-            entry = { due = 0, fn = false, handle = false, period = false, sequence = 0 }
+            entry = NewQueueEntry()
         end
         entry.due, entry.fn, entry.handle, entry.period = world.clock + (delay or 0), fn, handle or false, period or false
         entry.sequence = world.timerSequence

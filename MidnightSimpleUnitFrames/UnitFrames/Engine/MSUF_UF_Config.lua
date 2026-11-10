@@ -1852,11 +1852,13 @@ function Config.ResolveSharedFont(out, scope)
   local db = EnsureDB()
   local general = db.general or {}
   local conf = scope == "nameplates" and db.nameplates or nil
-  out.font, out.fontFlags = FontFromGlobal(), ResolveFontFlags(general, conf)
+  out.font = conf and conf.fontOverride == true and conf.fontKey
+    and MSUF.MSUF_GetFontPathForKey(conf.fontKey) or FontFromGlobal()
+  out.fontFlags = ResolveFontFlags(general, conf)
   out.characterNameParts = general.characterNameParts
   out.fontBaselineOffset = Number(conf and conf.fontOverride and conf.fontBaselineOffset, Number(general.fontBaselineOffset, 0))
-  out.fontSize = Number(general.fontSize, 12)
-  out.nameFontSize = Number(general.nameFontSize, out.fontSize)
+  out.fontSize = Number(conf and conf.fontOverride == true and conf.fontSize, Number(general.fontSize, 12))
+  out.nameFontSize = Number(conf and conf.fontOverride == true and conf.nameFontSize, Number(general.nameFontSize, out.fontSize))
   out.fontTextAlpha = ResolveFontTextAlpha(general, conf)
   out.fontShadow, out.fontShadowAlpha, out.fontShadowX, out.fontShadowY = ResolveFontShadow(general, conf, out.fontFlags)
   ResolveNameShortening(db, general, conf, "nameplates", out)
@@ -1865,6 +1867,9 @@ function Config.ResolveSharedFont(out, scope)
     MSUF.UFText.DescribeNameFormat(mode, out.nameShortenMax, out.nameShortenDots, out.nameShortenSide)
   out.textColor = out.textColor or {}
   ResolveTextColor(general, out.textColor)
+  if conf and conf.fontOverride == true and conf.fontColorR ~= nil then
+    CopyColor(out.textColor, Number(conf.fontColorR, 1), Number(conf.fontColorG, 1), Number(conf.fontColorB, 1), 1)
+  end
   out.textColor.a = out.fontTextAlpha
   out.text = out.text or {}
   local text = out.text

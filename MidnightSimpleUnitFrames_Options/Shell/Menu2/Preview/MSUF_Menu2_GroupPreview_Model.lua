@@ -160,6 +160,7 @@ local STATUS_TEXT_SUBKEYS = {
 local function RuntimeStatusConfig(status, spec)
     if type(status) ~= "table" or type(spec) ~= "table" then return nil end
     local value = spec.value
+    if value == "layerStatusText" then return status.layerStatus end
     local text = status.statusText
     if value == "statusText" then return text and text.dead or text end
     local sub = STATUS_TEXT_SUBKEYS[value]
@@ -373,6 +374,7 @@ local function StatusText(spec, runtimeCfg, conf)
     if value == "statusAFKTimer" then return "5m" end
     if value == "statusDNDText" then return "DND" end
     if value == "statusConsumptionText" then return MSUF.Translate("DRINKING") end
+    if value == "layerStatusText" then return MSUF.UFStatusRuntime.LayerStatusText(false) end
     if value == "threatText" then return "85%" end
     if value == "levelText" then
         local level = UnitLevel and tonumber(UnitLevel("player")) or nil

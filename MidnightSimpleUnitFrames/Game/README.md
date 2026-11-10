@@ -36,6 +36,11 @@ independent UF state/lifecycle/event owner, before the ClassPower controller.
 Extra Health retains every option and its ResourceVisibility parent/scale
 rules; Player unit-frame enablement or detachment does not own this resource.
 
+On Forever, Party and Raid Status Icons include an optional Layer Status Text.
+It uses the client's phase reason outside instances, shares the status event
+dispatcher and preview painter, and displays only a reported layer/phase mismatch.
+It does not infer another player's layer ID from the local map observation.
+
 The group XML manifests load the shared `GroupFrames/MSUF_GroupFrames_Additional`
 Lua/XML pair after the group runtime, for optional target, pet, friendly-boss and
 healer-mana views. These additive modules remain in the shared group subsystem;
@@ -240,3 +245,7 @@ slot/full colour resolvers, health background geometry and castbar detail rules.
 Client-specific portrait dressing remains a core decision; Options passes plain
 sample identity and scaled geometry without registering live unit consumers.
 See [shared runtime rules](../../docs/PREVIEW_RUNTIME_RULES.md).
+
+## Optional timer bars
+
+All supported clients share optional Breath, Fatigue, Feign Death, Battle Start and Group Countdown bars. The Castbar page includes independent timer samples; enabled bars can be dragged individually in Edit Mode. See [timer bars](../../docs/TIMER_BARS.md) for the native source snapshots, runtime ownership and validation boundary.

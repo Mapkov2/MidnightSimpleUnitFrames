@@ -74,7 +74,7 @@ local MSUF_Defaults_Stage_SeedPredictionDefaults = sharedBarsDefaults.MSUF_Defau
 
 --- Leader/level/raid group/combat/resting/PvP indicators, the ...Pos ->
 --- ...Anchor lift, per-unit raid marker, PvP flag and elite icon defaults.
-local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
+local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g, keepUnitOverrides)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_07")
     --- Level indicator offset (global)
     MSUF.DefaultsSchema.SeedGeneral(g, "base_08")
@@ -201,6 +201,8 @@ for _, key in ipairs({"player","target","focus","targettarget","focustarget","ar
     if conf.showPvpIndicator == nil then conf.showPvpIndicator = (key ~= "arena") end
         MSUF.DefaultsSchema.Fill(conf, MSUF.DefaultsSchema.Values.CorePvpIndicatorSize)
     end
+    -- A missing unit-level setting on a current profile inherits its global value.
+    if keepUnitOverrides then return end
     --- Elite / Rare icon defaults (per-unit)
     for _, key in ipairs({"target","focus","targettarget","focustarget","boss", "arena"}) do
         profileDB[key] = profileDB[key] or {}
@@ -453,9 +455,9 @@ local MSUF_Defaults_Stage_SeedUnitPortraitDefaults = sharedUnitsDefaults.MSUF_De
 
 --- Legacy/unit defaults, split per domain and run in this order. The portrait
 --- stage flattens the unit tables the earlier stages created, so keep it last.
-local function MSUF_Defaults_Stage_FillUnitDefaults(profileDB, g, legacyPortraitOverrideState)
+local function MSUF_Defaults_Stage_FillUnitDefaults(profileDB, g, legacyPortraitOverrideState, keepUnitOverrides)
     MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
-    MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB)
+    MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB, keepUnitOverrides)
     MSUF_Defaults_Stage_SeedUnitPowerBarDefaults(profileDB)
     MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
     MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacyPortraitOverrideState)

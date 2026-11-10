@@ -120,4 +120,67 @@ M.HideSlashMenuAndMinibar(M.frame)
 Busy(fullSpinner, false, "full page closed")
 Drain()
 assert(M.MenuRuntime:PendingTaskCount() == 0, "spinner left a timer after close")
+-- The real debounced path and direct reads share three recent exact queries.
+assert(M.Open("home") ~= false)
+Drain()
+local api = M.Search._CoreAPI
+local function Query(text)
+    Type(text)
+    Drain()
+    assert(M.searchResultsQuery == text and not M.searchResultsPending, "query did not settle")
+    return M.searchResults
+end
+local first, second, third = Query("castbar"), Query("font"), Query("minimap")
+assert(Query("castbar") == first and Query("minimap") == third, "the last three queries were not reused")
+assert(Query("Castbar") ~= first, "a differently spelled query reused the result list")
+assert(Query("castbar") == first, "a cache hit did not renew recency")
+assert(Query("font") ~= second, "the fourth-most-recent query remained cached")
+
+local textureRows = api.SearchPages("texture")
+local bars
+for _, row in ipairs(textureRows) do if row.key == "opt_bars" then bars = row break end end
+assert(bars, "texture query fixture lost its Bars result")
+local originalPage, score = M.activeKey, bars.score
+M.activeKey = "opt_bars"
+assert(api.SearchPages("texture") ~= textureRows and bars.score == score + 120, "origin page did not change ranking")
+M.activeKey = originalPage
+assert(api.SearchPages("texture") == textureRows and bars.score == score, "cache reused another page's rank metadata")
+
+-- A synchronous cache hit can arrive while the debounce job is between scan and sort.
+api.MarkSearchIndexDirty()
+api.GetSearchRecords()
+Drain()
+M.activeKey = "opt_bars"
+local boosted = api.SearchPages("texture")
+M.activeKey = originalPage
+api.ScheduleSearchInputQuery(nil, "texture", false)
+local state = M.Search._RenderContext.SEARCH_STATE
+for _ = 1, 1000 do
+    mw:RunTimers(1)
+    if state.request and state.request.job and state.request.job.sortReady then break end
+end
+assert(state.request and state.request.job and state.request.job.sortReady, "fixture did not pause before sort")
+M.activeKey = "opt_bars"
+assert(api.SearchPages("texture") == boosted, "interleaving fixture missed the cache")
+M.activeKey = originalPage
+Drain()
+local settled = false
+for _, row in ipairs(M.searchResults) do
+    if row.key == bars.key and row.label == bars.label and row.score == score then settled = true break end
+end
+assert(settled, "a synchronous cache hit changed the suspended query ranking")
+
+local font = Query("font")
+M.InvalidateSearchLexicon()
+assert(Query("font") ~= font, "a lexicon change reused cached results")
+local empty = Query("zzzxqvvzzz")
+assert(#empty == 0 and Query("zzzxqvvzzz") == empty, "a completed empty query did not reuse its result list")
+M.RegisterSearchProvider("search-cache-test", function()
+    return { { pageKey = "opt_bars", kind = "toggle", label = "zzzxqvvzzz" } }
+end)
+local fresh = Query("zzzxqvvzzz")
+assert(fresh ~= empty and fresh[1] and fresh[1].key == "opt_bars", "an index change did not invalidate the cached query")
+M.RegisterSearchProvider("search-cache-test", nil)
+M.HideSlashMenuAndMinibar(M.frame)
+Drain()
 print("search_busy_indicator_smoke " .. flavor .. ": pending/results/cancel/close/combat/reduced-motion passed")

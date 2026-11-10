@@ -45,7 +45,7 @@ local function EnsureClassPowerRoundedOutline(CP)
   local host = CP._msufRCPOutlineHost
   if not host then
     if not (CreateFrame and CanCreateRoundedRegion(host)) then return nil, nil end
-    host = PixelLayoutRegion(CreateFrame("Frame", nil, container))
+    host = PixelLayoutRegion(CreateFrame("Frame", nil, CP.druidVisual or container))
     host:SetAllPoints(container)
     if host.EnableMouse then host:EnableMouse(false) end
     CP._msufRCPOutlineHost = host

@@ -1,5 +1,6 @@
 -- <root> [baseline directory or -] [measure|plain|providers] [client].
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
+local addonSource = "@" .. root .. "/MidnightSimpleUnitFrames/"
 local baseline = arg[2] and arg[2] ~= "-" and arg[2] or nil
 local mode = arg[3]
 local function Read(relative)
@@ -94,7 +95,7 @@ if mode ~= "plain" then
                 local vm = world:AddonInstructions(operation)
                 local calls, native, counts = 0, 0, {}
                 debug.sethook(function()
-                    if debug.getinfo(2, "S").source:find("MidnightSimpleUnitFrames/", 1, true) then calls = calls + 1 end
+                    if debug.getinfo(2, "S").source:find(addonSource, 1, true) == 1 then calls = calls + 1 end
                 end, "c")
                 operation()
                 debug.sethook()

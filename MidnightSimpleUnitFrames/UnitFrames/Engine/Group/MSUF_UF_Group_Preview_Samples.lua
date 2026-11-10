@@ -229,6 +229,7 @@ local function HidePreviewStatus(frame, keepCombatIcon)
   SetShown(frame.resurrectIcon or frame.incomingResIndicatorIcon, false)
   SetShown(frame.pvpIcon or frame.pvpIndicatorIcon, false)
   SetShown(frame.phaseIcon, false)
+  MSUF.UFStatusRuntime.PaintLayerStatus(frame, frame.MSUFSpec and frame.MSUFSpec.status, false)
   SetShown(frame.raidGroupNameText, false)
   SetShown(frame.levelText, false)
   if not keepCombatIcon then SetShown(frame.combatStateIndicatorIcon, false) end
@@ -248,12 +249,16 @@ local function ApplyPreviewStatus(frame, kind, index, role, scene, sample)
       local row = regions[i]
       local region = frame[row.field]
       if region then
-        if row.text ~= nil then region:SetText(row.text)
-        elseif row.texture then
-          region:SetTexture(row.texture)
-          region:SetTexCoord(row.l or 0, row.r or 1, row.t or 0, row.b or 1)
+        if row.field == "layerStatusText" then
+          runtime.PaintLayerStatus(frame, status, row.shown == true and PreviewLayerOn("status", scene), false)
+        else
+          if row.text ~= nil then region:SetText(row.text)
+          elseif row.texture then
+            region:SetTexture(row.texture)
+            region:SetTexCoord(row.l or 0, row.r or 1, row.t or 0, row.b or 1)
+          end
+          region:SetShown(row.shown == true and PreviewLayerOn("status", scene))
         end
-        region:SetShown(row.shown == true and PreviewLayerOn("status", scene))
         region:SetAlpha((region._msufStatusAlpha or 1) * (frame._msufAlphaLastFG or 1))
       end
     end
@@ -302,6 +307,9 @@ local function ApplyPreviewStatus(frame, kind, index, role, scene, sample)
     frame.phaseIcon:Show()
   else
     SetShown(frame.phaseIcon, false)
+  end
+  if frame.layerStatusText then
+    MSUF.UFStatusRuntime.PaintLayerStatus(frame, frame.MSUFSpec.status, index == 4, false)
   end
   --- The compiled status always carries a raidGroup table, so gate on its
   --- enabled flag: testing the table alone kept a stale number on screen after

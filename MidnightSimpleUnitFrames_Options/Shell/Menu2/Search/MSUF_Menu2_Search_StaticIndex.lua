@@ -24,31 +24,39 @@ local StaticIndex = Search.StaticIndex or {}
 Search.StaticIndex = StaticIndex
 
 local CONTROL_TOKEN_LIMIT = 36
+local COLUMN_BLOCK_SIZE = 1024
 -- Includes the retained source blob, columns and localized strings, after full GC.
 -- Fuzzy/query caches belong to IndexQuery and are discarded on menu quiescence.
 StaticIndex.HEAP_BUDGET_KIB = 5632
 local FIELD = {
     label = 1, kind = 2, hint = 3, labelNorm = 4, searchIdentity = 5,
     hintNorm = 6, haystack = 7, settingKey = 8, actionKey = 9, sectionId = 10,
-    prepareKinds = 11, prepareContracts = 12, prepareKind = 14, prepareValue = 15,
+    -- Fields 11 through 14 share one immutable preparation tuple.
+    prepareKinds = 11, prepareContracts = 12, prepareKind = 13, prepareValue = 14,
 }
 local PAGE_FIELD = { title = "title", group = "group", titleNorm = "titleNorm", groupNorm = "groupNorm", key = "key", pageKey = "key" }
 
 -- A row is just its numeric ID. All immutable fields live in dense columns;
--- page metadata is shared by page ID. Mutable ranking/fuzzy fields stay on the row.
+-- page metadata is shared through the per-page hints. Mutable ranking/fuzzy fields stay on the row.
 local function ColumnField(row, key)
-    local store, id = getmetatable(row), row[1]
-    if key == "controlId" then return StaticIndex.ControlId(row) end
+    local store = getmetatable(row)
+    local id = row[1] - store.offset
+    if key == "labelNorm" then return store.columns[1][id][2] end
     if key == "hint" then return store.columns[3][id][1] end
+    if key == "sourceLabelNorm" then return store.columns[1][id][3] end
     if key == "hintNorm" then return store.columns[3][id][2] end
     if key == "label" then return store.columns[1][id][1] end
-    if key == "labelNorm" then return store.columns[1][id][2] end
-    if key == "sourceLabelNorm" then return store.columns[1][id][3] end
-    if key == "prepareKinds" then return store.columns[11][id] or store.columns[14][id] end
+    if key == "controlId" then return StaticIndex.ControlId(row) end
     local column = FIELD[key]
-    if column then return store.columns[column][id] end
+    if column then
+        if column >= 11 then
+            local preparation = store.preparations[id]
+            return preparation and preparation[column - 10]
+        end
+        return store.columns[column][id]
+    end
     local pageField = PAGE_FIELD[key]
-    if pageField then return store.pages[store.columns[13][id]][pageField] end
+    if pageField then return store.columns[3][id][3][pageField] end
 end
 function StaticIndex.TargetField(row, key)
     if getmetatable(row) and getmetatable(row)._staticColumns then return ColumnField(row, key) end
@@ -60,7 +68,8 @@ local function RecordField(row, key)
     if key == "tokenLimit" then return CONTROL_TOKEN_LIMIT end
     if key ~= "exactTarget" then
         -- Target-only fields keep the public row shape they had before columns.
-        if (FIELD[key] and FIELD[key] > 7) or key == "controlId" or key == "pageKey" then return nil end
+        local field = FIELD[key]
+        if (field and field > 7) or key == "controlId" or key == "pageKey" then return nil end
         return ColumnField(row, key)
     end
     local controlId, settingKey, actionKey = ColumnField(row, "controlId"), ColumnField(row, "settingKey"), ColumnField(row, "actionKey")
@@ -104,6 +113,7 @@ local function BuildPageInfo()
             local spec = M.pages and M.pages[pageKey]
             local title = Translate((spec and spec.title) or pageKey)
             entry = {
+                key = pageKey,
                 title = title,
                 titleNorm = Normalize(title),
                 group = "",
@@ -188,8 +198,9 @@ end
 -- Control IDs are needed only for navigation. Keep the encoded identity once;
 -- thousands of decoded duplicate ID strings need not live beside the source.
 function StaticIndex.ControlId(row)
-    local store, id = getmetatable(row), row[1]
-    if store.columns[16][id] then return nil end
+    local store = getmetatable(row)
+    local id = row[1] - store.offset
+    if store.invalidControls[id] then return nil end
     local encoded = store.columns[5][id]:match("^id\031[^\031]+\031([^\031]+)$")
     return DecodeIdentityPart(encoded)
 end
@@ -377,40 +388,53 @@ local function DecodeLine(decoder, line)
         if settingKey == "" then settingKey = declaredSetting or "" end
         local count = decoder.count + 1
         decoder.count = count
-        local pageId = decoder.pageIds[pageKey]
-        if not pageId then
-            pageId = #decoder.pages + 1
-            decoder.pageIds[pageKey] = pageId
-            page.key = pageKey
-            decoder.pages[pageId] = page
+        local rowMeta = decoder.rowMeta
+        if not rowMeta or count > rowMeta.offset + COLUMN_BLOCK_SIZE then
+            -- Lua doubles a dense array when it fills. Limit the unused tail to the final block.
+            -- Each group of rows owns its columns while keeping the public row IDs consecutive.
+            local columns = {}
+            for i = 1, 10 do columns[i] = {} end
+            rowMeta = { __index = RecordField, columns = columns, preparations = {}, invalidControls = {},
+                offset = count - 1, _staticColumns = true }
+            decoder.rowMeta = rowMeta
         end
-        local columns = decoder.columns
+        local columns, id = rowMeta.columns, count - rowMeta.offset
         local labelInfo = decoder.labels[label]
         if not labelInfo then
             labelInfo = { displayLabel, labelNorm, sourceLabelNorm ~= labelNorm and sourceLabelNorm or nil }
             decoder.labels[label] = labelInfo
         end
-        columns[1][count], columns[2][count] = labelInfo, kind ~= "" and kind or "control"
-        local pageHints = decoder.hints[pageId]
+        columns[1][id], columns[2][id] = labelInfo, kind ~= "" and kind or "control"
+        local pageHints = decoder.hints[pageKey]
         if not pageHints then
             pageHints = {}
-            decoder.hints[pageId] = pageHints
+            decoder.hints[pageKey] = pageHints
         end
         local hintInfo = pageHints[hint]
         if not hintInfo then
-            hintInfo = { displayHint, hintNorm }
+            -- Each hint is already interned per page. Keep the page once per hint.
+            hintInfo = { displayHint, hintNorm, page }
             pageHints[hint] = hintInfo
         end
-        columns[3][count] = hintInfo
-        columns[5][count], columns[7][count] = searchIdentity, haystack
-        columns[8][count] = settingKey ~= "" and settingKey or nil
-        columns[9][count] = actionKey ~= "" and actionKey or nil
-        columns[10][count] = exactSectionId ~= "" and exactSectionId or nil
-        if exactTargetKinds ~= "" and exactTargetKinds ~= prepareKind then columns[11][count] = exactTargetKinds end
-        columns[12][count] = exactTargetContracts ~= "" and exactTargetContracts or nil
-        columns[13][count], columns[14][count], columns[15][count] = pageId, prepareKind, prepareValue
-        if not hasControlId then columns[16][count] = true end
-        records[count] = setmetatable({ count }, decoder.rowMeta)
+        columns[3][id] = hintInfo
+        columns[5][id], columns[7][id] = searchIdentity, haystack
+        columns[8][id] = settingKey ~= "" and settingKey or nil
+        columns[9][id] = actionKey ~= "" and actionKey or nil
+        columns[10][id] = exactSectionId ~= "" and exactSectionId or nil
+        if exactTargetContracts ~= "" or exactTargetKinds ~= "" then
+            local kinds = exactTargetKinds ~= "" and exactTargetKinds or prepareKind
+            local preparation = decoder.preparationsByContract[exactTargetContracts]
+            if not preparation or preparation[1] ~= kinds
+                or preparation[3] ~= prepareKind or preparation[4] ~= prepareValue then
+                -- Controls can share a contract but select different views through their setting key.
+                preparation = { kinds, exactTargetContracts ~= "" and exactTargetContracts or nil,
+                    prepareKind, prepareValue }
+                decoder.preparationsByContract[exactTargetContracts] = preparation
+            end
+            rowMeta.preparations[id] = preparation
+        end
+        if not hasControlId then rowMeta.invalidControls[id] = true end
+        records[count] = setmetatable({ count }, rowMeta)
     end
 end
 
@@ -423,16 +447,13 @@ local function Decode(deadline)
         local blob = Search.StaticIndexBlob
         if type(blob) ~= "string" or blob == "" then return {} end
         local _, EnsurePage = BuildPageInfo()
-        local columns, pages = {}, {}
-        for i = 1, 16 do columns[i] = {} end
         decoder = { lines = blob:gmatch("[^\n]+"), records = {}, count = 0, hintCache = {}, EnsurePage = EnsurePage,
-            columns = columns, pages = pages, pageIds = {}, labels = {}, hints = {}, translations = {},
+            labels = {}, hints = {}, preparationsByContract = {}, translations = {},
             locale = Search.Text.SearchEffectiveLocale and Search.Text.SearchEffectiveLocale(), metadata = {},
             contextValues = Search.StaticIndexContextBlob and {},
             contextLines = (Search.StaticIndexContextBlob or ""):gmatch("[^\n]+"),
             metadataLines = (Search.StaticIndexMetadataBlob or ""):gmatch("[^\n]+"),
             keys = (Search.StaticIndexLocaleKeys or ""):gmatch("[^\n]+") }
-        decoder.rowMeta = { __index = RecordField, columns = columns, pages = pages, _staticColumns = true }
         decoder.wordTokens = setmetatable({ _decoder = decoder }, { __index = ContextWordToken })
         state.decoder = decoder
     end

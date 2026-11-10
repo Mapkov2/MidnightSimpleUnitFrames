@@ -241,6 +241,26 @@ local TEXLAYER_PACK_STATIC_LOOK = TextureLook(TEXLAYER_DRAW_RESET, TEXLAYER_RULE
     CropMode = "FULL",
 })
 
+local LOW_HEALTH_PRESET = TextureLook(TEXLAYER_DRAW_RESET, TEXLAYER_PLACEMENT_RESET, TEXLAYER_RULES_RESET, {
+    Enabled = true,
+    SourceMode = "PACK",
+    Texture = "",
+    CustomTexturePath = TEXLAYER_PACK_BY_VALUE.MIN_BASE_HAIRLINE.path,
+    AnchorTarget = "FRAME",
+    SizeMode = "FRAME",
+    ResponsiveSize = true,
+    ColorMode = "CUSTOM",
+    ColorTreatment = "MONOCHROME",
+    ColorR = 1,
+    ColorG = 0.25,
+    ColorB = 0.15,
+    Alpha = 0.65,
+    BlendMode = "BLEND",
+    CropMode = "FULL",
+    HealthCondition = "BELOW",
+    HealthThreshold = 0.35,
+})
+
 -- Writes one bundled texture into a slot and reports whether anything changed.
 -- The texture fits itself around the frame (FRAME) or stays a square on the
 -- left frame edge (medallion); Width/Height hold the fitted size for when the
@@ -372,11 +392,12 @@ end
 local function LayoutQuickPresets(setupCard, presetButtons)
     local colW = floor((setupCard._msuf2Width - 48) / 2)
     local quickX = 16
+    local full = #presetButtons > 3 and 506 or 402
     for _, preset in ipairs(presetButtons) do
-        local width = colW < 402 and floor(preset[4] * (colW - 16) / 386) or preset[4]
+        local width = colW < full and floor(preset[4] * (colW - 16) / (full - 16)) or preset[4]
         preset[1]:SetWidth(width)
         preset[1]:ClearAllPoints()
-        preset[1]:SetPoint("TOPLEFT", setupCard, "TOPLEFT", colW < 402 and quickX or preset[5], -108)
+        preset[1]:SetPoint("TOPLEFT", setupCard, "TOPLEFT", colW < full and quickX or preset[5], -108)
         quickX = quickX + width + 8
     end
 end
@@ -571,6 +592,11 @@ local function TextureLayerSetupCard(ctx, s)
     packChevron:SetPoint("RIGHT", texturePackPreset, "RIGHT", -8, 0)
     if texturePackPreset._msuf2Label then
         texturePackPreset._msuf2Label:SetPoint("RIGHT", texturePackPreset, "RIGHT", -22, 0)
+    end
+    if unit == "player" then
+        PresetButton("texture_layer.preset.low_health", "Low HP", 80, 426, function()
+            ApplyPreset(LOW_HEALTH_PRESET, "MSUF2_TEXLAYER_LOW_HEALTH_PRESET")
+        end)
     end
     LayoutQuickPresets(setupCard, presetButtons)
     ctx:AddResizeCallback(function() LayoutQuickPresets(setupCard, presetButtons) end)

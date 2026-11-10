@@ -184,6 +184,7 @@ auras3_custom 3 1
 auras3_styling 3 1
 auras3_filters 3 1
 opt_castbar 2 1
+swingtimers 1 1
 opt_misc 4 2
 opt_colors 4 1
 icon_skins 5 4
@@ -203,6 +204,7 @@ home=0.231,0.510,0.965
 uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet uf_pettarget=0.231,0.510,0.965
 opt_bars opt_fonts auras3 auras3_buffs auras3_debuffs auras3_custom auras3_styling auras3_filters opt_castbar opt_misc opt_colors=0.659,0.706,0.780
 icon_skins=0.659,0.706,0.780
+swingtimers=0.659,0.706,0.780
 classpower=0.659,0.706,0.780
 gameplay=0.659,0.706,0.780
 groupframes gf_layout gf_bars gf_auras gf_indicators gf_priority=0.659,0.706,0.780
