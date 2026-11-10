@@ -469,11 +469,332 @@ local function MSUF_ProfileIO_MakeWagoPayload(payload)
     return out
 end
 
+-- An export's aura owners describe its source client. Only full profiles
+-- carry foreign sections. Runtime configuration reads the active owners.
+local AuraTransfer = { StorageKey = "_msufAuraClients" }
+local AURA_CLIENTS = { Mainline = true, Forever = true, Vanilla = true, TBC = true, Mists = true }
+local CURRENT_AURA_CLIENT = MSUF.Client.IsForever and "Forever" or MSUF.Client.Flavor
+local AURA_PARTIAL_KINDS = { unitselection = true, unitframe = true, groupframe = true, groupframes = true }
+local CLIENT_LABELS = { Mainline = "Retail", Forever = "WoW Forever", Vanilla = "Classic Era", TBC = "TBC", Mists = "Mists" }
+local GROUP_SCOPES = { gf_party = true, gf_raid = true, gf_mythicraid = true, gf_priority = true }
+local GROUP_AURA_FIELDS = {
+    auras = "table", privateAuras = "table", spellIndicators = "table",
+    ciCustomTL = "table", ciCustomTR = "table", ciCustomBL = "table", ciCustomBR = "table", ciCustomC = "table",
+    ciSlotTL = "string", ciSlotTR = "string", ciSlotBL = "string", ciSlotBR = "string", ciSlotC = "string",
+}
+local NO_CARRIED = {}
+local PORTABLE_STYLE = {
+    "iconSize", "spacing", "iconZoom", "iconHeightPercent", "iconShape", "buffGroupIconSize", "debuffGroupIconSize",
+    "buffSpacing", "debuffSpacing", "styleBorderEnabled", "styleBorderStyle", "styleBorderThickness", "styleBorderColor",
+    "styleShadowEnabled", "styleShadowSize", "styleShadowColor",
+}
+
+local function IsAuraVariantField(field)
+    local path = field.path
+    local root, key = path[1], path[2]
+    return root == "auras3" or root == "auras2" or (GROUP_SCOPES[root] and GROUP_AURA_FIELDS[key]) ~= nil
+end
+
+local function AuraVariantSectionValid(value)
+    local clean = MSUF.ProfileVariants.Validate(value)
+    if not clean then return false end
+    for _, entry in ipairs(clean.entries) do
+        for _, field in ipairs(entry.patch) do
+            if not IsAuraVariantField(field) then return false end
+        end
+    end
+    return true
+end
+
+local function AuraSectionValid(section)
+    if type(section) ~= "table" then return false end
+    for key, value in pairs(section) do
+        if key == "legacyRetail" then
+            if value ~= true then return false end
+        elseif key ~= "auras3" and key ~= "profileVariants" and not GROUP_SCOPES[key]
+            and (section.legacyRetail ~= true or (key ~= "auras2" and key ~= "auras")) then
+            return false
+        end
+        if key ~= "legacyRetail" and type(value) ~= "table" then return false end
+        if key == "profileVariants" and not AuraVariantSectionValid(value) then return false end
+        if GROUP_SCOPES[key] then
+            for field, settings in pairs(value) do
+                if GROUP_AURA_FIELDS[field] ~= type(settings) then return false end
+            end
+        end
+    end
+    return true
+end
+
+function AuraTransfer.Validate(decoded, selected, isSnapshot, legacyRetail)
+    local full = not isSnapshot or selected.kind == "all"
+    local payload = isSnapshot and selected.payload or selected
+    if legacyRetail == true and not full then
+        return false, nil, nil, "The Retail option applies only to full MSUF profile strings."
+    end
+    local storage = payload[AuraTransfer.StorageKey]
+    local envelope = decoded
+    if isSnapshot and type(decoded.msuf6) == "table" and decoded.msuf6.payload == payload then envelope = decoded.msuf6 end
+    local source
+    if type(envelope) == "table" then source = envelope.auraClient end
+    if source ~= nil and (type(source) ~= "string" or not AURA_CLIENTS[source]
+        or (not full and not AURA_PARTIAL_KINDS[selected.kind])) then return false end
+    if storage == nil then
+        if not source and full and legacyRetail == true then return true, "Mainline", true end
+        return true, source
+    end
+    if not full or not source or not AURA_CLIENTS[CURRENT_AURA_CLIENT] or type(storage) ~= "table" or storage.version ~= 1
+        or type(storage.clients) ~= "table" then return false end
+    for key in pairs(storage) do
+        if key ~= "version" and key ~= "clients" then return false end
+    end
+    for client, section in pairs(storage.clients) do
+        if not AURA_CLIENTS[client] or client == source or not AuraSectionValid(section) then return false end
+        if section.legacyRetail and client ~= "Mainline" then return false end
+    end
+    return true, source
+end
+
+local function ProjectVariantFields(schema, auras)
+    if not schema then return nil end
+    local projected = { version = schema.version, entries = {} }
+    for index, entry in ipairs(schema.entries) do
+        local patch, removed = {}, false
+        for _, field in ipairs(entry.patch) do
+            if IsAuraVariantField(field) == auras then patch[#patch + 1] = field else removed = true end
+        end
+        if #patch > 0 or (not auras and not removed) then
+            projected.entries[#projected.entries + 1] = {
+                name = entry.name, conditions = entry.conditions, enabled = entry.enabled, hotkey = entry.hotkey,
+                patch = patch, auraOrder = auras and index or nil,
+            }
+        end
+    end
+    if auras and #projected.entries == 0 then return nil end
+    return projected
+end
+
+local function CaptureAuraSection(profile, variants, legacyRetail)
+    local result = { auras3 = MSUF_DeepCopy(profile.auras3) }
+    if legacyRetail then
+        result.legacyRetail = true
+        result.auras2 = MSUF_DeepCopy(profile.auras2)
+        result.auras = MSUF_DeepCopy(profile.auras)
+    end
+    if variants then
+        local schema = MSUF.ProfileVariants.Validate(profile.profileVariants)
+        result.profileVariants = MSUF_DeepCopy(ProjectVariantFields(schema, true))
+    end
+    for key in pairs(GROUP_SCOPES) do
+        local scope = profile[key]
+        if type(scope) == "table" then
+            local aura = {}
+            for field in pairs(GROUP_AURA_FIELDS) do aura[field] = MSUF_DeepCopy(scope[field]) end
+            if next(aura) then result[key] = aura end
+        end
+    end
+    return result
+end
+
+local function SameAuraVariantConditions(a, b)
+    local fields = MSUF.ProfileFields
+    for key, value in pairs(a) do
+        if key ~= "manual" and not fields.Equal(value, b[key]) then return false end
+    end
+    for key in pairs(b) do
+        if key ~= "manual" and a[key] == nil then return false end
+    end
+    return true
+end
+
+local function ApplyAuraVariants(profile, section)
+    local variants = ProjectVariantFields(profile.profileVariants, false)
+    local auraVariants = MSUF.ProfileVariants.Validate(section.profileVariants)
+    if not auraVariants then
+        profile.profileVariants = variants
+        return true
+    end
+    variants = variants or { version = auraVariants.version, entries = {} }
+    local byName = {}
+    for _, entry in ipairs(variants.entries) do byName[entry.name] = entry end
+    for index, entry in ipairs(auraVariants.entries) do
+        local match = byName[entry.name]
+        if match then
+            if not SameAuraVariantConditions(match.conditions, entry.conditions) then return false, "invalid variant conditions" end
+            for _, field in ipairs(entry.patch) do match.patch[#match.patch + 1] = field end
+        else
+            local order = section.profileVariants.entries[index].auraOrder
+            local tail = #variants.entries + 1
+            if type(order) ~= "number" or order % 1 ~= 0 or order < 1 or order > tail then order = tail end
+            table.insert(variants.entries, order, entry)
+        end
+    end
+    profile.profileVariants = variants
+    return true
+end
+
+local function ApplyGroupAura(profile, key, aura)
+    local scope = profile[key]
+    if type(scope) ~= "table" then
+        if not aura then return end
+        scope = {}
+        profile[key] = scope
+    end
+    for field in pairs(GROUP_AURA_FIELDS) do scope[field] = aura and MSUF_DeepCopy(aura[field]) or nil end
+end
+
+local function ApplyAuraSection(profile, section)
+    profile.auras, profile.auras2 = nil, nil
+    profile.auras3 = MSUF_DeepCopy(section.auras3)
+    for key in pairs(GROUP_SCOPES) do ApplyGroupAura(profile, key, section[key]) end
+end
+
+local function LegacyAuraRoot(section)
+    local aura = section.auras3
+    if section.legacyRetail and (not aura or (type(aura.shared) ~= "table" and type(aura.perUnit) ~= "table")) then
+        aura = section.auras2 or section.auras or aura
+    end
+    return aura
+end
+
+local function PortableAuraStyle(section)
+    local auras = LegacyAuraRoot(section)
+    local shared = type(auras) == "table" and auras.shared or nil
+    local defaults = MSUF.MSUF_CreateCanonicalUnitAuras()
+    if type(shared) == "table" then
+        for _, key in ipairs(PORTABLE_STYLE) do
+            if shared[key] ~= nil then defaults.shared[key] = shared[key] end
+        end
+    end
+    return { auras3 = defaults }
+end
+
+function AuraTransfer.Prepare(plan, source, variants, legacyRetail)
+    plan.auraPrepared = true
+    plan.auraClient = source
+    plan.auraVariants = variants
+    if not source or source == CURRENT_AURA_CLIENT then return true end
+    if not AURA_CLIENTS[CURRENT_AURA_CLIENT] then return true end
+    if AURA_PARTIAL_KINDS[plan.kind] then
+        plan.foreignAuraPartial = true
+        ApplyAuraSection(plan.payload, {})
+        return true
+    end
+    local section = CaptureAuraSection(plan.payload, variants, legacyRetail)
+    if not AuraSectionValid(section) then return false end
+    plan.foreignAura = section
+    ApplyAuraSection(plan.payload, {})
+    return true
+end
+
+-- The compatibility envelope can contain Auras3 data under the older Auras2
+-- key. Use the current client's baseline to migrate geometry, then retain the
+-- saved aura fields supported by that baseline.
+local function RestoreLegacyAuras(profile, section)
+    profile.auras2 = MSUF_DeepCopy(section.auras2)
+    profile.auras = MSUF_DeepCopy(section.auras)
+    Normalize.RestoreLegacyAuraTransfer(profile, LegacyAuraRoot(section), section)
+end
+
+local function MatchesAuraFactory(current, factory)
+    local fields = MSUF.ProfileFields
+    local defaults = CaptureAuraSection(factory)
+    local preset = { "auras3", "customContainers", "perUnit", "player", "items", MSUF.MSUF_Auras3.PRESET_CUSTOM_CONTAINER_INDEX }
+    local defaultItem, currentItem = fields.Read(defaults, preset), fields.Read(current, preset)
+    -- The defensive preset's first runtime compile marks its style as materialized.
+    if defaultItem and currentItem then defaultItem._msufA3LocalStyleFromShared_v1 = currentItem._msufA3LocalStyleFromShared_v1 end
+    return fields.Equal(current, defaults)
+end
+
+local function CarriedAuraSections(profile)
+    local storage = profile[AuraTransfer.StorageKey]
+    return type(storage) == "table" and type(storage.clients) == "table" and storage.clients or NO_CARRIED
+end
+
+function AuraTransfer.Stage(plan, candidate, base, factoryBase)
+    if not plan.auraPrepared then return true end
+    local key, source = AuraTransfer.StorageKey, plan.auraClient
+    local incoming, localSections = CarriedAuraSections(candidate), CarriedAuraSections(base)
+    if not next(incoming) and not next(localSections) and not plan.foreignAura then return true end
+    local carried = {}
+    for client, section in pairs(incoming) do
+        carried[client] = MSUF_DeepCopy(section)
+        if not plan.auraVariants then
+            carried[client].profileVariants = MSUF_DeepCopy(localSections[client] and localSections[client].profileVariants)
+        end
+    end
+    for client, section in pairs(localSections) do
+        if carried[client] == nil then carried[client] = MSUF_DeepCopy(section) end
+    end
+    if plan.foreignAura then
+        local active = incoming[CURRENT_AURA_CLIENT]
+        if next(base) and not active then
+            local current = CaptureAuraSection(base, plan.auraVariants)
+            local factory = factoryBase()
+            if not factory or not MatchesAuraFactory(current, factory) then active = current end
+        end
+        local section = active or PortableAuraStyle(plan.foreignAura)
+        ApplyAuraSection(candidate, section)
+        if section.legacyRetail then RestoreLegacyAuras(candidate, section) end
+        if plan.auraVariants then
+            local ok, why = ApplyAuraVariants(candidate, section)
+            if not ok then return false, why end
+        end
+        carried[source] = MSUF_DeepCopy(plan.foreignAura)
+        if not plan.auraVariants then
+            carried[source].profileVariants = MSUF_DeepCopy(localSections[source] and localSections[source].profileVariants)
+        end
+    end
+    if source and AURA_CLIENTS[CURRENT_AURA_CLIENT] then carried[CURRENT_AURA_CLIENT] = nil end
+    candidate[key] = next(carried) and { version = 1, clients = carried } or nil
+    return true
+end
+
+function AuraTransfer.RestorePartial(plan, candidate, base)
+    if not plan.foreignAuraPartial then return end
+    for key in pairs(GROUP_SCOPES) do
+        local localScope = type(base[key]) == "table" and base[key] or nil
+        if plan.payload[key] then ApplyGroupAura(candidate, key, localScope) end
+    end
+end
+
+function AuraTransfer.ReviewChanges(changes, before, after)
+    local fields = MSUF.ProfileFields
+    before, after = CarriedAuraSections(before), CarriedAuraSections(after)
+    for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+        if not fields.Equal(before[client], after[client]) then
+            changes[#changes + 1] = { path = { "Auras", CLIENT_LABELS[client] }, auraClient = client,
+                before = fields.CopySnapshot(before[client]), value = fields.CopySnapshot(after[client]), selected = true }
+        end
+    end
+end
+
+function AuraTransfer.ApplyReview(profile, client, value)
+    local key = AuraTransfer.StorageKey
+    local clients = CarriedAuraSections(profile)
+    if clients == NO_CARRIED then clients = {} end
+    clients[client] = value
+    profile[key] = next(clients) and { version = 1, clients = clients } or nil
+end
+
+function AuraTransfer.ForExport(payload, full, variants)
+    local key = AuraTransfer.StorageKey
+    if not full then
+        payload[key] = nil
+    elseif not variants and type(payload[key]) == "table" and type(payload[key].clients) == "table" then
+        for _, section in pairs(payload[key].clients) do
+            if type(section) == "table" then section.profileVariants = nil end
+        end
+    end
+end
+
+Parts.AuraTransfer = AuraTransfer
+
 local function MSUF_ProfileIO_MakeWagoSnapshot(snapshot)
     if type(snapshot) ~= "table" or snapshot.kind ~= "all" or type(snapshot.payload) ~= "table" then
         return snapshot, false
     end
-    return {
+    local export = {
         addon   = "MSUF",
         fmt     = 2,
         schema  = MSUF_PROFILEIO_WAGO_SCHEMA,
@@ -486,7 +807,13 @@ local function MSUF_ProfileIO_MakeWagoSnapshot(snapshot)
             profile = snapshot.profile,
             payload = MSUF_DeepCopy(snapshot.payload),
         },
-    }, true
+    }
+    -- Ordinary exports retain the Beta 6 envelope. Only an archive needs a
+    -- source stamp to identify the active aura section alongside carried data.
+    if AURA_CLIENTS[CURRENT_AURA_CLIENT] and next(CarriedAuraSections(snapshot.payload)) then
+        export[MSUF_PROFILEIO_WAGO_FULL_KEY].auraClient = CURRENT_AURA_CLIENT
+    end
+    return export, true
 end
 
 local function MSUF_ProfileIO_SelectWagoFullSnapshot(snapshot)

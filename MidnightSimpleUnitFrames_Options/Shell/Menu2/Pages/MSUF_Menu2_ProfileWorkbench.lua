@@ -254,10 +254,10 @@ function UI.ImportChanged(text)
     state.review = nil
     if state.reviewSection then state.reviewSection:Hide() end
 end
-function UI.ReviewImport(text)
+function UI.ReviewImport(text, legacyRetailSource)
     if M.profileImportCreateNew == true then return false end
     text = text or ""
-    local review, why = W.ReviewImport(text)
+    local review, why = W.ReviewImport(text, legacyRetailSource)
     M.profileImportString = text
     state.reviewSource, state.reviewProfile = text, M.EnsureDB()
     state.review, state.change, state.reviewPage = review, 1, "profiles"

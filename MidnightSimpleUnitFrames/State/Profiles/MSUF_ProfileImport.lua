@@ -1,6 +1,7 @@
 -- Profile import planning, transaction commit and external import/export API.
 local _, MSUF = ...
 local Parts = MSUF.ProfilesParts
+local AuraTransfer = Parts.AuraTransfer
 local ApplyProfileRuntime = Parts.ApplyProfileRuntime
 local ExportPublic = Parts.ExportPublic
 local InitProfiles = Parts.InitProfiles
@@ -294,18 +295,7 @@ local function ImportFailedLine(text, reason, template, inserted)
     end
     return ProfileChatLine("error", text, Translate(tostring(reason)))
 end
---- Import transaction, step 1 of 3: decode, select, validate and stage.
---- Runs before anything is written. It performs no SavedVariables writes, no
---- ExportPublic and no prints, so every rejection (including a truncated
---- string pasted into new-profile import) leaves the stored profiles
---- untouched. The codec returns nil for bytes the native decoders reject
---- (native CBOR raises into the Kernel boundary), so a garbled string is an
---- ordinary rejection here. mode is "active" (current or new profile) or
---- "external" (MSUF_ImportExternal). Returns a plan table, or nil plus reason
---- plus (active mode) the exact chat line the pre-transaction entry points
---- printed for that rejection. External reasons keep their old strings too.
-local function MSUF_ProfileIO_PrepareImport(str, mode)
-    local external = (mode == "external")
+local function DecodeImport(str, external)
     if type(str) ~= "string" or not str:match("%S") then
         return nil, "empty string", ProfileChatLine("error", "Import failed (empty string).")
     end
@@ -329,6 +319,23 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
             return nil, tostring(why), ImportFailedLine("Import failed: %s", why)
         end
     end
+    return decoded
+end
+
+--- Import transaction, step 1 of 3: decode, select, validate and stage.
+--- Runs before anything is written. It performs no SavedVariables writes, no
+--- ExportPublic and no prints, so every rejection (including a truncated
+--- string pasted into new-profile import) leaves the stored profiles
+--- untouched. The codec returns nil for bytes the native decoders reject
+--- (native CBOR raises into the Kernel boundary), so a garbled string is an
+--- ordinary rejection here. mode is "active" (current or new profile) or
+--- "external" (MSUF_ImportExternal). Returns a plan table, or nil plus reason
+--- plus (active mode) the exact chat line the pre-transaction entry points
+--- printed for that rejection. External reasons keep their old strings too.
+local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
+    local external = (mode == "external")
+    local decoded, why, chatLine = DecodeImport(str, external)
+    if not decoded then return nil, why, chatLine end
     --- Source-client stamp: `decoded` is still the raw decoded envelope here.
     --- A reader of the exporting client's stamp belongs at this point, before
     --- SelectSupportedProfile rebuilds or drops the envelope.
@@ -353,6 +360,11 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     if not valid then
         return nil, validationError, ImportFailedLine(isSnapshot and "Import failed: %s" or "Profile import failed: %s",
             validationError, validationTemplate, validationType)
+    end
+    local auraValid, auraClient, legacy, auraReason = AuraTransfer.Validate(decoded, selected, isSnapshot, legacyRetail)
+    if not auraValid then
+        local reason = auraReason or "invalid profile data"
+        return nil, reason, ImportFailedLine("Import failed: %s", reason)
     end
     local staged = MSUF_DeepCopy(selected)
     local plan = {
@@ -389,6 +401,9 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         end
         payload.profileVariants=clean
     end
+    if not AuraTransfer.Prepare(plan, auraClient, MSUF_ProfileIO_ImportVariants, legacy) then
+        return nil, "invalid profile data", ImportFailedLine("Import failed: %s", "invalid profile data")
+    end
     MSUF.ProfileNormalize.PrepareGroupFrameImport(payload, kind)
     if kind == "unitselection" then
         local selectedUnits, selectionError, selectionTemplate, selectionKey = UnitSelection.Validate(payload)
@@ -410,6 +425,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
             StateHelpers.NormalizeAuraLayoutTable(conf.layoutShared, StateHelpers.ProfileIOSpec)
         end
         plan.payload = UnitSelection.Copy(payload, selectedUnits)
+        if plan.foreignAuraPartial then plan.payload.auras3 = nil end
         plan.selectedUnits = selectedUnits
         MSUF_ProfileIO_CollectProfileMediaWarnings(plan.payload)
         return plan
@@ -555,16 +571,20 @@ function ImportTx.Stage(plan, base)
         candidate = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
         MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
         plan.selection = UnitSelection.Copy(candidate, plan.selectedUnits)
+        if plan.foreignAuraPartial then plan.selection.auras3 = nil end
         return candidate
     end
     if kind == "all" then
         candidate = MSUF_DeepCopy(payload)
+        local ok, why = AuraTransfer.Stage(plan, candidate, base, ImportTx.FactoryAuraBase)
+        if not ok then return nil, why end
         if not MSUF_ProfileIO_ImportVariants then
             candidate.profileVariants = MSUF_DeepCopy(base.profileVariants)
         end
     else
         candidate = MSUF_DeepCopy(base)
         ImportTx.Merge(kind, payload, candidate)
+        AuraTransfer.RestorePartial(plan, candidate, base)
     end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(candidate) end
     candidate._msufStateSchema = nil
@@ -576,6 +596,11 @@ function ImportTx.Stage(plan, base)
     if type(gf) == "table" and type(gf.RepairGroupDB) == "function" then gf.RepairGroupDB(candidate) end
     if MSUF.ProfileMigrations then MSUF.ProfileMigrations.CompleteImportedGroupFontOwnership(candidate) end
     if type(auras) == "table" and type(auras.NormalizeProfileDB) == "function" then auras.NormalizeProfileDB(candidate) end
+    if plan.foreignAura and plan.auraVariants and candidate.profileVariants ~= nil then
+        local clean, why = Variants.ValidateForProfile(candidate, candidate.profileVariants)
+        if not clean then return nil, why end
+        candidate.profileVariants = clean
+    end
     --- Local variants kept across a full import are checked against the new
     --- settings they will overlay. They stay stored either way (they are the
     --- user's data); a mismatch is reported once after the commit.
@@ -587,11 +612,13 @@ function ImportTx.Stage(plan, base)
     return candidate
 end
 --- Base content of the active profile for staging: the base snapshot (never
---- a live variant overlay). A full import with variant import on needs none.
+--- a live variant overlay). Full imports can preserve local variants and aura data.
 function ImportTx.LiveBase(plan)
     MSUF_ProfileIO_RunEnsureDB()
-    if plan.kind == "all" and MSUF_ProfileIO_ImportVariants then return {} end
     if type(MSUF_DB) ~= "table" then return {} end
+    if plan.kind == "all" and MSUF_ProfileIO_ImportVariants and not plan.foreignAura and not MSUF_DB[AuraTransfer.StorageKey] then
+        return {}
+    end
     if Variants then return Variants.BaseSnapshot(MSUF_DB, true) end
     return MSUF_DeepCopy(MSUF_DB)
 end
@@ -609,6 +636,14 @@ function ImportTx.FactoryBase()
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
     MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(profile, false, true)
     return profile
+end
+function ImportTx.FactoryAuraBase()
+    local factory = ImportTx.FactoryBase()
+    if factory then
+        MSUF.GF.RepairGroupDB(factory)
+        MSUF.MSUF_Auras3.NormalizeProfileDB(factory)
+    end
+    return factory
 end
 function ImportTx.ReportKeptVariants(plan)
     if not plan.keptVariantsProblem then return end
@@ -691,10 +726,10 @@ function ImportTx.Finish(plan)
     MSUF_ProfileIO_ReportImportWarnings()
     return true
 end
-local function MSUF_ImportFromString(str)
+local function MSUF_ImportFromString(str, legacyRetail)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     MSUF_ProfileIO_ResetImportWarnings()
-    local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active")
+    local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active", legacyRetail)
     if not plan then
         print(chatLine)
         return false, why
@@ -705,7 +740,11 @@ local function MSUF_ImportFromString(str)
         print(chatLine)
         return false, baseWhy
     end
-    ImportTx.Stage(plan, base)
+    local candidate, stageWhy = ImportTx.Stage(plan, base)
+    if not candidate then
+        print(ImportFailedLine("Import failed: %s", stageWhy))
+        return false, stageWhy
+    end
     return ImportTx.Finish(plan)
 end
 --- Imports a string into a new profile and switches to it. The string is
@@ -715,7 +754,7 @@ end
 --- switch switches back and removes the created profile, from Suite too.
 --- Returns true, or false plus reason plus stage ("name", "exists", "decode",
 --- "create" or "switch").
-local function MSUF_ImportIntoNewProfile(name, str)
+local function MSUF_ImportIntoNewProfile(name, str, legacyRetail)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     MSUF_ProfileIO_ResetImportWarnings()
     name = type(name) == "string" and name:match("^%s*(.-)%s*$") or ""
@@ -729,7 +768,7 @@ local function MSUF_ImportIntoNewProfile(name, str)
     if type(profiles) == "table" and profiles[name] ~= nil then
         return false, "profile already exists", "exists"
     end
-    local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active")
+    local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active", legacyRetail)
     if not plan then
         print(chatLine)
         return false, why, "decode"
@@ -742,7 +781,8 @@ local function MSUF_ImportIntoNewProfile(name, str)
             return false, "factory defaults unavailable", "create"
         end
     end
-    ImportTx.Stage(plan, base)
+    local candidate, stageWhy = ImportTx.Stage(plan, base)
+    if not candidate then return false, stageWhy, "decode" end
     local previous = MSUF_ActiveProfile or "Default"
     local created = MSUF_CreateProfile(name)
     profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
@@ -821,7 +861,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
     if existing == nil and ProfileNameTooLong(profileKey, true) then return false, "invalid profileKey" end
     local isActive = (profileKey == MSUF_ActiveProfile)
     local base = {}
-    if not MSUF_ProfileIO_ImportVariants and type(existing) == "table" then
+    if type(existing) == "table" and (plan.foreignAura or existing[AuraTransfer.StorageKey] or not MSUF_ProfileIO_ImportVariants) then
         base = existing
         if isActive and Variants and type(MSUF_DB) == "table" then
             local why
@@ -829,7 +869,8 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
             if not base then return false, why end
         end
     end
-    local newTable = ImportTx.Stage(plan, base)
+    local newTable, stageWhy = ImportTx.Stage(plan, base)
+    if not newTable then return false, stageWhy end
     if isActive then
         --- As for any import into the active profile: pending edits reach
         --- the sync members first, the imported settings stay local.
@@ -938,8 +979,10 @@ Parts.MSUF_ProfileIO_MaterializeProfileCopyForExport = MSUF_ProfileIO_Materializ
 -- Complete forward bindings once; gameplay closures keep direct local calls.
 -- Staging and commit share the existing importer and normalization owners.
 MSUF.ProfileImportReview = {
-    Prepare = function(text, base)
-        local plan, why = MSUF_ProfileIO_PrepareImport(text, "active")
+    AuraReviewChanges = AuraTransfer.ReviewChanges,
+    ApplyAuraReview = AuraTransfer.ApplyReview,
+    Prepare = function(text, base, legacyRetail)
+        local plan, why = MSUF_ProfileIO_PrepareImport(text, "active", legacyRetail)
         if not plan then return nil, why end
         return ImportTx.Stage(plan, base)
     end,

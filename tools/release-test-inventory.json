@@ -24,6 +24,17 @@
       ]
     },
     {
+      "test": "tools/tests/profile_menu_beta_ux_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/menu_background_opacity_warning_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -1096,6 +1107,13 @@
     {
       "test": "tools/tests/client_world_root_smoke.lua",
       "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/profile_aura_roundtrip_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline"
+      ]
     },
     {
       "test": "tools/tests/profile_corpus_golden_smoke.lua",

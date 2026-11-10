@@ -241,6 +241,7 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
     end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(payload) end
     payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
+    Parts.AuraTransfer.ForExport(payload, kind == "all", MSUF_ProfileIO_ExportVariants)
     if kind~="all" or not MSUF_ProfileIO_ExportVariants then payload.profileVariants=nil end
     if type(payload.general) == "table" then
         payload.general.blizzardEditModeSnapshot = nil
@@ -304,6 +305,7 @@ function MSUF.PublicGlobals.MSUF_ExportExternal(profileKey)
     end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(payload) end
     payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
+    Parts.AuraTransfer.ForExport(payload, true, MSUF_ProfileIO_ExportVariants)
     if not MSUF_ProfileIO_ExportVariants then payload.profileVariants=nil end
     local snap = {
         addon   = "MSUF",

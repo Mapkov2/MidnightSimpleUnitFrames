@@ -133,6 +133,19 @@ local function SuiteImportKind(text)
     if text:match("^%s*MSUFS[123]:") then return "full" end
     if text:match("^%s*MSUFM2:") or text:match("^%s*MSKIN1:") then return "module" end
 end
+local function UpdateLegacyRetailSource(state, text)
+    local toggle = state.legacyRetail
+    if not toggle then return end
+    local enabled = not SuiteImportKind(text or state.blob:GetText())
+    if not enabled then
+        state.legacyRetailSource = nil
+        toggle:SetChecked(false)
+    end
+    if state.legacyRetailEnabled ~= enabled then
+        state.legacyRetailEnabled = enabled
+        toggle:SetEnabled(enabled)
+    end
+end
 -- The unassigned row of a profile picker. No profile can be named "" (every
 -- name entry point refuses it), so a real profile named "None" keeps its row.
 local NO_PROFILE = ""
@@ -488,15 +501,15 @@ function ProfilesPage.Prepare(ctx)
 end
 function ProfilesPage.Hero(state)
     local ctx, b, contentW = state.ctx, state.b, state.contentW
-    local StatusPill, AddProfileTooltip, ExportProfileString = state.StatusPill, state.AddProfileTooltip, state.ExportProfileString
+    local StatusPill, AddProfileTooltip = state.StatusPill, state.AddProfileTooltip
 
     -- Profile management is a high-impact workflow, so its current state stays visible
     -- even when every task section is collapsed.
-    -- The status pills and the two profile actions need more horizontal room
+    -- The status pills and the profile shortcuts need more horizontal room
     -- than the rest of this page. Switch to the stacked layout before those
     -- groups can overlap at intermediate menu/UI scales.
     local compactHero = contentW < 1120
-    local heroH = compactHero and 206 or 112
+    local heroH = compactHero and 254 or 132
     local hero = T.Panel(b.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     if T.ApplySurface then T.ApplySurface(hero, "status") end
     hero:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
@@ -531,36 +544,30 @@ function ProfilesPage.Hero(state)
     specStatePill:SetPoint("LEFT", profileCountPill, "RIGHT", 10, 0)
     safetyPill:SetPoint("TOPLEFT", hero, "TOPLEFT", heroPillX, compactHero and -132 or -64)
 
-    local heroExport = AP.Row(nil, hero, { "button", "advancedprofiles.heroExport.5", nil, { "Export backup", 150, 34, { noSearch = true } } })
+    local heroTransfer = AP.Row(nil, hero, { "button", "advancedprofiles.heroExport.5", nil,
+        { "Import & Export", 168, 34, { noSearch = true } } })
     local heroSwitch = AP.Row(nil, hero, { "button", "advancedprofiles.heroSwitch.6", nil, { "Switch profile", 168, 34, { noSearch = true } } })
     if T.CenterButtonLabel then
-        T.CenterButtonLabel(heroExport)
+        T.CenterButtonLabel(heroTransfer)
         T.CenterButtonLabel(heroSwitch)
     end
     if T.ApplyButtonRole then T.ApplyButtonRole(heroSwitch, "primary") end
-    if compactHero then
-        heroExport:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -202, -164)
-        heroSwitch:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -20, -164)
-    else
-        heroExport:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -202, -34)
-        heroSwitch:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -20, -34)
-        local combatHint = AP.LabelAt(hero, "Profile actions are blocked in combat.", contentW - 390, -78, 370,
+    heroSwitch:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -20, compactHero and -164 or -18)
+    heroTransfer:SetPoint("TOPRIGHT", heroSwitch, "BOTTOMRIGHT", 0, -8)
+    if not compactHero then
+        local combatHint = AP.LabelAt(hero, "Profile actions are blocked in combat.", contentW - 390, -104, 370,
             "GameFontDisableSmall", T.colors.muted)
         if combatHint and combatHint.SetJustifyH then combatHint:SetJustifyH("RIGHT") end
     end
-    heroExport:SetScript("OnClick", function()
-        local io = state.io
-        if ExportProfileString(SuiteExportAvailable() and "suite_all" or "all") and io and W.FocusCollapsibleSection then
-            W.FocusCollapsibleSection(io, { flash = true })
-        end
+    heroTransfer:SetScript("OnClick", function()
+        if state.io and W.FocusCollapsibleSection then W.FocusCollapsibleSection(state.io, { flash = true }) end
     end)
     heroSwitch:SetScript("OnClick", function()
         local current = state.current
         if current and W.FocusCollapsibleSection then W.FocusCollapsibleSection(current, { flash = true }) end
     end)
-    AddProfileTooltip(heroExport, "Export backup", "Creates a full-profile export string and opens Import & Export.")
     AddProfileTooltip(heroSwitch, "Switch profile", "Opens Profile Management. Profile switching is blocked during combat.")
-    state.activeName, state.heroExport, state.heroSwitch = activeName, heroExport, heroSwitch
+    state.activeName, state.heroSwitch = activeName, heroSwitch
     state.profileCountPill, state.specStatePill, state.safetyPill = profileCountPill, specStatePill, safetyPill
 end
 function ProfilesPage.ManagementLayout(state)
@@ -949,10 +956,10 @@ end
 function ProfilesPage.ImportExport(state)
     local ctx, b, contentW, buttonH, buttonGap = state.ctx, state.b, state.contentW, state.buttonH, state.buttonGap
     local ProfileButton, AddProfileTooltip = state.ProfileButton, state.AddProfileTooltip
-    local heroExport, ExportProfileString = state.heroExport, state.ExportProfileString
+    local ExportProfileString = state.ExportProfileString
 
     local ioWide = contentW >= 980
-    local ioH = ioWide and 462 or 824
+    local ioH = ioWide and 504 or 866
     local io = b:CollapsibleSection("profiles_io", "Import & Export", ioH, false)
     M.ControlSchema.Section(io, "profiles")
 
@@ -964,18 +971,18 @@ function ProfilesPage.ImportExport(state)
     local stringCardX, stringCardY, stringCardW, stringCardH
     local actionsCardX, actionsCardY, actionsCardW, actionsCardH
     if ioWide then
-        stringCardX, stringCardY, stringCardW, stringCardH = ioInset, -42, floor((ioInnerW - ioGap) * 0.56), 398
+        stringCardX, stringCardY, stringCardW, stringCardH = ioInset, -42, floor((ioInnerW - ioGap) * 0.56), 440
         actionsCardX, actionsCardY, actionsCardW, actionsCardH = stringCardX + stringCardW + ioGap, -42,
             ioInnerW - stringCardW - ioGap, 398
     else
-        stringCardX, stringCardY, stringCardW, stringCardH = ioInset, -42, ioInnerW, 342
-        actionsCardX, actionsCardY, actionsCardW, actionsCardH = ioInset, -402, ioInnerW, 398
+        stringCardX, stringCardY, stringCardW, stringCardH = ioInset, -42, ioInnerW, 384
+        actionsCardX, actionsCardY, actionsCardW, actionsCardH = ioInset, -444, ioInnerW, 398
     end
     local stringCard = AP.Row(nil, io, { "card", "advancedprofiles.stringCard.22", nil, { "Profile string",
-        "Export fills this shared field; the string stays after an import so you can reuse it.",
+        "Paste the full profile string here, or use Export to create a string to copy.",
         stringCardX, stringCardY, stringCardW, stringCardH } })
     local actionsCard = AP.Row(nil, io, { "card", "advancedprofiles.actionsCard.23", nil, { "Export & import",
-        "Create a backup first or import into a new profile for the safest workflow.",
+        "Choose where to import a profile, or export one to share or save.",
         actionsCardX, actionsCardY, actionsCardW, actionsCardH } })
     local ioButtonW = max(140, min(240, floor((actionsCardW - 40 - buttonGap) / 2)))
     local exportKindW = min(280, max(180, stringCardW - 40))
@@ -1009,16 +1016,23 @@ function ProfilesPage.ImportExport(state)
     -- the menu state directly: every refresh writes the state back into the box, so without this
     -- a pasted string is lost the moment anything refreshes the page - importing, or just
     -- flipping the new-profile toggle. Focus loss re-syncs in case a paste path skips userInput.
+    local observedText = blob:GetText() or ""
     local function MirrorImportBuffer(self) M.profileImportString = self:GetText() or "" end
     blob:HookScript("OnTextChanged", function(self, userInput)
-        if userInput then MirrorImportBuffer(self) end
-        M.ProfileWorkbenchUI.ImportChanged(self:GetText() or "")
+        local text = self:GetText() or ""
+        if userInput then M.profileImportString = text end
+        if text ~= observedText then
+            observedText = text
+            state.legacyRetailSource = nil
+            if state.legacyRetail then state.legacyRetail:SetChecked(false) end
+        end
+        UpdateLegacyRetailSource(state, text)
+        M.ProfileWorkbenchUI.ImportChanged(text)
     end)
     blob:HookScript("OnEditFocusLost", MirrorImportBuffer)
     local export = ProfileButton(actionsCard, "Export", function()
         return ExportProfileString(M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all"))
     end, nil, "export.generate", false, nil, nil, nil, ioButtonW)
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(heroExport, export) end
     if T.ApplyButtonRole then T.ApplyButtonRole(export, "primary") end
     local importCreateNew, importProfileName
     local import = AP.Row(nil, actionsCard, { "button", "advancedprofiles.import.26", nil, { "Import to current profile", ioButtonW, buttonH } })
@@ -1116,7 +1130,7 @@ local function BuildImportHandlers(state)
             return true
         end
         -- `text` is a string the user pasted
-        local imported = MSUF.Require("MSUF_ImportFromString", FILE)(text)
+        local imported = MSUF.Require("MSUF_ImportFromString", FILE)(text, state.legacyRetailSource)
         if imported ~= true then return false end
         ClearProfileHistory()
         M.RequestGeneralDomains("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
@@ -1160,7 +1174,7 @@ local function BuildImportHandlers(state)
 
         -- MSUF_ImportIntoNewProfile decodes, validates and stages the string before it creates
         -- or switches a profile; a rejected string leaves SavedVariables untouched.
-        local ok, _, stage = MSUF.Require("MSUF_ImportIntoNewProfile", FILE)(name, text)
+        local ok, _, stage = MSUF.Require("MSUF_ImportIntoNewProfile", FILE)(name, text, state.legacyRetailSource)
         if ok ~= true then
             if stage == "create" then
                 PrintProfileMessage("|cffff0000", "Import failed: could not create profile '%s'.", name)
@@ -1237,7 +1251,7 @@ local function TrackImportMode(state, importModeHelp)
         if not createNew and importProfileName.HasFocus and importProfileName:HasFocus() then importProfileName:ClearFocus() end
         if importModeHelp then
             importModeHelp:SetText(createNew
-                and "Safe mode: creates a separate profile before importing and leaves the current profile available."
+                and "Imports into a separate profile. Your current profile remains available."
                 or "Warning: importing now changes the active profile. Export or copy it first if you need a backup.")
         end
         if W.SetCollapsibleBadges then
@@ -1248,7 +1262,7 @@ local function TrackImportMode(state, importModeHelp)
             end
             W.SetCollapsibleBadges(io, {
                 { text = exportLabel or "Full profile", kind = "info", showWhenClosed = true },
-                { text = createNew and "Safe import mode" or "Current profile", kind = createNew and "ok" or "muted", showWhenClosed = true },
+                { text = createNew and "New profile" or "Current profile", kind = createNew and "ok" or "muted", showWhenClosed = true },
             })
         end
     end
@@ -1296,17 +1310,36 @@ function ProfilesPage.ImportActions(state)
     MoveWidget(exportKind, stringCard, 20, -76, exportKindW)
     local blobW = max(220, stringCardW - 40)
     MoveWidget(blob, stringCard, 20, -142, blobW)
-    WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, ioWide and 220 or 162)
-    PlaceActionRow(actionsCard, 20, export, import, -82)
+    local fieldHeight = ioWide and 220 or 162
+    WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, fieldHeight)
+    local warning = AP.LabelAt(stringCard, "Pasting or importing a profile can freeze the game for several seconds.",
+        20, -176 - fieldHeight, blobW, "GameFontDisableSmall", T.colors.accent)
+    warning:SetWordWrap(true)
+    PlaceActionRow(actionsCard, 20, import, export, -82)
     MoveWidget(wago, actionsCard, 20, -126, ioButtonW)
     local review = ProfileButton(actionsCard, "Review changes", function()
-        M.ProfileWorkbenchUI.ReviewImport(blob:GetText())
+        M.ProfileWorkbenchUI.ReviewImport(blob:GetText(), state.legacyRetailSource)
     end, nil, "import.review", false, nil, nil, nil, ioButtonW)
     state.reviewImport = review
     state.AddProfileTooltip(review, "Review changes", "Selective review changes the current profile. Turn off new-profile import to use it.")
     MoveWidget(review, actionsCard, 20 + ioButtonW + state.buttonGap, -126, ioButtonW)
     MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)
     StyleProfileInput(importProfileName, importNameW, 28, false)
+    local legacyLabel = "Old profile is from Retail"
+    local legacyMeta = ProfilesMeta("import.legacy_retail_source", "ephemeral")
+    state.legacyRetail = AP.Row(nil, actionsCard, { "switch", legacyMeta.controlId, nil,
+        { legacyLabel, 20, -202, max(220, actionsCardW - 40) }, bind = AP.NativeInput })
+    RegisterControl(state.legacyRetail, legacyMeta, legacyLabel, "toggle")
+    state.legacyRetail:SetScript("OnClick", function(self)
+        if not BlockCombatAction() then
+            state.legacyRetailSource = not state.legacyRetailSource
+            M.ProfileWorkbenchUI.ImportChanged(nil)
+        end
+        self:SetChecked(state.legacyRetailSource == true)
+    end)
+    state.AddProfileTooltip(state.legacyRetail, legacyLabel,
+        "For full MSUF profile strings from Retail. Not available for Suite bundles or partial imports.")
+    UpdateLegacyRetailSource(state)
     local importModeHelp = AP.Row(nil, actionsCard, { "text", "advancedprofiles.importModeHelp.30", nil,
         { "", 20, -336, max(220, actionsCardW - 40), T.colors.muted } })
     if importModeHelp and importModeHelp.SetWordWrap then importModeHelp:SetWordWrap(true) end
@@ -1323,11 +1356,11 @@ function ProfilesPage.UnitSelection(state)
         if not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(labels[i].value) then count = count + 1 end
     end
     local rows = floor((count + 1) / 2)
-    local section = b:CollapsibleSection("profiles_unit_selection", "Selected unitframes", 134 + rows * 28, false)
+    local section = b:CollapsibleSection("profiles_unit_selection", "Unit frames to export", 134 + rows * 28, false)
     M.ControlSchema.Section(section, "profiles")
     state.unitSelectionSection = section
     AP.Row(nil, section, { "text", "advancedprofiles.text.31", nil,
-        { "Choose frames for a Selected unitframes export. Imports automatically use the frames included in the string.",
+        { "Choose which frames to include when exporting Selected unitframes.",
         20, -44, max(220, state.contentW - 40), T.colors.muted } })
     M.profileExportUnits = M.profileExportUnits or { player = true }
     local index = 0
@@ -1358,16 +1391,16 @@ function ProfilesPage.Build(ctx)
     ProfilesPage.Hero(state)
     ProfilesPage.ManagementLayout(state)
     ProfilesPage.ManagementControls(state)
+    ProfilesPage.ImportExport(state)
+    ProfilesPage.ImportActions(state)
+    ProfilesPage.UnitSelection(state)
+    M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "review")
     ProfilesPage.ProfileCleanup(state)
     ProfilesPage.Specializations(state)
     M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "versions")
     if M.ProfileVariantPage then M.ProfileVariantPage.Build(state,GetSpecMeta()) end
     M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "display")
     if M.ProfileSyncPage then M.ProfileSyncPage.Build(state) end
-    ProfilesPage.ImportExport(state)
-    ProfilesPage.ImportActions(state)
-    M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "review")
-    ProfilesPage.UnitSelection(state)
     if M.ProfileVariantPage then M.ProfileVariantPage.Transport(state) end
     M.ProfileWorkbenchUI.Profiles(ctx, state.b, state.contentW, "inspector")
     ctx:SetContentHeight(math.abs(state.b.y) + 42)

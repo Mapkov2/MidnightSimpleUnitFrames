@@ -1182,6 +1182,182 @@ local function MSUF_ProfileIO_NormalizeProfileAuras(profile)
     return changed
 end
 
+-- The current translator owns all geometry, fonts and layout aliases. Restore
+-- only the spell-selection rules removed by its historical aura-model reset.
+local LEGACY_AURA_RULE_TYPES = {
+    enabled = "boolean", showPlayer = "boolean", showTarget = "boolean", showFocus = "boolean",
+    showPet = "boolean", showBoss = "boolean", showArena = "boolean", showBuffs = "boolean", showDebuffs = "boolean",
+    showWeaponEnchants = "boolean", hidePermanent = "boolean", blacklist = "table", ignoreCats = "table", filters = "table",
+    filterToken = "string", blacklistCats = "table", blacklistSpells = "table", autoBlacklistBuffs = "boolean",
+    blizzardTypes = "table", blizzardDispelMode = "string", trackedOnlyOwn = "boolean",
+    overrideBlacklist = "boolean", overrideFilters = "boolean", overrideIgnore = "boolean",
+    id = true, name = "string", auraType = "string", spellIDs = true, includeSpellIDs = true, sourceUnit = "string",
+    onlyOwn = "boolean", playerDefensives = "boolean", targetDots = "boolean", autoBlacklistPlayerBuffs = "boolean",
+    autoBlacklistDebuffs = "boolean", disabledPredefinedSpellIDs = "table", customSpellIDs = true, prioritySpellIDs = true,
+    reminderItems = "table", reminderKeepSpells = "table", reminderEnchantMainHand = "boolean",
+    reminderEnchantOffHand = "boolean", reminderEnchantDurationMinutes = "number", reminderEnchantItem = true,
+    custom = "boolean", _msufCustomOnlyOwnExplicit = "boolean", autoBlacklist = "boolean", display = "string", spells = "string",
+    spellID = true, spellId = true,
+}
+
+local function CopyLegacyAuraRules(target, source)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    for key, kind in pairs(LEGACY_AURA_RULE_TYPES) do
+        local value = source[key]
+        if value ~= nil and (kind == true or type(value) == kind) then target[key] = MSUF_DeepCopy(value) end
+    end
+end
+
+local function RestoreLegacyCustomItems(target, source)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    target.items = target.items or {}
+    target.override = source.override -- nil and false retain historical shared-list inheritance
+    for index, item in pairs(type(source.items) == "table" and source.items or {}) do
+        if type(index) == "number" and type(item) == "table" then
+            target.items[index] = target.items[index] or {}
+            CopyLegacyAuraRules(target.items[index], item)
+            local placed = type(item.placed) == "table" and item.placed
+            if placed then
+                local current = target.items[index].placed or {}
+                target.items[index].placed = current
+                for _, field in ipairs({ "reminderEnabled", "reminderClickCast", "reminderOnlyCastable" }) do
+                    if type(placed[field]) == "boolean" then current[field] = placed[field] end
+                end
+            end
+        end
+    end
+end
+
+local function RestoreLegacyDisplaySerial(target, source)
+    local serial = 0
+    local function IncludeValue(value)
+        value = tonumber(value)
+        if value and value >= 0 and value < math.huge and value % 1 == 0
+            and value + 1 > value and value > serial then serial = value end
+    end
+    IncludeValue(target.serial)
+    IncludeValue(source.serial)
+    local function Include(scope)
+        for _, item in pairs(type(scope) == "table" and scope.items or {}) do
+            if type(item) == "table" then IncludeValue(item.id) end
+        end
+    end
+    Include(target.shared)
+    for _, scope in pairs(target.perUnit or {}) do Include(scope) end
+    target.serial = serial
+end
+
+local function RestoreLegacyCustomRules(target, source, updateSerial)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    target.perUnit = target.perUnit or {}
+    if type(source.shared) == "table" then
+        target.shared = target.shared or {}
+        RestoreLegacyCustomItems(target.shared, source.shared)
+    end
+    local perUnit = type(source.perUnit) == "table" and source.perUnit or {}
+    for unit, current in pairs(target.perUnit) do
+        local original = type(perUnit[unit]) == "table" and perUnit[unit] or {}
+        current.override = original.override
+    end
+    for unit, scope in pairs(perUnit) do
+        if type(unit) == "string" and type(scope) == "table" and MSUF.Client.SupportsUnit(unit) then
+            target.perUnit[unit] = target.perUnit[unit] or { items = {} }
+            RestoreLegacyCustomItems(target.perUnit[unit], scope)
+        end
+    end
+    if updateSerial then RestoreLegacyDisplaySerial(target, source) end
+end
+
+local function RestoreLegacySpellIndicatorRules(target, source)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    CopyLegacyAuraRules(target, source)
+    if type(source.spec) == "string" then target.spec = source.spec end
+    if type(source.multiSpecs) == "table" then target.multiSpecs = MSUF_DeepCopy(source.multiSpecs) end
+    target.specs = target.specs or {}
+    for spec, entries in pairs(type(source.specs) == "table" and source.specs or {}) do
+        if type(spec) == "string" and type(entries) == "table" then
+            target.specs[spec] = target.specs[spec] or {}
+            for name, item in pairs(entries) do
+                if item == false then target.specs[spec][name] = false
+                elseif type(item) == "table" then
+                    local current = type(target.specs[spec][name]) == "table" and target.specs[spec][name] or {}
+                    target.specs[spec][name] = current
+                    CopyLegacyAuraRules(current, item)
+                end
+            end
+        end
+    end
+end
+
+local function RestoreLegacyUnitAuraRules(profile, source)
+    local aura = profile.auras3
+    if type(aura) ~= "table" or type(source) ~= "table" then return end
+    local containers = source.customContainers
+    source = MSUF_DeepCopy(source)
+    MSUF.MSUF_MaterializeUnitAuraLaneOwners(source)
+    -- Resolve historical list ownership on a detached source. Keep the current
+    -- candidate's model revision so old default-on migrations cannot rerun.
+    source[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY] = nil
+    source._msufA3FrameOwnedLists_v1 = nil
+    MSUF.MSUF_Auras3.NormalizeProfileDB({ auras3 = source })
+    CopyLegacyAuraRules(aura, source)
+    CopyLegacyAuraRules(aura.shared, source.shared)
+    local perUnit = type(source.perUnit) == "table" and source.perUnit or {}
+    for unit, current in pairs(aura.perUnit) do
+        local rule = type(perUnit[unit]) == "table" and perUnit[unit] or {}
+        current.overrideBlacklist = rule.overrideBlacklist
+        CopyLegacyAuraRules(current, rule)
+        -- Visibility lives beside geometry in the lane owner, but remains a
+        -- selection rule. Keep its resolved value without copying layout.
+        for _, field in ipairs({ "showBuffs", "showDebuffs" }) do
+            local value = type(rule.layoutShared) == "table" and rule.layoutShared[field]
+            if type(value) == "boolean" then current.layoutShared[field] = value end
+        end
+    end
+    RestoreLegacyCustomRules(aura.customContainers, containers)
+    RestoreLegacyCustomRules(aura.customDisplays, source.customDisplays, true)
+    MSUF.MSUF_Auras3.NormalizeProfileDB(profile)
+end
+
+local function RestoreLegacyGroupLane(target, source, migrated)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    CopyLegacyAuraRules(target, source)
+    if type(migrated) ~= "table" then return end
+    if source.filterToken == nil and source.filterMode ~= nil then target.filterToken = migrated.filterToken end
+    if source.spellFilter == "BLACKLIST" and type(source.spellList) == "table" then
+        target.blacklist = MSUF_DeepCopy(migrated.blacklist)
+        target.blacklistCats = MSUF_DeepCopy(migrated.blacklistCats)
+    elseif type(source.blacklistSpells) == "table"
+        and not (type(source.blacklist) == "table" and type(source.blacklist.spells) == "table") then
+        target.blacklist = target.blacklist or {}
+        target.blacklist.spells = MSUF_DeepCopy(source.blacklistSpells)
+    end
+end
+
+local function RestoreLegacyAuraTransfer(profile, source, section)
+    MSUF_ProfileIO_PrepareGroupFrameImport(profile, "all")
+    MSUF_ProfileIO_TranslateProfileToCurrent(profile, { source = "legacy_aura_import", markProfile = false })
+    RestoreLegacyUnitAuraRules(profile, source)
+    -- Reuse the Group owner for old filterMode/spellList aliases on a detached
+    -- copy. Only migrated explicit selections return; its generated defaults,
+    -- old force-enable migration and geometry cannot replace the candidate.
+    local rules = MSUF_DeepCopy(section)
+    MSUF.GF.RepairGroupDB(rules)
+    for _, scope in ipairs(MSUF_PROFILEIO_GROUP_AURA_SCOPES) do
+        local frame, saved, migrated = profile[scope], section[scope], rules[scope]
+        if type(frame) == "table" and type(saved) == "table" then
+            CopyLegacyAuraRules(frame.auras, saved.auras)
+            for _, lane in ipairs({ "buff", "debuff", "externals" }) do
+                RestoreLegacyGroupLane(frame.auras and frame.auras[lane],
+                    saved.auras and saved.auras[lane], migrated.auras and migrated.auras[lane])
+            end
+            CopyLegacyAuraRules(frame.privateAuras, saved.privateAuras)
+            RestoreLegacySpellIndicatorRules(frame.spellIndicators, saved.spellIndicators)
+        end
+    end
+    MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true)
+end
+
 --- Translation uses the shared alias ledger with explicit metadata trust rules.
 -- Preserve the former Suite design when its artwork becomes native.
 -- Called on stored/imported frame profiles and by the Suite data handoff.
@@ -1316,6 +1492,7 @@ MSUF.ProfileNormalize = {
     NormalizeImportedFontSizes = MSUF_ProfileIO_NormalizeImportedFontSizes,
     NormalizeGFAuraFilterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken,
     PrepareGroupFrameImport = MSUF_ProfileIO_PrepareGroupFrameImport,
+    RestoreLegacyAuraTransfer = RestoreLegacyAuraTransfer,
     CarryFormerResourceExtras = MSUF_ProfileIO_CarryFormerResourceExtras,
     CarryFormerResourceExtrasPatch = MSUF_ProfileIO_CarryFormerResourceExtrasPatch,
     TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent,

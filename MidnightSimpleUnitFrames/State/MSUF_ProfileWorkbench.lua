@@ -249,6 +249,8 @@ function W.ReviewSnapshot(after, label)
         change.selected = true
     end
     AppendSpecial(changes, before.core.profileVariants, after.core.profileVariants, "profileVariants")
+    local auraReview = MSUF.ProfileImportReview.AuraReviewChanges
+    if auraReview then auraReview(changes, before.core, after.core) end
     for id, value in pairs(after.providers or {}) do
         if not ProviderChanges(changes, before.providers[id], value, { id }) then
             return nil, "Some changes cannot be reviewed safely."
@@ -256,7 +258,7 @@ function W.ReviewSnapshot(after, label)
     end
     return { before = before, after = after, changes = changes, label = label, profile = ProfileName() }
 end
-function W.ReviewImport(text)
+function W.ReviewImport(text, legacyRetail)
     local before, why = W.Snapshot()
     if not before then return nil, why end
     for id, provider in pairs(providers) do
@@ -273,7 +275,7 @@ function W.ReviewImport(text)
             return W.ReviewSnapshot({ core = candidate, providers = before.providers }, "Before importing settings")
         end
     end
-    local candidate, reason = MSUF.ProfileImportReview.Prepare(text, before.core)
+    local candidate, reason = MSUF.ProfileImportReview.Prepare(text, before.core, legacyRetail)
     if not candidate then return nil, reason end
     candidate.suiteModules = before.core.suiteModules
     return W.ReviewSnapshot({ core = candidate, providers = before.providers }, "Before importing settings")
@@ -294,6 +296,7 @@ function W.CommitReview(review)
                     target = target[change.path[i]]
                 end
                 target[change.path[#change.path]] = value
+            elseif change.auraClient then MSUF.ProfileImportReview.ApplyAuraReview(nextSnapshot.core, change.auraClient, value)
             elseif change.special then nextSnapshot.core[change.path[1]] = value
             else Fields.Write(nextSnapshot.core, change.path, value) end
         end
