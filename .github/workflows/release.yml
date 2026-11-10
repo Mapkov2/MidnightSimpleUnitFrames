@@ -1,0 +1,19 @@
+name: MSUF 7.0 RC1 Discord announcement
+run-name: Publish classic-v7.0-rc1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-curseforge-release:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames' && github.ref == 'refs/heads/codex/announce-7.0-rc1'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify the exact RC1 package is available from CurseForge
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 --max-time 60 --output rc1.zip 'https://edge.forgecdn.net/files/9548/86/MSUF-7.0-rc1-Mainline-Vanilla-Mists-TBC.zip'
+          echo 'b2248e86e42e985f7a948d93208a09b7ad8d20245eed39bf2f55d1dc460cc4d4  rc1.zip' | sha256sum --check
