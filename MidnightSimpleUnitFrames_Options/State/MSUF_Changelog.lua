@@ -8,41 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F27CF3025EDF24C3E6FD82EE86CA2C285851F3BE3597858729F19674F71E62B8",
-    currentVersion = "7.0-beta7",
+    sourceSha256 = "DD6ED8FC80039334B451C8EA697D15342459E2235FD46913FCA50DD4A86BE14D",
+    currentVersion = "7.0-beta8",
     historyFromVersion = "6.21",
-    previousVersion = "7.0-beta6",
-    rangeLabel = "7.0-beta6 -> 7.0-beta7",
+    previousVersion = "7.0-beta7",
+    rangeLabel = "7.0-beta7 -> 7.0-beta8",
     entries = {
         {
-            version = "7.0-beta7",
+            version = "7.0-beta8",
             date = "2026-11-10",
             sections = {
                 {
-                    title = "Features and improvements",
+                    title = "Fixes",
                     bullets = {
                         {
-                            text = "Timer Bars. Add optional Breath, Fatigue, Feign Death, Battle Start and Group Countdown bars with independent placement and appearance. [Timer Bars guide](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta7/docs/TIMER_BARS.md)",
-                            linkless = true,
-                        },
-                        {
-                            text = "Profile imports. Preserve supported aura settings from older Retail profiles when you select Old profile is from Retail for a full import. Profiles opens the Import & Export panel from a dedicated shortcut and explains which options apply to the pasted string.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Nameplates. Add shared settings for compatible Suite nameplate customization, profiles and fonts.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Group frames and Edit Mode. Show a separate Different layer or Different phase status on WoW Forever. Edit the shown group layout's offsets and size independently, with status and layout changes reflected in the previews.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Class resources and castbars. Respect Druid form visibility on resource bars and outlines. Update interrupt readiness visuals shared with Suite nameplates and refine the WoW Forever off-hand swing timer display.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Improve settings search, previews and profile management across supported clients.",
+                            text = "WoW Forever: Fix an error in Eating / Drinking Text that could interrupt party and raid frame updates. The text stays hidden while aura access is restricted and returns on the next readable aura update.",
                             linkless = true,
                         },
                     },

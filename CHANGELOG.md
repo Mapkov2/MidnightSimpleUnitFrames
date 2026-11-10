@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-beta8 - 2026-11-10
+
+### Fixes
+
+- **WoW Forever:** Fix an error in Eating / Drinking Text that could interrupt party and raid frame updates. The text stays hidden while aura access is restricted and returns on the next readable aura update.
+<!-- msuf-menu-link: none -->
+
+[Compare Beta 7 and Beta 8](https://github.com/Mapkov2/MidnightSimpleUnitFrames/compare/classic-v7.0-beta7...classic-v7.0-beta8)
+
 ## 7.0-beta7 - 2026-11-10
 
 Changes since 7.0 Beta 6.

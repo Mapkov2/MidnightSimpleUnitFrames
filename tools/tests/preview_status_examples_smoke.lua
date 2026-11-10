@@ -16,6 +16,9 @@ local EMPTY_AURAS = {}
 local mw = MenuWorld.Open(root, flavor, { page = 'uf_target', clientScriptBindings = true,
     tocMetadata = true, beforeCore = function(world)
         MenuWorld.InstallNativeUnitInputs(world)
+        world.env.C_Secrets = setmetatable({
+            ShouldAurasBeSecret = function() return false end,
+        }, { __index = world.env.C_Secrets })
         world.env.C_UnitAuras = setmetatable({
             GetUnitAuras = function(unit, filter)
                 local source = debug.getinfo(2, "S").source

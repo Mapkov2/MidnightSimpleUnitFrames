@@ -14,6 +14,7 @@ local guidReads, nameReads = 0, 0
 local rosterGuidReads, elementGuidReads = 0, 0
 local secret = false
 local helpfulAuras, consumptionReads = {}, 0
+local auraAccessRestricted = false
 local EMPTY_AURAS = {}
 -- members[unit][3] == false marks that occupant offline; transientOffline models
 -- UnitIsConnected answering false for every token while the roster is in flux.
@@ -22,10 +23,14 @@ local instanceType, runtimeZoneReads = "raid", 0
 local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.type, h.env.issecretvalue = type, issecretvalue
     h.env.GetNumClasses = function() return 13 end
+    h.env.C_Secrets = setmetatable({
+        ShouldAurasBeSecret = function() return auraAccessRestricted end,
+    }, { __index = h.env.C_Secrets })
     h.env.C_UnitAuras.GetUnitAuras = function(unit, filter)
         local source = debug.getinfo(2, "S").source
         if source:find("MSUF_UF_Status_Indicators.lua", 1, true) then
             assert(filter == "HELPFUL", "unexpected consumption aura filter")
+            assert(not auraAccessRestricted, "GetUnitAuras blocked while aura access is restricted")
             consumptionReads = consumptionReads + 1
             return helpfulAuras[unit] or EMPTY_AURAS
         end
@@ -166,6 +171,19 @@ local function CheckConsumption(scope, unit)
         before = consumptionReads
         h.UF.elements.GroupStatusRuntime.UpdateState(frame, "UNIT_HEALTH", unit, 100)
         assert(consumptionReads == before, unit .. " health event read helpful auras")
+        CheckText("DRINKING")
+
+        -- Restrictions can be active independently of the protected-frame
+        -- combat lock. A structural apply must still complete.
+        auraAccessRestricted = true
+        Apply(true)
+        CheckText(nil)
+        assert(consumptionReads == before, unit .. " restricted apply queried helpful auras")
+        h:Event("UNIT_AURA", unit, { isFullUpdate = false, addedAuras = helpfulAuras[unit] })
+        CheckText(nil)
+        assert(consumptionReads == before, unit .. " restricted aura event queried helpful auras")
+        auraAccessRestricted = false
+        h:Event("UNIT_AURA", unit, fullUpdate)
         CheckText("DRINKING")
 
         h:EnterCombat()

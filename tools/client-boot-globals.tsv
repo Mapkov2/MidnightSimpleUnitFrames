@@ -26,6 +26,7 @@ C_IncomingSummon	*	namespace	Blizzard C_* namespace the harness does not model
 C_NamePlate	*	namespace	Blizzard C_* namespace the harness does not model
 C_PetInfo	Vanilla,TBC,Forever	namespace	Blizzard C_* namespace the harness does not model
 C_PlayerInteractionManager	*	namespace	Blizzard C_* namespace the harness does not model
+C_Secrets	Forever	namespace	Checks whether the Forever client restricts aura reads before rendering Eating / Drinking Text
 C_Spell	*	namespace	Blizzard C_* namespace the harness does not model
 C_SpellBook	*	namespace	Blizzard C_* namespace the harness does not model
 C_StringUtil	*	namespace	Blizzard C_* namespace the harness does not model
