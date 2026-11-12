@@ -32,6 +32,7 @@ local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 local UnitGetTotalHealAbsorbs = UnitGetTotalHealAbsorbs
 local CreateUnitHealPredictionCalculator = CreateUnitHealPredictionCalculator
 local UnitGetDetailedHealPrediction = UnitGetDetailedHealPrediction
+local UnitCanAttack = UnitCanAttack
 local InCombatLockdown = InCombatLockdown
 local tonumber = tonumber
 local type = type
@@ -457,6 +458,29 @@ local function HideOverAbsorbGlow(frame)
     holder:SetShown(false)
     holder._msufShown = false
   end
+end
+
+-- Owner decision 2026-11-11: a single frame showing a unit the player can
+-- attack draws no over-absorb glow, so neither its health ticks nor its absorb
+-- events fill the heal prediction calculator (raid trace 2026-11-11: boss1 and
+-- target ran one calculator read per UNIT_HEALTH, about 1.8 ms/s). The glow's
+-- overflow flag depends on missing health, so it cannot stay exact without that
+-- per-tick read; the absorb bar is unchanged. Decided on unit change and
+-- UNIT_FACTION through the full plan; UnitCanAttack is not secret-returning
+-- (UnitDocumentation.lua; Blizzard TargetFrame.lua tests it directly), a secret
+-- or unknown answer keeps the configured glow. Group frames keep it always.
+local function ResolveOverAbsorbOverlay(frame, cfg, unit, unitSecret)
+  local overlay = cfg.absorb == true and cfg.overAbsorbOverlay == true
+  if overlay and unitSecret ~= true and frame._msufCoreScope ~= "group"
+    and frame._msufIsGroupFrame ~= true and UnitCanAttack then
+    local hostile = UnitCanAttack("player", unit)
+    if issecretvalue(hostile) ~= true and (hostile == true or hostile == 1) then overlay = false end
+  end
+  if overlay == false and frame._msufPredictionOverAbsorbOverlay == true
+    and frame._msufPredictionFullHealthStripe ~= true then
+    HideOverAbsorbGlow(frame)
+  end
+  frame._msufPredictionOverAbsorbOverlay = overlay
 end
 
 local function SetOverAbsorbAlpha(holder, alpha, secret)
@@ -930,7 +954,7 @@ function Prediction.IsEnabled(frame, spec)
   return PredictionMask(cfg) ~= 0
 end
 
-local function PredictionEventsForConfig(cfg, healthAware, unit)
+local function PredictionEventsForConfig(cfg, healthAware, unit, group)
   local mask = PredictionMask(cfg)
   if mask == 0 then
     return EMPTY_EVENTS
@@ -942,6 +966,7 @@ local function PredictionEventsForConfig(cfg, healthAware, unit)
   if healthAware ~= false and NeedsHealthEvent(cfg) then
     eventTable = player and PREDICTION_HEALTH_EVENTS_PLAYER
       or dependent and PREDICTION_HEALTH_EVENTS_DEPENDENT
+      or (group ~= true and cfg.overAbsorbOverlay == true and Plans.PREDICTION_HEALTH_EVENTS_FACTION)
       or PREDICTION_HEALTH_EVENTS
   else
     eventTable = player and PREDICTION_EVENTS_PLAYER
@@ -955,7 +980,9 @@ function Prediction.GetEvents(frame, spec)
   return PredictionEventsForConfig(
     spec and spec.prediction,
     true,
-    (frame and frame.MSUFUnitKey) or (spec and spec.key)
+    (frame and frame.MSUFUnitKey) or (spec and spec.key),
+    (spec and spec.scope == "group")
+      or (frame and (frame._msufCoreScope == "group" or frame._msufIsGroupFrame == true))
   )
 end
 
@@ -1671,6 +1698,10 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedA
   end
   if not plan then
     return
+  end
+  if plan == frame._msufPredictionFullPlan then
+    -- Unit change, faction change or a cold cache: the one hostility decision.
+    ResolveOverAbsorbOverlay(frame, cfg, unit, unitSecret)
   end
   local refreshHeal = plan[PLAN_REFRESH_HEAL]
   local refreshAbsorb = plan[PLAN_REFRESH_ABSORB]

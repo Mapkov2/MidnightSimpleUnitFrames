@@ -47,7 +47,7 @@ function Normalize-VersionKey {
     $candidate = $candidate -replace '^refs/tags/', ''
     $candidate = $candidate -replace '(?i)^classic[\s._-]*', ''
     $candidate = $candidate -replace '^v(?=\d)', ''
-    if ($candidate -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|a)[\s._-]*(?<number>\d+))\s*$') {
+    if ($candidate -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|a)[\s._-]*(?<number>\d+))\s*$') {
         # Keep the authored base so a 6.05 heading can never select the 6.5 section.
         $base = $Matches["base"]
         $channel = $Matches["channel"].ToLowerInvariant()

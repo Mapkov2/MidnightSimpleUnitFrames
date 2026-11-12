@@ -1,4 +1,5 @@
--- Optional mirror timers and countdowns. Only running, unpaused timers tick.
+-- Optional mirror timers and countdowns. Only running, unpaused timers tick, and
+-- only the events of enabled timers are registered: an unused timer costs nothing.
 local _, MSUF = ...
 local Bars = {}
 MSUF.TimerBars = Bars
@@ -11,12 +12,21 @@ local TYPES = { breath = "BREATH", fatigue = "EXHAUSTION", feign = "FEIGNDEATH" 
 local DEFAULTS = {
     enabled = false, hideBlizzard = true, ownSize = false, width = 250, height = 18,
     x = 0, y = 200, lowWarning = false, warningPercent = 30, showUnderNumbers = false,
-    r = 0.2, g = 0.65, b = 1,
+    r = 0.2, g = 0.65, b = 1, texture = "", backgroundTexture = "", timeFont = "",
+    -- Text settings. An empty position and a size of 0 follow the Player castbar.
+    labelPosition = "", labelSize = 0, labelX = 0, labelY = 0,
+    timeFormat = "CURRENT", timePosition = "", timeSize = 0, timeX = 0, timeY = 0,
 }
 local LIMITS = {
     width = { 40, 1200 }, height = { 4, 100 }, x = { -2000, 2000 }, y = { -1200, 1200 },
     warningPercent = { 1, 100 }, r = { 0, 1 }, g = { 0, 1 }, b = { 0, 1 },
+    labelSize = { 0, 48 }, timeSize = { 0, 48 },
+    labelX = { -300, 300 }, labelY = { -300, 300 }, timeX = { -300, 300 }, timeY = { -300, 300 },
 }
+-- Text settings that take one of a fixed set of values; anything else reads as the default.
+local POSITIONS = { [""] = true, LEFT = true, CENTER = true, RIGHT = true, ABOVE = true, BELOW = true }
+local CHOICES = { labelPosition = POSITIONS, timePosition = POSITIONS,
+    timeFormat = { CURRENT = true, ELAPSED = true, ELAPSED_MAX = true, CURRENT_MAX = true } }
 Bars.Order = { "breath", "fatigue", "feign", "battle", "countdown" }
 Bars.Labels = { breath = "Breath", fatigue = "Fatigue", feign = "Feign Death",
     battle = "Battle Start", countdown = "Group Countdown" }
@@ -25,7 +35,7 @@ local byTimer, byCountdown = {}, {}
 local driver = CreateFrame("Frame")
 local enabled, editing, manualPreview, nativeQueued, ticking = false, false, false, false, false
 local elapsedSinceUpdate = 0
-local Apply, Resync, SyncDriver, SyncNative
+local Apply, Resync, SyncDriver, SyncEvents, SyncNative
 
 local function Public(value)
     return not (IsSecret and IsSecret(value))
@@ -47,6 +57,15 @@ for _, id in ipairs({ "battle", "countdown" }) do
     local state = Bars.States[id]
     if state.timerType then byCountdown[state.timerType] = state end
 end
+-- Each timer names the events it needs; nothing else is ever registered for it.
+local MIRROR_EVENTS = { "MIRROR_TIMER_START", "MIRROR_TIMER_STOP", "MIRROR_TIMER_PAUSE" }
+local COUNTDOWN_EVENTS = { "START_TIMER", "STOP_TIMER_OF_TYPE" }
+for _, id in ipairs(Bars.Order) do
+    local state = Bars.States[id]
+    state.events = state.timer and MIRROR_EVENTS or COUNTDOWN_EVENTS
+end
+Bars.States.countdown.events = { "START_TIMER", "STOP_TIMER_OF_TYPE", "START_PLAYER_COUNTDOWN", "CANCEL_PLAYER_COUNTDOWN" }
+local wantedEvents, registeredEvents = {}, {}
 
 function Bars.IsAvailable(id)
     local state = Bars.States[id]
@@ -79,6 +98,11 @@ function Bars.Get(id, key)
     local value = cfg and cfg[key]
     local fallback = Bars.Default(id, key)
     if type(fallback) == "boolean" then return value == true or (value == nil and fallback) end
+    if type(fallback) == "string" then
+        local choices = CHOICES[key]
+        if type(value) ~= "string" or (choices and not choices[value]) then return fallback end
+        return value
+    end
     if not Number(value) then return fallback end
     local limit = LIMITS[key]
     return limit and math.max(limit[1], math.min(limit[2], value)) or value
@@ -279,12 +303,38 @@ local function OnEvent(_, event, a, b, c, d, e, f)
             if state.frame then state.frame:StopMovingOrSizing() state.frame:EnableMouse(false) end
             Show(state, Clock())
         end
+        SyncEvents()
     end
     SyncDriver()
     QueueNative()
 end
-local EVENTS = { "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "MIRROR_TIMER_START", "MIRROR_TIMER_STOP",
-    "MIRROR_TIMER_PAUSE", "START_TIMER", "START_PLAYER_COUNTDOWN", "CANCEL_PLAYER_COUNTDOWN", "STOP_TIMER_OF_TYPE" }
+-- Registers exactly what the enabled timers need. Combat only matters while a
+-- sample can be dragged, so its event exists during preview and Edit Mode alone.
+SyncEvents = function()
+    for event in pairs(wantedEvents) do wantedEvents[event] = nil end
+    if enabled then
+        wantedEvents.PLAYER_ENTERING_WORLD = true
+        if Bars.IsPreview() then wantedEvents.PLAYER_REGEN_DISABLED = true end
+        for _, id in ipairs(Bars.Order) do
+            local state = Bars.States[id]
+            if state.enabled then
+                for _, event in ipairs(state.events) do wantedEvents[event] = true end
+            end
+        end
+    end
+    for event in pairs(registeredEvents) do
+        if not wantedEvents[event] then
+            driver:UnregisterEvent(event)
+            registeredEvents[event] = nil
+        end
+    end
+    for event in pairs(wantedEvents) do
+        if not registeredEvents[event] then
+            driver:RegisterEvent(event)
+            registeredEvents[event] = true
+        end
+    end
+end
 Apply = function()
     local wanted = Bars.GetEnabled()
     local started = wanted and not enabled
@@ -300,13 +350,13 @@ Apply = function()
         else Clear(state) end
     end
     if enabled then
-        for _, event in ipairs(EVENTS) do driver:RegisterEvent(event) end
+        SyncEvents()
         MSUF.EventBus:Register("CONFIG_APPLIED", "TimerBars", Apply)
         Resync(false)
     else
-        driver:UnregisterAllEvents()
-        MSUF.EventBus:Unregister("CONFIG_APPLIED", "TimerBars")
         manualPreview = false
+        SyncEvents()
+        MSUF.EventBus:Unregister("CONFIG_APPLIED", "TimerBars")
         SyncDriver()
         SyncNative()
     end
@@ -317,9 +367,14 @@ function Bars.Set(id, key, value)
     if not Bars.States[id] or DEFAULTS[key] == nil or MSUF.Util.InCombat() then return false end
     local fallback, limit = DEFAULTS[key], LIMITS[key]
     if type(fallback) == "boolean" then value = value == true
+    elseif type(fallback) == "string" then
+        local choices = CHOICES[key]
+        if type(value) ~= "string" or #value > 260 or (choices and value ~= "" and not choices[value]) then return false end
+        -- An empty choice follows the castbar; it and the default leave no profile override.
+        if value == "" or value == fallback then value = nil end
     elseif not Number(value) or value < limit[1] or value > limit[2] then return false end
-    local cfg = Saved(id, true)
-    if not cfg then return false end
+    local cfg = Saved(id, value ~= nil)
+    if not cfg then return value == nil end
     cfg[key] = value
     Apply()
     return true
@@ -352,6 +407,7 @@ end
 local function Shutdown()
     enabled, editing, manualPreview, ticking = false, false, false, false
     driver:UnregisterAllEvents()
+    for event in pairs(registeredEvents) do registeredEvents[event] = nil end
     driver:SetScript("OnUpdate", nil)
     MSUF.EventBus:Unregister("CONFIG_APPLIED", "TimerBars")
     for _, id in ipairs(Bars.Order) do Clear(Bars.States[id]) end
@@ -366,3 +422,4 @@ MSUF.MSUF_RegisterModule("TimerBars", { order = 76, IsEnabled = Bars.GetEnabled,
     Enable = Apply, Disable = Apply, RefreshSettings = Apply, Shutdown = Shutdown })
 driver:SetScript("OnEvent", OnEvent)
 driver:RegisterEvent("PLAYER_ENTERING_WORLD")
+registeredEvents.PLAYER_ENTERING_WORLD = true

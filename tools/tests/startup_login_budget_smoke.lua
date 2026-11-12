@@ -48,6 +48,11 @@
 -- initialize only for sparse I/O: round-3 load 431k -> 201k (limit +2%).
 -- First-upgrade login retains f4d42a9d6's 6963k +2%; ordinary reload still
 -- must meet the original 1849k login limit with the saved backup present.
+-- 2026-11-12 (7.0 RC2): the hostile over-absorb decision (owner decision
+-- 2026-11-11, uf_prediction_hostile_glow_budget.lua) builds a third prediction
+-- event table with UNIT_FACTION once at load: Mainline load 206k -> 207k,
+-- widget calls unchanged (241). Accepted for about 1.8 ms/s less raid combat
+-- work on hostile single frames; the load limit moves 206k -> 207k.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg and arg[2], "flavor required (Mainline)")
@@ -57,7 +62,7 @@ assert(rawget(_G, "MSUF_Auras3TestLoader") == nil,
 -- [flavor] = { [phase] = { k instructions, widget API calls } }
 local BUDGETS = {
     Mainline = {
-        load = { 206, 242 }, login = { 7103, 19365 }, enter_world = { 841, 2021 }, settle = { 2349, 8790 },
+        load = { 207, 242 }, login = { 7103, 19365 }, enter_world = { 841, 2021 }, settle = { 2349, 8790 },
     },
 }
 local SV_FIXTURE = "tools/fixtures/profiles/sv/sv_retail_rev16_17.lua"

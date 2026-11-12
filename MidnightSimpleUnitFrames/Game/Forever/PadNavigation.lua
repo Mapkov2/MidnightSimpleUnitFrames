@@ -15,8 +15,9 @@
 -- per press, with SmartNavigation's rule (buttons, edit boxes, sliders, frames
 -- with mouse scripts), so building a page costs nothing. Companion files:
 -- PadKeyboard.lua (on-screen keyboard), PadPrompts.lua (button hints) and
--- PadEditMode.lua (Edit Mode and popups on UIParent). Only a 4 Hz name check
--- runs while the Gamepad UI is off.
+-- PadEditMode.lua (Edit Mode and popups on UIParent). The 4 Hz poll runs only
+-- while the Gamepad UI is on or still has something to release; the interface
+-- style event (INPUT_DEVICE_INTERFACE_TRANSITION) starts it.
 --
 -- Buttons: D-pad moves (a slider's value on left/right, faster while held), A
 -- presses (a slider: types its exact value), B goes back, X right-clicks, Y moves
@@ -1316,11 +1317,20 @@ PadNav.Kit = {
 
 -- SmartNavigation and the watched windows have no event an addon can follow
 -- without hooking Blizzard's frames, so one ticker polls them.
+local ticker
 local function Poll()
     if not PadUIEnabled() then
         if capturing then UpdateCapture() end
         local menus = MSUF.UnitMenus
         if menus and menus.UpdateGamepad then menus.UpdateGamepad() end
+        -- Without the Gamepad UI nothing is left to follow once the capture and
+        -- the unit menu bindings are released (the menu releases them out of
+        -- combat only): the ticker stops, and INPUT_DEVICE_INTERFACE_TRANSITION
+        -- starts it again.
+        if ticker and not capturing and not inCombat and not InCombatLockdown() then
+            ticker:Cancel()
+            ticker = nil
+        end
         return
     end
     CheckWatches()
@@ -1333,8 +1343,13 @@ local function Poll()
     end
 end
 
+local function StartPolling()
+    if not ticker then ticker = C_Timer.NewTicker(POLL_INTERVAL, Poll) end
+end
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
+events:RegisterEvent("INPUT_DEVICE_INTERFACE_TRANSITION")
 events:RegisterEvent("PLAYER_REGEN_DISABLED")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:SetScript("OnEvent", function(self, event)
@@ -1343,7 +1358,11 @@ events:SetScript("OnEvent", function(self, event)
         inCombat = InCombatLockdown() == true
         -- Blizzard's own tooltip switch for the Gamepad UI (read, never written).
         tooltipsHidden = type(GetCVarBool) == "function" and GetCVarBool("GamepadDisableTooltips") == true
-        C_Timer.NewTicker(POLL_INTERVAL, Poll)
+        StartPolling()
+        return
+    end
+    if event == "INPUT_DEVICE_INTERFACE_TRANSITION" then
+        StartPolling()
         return
     end
     -- InCombatLockdown() is still false on PLAYER_REGEN_DISABLED.

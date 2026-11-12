@@ -33,7 +33,7 @@ local PREDICTION_DIRTY_PLAN_KEYS = {
   [7] = "MSUF_PREDICTION_DIRTY_ALL",
 }
 
-local function BuildPredictionEventTable(healthAware, includeConnection)
+local function BuildPredictionEventTable(healthAware, includeConnection, includeFaction)
   -- Specs opt into only the prediction pieces they display. Build the event lists from bit
   -- masks once so runtime registration stays compact even with several overlay combinations.
   local out = {}
@@ -48,6 +48,7 @@ local function BuildPredictionEventTable(healthAware, includeConnection)
     end
     events[#events + 1] = "UNIT_MAXHEALTH"
     if includeConnection then events[#events + 1] = "UNIT_CONNECTION" end
+    if includeFaction then events[#events + 1] = "UNIT_FACTION" end
     out[mask] = events
   end
   return out
@@ -55,6 +56,9 @@ end
 
 local PREDICTION_EVENTS = BuildPredictionEventTable(false, true)
 local PREDICTION_HEALTH_EVENTS = BuildPredictionEventTable(true, true)
+-- A single frame with the over-absorb overlay re-decides hostility on
+-- UNIT_FACTION (Prediction's full plan); group frames never drop the glow.
+local PREDICTION_HEALTH_EVENTS_FACTION = BuildPredictionEventTable(true, true, true)
 local PREDICTION_EVENTS_PLAYER = BuildPredictionEventTable(false, false)
 local PREDICTION_HEALTH_EVENTS_PLAYER = BuildPredictionEventTable(true, false)
 -- Core coalesces PLAYER_*_CHANGED + UNIT_TARGET into one authoritative identity
@@ -188,6 +192,7 @@ return {
   PREDICTION_DIRTY_PLAN_KEYS = PREDICTION_DIRTY_PLAN_KEYS,
   PREDICTION_EVENTS = PREDICTION_EVENTS,
   PREDICTION_HEALTH_EVENTS = PREDICTION_HEALTH_EVENTS,
+  PREDICTION_HEALTH_EVENTS_FACTION = PREDICTION_HEALTH_EVENTS_FACTION,
   PREDICTION_EVENTS_PLAYER = PREDICTION_EVENTS_PLAYER,
   PREDICTION_HEALTH_EVENTS_PLAYER = PREDICTION_HEALTH_EVENTS_PLAYER,
   PREDICTION_EVENTS_DEPENDENT = PREDICTION_EVENTS_DEPENDENT,

@@ -11,7 +11,8 @@ param(
 #
 # Accepted forms, both naming the same release:
 #   classic-v<base>-alpha<number>  classic-v<base>-beta<number>   (release tag)
-#   <base>-alpha<number>           <base>-beta<number>            (VERSION line)
+#   classic-v<base>-rc<number>                                    (release tag)
+#   <base>-alpha<number>, <base>-beta<number>, <base>-rc<number>   (VERSION line)
 #   classic-v<base>                <base>                         (stable release)
 #
 # The authored base is never int-cast: 6.05 and 6.5 are different releases.
@@ -33,8 +34,8 @@ if ($candidate -match '^(?:classic-v)?(?<base>(?:0|[1-9][0-9]*)\.[0-9]+)$') {
         ReleaseType = "release"
     }
 }
-if ($candidate -notmatch '^(?:classic-v)?(?<base>(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*)-(?<channel>alpha|beta)(?<number>0|[1-9][0-9]*)$') {
-    throw "Classic release must use 'classic-v<version>', 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>' without leading zeros. Got: $Tag"
+if ($candidate -notmatch '^(?:classic-v)?(?<base>(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*)-(?<channel>alpha|beta|rc)(?<number>0|[1-9][0-9]*)$') {
+    throw "Classic release must use 'classic-v<version>', 'classic-v<version>-alpha<number>', 'classic-v<version>-beta<number>' or 'classic-v<version>-rc<number>' without leading zeros. Got: $Tag"
 }
 
 $base = $Matches["base"]
@@ -42,6 +43,8 @@ $channel = $Matches["channel"]
 $number = [int]$Matches["number"]
 if ($channel -ceq "alpha") {
     $displayName = "MSUF_${base}A$number"
+} elseif ($channel -ceq "rc") {
+    $displayName = "MSUF_${base} RC$number"
 } else {
     $displayName = "MSUF_${base} Beta $number"
 }
@@ -52,5 +55,5 @@ return [pscustomobject][ordered]@{
     Number      = $number
     Version     = "$base-$channel$number"
     DisplayName = $displayName
-    ReleaseType = $channel
+    ReleaseType = if ($channel -ceq "rc") { "beta" } else { $channel }
 }

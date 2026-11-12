@@ -300,7 +300,10 @@ function H.NewRuntimeUnitSurface(parent, unit, sample, configure, barOnly)
             local show = scene.Show
             function scene:Show(...)
                 local result = show(self, ...)
-                local frame = self:Frames()[1]
+                -- Show only records the wanted count while the root is inactive (or in combat);
+                -- a scene that was never painted has no frame list yet. Activate repaints via this wrapper.
+                local frames = self:Frames()
+                local frame = frames and frames[1]
                 if result and frame and surface.fit then
                     self:SetScale(math.min(1, parent:GetWidth() / math.max(1, frame:GetWidth()),
                         parent:GetHeight() / math.max(1, frame:GetHeight())))
@@ -327,7 +330,8 @@ function H.NewRuntimeUnitSurface(parent, unit, sample, configure, barOnly)
                 bodyOnly = barOnly, layerVisible = barOnly and BAR_GROUP_LAYERS or nil })
             scene:Show(1)
             root:Activate()
-            return scene:Frames()[1]
+            local frames = scene:Frames()
+            return frames and frames[1]
         end
         if not barOnly or scene.override ~= self.sample then scene:SetSample(self.sample, true) end
         scene:Show()

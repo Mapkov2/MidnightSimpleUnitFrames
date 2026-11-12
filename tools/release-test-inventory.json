@@ -136,6 +136,13 @@
       ]
     },
     {
+      "test": ".github/quality/forever_pad_poll_smoke.lua",
+      "phase": "runtime",
+      "arguments": [
+        "{root}"
+      ]
+    },
+    {
       "test": "tools/tests/forever_profile_identity_smoke.lua",
       "phase": "runtime",
       "arguments": [
@@ -1078,6 +1085,14 @@
     },
     {
       "test": "tools/tests/uf_prediction_native_budget.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla"
+      ]
+    },
+    {
+      "test": "tools/tests/uf_prediction_hostile_glow_budget.lua",
       "phase": "runtime",
       "clients": [
         "Mainline",

@@ -13,6 +13,7 @@ end
 function methods:SetScript(key, value) self.scripts[key] = value end
 function methods:GetScript(key) return self.scripts[key] end
 function methods:RegisterEvent(event) self.events[event] = true end
+function methods:UnregisterEvent(event) self.events[event] = nil end
 function methods:UnregisterAllEvents() for key in pairs(self.events) do self.events[key] = nil end end
 function methods:Hide() self.shown = false end
 function methods:Show() self.shown = true end
@@ -73,8 +74,11 @@ ns.MSUF_RegisterModule = function(_, definition) module = definition end
 ns.Castbars.Config = { Source = function() return saved end }
 ns.Castbars.Anchors = { GetCastbarDesiredSize = function() return 271, 22 end }
 ns.Castbars.Utils = { GetReverseFillSafe = function() return false end }
-ns.Castbars.Core = { ApplyCastbarFrameLayer = noop, ApplyCastbarSparkVisual = noop }
-ns.Castbars.Visuals = { RefreshCastbarFrame = function(frame) frame.paintedStyle = true end }
+ns.Castbars.Core = { ApplyCastbarFrameLayer = noop, ApplyCastbarSparkVisual = noop,
+    ResolveStatusbarTextureKey = function(key) return key end }
+ns.Castbars.Visuals = { RefreshCastbarFrame = function(frame, _, general)
+    frame.paintedStyle, frame.painted = true, general
+end }
 ns.Castbars.Frames = { CreateCastbarPreviewFrame = function(_, _, opts)
     local frame = object(opts.parent or UIParent)
     frame.statusBar, frame.castText, frame.timeText = object(frame), object(frame), object(frame)
@@ -113,6 +117,20 @@ MirrorTimer1.timer, MirrorTimer1.alpha = "BREATH", 0.8
 mirrorValues.BREATH = 65000
 fire("MIRROR_TIMER_START", "BREATH", 65000, 180000, -1, 0, "Breathing")
 assert(breath.frame.shown and breath.frame.timeText.text == "1:05")
+-- A settings change re-reads running mirror timers from the client.
+mirrorData[1] = { "BREATH", 65000, 180000, -1, 0, "Breathing" }
+for format, text in pairs({ ELAPSED = "1:55", ELAPSED_MAX = "1:55 / 3:00", CURRENT_MAX = "1:05 / 3:00" }) do
+    assert(Bars.Set("breath", "timeFormat", format))
+    assert(breath.frame.timeText.text == text, format .. " shows " .. tostring(breath.frame.timeText.text))
+    assert(breath.frame.painted.castbarPlayerTimeFormat == format, "the painter reserves room for the timer's format")
+end
+saved.general.castbarTimers.breath.timeFormat = "SIDEWAYS"
+Bars.Apply()
+assert(breath.frame.timeText.text == "1:05", "an unknown stored format reads as Remaining")
+assert(Bars.Set("breath", "timeFormat", "CURRENT") and saved.general.castbarTimers.breath.timeFormat == nil,
+    "the default format stores no override")
+assert(breath.frame.timeText.text == "1:05")
+mirrorData[1] = nil
 assert(MirrorTimer1.alpha == 0 and driver.scripts.OnUpdate)
 Bars.Set("breath", "lowWarning", true)
 fire("MIRROR_TIMER_START", "BREATH", 15000, 180000, -1, 0, "Breathing")
@@ -196,6 +214,45 @@ Bars.Set("breath", "ownSize", true)
 Bars.Set("breath", "width", 333)
 Bars.Set("breath", "height", 33)
 assert(breath.frame.width == 333 and breath.frame.height == 33)
+-- The painter lays the texts out from the Player castbar's keys; a timer's own
+-- choices answer for them in the profile view it is handed, everything else reads through.
+saved.general.castbarPlayerTimePosition, saved.general.castbarOutlineThickness = "LEFT", 3
+saved.general.castbarPlayerTextOffsetX, saved.general.castbarPlayerSpellNameFontSize = 9, 15
+Bars.Apply()
+local view = breath.frame.painted
+assert(view ~= saved.general and view.castbarOutlineThickness == 3, "the view reads every other key from the profile")
+assert(view.castbarPlayerTimePosition == "LEFT" and view.castbarPlayerTextOffsetX == 9
+    and view.castbarPlayerSpellNameFontSize == 15 and view.castbarPlayerTimeFont == nil,
+    "a timer without own text settings follows the castbar")
+assert(Bars.Set("breath", "labelX", 7) and Bars.Set("breath", "timeX", 5) and Bars.Set("breath", "timeY", -3))
+assert(breath.frame.painted.castbarPlayerTextOffsetX == 9 and breath.frame.painted.castbarPlayerTimeOffsetX == nil,
+    "own offsets wait for an own position")
+assert(Bars.Set("breath", "labelPosition", "CENTER") and Bars.Set("breath", "timePosition", "RIGHT"))
+view = breath.frame.painted
+assert(view.castbarPlayerSpellNamePosition == "CENTER" and view.castbarPlayerTextOffsetX == 7
+    and view.castbarPlayerTextOffsetY == 0, "an own label position brings the timer's own offsets")
+assert(view.castbarPlayerTimePosition == "RIGHT" and view.castbarPlayerTimeOffsetX == 3
+    and view.castbarPlayerTimeOffsetY == -3, "own time offsets sit on the castbar's 2 px edge padding")
+assert(Bars.Set("breath", "labelSize", 20) and Bars.Set("breath", "timeSize", 11))
+assert(Bars.Set("breath", "timeFont", "Fonts\\MORPHEUS.TTF"))
+view = breath.frame.painted
+assert(view.castbarPlayerSpellNameFontSize == 20 and view.castbarPlayerTimeFontSize == 11
+    and view.castbarPlayerTimeFont == "Fonts\\MORPHEUS.TTF", "own sizes and the own time font reach the painter")
+assert(Bars.States.fatigue.frame.painted.castbarPlayerSpellNamePosition == nil
+    and Bars.States.fatigue.frame.painted.castbarPlayerTimeFont == nil, "text settings stay on their own timer")
+assert(not Bars.Set("breath", "labelPosition", "SIDEWAYS") and not Bars.Set("breath", "timeSize", 49),
+    "unknown positions and out-of-range sizes are refused")
+assert(Bars.Set("breath", "labelPosition", "") and Bars.Set("breath", "timePosition", ""))
+assert(Bars.Set("breath", "labelSize", 0) and Bars.Set("breath", "timeSize", 0) and Bars.Set("breath", "timeFont", ""))
+view = breath.frame.painted
+assert(view.castbarPlayerSpellNamePosition == nil and view.castbarPlayerTextOffsetX == 9
+    and view.castbarPlayerTimePosition == "LEFT" and view.castbarPlayerSpellNameFontSize == 15
+    and view.castbarPlayerTimeFont == nil, "emptied text settings follow the castbar again")
+local stored = saved.general.castbarTimers.breath
+assert(stored.labelPosition == nil and stored.timePosition == nil and stored.timeFont == nil,
+    "an empty choice stores no override")
+assert(rawget(saved.general, "castbarPlayerSpellNamePosition") == nil and rawget(saved.general, "castbarPlayerTimeFont") == nil,
+    "timer text settings never write the Player castbar's keys")
 local snapshot = saved.general.castbarTimers.breath.width
 local sample = Bars.CreateMenuPreview(UIParent, "breath")
 Bars.RefreshMenuPreview(sample, "breath")
@@ -218,4 +275,4 @@ assert(MirrorTimer1.alpha == 0.8)
 saved = { general = {} }
 Bars.Apply()
 assert(next(saved.general) == nil, "profile switch does not manufacture timer overrides")
-print("timer bars: runtime, refill, pause, countdowns, native restore, preview, drag and combat checks passed")
+print("timer bars: runtime, refill, pause, countdowns, native restore, preview, drag, own text settings and combat checks passed")

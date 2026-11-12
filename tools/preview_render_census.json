@@ -350,7 +350,7 @@
       "support_sources": [
         {
           "file": "MSUF_Menu2_Preview_Scenes.lua",
-          "source_sha256": "f07d51585b11018bf63f77f4b9fb31850d0beb52f299545b41e5f35b00eafef5"
+          "source_sha256": "a3e704d319f6105f7dfa1603ac600565145790b8e4f86200527d5dd29d33ba02"
         },
         {
           "file": "MSUF_Menu2_Preview_Rendering.lua",

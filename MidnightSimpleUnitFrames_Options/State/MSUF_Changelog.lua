@@ -8,21 +8,43 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "DD6ED8FC80039334B451C8EA697D15342459E2235FD46913FCA50DD4A86BE14D",
-    currentVersion = "7.0-beta8",
+    sourceSha256 = "FFBD21AF68BB28145AF8D18199689F86B216600B980556CBD63117A7337EED4C",
+    currentVersion = "7.0-rc2",
     historyFromVersion = "6.21",
-    previousVersion = "7.0-beta7",
-    rangeLabel = "7.0-beta7 -> 7.0-beta8",
+    previousVersion = "7.0-rc1",
+    rangeLabel = "7.0-rc1 -> 7.0-rc2",
     entries = {
         {
-            version = "7.0-beta8",
-            date = "2026-11-10",
+            version = "7.0-rc2",
+            date = "2026-11-12",
             sections = {
+                {
+                    title = "Castbar timer options",
+                    bullets = {
+                        {
+                            text = "Text per timer. Each timer bar has its own label and time text settings: position, size, X and Y offsets, time font and time format. Leave a setting empty to follow the Player castbar.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Performance",
+                    bullets = {
+                        {
+                            text = "Hostile unit frames. Single unit frames such as Target, Focus and Boss no longer draw the over-absorb glow while they show a unit you can attack. This removes a heal prediction read on every health update of those frames (about 1.8 ms per second in a measured raid boss fight). The absorb bar is unchanged, and friendly units and group frames keep the glow.",
+                            linkless = true,
+                        },
+                        {
+                            text = "WoW Forever gamepad. The gamepad navigation check no longer runs four times per second while the Gamepad UI is off. Switching the Gamepad UI on starts it again.",
+                            linkless = true,
+                        },
+                    },
+                },
                 {
                     title = "Fixes",
                     bullets = {
                         {
-                            text = "WoW Forever: Fix an error in Eating / Drinking Text that could interrupt party and raid frame updates. The text stays hidden while aura access is restricted and returns on the next readable aura update.",
+                            text = "Menu previews. Fixed an error in unit frame previews when a preview opened before it was first drawn, for example in combat.",
                             linkless = true,
                         },
                     },

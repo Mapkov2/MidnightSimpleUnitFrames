@@ -1,5 +1,44 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-rc2 - 2026-11-12
+
+Changes since 7.0 RC1 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Castbar timer options
+
+- **Text per timer.** Each timer bar has its own label and time text settings: position, size, X and Y offsets, time font and time format. Leave a setting empty to follow the Player castbar.
+<!-- msuf-menu-link: none -->
+
+### Performance
+
+- **Hostile unit frames.** Single unit frames such as Target, Focus and Boss no longer draw the over-absorb glow while they show a unit you can attack. This removes a heal prediction read on every health update of those frames (about 1.8 ms per second in a measured raid boss fight). The absorb bar is unchanged, and friendly units and group frames keep the glow.
+<!-- msuf-menu-link: none -->
+- **WoW Forever gamepad.** The gamepad navigation check no longer runs four times per second while the Gamepad UI is off. Switching the Gamepad UI on starts it again.
+<!-- msuf-menu-link: none -->
+
+### Fixes
+
+- **Menu previews.** Fixed an error in unit frame previews when a preview opened before it was first drawn, for example in combat.
+<!-- msuf-menu-link: none -->
+
+## 7.0-rc1 - 2026-11-10
+
+Changes since 7.0 Beta 8 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Castbar timer options
+
+- **One tab per timer.** Open **Castbar > Other timer bars** for Breath, Fatigue, Feign Death, Battle Start and Group Countdown. The tabs and the Castbar preview stay in sync. Enabled bars can be dragged in the on-screen preview or Edit Mode, and disabled bars can still be previewed in the menu.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"timer_bars","controlId":"menu2.opt.castbar.global.timers.breath.enabled","settingKey":"general.castbarTimers.breath.enabled","prepareKind":"menuTab","prepareValue":"breath","query":"breath timer bar","label":"Enable"} -->
+- **Independent textures.** Choose a separate SharedMedia fill and background texture for each timer. Either texture can follow the Player castbar. Color, size, position and the low-time warning are still configurable per timer.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"timer_bars","controlId":"menu2.opt.castbar.global.timers.breath.texture","settingKey":"general.castbarTimers.breath.texture","prepareKind":"menuTab","prepareValue":"breath","query":"timer bar texture","label":"Timer bar texture"} -->
+- **Less idle work.** Timer bars listen only for the events needed by the enabled timers. With every timer disabled, the module stops listening for timer events.
+<!-- msuf-menu-link: none -->
+
+### Fixes
+
+- **Localization.** Fixed an error when loading the localized Name font size label.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-beta8 - 2026-11-10
 
 ### Fixes
