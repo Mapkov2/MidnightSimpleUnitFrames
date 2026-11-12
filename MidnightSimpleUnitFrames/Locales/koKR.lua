@@ -7615,6 +7615,11 @@ L["Timer time X offset"] = "타이머 시간 텍스트 X 오프셋"
 L["Timer time Y offset"] = "타이머 시간 텍스트 Y 오프셋"
 
 L["Name font size"] = "이름 글꼴 크기"
+L["Bar opacity"] = "바 불투명도"
+L["Bar opacity (%s)"] = "바 불투명도 (%s)"
+L["Background opacity (%s)"] = "배경 불투명도 (%s)"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "이 프레임 페이지의 투명도 > 자원 바 > 전경과 같은 값입니다. 색상 자체는 모든 프레임이 공유합니다."
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "이 프레임 페이지의 투명도 > 자원 바 > 배경과 같은 값입니다. 공유 배경 색상의 불투명도와 곱해집니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

@@ -107,6 +107,10 @@ local function ContextColorVirtualOwner(spec, opts)
     local owner = {
         _msuf2ColorLabel = spec.label or "Color",
         _msuf2ColorHasOpacity = spec.hasOpacity == true,
+        -- Optional wording when the opacity is a setting other than the color's own alpha.
+        _msuf2ColorOpacityLabel = spec.opacityLabel,
+        _msuf2ColorOpacityTitle = spec.opacityTitle,
+        _msuf2ColorOpacityNote = spec.opacityNote,
         _msuf2GetColorByClass = spec.getColorByClass,
         _msuf2SetColorByClass = spec.setColorByClass,
     }

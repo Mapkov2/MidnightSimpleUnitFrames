@@ -993,6 +993,7 @@ Parts.SetControlEnabled = SetControlEnabled
 Parts.SetControlsEnabled = SetControlsEnabled
 Parts.SetOutlineColorForScope = SetOutlineColorForScope
 Parts.SetRoundedBool = SetRoundedBool
+Parts.ShapePreviewScope = ShapePreviewScope
 Parts.ShapePreviewSurface = ShapePreviewSurface
 Parts.SharedScope = SharedScope
 Parts.ShowDispelBorderReloadRequiredPopup = ShowDispelBorderReloadRequiredPopup

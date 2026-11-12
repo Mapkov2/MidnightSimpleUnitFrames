@@ -3,7 +3,7 @@
 ## Notes: Load-on-demand menu language packs for Midnight Simple Unit Frames.
 ## Author: Mapko
 ## Category: Combat
-## Version: 7.0-rc2
+## Version: 7.0-rc3
 ## X-MSUF-Client: Vanilla
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames

@@ -43,6 +43,7 @@ local SetBarBackgroundTextureForScope = Parts.SetBarBackgroundTextureForScope
 local SetBarTextureForScope = Parts.SetBarTextureForScope
 local SetControlEnabled = Parts.SetControlEnabled
 local SetControlsEnabled = Parts.SetControlsEnabled
+local ShapePreviewScope = Parts.ShapePreviewScope
 local SharedScope = Parts.SharedScope
 local T = Parts.T
 local TEMP_MAX_HEALTH_COLOR_STATE_FIELDS = Parts.TEMP_MAX_HEALTH_COLOR_STATE_FIELDS
@@ -214,9 +215,13 @@ function GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradient
     return directionButtons, pads
 end
 
-function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
+function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY, refreshPreview)
+    local function Applied(reason)
+        ApplyBars(reason)
+        if refreshPreview then refreshPreview() end
+    end
     local options = Rows.Options(function(key, fallback) return Bars()[key] or fallback end,
-        function(key, value) Bars()[key] = value end, function(row) ApplyBars(row.reason) end,
+        function(key, value) Bars()[key] = value end, function(row) Applied(row.reason) end,
         function(key) return Bars()[key] end)
     -- Shared power-bar art for every unit power bar (detached or not). Stored in
     -- the shared bars table like powerBarHeight, and resolved in the UF compiler
@@ -225,11 +230,11 @@ function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
         { "dropdown", "foreground", "", { "Bar textures (SharedMedia)", function() return TextureValues(nil) end, leftW },
             { leftX, topY, leftW, "LEFT" }, path = "textures.foreground", get = BarTextureForScope,
             customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
-                set = function(v) if SetBarTextureForScope(v) then ApplyBars("MSUF2_BAR_TEXTURE") end end },
+                set = function(v) if SetBarTextureForScope(v) then Applied("MSUF2_BAR_TEXTURE") end end },
         { "dropdown", "background", "", { "Background texture", function() return TextureValues("Use foreground texture") end, leftW },
             { leftX, topY - 54, leftW, "LEFT" }, path = "textures.background", get = BarBackgroundTextureForScope,
             customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
-                set = function(v) if SetBarBackgroundTextureForScope(v) then ApplyBars("MSUF2_BAR_BG_TEXTURE") end end },
+                set = function(v) if SetBarBackgroundTextureForScope(v) then Applied("MSUF2_BAR_BG_TEXTURE") end end },
         { "dropdown", "powerBarTexture", "", { "Power bar texture", function() return TextureValues("Use bar texture") end, leftW },
             { leftX, topY - 108, leftW, "LEFT" }, path = "textures.power_foreground", skipEqual = true, reason = "MSUF2_POWER_BAR_TEXTURE",
             tip = { "Power Bar Texture",
@@ -244,7 +249,7 @@ function GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
     return refs.foreground, refs.background
 end
 
-function GP.BuildBarGlossControls(ctx, section, leftX, rightX, width, compact)
+function GP.BuildBarGlossControls(ctx, section, leftX, rightX, width, compact, refreshPreview)
     local topY = compact and -546 or -304
     local Sync = M.RefreshProxy()
     local options = Rows.Options(function(key, fallback, row)
@@ -256,6 +261,7 @@ function GP.BuildBarGlossControls(ctx, section, leftX, rightX, width, compact)
     end, function(row)
         RequestApply("RequestBarGradients", row.reason, CurrentBarsScope())
         Sync()
+        if refreshPreview then refreshPreview() end
     end)
     local refs = Rows.Build(ctx, section, {
         { "toggle", "healthGlossEnabled", false, { "Health gloss", leftX, topY, width },
@@ -289,17 +295,161 @@ function GP.BuildBarGlossControls(ctx, section, leftX, rightX, width, compact)
     end))
 end
 
+-- Half health and half power, painted by the runtime unit scene so textures,
+-- gradients and gloss look exactly as on the frames of the selected scope.
+local MATERIAL_PREVIEW_SAMPLE = { hp = .5, power = .5, hpPct = .5, powerPct = .5,
+    incoming = 0, absorb = 0, healAbsorb = 0, reducedMax = 0 }
+local MATERIAL_PREVIEW_LANE_H, MATERIAL_PREVIEW_GROUP_H = 20, 46
+GP.MATERIAL_PREVIEW_HEIGHT = 84
+
+-- The preview sits under the gloss rows. The lazy shell in GlobalBars_Highlights
+-- declares this same height, so the next section starts below the preview.
+local function MaterialPreviewTop(width) return ((width or 720) < 560) and -736 or -400 end
+function GP.TextureSectionHeight(width)
+    return -MaterialPreviewTop(width) + GP.MATERIAL_PREVIEW_HEIGHT + 16
+end
+
+local function MaterialPreviewGroup(key) return key == "party" or key == "raid" end
+-- A group scope has one group frame body (health and power); units get two lanes.
+local function MaterialPreviewPowerUnit()
+    local key = ShapePreviewScope()
+    return MaterialPreviewGroup(key) and "player" or key
+end
+
+-- The power lane shows the live power type, as the frames do: a priest mana,
+-- a warrior rage, a druid the power of its current form. The scope's unit is
+-- read while it exists; otherwise (and for Shared and group scopes) the player.
+local UnitExists, UnitPowerType, issecretvalue = UnitExists, UnitPowerType, issecretvalue
+local function MaterialPreviewLiveUnit()
+    local scene = MSUF.UF and MSUF.UF.UnitScene
+    local unit = scene and scene.Normalize(MaterialPreviewPowerUnit()) or "player"
+    if unit ~= "player" and not (UnitExists and UnitExists(unit)) then unit = "player" end
+    return unit
+end
+-- Classic clients lack some of these events; keep only the ones this client has.
+local MATERIAL_POWER_EVENTS = {}
+for _, event in ipairs({ "UNIT_DISPLAYPOWER", "PLAYER_SPECIALIZATION_CHANGED", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED" }) do
+    if MSUF.Client.SupportsEvent(event) then MATERIAL_POWER_EVENTS[#MATERIAL_POWER_EVENTS + 1] = event end
+end
+local materialPowerSamples = {}
+local function MaterialPreviewPowerSample()
+    if not UnitPowerType then return MATERIAL_PREVIEW_SAMPLE end
+    local unit = MaterialPreviewLiveUnit()
+    local powerType, token = UnitPowerType(unit)
+    if issecretvalue and (issecretvalue(powerType) or issecretvalue(token)) then return MATERIAL_PREVIEW_SAMPLE end
+    local common = MSUF.UFBarTextCommon
+    if common and common.ResolveDisplayedPowerIdentity then
+        powerType, token = common.ResolveDisplayedPowerIdentity(unit, powerType, token)
+    end
+    if powerType == nil and token == nil then return MATERIAL_PREVIEW_SAMPLE end
+    -- One sample per power type: the scene re-merges only when the table changes.
+    local key = tostring(token or powerType)
+    local sample = materialPowerSamples[key]
+    if not sample then
+        sample = {}
+        for field, value in pairs(MATERIAL_PREVIEW_SAMPLE) do sample[field] = value end
+        sample.powerType, sample.powerToken = powerType, token
+        materialPowerSamples[key] = sample
+    end
+    return sample
+end
+
+function GP.BuildBarMaterialPreview(section, x, y, width)
+    local panel = T.Panel(section, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.92 }, T.colors.borderSoft)
+    panel:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
+    panel:SetSize(width, GP.MATERIAL_PREVIEW_HEIGHT)
+    T.Font(panel, "GameFontNormalSmall", "Live preview", T.colors.muted):SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -8)
+    local hpLabel = T.Font(panel, "GameFontHighlightSmall", "Health bar", T.colors.text)
+    local powerLabel = T.Font(panel, "GameFontHighlightSmall", "Power bar", T.colors.text)
+    hpLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -32)
+    powerLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -58)
+    -- The floor fits the longest translation even when the font has no width yet.
+    local labelW = min(150, max(110, floor(max(hpLabel:GetStringWidth(), powerLabel:GetStringWidth()) + 0.5) + 12))
+    local laneW = max(80, width - labelW - 36)
+    local hpHost = PixelLayoutRegion(CreateFrame("Frame", nil, panel))
+    local powerHost = PixelLayoutRegion(CreateFrame("Frame", nil, panel))
+    powerHost:SetPoint("TOPLEFT", panel, "TOPLEFT", 24 + labelW, -54)
+    powerHost:SetSize(laneW, MATERIAL_PREVIEW_LANE_H)
+    local layoutGroup
+    local function Layout()
+        local group = MaterialPreviewGroup(ShapePreviewScope())
+        if layoutGroup == group then return group end
+        layoutGroup = group
+        hpHost:ClearAllPoints()
+        hpHost:SetPoint("TOPLEFT", panel, "TOPLEFT", group and 12 or 24 + labelW, -28)
+        hpHost:SetSize(group and width - 24 or laneW, group and MATERIAL_PREVIEW_GROUP_H or MATERIAL_PREVIEW_LANE_H)
+        hpLabel:SetShown(not group)
+        powerLabel:SetShown(not group)
+        powerHost:SetShown(not group)
+        return group
+    end
+    Layout()
+    -- Runs before the surface's own OnShow repaint, so a scope picked while
+    -- the page was hidden never paints into the previous layout.
+    hpHost:HookScript("OnShow", Layout)
+    local health = M.PreviewHelpers.NewRuntimeUnitSurface(hpHost, ShapePreviewScope, MATERIAL_PREVIEW_SAMPLE, function(spec)
+        spec.width, spec.height = laneW, MATERIAL_PREVIEW_LANE_H
+        spec.power.enabled = false
+        spec.prediction.enabled = false
+    end, true)
+    local power
+    -- Runs before the surface's own OnShow repaint: a form or spec change while
+    -- the page was hidden paints the new power type on the first frame.
+    powerHost:HookScript("OnShow", function() if power then power.sample = MaterialPreviewPowerSample() end end)
+    power = M.PreviewHelpers.NewRuntimeUnitSurface(powerHost, MaterialPreviewPowerUnit, MaterialPreviewPowerSample(), function(spec)
+        spec.width, spec.height = laneW, MATERIAL_PREVIEW_LANE_H
+        spec.power.enabled, spec.power.detached, spec.power.embed = true, false, true
+        spec.power.height = MATERIAL_PREVIEW_LANE_H
+        spec.prediction.enabled = false
+    end, true)
+    local paintedScope, paintedRevision
+    function panel:Refresh()
+        local group = Layout()
+        paintedScope, paintedRevision = ShapePreviewScope(), M._msuf2MenuDataRevision
+        health:Refresh()
+        if not group then power:Refresh(MaterialPreviewPowerSample()) end
+    end
+    -- Shapeshift, spec, target and focus changes swap the power type while the
+    -- preview is visible; only a changed type repaints. No listener while hidden.
+    local watcher = CreateFrame("Frame", nil, panel)
+    watcher:SetScript("OnEvent", function(_, event, unit)
+        if event == "UNIT_DISPLAYPOWER" and unit ~= MaterialPreviewLiveUnit() then return end
+        if Layout() then return end
+        local sample = MaterialPreviewPowerSample()
+        if power.sample ~= sample then power:Refresh(sample) end
+    end)
+    local function WatchPower(on)
+        if not on then watcher:UnregisterAllEvents() return end
+        for i = 1, #MATERIAL_POWER_EVENTS do watcher:RegisterEvent(MATERIAL_POWER_EVENTS[i]) end
+    end
+    watcher:SetScript("OnShow", function() WatchPower(true) end)
+    watcher:SetScript("OnHide", function() WatchPower(false) end)
+    WatchPower(watcher:IsVisible())
+    -- Page refreshes repaint only after a scope switch or a menu data change
+    -- (undo, reset, profile); each control write repaints through Refresh.
+    function panel:RefreshIfStale()
+        if paintedScope ~= ShapePreviewScope() or paintedRevision ~= M._msuf2MenuDataRevision then self:Refresh() end
+    end
+    panel._msuf2BarMaterialPreview = { health = health, power = power }
+    return panel
+end
+
 local function BuildTextureSection(ctx, b)
     local compactTextures = (ctx.width or 720) < 560
-    local textures = Rows.Schema.Section(b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 766 or 448, true), "bars")
+    local previewY = MaterialPreviewTop(ctx.width)
+    local textures = Rows.Schema.Section(b:CollapsibleSection("bars_textures", "Textures & Gradient",
+        GP.TextureSectionHeight(ctx.width), true), "bars")
     local leftX, topY = 14, -42
     local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
     local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
     -- Compact stacks the gradient block under the texture column, which now
     -- carries two extra power dropdowns.
     local gradientY = compactTextures and (topY - 234) or topY
-    local barTexture, bgTexture = GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY)
-    GP.BuildBarGlossControls(ctx, textures, leftX, rightX, leftW, compactTextures)
+    local RefreshPreview = M.RefreshProxy()
+    local barTexture, bgTexture = GP.BuildBarTextureControls(ctx, textures, leftW, leftX, topY, RefreshPreview)
+    GP.BuildBarGlossControls(ctx, textures, leftX, rightX, leftW, compactTextures, RefreshPreview)
+    local preview = GP.BuildBarMaterialPreview(textures, leftX, previewY, (textures._msuf2Width or ctx.width or 720) - 2 * leftX)
+    RefreshPreview(function() preview:Refresh() end)
     Rows.Schema.Build(ctx, textures, {
         { "font", "gradientLabel", nil, { "GameFontHighlightSmall", "Gradient", T.colors.muted }, scope = "bars",
             anchor = { "TOPLEFT", textures, "TOPLEFT", rightX, gradientY } },
@@ -310,6 +460,7 @@ local function BuildTextureSection(ctx, b)
         function(row)
             ApplyGradientRuntime(row.reason, row.gradientKind)
             SyncGradientControls()
+            RefreshPreview()
         end)
     local hpY = gradientY - 28
     local powerY = gradientY - 138
@@ -330,7 +481,10 @@ local function BuildTextureSection(ctx, b)
         historySource = "menu:bars-gradient-colors",
         offsetY = -8,
     })
-    local strengthOptions = Rows.Options(GradientScopeGet, GradientScopeSet, ApplyGradientRuntime, nil, true)
+    local strengthOptions = Rows.Options(GradientScopeGet, GradientScopeSet, function(reason, kind)
+        ApplyGradientRuntime(reason, kind)
+        RefreshPreview()
+    end, nil, true)
     local strengths = Rows.Build(ctx, textures, {
         { "slider", "gradientStrength", 0.45, { "Health strength", 0, 1, 0.05, 220 },
             { rightX, hpY - 36, compactTextures and compactStrengthW or 220, "LEFT" }, path = "gradient.health.strength",
@@ -342,7 +496,10 @@ local function BuildTextureSection(ctx, b)
             tip = "How dark the power bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color." },
     }, strengthOptions)
     local hpStrength, powerStrength = strengths.gradientStrength, strengths.powerGradientStrength
-    local directionButtons, pads = GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, SyncGradientControls)
+    local directionButtons, pads = GP.BuildGradientDirectionPads(textures, padX, hpY, powerY, function()
+        SyncGradientControls()
+        RefreshPreview()
+    end)
     local textureControls = { barTexture, bgTexture }
     local gradientControls = { hpGradient, powerGradient }
     -- Hover reasons: a unit or group scope without its own settings locks this
@@ -386,6 +543,8 @@ local function BuildTextureSection(ctx, b)
             SetControlEnabled(btn, powerActive)
         end
     end))
+    -- Colors and other applies also repaint through the scene root's CONFIG_APPLIED listener.
+    M.TrackRefresh(ctx, function() preview:RefreshIfStale() end)
 end
 
 local function BuildTempMaxHealthSection(ctx, b)

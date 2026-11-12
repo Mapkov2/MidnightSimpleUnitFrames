@@ -191,6 +191,10 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
     local charKey = GetCharKey()
     if not charKey then return false, "character identity unavailable" end
+    -- A restored pre-7.0 backup can again hold only the 6.5x Forever key.
+    -- State-only test slices load this file without the startup binding.
+    local binding = MSUF.ProfileBinding
+    if binding then binding.AdoptLegacyCharacter(MSUF_GlobalDB, charKey) end
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     local active = char.activeProfile

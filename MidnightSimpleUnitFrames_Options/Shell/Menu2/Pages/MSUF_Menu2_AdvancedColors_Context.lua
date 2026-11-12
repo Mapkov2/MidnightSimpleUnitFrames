@@ -452,6 +452,44 @@ local function ContextUnitKey(context)
     if unit:match("^arena%d+$") then return "arena" end
     return unit
 end
+-- The shared resource colors store RGB, or one alpha for every frame. When a
+-- card names its unit, the picker's opacity is that unit's own Opacity >
+-- Resource Bar slider instead (the runtime multiplies the background one with
+-- the shared background color's alpha, which the Colors page keeps editing).
+local RESOURCE_OPACITY = {
+    powerBarAlpha = { reason = "MSUF2_ALPHA_POWER", title = "Bar opacity", label = "Bar opacity (%s)",
+        note = "Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame." },
+    powerBarBgAlpha = { reason = "MSUF2_ALPHA_POWER_BG", title = "Background opacity", label = "Background opacity (%s)",
+        note = "Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color." },
+}
+local RESOURCE_ALPHA_APPLY = { power = true, preview = true }
+local function WithUnitResourceOpacity(target, context, alphaKey)
+    if ContextValue(context and (context.unitKey or context.unit), context) == nil then return target end
+    local unitKey, spec = ContextUnitKey(context), RESOURCE_OPACITY[alphaKey]
+    if not M.GetUnitDB(unitKey) then return target end
+    local alphaState = ContextDBRowsState({ unitKey }, { alphaKey }, false)
+    local function ApplyAlpha() M.RequestUnitDomains(unitKey, spec.reason, RESOURCE_ALPHA_APPLY) end
+    local setColor, captureColor, restoreColor = target.setRGB, target.captureState, target.restoreState
+    target.hasOpacity = true
+    target.getOpacity = function()
+        return tonumber(M.GetUnitDB(unitKey)[alphaKey]) or M.ControlSchema.Default(unitKey, alphaKey)
+    end
+    target.opacityTitle, target.opacityNote = spec.title, spec.note
+    target.opacityLabel = string.format(M.Tr(spec.label), M.Tr(M.UnitPage.UnitTopLabelKey(unitKey)))
+    -- The color wheel sends no alpha; the opacity slider sends the unchanged color.
+    target.setRGB = function(r, g, b, a)
+        if type(a) ~= "number" then return setColor(r, g, b) end
+        M.GetUnitDB(unitKey)[alphaKey] = a
+        ApplyAlpha()
+    end
+    target.captureState = function() return { captureColor(), alphaState.captureState() } end
+    target.restoreState = function(state)
+        restoreColor(state and state[1])
+        alphaState.restoreState(state and state[2])
+        ApplyAlpha()
+    end
+    return target
+end
 -- UFBarTextCommon.UnitNPCKind with the NPC-type switches of the General settings, for a
 -- bar ("health") or a text ("text") consumer.
 local function ContextNPCKind(unit, key, exists, section, colorKey, forText)
@@ -576,9 +614,9 @@ local function RegisterBarContextFactories()
         return ContextStoredApiScopedOpacity("bar.heal_absorb", "Heal absorb", "GetHealAbsorbOverlayColor", "SetHealAbsorbOverlayColor",
             "healAbsorbBarColor", 0.7, 0, 0, 0.45, "healAbsorbBarOpacity", 1, "MSUF2_HEAL_ABSORB_OPACITY")
     end)
-    FixedContextFactory("bar.power_background", function()
-        return ContextStoredApi("bar.power_background", "Power background", "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", "powerBarBgColor", 0, 0,
-            0, 1, ApplyColors, true)
+    ContextFactory("bar.power_background", function(context)
+        return WithUnitResourceOpacity(ContextStoredApi("bar.power_background", "Power background", "GetPowerBarBackgroundColor",
+            "SetPowerBarBackgroundColor", "powerBarBgColor", 0, 0, 0, 1, ApplyColors, true), context, "powerBarBgAlpha")
     end)
     FixedContextFactory("bar.aggro_border", function()
         return ContextWithState(ContextApi("bar.aggro_border", "Aggro border", "GetAggroBorderColor", "SetAggroBorderColor", 1, 0.5, 0),
@@ -995,8 +1033,9 @@ local function RegisterPowerContextFactories()
         local target = PowerTokenTarget("power.current." .. token, token, (token:gsub("_", " ")) .. " power")
         target.getColorByClass = M.PowerBarColorByClass.Get
         target.setColorByClass = M.PowerBarColorByClass.Set
-        return ContextWithState(target,
+        ContextWithState(target,
             ContextStoredState(G, { "powerColorOverrides", "powerColorMode", "powerBarColorMode" }, ApplyColors))
+        return WithUnitResourceOpacity(target, context, "powerBarAlpha")
     end)
     -- The unit's own power bar border colour. Unset, the border follows the frame
     -- outline colour (CompileUnitPower), so the picker starts from that colour.

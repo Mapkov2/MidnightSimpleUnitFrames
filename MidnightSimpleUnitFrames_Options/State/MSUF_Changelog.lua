@@ -8,34 +8,43 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "FFBD21AF68BB28145AF8D18199689F86B216600B980556CBD63117A7337EED4C",
-    currentVersion = "7.0-rc2",
+    sourceSha256 = "85A0C5DA8F873FD17DBC3BD36A987D179714BDCF3627D605E444EF496B513E2E",
+    currentVersion = "7.0-rc3",
     historyFromVersion = "6.21",
-    previousVersion = "7.0-rc1",
-    rangeLabel = "7.0-rc1 -> 7.0-rc2",
+    previousVersion = "7.0-rc2",
+    rangeLabel = "7.0-rc2 -> 7.0-rc3",
     entries = {
         {
-            version = "7.0-rc2",
+            version = "7.0-rc3",
             date = "2026-11-12",
             sections = {
                 {
-                    title = "Castbar timer options",
+                    title = "Bars options",
                     bullets = {
                         {
-                            text = "Text per timer. Each timer bar has its own label and time text settings: position, size, X and Y offsets, time font and time format. Leave a setting empty to follow the Player castbar.",
+                            text = "Live preview. Bars > Textures & Gradient shows a health bar and a power bar at half value, drawn the same way as your frames. Bar texture, background, power texture, gradient and gloss changes show at once. Party and Raid show a group frame, and the power bar uses your current power type.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Performance",
+                    title = "Menu",
                     bullets = {
                         {
-                            text = "Hostile unit frames. Single unit frames such as Target, Focus and Boss no longer draw the over-absorb glow while they show a unit you can attack. This removes a heal prediction read on every health update of those frames (about 1.8 ms per second in a measured raid boss fight). The absorb bar is unchanged, and friendly units and group frames keep the glow.",
+                            text = "Swing Timers icon. The Swing Timers page has its own sword icon in the menu navigation.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Colors",
+                    bullets = {
+                        {
+                            text = "Resource opacity in the color picker. Opening the power or power background color from a frame's card, the picker's opacity slider now edits that frame's own Opacity > Resource Bar value and names the frame.",
                             linkless = true,
                         },
                         {
-                            text = "WoW Forever gamepad. The gamepad navigation check no longer runs four times per second while the Gamepad UI is off. Switching the Gamepad UI on starts it again.",
+                            text = "Dark mode bar color. The slider now works with tinted dark colors, such as those in the Suite factory profiles: it shows the brightness you see and keeps the tint while you drag.",
                             linkless = true,
                         },
                     },
@@ -44,7 +53,11 @@ local data = {
                     title = "Fixes",
                     bullets = {
                         {
-                            text = "Menu previews. Fixed an error in unit frame previews when a preview opened before it was first drawn, for example in combat.",
+                            text = "WoW Forever profiles. A character with a surname now starts its first 7.0 login on the profile it used in 6.5 instead of Default.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Color picker. The brightness bar shows its handle again, and a color without a stored opacity no longer shows a 0% opacity row.",
                             linkless = true,
                         },
                     },

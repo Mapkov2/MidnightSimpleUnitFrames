@@ -247,6 +247,41 @@ function Build.Background(ctx, b)
     elseif M.TrackRefresh then M.TrackRefresh(ctx, refreshBackgroundPreview) end
     if ctx.entry then ctx.entry._msuf2HealthBackgroundInlinePreviewRefresh = refreshBackgroundPreview end
 end
+-- The dark tone slider reads and writes through the engine's own dark color
+-- rule. A profile can store a tinted darkBarR/G/B (the Suite factory profiles
+-- do), which the engine paints over darkBarGray; the slider then shows that
+-- painted brightness and scales the tint instead of leaving it in place.
+-- At 0 the tint keeps a peak of 1/40 of one 8-bit level: black on screen,
+-- and a drag back up still has the hue to scale.
+local DARK_TINT_FLOOR = 0.0001
+local darkToneColor = {}
+local function ResolveDarkTone(g)
+    local c = darkToneColor
+    c.r, c.g, c.b = nil, nil, nil -- a fresh table, as the engine's settings cache uses
+    MSUF.UF.Config.ResolveDarkColor(g, c)
+    return c
+end
+local function DarkToneValue()
+    local c = ResolveDarkTone(G())
+    return min(100, max(0, floor(max(c.r, c.g, c.b) * 100 + 0.5)))
+end
+local function SetDarkTone(v)
+    local g = G()
+    local gray = (tonumber(v) or 0) / 100
+    if g.darkBarR ~= nil or g.darkBarG ~= nil or g.darkBarB ~= nil then
+        local c = ResolveDarkTone(g)
+        local peak = max(c.r, c.g, c.b)
+        if peak > 0 then
+            local scale = max(gray, DARK_TINT_FLOOR) / peak
+            g.darkBarR, g.darkBarG, g.darkBarB = c.r * scale, c.g * scale, c.b * scale
+        else
+            g.darkBarR, g.darkBarG, g.darkBarB = nil, nil, nil
+        end
+    end
+    g.darkBarGray = gray
+    g.darkBarTone = nil
+    ApplyUnitframeColorWithReload()
+end
 -- An explicit global choice supersedes the individual modes carried by presets.
 -- Individual frame controls can opt out again after this user action.
 local function SetGlobalBarMode(mode)
@@ -303,18 +338,7 @@ function Build.Appearance(ctx, b)
     local modeDescLabel = LabelAt(appearance, "", 12, -64, appearanceW - 24, "GameFontHighlightSmall", T.colors.muted)
     local unifiedColor = GeneralColorAt(ctx, appearance, "Unified bar color", 12, -94, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
     local darkColor = ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -136, 0, 100, 1, 300,
-        function()
-            local v = tonumber(G().darkBarGray)
-            if not v then return 7 end
-            if v <= 1 then return floor(v * 100 + 0.5) end
-            return floor(v + 0.5)
-        end,
-        function(v)
-            G().darkBarGray = (tonumber(v) or 0) / 100
-            G().darkBarTone = nil
-            ApplyUnitframeColorWithReload()
-        end,
-        Meta("appearance.dark_mode_tone"))
+        DarkToneValue, SetDarkTone, Meta("appearance.dark_mode_tone"))
     local gradientStrength = SliderAt(ctx, appearance, "Health strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45,
         ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
     local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -142, 230, G, "enableHealthGradient", true, function()

@@ -5371,6 +5371,11 @@ L["Timer time X offset"] = "Timer time X offset"
 L["Timer time Y offset"] = "Timer time Y offset"
 
 L["Name font size"] = "Name font size"
+L["Bar opacity"] = "Bar opacity"
+L["Bar opacity (%s)"] = "Bar opacity (%s)"
+L["Background opacity (%s)"] = "Background opacity (%s)"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

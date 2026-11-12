@@ -20,6 +20,7 @@ local PICKER_REFERENCE_SCALE = 0.915
 local ACTION_SIDE_PAD, ACTION_GAP = 8, 10
 local SIMPLE_MORE_WIDTH, SIMPLE_CANCEL_WIDTH, SIMPLE_DONE_WIDTH = 102, 72, 88
 local ADVANCED_MORE_WIDTH, ADVANCED_CANCEL_WIDTH, ADVANCED_DONE_WIDTH = 110, 98, 94
+local VALUE_HANDLE_WIDTH, VALUE_HANDLE_HEIGHT = 31, 3
 
 local function Clamp01(value)
     value = tonumber(value) or 0
@@ -638,14 +639,17 @@ function Picker.BuildWheelCard(panel)
     value:SetSize(25, 102)
     colorSelect:SetColorValueTexture(value)
     colorSelect:SetColorValueThumbTexture("Interface\\Buttons\\UI-ColorPicker-Buttons")
+    -- The engine moves this thumb along the brightness bar, so the thumb itself
+    -- is the visible handle. A menu backdrop (tooltip edge or rounded skin)
+    -- cannot draw at handle height, which left the bar without a slider.
     local valueThumb = colorSelect:GetColorValueThumbTexture()
-    valueThumb:SetSize(35, 11)
-    valueThumb:SetTexCoord(0.25, 1.0, 0, 0.875)
-    valueThumb:SetAlpha(0.001)
-    local valueHandle = PixelLayoutRegion(CreateFrame("Frame", nil, colorSelect, "BackdropTemplate"))
-    valueHandle:SetSize(31, 6)
-    valueHandle:SetPoint("CENTER", valueThumb, "CENTER", 0, 0)
-    if T.ApplyBackdrop then T.ApplyBackdrop(valueHandle, T.colors.coreShadow, T.colors.text) end
+    valueThumb:SetDrawLayer("OVERLAY", 2)
+    valueThumb:SetColorTexture(T.colors.text[1], T.colors.text[2], T.colors.text[3], 1)
+    valueThumb:SetSize(VALUE_HANDLE_WIDTH, VALUE_HANDLE_HEIGHT)
+    local valueHandle = PixelLayoutRegion(colorSelect:CreateTexture(nil, "OVERLAY", nil, 1))
+    valueHandle:SetPoint("TOPLEFT", valueThumb, "TOPLEFT", -1, 1)
+    valueHandle:SetPoint("BOTTOMRIGHT", valueThumb, "BOTTOMRIGHT", 1, -1)
+    valueHandle:SetColorTexture(T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 1)
     local valueUp = FontAt(colorSelect, "GameFontHighlightSmall", "^", T.colors.dim, "BOTTOM", value, "TOP", 0, 3)
     local valueDown = FontAt(colorSelect, "GameFontHighlightSmall", "v", T.colors.dim, "TOP", value, "BOTTOM", 0, -3)
     colorSelect:SetScript("OnColorSelect", function(_, r, g, b)
@@ -657,6 +661,10 @@ function Picker.BuildWheelCard(panel)
     panel.colorValueHandle, panel.colorValueUp, panel.colorValueDown = valueHandle, valueUp, valueDown
 
     local opacityLabel = Font(wheelCard, "GameFontNormalSmall", "Opacity", T.colors.muted)
+    -- A unit-bound opacity names its frame; a long translation truncates instead of wrapping.
+    opacityLabel:SetWidth(LEFT_CARD_WIDTH - 24)
+    opacityLabel:SetJustifyH("LEFT")
+    if opacityLabel.SetWordWrap then opacityLabel:SetWordWrap(false) end
     local opacity = OpacityDisplay(wheelCard, 160)
     local opacityValue = Font(wheelCard, "GameFontHighlightSmall", "100%", T.colors.text)
     opacityLabel:Hide()
@@ -666,7 +674,10 @@ function Picker.BuildWheelCard(panel)
     opacity:SetScript("OnValueChanged", function(_, value)
         if not panel._syncingOpacity then panel:ApplyOpacity(value) end
     end)
-    if M.AddTooltip then M.AddTooltip(opacity, "Opacity", "Adjusts the alpha channel of this color.") end
+    if M.AddTooltip then
+        M.AddTooltip(opacity, function() return panel.owner and panel.owner._msuf2ColorOpacityTitle or "Opacity" end,
+            function() return panel.owner and panel.owner._msuf2ColorOpacityNote or "Adjusts the alpha channel of this color." end)
+    end
 
     local CommitHex = HexCommitter(panel)
 
@@ -946,7 +957,7 @@ function Picker.DefineLayout(panel)
         self.colorWheel:SetSize(wheelSize, wheelSize)
         Anchor(self.colorValue, "LEFT", self.colorWheel, "RIGHT", 10, 0)
         self.colorValue:SetSize(25, wheelSize)
-        self.colorValueThumb:SetSize(35, 11)
+        self.colorValueThumb:SetSize(VALUE_HANDLE_WIDTH, VALUE_HANDLE_HEIGHT)
         self.advancedCard:SetShown(advanced)
         Anchor(self.compactHex, "TOPRIGHT", self.wheelCard, "TOPRIGHT", -6, -55)
         Anchor(self.compactHexTitle, "BOTTOMLEFT", self.compactHex, "TOPLEFT", 0, 3)
@@ -1084,7 +1095,8 @@ function Picker.DefineReadout(panel)
         end
     end
     function panel:RefreshOpacity(alpha)
-        alpha = alpha == nil and OwnerOpacity(self.owner) or Clamp01(alpha)
+        -- No stored opacity stays nil: Clamp01(nil) would show a dead 0% row.
+        if alpha == nil then alpha = OwnerOpacity(self.owner) else alpha = Clamp01(alpha) end
         local hasOpacity = type(alpha) == "number"
         if hasOpacity then
             self._syncingOpacity = true
@@ -1111,6 +1123,7 @@ function Picker.DefineReadout(panel)
         T.SetTranslatedText(self.selector.label, Tr(self.owner._msuf2ColorLabel or self.owner._msuf2SearchText or "Color"))
         self._readoutHex, self._readoutR, self._readoutG, self._readoutB = nil, nil, nil, nil
         self:RefreshColorReadout(true)
+        T.SetTranslatedText(self.opacityLabel, self.owner._msuf2ColorOpacityLabel or Tr("Opacity"))
         self:RefreshOpacity()
         if self.advanced then self:RefreshPalettes() else self:RefreshSelectedSwatch(r, g, b, self._readoutHex) end
     end

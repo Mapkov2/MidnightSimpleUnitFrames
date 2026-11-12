@@ -50,8 +50,20 @@ Check(store.char["Mapko-Realm"].activeProfile == "Main", "legacy binding was dis
 store.global.defaultProfileForNewChars = "Main"
 name = ns.ResolveStartupProfile(store, main, "Mapko Newalt-Realm")
 Check(name == "Main", "explicit global alt preference stopped working")
+-- 6.5x stored "Mapko-Realm" for every surname. A character without a binding
+-- of its own starts on that profile once; its own binding always wins.
+surname = "Main"
+Check(ns.GetLegacyCharacterProfileKey() == "Mapko-Realm", "6.5x key differs from the 6.5x key format")
+local upgraded = { profiles = { Main = main, Default = default }, global = {},
+    char = { ["Mapko-Realm"] = { activeProfile = "Main" } } }
+name, profile = ns.ResolveStartupProfile(upgraded, nil, altKey, "Mapko-Realm")
+Check(name == "Main" and profile == main, "6.5x binding was ignored on the first 7.0 login")
+upgraded.char[altKey] = { activeProfile = "Default" }
+name = ns.ResolveStartupProfile(upgraded, nil, altKey, "Mapko-Realm")
+Check(name == "Default", "6.5x binding replaced the character's own binding")
 first, surname = "Mapko Merged", nil
 Check(Key() == "Mapko Merged-Realm", "already merged names changed")
+Check(ns.GetLegacyCharacterProfileKey() == nil, "a name without surname reported a separate 6.5x key")
 local secret = {}
 issecretvalue = function(value) return value == secret end
 surname = secret
@@ -59,6 +71,7 @@ Check(Key() == nil, "secret surname became a profile key")
 ns.Client.HasCharacterSurnames = false
 first, surname = "Tester", "ForeignRealm"
 Check(Key() == "Tester-Realm", "ordinary client treated realm as surname")
+Check(ns.GetLegacyCharacterProfileKey() == nil, "ordinary client reported a separate 6.5x key")
 surname = secret
 Check(Key() == "Tester-Realm", "unused secret realm return blocked ordinary identity")
 GetRealmName = function() return nil end

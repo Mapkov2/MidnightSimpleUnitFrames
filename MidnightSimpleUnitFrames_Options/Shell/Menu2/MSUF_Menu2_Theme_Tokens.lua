@@ -184,7 +184,7 @@ auras3_custom 3 1
 auras3_styling 3 1
 auras3_filters 3 1
 opt_castbar 2 1
-swingtimers 1 1
+swingtimers 6 4
 opt_misc 4 2
 opt_colors 4 1
 icon_skins 5 4

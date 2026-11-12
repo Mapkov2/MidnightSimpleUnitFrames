@@ -1,5 +1,33 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-rc3 - 2026-11-12
+
+Changes since 7.0 RC2 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Bars options
+
+- **Live preview.** **Bars > Textures & Gradient** shows a health bar and a power bar at half value, drawn the same way as your frames. Bar texture, background, power texture, gradient and gloss changes show at once. Party and Raid show a group frame, and the power bar uses your current power type.
+<!-- msuf-menu-link: none -->
+
+### Menu
+
+- **Swing Timers icon.** The Swing Timers page has its own sword icon in the menu navigation.
+<!-- msuf-menu-link: none -->
+
+### Colors
+
+- **Resource opacity in the color picker.** Opening the power or power background color from a frame's card, the picker's opacity slider now edits that frame's own **Opacity > Resource Bar** value and names the frame.
+<!-- msuf-menu-link: none -->
+- **Dark mode bar color.** The slider now works with tinted dark colors, such as those in the Suite factory profiles: it shows the brightness you see and keeps the tint while you drag.
+<!-- msuf-menu-link: none -->
+
+### Fixes
+
+- **WoW Forever profiles.** A character with a surname now starts its first 7.0 login on the profile it used in 6.5 instead of Default.
+<!-- msuf-menu-link: none -->
+- **Color picker.** The brightness bar shows its handle again, and a color without a stored opacity no longer shows a 0% opacity row.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-rc2 - 2026-11-12
 
 Changes since 7.0 RC1 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.

@@ -184,6 +184,32 @@
       ]
     },
     {
+      "test": "tools/tests/bars_material_preview_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_dark_tone_slider_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/menu_colors_preview_regressions_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -440,6 +466,13 @@
         "Vanilla",
         "TBC",
         "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/forever_surname_upgrade_binding_smoke.lua",
+      "phase": "profiles",
+      "clients": [
         "Forever"
       ]
     },

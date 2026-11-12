@@ -249,7 +249,7 @@ do
         -- Startup may normalize a copy before adding its selected saved source.
         local legacy = MSUF.FirstLoad6.GetLegacyProfileDB()
         local charKey = MSUF.Require("MSUF_GetCharKey", "State/Defaults/MSUF_Defaults_Schema.lua")()
-        local name, source = MSUF.ResolveStartupProfile(store, legacy, charKey)
+        local name, source = MSUF.ResolveStartupProfile(store, legacy, charKey, MSUF.GetLegacyCharacterProfileKey())
         if not Plain(source) or MSUF.Util.IsSecret(source._msufDefaultsRevision) then return true end
         if field == "_rejectedProfileBackups" and Literal(source, {}) ~= Literal(profile, {}) then return true end
         local revision = tonumber(source._msufDefaultsRevision)

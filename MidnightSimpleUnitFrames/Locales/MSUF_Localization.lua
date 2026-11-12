@@ -63,10 +63,16 @@ end
 
 -- Pure startup choice shared with profile binding. Locale loading must use
 -- the same donor as a missing-profile repair without initializing runtime UI.
-function MSUF.ResolveStartupProfile(globalDB, legacyDB, charKey)
+-- legacyKey (optional) names the 6.5x binding of the same character; it is
+-- read only while the character has no binding of its own.
+function MSUF.ResolveStartupProfile(globalDB, legacyDB, charKey, legacyKey)
     local profiles = type(globalDB) == "table" and globalDB.profiles
     local characters = type(globalDB) == "table" and globalDB.char
     local character = type(characters) == "table" and characters[charKey]
+    if type(character) ~= "table" and type(characters) == "table"
+        and type(legacyKey) == "string" and legacyKey ~= charKey then
+        character = characters[legacyKey]
+    end
     local active = type(character) == "table" and character.activeProfile
     if type(active) ~= "string" or active == "" then active = nil end
     if type(profiles) ~= "table" or not next(profiles) then
@@ -110,6 +116,21 @@ function MSUF.GetCharacterProfileKey()
     return name .. "-" .. realm
 end
 
+-- MSUF 6.5x keyed every character as first name and realm. On Forever a
+-- surname character therefore finds its 6.5x binding under that shorter key.
+-- Returns nil when the 6.5x key equals the current key.
+function MSUF.GetLegacyCharacterProfileKey()
+    if not MSUF.Client.HasCharacterSurnames then return nil end
+    local name = UnitName("player")
+    local realm = GetRealmName()
+    if issecretvalue and (issecretvalue(name) or issecretvalue(realm)) then return nil end
+    if type(name) ~= "string" or name == "" then return nil end
+    if type(realm) ~= "string" then realm = "" end
+    local key = name .. "-" .. realm
+    if key == MSUF.GetCharacterProfileKey() then return nil end
+    return key
+end
+
 local function ActiveProfileLocale()
     local globalDB = rawget(_G, "MSUF_GlobalDB")
     local unitName = _G.UnitName
@@ -117,7 +138,8 @@ local function ActiveProfileLocale()
     if type(unitName) ~= "function" or type(getRealmName) ~= "function" then return nil end
     local key = MSUF.GetCharacterProfileKey()
     if not key then return nil end
-    local _, profile = MSUF.ResolveStartupProfile(globalDB, rawget(_G, "MSUF_DB"), key)
+    local _, profile = MSUF.ResolveStartupProfile(globalDB, rawget(_G, "MSUF_DB"), key,
+        MSUF.GetLegacyCharacterProfileKey())
     return LocaleFromDB(profile)
 end
 

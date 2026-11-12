@@ -7818,6 +7818,11 @@ L["Timer time X offset"] = "X-Versatz des Timer-Zeittexts"
 L["Timer time Y offset"] = "Y-Versatz des Timer-Zeittexts"
 
 L["Name font size"] = "Schriftgröße des Namens"
+L["Bar opacity"] = "Leistendeckkraft"
+L["Bar opacity (%s)"] = "Leistendeckkraft (%s)"
+L["Background opacity (%s)"] = "Hintergrunddeckkraft (%s)"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Derselbe Wert wie Vordergrund unter Deckkraft > Ressourcenleiste auf der Seite dieses Frames. Die Farbe selbst gilt für alle Frames."
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Derselbe Wert wie Hintergrund unter Deckkraft > Ressourcenleiste auf der Seite dieses Frames. Er wird mit der Deckkraft der gemeinsamen Hintergrundfarbe multipliziert."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

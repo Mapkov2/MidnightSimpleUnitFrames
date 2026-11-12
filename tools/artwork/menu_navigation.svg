@@ -34,6 +34,7 @@
     <g id="skin"><path d="m14 3 7 7-8 8-7-7 8-8ZM9 15l-5 5H2v-2l5-5m9-8 3 3"/></g>
     <g id="qol"><path d="M12 21 3 12a6 6 0 0 1 9-8 6 6 0 0 1 9 8l-9 9Z"/><path d="m8 11 3 3 5-6"/></g>
     <g id="planner"><path d="m11 5-3-1-6 2v15l6-2 7 2 7-2v-6M8 4v15m7-4v6"/><path d="M22 6c0 3.2-4 7-4 7s-4-3.8-4-7a4 4 0 0 1 8 0Z"/><circle cx="18" cy="6" r="0.8" fill="#fff" stroke="none"/></g>
+    <g id="sword"><path d="m21 3-4 .5L7.5 13l3.5 3.5L20.5 7 21 3ZM5 12.5l6.5 6.5M9 17.5l-4 4"/><circle cx="3.6" cy="21.4" r=".6"/></g>
     <g id="icon-skins"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m12 7 1.5 3.5L17 12l-3.5 1.5L12 17l-1.5-3.5L7 12l3.5-1.5L12 7Z"/></g>
   </defs>
   <g fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -41,6 +42,6 @@
     <use href="#fonts" y="24"/><use href="#clock" x="24" y="24"/><use href="#cast" x="48" y="24"/><use href="#aura" x="72" y="24"/><use href="#colors" x="96" y="24"/><use href="#layers" x="120" y="24"/><use href="#status" x="144" y="24"/><use href="#gameplay" x="168" y="24"/>
     <use href="#resources" y="48"/><use href="#group" x="24" y="48"/><use href="#grid" x="48" y="48"/><use href="#groupbars" x="72" y="48"/><use href="#settings" x="96" y="48"/><use href="#profiles" x="120" y="48"/><use href="#boss" x="144" y="48"/>
     <use href="#nameplates" y="72"/><use href="#clock" x="24" y="72"/><use href="#bell" x="48" y="72"/><use href="#hud" x="72" y="72"/><use href="#grid" x="96" y="72"/><use href="#minimap" x="120" y="72"/><use href="#meter" x="144" y="72"/><use href="#bag" x="168" y="72"/>
-    <use href="#chat" y="96"/><use href="#data" x="24" y="96"/><use href="#skin" x="48" y="96"/><use href="#qol" x="72" y="96"/><use href="#planner" x="96" y="96"/><use href="#icon-skins" x="120" y="96"/>
+    <use href="#chat" y="96"/><use href="#data" x="24" y="96"/><use href="#skin" x="48" y="96"/><use href="#qol" x="72" y="96"/><use href="#planner" x="96" y="96"/><use href="#icon-skins" x="120" y="96"/><use href="#sword" x="144" y="96"/>
   </g>
 </svg>

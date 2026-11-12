@@ -109,6 +109,14 @@ profiles and variant reference removals can remain pending across sessions.
 Once adopted, ordinary 7.0 resizing resumes. Fresh profiles and profile-string
 imports retain the existing resolution-transfer behavior.
 
+**Forever surname bindings.** 6.5x keyed every character as `Name-Realm`. 7.0
+keys a Forever character with a surname as `Name Surname-Realm`. On its first 7.0
+login such a character has no binding yet, so it copies the 6.5x binding (active
+profile, spec map, auto switch) before startup resolves its profile. Its own
+binding wins afterwards. The 6.5x entry stays unchanged for 6.5x and for other
+characters that shared it. A restored pre-7.0 safety copy is adopted the same way.
+`forever_surname_upgrade_binding_smoke.lua` covers this on Forever.
+
 The profile graph checks cover 6.50, 6.509 and 6.510 inputs on every supported
 client, plus an unprepared 7.0-to-6.510-to-7.0 return. Recovering valid remaining
 masks on that return does not make 6.510 a sparse reader and cannot undo values

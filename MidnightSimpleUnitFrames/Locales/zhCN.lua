@@ -7778,6 +7778,11 @@ L["Timer time X offset"] = "计时条时间文本 X 偏移"
 L["Timer time Y offset"] = "计时条时间文本 Y 偏移"
 
 L["Name font size"] = "名字字体大小"
+L["Bar opacity"] = "条不透明度"
+L["Bar opacity (%s)"] = "条不透明度（%s）"
+L["Background opacity (%s)"] = "背景不透明度（%s）"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "与此框体页面中“透明度 > 资源栏 > 前景”的数值相同。颜色本身由所有框体共享。"
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "与此框体页面中“透明度 > 资源栏 > 背景”的数值相同。它会与共享背景颜色的不透明度相乘。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

@@ -7648,6 +7648,11 @@ L["Timer time X offset"] = "Deslocamento X do texto de tempo do temporizador"
 L["Timer time Y offset"] = "Deslocamento Y do texto de tempo do temporizador"
 
 L["Name font size"] = "Tamanho da fonte do nome"
+L["Bar opacity"] = "Opacidade da barra"
+L["Bar opacity (%s)"] = "Opacidade da barra (%s)"
+L["Background opacity (%s)"] = "Opacidade do fundo (%s)"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Mesmo valor de Primeiro plano em Opacidade > Barra de recursos na página deste quadro. A cor em si é compartilhada por todos os quadros."
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Mesmo valor de Plano de fundo em Opacidade > Barra de recursos na página deste quadro. É multiplicado pela opacidade da cor de fundo compartilhada."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

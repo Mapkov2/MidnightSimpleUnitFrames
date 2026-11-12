@@ -7691,6 +7691,11 @@ L["Timer time X offset"] = "Desplazamiento X del texto de tiempo del temporizado
 L["Timer time Y offset"] = "Desplazamiento Y del texto de tiempo del temporizador"
 
 L["Name font size"] = "Tamaño de fuente del nombre"
+L["Bar opacity"] = "Opacidad de la barra"
+L["Bar opacity (%s)"] = "Opacidad de la barra (%s)"
+L["Background opacity (%s)"] = "Opacidad del fondo (%s)"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Mismo valor que Primer plano en Opacidad > Barra de recursos en la página de este marco. El color en sí lo comparten todos los marcos."
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Mismo valor que Fondo en Opacidad > Barra de recursos en la página de este marco. Se multiplica por la opacidad del color de fondo compartido."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

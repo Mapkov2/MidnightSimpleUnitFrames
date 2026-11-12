@@ -7713,6 +7713,11 @@ L["Timer time X offset"] = "Décalage X du texte de temps de la minuterie"
 L["Timer time Y offset"] = "Décalage Y du texte de temps de la minuterie"
 
 L["Name font size"] = "Taille de la police des noms"
+L["Bar opacity"] = "Opacité de la barre"
+L["Bar opacity (%s)"] = "Opacité de la barre (%s)"
+L["Background opacity (%s)"] = "Opacité de l’arrière-plan (%s)"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Même valeur que Premier plan dans Opacité > Barre de ressources sur la page de ce cadre. La couleur elle-même est partagée par tous les cadres."
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Même valeur qu’Arrière-plan dans Opacité > Barre de ressources sur la page de ce cadre. Elle se multiplie avec l’opacité de la couleur d’arrière-plan partagée."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

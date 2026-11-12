@@ -403,7 +403,8 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
         sectionId = "bars_textures", prepareShell = Rows.PrepareSection,
         title = "Textures & Gradient",
         defaultOpen = true,
-        height = function(lazyCtx) return (((lazyCtx and lazyCtx.width) or 720) < 560) and 766 or 448 end,
+        -- Includes the live material preview under the gloss rows (same source as the builder).
+        height = function(lazyCtx) return GP.TextureSectionHeight(lazyCtx and lazyCtx.width) end,
         build = BuildTextureSection,
     },
     {

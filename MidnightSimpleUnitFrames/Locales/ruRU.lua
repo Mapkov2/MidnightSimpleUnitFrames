@@ -7642,6 +7642,11 @@ L["Timer time X offset"] = "Смещение текста времени тай�
 L["Timer time Y offset"] = "Смещение текста времени таймера по Y"
 
 L["Name font size"] = "Размер шрифта имени"
+L["Bar opacity"] = "Непрозрачность полосы"
+L["Bar opacity (%s)"] = "Непрозрачность полосы (%s)"
+L["Background opacity (%s)"] = "Непрозрачность фона (%s)"
+L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "То же значение, что и «Передний план» в разделе «Прозрачность > Панель ресурсов» на странице этой рамки. Сам цвет общий для всех рамок."
+L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "То же значение, что и «Фон» в разделе «Прозрачность > Панель ресурсов» на странице этой рамки. Оно умножается на непрозрачность общего цвета фона."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end
