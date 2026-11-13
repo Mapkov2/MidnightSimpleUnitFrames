@@ -3,8 +3,8 @@
 ## Notes: Load-on-demand menu language packs for Midnight Simple Unit Frames.
 ## Author: Mapko
 ## Category: MSUF
-## Version: 7.0-rc4 [AllowLoadGameType standard]
-## Version: 7.0-rc4 [ExcludeLoadGameType standard]
+## Version: 7.0-rc5 [AllowLoadGameType standard]
+## Version: 7.0-rc5 [ExcludeLoadGameType standard]
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1

@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-rc5 - 2026-11-13
+
+Final 7.0 release candidate, published on the Beta channel for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Profiles
+
+- **Reload after import or switching profiles.** The confirmation button reloads the UI directly from the click. Included Blizzard Edit Mode settings are saved before the reload, and pending changes can be retried if the layout save fails.
+<!-- msuf-menu-link: none -->
+- **First update to 7.0.** **Open Profiles** opens the profile page even if the Options addon has not loaded yet. The reminder stays available if the page cannot open, and opening it keeps the current profile selected.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-rc4 - 2026-11-13
 
 Changes since 7.0 RC3 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.

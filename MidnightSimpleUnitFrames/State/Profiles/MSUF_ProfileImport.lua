@@ -671,10 +671,10 @@ end
 --- Import transaction, step 3 of 3: swap the staged candidate into the active
 --- profile. Everything that can reject a string or raise already ran on the
 --- private candidate, so this step has no failure return.
-local function ApplyImportedBlizzardLayout(payload)
+local function ApplyImportedBlizzardLayout(payload, commitImportedStaged)
     if MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
         and type(payload.general.blizzardEditModeSnapshot) == "table" then
-        MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+        MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot(commitImportedStaged)
     end
 end
 
@@ -714,7 +714,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_ProfileIO_PostImportApply_Auras("all", payload)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", payload)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", payload)
-        if not plan.skipNativeLayout then ApplyImportedBlizzardLayout(payload) end
+        if not plan.skipNativeLayout then ApplyImportedBlizzardLayout(payload, true) end
         ApplyProfileRuntime("PROFILE_IMPORT", true)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
         ImportTx.ReportKeptVariants(plan)
@@ -723,7 +723,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     MSUF_ProfileIO_PostImportApply_Auras(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
-    if not plan.skipNativeLayout then ApplyImportedBlizzardLayout(payload) end
+    if not plan.skipNativeLayout then ApplyImportedBlizzardLayout(payload, not plan.preserveIdentity) end
     ApplyProfileRuntime("PROFILE_IMPORT", true)
     MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
     MSUF.ProfileIOCompleteFirstLoadImport()
@@ -946,7 +946,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
-        ApplyImportedBlizzardLayout(plan.payload)
+        ApplyImportedBlizzardLayout(plan.payload, true)
         ApplyProfileRuntime("PROFILE_EXTERNAL_IMPORT", true)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_EXTERNAL_IMPORT", profileKey)
         MSUF_ProfileIO_ReportImportWarnings()

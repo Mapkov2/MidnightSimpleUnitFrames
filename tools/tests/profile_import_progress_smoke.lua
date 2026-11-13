@@ -339,11 +339,17 @@ assert(progress:IsShown() and progress.bar:GetValue() == 1)
 Until(function() return suiteCalls == 3 end)
 assert(not progress:IsShown() and import:IsEnabled(), "Suite job did not settle")
 -- The final phase can synchronously trigger Menu2 hide through a profile
--- lifecycle notification. The completed import must still offer a reload.
-local reloads, clickInProgress = 0, false
-local function Reload()
-    assert(clickInProgress, "profile import called protected ReloadUI outside the confirmation click")
-    reloads = reloads + 1
+-- lifecycle notification. The completed import must still explain the restart.
+local commitsToBlizzard, clickInProgress, staged = 0, false, core.Client.SupportsBlizzardEditMode
+local activeLayout, saveFails = "Imported layout", false
+local function CommitStaged(layoutName)
+    assert(clickInProgress, "profile import committed staged Blizzard settings outside the confirmation click")
+    assert(layoutName == "Imported layout", "profile import committed a different Blizzard layout")
+    if layoutName ~= activeLayout then return false, "layout_changed" end
+    if saveFails then return false end
+    commitsToBlizzard = commitsToBlizzard + 1
+    staged = false
+    return true
 end
 local reloadPrompt
 M.ShowPrompt = function(id, spec)
@@ -351,10 +357,22 @@ M.ShowPrompt = function(id, spec)
     reloadPrompt = ShowPrompt(id, spec)
     return reloadPrompt
 end
-env.ReloadUI = Reload
+env.RELOADUI, env.OKAY = "Reload UI", "Okay"
+local reloads = 0
+env.ReloadUI = function()
+    assert(clickInProgress and reloadPrompt:IsShown(), "ReloadUI must be called by the click before the dialog closes")
+    assert(not staged, "ReloadUI called with unsaved imported settings")
+    reloads = reloads + 1
+end
+local function ClickPrompt(index)
+    clickInProgress = true
+    reloadPrompt._msufPromptButtons[index]:Click()
+    clickInProgress = false
+end
 if core.Client.SupportsBlizzardEditMode then
-    env.MSUF_BlizzardEditMode_ReloadUI = Reload
-    core.PublicGlobals.MSUF_BlizzardEditMode_ReloadUI = Reload
+    core.PublicGlobals.MSUF_BlizzardEditMode_StagedLayoutName = function() return staged and activeLayout end
+    env.MSUF_BlizzardEditMode_CommitStaged = CommitStaged
+    core.PublicGlobals.MSUF_BlizzardEditMode_CommitStaged = CommitStaged
 end
 local commits = 0
 core.SuiteLink.Profiles = function()
@@ -383,18 +401,41 @@ local name = Control("import.new.profile.name")
 Text(name, "Imported Suite")
 assert(import:Click() == true)
 Until(function() return not progress:IsShown() end)
-assert(commits == 1 and reloads == 0 and M.profileImportNewName == "", "quiescing during commit swallowed or repeated completion")
-assert(reloadPrompt and reloadPrompt:IsShown(), "completed named Suite import did not show reload confirmation")
+assert(commits == 1 and commitsToBlizzard == 0 and M.profileImportNewName == "", "quiescing during commit swallowed or repeated completion")
+assert(reloadPrompt and reloadPrompt:IsShown(), "completed named Suite import did not show restart instructions")
+assert(reloads == 0, "import reloaded without a click")
+if staged then
+    assert(reloadPrompt._msufPromptButtons[1]:GetText() == "Apply", "reload was offered before staging was committed")
+    mw.world.widgets:EnterCombat()
+    ClickPrompt(1)
+    assert(commitsToBlizzard == 0 and reloadPrompt:IsShown(), "combat committed staged settings or discarded the confirmation")
+    mw.world.widgets:LeaveCombat()
+    activeLayout = "Other layout"
+    ClickPrompt(1)
+    local recovery = reloadPrompt._msufPromptText:GetText()
+    assert(commitsToBlizzard == 0 and recovery:find("Switch back", 1, true) and recovery:find("Imported layout", 1, true),
+        "layout switch changed the consent target or failed to explain how to recover")
+    activeLayout, saveFails = "Imported layout", true
+    ClickPrompt(1)
+    assert(reloads == 0 and commitsToBlizzard == 0 and staged and reloadPrompt:IsShown(),
+        "failed save did not keep the imported settings and confirmation for retry")
+    saveFails = false
+    ClickPrompt(1)
+    assert(reloads == 0 and commitsToBlizzard == 1 and reloadPrompt:IsShown(),
+        "Apply did not commit once before offering reload")
+end
+local reloadLabel = env.RELOADUI or "Reload"
+assert(reloadPrompt._msufPromptButtons[1]:GetText() == reloadLabel, "the confirmation does not offer a one-click reload")
+local previousCommitCount = commitsToBlizzard
 mw.world.widgets:EnterCombat()
-clickInProgress = true
-reloadPrompt._msufPromptButtons[1]:Click()
-clickInProgress = false
-assert(reloads == 0 and reloadPrompt:IsShown(), "combat ran the reload or discarded the confirmation")
+ClickPrompt(1)
+assert(reloads == 0 and reloadPrompt:IsShown(), "reload was attempted in combat")
 mw.world.widgets:LeaveCombat()
-clickInProgress = true
-reloadPrompt._msufPromptButtons[1]:Click()
-clickInProgress = false
-assert(reloads == 1 and not reloadPrompt:IsShown(), "confirmation did not reload once and dismiss the prompt after combat")
+ClickPrompt(1)
+assert(reloads == 1 and commitsToBlizzard == previousCommitCount and reloadPrompt:IsShown(),
+    "reload should perform no save work and remain retryable if the native call returns")
+ClickPrompt(2)
+assert(reloads == 1 and not reloadPrompt:IsShown(), "Not now triggered a reload or left the prompt open")
 assert(M.Open("profiles") ~= false)
 Drain()
 

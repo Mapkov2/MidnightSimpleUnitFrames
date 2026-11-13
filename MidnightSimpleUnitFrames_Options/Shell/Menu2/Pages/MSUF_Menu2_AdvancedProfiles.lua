@@ -489,52 +489,46 @@ function ProfilePrompts.ConfirmDelete(name, after)
         end,
     })
 end
--- An import can stage Blizzard Edit Mode settings (Micro Menu, Bags) that only
--- the Edit Mode adapter's reload merges and saves (MSUF_EditMode_Blizzard.lua).
-local function ReloadImportedUI()
-    if MSUF.Client.SupportsBlizzardEditMode then
-        return MSUF.Require("MSUF_BlizzardEditMode_ReloadUI", FILE)()
-    end
-    ReloadUI()
+local function ShowProfileRestartPrompt(id, text)
+    M.ShowPrompt(id, {
+        text = text .. "\n\n" .. M.Tr("Requires a UI reload."),
+        accept = RELOADUI or M.Tr("Reload"), cancel = M.Tr("Not now"),
+        reload = true,
+    })
 end
--- A reload cannot run in combat: the message tells the player to /reload afterwards.
-local function ReloadBlockedInCombat(message, ...)
-    if not (InCombatLockdown and InCombatLockdown()) then return false end
-    PrintProfileMessage("|cffffd700", message, ...)
-    return true
-end
-local function ShowImportReloadPrompt(profileName)
-    if type(ReloadUI) ~= "function" then
-        PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
+local function ShowImportReloadPrompt(profileName, expectedLayout, failure)
+    local text = profileName
+        and M.Format("Imported profile '%s'.", profileName)
+        or M.Tr("Profile imported.")
+    local id = "MSUF2_IMPORT_RELOAD_PROMPT"
+    local layoutName = expectedLayout or (MSUF.Client.SupportsBlizzardEditMode
+        and MSUF.Require("MSUF_BlizzardEditMode_StagedLayoutName", FILE)())
+    if not layoutName then
+        ShowProfileRestartPrompt(id, text)
         return
     end
-    -- The last import phase can run from a timer. Reload requires a player click.
-    local text = profileName
-        and M.Format("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?", profileName)
-        or M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?")
-    M.ShowPrompt("MSUF2_IMPORT_RELOAD_PROMPT", {
-        text = text,
-        accept = RELOAD or M.Tr("Reload"),
-        cancel = CANCEL or M.Tr("Not now"),
-        owned = true,
+    local instructions = failure == "layout_changed"
+        and M.Format("Switch back to Blizzard Edit Mode layout '%s', then try again.", layoutName)
+        or M.Tr("Apply the pending Blizzard Edit Mode settings before restarting the UI.") .. "\n" .. layoutName
+    M.ShowPrompt(id, {
+        text = text .. "\n\n" .. instructions,
+        accept = M.Tr("Apply"), cancel = M.Tr("Not now"), owned = true,
         canAnswer = function() return not MSUF.Util.InCombat() end,
-        onAccept = ReloadImportedUI,
+        onAccept = function()
+            local saved, reason = MSUF.Require("MSUF_BlizzardEditMode_CommitStaged", FILE)(layoutName)
+            if saved then
+                ShowProfileRestartPrompt(id, text)
+            else
+                ShowImportReloadPrompt(profileName, layoutName, reason)
+            end
+        end,
     })
 end
 -- A profile switch swaps the whole DB under a live UI. Frames re-apply, but anything baked
--- at load time (group headers, module gating) only settles after a reload, so offer one.
+-- at load time (group headers, module gating) only settles after a restart.
 local function ShowProfileSwitchReloadPrompt(profileName)
     local name = tostring(profileName or ActiveProfileName())
-    if ReloadBlockedInCombat("Switched to profile '%s'. Reload after combat with /reload.", name) then return end
-    M.ShowPrompt("MSUF2_PROFILE_SWITCH_RELOAD", {
-        text = string.format(M.Tr("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"), name),
-        accept = YES or M.Tr("Yes"),
-        cancel = NO or M.Tr("No"),
-        onAccept = function()
-            if ReloadBlockedInCombat("Can't reload the UI in combat. Leave combat, then type /reload.") then return end
-            ReloadUI()
-        end,
-    })
+    ShowProfileRestartPrompt("MSUF2_PROFILE_SWITCH_RELOAD", M.Format("Switched to profile '%s'.", name))
 end
 local function ProfileExists(name)
     local gdb = MSUF_GlobalDB

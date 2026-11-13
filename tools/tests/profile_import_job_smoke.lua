@@ -68,8 +68,9 @@ do
     source.env.MSUF_DB.general.blizzardEditModeSnapshot = C.Copy(layout)
     assert(send.MSUF_CopyProfile(sourceActive, "Stored layout"))
     local native = { arrangement = "local" }
-    local applied = 0
-    receive.MSUF_BlizzardEditMode_ApplyProfileSnapshot = function()
+    local applied, commitImportedStaged = 0, nil
+    receive.MSUF_BlizzardEditMode_ApplyProfileSnapshot = function(commit)
+        commitImportedStaged = commit
         applied = applied + 1
         native = receiver.env.MSUF_DB.general.blizzardEditModeSnapshot
     end
@@ -102,6 +103,7 @@ do
             assert(receiver.core.ProfileFields.Equal(stored, expected), "external import ignored the layout preference")
             local wantApply = include and name == active and receiver.core.Client.SupportsBlizzardEditMode
             assert(applied == before + (wantApply and 1 or 0), "external import applied the wrong profile's layout")
+            if wantApply then assert(commitImportedStaged == true, "active external import did not commit its own native settings") end
             if not include then assert(native.arrangement == "local", "disabled import changed the active native layout") end
         end
     end
@@ -147,6 +149,9 @@ do
     assert(workbench.CommitReview(assert(workbench.ReviewImport(text))))
     assert(applied == previousCalls + (receiver.core.Client.SupportsBlizzardEditMode and 1 or 0),
         "a selected changed layout was not applied")
+    if receiver.core.Client.SupportsBlizzardEditMode then
+        assert(not commitImportedStaged, "Workbench changed the existing native restore mode")
+    end
 
     receiver.env.MSUF_DB.general.blizzardEditModeSnapshot.bags.x = 999
     previousCalls = applied

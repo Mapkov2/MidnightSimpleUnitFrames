@@ -431,6 +431,8 @@ end
 --- YES / NO), onAccept(text), onCancel(), showAlert, single (one button),
 --- hideOnEscape (false: Escape does not answer), owned (always the owned
 --- frame), input = { maxLetters = n }, canAnswer() (optional answer gate).
+--- reload uses an owned frame with a dedicated ReloadUI accept click.
+--- An owned prompt with keepOpenOnAccept lets its accept handler close it.
 --- style (optional): panel(parent) builds the owned frame, text(fontString)
 --- styles its message, priority(frame) sets its strata and level on every
 --- show, raise(dialog) lifts a generic dialog.
@@ -466,9 +468,15 @@ local function PromptButtonClick(button)
     local frame = button:GetParent()
     local spec = frame._msufPromptSpec
     if spec.canAnswer and not spec.canAnswer() then return end
-    frame:Hide()
-    local handler = spec[button._msufPromptField]
+    local field = button._msufPromptField
+    if field ~= "onAccept" or not spec.keepOpenOnAccept then frame:Hide() end
+    local handler = spec[field]
     if handler then handler() end
+end
+local function PromptReloadClick()
+    -- Forever can block ReloadUI if the click has already closed the dialog
+    -- or applied settings. Keep this click dedicated to the reload.
+    if not InCombatLockdown() then ReloadUI() end
 end
 local function PromptKeyDown(frame, key)
     if InCombatLockdown() then return end
@@ -563,6 +571,7 @@ local function LayoutPromptFrame(frame, spec)
     text:SetWidth(width - inset - 18)
     text:SetText(spec.text)
     accept:SetText(spec.accept)
+    accept:SetScript("OnClick", spec.reload and PromptReloadClick or PromptButtonClick)
     cancel:SetText(spec.cancel or "")
     cancel:SetShown(not spec.single)
     accept:ClearAllPoints()
@@ -593,7 +602,9 @@ local function ShowFramePrompt(key, spec, style)
 end
 --- Shows the prompt for `key` (see the spec above) and returns its frame.
 function UI.ShowPrompt(key, spec, style)
-    if spec.single or spec.hideOnEscape == false or spec.owned then return ShowFramePrompt(key, spec, style) end
+    if spec.reload or spec.single or spec.hideOnEscape == false or spec.owned then
+        return ShowFramePrompt(key, spec, style)
+    end
     return ShowGenericPrompt(key, spec, style)
 end
 --- Hides the prompt for `key` without answering it.

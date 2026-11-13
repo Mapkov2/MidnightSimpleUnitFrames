@@ -2129,6 +2129,17 @@
       ]
     },
     {
+      "test": "tools/tests/profile_upgrade_prompt_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/menu_navigation_cost_smoke.lua",
       "phase": "menu",
       "arguments": [

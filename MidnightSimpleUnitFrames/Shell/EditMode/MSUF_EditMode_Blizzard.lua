@@ -118,11 +118,11 @@ end
 
 --- The only C_EditMode.SaveLayouts call. Blizzard may answer it with
 --- EDIT_MODE_LAYOUTS_UPDATED inside the call (a synchronous event), so it runs
---- out of combat only, and staged Micro Menu and Bags values (StagedRows) never
---- sit in the saved table except in ReloadWithStaged, right before ReloadUI.
+--- out of combat only. Micro Menu and Bags values stay staged until the
+--- player applies the change or explicitly imports the layout.
 --- Callers: EnsureEditableLayout (a copy of the active preset), MutateSettings
 --- and Restore (an anchor or a non-staged setting that changed),
---- ApplyProfileSnapshot (anchors and non-staged settings) and ReloadWithStaged.
+--- ApplyProfileSnapshot (anchors and non-staged settings) and CommitStaged.
 local function SaveLayouts(api, info)
     if InCombat() then return false end
     NoteOwnLayoutWrite()
@@ -452,8 +452,8 @@ end
 --- (MSUF_GlobalDB.char[character].blizzardEditModeStaged[layout name]), never in
 --- the layout table MSUF saves: Blizzard answers SaveLayouts with
 --- EDIT_MODE_LAYOUTS_UPDATED, a synchronous event whose handler also re-lays
---- the action bars. Only the Reload click merges them, saves once and reloads
---- (ReloadWithStaged); until then they stay pending, also in later sessions.
+--- the action bars. The confirmation merges and saves them before the player
+--- restarts the UI. Until then they stay pending, also in later sessions.
 local STAGED_KEYS = { [systemEnum.MicroMenu or -3] = "micromenu", [systemEnum.Bags or -5] = "bags" }
 
 --- A staged system's key and its live (field-free) setting; nil otherwise.
@@ -659,6 +659,14 @@ end
 local RELOAD_PROMPT = "MSUF_BLIZZARD_EDITMODE_RELOAD"
 local reloadLabels = {}
 local StoreSnapshot
+local function StagedLayoutName()
+    ValidateLayoutCache()
+    for systemId in pairs(STAGED_KEYS) do
+        local rows, _, _, _, layoutName = StagedRows(systemId)
+        if rows and next(rows) then return layoutName end
+    end
+    return false
+end
 
 --- True when a change gives the saved entry a new value.
 local function Differs(entry, changes)
@@ -695,39 +703,73 @@ local function SplitStaged(systemId, entry, changes)
     return rest, changed == true
 end
 
---- The Reload click (this offer and the profile import's), out of combat:
---- merge the staged rows into the active layout, save it once when anything
---- was staged, reload. False in combat.
-local function ReloadWithStaged()
+--- Save staged settings for this layout. An import only commits the settings
+--- it supplied, leaving other pending edits for their own confirmation.
+local function CommitStaged(expectedLayout, importedSettings)
     if InCombat() then return false end
-    local api, info = Blizzard(), ActiveLayout()
-    local merged
-    if api and info then
-        for systemId in pairs(STAGED_KEYS) do
-            local rows = StagedRows(systemId)
-            local entry = rows and next(rows) and SystemEntry(systemId)
-            if entry then
-                ApplySettingsTo(entry, rows)
-                for settingId in pairs(rows) do rows[settingId] = nil end
-                PruneStaged(systemId)
-                StoreSnapshot(systemId, entry)
-                merged = true
+    ValidateLayoutCache()
+    local api = Blizzard()
+    local info, layout = ActiveLayout()
+    if not layout or layout.layoutName ~= expectedLayout then return false, "layout_changed" end
+    local entries = {}
+    for systemId in pairs(STAGED_KEYS) do
+        local rows, layoutNode, key, root, name = StagedRows(systemId)
+        local imported = importedSettings and importedSettings[systemId]
+        if rows and (not importedSettings or imported) then
+            local values = {}
+            for settingId, value in pairs(rows) do
+                if not imported or value == tonumber(imported[settingId]) then values[settingId] = value end
+            end
+            if next(values) then
+                local entry = SystemEntry(systemId)
+                if not (api and info and entry) then return false end
+                entries[systemId] = { entry = entry, values = values, rows = rows, original = entry.settings,
+                    layoutNode = layoutNode, key = key, root = root, name = name }
             end
         end
-        if merged then SaveLayouts(api, info) end
     end
-    local reload = ReloadUI
-    if reload then reload() end
+    if not next(entries) then return true end
+    for _, pending in pairs(entries) do
+        pending.entry.settings = CopyTable(pending.original, 0)
+        ApplySettingsTo(pending.entry, pending.values)
+    end
+    local pendingSaves, pendingExpiry = ownSavesPending, ownSaveExpiry
+    local function RestoreUncommitted()
+        for _, pending in pairs(entries) do pending.entry.settings = pending.original end
+        ownSavesPending, ownSaveExpiry = pendingSaves, pendingExpiry
+    end
+    local ok, saved = MSUF.RunLabeledStep("save staged Blizzard Edit Mode settings", SaveLayouts, function(succeeded)
+        if not succeeded then RestoreUncommitted() end
+    end, api, info)
+    if not ok then return false end
+    if not saved then RestoreUncommitted() return false end
+    for systemId, pending in pairs(entries) do
+        -- SaveLayouts can dispatch EDIT_MODE_LAYOUTS_UPDATED synchronously.
+        if pending.layoutNode[pending.key] == pending.rows then
+            for settingId, value in pairs(pending.values) do
+                if pending.rows[settingId] == value then pending.rows[settingId] = nil end
+            end
+            if not next(pending.rows) then pending.layoutNode[pending.key] = nil end
+            if not next(pending.layoutNode) and pending.root[pending.name] == pending.layoutNode then
+                pending.root[pending.name] = nil
+            end
+        end
+        StoreSnapshot(systemId, pending.entry)
+    end
     return true
 end
 
---- Offers the Reload click while anything is staged (a new staged value, or
+--- Offers Apply while anything is staged (a new staged value, or
 --- the start of an Edit Mode visit) and withdraws it once nothing is.
 local function OfferReload(offer)
     local names = {}
+    local layoutName
     for systemId, key in pairs(STAGED_KEYS) do
-        local rows = StagedRows(systemId)
-        if rows and next(rows) then names[#names + 1] = reloadLabels[systemId] or key end
+        local rows, _, _, _, name = StagedRows(systemId)
+        if rows and next(rows) then
+            names[#names + 1] = reloadLabels[systemId] or key
+            layoutName = name
+        end
     end
     local ui = MSUF.UI
     if #names == 0 then
@@ -740,10 +782,28 @@ local function OfferReload(offer)
     table.sort(names)
     local translate = MSUF.Translate or tostring
     ui.ShowPrompt(RELOAD_PROMPT, {
-        text = string.format(translate("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
-            table.concat(names, ", ")),
-        accept = translate("Reload"), cancel = translate("Not now"), owned = true,
-        canAnswer = function() return not InCombat() end, onAccept = ReloadWithStaged,
+        text = layoutName .. "\n" .. table.concat(names, ", ") .. "\n\n" .. translate("Requires a UI reload."),
+        accept = translate("Apply"), cancel = translate("Not now"), owned = true,
+        canAnswer = function() return not InCombat() end,
+        onAccept = function()
+            local saved, reason = CommitStaged(layoutName)
+            if not saved then
+                if reason == "layout_changed" then
+                    ui.ShowPrompt(RELOAD_PROMPT, {
+                        text = string.format(translate("Switch back to Blizzard Edit Mode layout '%s', then try again."), layoutName),
+                        accept = OKAY or translate("Okay"), single = true,
+                    })
+                else
+                    OfferReload(true)
+                end
+                return
+            end
+            ui.ShowPrompt(RELOAD_PROMPT, {
+                text = translate("Requires a UI reload."),
+                accept = RELOADUI or translate("Reload"), cancel = translate("Not now"),
+                reload = true,
+            })
+        end,
     })
 end
 
@@ -761,7 +821,7 @@ if IS_FOREVER then SNAPSHOT_KEYS[systemEnum.MicroMenu or -3] = nil end
 --- (general.blizzardEditModeSnapshot), so a profile export carries the
 --- Blizzard Edit Mode arrangement and a profile apply can restore it. It holds
 --- committed values only: staged Micro Menu and Bags values enter it when the
---- Reload commits them, and an applied import is rewritten from the committed
+--- confirmation commits them, and an applied import is rewritten from the committed
 --- layout, so an export before that Reload carries the committed state and
 --- never the pending one.
 StoreSnapshot = function(systemId, entry)
@@ -924,16 +984,16 @@ local function Move(systemId, request)
         state.relativePoint or state.point, x, y)
 end
 
-local snapshotRetry
+local snapshotRetry, snapshotRetryRequest
 
---- Explicit restore and opt-in profile import: push the stored snapshot back
---- into the active saved layout in ONE SaveLayouts, then apply the visuals
---- directly. A plain profile switch, reset or rebind never calls this: the
---- stored snapshot can be older than the live Blizzard layout. Presets stay
+--- Explicit restore and opt-in profile import: save the stored snapshot to
+--- the active layout, then apply the visuals directly. A plain profile switch,
+--- reset or rebind never calls this: its snapshot can be older than the live
+--- Blizzard layout. Presets stay
 --- untouched — the user creates an editable layout through the Edit Mode
 --- dialog first. In combat this arms a one-shot PLAYER_REGEN_ENABLED retry
 --- (no recurring cost).
-local function ApplyProfileSnapshot()
+local function ApplyProfileSnapshot(commitImportedStaged)
     if not Enabled() or EditModeRuleBlocked() then return false end
     local general = General()
     local snapshot = general and general.blizzardEditModeSnapshot
@@ -943,10 +1003,20 @@ local function ApplyProfileSnapshot()
             snapshotRetry = CreateFrame("Frame")
             snapshotRetry:SetScript("OnEvent", function(self)
                 self:UnregisterAllEvents()
-                ApplyProfileSnapshot()
+                local pending = snapshotRetryRequest
+                snapshotRetryRequest = nil
+                local current = General()
+                if current and current.blizzardEditModeSnapshot == pending.snapshot
+                    and MSUF.ProfileRuntime.IsCurrentIdentity(pending.identity) then
+                    ApplyProfileSnapshot(pending.commitImportedStaged)
+                end
             end)
         end
-        if snapshotRetry then snapshotRetry:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        if snapshotRetry then
+            snapshotRetryRequest = { snapshot = snapshot, identity = MSUF.ProfileRuntime.Identity(),
+                commitImportedStaged = commitImportedStaged }
+            snapshotRetry:RegisterEvent("PLAYER_REGEN_ENABLED")
+        end
         return false
     end
     local api = Blizzard()
@@ -955,7 +1025,8 @@ local function ApplyProfileSnapshot()
     if not OwnSaveInFlight() then InvalidateLayoutCache() end
     local info, layout = ActiveLayout()
     if not (api and layout) then return false end
-    local applied = {}
+    local applied, importedSettings = {}, nil
+    local layoutName = layout.layoutName
     for systemId, key in pairs(SNAPSHOT_KEYS) do
         local state = snapshot[key]
         if type(state) == "table" and type(state.point) == "string"
@@ -972,6 +1043,10 @@ local function ApplyProfileSnapshot()
                     anchor.offsetY = tonumber(state.y) or 0
                     local rest = SplitStaged(systemId, entry, state.settings)
                     if type(rest) == "table" then ApplySettingsTo(entry, rest) end
+                    if commitImportedStaged and STAGED_KEYS[systemId] and type(state.settings) == "table" then
+                        importedSettings = importedSettings or {}
+                        importedSettings[systemId] = state.settings
+                    end
                     applied[#applied + 1] = { systemId, entry }
                     break
                 end
@@ -989,6 +1064,11 @@ local function ApplyProfileSnapshot()
             tonumber(anchor.offsetX) or 0, tonumber(anchor.offsetY) or 0)
         ApplyVisual(systemId, entry)
         StoreSnapshot(systemId, entry)
+    end
+    -- Finish the explicitly imported settings before offering a reload click.
+    -- On a save failure their staged values stay available to apply again.
+    if importedSettings and General() == general and CommitStaged(layoutName, importedSettings) then
+        OfferReload(false)
     end
     --- No Blizzard Edit Mode panel toggle here: opening and closing it from
     --- addon code runs Blizzard's Edit Mode enter/exit (aura provider switch,
@@ -1358,8 +1438,8 @@ Export("MSUF_BlizzardEditMode_SetEnabled", SetEnabled)
 --- Field probe: /run print(MSUF_BlizzardEditMode_EnsureLayout())
 Export("MSUF_BlizzardEditMode_EnsureLayout", function() return EnsureEditableLayout() end)
 Export("MSUF_BlizzardEditMode_ApplyProfileSnapshot", ApplyProfileSnapshot)
---- The profile import's Reload (Menu2 profiles page) takes the same path.
-Export("MSUF_BlizzardEditMode_ReloadUI", ReloadWithStaged)
+Export("MSUF_BlizzardEditMode_StagedLayoutName", StagedLayoutName)
+Export("MSUF_BlizzardEditMode_CommitStaged", CommitStaged)
 --- Field probe: /run print(MSUF_BlizzardEditMode_Debug())
 Export("MSUF_BlizzardEditMode_Debug", function()
     local parts = {}

@@ -421,9 +421,17 @@ local function ProfileCheckText(liveDB)
     return text
 end
 
+local function FinishOpeningProfiles()
+    local menu = MSUF.MSUF2
+    if menu.activeKey ~= "profiles" or not menu.frame or not menu.frame:IsShown() then return end
+    local entry = menu.cache.profiles
+    if not (entry and entry.wrapper:IsShown() and MSUF.UI.IsPromptShown(PROFILE_CHECK_KEY)) then return end
+    AnswerProfileCheck("opened")
+    MSUF.UI.HidePrompt(PROFILE_CHECK_KEY)
+end
+
 local function OpenProfilesPage()
-    local open = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
-    if open then open("profiles") end
+    MSUF.OpenOptionsFromLauncher("profiles", FinishOpeningProfiles)
 end
 
 -- force (true only) shows it again for testing: /run MSUF.FirstLoad6.ShowProfileCheck(true)
@@ -443,10 +451,8 @@ local function ShowProfileCheck(force)
         showAlert = true,
         hideOnEscape = false,
         canAnswer = function() return not MSUF.Util.InCombat() end,
-        onAccept = function()
-            AnswerProfileCheck("opened")
-            OpenProfilesPage()
-        end,
+        keepOpenOnAccept = true,
+        onAccept = OpenProfilesPage,
         onCancel = function() AnswerProfileCheck("confirmed") end,
     })
     return true

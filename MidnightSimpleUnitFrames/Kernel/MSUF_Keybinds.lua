@@ -155,11 +155,11 @@ local function MSUF_SyncCurrentBindingsIntoGlobalStore()
 end
 
 local optionsOpenPending = false
-local optionsOpenPage
+local optionsOpenPage, optionsAfterOpen
 local function OpenLoadedOptionsFromLauncher()
     optionsOpenPending = false
-    local pageKey = optionsOpenPage
-    optionsOpenPage = nil
+    local pageKey, afterOpen = optionsOpenPage, optionsAfterOpen
+    optionsOpenPage, optionsAfterOpen = nil, nil
     -- Combat can start between the demand load and the next-frame open.
     if _G.InCombatLockdown() then
         local showLock = MSUF.PublicGlobals.MSUF_ShowConfigCombatLockMessage
@@ -167,23 +167,25 @@ local function OpenLoadedOptionsFromLauncher()
         return false
     end
     local open = MSUF.PublicGlobals.MSUF_OpenStandaloneOptionsWindow
-    if type(open) == "function" then return open(pageKey) end
-    return false
+    if type(open) ~= "function" then return false end
+    local result = open(pageKey)
+    if afterOpen and result ~= false then afterOpen() end
+    return result
 end
 
 -- Game Menu and keybind share one cold-open boundary. Loading Options and
 -- building its skinned window must not consume the same script time budget.
 -- Blizzard_FrameXML/Mainline/AlertFrames.lua (upstream/forever) also uses
 -- C_Timer.After(0, ...) for work deferred until the first rendered frame.
-function MSUF.OpenOptionsFromLauncher(pageKey)
-    optionsOpenPage = pageKey
+function MSUF.OpenOptionsFromLauncher(pageKey, afterOpen)
+    optionsOpenPage, optionsAfterOpen = pageKey, afterOpen
     if optionsOpenPending then return true end
     local isLoaded = MSUF.PublicGlobals.MSUF_IsOptionsLoaded
     local ensureLoaded = MSUF.PublicGlobals.MSUF_EnsureOptionsLoaded
     if type(isLoaded) == "function" and isLoaded() ~= true
         and type(ensureLoaded) == "function" then
         if ensureLoaded("MSUF_OpenStandaloneOptionsWindow") ~= true then
-            optionsOpenPage = nil
+            optionsOpenPage, optionsAfterOpen = nil, nil
             return false
         end
         local timer = _G.C_Timer
