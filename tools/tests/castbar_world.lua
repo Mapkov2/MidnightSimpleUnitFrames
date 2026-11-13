@@ -272,9 +272,6 @@ function World.New(root, backend, options)
     -- real namespace contract and may anchor to a frame a smoke supplies.
     ns.UF = { frames = {} }
     function ns.UF.GetFrame(unit) return ns.UF.frames[unit] end
-    -- Castbars/MSUF_CastbarFrames.lua is not loaded: World:Driver and
-    -- World:PoolCastbar supply the regions its builder makes.
-    _G.MSUF_BuildCastbarFrameElements = function() end
     -- The real EventBus loads in TOC order; busRefuses still exercises the
     -- existing native-event subscription refusal path in pool budget smokes.
     if options.setup then options.setup(ns, world) end
@@ -314,7 +311,12 @@ function World.New(root, backend, options)
                     return register(...)
                 end)
             end
-            if name == "MSUF_Castbars_PublicAPI.lua" then Fixture.Seed(ns) end
+            if name == "MSUF_Castbars_PublicAPI.lua" then
+                Fixture.Seed(ns)
+                -- World:Driver and World:PoolCastbar supply the regions that
+                -- Castbars/MSUF_CastbarFrames.lua would build in the client.
+                ns.Castbars.Frames.BuildCastbarFrameElements = ns.Castbars.Frames.BuildCastbarFrameElements or NoOp
+            end
             if ns.Castbars then Fixture.Bind(ns) end
             loaded[name] = true
         end

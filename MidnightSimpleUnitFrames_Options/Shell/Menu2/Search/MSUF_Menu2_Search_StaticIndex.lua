@@ -24,7 +24,7 @@ local StaticIndex = Search.StaticIndex or {}
 Search.StaticIndex = StaticIndex
 
 local CONTROL_TOKEN_LIMIT = 36
-local COLUMN_BLOCK_SIZE = 1024
+local COLUMN_BLOCK_SIZE = 512
 -- Includes the retained source blob, columns and localized strings, after full GC.
 -- Fuzzy/query caches belong to IndexQuery and are discarded on menu quiescence.
 StaticIndex.HEAP_BUDGET_KIB = 5632
@@ -36,6 +36,14 @@ local FIELD = {
 }
 local PAGE_FIELD = { title = "title", group = "group", titleNorm = "titleNorm", groupNorm = "groupNorm", key = "key", pageKey = "key" }
 
+local function RowIdentity(store, id)
+    local offsets = store.columns[5]
+    if not store.identities then return offsets[id] end
+    local i = (id - 1) * 2 + 1
+    local a, b, c, d = offsets:byte(i, i + 3)
+    return store.identities:sub(a + b * 256, c + d * 256 - 1)
+end
+
 -- A row is just its numeric ID. All immutable fields live in dense columns;
 -- page metadata is shared through the per-page hints. Mutable ranking/fuzzy fields stay on the row.
 local function ColumnField(row, key)
@@ -46,6 +54,7 @@ local function ColumnField(row, key)
     if key == "sourceLabelNorm" then return store.columns[1][id][3] end
     if key == "hintNorm" then return store.columns[3][id][2] end
     if key == "label" then return store.columns[1][id][1] end
+    if key == "searchIdentity" then return RowIdentity(store, id) end
     if key == "controlId" then return StaticIndex.ControlId(row) end
     local column = FIELD[key]
     if column then
@@ -201,7 +210,7 @@ function StaticIndex.ControlId(row)
     local store = getmetatable(row)
     local id = row[1] - store.offset
     if store.invalidControls[id] then return nil end
-    local encoded = store.columns[5][id]:match("^id\031[^\031]+\031([^\031]+)$")
+    local encoded = RowIdentity(store, id):match("^id\031[^\031]+\031([^\031]+)$")
     return DecodeIdentityPart(encoded)
 end
 
@@ -333,6 +342,23 @@ local function ContextIdentity(decoder, value)
     return ContextValue(decoder, tonumber(id)) .. suffix
 end
 
+-- Each block retains one string instead of one interned string per control.
+-- The compact offsets are resolved only when search or navigation uses an ID.
+local function FinishIdentityColumn(store)
+    if not store then return end
+    local identities = store.columns[5]
+    local joined = table.concat(identities)
+    if #joined >= 65535 then return end
+    local offset = 1
+    for i = 1, #identities do
+        local length = #identities[i]
+        identities[i] = string.char(offset % 256, math.floor(offset / 256))
+        offset = offset + length
+    end
+    identities[#identities + 1] = string.char(offset % 256, math.floor(offset / 256))
+    store.columns[5], store.identities = table.concat(identities), joined
+end
+
 local function DecodeLine(decoder, line)
     local EnsurePage, records, hintCache = decoder.EnsurePage, decoder.records, decoder.hintCache
     local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
@@ -390,6 +416,7 @@ local function DecodeLine(decoder, line)
         decoder.count = count
         local rowMeta = decoder.rowMeta
         if not rowMeta or count > rowMeta.offset + COLUMN_BLOCK_SIZE then
+            FinishIdentityColumn(rowMeta)
             -- Lua doubles a dense array when it fills. Limit the unused tail to the final block.
             -- Each group of rows owns its columns while keeping the public row IDs consecutive.
             local columns = {}
@@ -461,6 +488,7 @@ local function Decode(deadline)
         DecodeLine(decoder, line)
         if deadline and debugprofilestop() >= deadline then return nil end
     end
+    FinishIdentityColumn(decoder.rowMeta)
     state.decoder = nil
     -- Keep the compact source for a sliced rebuild after menu-close cache release.
     return decoder.records

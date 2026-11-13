@@ -689,7 +689,15 @@ local function SearchTokenCharCounts(rec, tokens)
     local counts = rec.tokenCharCounts
     if counts and rec.tokenCharCountsFor == tokens then return counts end
     counts = {}
-    for i = 1, #tokens do counts[i] = SearchCharCount(tokens[i]) end
+    local fitsBytes = true
+    for i = 1, #tokens do
+        local length = SearchCharCount(tokens[i])
+        counts[i] = length
+        if length > 255 then fitsBytes = false end
+    end
+    -- Most records need only one byte per length. Keep exact counts for any
+    -- longer provider token, and retain the same count cache on repeated queries.
+    if fitsBytes then counts = string.char(unpack(counts)) end
     rec.tokenCharCounts, rec.tokenCharCountsFor = counts, tokens
     return counts
 end
@@ -711,9 +719,10 @@ local function SearchFuzzyTokenMatch(rec, term, distanceCache)
     end
     local counts = rec.tokenCharCounts
     if not counts or rec.tokenCharCountsFor ~= tokens then counts = SearchTokenCharCounts(rec, tokens) end
+    local packed = type(counts) == "string"
     local termLength = termCache[2]
     for i = 1, #tokens do
-        local lengthDelta = counts[i] - termLength
+        local lengthDelta = (packed and byte(counts, i) or counts[i]) - termLength
         if lengthDelta <= maxDistance and lengthDelta >= -maxDistance then
             local token = tokens[i]
             local matched = termCache[token]
