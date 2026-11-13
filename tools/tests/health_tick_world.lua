@@ -267,6 +267,7 @@ function World.New(root, flavor, options)
         env.CurveConstants = { ScaleTo100 = scale, ReverseTo100 = reverse }
         local unknown = env.MSUF_HEALTH_TICK_WORLD_UNKNOWN
         env.Enum = setmetatable({
+            PhaseReason = flavor == "Forever" and { Phasing = 0, Sharding = 1 } or nil,
             PowerType = { Mana = 0, Rage = 1, Energy = 3, ComboPoints = 4 },
             LuaCurveType = { Linear = 0, Step = 1 },
             UnitDamageAbsorbClampMode = { MissingHealth = 0, MissingHealthWithoutIncomingHeals = 1, MaximumHealth = 2 },

@@ -285,7 +285,7 @@ function Render.Install(box, ctx, deps)
     if not box then return end
     local Config = RequireFields("GroupRender.Config", deps.Config,
         "GF_PREVIEW_ROLE_DEFAULT StatusSpecs ScaleValue ConfigToOffset CompiledSpec CompiledAuraLane RuntimeStatusConfig CurrentStatusSpec "
-        .. "StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellInfo "
+        .. "StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText CurrentSpellInfo "
         .. "PreviewAllSpecSpellIcons CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture "
         .. "CurrentSpellColor MockSpellTexture Round ClampLayer ClassColor AuraGrowth Int")
     local Selection = RequireFields("GroupRender.Selection", deps.Selection,
@@ -326,7 +326,6 @@ function Render.Install(box, ctx, deps)
     env.StatusSpecInMode = Config.StatusSpecInMode
     env.StatusSpecIsText = Config.StatusSpecIsText
     env.StatusText = Config.StatusText
-    env.StatusLabel = Config.StatusLabel
     env.CurrentSpellInfo = Config.CurrentSpellInfo
     env.PreviewAllSpecSpellIcons = Config.PreviewAllSpecSpellIcons
     env.CurrentSpellConfig = Config.CurrentSpellConfig

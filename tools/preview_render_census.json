@@ -330,7 +330,7 @@
           1355
         ]
       ],
-      "source_sha256": "05743a01ee8ec6f953d6f63aebb5e615c1d176960a43c34090651ad598f6718e",
+      "source_sha256": "446ffc2027061a342dbc4a068fe2aac15373d1d97be6c461dcd59d22ecc30377",
       "adapter_exclusions": [
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
@@ -386,7 +386,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Frame.lua",
-          "source_sha256": "7ddf8ee6792fd2a8c16e568225c82a806e263ed86d4c1f64bd14edaad80726d3"
+          "source_sha256": "7ad590be836118492685f48e8071bf6c0c80447aa4adaa182104a0fef0b95058"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
@@ -442,14 +442,14 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_HandleView.lua",
-          "source_sha256": "6040f484410e0dcf10b1cb7215e95208633f71431d86a484f7227d8060a61c07"
+          "source_sha256": "32fedb418cf6f8619e5de4c30ab4ffd4a8e3aa261f9af14348efd04d14852770"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Handles.lua",
           "source_sha256": "bfef09fcc6e5879e69ea073acae0a9f6297160c449ede71f6ed31802bb7a9b55"
         }
       ],
-      "review_note": "2026-10-25 K5: reviewed unchanged aura, spell and frame-owner extraction; new support sources pinned; historical counts retained. 2026-11-01: reviewed GroupPreview_Frame forwarding of active animation state to runtime Power.PaintSample; no separate painter added. 2026-11-01: unchanged composition bodies split into named planning/layout/presentation owners; every added support source pinned; historical counts unchanged. 2026-11-01: host, model, interaction and layer owners split with explicit required interfaces; renderer remains runtime-owned."
+      "review_note": "2026-10-25 K5: reviewed unchanged aura, spell and frame-owner extraction; new support sources pinned; historical counts retained. 2026-11-01: reviewed GroupPreview_Frame forwarding of active animation state to runtime Power.PaintSample; no separate painter added. 2026-11-01: unchanged composition bodies split into named planning/layout/presentation owners; every added support source pinned; historical counts unchanged. 2026-11-01: host, model, interaction and layer owners split with explicit required interfaces; renderer remains runtime-owned. 2026-11-13: status handles retain creation-time labels and reuse the sample rows for region and anchor binding."
     },
     {
       "file": "Pages/MSUF_Menu2_Auras_Preview.lua",
@@ -696,7 +696,7 @@
           1934
         ]
       ],
-      "source_sha256": "e7c1b2fa0a643fea20ec5072ea72eb39c730d059354cabc41975d667c23df2d4",
+      "source_sha256": "77dc7adaa34ba53754df19a0ccab2032ed9bfc3892606fe5de1df92c1268d8fd",
       "adapter_exclusions": [
         {
           "name": "CreateRoundedTexturePreview",
@@ -715,7 +715,7 @@
       "support_sources": [
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Textures.lua",
-          "source_sha256": "0b4d51654dead5cdd8c0aa72ba900545ad079c160745362158214462208d8a71"
+          "source_sha256": "0dba4c83d12654e0835aa1bcf676c6c1c29480ed081f90f1e3ddcaedea576d03"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
@@ -723,7 +723,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Highlights.lua",
-          "source_sha256": "2620b59f121caaa9711295ef6f0f3d7135c82c74d563dbc2b9c9b86dad9b17e2"
+          "source_sha256": "00fb9486bb798113ecd9e38ed49c593dfb04236e86daeee7bcc2d53af9931dba"
         }
       ],
       "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
@@ -781,7 +781,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua",
-          "source_sha256": "0d92e8290b0281435fbb97650b9bc70328da3e726b6af0cec43019103c1a9a9f"
+          "source_sha256": "ae23903d5f78c6f4b1e45687fceea5f51e98200f1e96f58aece70a977a0a778a"
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",

@@ -69,11 +69,11 @@ end
 -- Beta 1 regenerates both families with the new menu context; all prior identities remain.
 -- Beta 2 adds Mute MSUF menu sounds in both families and the Target/Focus faction switches in Mainline.
 -- Beta 3 adds five Forever consumption selectors and refreshes their status control metadata.
--- The four Druid form switches are the only additional rows in either family.
--- After resolving both dictionaries, every prior row retains its full metadata.
+-- RC3 includes the Druid form, castbar timer, nameplate and group status controls.
+-- Both current generated indexes retain all 17 relocated action identities below.
 local indexes = {
-    { "", 4547, 2061178382 },
-    { "_Classic", 4115, 1416343016 },
+    { "", 4658, 415580032 },
+    { "_Classic", 4222, 1746985476 },
 }
 local moved = {
     { "edit_selection", "workbench_alignment", "multi", "bottom left right top horizontal vertical move open toggle" },

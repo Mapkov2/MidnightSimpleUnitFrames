@@ -7823,6 +7823,12 @@ L["Bar opacity (%s)"] = "Leistendeckkraft (%s)"
 L["Background opacity (%s)"] = "Hintergrunddeckkraft (%s)"
 L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Derselbe Wert wie Vordergrund unter Deckkraft > Ressourcenleiste auf der Seite dieses Frames. Die Farbe selbst gilt für alle Frames."
 L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Derselbe Wert wie Hintergrund unter Deckkraft > Ressourcenleiste auf der Seite dieses Frames. Er wird mit der Deckkraft der gemeinsamen Hintergrundfarbe multipliziert."
+-- First 7.0 login profile check.
+L["MSUF 7.0: Please check your profile"] = "MSUF 7.0: Bitte prüfe dein Profil"
+L["This character uses the profile %s."] = "Dieser Charakter nutzt das Profil %s."
+L["If your frames do not look like before, open Profiles and select your profile there. All your previous profiles are still listed."] = "Wenn deine Frames nicht wie vorher aussehen, öffne die Profile und wähle dort dein Profil aus. Alle bisherigen Profile sind weiterhin vorhanden."
+L["MSUF also kept a full copy of your pre-7.0 profiles: /msuf restorebackup"] = "MSUF hat außerdem eine vollständige Kopie deiner Profile von vor 7.0 behalten: /msuf restorebackup"
+L["Profile is correct"] = "Profil passt"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

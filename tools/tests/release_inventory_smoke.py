@@ -134,7 +134,7 @@ $startWorker = ${function:Start-ContractWorker}
 function Start-ContractWorker($Name, $Runs, $Queue, $Epoch) {
     & $startWorker ((Split-Path -Leaf $Fixture) + '-' + $Name) $Runs $Queue $Epoch
 }
-$receipts = @(Invoke-ContractWorkers $runs $queue $true)
+$receipts = @(Invoke-ContractWorkers $runs $queue $true 2)
 if (Test-Path -LiteralPath $queue) { throw 'Controller retained its queue' }
 $receipts | ConvertTo-Json -Depth 5 -Compress | Write-Output
 """
@@ -157,8 +157,8 @@ $receipts | ConvertTo-Json -Depth 5 -Compress | Write-Output
             peak = max(peak, len(live))
         else:
             live.remove(pid)
-    assert not live and 2 <= peak <= 6, (live, peak)
-print('release scheduling: isolated Windows wall-time probes then shared six-worker queue; exact inventory; false fast-check completion rejected')
+    assert not live and peak == 2, (live, peak)
+print('release scheduling: isolated Windows wall-time probes, exact bounded queue, false fast-check completion rejected')
 
 # A batched syntax check must compile the exact shipped union, keep independent
 # Lua chunk limits and report every bad file even when the first batch aborts.

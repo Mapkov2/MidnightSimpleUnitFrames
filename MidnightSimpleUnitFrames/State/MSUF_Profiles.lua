@@ -92,6 +92,11 @@ local function ProfileNameTooLong(name, quiet)
     return true
 end
 local Variants, ProfileSync = MSUF.ProfileVariants, MSUF.ProfileSync
+local function UpdateWorkbenchOwner(source, destination)
+    -- Workbench loads later; state-only integrations can omit its UI tools.
+    local workbench = MSUF.ProfileWorkbench
+    if workbench then workbench.RenameOrDeleteProfilePoints(source, destination) end
+end
 local function PrepareProfileMutation(rebindOnly)
     local beforeMutation = MSUF.ProfileRuntime.BeforeMutation
     if beforeMutation and not rebindOnly then beforeMutation() end
@@ -208,6 +213,7 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     end
     if not next(profiles) then
         local base = legacyDB or {}
+        UpdateWorkbenchOwner("Default")
         profiles["Default"] = CopyTable(type(base) == "table" and base or {})
         if not active then
             active = "Default"
@@ -235,6 +241,7 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     end
     local startupName, startupSource = MSUF.ResolveStartupProfile(MSUF_GlobalDB, legacyDB, charKey)
     active = startupName
+    if type(profiles[active]) ~= "table" then UpdateWorkbenchOwner(active) end
     if startup and startup.profile then
         profiles[active] = startup.profile
     elseif type(profiles[active]) ~= "table" then
@@ -315,6 +322,7 @@ function MSUF_CreateProfile(name)
         ProfileChat("error", "Factory defaults are not available; profile was not created.")
         return false, "factory defaults unavailable"
     end
+    UpdateWorkbenchOwner(name)
     profiles[name] = profile
     if MSUF_ProfileIO_TranslateProfileToCurrent then
         MSUF_ProfileIO_TranslateProfileToCurrent(profiles[name], {
@@ -488,6 +496,7 @@ local function DeleteProfile(name, quiet)
         globalMeta.defaultProfileForNewChars = nil
     end
     if ProfileSync then ProfileSync.RenameOrDelete(name) end
+    UpdateWorkbenchOwner(name)
     profiles[name] = nil
     MSUF.DefaultsSchema.RenameProfileRecovery(name)
     if MSUF_ActiveProfile == name then
@@ -549,6 +558,7 @@ local function MSUF_CopyProfile(sourceName, destName)
     if not copy then return false,why end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(copy) end
     copy.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
+    UpdateWorkbenchOwner(destName)
     profiles[destName] = copy
     if MSUF_ProfileIO_TranslateProfileToCurrent then
         MSUF_ProfileIO_TranslateProfileToCurrent(profiles[destName], {
@@ -617,6 +627,7 @@ local function MSUF_RenameProfile(sourceName, destName)
     end
 
     if ProfileSync then ProfileSync.RenameOrDelete(sourceName,destName) end
+    UpdateWorkbenchOwner(sourceName, destName)
     profiles[destName] = src
     profiles[sourceName] = nil
     MSUF.DefaultsSchema.RenameProfileRecovery(sourceName, destName)

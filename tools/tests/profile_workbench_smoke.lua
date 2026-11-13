@@ -64,6 +64,18 @@ assert(mw.core.ProfileVariants.Validate({ version = 1, entries = {
 assert(not mw.core.ProfileVariants.Validate({ version = 1, entries = {
     { name = "Invalid", conditions = { display = { minWidth = 3000, maxWidth = 1000 } }, patch = {} },
 } }))
+local variants = mw.core.ProfileVariants
+local mode = false
+local input, original = mw.env.InputUtil, db.profileVariants
+mw.env.InputUtil = { IsGamepadUIEnabled = function() return mode end }
+db.profileVariants = assert(variants.Validate({ version = 1, entries = {
+    { name = "Gamepad layout", conditions = { inputMode = "gamepad" }, patch = {} },
+    { name = "Keyboard layout", conditions = { inputMode = "keyboard" }, patch = {} },
+} }))
+assert(variants.MatchSignature(db) == (flavor == "Forever" and 2 or 0))
+mode = true
+assert(variants.MatchSignature(db) == (flavor == "Forever" and 1 or 0))
+db.profileVariants, mw.env.InputUtil = original, input
 local EM = mw.core.MSUF_EM2 or mw.core.Require("MSUF_EM2", "profile_workbench_smoke")
 local active = EM.State.IsActive
 EM.State.IsActive = function() return true end

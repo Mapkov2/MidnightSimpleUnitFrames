@@ -207,6 +207,9 @@ local function Prepare(owner, element)
         or element.settingsLabel == "" or #element.settingsLabel > 120) then
         return nil, "invalid_settings_label"
     end
+    if element.sizeSummary ~= nil and type(element.sizeSummary) ~= "boolean" then
+        return nil, "invalid_size_summary"
+    end
     if type(element.getFrame) ~= "function" then return nil, "getFrame_required" end
     for i = 1, #CALLBACKS do
         local name = CALLBACKS[i]
@@ -582,6 +585,13 @@ end
 
 function External.CanReset(key)
     return type(records[key] and records[key].resetPosition) == "function"
+end
+
+--- An owner whose quick controls already set the size can drop the popup's
+--- W/H readout with sizeSummary = false; hosts without the field show it.
+function External.ShowsSizeSummary(key)
+    local record = records[key]
+    return not (record and record.sizeSummary == false)
 end
 
 function External.GetDisplayInfo(key)

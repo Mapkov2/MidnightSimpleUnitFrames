@@ -137,44 +137,34 @@ function G.C_Timer.NewTicker(_, fn)
 end
 
 local frameId = 0
-local function fakeRegion()
-    local object = { _scripts = {}, _children = {} }
-    local mt
-    mt = {
-        __index = function(tbl, key)
-            if key == "GetName" then return function(self) return rawget(self, "_name") end end
-            if key == "SetScript" or key == "HookScript" then
-                return function(self, event, fn)
-                    self._scripts[event] = fn
-                    return self
-                end
-            end
-            if key == "CreateTexture" or key == "CreateFontString" then
-                return function(self)
-                    local child = fakeRegion()
-                    self._children[#self._children + 1] = child
-                    return child
-                end
-            end
-            if key == "GetChildren" then
-                return function(self) return table.unpack(self._children or {}) end
-            end
-            if key == "GetRegions" then
-                return function(self) return table.unpack(self._children or {}) end
-            end
-            if key == "GetParent" then return function(self) return rawget(self, "_parent") end end
-            if key == "GetWidth" or key == "GetHeight" then return function() return 1 end end
-            if key == "GetSize" then return function() return 1, 1 end end
-            if key == "GetPoint" then return function() return "CENTER", G.UIParent, "CENTER", 0, 0 end end
-            if key == "IsShown" or key == "IsVisible" then return function() return true end end
-            if key == "CanChangeAttribute" then return function() return true end end
-            if key == "RegisterEvent" or key == "UnregisterEvent" or key == "RegisterUnitEvent" then
-                return function(self) return self end
-            end
-            return function(self) return self end
-        end,
-    }
-    return setmetatable(object, mt)
+local fakeRegion
+local function ReturnSelf(self) return self end
+local function ReturnOne() return 1 end
+local function ReturnTrue() return true end
+local function SetScript(self, event, fn)
+    self._scripts[event] = fn
+    return self
+end
+local function CreateRegion(self)
+    local child = fakeRegion()
+    self._children[#self._children + 1] = child
+    return child
+end
+local function GetChildren(self) return table.unpack(self._children or {}) end
+local regionMethods = {
+    GetName = function(self) return rawget(self, "_name") end,
+    SetScript = SetScript, HookScript = SetScript,
+    CreateTexture = CreateRegion, CreateFontString = CreateRegion,
+    GetChildren = GetChildren, GetRegions = GetChildren,
+    GetParent = function(self) return rawget(self, "_parent") end,
+    GetWidth = ReturnOne, GetHeight = ReturnOne,
+    GetSize = function() return 1, 1 end,
+    GetPoint = function() return "CENTER", G.UIParent, "CENTER", 0, 0 end,
+    IsShown = ReturnTrue, IsVisible = ReturnTrue, CanChangeAttribute = ReturnTrue,
+}
+local function RegionIndex(_, key) return regionMethods[key] or ReturnSelf end
+fakeRegion = function()
+    return setmetatable({ _scripts = {}, _children = {} }, { __index = RegionIndex })
 end
 
 G.UIParent = G.UIParent or fakeRegion()

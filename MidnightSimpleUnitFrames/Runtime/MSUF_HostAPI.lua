@@ -293,6 +293,9 @@ local API = {
     GetIconSkins = GetIconSkins,
     GetNameFormatter = GetNameFormatter,
     GetProfileWorkbench = function() return MSUF.ProfileWorkbench end,
+    Profiles_BeginImport = function(text, name, legacyRetail)
+        return MSUF.ProfileImportReview.BeginImport(text, name, legacyRetail)
+    end,
 }
 MSUF.HostAPI = API
 MSUF.HostAPIPlayerInCombat = PlayerInCombat

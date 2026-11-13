@@ -99,13 +99,24 @@ print(json.dumps(counts))
     return $script:MenuControlCounts
 }
 function Order-ContractRuns([object[]]$Runs) {
-    # Lead with long independent jobs, avoiding a late namespace tail after
-    # other workers drain. Every run retains its original inventory ID.
+    # The remaining long, independent contracts follow the setter, preflight
+    # and namespace jobs. Avoid leaving a single search/profile replay at the
+    # end of the queue after other workers drain. All runs retain their IDs.
+    $longTests = @{
+        'tools/tests/castbar_interrupt_ready_geometry.lua' = 3
+        'tools/tests/search_status_choices_smoke.lua' = 4
+        'tools/tests/search_catalog_findability_smoke.lua' = 4
+        'tools/tests/profile_aura_roundtrip_smoke.lua' = 4
+        'tools/tests/profile_corpus_golden_smoke.lua' = 4
+        'tools/tests/profile_import_job_smoke.lua' = 4
+        'tools/tests/profile_newer_revision_backup_smoke.lua' = 4
+    }
     return $Runs | Sort-Object @{ Expression = {
         if ($_.Phase -eq 'setter parity') { 0 }
         elseif ($_.Phase -eq 'fast-check') { 1 }
-        elseif ($_.Phase -eq 'namespace') { 2 }
-        else { 3 }
+        elseif ($_.Phase -in @('namespace', 'scorecard')) { 2 }
+        elseif ($_.Test -and $longTests.ContainsKey($_.Test)) { $longTests[$_.Test] }
+        else { 5 }
     } }, @{ Expression = { $_.Id } }
 }
 function LuaRun([string]$Smoke, [string]$Flavor, [string]$Mode = "") {
@@ -148,7 +159,7 @@ function New-ProfileRuns {
     )
     return $runs + @(Get-InventoryRuns 'profiles')
 }
-# A bounded shared queue: at most six Lua processes. Each
+# A bounded shared queue. Each
 # setter replay keeps its single menu world for scalar, reset and compound cases.
 function Start-ContractWorker([string]$Name, [object[]]$Runs, [string]$QueuePath = '', [long]$Epoch = 0) {
     $job = Start-Job -ArgumentList $root, $Slot, "$Owner-$Name", $Name, @($Runs), $QueuePath, $Epoch -ScriptBlock {
@@ -210,7 +221,13 @@ function Receive-ContractReceipts($Worker) {
     }
     $result[0].Receipts
 }
-function Invoke-ContractWorkers([object[]]$Runs, [string]$Queue, [bool]$WindowsHost) {
+function Get-ContractWorkerCount([int]$LogicalProcessors) {
+    # Keep scheduler headroom for the host, including on SMT machines. External
+    # slots still gate each worker independently when a scheduler is supplied.
+    return [Math]::Min(12, [Math]::Max(1, [int][Math]::Floor($LogicalProcessors * 0.75)))
+}
+function Invoke-ContractWorkers([object[]]$Runs, [string]$Queue, [bool]$WindowsHost,
+    [ValidateRange(1,12)][int]$WorkerCount = (Get-ContractWorkerCount ([Environment]::ProcessorCount))) {
     $workers = @()
     $parallel = $Runs
     $timed = @()
@@ -227,7 +244,7 @@ function Invoke-ContractWorkers([object[]]$Runs, [string]$Queue, [bool]$WindowsH
             $workers = @()
         }
         [IO.File]::WriteAllText($Queue, '0')
-        foreach ($number in 1..6) {
+        foreach ($number in 1..$WorkerCount) {
             $workers += (Start-ContractWorker "worker-$number" $parallel $Queue $epoch)
         }
         foreach ($worker in $workers) { Receive-ContractReceipts $worker }
@@ -279,7 +296,7 @@ try {
         $projectionTime = $projectionTimer.Elapsed.TotalSeconds
         Exit-CheckSlot $Slot $Owner
     }
-    Contract 'scorecard' @(
+    $scorecard = @(
         @{ Label = 'current source and projection'; Exe = $Python; Args = @('tools/scorecard.py') }
     )
     # A stale projection or scorecard still fails the final receipt. Continue
@@ -288,12 +305,11 @@ try {
         '-Python', $Python, '-LogDirectory', $LogDirectory)
     if ($Slot) { $fastArguments += @('-Slot', $Slot) }
     if (-not $ParallelContracts) {
+        Contract 'scorecard' $scorecard
         $fast = Invoke-Check "fast-check" $PowerShell $fastArguments
         $fastOk = $fast.Ok -and $fast.Text -match "fast-check: 0 failed,"
         if (-not $fastOk) { $failed++ }
-        if ($fast.Text -match "fast-check: \d+ failed, ([\d.,]+) s,") {
-            $slotTime += [double]::Parse($Matches[1].Replace(",", ""), [Globalization.CultureInfo]::InvariantCulture)
-        } else { $slotTime += $fast.Seconds }
+        $slotTime += $fast.Seconds
         $line = "{0} fast-check: {1:F1} s" -f $(if ($fastOk) { "PASS" } else { "FAIL" }), $fast.Seconds
         $summary.Add($line)
         Write-Output $line
@@ -315,9 +331,10 @@ try {
             'Edit Mode' = @(Get-InventoryRuns 'edit')
         }
         if ($ParallelContracts) {
-            # Fast-check is one sequential child inside the six-worker limit.
+            # Fast-check is one sequential child inside the worker limit.
             # Its worker owns the slot, so the child must not acquire it again.
-            $phaseNames = @('fast-check') + $phaseNames
+            $phaseNames = @('scorecard', 'fast-check') + $phaseNames
+            $phases['scorecard'] = $scorecard
             $phases['fast-check'] = @(@{ Label = 'full preflight'; Exe = $PowerShell;
                 Args = @($fastArguments) + @('-InheritedSlot') })
             $allRuns = @()
@@ -330,7 +347,11 @@ try {
             # External schedulers own capacity. Release the parent's slot before
             # the workers acquire theirs, including with a capacity-one scheduler.
             if ($Slot) { Exit-CheckSlot $Slot $Owner; $suiteSlotHeld = $false }
-            $receipts = @(Invoke-ContractWorkers (Order-ContractRuns $allRuns) "$log.queue" ([Environment]::OSVersion.Platform -eq 'Win32NT'))
+            $workerCount = Get-ContractWorkerCount ([Environment]::ProcessorCount)
+            $workerLine = "Contract workers: $workerCount on $([Environment]::ProcessorCount) logical processors"
+            Write-Output $workerLine
+            [IO.File]::AppendAllText($log, "$workerLine$nl", $utf8)
+            $receipts = @(Invoke-ContractWorkers (Order-ContractRuns $allRuns) "$log.queue" ([Environment]::OSVersion.Platform -eq 'Win32NT') $workerCount)
             $expectedIds = @($allRuns | ForEach-Object { $_.Id } | Sort-Object)
             $actualIds = @($receipts | ForEach-Object { $_.Id } | Sort-Object)
             if ($receipts.Count -ne $allRuns.Count -or (Compare-Object $expectedIds $actualIds)) {
@@ -365,7 +386,7 @@ try {
     try { if ($suiteSlotHeld) { Exit-CheckSlot $Slot $Owner } }
     finally { Pop-Location; $env:PATH = $oldPath }
 }
-# The budget measures the six-worker development machine; a reproducible CI
+# The budget measures the development machine; a reproducible CI
 # runner has other hardware, so it reports the time without gating on it.
 if (-not $Reproducible -and $slotTime -ge 300) { $failed++; Write-Output "FAIL time budget: must be under 300 s inside the Lua slot" }
 if (-not $Reproducible -and $wall.Elapsed.TotalSeconds -ge 300) { $failed++; Write-Output "FAIL complete time budget: must be under 300 s including preparation and all checks" }

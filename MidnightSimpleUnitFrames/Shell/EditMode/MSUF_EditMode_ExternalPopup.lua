@@ -54,6 +54,9 @@ end
 --- as native MSUF stepper/toggle rows above the buttons. Widget sets are built
 --- once per control signature and shared by every element that declares it.
 local CONTROLS_TOP, CONTROL_ROW_H, BUTTONS_TOP, BASE_HEIGHT = -144, 40, -150, 264
+--- The W/H readout's line (-76) sits above the generic position row; an
+--- owner without the readout (sizeSummary = false) lifts every row by it.
+local POSITION_TOP, SUMMARY_LIFT = -104, 28
 
 local function ApplyNumberControl(id, box)
     if Blocked() or not (frame and frame._key) or frame._syncing then return end
@@ -105,9 +108,9 @@ local function LabelWidth(text)
     return (frame._labelProbe:GetStringWidth() or 0) * 1.08
 end
 
-local function BuildControlSet(controls)
+local function BuildControlSet(controls, lift)
     local set = { rows = {}, numbers = {}, toggles = {}, height = 0 }
-    local top = CONTROLS_TOP + (OwnerPositionControls(controls) and CONTROL_ROW_H or 0)
+    local top = CONTROLS_TOP + lift + (OwnerPositionControls(controls) and CONTROL_ROW_H or 0)
     local numbers, toggles = {}, {}
     for i = 1, #controls do
         local spec = controls[i]
@@ -173,15 +176,15 @@ local function SetControlSetShown(set, shown)
     end
 end
 
-local function LayoutControls(key)
+local function LayoutControls(key, lift)
     local controls = External.GetControls and External.GetControls(key)
     local set
     if controls then
         frame._controlSets = frame._controlSets or {}
-        local signature = ControlSignature(controls)
+        local signature = ControlSignature(controls) .. "|" .. lift
         set = frame._controlSets[signature]
         if not set then
-            set = BuildControlSet(controls)
+            set = BuildControlSet(controls, lift)
             frame._controlSets[signature] = set
         end
     end
@@ -226,7 +229,7 @@ local function Build()
     frame._summaryFS:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -76)
     frame._summaryFS:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20, -76)
     frame._summaryFS:SetJustifyH("LEFT")
-    frame._positionRow = Quick.ValuePairAt(frame, frame, 20, -104,
+    frame._positionRow = Quick.ValuePairAt(frame, frame, 20, POSITION_TOP,
         "X", "xBox", function() ApplyPosition("x", frame.xBox) end,
         "Y", "yBox", function() ApplyPosition("y", frame.yBox) end,
         { boxWidth = 48 })
@@ -252,7 +255,12 @@ function Popup.Sync()
     frame._syncing = true
     frame._titleFS:SetText(label)
     local title, x, y, width, height = External.GetInspectorValues(frame._key)
-    frame._summaryFS:SetText(FormatValues(title, x, y, width, height))
+    local summary = External.ShowsSizeSummary(frame._key)
+    local lift = summary and 0 or SUMMARY_LIFT
+    frame._summaryFS:SetText(summary and FormatValues(title, x, y, width, height) or "")
+    frame._summaryFS:SetShown(summary)
+    frame._positionRow:ClearAllPoints()
+    frame._positionRow:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, POSITION_TOP + lift)
     Quick.SetBoxText(frame.xBox, x ~= nil and x or "")
     Quick.SetBoxText(frame.yBox, y ~= nil and y or "")
     local ownedPosition = OwnerPositionControls(External.GetControls(frame._key))
@@ -267,9 +275,9 @@ function Popup.Sync()
         frame.xBox:ClearFocus()
         frame.yBox:ClearFocus()
     end
-    local set = LayoutControls(frame._key)
+    local set = LayoutControls(frame._key, lift)
     SyncControlValues(set, frame._key)
-    local extra = (set and set.height or 0) - (ownedPosition and CONTROL_ROW_H or 0)
+    local extra = (set and set.height or 0) - (ownedPosition and CONTROL_ROW_H or 0) - lift
     frame._settingsBtn:ClearAllPoints()
     frame._settingsBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, BUTTONS_TOP - extra)
     frame._resetBtn:ClearAllPoints()

@@ -408,6 +408,12 @@ function World.New(root, flavor, options)
             nativeWidgetMethods["Get" .. state .. "Texture"] = function(self) return self["nativeButtonTexture" .. state] end
         end
     end
+    -- Keyboard input of MSUF-owned prompts (Shell/UI/MSUF_Widgets.lua), e.g. the
+    -- first 7.0 login profile check.
+    nativeWidgetMethods.EnableKeyboard = nativeWidgetMethods.EnableKeyboard
+        or function(self, enabled) self.keyboardEnabled = enabled end
+    nativeWidgetMethods.SetPropagateKeyboardInput = nativeWidgetMethods.SetPropagateKeyboardInput
+        or function(self, propagate) self.propagateKeyboardInput = propagate end
 
     local world = setmetatable({
         root = root,

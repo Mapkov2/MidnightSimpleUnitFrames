@@ -46,17 +46,6 @@
       ]
     },
     {
-      "test": "tools/tests/profile_menu_beta_ux_smoke.lua",
-      "phase": "menu",
-      "clients": [
-        "Mainline",
-        "Vanilla",
-        "TBC",
-        "Mists",
-        "Forever"
-      ]
-    },
-    {
       "test": "tools/tests/menu_background_opacity_warning_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -196,17 +185,6 @@
       "arguments": [
         "{root}",
         "{client}"
-      ]
-    },
-    {
-      "test": "tools/tests/menu_dark_tone_slider_smoke.lua",
-      "phase": "menu",
-      "clients": [
-        "Mainline",
-        "Vanilla",
-        "TBC",
-        "Mists",
-        "Forever"
       ]
     },
     {
@@ -1184,13 +1162,6 @@
     {
       "test": "tools/tests/client_world_root_smoke.lua",
       "phase": "runtime"
-    },
-    {
-      "test": "tools/tests/profile_aura_roundtrip_smoke.lua",
-      "phase": "profiles",
-      "clients": [
-        "Mainline"
-      ]
     },
     {
       "test": "tools/tests/profile_corpus_golden_smoke.lua",
@@ -2224,6 +2195,28 @@
       ]
     },
     {
+      "test": "tools/tests/profile_import_progress_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_menu_beta_ux_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/profile_workbench_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -2811,6 +2804,28 @@
       ]
     },
     {
+      "test": "tools/tests/profile_unit_override_roundtrip_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_import_job_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/profile_aura_roundtrip_smoke.lua",
       "phase": "profiles",
       "clients": [
@@ -2902,6 +2917,17 @@
     },
     {
       "test": "tools/tests/menu_global_color_mode_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_dark_tone_slider_smoke.lua",
       "phase": "menu",
       "clients": [
         "Mainline",

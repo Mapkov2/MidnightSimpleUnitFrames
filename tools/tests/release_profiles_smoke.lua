@@ -80,13 +80,69 @@ do
     assert(upgradedW.Points()[1].label == "Unrelated version", "upgrade lost a valid owner's restore point")
     assert(upgradedAPI.MSUF_CreateProfile("Raid setup") and upgradedAPI.MSUF_SwitchProfile("Raid setup"))
     assert(#upgradedW.Points() == 0 and not upgradedW.Restore(id), "fresh profile inherited a deleted legacy profile's settings")
+    local lifecycle = ns.SuiteLink.NotifyProfileLifecycle
+    ns.SuiteLink.NotifyProfileLifecycle = function() return false, "profile-exists" end
+    assert(not api.MSUF_RenameProfile("Raid setup", "Refused rename"))
+    ns.SuiteLink.NotifyProfileLifecycle = lifecycle
+    assert(W.Points()[1].id == id, "refused rename moved the owner's restore points")
+    local staleDestination = Serial(W.Points()[1])
+    staleDestination.profile, staleDestination.id = "Progress", id + 5000
+    table.insert(env.MSUF_GlobalDB.global.profileWorkbench.points, staleDestination)
     assert(api.MSUF_RenameProfile("Raid setup", "Progress"))
-    assert(W.Points()[1] and W.Points()[1].id == id and W.Restore(id), "rename lost the profile's restore point")
+    assert(#W.Points() == 1 and W.Points()[1].id == id and W.Restore(id), "rename lost or mixed the profile's restore points")
     assert(api.MSUF_CreateProfile("Raid setup") and api.MSUF_SwitchProfile("Raid setup"))
     assert(#W.Points() == 0 and not W.Restore(id), "fresh profile inherited another profile's restore point")
+    assert(api.MSUF_SwitchProfile("Progress"))
+    local after = assert(W.Snapshot())
+    after.core.player.width = after.core.player.width + 17
+    local draft = assert(W.ReviewSnapshot(after, "Before replacement"))
+    local sameSettings = C.Copy(env.MSUF_DB)
     assert(api.MSUF_DeleteProfile("Progress") and api.MSUF_CreateProfile("Progress") and api.MSUF_SwitchProfile("Progress"))
+    for key in pairs(env.MSUF_DB) do env.MSUF_DB[key] = nil end
+    for key, value in pairs(sameSettings) do env.MSUF_DB[key] = value end
+    assert(not W.CommitReview(draft), "review applied to a replacement profile with identical settings")
     assert(#W.Points() == 0 and not W.Restore(id), "reusing a deleted profile name adopted its restore points")
     assert(api.MSUF_SwitchProfile(active) and W.Points()[1].label == "Unrelated version", "another profile's points changed")
+    local saved = env.MSUF_GlobalDB.global.profileWorkbench
+    local template = Serial(W.Points()[1])
+    local function AddOrphan(name)
+        local point = Serial(template)
+        saved.serial = saved.serial + 1
+        point.id, point.profile = saved.serial, name
+        table.insert(saved.points, point)
+        return point.id
+    end
+    local function HasPoint(name)
+        for _, point in ipairs(saved.points) do if point.profile == name then return true end end
+        return false
+    end
+    -- Observe at publication: lazy cleanup on opening Workbench is too late.
+    ns.SuiteLink.NotifyProfileLifecycle = function(kind, source, destination)
+        if kind == "create" or kind == "copy" then
+            assert(not HasPoint(destination or source), "new profile became visible with stale restore points")
+        end
+        return true
+    end
+    AddOrphan("Fresh create")
+    assert(api.MSUF_CreateProfile("Fresh create"))
+    AddOrphan("Fresh copy")
+    assert(api.MSUF_CopyProfile(active, "Fresh copy"))
+    ns.SuiteLink.NotifyProfileLifecycle = lifecycle
+    assert(api.MSUF_SwitchProfile("Fresh copy") and #W.Points() == 0, "copy adopted another owner's points")
+    local resetOK, resetID = W.Checkpoint("Before reset")
+    assert(resetOK and api.MSUF_ResetProfile("Fresh copy"))
+    assert(W.Points()[2].id == resetID, "reset lost the existing owner's restore point")
+    assert(not api.MSUF_CreateProfile("Fresh copy") and W.Points()[2].id == resetID,
+        "refused create cleared the existing owner's restore point")
+    assert(api.MSUF_SwitchProfile(active))
+    local orphanID = AddOrphan("Removed profile")
+    assert(not W.Restore(orphanID) and not HasPoint("Removed profile"), "legacy orphan survived storage validation")
+    local empty = Serial(env.MSUF_GlobalDB)
+    empty.profiles, empty.char = {}, {}
+    template.profile = "Default"
+    empty.global.profileWorkbench.points = { template }
+    local _, _, rebuiltNS = World({ MSUF_GlobalDB = empty })
+    assert(#rebuiltNS.ProfileWorkbench.Points() == 0, "startup Default adopted a deleted owner's restore point")
 end
 
 -- Drive the real native event listener, including the combat deferral.

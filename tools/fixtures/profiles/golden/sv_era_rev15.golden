@@ -18,6 +18,7 @@ exists.account[5] = "unitFrameScreenCache"
 exists.archive = {}
 exists.profiles[1] = "Profile01"
 global._msufRetiredAssistantDataCleared_v1 = true
+global.profileCheck70.status = "pending"
 char["Char01-Realm02"].specProfileMapVersion = 1
 char["Char02-Realm02"].specProfileMapVersion = 1
 char["Char03-Realm01"].specProfileMapVersion = 1

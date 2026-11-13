@@ -673,6 +673,11 @@ function AuraTransfer.Prepare(plan, source, variants, legacyRetail)
     plan.auraPrepared = true
     plan.auraClient = source
     plan.auraVariants = variants
+    if source == CURRENT_AURA_CLIENT and legacyRetail then
+        -- Explicit legacy Retail imports use the same rule migration as a
+        -- Retail section carried home through another client.
+        plan.localLegacyAura = CaptureAuraSection(plan.payload, variants, true)
+    end
     if not source or source == CURRENT_AURA_CLIENT then return true end
     if not AURA_CLIENTS[CURRENT_AURA_CLIENT] then return true end
     if AURA_PARTIAL_KINDS[plan.kind] then
@@ -713,6 +718,7 @@ end
 
 function AuraTransfer.Stage(plan, candidate, base, factoryBase)
     if not plan.auraPrepared then return true end
+    if plan.localLegacyAura then RestoreLegacyAuras(candidate, plan.localLegacyAura) end
     local key, source = AuraTransfer.StorageKey, plan.auraClient
     local incoming, localSections = CarriedAuraSections(candidate), CarriedAuraSections(base)
     if not next(incoming) and not next(localSections) and not plan.foreignAura then return true end
@@ -791,7 +797,11 @@ end
 Parts.AuraTransfer = AuraTransfer
 
 local function MSUF_ProfileIO_MakeWagoSnapshot(snapshot)
-    if type(snapshot) ~= "table" or snapshot.kind ~= "all" or type(snapshot.payload) ~= "table" then
+    if type(snapshot) ~= "table" or type(snapshot.payload) ~= "table" then return snapshot, false end
+    if snapshot.kind ~= "all" then
+        if AURA_CLIENTS[CURRENT_AURA_CLIENT] and AURA_PARTIAL_KINDS[snapshot.kind] then
+            snapshot.auraClient = CURRENT_AURA_CLIENT
+        end
         return snapshot, false
     end
     local export = {
@@ -808,9 +818,9 @@ local function MSUF_ProfileIO_MakeWagoSnapshot(snapshot)
             payload = MSUF_DeepCopy(snapshot.payload),
         },
     }
-    -- Ordinary exports retain the Beta 6 envelope. Only an archive needs a
-    -- source stamp to identify the active aura section alongside carried data.
-    if AURA_CLIENTS[CURRENT_AURA_CLIENT] and next(CarriedAuraSections(snapshot.payload)) then
+    -- Keep Wago's outer payload portable. The full snapshot records the
+    -- active aura owner even on its first trip to another client.
+    if AURA_CLIENTS[CURRENT_AURA_CLIENT] then
         export[MSUF_PROFILEIO_WAGO_FULL_KEY].auraClient = CURRENT_AURA_CLIENT
     end
     return export, true

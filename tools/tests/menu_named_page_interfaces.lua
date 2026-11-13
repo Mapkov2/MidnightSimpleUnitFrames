@@ -235,6 +235,11 @@ for _, scope in ipairs({ "party", "raid" }) do
     box._stage:SetSize(600, 220)
     box._animationEnabled, box._animationElapsed = true, 0.25
     for _ = 1, 3 do box:Refresh("SETTINGS") end
+    local roleLabel = box._handles.status_roleIcon._label
+    assert(roleLabel:GetText() == "Role", "role handle lost its creation label")
+    local layerHandle = box._handles.status_layerStatusText
+    assert((layerHandle ~= nil) == (flavor == "Forever"), "unexpected layer status handle availability")
+    if layerHandle then assert(layerHandle._label:GetText() == "Layer Status Text", "layer status handle lost its creation label") end
     active = true
     box:Refresh("SETTINGS")
     assert(box:RefreshAnimation(), "group preview did not animate")
@@ -253,11 +258,11 @@ if observe then print("GROUP_DRAWING " .. flavor .. " " .. #drawing .. " " .. st
 -- Both positional and named owners now delegate to the same runtime painter.
 -- Compared with the original G1 receipt: 84 aura levels keep the +403 band,
 -- 12 repeated health/power SetValue calls are cached, and six bar colors pass
--- RGB with the default alpha of 1. Forever adds four calls per pass to
--- bind and hide its consumption handle. Existing drawing calls are unchanged.
+-- RGB with the default alpha of 1. Warm passes no longer rewrite the
+-- creation-time status labels. Forever also binds its layer status handle.
 local drawingPins = {
-    Mainline = { 1875, 1291751023 }, Vanilla = { 1915, 3837208654 }, TBC = { 1915, 3837208654 },
-    Mists = { 1899, 400976151 }, Forever = { 1907, 3518574703 },
+    Mainline = { 1811, 3044966710 }, Vanilla = { 1847, 3246844198 }, TBC = { 1847, 3246844198 },
+    Mists = { 1835, 3672595422 }, Forever = { 1847, 3076733034 },
 }
 if not observe then
     local pin = assert(drawingPins[flavor], "missing positional drawing receipt")

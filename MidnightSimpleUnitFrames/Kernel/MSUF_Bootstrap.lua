@@ -104,6 +104,7 @@ MSUF.Compat.GlobalKeep = {
     -- reviewed blizzard-contract
     BINDING_NAME_MSUF_VARIANT_8 = true,
     -- Suite reader
+    -- documented /run
     -- reviewed suite
     MSUF = true,
     -- Suite reader

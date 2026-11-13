@@ -3,10 +3,10 @@
   python tools/menu_schema_coverage.py --write --lua <lua51>
   python tools/menu_schema_coverage.py --check
 
-Generation checks the two existing search families concurrently with a tool-only
-capture hook. Thus search and coverage use the same actual page builds and finite
-workspace states. Capture includes widgetless controls and declarations omitted
-from search. It does not execute setters or prove in-game rendering.
+Generation builds the clients concurrently with a tool-only capture hook. Search
+and coverage use the same actual page builds and finite workspace states.
+Capture includes widgetless controls and declarations omitted from search. It
+does not execute setters or prove in-game rendering.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -30,6 +30,7 @@ RECEIPT = "tools/menu_schema_coverage_receipt.json"
 MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 INDEXES = ("Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua",
            "Search/MSUF_Menu2_Search_StaticIndex_Data.lua")
+INDEX_PROJECT = ".github/scripts/search_static_index_project.lua"
 SETTING_KINDS = {"toggle", "checkbox", "slider", "dropdown", "segment", "color", "textinput", "editbox", "input"}
 
 
@@ -289,17 +290,26 @@ def load_stream(path):
 def generate(root, lua, refresh_indexes=False):
     before = source_hash(root, include_indexes=False)
     matrix = list(csv.DictReader(read(root / "tools/classic-client-matrix.tsv").splitlines(), delimiter="\t"))
+    families = {classic: [row["Suffix"] for row in matrix if (row["IsClassic"] == "true") == classic]
+                for classic in (True, False)}
+    families[False].append("Forever")
     baseline = {name: index_data(root, name, current=not refresh_indexes)[0] for name in INDEXES}
     evidence = {"version": 2, "clients": {}, "indexes": {}}
     with tempfile.TemporaryDirectory(prefix="menu-schema-") as directory:
-        def check_index(item):
-            classic, name = item
+        def index_environment(classic):
             env = dict(os.environ, LUA_INIT="@tools/menu_schema_harness.lua", MSUF_SCHEMA_CAPTURE_DIR=directory,
                        MSUF_SEARCH_SOURCE_SHA256=menu_hash(root, classic))
             env.pop("MSUF_SCHEMA_CATALOG_SOURCE", None)
-            command = [lua, ".github/scripts/search_static_index_project.lua"]
-            if classic:
-                command.extend(("--flavor", "Vanilla"))
+            return env
+
+        def build_index_rows(flavor, env):
+            command = [lua, INDEX_PROJECT, "--flavor", flavor, "--rows-only"]
+            print(" ".join(command), flush=True)
+            with (Path(directory) / (flavor + ".rows")).open("wb") as rows:
+                subprocess.run(command, cwd=root, env=env, stdout=rows, check=True)
+
+        def finish_index(classic, name, env):
+            command = [lua, INDEX_PROJECT, "--flavor", families[classic][0], "--merge-rows", directory]
             if not refresh_indexes:
                 command.append("--check")
             print(" ".join(command), flush=True)
@@ -311,17 +321,21 @@ def generate(root, lua, refresh_indexes=False):
                 raise ValueError("search rows lost: " + repr(lost))
             return name, current
 
-        # Read-only family checks capture disjoint clients. Two parents and
-        # their sequential children use at most four Lua processes.
-        # Explicit index generation must finish Classic before computing the
-        # Mainline digest, which includes the resulting Classic index.
-        if refresh_indexes:
-            for item in zip((True, False), INDEXES):
-                name, current = check_index(item)
-                evidence["indexes"][name] = current
-        else:
-            with ThreadPoolExecutor(max_workers=2) as workers:
-                evidence["indexes"].update(workers.map(check_index, zip((True, False), INDEXES)))
+        # Each child has disjoint row and capture files. In read-only mode all
+        # clients can build together. During refresh, Mainline must see the new
+        # Classic index in its input graph and in its source digest.
+        groups = ((True,), (False,)) if refresh_indexes else ((True, False),)
+        index_names = dict(zip((True, False), INDEXES))
+        with ThreadPoolExecutor(max_workers=5) as workers:
+            for group in groups:
+                environments = {classic: index_environment(classic) for classic in group}
+                futures = [workers.submit(build_index_rows, flavor, environments[classic])
+                           for classic in group for flavor in families[classic]]
+                for future in futures:
+                    future.result()
+                for classic in group:
+                    name, current = finish_index(classic, index_names[classic], environments[classic])
+                    evidence["indexes"][name] = current
 
         def initial_projection(flavor):
             initial_env = dict(os.environ)
@@ -333,7 +347,7 @@ def generate(root, lua, refresh_indexes=False):
                 raise ValueError(flavor + ': initial schema projection failed: ' + initial.stderr)
             return flavor
 
-        # Family children have all joined before these five independent worlds.
+        # Index children have all joined before these five independent worlds.
         flavors = [row["Suffix"] for row in matrix] + ["Forever"]
         with ThreadPoolExecutor(max_workers=5) as workers:
             completed = list(workers.map(initial_projection, flavors))

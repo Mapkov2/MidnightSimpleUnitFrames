@@ -198,8 +198,8 @@ function M.BuildTimerBarSections(ctx, builder)
     Schema.Build(ctx, section, {
         { "flowToggle", "preview", false, { "Preview timer bars" }, { 14, -36 },
             meta = Meta("timers.preview", "ephemeral"),
-            domain = "castbarTimers", get = Bars.IsPreview,
-            set = function(value) Bars.SetPreview(value) end },
+            domain = "castbarTimers", get = Bars.IsPreview, set = Bars.SetPreview,
+            customSetReason = "Shows timer bars temporarily without writing a profile setting." },
     }, Schema.UnitOptions())
     section:HookScript("OnHide", function() Bars.SetPreview(false) end)
     local frames, refreshTabs = BuildTabs(ctx, section, width)

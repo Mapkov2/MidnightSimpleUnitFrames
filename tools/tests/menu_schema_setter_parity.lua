@@ -4,7 +4,7 @@ io.stdout:setvbuf("no")
 local root, flavor = assert(arg[1]), assert(arg[2])
 root = root:gsub("\\", "/"):gsub("/$", "")
 local reportDirectory = os.getenv("MSUF_SCHEMA_SETTER_REPORT_DIR") or os.getenv("TEMP") or os.getenv("TMPDIR") or "/tmp"
-local Capture, Restore, Matches, Snapshot = assert(loadfile(root .. "/tools/tests/menu_schema_setter_parity_compare.lua"))()
+local Capture, Restore, Matches, Snapshot, VisitWrites = assert(loadfile(root .. "/tools/tests/menu_schema_setter_parity_compare.lua"))()
 local fixtures = assert(loadfile(root .. "/tools/tests/menu_schema_setter_legacy.lua"))()
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local function Read(path)
@@ -13,7 +13,7 @@ local function Read(path)
     file:close()
     return source
 end
-local type, pairs = type, pairs
+local type, pairs, next = type, pairs, next
 local function Copy(value, seen)
     if not seen then
         if type(value) ~= "table" then return value end
@@ -29,8 +29,8 @@ local function Copy(value, seen)
     return out
 end
 local function Replace(dst, src)
-    for key in pairs(dst) do if src[key] == nil then dst[key] = nil end end
-    for key, value in pairs(src) do
+    for key in next, dst do if src[key] == nil then dst[key] = nil end end
+    for key, value in next, src do
         local current = dst[key]
         if current ~= value then
             if type(value) == "table" then
@@ -68,7 +68,7 @@ end
 local function EqualOutcome(baseline, frozen, actual)
     local expectedProfile, actualProfile = frozen.profile, actual.profile
     frozen.profile, actual.profile = nil, nil
-    local profileSame, profileWhy = Matches(baseline, expectedProfile, actualProfile, Equal)
+    local profileSame, profileWhy = Matches(baseline, expectedProfile, actualProfile)
     local same, why = Equal(frozen, actual)
     frozen.profile, actual.profile = expectedProfile, actualProfile
     if not profileSame then return false, ".profile" .. tostring(profileWhy) end
@@ -453,36 +453,9 @@ end
 -- Replay unchanged compound setters against their physical write declarations.
 -- Their original command/history owner stays in place; the contract audits all
 -- changed profile leaves, including dependent values written by an apply.
-local function CheckWrites(spec, before, after, path)
-    if type(before) == "table" and type(after) == "table" then
-        for key, value in pairs(before) do
-            if value ~= after[key] then
-                CheckWrites(spec, value, after[key], path == "" and tostring(key) or path .. "." .. tostring(key))
-            end
-        end
-        for key, value in pairs(after) do
-            if before[key] == nil then
-                CheckWrites(spec, nil, value, path == "" and tostring(key) or path .. "." .. tostring(key))
-            end
-        end
-    elseif type(before) == "table" or type(after) == "table" then
-        local record = type(before) == "table" and before or after
-        if next(record) == nil then
-            assert(M.ControlSchema.MatchesWrite(spec, path), spec.id .. ": undeclared record write " .. path)
-        end
-        for key in pairs(record) do
-            local oldValue, newValue
-            if type(before) == "table" then oldValue = before[key] end
-            if type(after) == "table" then newValue = after[key] end
-            CheckWrites(spec, oldValue, newValue, path .. "." .. tostring(key))
-        end
-    elseif before ~= after then
-        assert(M.ControlSchema.MatchesWrite(spec, path), spec.id .. ": undeclared profile write " .. path)
-    end
-end
 -- A record-creation companion permits the empty parent; populated sibling
 -- maps must still survive the command byte-for-byte.
-local function CheckColorCompanion(spec, set, value, b, c, before)
+local function CheckColorCompanion(spec, set, value, b, c, before, checkWrite)
     local root, field, target = "general"
     if spec.id:match("%.class%.power%.editor%.background%.color$") then field = "classPowerColorOverrides"
     elseif spec.id:match("%.class%.power%.editor%.foreground%.color$")
@@ -493,13 +466,16 @@ local function CheckColorCompanion(spec, set, value, b, c, before)
     end
     if not field then return 0 end
     local profile = M.EnsureDB()
-    Replace(profile, before)
     profile[root][field] = { unchanged = { r = 0.13, g = 0.27, b = 0.41 } }
-    local expected, seeded = Copy(profile[root][field]), Snapshot(before, profile)
+    local expected = Copy(profile[root][field])
+    local seeded, seedDelta = Snapshot(before, profile)
     set(value, b, c)
     if target then expected[target] = profile[root][field][target] end
     assert(Equal(profile[root][field], expected), spec.id .. ": changed existing companion entries")
-    CheckWrites(spec, seeded, profile, "")
+    local changes = Capture(seeded, profile)
+    VisitWrites(seeded, changes, checkWrite)
+    Restore(profile, seeded, changes, Replace)
+    Restore(profile, before, seedDelta, Replace)
     return 1
 end
 local function SelectSlotOwner(spec, widget)
@@ -541,8 +517,8 @@ local function ReplayCustomContracts()
             and not spec.id:match("advancedprofiles") and not spec.id:match("%.opt_profiles%.")
             and (spec.kind == "toggle" or spec.kind == "slider" or spec.kind == "dropdown"
                 or spec.kind == "segment" or spec.kind == "color") and SelectSlotOwner(spec, widget) then
-            local profile, current = M.EnsureDB(), M.EnsureDB()
-            local original = previousOriginal and Snapshot(previousOriginal, current) or Copy(current)
+            local profile = M.EnsureDB()
+            local original = previousOriginal and Snapshot(previousOriginal, profile) or Copy(profile)
             previousOriginal = original
             -- The dedicated Pet XP width row is actionable only for that selected indicator.
             if spec.id:match("%.msuf2_pet_xp_width$") then M.unitStatusSelection.pet = "statusPetXP" end
@@ -579,27 +555,35 @@ local function ReplayCustomContracts()
                 end
                 if #values == 0 and a ~= nil then values[1] = a end
             end
-            local before = Snapshot(original, M.EnsureDB())
+            local before, setupDelta = Snapshot(original, M.EnsureDB())
+            local function CheckWrite(path)
+                assert(M.ControlSchema.MatchesWrite(spec, path), spec.id .. ": undeclared profile write " .. path)
+            end
             for _, value in ipairs(values) do
-                Replace(M.EnsureDB(), before)
                 M.ClearHistory()
                 local ok, why = pcall(function()
                     assert(spec.writes and (spec.writes.menuState or #spec.writes.keys > 0 or #spec.writes.patterns > 0),
                         spec.id .. ": command has no concrete write contract (" .. spec.kind .. ", " .. tostring(spec.labelKey)
                         .. ", " .. tostring(spec.applyDomain) .. ", " .. tostring(spec.meta and spec.meta.classification) .. ")")
                     set(value, b, c)
-                    CheckWrites(spec, before, M.EnsureDB(), "")
+                    profile = M.EnsureDB()
+                    local changes = Capture(before, profile)
+                    VisitWrites(before, changes, CheckWrite)
                     local catalog = M.RuntimeControlCatalog
                     if catalog.Get(spec.id) and catalog.Get(spec.id) == catalog.GetForWidget(widget) then
                         local contract = assert(catalog.GetWriteContract(spec.id), spec.id .. ": catalog lost its write contract")
                         assert(Equal(contract, spec.writes), spec.id .. ": catalog write contract differs from the live declaration")
                     end
-                    cases = cases + CheckColorCompanion(spec, set, value, b, c, before)
+                    Restore(profile, before, changes, Replace)
+                    cases = cases + CheckColorCompanion(spec, set, value, b, c, before, CheckWrite)
                 end)
-                if not ok then issues[#issues + 1] = spec.id .. ": " .. tostring(why) end
+                if not ok then
+                    issues[#issues + 1] = spec.id .. ": " .. tostring(why)
+                    Replace(M.EnsureDB(), before)
+                end
                 cases = cases + 1
             end
-            Replace(M.EnsureDB(), original)
+            Restore(M.EnsureDB(), original, setupDelta, Replace)
             if M._persistentMenuState then
                 Replace(M._persistentMenuState, menuState)
                 for field, value in pairs(menuState) do
@@ -773,13 +757,18 @@ for _, control in ipairs(controls) do
             local ok, why = pcall(Drive, control, value)
             tracing, applyDepth = false, 0
             Check(ok, spec.id .. ": " .. tostring(why))
+            profile = M.EnsureDB()
             if old then
-                frozenOutcome = { profile = Capture(baseline, M.EnsureDB()), history = History(), apply = applyLog,
+                frozenOutcome = { profile = Capture(baseline, profile), history = History(), apply = applyLog,
                     declarationResult = control.declarationOnly and why }
+                restoreDelta, restoreKnown = frozenOutcome.profile, true
             else
-                local same, difference = EqualOutcome(baseline, frozenOutcome, { profile = M.EnsureDB(), history = History(), apply = applyLog,
+                local same, difference = EqualOutcome(baseline, frozenOutcome, { profile = profile, history = History(), apply = applyLog,
                     declarationResult = control.declarationOnly and why })
                 Check(same, control.frozen.id .. " / " .. spec.id .. ": " .. tostring(difference))
+                if same then restoreDelta = frozenOutcome.profile
+                else restoreDelta = Capture(baseline, profile) end
+                restoreKnown = true
             end
             -- Drive the same section-reset operation the popup calls. The
             -- frozen branch is its former raw-key copy; the new branch uses
@@ -862,7 +851,7 @@ for _, control in ipairs(controls) do
             outcome = Capture(baseline, profile)
             frozenCombat = outcome
         else
-            local same = Matches(baseline, frozenCombat, profile, Equal)
+            local same = Matches(baseline, frozenCombat, profile)
             Check(same, spec.id .. ": combat refresh changed profile behavior")
             if same then outcome = frozenCombat
             else outcome = Capture(baseline, profile) end

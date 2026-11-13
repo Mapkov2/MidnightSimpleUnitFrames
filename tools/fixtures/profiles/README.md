@@ -508,3 +508,12 @@ fingerprints and harness-error allowances are unchanged. Dedicated upgrade
 smokes independently cover native positions, delayed/combat scale application,
 variants, old revision-18 data and repeated saving; the historical expected
 file is not the only correctness oracle.
+
+
+## Forever group layer status defaults (2026-11-13)
+
+The factory and seven historical entries now record the six defaults for the
+Forever group layer status text. The status is off by default. Its anchor,
+layer, font size and offsets match the group-frame defaults. The settings are
+recorded for the stored party, raid and retained mythic-raid scopes. No other
+expectations changed.

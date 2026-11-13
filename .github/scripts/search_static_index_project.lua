@@ -23,6 +23,8 @@
 --   lua .github/scripts/search_static_index_project.lua --flavor Vanilla   -> Classic file
 -- The harness can only build one client per process, so each client runs in a child of
 -- this script with --rows-only; that flag is internal and prints rows, not a file.
+-- The coverage driver runs those children concurrently and passes their completed
+-- row files back with --merge-rows. Rendering still uses the client matrix order.
 _G = _G or _ENV
 loadstring = loadstring or load
 unpack = unpack or table.unpack
@@ -1193,13 +1195,28 @@ local function BuildFlavorInChild(suffix)
     return lines
 end
 
+local function ReadFlavorRows(directory, flavor)
+    local path = directory .. "/" .. flavor .. ".rows"
+    local text = Read(path):gsub("\r\n", "\n")
+    local trailer = "\n" .. ROWS_TERMINATOR .. "\n"
+    if text:sub(-#trailer) ~= trailer then Fail(path .. ": missing flavor row terminator") end
+    local lines = {}
+    for line in text:sub(1, -#trailer):gmatch("[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    if #lines == 0 then Fail(path .. ": no flavor rows") end
+    return lines
+end
+
 local rows = {}
 if ROWS_ONLY then
     io.write(table.concat(BuildFlavor(FLAVOR), "\n"), "\n", ROWS_TERMINATOR, "\n")
     return
 end
+local rowsDirectory = ArgumentValue("--merge-rows")
 for _, target in ipairs(BUILD_FLAVORS) do
-    for _, line in ipairs(BuildFlavorInChild(target)) do rows[#rows + 1] = line end
+    local flavorRows = rowsDirectory and ReadFlavorRows(rowsDirectory, target) or BuildFlavorInChild(target)
+    for _, line in ipairs(flavorRows) do rows[#rows + 1] = line end
     -- Only encoded rows survive a client; release the child pipe/merge temporaries.
     collectgarbage("collect")
 end

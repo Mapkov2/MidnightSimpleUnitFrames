@@ -35,8 +35,14 @@ local function OpenSections(entry)
         Settle()
     end
 end
+local layerHandleId = "menu2.gf_auras.group.preview.handle.status_layerstatustext"
+local layerHandleLabels = {
+    [layerHandleId] = "Layer Status Text",
+    [layerHandleId .. ".open_settings"] = "Open Layer Status Text settings",
+}
 local function Catalog(entry)
     local rows, navigationRows = {}, 0
+    local layerRows = {}
     for _, widget in ipairs(entry.searchWidgets) do
         local record, meta = widget._msuf2RuntimeControlRecord, widget._msuf2SearchMeta
         if record and meta then
@@ -63,12 +69,20 @@ local function Catalog(entry)
                     and record.classification == "navigation" and record.searchIndexed == true,
                     "custom spell editor is no longer searchable navigation")
                 navigationRows = navigationRows + 1
+            elseif layerHandleLabels[record.controlId] then
+                assert(row == record.controlId .. "\t\t" .. layerHandleLabels[record.controlId] .. "\tbutton\t\t\t\t\t\t",
+                    "layer handle identity changed: " .. record.controlId)
+                assert(not layerRows[record.controlId], "duplicate layer handle control: " .. record.controlId)
+                layerRows[record.controlId] = true
             else rows[#rows + 1] = row end
         end
     end
-    -- One newly searchable shared editor is additive; all frozen rows and
-    -- geometry must still match the pre-area baseline for every selection.
+    -- Check additive controls separately so the original catalog and geometry
+    -- still have to match the pre-area baseline for every selection.
     assert(navigationRows == 1, "custom spell navigation row missing or duplicated")
+    for id in pairs(layerHandleLabels) do
+        assert((layerRows[id] == true) == (flavor == "Forever"), "unexpected layer handle availability: " .. id)
+    end
     table.sort(rows)
     local hash = 0
     for _, row in ipairs(rows) do

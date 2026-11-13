@@ -196,20 +196,100 @@ end
 -- Canonical serialization
 ---------------------------------------------------------------------------
 
--- The shortest text that reads back as the same double. "%d" only below 2^31
--- (Lua 5.1 formats it through a C long, 32 bits on Windows); the exponent loses
--- its leading zeros so Windows ("e+015") and other C runtimes ("e+15") agree.
+local DECIMAL_BASE = 10000000
+local numberText = {}
+
+-- Form the exact decimal digits of the binary64 value with integer arithmetic.
+-- Multiplying by 5 for a negative binary exponent leaves a decimal shift.
+-- Each limb product stays below 2^53, so no host printf rounding is involved.
+local function ExactDecimal(value)
+    local fraction, exponent = math.frexp(value)
+    local significand = math.ldexp(fraction, 53)
+    exponent = exponent - 53
+    while exponent < 0 and significand % 2 == 0 do
+        significand = significand / 2
+        exponent = exponent + 1
+    end
+
+    local high = math.floor(significand / DECIMAL_BASE)
+    local top = math.floor(high / DECIMAL_BASE)
+    local limbs = { significand - high * DECIMAL_BASE, high - top * DECIMAL_BASE }
+    if top > 0 then limbs[3] = top end
+    local shift = math.min(exponent, 0)
+    local factor, chunk = 2, 23
+    if exponent < 0 then factor, chunk = 5, 10 end
+    local remaining = math.abs(exponent)
+    while remaining > 0 do
+        local step = math.min(remaining, chunk)
+        local multiplier = factor ^ step
+        local carry = 0
+        for index = 1, #limbs do
+            local product = limbs[index] * multiplier + carry
+            carry = math.floor(product / DECIMAL_BASE)
+            limbs[index] = product - carry * DECIMAL_BASE
+        end
+        if carry > 0 then limbs[#limbs + 1] = carry end
+        remaining = remaining - step
+    end
+
+    local last = #limbs
+    while last > 1 and limbs[last] == 0 do last = last - 1 end
+    local parts = { string.format("%d", limbs[last]) }
+    for index = last - 1, 1, -1 do
+        parts[#parts + 1] = string.format("%07d", limbs[index])
+    end
+    local digits = table.concat(parts)
+    return digits, #digits + shift - 1
+end
+
+local function RoundDecimal(digits, precision, exponent)
+    if #digits > precision then
+        local nextDigit = digits:byte(precision + 1)
+        local five = string.byte("5")
+        local roundUp = nextDigit > five or (nextDigit == five and
+            (digits:find("[1-9]", precision + 2) or digits:byte(precision) % 2 == 1))
+        digits = digits:sub(1, precision)
+        if roundUp then
+            local last = #digits
+            while last > 0 and digits:byte(last) == 57 do last = last - 1 end
+            if last == 0 then return "1", exponent + 1 end
+            digits = digits:sub(1, last - 1) .. string.char(digits:byte(last) + 1)
+        end
+    end
+    return (digits:gsub("0+$", "")), exponent
+end
+
+local function DecimalText(digits, exponent, precision)
+    if exponent < -4 or exponent >= precision then
+        local fraction = #digits > 1 and "." .. digits:sub(2) or ""
+        return digits:sub(1, 1) .. fraction .. string.format("e%+d", exponent)
+    end
+    local point = exponent + 1
+    if point <= 0 then return "0." .. string.rep("0", -point) .. digits end
+    if point >= #digits then return digits .. string.rep("0", point - #digits) end
+    return digits:sub(1, point) .. "." .. digits:sub(point + 1)
+end
+
+-- Keep the corpus's 14-to-17-digit round-trip format and break exact decimal
+-- ties toward an even digit. Different CRTs round %.Ng differently.
 local function FormatNumber(value)
     if value ~= value then return "nan" end
     if value == math.huge then return "inf" end
     if value == -math.huge then return "-inf" end
     if value % 1 == 0 and math.abs(value) < 2 ^ 31 then return string.format("%d", value) end
-    local text
-    for digits = 14, 17 do
-        text = string.format("%." .. digits .. "g", value)
-        if tonumber(text) == value then break end
+    local cached = numberText[value]
+    if cached then return cached end
+    local digits, exponent = ExactDecimal(math.abs(value))
+    local sign = value < 0 and "-" or ""
+    for precision = 14, 17 do
+        local rounded, roundedExponent = RoundDecimal(digits, precision, exponent)
+        local text = sign .. DecimalText(rounded, roundedExponent, precision)
+        if tonumber(text) == value then
+            numberText[value] = text
+            return text
+        end
     end
-    return (text:gsub("e([%+%-])0*(%d)", "e%1%2"))
+    error("could not round-trip a profile corpus number: " .. tostring(value))
 end
 
 local function FormatString(value)

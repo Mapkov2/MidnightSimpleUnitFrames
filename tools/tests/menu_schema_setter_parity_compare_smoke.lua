@@ -1,6 +1,6 @@
 -- The sparse comparison must reject the same mutations as full-profile equality.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
-local Capture, Restore, Matches, Snapshot = assert(loadfile(root .. "/tools/tests/menu_schema_setter_parity_compare.lua"))()
+local Capture, Restore, Matches, Snapshot, VisitWrites = assert(loadfile(root .. "/tools/tests/menu_schema_setter_parity_compare.lua"))()
 local function Equal(a, b)
     if type(a) ~= type(b) then return false end
     if type(a) ~= "table" then return a == b end
@@ -23,6 +23,23 @@ local function Replace(dst, src)
         else dst[key] = value end
     end
 end
+local function ReferenceWrites(before, after, record, path)
+    if type(before) == "table" or type(after) == "table" then
+        local keys = {}
+        if type(before) == "table" then for key in pairs(before) do keys[key] = true end end
+        if type(after) == "table" then for key in pairs(after) do keys[key] = true end end
+        for key in pairs(keys) do
+            local left, right
+            if type(before) == "table" then left = before[key] end
+            if type(after) == "table" then right = after[key] end
+            ReferenceWrites(left, right, record, path == "" and tostring(key) or path .. "." .. tostring(key))
+        end
+        if next(keys) ~= nil or type(before) == type(after) then return end
+    elseif before == after then
+        return
+    end
+    record[#record + 1] = path
+end
 local baseline = { edited = 1, untouched = { nested = { value = 2 }, kept = false } }
 local frozen = Copy(baseline)
 frozen.edited = 3
@@ -42,7 +59,7 @@ for _, mutation in ipairs(mutations) do
     local derived = Copy(frozen)
     mutation[2](derived)
     local ok = pcall(function()
-        assert(Matches(baseline, expected, derived, Equal), "derived profile differs")
+        assert(Matches(baseline, expected, derived), "derived profile differs")
     end)
     assert(not ok, "accepted wrong derived write: " .. mutation[1])
 end
@@ -54,12 +71,13 @@ local records = {
     { x = { y = 1, z = 2 } }, { x = { [1] = true, [false] = "bool" } },
     { x = { y = { z = 1 } }, extra = {} }, { [1] = 0, [true] = false },
     { x = { removed = false }, extra = true }, { x = function() end },
+    { x = { kept = 1 } }, { x = { replaced = 1 } }, { added = false },
 }
 local nan = 0 / 0
 local withNaN = { nested = { value = nan } }
 local nanBaseline = Copy(withNaN)
 assert(not Equal(Capture(nanBaseline, withNaN), Capture(nanBaseline, Copy(withNaN))), "NaN leaf was treated as equal")
-assert(not Matches(nanBaseline, Capture(nanBaseline, withNaN), Copy(withNaN), Equal), "direct comparison accepted NaN")
+assert(not Matches(nanBaseline, Capture(nanBaseline, withNaN), Copy(withNaN)), "direct comparison accepted NaN")
 local checks = 0
 local restores = 0
 for _, record in ipairs(records) do
@@ -68,9 +86,15 @@ for _, record in ipairs(records) do
         local delta = Capture(before, left)
         assert(Equal(Snapshot(before, left), left), "persistent/full snapshot differs")
         assert(Equal(before, record), "persistent snapshot mutated its baseline")
+        local audited, expectedWrites = {}, {}
+        VisitWrites(before, delta, function(path) audited[#audited + 1] = path end)
+        ReferenceWrites(before, left, expectedWrites, "")
+        table.sort(audited)
+        table.sort(expectedWrites)
+        assert(Equal(audited, expectedWrites), "delta write coverage differs from full graph walk")
         for _, right in ipairs(records) do
             assert(Equal(left, right) == Equal(delta, Capture(before, right)), "sparse/full comparison differs")
-            assert(Equal(left, right) == Matches(before, delta, right, Equal), "direct/full comparison differs")
+            assert(Equal(left, right) == Matches(before, delta, right), "direct/full comparison differs")
             checks = checks + 1
         end
         local actual = Copy(left)
@@ -97,3 +121,4 @@ Restore(actual, baseline, Capture(baseline, actual), Replace)
 assert(actual.untouched == owner and actual.untouched.nested == nested, "restore replaced a surviving table")
 print(("PASS setter parity comparison: %d oracle pairs, %d restores, %d rejected derived mutations")
     :format(checks, restores, #mutations))
+print(("PASS setter write audit: %d changed-path inventories match a full graph walk"):format(restores))

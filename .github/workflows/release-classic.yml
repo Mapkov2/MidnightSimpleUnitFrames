@@ -96,12 +96,11 @@ jobs:
     with:
       ref: ${{ github.ref_name }}
 
-  # Nothing is packaged or uploaded until both gates are green: a skipped or
-  # failed job above skips this one.
+  # Beta and stable uploads require the full gate. Alphas retain the owner's
+  # 2026-10-25 exception, with the gate run locally before tagging.
   publish-classic:
-    # Owner decision 2026-10-25 for 7.0 alphas: the release check runs locally
-    # before tagging; this CI run reports in parallel but does not hold the upload.
-    needs: [preflight]
+    needs: [preflight, release-check]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.release-check.result == 'success' || needs.preflight.outputs.release_type == 'alpha') }}
     runs-on: ubuntu-24.04
     env:
       CLASSIC_RELEASE_TAG: ${{ github.ref_name }}

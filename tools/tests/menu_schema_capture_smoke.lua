@@ -22,7 +22,8 @@ local undeclared = { controlId = 'menu2.third.preview.zoom', pageKey = 'third',
 records[#records + 1], byId[undeclared.controlId] = undeclared, { widget = widget }
 widget._msuf2RuntimeControlRecord = records[2]
 local Catalog = {}
-function Catalog.GetRecords() return records end
+local enumerations = 0
+function Catalog.GetRecords() enumerations = enumerations + 1; return records end
 function Catalog.Get(id) return byId[id] end
 Capture.Start(M, Catalog)
 local data = Capture.Data()
@@ -39,6 +40,7 @@ local declaration = widget._msuf2ControlSchema
 active.observationIssues = nil
 declaration.id = 'corrupt.current.id'
 Catalog.GetRecords()
+assert(enumerations == 2, 'the capture and its caller must use the same catalog enumeration')
 assert(active.observationIssues and active.observationIssues['invalid schema provenance in a live build'],
     'snapshot hid a current-ID mutation')
 declaration.id = 'menu2.second.preview.zoom'

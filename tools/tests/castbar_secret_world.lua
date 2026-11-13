@@ -716,6 +716,7 @@ local function InstallClient(world, env)
         end,
     }
     env.Enum = rawget(env, "Enum") or {}
+    if world.base.client.isForever then env.Enum.PhaseReason = { Phasing = 0, Sharding = 1 } end
     env.Enum.DurationTextBindingProperty = { RemainingDuration = 0, ElapsedDuration = 1, TotalDuration = 2 }
     env.Enum.PowerType = { Mana = 0, Rage = 1, Energy = 3, ComboPoints = 4 }
     env.Enum.NumericRuleFormatRounding = { Nearest = 0, Floor = 1, Ceil = 2 }

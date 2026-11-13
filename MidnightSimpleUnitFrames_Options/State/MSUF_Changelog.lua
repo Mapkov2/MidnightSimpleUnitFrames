@@ -8,56 +8,54 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "85A0C5DA8F873FD17DBC3BD36A987D179714BDCF3627D605E444EF496B513E2E",
-    currentVersion = "7.0-rc3",
+    sourceSha256 = "F8BD6E24B2805D58AF0D4DA0D0B57313D9C0E174563FCD6BAA141F107615722E",
+    currentVersion = "7.0-rc4",
     historyFromVersion = "6.21",
-    previousVersion = "7.0-rc2",
-    rangeLabel = "7.0-rc2 -> 7.0-rc3",
+    previousVersion = "7.0-rc3",
+    rangeLabel = "7.0-rc3 -> 7.0-rc4",
     entries = {
         {
-            version = "7.0-rc3",
-            date = "2026-11-12",
+            version = "7.0-rc4",
+            date = "2026-11-13",
             sections = {
                 {
-                    title = "Bars options",
+                    title = "Profiles",
                     bullets = {
                         {
-                            text = "Live preview. Bars > Textures & Gradient shows a health bar and a power bar at half value, drawn the same way as your frames. Bar texture, background, power texture, gradient and gloss changes show at once. Party and Raid show a group frame, and the power bar uses your current power type.",
+                            text = "Full profile imports. Unit-frame settings that inherit from the shared configuration continue to inherit after import. Explicit false and 0 overrides survive import and reload.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Aura settings across clients. Full exports identify the source client so its aura rules can travel with the profile and return to their original client. Use Old profile is from Retail for older Retail exports without source metadata, including supported Wago aura rules carried through WoW Forever.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Restore points and import review. Restore points follow a renamed profile and are removed when it is deleted. An open import review must be renewed if the active profile was replaced or the import options changed.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Blizzard Edit Mode layouts. Profile transfer respects the layout import and export switches, including external profile operations. Partial imports keep the existing layout.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Paste and import progress. Long strings show status when pasted. Quick Mode is available, and imports show their progress while preparing data before applying it. The reload confirmation opens after a successful import.",
+                            linkless = true,
+                        },
+                        {
+                            text = "First 7.0 login. Upgrading accounts see the profile assigned to their character and can open Profiles directly or confirm the assignment.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Menu",
+                    title = "Preview and Edit Mode",
                     bullets = {
                         {
-                            text = "Swing Timers icon. The Swing Timers page has its own sword icon in the menu navigation.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Colors",
-                    bullets = {
-                        {
-                            text = "Resource opacity in the color picker. Opening the power or power background color from a frame's card, the picker's opacity slider now edits that frame's own Opacity > Resource Bar value and names the frame.",
+                            text = "Party and Raid previews. Status handles reuse the regions and anchors already calculated for the preview and set their fixed labels once, reducing work on refresh and animation.",
                             linkless = true,
                         },
                         {
-                            text = "Dark mode bar color. The slider now works with tinted dark colors, such as those in the Suite factory profiles: it shows the brightness you see and keeps the tint while you drag.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        {
-                            text = "WoW Forever profiles. A character with a surname now starts its first 7.0 login on the profile it used in 6.5 instead of Default.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Color picker. The brightness bar shows its handle again, and a color without a stored opacity no longer shows a 0% opacity row.",
+                            text = "External Edit Mode controls. Integrations that provide their own size controls can hide the duplicate width and height readout.",
                             linkless = true,
                         },
                     },

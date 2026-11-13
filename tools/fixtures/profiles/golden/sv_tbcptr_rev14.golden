@@ -18,6 +18,7 @@ exists.account[4] = "profiles"
 exists.archive = {}
 exists.profiles[1] = "Default"
 global._msufRetiredAssistantDataCleared_v1 = true
+global.profileCheck70.status = "pending"
 char["Char01-Realm01"].specProfileMapVersion = 1
 char["Char02-Realm01"].specProfileMapVersion = 1
 resolve["Char01-Realm01"] = "Default <- Default"

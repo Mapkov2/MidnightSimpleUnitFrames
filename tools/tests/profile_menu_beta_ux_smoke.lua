@@ -66,24 +66,23 @@ assert(ioEntry.open and exports == 0 and M.profileImportString == before, "short
 core.PublicGlobals.MSUF_ExportSelectionToString = export
 
 local box = Control("import.export.buffer")
-local host = box:GetParent():GetParent()
-local warning = assert(Find(host:GetParent(), "Pasting or importing a profile can freeze the game for several seconds."),
-    "inline paste warning is missing")
-local _, _, _, _, hostY = host:GetPoint()
-local _, _, _, _, warningY = warning:GetPoint()
-assert(warningY < hostY - host:GetHeight(), "warning overlaps the paste area")
 local selectionHint = "Choose which frames to include when exporting Selected unitframes."
 assert(Find(chooser, selectionHint), "unit-frame selection is not presented as export-only")
-assert(not Find(entry.wrapper, "Quick Mode"), "quick mode was carried into the beta UI")
+assert(not Control("import.export.quick.mode"):GetChecked(), "quick mode replaced the default full editor")
 
 local raw = "MSUFS3:MSUF3:" .. string.rep("A", 100000) .. "\r\nMSUFM1:MSUF3:É雪\r\nMSKIN1:" .. string.rep("B", 6000)
 box:SetText(raw)
 MenuWorld.FireScript(box, "OnTextChanged", true)
 assert(M.profileImportString == raw and box:GetText() == raw, "normal editor changed multiline input")
 
-local legacy = Control("import.legacy.retail.source")
 local target = Control("import.create.new.mode")
 local name = Control("import.new.profile.name")
+local legacy
+for _, child in ipairs({ name:GetParent():GetChildren() }) do
+    local label = child._msuf2Label
+    if label and label:GetText() == "Old profile is from Retail" then legacy = child end
+end
+assert(legacy, "legacy source switch missing")
 assert(not legacy:GetChecked(), "new strings inherit the Retail origin flag")
 assert(not legacy:IsEnabled(), "Retail source is offered for a Suite bundle it cannot affect")
 box:SetText("MSUF3:standalone profile")
@@ -112,4 +111,4 @@ core.PublicGlobals.MSUF_ExportSelectionToString = function(kind, units)
 end
 assert(exportButton:Click() == true and box:GetText() == "selected frame export", "export could not fill the field")
 core.PublicGlobals.MSUF_ExportSelectionToString = export
-print(flavor .. ": beta profile shortcut, paste warning, Retail source and selected-frame export passed")
+print(flavor .. ": beta profile shortcut, full editor, Retail source and selected-frame export passed")

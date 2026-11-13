@@ -282,9 +282,9 @@ _G.__MSUF_ProjectSchema = function(M, Catalog)
             if setter then Changed(row, "setter", setter) end
         end
     end
-    local function Capture()
+    local function Capture(records)
         local previousPage
-        for _, public in ipairs(Catalog.GetRecords()) do
+        for _, public in ipairs(records or Catalog.GetRecords()) do
             if previousPage and previousPage ~= public.pageKey then Flush() end
             previousPage = public.pageKey
             local raw = assert(Catalog.Get(public.controlId))
@@ -326,7 +326,7 @@ return {
             local records = get()
             if not inside then
                 inside = true
-                capture()
+                capture(records)
                 inside = false
             end
             return records

@@ -64,6 +64,50 @@ capacity, changed-mask strings and normal login reconstruction may allocate;
 this is a steady-state contract, not a claim that initialization allocates
 nothing. Both original fast-check allocation contracts remain required.
 
+## Aura settings in full profile strings
+
+The full schema-600 snapshot inside a Wago-compatible export records its source
+client. Cross-client imports leave configured local aura owners active and keep
+the source client's aura, spell indicator and custom corner settings in the
+profile. A new or factory profile activates a matching carried section when
+one is available. A new client starts with its own aura defaults and copies
+supported shared appearance values. Aura fields inside variants travel with
+their client and are restored alongside the regular imported variant fields.
+The imported variant supplies its enable state and hotkey. If two variants
+with the same name use different context or specialization conditions, the
+import stops before saving. The standard import and the staged import use
+the same transaction.
+With variant import disabled, existing variants are kept for the active client
+and every carried client. A new profile omits incoming variants for all clients.
+
+Each full export carries the other client sections. Review changes can select
+the incoming local settings and choose carried sections by client. Profile
+strings without source metadata use the historical import behavior by
+default. For older full profiles with a known Retail origin, the import option
+**Old profile is from Retail** keeps the original aura sections for the return
+to Retail, including Auras2 and the full section of a Wago string when present.
+The return import restores the supported fields with the current aura model.
+The Wago
+compatibility projection keeps its existing shape. A partial frame import from
+another client preserves the local aura settings for the affected frames.
+Aura client sections live outside the settings roots used for profile sync and
+variant patches.
+
+Full-profile exports and imports share the Blizzard Edit Mode layout switch
+across the Profiles page and the external API. With the switch off, existing
+profiles retain their own saved layout. Only an opted-in import into the
+active profile can apply a transferred layout. An import review applies
+the layout when selected changes affect it. Changing either import preference
+requires reviewing the string again.
+
+Named Workbench restore points follow their profile when it is renamed.
+Deleting a profile removes its points from the shared history budget.
+A new profile cannot inherit points left by an older profile with the same name.
+Import reviews are bound to the active profile identity when they are prepared.
+
+A current full profile keeps absent unit overrides as inherited settings.
+Explicit values, including zero and false, survive import and reload.
+
 ## Compatibility and downgrade boundaries
 
 Sparse storage still uses `_msufDefaultsRevision = 17.5`, returning it to `17`
@@ -116,6 +160,13 @@ profile, spec map, auto switch) before startup resolves its profile. Its own
 binding wins afterwards. The 6.5x entry stays unchanged for 6.5x and for other
 characters that shared it. A restored pre-7.0 safety copy is adopted the same way.
 `forever_surname_upgrade_binding_smoke.lua` covers this on Forever.
+
+**Profile check prompt.** Saved profiles without `_pre70ProfileBackup` mark the
+first 7.0 login of an existing account: `MSUF_GlobalDB.global.profileCheck70.status`
+becomes `pending`, otherwise `baseline`. A pending check shows a warning two
+seconds after `PLAYER_ENTERING_WORLD`, out of combat. It names the character's
+active profile and offers **Open Profiles** or **Profile is correct**; either
+answer sets `done`. Without an answer it returns on the next login.
 
 The profile graph checks cover 6.50, 6.509 and 6.510 inputs on every supported
 client, plus an unprepared 7.0-to-6.510-to-7.0 return. Recovering valid remaining

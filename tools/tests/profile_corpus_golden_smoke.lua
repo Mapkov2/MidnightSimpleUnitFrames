@@ -21,6 +21,23 @@ local Corpus = assert(loadfile(root .. "/tools/profile_corpus_golden.lua"))()
 local entries = Corpus.EntriesFor(root, flavor)
 assert(#entries > 0, "the corpus has no entry for " .. flavor)
 
+-- The legacy Windows CRT and Ubuntu's libc printed these values differently.
+-- Keep both the canonical text and its exact binary64 round trip pinned.
+local numericCases = {
+    { 1020.25628662109375, "1020.2562866210938" },
+    { -674.70001220703125, "-674.7000122070312" },
+    { 0.95686280727386474609375, "0.9568628072738647" },
+    { 832.00006103515625, "832.0000610351562" },
+    { math.ldexp(1, -1074), "4.9406564584125e-324" },
+    { math.ldexp(1 - 2 ^ -53, 1024), "1.7976931348623157e+308" },
+}
+for _, case in ipairs(numericCases) do
+    local value, text = case[1], case[2]
+    local values = Corpus.Flatten({ [value] = value })
+    assert(values["[" .. text .. "]"] == text and tonumber(text) == value,
+        "profile corpus failed canonical round trip for " .. text)
+end
+
 -- Exercise the real registry and Boundary report path, then the corpus driver.
 -- A successfully caught/reported module exception must still fail the entry.
 -- Any saved-variables entry reaches the same path; skip the costly factory build.

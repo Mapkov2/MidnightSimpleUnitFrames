@@ -92,7 +92,7 @@ local groupOwners = {
     { name = "GroupRender", api = mw.M.GroupPreviewRender, depsAt = 3,
       domains = {
         Config = "GF_PREVIEW_ROLE_DEFAULT StatusSpecs ScaleValue ConfigToOffset CompiledSpec CompiledAuraLane RuntimeStatusConfig "
-            .. "CurrentStatusSpec StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellInfo "
+            .. "CurrentStatusSpec StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText CurrentSpellInfo "
             .. "PreviewAllSpecSpellIcons CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture CurrentSpellColor MockSpellTexture "
             .. "Round ClampLayer ClassColor AuraGrowth Int",
         Selection = "RefreshHandleSelection Helpers",

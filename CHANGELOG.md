@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-rc4 - 2026-11-13
+
+Changes since 7.0 RC3 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Profiles
+
+- **Full profile imports.** Unit-frame settings that inherit from the shared configuration continue to inherit after import. Explicit `false` and `0` overrides survive import and reload.
+<!-- msuf-menu-link: none -->
+- **Aura settings across clients.** Full exports identify the source client so its aura rules can travel with the profile and return to their original client. Use **Old profile is from Retail** for older Retail exports without source metadata, including supported Wago aura rules carried through WoW Forever.
+<!-- msuf-menu-link: none -->
+- **Restore points and import review.** Restore points follow a renamed profile and are removed when it is deleted. An open import review must be renewed if the active profile was replaced or the import options changed.
+<!-- msuf-menu-link: none -->
+- **Blizzard Edit Mode layouts.** Profile transfer respects the layout import and export switches, including external profile operations. Partial imports keep the existing layout.
+<!-- msuf-menu-link: none -->
+- **Paste and import progress.** Long strings show status when pasted. Quick Mode is available, and imports show their progress while preparing data before applying it. The reload confirmation opens after a successful import.
+<!-- msuf-menu-link: none -->
+- **First 7.0 login.** Upgrading accounts see the profile assigned to their character and can open Profiles directly or confirm the assignment.
+<!-- msuf-menu-link: none -->
+
+### Preview and Edit Mode
+
+- **Party and Raid previews.** Status handles reuse the regions and anchors already calculated for the preview and set their fixed labels once, reducing work on refresh and animation.
+<!-- msuf-menu-link: none -->
+- **External Edit Mode controls.** Integrations that provide their own size controls can hide the duplicate width and height readout.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-rc3 - 2026-11-12
 
 Changes since 7.0 RC2 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.

@@ -307,6 +307,9 @@ function MSUF.PublicGlobals.MSUF_ExportExternal(profileKey)
     payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
     Parts.AuraTransfer.ForExport(payload, true, MSUF_ProfileIO_ExportVariants)
     if not MSUF_ProfileIO_ExportVariants then payload.profileVariants=nil end
+    if not MSUF_ProfileIO_ExportBlizzardEM and type(payload.general) == "table" then
+        payload.general.blizzardEditModeSnapshot = nil
+    end
     local snap = {
         addon   = "MSUF",
         fmt     = 2,

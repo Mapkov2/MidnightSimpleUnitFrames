@@ -295,7 +295,8 @@ local function ImportFailedLine(text, reason, template, inserted)
     end
     return ProfileChatLine("error", text, Translate(tostring(reason)))
 end
-local function DecodeImport(str, external)
+local function DecodeImport(str, mode)
+    local external = (mode == "external")
     if type(str) ~= "string" or not str:match("%S") then
         return nil, "empty string", ProfileChatLine("error", "Import failed (empty string).")
     end
@@ -332,13 +333,8 @@ end
 --- "external" (MSUF_ImportExternal). Returns a plan table, or nil plus reason
 --- plus (active mode) the exact chat line the pre-transaction entry points
 --- printed for that rejection. External reasons keep their old strings too.
-local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
+local function ValidateImport(decoded, mode, legacyRetail)
     local external = (mode == "external")
-    local decoded, why, chatLine = DecodeImport(str, external)
-    if not decoded then return nil, why, chatLine end
-    --- Source-client stamp: `decoded` is still the raw decoded envelope here.
-    --- A reader of the exporting client's stamp belongs at this point, before
-    --- SelectSupportedProfile rebuilds or drops the envelope.
     local selected = MSUF_ProfileIO_SelectSupportedProfile(decoded)
     local schemaWhy = "MSUF 6.x profile required (schema 600)"
     if type(selected) ~= "table" then
@@ -366,9 +362,13 @@ local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
         local reason = auraReason or "invalid profile data"
         return nil, reason, ImportFailedLine("Import failed: %s", reason)
     end
-    local staged = MSUF_DeepCopy(selected)
+    return { profile = selected, isSnapshot = isSnapshot, auraClient = auraClient, legacyRetail = legacy }
+end
+
+local function PlanImport(input, mode)
+    local staged = MSUF_DeepCopy(input.profile)
     local plan = {
-        isSnapshot = isSnapshot,
+        isSnapshot = input.isSnapshot,
         schema = staged.schema,
     }
     local kind
@@ -388,6 +388,9 @@ local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
     end
     plan.kind = kind
     local payload = plan.payload
+    -- Capture the profile format before the untrusted translator strips its
+    -- repair revision. Missing unit overrides are inheritance in this format.
+    plan.keepUnitOverrides = kind == "all" and MSUF.DefaultsSchema.IsCurrentProfile(payload)
     if Normalize.PersistenceRejected(payload) then return nil, "invalid profile data", ImportFailedLine("Import failed: %s", "invalid profile data") end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(payload) end
     payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
@@ -401,8 +404,11 @@ local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
         end
         payload.profileVariants=clean
     end
-    if not AuraTransfer.Prepare(plan, auraClient, MSUF_ProfileIO_ImportVariants, legacy) then
+    if not AuraTransfer.Prepare(plan, input.auraClient, MSUF_ProfileIO_ImportVariants, input.legacyRetail) then
         return nil, "invalid profile data", ImportFailedLine("Import failed: %s", "invalid profile data")
+    end
+    if not MSUF_ProfileIO_ImportBlizzardEM and type(payload.general) == "table" then
+        payload.general.blizzardEditModeSnapshot = nil
     end
     MSUF.ProfileNormalize.PrepareGroupFrameImport(payload, kind)
     if kind == "unitselection" then
@@ -427,7 +433,6 @@ local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
         plan.payload = UnitSelection.Copy(payload, selectedUnits)
         if plan.foreignAuraPartial then plan.payload.auras3 = nil end
         plan.selectedUnits = selectedUnits
-        MSUF_ProfileIO_CollectProfileMediaWarnings(plan.payload)
         return plan
     end
     if mode == "external" then
@@ -444,16 +449,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
             source = "profile_import",
             markProfile = true,
         })
-        if not MSUF_ProfileIO_ImportBlizzardEM and type(payload.general) == "table" then
-            payload.general.blizzardEditModeSnapshot = nil
-        end
     else
-        --- Opt-in gate for imported Blizzard Edit Mode data: stripped before the
-        --- merge unless the profiles-page switch is on, so a foreign string can
-        --- never silently rearrange the local Blizzard HUD.
-        if not MSUF_ProfileIO_ImportBlizzardEM and type(payload.general) == "table" then
-            payload.general.blizzardEditModeSnapshot = nil
-        end
         if kind == "unitframe" or kind == "groupframe" or kind == "all" then
             MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
                 source = "snapshot_import",
@@ -466,9 +462,20 @@ local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
             MSUF_ProfileIO_NormalizeImportedFontSizes(payload)
         end
     end
-    MSUF_ProfileIO_CollectProfileMediaWarnings(payload)
     return plan
 end
+local function MSUF_ProfileIO_PrepareImport(str, mode, legacyRetail)
+    local decoded, why, chatLine = DecodeImport(str, mode)
+    if not decoded then return nil, why, chatLine end
+    local input
+    input, why, chatLine = ValidateImport(decoded, mode, legacyRetail)
+    if not input then return nil, why, chatLine end
+    local plan
+    plan, why, chatLine = PlanImport(input, mode)
+    if plan then MSUF_ProfileIO_CollectProfileMediaWarnings(plan.payload) end
+    return plan, why, chatLine
+end
+
 --- Import transaction, step 2 of 3: stage the complete profile the commit
 --- will install and run every normalizer over it: the forced defaults pass,
 --- the unit alpha keys, the group-frame repair and the aura model. Nothing
@@ -568,7 +575,8 @@ function ImportTx.Stage(plan, base)
         candidate = MSUF_DeepCopy(base)
         UnitSelection.Commit(payload, plan.selectedUnits, candidate)
         candidate._msufStateSchema = nil
-        candidate = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
+        candidate = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true, false,
+            MSUF.DefaultsSchema.IsCurrentProfile(base))
         MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
         plan.selection = UnitSelection.Copy(candidate, plan.selectedUnits)
         if plan.foreignAuraPartial then plan.selection.auras3 = nil end
@@ -578,6 +586,10 @@ function ImportTx.Stage(plan, base)
         candidate = MSUF_DeepCopy(payload)
         local ok, why = AuraTransfer.Stage(plan, candidate, base, ImportTx.FactoryAuraBase)
         if not ok then return nil, why end
+        if not MSUF_ProfileIO_ImportBlizzardEM then
+            candidate.general = candidate.general or {}
+            candidate.general.blizzardEditModeSnapshot = MSUF_DeepCopy(base.general and base.general.blizzardEditModeSnapshot)
+        end
         if not MSUF_ProfileIO_ImportVariants then
             candidate.profileVariants = MSUF_DeepCopy(base.profileVariants)
         end
@@ -588,7 +600,8 @@ function ImportTx.Stage(plan, base)
     end
     if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(candidate) end
     candidate._msufStateSchema = nil
-    candidate = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true)
+    local keepUnitOverrides = plan.keepUnitOverrides or (kind ~= "all" and MSUF.DefaultsSchema.IsCurrentProfile(base))
+    candidate = MSUF.PublicGlobals.MSUF_NormalizeProfileDefaults(candidate, true, false, keepUnitOverrides)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
     --- The group-frame and aura modules load after this file; the import
     --- refreshes below treat them as optional the same way.
@@ -613,10 +626,15 @@ function ImportTx.Stage(plan, base)
 end
 --- Base content of the active profile for staging: the base snapshot (never
 --- a live variant overlay). Full imports can preserve local variants and aura data.
+function ImportTx.NeedsLiveBase(plan)
+    return plan.kind ~= "all" or not MSUF_ProfileIO_ImportVariants or not MSUF_ProfileIO_ImportBlizzardEM or plan.foreignAura
+        or (MSUF_DB and MSUF_DB[AuraTransfer.StorageKey])
+end
+
 function ImportTx.LiveBase(plan)
     MSUF_ProfileIO_RunEnsureDB()
     if type(MSUF_DB) ~= "table" then return {} end
-    if plan.kind == "all" and MSUF_ProfileIO_ImportVariants and not plan.foreignAura and not MSUF_DB[AuraTransfer.StorageKey] then
+    if not ImportTx.NeedsLiveBase(plan) then
         return {}
     end
     if Variants then return Variants.BaseSnapshot(MSUF_DB, true) end
@@ -653,6 +671,13 @@ end
 --- Import transaction, step 3 of 3: swap the staged candidate into the active
 --- profile. Everything that can reject a string or raise already ran on the
 --- private candidate, so this step has no failure return.
+local function ApplyImportedBlizzardLayout(payload)
+    if MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
+        and type(payload.general.blizzardEditModeSnapshot) == "table" then
+        MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+    end
+end
+
 local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     --- Pending edits reach the other sync members first; the imported
     --- settings themselves stay in this profile (re-based below).
@@ -689,10 +714,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_ProfileIO_PostImportApply_Auras("all", payload)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", payload)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", payload)
-        if MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
-            and type(payload.general.blizzardEditModeSnapshot) == "table" then
-            MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
-        end
+        if not plan.skipNativeLayout then ApplyImportedBlizzardLayout(payload) end
         ApplyProfileRuntime("PROFILE_IMPORT", true)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
         ImportTx.ReportKeptVariants(plan)
@@ -701,10 +723,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     MSUF_ProfileIO_PostImportApply_Auras(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
-    if MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
-        and type(payload.general.blizzardEditModeSnapshot) == "table" then
-        MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
-    end
+    if not plan.skipNativeLayout then ApplyImportedBlizzardLayout(payload) end
     ApplyProfileRuntime("PROFILE_IMPORT", true)
     MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
     MSUF.ProfileIOCompleteFirstLoadImport()
@@ -726,27 +745,32 @@ function ImportTx.Finish(plan)
     MSUF_ProfileIO_ReportImportWarnings()
     return true
 end
+local function ApplyCurrentImport(plan)
+    if plan.candidate then
+        MSUF_ProfileIO_RunEnsureDB()
+    else
+        local base, baseWhy = ImportTx.LiveBase(plan)
+        if not base then
+            print(ImportFailedLine("Import failed: %s", baseWhy))
+            return false, baseWhy
+        end
+        local candidate, why = ImportTx.Stage(plan, base)
+        if not candidate then return false, why end
+    end
+    return ImportTx.Finish(plan)
+end
+
 local function MSUF_ImportFromString(str, legacyRetail)
-    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
+    if Variants and not Variants.CanMutateProfile() then return false, "finish editing the variant first" end
     MSUF_ProfileIO_ResetImportWarnings()
     local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active", legacyRetail)
     if not plan then
         print(chatLine)
         return false, why
     end
-    local base, baseWhy = ImportTx.LiveBase(plan)
-    if not base then
-        chatLine = ImportFailedLine("Import failed: %s", baseWhy)
-        print(chatLine)
-        return false, baseWhy
-    end
-    local candidate, stageWhy = ImportTx.Stage(plan, base)
-    if not candidate then
-        print(ImportFailedLine("Import failed: %s", stageWhy))
-        return false, stageWhy
-    end
-    return ImportTx.Finish(plan)
+    return ApplyCurrentImport(plan)
 end
+
 --- Imports a string into a new profile and switches to it. The string is
 --- decoded, validated, staged and normalized BEFORE the profile is created or
 --- switched, so a rejected string creates nothing, switches nothing and
@@ -754,25 +778,22 @@ end
 --- switch switches back and removes the created profile, from Suite too.
 --- Returns true, or false plus reason plus stage ("name", "exists", "decode",
 --- "create" or "switch").
-local function MSUF_ImportIntoNewProfile(name, str, legacyRetail)
-    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
-    MSUF_ProfileIO_ResetImportWarnings()
+local function CheckNewImportName(name)
     name = type(name) == "string" and name:match("^%s*(.-)%s*$") or ""
     if name == "" then
-        return false, "enter a new profile name", "name"
+        return nil, "enter a new profile name", "name"
     end
-    if ProfileNameTooLong(name) then return false, "profile name too long", "name" end
+    if ProfileNameTooLong(name) then return nil, "profile name too long", "name" end
     --- Read-only existence check: the profile roots are not created before
     --- the string has been accepted.
     local profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
     if type(profiles) == "table" and profiles[name] ~= nil then
-        return false, "profile already exists", "exists"
+        return nil, "profile already exists", "exists"
     end
-    local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active", legacyRetail)
-    if not plan then
-        print(chatLine)
-        return false, why, "decode"
-    end
+    return name
+end
+
+local function StageNewImport(plan)
     local base = {}
     if plan.kind ~= "all" then
         base = ImportTx.FactoryBase()
@@ -781,23 +802,50 @@ local function MSUF_ImportIntoNewProfile(name, str, legacyRetail)
             return false, "factory defaults unavailable", "create"
         end
     end
-    local candidate, stageWhy = ImportTx.Stage(plan, base)
-    if not candidate then return false, stageWhy, "decode" end
+    local candidate, why = ImportTx.Stage(plan, base)
+    return candidate ~= nil, why, not candidate and "decode" or nil
+end
+
+local function RollbackNewImport(name, previous, profiles)
+    if type(profiles[previous]) == "table" then MSUF_SwitchProfile(previous) end
+    if MSUF_ActiveProfile == name then return end
+    profiles[name] = nil
+    MSUF_ProfileIO_NotifySuiteLifecycle("delete", name)
+end
+
+local function ApplyNewImport(name, plan)
     local previous = MSUF_ActiveProfile or "Default"
     local created = MSUF_CreateProfile(name)
-    profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
+    local profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
     if created ~= true or type(profiles) ~= "table" or type(profiles[name]) ~= "table" then
         return false, "could not create profile", "create"
     end
-    local previousExists = type(profiles[previous]) == "table"
     MSUF_SwitchProfile(name)
     if MSUF_ActiveProfile ~= name then
-        if previousExists then MSUF_SwitchProfile(previous) end
-        profiles[name] = nil
-        MSUF_ProfileIO_NotifySuiteLifecycle("delete", name)
+        RollbackNewImport(name, previous, profiles)
         return false, "could not switch profile", "switch"
     end
-    return ImportTx.Finish(plan)
+    local ok, why = ImportTx.Finish(plan)
+    if ok then return true end
+    RollbackNewImport(name, previous, profiles)
+    return false, why
+end
+
+local function MSUF_ImportIntoNewProfile(name, str, legacyRetail)
+    if Variants and not Variants.CanMutateProfile() then return false, "finish editing the variant first" end
+    MSUF_ProfileIO_ResetImportWarnings()
+    local target, why, stage = CheckNewImportName(name)
+    if not target then return false, why, stage end
+    local plan, chatLine
+    plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active", legacyRetail)
+    if not plan then
+        print(chatLine)
+        return false, why, "decode"
+    end
+    local staged
+    staged, why, stage = StageNewImport(plan)
+    if not staged then return false, why, stage end
+    return ApplyNewImport(target, plan)
 end
 ---
 --- External Wago UI Packs API (stateless by profileKey)
@@ -861,7 +909,8 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
     if existing == nil and ProfileNameTooLong(profileKey, true) then return false, "invalid profileKey" end
     local isActive = (profileKey == MSUF_ActiveProfile)
     local base = {}
-    if type(existing) == "table" and (plan.foreignAura or existing[AuraTransfer.StorageKey] or not MSUF_ProfileIO_ImportVariants) then
+    if type(existing) == "table" and (plan.foreignAura or existing[AuraTransfer.StorageKey]
+        or not MSUF_ProfileIO_ImportVariants or not MSUF_ProfileIO_ImportBlizzardEM) then
         base = existing
         if isActive and Variants and type(MSUF_DB) == "table" then
             local why
@@ -897,6 +946,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
+        ApplyImportedBlizzardLayout(plan.payload)
         ApplyProfileRuntime("PROFILE_EXTERNAL_IMPORT", true)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_EXTERNAL_IMPORT", profileKey)
         MSUF_ProfileIO_ReportImportWarnings()
@@ -914,6 +964,9 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
         ImportTx.ReportKeptVariants(plan)
         MSUF.ProfileIOCompleteFirstLoadImport()
         return true
+    end
+    if type(existing) ~= "table" and MSUF.ProfileWorkbench then
+        MSUF.ProfileWorkbench.RenameOrDeleteProfilePoints(profileKey)
     end
     MSUF_GlobalDB.profiles[profileKey] = newTable
     MSUF_ProfileIO_ReportImportWarnings()
@@ -978,7 +1031,98 @@ Parts.MSUF_ProfileIO_MaterializeProfileCopyForExport = MSUF_ProfileIO_Materializ
 
 -- Complete forward bindings once; gameplay closures keep direct local calls.
 -- Staging and commit share the existing importer and normalization owners.
+-- Menu and Suite run one detached preparation phase per frame. The final
+-- step alone runs the existing synchronous apply and its notification chain.
+local ImportJob = {}
+ImportJob.__index = ImportJob
+local IMPORT_PHASES = { "decode", "validate", "stage", "stage" }
+
+local function ImportJobResult(job, ok, why, stage)
+    job.finished, job.ok, job.why, job.stage = true, ok, why, stage
+    job.text, job.input, job.plan, job.identity, job.applying = nil, nil, nil, nil, nil
+    return true, ok, why, stage
+end
+
+local function CheckImportJob(job)
+    if MSUF.Util.InCombat() then return false, "combat", "combat" end
+    if not MSUF.ProfileRuntime.IsCurrentIdentity(job.identity)
+        or job.variants ~= MSUF_ProfileIO_ImportVariants
+        or job.blizzardEditMode ~= MSUF_ProfileIO_ImportBlizzardEM then
+        return false, "Settings changed. Review again before applying.", "stale"
+    end
+    if Variants and not Variants.CanMutateProfile() then
+        return false, "finish editing the variant first", "stale"
+    end
+    if job.name ~= nil then return CheckNewImportName(job.name) end
+    return true
+end
+
+function ImportJob:Prepare()
+    local step, value, why, chatLine = self.completed
+    if step == 0 then
+        value, why, chatLine = DecodeImport(self.text, "active")
+        self.text, self.input = nil, value
+    elseif step == 1 then
+        value, why, chatLine = ValidateImport(self.input, "active", self.legacyRetail)
+        self.input = value
+    elseif step == 2 then
+        value, why, chatLine = PlanImport(self.input, "active")
+        self.input, self.plan = nil, value
+        if value and not self.name and not ImportTx.NeedsLiveBase(value) then
+            local candidate
+            candidate, why = ImportTx.Stage(value, {})
+            if not candidate then value = nil end
+        end
+    else
+        return StageNewImport(self.plan)
+    end
+    if chatLine then print(chatLine) end
+    return value ~= nil, why, "decode"
+end
+
+function ImportJob:Step()
+    if self.finished then return true, self.ok, self.why, self.stage end
+    if self.applying then return false end
+    local ready, why, stage = CheckImportJob(self)
+    if not ready then return ImportJobResult(self, false, why, stage) end
+    if self.completed < self.total - 1 then
+        local ok
+        ok, why, stage = self:Prepare()
+        if not ok then return ImportJobResult(self, false, why, stage) end
+        self.completed = self.completed + 1
+        self.phase = self.completed == self.total - 1 and "apply" or IMPORT_PHASES[self.completed + 1]
+        return false
+    end
+    self.applying = true
+    MSUF_ProfileIO_ResetImportWarnings()
+    MSUF_ProfileIO_CollectProfileMediaWarnings(self.plan.payload)
+    local ok
+    if self.name then
+        ok, why, stage = ApplyNewImport(self.name, self.plan)
+    else
+        -- Partial imports and preserved variants must merge with the live
+        -- base from this frame. A profile identity stamp misses field edits.
+        ok, why, stage = ApplyCurrentImport(self.plan)
+    end
+    if ok then self.completed = self.total end
+    return ImportJobResult(self, ok, why, stage)
+end
+
+local function BeginImport(text, name, legacyRetail)
+    local job = setmetatable({
+        text = text, name = name, legacyRetail = legacyRetail == true, identity = MSUF.ProfileRuntime.Identity(),
+        variants = MSUF_ProfileIO_ImportVariants, blizzardEditMode = MSUF_ProfileIO_ImportBlizzardEM,
+        completed = 0, total = name ~= nil and 5 or 4, phase = "decode",
+    }, ImportJob)
+    local target, why, stage = CheckImportJob(job)
+    if not target then return nil, why, stage end
+    if name ~= nil then job.name = target end
+    return job
+end
+
 MSUF.ProfileImportReview = {
+    BeginImport = BeginImport,
+    ImportOptions = function() return MSUF_ProfileIO_ImportVariants, MSUF_ProfileIO_ImportBlizzardEM end,
     AuraReviewChanges = AuraTransfer.ReviewChanges,
     ApplyAuraReview = AuraTransfer.ApplyReview,
     Prepare = function(text, base, legacyRetail)
@@ -998,9 +1142,9 @@ MSUF.ProfileImportReview = {
         -- base too, so the ordinary import preference cannot replace them.
         return ImportTx.Stage({ kind = "all", payload = candidate }, candidate)
     end,
-    Commit = function(candidate)
+    Commit = function(candidate, skipNativeLayout)
         return MSUF_ProfileIO_CommitImportToActiveProfile({ candidate = candidate, payload = candidate,
-            kind = "all", isSnapshot = true, snapshotKind = "all", preserveIdentity = true })
+            kind = "all", isSnapshot = true, snapshotKind = "all", preserveIdentity = true, skipNativeLayout = skipNativeLayout })
     end,
 }
 Parts.Bind1()

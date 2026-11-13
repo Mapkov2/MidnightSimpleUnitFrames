@@ -532,6 +532,7 @@ function Stage.PrepareCellSamples(st, env, sample)
         local row = regions[i] or {}
         regions[i] = row
         row.field = ENGINE_STATUS_FIELDS[spec.value] or spec.value
+        row.anchor = status and status.anchor
         row.shown = status and status.enabled == true and env.StatusSpecInMode(spec, scene.statusSpec) or false
         row.text, row.texture = nil, nil
         if env.StatusSpecIsText(spec) then
@@ -542,17 +543,16 @@ function Stage.PrepareCellSamples(st, env, sample)
     end
     for i = #regions, #env.statusHandles + 1, -1 do regions[i] = nil end
 end
-function Stage.ConfigureStatusHandle(st, env, handle)
-    local spec, frame = handle._statusSpec, st.mock._cell
-    local cfg = env.RuntimeStatusConfig(st.scene.runtimeStatus, spec)
-    local region = frame and frame[ENGINE_STATUS_FIELDS[spec.value] or spec.value]
-    handle._previewText = spec.text or "Status"
-    if handle._label then handle._label:SetText(env.StatusLabel(spec)) end
-    M.PreviewHelpers.BindGroupSceneHandle(handle, st.mock, region, st.previewScale, cfg and cfg.anchor)
-end
 function Stage.ConfigureStatusHandles(st, env)
-    if not st.mock._cell then return end
-    for i = 1, #env.statusHandles do Stage.ConfigureStatusHandle(st, env, env.statusHandles[i]) end
+    local mock, scale = st.mock, st.previewScale
+    local frame = mock._cell
+    if not frame then return end
+    local bind, handles = M.PreviewHelpers.BindGroupSceneHandle, env.statusHandles
+    local rows = st.self._msufGFCellSample.statusRegions
+    for i = 1, #handles do
+        local row = rows[i]
+        bind(handles[i], mock, frame[row.field], scale, row.anchor)
+    end
 end
 
 --- Spell indicator handle painters: icon glow effect and the per-visual

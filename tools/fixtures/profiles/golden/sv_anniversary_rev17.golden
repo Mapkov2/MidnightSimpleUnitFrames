@@ -17,6 +17,7 @@ exists.account[4] = "profiles"
 exists.account[5] = "unitFrameScreenCache"
 exists.archive = {}
 exists.profiles[1] = "Profile01"
+global.profileCheck70.status = "pending"
 resolve["Char01-Realm01"] = "Profile01 <- Profile01"
 resolve["Char02-Realm01"] = "Default <- Profile01"
 resolve["NewChar-NewRealm"] = "Default <- Profile01"

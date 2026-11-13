@@ -17,7 +17,7 @@ uses the same scheduler. Logs default to ignored dist/checks (`-LogDirectory`
 overrides this). The fast runner remains usable by parallel development lanes.
 
 On Windows, release-check runs the static search index wall-time probes one at a
-time before it starts its six-worker queue. Each client and locale keeps its
+time before it starts its parallel queue. Each client and locale keeps its
 original inventory ID, arguments and time budget.
 
 `tools/release-test-inventory.json` is the single test inventory for fast-check
@@ -49,11 +49,13 @@ Mainline digest is computed. Ordinary `--ensure`/`--check` runs never write inde
 A missing/stale coverage projection needs a complete workspace build. This
 preparation has its own Lua slot and is timed explicitly. Capture writes changed
 serializable records after each page, retains only the bounded declaration union,
-and drops widget callbacks. The two read-only index families run concurrently
-(at most four Lua processes),
-then all five initial-page projections run concurrently. Every client uses an
-isolated child and disjoint capture files; each phase joins completely. Python
-folds the disk records with the same first-public/last-schema/set-union rules.
+and drops widget callbacks. The read-only index build runs all five clients
+concurrently, then merges each family in matrix order and checks its shipped
+rows. An explicit refresh builds each family concurrently while still finishing
+Classic before Mainline. All five initial-page projections then run concurrently.
+Every client uses an isolated child and disjoint capture files. Each phase joins
+completely before Python folds the records with the same
+first-public/last-schema/set-union rules.
 Both the existing contract-slot budget and the complete elapsed budget require
 strictly less than 300 seconds on the development machine. The latter includes
 tool setup, generated checks, queue wait, projection preparation, scorecard,
@@ -64,12 +66,13 @@ per content SHA256 within the run, across all five clients and both load
 phases. Compiler listings are collected in bounded batches; provider
 observations remain client/phase-specific. Negative probes also verify
 cache invalidation for equal-size edits and batched/standalone parity.
-Contracts run through a bounded queue with at most six Lua processes. The five
+Contracts use up to 75% of the available logical processors, rounded down and
+bounded to 1–12 workers. The five
 setter replays and the complete fast-check lead the queue; fast-check inherits
 its worker's slot and runs its unchanged checks sequentially inside that slot.
 A zero exit without its exact successful completion receipt is rejected.
-Namespace jobs follow as soon as a worker becomes free, avoiding a phase span
-inflated by late probes. Each setter keeps one menu world for scalar, reset
+The scorecard, namespace and the longer independent search, profile and castbar jobs follow as
+soon as a worker becomes free. Each setter keeps one menu world for scalar, reset
 and compound checks. A free worker claims the next independent client
 or root-only contract under a shared cursor mutex. No worker waits for another
 client's setter before running unrelated work. Exact run-ID inventories,

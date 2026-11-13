@@ -223,6 +223,195 @@ local function StyleProfileInput(editBox, width, height, multiline)
     if editBox._msuf2PaintEditBox then editBox:_msuf2PaintEditBox(false) end
     return editBox
 end
+local function CreateProfileProgress(parent)
+    local progress = T.Panel(parent, nil, T.colors.coreShadow, T.colors.borderSoft)
+    progress:SetHeight(46)
+    progress.label = T.Font(progress, "GameFontHighlightSmall", "", T.colors.text)
+    progress.label:SetPoint("TOPLEFT", progress, "TOPLEFT", 10, -8)
+    progress.label:SetPoint("TOPRIGHT", progress, "TOPRIGHT", -10, -8)
+    progress.label:SetJustifyH("LEFT")
+    progress.bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, progress))
+    progress.bar:SetPoint("BOTTOMLEFT", progress, "BOTTOMLEFT", 10, 9)
+    progress.bar:SetPoint("BOTTOMRIGHT", progress, "BOTTOMRIGHT", -10, 9)
+    progress.bar:SetHeight(7)
+    progress.bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    local color = T.colors.accent
+    progress.bar:SetStatusBarColor(color[1], color[2], color[3])
+    progress:Hide()
+    return progress
+end
+
+local PasteInput = {}
+local PASTE_FEEDBACK_SECONDS = 0.35
+
+function PasteInput.Release(input)
+    if PasteInput.active == input and not input.scrollTask and not input.hideTask then
+        PasteInput.active = nil
+    end
+end
+
+function PasteInput.Stop(input)
+    if not input then return end
+    if input.scrollTask then input.scrollTask:Cancel() end
+    if input.hideTask then input.hideTask:Cancel() end
+    input.scrollTask, input.hideTask = nil, nil
+    input.cursorTop, input.cursorHeight, input.receiving, input.waitForPaint = nil, nil, nil, nil
+    input.progress:Hide()
+    PasteInput.Release(input)
+end
+
+function PasteInput.ScrollToCursor(input)
+    local top, height = input.cursorTop, input.cursorHeight
+    input.cursorTop, input.cursorHeight = nil, nil
+    if not top then return end
+    local scroll = input.scroll
+    local viewH = scroll:GetHeight()
+    if viewH <= 0 then return end
+    local offset, bottom = scroll:GetVerticalScroll(), top + height
+    if top < offset then
+        scroll:SetVerticalScroll(top)
+    elseif bottom > offset + viewH then
+        scroll:SetVerticalScroll(bottom - viewH)
+    end
+end
+
+function PasteInput.Flush(input)
+    input.scrollTask = nil
+    if not input.host:IsVisible() then PasteInput.Stop(input) return end
+    if input.waitForPaint then
+        input.waitForPaint = nil
+        PasteInput.Queue(input)
+        return
+    end
+    PasteInput.ScrollToCursor(input)
+    if input.receiving then
+        input.receiving = nil
+        input.progress.bar:SetValue(2)
+        input.hideTask = M.MenuRuntime:Schedule(PASTE_FEEDBACK_SECONDS, input.hide, "profile-paste-feedback")
+        if not input.hideTask then input.progress:Hide() end
+    end
+    PasteInput.Release(input)
+end
+
+function PasteInput.Queue(input)
+    if input.scrollTask then return end
+    input.scrollTask = M.MenuRuntime:Schedule(0, input.flush, "profile-paste-scroll")
+    if input.scrollTask then
+        PasteInput.active = input
+    else
+        PasteInput.Stop(input)
+    end
+end
+
+function PasteInput.Receive(input, previous, text)
+    local delta = math.abs(#text - #previous)
+    -- Bulk insertion can arrive without a key event. A single UTF-8 letter
+    -- can change the byte length by up to four.
+    if #text < 32 or (delta > 0 and delta <= 4) or not input or not input.host:IsVisible() then return end
+    if input.hideTask then input.hideTask:Cancel() end
+    input.hideTask, input.receiving, input.waitForPaint = nil, true, true
+    T.SetTranslatedText(input.progress.label, M.Tr("Updating profile string..."))
+    input.progress.bar:SetValue(1)
+    input.progress:Show()
+    PasteInput.Queue(input)
+end
+
+function PasteInput.ShowQuickStatus(input, text)
+    if not input or not input.quick then return end
+    local bytes = #text
+    if bytes == input.quickBytes then return end
+    input.quickBytes = bytes
+    local label = bytes > 0 and M.Format("%d bytes ready. Click here to replace the string.", bytes)
+        or M.Tr("Click here, then press Ctrl+V to paste a profile string.")
+    T.SetTranslatedText(input.quickLabel, label)
+end
+
+function PasteInput.FocusQuick(input)
+    local editBox = input.editBox
+    editBox:SetFocus()
+    if not editBox:HasFocus() then
+        if MSUF.Util.InCombat() then return end
+        PasteInput.SetQuick(input, false)
+        editBox:SetFocus()
+    end
+    if editBox:HasFocus() and editBox:GetText() ~= "" then editBox:HighlightText() end
+end
+
+function PasteInput.SetQuick(input, quick)
+    PasteInput.Stop(input)
+    local editBox, scroll, host = input.editBox, input.scroll, input.host
+    if editBox:HasFocus() then editBox:ClearFocus() end
+    input.quick = quick
+    if quick then
+        if not input.blank then
+            input.blank = CreateFrame("Frame", nil, scroll)
+            input.blank:SetSize(1, 1)
+            input.blank:SetPoint("TOPLEFT", scroll, "TOPLEFT")
+            input.quickLabel = T.Font(host, "GameFontHighlightSmall", "", T.colors.text)
+            input.quickLabel:SetPoint("LEFT", host, "LEFT", 16, 0)
+            input.quickLabel:SetPoint("RIGHT", host, "RIGHT", -16, 0)
+            input.quickLabel:SetJustifyH("CENTER")
+            input.quickLabel:SetWordWrap(true)
+        end
+        -- Keep the same native multiline buffer and its input settings. Only
+        -- the presentation and scroll ownership change before Ctrl+V.
+        input.alpha, input.mouseEnabled = editBox:GetAlpha(), editBox:IsMouseEnabled()
+        input.wheelEnabled = editBox:GetScript("OnMouseWheel") ~= nil
+        scroll:Hide()
+        scroll:SetScrollChild(input.blank)
+        editBox:SetParent(host)
+        editBox:ClearAllPoints()
+        -- Native EditBox selection can still draw at zero alpha.
+        editBox:SetPoint("TOPLEFT", UIParent, "BOTTOMRIGHT", 32, -32)
+        editBox:SetAlpha(0)
+        editBox:EnableMouse(false)
+        editBox:EnableMouseWheel(false)
+        host:EnableMouse(true)
+        input.quickBytes = nil
+        PasteInput.ShowQuickStatus(input, editBox:GetText() or "")
+        input.quickLabel:Show()
+    else
+        host:EnableMouse(false)
+        input.quickLabel:Hide()
+        editBox:SetParent(scroll)
+        editBox:ClearAllPoints()
+        editBox:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
+        scroll:SetScrollChild(editBox)
+        editBox:SetAlpha(input.alpha)
+        editBox:EnableMouse(input.mouseEnabled)
+        editBox:EnableMouseWheel(input.wheelEnabled)
+        scroll:Show()
+    end
+    input.quickToggle:SetChecked(quick)
+end
+
+function PasteInput.Attach(editBox, scroll, host)
+    local progress = CreateProfileProgress(host)
+    progress:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 8, 6)
+    progress:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -26, 6)
+    progress:SetFrameLevel(scroll:GetFrameLevel() + 3)
+    progress.bar:SetMinMaxValues(0, 2)
+    local input = { host = host, scroll = scroll, progress = progress, editBox = editBox }
+    input.flush = function() PasteInput.Flush(input) end
+    input.hide = function()
+        input.hideTask = nil
+        progress:Hide()
+        PasteInput.Release(input)
+    end
+    host:HookScript("OnHide", function() PasteInput.Stop(input) end)
+    host:SetScript("OnMouseDown", function(_, button)
+        if input.quick and button == "LeftButton" then PasteInput.FocusQuick(input) end
+    end)
+    editBox:SetScript("OnCursorChanged", function(_, _, cursorY, _, cursorH)
+        if input.quick or not host:IsVisible() then return end
+        input.cursorTop, input.cursorHeight = -(tonumber(cursorY) or 0), tonumber(cursorH) or 0
+        PasteInput.Queue(input)
+    end)
+    return input
+end
+
+M.MenuRuntime:SetQuiesceSettler("profile-paste", function() PasteInput.Stop(PasteInput.active) end)
+
 -- A multiline EditBox never clips its own text: once the export string outgrows the box,
 -- the overflow paints across the whole menu. Host the box in a ScrollFrame (which clips)
 -- and hang the skin on a static host frame so the visuals do not scroll with the text.
@@ -260,19 +449,7 @@ local function WrapMultilineProfileInput(editBox, card, x, y, width, height)
         editBox:SetFocus()
         if editBox.GetNumLetters then editBox:SetCursorPosition(editBox:GetNumLetters()) end
     end)
-    editBox:SetScript("OnCursorChanged", function(_, _, cursorY, _, cursorH)
-        local viewH = scroll:GetHeight() or 0
-        if viewH <= 0 then return end
-        local top = -(tonumber(cursorY) or 0)
-        local bottom = top + (tonumber(cursorH) or 0)
-        local offset = scroll:GetVerticalScroll() or 0
-        if top < offset then
-            scroll:SetVerticalScroll(top)
-        elseif bottom > offset + viewH then
-            scroll:SetVerticalScroll(bottom - viewH)
-        end
-    end)
-    return editBox
+    return PasteInput.Attach(editBox, scroll, host)
 end
 -- Prompts are the safety boundary for destructive profile operations. Keep the
 -- actual profile mutations inside their accept handlers so callers cannot
@@ -326,12 +503,21 @@ local function ReloadBlockedInCombat(message, ...)
     PrintProfileMessage("|cffffd700", message, ...)
     return true
 end
-local function ShowImportReloadPrompt()
-    if ReloadBlockedInCombat("Profile imported. Reload after combat with /reload.") then return end
+local function ShowImportReloadPrompt(profileName)
+    if type(ReloadUI) ~= "function" then
+        PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
+        return
+    end
+    -- The last import phase can run from a timer. Reload requires a player click.
+    local text = profileName
+        and M.Format("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?", profileName)
+        or M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?")
     M.ShowPrompt("MSUF2_IMPORT_RELOAD_PROMPT", {
-        text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
+        text = text,
         accept = RELOAD or M.Tr("Reload"),
         cancel = CANCEL or M.Tr("Not now"),
+        owned = true,
+        canAnswer = function() return not MSUF.Util.InCombat() end,
         onAccept = ReloadImportedUI,
     })
 end
@@ -350,14 +536,6 @@ local function ShowProfileSwitchReloadPrompt(profileName)
         end,
     })
 end
-local function ReloadAfterNewProfileImport(profileName)
-    if ReloadBlockedInCombat("Imported profile '%s'. Reload after combat with /reload.", tostring(profileName)) then return end
-    if type(ReloadUI) == "function" then
-        ReloadImportedUI()
-    else
-        PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload the UI with /reload.", tostring(profileName))
-    end
-end
 local function ProfileExists(name)
     local gdb = MSUF_GlobalDB
     local profiles = type(gdb) == "table" and gdb.profiles or nil
@@ -366,6 +544,7 @@ end
 -- The page builds in stages that share one per-call state table. Every stage runs
 -- once, in order, from ProfilesPage.Build; Prepare owns the helpers the rest use.
 local ProfilesPage = {}
+local ImportUI = {}
 function ProfilesPage.Prepare(ctx)
     local b = W.PageBuilder(ctx)
     local contentW = b.width or ctx.width or 920
@@ -411,6 +590,7 @@ function ProfilesPage.Prepare(ctx)
             or false
     end
     local function ExportProfileString(kind)
+        if ImportUI.pending or BlockCombatAction() then return false end
         kind = kind or M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")
         local suiteKind = kind == "suite_all" or kind:match("^suite_module:") ~= nil
         local selected = M.profileExportUnits or { player = true }
@@ -430,10 +610,13 @@ function ProfilesPage.Prepare(ctx)
             if M.ShowStatusFeedback then M.ShowStatusFeedback("Export failed", "danger", 1.8) end
             return false
         end
+        PasteInput.Stop(state.pasteInput)
         M.profileImportString = value
         local blob = state.blob
         if blob then
-            blob:SetText(value)
+            if blob:GetText() ~= value then blob:SetText(value) end
+            local input = state.pasteInput
+            if input and input.quick then PasteInput.SetQuick(input, false) end
             blob:SetFocus()
             blob:HighlightText()
         end
@@ -1006,30 +1189,34 @@ function ProfilesPage.ImportExport(state)
     end })
     local blob = AP.Row(nil, stringCard, { "textinput", "advancedprofiles.blob.25", nil, { "Profile string", max(220, stringCardW - 40) }, bind = function(blob)
         blob._msuf2CommitOnBlur = false
+        blob._msuf2RefreshTextOnChange = true
         BindProfileControl(ctx, blob, "textinput", "Profile string",
             function() return M.profileImportString or "" end,
             function(value) M.profileImportString = tostring(value or "") end,
-            ProfilesMeta("import_export.buffer", "ephemeral"), nil, false)
+            ProfilesMeta("import_export.buffer", "ephemeral", { anchor = blob._msuf2Title }), nil, false)
     end })
-    -- The box is multiline, so Enter inserts a newline instead of committing, and blur commits
-    -- are off (a profile string in the undo history would be pure noise). Mirror user edits into
-    -- the menu state directly: every refresh writes the state back into the box, so without this
-    -- a pasted string is lost the moment anything refreshes the page - importing, or just
-    -- flipping the new-profile toggle. Focus loss re-syncs in case a paste path skips userInput.
+    -- Keep the raw multiline string before any page refresh can read it.
+    -- Native paste may report the same text twice, including a later user flag.
     local observedText = blob:GetText() or ""
     local function MirrorImportBuffer(self) M.profileImportString = self:GetText() or "" end
     blob:HookScript("OnTextChanged", function(self, userInput)
         local text = self:GetText() or ""
-        if userInput then M.profileImportString = text end
-        if text ~= observedText then
-            observedText = text
-            state.legacyRetailSource = nil
-            if state.legacyRetail then state.legacyRetail:SetChecked(false) end
+        if userInput or (self:HasFocus() and not self._msuf2SkipBlurCommit) then
+            local previous = M.profileImportString or ""
+            M.profileImportString = text
+            if text ~= previous then PasteInput.Receive(state.pasteInput, previous, text) end
         end
+        if text == observedText then return end
+        observedText = text
+        PasteInput.ShowQuickStatus(state.pasteInput, text)
+        state.legacyRetailSource = false
+        if state.legacyRetail then state.legacyRetail:SetChecked(false) end
         UpdateLegacyRetailSource(state, text)
+        ImportUI.InputChanged(state, text)
         M.ProfileWorkbenchUI.ImportChanged(text)
     end)
     blob:HookScript("OnEditFocusLost", MirrorImportBuffer)
+    blob:HookScript("OnEscapePressed", function() PasteInput.Stop(state.pasteInput) end)
     local export = ProfileButton(actionsCard, "Export", function()
         return ExportProfileString(M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all"))
     end, nil, "export.generate", false, nil, nil, nil, ioButtonW)
@@ -1046,6 +1233,7 @@ function ProfilesPage.ImportExport(state)
             historyMode = "none",
             confirmRequired = true,
             customSetReason = "Runs a profile command with its own validation, history and refresh lifecycle.", set = function(value)
+                if ImportUI.pending or BlockCombatAction() then return false end
                 local payload, newName
                 if type(value) == "table" then
                     payload, newName = Trim(value.payload), Trim(value.profileName)
@@ -1062,8 +1250,7 @@ function ProfilesPage.ImportExport(state)
                     if importCreateNew then importCreateNew:SetChecked(true) end
                     if importProfileName then importProfileName:SetText(newName) end
                 end
-                local handler = import:GetScript("OnClick")
-                if type(handler) == "function" then return handler(import, "LeftButton", false) end
+                return ImportUI.Execute(state, newName, true)
             end,
         },
     }), "Import to current profile", "button")
@@ -1092,113 +1279,202 @@ function ProfilesPage.ImportExport(state)
 end
 -- Both import paths read the shared text box, refresh the page and clear the menu history
 -- once the profile data changed.
-local function BuildImportHandlers(state)
-    local ctx, blob, importProfileName = state.ctx, state.blob, state.importProfileName
-    local function ImportTextOrFail()
-        if BlockCombatAction() then return nil end
-        local text = blob:GetText()
-        if text and text ~= "" then
-            -- Importing refreshes the page, which repaints the box from the menu state; keep the
-            -- payload there so the string survives for a second import into a new profile.
-            M.profileImportString = text
-            return text
-        end
-        PrintProfileMessage("|cffff0000", "Import failed (empty string).")
-    end
-    local function ImportIntoCurrent()
-        local text = ImportTextOrFail()
-        if not text then return false end
-        local suiteKind = SuiteImportKind(text)
-        if suiteKind == "full" then
-            M.SetMenuStateValue("profileImportCreateNew", true)
-            PrintProfileMessage("|cffffd700", "Full MSUF + Suite imports create a new profile. Enter a name and import again.")
-            RefreshAfterProfileChange(ctx)
-            return false
-        elseif suiteKind == "module" then
-            local suite = SuiteProfiles()
-            if not suite then
-                PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module.")
-                return false
-            end
-            local ok, reason = suite.ImportModule(text)
-            if not ok then
-                PrintProfileMessage("|cffff0000", "Module import failed: %s", tostring(reason))
-                return false
-            end
-            ClearProfileHistory()
-            RefreshAfterProfileChange(ctx)
-            return true
-        end
-        -- `text` is a string the user pasted
-        local imported = MSUF.Require("MSUF_ImportFromString", FILE)(text, state.legacyRetailSource)
-        if imported ~= true then return false end
-        ClearProfileHistory()
-        M.RequestGeneralDomains("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
-        RefreshAfterProfileChange(ctx)
-        ShowImportReloadPrompt()
-        return true
-    end
-    local function ImportIntoNewProfile(rawName)
-        local text = ImportTextOrFail()
-        if not text then return false end
-        local name = Trim(rawName or importProfileName:GetText())
-        if not (name and name ~= "") then
-            PrintProfileMessage("|cffff0000", "Enter a new profile name first.")
-            return false
-        end
-        if ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
-            return false
-        end
-        local suiteKind = SuiteImportKind(text)
-        if suiteKind then
-            local suite = SuiteProfiles()
-            if not suite then
-                PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this profile.")
-                return false
-            end
-            local ok, reason
-            if suiteKind == "full" then ok, reason = suite.Import(name, text)
-            else ok, reason = suite.ImportModuleIntoNew(name, text) end
-            if not ok then
-                PrintProfileMessage("|cffff0000", "Suite import failed: %s", tostring(reason))
-                return false
-            end
-            ClearProfileHistory()
-            RefreshAfterProfileChange(ctx)
-            M.profileImportNewName = ""
-            importProfileName:SetText("")
-            ReloadAfterNewProfileImport(name)
-            return true
-        end
+local IMPORT_PHASE_TEXT = {
+    decode = "Reading profile... (%.1f s)",
+    validate = "Checking profile... (%.1f s)",
+    stage = "Preparing profile... (%.1f s)",
+    apply = "Applying profile... (%.1f s)",
+}
 
-        -- MSUF_ImportIntoNewProfile decodes, validates and stages the string before it creates
-        -- or switches a profile; a rejected string leaves SavedVariables untouched.
-        local ok, _, stage = MSUF.Require("MSUF_ImportIntoNewProfile", FILE)(name, text, state.legacyRetailSource)
-        if ok ~= true then
-            if stage == "create" then
-                PrintProfileMessage("|cffff0000", "Import failed: could not create profile '%s'.", name)
-                RefreshAfterProfileChange(ctx)
-            elseif stage == "switch" then
-                PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '%s'.", name)
-                RefreshAfterProfileChange(ctx)
-            elseif stage == "exists" then
-                PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
-            else
-                PrintProfileMessage("|cffff0000", "Import failed.")
-            end
-            return false
+local function FinishImport(state, name, suiteKind, ok, reason, stage)
+    local ctx = state.ctx
+    if ok ~= true then
+        if suiteKind then
+            local message = name and "Suite import failed: %s" or "Module import failed: %s"
+            PrintProfileMessage("|cffff0000", message, tostring(reason))
+        elseif stage == "create" then
+            PrintProfileMessage("|cffff0000", "Import failed: could not create profile '%s'.", name)
+            RefreshAfterProfileChange(ctx)
+        elseif stage == "switch" then
+            PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '%s'.", name)
+            RefreshAfterProfileChange(ctx)
+        elseif stage == "exists" then
+            PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
+        elseif name or stage == "stale" or stage == "combat" then
+            PrintProfileMessage("|cffff0000", "Import failed.")
         end
-        ClearProfileHistory()
-        M.RequestGeneralDomains("MSUF2_PROFILE_IMPORT_NEW", { preview = true, applyAll = false, notify = false })
-        RefreshAfterProfileChange(ctx)
-        M.profileImportNewName = ""
-        importProfileName:SetText("")
-        ReloadAfterNewProfileImport(name)
-        return true
+        return false
     end
-    return ImportIntoCurrent, ImportIntoNewProfile
+    ClearProfileHistory()
+    if not suiteKind then
+        local applyReason = name and "MSUF2_PROFILE_IMPORT_NEW" or "MSUF2_PROFILE_IMPORT"
+        M.RequestGeneralDomains(applyReason, { preview = true, applyAll = false, notify = false })
+    end
+    RefreshAfterProfileChange(ctx)
+    if name then
+        M.profileImportNewName = ""
+        state.importProfileName:SetText("")
+        ShowImportReloadPrompt(name)
+    elseif not suiteKind then
+        ShowImportReloadPrompt()
+    end
+    return true
 end
+
+local function ImportSynchronously(state, text, name, suiteKind, suite, legacyRetail)
+    local ok, reason, stage
+    if suiteKind == "full" then ok, reason = suite.Import(name, text)
+    elseif suiteKind and name then ok, reason = suite.ImportModuleIntoNew(name, text)
+    elseif suiteKind then ok, reason = suite.ImportModule(text)
+    elseif name then ok, reason, stage = MSUF.Require("MSUF_ImportIntoNewProfile", FILE)(name, text, legacyRetail)
+    else ok, reason, stage = MSUF.Require("MSUF_ImportFromString", FILE)(text, legacyRetail) end
+    return FinishImport(state, name, suiteKind, ok, reason, stage)
+end
+
+function ImportUI.SetBusy(state, busy)
+    state.import:SetEnabled(not busy)
+    if state.legacyRetail then state.legacyRetail:SetEnabled(not busy and state.legacyRetailEnabled ~= false) end
+    state.reviewImport:SetEnabled(not busy and M.profileImportCreateNew ~= true)
+    state.importModeHelp:SetShown(not busy)
+    state.importProgress:SetShown(busy)
+end
+
+function ImportUI.Stop(state)
+    local pending = ImportUI.pending
+    if not pending or (state and pending.state ~= state) then return end
+    if pending.running then
+        pending.interrupted = true
+        return
+    end
+    ImportUI.pending = nil
+    if pending.task then pending.task:Cancel() end
+    ImportUI.SetBusy(pending.state, false)
+end
+
+function ImportUI.InputChanged(state, text)
+    local pending = ImportUI.pending
+    if pending and pending.state == state and pending.text ~= text then ImportUI.Stop(state) end
+end
+
+function ImportUI.Paint(pending)
+    local job = pending.job
+    local progress = pending.state.importProgress
+    local completed, total = job and job.completed or 0, job and job.total or 1
+    local key = job and IMPORT_PHASE_TEXT[job.phase] or IMPORT_PHASE_TEXT.decode
+    progress.bar:SetMinMaxValues(0, total)
+    progress.bar:SetValue(completed)
+    T.SetTranslatedText(progress.label, M.Format(key, max(0, GetTime() - pending.started)))
+end
+
+function ImportUI.Advance(pending)
+    if pending.job then
+        pending.done, pending.ok, pending.reason, pending.stage = pending.job:Step()
+    else
+        pending.job, pending.reason, pending.stage = pending.begin(pending.text, pending.name, pending.legacyRetail)
+        pending.done = not pending.job
+    end
+end
+
+function ImportUI.SettleStep(ok, pending)
+    pending.running = false
+    if not ok then ImportUI.Stop(pending.state) end
+end
+
+function ImportUI.Tick()
+    local pending = ImportUI.pending
+    if not pending then return end
+    pending.task = nil
+    if M.activeKey ~= "profiles" or M.cache.profiles ~= pending.entry or not pending.state.io:IsVisible()
+        or not MSUF.ProfileRuntime.IsCurrentIdentity(pending.identity) then
+        ImportUI.Stop(pending.state)
+        return
+    end
+    pending.running = true
+    if not MSUF.RunLabeledStep("profile import", ImportUI.Advance, ImportUI.SettleStep, pending) then return end
+    if pending.done then
+        ImportUI.Stop(pending.state)
+        FinishImport(pending.state, pending.name, pending.suiteKind, pending.ok, pending.reason, pending.stage)
+    elseif pending.interrupted then
+        ImportUI.Stop(pending.state)
+    else
+        ImportUI.Paint(pending)
+        ImportUI.Queue()
+    end
+end
+
+function ImportUI.Queue()
+    local pending = ImportUI.pending
+    pending.task = M.MenuRuntime:Schedule(0, ImportUI.Tick, "profile-import")
+    if pending.task then return true end
+    ImportUI.Stop(pending.state)
+    return false
+end
+
+function ImportUI.Start(state, text, name, suiteKind, begin, legacyRetail)
+    local pending = { state = state, text = text, name = name, suiteKind = suiteKind, begin = begin, legacyRetail = legacyRetail,
+        started = GetTime(), identity = MSUF.ProfileRuntime.Identity(), entry = M.cache.profiles }
+    ImportUI.pending = pending
+    ImportUI.Paint(pending)
+    ImportUI.SetBusy(state, true)
+    -- The first callback creates the job. Its first heavy step runs on another
+    -- timer turn, so the import status can paint before decoding starts.
+    return ImportUI.Queue()
+end
+
+local function ImportTargetName(state, rawName)
+    local name = Trim(rawName or state.importProfileName:GetText())
+    if not (name and name ~= "") then
+        PrintProfileMessage("|cffff0000", "Enter a new profile name first.")
+    elseif ProfileExists(name) then
+        PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
+    else
+        return name
+    end
+end
+
+function ImportUI.Execute(state, rawName, synchronous)
+    if ImportUI.pending or BlockCombatAction() then return false end
+    local text = state.blob:GetText()
+    if not text or text == "" then
+        PrintProfileMessage("|cffff0000", "Import failed (empty string).")
+        return false
+    end
+    PasteInput.Stop(state.pasteInput)
+    -- Keep the same payload available for re-import after a page refresh.
+    M.profileImportString = text
+    local name
+    if M.profileImportCreateNew == true then
+        name = ImportTargetName(state, rawName)
+        if not name then return false end
+    end
+    local suiteKind = SuiteImportKind(text)
+    if suiteKind == "full" and not name then
+        M.SetMenuStateValue("profileImportCreateNew", true)
+        PrintProfileMessage("|cffffd700", "Full MSUF + Suite imports create a new profile. Enter a name and import again.")
+        RefreshAfterProfileChange(state.ctx)
+        return false
+    end
+    local suite = suiteKind and SuiteProfiles()
+    if suiteKind and not suite then
+        local message = name and "Install MSUF Suite to import this profile." or "Install MSUF Suite to import this module."
+        PrintProfileMessage("|cffff0000", message)
+        return false
+    end
+    local begin = suite and suite.BeginImport or (not suiteKind and MSUF.ProfileImportReview.BeginImport)
+    local legacyRetail = not suiteKind and state.legacyRetailSource
+    if not synchronous and begin then return ImportUI.Start(state, text, name, suiteKind, begin, legacyRetail) end
+    return ImportSynchronously(state, text, name, suiteKind, suite, legacyRetail)
+end
+
+function ImportUI.Build(state)
+    local card = state.actionsCard
+    local progress = CreateProfileProgress(card)
+    progress:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -328)
+    progress:SetPoint("TOPRIGHT", card, "TOPRIGHT", -20, -328)
+    state.importProgress = progress
+    card:HookScript("OnHide", function() ImportUI.Stop(state) end)
+end
+M.MenuRuntime:SetQuiesceSettler("profile-import", function() ImportUI.Stop() end)
 --- Blizzard Edit Mode data is opt-in per session for BOTH directions
 --- (never exported by default). The switch drives the two ProfileIO
 --- flags directly; nothing is persisted across reloads.
@@ -1243,7 +1519,7 @@ local function TrackImportMode(state, importModeHelp)
     local function RefreshImportMode()
         local createNew = M.profileImportCreateNew == true
         importCreateNew:SetChecked(createNew)
-        state.reviewImport:SetEnabled(not createNew)
+        state.reviewImport:SetEnabled(not createNew and not ImportUI.pending)
         M.ProfileWorkbenchUI.ImportChanged(M.profileImportString)
         if import.SetText then import:SetText(createNew and "Import new profile" or "Import to current profile") end
         if T.ApplyButtonRole then T.ApplyButtonRole(import, createNew and "success" or "danger") end
@@ -1272,6 +1548,26 @@ local function TrackImportMode(state, importModeHelp)
         M.TrackRefresh(ctx, RefreshImportMode)
     end
 end
+local function BuildQuickModeToggle(state)
+    local input = state.pasteInput
+    local meta = ProfilesMeta("import_export.quick_mode", "ephemeral")
+    local toggle = AP.Row(nil, state.stringCard, { "switch", meta.controlId, nil,
+        { "Quick Mode", 20, state.ioWide and -394 or -336, max(160, state.stringCardW - 40) }, bind = AP.NativeInput })
+    RegisterControl(toggle, meta, "Quick Mode", "toggle")
+    state.AddProfileTooltip(toggle, "Quick Mode",
+        "Hides the profile text and pauses scrolling while you paste. Turn it off to edit the full string.")
+    input.quickToggle = toggle
+    toggle:SetChecked(false)
+    toggle:SetScript("OnClick", function(self)
+        if ImportUI.pending or BlockCombatAction() then
+            self:SetChecked(input.quick == true)
+            return
+        end
+        PasteInput.SetQuick(input, not input.quick)
+        if input.quick then PasteInput.FocusQuick(input) end
+    end)
+end
+
 function ProfilesPage.ImportActions(state)
     local ctx, ioWide, stringCard, actionsCard = state.ctx, state.ioWide, state.stringCard, state.actionsCard
     local stringCardW, actionsCardW, ioButtonW = state.stringCardW, state.actionsCardW, state.ioButtonW
@@ -1279,20 +1575,18 @@ function ProfilesPage.ImportActions(state)
     local export, import, importCreateNew = state.export, state.import, state.importCreateNew
     local importProfileName, importNameW = state.importProfileName, state.importNameW
     local ProfileButton, PlaceActionRow = state.ProfileButton, state.PlaceActionRow
-    local ImportIntoCurrent, ImportIntoNewProfile = BuildImportHandlers(state)
-    import:SetScript("OnClick", function()
-        if M.profileImportCreateNew == true then
-            return ImportIntoNewProfile()
-        else
-            return ImportIntoCurrent()
-        end
-    end)
+    import:SetScript("OnClick", function() return ImportUI.Execute(state) end)
     importProfileName:SetOnValueCommitted(function(value)
+        if ImportUI.pending then return end
         M.profileImportNewName = Trim(value or "")
-        if M.profileImportCreateNew == true then ImportIntoNewProfile(value) end
+        if M.profileImportCreateNew == true then ImportUI.Execute(state, value) end
+    end)
+    importProfileName:HookScript("OnTextChanged", function(self, userInput)
+        local pending = ImportUI.pending
+        if userInput and pending and pending.state == state and pending.name ~= Trim(self:GetText()) then ImportUI.Stop(state) end
     end)
     importCreateNew:SetScript("OnClick", function(self)
-        if BlockCombatAction() then
+        if ImportUI.pending or BlockCombatAction() then
             self:SetChecked(M.profileImportCreateNew == true)
             return
         end
@@ -1311,14 +1605,14 @@ function ProfilesPage.ImportActions(state)
     local blobW = max(220, stringCardW - 40)
     MoveWidget(blob, stringCard, 20, -142, blobW)
     local fieldHeight = ioWide and 220 or 162
-    WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, fieldHeight)
-    local warning = AP.LabelAt(stringCard, "Pasting or importing a profile can freeze the game for several seconds.",
-        20, -176 - fieldHeight, blobW, "GameFontDisableSmall", T.colors.accent)
-    warning:SetWordWrap(true)
+    state.pasteInput = WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, fieldHeight)
+    BuildQuickModeToggle(state)
     PlaceActionRow(actionsCard, 20, import, export, -82)
     MoveWidget(wago, actionsCard, 20, -126, ioButtonW)
     local review = ProfileButton(actionsCard, "Review changes", function()
-        M.ProfileWorkbenchUI.ReviewImport(blob:GetText(), state.legacyRetailSource)
+        if not ImportUI.pending then
+            M.ProfileWorkbenchUI.ReviewImport(blob:GetText(), state.legacyRetailSource)
+        end
     end, nil, "import.review", false, nil, nil, nil, ioButtonW)
     state.reviewImport = review
     state.AddProfileTooltip(review, "Review changes", "Selective review changes the current profile. Turn off new-profile import to use it.")
@@ -1331,7 +1625,7 @@ function ProfilesPage.ImportActions(state)
         { legacyLabel, 20, -202, max(220, actionsCardW - 40) }, bind = AP.NativeInput })
     RegisterControl(state.legacyRetail, legacyMeta, legacyLabel, "toggle")
     state.legacyRetail:SetScript("OnClick", function(self)
-        if not BlockCombatAction() then
+        if not ImportUI.pending and not BlockCombatAction() then
             state.legacyRetailSource = not state.legacyRetailSource
             M.ProfileWorkbenchUI.ImportChanged(nil)
         end
@@ -1343,6 +1637,8 @@ function ProfilesPage.ImportActions(state)
     local importModeHelp = AP.Row(nil, actionsCard, { "text", "advancedprofiles.importModeHelp.30", nil,
         { "", 20, -336, max(220, actionsCardW - 40), T.colors.muted } })
     if importModeHelp and importModeHelp.SetWordWrap then importModeHelp:SetWordWrap(true) end
+    state.importModeHelp = importModeHelp
+    ImportUI.Build(state)
     TrackImportMode(state, importModeHelp)
 end
 function ProfilesPage.UnitSelection(state)

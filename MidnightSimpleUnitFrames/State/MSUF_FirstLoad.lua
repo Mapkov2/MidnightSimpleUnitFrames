@@ -139,6 +139,11 @@ local function DetectInstallEvidence()
     local profile = TableHasEntries(rawProfileDB) and rawProfileDB or FirstProfile(profiles)
     local schema = tonumber(type(profile) == "table" and profile._msufProfileSchema)
     local hasProfile = type(profile) == "table"
+    -- Saved profiles without the safety copy every 7.0 login takes: the first
+    -- 7.0 login of an account that used an older MSUF. Read before the rollback
+    -- session captures that copy.
+    local pre70Account = (TableHasEntries(profiles) or TableHasEntries(rawProfileDB))
+        and not (type(rawGlobalDB) == "table" and rawGlobalDB._pre70ProfileBackup ~= nil)
     local reason
     if TableHasEntries(profiles) then
         reason = schema and "saved_profiles_schema" or "legacy_saved_profiles"
@@ -159,6 +164,7 @@ local function DetectInstallEvidence()
         legacyProfile = hasProfile and (schema == nil or schema < CURRENT_PROFILE_SCHEMA) or false,
         rawDB = rawProfileDB ~= nil,
         rawProfiles = TableHasEntries(profiles),
+        pre70Account = pre70Account,
     }
 end
 
@@ -306,6 +312,15 @@ local function SettleLifecycleState()
     end
 end
 
+-- One profile check per account that brings pre-7.0 profiles. Accounts without
+-- them record a baseline and never see it. The record survives the profile
+-- pool; only an answer in the prompt retires it.
+local function SettleProfileCheck()
+    local record = globalDB.global.profileCheck70
+    if type(record) == "table" and type(record.status) == "string" then return end
+    globalDB.global.profileCheck70 = { status = installEvidence.pre70Account and "pending" or "baseline" }
+end
+
 -- Settles on the addon's ADDON_LOADED in game (loadedNow). A caller that asks
 -- for the lifecycle before that event (a harness without it) gets a lifecycle
 -- from what existed when this file ran; the event, when it comes, settles again
@@ -339,6 +354,7 @@ local function SettleSavedVariables(loadedNow)
     if loadedNow then MSUF.DefaultsSchema.BeginRollbackSession(globalDB, rawProfileDB) end
     ArchivePre6Profiles()
     SettleLifecycleState()
+    SettleProfileCheck()
 end
 
 local FirstLoad = MSUF.FirstLoad6 or {}
@@ -347,7 +363,10 @@ function FirstLoad.SettleSavedVariables(loadedNow)
     SettleSavedVariables(loadedNow)
     -- The legacy value remains private install/migration evidence. Consumers
     -- get no runtime alias until Kernel's explicit bind phase publishes it.
-    if loadedNow then MSUF_DB = nil end
+    if loadedNow then
+        MSUF_DB = nil
+        FirstLoad.ArmProfileCheck()
+    end
 end
 function FirstLoad.GetLegacyProfileDB()
     return ProfilePolicy.AcceptsProfile(rawProfileDB) and rawProfileDB or nil
@@ -370,6 +389,78 @@ function FirstLoad.ResolveLiveGlobalDB(fallback)
     end
     if type(liveDB.global) ~= "table" then liveDB.global = {} end
     return liveDB, true
+end
+
+-- First 7.0 login of an existing account: a warning that names the profile
+-- this character uses and opens Profiles on request. Both buttons answer it;
+-- closing the game without an answer shows it again on the next login.
+-- Nothing is registered when the account has no pending check.
+local PROFILE_CHECK_KEY = "MSUF_PROFILE_CHECK_70"
+local function ProfileCheckRecord()
+    local liveDB = FirstLoad.ResolveLiveGlobalDB(globalDB)
+    local record = liveDB.global.profileCheck70
+    return type(record) == "table" and record or nil, liveDB
+end
+
+local function AnswerProfileCheck(result)
+    local record = ProfileCheckRecord()
+    if not record then return end
+    record.status, record.result, record.answeredAt = "done", result, Now()
+end
+
+local function ProfileCheckText(liveDB)
+    local Tr = MSUF.Translate
+    local active = MSUF_ActiveProfile
+    if type(active) ~= "string" or active == "" then active = "Default" end
+    local text = "|cffff4040" .. Tr("MSUF 7.0: Please check your profile") .. "|r\n\n"
+        .. string.format(Tr("This character uses the profile %s."), "|cff38c7f0" .. active:gsub("|", "||") .. "|r")
+        .. "\n\n" .. Tr("If your frames do not look like before, open Profiles and select your profile there. All your previous profiles are still listed.")
+    if type(liveDB._pre70ProfileBackup) == "table" then
+        text = text .. "\n\n" .. Tr("MSUF also kept a full copy of your pre-7.0 profiles: /msuf restorebackup")
+    end
+    return text
+end
+
+local function OpenProfilesPage()
+    local open = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
+    if open then open("profiles") end
+end
+
+-- force (true only) shows it again for testing: /run MSUF.FirstLoad6.ShowProfileCheck(true)
+local function ShowProfileCheck(force)
+    local record, liveDB = ProfileCheckRecord()
+    if force ~= true and not (record and record.status == "pending") then return false end
+    if MSUF.Util.InCombat() then
+        MSUF.EventBus:Register("PLAYER_REGEN_ENABLED", PROFILE_CHECK_KEY, ShowProfileCheck, nil, true)
+        return false
+    end
+    local Tr = MSUF.Translate
+    MSUF.UI.ShowPrompt(PROFILE_CHECK_KEY, {
+        text = ProfileCheckText(liveDB),
+        accept = Tr("Open Profiles"),
+        cancel = Tr("Profile is correct"),
+        owned = true,
+        showAlert = true,
+        hideOnEscape = false,
+        canAnswer = function() return not MSUF.Util.InCombat() end,
+        onAccept = function()
+            AnswerProfileCheck("opened")
+            OpenProfilesPage()
+        end,
+        onCancel = function() AnswerProfileCheck("confirmed") end,
+    })
+    return true
+end
+FirstLoad.ShowProfileCheck = ShowProfileCheck
+
+function FirstLoad.ArmProfileCheck()
+    local record = ProfileCheckRecord()
+    if not (record and record.status == "pending") then return false end
+    -- After the login screen settles, like the other one-time login prompts.
+    MSUF.EventBus:Register("PLAYER_ENTERING_WORLD", PROFILE_CHECK_KEY, function()
+        MSUF.Scheduler.ScheduleAfter(PROFILE_CHECK_KEY, 2, ShowProfileCheck)
+    end, nil, true)
+    return true
 end
 
 local function SyncLiveState()

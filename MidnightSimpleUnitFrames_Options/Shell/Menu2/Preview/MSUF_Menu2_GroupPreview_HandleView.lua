@@ -251,6 +251,7 @@ function Stage.CreateLayerHandles(st)
         local statusHandle = CreatePreviewHandle("status_" .. tostring(spec.value or i), "sicons", { 0.80, 0.67, 0.20 }, StatusLabel(spec), 78, 28, false)
         statusHandle._cfgStatus = true
         statusHandle._statusSpec = spec
+        statusHandle._previewText = spec.text or "Status"
         statusHandles[#statusHandles + 1] = statusHandle
     end
     st.statusHandles = statusHandles

@@ -11,6 +11,24 @@ end
 local function Database()
     return MSUF.History.EnsureDB()
 end
+-- Called before a new owner is published, or after a rename is accepted.
+-- Do not initialize profiles here: lifecycle callers may still be binding one.
+function W.RenameOrDeleteProfilePoints(source, destination)
+    local global = MSUF_GlobalDB
+    local meta = type(global) == "table" and global.global
+    local saved = type(meta) == "table" and meta.profileWorkbench
+    if type(saved) ~= "table" or saved.version ~= 1 or type(saved.points) ~= "table" then return end
+    for i = #saved.points, 1, -1 do
+        local point = saved.points[i]
+        if type(point) == "table" then
+            if destination and point.profile == destination then
+                table.remove(saved.points, i)
+            elseif point.profile == source then
+                if destination then point.profile = destination else table.remove(saved.points, i) end
+            end
+        end
+    end
+end
 local function Storage()
     Database()
     local global = MSUF_GlobalDB
@@ -25,7 +43,8 @@ local function Storage()
         local point = saved.points[i]
         if i > MAX_POINTS or type(point) ~= "table" or not Whole(point.id, MAX_ID) or point.id < 1
             or type(point.profile) ~= "string" or type(point.label) ~= "string"
-            or type(point.snapshot) ~= "table" or type(point.snapshot.core) ~= "table" then
+            or type(point.snapshot) ~= "table" or type(point.snapshot.core) ~= "table"
+            or type(global.profiles[point.profile]) ~= "table" then
             table.remove(saved.points, i)
         else
             if not Whole(point.bytes, MAX_BYTES) then point.bytes = MAX_BYTES end
@@ -192,16 +211,26 @@ function W.ApplySnapshot(snapshot, label)
     if not checkpoint then return false, checkpointWhy end
     local prepared = MSUF.History.PrepareHistoryChange(label, "profile-workbench")
     local completed, failure, rollback = false, nil, true
+    local nativeAttempted = false
+    local oldLayout = before.core.general and before.core.general.blizzardEditModeSnapshot
+    local newLayout = normalized.general and normalized.general.blizzardEditModeSnapshot
+    local applyLayout = MSUF.Client.SupportsBlizzardEditMode and type(newLayout) == "table"
+        and not Fields.Equal(oldLayout, newLayout)
     local function Apply()
         local restored, restoreWhy = RestoreProviders(candidate)
         if not restored then failure = restoreWhy return end
-        completed, failure = MSUF.ProfileImportReview.Commit(normalized)
+        completed, failure = MSUF.ProfileImportReview.Commit(normalized, true)
+        if completed and applyLayout then
+            nativeAttempted = true
+            MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+        end
     end
     local function Finish(success)
         if success and completed then return end
         rollback = RestoreProviders(before)
         Fields.StripExternal(before.core)
-        rollback = MSUF.ProfileImportReview.Commit(before.core) and rollback
+        rollback = MSUF.ProfileImportReview.Commit(before.core, true) and rollback
+        if nativeAttempted then MSUF.PublicGlobals.MSUF_BlizzardEditMode_ApplyProfileSnapshot() end
     end
     local committed = MSUF.RunLabeledStep("profile restore transaction", Apply, Finish)
     if not committed or not completed then
@@ -256,7 +285,12 @@ function W.ReviewSnapshot(after, label)
             return nil, "Some changes cannot be reviewed safely."
         end
     end
-    return { before = before, after = after, changes = changes, label = label, profile = ProfileName() }
+    return { before = before, after = after, changes = changes, label = label, identity = MSUF.ProfileRuntime.Identity() }
+end
+local function ReviewImportedSnapshot(snapshot)
+    local review, why = W.ReviewSnapshot(snapshot, "Before importing settings")
+    if review then review.importOptions = { MSUF.ProfileImportReview.ImportOptions() } end
+    return review, why
 end
 function W.ReviewImport(text, legacyRetail)
     local before, why = W.Snapshot()
@@ -272,16 +306,24 @@ function W.ReviewImport(text, legacyRetail)
             end
             candidate.suiteModules = incoming.modules or before.core.suiteModules
             before.providers[id] = incoming.provider or before.providers[id]
-            return W.ReviewSnapshot({ core = candidate, providers = before.providers }, "Before importing settings")
+            return ReviewImportedSnapshot({ core = candidate, providers = before.providers })
         end
     end
     local candidate, reason = MSUF.ProfileImportReview.Prepare(text, before.core, legacyRetail)
     if not candidate then return nil, reason end
     candidate.suiteModules = before.core.suiteModules
-    return W.ReviewSnapshot({ core = candidate, providers = before.providers }, "Before importing settings")
+    return ReviewImportedSnapshot({ core = candidate, providers = before.providers })
 end
 function W.CommitReview(review)
-    if not review or review.profile ~= ProfileName() then return false, "The active profile changed. Review again." end
+    if review and review.importOptions then
+        local variants, layout = MSUF.ProfileImportReview.ImportOptions()
+        if review.importOptions[1] ~= variants or review.importOptions[2] ~= layout then
+            return false, "Settings changed. Review again before applying."
+        end
+    end
+    if not review or not MSUF.ProfileRuntime.IsCurrentIdentity(review.identity) then
+        return false, "The active profile changed. Review again."
+    end
     local current, why = W.Snapshot()
     if not current then return false, why end
     if not Fields.Equal(current, review.before) then return false, "Settings changed. Review again before applying." end

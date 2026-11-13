@@ -5,6 +5,9 @@ local type, next = type, next
 local removed = function() end
 local empty = {}
 local currentRoot, sizes = nil, { [empty] = 0 }
+local function UseBaseline(root)
+    if root ~= currentRoot then currentRoot, sizes = root, { [empty] = 0 } end
+end
 local function Size(record)
     local count = sizes[record]
     if count then return count end
@@ -48,7 +51,7 @@ local function CaptureValue(before, after)
     return changes
 end
 local function Capture(before, after)
-    if before ~= currentRoot then currentRoot, sizes = before, { [empty] = 0 } end
+    UseBaseline(before)
     return CaptureValue(before, after)
 end
 -- Materialize only changed ancestors. Everything shared with the old snapshot
@@ -64,7 +67,8 @@ local function Materialize(baseline, changes)
     return out
 end
 local function Snapshot(baseline, actual)
-    return Materialize(baseline, Capture(baseline, actual))
+    local changes = Capture(baseline, actual)
+    return Materialize(baseline, changes), changes
 end
 -- Fresh deltas restore the same values as Replace without scanning unchanged
 -- records again. Surviving tables keep their identity, as with full Replace.
@@ -81,32 +85,64 @@ local function Restore(dst, baseline, changes, replace)
         else dst[key] = original end
     end
 end
--- Compare the complete expected profile (baseline plus delta) with a live
--- branch. Unchanged subtrees go through the original full equality function;
--- the two key sweeps also reject missing expected keys and unexpected writes.
-local function Matches(baseline, changes, actual, equal)
-    if changes == nil then return equal(baseline, actual) end
+-- A baseline record has immutable cardinality. Checking each actual member and
+-- the expected count detects both extra and missing keys without a second walk
+-- over every unchanged subtree. A delta adjusts that count at its own level.
+local function MatchValue(baseline, changes, actual)
     if changes == removed then return actual == nil, " removed value" end
-    if type(changes) ~= "table" then return equal(changes, actual) end
+    if changes == nil and type(baseline) ~= "table" then return baseline == actual, " values" end
+    if changes ~= nil and type(changes) ~= "table" then return changes == actual, " values" end
     if type(actual) ~= "table" then return false, " types" end
     local before = type(baseline) == "table" and baseline or empty
-    for key, value in next, before do
-        local change, other = changes[key], actual[key]
-        local ok, why
-        if change ~= nil then ok, why = Matches(value, change, other, equal)
-        elseif type(value) == "table" then ok, why = equal(value, other)
-        else ok, why = value == other, " values" end
-        if not ok then return false, "." .. tostring(key) .. tostring(why) end
-    end
-    for key, change in next, changes do
-        if before[key] == nil then
-            local ok, why = Matches(nil, change, actual[key], equal)
-            if not ok then return false, "." .. tostring(key) .. tostring(why) end
+    local expectedCount = Size(before)
+    if changes then
+        for key, change in next, changes do
+            if change == removed then expectedCount = expectedCount - 1
+            elseif before[key] == nil then expectedCount = expectedCount + 1 end
         end
     end
-    for key in next, actual do
-        if before[key] == nil and changes[key] == nil then return false, "." .. tostring(key) .. " extra" end
+    local count = 0
+    for key, value in next, actual do
+        local previous, change = before[key], changes and changes[key]
+        if change ~= nil or value ~= previous then
+            local ok, why = MatchValue(previous, change, value)
+            if not ok then return false, "." .. tostring(key) .. why end
+        end
+        count = count + 1
     end
-    return true
+    return count == expectedCount, " missing key"
 end
-return Capture, Restore, Matches, Snapshot
+local function Matches(baseline, changes, actual)
+    UseBaseline(baseline)
+    return MatchValue(baseline, changes, actual)
+end
+local function VisitLeaves(record, visit, path, depth)
+    if type(record) ~= "table" or next(record) == nil then
+        visit(table.concat(path, ".", 1, depth))
+        return
+    end
+    local childDepth = depth + 1
+    for key, value in next, record do
+        path[childDepth] = tostring(key)
+        VisitLeaves(value, visit, path, childDepth)
+    end
+end
+local function VisitDelta(before, changes, visit, path, depth)
+    if type(before) ~= "table" then
+        VisitLeaves(changes, visit, path, depth)
+    elseif type(changes) ~= "table" then
+        VisitLeaves(before, visit, path, depth)
+    else
+        local childDepth = depth + 1
+        for key, change in next, changes do
+            path[childDepth] = tostring(key)
+            VisitDelta(before[key], change, visit, path, childDepth)
+        end
+    end
+end
+-- Audit only changed paths in a complete delta. Replacing an entire table
+-- still visits all its leaves, or its own path when the record was empty.
+local function VisitWrites(before, changes, visit)
+    if changes ~= nil then VisitDelta(before, changes, visit, {}, 0) end
+end
+return Capture, Restore, Matches, Snapshot, VisitWrites

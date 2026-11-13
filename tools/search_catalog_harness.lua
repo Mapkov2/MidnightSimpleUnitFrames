@@ -124,46 +124,51 @@ do
         TopLeftCorner = true, TopRightCorner = true, BottomLeftCorner = true, BottomRightCorner = true,
         TopEdge = true, BottomEdge = true, LeftEdge = true, RightEdge = true, Center = true,
     }
+    local type, byte = type, string.byte
+    local function One() return 1 end
+    local function Zero() return 0 end
+    local function Hundred() return 100 end
+    local getters = {
+        GetFrameLevel = One, GetScale = One, GetEffectiveScale = One,
+        GetAlpha = One, GetValue = One, GetVerticalScroll = One,
+        GetStringHeight = One, GetStringWidth = One, GetUnboundedStringWidth = One,
+        GetLeft = Zero, GetBottom = Zero, GetRight = Hundred, GetTop = Hundred,
+        GetCenter = function() return 50, 50 end,
+        GetText = function() return "" end,
+        GetChecked = function() return false end,
+        SetMinMaxValues = function(self, minValue, maxValue)
+            regionMinMaxValues[self] = { minValue, maxValue }
+        end,
+        GetMinMaxValues = function(self)
+            local values = regionMinMaxValues[self]
+            if values then return values[1], values[2] end
+            return 0, 100
+        end,
+    }
+    local patchedIndexes = {}
+    local function RegionIndex(oldIndex, patchRegion)
+        return function(object, key)
+            if type(key) == "string" then
+                local first = byte(key)
+                if first and (first == 95 or first >= 97 and first <= 122) then return nil end
+            end
+            if absentDataMember[key] then return nil end
+            local method = getters[key]
+            if method then return method end
+            local value = oldIndex(object, key)
+            if key == "CreateTexture" or key == "CreateFontString" then
+                return function(self, ...) return patchRegion(value(self, ...)) end
+            end
+            return value
+        end
+    end
     local function PatchRegion(region)
         local mt = region and getmetatable(region)
         if not mt or patched[mt] or type(mt.__index) ~= "function" then return region end
         patched[mt] = true
         local oldIndex = mt.__index
-        mt.__index = function(object, key)
-            if type(key) == "string" and key:sub(1, 1) == "_" then return nil end
-            if type(key) == "string" and key:match("^[a-z]") then return nil end
-            if absentDataMember[key] then return nil end
-            if key == "GetFrameLevel" or key == "GetScale" or key == "GetEffectiveScale"
-                or key == "GetAlpha" or key == "GetValue" or key == "GetVerticalScroll"
-                or key == "GetStringHeight" or key == "GetStringWidth" or key == "GetUnboundedStringWidth"
-            then
-                return function() return 1 end
-            end
-            if key == "GetLeft" or key == "GetBottom" then return function() return 0 end end
-            if key == "GetRight" or key == "GetTop" then return function() return 100 end end
-            if key == "GetCenter" then return function() return 50, 50 end end
-            if key == "SetMinMaxValues" then
-                return function(self, minValue, maxValue)
-                    regionMinMaxValues[self] = { minValue, maxValue }
-                end
-            end
-            if key == "GetMinMaxValues" then
-                return function(self)
-                    local values = regionMinMaxValues[self]
-                    if values then return values[1], values[2] end
-                    return 0, 100
-                end
-            end
-            if key == "GetText" then return function() return "" end end
-            if key == "GetChecked" then return function() return false end end
-            local value = oldIndex(object, key)
-            if key == "CreateTexture" or key == "CreateFontString" then
-                return function(self, ...)
-                    return PatchRegion(value(self, ...))
-                end
-            end
-            return value
-        end
+        local index = patchedIndexes[oldIndex] or RegionIndex(oldIndex, PatchRegion)
+        patchedIndexes[oldIndex], mt.__index = index, index
         return region
     end
     PatchRegion(_G.UIParent)

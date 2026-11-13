@@ -156,11 +156,14 @@ spec.loader.exec_module(coverage)
 with tempfile.TemporaryDirectory(prefix="schema-parallel-") as directory:
     fixture = Path(directory)
     (fixture / 'tools').mkdir()
-    (fixture / 'tools/classic-client-matrix.tsv').write_text('Suffix\nMainline\nVanilla\nTBC\nMists\n')
-    for failure in (None, 'index', 'initial', 'drift', 'lost', 'refresh', 'refresh-index', 'refresh-lost'):
-        refresh = failure in ('refresh', 'refresh-index', 'refresh-lost')
-        family_barrier, initial_barrier, lock = Barrier(2), Barrier(5), Lock()
-        calls, index_reads, hashes, finished = [], {}, [], set()
+    (fixture / 'tools/classic-client-matrix.tsv').write_text(
+        'Suffix\tIsClassic\nMainline\tfalse\nVanilla\ttrue\nTBC\ttrue\nMists\ttrue\n')
+    classic_clients, mainline_clients = {'Vanilla', 'TBC', 'Mists'}, {'Mainline', 'Forever'}
+    for failure in (None, 'index', 'merge', 'initial', 'drift', 'lost', 'refresh', 'refresh-index', 'refresh-lost'):
+        refresh = bool(failure and failure.startswith('refresh'))
+        client_barrier = Barrier(3 if refresh else 5)
+        mainline_barrier, initial_barrier, lock = Barrier(2), Barrier(5), Lock()
+        calls, index_reads, hashes, finished, built = [], {}, [], set(), set()
         def hash_source(root, include_indexes=True):
             hashes.append(include_indexes)
             return 'changed' if failure == 'drift' and len(hashes) > 1 else 'source'
@@ -173,21 +176,29 @@ with tempfile.TemporaryDirectory(prefix="schema-parallel-") as directory:
             with lock:
                 calls.append((list(command), dict(env)))
             if command[1].endswith('search_static_index_project.lua'):
-                assert (command[-1] == '--check') == (not refresh) and kwargs['check']
-                classic = '--flavor' in command
+                assert kwargs['check']
+                flavor = command[command.index('--flavor') + 1]
+                classic = flavor in classic_clients
                 assert env['MSUF_SEARCH_SOURCE_SHA256'] == ('C' if classic else 'M') * 64
                 assert env['LUA_INIT'] == '@tools/menu_schema_harness.lua'
-                if not refresh:
-                    family_barrier.wait(timeout=10)
-                elif classic:
-                    import time
-                    time.sleep(0.03)  # A parallel Mainline hash would run before this write finishes.
-                if failure in ('index', 'refresh-index') and classic:
-                    raise subprocess.CalledProcessError(1, command)
-                flavors = ('Vanilla', 'TBC', 'Mists') if classic else ('Mainline', 'Forever')
-                for flavor in flavors:
-                    (Path(env['MSUF_SCHEMA_CAPTURE_DIR']) / (flavor + '.ndjson')).write_text(json.dumps(control) + '\n')
-                with lock:
+                if command[-1] == '--rows-only':
+                    (mainline_barrier if refresh and not classic else client_barrier).wait(timeout=10)
+                    if failure in ('index', 'refresh-index') and flavor == 'Vanilla':
+                        raise subprocess.CalledProcessError(1, command)
+                    capture = Path(env['MSUF_SCHEMA_CAPTURE_DIR']) / (flavor + '.ndjson')
+                    capture.write_text(json.dumps(control) + '\n')
+                    kwargs['stdout'].write(flavor.encode())
+                    with lock:
+                        built.add(flavor)
+                else:
+                    assert (command[-1] == '--check') == (not refresh)
+                    directory = Path(command[command.index('--merge-rows') + 1])
+                    clients = classic_clients if classic else mainline_clients
+                    assert clients <= built, 'index merge started before its clients finished'
+                    for client in clients:
+                        assert (directory / (client + '.rows')).read_bytes() == client.encode()
+                    if failure == 'merge' and classic:
+                        raise subprocess.CalledProcessError(1, command)
                     finished.add(classic)
             else:
                 assert finished == {True, False}, 'initial phase started before both family checks finished'
@@ -209,7 +220,7 @@ with tempfile.TemporaryDirectory(prefix="schema-parallel-") as directory:
                 projected = coverage.generate(fixture, 'lua-fixture', refresh_indexes=refresh)
             except (ValueError, subprocess.CalledProcessError) as error:
                 assert failure, str(error)
-                expected = {'index': 'non-zero exit', 'initial': 'initial schema projection failed',
+                expected = {'index': 'non-zero exit', 'merge': 'non-zero exit', 'initial': 'initial schema projection failed',
                             'drift': 'sources changed', 'lost': 'search rows lost',
                             'refresh-index': 'non-zero exit', 'refresh-lost': 'search rows lost'}[failure]
                 assert expected in str(error), str(error)
@@ -219,7 +230,8 @@ with tempfile.TemporaryDirectory(prefix="schema-parallel-") as directory:
                 assert set(projected['indexes']) == set(coverage.INDEXES)
                 for client in projected['clients'].values():
                     assert client['controls'] == [control] and client['initialControls'] == [control]
-            assert len(calls) == (1 if failure in ('refresh-index', 'refresh-lost') else 2 if failure in ('index', 'lost') else 7), 'missing or extra child invocation'
+            expected_calls = {'index': 5, 'merge': 6, 'lost': 6, 'refresh-index': 3, 'refresh-lost': 4}
+            assert len(calls) == expected_calls.get(failure, 12), 'missing or extra child invocation'
 print('schema generation: bounded parallel phases retain every client and reject child failures, source drift and lost rows')
 
 # Ordinary check/ensure invocations cannot opt into index writes accidentally.

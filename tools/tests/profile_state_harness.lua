@@ -15,9 +15,37 @@
 
 local Harness = {}
 
-local function Literal(value, quotedKeys)
+-- A profile repeats the same scalars and keys across scopes and snapshots.
+-- Cache the exact formatted tokens, with a fixed limit for long-running tests.
+local literalNumbers, literalKeys = {}, {}
+local numberCount, keyCount = 0, 0
+local function NumberLiteral(value)
+    -- Negative zero compares equal to zero but has a different saved literal.
+    if value == 0 or value ~= value then return string.format("%.17g", value) end
+    local token = literalNumbers[value]
+    if not token then
+        token = string.format("%.17g", value)
+        if numberCount >= 2048 then literalNumbers, numberCount = {}, 0 end
+        literalNumbers[value], numberCount = token, numberCount + 1
+    end
+    return token
+end
+
+local function KeyLiteral(key)
+    local token = literalKeys[key]
+    if not token then
+        token = string.format("[%q]", key)
+        if #key <= 128 then
+            if keyCount >= 2048 then literalKeys, keyCount = {}, 0 end
+            literalKeys[key], keyCount = token, keyCount + 1
+        end
+    end
+    return token
+end
+
+local function Literal(value)
     local kind = type(value)
-    if kind == "number" then return string.format("%.17g", value) end
+    if kind == "number" then return NumberLiteral(value) end
     if kind == "boolean" then return value and "true" or "false" end
     if kind == "string" then return string.format("%q", value) end
     local keys, allStrings = {}, true
@@ -27,17 +55,11 @@ local function Literal(value, quotedKeys)
     end
     if allStrings then table.sort(keys)
     else table.sort(keys, function(a, b) return tostring(a) < tostring(b) end) end
-    -- Repeated profile sections share key spellings. Cache only their immutable
-    -- quoted names, for this serialization; values are always read afresh.
-    quotedKeys = quotedKeys or {}
     local parts = {}
-    for _, key in ipairs(keys) do
-        local name
-        if type(key) == "string" then
-            name = quotedKeys[key]
-            if not name then name = string.format("[%q]", key); quotedKeys[key] = name end
-        else name = "[" .. Literal(key, quotedKeys) .. "]" end
-        parts[#parts + 1] = name .. "=" .. Literal(value[key], quotedKeys)
+    for index = 1, #keys do
+        local key = keys[index]
+        local name = type(key) == "string" and KeyLiteral(key) or ("[" .. Literal(key) .. "]")
+        parts[index] = name .. "=" .. Literal(value[key])
     end
     return "{" .. table.concat(parts, ",") .. "}"
 end

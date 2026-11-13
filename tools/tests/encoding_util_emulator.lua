@@ -862,8 +862,9 @@ local function Enumerated(value, enum, position, name, fallback)
     error("bad argument #" .. position .. " to '" .. name .. "' (invalid enum value " .. tostring(value) .. ")", 3)
 end
 
--- Process-wide memo of the pure decoders, shared by every emulator instance.
+-- Process-wide memo of pure codecs, shared by every emulator instance.
 local memo = { base64 = {}, inflate = {}, cbor = {} }
+local compressed, compressedCount = {}, 0
 
 function Emulator.New()
     local api = {}
@@ -892,7 +893,21 @@ function Emulator.New()
         Source(source, "CompressString")
         method = Enumerated(method, Emulator.CompressionMethod, 2, "CompressString", 0)
         Enumerated(level, Emulator.CompressionLevel, 3, "CompressString", 0)
-        return Compress(source, method)
+        -- The emulator always writes the same fixed block for these bytes.
+        -- Cache small repeated exports without retaining unbounded test input.
+        if #source > 262144 then return Compress(source, method) end
+        local byMethod = compressed[source]
+        if not byMethod then
+            if compressedCount >= 32 then compressed, compressedCount = {}, 0 end
+            byMethod = {}
+            compressed[source], compressedCount = byMethod, compressedCount + 1
+        end
+        local result = byMethod[method]
+        if not result then
+            result = Compress(source, method)
+            byMethod[method] = result
+        end
+        return result
     end
     function api.DecompressString(source, method)
         Source(source, "DecompressString")

@@ -54,18 +54,25 @@ print('PASS inherited PowerShell host wins over missing/different PATH hosts')
 script = r'''param($root, $python, $runner)
 $ErrorActionPreference = 'Stop'
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($runner, [ref]$null, [ref]$null)
-foreach ($symbol in @('Start-ContractWorker', 'Get-MenuControlCounts', 'Order-ContractRuns')) {
+foreach ($symbol in @('Start-ContractWorker', 'Get-MenuControlCounts', 'Order-ContractRuns', 'Get-ContractWorkerCount')) {
     $function = $ast.Find({ param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $symbol
     }, $true)
     if (-not $function) { throw "runner helper missing: $symbol" }
     Invoke-Expression $function.Extent.Text
 }
+foreach ($case in @(@(1,1), @(4,3), @(8,6), @(16,12), @(32,12))) {
+    if ((Get-ContractWorkerCount $case[0]) -ne $case[1]) { throw "Invalid worker limit for $($case[0]) CPUs" }
+}
 $ordered = @(Order-ContractRuns @(
     @{ Id = 4; Phase = 'profiles'; Label = 'fixture' }, @{ Id = 9; Phase = 'namespace'; Label = 'flip' },
-    @{ Id = 2; Phase = 'setter parity'; Label = 'second' }, @{ Id = 0; Phase = 'setter parity'; Label = 'first' }
+    @{ Id = 2; Phase = 'setter parity'; Label = 'second' }, @{ Id = 0; Phase = 'setter parity'; Label = 'first' },
+    @{ Id = 12; Phase = 'menu'; Test = 'tools/tests/search_status_choices_smoke.lua' },
+    @{ Id = 7; Phase = 'fast-check'; Label = 'preflight' },
+    @{ Id = 14; Phase = 'runtime'; Test = 'tools/tests/castbar_interrupt_ready_geometry.lua' },
+    @{ Id = 6; Phase = 'profiles'; Test = 'tools/tests/profile_corpus_golden_smoke.lua' }
 ))
-if ((($ordered | ForEach-Object { $_.Id }) -join ',') -ne '0,2,9,4') { throw ("long-job order dropped or reordered inventory IDs: " + (($ordered | ForEach-Object { $_.Id }) -join ",")) }
+if ((($ordered | ForEach-Object { $_.Id }) -join ',') -ne '0,2,7,9,14,6,12,4') { throw ("long-job order dropped or reordered inventory IDs: " + (($ordered | ForEach-Object { $_.Id }) -join ",")) }
 $originalRoot = $root
 $root = Join-Path $PSScriptRoot 'counts'
 [void][IO.Directory]::CreateDirectory((Join-Path $root 'tools'))
