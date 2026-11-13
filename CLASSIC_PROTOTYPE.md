@@ -1016,6 +1016,15 @@ scale, sample identity and chrome stay local. See
 remaining scene boundaries and validation limits. No TOC/XML load order changes
 are needed: each provider already loads in core before the Options addon.
 
+### Optional Nameplates scope on Bars
+
+Menu2 accepts a Bars scope from a loaded settings provider through
+`RegisterBarsScope(key, label, provider)`. Suite registers its native health
+textures there when supported. Bars keeps the extra tab last and owns its
+layout, search reveal and reset dispatch. The provider owns its controls and
+profile values. Selecting the extra tab leaves the last unit-frame scope
+intact. Without the provider, Bars shows only its native scopes.
+
 ## Regenerating the Menu2 search index
 
 The nightly gate also runs the generator with `--check` for both client-family
@@ -1185,6 +1194,22 @@ Export hashes and per-locale source builds are recorded in
 `.github/auras3-alias-catalog-forever.json`; the table and UI source comparison
 is in `.github/forever-client-data-validation.json`. These are offline checks;
 combat, taint, SavedVariables and appearance still need a live beta client.
+
+## Forever Group Highlights: 1.60.1.70938
+
+Party and Raid use the same MSUF Highlights setting as Mainline. Forever
+supplies its own exact aura IDs for the major defensive, offensive, healing
+and support cooldowns of its nine classes. The catalog includes each verified
+rank and distinct recipient aura, such as the Last Stand health buff and the
+Contingency Plan absorb. It does not expand by spell name, which would also
+admit unrelated NPC spells and hidden controllers. Custom aura lists still
+use the Forever alias catalog.
+
+The catalog was checked against the 1.60.1.70938 SpellName, SpellEffect and
+SkillLineAbility exports and the active talent trees and class updates.
+Blizzard's Forever AuraContainer implementation at `bebcb6bf309c` accepts
+exact IDs for helpful auras on group members. The existing Buff lane owns
+display, blacklist precedence and duration handling on both clients.
 
 ## Class resource availability
 

@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-rc6 - 2026-11-13
+
+Changes since 7.0 RC5 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### WoW Forever
+
+- **Swing Timers.** Set each hand's width from 4 to 1200 and its height from 4 to 400. Undo and Redo now update the on-screen bars as well as the menu preview.
+<!-- msuf-menu-link: none -->
+- **Party and Raid highlights.** MSUF Highlights uses a Forever spell list. Buff coverage uses supported single-spell reads for readable buffs when aura access is restricted.
+<!-- msuf-menu-link: none -->
+
+### Fixes
+
+- **Party and Raid aggro.** Aggro borders and corner indicators clear when combat ends, even if threat data lags behind.
+<!-- msuf-menu-link: none -->
+- **Class resources and mana.** Out-of-combat visibility follows the combat event, and mana prediction keeps the correct channel when an unrelated instant spell succeeds.
+<!-- msuf-menu-link: none -->
+- **Castbars.** Penance shows the extra channel tick when Castigation is selected.
+<!-- msuf-menu-link: none -->
+- **Options.** Updated the Bars extension selector and exact search routing. The melee-range crosshair handles unavailable range results.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-rc5 - 2026-11-13
 
 Final 7.0 release candidate, published on the Beta channel for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.

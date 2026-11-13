@@ -28,6 +28,8 @@ local Blessings = assert(GF.BlessingPriorities, "BuffCoverage requires the Forev
 local UnitAuraAPI = C_UnitAuras
 local GetUnitAuras = UnitAuraAPI and UnitAuraAPI.GetUnitAuras
 if not (GF and type(GetUnitAuras) == "function") then return end
+local GetUnitAuraBySpellID = UnitAuraAPI.GetUnitAuraBySpellID
+local ShouldAurasBeSecret = C_Secrets and C_Secrets.ShouldAurasBeSecret
 
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua")
 local CreateFrame, C_Timer = CreateFrame, C_Timer
@@ -127,13 +129,19 @@ local function CheckSecrecy()
     local never = levels and levels.NeverSecret
     for index = 1, BUFF_COUNT do
         local buff = BUFFS[index]
-        local all, any = type(getSecrecy) == "function" and never ~= nil, false
+        local all = GetUnitAuraBySpellID ~= nil and type(getSecrecy) == "function" and never ~= nil
+        local readable = {}
         if all then
             for i = 1, #buff.ids do
-                if getSecrecy(buff.ids[i]) == never then any = true else all = false end
+                local spellID = buff.ids[i]
+                if getSecrecy(spellID) == never then
+                    readable[#readable + 1] = spellID
+                else
+                    all = false
+                end
             end
         end
-        buff.alwaysReadable, buff.sometimesReadable = all, any
+        buff.alwaysReadable, buff.readableIDs = all, readable
     end
 end
 
@@ -157,6 +165,8 @@ end
 
 local function ReadUnit(unit)
     local state = State(unit)
+    local secret = ShouldAurasBeSecret and ShouldAurasBeSecret()
+    if IsSecret(secret) or secret == true then return state end
     local count, instance = state.count, state.instance
     for i = 1, BUFF_COUNT do count[i] = 0 end
     wipe(instance)
@@ -230,22 +240,25 @@ local function ApplyUpdate(state, info)
     return changed
 end
 
--- Restricted read: only auras that are readable right now take part.
+-- Bulk aura access is blocked under restrictions. Single-spell lookups
+-- accept public spell IDs and return no data for an inaccessible aura.
 local function ReadRestricted(unit)
     local state = states[unit]
     if not (state and state.known and Reachable(unit)) then return false end
-    local auras = GetUnitAuras(unit, "HELPFUL")
-    if IsSecret(auras) or type(auras) ~= "table" then return false end
-    for index = 1, BUFF_COUNT do seen[index] = false end
     if Blessings and Blessings.enabled then Blessings.BeginReadable() end
-    for i = 1, #auras do
-        local aura = auras[i]
-        if not IsSecret(aura) and type(aura) == "table" then
-            local spellID = aura.spellId
-            local index = not IsSecret(spellID) and spellID and BUFF_OF_SPELL[spellID]
-            if index then
+    for index = 1, BUFF_COUNT do
+        local buff = BUFFS[index]
+        seen[index] = false
+        for _, spellID in ipairs(buff.readableIDs) do
+            local aura = GetUnitAuraBySpellID(unit, spellID)
+            if IsSecret(aura) then return false end
+            if aura then
                 seen[index] = true
-                if Blessings and Blessings.enabled then Blessings.SeeReadable(spellID) end
+                if Blessings and Blessings.enabled and buff.key == "Blessings" then
+                    Blessings.SeeReadable(spellID)
+                else
+                    break
+                end
             end
         end
     end
@@ -521,7 +534,7 @@ local function NeedsRestrictedReads()
         if conf and conf.buffCoverageEnabled == true and conf.buffCoverageCombat == true then
             for index = 1, BUFF_COUNT do
                 local buff = BUFFS[index]
-                if buff.sometimesReadable and conf[buff.setting] == true then return true end
+                if #buff.readableIDs > 0 and conf[buff.setting] == true then return true end
             end
         end
     end

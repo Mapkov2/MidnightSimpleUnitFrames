@@ -23,6 +23,26 @@ assert(source:find("GameplayHelpers.PaintCrosshairGeometry(crosshairFrame, size,
 assert(not preview:find("size * 0.28", 1, true), "preview retains four-arm geometry")
 print("crosshair: preview/runtime 2 continuous lines; 2 native geometry calls")
 
+do
+    local base, override = 35395, 408385
+    local answers, reads = {}, {}
+    local rangeAPI = { IsSpellInRange = function(spell)
+        reads[#reads + 1] = spell
+        return answers[spell]
+    end }
+    local body = Slice.Function(source, "local function IsUnitInMeleeRange", path)
+    local run = assert(loadstring(body .. "\nreturn IsUnitInMeleeRange"))
+    setfenv(run, { C_Spell = rangeAPI, GetOverrideSpellID = function() return override end,
+        tonumber = tonumber, PlainBool = function(value) if type(value) == "boolean" then return value end end })
+    local range = run()
+    answers[base], answers[override] = true, false
+    assert(range("target", base) == false and #reads == 1, "a base spell cannot override a valid out-of-range result")
+    answers[override] = nil
+    assert(range("target", base) == true, "unavailable override must fall back to the base spell")
+    answers[base] = nil
+    assert(range("target", base) == nil, "an invalid range query must remain unknown")
+end
+
 if arg[3] then
     local function PreviewWrites(text, file)
         local writes = 0

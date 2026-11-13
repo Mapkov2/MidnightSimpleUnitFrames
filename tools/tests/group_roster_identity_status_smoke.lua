@@ -25,12 +25,22 @@ local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.GetNumClasses = function() return 13 end
     h.env.C_Secrets = setmetatable({
         ShouldAurasBeSecret = function() return auraAccessRestricted end,
+        GetSpellAuraSecrecy = function(id) return id == 1459 and 0 or 1 end,
     }, { __index = h.env.C_Secrets })
+    local enum = h.env.Enum
+    h.env.Enum = setmetatable({ SecrecyLevel = { NeverSecret = 0 }, AddOnRestrictionType = { Combat = 1 },
+        AddOnRestrictionState = { Inactive = 0, Active = 1 } }, { __index = enum })
+    h.env.C_RestrictedActions = { IsAddOnRestrictionActive = function() return auraAccessRestricted end }
+    h.env.UnitIsVisible = function() return true end
+    h.env.C_UnitAuras.GetUnitAuraBySpellID = function(unit, id)
+        assert(auraAccessRestricted and id == 1459, "unexpected single-spell aura lookup")
+        return helpfulAuras[unit] and helpfulAuras[unit][1]
+    end
     h.env.C_UnitAuras.GetUnitAuras = function(unit, filter)
         local source = debug.getinfo(2, "S").source
+        assert(not auraAccessRestricted, "GetUnitAuras blocked while aura access is restricted")
         if source:find("MSUF_UF_Status_Indicators.lua", 1, true) then
             assert(filter == "HELPFUL", "unexpected consumption aura filter")
-            assert(not auraAccessRestricted, "GetUnitAuras blocked while aura access is restricted")
             consumptionReads = consumptionReads + 1
             return helpfulAuras[unit] or EMPTY_AURAS
         end
@@ -125,6 +135,34 @@ local function Swap()
     members.raid1, members.raid2 = members.raid2, members.raid1
 end
 Check("initial")
+
+if flavor == "Forever" and kind == "raid" then
+    local mage = assert(GF.FrameForUnit("raid1"))
+    conf.buffCoverageEnabled, conf.buffCoverageCombat, conf.buffCoverageIntellect = true, true, true
+    for _, buff in ipairs(GF.BUFF_COVERAGE_BUFFS) do
+        conf[buff.setting] = buff.key == "Intellect"
+    end
+    GF.RefreshBuffCoverage()
+    h:RunTimers()
+    local holder = assert(mage._msufBuffCoverage, "missing Intellect did not get a coverage icon")
+    assert(holder:IsShown(), "missing Intellect was hidden")
+    auraAccessRestricted = true
+    h:EnterCombat()
+    h:Event("ADDON_RESTRICTION_STATE_CHANGED", 1, 1)
+    helpfulAuras.raid1 = { { spellId = 1459 } }
+    h:Event("UNIT_AURA", "raid1", { isFullUpdate = true })
+    h:RunTimers()
+    assert(not holder:IsShown(), "readable Intellect gain in combat did not clear the reminder")
+    helpfulAuras.raid1 = nil
+    auraAccessRestricted = false
+    h:LeaveCombat()
+    h:Event("ADDON_RESTRICTION_STATE_CHANGED", 1, 0)
+    h:RunTimers()
+    assert(holder:IsShown(), "unrestricted rescan did not restore the missing Intellect reminder")
+    conf.buffCoverageEnabled = false
+    GF.RefreshBuffCoverage()
+    h:RunTimers()
+end
 
 local function CheckConsumption(scope, unit)
     local frame = assert(GF.FrameForUnit(unit))

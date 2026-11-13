@@ -17,6 +17,7 @@ end
 function MSUF.CPBuilders.ManaExtras(boundE)
 local E, state, events
 local Refresh, StartTick
+local HAS_CAST_BAR_ID = MSUF.Client.IsRetail
 local function Number(value) return E.NotSecret(value) and type(value)=="number" and value==value and value>-math.huge and value<math.huge end
 local function HidePrediction()
     if state.prediction then
@@ -24,6 +25,7 @@ local function HidePrediction()
     end
     state.cost=nil
     state.hasCost=false
+    state.castGUID, state.castBarID, state.channeling = nil, nil, nil
 end
 local function HideFive()
     state.fiveUntil=nil
@@ -443,13 +445,40 @@ local function ManaCost(spellID,allowRestricted)
         end
     end
 end
-local function CastCost(spellID)
+local function CastCost(spellID, castGUID, castBarID, channeling)
     if not state.preview then return end
     HidePrediction()
     state.cost,state.hasCost=ManaCost(spellID,true)
+    state.castGUID = E.NotSecret(castGUID) and castGUID or nil
+    state.castBarID = Number(castBarID) and castBarID or nil
+    state.channeling = channeling
     Prediction()
 end
-local function OnEvent(self,event,unit,powerToken,spellID)
+
+local function RefreshCastCost()
+    local current=select(9,UnitCastingInfo("player"))
+    if E.NotSecret(current) and not Number(current) then current=select(8,UnitChannelInfo("player")) end
+    if not E.NotSecret(current) or Number(current) then CastCost(current) else HidePrediction() end
+end
+
+local function FinishCastCost(event, castGUID, first, second)
+    -- Success can be reported at channel start or for another instant spell.
+    -- Stop events identify the cast even while UnitChannelInfo still returns it.
+    if event == "UNIT_SPELLCAST_SUCCEEDED" or not state.hasCost then return end
+    local castBarID = first
+    if event == "UNIT_SPELLCAST_CHANNEL_STOP" or event == "UNIT_SPELLCAST_INTERRUPTED" then castBarID = second end
+    if state.castBarID and Number(castBarID) then
+        if state.castBarID == castBarID then HidePrediction() end
+    elseif state.castGUID and E.NotSecret(castGUID) and castGUID ~= nil then
+        if state.castGUID == castGUID then HidePrediction() end
+    elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+        if state.channeling then HidePrediction() end
+    elseif event == "UNIT_SPELLCAST_STOP" then
+        if not state.channeling then HidePrediction() end
+    end
+end
+
+local function OnEvent(self,event,unit,powerToken,spellID,first,second)
     if unit~="player" or state.suspended then return end
     if event=="UNIT_SPELLCAST_SUCCEEDED" and (state.rule or state.ticks) then
         local cost=ManaCost(spellID)
@@ -472,15 +501,9 @@ local function OnEvent(self,event,unit,powerToken,spellID)
         ObserveMana()
         Prediction()
     elseif event=="UNIT_SPELLCAST_START" or event=="UNIT_SPELLCAST_CHANNEL_START" then
-        HidePrediction()
-        CastCost(spellID)
+        CastCost(spellID, powerToken, first, event == "UNIT_SPELLCAST_CHANNEL_START")
     elseif state.preview then
-        -- An instant spell allowed during another cast must not clear that
-        -- cast's preview. Native C_Spell accepts restricted identifiers;
-        -- only a public missing/invalid cast ID falls back to the channel.
-        local current=select(9,UnitCastingInfo("player"))
-        if E.NotSecret(current) and not Number(current) then current=select(8,UnitChannelInfo("player")) end
-        if not E.NotSecret(current) or Number(current) then CastCost(current) else HidePrediction() end
+        if HAS_CAST_BAR_ID then FinishCastCost(event, powerToken, first, second) else RefreshCastCost() end
     end
 end
 local function Disable()

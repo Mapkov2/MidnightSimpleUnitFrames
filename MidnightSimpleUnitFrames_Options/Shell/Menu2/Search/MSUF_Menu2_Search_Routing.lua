@@ -1130,6 +1130,9 @@ local function ApplyRouteSectionsInPlace(pageKey, route)
             local section = entry.sections[key:sub(#prefix + 1)]
             local collapsible = section and section._msuf2CollapsibleEntry
             local wanted = value and true or false
+            if wanted and pageKey == "opt_bars" and collapsible and collapsible._msuf2EnsureVisible then
+                collapsible._msuf2EnsureVisible(collapsible)
+            end
             if collapsible and collapsible.SetOpenImmediate and (collapsible.open == true) ~= wanted then
                 collapsible.SetOpenImmediate(wanted)
             end

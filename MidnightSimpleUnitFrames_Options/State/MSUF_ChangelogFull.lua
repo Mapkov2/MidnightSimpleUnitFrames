@@ -8,25 +8,46 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "182DA31390AF9879C64F544ED550AB197690CC87CF88727FE999F28B44FD0778",
-    currentVersion = "7.0-rc5",
+    sourceSha256 = "6E61A9C3DC157A85F0B9BF7831178D5EBFD6E460CE82EA4B2E0ED9AEDF6CEFDC",
+    currentVersion = "7.0-rc6",
     historyFromVersion = "6.02",
-    previousVersion = "7.0-rc4",
-    rangeLabel = "7.0-rc4 -> 7.0-rc5",
+    previousVersion = "7.0-rc5",
+    rangeLabel = "7.0-rc5 -> 7.0-rc6",
     entries = {
         {
-            version = "7.0-rc5",
+            version = "7.0-rc6",
             date = "2026-11-13",
             sections = {
                 {
-                    title = "Profiles",
+                    title = "WoW Forever",
                     bullets = {
                         {
-                            text = "Reload after import or switching profiles. The confirmation button reloads the UI directly from the click. Included Blizzard Edit Mode settings are saved before the reload, and pending changes can be retried if the layout save fails.",
+                            text = "Swing Timers. Set each hand's width from 4 to 1200 and its height from 4 to 400. Undo and Redo now update the on-screen bars as well as the menu preview.",
                             linkless = true,
                         },
                         {
-                            text = "First update to 7.0. Open Profiles opens the profile page even if the Options addon has not loaded yet. The reminder stays available if the page cannot open, and opening it keeps the current profile selected.",
+                            text = "Party and Raid highlights. MSUF Highlights uses a Forever spell list. Buff coverage uses supported single-spell reads for readable buffs when aura access is restricted.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        {
+                            text = "Party and Raid aggro. Aggro borders and corner indicators clear when combat ends, even if threat data lags behind.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Class resources and mana. Out-of-combat visibility follows the combat event, and mana prediction keeps the correct channel when an unrelated instant spell succeeds.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Castbars. Penance shows the extra channel tick when Castigation is selected.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Options. Updated the Bars extension selector and exact search routing. The melee-range crosshair handles unavailable range results.",
                             linkless = true,
                         },
                     },

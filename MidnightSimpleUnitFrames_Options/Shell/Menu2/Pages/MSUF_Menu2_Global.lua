@@ -676,11 +676,13 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
         local current = scopeOpts.getValue and scopeOpts.getValue() or "shared"
         local active = (type(opts.activeLabels) == "function" and opts.activeLabels()) or ScopeOverrideLabels(values, opts.hasOverride)
         local shared = current == "shared"
-        W.SetControlShown(override, not shared)
+        local separate = opts.isSeparate and opts.isSeparate(current)
+        W.SetControlShown(override, not shared and not separate)
         overrideInfo:SetShown(shared)
         reset:SetShown(shared and #active > 0)
+        hint:SetShown(not separate)
         T.SetTranslatedText(overrideInfo, "|cffffffff" .. M.Tr("Overrides:") .. "|r " .. (#active > 0 and table.concat(active, ", ") or M.Tr("None")))
-        if type(opts.updateHint) == "function" then opts.updateHint(hint, current, active, shared) end
+        if not separate and type(opts.updateHint) == "function" then opts.updateHint(hint, current, active, shared) end
         if segment and segment.Refresh then segment:Refresh() end
         hint:SetWidth(ctx.width - 28)
     end)

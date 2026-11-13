@@ -715,7 +715,7 @@
       "support_sources": [
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Textures.lua",
-          "source_sha256": "0dba4c83d12654e0835aa1bcf676c6c1c29480ed081f90f1e3ddcaedea576d03"
+          "source_sha256": "bebda175141e03c6b14a4c9628701c502ae4a47e8281fef84776f9b007eebbd1"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
@@ -723,7 +723,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Highlights.lua",
-          "source_sha256": "00fb9486bb798113ecd9e38ed49c593dfb04236e86daeee7bcc2d53af9931dba"
+          "source_sha256": "f3ca8f420988f86629d34d8f38539da24c1a5025c69768904afc0a251b7bfaad"
         }
       ],
       "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."

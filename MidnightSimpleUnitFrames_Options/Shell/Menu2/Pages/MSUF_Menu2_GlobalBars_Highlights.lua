@@ -433,13 +433,87 @@ local function BuildGlobalBarsSectionLazy(ctx, b, spec)
     return spec.build(ctx, b)
 end
 
+-- Optional sibling of the native scopes. The selection is menu state only;
+-- unit-frame settings and runtime continue to use CurrentBarsScope.
+local barsExtension, selectedExtension
+
+function M.RegisterBarsScope(key, label, provider)
+    if type(key) ~= "string" or key == "" or type(label) ~= "string" or type(provider) ~= "table"
+        or not (provider.build and provider.canReset and provider.warning and provider.reset)
+        or (barsExtension and barsExtension.key ~= key) then return false end
+    for _, item in ipairs(GP.SCOPE_VALUES) do
+        if item.value == key then return false end
+    end
+    local page = M.pages.opt_bars
+    if not page then return false end
+    if barsExtension and barsExtension.provider == provider and barsExtension.label == label then return true end
+    barsExtension = { key = key, label = label, provider = provider }
+    page.version = page.version + 1
+    if M.SearchBridge then M.SearchBridge.MarkSearchIndexDirty() end
+    if M.activeKey == "opt_bars" and not M.BlockCombatAction() then
+        M.RebuildPageKeepingScroll("opt_bars")
+    end
+    return true
+end
+
+function M.SelectedBarsExtension() return selectedExtension end
+
+function M.BarsScopeResetProvider(pageKey)
+    if pageKey == "opt_bars" and selectedExtension then return barsExtension.provider end
+end
+
+local function BuildBarsScopeView(ctx, b, extension)
+    local native, external, shown
+    local function Apply()
+        local showExternal = selectedExtension == extension.key
+        if not external or shown == showExternal then return end
+        shown = showExternal
+        for _, entry in ipairs(native) do (entry.outer or entry.frame):SetShown(not showExternal) end
+        for _, entry in ipairs(external) do (entry.outer or entry.frame):SetShown(showExternal) end
+        b.layoutEntries = showExternal and external or native
+        b:RequestRelayoutCollapsibles()
+    end
+    local function Select(key)
+        if selectedExtension == key then return end
+        selectedExtension = key
+        Apply()
+        M.RequestRefresh(ctx, "bars-scope-change")
+        if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
+    end
+    local function Install()
+        native = b.layoutEntries
+        b.layoutEntries = {}
+        MSUF.RunHostAPIStep("bars scope build", extension.provider.build, ctx, b)
+        external = b.layoutEntries
+        local function Attach(entries, key)
+            for _, entry in ipairs(entries) do
+                if entry.outer then
+                    local old = entry._msuf2EnsureVisible
+                    entry._msuf2EnsureVisible = function()
+                        Select(key)
+                        if old then old(entry) end
+                    end
+                end
+            end
+        end
+        Attach(native)
+        Attach(external, extension.key)
+        M.TrackRefresh(ctx, Apply)
+        Apply()
+    end
+    return Select, Install
+end
+
 local function BuildBars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
-    BuildScopeSection(ctx, b)
+    local selectView, install
+    if barsExtension then selectView, install = BuildBarsScopeView(ctx, b, barsExtension) end
+    BuildScopeSection(ctx, b, barsExtension, selectView)
     for i = 1, #GLOBAL_BARS_LAZY_SECTION_SPECS do
         BuildGlobalBarsSectionLazy(ctx, b, GLOBAL_BARS_LAZY_SECTION_SPECS[i])
     end
+    if install then install() end
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 19 })

@@ -56,7 +56,7 @@ local floor = Parts.floor
 local max = Parts.max
 local min = Parts.min
 
-local function BuildScopeSection(ctx, b)
+local function BuildScopeSection(ctx, b, extension, selectView)
     local function HasScopedSlantedDirection(scope)
         -- Selector values are already canonical; keep its badge refresh allocation-free.
         local conf = DB()[scope]
@@ -64,7 +64,14 @@ local function BuildScopeSection(ctx, b)
         return value == "RIGHT_DOWN" or value == "RIGHT_UP" or value == "LEFT_DOWN"
             or value == "LEFT_UP" or value == "BOTH_DOWN" or value == "BOTH_UP"
     end
-    local scopeValues = GP.SCOPE_VALUES
+    local scopeValues, values = GP.SCOPE_VALUES, GP.SCOPE_VALUES
+    if extension then
+        values = { unpack(scopeValues) }
+        values[#values + 1] = { value = extension.key, text = extension.label }
+    end
+    local function Selected()
+        return M.SelectedBarsExtension() or CurrentBarsScope()
+    end
     local function RefreshBarsPage(reason)
         M.RequestRefresh(ctx, reason)
     end
@@ -74,15 +81,23 @@ local function BuildScopeSection(ctx, b)
         write = { source = G, convert = NormalizeScopeKey,
             after = function() RefreshBorderTestModes() RefreshBarsPage("bars-scope-change") end
         } --[[schema setter: J5.Bars.Scope]] }
-    scopeSpec.set = M.ControlSchema.Setter(scopeSpec)
+    local setNative = M.ControlSchema.Setter(scopeSpec)
+    local function IsSeparate(value) return extension and value == extension.key end
+    local function Select(value)
+        if IsSeparate(value) then return selectView(value) end
+        if extension then selectView(nil) end
+        return setNative(value)
+    end
+    scopeSpec.get, scopeSpec.set, scopeSpec.values = Selected, Select, values
     local scopeUI = GP.BuildScopeOverrideSection(ctx, b, {
-        values = scopeValues,
+        values = values,
         meta = Meta,
-        getValue = function() return CurrentBarsScope() end,
+        getValue = Selected,
+        isSeparate = IsSeparate,
         selectorWriteTargets = "general.hpPowerTextSelectedKey",
-        setValue = scopeSpec.set,
+        setValue = Select,
         hasOverride = function(value)
-            return value ~= "shared" and (ScopeHasOverride(value, "hlOverride") or HasScopedSlantedDirection(value))
+            return value ~= "shared" and not IsSeparate(value) and (ScopeHasOverride(value, "hlOverride") or HasScopedSlantedDirection(value))
         end,
         getOverride = function()
             local key = CurrentBarsScope()

@@ -24,10 +24,7 @@ local NotSecretValue = Visuals.NotSecretValue
 local IsSecretValue = issecretvalue
 local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = Visuals.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
-local GROUP_THREAT_EVENT = {
-  UNIT_THREAT_SITUATION_UPDATE = true,
-  UNIT_THREAT_LIST_UPDATE = true,
-}
+local GROUP_THREAT_EVENT = Visuals.GROUP_THREAT_EVENT
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = Visuals.SetShown
 local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
@@ -105,7 +102,7 @@ function Borders.GetEvents(frame, spec)
     return EMPTY_EVENTS
   end
   if cfg.aggro == true and IsAggroBorderUnit(frame) then
-    return BORDER_THREAT_EVENTS
+    return spec.scope == "group" and Visuals.GROUP_THREAT_EVENTS or BORDER_THREAT_EVENTS
   end
   return EMPTY_EVENTS
 end
@@ -1091,16 +1088,14 @@ function UF.RefreshBossTargetPreview(frame)
   return Borders.Update(frame, "MSUF_BOSS_PREVIEW")
 end
 
--- Selected only for group threat events. Core supplies the already-resolved
--- border predicate from its one-read pair route; the nil fallback keeps this
--- function correct for private/custom route compilers.
+-- Mixed event routes resolve threat on demand. The paired route supplies it
+-- directly when border and corner are the only consumers.
 function Borders.UpdateGroupThreat(frame, event, unit, threat)
   if threat == nil then
     threat = ResolveGroupAggroThreat
       and ResolveGroupAggroThreat(frame, unit or (frame and frame.MSUFUnitKey),
         frame and frame._msufBorderRuntimeAggroMode)
       or false
-    return UpdateResolved(frame, true, threat == true)
   end
   local cfg = frame and frame._msufBorderRuntimeCfg
   if not cfg
@@ -1155,7 +1150,6 @@ if UF.RouteCompiler then
   local Compiler = UF.RouteCompiler
   local RouteCache = setmetatable({ directGroupThreat = {} }, { __index = Compiler.Cache })
   local RouteCacheLeaf = Compiler.RouteCacheLeaf
-  local GROUP_THREAT_EVENTS = { UNIT_THREAT_SITUATION_UPDATE = true, UNIT_THREAT_LIST_UPDATE = true }
   local function BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
     return function(self, ev, unit)
       local u = unit or self.MSUFUnitKey
@@ -1184,7 +1178,7 @@ if UF.RouteCompiler then
 
   local function Compile(frame, event, list, target)
     local count = #list
-    if frame._msufCoreScope == "group" and GROUP_THREAT_EVENTS[event] == true then
+    if frame._msufCoreScope == "group" and GROUP_THREAT_EVENT[event] == true then
       local borders = UF.elements.Borders
       local corners = UF.elements.GroupCornerIndicators
       local borderUpdate = borders and borders.UpdateGroupThreat
@@ -1213,5 +1207,5 @@ if UF.RouteCompiler then
       end
     end
   end
-  UF.RegisterRoute("threat", Compile, 20, GROUP_THREAT_EVENTS)
+  UF.RegisterRoute("threat", Compile, 20, GROUP_THREAT_EVENT)
 end

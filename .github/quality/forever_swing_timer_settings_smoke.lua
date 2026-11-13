@@ -17,9 +17,9 @@ local function noop() end
 local methods = {}
 for _, name in ipairs({
     "SetMovable", "SetClampedToScreen", "RegisterForDrag", "SetAllPoints",
-    "SetJustifyH", "SetBackdropBorderColor", "ClearAllPoints", "SetTextColor", "SetWidth",
+    "SetJustifyH", "SetBackdropBorderColor", "ClearAllPoints", "SetTextColor",
     "StopMovingOrSizing", "StartMoving", "SetUpdateInterval", "SetExpiredText", "SetZeroDurationText",
-    "SetTexCoord", "SetHeight", "SetClipsChildren", "RegisterForClicks",
+    "SetTexCoord", "SetClipsChildren", "RegisterForClicks",
     "SetColorTexture", "SetBackdropColor",
 }) do methods[name] = noop end
 function methods:SetMinMaxValues(a,b) self.minimum,self.maximum=a,b end
@@ -34,6 +34,8 @@ function methods:IsVisible() return self:IsShown() and (not self.parent or self.
 function methods:GetParent() return self.parent end
 function methods:GetWidth() return self.width or 1 end
 function methods:SetSize(w,h) self.width, self.height = w,h end
+function methods:SetWidth(w) self.width = w end
+function methods:SetHeight(h) self.height = h end
 function methods:SetScale(v) self.scale = v end
 function methods:GetScale() return self.scale or 1 end
 function methods:SetAlpha(v) self.alpha = v end
@@ -674,7 +676,11 @@ function W.Toggle() return object() end
 W.SectionSwitch=W.Toggle
 function W.Segment() local widget=object();widget._msuf2Title=object();return widget end
 function W.FixedPreviewSection() return object(), object() end
-function W.Slider() return object() end
+function W.Slider(_, _, min, max, step)
+    local widget = object()
+    widget.min, widget.max, widget.step = min, max, step
+    return widget
+end
 function W.Dropdown(_,_,values) local widget=object(); widget.values=values; return widget end
 function W.TextInput(parent,label,width)
     local widget=object(nil,parent)
@@ -752,7 +758,46 @@ assert(loadstring("local M=...\n"..Slice.Function(supportSource,"function M.Bind
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua"))("MSUF",ns)
-page.build({SetContentHeight=noop})
+local swingContext = { SetContentHeight = noop }
+page.build(swingContext)
+local swingPreview = assert(swingContext._msuf2SwingTimerPreview)
+for _, hand in ipairs({ "main", "off", "ranged" }) do
+    local width, height = controls[hand .. ".width"], controls[hand .. ".height"]
+    assert(width.min == 4 and width.max == 1200 and width.step == 1, hand .. " width slider range")
+    assert(height.min == 4 and height.max == 400 and height.step == 1, hand .. " height slider range")
+
+    local oldWidth, oldHeight = width.get(), height.get()
+    local oldDirection = swing.Get(hand, "direction")
+    assert(swingPreview.SelectHand(hand))
+    assert(swing.Set(hand, "direction", "UP"))
+    width.set(width.min)
+    height.set(height.max)
+    local live, sample = named["MSUF_SwingTimer_" .. hand], swingPreview.samples[hand]
+    assert(width.get() == 4 and height.get() == 400, hand .. " saves a tall, narrow bar")
+    assert(live.width == 4 and live.height == 400 and live.Bar.orientation == "VERTICAL")
+    assert(sample.width == 4 and sample.height == 400 and sample.Bar.orientation == "VERTICAL")
+    assert(sample:GetScale() > 0 and sample.height * sample:GetScale() <= swingPreview.canvasHeight,
+        hand .. " preview fits a tall bar")
+    assert(not swing.Set(hand, "width", 3) and not swing.Set(hand, "height", 401))
+    assert(width.get() == 4 and height.get() == 400, "out-of-range settings preserve saved dimensions")
+
+    if hand == "main" then
+        local oldBorder = swing.Get(hand, "borderSize")
+        assert(live.Cue.height == 100, "a tall bar keeps the cue icon bounded")
+        assert(swing.Set(hand, "borderSize", 8) and swing.Set(hand, "offhandLane", true))
+        assert(off.Lane.width > 0 and off.Lane.width < live.width - 2 * live.inset,
+            "a vertical off-hand strip leaves room for the main-hand fill")
+        assert(swing.Set(hand, "direction", "RIGHT"))
+        height.set(height.min)
+        assert(off.Lane.height > 0 and off.Lane.height < live.height - 2 * live.inset,
+            "a horizontal off-hand strip leaves room for the main-hand fill")
+        assert(swing.Set(hand, "offhandLane", false) and swing.Set(hand, "borderSize", oldBorder))
+    end
+    width.set(oldWidth)
+    height.set(oldHeight)
+    assert(swing.Set(hand, "direction", oldDirection))
+end
+swingPreview.SelectHand("main")
 local copyButton
 for _, widget in ipairs(objects) do
     local spec = widget._msuf2ControlSchema
@@ -808,6 +853,54 @@ for id,name in pairs({[78]="Heroic Strike",[845]="Cleave",[6807]="Maul",[2973]="
 end
 assert(#shortcuts[sections.swing_next].getTargets()==1, "main-hand cue context owns its color")
 print("PASS Swing menu: scoped appearance, text, reach and main-hand cue color menus, real shared media paths, number-only/direction, off-hand lane, reach, next-swing and per-attack cue text controls")
+
+local function CheckSizeHistory()
+    local statePath = root .. "/MidnightSimpleUnitFrames/State/"
+    assert(loadfile(statePath .. "MSUF_ProfileFields.lua"))("MSUF", ns)
+    ns.Util = { DeepCopy = ns.ProfileFields.CopySnapshot }
+    ns.ApplyService = { UnitKeys = {} }
+    ns.Public.IsConfigCombatLocked = InCombatLockdown
+    ns.PublicGlobals.MSUF_GetCharKey = noop
+    ns.PublicGlobals.MSUF_EM_RefreshHistoryControls = noop
+    ns.PublicGlobals.MSUF_EM_RefreshAfterHistoryRestore = noop
+    ns.PublicGlobals.MSUF_ApplySpecProfileIfEnabled = noop
+    ns.Castbars = { Backend = { Resolve = noop }, Config = { Invalidate = noop } }
+    _G.MSUF_DB.general = {}
+    _G.MSUF_ActiveProfile = "Swing test"
+    _G.MSUF_GlobalDB = { profiles = { [_G.MSUF_ActiveProfile] = _G.MSUF_DB } }
+    assert(loadfile(statePath .. "MSUF_HistoryProviders.lua"))("MSUF", ns)
+    assert(loadfile(statePath .. "MSUF_History.lua"))("MSUF", ns)
+    local history = ns.History
+    history.AttachUI(function(action)
+        if action == "RepaintActivePage" then
+            swingPreview.Paint()
+            return true
+        end
+    end)
+    assert(history.StartHistorySession("menu"))
+    for _, hand in ipairs({ "main", "off", "ranged" }) do
+        assert(swingPreview.SelectHand(hand))
+        local live = named["MSUF_SwingTimer_" .. hand]
+        local sample = swingPreview.samples[hand]
+        for _, key in ipairs({ "width", "height" }) do
+            local control = controls[hand .. "." .. key]
+            local original, changed = control.get(), control.min
+            history.CaptureHistory(key, "swingtimers:slider:" .. key, function()
+                return control.set(changed)
+            end, "swingTimers." .. hand .. "." .. key)
+            assert(live[key] == changed and sample[key] == changed, hand .. " menu resize: " .. key)
+            assert(history.Undo() and control.get() == original and sample[key] == original,
+                hand .. " saved setting and preview undo: " .. key)
+            assert(live[key] == original, hand .. " runtime undo: " .. key)
+            assert(history.Redo() and control.get() == changed and sample[key] == changed,
+                hand .. " saved setting and preview redo: " .. key)
+            assert(live[key] == changed, hand .. " runtime redo: " .. key)
+        end
+    end
+    assert(history.EndHistorySession("menu"))
+end
+CheckSizeHistory()
+print("PASS Swing history: width and height follow undo and redo in the live bars and menu preview")
 
 -- A fresh login with the feature disabled must leave no subscriber behind.
 assert(swing.SetEnabled(false))

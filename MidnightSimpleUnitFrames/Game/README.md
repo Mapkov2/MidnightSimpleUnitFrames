@@ -103,6 +103,11 @@ from them. The curated aura IDs retain their expected names. See
 [the validation notes](../../CLASSIC_PROTOTYPE.md#forever-data-validation-160170009)
 and `.github/forever-client-data-validation.json` for scope and source hashes.
 
+MSUF Highlights for Party and Raid uses a separate exact spell list on Forever.
+Its ranks and triggered effects are verified against 1.60.1.70938; the native
+aura renderer and saved filter token are shared with Mainline. See
+[the Highlights catalog notes](../../CLASSIC_PROTOTYPE.md#forever-group-highlights-160170938).
+
 Class-resource UI follows `Client.SupportsClassResource` and
 `Client.SupportsClassResourceSetting`, matching the active `CPClient` provider.
 Era/TBC/Forever offer only Rogue and Cat Form combo-point previews; Mists uses

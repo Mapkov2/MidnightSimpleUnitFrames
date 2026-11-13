@@ -168,6 +168,29 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             end
             Load(world, spec[1])
         end
+        if flavor == "Mainline" then
+            local knowsCastigation = false
+            world.env.C_SpellBook.IsSpellKnownOrInSpellBook = function(spellID)
+                assert(spellID == 193134, "Penance queried the wrong talent")
+                return knowsCastigation
+            end
+            local function VisibleMarkers()
+                local count = 0
+                for _, marker in ipairs(frame._msufPlayerChannelHasteMarkers) do
+                    if marker.shown then count = count + 1 end
+                end
+                return count
+            end
+            for _, spellID in ipairs({ 47757, 47758 }) do
+                frame._msufActiveSpellID = spellID
+                knowsCastigation = true
+                Markers()
+                assert(VisibleMarkers() == 3, "Castigation Penance needs four ticks")
+                knowsCastigation = false
+                Markers()
+                assert(VisibleMarkers() == 2, "Penance without Castigation needs three ticks")
+            end
+        end
     end
 end
 assert(#failures == 0, table.concat(failures, "\n"))

@@ -2,6 +2,32 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/group_aggro_recovery_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/profile_menu_beta_ux_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/classpower_combat_visibility_smoke.lua",
+      "phase": "runtime"
+    },
+    {
       "test": "tools/tests/group_layer_status_smoke.lua",
       "phase": "apply",
       "clients": [
@@ -538,6 +564,10 @@
     },
     {
       "test": "tools/tests/auras3_identity_alpha_world_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/group_highlights_forever_smoke.lua",
       "phase": "runtime"
     },
     {
@@ -2207,17 +2237,6 @@
     },
     {
       "test": "tools/tests/profile_import_progress_smoke.lua",
-      "phase": "menu",
-      "clients": [
-        "Mainline",
-        "Vanilla",
-        "TBC",
-        "Mists",
-        "Forever"
-      ]
-    },
-    {
-      "test": "tools/tests/profile_menu_beta_ux_smoke.lua",
       "phase": "menu",
       "clients": [
         "Mainline",

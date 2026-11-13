@@ -30,7 +30,7 @@ local DEFAULTS = {
     reachCheck = false, reachOpacity = 70, reachColor = { 0.55, 0.55, 0.6 },
 }
 local LIMITS = {
-    width = { 40, 1200 }, height = { 4, 100 }, scale = { 50, 200 }, opacity = { 0, 100 },
+    width = { 4, 1200 }, height = { 4, 400 }, scale = { 50, 200 }, opacity = { 0, 100 },
     x = { -2000, 2000 }, y = { -1200, 1200 }, backgroundOpacity = { 0, 100 },
     borderSize = { 0, 8 }, fontSize = { 6, 72 }, textX = { -300, 300 }, textY = { -200, 200 },
     reachOpacity = { 0, 100 },
@@ -52,7 +52,7 @@ local WEAPON_SHOTS = { Bows = 2480, Guns = 7918, Thrown = 2764, Crossbow = 7919,
 local NEXT_SWING = { WARRIOR = { 78, 845 }, DRUID = { 6807 }, HUNTER = { 2973 } }
 -- Every next-swing attack in menu order, for the per-attack cue texts.
 local NEXT_SWING_ORDER = { 78, 845, 6807, 2973 }
-local CUE_LABEL_LIMIT = 40
+local CUE_LABEL_LIMIT, MAX_CUE_SIZE = 40, 100
 local cueNames, cueIcons, cueLabelKeys, cueSpell, cueTitled = {}, {}, {}, nil, false
 local cueEventsBound, reachEventsBound, equippedOff, equippedRanged = false, false, nil, nil
 local function Public(value)
@@ -638,7 +638,8 @@ local function StyleLane(main, off)
     if not off.Lane then off.Lane = CreateSurface(main) end
     local lane, inset = off.Lane, main.inset
     local vertical = cfg.direction == "UP" or cfg.direction == "DOWN"
-    local thickness = math.max(2, math.floor(((vertical and cfg.width or cfg.height) - 2 * inset) / 3 + 0.5))
+    local innerSize = (vertical and cfg.width or cfg.height) - 2 * inset
+    local thickness = math.min(innerSize / 2, math.max(2, math.floor(innerSize / 3 + 0.5)))
     lane:ClearAllPoints()
     if vertical then
         lane:SetPoint("TOPRIGHT", main, "TOPRIGHT", -inset, -inset)
@@ -722,7 +723,8 @@ local function Style(frame, cfg, sample)
             frame.Cue = PixelLayoutRegion(frame.Text:CreateTexture(nil, "OVERLAY"))
             frame.Cue:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         end
-        frame.Cue:SetSize(cfg.height, cfg.height)
+        local cueSize = math.min(cfg.height, MAX_CUE_SIZE)
+        frame.Cue:SetSize(cueSize, cueSize)
         frame.Cue:ClearAllPoints()
         frame.Cue:SetPoint("RIGHT", frame, "LEFT", -2, 0)
         frame.Cue:Hide()

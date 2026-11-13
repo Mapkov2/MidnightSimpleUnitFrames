@@ -108,6 +108,20 @@ end
 --- the roster was in flux, otherwise kept OFFLINE/DEAD/AFK from that read.
 local ROSTER_IDENTITY_REASON = "MSUF_GF_UNIT_IDENTITY"
 
+local function RefreshAggroStateFrame(frame, unit, _, event)
+  local active = frame._msufActiveElements
+  if not (active and unit) then return end
+  local border = active.Borders and frame._msufBorderRuntimeCfg
+  local corners = active.GroupCornerIndicators and frame._msufGFCornerPreparedCfg
+  local borderMode = border and border.aggro == true and frame._msufBorderRuntimeAggroMode or nil
+  local cornerMode = corners and corners.needsThreat == true and corners.runtimeAggroMode or nil
+  if not (borderMode or cornerMode) then return end
+
+  local borderThreat, cornerThreat = MSUF.UFVisuals.ResolveGroupAggroPair(frame, unit, borderMode, cornerMode)
+  if borderMode then UF.elements.Borders.UpdateGroupThreat(frame, event, unit, borderThreat) end
+  if cornerMode then UF.elements.GroupCornerIndicators.UpdateGroupThreat(frame, event, unit, cornerThreat) end
+end
+
 local function RoleFilteredAggroMode(mode)
   mode = tostring(mode or "ALL"):upper()
   if mode == "TANK_ONLY" then mode = "TANK"
@@ -1108,7 +1122,7 @@ local function RuntimeOnEvent(self, event, unit)
     -- Priority selection is orthogonal to the broader pending reason. Catch up
     -- once unless the broad flush already rebuilt the active Priority header.
     if GF._pendingPriorityRefresh and not GF._pendingGroupRuntime then GF.RefreshPriorityFrames("deferred-priority") end
-    GF.RefreshCornerThreatState(event)
+    GF.ForEachFrame(RefreshAggroStateFrame, false, event)
     if refreshEvents then SetRuntimeEventsEnabled(AnyGroupFrameEnabled()) end
     return
   elseif event == "PLAYER_REGEN_DISABLED" then

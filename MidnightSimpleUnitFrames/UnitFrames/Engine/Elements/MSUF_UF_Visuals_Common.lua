@@ -9,6 +9,7 @@ local CreateFrame = CreateFrame
 -- border, alpha, and visual element files so they stay behaviorally aligned.
 local UnitExists = UnitExists
 local UnitThreatSituation = UnitThreatSituation
+local UnitAffectingCombat = UnitAffectingCombat
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitClass = UnitClass
 local UnitReaction = UnitReaction
@@ -29,6 +30,12 @@ local NotSecretValue = Secrets.NotSecret
 local EMPTY_EVENTS = {}
 local PORTRAIT_2D_EVENTS = { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
 local BORDER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
+local GROUP_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_FLAGS" }
+local GROUP_THREAT_EVENT = {
+  UNIT_THREAT_SITUATION_UPDATE = true,
+  UNIT_THREAT_LIST_UPDATE = true,
+  UNIT_FLAGS = true,
+}
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
 local QUESTION_MARK = "Interface\\ICONS\\INV_Misc_QuestionMark"
@@ -165,7 +172,11 @@ local function ReadGroupAggroThreat(unit)
   local status = UnitThreatSituation(unit)
   if IsNil(status) or not NotSecretValue(status) then return false end
   status = tonumber(status)
-  return status ~= nil and status >= 1
+  if status == nil or status < 1 then return false end
+  -- Threat can lag behind the member's combat flag at the end of a fight.
+  -- Only a known out-of-combat result overrides a positive threat state.
+  local active = UnitAffectingCombat and UnitAffectingCombat(unit)
+  return not NotSecretValue(active) or (active ~= false and active ~= 0)
 end
 
 -- Flat group hotpath: read threat once, read role at most once, and derive
@@ -183,41 +194,27 @@ local function ResolveGroupAggroPair(frame, unit, borderMode, cornerMode)
   return border, corner
 end
 
--- Borders run before corner indicators in the compiled event path. Resolve
--- their common group-aggro predicate once per dispatch; corners retain their
--- stricter combat gate and reuse this result when both visuals are enabled.
+-- Mixed event routes share the raw result even when border and corner modes differ.
 local function ResolveGroupAggroThreat(frame, unit, mode)
   if not (frame and unit and UnitThreatSituation) then return false end
   local token = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+  local active
   if token
     and frame._msufGroupAggroDispatchToken == token
-    and frame._msufGroupAggroDispatchUnit == unit
-    and frame._msufGroupAggroDispatchMode == mode then
-    return frame._msufGroupAggroDispatchValue == true
+    and frame._msufGroupAggroDispatchUnit == unit then
+    active = frame._msufGroupAggroDispatchValue
+  else
+    -- Apply and identity refresh can run before the unit is present.
+    local exists = UnitExists and UnitExists(unit)
+    active = not (NotSecretValue(exists) and (exists == false or exists == 0))
+      and ReadGroupAggroThreat(unit)
+    if token then
+      frame._msufGroupAggroDispatchToken = token
+      frame._msufGroupAggroDispatchUnit = unit
+      frame._msufGroupAggroDispatchValue = active
+    end
   end
-
-  -- This resolver is also used by cold/apply and UNIT_FLAGS fallback paths,
-  -- where no exact RegisterUnitEvent delivery proves that the token exists.
-  -- Keep their explicit existence guard; only ResolveGroupAggroPair is the
-  -- exact group-threat hotpath and can safely omit the duplicate native read.
-  local active = true
-  local exists = UnitExists and UnitExists(unit)
-  if not IsNil(exists) and NotSecretValue(exists)
-    and (exists == false or exists == 0) then
-    active = false
-  end
-  if active then
-    active = ReadGroupAggroThreat(unit)
-      and GroupAggroModeAllows(frame, unit, mode)
-  end
-
-  if token then
-    frame._msufGroupAggroDispatchToken = token
-    frame._msufGroupAggroDispatchUnit = unit
-    frame._msufGroupAggroDispatchMode = mode
-    frame._msufGroupAggroDispatchValue = active
-  end
-  return active
+  return active and GroupAggroModeAllows(frame, unit, mode)
 end
 
 MSUF.UFVisuals = {
@@ -240,6 +237,8 @@ MSUF.UFVisuals = {
   EMPTY_EVENTS = EMPTY_EVENTS,
   PORTRAIT_2D_EVENTS = PORTRAIT_2D_EVENTS,
   BORDER_THREAT_EVENTS = BORDER_THREAT_EVENTS,
+  GROUP_THREAT_EVENTS = GROUP_THREAT_EVENTS,
+  GROUP_THREAT_EVENT = GROUP_THREAT_EVENT,
   WHITE = WHITE,
   MEDIA_ROOT = MEDIA_ROOT,
   QUESTION_MARK = QUESTION_MARK,

@@ -63,8 +63,9 @@ local function Scenario(flavor, style, restricted)
     function UnitPowerType() return 0 end
     function UnitPowerPercent(_,_,_,curve) Check(curve.points[2][1]==1,"full-mana curve missing") return alpha end
     function canaccesstable() return true end
-    function UnitCastingInfo() end
-    function UnitChannelInfo() end
+    local castSpell, channelSpell
+    function UnitCastingInfo() return nil,nil,nil,nil,nil,nil,nil,nil,castSpell end
+    function UnitChannelInfo() return nil,nil,nil,nil,nil,nil,nil,channelSpell end
     Enum={StatusBarInterpolation={Immediate=0},StatusBarTimerDirection={RemainingTime=1,ElapsedTime=0},LuaCurveType={Step=1}}
     C_CurveUtil={CreateCurve=function() return {points={},SetType=function() end,
         AddPoint=function(self,x,y) self.points[#self.points+1]={x,y} end} end}
@@ -89,7 +90,7 @@ local function Scenario(flavor, style, restricted)
         return
     end
     Check(events and events.events.UNIT_POWER_UPDATE and events.events.UNIT_POWER_FREQUENT,"missing power route")
-    local function Fire(event,token,id) events.scripts.OnEvent(events,event,"player",token,id) end
+    local function Fire(event,token,id,...) events.scripts.OnEvent(events,event,"player",token,id,...) end
     local function Advance(seconds)
         now=now+seconds
         local queue=timers;timers={}
@@ -171,6 +172,37 @@ local function Scenario(flavor, style, restricted)
     Check((style == "spark" and five.manaSpark or five.fill).alpha == 0,
         "full Mana did not hide the rule-only marker")
     UnitPower, UnitPowerMax = nativeCurrent, nativeMaximum
+    if flavor == "Forever" then
+        local prediction
+        bars.manaUpcomingCost = true
+        local live = ns.CPBuilders.ManaExtras(E)
+        live.Refresh()
+        local driver = frames[#frames]
+        for _, f in ipairs(frames) do
+            if f.events.UNIT_SPELLCAST_CHANNEL_STOP then driver = f end
+            if f.kind == "StatusBar" and f.parent == host and not f.markerReady then prediction = f end
+        end
+        local function Cast(event, token, id, ...) driver.scripts.OnEvent(driver, event, "player", token, id, ...) end
+        Check(prediction ~= nil, "mana prediction bar is missing")
+        channelSpell = 698
+        Cast("UNIT_SPELLCAST_CHANNEL_START", "ritual", channelSpell, 21)
+        Check(prediction.shown, "ritual mana cost was not shown")
+        Cast("UNIT_SPELLCAST_SUCCEEDED", "ritual", channelSpell, 21)
+        Check(prediction.shown, "channel start success hid its cost before the channel stopped")
+        Cast("UNIT_SPELLCAST_CHANNEL_STOP", "ritual", channelSpell, nil, 21)
+        Check(not prediction.shown, "stale UnitChannelInfo revived the stopped ritual's cost")
+        Cast("UNIT_SPELLCAST_SUCCEEDED", "ritual", channelSpell, 21)
+        Check(not prediction.shown, "a late success revived the completed ritual's cost")
+        channelSpell, castSpell = nil, 42
+        Cast("UNIT_SPELLCAST_START", "new-cast", castSpell, 22)
+        Cast("UNIT_SPELLCAST_SUCCEEDED", "instant", 17)
+        Cast("UNIT_SPELLCAST_STOP", "old-cast", 42, 19)
+        Check(prediction.shown, "another spell's event cleared the active cast preview")
+        Cast("UNIT_SPELLCAST_STOP", "new-cast", castSpell, 22)
+        Check(not prediction.shown, "matching cast stop left its cost visible")
+        live.Disable()
+        bars.manaUpcomingCost = false
+    end
     -- Distinct preview/helper environments must never redirect live callbacks.
     local otherHost=CreateFrame("StatusBar");otherHost:SetStatusBarTexture()
     local other=ns.CPBuilders.ManaExtras({db={bars=bars},AM={visible=false},NotSecret=E.NotSecret,

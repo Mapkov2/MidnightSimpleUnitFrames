@@ -30,8 +30,8 @@ local CHANNEL_TICK_DATA = {
     [15407] = { ticks = 6 }, -- Mind Flay
     [48045] = { ticks = 6 }, -- Mind Sear
     [64843] = { ticks = 4 }, -- Divine Hymn
-    [47757] = { ticks = 3 }, -- Penance (Heal)
-    [47758] = { ticks = 3 }, -- Penance (Damage)
+    [47757] = { ticks = 3, modSpell = 193134, modTicks = 4 }, -- Penance (Heal) / Castigation
+    [47758] = { ticks = 3, modSpell = 193134, modTicks = 4 }, -- Penance (Damage) / Castigation
     [373129] = { ticks = 3 }, -- Dark Reprimand (Damage)
     [400171] = { ticks = 3 }, -- Dark Reprimand (Heal)
     -- Mage

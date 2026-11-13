@@ -1039,6 +1039,7 @@ local function CaptureSetterOnlySettings()
     if type(g) ~= "table" then return values end
     for key in pairs(SETTER_ONLY_SETTINGS) do values[key] = g[key] end
     values.menu = UI("CaptureMenuSettings", g)
+    if MSUF.SwingTimer then values.swingTimers = DeepCopy(db.swingTimers) end
     CaptureRuntimeSettings(db, values)
     return values
 end
@@ -1047,6 +1048,9 @@ local function ResyncSetterOnlySettings(before)
     local g = db and db.general
     if type(g) ~= "table" or type(before) ~= "table" then return end
     UI("ResyncMenuSettings", before.menu, g)
+    if MSUF.SwingTimer and not DeepEqual(db.swingTimers, before.swingTimers) then
+        MSUF.SwingTimer.RefreshSettings()
+    end
     if before.castbarBackends then ResyncRuntimeSettings(db, before) end
     for key, entry in pairs(SETTER_ONLY_SETTINGS) do
         local value = g[key]

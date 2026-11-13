@@ -21,6 +21,7 @@ local math_min     = math.min
 local math_max     = math.max
 local IsAltKeyDown  = IsAltKeyDown
 local tonumber            = tonumber
+local PlainBool = MSUF.Secrets.PlainBool
 
 local EditModeAPI = MSUF.EditModeAPI
 local GameplayHelpers = MSUF.Gameplay or {}
@@ -949,24 +950,13 @@ local function SetEnabledMeleeRangeCheck(spellID)
 end
 
 local function IsUnitInMeleeRange(unit, spellID)
-    spellID = tonumber(spellID) or 0
-    if spellID <= 0 then
-        return false
-    end
-    if not (C_Spell and C_Spell.IsSpellInRange) then
-        return false
-    end
-
+    if not (C_Spell and C_Spell.IsSpellInRange) then return nil end
     local overrideID = GetOverrideSpellID(spellID)
-    if overrideID and overrideID > 0 then
-        local okOverride = C_Spell.IsSpellInRange(overrideID, unit)
-        if okOverride == true or okOverride == 1 then
-            return true
-        end
+    if overrideID > 0 then
+        local inRange = PlainBool(C_Spell.IsSpellInRange(overrideID, unit))
+        if inRange ~= nil then return inRange end
     end
-
-    local ok = C_Spell.IsSpellInRange(spellID, unit)
-    return ok == true or ok == 1
+    return PlainBool(C_Spell.IsSpellInRange(spellID, unit))
 end
 
 local function CrosshairHasValidTarget()

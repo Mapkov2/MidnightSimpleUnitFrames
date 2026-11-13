@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "BBEF8555A641FEB369EA8CC4D7D7EB4A4350DD4322A4AC5511F3E661DFE6CB8E"
+Search.StaticIndexSourceSha256 = "C801073664CEDCF8CE8325D079D960CB19870BB96C1672D506CD7A1CF1EA370D"
 Search.StaticIndexRecordCount = 4658
 Search.StaticIndexContextBlob = [==[auras3_buffs
 Border Alpha (%)
@@ -6092,10 +6092,10 @@ Down (Single Column)
 !96!Hide duplicate Buff icon
 !320!Hides this aura from the regular Buff icons while this spell indicator is enabled. External-defensive Spell Icons follow the active External Defensives container's Auto-blacklist from Buffs setting.
 !96!Hide permanent auras
-!320!Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible.
+!320!Hides auras without a duration. MSUF Highlights uses its own spell list and ignores this option.
 Animated Glow
 !96!MSUF Highlights
-!320!Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible.
+!320!Shows major offensive, defensive, healing and support buffs on party and raid frames. The list matches your game version and ignores duration filters.
 !96!Maximum duration
 !320!Off shows auras of any duration. Otherwise, auras whose total duration exceeds this number of seconds are hidden.
 !96!Non-Player Auras
@@ -7592,11 +7592,11 @@ si right then down left then down right then up left then up growth for bar the 
 si health bar highlight open the colors used in this area323,324
 aura party duration bar
 si hide duplicate buff icon hides this aura from the regular buff icons while this spell indicator is enabled external defensive spell icons follow the active external defensives container s auto blacklist from buffs setting325,326
-hide permanent auras excludes auras without a duration msuf highlights intentionally uses its exact curated list instead so temporary shroud membership remains visible327,328
+hide permanent auras hides auras without a duration msuf highlights uses its own spell list and ignores this option327,328
 si none animated glow67,329
 si style
 aura party frame basics
-msuf highlights shows msuf s curated high value buffs from every party or raid member major defensive healing offensive and support cooldowns plus tactical states such as shroud membership and frequent high value cooldowns such as shadow dance uses blizzard s native aura filtering the exact list overrides duration filters so temporary330,331
+msuf highlights shows major offensive defensive healing and support buffs on party and raid frames the list matches your game version and ignores duration filters330,331
 maximum duration off shows auras of any duration otherwise auras whose total duration exceeds this number of seconds are hidden332,333
 non player auras only one filter can be active334,266
 normal reversed aura sort order reversed flips the complete priority order335,336,337,338

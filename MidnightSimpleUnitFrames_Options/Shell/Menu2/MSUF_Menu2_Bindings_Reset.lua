@@ -707,7 +707,8 @@ local PageResetProviders = {}
 M.PageResetProviders = PageResetProviders
 local function PageResetProvider(pageKey)
     local aura = M.AurasPage
-    return (aura and aura.AppearanceResetProvider(pageKey)) or PageResetProviders[pageKey]
+    return (aura and aura.AppearanceResetProvider(pageKey))
+        or (M.BarsScopeResetProvider and M.BarsScopeResetProvider(pageKey)) or PageResetProviders[pageKey]
 end
 -- Called by an optional Aura menu provider inside the host's reset/history boundary.
 function M.ResetBlizzardAuraVisibility()

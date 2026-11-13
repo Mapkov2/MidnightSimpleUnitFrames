@@ -5,12 +5,9 @@
 --- aura datasets right before this file (Auras3/MSUF_Auras3_DotData.lua,
 --- _DefensiveData.lua and _GroupHighlightsData.lua). Its spell database is
 --- Classic Era data with spell ranks, where almost none of those Retail IDs
---- exist. On WoW Forever only, this file replaces the datasets with IDs that
---- exist there and installs the Classic rank broadening
---- (Game/Classic/Auras/MSUF_Auras3_DataShared.lua): every curated or
---- configured ID expands to all same-name IDs of the Forever SpellName catalog
---- (Game/Forever/Auras/AliasData, loaded before Auras3/MSUF_Auras3_AuraAliases.lua),
---- because ranked auras carry rank-specific spell IDs. Every other client
+--- exist. On WoW Forever only, this file replaces the datasets and installs
+--- Classic rank broadening for custom aura filters. Group Highlights uses
+--- an exact list of the player aura IDs and their ranks. Every other client
 --- returns at once and keeps the Retail data unchanged.
 ---
 --- Provenance: selected from wago.tools DB2 exports for 1.60.1.69876 and
@@ -19,10 +16,11 @@
 ---   TargetDotData, PlayerDefensiveData: the Classic Era datasets
 ---     (Game/Vanilla/Auras) with their Forever names. Dropped because Forever
 ---     no longer has the ID: 12654 Ignite, 12721 Deep Wound, 19386 Wyvern Sting.
----   BigDefensiveData, Group Highlights: the Retail entries whose ID keeps its
+---   BigDefensiveData: the Retail entries whose ID keeps its
 ---     Retail 12.1.0.69497 name on Forever and is a class ability in Forever
 ---     SkillLineAbility, plus Ice Block 11958 from the Era defensive list
 ---     (Retail's Ice Block ID 45438 does not exist on Forever).
+---   Group Highlights: the current Forever catalog documented below.
 local _, MSUF = ...
 
 local Client = MSUF.Client
@@ -195,50 +193,94 @@ function A3.GetBigDefensiveSpellIDHash()
     return hash, signature
 end
 
---- Group Highlights base aura IDs, in the Retail categories.
-local GROUP_HIGHLIGHTS_VERSION = FOREVER_DATA_BUILD .. "-v1"
+--- Verified against Forever 1.60.1.70938 SpellName, SpellEffect and
+--- SkillLineAbility, the active talent trees and Blizzard's class updates.
+--- These are the auras that the native Party/Raid Buff filter should see.
+--- List ranks and triggered effects explicitly: a name may also belong to an
+--- NPC spell, a hidden controller, or a cast that does not apply a buff.
+local GROUP_HIGHLIGHTS_VERSION = "Forever-1.60.1.70938-v2"
 local groupHighlightSpellIDs = {
-    -- Defensive and healer-throughput cooldowns (10).
-    642, -- Divine Shield
-    740, -- Tranquility
-    871, -- Shield Wall
-    1022, -- Blessing of Protection
-    1966, -- Feint
-    5277, -- Evasion
-    6940, -- Blessing of Sacrifice
-    11958, -- Ice Block
-    19236, -- Desperate Prayer
+    -- Druid
     22812, -- Barkskin
+    22842, -- Frenzied Regeneration
+    17116, -- Nature's Swiftness (Druid)
+    29166, -- Innervate (recipient)
+    740, 8918, 9862, 9863, -- Tranquility, ranks 1–4
 
-    -- Major offensive and decision-relevant support cooldowns (7).
-    498, -- Divine Protection
-    1044, -- Blessing of Freedom
-    1719, -- Recklessness
-    10060, -- Power Infusion
+    -- Hunter
+    19263, -- Deterrence
+    3045, -- Rapid Fire
+    19574, -- Bestial Wrath (pet)
+
+    -- Mage
+    11958, -- Ice Block
+    11426, 13031, 13032, 13033, -- Ice Barrier, ranks 1–4
+    12042, -- Arcane Power
+    12043, -- Presence of Mind
+    28682, -- Combustion critical-strike aura (triggered by 11129)
+
+    -- Paladin
+    498, 5573, -- Divine Protection, ranks 1–2
+    642, 1020, -- Divine Shield, ranks 1–2
+    1022, 5599, 10278, -- Blessing of Protection, ranks 1–3 (recipient)
+    6940, 20729, -- Blessing of Sacrifice, ranks 1–2 (recipient)
+    1044, -- Blessing of Freedom (recipient)
+    1311015, -- Templar's Bulwark
+    19753, -- Divine Intervention aura (triggered by 19752)
+    20216, -- Divine Favor
+
+    -- Priest
+    2651, -- Elune's Grace
+    6346, -- Fear Ward (recipient)
+    10060, -- Power Infusion (recipient)
+    14751, -- Inner Focus
+    1277462, 1277634, 1277638, 1277639, 1277640, -- Contingency Plan, ranks 1–5 (recipient ward)
+    1277463, 1277464, 1277465, 1277467, 1277466, -- Contingency Plan, ranks 1–5 (triggered absorb)
+
+    -- Rogue
+    5277, -- Evasion
+    11327, 11329, -- Vanish auras, ranks 1–2 (triggered by 1856/1857)
     13750, -- Adrenaline Rush
-    19574, -- Bestial Wrath
-    29166, -- Innervate
+    13877, -- Blade Flurry
+    14177, -- Cold Blood
+
+    -- Shaman
+    8178, -- Grounding Totem (recipient spell redirection)
+    16166, -- Lightning Mastery
+    16188, -- Nature's Swiftness (Shaman)
+    16191, 17355, 17360, 1325257, -- Mana Tide, ranks 1–4 (party mana aura)
+    425336, -- Rage of the Farseer
+
+    -- Warlock
+    7812, 19438, 19440, 19441, 19442, 19443, -- Voidwalker Sacrifice, ranks 1–6 (owner shield)
+    18288, -- Amplify Curse
+
+    -- Warrior
+    871, -- Shield Wall
+    12976, -- Last Stand health aura (cast 12975)
+    18499, -- Berserker Rage (fear and incapacitate immunity)
+    20230, -- Retaliation
+    1719, -- Recklessness
+    12292, -- Sweeping Strikes in Forever
+    12328, -- Death Wish in Forever
 }
 
+local GROUP_HIGHLIGHTS_COUNT = #groupHighlightSpellIDs
+local GROUP_HIGHLIGHTS_SIGNATURE = "groupHighlights:" .. GROUP_HIGHLIGHTS_VERSION .. ":" .. GROUP_HIGHLIGHTS_COUNT
 A3.GroupHighlightsDataVersion = GROUP_HIGHLIGHTS_VERSION
-A3.GroupHighlightsDataCount = #groupHighlightSpellIDs
+A3.GroupHighlightsDataCount = GROUP_HIGHLIGHTS_COUNT
 
 local groupHighlightsSpellIDHash
-local groupHighlightsSpellIDSignature
-local groupHighlightsSpellIDCount
 
---- Forever variant of the Retail Group Highlights set: the same return
---- contract (shared immutable hash, signature, ID count), broadened to ranks.
+--- Build one shared, immutable hash at the first filter compile.
 function A3.GetGroupHighlightsSpellIDHash()
-    if groupHighlightsSpellIDHash then
-        return groupHighlightsSpellIDHash, groupHighlightsSpellIDSignature, groupHighlightsSpellIDCount
-    end
-    local hash, count, final = BroadenedSpellIDHash(groupHighlightSpellIDs)
-    local signature = "groupHighlights:" .. GROUP_HIGHLIGHTS_VERSION .. ":" .. count
-    if final then
+    if not groupHighlightsSpellIDHash then
+        local hash = {}
+        for i = 1, GROUP_HIGHLIGHTS_COUNT do
+            hash[groupHighlightSpellIDs[i]] = true
+        end
         groupHighlightsSpellIDHash = hash
-        groupHighlightsSpellIDSignature = signature
-        groupHighlightsSpellIDCount = count
+        groupHighlightSpellIDs = nil
     end
-    return hash, signature, count
+    return groupHighlightsSpellIDHash, GROUP_HIGHLIGHTS_SIGNATURE, GROUP_HIGHLIGHTS_COUNT
 end

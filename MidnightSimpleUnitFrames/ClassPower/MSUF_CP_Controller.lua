@@ -43,7 +43,7 @@ local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
 local UnitPowerDisplayMod = UnitPowerDisplayMod
 local UnitHasVehicleUI = UnitHasVehicleUI
 local InCombatLockdown = InCombatLockdown
-local UnitAffectingCombat = UnitAffectingCombat
+local InCombat = MSUF.Util.InCombat
 local GetTime = GetTime
 local C_Timer = C_Timer
 local GetBarTexture = MSUF.Require("MSUF_GetBarTexture", FILE)
@@ -432,11 +432,9 @@ local function CP_CheckAutoHide(cur, maxP)
 
     local b = _cpDB.bars or {}
 
-    --- OOC: hide when out of combat. PLAYER_REGEN_DISABLED is delivered before
-    --- InCombatLockdown() turns true, so the combat-entry re-check also reads
-    --- UnitAffectingCombat("player"). Modes with no later power event, such as
-    --- the Warrior Whirlwind bar, never get a second chance to show.
-    if b.classPowerHideOOC and not (InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player"))) then
+    --- The combat event can arrive before lockdown. Aura-only resources such
+    --- as Whirlwind may have no later power event to correct their visibility.
+    if b.classPowerHideOOC and not InCombat() then
         if b.classPowerSyncPlayerPowerOOC then CP_SyncPlayerPowerOOC(true)
         elseif CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
         CP.container:SetAlpha(0)
@@ -1476,6 +1474,7 @@ local function ClassPowerOnRareEvent(event, arg1)
 
     --- Combat state change: re-evaluate auto-hide (OOC toggle)
     if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+        InCombat(event)
         if event == "PLAYER_REGEN_ENABLED" then
             if CP.nativeAuraPending then CP.SyncNativeAuras() end
             if CP.augLifecycleDisablePending == true and CP.DisableNow then

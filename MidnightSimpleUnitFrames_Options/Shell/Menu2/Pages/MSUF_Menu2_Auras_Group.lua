@@ -1004,7 +1004,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 ".auras." .. lane .. ".blacklist.hidePermanent"),
         }) })
     AddTooltip(hidePermanent, "Hide permanent auras",
-        "Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible.")
+        "Hides auras without a duration. MSUF Highlights uses its own spell list and ignores this option.")
     local selectedFilterToken = CanonicalGroupFilterValue((GFReadGroup(scope, lane) or {}).filterToken or "ALL", lane)
     for i = 1, #values do
         local item = values[i]
