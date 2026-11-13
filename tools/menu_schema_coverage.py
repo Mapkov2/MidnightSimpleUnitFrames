@@ -75,7 +75,9 @@ def source_hash(root, include_indexes=True):
         "tools/classic-client-matrix.tsv", "tools/load-graph.lock"))
     # Follow the generation harness' actual Lua helper references. Deleting an
     # unrelated frozen smoke cannot stale a declaration projection.
-    helpers = {p.name: p for p in (root / 'tools').rglob('*.lua')}
+    helpers = {}
+    for path in (root / 'tools').rglob('*.lua'):
+        helpers.setdefault(path.name, []).append(path)
     pending = list(paths)
     seen = set()
     while pending:
@@ -87,10 +89,10 @@ def source_hash(root, include_indexes=True):
         names = lua_references(text)
         names += [name + '.lua' for name in re.findall(r'require\(["\']([\w_]+)["\']\)', text)]
         for name in names:
-            helper = helpers.get(name)
-            if helper and helper not in paths:
-                paths.add(helper)
-                pending.append(helper)
+            for helper in helpers.get(name, ()):
+                if helper not in paths:
+                    paths.add(helper)
+                    pending.append(helper)
     digest = hashlib.sha256()
     for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
         if not include_indexes and path.as_posix().endswith(tuple(INDEXES)):
