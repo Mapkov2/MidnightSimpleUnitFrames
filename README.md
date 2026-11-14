@@ -24,7 +24,7 @@
 
 Pet HoTs on your own pet and group pet frames, Icon Skins, independent Health and Power Gloss, and configurable Timer Bars arrive in 7.0. Upgrades carry over 6.5x profiles and character assignments and create a recovery backup.
 
-[Download 7.0.1 on CurseForge](https://www.curseforge.com/wow/addons/midnightsimpleunitframes/files/9615861) · [Wago releases](https://addons.wago.io/addons/midnightsimpleunitframes/versions?stability=stable) · [Full changelog](CHANGELOG.md#701---2026-11-14) · [Archived 6.5x branch](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/6.5)
+[Download 7.0.1 on Wago](https://addons.wago.io/addons/midnightsimpleunitframes/versions?stability=stable) · [CurseForge project](https://www.curseforge.com/wow/addons/midnightsimpleunitframes) · [Full changelog](CHANGELOG.md#701---2026-11-14) · [Archived 6.5x branch](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/6.5)
 
 > **Arena Frames, Pet Frames and Pet Target are built in.** Customize them alongside your unit and group frames in one consistent interface.
 
