@@ -22,20 +22,20 @@ $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace 
 # verifies nothing, so a malformed one fails instead of reporting "skipped": it
 # would otherwise pass every TOC, contract and changelog check below without
 # reading a single file. The shared channel resolver, which the packager and the
-# publishing workflows also use, owns the format (stable <major>.<minor>,
-# <major>.<minor>-alpha<N>, <major>.<minor>-beta<N>); this script adds the two
-# rules the version check relies on. The minor is a decimal fraction, so a stable
-# release spells it with two digits (a one-digit minor would collide with the
-# zero-padded one in the integer minor that older clients compare), and a
-# prerelease names its release line as <major>.<minor>.
+# publishing workflows also use, owns the accepted release formats. The
+# legacy two-component stable version keeps its two-digit decimal minor.
+# An explicit patch release uses the same bounded components as the addon
+# version comparator, which normalizes the minor as a decimal fraction.
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()
 if ($sourceVersion -ne $normalizedVersion) {
     throw "Classic VERSION '$sourceVersion' does not match release '$normalizedVersion'."
 }
 $releaseChannel = & (Join-Path $PSScriptRoot "resolve_classic_release_channel.ps1") -Tag $normalizedVersion
 if ($releaseChannel.Channel -ceq "release") {
-    if ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]{2}$') {
-        throw "A stable release spells its minor with two digits (for example 7.00), got '$normalizedVersion'."
+    $legacyStable = '^(?:0|[1-9][0-9]*)\.[0-9]{2}$'
+    $patchStable = '^(?:0|[1-9][0-9]{0,2})\.[0-9]{1,3}\.[1-9][0-9]{0,2}$'
+    if ($releaseChannel.Base -cnotmatch $legacyStable -and $releaseChannel.Base -cnotmatch $patchStable) {
+        throw "Use a two-digit minor for a legacy stable version (7.00) or an explicit patch version (7.0.1), got '$normalizedVersion'."
     }
 } elseif ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]+$') {
     throw "A prerelease names its release line as <major>.<minor> (for example 7.0-beta1), got '$normalizedVersion'."

@@ -192,7 +192,8 @@ local function BuildFullChangelog(ctx)
             local targetVersion = version
             local date = tostring(entry.date or "")
             local selected = version == selectedVersion
-            local heading = date ~= "" and (version .. "  -  " .. date) or version
+            local detail = type(entry.title) == "string" and entry.title ~= "" and entry.title or date
+            local heading = detail ~= "" and (version .. "  -  " .. detail) or version
             local header = T.Button(root, heading, contentWidth, 34)
             header:SetPoint("TOPLEFT", root, "TOPLEFT", 18, y)
             if T.CenterButtonLabel then T.CenterButtonLabel(header) end

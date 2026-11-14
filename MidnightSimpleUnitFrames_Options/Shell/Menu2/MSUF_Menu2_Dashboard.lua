@@ -279,7 +279,8 @@ local function FillChangelog(child, scrollW, entries)
         if type(entry) == "table" then
             local version = tostring(entry.version or "")
             local date = tostring(entry.date or "")
-            local heading = (date ~= "" and (version .. " - " .. date)) or version
+            local detail = type(entry.title) == "string" and entry.title ~= "" and entry.title or date
+            local heading = detail ~= "" and (version .. " - " .. detail) or version
             if entryIndex > 1 then
                 local rule = PixelLayoutRegion(child:CreateTexture(nil, "ARTWORK"))
                 rule:SetHeight(1)

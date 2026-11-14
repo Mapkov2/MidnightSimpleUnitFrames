@@ -28,7 +28,8 @@ local ApplyColorTexture = Apply.ColorTexture
 local SetShown = Apply.ShownPlain
 
 local EMPTY = {}
-local GROUP_THREAT_EVENT = Visuals.GROUP_THREAT_EVENT
+local GROUP_THREAT_EVENTS = UF.Metadata.GroupThreatEvents
+local GROUP_THREAT_EVENT = UF.Metadata.GroupThreatEvent
 
 local function ClampLayer(layer, fallback)
   layer = floor((tonumber(layer) or fallback or 7) + 0.5)
@@ -107,7 +108,7 @@ end
 
 function GroupCornerIndicators.GetEvents(frame, spec)
   local cfg = spec and spec.cornerIndicators
-  return cfg and cfg.needsThreat == true and Visuals.GROUP_THREAT_EVENTS or EMPTY
+  return cfg and cfg.needsThreat == true and GROUP_THREAT_EVENTS or EMPTY
 end
 
 function GroupCornerIndicators.GetUnitlessEvents(frame, spec)

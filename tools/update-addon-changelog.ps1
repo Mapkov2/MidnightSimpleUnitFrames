@@ -291,7 +291,13 @@ if (-not [string]::IsNullOrWhiteSpace($DashboardChangelogPath)) {
             $release = [ordered]@{
                 version = Convert-ToAsciiText $Matches[1]
                 date = Convert-ToAsciiText $Matches[2]
+                title = ""
                 sections = New-Object System.Collections.Generic.List[object]
+            }
+            # A standalone bold line after the version heading is its display title.
+            if ($lineIndex + 2 -lt $lines.Count -and $lines[$lineIndex + 1] -eq "" -and
+                $lines[$lineIndex + 2] -match '^\*\*([^*]+)\*\*\s*$') {
+                $release.title = Convert-ToAsciiText $Matches[1]
             }
             $releases.Add([pscustomobject]$release)
             $section = $null
@@ -447,6 +453,10 @@ function Write-ChangelogLua {
         $out.Add("        {")
         $out.Add("            version = $(Convert-ToLuaString $entry.version),")
         $out.Add("            date = $(Convert-ToLuaString $entry.date),")
+        $titleProperty = $entry.PSObject.Properties["title"]
+        if ($titleProperty -and -not [string]::IsNullOrWhiteSpace($titleProperty.Value)) {
+            $out.Add("            title = $(Convert-ToLuaString $titleProperty.Value),")
+        }
         $out.Add("            sections = {")
         foreach ($s in $entry.sections) {
             if ($s.bullets.Count -eq 0) { continue }

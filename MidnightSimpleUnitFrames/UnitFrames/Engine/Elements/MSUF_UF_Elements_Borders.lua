@@ -24,7 +24,8 @@ local NotSecretValue = Visuals.NotSecretValue
 local IsSecretValue = issecretvalue
 local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = Visuals.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
-local GROUP_THREAT_EVENT = Visuals.GROUP_THREAT_EVENT
+local GROUP_THREAT_EVENTS = UF.Metadata.GroupThreatEvents
+local GROUP_THREAT_EVENT = UF.Metadata.GroupThreatEvent
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = Visuals.SetShown
 local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
@@ -102,7 +103,7 @@ function Borders.GetEvents(frame, spec)
     return EMPTY_EVENTS
   end
   if cfg.aggro == true and IsAggroBorderUnit(frame) then
-    return spec.scope == "group" and Visuals.GROUP_THREAT_EVENTS or BORDER_THREAT_EVENTS
+    return spec.scope == "group" and GROUP_THREAT_EVENTS or BORDER_THREAT_EVENTS
   end
   return EMPTY_EVENTS
 end

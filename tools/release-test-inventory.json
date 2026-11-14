@@ -24,6 +24,18 @@
       ]
     },
     {
+      "test": "tools/tests/group_aggro_recovery_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "missing-visual-events"
+      ]
+    },
+    {
       "test": "tools/tests/profile_menu_beta_ux_smoke.lua",
       "phase": "menu",
       "clients": [

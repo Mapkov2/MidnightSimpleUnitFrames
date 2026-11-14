@@ -1,5 +1,166 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.1 - 2026-11-14
+
+**One Year Anniversary Edition**
+
+The stable 7.0 release for WoW Midnight, WoW Forever, Classic Era, The Burning Crusade Anniversary, and Mists of Pandaria Classic. Upgrades from 6.5x carry over profiles and character assignments and create a recovery backup.
+
+### Highlights
+
+- **Pet HoTs.** Enable Show HoTs on your own pet frame to see supported healing-over-time effects and their remaining duration. Only mine limits the display to your casts.
+<!-- msuf-menu-link: {"pageKey":"uf_pet","sectionId":"pet_frames","controlId":"menu2.uf_pet.unit.pet_frames.hots","settingKey":"pet.petHoTsEnabled","prepareKind":"","prepareValue":"","query":"show hots","label":"Show HoTs for your pet"} -->
+- **Party pet HoTs.** Enable Pet frames under Party/Raid Frames > Layout, then turn on Show HoTs. Icons stay inside the pet frame and leave room for the name.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"group_pets","controlId":"menu2.gf_layout.group.field.petshotsenabled","settingKey":"gf_party.petsHoTsEnabled","prepareKind":"groupScope","prepareValue":"party","query":"show hots","label":"Show HoTs for party pets"} -->
+- **Raid pet HoTs.** The Raid layout has its own Show HoTs and Only mine settings.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"group_pets","controlId":"menu2.gf_layout.group.field.petshotsenabled","settingKey":"gf_raid.petsHoTsEnabled","prepareKind":"groupScope","prepareValue":"raid","query":"show hots","label":"Show HoTs for raid pets"} -->
+- **Icon Skins.** Choose a shared skin with live previews, adjust opacity and gloss, and set overrides for individual aura and icon types.
+<!-- msuf-menu-link: {"pageKey":"icon_skins","sectionId":"icon_skins_default","controlId":"menu2.icon_skins.icon_skins.default-skin.skin","settingKey":"auras3.shared.iconSkinDefault.styleSkin","prepareKind":"","prepareValue":"","query":"skin","label":"Default Icon Skin"} -->
+- **Health Gloss.** Add an adjustable highlight to filled health bars. Bars > Textures & Gradient shows the effect in the live preview.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_textures","controlId":"menu2.opt.bars.global.gloss.health.enabled","settingKey":"","prepareKind":"","prepareValue":"","query":"health gloss","label":"Health gloss"} -->
+- **Power Gloss.** Enable and tune the power-bar highlight independently, with a preview of your current resource.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_textures","controlId":"menu2.opt.bars.global.gloss.power.enabled","settingKey":"","prepareKind":"","prepareValue":"","query":"power gloss","label":"Power gloss"} -->
+- **Timer Bars.** The Castbar menu adds separate Breath, Fatigue, Feign Death, Battle Start and Group Countdown tabs with their own placement, textures and text.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"timer_bars","controlId":"menu2.opt.castbar.global.timers.breath.enabled","settingKey":"general.castbarTimers.breath.enabled","prepareKind":"menuTab","prepareValue":"breath","query":"breath timer bar","label":"Open Timer Bars"} -->
+- **Profile restore points.** Save a named copy of your settings, inspect changed values and restore individual settings or an earlier profile state.
+<!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"workbench_versions","controlId":"menu2.profile.tools.profiles.version.save","settingKey":"","prepareKind":"","prepareValue":"","query":"save restore point","label":"Save restore point"} -->
+- **Profile import review.** Review changes before applying them. Full exports carry supported aura settings across clients, and older Retail profiles can identify their source so their aura rules survive a round trip.
+<!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"profiles_io","controlId":"menu2.profiles.advanced.import.review","settingKey":"","prepareKind":"","prepareValue":"","query":"review changes","label":"Review changes"} -->
+- **Display layouts.** Record frame positions and relative UI scale in a profile variant. Match layouts to screen width and aspect ratio.
+<!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"workbench_display","controlId":"menu2.profile.tools.profiles.display.record","settingKey":"","prepareKind":"","prepareValue":"","query":"record a layout for this display","label":"Record a layout for this display"} -->
+- **Color vision palettes.** Preview deuteranopia, protanopia and tritanopia presets before applying changes.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"workbench_accessibility","controlId":"menu2.profile.tools.profiles.accessibility.preview","settingKey":"","prepareKind":"colorsPainterCategory","prepareValue":"accessibility","query":"open live color preview","label":"Open live color preview"} -->
+- **Menu sounds.** Mute window and navigation sounds in the Misc settings.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.mute.menu.sounds","settingKey":"general.muteMenuSounds","prepareKind":"","prepareValue":"","query":"mute msuf menu sounds","label":"Mute MSUF menu sounds"} -->
+- **Edit Mode.** Move frames individually and step through position and size changes with Undo and Redo. Typed coordinates and dragging have separate undo steps.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- **Raider.IO on unit tooltips.** When the tooltip GUID is restricted, Raider.IO can resolve the unit through MSUF while respecting its own tooltip, modifier key, and combat settings.
+- **Aura effect previews for groups.** Configured icon glows, dispel highlights, icon styles, placement, and layers use the corresponding live rules or preview variants of the same renderer.
+- **Auras switch in the basic toolbar.** Re-enable aura previews and movers from the basic Edit Mode toolbar.
+- **Blizzard Micro Menu and Bags Bar.** Changes to orientation, order, or spacing are staged for the relevant layout and applied when confirmed out of combat. The reload dialog can offer pending changes again.
+- **Upgrade from 6.5x.** 7.0 migrates full profiles with character and specialization assignments and creates an account backup.
+- **Blizzard layouts in profile transfer.** Full imports and exports can include Blizzard Edit Mode layouts. The external profile API honors the same option.
+- **Profile recovery history.** Keep rejected profiles and profiles saved by newer builds in a separate recovery history.
+- **Aura color previews.** The color picker previews color changes as you drag and updates the native container when you commit.
+- **Forever Buff Coverage icons.** Buff reminders use fixed icons.
+- **Separate Druid form settings.** Choose resource bar and text visibility independently for Caster, Cat, Bear, and Moonkin Form where the form has a class resource.
+- **Larger Forever Swing Timers.** Each weapon slot supports widths from 4 to 1,200 and heights from 4 to 400.
+- **Forever profile variants.** Profiles can switch variants automatically when you change between Gamepad UI and mouse and keyboard mode.
+- **Interrupt Ready in Suite.** Compatible Suite nameplates use the same castbar texture and color settings as MSUF castbars. They can also use the shared aggro-border setting.
+- **Responsive menu layout.** Settings pages rearrange when the window is resized, docked, or scaled.
+- **Search before opening a page.** Find dropdown values, help, and keywords before visiting a settings page.
+- **Translations.** Expanded translations for menu copy, search breadcrumbs, prompts, and status indicator test mode.
+- **Aura preset and layer previews.** Updated aura preset names and previews, and made preview layer controls easier to see.
+- **Shared rendering and controls.** Unit and group frames share text rules. Auras, castbars, class resources, and Edit Mode share rendering or input rules with their previews. Menu controls share apply, copy, reset, history, and search behavior.
+- **Addon integration APIs.** Compatible addons can use documented interfaces for skins, castbar interrupts, UI settings, and Edit Mode elements.
+- **Release validation.** All five clients are checked for startup, saved profile formats, settings, search routes, and preview lifecycles.
+
+### Bug Fixes - Profiles, recovery, and upgrading from 6.5x
+
+- **Forever profile assignments on upgrade.** Characters with surnames retain their existing 6.5x character and specialization assignments and automatic switching on first login.
+- **Positions and UI scale.** When an upgraded layout loads for the first time, MSUF waits for the effective UI scale and active variant to apply. It then records a fresh screen-height reference while preserving saved anchors and offsets.
+- **Explicit mana regeneration choices survive migration.** Forever profiles keep existing Off settings even when older migration markers are missing.
+- **Full imports preserve inherited unit frame settings.** Settings without overrides continue to inherit from the shared scope. Explicit values such as **false** and **0** survive import and reload.
+- **Blizzard layouts in partial imports.** A selective import preserves your active Blizzard Edit Mode layout unless you select the imported layout changes.
+- **Blizzard Edit Mode before reload.** The automatic import step applies only layout settings included with that import. If the save fails, pending changes remain available to retry. The confirmation dialog verifies that the expected Blizzard layout is still active.
+- **Reload after an import or profile switch.** The confirmation button reloads the UI directly from the click. Temporary loading or dialog states no longer swallow the click.
+- **First 7.0 login.** **Open Profiles** loads Options when needed, opens the Profiles page, and keeps the active selection. If the page fails to open, the reminder remains available.
+- **Import review follows the profile and selected options.** Run the review again if the active profile was replaced or the import options changed. Same-name variants with different context or specialization conditions stop the import before saving.
+- **Cancelled or invalid imports.** MSUF decodes and validates the import string before saving. Existing profiles and assignments are preserved when it rejects an invalid or truncated string.
+- **Restore points follow their profiles.** Renaming a profile moves its restore points with it. Deleting a profile removes them, so a new profile with the same name starts with its own history.
+- **Profile sync and recovery.** Synchronization uses the active profile identity and keeps rejected storage data isolated to protect it during sync.
+- **Storage validation.** Saved masks and affected tables are validated before restoration. If the recovery budget cannot hold a copy, MSUF keeps the original profile and uses a separate working copy for that session.
+- **Safe fallback when saving.** An empty or damaged account backup prevents compaction. MSUF saves the profile in full if it cannot verify exact reconstruction. Valid V1 and V2 saves remain readable.
+
+### Bug Fixes - Party, Raid, and Unit Frames
+
+- **Follower Dungeon entry on Retail.** Party frame setup can finish when the visual module's threat-event table is unavailable, so names and bars can appear on entry.
+- **Open-world roster updates in combat on Retail and Forever.** Party and Raid frames update when the roster changes outside instances, including the first party invite while solo. Names and bars appear when members join, and frames refresh names and status when a slot changes owners. Party slots rebuild when you leave and rejoin a group during combat. Protected layout changes apply after combat.
+- **Role overlays on reassigned raid slots.** A group frame updates its role-based display when a new member takes the slot in combat. For example, an incoming healer gets the correct resource display. Restricted role and group information is handled safely.
+- **Status refresh when a unit changes.** Text, colors, and status indicators update for the current unit. Group text formatting caches clear on configuration and profile changes and at combat end.
+- **Party and Raid aggro at combat end.** Aggro borders and corner indicators clear even when threat data still reports the previous combat state.
+- **Complete frame setup after a reload in combat.** MSUF finishes pending setup once protected changes are available again. This includes hiding replaced Blizzard frames and setting up highlights, interrupt indicators, and external anchors.
+- **Frame and anchor retries.** Failed frame, position, size, and width updates stay queued. Late anchors apply when available. Text, prediction, and frame reassignment continue when another update fails.
+- **Arena preparation.** When preparation ends, MSUF clears cached name and health values, including the health percentage, so the frame displays live values.
+- **Portraits on Forever.** Automatic elite dragons follow the current target and clear for players or when player classification is restricted. NPCs with readable classifications can still show their configured decoration.
+
+### Bug Fixes - Auras and indicators
+
+- **Frozen native aura containers.** Retail and Forever can rebuild stuck containers after an interrupted Blizzard update. This addresses cases such as Target buffs going missing or stale while debuffs keep updating.
+- **Unit buffs and dispel or purge detection use separate containers.** A failure in dispel or purge detection is isolated from the buff lane for individual unit frames.
+- **More reliable native aura button setup.** Textures, fonts, and other regions are prepared before registration. Failed initialization is cleaned up, with fallbacks for dispel textures and fonts.
+- **Aura color edit cancellation.** Cancel, Escape, closing the menu, and entering combat restore the previous colors.
+- **Aura settings refresh.** Master switches refresh dependent controls right away. Pet aura settings and group aura duration and stack text apply immediately. Style copies and relevant partial imports activate the appropriate custom aura renderer.
+- **Copy Aura Style.** Style copying includes Custom Container padding.
+- **Eating and Drinking on Forever.** Restricted aura data no longer interrupts outdoor group frame setup. The status returns on the next readable aura update. Group header scans also skip inaccessible Blizzard widgets.
+- **Buff Coverage refresh on Forever.** Reminders update when a buff is refreshed or becomes visible again. If bulk aura access is restricted, supported single-spell lookups still pick up readable buffs.
+
+### Bug Fixes - Castbars, interrupts, and class resources
+
+- **Empowered spells on Midnight.** Interrupted or cancelled player casts show failure feedback and clear the stage display regardless of event order. Recognizable interrupts on enemy Empower casts display correctly even when completion data is restricted.
+- **Cast transitions and cleanup.** When a channel begins, the previous cast can no longer cover it while still being reported. Channel updates and changes to interruptibility follow the active channel. Interrupt Ready indicators clear correctly when a cast ends or a frame is disabled.
+- **Boss and Arena castbars.** Disabling castbars also hides those drawn from a pool. Scaling and range opacity apply to the active Boss castbars.
+- **Independent Focus castbar.** Target anchor and size changes affect only Target. Focus retains its own colors and preview sizing, and restores the correct range fade when a cast ends.
+- **Global Cooldown.** The GCD bar shows the icon and name of the spell that triggered it. Off-GCD spells and spells with unknown or restricted GCD metadata leave an already running bar alone.
+- **Penance with Castigation.** The channel bar shows the additional tick granted by the talent.
+- **Druid resource visibility.** Resource bars and outlines follow the current form, and detached marks inherit its visibility.
+- **Class resource combat visibility.** The display responds immediately to entering and leaving combat. Other players changing specialization no longer refresh your class resources.
+- **Mana prediction during channels.** A successful, unrelated instant spell leaves the active channel's mana prediction intact.
+- **Swing Timer state on Forever.** Improved cast and swing tracking. The embedded Off Hand lane follows its visibility setting. Undo and Redo refresh both the live bars and menu preview.
+- **Castbar subscribers.** Castbar consumers can subscribe or unsubscribe during an update.
+
+### Bug Fixes - Edit Mode, menus, and previews
+
+- **Edit Mode coordinate fields.** X/Y inputs are checked for finite values and valid bounds. Escape restores the displayed coordinates, including in group popups. Resizing the displayed group layout preserves its offsets.
+- **Cancelled drags and session changes.** Cancel, close, and combat entry restore positions, anchors, and session history consistently. Releasing the mouse after a cancelled drag of the combat timer or combat status text leaves the restored layout in place.
+- **External Edit Mode integrations.** Built-in elements such as Player are protected against external registration conflicts. Edit Mode can open even if an external callback fails. The EllesmereUI opt-out survives reload, and a cancelled EllesmereUI drag that moved an element keeps its Undo entry. Party and Raid selections from Danders route correctly.
+- **Menu layout fixes.** Corrected Dashboard shortcuts, dropdown scrolling, sticky headers, scope selectors, preview sizing, and window buttons.
+- **Search loading state.** Closing or cancelling search clears the loading indicator across all search entry points.
+- **Exact search results.** Results open the correct Absorb tabs, resource marks, status views, and font size settings. Suite search can prepare the right tab even when the caller supplies no explicit target. Supported nameplate options open in their matching scope.
+- **Localized font size.** Fixed loading the translated Name font size label.
+- **Unit frame preview initialization.** The preview can open before its scene has drawn for the first time, including when opened in combat.
+- **Raid and Mythic Raid previews.** Bars, backgrounds, borders, and text stay inside the preview when raid groups are kept separate.
+- **Preview placement and layers.** Castbars draw on the correct frame layer. Selection, dragging, resizing, auras, and status samples use the displayed regions, including the correct Arena castbar slot.
+- **Preview colors and borders.** Health text colors, gradients, and backgrounds tied to health use the current sample values. Unit previews show a full health bar when live health is restricted. Portrait borders follow live styling, class, and reaction rules. Classic previews use the correct dispel border for stealable effects.
+- **Class resource previews.** Detached resources, alternative mana, and Player HP use the live sizing, anchoring, and rendering rules. Hunter samples show the resource for their client.
+- **Preview lifecycle and live data.** Opening a preview leaves live frame settings alone. Preview scenes are cleaned up when they close.
+- **Guided Setup restore points.** Guided Setup releases restore points when dismissed or abandoned. Stale points expire after 30 days.
+- **Melee range crosshair.** Missing or restricted range results are handled safely. The preview uses the same geometry as the live crosshair.
+
+### Bug Fixes - Colors, copying, and resets
+
+- **Per-frame resource opacity.** Opening the color picker for a resource bar or its background edits the selected frame's opacity under **Opacity → Resource Bar**. The picker names the frame it affects.
+- **Tinted Dark Mode bars.** The brightness slider shows the actual brightness of tinted colors and preserves the tint while you drag. This includes the relevant Suite factory profiles.
+- **Compact color picker.** The brightness bar shows its handle again. The picker distinguishes a background explicitly set to 0% opacity from a color with no saved opacity. Changing only the color preserves the saved opacity.
+- **Status and target colors.** Status text colors apply to live frames immediately. The Target of Target color picker opens with the saved mode selected. The health gradient strength label matches the corresponding Bars setting.
+- **Health text decimals.** Older profiles with two legacy settings now use a single setting, so the toggle can turn decimals off again.
+- **Interrupt shake and status icons.** The interrupt shake toggle shows the default used in the game. Copying status icons carries over the correct settings.
+- **Group Copy To.** Copying also carries the dependent heal prediction, absorb, texture, outline, highlight, and gradient settings. Each group scope keeps its own enable and Blizzard fallback settings.
+- **Copy to All and spell tiles.** The confirmation names Arena and Pet Target as well. Spell tiles can be dragged into all intended slots.
+- **Integration startup.** MapkoSkin connects at login and refreshes on profile switches. External anchors are discovered after login. Other integrations continue to work if a MiniAuras or nickname provider fails. The MSUF button in the WoW Game Menu returns to the right position after Blizzard rearranges the menu.
+- **Optional module failures.** An error in one optional module no longer prevents subsequent modules from running.
+
+### Performance
+
+- **More compact SavedVariables.** The active profile is saved once in the shared profile store at logout. The V3 format can omit default values at 6,622 defined paths and fill them in on load. Explicit overrides, including **false**, **0**, and empty strings, are preserved along with unknown keys. Values that matched the defaults when saved can follow future default changes. Profiles are fully loaded in game, and export schema 600 remains compatible.
+- **Less data to load at startup.** WoW loads the language files needed for the game client's locale. Other menu languages are available on demand through the bundled **MidnightSimpleUnitFrames_Locales**. **Options** and the in-game changelog load when opened. Classic and Mainline load their respective aura modules.
+- **Less work for search and the menu.** The compact search index builds FAQ and alias data on demand and releases caches when closed. RC4 further reduced search memory use. Pages, widgets, and previews are reused as you switch views.
+- **Fewer repeated updates.** Settled aura opacity, portrait models, text layers, and Interrupt Ready geometry require fewer calls to update UI elements. Group status previews reuse existing regions and fixed labels. Login and reload reuse the PvP context when it is unchanged. Zone transitions still refresh it.
+- **Over-absorb glow on hostile unit frames.** Target, Focus, Boss, and other single unit frames omit the glow while showing an attackable unit, saving one heal prediction read per health update. The absorb bar stays visible. Friendly units and group frames retain the glow.
+- **Profile snapshots and previews.** Profile snapshots copy less data, and group previews and menu refreshes reuse existing widgets and layout information.
+- **Less idle work for resources and timers.** The optional Player HP bar caches maximum health until it changes or the unit changes. Timer Bars register events for enabled timers and update their display while a timer is active. Arena trinket events are registered when both Arena Frames and the trinket display are enabled.
+- **Forever Swing Timer range checks.** The Main Hand and Off Hand share one fallback range check while it is needed.
+- **Gamepad on Forever.** Turning off the Gamepad UI stops regular polling after cleanup. Turning it back on resumes polling.
+- **Native aura containers.** Visually unchanged style settings reuse the existing native container.
+- **Specialization changes.** Group related class resource updates into one refresh when you change specialization.
+- **Menu resizing.** Repeated resizing reuses the existing page containers.
+- **Incremental settings search.** All search entry points build the index in small steps.
+- **In-game changelog.** Reopening the same release reuses its existing view.
+- **SavedVariables size example.** In the documented offline test, one Forever profile entry took **23,984 bytes**, down from **195,663 bytes**.
+
 ## 7.0-rc7 - 2026-11-14
 
 Changes since 7.0 RC6 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.

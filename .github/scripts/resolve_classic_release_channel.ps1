@@ -14,6 +14,7 @@ param(
 #   classic-v<base>-rc<number>                                    (release tag)
 #   <base>-alpha<number>, <base>-beta<number>, <base>-rc<number>   (VERSION line)
 #   classic-v<base>                <base>                         (stable release)
+#   classic-v<major>.<minor>.<patch>  <major>.<minor>.<patch>      (stable patch release)
 #
 # The authored base is never int-cast: 6.05 and 6.5 are different releases.
 
@@ -21,9 +22,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $candidate = $Tag.Trim() -replace '^refs/tags/', ''
-# A stable release (6.50) names only its version; its two-digit minor may end
-# in zero, so the base keeps every authored digit.
-if ($candidate -match '^(?:classic-v)?(?<base>(?:0|[1-9][0-9]*)\.[0-9]+)$') {
+# Keep all digits of the legacy decimal minor. Patch releases use an
+# unpadded positive patch component and keep the authored minor as well.
+if ($candidate -match '^(?:classic-v)?(?<base>(?:0|[1-9][0-9]*)\.[0-9]+(?:\.[1-9][0-9]*)?)$') {
     $base = $Matches["base"]
     return [pscustomobject][ordered]@{
         Base        = $base

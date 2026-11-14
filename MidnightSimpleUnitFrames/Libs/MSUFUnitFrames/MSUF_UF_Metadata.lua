@@ -39,6 +39,10 @@ end
 Metadata.BuildNameSet = BuildNameSet
 Metadata.BuildNameList = BuildNameList
 
+-- Route registration must be available even if visual setup is incomplete.
+Metadata.GroupThreatEvents = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "UNIT_FLAGS" }
+Metadata.GroupThreatEvent = BuildNameSet(Metadata.GroupThreatEvents)
+
 Metadata.runtimeUpdateOwners = BuildNameSet(
   "Health Power Text NameText HealthText PowerText InlineToT Portrait Alpha " ..
   "StatusIndicators RaidMarkerIndicator LeaderIndicator LevelIndicator " ..
