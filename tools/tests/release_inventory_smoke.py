@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='release-scheduling-') as directory:
     root = Path(directory)
     (root / 'tools').mkdir()
     (root / 'tools/check-common.ps1').write_bytes((ROOT / 'tools/check-common.ps1').read_bytes())
-    (root / 'leaf.ps1').write_text(r"""param($Phase, $Bad, $Events)
+    (root / 'leaf.ps1').write_text(r"""param($Phase, $Bad, $Events, [int]$RunID)
 $lock = New-Object Threading.Mutex($false, ('MSUF-Scheduling-Probe-' + [IO.Path]::GetFileName($Events)))
 function Note($action) {
     [void]$lock.WaitOne()
@@ -81,7 +81,17 @@ function Note($action) {
 }
 Note 'start'
 try {
-    Start-Sleep -Milliseconds 700
+    # Hold the first two general leaves until both have started. Prove actual
+    # queue overlap without depending on PowerShell startup time on this host.
+    if ($RunID -lt 2) {
+        [IO.File]::WriteAllText("$Events.ready.$RunID", "")
+        $peer = "$Events.ready.$(1 - $RunID)"
+        $wait = [Diagnostics.Stopwatch]::StartNew()
+        while (-not [IO.File]::Exists($peer)) {
+            if ($wait.Elapsed.TotalSeconds -gt 20) { throw 'Second queue worker did not start' }
+            Start-Sleep -Milliseconds 20
+        }
+    }
     if ($Bad -eq 'exit3') { exit 3 }
     if ($Phase -eq 'setter parity') {
         Write-Output 'PASS schema setters Mainline: complete'
@@ -125,7 +135,7 @@ foreach ($id in 0..9) {
     $bad = if ($id -eq 9) { 'exit3' } elseif ($id -eq 7) { 'yes' } else { 'no' }
     $test = if ($id -ge 8) { 'tools/tests/search_static_heap.lua' } else { 'tools/tests/other.lua' }
     $runs += @{ Id = $id; Test = $test; Phase = $phase; Client = 'Mainline'; Label = "probe-$id"; Exe = $PowerShell;
-        Args = @('-NoProfile', '-File', (Join-Path $Fixture 'leaf.ps1'), $phase, $bad, $events) }
+        Args = @('-NoProfile', '-File', (Join-Path $Fixture 'leaf.ps1'), $phase, $bad, $events, $id) }
 }
 $runs = @(Order-ContractRuns $runs)
 if (($runs[0..5].Id -join ',') -ne '0,1,2,3,4,5') { throw 'Fast-check did not share the first six slots' }

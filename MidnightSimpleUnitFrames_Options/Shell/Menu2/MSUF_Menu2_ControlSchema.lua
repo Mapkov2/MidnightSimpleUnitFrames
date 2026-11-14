@@ -51,6 +51,7 @@ local UNIT_DOMAINS = {
     range = { preview = true },
     arenaTrinket = { preview = true },
     layout = { preview = true },
+    auras = { auras = true, preview = true },
 }
 function Schema.SetUnit(domain, unit, key, value, reason, kind)
     local flags = assert(UNIT_DOMAINS[domain], "unknown pilot unit apply domain")

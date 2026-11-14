@@ -9,8 +9,7 @@ local Fallbacks = M.Fallbacks
 local WHITE8X8 = Specs.WHITE8X8
 local Tr = M.Tr
 local floor = math.floor
-local Chrome = RequireFields("GroupLayers.Chrome", M.GroupPreviewChrome, "ApplyGroupChrome LAYER_HEADER_COLOR LayerFont UpdateHint")
-local ApplyGroupChrome = Chrome.ApplyGroupChrome
+local Chrome = RequireFields("GroupLayers.Chrome", M.GroupPreviewChrome, "LAYER_HEADER_COLOR LayerFont UpdateHint")
 local LAYER_HEADER_COLOR = Chrome.LAYER_HEADER_COLOR
 local LayerFont = Chrome.LayerFont
 local UpdateHint = Chrome.UpdateHint
@@ -115,8 +114,7 @@ local LAYER_DEFS = {
 function Layers.Build(state)
     local box, chrome, layerW, RegisterPreviewControl = state.box, state.chrome, state.layerW, state.RegisterPreviewControl
     local layers = PixelLayoutRegion(CreateFrame("Frame", nil, box, T.Template()))
-    local layerColors = T.colors or {}
-    ApplyGroupChrome(layers, "sidebar", layerColors.coreShadow or layerColors.panel, layerColors.borderSoft)
+    PreviewHelpers.ApplyPreviewLayerRail(layers)
     -- Layer chips flow along the bottom edge instead of holding a fixed column,
     -- so the stage keeps the full card width. Same treatment as the Unit preview.
     layers:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
@@ -134,7 +132,7 @@ function Layers.Build(state)
     end
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
-    local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(Tr, layerColors, chrome, {
+    local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(Tr, T.colors, chrome, {
         IsAvailable = GroupLayerChip.Available,
         IsOn = GroupLayerChip.On,
         OnClick = GroupLayerChip.Click,

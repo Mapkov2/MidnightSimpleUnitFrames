@@ -226,6 +226,10 @@ end
 
 local OutlineModeEnabled = MSUF.Require("MSUF_UF_OutlineModeEnabled", CONFIG_FILE)
 
+function Config.AggroBorderEnabled(general, mode)
+  return OutlineModeEnabled(mode, AggroBorderDefault(general))
+end
+
 local function CopyColor(dst, r, g, b, a)
   dst.r = Number(r, dst.r or 1)
   dst.g = Number(g, dst.g or 1)
@@ -1765,8 +1769,7 @@ local function CompileUnitBorder(out, conf, general, bars)
   if general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then
     legacyDispelBorder = true
   end
-  border.aggro = OutlineModeEnabled(ScopedValue(conf, general, "aggroOutlineMode", nil),
-    AggroBorderDefault(general))
+  border.aggro = Config.AggroBorderEnabled(general, ScopedValue(conf, general, "aggroOutlineMode", nil))
   border.dispel = OutlineModeEnabled(ScopedValue(conf, general, "dispelOutlineMode", nil),
     legacyDispelBorder)
   border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE"))

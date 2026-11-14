@@ -472,6 +472,87 @@ local function RootDB()
     return MSUF_DB
 end
 
+-- Buff aura IDs, grouped by client availability. Classic's aura compiler also
+-- matches spell names for additional ranks. The native path uses its ID aliases.
+local PET_HOT_SPELLS = {
+    136, 3661, 3662, 13542, 13543, 13544,  -- Mend Pet and Classic ranks
+    774, 8936, 139,                      -- Rejuvenation, Regrowth, Renew
+}
+local PET_HOT_TBC = {
+    27046, 33763,                        -- Mend Pet, Lifebloom
+}
+local PET_HOT_MISTS = {
+    48438, 61295, 51945, 90361,           -- Wild Growth, Riptide, Earthliving, Spirit Mend
+    77489, 119611, 132120,                -- Echo of Light, Renewing Mist, Enveloping Mist
+}
+local PET_HOT_RETAIL = {
+    155777, 124682, 382024, 156322,        -- Germination, Enveloping Mist, Earthliving, Eternal Flame
+    355941, 376788, 366155, 367364, 363502, -- Dream Breath, Reversion and their Echo auras, Dream Flight
+}
+local petHoTSpellIDs
+
+local function AddPetHoTSpells(hash, spells)
+    for i = 1, #spells do hash[spells[i]] = true end
+end
+
+local function GetPetHoTSpellIDs()
+    if petHoTSpellIDs then return petHoTSpellIDs end
+    local client = MSUF.Client
+    local ids = {}
+    AddPetHoTSpells(ids, PET_HOT_SPELLS)
+    if client.IsTBC or client.IsMists or (client.IsRetail and not client.IsForever) then
+        AddPetHoTSpells(ids, PET_HOT_TBC)
+    end
+    if client.IsMists or (client.IsRetail and not client.IsForever) then AddPetHoTSpells(ids, PET_HOT_MISTS) end
+    if client.IsRetail and not client.IsForever then AddPetHoTSpells(ids, PET_HOT_RETAIL) end
+    petHoTSpellIDs = ids
+    return ids
+end
+
+function A3.GetOwnPetHoTSettings()
+    local db = RootDB()
+    local pet = db and db.pet
+    if pet and pet.petHoTsEnabled == true then return pet end
+end
+
+function A3.BuildPetHoTEntry(onlyMine, size, limit, group)
+    return {
+        enabled = true, auraType = "BUFF", spellIDs = GetPetHoTSpellIDs(),
+        filters = { onlyMine = onlyMine == true, hidePermanent = true },
+        placed = {
+            anchor = group and "RIGHT" or "TOPRIGHT",
+            growth = "LEFTDOWN", x = group and -1 or 0, y = group and 0 or size + 2,
+            size = size, max = limit, perRow = limit, spacing = 1,
+            cooldownSize = math.max(6, size - 5), showStacks = false, showTooltip = not group,
+        },
+    }
+end
+
+-- Group pets have a small single row inside the bar. The header reserves the
+-- same width for the row so active icons cannot cover the pet name.
+function A3.GetGroupPetHoTGeometry(width, height)
+    local size = math.max(8, math.min(16, math.floor(height - 2), math.floor((width - 4) / 2)))
+    local limit = math.max(1, math.min(4, math.floor(width * 0.55 / (size + 1))))
+    return size, limit, limit * (size + 1)
+end
+
+function A3.ResolveGroupPetHoTConfig(frame, unit, onlyMine, size, limit, compile)
+    local cfg = frame._msufPetHoTConfig
+    local visual = A3.GetNativeVisualSignature and A3.GetNativeVisualSignature()
+    if cfg and cfg.unit == unit and cfg.onlyMine == onlyMine and cfg.size == size and cfg.limit == limit
+        and cfg.visual == visual then
+        return cfg
+    end
+    local auras = A3.EnsureDB()
+    local lane = compile(unit, A3.BuildPetHoTEntry(onlyMine, size, limit, true), nil, auras)
+    cfg = {
+        unit = unit, enabled = true, lanes = { petHoTs = lane }, laneOrder = { "petHoTs" },
+        onlyMine = onlyMine, size = size, limit = limit, visual = visual,
+    }
+    frame._msufPetHoTConfig = cfg
+    return cfg
+end
+
 local function EnsureRootDB()
     local db = RootDB()
     if type(db) ~= "table" then

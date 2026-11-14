@@ -1584,7 +1584,13 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         AddExtraLanes(cfg, extraLanes, extraOrder)
     end
 
-    cfg.enabled = cfg.enabled == true or cfg.purgeEnabled == true
+    local petSettings = unit == "pet" and A3.GetOwnPetHoTSettings()
+    if petSettings then
+        local entry = A3.BuildPetHoTEntry(petSettings.petHoTsOnlyMine, 18, 6, false)
+        cfg.lanes.petHoTs = Features.CompilePetHoTs(unit, entry, frameSpec)
+        cfg.laneOrder[#cfg.laneOrder + 1] = "petHoTs"
+    end
+    cfg.enabled = cfg.enabled == true or cfg.purgeEnabled == true or cfg.lanes.petHoTs ~= nil
     return cfg
 end
 

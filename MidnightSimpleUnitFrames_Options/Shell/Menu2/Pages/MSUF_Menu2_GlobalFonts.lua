@@ -68,8 +68,6 @@ local FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH = {
 }
 local FONT_EXTRA_SCOPES = { "nameplates" }
 local FONT_STORAGE_FIELDS = {
-    ["font.nameplate_size"] = { { "fontSize" }, "general", "fontOverride" },
-    ["font.nameplate_name_size"] = { { "nameFontSize" }, "general", "fontOverride" },
     ["name_shortening.format"] = { { "nameFormat", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots" },
         "general", "fontOverride", { "nameFormat", "nameClipSide", "nameMaxChars", "nameNoEllipsis",
             "nameShortenOverride", "_msufGFNameTruncationOverride" } },
@@ -99,14 +97,7 @@ local function Meta(path, classification, exact)
     if type(exact) == "table" then
         for key, value in pairs(exact) do resolved[key] = value end
     end
-    if path == "font.nameplate_size" or path == "font.nameplate_name_size" then
-        resolved.settingKey = "nameplates." .. (path == "font.nameplate_size" and "fontSize" or "nameFontSize")
-        resolved.searchPrepareKind, resolved.searchPrepareValue = "fontScope", "nameplates"
-        resolved.searchPrepareSettingKey = resolved.settingKey
-        resolved.prepareExactSearchTarget = function(_, target)
-            return target.prepareValue == "nameplates" and CurrentFontScope() == "nameplates"
-        end
-    elseif path == "font.family" then
+    if path == "font.family" then
         resolved.settingKey = resolved.settingKey or (CurrentFontScope() == "nameplates" and "nameplates.fontKey" or "general.fontKey")
     elseif path == "name_shortening.character_name_parts" then
         resolved.settingKey = resolved.settingKey or "general.characterNameParts"
@@ -743,26 +734,8 @@ local function NameplateFontEditable()
     return CurrentFontScope() == "nameplates" and ScopeHasOverride("nameplates", "fontOverride")
 end
 
-local function BuildNameplateFontSizes(ctx, font)
-    if CurrentFontScope() ~= "nameplates" then return end
-    local controls = Schema.Build(ctx, font, {
-        { "slider", "font.nameplate_size", 14, { "Font size", 6, 64, 1, 300 },
-            get = function() return FontScopeGet("fontSize", 14) end,
-            set = function(v) SetFontAndApply("fontSize", v, "MSUF2_NAMEPLATE_FONT_SIZE") end,
-            meta = Meta("font.nameplate_size"), domain = "global" },
-        { "slider", "font.nameplate_name_size", 14, { "Name font size", 6, 64, 1, 300 },
-            get = function() return FontScopeGet("nameFontSize", FontScopeGet("fontSize", 14)) end,
-            set = function(v) SetFontAndApply("nameFontSize", v, "MSUF2_NAMEPLATE_NAME_SIZE") end,
-            meta = Meta("font.nameplate_name_size"), domain = "global" },
-    }, ROW_OPTIONS)
-    M.TrackRefresh(ctx, function()
-        for _, control in pairs(controls) do SetControlEnabled(control, NameplateFontEditable()) end
-    end)
-end
-
 local function BuildGlobalFont(ctx, b)
-    local height = CurrentFontScope() == "nameplates" and 232 or 146
-    local font = Schema.Section(b:CollapsibleSection("fonts_global_font", "Global Font", height, true), ctx.key)
+    local font = Schema.Section(b:CollapsibleSection("fonts_global_font", "Global Font", 146, true), ctx.key)
     local RefreshFontPreview
     local fontDrop = Schema.Build(ctx, font, {
         { "dropdown", "font.family", nil, { "Font (SharedMedia)", function() return FontValues(false) end, 340 },
@@ -800,9 +773,7 @@ local function BuildGlobalFont(ctx, b)
             374, -42, ctx.width - 402, T.colors.muted } },
     })["menu2.opt_fonts.font.fontScopeInfo"]
     if fontScopeInfo.SetShown then fontScopeInfo:SetShown(CurrentFontScope() ~= "shared" and CurrentFontScope() ~= "nameplates") end
-    BuildNameplateFontSizes(ctx, font)
-    local previewY = CurrentFontScope() == "nameplates" and -168 or -82
-    local preview = Schema.Custom(W.Text(font, "AaBbCc 12345 - Midnight Simple Unit Frames", 14, previewY, ctx.width - 56,
+    local preview = Schema.Custom(W.Text(font, "AaBbCc 12345 - Midnight Simple Unit Frames", 14, -82, ctx.width - 56,
         T.colors.text), { id = "menu2.opt_fonts.font.preview", kind = "preview", scope = ctx.key, applyDomain = "preview" })
     if preview.SetHeight then preview:SetHeight(28) end
     if preview.SetJustifyV then preview:SetJustifyV("MIDDLE") end

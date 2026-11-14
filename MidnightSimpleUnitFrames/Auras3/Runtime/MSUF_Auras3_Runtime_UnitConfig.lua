@@ -67,6 +67,12 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local auras = EnsureDB()
     local iconsEnabled = UnitAuraIconsEnabled(auras, unit)
     local customLanes, customEffects, targetDotEffects = CompileUnitCustomContainers(auras, unit, frameSpec)
+    local petSettings = unit == "pet" and A3.GetOwnPetHoTSettings()
+    if petSettings then
+        customLanes = customLanes or {}
+        local entry = A3.BuildPetHoTEntry(petSettings.petHoTsOnlyMine, 18, 6, false)
+        customLanes.petHoTs = dependencies.CustomConfig.CompilePetHoTs(unit, entry, frameSpec, auras)
+    end
     local hasCustomContainers = false
     if customLanes then
         for _, lane in pairs(customLanes) do

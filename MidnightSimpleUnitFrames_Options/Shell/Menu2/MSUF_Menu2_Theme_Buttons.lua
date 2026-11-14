@@ -415,6 +415,7 @@ local function ButtonVisual(btn, active, hover)
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
         SetSkinnedSelectionCue(btn, active and btn._msuf2NavItem)
+        if enabled and btn._msuf2LabelColor then SetLabelColor(btn._msuf2Label, btn._msuf2LabelColor) end
         return
     end
     SetSkinnedSelectionCue(btn, false)
@@ -521,6 +522,7 @@ local function ButtonVisual(btn, active, hover)
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.12, -0.20, 0.95)
         PaintStoredNavIcon(btn, 0.50)
     end
+    if btn._msuf2LabelColor then SetLabelColor(btn._msuf2Label, btn._msuf2LabelColor) end
     if (not active) and btn._msuf2Override and edge then
         edge:SetVertexColor(0.96, 0.78, 0.24, 0.92)
         btn._msuf2Label:SetTextColor(c.accent[1], c.accent[2], c.accent[3], 1)
@@ -642,6 +644,7 @@ local function IsPageContent(parent)
 end
 function T.Button(parent, text, width, height, opts)
     local btn = PixelLayoutLeaf(CreateFrame("Button", nil, parent))
+    btn._msuf2LabelColor = opts and opts.labelColor
     local history = opts and opts.history
     if history == nil then history = IsPageContent(parent) end
     btn._msuf2HistoryCheckpoint = history == true

@@ -708,7 +708,8 @@ ns.Require=function(name,...)
     return function(region) return region end
 end
 ns.MSUF2={
-    Widgets=W, Theme={colors={accent={0.2,0.5,1}}, Button=function() return object() end},
+    Widgets=W, Theme={colors={accent={0.2,0.5,1}}, Button=function() return object() end,
+        Font=function(parent) return parent:CreateFontString() end},
     Tr=function(label) return label end,
     AlphaLabel=function(label) return label end,
     PreviewHelpers={
@@ -717,6 +718,7 @@ ns.MSUF2={
         CreateLayerButton=function() local chip=object(); chip.Refresh=noop; return chip end,
         FlowLayerChips=function() return 24 end,
         ApplyPreviewChrome=noop,
+        ApplyPreviewLayerRail=noop,
         StylePreviewPillButton=function(button) button.MSUF2RefreshPreviewPill=noop end,
     },
     UnitSectionsShared={MakeScopeCopyPopup=function() return {Show=noop,Hide=noop} end},

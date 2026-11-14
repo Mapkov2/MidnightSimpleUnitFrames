@@ -2,6 +2,17 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/pet_hots_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/group_aggro_recovery_smoke.lua",
       "phase": "runtime",
       "clients": [

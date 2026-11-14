@@ -146,6 +146,12 @@ function Link.ApplyFonts(force)
     if apply then apply(force) end
 end
 
+function Link.ApplyNameplateHighlights()
+    local current = API()
+    local apply = OptionalFunction(current and current.ApplyNameplateHighlightsFromMSUF)
+    if apply then apply() end
+end
+
 ------------------------------------------------------------------ cooldown anchor
 function Link.HasCooldownAnchor()
     local current = API()

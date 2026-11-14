@@ -130,6 +130,7 @@ glassPopup=0.020,0.039,0.071,0.940
 guide=0.231,0.510,0.965,0.58
 focus=0.055,0.098,0.161,0.78
 warning=0.851,0.643,0.255,1.00
+previewLayerTitle=0.94,0.81,0.47,1.00
 ]]
 T.fontBump = T.fontBump or 1
 local function NavIconGrid(rows)

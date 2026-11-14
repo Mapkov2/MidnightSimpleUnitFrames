@@ -11,8 +11,8 @@
 ---     frame, so nameplates, targets and every other unit never reach Lua.
 ---   * The event payload is applied incrementally: an added aura is matched by
 ---     its spell ID, a removed one by the auraInstanceID recorded when it was
----     added. A member is read in full only after a full update, a roster
----     change that gives the token to someone else, or a restriction ending.
+---     added. An updated instance can supply a previously unseen buff. Full
+---     reads recover after interrupted observation or a full aura update.
 ---   * While combat, an encounter, a challenge mode or a PvP match restricts
 ---     aura data, only auras that are still readable are looked at, at most
 ---     twice a second: they can show that a buff arrived, and a buff whose
@@ -29,14 +29,17 @@ local UnitAuraAPI = C_UnitAuras
 local GetUnitAuras = UnitAuraAPI and UnitAuraAPI.GetUnitAuras
 if not (GF and type(GetUnitAuras) == "function") then return end
 local GetUnitAuraBySpellID = UnitAuraAPI.GetUnitAuraBySpellID
+local GetAuraDataByAuraInstanceID = UnitAuraAPI.GetAuraDataByAuraInstanceID
 local ShouldAurasBeSecret = C_Secrets and C_Secrets.ShouldAurasBeSecret
+local ShouldUnitAuraInstanceBeSecret = C_Secrets and C_Secrets.ShouldUnitAuraInstanceBeSecret
 
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua")
 local CreateFrame, C_Timer = CreateFrame, C_Timer
 local UnitClass, UnitGUID = UnitClass, UnitGUID
 local UnitIsConnected, UnitIsVisible = UnitIsConnected, UnitIsVisible
 local GetNumGroupMembers, GetNumSubgroupMembers, IsInRaid = GetNumGroupMembers, GetNumSubgroupMembers, IsInRaid
-local issecretvalue = issecretvalue
+local function NoSecretValues() return false end
+local IsSecret = issecretvalue or NoSecretValues
 local floor, max, min, tonumber, pairs, wipe = math.floor, math.max, math.min, tonumber, pairs, wipe
 
 -- Buffs by the class that casts them. "ids" lists, in ascending order, every
@@ -45,39 +48,40 @@ local floor, max, min, tonumber, pairs, wipe = math.floor, math.max, math.min, t
 -- one of the buff's spells: each rank of the single-target spell, the
 -- group-wide version and same-named variants. Any one of them counts.
 -- "need" decides who should carry the buff: every member, members of a mana
--- class, or members holding the Tank role.
+-- class, or members holding the Tank role. Forever 1.60.1.70938 SpellMisc
+-- icon file IDs let reminders draw without loading spell data.
 local BUFFS_BY_CLASS = {
     DRUID = {
         -- Mark of the Wild and Gift of the Wild.
-        { key = "Wild", need = "all", ids = {
+        { key = "Wild", need = "all", texture = 136078, ids = {
             1126, 5232, 5234, 5286, 5287, 6756, 8907, 8908, 9884, 9885, 16878,
             21849, 21850, 24752, 364163, 1291335, 1310503 } },
         -- Thorns.
-        { key = "Thorns", need = "tank", ids = {
+        { key = "Thorns", need = "tank", texture = 136104, ids = {
             467, 782, 1075, 8914, 9756, 9910, 15438, 16877, 21335, 21337, 22128,
             22351, 22696, 25640, 25777, 438294, 438326, 1213813, 1213816, 1213834,
             1236308, 1291338, 1312955 } },
     },
     MAGE = {
         -- Arcane Intellect and Arcane Brilliance.
-        { key = "Intellect", need = "mana", ids = {
+        { key = "Intellect", need = "mana", texture = 135932, ids = {
             1459, 1460, 1461, 10156, 10157, 13326, 16876, 23028, 364161 } },
     },
     PALADIN = {
         -- One paladin blessing of any kind, normal or greater: Might, Wisdom,
         -- Kings, Salvation, Light and Sanctuary.
-        { key = "Blessings", need = "all", ids = {
+        { key = "Blessings", need = "all", texture = 135906, ids = {
             1038, 19740, 19742, 19834, 19835, 19836, 19837, 19838, 19850, 19852,
             19853, 19854, 19977, 19978, 19979, 20217, 20911, 25290, 25291, 25782,
             25890, 25894, 25895, 25898, 25899, 25916, 25918, 26650, 1213408 } },
     },
     PRIEST = {
         -- Power Word: Fortitude and Prayer of Fortitude.
-        { key = "Stamina", need = "all", ids = {
+        { key = "Stamina", need = "all", texture = 135987, ids = {
             1243, 1244, 1245, 2791, 10937, 10938, 10939, 10940, 13864, 21562,
             21564, 23947, 23948, 450086 } },
         -- Divine Spirit and Prayer of Spirit.
-        { key = "Spirit", need = "mana", ids = {
+        { key = "Spirit", need = "mana", texture = 135898, ids = {
             14752, 14818, 14819, 16875, 27681, 27841 } },
     },
 }
@@ -115,8 +119,6 @@ local flushQueued, fullPending, restrictedQueued = false, false, false
 local pendingUnits, restrictedDirty = {}, {}
 local seen, order = {}, {}
 local RESTRICTED_READ_DELAY = 0.5
-
-local function IsSecret(value) return issecretvalue ~= nil and issecretvalue(value) == true end
 
 -- A buff whose every ID Blizzard flags never secret stays decidable while
 -- auras are restricted; one with some such IDs can still be seen arriving.
@@ -163,15 +165,19 @@ local function Reachable(unit)
     return not IsSecret(connected) and connected == true and not IsSecret(visible) and visible == true
 end
 
+local function AuraAccessRestricted()
+    local secret = ShouldAurasBeSecret and ShouldAurasBeSecret()
+    return IsSecret(secret) or secret == true
+end
+
 local function ReadUnit(unit)
     local state = State(unit)
-    local secret = ShouldAurasBeSecret and ShouldAurasBeSecret()
-    if IsSecret(secret) or secret == true then return state end
+    state.known = false
+    if AuraAccessRestricted() then return state end
     local count, instance = state.count, state.instance
     for i = 1, BUFF_COUNT do count[i] = 0 end
     wipe(instance)
     if Blessings and Blessings.enabled then Blessings.Reset(state) end
-    state.known = false
     if not Reachable(unit) then return state end
     local auras = GetUnitAuras(unit, "HELPFUL")
     if IsSecret(auras) or type(auras) ~= "table" then return state end
@@ -181,22 +187,34 @@ local function ReadUnit(unit)
         local spellID = aura.spellId
         if IsSecret(spellID) then return state end
         local index = spellID and BUFF_OF_SPELL[spellID]
-        if index then
-            count[index] = count[index] + 1
-            local auraInstanceID = aura.auraInstanceID
-            if not IsSecret(auraInstanceID) and auraInstanceID ~= nil then
-                instance[auraInstanceID] = index
-                if Blessings and Blessings.enabled and BUFFS[index].key == "Blessings" then Blessings.Add(state, spellID, auraInstanceID) end
-            end
+        if index then count[index] = count[index] + 1 end
+        local auraInstanceID = aura.auraInstanceID
+        if not IsSecret(auraInstanceID) and auraInstanceID ~= nil then
+            instance[auraInstanceID] = index or false
+            if index and Blessings.enabled and BUFFS[index].key == "Blessings" then Blessings.Add(state, spellID, auraInstanceID) end
         end
     end
     state.known = true
     return state
 end
 
+local function TrackAura(state, spellID, auraInstanceID)
+    if auraInstanceID == nil or state.instance[auraInstanceID] ~= nil then return false end
+    local index = spellID and BUFF_OF_SPELL[spellID]
+    -- Remember unrelated auras too so repeated updates never need an API read.
+    state.instance[auraInstanceID] = index or false
+    if not index then return false end
+    local count = state.count[index] + 1
+    state.count[index] = count
+    if Blessings.enabled and BUFFS[index].key == "Blessings" and Blessings.Add(state, spellID, auraInstanceID) then
+        return true
+    end
+    return count == 1
+end
+
 -- Applies one readable payload. Returns true when the shown result can have
 -- changed, false when it cannot, nil when the payload cannot be applied.
-local function ApplyUpdate(state, info)
+local function ApplyUpdate(unit, state, info)
     if IsSecret(info) or type(info) ~= "table" then return nil end
     local full = info.isFullUpdate
     if IsSecret(full) or full ~= false then return nil end
@@ -209,19 +227,35 @@ local function ApplyUpdate(state, info)
             if IsSecret(aura) or type(aura) ~= "table" then return nil end
             local spellID, auraInstanceID = aura.spellId, aura.auraInstanceID
             if IsSecret(spellID) or IsSecret(auraInstanceID) then return nil end
-            local index = spellID and BUFF_OF_SPELL[spellID]
-            if index and auraInstanceID ~= nil and instance[auraInstanceID] == nil then
-                instance[auraInstanceID] = index
-                count[index] = count[index] + 1
-                if Blessings and Blessings.enabled and BUFFS[index].key == "Blessings" and Blessings.Add(state, spellID, auraInstanceID) then
-                    changed = true
+            if TrackAura(state, spellID, auraInstanceID) then changed = true end
+        end
+    end
+    local updated = info.updatedAuraInstanceIDs
+    if IsSecret(updated) then return nil end
+    if updated then
+        local canRead
+        for i = 1, #updated do
+            local auraInstanceID = updated[i]
+            if IsSecret(auraInstanceID) then return nil end
+            if instance[auraInstanceID] == nil and type(auraInstanceID) == "number" then
+                if canRead == nil then
+                    canRead = GetAuraDataByAuraInstanceID ~= nil and ShouldUnitAuraInstanceBeSecret ~= nil
+                        and not AuraAccessRestricted() and Reachable(unit)
                 end
-                if count[index] == 1 then changed = true end
+                if not canRead then return nil end
+                local secret = ShouldUnitAuraInstanceBeSecret(unit, auraInstanceID)
+                if not IsSecret(secret) and secret == false then
+                    local aura = GetAuraDataByAuraInstanceID(unit, auraInstanceID)
+                    if IsSecret(aura) then return nil end
+                    if aura then
+                        local helpful, spellID = aura.isHelpful, aura.spellId
+                        if IsSecret(helpful) or IsSecret(spellID) then return nil end
+                        if TrackAura(state, helpful == true and spellID or nil, auraInstanceID) then changed = true end
+                    end
+                end
             end
         end
     end
-    -- An updated instance keeps its spell, so updatedAuraInstanceIDs never
-    -- changes which buffs are present and is not looked at.
     local removed = info.removedAuraInstanceIDs
     if IsSecret(removed) then return nil end
     if removed then
@@ -229,8 +263,8 @@ local function ApplyUpdate(state, info)
             local auraInstanceID = removed[i]
             if IsSecret(auraInstanceID) then return nil end
             local index = auraInstanceID ~= nil and instance[auraInstanceID]
+            if auraInstanceID ~= nil then instance[auraInstanceID] = nil end
             if index then
-                instance[auraInstanceID] = nil
                 count[index] = max(0, count[index] - 1)
                 if Blessings and Blessings.enabled and BUFFS[index].key == "Blessings" and Blessings.Remove(state, auraInstanceID) then changed = true end
                 if count[index] == 0 then changed = true end
@@ -282,19 +316,6 @@ local ANCHORS = {
     RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
 }
 local ICON_GAP = 2
-local FALLBACK_TEXTURE = "Interface\\Icons\\INV_Misc_QuestionMark"
-
-local function Texture(buff)
-    local texture = buff.texture
-    if texture == nil then
-        local spellAPI = C_Spell
-        local resolve = spellAPI and spellAPI.GetSpellTexture
-        texture = type(resolve) == "function" and resolve(buff.ids[1]) or false
-        if IsSecret(texture) then texture = false end
-        buff.texture = texture
-    end
-    return texture or FALLBACK_TEXTURE
-end
 
 local function Holder(frame)
     local holder = frame._msufBuffCoverage
@@ -420,7 +441,7 @@ local function ShowRow(frame, conf, list, n, scale, blessing)
         local index = list[slot]
         local family = BUFFS[index].key == "Blessings" and blessing or nil
         if icon._msufBuff ~= index or icon._msufBlessing ~= family then
-            icon:SetTexture(family and Blessings.Texture(family) or Texture(BUFFS[index]))
+            icon:SetTexture(family and Blessings.Texture(family) or BUFFS[index].texture)
             icon._msufBuff, icon._msufBlessing = index, family
         end
         local placed = resized or not icon:IsShown()
@@ -570,7 +591,7 @@ local function OnShardEvent(_, _, unit, info)
     end
     local state = states[unit]
     local changed
-    if state and state.known then changed = ApplyUpdate(state, info) end
+    if state and state.known then changed = ApplyUpdate(unit, state, info) end
     if changed == nil then
         pendingUnits[unit] = true
         QueueFlush()
@@ -641,6 +662,9 @@ local function ReadRoster()
         end
         state.class = class
     end
+    for unit, state in pairs(states) do
+        if not watchedSet[unit] then state.known = false end
+    end
 end
 
 function dispatcher.Flush()
@@ -649,6 +673,8 @@ function dispatcher.Flush()
     active = AnyScopeEnabled()
     if not active then
         if wasActive then
+            dispatcher:UnregisterEvent("PARTY_MEMBER_ENABLE")
+            dispatcher:UnregisterEvent("PARTY_MEMBER_DISABLE")
             SyncShards()
             PaintAll()
         end
@@ -666,6 +692,8 @@ function dispatcher.Flush()
         if Blessings and Blessings.enabled then dispatcher:RegisterEvent("SPELLS_CHANGED")
         else dispatcher:UnregisterEvent("SPELLS_CHANGED") end
         if not wasActive then
+            dispatcher:RegisterEvent("PARTY_MEMBER_ENABLE")
+            dispatcher:RegisterEvent("PARTY_MEMBER_DISABLE")
             for _, state in pairs(states) do state.known = false end
         end
         ReadRoster()
@@ -710,6 +738,33 @@ local function SetRestricted(value)
     end
 end
 
+local function RefreshPresence(event, unit)
+    if not active then return end
+    local available = event == "PARTY_MEMBER_ENABLE"
+    if not IsSecret(unit) and watchedSet[unit] then
+        states[unit].known = false
+        if available then
+            pendingUnits[unit] = true
+            QueueFlush()
+        else
+            pendingUnits[unit] = nil
+            PaintUnit(unit)
+        end
+        return
+    end
+    for i = 1, #watched do
+        local token = watched[i]
+        if available then
+            pendingUnits[token] = true
+        elseif not Reachable(token) then
+            states[token].known = false
+            pendingUnits[token] = nil
+            PaintUnit(token)
+        end
+    end
+    if available then QueueFlush() end
+end
+
 -- ADDON_RESTRICTION_STATE_CHANGED fires before a restriction is enforced and
 -- after it ends. Only the four kinds that make aura data secret matter.
 local ENUM = Enum
@@ -751,6 +806,8 @@ dispatcher:SetScript("OnEvent", function(_, event, kind, stateValue)
         SetRestricted(true)
     elseif event == "PLAYER_REGEN_ENABLED" then
         SetRestricted(RestrictedNow())
+    elseif event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE" then
+        RefreshPresence(event, kind)
     elseif event == "PLAYER_ROLES_ASSIGNED" then
         if active then PaintAll() end
     else

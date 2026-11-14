@@ -496,7 +496,10 @@ local AurasElement = {
     unitlessEvents = EMPTY_EVENTS,
 }
 
-function AurasElement.GetEvents()
+local PET_HOT_EVENTS = { "UNIT_PET" }
+
+function AurasElement.GetEvents(frame)
+    if frame and frame.MSUFUnitKey == "pet" and A3.GetOwnPetHoTSettings() then return PET_HOT_EVENTS end
     return EMPTY_EVENTS
 end
 
@@ -543,6 +546,11 @@ function AurasElement.Disable(frame)
 end
 
 function AurasElement.Update(frame, event)
+    if event == "UNIT_PET" and frame.MSUFUnitKey == "pet" then
+        local lane = frame.Auras and frame.Auras.PetHoTs
+        if lane then lane:UpdateAllAuras() end
+        return lane ~= nil
+    end
     if event ~= nil and not ReasonRequiresAuraApply(event) then
         local root = frame and frame.Auras
         if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
@@ -552,6 +560,20 @@ function AurasElement.Update(frame, event)
         return false
     end
     return A3.RenderFrame(frame, event)
+end
+
+function A3.ConfigureGroupPetHoTs(frame, unit, onlyMine, size, limit, identityChanged)
+    if not unit then
+        if frame._msufPetHoTConfig then HideState(frame) end
+        frame._msufPetHoTConfig = nil
+        return
+    end
+    local cfg = A3.ResolveGroupPetHoTConfig(frame, unit, onlyMine, size, limit, dependencies.CustomConfig.CompilePetHoTs)
+    local root = frame.Auras
+    if not (root and root._msufA3Config == cfg and root._msufA3Applied) then
+        if AuraRuntimeCombatBlocked() or not ApplyConfig(frame, cfg) then return end
+    end
+    if identityChanged then NativeApply.RefreshAppliedNativeAuras(frame, true) end
 end
 
 UF.RegisterElement("Auras", AurasElement)

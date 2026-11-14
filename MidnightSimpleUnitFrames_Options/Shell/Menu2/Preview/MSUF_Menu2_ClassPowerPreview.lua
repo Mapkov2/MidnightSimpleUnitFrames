@@ -993,8 +993,8 @@ local CP_LAYER_BUTTON_OPTS = Helpers.LayerChipButtonOpts(TR, T.colors, Helpers.P
     end,
 })
 local function CreateLayerSidebar(box, sideW)
-    local sidebar = T.Panel(box, nil, { 0.025, 0.028, 0.04, 0.82 }, T.colors.borderSoft)
-    Helpers.ApplyPreviewChrome(sidebar, "sidebar", T)
+    local sidebar = PixelLayoutRegion(CreateFrame("Frame", nil, box, "BackdropTemplate"))
+    Helpers.ApplyPreviewLayerRail(sidebar)
     sidebar:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     if sidebar.SetClipsChildren then sidebar:SetClipsChildren(true) end
@@ -1128,7 +1128,7 @@ function Anim.CreateButton(preview)
 end
 local function EnsureClassPowerLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
-    local btn = T.Button(box, "", 132, 20)
+    local btn = T.Button(box, "", 132, 20, { labelColor = T.colors.previewLayerTitle })
     btn:SetText(TR("Preview Layers") .. " v", true)
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     btn:SetScript("OnClick", function()

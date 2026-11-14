@@ -509,6 +509,19 @@ local function LazySection(ctx, builder, unit, buildFn, sectionId, title, height
         build = buildFn,
     })
 end
+local function BuildPetHoTs(ctx, builder, unit)
+    local section = Schema.Section(builder:CollapsibleSection("pet_frames", "Pet frames", 103, false), unit)
+    local width = math.max(120, ((section._msuf2Width or 720) - 72) / 2)
+    Schema.Build(ctx, section, {
+        { "toggle", "petHoTsEnabled", false, { "Show HoTs", 24, -48, width },
+            meta = SettingMeta(ctx, "pet_frames.hots", unit, "petHoTsEnabled"), scope = unit,
+            reason = "AURAS3_PET_HOTS", unit = unit, domain = "auras" },
+        { "toggle", "petHoTsOnlyMine", false, { "Only mine", width + 48, -48, width },
+            meta = SettingMeta(ctx, "pet_frames.hots_only_mine", unit, "petHoTsOnlyMine"), scope = unit,
+            reason = "AURAS3_PET_HOTS", unit = unit, domain = "auras" },
+    }, ROW_OPTIONS)
+end
+
 local function PrepareBasicsShell(ctx, sec, unit)
     PrepareBasicsSwitch(ctx, sec, unit)
     local refresh = AttachBasicsHeaderStatus(sec, unit)
@@ -539,6 +552,7 @@ local function BuildUnitPage(info)
             return BuildBasics(lazyCtx, lazyBuilder, lazyUnit, info.label)
         end, "frame_basics", "Basics", 216, PrepareBasicsShell)
         LazySection(ctx, builder, unit, BuildLayout, "anchoring", "Anchor", UNIT_ANCHOR_SECTION_HEIGHT)
+        if unit == "pet" then LazySection(ctx, builder, unit, BuildPetHoTs, "pet_frames", "Pet frames", 103) end
         if UNIT_AURAS_MENU_UNITS[unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.

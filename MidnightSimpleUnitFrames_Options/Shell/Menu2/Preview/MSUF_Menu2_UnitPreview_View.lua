@@ -174,11 +174,7 @@ function BoxBuild.Chrome(box, s)
     sidebar:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     sidebar:SetHeight(30)
-    if PreviewHelpers.ApplyPreviewChrome then
-        PreviewHelpers.ApplyPreviewChrome(sidebar, "sidebar", T, ApplyPreviewBackdrop)
-    else
-        ApplyPreviewBackdrop(sidebar, colors.coreShadow or colors.panel or { 0.020, 0.039, 0.071, 0.56 }, colors.borderSoft or { 0.086, 0.149, 0.227, 0.32 })
-    end
+    PreviewHelpers.ApplyPreviewLayerRail(sidebar)
     box.sidebar = sidebar
     local sHdr = PixelLayoutRegion(sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     sHdr:SetPoint("LEFT", sidebar, "LEFT", 10, 0)

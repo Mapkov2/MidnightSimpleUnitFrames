@@ -5,7 +5,6 @@ local OWNERS = {
     version = { "profiles", "workbench_versions" }, review = { "profiles", "workbench_review" },
     inspector = { "profiles", "workbench_inspector" }, display = { "profiles", "workbench_display" },
     accessibility = { "opt_colors", "workbench_accessibility" },
-    multi = { "edit_selection", "workbench_alignment" },
 }
 local function Resolve(page, exact)
     if page ~= "profile_tools" then return end

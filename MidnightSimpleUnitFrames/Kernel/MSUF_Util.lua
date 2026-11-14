@@ -988,9 +988,7 @@ do
     -- No Blizzard globals, widget methods or profile values are replaced.
     -- Templates may create their own regions, so visit those once at creation.
     local VisitPixelLayout
-    local function PixelLayoutChildren(owner, ...)
-        local isStatusBar = owner.GetObjectType and owner:GetObjectType() == "StatusBar"
-        local fill = isStatusBar and owner.GetStatusBarTexture and owner:GetStatusBarTexture()
+    local function PixelLayoutChildren(fill, ...)
         for i = 1, select("#", ...) do
             local child = select(i, ...)
             if child and child ~= fill then VisitPixelLayout(child, false) end
@@ -1008,6 +1006,13 @@ do
                 return region
             end
         end
+        -- A secure template can contain native aura widgets whose access changes with aura secrecy.
+        -- Follow Blizzard_TextureInfoGenerator: ask before inspecting or touching the widget.
+        if region.CanBeAccessedInContext then
+            local accessible = region:CanBeAccessedInContext()
+            if IsSecretValue(accessible) or accessible ~= true then return region end
+        end
+        local objectType = region.GetObjectType and region:GetObjectType()
         region._msufPixelLayoutOwned = true
         if preserveLogicalGeometry then
             region._msufPixelLayoutExcluded = true
@@ -1016,7 +1021,7 @@ do
                     region._msufPixelLayoutEnabled = nil
                 end
             end
-        elseif not (region.GetObjectType and region:GetObjectType() == "MaskTexture") then
+        elseif objectType ~= "MaskTexture" then
             Util.EnablePixelPerfectLayout(region)
         end
         -- A protected template skipped in combat may be retried by the next
@@ -1025,8 +1030,9 @@ do
             and region.IsProtected and region:IsProtected() then return region end
         if not region._msufPixelLayoutTemplateVisited then
             region._msufPixelLayoutTemplateVisited = true
-            if region.GetRegions then PixelLayoutChildren(region, region:GetRegions()) end
-            if region.GetChildren then PixelLayoutChildren(region, region:GetChildren()) end
+            local fill = objectType == "StatusBar" and region.GetStatusBarTexture and region:GetStatusBarTexture()
+            if region.GetRegions then PixelLayoutChildren(fill, region:GetRegions()) end
+            if region.GetChildren then PixelLayoutChildren(fill, region:GetChildren()) end
         end
         -- Keep partial visits retryable without another per-region table field.
         if region._msufPixelLayoutEnabled or region._msufPixelLayoutExcluded then

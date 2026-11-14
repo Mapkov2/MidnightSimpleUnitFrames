@@ -17,6 +17,8 @@
 local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local GF = MSUF.GF
+local A3 = MSUF.MSUF_Auras3
+local classicAuras = MSUF.Client.IsClassic
 local Client = MSUF.Client
 local InCombat = MSUF.Util.InCombat
 local floor, min, max = math.floor, math.min, math.max
@@ -146,9 +148,39 @@ local function PaintIdentity(button, event)
     button.Name:SetText(ReadDisplayName(unit))
     PaintColors(button, button._msufAdditionalKind or "party", button._msufAdditionalPrefix or "pets", nil, nil, unit, hp, maxHP, event or "UNIT_NAME_UPDATE")
 end
-local function OnUnitEvent(button, event)
-    if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then PaintValue(button, event)
-    else PaintIdentity(button, event) end
+local function RefreshPetHoTs(button, identityChanged)
+    local header = button:GetParent()
+    local size = header._msufPetHoTSize
+    local unit = button.unit
+    if not size or not unit then
+        if button._msufPetHoTConfig then A3.ConfigureGroupPetHoTs(button) end
+        return
+    end
+    if button:IsVisible() then
+        A3.ConfigureGroupPetHoTs(button, unit, header._msufPetHoTOnlyMine, size, header._msufPetHoTLimit, identityChanged)
+    end
+end
+
+local function BindPetHoTEvents(button)
+    button:UnregisterEvent("UNIT_PET")
+    if classicAuras then button:UnregisterEvent("UNIT_AURA") end
+    local unit = button.unit
+    local owner = button._msufAdditionalColorUnit
+    if not (unit and owner and button:GetParent()._msufPetHoTSize and button:IsVisible()) then return end
+    button:RegisterUnitEvent("UNIT_PET", owner)
+    if classicAuras then button:RegisterUnitEvent("UNIT_AURA", unit) end
+end
+
+local function OnUnitEvent(button, event, unit, updateInfo)
+    if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+        PaintValue(button, event)
+    elseif event == "UNIT_AURA" then
+        A3.HandleUnitAura(button, event, unit, updateInfo)
+    elseif event == "UNIT_PET" then
+        RefreshPetHoTs(button, true)
+    else
+        PaintIdentity(button, event)
+    end
 end
 -- A compound token (party1target) raises no unit events; the ticker owns it.
 local function IsCompound(unit)
@@ -164,11 +196,32 @@ local function BindHealth(button, unit)
         if listen then button:RegisterUnitEvent(UNIT_EVENTS[i], unit) end
     end
     if unit then PaintIdentity(button, "UNIT_NAME_UPDATE") else button.Name:SetText("") end
+    if button._msufAdditionalPrefix == "pets" then
+        BindPetHoTEvents(button)
+        RefreshPetHoTs(button)
+    end
 end
 local function HealthAttribute(button, name, unit)
     if name == "unit" then BindHealth(button, unit) end
 end
-local function HealthShown(button) PaintIdentity(button, "UNIT_NAME_UPDATE") end
+local function HealthShown(button)
+    PaintIdentity(button, "UNIT_NAME_UPDATE")
+    if button._msufAdditionalPrefix == "pets" then
+        BindPetHoTEvents(button)
+        RefreshPetHoTs(button, true)
+    end
+end
+
+local function PetHidden(button)
+    button:UnregisterEvent("UNIT_PET")
+    if classicAuras then button:UnregisterEvent("UNIT_AURA") end
+end
+
+local function ReservePetHoTSpace(button, width)
+    if button._msufPetHoTReservedWidth == width then return end
+    button._msufPetHoTReservedWidth = width
+    button.Name:SetPoint("RIGHT", button.Health, "RIGHT", -3 - width, 0)
+end
 local function StyleHealth(button, kind, conf, prefix)
     PixelLayoutRegion(button)
     button._msufAdditionalKind, button._msufAdditionalPrefix = kind, prefix
@@ -190,6 +243,10 @@ function GF.AdditionalUnitOnLoad(button)
     local header = button:GetParent()
     local kind = header._msufAdditionalKind or activeKind or "party"
     StyleHealth(button, kind, GF.GetConf(kind), header._msufAdditionalPrefix or "pets")
+    if button._msufAdditionalPrefix == "pets" then
+        button:HookScript("OnHide", PetHidden)
+        ReservePetHoTSpace(button, header._msufPetHoTReservedWidth or 0)
+    end
     button._msufStyleSerial = styleSerial
     -- Click-cast addons (ClickCastFrames) bind the same way as on the group frames.
     if GF.RegisterClickCastFrame then GF.RegisterClickCastFrame(button) end
@@ -488,12 +545,18 @@ local function ClearPetHeader(header)
             child:UnregisterAllEvents()
             child.unit = nil
             child._msufAdditionalColorUnit = nil
+            if child._msufPetHoTConfig then A3.ConfigureGroupPetHoTs(child) end
         end
     end
 end
 local wanted = {}
-local function ConfigurePetHeader(header, kind, conf, width, height, units, rows, start)
+local function ConfigurePetHeader(header, kind, conf, width, height, units, rows, start, refreshIdentity)
     header._msufAdditionalKind, header._msufAdditionalPrefix = kind, "pets"
+    local size, limit, reservedWidth
+    if conf.petsHoTsEnabled == true then size, limit, reservedWidth = A3.GetGroupPetHoTGeometry(width, height) end
+    header._msufPetHoTSize, header._msufPetHoTLimit = size, limit
+    header._msufPetHoTReservedWidth = reservedWidth
+    header._msufPetHoTOnlyMine = conf.petsHoTsOnlyMine == true
     wanted.template, wanted.templateType = "MSUF_GroupAdditionalUnitTemplate", "Button"
     wanted.showRaid, wanted.showParty, wanted.showPlayer = IsInRaid(), kind == "party", true
     wanted.showSolo, wanted.sortMethod, wanted.startingIndex = conf.showSolo == true, "INDEX", start
@@ -510,12 +573,18 @@ local function ConfigurePetHeader(header, kind, conf, width, height, units, rows
             child._msufW, child._msufH = width, height
         end
         Restyle(child, kind, conf, "pets")
+        ReservePetHoTSpace(child, reservedWidth or 0)
         local unit = child:GetAttribute("unit")
-        if child.unit ~= unit then BindHealth(child, unit) end
+        if child.unit ~= unit then
+            BindHealth(child, unit)
+        else
+            BindPetHoTEvents(child)
+            RefreshPetHoTs(child, refreshIdentity)
+        end
     end
     if not header:IsShown() then header:Show() end
 end
-local function ApplyPets(kind, conf, enabled)
+local function ApplyPets(kind, conf, enabled, refreshIdentity)
     if not enabled or conf.petsEnabled ~= true then
         ClearPetHeader(holders.Pets)
         ClearPetHeader(holders.PetsRest)
@@ -537,18 +606,18 @@ local function ApplyPets(kind, conf, enabled)
         header._msufAnchor = block
     end
     if split then
-        ConfigurePetHeader(header, kind, conf, width, height, columns, full / columns, 1)
+        ConfigurePetHeader(header, kind, conf, width, height, columns, full / columns, 1, refreshIdentity)
         local rest = PetHeader("PetsRest", "MSUF_GroupAdditional_PetsRest")
         if rest._msufAnchor ~= header then
             rest:ClearAllPoints()
             rest:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -2)
             rest._msufAnchor = header
         end
-        ConfigurePetHeader(rest, kind, conf, width, height, remainder, 1, full + 1)
+        ConfigurePetHeader(rest, kind, conf, width, height, remainder, 1, full + 1, refreshIdentity)
     else
         ClearPetHeader(holders.PetsRest)
         local units = min(columns, cap)
-        ConfigurePetHeader(header, kind, conf, width, height, units, math.ceil(cap / units), 1)
+        ConfigurePetHeader(header, kind, conf, width, height, units, math.ceil(cap / units), 1, refreshIdentity)
     end
 end
 -- A boss token can pass to another friendly NPC while its button stays shown:
@@ -738,6 +807,15 @@ function GF.RefreshGroupNames(unit)
     end
     return RefreshEngineGroupNames(unit)
 end
+local function RefreshPetHeaderHoTs(header)
+    if not (header and header._msufPetHoTSize) then return end
+    for i = 1, 40 do
+        local child = header:GetAttribute(CHILD_KEYS[i])
+        if not child then break end
+        if child:IsVisible() then RefreshPetHoTs(child, true) end
+    end
+end
+
 function GF.RefreshAdditionalGroups(refreshIdentity)
     local combat = InCombat()
     if not combat then GF.EnsureDB() end
@@ -750,6 +828,10 @@ function GF.RefreshAdditionalGroups(refreshIdentity)
         and not (hiddenByEnvironment and hiddenByEnvironment(kind))
     ApplyMana(kind, conf, enabled, refreshIdentity)
     if combat then
+        if refreshIdentity then
+            RefreshPetHeaderHoTs(holders.Pets)
+            RefreshPetHeaderHoTs(holders.PetsRest)
+        end
         pending = true
         return
     end
@@ -758,7 +840,7 @@ function GF.RefreshAdditionalGroups(refreshIdentity)
     -- Keep protected live holders and unit watches ready for combat. Visual-only
     -- samples overlay them OOC and can disappear safely at combat entry.
     ApplyTargets(kind, conf, enabled)
-    ApplyPets(kind, conf, enabled)
+    ApplyPets(kind, conf, enabled, refreshIdentity)
     RefreshScreenPreviews()
     ApplyBosses(kind, conf, enabled)
 end

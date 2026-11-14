@@ -197,7 +197,7 @@
           1665
         ]
       ],
-      "source_sha256": "74b2a6e4893542665d1e9fb6179018e7764917045986003c8aab6ff3e7fbd280",
+      "source_sha256": "9de7612b76b014c913ca3727fa2ccad2f6777988fd8a02a17a38a54de3995314",
       "adapter_exclusions": [
         {
           "name": "HideMeterText",
@@ -362,7 +362,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "9a02964528fb2560df0377695a838fc930827e5a7349fd4bbbd2f73b4bc700f6"
+          "source_sha256": "24d8bd13031e05f2e9f53e6ca9500a109707b27452873db29978c2738bd526d8"
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
@@ -414,7 +414,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Chrome.lua",
-          "source_sha256": "47ea0e8d166fb5f7e5686e534528e1eadd6a64001050726fcd928263bc18ab04"
+          "source_sha256": "06c32c98d081999f81812e56fceba75cf81d333a6c361a83e2bac3598d587190"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Selection.lua",
@@ -422,7 +422,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Layers.lua",
-          "source_sha256": "50eda754f863ac8ddbe4d4b7931a7935d31afb2dbc7548d606c0bc8a2fcc90b2"
+          "source_sha256": "998b05a59539c96b62771758422e90cfd6a7ca6f63131876ad25e84382b711d2"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_View.lua",
@@ -553,7 +553,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View.lua",
-          "source_sha256": "fe55ff335b72c34ae84b855ad5d0aeecef1c2064166fb64df4945295a47b3d2f"
+          "source_sha256": "313dc5e378dadbbf886dc79b5c2ffaf550a7e454247407c75f7e0d14c5da8679"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Specs.lua",
@@ -569,7 +569,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua",
-          "source_sha256": "d7884b92d2b72f79b3d00119a62062f0fbe05e68271b16e4b5db631fbfa39416"
+          "source_sha256": "5079fe283f8c359cd3fc81623ab6068cdaee8fe5f2e2fe8346ad92083fc22c81"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View_Handles.lua",

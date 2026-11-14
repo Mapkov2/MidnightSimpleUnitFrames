@@ -15,6 +15,9 @@ local rosterGuidReads, elementGuidReads = 0, 0
 local secret = false
 local helpfulAuras, consumptionReads = {}, 0
 local auraAccessRestricted = false
+local coverageAuras, hiddenCoverageUnit, coverageInstanceReads = {}, nil, 0
+local blockedCoverageInstance
+local rejectCombatConsumption = false
 local EMPTY_AURAS = {}
 -- members[unit][3] == false marks that occupant offline; transientOffline models
 -- UnitIsConnected answering false for every token while the roster is in flux.
@@ -31,20 +34,31 @@ local h = Harness.New(root, flavor, { beforeBoot = function(h)
     h.env.Enum = setmetatable({ SecrecyLevel = { NeverSecret = 0 }, AddOnRestrictionType = { Combat = 1 },
         AddOnRestrictionState = { Inactive = 0, Active = 1 } }, { __index = enum })
     h.env.C_RestrictedActions = { IsAddOnRestrictionActive = function() return auraAccessRestricted end }
-    h.env.UnitIsVisible = function() return true end
+    h.env.UnitIsVisible = function(unit) return unit ~= hiddenCoverageUnit end
     h.env.C_UnitAuras.GetUnitAuraBySpellID = function(unit, id)
         assert(auraAccessRestricted and id == 1459, "unexpected single-spell aura lookup")
         return helpfulAuras[unit] and helpfulAuras[unit][1]
+    end
+    h.env.C_Secrets.ShouldUnitAuraInstanceBeSecret = function(_, id) return id == blockedCoverageInstance end
+    h.env.C_UnitAuras.GetAuraDataByAuraInstanceID = function(unit, id)
+        assert(not auraAccessRestricted, "instance lookup during restricted aura access")
+        assert(unit ~= hiddenCoverageUnit, "instance lookup for unavailable unit")
+        assert(id ~= blockedCoverageInstance, "instance lookup for restricted aura")
+        coverageInstanceReads = coverageInstanceReads + 1
+        for _, aura in ipairs(coverageAuras[unit] or EMPTY_AURAS) do
+            if aura.auraInstanceID == id then return aura end
+        end
     end
     h.env.C_UnitAuras.GetUnitAuras = function(unit, filter)
         local source = debug.getinfo(2, "S").source
         assert(not auraAccessRestricted, "GetUnitAuras blocked while aura access is restricted")
         if source:find("MSUF_UF_Status_Indicators.lua", 1, true) then
+            assert(not (rejectCombatConsumption and h.env.InCombatLockdown()), "combat blocked consumption aura access")
             assert(filter == "HELPFUL", "unexpected consumption aura filter")
             consumptionReads = consumptionReads + 1
             return helpfulAuras[unit] or EMPTY_AURAS
         end
-        return EMPTY_AURAS
+        return coverageAuras[unit] or EMPTY_AURAS
     end
     h.env.IsInInstance = function()
         local caller = debug.getinfo(2, "S")
@@ -137,6 +151,20 @@ end
 Check("initial")
 
 if flavor == "Forever" and kind == "raid" then
+    local spellAPI = h.env.C_Spell
+    h.env.C_Spell = setmetatable({ GetSpellTexture = function() return nil end }, { __index = spellAPI })
+    local preview = h.env.CreateFrame("Frame")
+    local previewCoverage = { buffCoverageEnabled = true }
+    for _, buff in ipairs(GF.BUFF_COVERAGE_BUFFS) do previewCoverage[buff.setting] = true end
+    GF.RenderBuffCoveragePreview(preview, previewCoverage, 1)
+    local icons = assert(preview._msufBuffCoverage).icons
+    for slot, texture in ipairs({ 136078, 136104, 135932, 135906, 135987, 135898 }) do
+        assert(icons[slot]:GetTexture() == texture, "missing buff coverage artwork at slot " .. slot)
+    end
+    for family, texture in ipairs({ 135906, 135970, 135995, 135967, 135943, 136051 }) do
+        assert(GF.BlessingPriorities.Texture(family) == texture, "missing artwork for blessing priority " .. family)
+    end
+    h.env.C_Spell = spellAPI
     local mage = assert(GF.FrameForUnit("raid1"))
     conf.buffCoverageEnabled, conf.buffCoverageCombat, conf.buffCoverageIntellect = true, true, true
     for _, buff in ipairs(GF.BUFF_COVERAGE_BUFFS) do
@@ -162,6 +190,81 @@ if flavor == "Forever" and kind == "raid" then
     conf.buffCoverageEnabled = false
     GF.RefreshBuffCoverage()
     h:RunTimers()
+
+    local oldPriest, oldRogue = members.raid1, members.raid2
+    local oldPriestColor, oldRogueColor = colors.PRIEST, colors.ROGUE
+    colors.PRIEST, colors.ROGUE = colors.MAGE, colors.WARRIOR
+    members.raid1, members.raid2 = { "Priest", "PRIEST" }, { "Rogue", "ROGUE" }
+    conf.buffCoverageEnabled = true
+    conf.buffCoverageCombat = false
+    conf.buffCoverageIntellect = false
+    conf.buffCoverageStamina = true
+    Roster()
+    local rogue = assert(GF.FrameForUnit("raid2"))
+    local reminders = assert(rogue._msufBuffCoverage, "missing Fortitude did not get a reminder")
+    assert(reminders:IsShown(), "missing Fortitude reminder is hidden")
+    local fortitude = { spellId = 1244, auraInstanceID = 9144, isHelpful = true }
+    local coverageSource = root .. "/MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua"
+    local stopWatch = Secrets.Watch(coverageSource, { strict = true })
+    blockedCoverageInstance = 9144
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, updatedAuraInstanceIDs = { 9144 } })
+    assert(reminders:IsShown(), "restricted instance changed the reminder")
+    blockedCoverageInstance = nil
+    hiddenCoverageUnit = "raid2"
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, updatedAuraInstanceIDs = { 9144 } })
+    h:Event("PARTY_MEMBER_DISABLE", "raid2")
+    h:RunTimers()
+    assert(not reminders:IsShown(), "unavailable member kept a stale Fortitude reminder")
+    coverageAuras.raid2 = { fortitude }
+    hiddenCoverageUnit = nil
+    h:Event("PARTY_MEMBER_ENABLE", "raid2")
+    h:RunTimers()
+    assert(not reminders:IsShown(), "returning member is already buffed")
+    coverageAuras.raid2 = nil
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, removedAuraInstanceIDs = { 9144 } })
+    h:RunTimers()
+    assert(reminders:IsShown(), "removal after a presence change did not show the reminder")
+
+    h:SetRaid(1)
+    Roster()
+    coverageAuras.raid2 = { fortitude }
+    h:SetRaid(2)
+    Roster()
+    rogue = assert(GF.FrameForUnit("raid2"))
+    reminders = rogue._msufBuffCoverage
+    assert(not reminders or not reminders:IsShown(), "reused roster token kept the old missing Fortitude result")
+
+    coverageAuras.raid2 = nil
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = true })
+    h:RunTimers()
+    reminders = assert(rogue._msufBuffCoverage)
+    assert(reminders:IsShown(), "missing Fortitude reminder did not return")
+    coverageAuras.raid2 = { { spellId = 1244, auraInstanceID = 9145, isHelpful = false } }
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, updatedAuraInstanceIDs = { 9145 } })
+    h:RunTimers()
+    assert(reminders:IsShown(), "harmful update was mistaken for helpful Fortitude")
+    local previousLookups = coverageInstanceReads
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, updatedAuraInstanceIDs = { 9145 } })
+    h:RunTimers()
+    assert(coverageInstanceReads == previousLookups, "known unrelated aura was queried again")
+    coverageAuras.raid2 = { fortitude }
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, updatedAuraInstanceIDs = { 9144 } })
+    h:RunTimers()
+    assert(not reminders:IsShown(), "refresh of an untracked Fortitude did not clear the reminder")
+    previousLookups = coverageInstanceReads
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, updatedAuraInstanceIDs = { 9144 } })
+    h:RunTimers()
+    assert(coverageInstanceReads == previousLookups, "known Fortitude was queried again")
+    h:Event("UNIT_AURA", "raid2", { isFullUpdate = false, updatedAuraInstanceIDs = { Secrets.New("number") } })
+    h:RunTimers()
+    assert(not reminders:IsShown(), "secret aura instance update resurrected the reminder")
+    local violations = stopWatch()
+    assert(#violations == 0, table.concat(violations, "\n"))
+    conf.buffCoverageEnabled = false
+    coverageAuras.raid2 = nil
+    members.raid1, members.raid2 = oldPriest, oldRogue
+    colors.PRIEST, colors.ROGUE = oldPriestColor, oldRogueColor
+    Roster()
 end
 
 local function CheckConsumption(scope, unit)
@@ -554,6 +657,8 @@ for _, location in ipairs({ "none", "party" }) do
     h:SetRoster({ "player" })
     Roster()
     assert(GF.headers.party == nil, "solo should not start with a Party header")
+    local checkConsumption = liveOpenWorld and location == "none" and flavor == "Forever"
+    if checkConsumption then party.statusConsumptionText = true end
     h:EnterCombat()
     local immediate = liveOpenWorld and location == "none"
     assert((GF.headers.party ~= nil) == immediate, "wrong Party standby scope")
@@ -567,6 +672,7 @@ for _, location in ipairs({ "none", "party" }) do
     -- With Show Player off, the first join fills the header's hidden standby slot.
     local standby = immediate and GF.headers.party:GetAttribute("child1")
     if immediate then assert(standby and not standby:IsShown(), "standby slot should begin hidden") end
+    rejectCombatConsumption = checkConsumption
     h:SetRoster({ "player", "party1" })
     h:Event("GROUP_ROSTER_UPDATE")
     if immediate then
@@ -583,9 +689,16 @@ for _, location in ipairs({ "none", "party" }) do
     else
         assert(GF.FrameForUnit("party1") == nil, "wrong first Party join timing")
     end
+    rejectCombatConsumption = false
+    if checkConsumption then helpfulAuras.party1 = { { spellId = 433 } } end
     h:LeaveCombat()
     h:RunTimers()
-    assert(GF.FrameForUnit("party1"), "regen failed to catch up the Party roster")
+    local joined = assert(GF.FrameForUnit("party1"), "regen failed to catch up the Party roster")
+    if checkConsumption then
+        assert(joined._msufStatusTextValue == "EATING", "regen failed to restore consumption scans")
+        party.statusConsumptionText, helpfulAuras.party1 = nil, nil
+        GF.InvalidateCompiledSpecs("party")
+    end
 end
 
 CheckConsumption("party", "party1")
@@ -618,6 +731,29 @@ assert(GF.FrameForUnit("party2") and partyHeader:GetAttribute("nameList"), "Part
 assert(#h.violations == 0, "join wrote protected state: " .. tostring(h.violations[1]))
 
 if liveOpenWorld then
+    -- Retiring a Party header detaches its slots but leaves their compiled
+    -- specs behind. Both the first invite and a later join must reattach them.
+    party.sortMode, party.playerFirstInRole = "INDEX", false
+    Roster()
+    local first = assert(GF.FrameForUnit("party1"))
+    local spare = assert(GF.FrameForUnit("party2"))
+    h:SetRoster({ "player" })
+    Roster()
+    assert(not GF.headers.party and first.MSUFSpec and not h.UF.attachedFrames[first], "retired Party fixture")
+    assert(spare.MSUFSpec and not h.UF.attachedFrames[spare], "retired spare fixture")
+    h:EnterCombat()
+    members.party1, members.party2 = { "Rejoin", "WARRIOR" }, { "LateTwo", "MAGE" }
+    h:SetRoster({ "player", "party1" })
+    Roster()
+    assert(h.UF.attachedFrames[first], "first pooled Party slot stayed detached")
+    assert(AssertCombatPaint("party1", "Rejoin") == first, "first join did not reuse the pooled slot")
+    h:SetRoster({ "player", "party1", "party2" })
+    Roster()
+    assert(h.UF.attachedFrames[spare], "second pooled Party slot stayed detached")
+    assert(AssertCombatPaint("party2", "LateTwo") == spare, "later join did not reuse the pooled slot")
+    h:LeaveCombat()
+    h:RunTimers()
+
     -- An already active instance Party keeps its existing roster route.
     EnterZone("party")
     party.sortMode, party.playerFirstInRole = "INDEX", false

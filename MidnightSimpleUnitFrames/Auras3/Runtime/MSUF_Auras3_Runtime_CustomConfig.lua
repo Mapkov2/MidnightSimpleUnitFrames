@@ -883,9 +883,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
             and normalizeFrameEffect(styleFrame) or styleFrame
     end
     local lane = FinalizeLane(MSUF.AuraConfig.StampLaneGeometry({
-        kind = "custom" .. tostring(index),
+        kind = index and ("custom" .. tostring(index)) or "petHoTs",
         appearanceKind = appearanceKind,
-        rootKey = "CustomAuras" .. tostring(index),
+        rootKey = index and ("CustomAuras" .. tostring(index)) or "PetHoTs",
         unit = sourceUnit,
         enabled = maxCount > 0,
         nativeFilter = targetDots and "HARMFUL|PLAYER"
@@ -1033,6 +1033,9 @@ end
 
 local exports = {
     CompileUnitCustomContainers = CompileUnitCustomContainers,
+    CompilePetHoTs = function(unit, entry, frameSpec, auras)
+        return CompileUnitCustomLane(unit, entry, nil, nil, frameSpec, auras.shared, auras)
+    end,
     CompileUnitCustomDisplays = CompileUnitCustomDisplays,
     CompileUnitLaneEffects = CompileUnitLaneEffects,
     EffectiveUnitCustomContainers = EffectiveUnitCustomContainers,

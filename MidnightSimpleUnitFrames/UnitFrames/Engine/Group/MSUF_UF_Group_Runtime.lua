@@ -745,7 +745,7 @@ local function FlushHeaderLayoutSettle()
     return false
   end
   if GF._openWorldCombatRoster and not IsOpenWorldRosterLocation() then
-    GF._openWorldCombatRoster = nil
+    GF.SetOpenWorldCombatRoster(false)
     pendingCombatBindings = nil
   end
   local did
@@ -1075,7 +1075,7 @@ local function StartOpenWorldRosterCombat()
   if not IsOpenWorldRosterLocation() then return GF.SetRaidRosterFrozen(true) end
   PrepareOpenWorldCombatRoster("party", "party")
   if GF.headers.raid then PrepareOpenWorldCombatRoster("raid", GF.headers.raid._msufGFKind) end
-  GF._openWorldCombatRoster = true
+  GF.SetOpenWorldCombatRoster(true)
   -- Refuse protected layout as usual, while Blizzard keeps its roster events.
   GF._raidRosterCombatActive = true
 end
@@ -1092,7 +1092,7 @@ local function RuntimeOnEvent(self, event, unit)
   -- unregister the very events that perform the first live header setup.
   if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
     if event == "PLAYER_ENTERING_WORLD" then SelectPullRosterHandler() end
-    GF._openWorldCombatRoster = nil
+    if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
     pendingCombatBindings = nil
     SyncCombatState()
     GF.RefreshHeaderLayout()
@@ -1110,7 +1110,7 @@ local function RuntimeOnEvent(self, event, unit)
   end
   if event == "PLAYER_REGEN_ENABLED" then
     SyncCombatState(false)
-    GF._openWorldCombatRoster = nil
+    if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
     if pendingCombatBindings then
       pendingCombatBindings = nil
       GF.DeferGroupRuntime("roster")
@@ -1207,6 +1207,8 @@ local function RuntimeOnEvent(self, event, unit)
     end
   elseif event == "PLAYER_LEAVING_WORLD" then
     freezeRaidRosterForPull = GF.SetRaidRosterFrozen
+    if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
+    pendingCombatBindings = nil
   end
 end
 

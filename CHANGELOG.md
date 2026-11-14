@@ -1,5 +1,32 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0-rc7 - 2026-11-14
+
+Changes since 7.0 RC6 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Group frames
+
+- **Joining a group during outdoor combat.** Party and raid frames paint their names and bars when a member joins. Reused party slots are rebuilt after leaving and rejoining a group during a fight.
+<!-- msuf-menu-link: none -->
+- **WoW Forever.** Aura access restrictions no longer interrupt the outdoor group frame setup through the optional eating and drinking status. Group header scans skip native widgets that the client marks inaccessible.
+<!-- msuf-menu-link: none -->
+- **Forever buff coverage.** Buff reminders use fixed icons and pick up refreshed buffs and auras that became visible again.
+<!-- msuf-menu-link: none -->
+- **Pet HoTs.** Show supported healing-over-time buffs on your pet frame and, if enabled, on party and raid pet frames.
+<!-- msuf-menu-link: none -->
+
+### Edit Mode
+
+- **Edit Mode.** Move frames individually. Multi-selection and alignment tools have been removed from this candidate.
+<!-- msuf-menu-link: none -->
+
+### Options and appearance
+
+- Updated aura icon preset names and previews. Made the preview layer controls easier to see.
+<!-- msuf-menu-link: none -->
+- The Suite integration can use the shared aggro-border setting for nameplates.
+<!-- msuf-menu-link: none -->
+
 ## 7.0-rc6 - 2026-11-13
 
 Changes since 7.0 RC5 for Midnight, WoW Forever, Classic Era, Burning Crusade Anniversary and Mists of Pandaria Classic.
@@ -207,7 +234,7 @@ Changes since 7.0 Beta 1 for Midnight, WoW Forever, Classic Era, Burning Crusade
 
 - PvP icons refresh on flag changes without a reload. Target and Focus follow their own PvP flag, and on Retail the Player icon clears when War Mode is turned off.
 <!-- msuf-menu-link: none -->
-- Added a round Shadow 3 option to the Icon Skins gallery and refined how that skin paints and previews.
+- Added a round icon skin with inner and outer shading and refined how it paints and previews.
 <!-- msuf-menu-link: {"pageKey":"icon_skins","sectionId":"icon_skins_default","controlId":"menu2.icon_skins.icon_skins.default-skin.skin","settingKey":"auras3.shared.iconSkinDefault.styleSkin","prepareKind":"","prepareValue":"","query":"default skin","label":"Default Skin"} -->
 - Improved profile upgrades from 6.5x and earlier 7.0 builds. Unit and group frame positions are restored once display scaling is ready, and recovery copies are available when a profile needs protection.
 <!-- msuf-menu-link: none -->
@@ -232,8 +259,6 @@ Full changes in MSUF 7.0 Beta 1 compared with the current stable 6.5x release, 6
 <!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"workbench_versions","controlId":"menu2.profile.tools.profiles.version.save","settingKey":"","prepareKind":"","prepareValue":"","query":"save restore point","label":"Save restore point"} -->
 - **Review before importing.** Compare incoming profile settings, then apply the changes you choose.
 <!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"profiles_io","controlId":"menu2.profiles.advanced.import.review","settingKey":"","prepareKind":"","prepareValue":"","query":"review changes","label":"Review changes"} -->
-- **Edit several frames together.** The Edit Mode Selection workspace lets you select, move and align multiple elements in one operation.
-<!-- msuf-menu-link: {"pageKey":"edit_selection","sectionId":"workbench_alignment","controlId":"menu2.profile.tools.profiles.multi.toggle","settingKey":"","prepareKind":"","prepareValue":"","query":"select remove element","label":"Select / remove element"} -->
 - **Layouts for different displays.** Record frame positions and relative scale into a layout variant and give it display conditions.
 <!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"workbench_display","controlId":"menu2.profile.tools.profiles.display.record","settingKey":"","prepareKind":"","prepareValue":"","query":"record a layout for this display","label":"Record a layout for this display"} -->
 - **Accessibility and visibility.** Preview and review color-vision changes in Colors. The contextual Why is this hidden? card explains selected aura visibility.
@@ -376,8 +401,6 @@ Test build for Midnight, WoW Forever, Classic Era, TBC and Mists. Please report 
 - **Profile workbench:** create and restore named restore points, inspect changed settings and their sources, and review imported settings before applying selected changes.
 <!-- msuf-menu-link: none -->
 - **Display and accessibility tools:** save layouts for your display, try color-vision presets, and inspect why an element is hidden.
-<!-- msuf-menu-link: none -->
-- **Move several elements together:** select multiple Edit Mode elements, move and align them together, and undo or redo the selection's layout changes.
 <!-- msuf-menu-link: none -->
 - **Shared history:** profile restores and undo/redo now include supported Suite settings while preserving profile variant overrides.
 <!-- msuf-menu-link: none -->

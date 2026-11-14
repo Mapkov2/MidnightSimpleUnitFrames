@@ -987,6 +987,7 @@ end
 local CASTBAR_HISTORY_UNITS = { "player", "target", "focus", "boss", "arena" }
 local function BarHistoryFlag(key)
     if type(key) ~= "string" then return end
+    if key == "aggroOutlineMode" then return "aggroBorder" end
     local lower = key:lower()
     if lower:find("baroutline", 1, true) then return "barOutline" end
     if lower:find("rounded", 1, true) then return "roundedBars" end

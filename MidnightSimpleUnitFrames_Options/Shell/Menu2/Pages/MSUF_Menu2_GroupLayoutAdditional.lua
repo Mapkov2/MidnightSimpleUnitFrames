@@ -95,6 +95,8 @@ local function BuildAdditionalSection(ctx, b, id, prefix, extra)
     end
     rows[#rows + 1] = SliderRow(prefix .. "TextSize", 11, "Text size", 7, 32, right, -308, controlWidth)
     if prefix == "pets" then
+        rows[#rows + 1] = { "toggle", "petsHoTsEnabled", false, { "Show HoTs", 32, -72, controlWidth }, domain = "rebuild" }
+        rows[#rows + 1] = { "toggle", "petsHoTsOnlyMine", false, { "Only mine", right, -72, controlWidth }, domain = "rebuild" }
         rows[#rows + 1] = SliderRow(prefix .. "MaxCount", 40, "Pet limit", 1, 40, 32, -398, controlWidth)
     end
     rows[#rows + 1] = { "text", "menu2.gf_layout." .. prefix .. ".position_help", nil,
@@ -111,7 +113,9 @@ local function BuildAdditionalSection(ctx, b, id, prefix, extra)
     end
     local controls = Schema.Build(ctx, section, rows, ROW_OPTIONS)
     for _, row in ipairs(rows) do
-        if row[1] == "slider" or row[2] == "targetsIncludePlayer" then WithExactGroupScope(controls[row[2]], row[2]) end
+        if row[1] == "slider" or row[2] == "targetsIncludePlayer" or prefix == "pets" and row[1] == "toggle" then
+            WithExactGroupScope(controls[row[2]], row[2])
+        end
     end
     if prefix == "healerMana" then
         W.AttachContextColorReferences(section, { "group.healer_mana_text" }, {

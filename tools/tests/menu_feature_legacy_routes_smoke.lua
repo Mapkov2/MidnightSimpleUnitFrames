@@ -22,7 +22,6 @@ local cases = {
     { "inspector.select", "Changed from factory defaults", "workbench_inspector", "profiles" },
     { "display.variant", "Profile variant", "workbench_display", "profiles" },
     { "accessibility.review", "Review accessibility changes", "workbench_accessibility", "opt_colors" },
-    { "multi.left", "Align left", "workbench_alignment", "edit_selection" },
 }
 local api, called = M.Search._CoreAPI
 local open = api.OpenSearchTarget
@@ -51,7 +50,13 @@ for _, item in ipairs(cases) do
     end
 end
 for _, item in ipairs(M.navItems or {}) do Check(item.key ~= "profile_tools", "obsolete workbench remains in navigation") end
-Check(not M.PageHasReset("edit_selection"), "Alignment unexpectedly offers a profile reset")
+local removed = { pageKey = "profile_tools", label = "Align left", sectionId = "workbench_alignment",
+    controlId = M.ControlMeta("profile_tools", "profiles", "multi.left", "action").controlId }
+assert(mw:Select("home"))
+Settle()
+Check(not api.OpenSearchTarget(removed.pageKey, removed.label, nil, nil, nil, removed),
+    "retired alignment action still resolves")
+Check(M.activeKey == "home" and M.pages.edit_selection == nil, "retired alignment page still exists")
 for _, failure in ipairs(failures) do print("FAIL", failure) end
 assert(#failures == 0, tostring(#failures) .. " legacy ownership checks failed")
 print("legacy_owner_probe: " .. flavor .. " passed " .. checks .. " checks")

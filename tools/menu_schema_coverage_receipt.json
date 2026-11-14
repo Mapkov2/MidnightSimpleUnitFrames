@@ -1,46 +1,46 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7266,
-      "initialDeclarations": 4929,
-      "profileControls": 3851,
-      "proven": 3851
+      "declarations": 7252,
+      "initialDeclarations": 4919,
+      "profileControls": 3853,
+      "proven": 3853
     },
     "Mainline": {
-      "declarations": 7784,
-      "initialDeclarations": 5146,
-      "profileControls": 4169,
-      "proven": 4169
+      "declarations": 7770,
+      "initialDeclarations": 5136,
+      "profileControls": 4171,
+      "proven": 4171
     },
     "Mists": {
-      "declarations": 7426,
-      "initialDeclarations": 5117,
-      "profileControls": 3885,
-      "proven": 3885
+      "declarations": 7414,
+      "initialDeclarations": 5107,
+      "profileControls": 3889,
+      "proven": 3889
     },
     "TBC": {
-      "declarations": 6811,
-      "initialDeclarations": 4721,
-      "profileControls": 3506,
-      "proven": 3506
+      "declarations": 6799,
+      "initialDeclarations": 4711,
+      "profileControls": 3510,
+      "proven": 3510
     },
     "Vanilla": {
-      "declarations": 5253,
-      "initialDeclarations": 3631,
-      "profileControls": 2567,
-      "proven": 2567
+      "declarations": 5241,
+      "initialDeclarations": 3621,
+      "profileControls": 2571,
+      "proven": 2571
     }
   },
   "generatorVersion": "menu-schema-coverage/4",
   "issueCount": 0,
-  "projectionSha256": "e1b5cd79bf687d38533f9c7e8281b5060500483909dcee7e5a26a9a379b12f59",
+  "projectionSha256": "832b7e15fe76c5f48ecf1d8126f42d8b63654693629a436cc2312b5774288cad",
   "projectionVersion": 2,
-  "sourceSha256": "3A2A5007C3B272EB4BCA7A272ADB40160B9E6141E676727257E7132E7E369F1B",
+  "sourceSha256": "7098BCF4BC04239A686C8A162832122F7268C4B4A75EB266EE332E833285A9FA",
   "totals": {
-    "declarations": 34540,
-    "initialDeclarations": 23544,
-    "profileControls": 17978,
-    "proven": 17978
+    "declarations": 34476,
+    "initialDeclarations": 23494,
+    "profileControls": 17994,
+    "proven": 17994
   },
   "version": 1
 }

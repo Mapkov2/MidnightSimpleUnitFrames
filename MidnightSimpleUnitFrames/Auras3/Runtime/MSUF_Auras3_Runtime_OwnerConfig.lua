@@ -18,11 +18,11 @@ local SensorStructuralSignature = dependencies.Signatures.SensorStructuralSignat
 local DISPEL_SENSOR_ORDER = { "dispelBorder", "purgeBorder", "dispelOverlay", "dispelCorner", "dispelSymbol" }
 A3._normalAuraLaneOrder = {
     "buff", "trackedBuff", "debuff", "external",
-    "custom1", "custom2", "custom3", "custom4", "defensivePortrait", "targetDotPortrait",
+    "custom1", "custom2", "custom3", "custom4", "defensivePortrait", "targetDotPortrait", "petHoTs",
 }
 local NORMAL_LANE_ROOT_KEYS = {
     "Buffs", "TrackedBuffs", "Debuffs", "Externals",
-    "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4", "DefensivePortrait", "TargetDotPortrait",
+    "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4", "DefensivePortrait", "TargetDotPortrait", "PetHoTs",
 }
 local EFFECT_ROOT_FIELDS = {
     "spellIndicators", "spellIndicatorsAssist", "spellIndicatorsHostile",

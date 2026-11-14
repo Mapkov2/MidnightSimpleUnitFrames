@@ -544,6 +544,21 @@ for _, key in ipairs({ "player", "target", "focus", "pet", "pettarget", "targett
     end
 end
 
+-- Native drag completion can omit OnClick. The next click on the same mover
+-- still opens the single-frame popup, including when Ctrl is held.
+do
+    env.IsControlKeyDown = function() return true end
+    EM2.State.SetUnitKey("player")
+    cursorX,cursorY=Physical(mover)
+    mouseDown=true
+    Check(mover:GetScript("OnMouseDown")(mover,"LeftButton")==true,"Ctrl click rejected by mover")
+    mouseDown=false
+    Check(mover:GetScript("OnMouseUp")(mover,"LeftButton")==false,"stationary Ctrl click persisted movement")
+    mover:GetScript("OnClick")(mover,"LeftButton")
+    Check(EM2.State.GetUnitKey()=="boss" and EM2.UnitPopup.IsOpen(),"first click after drag did not open the single-frame popup")
+    EM2.UnitPopup.Close()
+end
+
 -- A wide raid block must move by one unit across X = 0, even while its
 -- bounds still span the screen center. Drive the real popup's +/- callbacks.
 do

@@ -581,6 +581,13 @@ local function EffectiveDisplays(auras, unit)
     return nil
 end
 
+function Features.CompilePetHoTs(unit, entry, frameSpec)
+    local lane = BaseLane(unit, "petHoTs", entry, nil, entry.spellIDs, true, "PetHoTs")
+    lane.appearanceKind = "buff"
+    Visuals.EnrichCustomLane(lane, entry, frameSpec)
+    return lane
+end
+
 function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
     local source = EffectiveContainers(auras, unit)
     local lanes, order = {}, {}

@@ -197,7 +197,7 @@ local function ApplyGroupChrome(frame, role, bg, border)
 end
 local function EnsureGroupLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
-    local btn = T.Button(box, "", 132, 20)
+    local btn = T.Button(box, "", 132, 20, { labelColor = T.colors.previewLayerTitle })
     btn:SetText(TrText("Preview Layers") .. " v", true)
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     btn:SetScript("OnClick", function()

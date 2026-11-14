@@ -5,6 +5,12 @@
 # otherwise be compared with (a fresh install's Default).
 # [common] holds what every client of the entry shares, [<client>] the rest.
 [common]
+profile["Profile01"].gf_mythicraid.petsHoTsEnabled = false
+profile["Profile01"].gf_mythicraid.petsHoTsOnlyMine = false
+profile["Profile01"].gf_party.petsHoTsEnabled = false
+profile["Profile01"].gf_party.petsHoTsOnlyMine = false
+profile["Profile01"].gf_raid.petsHoTsEnabled = false
+profile["Profile01"].gf_raid.petsHoTsOnlyMine = false
 login.activeProfile = "Profile01"
 login.boundDBIsActiveProfile = true
 login.character = "Char03-Realm01"

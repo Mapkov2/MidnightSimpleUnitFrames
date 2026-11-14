@@ -380,7 +380,7 @@ local PREVIEW_CHROME_FALLBACK = {
     sidebarBg = { 0.020, 0.039, 0.071, 0.56 },
     sidebarBorder = { 0.086, 0.149, 0.227, 0.32 },
     title = { 0.231, 0.510, 0.965, 1.00 },
-    layerHeader = { 0.659, 0.706, 0.780, 0.82 },
+    layerHeader = { 0.94, 0.81, 0.47, 1 },
     rowBase = { 0.035, 0.067, 0.114, 1.00 },
     rowHover = { 0.055, 0.098, 0.161, 1.00 },
 }
@@ -402,10 +402,14 @@ function H.PreviewChromePalette(theme)
         -- One controlled blue accent anchors the preview header while the
         -- surrounding card, canvas, and tools remain deliberately quiet.
         title = PreviewChromeColor(colors.accent or colors.coreGlow, PREVIEW_CHROME_FALLBACK.title, 1.00),
-        layerHeader = PreviewChromeColor(colors.muted, PREVIEW_CHROME_FALLBACK.layerHeader, 0.82),
+        layerHeader = colors.previewLayerTitle or PREVIEW_CHROME_FALLBACK.layerHeader,
         rowBase = PreviewChromeColor(colors.coreSurface or colors.panel, PREVIEW_CHROME_FALLBACK.rowBase, 1.00),
         rowHover = PreviewChromeColor(colors.coreRaised or colors.panel2, PREVIEW_CHROME_FALLBACK.rowHover, 1.00),
     }
+end
+--- Keep the layer outline and title readable under either menu renderer.
+function H.ApplyPreviewLayerRail(frame)
+    FlatBackdrop(frame, { 0.04, 0.06, 0.09, 0.96 }, { 0.62, 0.60, 0.50, 1 })
 end
 function H.ApplyPreviewChrome(frame, role, theme, fallback)
     if not frame then return H.PreviewChromePalette(theme) end

@@ -23,7 +23,6 @@ local PreviewHelpers = M2.PreviewHelpers or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey, TextScopeGet, UnitPreviewText = PreviewModel.CanonKey, PreviewModel.TextScopeGet, PreviewModel.UnitPreviewText
 local MenuTheme = PreviewCore.MenuTheme
-local ApplyPreviewBackdrop = PreviewCore.ApplyBackdrop
 local Chrome = MSUF.UFPreviewViewChrome or {}
 MSUF.UFPreviewViewChrome = Chrome
 local function PreviewGuidesEnabled()
@@ -318,7 +317,7 @@ local function EnsureUnitLayersButton(box)
     local T = MenuTheme()
     local btn
     if T and T.Button then
-        btn = T.Button(box, "Preview Layers", 132, 20)
+        btn = T.Button(box, "Preview Layers", 132, 20, { labelColor = T.colors.previewLayerTitle })
     else
         btn = PixelLayoutRegion(CreateFrame("Button", nil, box, "BackdropTemplate"))
         btn:SetSize(76, 20)
@@ -345,7 +344,6 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
     if box._msuf2PinnedFloating == true then compact = false end
     if PreviewHelpers.SwitchCompactZoomMode then PreviewHelpers.SwitchCompactZoomMode(box, compact, 1.50) end
     local canvas, sidebar = box.canvas, box.sidebar
-    local T = MenuTheme()
     if compact then
         if box.title then box.title:Hide() end
         if box.hint then box.hint:Hide() end
@@ -375,11 +373,6 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
             if sidebar.SetFrameLevel and canvas.GetFrameLevel then
                 sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 90)
             end
-            if sidebar.SetBackdropColor then sidebar:SetBackdropColor(0.012, 0.026, 0.050, 0.98) end
-            if sidebar.SetBackdropBorderColor then
-                local border = (T and T.colors and T.colors.borderSoft) or { 0.086, 0.149, 0.227, 1 }
-                sidebar:SetBackdropBorderColor(border[1], border[2], border[3], 0.9)
-            end
             sidebar:Hide()
         end
         EnsureUnitLayersButton(box):Show()
@@ -393,9 +386,6 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
         if sidebar then
             if sidebar.SetFrameLevel and canvas and canvas.GetFrameLevel then
                 sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 1)
-            end
-            if PreviewHelpers.ApplyPreviewChrome then
-                PreviewHelpers.ApplyPreviewChrome(sidebar, "sidebar", T, ApplyPreviewBackdrop)
             end
             if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Show() end
         end

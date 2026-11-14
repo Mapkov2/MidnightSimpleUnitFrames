@@ -973,6 +973,9 @@ FlushApply = function()
         local castbarTexturesApplied = false
         if WantsBarRuntime(opt) then
             castbarTexturesApplied = ApplyBarRuntime(opt, fullUnitFramesApplied, pendingCastbar == true) == true
+            if IsGlobalApplyScope(opt.barsScope) and (opt.aggroBorder or opt.bars) then
+                MSUF.SuiteLink.ApplyNameplateHighlights()
+            end
         end
         if opt.castbarTextures and pendingCastbar ~= true and not castbarTexturesApplied then
             ApplyCastbarRuntime(opt)

@@ -832,10 +832,6 @@ local function RunChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
   end
 
   if not (visual and visual.MSUFSpec) then
-    if GF._openWorldCombatRoster and InCombat() and not IsPriorityFrame(visual) then
-      GF.QueueCombatRosterBinding(self, kind or "party")
-      return
-    end
     ApplyUnitFrame(self, kind or "party", rawUnit, "UNIT_CHANGED")
     return
   end
@@ -872,6 +868,25 @@ local function RunChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
   TrackFrame(visual, rawUnit)
 end
 
+local function RunOpenWorldChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
+  -- Retired children still carry a spec, but DetachFrame removed their live
+  -- elements and routing. A first apply that failed also has no applied serial.
+  if rawUnit ~= NO_UNIT and appliedSerial[visual] == nil and not IsPriorityFrame(visual) then
+    GF.QueueCombatRosterBinding(self, kind or "party")
+    return
+  end
+  return RunChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
+end
+
+local rebindChild = RunChildUnitRebind
+local suspendConsumptionAuraScan = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.SuspendConsumptionAuraScan
+
+function GF.SetOpenWorldCombatRoster(enabled)
+  GF._openWorldCombatRoster = enabled or nil
+  rebindChild = enabled and RunOpenWorldChildUnitRebind or RunChildUnitRebind
+  if suspendConsumptionAuraScan then suspendConsumptionAuraScan(enabled) end
+end
+
 local function FinishChildUnitRebind(_, self, visual, rawUnit, oldUnit, kind, previousDepth)
   unitIndexRebindDepth = previousDepth
 end
@@ -891,7 +906,7 @@ local function OnChildAttributeChanged(self, name, value)
   unitIndexRebindDepth = previousDepth + 1
   -- A cold rebind can fail after changing the visual but before indexing it.
   -- Keep the exact route locked only for this scope, including nested children.
-  MSUF.RunUnitFrameApply(RunChildUnitRebind, FinishChildUnitRebind, self, visual, rawUnit, oldUnit, kind, previousDepth)
+  MSUF.RunUnitFrameApply(rebindChild, FinishChildUnitRebind, self, visual, rawUnit, oldUnit, kind, previousDepth)
 end
 
 local function InstallChildAttrHook(child, kind)

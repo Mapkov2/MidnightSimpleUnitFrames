@@ -372,7 +372,7 @@ local GF_COPY_CATEGORIES = {
             tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height
             tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y
             tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns
-            petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled
+            petsEnabled petsHoTsEnabled petsHoTsOnlyMine petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled
             friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns
             healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize
             targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG

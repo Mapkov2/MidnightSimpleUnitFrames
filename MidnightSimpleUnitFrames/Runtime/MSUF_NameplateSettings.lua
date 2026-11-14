@@ -207,6 +207,14 @@ local function Profile(name)
     return type(profiles) == "table" and profiles[name] or nil
 end
 
+function Settings.SharedAggroBorderEnabled()
+    local db = Profile()
+    local general = type(db) == "table" and db.general
+    if type(general) == "table" then
+        return MSUF.UF.Config.AggroBorderEnabled(general, general.aggroOutlineMode)
+    end
+end
+
 local function Snapshot(db, fonts)
     local fields, snapshot = MSUF.ProfileFields, { version = 1, clear = {} }
     for section, schema in pairs(SCHEMA) do

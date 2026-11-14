@@ -555,7 +555,7 @@ end
 
 local MANAGED_ROOT_KEYS = {
     "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1",
-    "CustomAuras2", "CustomAuras3", "CustomAuras4", "DefensivePortrait", "TargetDotPortrait",
+    "CustomAuras2", "CustomAuras3", "CustomAuras4", "DefensivePortrait", "TargetDotPortrait", "PetHoTs",
     "GroupSlots", "GroupAuraFlow", "GroupAuraAssist", "GroupAuraHostile", "DispelSensor",
     "DispelSensorNeutral", "DispelSensorHostile", "DispelBorderSensor", "DispelOverlaySensor", "DispelCornerSensor",
     "SpellIndicators", "SpellIndicatorsAssist", "SpellIndicatorsHostile", "LaneEffects", "LaneEffectsAssist",

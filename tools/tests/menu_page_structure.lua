@@ -70,13 +70,13 @@ end
 -- Beta 2 adds Mute MSUF menu sounds in both families and the Target/Focus faction switches in Mainline.
 -- Beta 3 adds five Forever consumption selectors and refreshes their status control metadata.
 -- RC3 includes the Druid form, castbar timer, nameplate and group status controls.
--- Both current generated indexes retain all 17 relocated action identities below.
+-- Both current generated indexes retain all 8 relocated action identities below.
 local indexes = {
-    { "", 4658, 415580032 },
-    { "_Classic", 4222, 1746985476 },
+    -- Pet and Group Frames each register Show HoTs and Only mine.
+    { "", 4651, 393589875 },
+    { "_Classic", 4217, 2823365389 },
 }
 local moved = {
-    { "edit_selection", "workbench_alignment", "multi", "bottom left right top horizontal vertical move open toggle" },
     { "opt_colors", "workbench_accessibility", "accessibility", "preview review" },
     { "profiles", "workbench_versions", "version", "delete restore save" },
     { "profiles", "workbench_display", "display", "record save" },
@@ -87,6 +87,7 @@ local function CheckMovedActions(decoded)
     local rows, count = {}, 0
     for _, columns in ipairs(decoded) do
         assert(columns[1] ~= "profile_tools", "obsolete workbench page still owns indexed actions")
+        assert(columns[1] ~= "edit_selection", "retired alignment page remains indexed")
         rows[columns[8]] = columns
     end
     for _, owner in ipairs(moved) do
@@ -99,7 +100,7 @@ local function CheckMovedActions(decoded)
             count = count + 1
         end
     end
-    assert(count == 17, "relocated action inventory is incomplete")
+    assert(count == 8, "relocated action inventory is incomplete")
 end
 for _, row in ipairs(indexes) do
     local source = Read(base .. "Search/MSUF_Menu2_Search_StaticIndex_Data" .. row[1] .. ".lua")
@@ -109,4 +110,4 @@ for _, row in ipairs(indexes) do
     CheckMovedActions(decoded)
     assert(Adler(blob) == row[3], "static search rows changed: " .. row[1])
 end
-print("PASS menu page responsibilities: <=1200 lines; reviewed static search inventory and 17 ownership moves preserved")
+print("PASS menu page responsibilities: <=1200 lines; reviewed static search inventory and 8 ownership moves preserved")

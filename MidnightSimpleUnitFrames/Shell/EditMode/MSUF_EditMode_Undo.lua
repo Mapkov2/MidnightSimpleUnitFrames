@@ -361,7 +361,6 @@ end
 -- whether an external apply succeeded after the DB write.  Failed applies do
 -- not consume undo capacity or destroy the redo stack.
 function Undo.PrepareChange(category, key, debounce)
-    if Undo.batchActive then return { batch = true } end
     if PublicGlobals.MSUF__UndoRestoring then return nil end
     local pending = preparedDebounce
     local history = SharedHistoryService()
@@ -413,7 +412,6 @@ local function CommitNudgeSnapshot(snap)
 end
 
 function Undo.CommitPrepared(snap)
-    if Undo.batchActive and snap and snap.batch then return true end
     if PublicGlobals.MSUF__UndoRestoring or type(snap) ~= "table" or type(snap.category) ~= "string" then return false end
     if snap.debounce then return CommitNudgeSnapshot(snap) end
     if snap.shared then
@@ -428,7 +426,6 @@ function Undo.CommitPrepared(snap)
 end
 
 function Undo.BeforeChange(category, key, debounce)
-    if Undo.batchActive then return true end
     if PublicGlobals.MSUF__UndoRestoring then return end
     CommitPreparedDebounce()
     local history = SharedHistoryService()
@@ -507,7 +504,6 @@ local function CommitPendingChanges()
 end
 
 function Undo.BeginChange(category, key, action)
-    if Undo.batchActive then return true end
     if PublicGlobals.MSUF__UndoRestoring then return false end
     CommitSharedDebounce()
     CommitPendingChanges()
@@ -526,7 +522,6 @@ function Undo.BeginChange(category, key, action)
 end
 
 function Undo.CommitChange()
-    if Undo.batchActive then return true end
     if activeChangeUsesShared then
         activeChangeUsesShared = false
         local history = SharedHistoryService()
@@ -540,7 +535,6 @@ function Undo.CommitChange()
 end
 
 function Undo.CancelChange(combatStarting)
-    if Undo.batchActive then return true end
     --- combatStarting: called from PLAYER_REGEN_DISABLED, before lockdown.
     local combatLocked = combatStarting == true or ((InCombatLockdown and InCombatLockdown()) and true or false)
     local history = SharedHistoryService()

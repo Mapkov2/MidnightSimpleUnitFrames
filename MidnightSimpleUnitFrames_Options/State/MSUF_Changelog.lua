@@ -8,46 +8,55 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6E61A9C3DC157A85F0B9BF7831178D5EBFD6E460CE82EA4B2E0ED9AEDF6CEFDC",
-    currentVersion = "7.0-rc6",
+    sourceSha256 = "863FD225846649BDD67C0A1D9730723EFDC5C0EF86B760C6422E4DD0C90F00C4",
+    currentVersion = "7.0-rc7",
     historyFromVersion = "6.21",
-    previousVersion = "7.0-rc5",
-    rangeLabel = "7.0-rc5 -> 7.0-rc6",
+    previousVersion = "7.0-rc6",
+    rangeLabel = "7.0-rc6 -> 7.0-rc7",
     entries = {
         {
-            version = "7.0-rc6",
-            date = "2026-11-13",
+            version = "7.0-rc7",
+            date = "2026-11-14",
             sections = {
                 {
-                    title = "WoW Forever",
+                    title = "Group frames",
                     bullets = {
                         {
-                            text = "Swing Timers. Set each hand's width from 4 to 1200 and its height from 4 to 400. Undo and Redo now update the on-screen bars as well as the menu preview.",
+                            text = "Joining a group during outdoor combat. Party and raid frames paint their names and bars when a member joins. Reused party slots are rebuilt after leaving and rejoining a group during a fight.",
                             linkless = true,
                         },
                         {
-                            text = "Party and Raid highlights. MSUF Highlights uses a Forever spell list. Buff coverage uses supported single-spell reads for readable buffs when aura access is restricted.",
+                            text = "WoW Forever. Aura access restrictions no longer interrupt the outdoor group frame setup through the optional eating and drinking status. Group header scans skip native widgets that the client marks inaccessible.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Forever buff coverage. Buff reminders use fixed icons and pick up refreshed buffs and auras that became visible again.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Pet HoTs. Show supported healing-over-time buffs on your pet frame and, if enabled, on party and raid pet frames.",
                             linkless = true,
                         },
                     },
                 },
                 {
-                    title = "Fixes",
+                    title = "Edit Mode",
                     bullets = {
                         {
-                            text = "Party and Raid aggro. Aggro borders and corner indicators clear when combat ends, even if threat data lags behind.",
+                            text = "Edit Mode. Move frames individually. Multi-selection and alignment tools have been removed from this candidate.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Options and appearance",
+                    bullets = {
+                        {
+                            text = "Updated aura icon preset names and previews. Made the preview layer controls easier to see.",
                             linkless = true,
                         },
                         {
-                            text = "Class resources and mana. Out-of-combat visibility follows the combat event, and mana prediction keeps the correct channel when an unrelated instant spell succeeds.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Castbars. Penance shows the extra channel tick when Castigation is selected.",
-                            linkless = true,
-                        },
-                        {
-                            text = "Options. Updated the Bars extension selector and exact search routing. The melee-range crosshair handles unavailable range results.",
+                            text = "The Suite integration can use the shared aggro-border setting for nameplates.",
                             linkless = true,
                         },
                     },

@@ -147,7 +147,6 @@ for _, record in ipairs(M.RuntimeControlCatalog.GetRecords()) do
         Check(not record.collision, "moved controls collide across cached owners: " .. record.controlId)
     end
 end
-Check(not M.PageHasReset("edit_selection"), "alignment page owns profile reset")
 local em = assert(core.PublicGlobals.MSUF_EM2)
 em.Focus.SetSelection("player", "frame", nil, { menu = false })
 local cfg = em.Registry.Get("player")
@@ -155,9 +154,6 @@ local external, oldExternal, externalCalls = em.ExternalElements, cfg.externalPu
 local oldOpenSettings = external.OpenSettings
 cfg.externalPublicElement = true
 external.OpenSettings = function() externalCalls = externalCalls + 1 return true end
-Check(em.Focus.OpenFullSettings("edit_selection"), "alignment entry refused an external selection")
-Settle()
-Check(M.activeKey == "edit_selection" and externalCalls == 0, "Align opened selected external module settings")
 Check(em.Focus.OpenFullSettings(), "ordinary external settings entry failed")
 Check(externalCalls == 1, "ordinary external settings entry lost its owner route")
 external.OpenSettings, cfg.externalPublicElement = oldOpenSettings, oldExternal

@@ -354,7 +354,16 @@ end
 local GetConsumptionText
 if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
   local GetUnitAuras = C_UnitAuras.GetUnitAuras
+  local ReadConsumptionAuras = GetUnitAuras
   local ShouldAurasBeSecret = C_Secrets and C_Secrets.ShouldAurasBeSecret
+  local function SkipConsumptionAuras() end
+
+  -- The global secrecy predicate can be false while the client refuses a
+  -- unit's bulk read. World combat can create a group frame during that window.
+  function Runtime.SuspendConsumptionAuraScan(suspended)
+    ReadConsumptionAuras = suspended and SkipConsumptionAuras or GetUnitAuras
+  end
+
   -- Forever 1.60.1.70862 SpellEffect and SpellInterrupts data. These are the
   -- seated regeneration auras, including food and drink combined.
   local DRINK_AURAS = {
@@ -392,8 +401,6 @@ if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
   end
 
   GetConsumptionText = function(unit, previous, update)
-    -- The client blocks the aura query itself during restrictions. Clear the
-    -- cached text without touching either the bulk API or event aura data.
     if not ShouldAurasBeSecret or ShouldAurasBeSecret() ~= false then return nil end
     -- When no consumption aura was visible, a pure addition/removal only
     -- needs the new auras. Refresh on updates because visibility can change.
@@ -405,7 +412,7 @@ if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
         return ClassifyConsumption(update.addedAuras)
       end
     end
-    return ClassifyConsumption(GetUnitAuras(unit, "HELPFUL"))
+    return ClassifyConsumption(ReadConsumptionAuras(unit, "HELPFUL"))
   end
 end
 

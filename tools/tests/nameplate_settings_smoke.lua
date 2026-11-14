@@ -53,6 +53,20 @@ MSUF.ExportPublic = function(name, value) _G[name] = value end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua"))("MSUF", MSUF)
 Check(MSUF_HostAPI.GetNameplateSettings() == Settings, "host facade returns the settings owner")
 
+do
+    local resolve = MSUF.UF.Config.AggroBorderEnabled
+    local settings = MSUF_HostAPI.GetNameplateSettings()
+    MSUF.UF.Config.AggroBorderEnabled = function(general, mode)
+        assert(general == MSUF_DB.general)
+        return mode == 1
+    end
+    MSUF_DB = { general = { aggroOutlineMode = 0 }, target = { hlOverride = true, aggroOutlineMode = 1 } }
+    Check(settings.SharedAggroBorderEnabled() == false, "target override cannot enable Shared Nameplate Aggro")
+    MSUF_DB.general.aggroOutlineMode, MSUF_DB.target.aggroOutlineMode = 1, 0
+    Check(settings.SharedAggroBorderEnabled() == true, "Nameplates read the active profile's Shared Aggro border")
+    MSUF.UF.Config.AggroBorderEnabled = resolve
+end
+
 local function Reset(fonts)
     MSUF.UF.Config.ResolveNameplateFont = fonts and function() end or nil
     MSUF_DB = { general = { unrelated = "keep", fontKey = "EXPRESSWAY", fontSize = 15,

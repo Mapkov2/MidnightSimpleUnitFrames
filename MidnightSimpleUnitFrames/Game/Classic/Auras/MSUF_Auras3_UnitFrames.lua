@@ -102,7 +102,7 @@ local function CurrentFrameState(frame, unit)
     -- profile's auras3 table, the unit-frame spec serial, a scoped
     -- invalidation), so the applied config is current only while it is the
     -- one the cache returns.
-    local cfg = A3.ResolveUnitFrameConfig(unit, frame.MSUFSpec)
+    local cfg = frame._msufPetHoTConfig or A3.ResolveUnitFrameConfig(unit, frame.MSUFSpec)
     if state and state.config == cfg and cfg and state.unit == unit then
         return state, cfg
     end
@@ -669,6 +669,17 @@ function AurasElement.Update(frame, event, unit, updateInfo)
         return CombatEdgeAuras(frame)
     end
     return A3.HandleUnitAura(frame, event, unit, updateInfo)
+end
+
+function A3.ConfigureGroupPetHoTs(frame, unit, onlyMine, size, limit, identityChanged)
+    local previous = frame._msufPetHoTConfig
+    if not unit then
+        if previous then HideState(frame) end
+        frame._msufPetHoTConfig = nil
+        return
+    end
+    local cfg = A3.ResolveGroupPetHoTConfig(frame, unit, onlyMine, size, limit, A3.ClassicFeatures.CompilePetHoTs)
+    if identityChanged or cfg ~= previous then UpdateAuras(frame, "ForceUpdate", unit, nil, true) end
 end
 
 UF.RegisterElement("Auras", AurasElement)

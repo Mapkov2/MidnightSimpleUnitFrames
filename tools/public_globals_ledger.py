@@ -239,6 +239,8 @@ TABLE_LOCAL = re.compile(r"local[ \t]+(%s)[ \t]*=[ \t]*\{" % NAME)
 PREFIXED = r"(?P<q>[\"'])(?P<p>x*)(?P=q)[ \t]*\.\.[ \t]*(?P<rest>[^,)\n]*)"
 PREFIXED_KEY = PREFIXED.replace(r"[^,)\n]*", r"[^\]\n]*")
 TRAILING_LITERAL = re.compile(r"\.\.[ \t]*(?P<q>[\"'])(?P<s>x*)(?P=q)[ \t]*$")
+BUILDER_ASSIGN = re.compile(r"=(?!=)[ \t]*" + PREFIXED)
+BUILDER_LOCAL_NAME = re.compile(r"(?<![\w.])%s[ \t]*\Z" % NAME)
 
 
 class Family:
@@ -503,8 +505,12 @@ def scan_lua(rel, text, exports, dynamic, include_namespace=True, classify_value
         # A function that returns, or a variable that is set to, `"MSUF_..." .. x` builds a name somewhere else.
         for match in re.finditer(r"\breturn[ \t]+" + PREFIXED, masked):
             family(match, "builder")
-        for match in re.finditer(r"(?<![\w.])%s[ \t]*=(?!=)[ \t]*" % NAME + PREFIXED, masked):
-            family(match, "builder")
+        # Search for the literal assignment operator first so the regex does
+        # not retry NAME at every character of identifiers across the file.
+        for match in BUILDER_ASSIGN.finditer(masked):
+            line_start = masked.rfind("\n", 0, match.start()) + 1
+            if BUILDER_LOCAL_NAME.search(masked, line_start, match.start()):
+                family(match, "builder")
     if include_namespace and "MSUF_" in masked:
         for base in NS_BASES:
             for match in NS_FIELD[base].finditer(masked):

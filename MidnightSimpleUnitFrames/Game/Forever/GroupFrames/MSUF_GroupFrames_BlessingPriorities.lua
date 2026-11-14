@@ -35,7 +35,9 @@ local SPELLS = {
     { 19742, 19850, 19852, 19853, 19854, 25290, 25894, 25918 },
     { 20217, 25898, 1213408 }, { 1038, 25895 }, { 19977, 19978, 19979, 25890, 26650 }, { 20911, 25899 },
 }
-local bySpell, known, textures, readable, observed = {}, {}, {}, {}, {}
+-- File IDs for Might, Wisdom, Kings, Salvation, Light, and Sanctuary.
+local TEXTURES = { 135906, 135970, 135995, 135967, 135943, 136051 }
+local bySpell, known, readable, observed = {}, {}, {}, {}
 for family = 1, #SPELLS do
     for _, spell in ipairs(SPELLS[family]) do bySpell[spell] = family end
 end
@@ -154,10 +156,5 @@ function B.Missing(state, family)
     return family ~= nil and state.blessings[family] == 0
 end
 function B.Texture(family)
-    if textures[family] == nil then
-        local api = C_Spell
-        local value = api and api.GetSpellTexture and api.GetSpellTexture(SPELLS[family][1])
-        textures[family] = not Secret(value) and value or false
-    end
-    return textures[family] or "Interface\\Icons\\INV_Misc_QuestionMark"
+    return TEXTURES[family]
 end

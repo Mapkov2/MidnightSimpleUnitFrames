@@ -1,4 +1,37 @@
 local root = assert(arg[1]):gsub("\\", "/")
+
+local function CheckRestrictedHeaderChildren(w)
+    local group = w.group._msufSecureShell or w.group
+    local blockedChild = w.env.CreateFrame("Frame", nil, group)
+    local allowedChild = w.env.CreateFrame("StatusBar", nil, group)
+    local fill, overlay = allowedChild:CreateTexture(), allowedChild:CreateTexture()
+    allowedChild:SetStatusBarTexture(fill)
+    local blockedRegion = group:CreateTexture()
+    function blockedChild:CanBeAccessedInContext() return false end
+    function allowedChild:CanBeAccessedInContext() return true end
+    function blockedRegion:CanBeAccessedInContext() return w.Secrets.New("boolean") end
+    local function ForbiddenType()
+        error("GetObjectType: Attempt to access forbidden object from code tainted by an AddOn")
+    end
+    blockedChild.GetObjectType, blockedRegion.GetObjectType = ForbiddenType, ForbiddenType
+    group._msufPixelLayoutTemplateVisited = nil
+
+    local previousHandler = w.env.geterrorhandler
+    local report
+    w.env.geterrorhandler = function() return function(message) report = message end end
+    local stop = w.Secrets.Watch(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua", { strict = true })
+    local applied, success = w.GF.ScanHeader("raid", "raid")
+    local violations = stop()
+    w.env.geterrorhandler = previousHandler
+    assert(#violations == 0, table.concat(violations, "\n"))
+    assert(not report, report)
+    assert(applied and success, "restricted artwork interrupted the group header scan")
+    assert(allowedChild.roundLayout == true, "accessible sibling was skipped")
+    assert(overlay.roundLayout == true and not fill.roundLayout, "status-bar fill or overlay rounding changed")
+    assert(not blockedChild._msufPixelLayoutOwned and not blockedRegion._msufPixelLayoutOwned,
+        "restricted artwork was marked as owned")
+end
+
 local function Run()
     local flavor, measure = arg[2] or "Mainline", arg[3] == "measure"
     local w = dofile(root .. "/tools/tests/health_tick_world.lua").New(root, flavor)
@@ -78,6 +111,7 @@ local function Run()
     Bench("roster-unchanged", function() h:Event("GROUP_ROSTER_UPDATE") h:RunTimers() end)
     assert(#h.eventErrors == 0, tostring(h.eventErrors[1]))
     assert(#h.violations == 0, tostring(h.violations[1]))
+    if flavor == "Mainline" or flavor == "Forever" then CheckRestrictedHeaderChildren(w) end
     for name in pairs(methods) do methods[name] = originalMethods[name] end
     print("PASS uf_pixel_layout_budget_smoke " .. flavor)
 end

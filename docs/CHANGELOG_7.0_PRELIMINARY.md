@@ -11,7 +11,7 @@
 
 - Added an Icon Skins gallery with live previews for frames, shadows, rings, and gloss.
 - Set a shared skin or override it per supported area. Choose Custom to use your manual appearance settings.
-- Added a round Shadow 3 variant.
+- Added a round variant with inner and outer shading.
 - Skins work on auras and supported castbar and tracker icons. Compatible Suite modules can use them on cooldown and action bar icons. [Icon Skins](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/ICON_SKINS.md)
 
 ### Profiles
@@ -24,9 +24,6 @@
 
 ### Edit Mode
 
-- **Multi-select.** Hold **Ctrl** and click the frame movers. Ctrl-click again to remove a frame from the selection. [Mover controls](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua#L533-L542)
-- **Move and align.** Open **Layout → Align**. Enter **Move X** and **Move Y**, then click **Move together**, or choose an alignment action. You can also add or remove frames in this panel. Edge alignment uses the first selected frame in the list. Equal spacing requires at least three frames. [Align button](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD.lua#L575-L579) · [Selection panel](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_MultiSelection.lua) · [Alignment rules](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_MultiSelection.lua)
-- Undo a group move or alignment in one step.
 - Added placement controls for Priority Frames and Gameplay positions. Typed coordinates and dragging have separate undo steps. [Edit Mode changes](https://github.com/Mapkov2/MidnightSimpleUnitFrames/blob/classic-v7.0-beta6/docs/EDITMODE_ENGINE_DELTA.md)
 
 ### Menu, search, and previews
@@ -138,8 +135,8 @@ A profile that has never been active in 7.0 may move on first load in 6.5. The o
 
 | Build | Changes |
 | --- | --- |
-| Beta 1 · Nov 7 | Icon Skins, profile workbench and import review, multi-selection, display variants, menu and preview changes, full 6.5x profile migration. |
-| Beta 2 · Nov 8 | Menu sounds, round Shadow 3, migration and position fixes, Dashboard and Forever fixes. Includes the 6.511 PvP changes. |
+| Beta 1 · Nov 7 | Icon Skins, profile workbench and import review, display variants, menu and preview changes, full 6.5x profile migration. |
+| Beta 2 · Nov 8 | Menu sounds, round shadow preset, migration and position fixes, Dashboard and Forever fixes. Includes the 6.511 PvP changes. |
 | Beta 3 · Nov 9 | Eating and Drinking status on Forever. |
 | Beta 4 · Nov 9 | Party and Raid updates during open-world combat on Retail and Forever. |
 | Beta 5 · Nov 9 | Shared melee range fallback for both hands on Forever. |

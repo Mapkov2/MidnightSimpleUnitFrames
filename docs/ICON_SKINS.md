@@ -2,6 +2,23 @@
 
 Detailed contracts retained from the core painter. The runtime keeps concise references to this document.
 
+## Artwork and profile compatibility
+
+MSUF renders its built-in presets from the skin catalog. The shadow and vignette presets
+were inspired by Masque's Shadow and DarkShadow packs. The bundled files in `Media/Skins`
+come from the mathematical profiles in `tools/generate_aura_icon_skins.py`.
+[Masque: Shadow](https://www.curseforge.com/wow/addons/masque-shadow) ·
+[Masque: DarkShadow](https://www.curseforge.com/wow/addons/masque-darkshadow)
+
+Blizzard Retail Button and Blizzard Classic Button use the WoW client's action-button art.
+Blizzard Cooldown Frame uses the client's cooldown icon overlay.
+[Retail action buttons](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_ActionBar/Mainline/ActionButtonTemplate.xml) ·
+[Classic action buttons](https://github.com/Gethe/wow-ui-source/blob/classic_era/Interface/AddOns/Blizzard_ActionBar/Classic/ActionButtonTemplate.xml) ·
+[Cooldown Viewer](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_CooldownViewer/CooldownViewer.xml)
+
+Preset names in the gallery, dropdowns and search are localized. Profiles and host API
+callers keep using the catalog IDs, so existing preset selections carry across label changes.
+
 ## Contract 1
 
 ```lua

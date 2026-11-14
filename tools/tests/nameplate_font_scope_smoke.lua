@@ -32,14 +32,13 @@ mw:RunTimers()
 assert(M.GlobalPage.CurrentFontScope() == "nameplates", "nameplate font scope not selectable")
 scopeOptions.setOverride(true)
 mw:RunTimers()
-assert(rows["font.nameplate_size"] and rows["font.nameplate_name_size"], "nameplate size controls missing")
+assert(not rows["font.nameplate_size"] and not rows["font.nameplate_name_size"], "Fonts still builds nameplate size controls")
+db.nameplates.fontSize, db.nameplates.nameFontSize = 19, 23
 rows["font.family"].set("EXPRESSWAY")
-rows["font.nameplate_size"].set(19)
-rows["font.nameplate_name_size"].set(23)
 mw:RunTimers()
 local selectedFont = db.nameplates.fontKey
 assert(selectedFont and db.nameplates.fontSize == 19 and db.nameplates.nameFontSize == 23,
-    "font controls failed to write the nameplate scope")
+    "font picker changed the stored nameplate sizes or failed to write the scoped family")
 assert(db.general.fontKey == globalKey and db.general.fontSize == globalSize, "nameplate controls altered shared font settings")
 local shared = mw.core.UF.Config.ResolveNameplateFont({})
 assert(shared.fontSize == 19 and shared.nameFontSize == 23, "runtime ignored scoped sizes")
@@ -56,18 +55,11 @@ assert(db.general.fontKey == globalKey and db.nameplates.fontKey == selectedFont
 local api = M.Search._CoreAPI
 api.GetSearchRecords()
 mw:RunTimers(1000)
-local linked
 for _, row in ipairs(api.GetSearchRecords()) do
-    if row.exactTarget and row.exactTarget.settingKey == "nameplates.fontSize" then linked = row break end
+    local key = row.exactTarget and row.exactTarget.settingKey
+    assert(key ~= "nameplates.fontSize" and key ~= "nameplates.nameFontSize", "removed Fonts size is still in search")
 end
-assert(linked, "nameplate size is missing from search")
-scopeOptions.setValue("shared")
-mw:RunTimers(1000)
-local opened, anchored, exact = api.OpenSearchTarget(linked.key, linked.label, linked.label, nil, linked.route, linked.exactTarget)
-mw:RunTimers(1000)
-assert(opened and anchored and exact and M.GlobalPage.CurrentFontScope() == "nameplates",
-    "nameplate size search did not open its owning scope")
-print("nameplate font scope " .. flavor .. ": picker, sizes, runtime, inheritance and exact search passed")
+print("nameplate font scope " .. flavor .. ": scoped family, saved size inheritance and search passed")
 
 -- Compare the portable field resolver to the actual unit-frame typography
 -- compiler, including native groups that do not inherit channel by channel.

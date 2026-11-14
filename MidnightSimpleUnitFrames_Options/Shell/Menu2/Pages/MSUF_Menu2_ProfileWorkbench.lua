@@ -234,8 +234,7 @@ local function Display(ctx, builder, width)
         Result(ok, why)
     end, 280)
 end
-local UI = { Button = Button, Text = Text, Drop = Drop, Input = Input, Result = Result, Value = Value,
-    Editor = Editor, Refresh = Refresh }
+local UI = { Refresh = Refresh }
 M.ProfileWorkbenchUI = UI
 function UI.Owner(page) PAGE = page end
 function UI.Profiles(ctx, builder, width, part)
@@ -279,14 +278,5 @@ function UI.Aura(ctx, builder, unit, lane)
         end
     end
 end
-local function BuildSelection(ctx)
-    PAGE = "edit_selection"
-    local builder = M.Widgets.PageBuilder(ctx)
-    builder:Header("Move and align multiple elements",
-        "Choose elements here or Ctrl-click their movers. Alignment uses the first selected element in the list.", 76)
-    M.BuildMultiSelectionTools(ctx, builder, math.max(520, builder.width or ctx.width or 640))
-    ctx:SetContentHeight(math.abs(builder.y) + 42)
-end
-M.RegisterPage("edit_selection", { title = "Move and align multiple elements", build = BuildSelection, version = 1 })
 -- Direct old page links remain useful.
 M.ALIASES.profile_tools = "profiles"
