@@ -1,6 +1,6 @@
 --- Public registration bridge for frames owned by other addons.
---- GetCapabilities/GetElementCapabilities: positionFields advertises host X/Y
---- popup controls; unreadable geometry keeps owner inspector values read-only.
+--- positionFields advertises host screen X/Y controls for readable frames.
+--- relativePositionSteps identifies the screen row that uses relative steps.
 local _, MSUF = ...
 
 local EM2 = MSUF.Optional("MSUF_EM2")
@@ -293,7 +293,8 @@ function API.GetVersion() return API.VERSION end
 function API.GetCapabilities()
     return { registration = true, drag = true, gridSnap = true, nudge = true,
         undoRedo = true, saveDiscard = true, reset = true, inspector = true,
-        settingsLink = true, popup = true, positionFields = true, sessionCallbacks = true,
+        settingsLink = true, popup = true, positionFields = true, relativePositionSteps = true,
+        sessionCallbacks = true,
         resize = false, polling = false }
 end
 
@@ -310,6 +311,7 @@ function API.GetElementCapabilities(owner, id)
         settings = type(record.openSettings) == "function",
         inspector = true,
         positionFields = true,
+        relativePositionSteps = true,
         drag = true,
         nudge = true,
         undoRedo = true,
@@ -628,21 +630,13 @@ function External.GetInspectorValues(key)
         if left and right and top and bottom then
             local ratio = 1
             --- Fallback when Core's shared geometry helper is unavailable:
-            --- use the same center-facing horizontal edge as native elements.
+            --- use the same frame-center X coordinate as native elements.
             local screenW = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
             local screenH = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
             local uiLeft, uiRight = left * ratio, right * ratio
             local centerX = screenW * 0.5
-            local x
-            if uiRight <= centerX then
-                x = uiRight - centerX
-            elseif uiLeft >= centerX then
-                x = uiLeft - centerX
-            else
-                x = 0
-            end
             return record.label,
-                Round(x),
+                Round((uiLeft + uiRight) * 0.5 - centerX),
                 Round(top * ratio - screenH * 0.5),
                 Round(uiRight - uiLeft), Round(height)
         end

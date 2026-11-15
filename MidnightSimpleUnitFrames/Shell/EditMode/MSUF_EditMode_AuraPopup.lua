@@ -237,10 +237,10 @@ local function ReadVisiblePosition(unit, kind, currentX, currentY)
     return currentX, currentY
 end
 
-local function TranslateVisiblePosition(unit, kind, currentX, currentY, displayX, displayY)
+local function TranslateVisiblePosition(unit, kind, currentX, currentY, displayX, displayY, resizeX)
     local frame = ActiveLaneFrame(unit, kind)
     if frame then
-        return TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+        return TranslateFramePosition(frame, currentX, currentY, displayX, displayY, resizeX)
     end
     local x, y = tonumber(displayX) or currentX, tonumber(displayY) or currentY
     return x, y, x ~= currentX or y ~= currentY
@@ -323,6 +323,10 @@ local function ApplyCustom(unit, activeGroup, spec, shared)
     UndoBeforeAuraChange(unit)
 
     if geometryChanged then
+        local resizeX
+        if not Quick.IsBoxEdited(pf.xBox) then
+            resizeX = Util.FrameResizeReferenceX(ActiveLaneFrame(unit, activeGroup))
+        end
         for i = 1, #units do
             local placed = CustomPlaced(units[i], spec, true)
             if placed then
@@ -332,7 +336,7 @@ local function ApplyCustom(unit, activeGroup, spec, shared)
         end
         ReapplyAuras(units)
         x, y, positionChanged = TranslateVisiblePosition(unit, activeGroup,
-            currentX, currentY, displayX, displayY)
+            currentX, currentY, displayX, displayY, resizeX)
     end
 
     if positionChanged then
@@ -420,7 +424,9 @@ local function Apply()
     -- A size/gap change can move a lane's visible reference edges. Materialize
     -- that geometry first, then translate the displayed position back into the
     -- lane's anchor-local offsets.
+    local resizeX
     if geometryChanged then
+        if not Quick.IsBoxEdited(pf.xBox) then resizeX = Util.FrameResizeReferenceX(positionFrame) end
         WriteLayout()
         ReapplyAuras(units)
         positionFrame = ActiveLaneFrame(pf.unit, activeGroup)
@@ -428,7 +434,7 @@ local function Apply()
 
     local x, y
     if positionFrame then
-        x, y = TranslateFramePosition(positionFrame, currentX, currentY, displayX, displayY)
+        x, y = TranslateFramePosition(positionFrame, currentX, currentY, displayX, displayY, resizeX)
     else
         x, y = displayX, displayY
     end
@@ -448,6 +454,42 @@ local function Apply()
         ReapplyAuras(units)
     end
     if pf and pf:IsShown() then Sync() end
+end
+
+local function StepX(amount)
+    if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return false end
+    local unit = pf.unit
+    local group, spec = ActiveGroup()
+    local shared = Shared(false) or {}
+    local current = tonumber(ReadSpecValue(unit, spec, "x", shared)) or spec.defaultX
+    local nextX = Util.StepFrameOffsetX(ActiveLaneFrame(unit, group), current, amount)
+    if nextX == current then return false end
+
+    UndoBeforeAuraChange(unit)
+    local units = AffectedUnits(unit, shared)
+    local moved = spec.customIndex and {}
+    for i = 1, #units do
+        local affected = units[i]
+        local x = tonumber(ReadSpecValue(affected, spec, "x", shared)) or spec.defaultX
+        local value = affected == unit and nextX
+            or Util.StepFrameOffsetX(ActiveLaneFrame(affected, group), x, amount)
+        if spec.customIndex then
+            local placed = CustomPlaced(affected, spec, true)
+            if placed and not moved[placed] then
+                placed[spec.xKey] = value
+                moved[placed] = true
+            end
+        else
+            local layout, config = UnitLayout(affected, true)
+            if layout and config then
+                config.overrideLayout = true
+                layout[spec.xKey] = value
+            end
+        end
+    end
+    ReapplyAuras(units)
+    if pf:IsShown() then Sync(true) end
+    return true
 end
 
 local function ResetPosition()
@@ -557,7 +599,7 @@ local function SetActiveGroup(kind)
     if pf and pf:IsShown() then Sync() end
 end
 
-function Sync()
+function Sync(committedX)
     if not (pf and pf.unit) then return end
     local sh = Shared(false) or {}
     local layout = RuntimeLayout(pf.unit)
@@ -580,14 +622,14 @@ function Sync()
         local currentY = ReadSpecValue(pf.unit, spec, "y", sh)
         local x, y = ReadVisiblePosition(pf.unit, activeGroup, currentX, currentY)
         Quick.SetBoxText(pf.spacingBox, ReadSpecValue(pf.unit, spec, "spacing", sh))
-        Quick.SetBoxText(pf.xBox, x ~= nil and x or currentX)
+        Quick.SetBoxText(pf.xBox, x ~= nil and x or currentX, committedX)
         Quick.SetBoxText(pf.yBox, y ~= nil and y or currentY)
         Quick.SetBoxText(pf.sizeBox, ReadSpecValue(pf.unit, spec, "size", sh))
     else
         Quick.SetBoxText(pf.spacingBox,
             ReadValue(layout, sh, spec.spacingKey, spec.spacingKey, ReadValue(layout, sh, "spacing", "spacing", 2)))
         local x, y = FramePositionValues(ActiveLaneFrame(pf.unit, activeGroup))
-        Quick.SetBoxText(pf.xBox, x ~= nil and x or ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
+        Quick.SetBoxText(pf.xBox, x ~= nil and x or ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX), committedX)
         Quick.SetBoxText(pf.yBox, y ~= nil and y or ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
         Quick.SetBoxText(pf.sizeBox, ReadValue(layout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize))
     end
@@ -636,7 +678,7 @@ local function Build()
     pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 290, -58, 250, 32, function() SetActiveGroup("debuff") end,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
     Quick.ValueCard(pf, pf, 20, -102, 250, "Position", {
-        { label = "X", key = "xBox", onChanged = Apply },
+        { label = "X", key = "xBox", onChanged = Apply, onStep = StepX },
         { label = "Y", key = "yBox", onChanged = Apply },
     }, { height = 132, boxWidth = 64, peelSkin = true })
     Quick.ValueCard(pf, pf, 290, -102, 250, "Aura layout", {
