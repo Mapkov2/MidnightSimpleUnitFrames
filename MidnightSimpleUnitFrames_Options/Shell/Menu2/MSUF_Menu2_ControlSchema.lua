@@ -765,7 +765,7 @@ function Schema.Owned(widget, scope, domain)
             return (widget._msuf2CommandAction or record.command).set(...)
         end,
         values = widget.GetValues and function() return widget:GetValues() end,
-        action = widget.GetScript and widget:GetScript("OnClick") and Schema.ButtonAction(widget), owner = widget,
+        action = widget.Click and widget.GetScript and widget:GetScript("OnClick") and Schema.ButtonAction(widget), owner = widget,
     }
     if command and command.write then
         Declare(spec)

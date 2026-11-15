@@ -1,5 +1,15 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.021 - 2026-11-15
+
+**Classic Menu Hotfix**
+
+Available for Classic Era, The Burning Crusade Classic Anniversary, and Mists of Pandaria Classic.
+
+### Fixes
+
+- Fixed a Lua error that could prevent the Castbars settings from opening. Timer bar tabs now open and can be selected on all three Classic clients.
+
 ## 7.0.2 - 2026-11-15
 
 **One Year Anniversary Edition**

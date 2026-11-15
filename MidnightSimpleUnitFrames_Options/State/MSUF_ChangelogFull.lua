@@ -8,12 +8,25 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A4A6C34FC523CFB6D4E751B7EC1C5B2C7197292C97CE82378AC627B6067C05A9",
-    currentVersion = "7.0.2",
+    sourceSha256 = "11AC3E51AED5BA1502930D0A7950D8826A027FC2BF474B9E2A34090741924786",
+    currentVersion = "7.021",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 7.0.2",
+    previousVersion = "7.0.2",
+    rangeLabel = "7.0.2 -> 7.021",
     entries = {
+        {
+            version = "7.021",
+            date = "2026-11-15",
+            title = "Classic Menu Hotfix",
+            sections = {
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed a Lua error that could prevent the Castbars settings from opening. Timer bar tabs now open and can be selected on all three Classic clients.",
+                    },
+                },
+            },
+        },
         {
             version = "7.0.2",
             date = "2026-11-15",

@@ -24,6 +24,7 @@ jobs:
       release_name: ${{ steps.release.outputs.release_name }}
       release_type: ${{ steps.release.outputs.release_type }}
       publish_wago: ${{ steps.release.outputs.publish_wago }}
+      release_scope: ${{ steps.release.outputs.release_scope }}
 
     steps:
       - name: Check out Classic release tag
@@ -76,18 +77,32 @@ jobs:
           if ($publishTarget -cnotin @("all", "curseforge")) { throw "Unsupported publish-target: $publishTarget" }
           "publish_wago=$($publishTarget -ceq 'all')".ToLowerInvariant() >> $env:GITHUB_OUTPUT
 
+          $clientScopes = [regex]::Matches($tagMessage, '(?m)^publish-clients:[ \t]*([^\r\n]*)')
+          $releaseScope = "all"
+          if ($clientScopes.Count -gt 1) { throw "Duplicate publish-clients metadata." }
+          if ($clientScopes.Count -eq 1) { $releaseScope = $clientScopes[0].Groups[1].Value.Trim() }
+          if ($releaseScope -cnotin @("all", "classic")) { throw "Unsupported publish-clients: $releaseScope" }
+          "release_scope=$releaseScope" >> $env:GITHUB_OUTPUT
+
           "version=$version" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
           "release_type=$releaseType" >> $env:GITHUB_OUTPUT
           Write-Host "Classic tag '$tag' is current at origin/7.0 $mainCommit."
 
-      - name: Validate CurseForge publishing configuration
+      - name: Validate store publishing configuration
         shell: pwsh
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
+          WAGO_TOKEN_CONFIGURED: ${{ secrets.WAGO_API_TOKEN != '' }}
+          CLASSIC_RELEASE_SCOPE: ${{ steps.release.outputs.release_scope }}
+          PUBLISH_WAGO: ${{ steps.release.outputs.publish_wago }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
             throw "Missing CurseForge secret CF_API_KEY (or CURSEFORGE fallback)."
+          }
+          if ($env:CLASSIC_RELEASE_SCOPE -ceq "classic" -and $env:PUBLISH_WAGO -ceq "true" -and
+              $env:WAGO_TOKEN_CONFIGURED -ne "true") {
+            throw "Missing Wago secret WAGO_API_TOKEN for this Classic release."
           }
 
   release-check:
@@ -107,6 +122,7 @@ jobs:
       CLASSIC_RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
       CLASSIC_RELEASE_NAME: ${{ needs.preflight.outputs.release_name }}
       CLASSIC_RELEASE_TYPE: ${{ needs.preflight.outputs.release_type }}
+      CLASSIC_RELEASE_SCOPE: ${{ needs.preflight.outputs.release_scope }}
       # Presence only, never the token: the Wago upload step is the single step
       # that is handed WAGO_API_TOKEN, and a step `if:` cannot read `secrets`.
       WAGO_UPLOAD_ENABLED: ${{ needs.preflight.outputs.publish_wago == 'true' && secrets.WAGO_API_TOKEN != '' }}
@@ -123,7 +139,8 @@ jobs:
         run: |
           & "./.github/scripts/build_classic_release_package.ps1" `
             -ReleaseVersion $env:CLASSIC_RELEASE_TAG `
-            -OutputDirectory "dist"
+            -OutputDirectory "dist" `
+            -ClassicOnly:($env:CLASSIC_RELEASE_SCOPE -ceq "classic")
           if ($LASTEXITCODE -ne 0) {
             throw "Classic release package build failed."
           }
@@ -202,7 +219,8 @@ jobs:
             Write-Host "::warning::Could not read the CurseForge game version list: $_"
           }
           $gameVersionNames = @(& "./.github/scripts/resolve_release_game_versions.ps1" `
-            -ClientMatrixPath "tools/classic-client-matrix.tsv" -AvailableNames $availableNames)
+            -ClientMatrixPath "tools/classic-client-matrix.tsv" -AvailableNames $availableNames `
+            -ClassicOnly:($env:CLASSIC_RELEASE_SCOPE -ceq "classic"))
           "game_versions=$($gameVersionNames -join ', ')" >> $env:GITHUB_OUTPUT
           $gameVersionNames = [string[]]$gameVersionNames
           Write-Host "CurseForge upload $($env:CLASSIC_RELEASE_NAME) type=$($env:CLASSIC_RELEASE_TYPE) zip=$($zip.Name) bytes=$($zip.Length) versions=[$($gameVersionNames -join ', ')]"
@@ -275,7 +293,8 @@ jobs:
           $flavors = @($gameData.patches.PSObject.Properties)
           $availableNames = @(foreach ($flavor in $flavors) { foreach ($patch in $flavor.Value) { [string]$patch } })
           $gameVersionNames = @(& "./.github/scripts/resolve_release_game_versions.ps1" `
-            -ClientMatrixPath "tools/classic-client-matrix.tsv" -AvailableNames $availableNames)
+            -ClientMatrixPath "tools/classic-client-matrix.tsv" -AvailableNames $availableNames `
+            -ClassicOnly:($env:CLASSIC_RELEASE_SCOPE -ceq "classic"))
 
           $metadata = [ordered]@{
             label = $env:CLASSIC_RELEASE_NAME
@@ -283,15 +302,22 @@ jobs:
             changelog = Get-Content -LiteralPath $changelogPath -Raw
           }
           $assigned = @()
+          $assignedVersions = @()
           foreach ($flavor in $flavors) {
             $patches = @($gameVersionNames | Where-Object { @($flavor.Value) -ccontains $_ })
             if ($patches.Count -gt 0) {
               $metadata["supported_$($flavor.Name)_patches"] = [string[]]$patches
               $assigned += "$($flavor.Name)=$($patches -join '/')"
+              $assignedVersions += $patches
             }
           }
           if ($assigned.Count -eq 0) {
             throw "Wago lists none of [$($gameVersionNames -join ', ')]."
+          }
+          if ($env:CLASSIC_RELEASE_SCOPE -ceq "classic" -and
+              ($assignedVersions.Count -ne $gameVersionNames.Count -or
+                  @(Compare-Object $gameVersionNames $assignedVersions).Count -ne 0)) {
+            throw "Every Classic version must map to exactly one Wago flavor."
           }
           if ($gameData.stability_values -cnotcontains $metadata.stability) {
             throw "Wago does not accept stability '$($metadata.stability)'."
