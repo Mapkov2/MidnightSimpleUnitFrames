@@ -7836,6 +7836,9 @@ L["Latency zone color"] = "Farbe der Latenzzone"
 L["Rank 4"] = "Rang 4"
 L["Disabled while Reduce menu motion is enabled."] = "Deaktiviert, solange „Menübewegungen reduzieren“ eingeschaltet ist."
 L["Fade in when shown"] = "Beim Anzeigen sanft einblenden"
+L["Edit positions"] = "Positionen bearbeiten"
+L["Continue to keep your current positions."] = "Mit „Weiter“ behältst du deine aktuellen Positionen."
+L["Back to %d%%"] = "Zurück auf %d%%"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

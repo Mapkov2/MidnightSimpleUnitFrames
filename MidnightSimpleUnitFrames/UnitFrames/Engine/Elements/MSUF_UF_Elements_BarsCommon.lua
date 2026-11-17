@@ -1652,15 +1652,102 @@ local function PreviewHealthGradientColor(health, pct)
   return 0.2, 0.8, 0.2, false
 end
 
--- A late identity event can follow the first living health update. Keep the
--- exception briefly for the same roster binding and always read its current class.
-local function GroupRezzClassColor(unit, state)
+-- Only the out-of-combat group health sampler consumes these tokens. Multiple
+-- visuals of the same member share the token and keep their own binding state.
+local Rezz = { pendingUnits = {} }
+
+function Rezz.RetryFrame(frame, unit)
+  local state = frame._msufUnitState
+  if not state or state.rezzClassUnit ~= unit or not state.rezzHealthPending then return end
+  if state.rezzHealthPending == "native" and frame.hpBar and frame.hpBar._msufStatusR == nil then
+    -- A successful native class paint clears the plain RGB cache. A failed
+    -- lookup writes a plain fallback and still needs the next health event.
+    state.rezzHealthPending = nil
+    if state.rezzBindingChanged then state.rezzClassUnit = nil end
+    return
+  end
+  state.rezzHealthPending = nil
+  local spec = frame.MSUFSpec
+  local active = frame._msufActiveElements
+  if not (active and active.Health and spec and spec.scope == "group" and spec.health.mode == "class") then return end
+  if not frame:IsVisible() then return end
+  state.identityReady = nil
+  UF.elements.Health.RefreshColor(frame, "MSUF_GF_REZZ_HEALTH")
+end
+
+function Common.RetryGroupRezzUnit(unit)
+  if issecretvalue(unit) ~= true and Rezz.pendingUnits[unit] then
+    Rezz.pendingUnits[unit] = nil
+    MSUF.GF.ForEachFrameForUnit(unit, Rezz.RetryFrame)
+  end
+end
+
+function Rezz.MarkPending(state, unit, reason)
+  state.rezzHealthPending = reason
+  Rezz.pendingUnits[unit] = true
+end
+
+-- Use only readable identity to recognize roster churn after a death. A
+-- match allows another identity check; it never supplies the color to paint.
+function Rezz.ReadMemberIdentity(unit)
+  local guid = UnitGUID(unit)
+  if issecretvalue(guid) == true then guid = nil end
+  local name, realm = UnitName(unit)
+  if issecretvalue(name) == true or issecretvalue(realm) == true then return guid end
+  if type(name) ~= "string" or name == "" then return guid end
+  if realm == "" then realm = nil end
+  return guid, name, realm
+end
+
+function Rezz.ResumeFrame(frame, unit)
+  local state = frame._msufUnitState
+  if not state or not state.rezzClassUnit or state.rezzClassUnit ~= unit then return end
+  if not IsUnitToken(unit) or not (unit:match("^party%d+$") or unit:match("^raid%d+$")) then return end
+  if not state.rezzClassRosterRevision then
+    -- The existing death observation identified a player during combat. Read
+    -- the occupant only now; a former player's class is never copied.
+    state.rezzClassRosterRevision = MSUF.GF.healthClassRosterRevision or 0
+    state.rezzMemberGUID, state.rezzMemberName, state.rezzMemberRealm = Rezz.ReadMemberIdentity(unit)
+    state.rezzBindingChanged = nil
+    state.rezzHealthPending = true
+  elseif not state.rezzHealthPending then
+    if state.isPlayerKnown and state.isPlayer then return end
+    state.rezzHealthPending = true
+  end
+  -- At full health there may be no further HP event after the pull.
+  Rezz.RetryFrame(frame, unit)
+end
+
+function Common.ResumeGroupRezzColors()
+  MSUF.GF.ForEachFrame(Rezz.ResumeFrame, false)
+end
+
+-- Only the observed member can use the short class override. On a settled
+-- roster replacement, give the current occupant one fresh HP check.
+local function GroupRezzClassColor(unit, state, event)
   local group = MSUF.GF
-  if not group then return false end
+  if not group or state.rezzClassUnit ~= unit then return false end
   local revision = group.healthClassRosterRevision or 0
-  if state.rezzClassUnit ~= unit or state.rezzClassRosterRevision ~= revision
-    or MSUF.PublicGlobals.MSUF_InCombat == true or MSUF.Util.InCombat() then
-    state.rezzClassUnit, state.rezzClassUntil = nil, nil
+  if state.rezzClassRosterRevision ~= revision then
+    state.rezzClassUntil = false
+    if event == "MSUF_GF_UNIT_IDENTITY" then
+      local guid, name, realm = Rezz.ReadMemberIdentity(unit)
+      if guid and state.rezzMemberGUID then
+        state.rezzBindingChanged = guid ~= state.rezzMemberGUID
+      elseif name and state.rezzMemberName then
+        state.rezzBindingChanged = name ~= state.rezzMemberName
+          or (realm and state.rezzMemberRealm and realm ~= state.rezzMemberRealm)
+      end
+      state.rezzClassRosterRevision = revision
+    end
+  end
+  if state.rezzBindingChanged and event == "MSUF_GF_REZZ_HEALTH" and state.isPlayerKnown and not state.isPlayer then
+    state.rezzClassUnit = nil
+    return false
+  end
+  if state.rezzClassUntil == false then return false end
+  if MSUF.PublicGlobals.MSUF_InCombat == true or MSUF.Util.InCombat() then
+    state.rezzClassUntil = false
     return false
   end
   if state.deadKnown ~= true then return false end
@@ -1669,7 +1756,7 @@ local function GroupRezzClassColor(unit, state)
     state.rezzClassUntil = now + 1
     state.rezzClassRetried = nil
   elseif now > state.rezzClassUntil then
-    state.rezzClassUnit, state.rezzClassUntil = nil, nil
+    state.rezzClassUntil = false
     return false
   end
   return not (state.isPlayerKnown and state.isPlayer)
@@ -1680,6 +1767,7 @@ local function QueueRezzClassRetry(frame, unit, state)
   local deadline = state.rezzClassUntil
   state.rezzClassRetried = true
   MSUF.Scheduler.RunNextFrame(function()
+    if not Common.groupRezzOutOfCombat then return end
     local active = frame._msufActiveElements
     if frame._msufUnitState ~= state or frame.MSUFUnitKey ~= unit
       or not (active and active.Health == true) or not frame:IsVisible() then return end
@@ -1706,14 +1794,21 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
     return 0.35, 0.35, 0.35
   end
   if state and state.deadKnown and state.dead == true then
-    local group = MSUF.GF
-    local revision = group and group.healthClassRosterRevision or 0
-    if state.rezzClassUntil or state.rezzClassUnit ~= unit or state.rezzClassRosterRevision ~= revision then
-      state.rezzClassUnit, state.rezzClassUntil = nil, nil
-      if state.isPlayerKnown and state.isPlayer and spec and spec.scope == "group" and health.mode == "class"
-        and not frame._msufGFIsPreviewFrame and group and IsUnitToken(unit)
-        and (unit:match("^party%d+$") or unit:match("^raid%d+$")) then
-        state.rezzClassUnit, state.rezzClassRosterRevision = unit, revision
+    if not Common.groupRezzOutOfCombat then
+      if (state.rezzClassUnit ~= unit or state.rezzClassRosterRevision ~= nil)
+        and state.isPlayer and spec and spec.scope == "group" and health.mode == "class" and not frame._msufGFIsPreviewFrame then
+        state.rezzClassUnit, state.rezzClassUntil, state.rezzClassRosterRevision = unit, false, nil
+      end
+    else
+      local revision = MSUF.GF and MSUF.GF.healthClassRosterRevision or 0
+      if state.rezzClassUntil ~= nil or state.rezzClassUnit ~= unit or state.rezzClassRosterRevision ~= revision then
+        state.rezzClassUnit, state.rezzClassUntil = nil, nil
+        if state.isPlayer and spec and spec.scope == "group" and health.mode == "class"
+          and not frame._msufGFIsPreviewFrame and MSUF.GF and IsUnitToken(unit) and (unit:match("^party%d+$") or unit:match("^raid%d+$")) then
+          state.rezzClassUnit, state.rezzClassUntil, state.rezzClassRosterRevision = unit, nil, revision
+          state.rezzMemberGUID, state.rezzMemberName, state.rezzMemberRealm = Rezz.ReadMemberIdentity(unit)
+          state.rezzBindingChanged, state.rezzHealthPending = nil, nil
+        end
       end
     end
     frame._msufHealthStatusGone = true
@@ -1737,13 +1832,31 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
     end
   end
 
-  if state and state.rezzClassUnit and spec.scope == "group" and health.mode == "class"
-    and GroupRezzClassColor(unit, state) then
-    local r, g, b, native = DispatchClassColor(frame, unit, true, true)
-    if native == SECRET_NATIVE_CLASS_COLOR then return r, g, b, native end
-    if r ~= nil then return r, g, b end
-    QueueRezzClassRetry(frame, unit, state)
-    return 0.28, 0.28, 0.28
+  -- The short window may paint by class before the client recognizes the
+  -- player. After it closes, only a fresh identity may restore class color.
+  -- Keep an unresolved paint eligible for the next HP event on this binding.
+  if Common.groupRezzOutOfCombat and state and state.rezzClassUnit and state.rezzClassUnit == unit
+    and spec.scope == "group" and health.mode == "class" then
+    state.rezzHealthPending = nil
+    local useRezzClass = GroupRezzClassColor(unit, state, event)
+    if useRezzClass or (state.isPlayerKnown and state.isPlayer) then
+      local r, g, b, native = DispatchClassColor(frame, unit, true, true)
+      if native == SECRET_NATIVE_CLASS_COLOR then
+        Rezz.MarkPending(state, unit, "native")
+        return r, g, b, native
+      end
+      if r ~= nil then
+        if state.rezzBindingChanged then state.rezzClassUnit = nil end
+        return r, g, b
+      end
+      Rezz.MarkPending(state, unit, true)
+      if useRezzClass then
+        QueueRezzClassRetry(frame, unit, state)
+        return 0.28, 0.28, 0.28
+      end
+      return 0.12, 0.62, 0.95
+    end
+    if state.rezzClassUnit then Rezz.MarkPending(state, unit, true) end
   end
   if state and state.isPlayerKnown and state.isPlayer then
     return DispatchClassColor(frame, unit, true)

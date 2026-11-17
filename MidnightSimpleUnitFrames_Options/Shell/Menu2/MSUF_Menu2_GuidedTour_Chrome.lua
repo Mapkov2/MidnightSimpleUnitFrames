@@ -16,6 +16,7 @@ local CurrentControlTouched = Parts.CurrentControlTouched
 local CurrentPosition = Parts.CurrentPosition
 local CurrentStage = Parts.CurrentStage
 local EditDone = Parts.EditDone
+local IsQuickPlacement = Parts.IsQuickPlacement
 local EditModeStatus = Parts.EditModeStatus
 local EmphasizeControl = Parts.EmphasizeControl
 local EmphasizeSection = Parts.EmphasizeSection
@@ -301,6 +302,8 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
         else
             Add(chrome.next)
         end
+    elseif IsQuickPlacement(stage.id) then
+        Add(chrome.next)
     elseif stage.id == "edit_mode" then
         if not CooldownAnchorDecisionComplete() then
             AddGroup("anchor")
@@ -351,7 +354,7 @@ local function PaintChromeHeadings(chrome, stage, position, profileMismatch, man
                 power_moves = "MSUF POWER MOVES",
                 final_review = "READY TO PLAY",
             }
-            M.Theme.SetTranslatedText(chrome.section, Tr(labels[stage.id] or "GUIDED SETUP"))
+            M.Theme.SetTranslatedText(chrome.section, Tr(IsQuickPlacement(stage.id) and "Quick Setup" or labels[stage.id] or "GUIDED SETUP"))
         elseif position.overview then
             local controls = AllStageControls(stage, position.sections)
             M.Theme.SetTranslatedText(chrome.section, format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
@@ -374,15 +377,17 @@ local function PaintChromeButtons(chrome, stage, position, touched, stagePositio
     -- Keep and Next unlock (the cooldown anchor choice, the Player move and the
     -- Party move) is read once here and serves both.
     local final = stage.id == "final_review"
-    local waitingForAnchorDecision = stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
-    local waitingForEditModeMove = stage.id == "edit_mode" and not waitingForAnchorDecision and not EditDone.placement()
-    local waitingForGroupMove = stage.id == "group_edit_mode" and not EditDone.groupPlacement()
+    local quickPlacement = IsQuickPlacement(stage.id)
+    local waitingForAnchorDecision = not quickPlacement and stage.id == "edit_mode" and not CooldownAnchorDecisionComplete()
+    local waitingForEditModeMove = not quickPlacement and stage.id == "edit_mode" and not waitingForAnchorDecision and not EditDone.placement()
+    local waitingForGroupMove = not quickPlacement and stage.id == "group_edit_mode" and not EditDone.groupPlacement()
     SetButtonText(chrome.back, profileMismatch and "Restart tour" or (warning and "Cancel" or "Back"))
     SetButtonText(chrome.keep, KeepLabel(stage, position))
     SetButtonText(chrome.skip, warning and "Confirm skip" or "Skip")
     local nextLabel = "Next setting"
     if manualAway then nextLabel = "Return"
     elseif final then nextLabel = "Finish setup"
+    elseif quickPlacement then nextLabel = "Continue"
     elseif waitingForEditModeMove then nextLabel = EditDone.movement() and "Open size popup" or "Move Player first"
     elseif waitingForGroupMove then nextLabel = EditDone.groupMovement() and "Open size popup" or "Move Party first"
     elseif touched then nextLabel = "Claim +10 XP"
@@ -553,7 +558,8 @@ function M.RunGuidedTourStep(step)
     if step == "next" and stage.id == "menu_basics" and not SetupAreaDecisionComplete() then
         return false, "guided_setup_area_required"
     end
-    if (step == "keep" or step == "next") and stage.id == "edit_mode" then
+    local needsPractice = (step == "keep" or step == "next") and not IsQuickPlacement(stage.id)
+    if needsPractice and stage.id == "edit_mode" then
         if not CooldownAnchorDecisionComplete() then return false, "guided_edit_mode_anchor_required" end
         if not EditDone.placement() then
             if step == "next" and EditDone.movement() and OpenGuidedEditModePopup("player", stage) then
@@ -562,7 +568,7 @@ function M.RunGuidedTourStep(step)
             return false, "guided_edit_mode_move_required"
         end
     end
-    if (step == "keep" or step == "next") and stage.id == "group_edit_mode"
+    if needsPractice and stage.id == "group_edit_mode"
         and not EditDone.groupPlacement()
     then
         if step == "next" and EditDone.groupMovement() and OpenGuidedEditModePopup("gf_party", stage) then

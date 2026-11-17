@@ -1162,25 +1162,46 @@ function Dashboard.BuildRecoveryCard(state)
         Dashboard.BuildRecoveryBody(state, body)
     end)
 end
+function M.ApplyUnitFrameScaleSetting(scale)
+    M.GetGeneralDB().msufUiScale = scale
+    MSUF.Require("MSUF_ApplyMsufScale", FILE)(scale)
+    if M.RequestGeneralDomains then
+        M.RequestGeneralDomains("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
+    end
+end
+
 local function RefreshScalePills(state)
     local pills = state.scalePills
     if not pills then return end
     local g, ui = GlobalState()
     local uiValue = ui.Enabled and M.Format("%d%%", DirectPercent(ui.Scale, 1)) or M.Tr("Off")
-    T.SetTranslatedText(pills[1], M.Format("UI %s", uiValue))
-    T.SetTranslatedText(pills[2], M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)))
+    if pills[1] then
+        T.SetTranslatedText(pills[1], M.Format("UI %s", uiValue))
+        T.SetTranslatedText(pills[2], M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)))
+    end
     T.SetTranslatedText(pills[3], M.Format("Frames %d%%", DirectPercent(g.msufUiScale, 1)))
 end
 function Dashboard.BuildScalingCard(state, ctx)
     local recoveryW, scalingOpen = state.recoveryW, state.scalingOpen
     local scaling = Card(state.root, "", state.x0, state.scalingTop, recoveryW, scalingOpen and state.scalingH or 42)
     DashboardDisclosure(scaling, "Scaling", scalingOpen, "dashboardScalingOpen", recoveryW, function(scaleHead)
-        if recoveryW < 520 then return end
-        state.scalePills = {
-            Pill(scaleHead, "", 186, -11, 64)._msuf2Label,
-            Pill(scaleHead, "", 104, -11, 76)._msuf2Label,
-            Pill(scaleHead, "", 14, -11, 84)._msuf2Label,
-        }
+        local standalone = not MSUF.SuiteLink.IsLoaded()
+        if recoveryW < 520 and not standalone then return end
+        local frames = Pill(scaleHead, "", 14, -11, 84, standalone and T.colors.accent or nil)
+        state.scalePills = { [3] = frames._msuf2Label }
+        if recoveryW >= 520 then
+            state.scalePills[1] = Pill(scaleHead, "", 186, -11, 64)._msuf2Label
+            state.scalePills[2] = Pill(scaleHead, "", 104, -11, 76)._msuf2Label
+        end
+        if standalone then
+            local button = CreateFrame("Button", nil, frames)
+            button:SetAllPoints(frames)
+            button:SetScript("OnClick", function()
+                local target = DashboardMeta("scaling.msuf_frames.percent", "setting")
+                M.SearchBridge.OpenSearchTarget("home", "MSUF Frame Scale", nil, nil,
+                    { state = { dashboardScalingOpen = true } }, target)
+            end)
+        end
         RefreshScalePills(state)
         M.TrackRefresh(ctx, function() RefreshScalePills(state) end)
     end, "scaling.disclosure")
@@ -1363,12 +1384,8 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
         revert = function() pending.msuf = nil end,
         apply = function()
             local scaleValue = PendingMsufScale()
-            M.GetGeneralDB().msufUiScale = scaleValue
             pending.msuf = nil
-            MSUF.Require("MSUF_ApplyMsufScale", FILE)(scaleValue)
-            if M.RequestGeneralDomains then
-                M.RequestGeneralDomains("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
-            end
+            M.ApplyUnitFrameScaleSetting(scaleValue)
             RefreshScalePills(state)
         end,
     })

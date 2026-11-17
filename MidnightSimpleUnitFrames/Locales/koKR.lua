@@ -7627,6 +7627,9 @@ L["Latency zone color"] = "지연 시간 영역 색상"
 L["Rank 4"] = "4 레벨"
 L["Disabled while Reduce menu motion is enabled."] = "메뉴 동작 줄이기가 활성화되어 있으면 비활성화됩니다."
 L["Fade in when shown"] = "표시될 때 부드럽게 나타나기"
+L["Edit positions"] = "위치 편집"
+L["Continue to keep your current positions."] = "현재 위치를 유지하려면 계속 진행하세요."
+L["Back to %d%%"] = "%d%%로 되돌리기"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

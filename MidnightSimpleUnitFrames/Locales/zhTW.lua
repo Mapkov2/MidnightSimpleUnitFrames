@@ -7627,6 +7627,9 @@ L["Latency zone color"] = "延遲區域顏色"
 L["Rank 4"] = "等級 4"
 L["Disabled while Reduce menu motion is enabled."] = "啟用減少選單動畫時停用。"
 L["Fade in when shown"] = "顯示時淡入"
+L["Edit positions"] = "編輯位置"
+L["Continue to keep your current positions."] = "點選繼續即可保留目前的位置。"
+L["Back to %d%%"] = "還原為 %d%%"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

@@ -7654,6 +7654,9 @@ L["Latency zone color"] = "Цвет зоны задержки"
 L["Rank 4"] = "Ранг 4"
 L["Disabled while Reduce menu motion is enabled."] = "Отключено, пока включено уменьшение анимации меню."
 L["Fade in when shown"] = "Плавное появление при отображении"
+L["Edit positions"] = "Изменить позиции"
+L["Continue to keep your current positions."] = "Нажмите «Далее», чтобы сохранить текущие позиции."
+L["Back to %d%%"] = "Вернуть %d%%"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

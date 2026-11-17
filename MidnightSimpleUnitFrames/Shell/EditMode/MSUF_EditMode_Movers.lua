@@ -55,6 +55,8 @@ local function GuidedPlacementPending()
     local state = tour:GetState()
     local preferences = state and state.preferences
     if not (state and state.status == "active" and preferences) then return false end
+    local menu = MSUF.MSUF2
+    if menu and menu.IsQuickTourPlacement and menu.IsQuickTourPlacement(state.currentStageId) then return false end
     if state.currentStageId == "group_edit_mode" then
         return preferences.groupEditModeMoved ~= true or preferences.groupEditModePopupOpened ~= true, "gf_party"
     end

@@ -275,4 +275,89 @@ assert(Button("Start Quick Setup"), "Quick Setup missing after completion"):Clic
 assert(prompt and not core.GuidedTour6:IsActive(), "completed setup must confirm a restart")
 prompt.onAccept()
 assert(M.activeKey == "guided_setup" and core.GuidedTour6:IsActive(), "completed tour could not restart")
-print("PASS Dashboard resize, Changelog tabs, first-run Skip and Suite Setup (" .. flavor .. ")")
+
+local tour = core.GuidedTour6
+local function Start(mode, area)
+    assert(M.StartGuidedTour({ source = "dashboard", restart = true, mode = mode }))
+    tour:SetPreference("setupMode", mode)
+    tour:SetPreference("setupArea", area)
+    assert(M.RunGuidedTourStep("next"))
+    assert(M.activeKey == "guided_setup")
+end
+local general = M.GetGeneralDB()
+general.msufUiScale = 0.87
+Start("quick", "unitframes")
+assert(tour:GetState().currentStageId == "edit_mode")
+local minus = assert(Button("-"), "Standalone Quick Setup is missing the scale stepper")
+local player = core.UF.frames.player
+if not player then
+    player = mw.env.CreateFrame("Button", nil, mw.env.UIParent)
+    player.MSUFUnitKey = "player"
+    core.UF.frames.player = player
+    core.UF.frameList[#core.UF.frameList + 1] = player
+end
+local db = mw.env.MSUF_DB
+local anchor, x, y, ui = db.player.anchorFrameName, db.player.offsetX, db.player.offsetY, general.UIScale.Enabled
+tour:SetPreference("quickFrameScaleBefore", "invalid")
+assert(M.SelectPage("guided_setup"))
+minus:Click()
+assert(math.abs(general.msufUiScale - 0.82) < 0.00001)
+assert(player and math.abs(player:GetScale()-0.82) < 0.00001, "scale did not reach live player frame")
+assert(Button("Back to 87%"), "reset missing after first edit"):Click()
+assert(general.msufUiScale == 0.87 and not Button("Back to 87%"))
+assert(Button("+")):Click()
+assert(M.RunGuidedTourStep("next"))
+assert(tour:GetState().currentStageId == "uf_player" and not tour:GetPreference("editModeMoved"))
+assert(math.abs(general.msufUiScale-0.92)<0.00001 and general.UIScale.Enabled == ui)
+assert(db.player.offsetX == x and db.player.offsetY == y and db.player.anchorFrameName == anchor)
+assert(M.RunGuidedTourStep("back"))
+assert(Button("Back to 87%"), "original scale lost on revisit"):Click()
+general.msufUiScale = 0.25
+assert(Button("+")):Click()
+assert(Button("-")):Click()
+assert(math.abs(general.msufUiScale - 0.25) < 0.00001)
+assert(not Button("-"):IsEnabled())
+assert(Button("Back to 87%")):Click()
+-- Optional group placement is also reachable on its own.
+Start("quick", "groupframes")
+assert(tour:GetState().currentStageId == "group_edit_mode" and not Button("-"))
+assert(M.RunGuidedTourStep("next") and tour:GetState().currentStageId == "gf_layout")
+-- The complete route and the Suite quick route retain their practice requirement.
+Start("complete", "unitframes")
+assert(M.RunGuidedTourStep("next"))
+assert(tour:GetState().currentStageId == "edit_mode" and not Button("Edit positions"))
+assert(not M.RunGuidedTourStep("next"))
+installed = true
+mw.env.MSUFSuite = {}
+Start("quick", "unitframes")
+assert(tour:GetState().currentStageId == "edit_mode" and not Button("Edit positions"))
+assert(not M.RunGuidedTourStep("next"))
+tour:Dismiss()
+core.FirstLoad6:Dismiss("scale-check")
+core.UpgradeHighlights.ShouldShow = function() return false end
+local function Shortcut()
+    M.SetMenuStateValue("dashboardScalingOpen", false)
+    SelectHome(true)
+    local pill = assert(M.cache.home.wrapper._msuf2DashboardState.scalePills[3]):GetParent()
+    for _, child in ipairs({pill:GetChildren()}) do
+        if child:GetObjectType() == "Button" then return child end
+    end
+end
+width = 1040
+assert(not Shortcut(), "Suite Dashboard acquired a standalone shortcut")
+installed = false
+mw.env.MSUFSuite = nil
+width = 428
+local shortcut = assert(Shortcut())
+local open = M.SearchBridge.OpenSearchTarget
+local ok, focused, exact
+M.SearchBridge.OpenSearchTarget = function(...)
+    local called
+    called, ok, focused, exact = open(...)
+    return called, ok, focused, exact
+end
+shortcut:Click()
+assert(ok and focused and exact and M.dashboardScalingOpen, "percentage did not focus the exact frame slider")
+assert(general.msufUiScale == 0.87 and general.UIScale.Enabled == ui)
+M.SearchBridge.OpenSearchTarget = open
+print("PASS Dashboard resize, Changelog tabs, standalone scale and placement, first-run Skip and Suite Setup (" .. flavor .. ")")

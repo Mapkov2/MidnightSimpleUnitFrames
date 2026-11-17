@@ -5384,6 +5384,9 @@ L["Latency zone color"] = "Latency zone colour"
 L["Rank 4"] = "Rank 4"
 L["Disabled while Reduce menu motion is enabled."] = "Disabled while Reduce menu motion is enabled."
 L["Fade in when shown"] = "Fade in when shown"
+L["Edit positions"] = "Edit positions"
+L["Continue to keep your current positions."] = "Continue to keep your current positions."
+L["Back to %d%%"] = "Back to %d%%"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

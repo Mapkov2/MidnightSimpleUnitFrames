@@ -49,6 +49,10 @@ local function LegacyFunction(owner, name)
 end
 
 ------------------------------------------------------------------ dashboard
+function Link.IsLoaded()
+    return Suite() ~= nil
+end
+
 function Link.CanStageFactoryReset()
     return API() ~= nil or LegacyFunction("Database", "StageFactoryReset") ~= nil
 end

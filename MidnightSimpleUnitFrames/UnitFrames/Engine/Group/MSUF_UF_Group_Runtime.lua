@@ -6,6 +6,7 @@ local GF = MSUF.GF or {}
 MSUF.GF = GF
 local UF = MSUF.UF
 local Metadata = GF.Metadata or {}
+local bars = MSUF.UFBarTextCommon
 
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
@@ -35,10 +36,8 @@ local function IsOpenWorldRosterLocation()
 end
 
 local function SyncCombatState(inCombat)
-  if inCombat == nil then inCombat = InCombat() end
-  inCombat = inCombat == true
   ExportPublic("MSUF_InCombat", inCombat)
-  return inCombat
+  bars.SetGroupRezzOutOfCombat(not inCombat)
 end
 
 local IsUnitToken = UF and UF.IsUnitToken
@@ -310,7 +309,12 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
     and state.matchEvents == matchEvents and state.nameEvents == nameEvents
     and sceneEventsOn == sceneEvents and housingEventsOn == housingEvents then return end
   -- Disabled frames miss zone events, so sample the location before resubscribing.
-  if active and (not state.enabled or state.regenOnly) then SelectPullRosterHandler() end
+  if active and (not state.enabled or state.regenOnly) then
+    SelectPullRosterHandler()
+    bars.SetGroupRezzOutOfCombat(not InCombat())
+  elseif not active then
+    bars.SetGroupRezzOutOfCombat(false)
+  end
   state.enabled, state.regenOnly = enabled, regenOnly
   state.matchEvents, state.nameEvents = matchEvents, nameEvents
   sceneEventsOn, housingEventsOn = sceneEvents, housingEvents
@@ -1086,8 +1090,23 @@ SelectPullRosterHandler = function()
 end
 
 local function RuntimeOnEvent(self, event, unit)
-  if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_DISABLED" then
+  if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
     GF.healthClassRosterRevision = (GF.healthClassRosterRevision or 0) + 1
+  elseif event == "PLAYER_REGEN_DISABLED" then
+    if not AnyGroupFrameEnabled() then
+      SetRuntimeEventsEnabled(false, InCombat())
+      return
+    end
+    SyncCombatState(true)
+    -- A preview retires its scope's live header (PreviewSuppressesHeader), and
+    -- combat hides every preview. Hand the block back to the live header now:
+    -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
+    -- begins the header could not come back before regen.
+    if GF.HidePreviewsForCombat() == true then
+      SetupWantedHeaders()
+    end
+    freezeRaidRosterForPull(true)
+    return
   end
   if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
   -- SavedVariables/config caches are only reliable at the startup event
@@ -1097,7 +1116,7 @@ local function RuntimeOnEvent(self, event, unit)
     if event == "PLAYER_ENTERING_WORLD" then SelectPullRosterHandler() end
     if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
     pendingCombatBindings = nil
-    SyncCombatState()
+    SyncCombatState(InCombat() == true)
     GF.RefreshHeaderLayout()
     if event == "PLAYER_ENTERING_WORLD" then
       startupVisualsPending = true
@@ -1112,6 +1131,8 @@ local function RuntimeOnEvent(self, event, unit)
     return
   end
   if event == "PLAYER_REGEN_ENABLED" then
+    -- The short out-of-combat rez window must expire before its sampler resumes.
+    GF.healthClassRosterRevision = (GF.healthClassRosterRevision or 0) + 1
     SyncCombatState(false)
     if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
     if pendingCombatBindings then
@@ -1127,17 +1148,7 @@ local function RuntimeOnEvent(self, event, unit)
     if GF._pendingPriorityRefresh and not GF._pendingGroupRuntime then GF.RefreshPriorityFrames("deferred-priority") end
     GF.ForEachFrame(RefreshAggroStateFrame, false, event)
     if refreshEvents then SetRuntimeEventsEnabled(AnyGroupFrameEnabled()) end
-    return
-  elseif event == "PLAYER_REGEN_DISABLED" then
-    SyncCombatState(true)
-    -- A preview retires its scope's live header (PreviewSuppressesHeader), and
-    -- combat hides every preview. Hand the block back to the live header now:
-    -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
-    -- begins the header could not come back before regen.
-    if GF.HidePreviewsForCombat() == true then
-      SetupWantedHeaders()
-    end
-    freezeRaidRosterForPull(true)
+    if bars.groupRezzOutOfCombat then bars.ResumeGroupRezzColors() end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
     GF.InvalidateLayoutRoster()
