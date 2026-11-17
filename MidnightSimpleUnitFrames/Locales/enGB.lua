@@ -8,6 +8,7 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
+L["Hide when resource is missing"] = "Hide when resource is missing"
 L["Layer Status Text"] = "Layer Status Text"
 L["Different layer"] = "Different layer"
 L["Different phase"] = "Different phase"
@@ -1443,6 +1444,8 @@ L["Rested (player only)"] = "Rested"
 L["PvP Flag (War Mode/PvP)"] = "PvP Flag"
 L["Faction Symbol Without PvP Flag"] = "Faction Symbol Without PvP Flag"
 L["Show the faction symbol for unflagged players in the open world."] = "Show the faction symbol for unflagged players in the open world."
+L["Show PvP countdown"] = "Show PvP countdown"
+L["Show the remaining time next to your PvP flag."] = "Show the remaining time next to your PvP flag."
 L["Right to left (default)"] = "Right to left"
 L["Vertical (top -> bottom)"] = "Top to bottom"
 L["Vertical (bottom -> top)"] = "Bottom to top"
@@ -5366,6 +5369,21 @@ L["Bar opacity (%s)"] = "Bar opacity (%s)"
 L["Background opacity (%s)"] = "Background opacity (%s)"
 L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."
 L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."
+
+L["Taint Report"] = "Taint Report"
+L["Start new recording"] = "Start new recording"
+L["Stop recording"] = "Stop recording"
+L["Copy report"] = "Copy report"
+L["Recording blocked actions."] = "Recording blocked actions."
+L["Recording is off."] = "Recording is off."
+L["Open the Taint Report outside combat."] = "Open the Taint Report outside combat."
+L["Open the copyable report for blocked addon actions."] = "Open the copyable report for blocked addon actions."
+L["Show spell rank"] = "Show spell rank"
+L["Fade castbars in and out"] = "Fade castbars in and out"
+L["Latency zone color"] = "Latency zone colour"
+L["Rank 4"] = "Rank 4"
+L["Disabled while Reduce menu motion is enabled."] = "Disabled while Reduce menu motion is enabled."
+L["Fade in when shown"] = "Fade in when shown"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

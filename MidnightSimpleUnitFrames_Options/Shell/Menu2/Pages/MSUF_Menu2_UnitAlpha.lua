@@ -6,6 +6,9 @@ local max = math.max
 local SettingMeta, ControlMeta = UP.SettingMeta, UP.ControlMeta
 local Schema = M.ControlSchema
 local ALPHA_ROWS = {
+    { key = "fadeInOnShow", path = "transparency.fade_in_on_show", kind = "toggle", labelKey = "Fade in when shown",
+        card = "options", y = -154,
+        domain = "alpha", reason = "MSUF2_ALPHA_APPEARANCE" },
     { key = "hpBarAlpha", path = "transparency.hpBarAlpha", kind = "slider", labelKey = "Foreground",
         card = "health", y = -54,
         domain = "alpha", reason = "MSUF2_ALPHA_HP" },
@@ -121,7 +124,7 @@ local function BuildAlpha(ctx, builder, unit)
     local leftX = 20
     local innerW = max(320, sectionW - 40)
     local cardW = math.floor((innerW - (gap * 2)) / 3)
-    local cardH = 180
+    local cardH = 216
     local healthX = leftX
     local resourceX = healthX + cardW + gap
     local optionsX = resourceX + cardW + gap
@@ -169,6 +172,7 @@ local function BuildAlpha(ctx, builder, unit)
                     end } --[[schema setter: UnitAlpha.1]] },
         }, Schema.UnitOptions(), controls)
     end
+    M.AddTooltip(controls.fadeInOnShow, "Fade in when shown", "Disabled while Reduce menu motion is enabled.", { hook = true })
     UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, "oocFadeEnabled", Schema.Default(unit, "oocFadeEnabled")))
 
     -- Tab switch: show either the base opacity cards or the OOC fade card.

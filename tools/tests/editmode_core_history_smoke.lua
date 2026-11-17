@@ -11,7 +11,7 @@ end
 if arg[3] == "positions" then
     local flavor = arg[2] or "Mainline"
     local w = World.New(root, flavor)
-    local env, ns = NamespaceView(w), w.core
+    local env, ns = w.env, w.core
     env.GetCursorPosition = function() return 300, 400 end
     env.IsShiftKeyDown = function() return false end
     env.IsControlKeyDown = function() return false end
@@ -145,7 +145,7 @@ if arg[3] == "positions" then
             world.env.IsShiftKeyDown = function() return false end
             world.env.IsControlKeyDown = function() return false end
         end })
-    local M, menv, core = mw.M, NamespaceView(mw.world), mw.core
+    local M, menv, core = mw.M, mw.env, mw.core
     local mem, mg = menv.MSUF_EM2, menv.MSUF_DB.gameplay
     -- Native unit rendering has its own worlds; this menu fixture covers setters.
     menv.MSUF_UFCore_NotifyConfigChanged = function() return true end

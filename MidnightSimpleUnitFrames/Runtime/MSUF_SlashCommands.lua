@@ -802,7 +802,11 @@ Commands.Register({
 --- registered for the whole session (every trade/guild/say line paid string
 --- work) to duplicate what /msuf help already does.
 SLASH_MIDNIGHTSUF1 = "/msufold"
+--- Kernel/MSUF_OptionsLoader.lua publishes Commands.Route (the /msuf router), so
+--- menu-bound commands leave a macro click before Options loads or builds.
 SlashCmdList["MIDNIGHTSUF"] = function(msg)
+    local route = Commands.Route
+    if route then return route(msg) end
     return Commands.Dispatch(msg)
 end
 --- "/rl" is a shared convenience token rather than ours: ElvUI and others

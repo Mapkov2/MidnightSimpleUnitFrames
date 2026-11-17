@@ -511,11 +511,14 @@ local function ResolveTextColorTargets()
         targets[#targets + 1] = UnitClassTarget(data)
         return targets
     elseif kind == "hp" then
-        targets = mode == "HEALTH" and {
-            GeneralRGBTarget("Low health", "healthGradientLow", 1, 0, 0),
-            GeneralRGBTarget("Mid health", "healthGradientMid", 1, 1, 0),
-            GeneralRGBTarget("High health", "healthGradientHigh", 0, 1, 0),
-        } or { DefaultFontTarget(scope, group) }
+        if mode == "HEALTH" then
+            return {
+                GeneralRGBTarget("Low", "healthGradientLow", 1, 0, 0),
+                GeneralRGBTarget("Mid", "healthGradientMid", 1, 1, 0),
+                GeneralRGBTarget("High", "healthGradientHigh", 0, 1, 0),
+            }
+        end
+        targets = { DefaultFontTarget(scope, group) }
         if group then return AppendTargets(targets, GroupClassTargets()) end
         targets[#targets + 1] = UnitClassTarget(select(2, PreviewUnitData(settings)))
         return targets
@@ -597,7 +600,10 @@ local function RefreshPopup(self)
     local modeVisible = ColorModeVisible()
     SetShown(self.colorMode, modeVisible)
     SetShown(self.colors, colorsVisible)
-    SetShown(self.colorNote, colorsVisible)
+    local healthGradient = colorsVisible and CurrentKind() == "hp" and CurrentColorMode() == "HEALTH"
+    SetShown(self.colorNote, colorsVisible and not healthGradient)
+    self.colors:SetWidth(healthGradient and 260 or 104)
+    self.colors:SetText(healthGradient and "Health gradient stops" or "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors...")
     local modeTitle = self.colorMode._msuf2Title
     if modeVisible then
         self.colorMode:SetValues(ColorModeValues())

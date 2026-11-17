@@ -849,6 +849,10 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     local prefix = PrefixForUnit(unit)
     if not prefix then return end
     local g = general or GeneralDB()
+    if frame.latencyBar then
+        frame.latencyBar:SetColorTexture(tonumber(g.castbarLatencyR) or 1, tonumber(g.castbarLatencyG) or 0,
+            tonumber(g.castbarLatencyB) or 0, tonumber(g.castbarLatencyA) or 0.25)
+    end
     ApplyIconLayout(frame, g, unit, prefix)
     local timeFontReady = ApplyTimeTextLayout(frame, g, unit, prefix)
     local spellFontReady = ApplySpellTextLayout(frame, g, unit, prefix)

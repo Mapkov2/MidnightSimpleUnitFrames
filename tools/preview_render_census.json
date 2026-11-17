@@ -197,7 +197,7 @@
           1665
         ]
       ],
-      "source_sha256": "9de7612b76b014c913ca3727fa2ccad2f6777988fd8a02a17a38a54de3995314",
+      "source_sha256": "4bedef5d61ed48986725882484c13b75fa3292cc52765d7591b3b29bef6902fa",
       "adapter_exclusions": [
         {
           "name": "HideMeterText",
@@ -283,7 +283,7 @@
           "reason": "sample metadata / shared provider / editor chrome"
         }
       ],
-      "review_note": " 2026-11-01: reviewed current search-anchor-only changes; runtime scene owners retained, adapter/declaration locations synchronized."
+      "review_note": "2026-11-17: independently reviewed disabled layer-chip navigation to exact owning controls; no duplicate preview painter added."
     },
     {
       "file": "Preview/MSUF_Menu2_GroupPreview_Render.lua",
@@ -362,7 +362,8 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "24d8bd13031e05f2e9f53e6ca9500a109707b27452873db29978c2738bd526d8"
+          "source_sha256": "e39ea044deec22f807abf113a5e8ca0cd2ec559d18f17ee4f46b783cc3e55a50",
+          "review_note": "2026-11-17: independently reviewed searchIndexed metadata on the existing ephemeral gradient opener; renderer unchanged."
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
@@ -549,7 +550,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
-          "source_sha256": "94c68c3a9831cbe90e8428304e1d98be8c3a5cf9a72d8f94b4e6ef6874f552bc"
+          "source_sha256": "cf0768bfe19494ed4119c6d45c180dca275287efcb2571b20cc72701f60799ac"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View.lua",
@@ -577,7 +578,8 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua",
-          "source_sha256": "2b23f30c2f8b4b74ba8cdcada087a1e599d9b993b82a4961d19278570c0b6cb8"
+          "source_sha256": "98e226dcbb2226da3ba20459b8a7cdf7eb5cee76a84f72d51eb712e03b1de0d8",
+          "review_note": "2026-11-17: independently reviewed PvP elapsed input and timer layer region; existing runtime painter retained."
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
@@ -781,7 +783,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Frames.lua",
-          "source_sha256": "ae23903d5f78c6f4b1e45687fceea5f51e98200f1e96f58aece70a977a0a778a"
+          "source_sha256": "3f10c21df1f686718dfbb95ad999d75943cf22c0d98a6ab6adb7c34086fbc4cc"
         },
         {
           "file": "Pages/MSUF_Menu2_AdvancedColors_Host.lua",

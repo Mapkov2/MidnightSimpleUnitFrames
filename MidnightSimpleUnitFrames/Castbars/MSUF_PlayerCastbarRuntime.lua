@@ -8,6 +8,7 @@
 local _, MSUF = ...
 local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_PlayerCastbarRuntime.lua").Castbars
 local Config = Castbars.Config
+local Fade = Castbars.Style.Fade
 local Bridge = Castbars.Bridge
 local ChannelTicks = Castbars.ChannelTicks
 local Driver = Castbars.Driver
@@ -417,6 +418,7 @@ local function HasActivePlayerCast(frame)
 end
 
 local function MarkPlayerStateInactive(frame)
+    frame._msufPlayerTargetCaptured = false
     local state = frame and frame._msufPlayerState
     if state then state.active = false end
 end
@@ -552,7 +554,10 @@ local function ApplyActiveCast(
     durationObj
 )
     local isChannel = castType == "CHANNEL"
+    if frame._msufFadeDriver then Fade.Begin(frame) end
 
+    if Config.playerSpellRank then Utils.CapturePlayerSpellRank(frame, spellID, nil, unit)
+    elseif frame._msufPlayerCastRank then frame._msufPlayerCastRank, frame._msufBaseCastText = nil, nil end
     InvalidatePlayerInterruptHide(frame)
     frame.interruptFeedbackEndTime = nil
     frame.interrupted = nil
@@ -605,7 +610,7 @@ local function ApplyActiveCast(
         end
     end
 
-    frame._msufStripeReverseFill = reverseFill and true or false
+    frame._msufStripeReverseFill = reverseFill
     if isChannel then
         frame.MSUF_channelDirect = nil
     else
@@ -647,7 +652,8 @@ local function ApplyActiveCast(
     frame.MSUF_durationObj = frame.MSUF_durationObj or durationObj
     frame.MSUF_timerDriven = timerDriven and true or nil
 
-    frame:Show()
+    if frame._msufPlayerTargetCaptured or frame._msufPlayerTargetPainted then Player.UpdateTargetText(frame) end
+    if Config.fadeEnabled or frame._msufFadeDriver then Fade.Show(frame) else frame:Show() end
     if Manager.RegisterCastbar then Manager.RegisterCastbar(frame) end
     if Manager.UpdateCastbarFrame then
         local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
@@ -739,7 +745,7 @@ local function StopPlayerCastbar(frame)
     frame._msufLastDurationObj = nil
     ClearActiveCastIdentity(frame)
     frame._msufActiveCastUnit = nil
-    HideChannelHasteMarkers(frame)
+    if not Config.fadeEnabled then HideChannelHasteMarkers(frame) end
 
     if Runtime.CB_ResetStateOnStop then
         Runtime.CB_ResetStateOnStop(frame, "STOPPED")
@@ -751,7 +757,7 @@ local function StopPlayerCastbar(frame)
         if frame.timeText then SetTextIfChanged(frame.timeText, "") end
         frame:Hide()
     end
-    if frame.statusBar and frame.statusBar.SetValue then
+    if frame.statusBar and frame.statusBar.SetValue and not Fade.IsFadingOut(frame) then
         frame.statusBar:SetValue(0)
     end
 end
@@ -859,7 +865,7 @@ local function HidePlayerFrameIfNoLongerCasting(frame)
     frame._msufActiveSpellID = nil
     frame._msufActiveCastBarID = nil
     frame._msufActiveCastUnit = nil
-    frame:Hide()
+    if not Fade.Hide(frame) then frame:Hide() end
 end
 
 local function EnsureInterruptHideCallback(frame)
@@ -1056,6 +1062,51 @@ local function MatchesPendingInterrupt(frame, eventUnit, castGUID, castBarID)
     return castGUID == pendingGUID
 end
 
+local playerTargetPainter
+local function ResolvePlayerTarget(frame)
+    return frame._msufPlayerCastTarget, nil, frame._msufPlayerTargetCaptured == true
+end
+local function PlayerTargetActive(frame)
+    return frame and (frame.MSUF_castActive == true or frame.isEmpower == true) and frame._msufPlayerTargetCaptured == true
+end
+function Player.UpdateTargetText(frame)
+    if not playerTargetPainter then
+        playerTargetPainter = Driver.CreateTargetPainter(ResolvePlayerTarget, PlayerTargetActive)
+    end
+    playerTargetPainter(frame, frame)
+    frame._msufPlayerTargetPainted = PlayerTargetActive(frame)
+end
+local function ClearPendingTarget(frame)
+    frame._msufSentTarget, frame._msufSentGUID, frame._msufSentSpellID = nil, nil, nil
+    frame._msufSentUnit, frame._msufSentUntil = nil, nil
+end
+local function CaptureSentTarget(frame, unit, target, guid, spellID)
+    ClearPendingTarget(frame)
+    if Config.Read().general.castbarPlayerShowTargetName ~= true then return end
+    frame._msufSentTarget, frame._msufSentUnit = target, unit
+    frame._msufSentGUID = nil
+    if not issecretvalue(guid) then frame._msufSentGUID = guid end
+    frame._msufSentSpellID = PlainNumber(spellID)
+    frame._msufSentUntil = GetTime() + 2
+end
+local function BeginPlayerTarget(frame, unit, guid, spellID)
+    frame._msufPlayerCastTarget, frame._msufPlayerTargetCaptured = nil, false
+    local valid = frame._msufSentUntil ~= nil and GetTime() <= frame._msufSentUntil and frame._msufSentUnit == unit
+    if valid then
+        if not issecretvalue(guid) and guid ~= nil and frame._msufSentGUID ~= nil then
+            valid = guid == frame._msufSentGUID
+        else
+            local id = PlainNumber(spellID)
+            valid = id ~= nil and id == frame._msufSentSpellID
+        end
+    end
+    if valid then
+        frame._msufPlayerCastTarget = frame._msufSentTarget
+        frame._msufPlayerTargetCaptured = true
+    end
+    ClearPendingTarget(frame)
+end
+
 local function PlayerCastbarOnEventImpl(frame, event, ...)
     if not Bridge.IsCastbarEnabledForUnit("player") then
         DisablePlayerCastbar(frame)
@@ -1064,6 +1115,10 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if frame.MSUF_testMode then return end
 
     local eventUnit = select(1, ...)
+    if event == "UNIT_SPELLCAST_SENT" then
+        CaptureSentTarget(frame, eventUnit, select(2, ...))
+        return
+    end
     -- Failed/interrupted spell spam and duplicate channel-stop events are common
     -- while no castbar exists. They cannot change visible state, so reject them
     -- before invalidating both player/vehicle engine caches or arming a next-frame
@@ -1080,6 +1135,10 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_CHANNEL_START"
         or event == "UNIT_SPELLCAST_EMPOWER_START" then
+        if frame._msufFadeDriver then Fade.Begin(frame) end
+        if Config.playerTargetName or frame._msufPlayerTargetPainted then
+            BeginPlayerTarget(frame, eventUnit, select(2, ...), select(3, ...))
+        end
         local engine = CastbarEngine()
         if engine and type(engine.AdvanceGeneration) == "function" then
             engine:AdvanceGeneration(eventUnit)

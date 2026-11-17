@@ -315,6 +315,26 @@ roundtrip.Profile15.excepted[".targettarget.portraitFlip"] = "filledOnImport add
 roundtrip.Profile15.excepted[".targettarget.portraitInnerShadow"] = "filledOnImport added: nil -> 0"
 roundtrip.Profile15.excepted[".targettarget.screenPositionHeight"] = "screenReference added: nil -> 1080"
 roundtrip.Profile15.excepted[".targettarget.screenPositionMode"] = "screenReference added: nil -> \"relativeHeight\""
+profile["Profile15"].arena.fadeInOnShow = false
+profile["Profile15"].boss.fadeInOnShow = false
+profile["Profile15"].focus.fadeInOnShow = false
+profile["Profile15"].focustarget.fadeInOnShow = false
+profile["Profile15"].general.castbarFadeEnabled = false
+profile["Profile15"].general.castbarPlayerShowSpellRank = false
+profile["Profile15"].general.castbarPlayerShowTargetName = false
+profile["Profile15"].general.castbarPlayerTargetNameAlign = "RIGHT"
+profile["Profile15"].general.castbarPlayerTargetNameFontSize = 10
+profile["Profile15"].general.castbarPlayerTargetNameOffsetX = 0
+profile["Profile15"].general.castbarPlayerTargetNameOffsetY = 1
+profile["Profile15"].general.castbarPlayerTargetNamePosition = "BELOW"
+profile["Profile15"].gf_mythicraid.fadeInOnShow = false
+profile["Profile15"].gf_party.fadeInOnShow = false
+profile["Profile15"].gf_raid.fadeInOnShow = false
+profile["Profile15"].pet.fadeInOnShow = false
+profile["Profile15"].pettarget.fadeInOnShow = false
+profile["Profile15"].player.fadeInOnShow = false
+profile["Profile15"].target.fadeInOnShow = false
+profile["Profile15"].targettarget.fadeInOnShow = false
 [Mainline]
 login.rebindChangedPaths = 0
 [Forever]

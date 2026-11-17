@@ -4,6 +4,7 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
+L["Hide when resource is missing"] = "Ausblenden, wenn Ressource fehlt"
 L["Layer Status Text"] = "Layerstatus-Text"
 L["Different layer"] = "Anderer Layer"
 L["Different phase"] = "Andere Phase"
@@ -3044,6 +3045,8 @@ L["Rested (player only)"] = "Erholt"
 L["PvP Flag (War Mode/PvP)"] = "PvP-Flagge"
 L["Faction Symbol Without PvP Flag"] = "Fraktionssymbol auch ohne PvP-Flag"
 L["Show the faction symbol for unflagged players in the open world."] = "Zeigt das Fraktionssymbol für Spieler ohne PvP-Flag in der offenen Welt an."
+L["Show PvP countdown"] = "PvP-Countdown anzeigen"
+L["Show the remaining time next to your PvP flag."] = "Zeigt die verbleibende Zeit neben deiner PvP-Flagge an."
 L["Right to left (default)"] = "Rechts nach links"
 L["Vertical (top -> bottom)"] = "Oben nach unten"
 L["Vertical (bottom -> top)"] = "Unten nach oben"
@@ -7818,6 +7821,21 @@ L["This character uses the profile %s."] = "Dieser Charakter nutzt das Profil %s
 L["If your frames do not look like before, open Profiles and select your profile there. All your previous profiles are still listed."] = "Wenn deine Frames nicht wie vorher aussehen, öffne die Profile und wähle dort dein Profil aus. Alle bisherigen Profile sind weiterhin vorhanden."
 L["MSUF also kept a full copy of your pre-7.0 profiles: /msuf restorebackup"] = "MSUF hat außerdem eine vollständige Kopie deiner Profile von vor 7.0 behalten: /msuf restorebackup"
 L["Profile is correct"] = "Profil passt"
+
+L["Taint Report"] = "Taint-Report"
+L["Start new recording"] = "Neue Aufnahme starten"
+L["Stop recording"] = "Aufnahme stoppen"
+L["Copy report"] = "Report kopieren"
+L["Recording blocked actions."] = "Blockierte Aktionen werden aufgezeichnet."
+L["Recording is off."] = "Aufnahme ist aus."
+L["Open the Taint Report outside combat."] = "Öffne den Taint-Report außerhalb des Kampfes."
+L["Open the copyable report for blocked addon actions."] = "Öffnet den kopierbaren Report für blockierte Addon-Aktionen."
+L["Show spell rank"] = "Zauberrang anzeigen"
+L["Fade castbars in and out"] = "Zauberleisten sanft ein- und ausblenden"
+L["Latency zone color"] = "Farbe der Latenzzone"
+L["Rank 4"] = "Rang 4"
+L["Disabled while Reduce menu motion is enabled."] = "Deaktiviert, solange „Menübewegungen reduzieren“ eingeschaltet ist."
+L["Fade in when shown"] = "Beim Anzeigen sanft einblenden"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

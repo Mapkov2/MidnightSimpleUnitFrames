@@ -707,6 +707,14 @@ local function ResetCastbarBorderColor()
     PushCastbarVisualUpdates()
 end
 
+local function GetCastbarLatencyColor()
+    return _getRGBA("castbarLatencyR", "castbarLatencyG", "castbarLatencyB", "castbarLatencyA", 1, 0, 0, 0.25)
+end
+local function SetCastbarLatencyColor(r, g, b, a)
+    _setRGBA("castbarLatencyR", "castbarLatencyG", "castbarLatencyB", "castbarLatencyA", r, g, b, a,
+        1, 0, 0, 0.25, PushCastbarVisualUpdates)
+end
+
 --- - Castbar Background Color -
 local function GetCastbarBackgroundColor()
     local g = _general()
@@ -1069,6 +1077,8 @@ MSUF._colorsAPI = {
     GetCastbarBorderColor           = GetCastbarBorderColor,
     SetCastbarBorderColor           = SetCastbarBorderColor,
     ResetCastbarBorderColor         = ResetCastbarBorderColor,
+    GetCastbarLatencyColor          = GetCastbarLatencyColor,
+    SetCastbarLatencyColor          = SetCastbarLatencyColor,
     GetCastbarBackgroundColor       = GetCastbarBackgroundColor,
     SetCastbarBackgroundColor       = SetCastbarBackgroundColor,
     ResetCastbarBackgroundColor     = ResetCastbarBackgroundColor,

@@ -11,6 +11,7 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("itIT")) or (MSUF.L or {})
+L["Hide when resource is missing"] = "Nascondi se la risorsa è assente"
 L["Layer Status Text"] = "Testo dello strato"
 L["Different layer"] = "Altro strato"
 L["Different phase"] = "Altra fase"
@@ -3018,6 +3019,8 @@ L["Not ready color (kick on cooldown)"] = "Colore non pronto (avvio del tempo di
 L["PvP Flag (War Mode/PvP)"] = "Bandiera PvP (modalità Guerra/PvP)"
 L["Faction Symbol Without PvP Flag"] = "Simbolo di fazione senza contrassegno PvP"
 L["Show the faction symbol for unflagged players in the open world."] = "Mostra il simbolo di fazione dei giocatori non contrassegnati per il PvP nel mondo aperto."
+L["Show PvP countdown"] = "Mostra il conto alla rovescia PvP"
+L["Show the remaining time next to your PvP flag."] = "Mostra il tempo rimanente accanto al tuo contrassegno PvP."
 L["Abbreviate HP values (K/M)"] = "Abbreviare i valori HP (K/M)"
 L["For specializations that use mana alongside another resource."] = "Per le specializzazioni che utilizzano il mana insieme a un'altra risorsa."
 L["Smooths resource changes. Runes, Essence recharge, and timers keep their own animation."] = "Agevola i cambiamenti delle risorse. Rune, ricarica dell'essenza e timer mantengono la propria animazione."
@@ -7711,6 +7714,21 @@ L["Bar opacity (%s)"] = "Opacità della barra (%s)"
 L["Background opacity (%s)"] = "Opacità dello sfondo (%s)"
 L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "Stesso valore di Primo piano in Opacità > Barra delle risorse nella pagina di questo riquadro. Il colore stesso è condiviso da tutti i riquadri."
 L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "Stesso valore di Sfondo in Opacità > Barra delle risorse nella pagina di questo riquadro. Si moltiplica per l'opacità del colore di sfondo condiviso."
+
+L["Taint Report"] = "Rapporto di taint"
+L["Start new recording"] = "Avvia nuova registrazione"
+L["Stop recording"] = "Interrompi registrazione"
+L["Copy report"] = "Copia rapporto"
+L["Recording blocked actions."] = "Registrazione delle azioni bloccate."
+L["Recording is off."] = "Registrazione disattivata."
+L["Open the Taint Report outside combat."] = "Apri il rapporto di taint fuori dal combattimento."
+L["Open the copyable report for blocked addon actions."] = "Apre il rapporto copiabile delle azioni bloccate degli addon."
+L["Show spell rank"] = "Mostra il grado dell’incantesimo"
+L["Fade castbars in and out"] = "Dissolvenza in entrata e in uscita delle barre di lancio"
+L["Latency zone color"] = "Colore della zona di latenza"
+L["Rank 4"] = "Grado 4"
+L["Disabled while Reduce menu motion is enabled."] = "Disattivato quando la riduzione delle animazioni del menu è attiva."
+L["Fade in when shown"] = "Dissolvenza in entrata alla visualizzazione"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

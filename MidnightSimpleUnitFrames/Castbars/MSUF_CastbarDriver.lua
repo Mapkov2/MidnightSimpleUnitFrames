@@ -4,6 +4,7 @@
 local _, MSUF = ...
 local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarDriver.lua").Castbars
 local Config = Castbars.Config
+local Fade = Castbars.Style.Fade
 local Backend = Castbars.Backend
 local Bridge = Castbars.Bridge
 local Core = Castbars.Core
@@ -634,7 +635,7 @@ local function StopDriverFrame(frame, reason)
 
     ClearStopExpectation(frame)
     ClearStartRetry(frame)
-    if frame.castTargetText then
+    if frame.castTargetText and not (Config.fadeEnabled and reason ~= "HARDHIDE") then
         SetTextIfChanged(frame.castTargetText, "")
         frame.castTargetText:Hide()
     end
@@ -749,7 +750,7 @@ local function EnsureDriverCallbacks(frame)
 
         if frame.interrupted then
             frame.interrupted = nil
-            frame:Hide()
+            if not Fade.Hide(frame) then frame:Hide() end
         end
     end
 end
@@ -778,19 +779,8 @@ end
 
 local function CastTargetTextEnabled(frame)
     if not (frame and frame.castTargetText) then return false end
-    local unit = frame.unit
-    local configUnit = CastbarConfigUnitKey(unit)
-    local general = Config.Read().general
-    if unit == "target" then
-        return general and general.castbarTargetShowTargetName == true
-    elseif unit == "focus" then
-        return general and general.castbarFocusShowTargetName == true
-    elseif frame._msufIsBossCastbar or configUnit == "boss" then
-        return general and general.showBossCastTargetName == true
-    elseif frame._msufIsArenaCastbar or configUnit == "arena" then
-        return general and general.showArenaCastTargetName == true
-    end
-    return false
+    local record = Config.Read(CastbarConfigUnitKey(frame.unit))
+    return record ~= nil and record.showTargetName == true
 end
 
 local function SetCastTargetText(frame, text)
@@ -913,7 +903,12 @@ local function RefreshCastTargetText(frame)
         UpdateCastTargetText(frame, nil)
         return
     end
-    UpdateCastTargetText(frame, BuildState(frame))
+    if frame._msufRetainedCast then return end
+    if frame.unit == "player" then
+        Castbars.Player.UpdateTargetText(frame)
+    elseif not (frame._msufFadeDriver and frame._msufFadeDriver.cleanup) then
+        UpdateCastTargetText(frame, BuildState(frame))
+    end
 end
 Driver.RefreshCastTargetText = RefreshCastTargetText
 
@@ -925,6 +920,8 @@ local function RefreshAllCastTargetTextColors()
         if frame and frame.castTargetText then ApplyCastTargetTextColor(frame) end
     end
 
+    RefreshLive(Frames.player)
+    RefreshPreview(Frames.playerPreview)
     RefreshLive(Frames.target)
     RefreshLive(Frames.focus)
     RefreshPreview(Frames.targetPreview)
@@ -1412,7 +1409,7 @@ local function ShowActiveCast(frame, state, durationObj, isChannel, spellName, l
         -- through so the decorator does not have to infer it again.
         Utils.CB_ApplyColor(frame, state)
     end
-    frame:Show()
+    if Config.fadeEnabled or frame._msufFadeDriver then Fade.Show(frame) else frame:Show() end
     frame.MSUF_castActive = true
     if Manager.RegisterCastbar then
         Manager.RegisterCastbar(frame)
@@ -1438,7 +1435,7 @@ local function ShowNoCast(frame)
     ClearFrameOnUpdate(frame)
     frame.MSUF_castActive = false
     frame.MSUF_kickInterruptibleConfirmed = nil
-    UpdateCastTargetText(frame, nil)
+    if not Config.fadeEnabled then UpdateCastTargetText(frame, nil) end
     if frame.kickReadyBox then frame.kickReadyBox:Hide() end
     if KickReady.KickReady_RefreshFrame then KickReady.KickReady_RefreshFrame(frame, nil) end
 
@@ -1466,6 +1463,7 @@ local function InstallDriverCastMethods(frame)
         local spellName, label, icon
         local isChannel = false
         if hasSpell then
+            if self._msufFadeDriver then Fade.Begin(self) end
             spellName = state.spellName
             label = state.text or state.spellName
             icon = state.icon

@@ -593,6 +593,7 @@ function Build.Castbar(ctx, b)
         { "Cast Target Name Color", 360, -118, "GetCastbarTargetNameColor", "SetCastbarTargetNameColor", 1, 1, 1 },
     }, ApplyCastbarColors)) do Owned(control, "castbar") end
     for _, control in pairs(BuildApiOrGeneralColorSpecs(ctx, castbar, {
+        { "Latency zone color", 12, -118, "GetCastbarLatencyColor", "SetCastbarLatencyColor", "castbarLatency", 1, 0, 0, nil, 0.25 },
         { "Castbar border color", 360, -46, "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, nil, 1 },
         { "Castbar background color", 360, -82, "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10, 0.10, 0.10, nil, 0.85 },
     }, ApplyCastbarColors)) do Owned(control, "castbar") end

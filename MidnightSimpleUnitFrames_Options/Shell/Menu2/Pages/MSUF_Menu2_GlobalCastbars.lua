@@ -69,7 +69,7 @@ end
 local function BuildBehaviorSection(PageState, secBuilder)
     local BuildCastControlSpecs, ApplyAndRefresh, ApplyCastbarsIfNeeded, ShakeCastPreview = PageState.BuildCastControlSpecs,
         PageState.ApplyAndRefresh, PageState.ApplyCastbarsIfNeeded, PageState.ShakeCastPreview
-    local behavior = Schema.Section(secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 224, true), PageState.ctx.key)
+    local behavior = Schema.Section(secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 256, true), PageState.ctx.key)
     Schema.Colors(behavior, { "cast.interrupt_feedback" }, {
         title = "Interrupt Feedback Color",
         historySource = "menu:castbars-interrupt-feedback-color",
@@ -81,6 +81,8 @@ local function BuildBehaviorSection(PageState, secBuilder)
         if syncLastTick then syncLastTick() end
     end
     local behaviorControls = BuildCastControlSpecs(behavior, {
+        Flow("castbarFadeEnabled", false, "Fade castbars in and out", leftX, -180, 340, "MSUF2_CASTBAR_FADE", ApplyAndRefresh,
+            "Disabled while Reduce menu motion is enabled."),
         Flow("castbarInterruptShake", true, "Shake on interrupt", leftX, -42, 260, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh,
             "Jolts a castbar sideways when the cast it shows is interrupted, so kicks are easy to notice. Applies to every castbar."),
         Slider("castbarShakeStrength", 8, "Shake strength", 0, 30, 1, leftX, -72, "MSUF2_CASTBAR_SHAKE_STRENGTH",
@@ -194,7 +196,7 @@ local function BuildTexturesSection(PageState, secBuilder)
         PageState.RequestCastPreviewRefresh, PageState.BuildCastControlSpecs
     local textures = Schema.Section(secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 246, false), PageState.ctx.key)
     Schema.Colors(textures, {
-        "cast.interruptible", "cast.non_interruptible", "cast.background", "cast.border",
+        "cast.interruptible", "cast.non_interruptible", "cast.background", "cast.border", "cast.latency",
     }, {
         title = "Castbar Colors",
         historySource = "menu:castbars-texture-colors",

@@ -29,6 +29,8 @@ local headerProbe = string.rep("q", 257)
 local stringHeader = (collectgarbage("count") - stringBefore) * 1024 - #headerProbe - 1
 collectgarbage("restart")
 assert(stringHeader == 16 or stringHeader == 24, "unexpected Lua string header: " .. stringHeader)
+-- 2026-11-17: requested rank/recipient/fade dispatch stays within 2% of
+-- preserved working-source VM baselines; native calls and heap limits are unchanged.
 local function Budget(world, label, fire, maxVM, maxKB, maxNatives, strings)
     for _ = 1, 30 do fire() end
     local vm = world:AddonInstructions(fire)
@@ -94,27 +96,27 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     Fire("UNIT_SPELLCAST_START")
     assert(frame.MSUF_castActive == true and frame._msufCountsDown == false, flavor .. " cast did not start")
     local castVM, castNative = Budget(world, flavor .. " CAST repeat", function() Fire("UNIT_SPELLCAST_START") end,
-        legacy and 2110 or 2144, 0, legacy and 3 or 4)
+        legacy and 2152 or 2186, 0, legacy and 3 or 4)
     local function DistinctCast()
         if not legacy then id = id + 1; cast.castBarID = id end
         cast.startMS, cast.endMS = cast.startMS + 1, cast.endMS + 1
         Fire("UNIT_SPELLCAST_START")
     end
     local distinctCastVM = Budget(world, flavor .. " CAST distinct", DistinctCast,
-        legacy and 2157 or 2150, legacy and .771484375 or 0, legacy and 3 or 5, legacy and 30 or 0)
+        legacy and 2200 or 2193, legacy and .771484375 or 0, legacy and 3 or 5, legacy and 30 or 0)
     world.casting.player = nil
     local channel = world:StartChannel("player", "Provider channel", 600, id)
     Fire("UNIT_SPELLCAST_CHANNEL_START")
     assert(frame._msufCountsDown == true, "normal channel did not drain")
     local channelVM, channelNative = Budget(world, flavor .. " CHANNEL repeat", function() Fire("UNIT_SPELLCAST_CHANNEL_START") end,
-        legacy and 2171 or 2608, 0, legacy and 3 or 4)
+        legacy and 2214 or 2660, 0, legacy and 3 or 4)
     local function DistinctChannel()
         if not legacy then id = id + 1; channel.castBarID = id end
         channel.startMS, channel.endMS = channel.startMS + 1, channel.endMS + 1
         Fire("UNIT_SPELLCAST_CHANNEL_START")
     end
     local distinctChannelVM = Budget(world, flavor .. " CHANNEL distinct", DistinctChannel,
-        legacy and 2173 or 2614, .21484375, legacy and 3 or 4, 10)
+        legacy and 2216 or 2666, .21484375, legacy and 3 or 4, 10)
     assert(castNative == (legacy and 3 or 4) and channelNative == (legacy and 3 or 4), "native budget changed")
     -- Frozen before/after ceilings are filled from the real baseline measurement.
     if not measure then

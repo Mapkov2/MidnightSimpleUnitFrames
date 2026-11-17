@@ -296,7 +296,11 @@ function MiscSection.MenuBehavior(s)
         function() M.RefreshNavIconVisibility() end)
     BindMiscToggle(menuBehavior, "Show MSUF button in game menu", "showGameMenuButton", true, "MSUF2_GAME_MENU_BUTTON", 14, -178, 320, MENU_WRITE_OPTS,
         function(v) Core.MSUF_SetGameMenuButtonEnabled(v) end)
-    BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -208, 280, MENU_WRITE_OPTS)
+    BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -208, 280, MENU_WRITE_OPTS,
+        function()
+            MSUF.UF.Appearance.UpdateSettings()
+            M.RequestGeneralDomains("MSUF2_REDUCE_MOTION_CASTBARS", { castbar = true, preview = true, applyAll = false })
+        end)
     BindMiscToggle(menuBehavior, "Mute MSUF menu sounds", "muteMenuSounds", false,
         "MSUF2_MUTE_MENU_SOUNDS", 14, -238, 280, MENU_WRITE_OPTS)
     local menuFontRightX = max(350, floor(menuBehaviorW * 0.52))

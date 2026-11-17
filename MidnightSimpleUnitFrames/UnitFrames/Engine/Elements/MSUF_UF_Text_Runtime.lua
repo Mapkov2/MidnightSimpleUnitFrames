@@ -1973,8 +1973,10 @@ function PowerText.GetEvents(frame, spec)
   if not PowerTextNeedsValueTicks(spec) then
     return EventLists.POWER_TEXT_MAX_EVENTS
   end
-  if not PowerTextNeedsMaxEvents(spec) then
-    return spec and spec.power and spec.power.frequent == true and EventLists.POWER_TEXT_VALUE_META_EVENTS_FREQUENT or EventLists.POWER_TEXT_VALUE_META_EVENTS
+  local power = spec and spec.power
+  local needsPresence = power and power.enabled == true and power.hideMissingResource == true
+  if not needsPresence and not PowerTextNeedsMaxEvents(spec) then
+    return power and power.frequent == true and EventLists.POWER_TEXT_VALUE_META_EVENTS_FREQUENT or EventLists.POWER_TEXT_VALUE_META_EVENTS
   end
   return spec and spec.power and spec.power.frequent == true and POWER_EVENTS_FREQUENT or POWER_EVENTS
 end
@@ -2005,6 +2007,15 @@ UpdatePowerTextValues = function(frame, event, unit, power, powerMax, powerType,
   return Text.UpdatePower(frame, event, unit or frame.MSUFUnitKey, power, powerMax, powerType, powerToken, powerMetaChanged)
 end
 PowerText.Update = UpdatePowerTextValues
+
+local function UpdatePresentPowerText(frame, ...)
+  if frame._msufPowerResourceMissing ~= true then return UpdatePowerTextValues(frame, ...) end
+end
+
+function PowerText.SelectUpdate(_, spec)
+  if spec and spec.power and spec.power.hideMissingResource == true then return UpdatePresentPowerText end
+  return UpdatePowerTextValues
+end
 
 function PowerText.SelectEventUpdate(frame, spec, event, update)
   -- The explicit realtime player option promises event-accurate text. Keep

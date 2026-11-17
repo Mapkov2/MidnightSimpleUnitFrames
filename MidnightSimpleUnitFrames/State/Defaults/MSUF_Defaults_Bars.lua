@@ -154,17 +154,11 @@ NormalizeCastbarWidthSourceKey("arenaCastbarMatchWidth", "castbarArenaMatchUnitW
     if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] = 0, ["3"] = 0 } end
     --- Per-castbar toggles + offsets
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_13")
-    local function InitCastTargetTextDefaults(prefix)
-        if g[prefix .. "TargetNamePosition"] == nil then g[prefix .. "TargetNamePosition"] = "BELOW" end
-        if g[prefix .. "TargetNameFontSize"] == nil then g[prefix .. "TargetNameFontSize"] = 10 end
-        if g[prefix .. "TargetNameAlign"] == nil then g[prefix .. "TargetNameAlign"] = "RIGHT" end
-        if g[prefix .. "TargetNameOffsetX"] == nil then g[prefix .. "TargetNameOffsetX"] = 0 end
-        if g[prefix .. "TargetNameOffsetY"] == nil then g[prefix .. "TargetNameOffsetY"] = 1 end
-    end
-    InitCastTargetTextDefaults("castbarTarget")
-    InitCastTargetTextDefaults("castbarFocus")
-    InitCastTargetTextDefaults("bossCast")
-    InitCastTargetTextDefaults("arenaCast")
+    MSUF.DefaultsSchema.FillCastTargetText(g, "castbarPlayer")
+    MSUF.DefaultsSchema.FillCastTargetText(g, "castbarTarget")
+    MSUF.DefaultsSchema.FillCastTargetText(g, "castbarFocus")
+    MSUF.DefaultsSchema.FillCastTargetText(g, "bossCast")
+    MSUF.DefaultsSchema.FillCastTargetText(g, "arenaCast")
     MSUF.DefaultsSchema.SeedGeneral(g, "bars_14")
     local function InitCastbarDetailDefaults(prefix)
         if g[prefix .. "FrameLevelOffset"] == nil then g[prefix .. "FrameLevelOffset"] = 6 end

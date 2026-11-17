@@ -705,7 +705,7 @@ if IS_FOREVER then
   SI.SpellIDs = {
     ClassicDruid = { Rejuvenation = 774, Regrowth = 8936 },
     ClassicShaman = { AncestralFortitude = 16177 },
-    ClassicPriest = { PowerWordShield = 17, Renew = 139, PowerInfusion = 10060 },
+    ClassicPriest = { PowerWordShield = 17, Renew = 139, PowerInfusion = 10060, WeakenedSoul = 6788 },
     ClassicPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
   }
 
@@ -740,6 +740,15 @@ if IS_FOREVER then
   SI.SecretAuraInfo = {}
   SI.IconTextures = {}
 
+  local weakenedSoul = Aura("WeakenedSoul", 0.85, 0.32, 0.30)
+  if C_Spell and C_Spell.GetSpellName then
+    local name = C_Spell.GetSpellName(SI.SpellIDs.ClassicPriest.WeakenedSoul)
+    if type(name) == "string" and name ~= "" then weakenedSoul.display = name end
+  end
+  local weakenedSoulDefault = Placed("icon", "BOTTOMRIGHT", -1, 1, 20)
+  weakenedSoulDefault.enabled = false
+  weakenedSoulDefault.onlyOwn = false
+
   SI.TrackableAuras = {
     ClassicDruid = {
       Aura("Rejuvenation", 0.51, 0.78, 0.52),
@@ -752,6 +761,7 @@ if IS_FOREVER then
       Aura("PowerWordShield", 1.00, 0.84, 0.28),
       Aura("Renew", 0.56, 0.93, 0.56),
       Aura("PowerInfusion", 0.94, 0.82, 0.31),
+      weakenedSoul,
     },
     ClassicPaladin = {
       Aura("BlessingOfProtection", 0.94, 0.82, 0.31),
@@ -772,6 +782,7 @@ if IS_FOREVER then
       PowerWordShield = Placed("icon", "TOPRIGHT", -1, -1, 22),
       Renew = Placed("icon", "TOPLEFT", 1, -1, 22),
       PowerInfusion = Frame("glow", 0.94, 0.82, 0.31, 1, 1),
+      WeakenedSoul = weakenedSoulDefault,
     },
     ClassicPaladin = PALADIN_BLESSING_DEFAULTS,
   }

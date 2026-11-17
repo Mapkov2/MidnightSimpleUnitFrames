@@ -17,6 +17,7 @@
 local _, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local GF = MSUF.GF
+local Appearance = MSUF.UF.Appearance
 local A3 = MSUF.MSUF_Auras3
 local classicAuras = MSUF.Client.IsClassic
 local Client = MSUF.Client
@@ -225,6 +226,7 @@ end
 local function StyleHealth(button, kind, conf, prefix)
     PixelLayoutRegion(button)
     button._msufAdditionalKind, button._msufAdditionalPrefix = kind, prefix
+    Appearance.Configure(button, conf)
     CacheColorUnit(button)
     button.Health:SetStatusBarTexture(GF.ResolveBarTexture(kind))
     button.Name:SetFont(GF.ResolveFontPath(kind), Number(conf, prefix .. "TextSize", 11, 7, 32), GF.ResolveFontFlags(kind))
@@ -357,6 +359,7 @@ function GF.RenderAdditionalPreview(parent, kind, prefix, count, options)
         local button = holder.buttons[i]
         if not button then
             button = PixelLayoutRegion(CreateFrame("Frame", nil, holder))
+            button._msufIsPreview = true
             button.Health = PixelLayoutRegion(CreateFrame("StatusBar", nil, button))
             button.Health:SetAllPoints()
             local bg = PixelLayoutRegion(button.Health:CreateTexture(nil, "BACKGROUND"))

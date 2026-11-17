@@ -65,11 +65,19 @@ local function VersionToNumber(str)
         revision = revision, legacy = legacy }
 end
 
+--- Local ordering places the historical Classic hotfix between 7.0.2 and
+--- 7.0.3. Wire epochs stay unchanged for validation and older clients.
+local HOTFIX_7021_ORDER = VersionToNumber("7.0.2") + 99999
+local function ReleaseOrder(number, label)
+    return label == "7.021" and HOTFIX_7021_ORDER or number
+end
+
 --- State (session-scoped)
 local myVersionStr   = nil
 local myVersionNum   = 0
 local myVersionParts = nil
 local highestSeenNum = 0
+local highestSeenOrder = 0
 local highestSeenStr = nil
 local notifiedUser   = false
 local prefixOk       = false
@@ -90,6 +98,7 @@ local function ReadMyVersion()
         myVersionNum   = number
         myVersionParts = parts
         highestSeenNum = myVersionNum
+        highestSeenOrder = ReleaseOrder(myVersionNum, myVersionStr)
         highestSeenStr = myVersionStr
     end
 end
@@ -101,9 +110,9 @@ end
 
 local function NotifyOnce()
     if notifiedUser then return end
-    if highestSeenNum <= myVersionNum then return end
+    if highestSeenOrder <= ReleaseOrder(myVersionNum, myVersionStr) then return end
     notifiedUser = true
-    -- highestSeenNum only ever rises in OnBroadcastReceived, which sets
+    -- highestSeenOrder only ever rises in OnBroadcastReceived, which sets
     -- highestSeenStr from the same VersionToNumber call, so the string is
     -- always present once this guard passes.
     PrintUpdateMessage(highestSeenStr)
@@ -162,7 +171,9 @@ local function OnAddonMessage(_, prefix, payload, channel)
     end
 
     --- Secret-safe: comparing addon-generated integers only
-    if num > highestSeenNum then
+    local order = ReleaseOrder(num, normalized)
+    if order > highestSeenOrder then
+        highestSeenOrder = order
         highestSeenNum = num
         highestSeenStr = normalized
         NotifyOnce()

@@ -1,5 +1,82 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.3-beta1 - 2026-11-17
+
+**7.0.3 Beta 1**
+
+New features and fixes since 7.021. Includes the previous 7.0.2 anniversary features and Classic menu hotfix. Supported clients: WoW Midnight, WoW Forever, Classic Era, The Burning Crusade Anniversary and Mists of Pandaria Classic.
+
+### Highlights
+
+- **Player spell ranks.** Optionally append the spell rank to the Player castbar on WoW Forever, Classic Era and TBC Anniversary. Live bars and previews use the same setting.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.show_spell_rank","settingKey":"general.castbarPlayerShowSpellRank","prepareKind":"menuTab","prepareValue":"spell","query":"show spell rank","label":"Show spell rank"} -->
+- **Player cast recipient.** Show the recipient of your own cast with independent text placement, size, alignment and color. The name follows the matching spellcast-sent event, including mouseover casts, instead of guessing from your current target.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.show_target_name","settingKey":"general.castbarPlayerShowTargetName","prepareKind":"menuTab","prepareValue":"spell","query":"target name","label":"Enable"} -->
+- **Castbar fade in and out.** Add a smooth spring fade to castbars. A new cast can reverse an outgoing fade, and completed casts keep their final state while fading. The matching previews use the same animation.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.fade.enabled","settingKey":"general.castbarFadeEnabled","prepareKind":"","prepareValue":"","query":"fade castbars in and out","label":"Fade castbars in and out"} -->
+- **Latency zone color.** Choose the Player castbar latency indicator's color and opacity from Colors or the castbar color shortcut. The live bar, global preview and unit preview show the same RGBA values.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_castbar","controlId":"menu2.opt.colors.advanced.general.castbar.latency","settingKey":"general.castbarLatencyColor","prepareKind":"colorsPainterCategory","prepareValue":"cast","query":"latency zone color","label":"Latency zone color"} -->
+- **Unit frame appearance fade.** Enable Fade in when shown independently for supported unit frames. The animation preserves configured bar, text, portrait and prediction opacity and works with range and combat fades.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"transparency","controlId":"menu2.uf_target.unit.transparency.fade_in_on_show","settingKey":"target.fadeInOnShow","prepareKind":"unitAlphaTab","prepareValue":"combat","query":"fade in when shown","label":"Fade in when shown"} -->
+- **Party and Raid appearance fade.** Group layouts get their own Fade in when shown setting. Supported additional group frames and their previews inherit the same appearance behavior.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"transparency","controlId":"menu2.gf_layout.group.field.fadeinonshow","settingKey":"","prepareKind":"groupTransparencyTab","prepareValue":"combat","query":"fade in when shown","label":"Fade in when shown"} -->
+- **Hide missing resources.** Optionally hide a unit's resource bar, background, outline, loss effect and resource text when that resource is absent. A resource at zero remains visible when its maximum is valid, and the display returns when the resource becomes available.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"power_bar","controlId":"menu2.uf_target.unit.power.powerhidemissingresource","settingKey":"target.powerHideMissingResource","prepareKind":"","prepareValue":"","query":"hide when resource is missing","label":"Hide when resource is missing"} -->
+- **Forever PvP countdown.** Show the native remaining PvP flag time beside the Player PvP icon, with an independent toggle. Free-for-all PvP hides the countdown. Edit Mode and status test mode include a countdown sample.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.pvp.countdown","settingKey":"player.pvpIndicatorCountdownEnabled","prepareKind":"unitStatus","prepareValue":"statusPvp","query":"show pvp countdown","label":"Show PvP countdown"} -->
+- **Health text gradient shortcut.** Edit Low, Mid and High health color stops directly from Fonts and the HP text quick settings. The shortcut follows the current font scope and inherited health color mode.
+<!-- msuf-menu-link: {"pageKey":"opt_fonts","sectionId":"fonts_name_power_colors","controlId":"menu2.opt.fonts.global.colors.health.gradient.stops","settingKey":"","prepareKind":"","prepareValue":"","query":"health gradient stops","label":"Health gradient stops"} -->
+- **Forever Weakened Soul indicator.** Add an opt-in Weakened Soul entry to Party and Raid Spell Icons, including Only mine. It uses the native property-based filter available on Forever; other short, nondispellable player debuffs can also match.
+<!-- msuf-menu-link: {"pageKey":"gf_auras","sectionId":"si","controlId":"menu2.gf_auras.group.spell.enabled","settingKey":"","prepareKind":"","prepareValue":"","query":"show spell indicators","label":"Show spell indicators"} -->
+- **Copyable Taint Report.** Use /msuf taint outside combat to open an optional blocked-action recorder. Start and stop capture yourself, then copy a report with client and addon versions, the protected action, the addon reported by WoW, combat state and a stack. It retains up to 20 entries and groups consecutive repeats.
+<!-- msuf-menu-link: none -->
+### Bug Fixes - Profiles
+
+- **Complete new defaults before export.** Full-profile exports complete the new appearance, spell rank, cast recipient and castbar fade defaults before capture. Current-revision profiles keep identical settings through export, import and reload, including explicit disabled settings and zero offsets.
+<!-- msuf-menu-link: {"pageKey":"profiles","sectionId":"profiles_io","controlId":"menu2.profiles.advanced.export.generate","settingKey":"","prepareKind":"","prepareValue":"","query":"export","label":"Export"} -->
+### Bug Fixes - Frames and status
+
+- **Portrait refresh on show.** Target and Focus portraits refresh when a frame is shown, including unit changes with restricted GUIDs. The previous unit's portrait and classification are no longer reused.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"portrait","controlId":"menu2.uf_target.unit.portrait.enabled","settingKey":"","prepareKind":"","prepareValue":"","query":"portrait","label":"Portrait"} -->
+- **AFK timer event order.** The AFK duration starts correctly even when the status painter receives the event before the timer's start-stamp listener.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.indicator.statusafktimer","settingKey":"","prepareKind":"unitStatusIndicator","prepareValue":"statusAFKTimer","query":"afk timer","label":"AFK Timer"} -->
+- **Class colors after resurrection.** Party and Raid health bars recover their class color after an out-of-combat resurrection when unit identity information arrives late. Short retries follow the current roster identity and do not reuse another member's class.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_group_frames","controlId":"menu2.opt.colors.advanced.group.frame.health.mode","settingKey":"gf_party.gfBarMode","prepareKind":"colorsPainterCategory","prepareValue":"group","query":"health color scheme","label":"Bar Color Mode"} -->
+- **Embedded resource layout.** When Hide when resource is missing is active, health bars and rounded borders reclaim the embedded resource area. The original layout returns when the resource is available again.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"power_bar","controlId":"menu2.uf_target.unit.power.powerhidemissingresource","settingKey":"target.powerHideMissingResource","prepareKind":"","prepareValue":"","query":"hide when resource is missing","label":"Hide when resource is missing"} -->
+- **Restricted group range values.** Group range updates keep restricted boolean values in the native alpha path while appearance fades run. Restricted range values are excluded from Lua comparisons and comparison caches.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"transparency","controlId":"menu2.gf_layout.group.field.fadeinonshow","settingKey":"","prepareKind":"groupTransparencyTab","prepareValue":"combat","query":"fade in when shown","label":"Fade in when shown"} -->
+### Bug Fixes - Castbars and previews
+
+- **Forever Penance markers.** Penance ranks 1 through 4 use the correct halfway channel marker for the two later bolts after the initial hit.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.show.channel.ticks","settingKey":"general.castbarShowChannelTicks","prepareKind":"","prepareValue":"","query":"channel ticks","label":"Spell-specific channel tick markers"} -->
+- **Cast and fade transitions.** Castbar fades handle casts, channels, Empower spells, interrupts and incoming replacement casts without leaving an outdated bar over the active cast. Live and preview bars retain the completed value during fade-out.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.fade.enabled","settingKey":"general.castbarFadeEnabled","prepareKind":"","prepareValue":"","query":"fade castbars in and out","label":"Fade castbars in and out"} -->
+- **Class resource preview shortcuts.** Clicking an inactive Class Resources preview layer opens the exact setting needed to enable it, including class bars and text, detached resources, Player HP and alternative mana.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.enabled","settingKey":"bars.showClassPower","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"show class power","label":"Class Resource"} -->
+### Bug Fixes - Menus and integrations
+
+- **Opening Options from macros.** Cold /msuf action-bar macros load Options and build the menu on subsequent frames to avoid script-ran-too-long errors inside the action-button click. Core diagnostic commands remain available without opening Options.
+<!-- msuf-menu-link: none -->
+- **External Edit Mode choices.** Compatible integrations can provide choice dropdowns in their Edit Mode popup. Long lists scroll, and stale selections are rejected when the owning integration no longer offers them.
+<!-- msuf-menu-link: none -->
+- **External choice history.** Undo, Redo and Discard restore the integration-owned state of external Edit Mode choice controls.
+<!-- msuf-menu-link: none -->
+### Performance
+
+- **Less repeated boolean work.** Castbar state updates and group event routing reuse their existing boolean results. This reduces redundant Lua work while preserving event membership, native call counts and allocation budgets.
+<!-- msuf-menu-link: none -->
+### Settings, accessibility and compatibility
+
+- **Reduced motion.** Reduce menu motion also suppresses the new castbar and unit appearance animations. Turning it off restores enabled effects without changing their saved options.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.reduce.motion","settingKey":"general.reduceMotion","prepareKind":"","prepareValue":"","query":"reduce menu motion","label":"Reduce menu motion"} -->
+- **Copy, reset and profile transfer.** The new frame appearance and missing-resource settings participate in their owning copy and reset scopes. Latency RGBA fields belong to the castbar color profile category.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"power_bar","controlId":"menu2.uf_target.unit.power.powerhidemissingresource","settingKey":"target.powerHideMissingResource","prepareKind":"","prepareValue":"","query":"hide when resource is missing","label":"Hide when resource is missing"} -->
+- **Search and translations.** The new settings are included in the Classic and Mainline search indexes. Added labels are present in all 12 locale packs, and supported settings retain their client-specific visibility.
+<!-- msuf-menu-link: {"pageKey":"opt_fonts","sectionId":"fonts_name_power_colors","controlId":"menu2.opt.fonts.global.colors.health.gradient.stops","settingKey":"","prepareKind":"","prepareValue":"","query":"health gradient stops","label":"Health gradient stops"} -->
+- **Version reminders after 7.021.** The update reminder places the historical 7.021 Classic hotfix before 7.0.3 prereleases. The new Beta no longer recommends updating back to that older hotfix, while validating the original version-message formats.
+<!-- msuf-menu-link: none -->
+
 ## 7.021 - 2026-11-15
 
 **Classic Menu Hotfix**

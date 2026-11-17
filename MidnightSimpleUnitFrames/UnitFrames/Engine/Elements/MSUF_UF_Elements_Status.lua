@@ -611,11 +611,42 @@ local function ApplyConfiguredRegion(frame, spec, status, def)
   if key == "level" then Runtime.ApplyForeverLevelBadge(frame, spec, cfg) end
 end
 
+--- WoW Forever: the player's PvP flag countdown sits beside the icon, as in
+--- Blizzard's Camelot player frame. Laid out on the cold apply only; the timer
+--- events and the ticker just write its text (Runtime.UpdatePVP).
+local function ApplyPVPCountdownText(frame, spec, status, cfg, icon)
+  local fs = EnsureText(frame, "pvpIndicatorTimerText", cfg.layer)
+  local size = floor((tonumber(cfg.size) or 18) * 0.6 + 0.5)
+  SetFont(fs, spec, size < 8 and 8 or size)
+  ApplyTextColor(fs, spec, nil)
+  local alpha = status.alpha or 1
+  if fs._msufStatusAlpha ~= alpha then
+    fs:SetAlpha(alpha)
+    fs._msufStatusAlpha = alpha
+  end
+  -- Grow away from the frame edge the icon is anchored to.
+  local anchor = cfg.anchor
+  local right = anchor == "NAMERIGHT" or (anchor ~= "NAMELEFT" and type(anchor) == "string" and find(anchor, "LEFT", 1, true) ~= nil)
+  local key = right and "PVPICON_RIGHT" or "PVPICON_LEFT"
+  -- AdoptRegion clears both fields when a layer change reparents the text.
+  if fs._msufStatusAnchor ~= key or fs._msufStatusTarget ~= icon then
+    fs:ClearAllPoints()
+    if right then
+      fs:SetPoint("LEFT", icon, "RIGHT", 0, 0)
+    else
+      fs:SetPoint("RIGHT", icon, "LEFT", 0, 0)
+    end
+    fs:SetJustifyH(right and "LEFT" or "RIGHT")
+    fs._msufStatusAnchor, fs._msufStatusTarget = key, icon
+  end
+end
+
 local function ApplyConfiguredPVP(frame, spec, status)
   local cfg = status.pvp
   if not (cfg and cfg.enabled) then
     HideField(frame, "pvpIcon")
     HideField(frame, "pvpIndicatorIcon")
+    Runtime.HidePVPCountdown(frame)
     return
   end
   local field = status.group and "pvpIcon" or "pvpIndicatorIcon"
@@ -627,6 +658,11 @@ local function ApplyConfiguredPVP(frame, spec, status)
   icon = EnsureTexture(frame, field, cfg.layer)
   frame.pvpIcon, frame.pvpIndicatorIcon = icon, icon
   LayoutRegion(icon, frame, spec, cfg, false)
+  if cfg.countdownEnabled then
+    ApplyPVPCountdownText(frame, spec, status, cfg, icon)
+  elseif frame.pvpIndicatorTimerText then
+    Runtime.HidePVPCountdown(frame)
+  end
   if cacheLayout and cfg.anchor ~= "NAMELEFT" and cfg.anchor ~= "NAMERIGHT" then
     icon._msufGroupPVPConfig, icon._msufGroupPVPLevelBase = cfg, levelBase
   end
@@ -838,6 +874,7 @@ function Status.Disable(frame)
   for i = 1, #CONFIGURED_REGION_DEFS do
     HideConfiguredRegion(frame, CONFIGURED_REGION_DEFS[i])
   end
+  Runtime.HidePVPCountdown(frame)
   frame._msufStatusTextValue = nil
   frame._msufStatusTextLayout = nil
   frame._msufNameRelativeStatus = nil
@@ -873,15 +910,23 @@ Runtime.PVP_EVENTS = { "UNIT_FACTION" }
 do
   local client = MSUF.Client
   local events = { "UNIT_FACTION" }
-  if client.SupportsEvent("PVP_TIMER_UPDATE") then events[#events + 1] = "PVP_TIMER_UPDATE" end
+  local timerEvent = client.SupportsEvent("PVP_TIMER_UPDATE")
+  if timerEvent and not client.IsForever then events[#events + 1] = "PVP_TIMER_UPDATE" end
   if client.IsRetail and not client.IsForever and client.SupportsEvent("PLAYER_FLAGS_CHANGED") then
     -- Retail's War Mode button uses this event to reconcile its predicted toggle.
     events[#events + 1] = "PLAYER_FLAGS_CHANGED"
   end
   Runtime.PVP_PLAYER_EVENTS = events
+  local unitless
   if client.IsRetail and client.SupportsEvent("PLAYER_PVP_FLAG_CHANGED") then
-    Runtime.PVP_PLAYER_UNITLESS_EVENTS = { "PLAYER_PVP_FLAG_CHANGED" }
+    unitless = { "PLAYER_PVP_FLAG_CHANGED" }
   end
+  if timerEvent and client.IsForever then
+    -- Like Blizzard's player frame, refresh the local timer regardless of the event payload.
+    unitless = unitless or {}
+    unitless[#unitless + 1] = "PVP_TIMER_UPDATE"
+  end
+  Runtime.PVP_PLAYER_UNITLESS_EVENTS = unitless
 end
 
 local function StatusEnabled(spec, key)
@@ -1081,6 +1126,7 @@ local function RegisterStatusIndicator(def)
 
   function element.Disable(frame)
     if key == "resting" then StopRestingFlipbook(frame and frame.restingIndicatorIcon) end
+    if key == "pvp" then Runtime.HidePVPCountdown(frame) end
     HideField(frame, hide)
   end
 

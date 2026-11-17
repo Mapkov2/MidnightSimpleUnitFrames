@@ -91,7 +91,6 @@ end
 -- place where unit pages translate a unit key into the correct castbar field names.
 -- Player, Target and Focus castbars share one key pattern ("castbarTargetBarWidth"), Boss
 -- and Arena another ("bossCastbarWidth"); $U is the capitalized unit, $u the unit key.
--- The Player castbar has no target-name key.
 local CASTBAR_FIELDS = (function()
     local patterns = {
         { units = "player target focus", stylePrefix = "castbar$U", enable = "enable$UCastbar",
@@ -114,7 +113,6 @@ local CASTBAR_FIELDS = (function()
             for field, template in pairs(pattern) do
                 if field ~= "units" then entry[field] = template:gsub("%$U", capitalized):gsub("%$u", unit) end
             end
-            if unit == "player" then entry.targetName = nil end
             fields[unit] = entry
         end
     end
@@ -361,7 +359,7 @@ end
 
 local DeepCopy = M.DeepCopy
 local COPY_POWER_BAR_FIELDS = WL [[
-    showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness
+    showPowerBar powerBarHeight embedPowerBarIntoHealth powerHideMissingResource powerBarBorderEnabled powerBarBorderThickness
     powerBarBorderColorR powerBarBorderColorG powerBarBorderColorB powerSmoothFill powerChunkedFill
     powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight
     detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset
@@ -459,7 +457,7 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
 ]]
 local COPY_TRANSPARENCY_FIELDS = WL [[
     hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars
-    oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
+    fadeInOnShow oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 -- Keep this as a WL literal (even though the shared prefix list is empty) so
 -- unit_copy_coverage_smoke.lua can audit the dynamically-prefixed suffix set.
 local COPY_TEXLAYER_FIELDS = WL [[]]

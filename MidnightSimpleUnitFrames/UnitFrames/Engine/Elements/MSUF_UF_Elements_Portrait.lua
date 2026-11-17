@@ -168,6 +168,9 @@ local QUEUED_2D_PORTRAIT_EVENTS = Visuals.QUEUED_2D_PORTRAIT_EVENTS or {
   MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
 }
 local PORTRAIT_GUID_BUST_EVENTS = {
+  -- The core OnShow seed can consume the following target/focus event.
+  -- Rebind once even when a restricted GUID left the old cache key unchanged.
+  MSUF_UF_ONSHOW = true,
   UNIT_PORTRAIT_UPDATE = true,
   UNIT_MODEL_CHANGED = true,
   UNIT_CONNECTION = true,
@@ -1567,6 +1570,7 @@ local CLASSIFICATION_REFRESH_EVENTS = {
   MSUF_UNIT_IDENTITY_VISUAL = true, MSUF_UNIT_IDENTITY_SOFT = true,
   MSUF_UNIT_IDENTITY_SOFT_VISUAL = true, MSUF_PORTRAIT_ONSHOW = true,
   UNIT_PORTRAIT_UPDATE = true, UNIT_MODEL_CHANGED = true, UNIT_CONNECTION = true,
+  MSUF_UF_ONSHOW = true,
   PORTRAITS_UPDATED = true, PARTY_MEMBER_ENABLE = true, PARTY_MEMBER_DISABLE = true,
 }
 

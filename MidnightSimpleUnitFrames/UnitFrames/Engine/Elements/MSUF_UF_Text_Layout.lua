@@ -1369,6 +1369,13 @@ local function PositionConfiguredText(frame, spec, text, inlineEnabled,
 
 end
 
+function Text.SetPowerResourceHidden(frame, hidden)
+  local overlay = frame.MSUFPowerTextLayer
+  if not overlay or overlay._msufPowerResourceHidden == hidden then return end
+  overlay._msufPowerResourceHidden = hidden
+  overlay:SetShown(not hidden)
+end
+
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
   local powerEbonMight = frame._msufPowerEbonMight == true
@@ -1377,6 +1384,7 @@ function Text.Apply(frame, spec)
     InvalidateTextForFontEpoch(frame)
   end
   local sinksChanged, sinksReady = EnsureConfiguredTextSinks(frame, spec)
+  if frame._msufPowerResourceMissing == true then Text.SetPowerResourceHidden(frame, true) end
   sinksChanged = EnsureNameAnchorProxy(frame, spec) or sinksChanged
   -- Run before layout cache returns: toggling hover does not require relayout.
   ApplyTextMouseover(frame, text)

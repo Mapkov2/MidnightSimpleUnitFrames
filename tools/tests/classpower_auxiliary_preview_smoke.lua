@@ -42,6 +42,29 @@ local function HealthColor()
     return bar.fill:GetVertexColor()
 end
 
+-- Click the real layer chip with its text switch disabled.
+do
+    local old = bars.classPowerShowText
+    bars.classPowerShowText = false
+    bars.showClassPower = true
+    Select("rogue_combo")
+    box:Refresh()
+    local layer
+    for _, chip in ipairs(box.layerButtons) do
+        if chip.key == "classText" then layer = chip break end
+    end
+    Check(layer and box.layerAvailable.classText == false, "disabled resource text unexpectedly available")
+    -- A visible example does not turn on the saved setting.
+    box.layerAvailable.classText = true
+    MenuWorld.FireScript(layer, "OnClick", "LeftButton")
+    mw:RunTimers()
+    local _, widget = M.RuntimeControlCatalog.ResolveExactTarget("classpower", M.ClassPowerPageParts.Meta("behavior.text"))
+    local highlight = M.cache.classpower.wrapper._msuf2SearchHighlight
+    Check(widget and widget:IsVisible() and highlight and highlight:IsShown() and bars.classPowerShowText == false,
+        "disabled resource text did not open its exact Show resource text control")
+    bars.classPowerShowText = old
+end
+
 bars.showClassPower, bars.showAltMana, bars.playerHPBarEnabled = true, true, true
 bars.playerHPBarColorMode = "CLASS"
 bars.playerHPBarAnchor, bars.playerHPBarWidthMode = "POWER_TOP", "power"

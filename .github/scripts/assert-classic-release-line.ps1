@@ -37,8 +37,8 @@ if ($releaseChannel.Channel -ceq "release") {
     if ($releaseChannel.Base -cnotmatch $legacyStable -and $releaseChannel.Base -cnotmatch $patchStable) {
         throw "Use a two-digit stable minor, a three-digit minor with ClassicOnly, or an explicit patch version. Got '$normalizedVersion'."
     }
-} elseif ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]+$') {
-    throw "A prerelease names its release line as <major>.<minor> (for example 7.0-beta1), got '$normalizedVersion'."
+} elseif ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]+(?:\.[1-9][0-9]{0,2})?$') {
+    throw "A prerelease names its release line as <major>.<minor> or <major>.<minor>.<patch> (for example 7.0.3-beta1), got '$normalizedVersion'."
 }
 
 $addons = @(

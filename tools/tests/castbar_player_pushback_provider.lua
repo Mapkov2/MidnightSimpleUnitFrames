@@ -19,7 +19,9 @@ end
 -- Both: 0 KB/1000 events; native calls, objects and provider calls stay unchanged.
 local VM = {
     modern = { 2178, 2226, 2644, 2685 },
-    legacy = { 2157, 2201, 2171, 2208 },
+    -- 2026-11-17: optional rank/recipient/fade dispatch; at most 2% over
+    -- the preserved working-source measurements, with unchanged native/heap budgets.
+    legacy = { 2200, 2245, 2214, 2252 },
 }
 local function Measure(world, label, fire, budget, legacy)
     for _ = 1, 30 do fire() end

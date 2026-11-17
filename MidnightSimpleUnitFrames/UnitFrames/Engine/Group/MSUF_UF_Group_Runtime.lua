@@ -1086,6 +1086,9 @@ SelectPullRosterHandler = function()
 end
 
 local function RuntimeOnEvent(self, event, unit)
+  if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_DISABLED" then
+    GF.healthClassRosterRevision = (GF.healthClassRosterRevision or 0) + 1
+  end
   if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
   -- SavedVariables/config caches are only reliable at the startup event
   -- boundary. Handle it before the disabled fast-exit so a cold cache cannot

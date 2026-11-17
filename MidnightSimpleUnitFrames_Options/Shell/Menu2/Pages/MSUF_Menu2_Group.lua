@@ -394,7 +394,7 @@ local GF_COPY_CATEGORIES = {
             powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol
             powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill
             powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled
-            powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha
+            powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture fadeInOnShow oocFadeEnabled oocFadeAlpha
             healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB
             deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX
             powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX
@@ -702,7 +702,7 @@ local function AttachGroupSectionUX(ctx)
             "powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth", prefixes = "detachedPower" },
         range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled
             and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
-        transparency = { fields = "hpBarAlpha hpBgAlpha oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha " ..
+        transparency = { fields = "hpBarAlpha hpBgAlpha fadeInOnShow oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha " ..
             "alphaExcludeTextPortrait alphaExcludePredictionBars", summary = function(c) return Number((c.hpBarAlpha or 1) * 100) .. "%" end },
         dispel = { prefixes = "dispelOverlay" },
         dispelSymbol = { prefixes = "dispelSymbol" },

@@ -912,7 +912,7 @@ local function ClassColor(unit)
   return 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
 end
 
-local function DispatchClassColor(frame, unit, allowSecretPassThrough)
+local function DispatchClassColor(frame, unit, allowSecretPassThrough, requireClass)
   local _, class = ReadUnitClassCached(frame, unit)
   local classIsKnownPlain
   if allowSecretPassThrough == true then
@@ -923,6 +923,7 @@ local function DispatchClassColor(frame, unit, allowSecretPassThrough)
   end
   local r, g, b = ClassColorForToken(class, classIsKnownPlain)
   if r ~= nil then return r, g, b end
+  if requireClass then return nil end
   return 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
 end
 
@@ -1651,15 +1652,70 @@ local function PreviewHealthGradientColor(health, pct)
   return 0.2, 0.8, 0.2, false
 end
 
+-- A late identity event can follow the first living health update. Keep the
+-- exception briefly for the same roster binding and always read its current class.
+local function GroupRezzClassColor(unit, state)
+  local group = MSUF.GF
+  if not group then return false end
+  local revision = group.healthClassRosterRevision or 0
+  if state.rezzClassUnit ~= unit or state.rezzClassRosterRevision ~= revision
+    or MSUF.PublicGlobals.MSUF_InCombat == true or MSUF.Util.InCombat() then
+    state.rezzClassUnit, state.rezzClassUntil = nil, nil
+    return false
+  end
+  if state.deadKnown ~= true then return false end
+  local now = GetTime()
+  if state.rezzClassUntil == nil then
+    state.rezzClassUntil = now + 1
+    state.rezzClassRetried = nil
+  elseif now > state.rezzClassUntil then
+    state.rezzClassUnit, state.rezzClassUntil = nil, nil
+    return false
+  end
+  return not (state.isPlayerKnown and state.isPlayer)
+end
+
+local function QueueRezzClassRetry(frame, unit, state)
+  if state.rezzClassRetried then return end
+  local deadline = state.rezzClassUntil
+  state.rezzClassRetried = true
+  MSUF.Scheduler.RunNextFrame(function()
+    local active = frame._msufActiveElements
+    if frame._msufUnitState ~= state or frame.MSUFUnitKey ~= unit
+      or not (active and active.Health == true) or not frame:IsVisible() then return end
+    local spec = frame.MSUFSpec
+    if spec and spec.scope == "group" and spec.health and spec.health.mode == "class" and state.rezzClassUntil == deadline
+      and GroupRezzClassColor(unit, state) then
+      UF.elements.Health.RefreshColor(frame, "MSUF_GF_REZZ_COLOR")
+    end
+  end)
+end
+
 local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or {}
   local state = RefreshUnitState(frame, unit, spec, event or "UNIT_HEALTH", hp)
   if state and state.existsKnown and state.exists == false then
+    state.rezzClassUnit, state.rezzClassUntil = nil, nil
     frame._msufHealthStatusGone = true
     return 0.28, 0.28, 0.28
   end
-  if state and ((state.deadKnown and state.dead == true) or (state.connectedKnown and state.connected == false)) then
+  if state and state.connectedKnown and state.connected == false then
+    state.rezzClassUnit, state.rezzClassUntil = nil, nil
+    frame._msufHealthStatusGone = true
+    return 0.35, 0.35, 0.35
+  end
+  if state and state.deadKnown and state.dead == true then
+    local group = MSUF.GF
+    local revision = group and group.healthClassRosterRevision or 0
+    if state.rezzClassUntil or state.rezzClassUnit ~= unit or state.rezzClassRosterRevision ~= revision then
+      state.rezzClassUnit, state.rezzClassUntil = nil, nil
+      if state.isPlayerKnown and state.isPlayer and spec and spec.scope == "group" and health.mode == "class"
+        and not frame._msufGFIsPreviewFrame and group and IsUnitToken(unit)
+        and (unit:match("^party%d+$") or unit:match("^raid%d+$")) then
+        state.rezzClassUnit, state.rezzClassRosterRevision = unit, revision
+      end
+    end
     frame._msufHealthStatusGone = true
     return 0.35, 0.35, 0.35
   end
@@ -1681,6 +1737,14 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
     end
   end
 
+  if state and state.rezzClassUnit and spec.scope == "group" and health.mode == "class"
+    and GroupRezzClassColor(unit, state) then
+    local r, g, b, native = DispatchClassColor(frame, unit, true, true)
+    if native == SECRET_NATIVE_CLASS_COLOR then return r, g, b, native end
+    if r ~= nil then return r, g, b end
+    QueueRezzClassRetry(frame, unit, state)
+    return 0.28, 0.28, 0.28
+  end
   if state and state.isPlayerKnown and state.isPlayer then
     return DispatchClassColor(frame, unit, true)
   end
@@ -1891,6 +1955,7 @@ Common.SetBarValue = SetBarValue
 Common.SetBarValueKnown = SetBarValueKnown
 Common.SetBarValuePlain = SetBarValuePlain
 Common.SnapBarInterpolation = SnapBarInterpolation
+Common.StopLossTrailAnimation = StopLossTrailAnimation
 Common.CreateLossTrail = CreateLossTrail
 Common.CreateLossTrailPool = CreateLossTrailPool
 Common.SetBarSmoothing = SetBarSmoothing

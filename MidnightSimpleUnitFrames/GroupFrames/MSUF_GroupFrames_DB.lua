@@ -229,6 +229,7 @@ local PARTY_DEFAULTS = {
     hpBgAlpha         = 0.85,
     --- Out-of-combat fade: whole-member-frame alpha while out of combat.
     --- Composed min() with range/offline fade in GroupRangeFade; off by default.
+    fadeInOnShow     = false,
     oocFadeEnabled    = false,
     oocFadeAlpha      = 0.5,
     --- Border

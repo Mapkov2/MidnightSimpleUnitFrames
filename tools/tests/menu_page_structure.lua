@@ -71,10 +71,11 @@ end
 -- Beta 3 adds five Forever consumption selectors and refreshes their status control metadata.
 -- RC3 includes the Druid form, castbar timer, nameplate and group status controls.
 -- Both current generated indexes retain all 8 relocated action identities below.
+-- 7.0.3: 28 Mainline and 27 Classic additions; all 7.021 identities retained.
 local indexes = {
     -- Pet and Group Frames each register Show HoTs and Only mine.
-    { "", 4651, 393589875 },
-    { "_Classic", 4217, 2823365389 },
+    { "", 4679, 1751207415 },
+    { "_Classic", 4244, 3792580662 },
 }
 local moved = {
     { "opt_colors", "workbench_accessibility", "accessibility", "preview review" },

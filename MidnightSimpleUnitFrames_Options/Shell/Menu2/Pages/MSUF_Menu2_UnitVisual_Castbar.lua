@@ -298,7 +298,7 @@ function CastbarSection.Cards(s)
             historySource = "menu:unit-castbar-general-colors",
             context = castContext,
         })
-        W.AttachContextColorReferences(providerCard, { "cast.background", "cast.border" }, {
+        W.AttachContextColorReferences(providerCard, { "cast.background", "cast.border", "cast.latency" }, {
             title = "Castbar Surface Colors",
             note = "Shared castbar background and outline colors.",
             historySource = "menu:unit-castbar-surface-colors",
@@ -535,6 +535,14 @@ function CastbarSection.IconAndText(s)
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.
     })
+    if unit == "player" and MSUF.Castbars.Utils.PlayerSpellRanksSupported then
+        ControlRow(ctx, spellCard, { "toggle", "spellRank", false, { "Show spell rank", 16, -196, controlWLeft },
+            get = function() return ReadGeneralBool("castbarPlayerShowSpellRank", false) end,
+            write = { call = SetGeneralBool, keyOnly = true, args = { "MSUF2_CASTBAR_SPELL_RANK", { castbar = true, preview = true } } },
+            scope = unit, meta = SettingMeta(ctx, "castbar.show_spell_rank", "general", "castbarPlayerShowSpellRank"),
+            beforeBind = s.PrepareControl, castbarControl = true,
+        })
+    end
     local targetNameToggle
     if fields.targetName and targetNameCard then
         targetNameToggle = ControlRow(ctx, targetNameCard, { "switch", "targetNameToggle", false, { "Enable", 16, -52, 160 },

@@ -13,7 +13,8 @@ local Publish = PublicAPI.Publish
 -- WoW Forever and Classic Era run Classic Era spell data: one spell ID per rank
 -- and Era tick counts. TBC and Mists keep the Retail table below until their
 -- spell data has been verified.
-local HAS_ERA_SPELL_DATA = MSUF.Client.IsForever == true or MSUF.Client.IsVanilla == true
+local IS_FOREVER = MSUF.Client.IsForever == true
+local HAS_ERA_SPELL_DATA = IS_FOREVER or MSUF.Client.IsVanilla == true
 
 local DEFAULT_MARKER_COUNT = 5
 local MAX_CUSTOM_MARKER_COUNT = 10
@@ -104,6 +105,16 @@ if HAS_ERA_SPELL_DATA then
             1949, 11683, 11684,                          -- Hellfire
         },
     }
+    if IS_FOREVER then
+        -- Penance ranks 1-4 (damage, heal, cast): three bolts including the
+        -- one at channel start, so two periods and one marker at 50%.
+        ERA_CHANNEL_TICKS[2] = {
+            402261, 402277, 402174,
+            1240734, 1240732, 1240720,
+            1240736, 1240733, 1240721,
+            1316994, 1316992, 1316995,
+        }
+    end
     for ticks, spellIDs in pairs(ERA_CHANNEL_TICKS) do
         local tickData = { ticks = ticks }
         for index = 1, #spellIDs do

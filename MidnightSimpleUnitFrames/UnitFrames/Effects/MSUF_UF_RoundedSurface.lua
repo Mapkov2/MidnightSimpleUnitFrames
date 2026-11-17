@@ -261,7 +261,8 @@ end
 
 local function PowerIsEmbedded(f)
   local power = f and f.MSUFSpec and f.MSUFSpec.power
-  return power and power.enabled == true and power.detached ~= true and power.embed ~= false
+  return power and power.enabled == true and f._msufPowerResourceMissing ~= true
+    and power.detached ~= true and power.embed ~= false
 end
 
 local dispelSignatureFrame = {}

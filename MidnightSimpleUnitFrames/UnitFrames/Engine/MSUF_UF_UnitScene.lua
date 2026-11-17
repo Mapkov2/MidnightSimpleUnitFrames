@@ -212,7 +212,7 @@ local function PaintTestModeElements(frame, unit)
 end
 
 --- Paint the sample into one applied frame; the window is open.
-local function PaintSample(frame, unit, sample, layout, animate, barOnly)
+local function PaintSample(frame, unit, sample, layout, animate, barOnly, elapsed)
   local elements = UF.elements
   local active = frame._msufActiveElements or {}
   local hpMax = sample.hpMax or UnitScene.HEALTH_MAX
@@ -254,7 +254,7 @@ local function PaintSample(frame, unit, sample, layout, animate, barOnly)
   local runtime = MSUF.UFStatusRuntime
   if status and runtime then
     runtime.PaintSampleIdentityTexts(frame, status, sample)
-    runtime.PaintSampleIndicators(frame, status, sample)
+    runtime.PaintSampleIndicators(frame, status, sample, elapsed)
     runtime.UpdateBossNumber(frame, status)
     if sample.statusSelection then runtime.PaintSceneStatus(frame, status, sample.statusSelection, sample) end
   end
@@ -274,7 +274,7 @@ local LAYER_REGIONS = {
   dispelOverlay = { "_msufSceneDispelOverlay" }, dispelSymbol = { "_msufSceneDispelSymbol" },
   status = { "raidTargetIcon", "leaderIcon", "assistIcon", "eliteIcon", "levelText", "raceText", "classStatusText",
     "raidGroupNameText", "bossNumberText", "statusAFKTimerText", "combatStateIndicatorIcon",
-    "restingIndicatorIcon", "incomingResIndicatorIcon", "pvpIndicatorIcon",
+    "restingIndicatorIcon", "incomingResIndicatorIcon", "pvpIndicatorIcon", "pvpIndicatorTimerText",
     "petHappinessIndicatorHolder", "petXPBar", "threatIndicatorHolder", "stanceIndicatorText", "_msufScene_statusText", "_msufScene_statusGhostText",
     "_msufScene_statusAFKText", "_msufScene_statusDNDText", "_msufScene_statusConsumptionText" },
 }
@@ -543,7 +543,8 @@ function Scene:RefreshData(layout)
     elseif effects and owner then effects.HidePreviewFrameEffect(owner) end
   end
   OpenWindow(frame, unit, sample)
-  PaintSample(frame, unit, sample, layout, layout == false and self.root.animating == true, self.barOnly)
+  local elapsed = self.root.animating and self.root.elapsed or nil
+  PaintSample(frame, unit, sample, layout, layout == false and self.root.animating == true, self.barOnly, elapsed)
   local gf = MSUF.GF
   if not self.barOnly and gf and gf.AnimateUnitFrameAuras then gf.AnimateUnitFrameAuras(frame, self.root.animating and self.root.elapsed or nil) end
   CloseWindow(frame)

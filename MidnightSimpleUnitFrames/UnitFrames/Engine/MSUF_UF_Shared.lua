@@ -156,6 +156,7 @@ function Shared.CompileAlpha(alpha, conf, externalOoc)
   local oocAlpha = Clamp01(conf and conf.oocFadeAlpha, 0.5)
   alpha.active = hpAlpha < 1
   alpha.hpAlpha = hpAlpha
+  alpha.fadeIn = conf ~= nil and conf.fadeInOnShow == true
   alpha.excludeTextPortrait = conf and conf.alphaExcludeTextPortrait == true
   alpha.excludePredictionBars = conf and conf.alphaExcludePredictionBars == true
   -- Out-of-combat fade: whole-frame multiplier applied only while out of

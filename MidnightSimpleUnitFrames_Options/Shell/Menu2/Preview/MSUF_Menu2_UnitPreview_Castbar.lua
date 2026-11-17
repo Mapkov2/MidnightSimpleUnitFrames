@@ -214,7 +214,8 @@ local function CastbarShowTime(key, g)
         or (key == "player" and g.showPlayerCastTime ~= false)
 end
 local function CastbarShowTargetName(key, g)
-    return (key == "target" and g.castbarTargetShowTargetName == true)
+    return (key == "player" and g.castbarPlayerShowTargetName == true)
+        or (key == "target" and g.castbarTargetShowTargetName == true)
         or (key == "focus" and g.castbarFocusShowTargetName == true)
         or (key == "boss" and g.showBossCastTargetName == true)
         or (key == "arena" and g.showArenaCastTargetName == true)
@@ -358,9 +359,9 @@ function Castbar.ComposeScene(st)
     sample.progress = animState and tonumber(animState.castPct) or CAST_PROGRESS
     if key == "player" then
         sample.latency, sample.latencyMS = 0.12, 50
-    else
-        sample.targetName = st.TR("Cleave Training Dummy")
+        sample.rank = st.TR("Rank 4")
     end
+    sample.targetName = st.TR("Cleave Training Dummy")
     sample.kickReady, sample.kickRecovery = true, CAST_KICK_RECOVERY
     local opts = box._castOpts
     opts.width, opts.height, opts.scale = castW, castBarH, st.scale

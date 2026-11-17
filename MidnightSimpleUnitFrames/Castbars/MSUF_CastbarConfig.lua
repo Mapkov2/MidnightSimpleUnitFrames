@@ -9,6 +9,7 @@ local TIME_KEYS = {
     boss = "showBossCastTime", arena = "showArenaCastTime",
 }
 local TARGET_KEYS = {
+    player = "castbarPlayerShowTargetName",
     target = "castbarTargetShowTargetName", focus = "castbarFocusShowTargetName",
     boss = "showBossCastTargetName", arena = "showArenaCastTargetName",
 }
@@ -80,6 +81,9 @@ function Config.Compile(kind, current)
     Copy(source and source.general, general)
     Copy(source, Config.DB)
     Config.DB.general = source and source.general and general or nil
+    Config.playerSpellRank = general.castbarPlayerShowSpellRank == true
+    Config.playerTargetName = general.castbarPlayerShowTargetName == true
+    Config.fadeEnabled = general.castbarFadeEnabled == true and general.reduceMotion ~= true and general.reducedMotion ~= true
     for index = 1, #KINDS do
         local kind = KINDS[index]
         local record = Config.records[kind]

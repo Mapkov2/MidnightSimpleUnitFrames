@@ -11,6 +11,7 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
+L["Hide when resource is missing"] = "자원이 없는 경우 숨기기"
 L["Layer Status Text"] = "위상 상태 텍스트"
 L["Different layer"] = "다른 레이어"
 L["Different phase"] = "다른 위상"
@@ -2981,6 +2982,8 @@ L["Not ready color (kick on cooldown)"] = "준비되지 않은 색상(쿨다운 
 L["PvP Flag (War Mode/PvP)"] = "PvP 깃발(전쟁 모드/PvP)"
 L["Faction Symbol Without PvP Flag"] = "PvP 표시가 없어도 진영 문장 표시"
 L["Show the faction symbol for unflagged players in the open world."] = "야외에서 PvP 표시가 없는 플레이어의 진영 문장을 표시합니다."
+L["Show PvP countdown"] = "PvP 카운트다운 표시"
+L["Show the remaining time next to your PvP flag."] = "PvP 표시 옆에 남은 시간을 표시합니다."
 L["Abbreviate HP values (K/M)"] = "HP 값을 약어로 표시합니다(K/M)"
 L["For specializations that use mana alongside another resource."] = "다른 자원과 함께 마나를 사용하는 전문화용입니다."
 L["Smooths resource changes. Runes, Essence recharge, and timers keep their own animation."] = "자원 변경을 원활하게 합니다. 룬, 정수 재충전 및 타이머는 자체 애니메이션을 유지합니다."
@@ -7609,6 +7612,21 @@ L["Bar opacity (%s)"] = "바 불투명도 (%s)"
 L["Background opacity (%s)"] = "배경 불투명도 (%s)"
 L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "이 프레임 페이지의 투명도 > 자원 바 > 전경과 같은 값입니다. 색상 자체는 모든 프레임이 공유합니다."
 L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "이 프레임 페이지의 투명도 > 자원 바 > 배경과 같은 값입니다. 공유 배경 색상의 불투명도와 곱해집니다."
+
+L["Taint Report"] = "오염 보고서"
+L["Start new recording"] = "새 기록 시작"
+L["Stop recording"] = "기록 중단"
+L["Copy report"] = "보고서 복사"
+L["Recording blocked actions."] = "차단된 동작을 기록하고 있습니다."
+L["Recording is off."] = "기록이 꺼져 있습니다."
+L["Open the Taint Report outside combat."] = "전투가 끝난 후 오염 보고서를 여세요."
+L["Open the copyable report for blocked addon actions."] = "복사할 수 있는 애드온 차단 동작 보고서를 엽니다."
+L["Show spell rank"] = "주문 등급 표시"
+L["Fade castbars in and out"] = "시전바 서서히 표시 및 숨기기"
+L["Latency zone color"] = "지연 시간 영역 색상"
+L["Rank 4"] = "4 레벨"
+L["Disabled while Reduce menu motion is enabled."] = "메뉴 동작 줄이기가 활성화되어 있으면 비활성화됩니다."
+L["Fade in when shown"] = "표시될 때 부드럽게 나타나기"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

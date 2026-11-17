@@ -464,7 +464,7 @@ local function StatusTextIsGone(value)
   return value == "DEAD" or value == "GHOST" or value == "OFFLINE"
 end
 
-local function HideAFKTimerText(frame)
+local function HideAFKTimerText(frame, waitingGUID)
   if not frame then return end
   local fs = frame.statusAFKTimerText
   if fs then
@@ -473,7 +473,7 @@ local function HideAFKTimerText(frame)
   end
   frame._msufAFKTimerLayout = nil
   local afkTimer = MSUF.UFAFKTimer
-  if afkTimer and afkTimer.Detach then afkTimer.Detach(frame) end
+  if afkTimer and afkTimer.Detach then afkTimer.Detach(frame, waitingGUID) end
 end
 
 --- Companion region to the AFK status text: shows how long the unit has been
@@ -488,14 +488,14 @@ local function UpdateAFKTimerText(frame, status, cfg, state)
   end
   local afkTimer = MSUF.UFAFKTimer
   if not afkTimer then return end
-  local text
+  local text, waitingGUID
   if status.testMode == true then
     text = afkTimer.SampleText()
   else
-    text = afkTimer.ResolveText(frame.MSUFUnitKey)
+    text, waitingGUID = afkTimer.ResolveText(frame.MSUFUnitKey)
   end
   if type(text) ~= "string" or text == "" then
-    HideAFKTimerText(frame)
+    HideAFKTimerText(frame, waitingGUID)
     return
   end
   local fs = EnsureText(frame, "statusAFKTimerText", tcfg.layer)
@@ -718,13 +718,14 @@ local function PVPVariantForAtlas(atlas)
   return "Alliance"
 end
 
-function Runtime.UpdatePVP(frame, status)
+local function PaintPVP(frame, status)
+  -- Paints the icon; returns its atlas while it is shown.
   local cfg = status and status.pvp
   local tex = frame and frame.pvpIndicatorIcon
   local unit = frame and frame.MSUFUnitKey
   if not (cfg and cfg.enabled and tex and unit) then
     SetShown(tex, false)
-    return
+    return nil
   end
   local showFaction
   if status.testMode ~= true then
@@ -732,28 +733,109 @@ function Runtime.UpdatePVP(frame, status)
       local allowed, openWorld = UF.TargetPVPScope()
       if not allowed then
         SetShown(tex, false)
-        return
+        return nil
       end
       showFaction = cfg.showOpenWorldFaction and openWorld
     elseif cfg.contextGated == true and not (UF.PVPIndicatorContextActive and UF.PVPIndicatorContextActive()) then
       SetShown(tex, false)
-      return
+      return nil
     end
   end
   local unitState = FreshUnitState(frame, unit)
   local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(frame, unit, unitState, showFaction)
   if atlas and ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) then
     SetShown(tex, true)
+    return atlas
   elseif ApplyPVPTexture(tex, atlas) then
     SetShown(tex, true)
+    return atlas
+  end
+  SetShown(tex, false)
+  return nil
+end
+
+local PVPCountdown = { attached = {}, count = 0 }
+local IsPVPTimerRunning, GetPVPTimer = IS_FOREVER and IsPVPTimerRunning, IS_FOREVER and GetPVPTimer
+
+function Runtime.HidePVPCountdown(frame)
+  local fs = frame and frame.pvpIndicatorTimerText
+  if fs then SetShown(fs, false) end
+  local attached = PVPCountdown.attached
+  if not (frame and attached[frame]) then return end
+  attached[frame] = nil
+  PVPCountdown.count = PVPCountdown.count - 1
+  local ticker = PVPCountdown.ticker
+  if PVPCountdown.count <= 0 and ticker then
+    PVPCountdown.count, PVPCountdown.ticker = 0, nil
+    ticker:Cancel()
+  end
+end
+
+local function PaintPVPCountdownText(fs, seconds)
+  if seconds then
+    seconds = math.ceil(seconds)
+    if fs._msufPVPCountdownSeconds ~= seconds then
+      SetText(fs, string.format("%d:%02d", math.floor(seconds / 60), seconds % 60))
+      fs._msufPVPCountdownSeconds = seconds
+    end
+  end
+  SetShown(fs, seconds ~= nil)
+end
+
+local function PaintSamplePVPCountdown(frame, cfg, visible, elapsed)
+  local fs = frame.pvpIndicatorTimerText
+  if not fs then return end
+  local seconds = cfg and cfg.countdownEnabled and visible and (75 - math.floor(elapsed or 0) % 75) or nil
+  PaintPVPCountdownText(fs, seconds)
+end
+
+function PVPCountdown.Paint(frame)
+  local expiresAt, icon = PVPCountdown.expiresAt, frame.pvpIndicatorIcon
+  local left = expiresAt and expiresAt - GetTime()
+  if not (left and left > 0 and frame:IsVisible() and icon and icon:IsShown()) then return false end
+  PaintPVPCountdownText(frame.pvpIndicatorTimerText, left)
+  return true
+end
+
+function PVPCountdown.Tick()
+  for frame in pairs(PVPCountdown.attached) do
+    if not PVPCountdown.Paint(frame) then Runtime.HidePVPCountdown(frame) end
+  end
+end
+
+function PVPCountdown.Sync(frame, status, atlas)
+  -- Blizzard's Forever player frame supplies the remaining milliseconds on
+  -- world entry and PVP_TIMER_UPDATE and hides its countdown in free-for-all.
+  if atlas and atlas ~= Media.PVP_FFA_ATLAS and status.pvp.countdownEnabled then
+    local ms = BoolTrue(IsPVPTimerRunning()) and SafeNumber(GetPVPTimer()) or nil
+    PVPCountdown.expiresAt = ms and ms > 0 and GetTime() + ms / 1000 or nil
+    if PVPCountdown.Paint(frame) then
+      local attached = PVPCountdown.attached
+      if not attached[frame] then
+        attached[frame] = true
+        PVPCountdown.count = PVPCountdown.count + 1
+      end
+      PVPCountdown.ticker = PVPCountdown.ticker or C_Timer.NewTicker(1, PVPCountdown.Tick)
+      return
+    end
+  end
+  Runtime.HidePVPCountdown(frame)
+end
+
+function Runtime.UpdatePVP(frame, status)
+  local atlas = PaintPVP(frame, status)
+  if not (frame and frame.pvpIndicatorTimerText) or frame._msufPreviewScope then return end
+  if status and status.testMode then
+    Runtime.HidePVPCountdown(frame)
+    PaintSamplePVPCountdown(frame, status.pvp, atlas ~= nil)
   else
-    SetShown(tex, false)
+    PVPCountdown.Sync(frame, status, atlas)
   end
 end
 
 
 --- Scene form of the indicator updates: the sample's flags into the regions StatusIndicators laid out, behind the live gates.
-function Runtime.PaintSampleIndicators(frame, status, sample)
+function Runtime.PaintSampleIndicators(frame, status, sample, elapsed)
   if not status then return end
   local cfg, tex = status.raidMarker, frame.raidTargetIcon
   if tex then
@@ -828,6 +910,9 @@ function Runtime.PaintSampleIndicators(frame, status, sample)
       shown = ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) or ApplyPVPTexture(tex, atlas)
     end
     SetShown(tex, shown and true or false)
+    local selection = sample.statusSelection
+    PaintSamplePVPCountdown(frame, cfg, shown and faction ~= "FFA"
+      and (selection == nil or selection == "all" or selection == "statusPvp"), elapsed)
   end
   cfg, tex = status.raidGroup, frame.raidGroupNameText
   if tex then

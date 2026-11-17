@@ -10,6 +10,7 @@
 local addonName, MSUF = ...
 
 local UF = MSUF.UF
+local Appearance = UF.Appearance
 local GF = MSUF.GF or {}
 MSUF.GF = GF
 
@@ -811,6 +812,16 @@ local function SetAlphaCached(region, alpha, key, force)
   end
 end
 
+local function SetFrameAlphaCached(frame, alpha)
+  if not frame then return end
+  if frame._msufAppearance then
+    Appearance.WriteNumber(frame, alpha, "_msufGFRangeFrameAlpha")
+  elseif frame._msufGFRangeFrameAlpha ~= alpha then
+    frame:SetAlpha(alpha)
+    frame._msufGFRangeFrameAlpha = alpha
+  end
+end
+
 local function ClearAlphaCaches(frame)
   if not frame then return end
   frame._msufGFRangeFrameAlpha = nil
@@ -1049,17 +1060,17 @@ local function ApplyFrameAlphaFromBoolean(frame, value, inAlpha, outAlpha, value
   if valueSecret == nil then
     valueSecret = issecretvalue(value) == true
   end
-  if not valueSecret
-    and frame._msufGFRangeFrameBool == value
+  if valueSecret then
+    ClearFrameRangeBool(frame)
+  elseif frame._msufGFRangeFrameBool == value
     and frame._msufGFRangeFrameBoolIn == inAlpha
     and frame._msufGFRangeFrameBoolOut == outAlpha then
     return true
   end
-  frame:SetAlphaFromBoolean(value, inAlpha, outAlpha)
+  if frame._msufAppearance then Appearance.WriteBoolean(frame, value, inAlpha, outAlpha)
+  else frame:SetAlphaFromBoolean(value, inAlpha, outAlpha) end
   frame._msufGFRangeFrameAlpha = nil
-  if valueSecret then
-    ClearFrameRangeBool(frame)
-  else
+  if not valueSecret then
     frame._msufGFRangeFrameBool = value
     frame._msufGFRangeFrameBoolIn = inAlpha
     frame._msufGFRangeFrameBoolOut = outAlpha
@@ -1221,7 +1232,7 @@ function ApplyAlpha(frame, event, rangeValue, rangeSecret)
   if baseLocked == true then
     ApplyHealthRangeAlpha(frame, 1)
     ClearFrameRangeBool(frame)
-    SetAlphaCached(frame, baseAlpha, "_msufGFRangeFrameAlpha")
+    SetFrameAlphaCached(frame, baseAlpha)
     return
   end
 
@@ -1239,7 +1250,7 @@ function ApplyAlpha(frame, event, rangeValue, rangeSecret)
     local rangeAlpha = frame._msufGFRangeFadeAlphaValue or 0.4
     if frame._msufGFRangeLayerHealth == true then
       ClearFrameRangeBool(frame)
-      SetAlphaCached(frame, baseAlpha, "_msufGFRangeFrameAlpha")
+      SetFrameAlphaCached(frame, baseAlpha)
       if inRangeKnown and ApplyHealthRangeAlphaFromBoolean(frame, inRange, 1, rangeAlpha, inRangeSecret) then
         return
       end
@@ -1263,14 +1274,14 @@ function ApplyAlpha(frame, event, rangeValue, rangeSecret)
     local safe = SafeBool(inRange)
     if safe ~= nil then
       ClearFrameRangeBool(frame)
-      SetAlphaCached(frame, safe and baseAlpha or outAlpha, "_msufGFRangeFrameAlpha")
+      SetFrameAlphaCached(frame, safe and baseAlpha or outAlpha)
       return
     end
   end
 
   ApplyHealthRangeAlpha(frame, 1)
   ClearFrameRangeBool(frame)
-  SetAlphaCached(frame, baseAlpha, "_msufGFRangeFrameAlpha")
+  SetFrameAlphaCached(frame, baseAlpha)
 end
 
 function GroupRangeFade.Apply(frame)
@@ -1318,7 +1329,8 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
   local rangeSecret
   if event == "UNIT_IN_RANGE_UPDATE" then
     if UnitEventMatchesFrame(frame, unit) then
-      local value = FrameIsPlayerUnit(frame) and true or inRange
+      local value = inRange
+      if FrameIsPlayerUnit(frame) then value = true end
       if PresenceForcesOutOfRange(frame) then
         -- The ordinary range hotpath stays unchanged. Only a currently
         -- not-present frame spends one plain visibility read to let the first
@@ -1373,7 +1385,7 @@ function GroupRangeFade.Disable(frame)
   end
   ClearRangeRuntime(frame)
   ApplyHealthRangeAlpha(frame, 1)
-  SetAlphaCached(frame, CoreAlpha(frame), "_msufGFRangeFrameAlpha")
+  SetFrameAlphaCached(frame, CoreAlpha(frame))
 end
 
 UF.RegisterElement("GroupRangeFade", GroupRangeFade)

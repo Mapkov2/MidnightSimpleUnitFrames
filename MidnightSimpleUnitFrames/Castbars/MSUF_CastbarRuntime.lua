@@ -5,6 +5,7 @@
 local _, ns = ...
 local Castbars = ns.Require("MSUF", "Castbars/MSUF_CastbarRuntime.lua").Castbars
 local Config = Castbars.Config
+local Fade = Castbars.Style.Fade
 local Driver = Castbars.Driver
 local Engine = Castbars.Engine
 local Manager = Castbars.Manager
@@ -921,7 +922,7 @@ function Runtime:ApplyActive(frame, state, options)
     SetText(frame, "castText", state.text or spellName or "")
 
     local reverseFill = ResolveReverseFill(frame, state, isChanneled)
-    frame._msufStripeReverseFill = reverseFill and true or false
+    frame._msufStripeReverseFill = reverseFill
     -- The anchor is direction-only, so every value-writing path has to read the
     -- count direction from the cast type instead of inferring it from the anchor.
     local countsDown = CountsDown(frame, isChanneled)
@@ -961,7 +962,7 @@ function Runtime:ApplyActive(frame, state, options)
     end
 
     if options.skipShow ~= true and frame.Show then
-        frame:Show()
+        if Config.fadeEnabled or frame._msufFadeDriver then Fade.Show(frame) else frame:Show() end
     end
 
     if options.skipRegister ~= true then
@@ -987,6 +988,7 @@ end
 --- disposable options table. ApplyInterrupt below preserves the public table API.
 function Runtime.CreateInterruptPainter(_G)
 local function ApplyInterruptValues(self, frame, barValue, reverseFill, label, colorR, colorG, colorB, skipShake)
+    if frame and frame._msufFadeDriver then Fade.Begin(frame) end
     if not frame then
         return
     end
@@ -1028,10 +1030,10 @@ local function ApplyInterruptValues(self, frame, barValue, reverseFill, label, c
     SetText(frame, "timeText", "")
 
     if frame.Show then
-        frame:Show()
+        if Config.fadeEnabled or frame._msufFadeDriver then Fade.Show(frame) else frame:Show() end
     end
 
-    if frame.SetAlpha and frame._msufFocusKickSuppressed ~= true then
+    if not Config.fadeEnabled and frame.SetAlpha and frame._msufFocusKickSuppressed ~= true then
         frame:SetAlpha(1)
     end
 
@@ -1060,6 +1062,22 @@ end
 
 --- Stop cleanup must be centralized because casts can end through normal stop,
 --- fail, interrupt, hard hide, unit death, backend disable, or preview teardown.
+local function ClearRetainedContent(frame)
+    frame._msufRetainedCast = nil
+    frame._msufPlayerCastRank, frame._msufBaseCastText = nil, nil
+    frame._msufPlayerTargetCaptured, frame._msufPlayerTargetPainted = false, false
+    frame._msufPlayerCastTarget = nil
+    SetText(frame, "timeText", "")
+    SetText(frame, "castText", "")
+    SetText(frame, "castTargetText", "")
+    if frame.castTargetText then frame.castTargetText:Hide() end
+    if frame.latencyBar then frame.latencyBar:Hide() end
+    if frame.latencyText then frame.latencyText:Hide() end
+    Utils.ClearEmpowerState(frame)
+    local hideTicks = Castbars.ChannelTicks.PlayerChannelHasteMarkers_Hide
+    if hideTicks then hideTicks(frame) end
+end
+
 -- hot path: kept whole (perf rule)
 function Runtime:Stop(frame, reasonOrOptions)
     if not frame then
@@ -1139,6 +1157,17 @@ function Runtime:Stop(frame, reasonOrOptions)
         castState.holdUntil = nil
     end
 
+    if reason ~= REASON_HARDHIDE and reason ~= REASON_INTERRUPTED and not frame.interrupted
+        and Config.fadeEnabled and frame:IsShown() and frame:IsVisible() then
+        Utils.ClearEmpowerRuntime(frame)
+        if frame.statusBar then frame.statusBar:SetValue(frame.statusBar:GetValue()) end
+        self:ClearTimer(frame.statusBar)
+        frame._msufRetainedCast = true
+        Fade.Hide(frame, ClearRetainedContent)
+        self:SetPhase(frame, self.Phase.IDLE)
+        return
+    end
+
     if reason == REASON_HARDHIDE then
         self:SetPhase(frame, self.Phase.HIDDEN)
         self:ClearTimer(frame.statusBar)
@@ -1154,7 +1183,9 @@ function Runtime:Stop(frame, reasonOrOptions)
     end
 
     if reason == REASON_STOPPED then
+        if frame.isEmpower then ClearEmpowerState(frame) end
         self:SetPhase(frame, self.Phase.IDLE)
+        if frame.castTargetText then SetText(frame, "castTargetText", "") frame.castTargetText:Hide() end
         SetText(frame, "timeText", "")
         SetText(frame, "castText", "")
 

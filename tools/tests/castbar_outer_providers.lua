@@ -191,6 +191,34 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
                 assert(VisibleMarkers() == 2, "Penance without Castigation needs three ticks")
             end
         end
+        if flavor == "Forever" or flavor == "Vanilla" then
+            local penance = { 402261, 402277, 402174, 1240734, 1240732, 1240720,
+                1240736, 1240733, 1240721, 1316994, 1316992, 1316995 }
+            local function Shown()
+                local shown = {}
+                for _, marker in ipairs(frame._msufPlayerChannelHasteMarkers) do
+                    if marker.shown then shown[#shown + 1] = marker end
+                end
+                return shown
+            end
+            for _, spellID in ipairs(penance) do
+                frame._msufActiveSpellID = spellID
+                Markers()
+                local shown = Shown()
+                if flavor == "Forever" then
+                    assert(#shown == 1, "Forever Penance " .. spellID .. " needs one marker")
+                    local x = math.abs(shown[1].points[1].x)
+                    assert(math.abs(x / frame.statusBar:GetWidth() - .5) < 1e-6,
+                        "Forever Penance " .. spellID .. " needs its marker at 50%")
+                else
+                    assert(#shown == 5, "Era Penance " .. spellID .. " must keep the default layout")
+                end
+            end
+            frame._msufActiveSpellID = 15407
+            Markers()
+            assert(#Shown() == 2, flavor .. " Mind Flay must keep three ticks")
+            frame._msufActiveSpellID = nil
+        end
     end
 end
 assert(#failures == 0, table.concat(failures, "\n"))

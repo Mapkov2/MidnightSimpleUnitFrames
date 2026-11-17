@@ -342,7 +342,7 @@ UF.CoreElementAllowed = HotElementAllowed
 local function EventElementAllowed(name)
   local traits = UF.elementTraits[name]
   return (traits and traits.events == true)
-    or HotElementAllowed(name) == true
+    or HotElementAllowed(name)
     or EVENT_ELEMENTS[name] == true
 end
 UF.EventElementAllowed = EventElementAllowed

@@ -1107,7 +1107,44 @@ local function ResolveCastbarPushbackMS(frame, state)
 end
 Utils.Castbar_ResolvePushbackMS = ResolveCastbarPushbackMS
 
+Utils.PlayerSpellRanksSupported = MSUF.Client.IsForever or MSUF.Client.IsTBC or MSUF.Client.IsVanilla
+
+function Utils.CapturePlayerSpellRank(frame, spellID, sampleRank, unit)
+    if frame.unit ~= "player" then return end
+    if unit == "vehicle" or not Utils.PlayerSpellRanksSupported or not Config.playerSpellRank then
+        frame._msufPlayerCastRank, frame._msufBaseCastText, frame._msufPlayerRankSpellID = nil, nil, nil
+        return
+    end
+    if sampleRank ~= nil then
+        frame._msufPlayerCastRank, frame._msufBaseCastText, frame._msufPlayerRankSpellID = sampleRank, nil, nil
+        return
+    end
+    if (IsSecretValue and IsSecretValue(spellID)) or type(spellID) ~= "number" then
+        frame._msufPlayerCastRank, frame._msufBaseCastText, frame._msufPlayerRankSpellID = nil, nil, nil
+        return
+    end
+    if frame._msufPlayerRankSpellID == spellID and frame._msufPlayerCastRank then return end
+    frame._msufPlayerRankSpellID, frame._msufPlayerCastRank, frame._msufBaseCastText = spellID, nil, nil
+    local api = C_Spell
+    if not (api and api.GetSpellSubtext) then return end
+    local rank = api.GetSpellSubtext(spellID)
+    if (not IsSecretValue or not IsSecretValue(rank)) and type(rank) == "string" and rank:find("%d") then
+        frame._msufPlayerCastRank = rank
+    end
+end
+
 local function ComposeCastText(frame, text)
+    local rank = frame._msufPlayerCastRank
+    if rank then
+        local secret = IsSecretValue and IsSecretValue(text)
+        if secret then frame._msufBaseCastText = nil
+        else frame._msufBaseCastText = text end
+        if not secret and type(text) == "string" and Config.playerSpellRank
+            and (frame.MSUF_castActive == true or frame._msufPreviewScope or frame.MSUF_testMode or frame._msufRetainedCast)
+            and not frame.interrupted then
+            text = string.format("%s (%s)", text, rank)
+        end
+    end
     local out = ShortenCastbarSpellName(frame, text)
     if type(out) ~= "string" then return out end
 
@@ -1119,8 +1156,15 @@ end
 local function RefreshCastbarSpellNameText(frame)
     if not (frame and frame.castText) then return end
 
-    local rawText = frame._msufRawCastText
+    local rawText = frame._msufBaseCastText or frame._msufRawCastText
     if rawText == nil then return end
+    if frame.unit == "player" and Config.playerSpellRank and not frame.interrupted then
+        if frame.MSUF_testMode then
+            Utils.CapturePlayerSpellRank(frame, nil, (MSUF.L and MSUF.L["Rank 4"]) or "Rank 4")
+        elseif frame.MSUF_castActive == true and not frame._msufPreviewScope then
+            Utils.CapturePlayerSpellRank(frame, frame._msufActiveSpellID, nil, frame._msufActiveCastUnit)
+        end
+    end
     SetText(frame.castText, ComposeCastText(frame, rawText))
 end
 Utils.RefreshCastbarSpellNameText = RefreshCastbarSpellNameText
@@ -1141,9 +1185,7 @@ Utils.CB_ApplyTexts = ApplyCastbarTexts
 Publish("MSUF_CB_ApplyTexts", Utils.CB_ApplyTexts)
 
 -- hot path: kept whole (perf rule)
-local function ClearEmpowerState(frame, hideFrame)
-    if not frame then return end
-
+local function ClearEmpowerRuntime(frame)
     frame.isEmpower = nil
     frame.empowerStartTime = nil
     frame.empowerStageEnds = nil
@@ -1161,6 +1203,26 @@ local function ClearEmpowerState(frame, hideFrame)
     frame._msufEmpowerMinMaxSet = nil
     frame._msufEmpowerElapsed = nil
     frame._msufEmpowerTimerDriven = nil
+
+end
+Utils.ClearEmpowerRuntime = ClearEmpowerRuntime
+
+local function ClearEmpowerState(frame, hideFrame)
+    if not frame then return end
+    if hideFrame then
+        if Config.fadeEnabled then
+            Castbars.Runtime:Stop(frame, "STOPPED")
+            return
+        end
+        ClearEmpowerState(frame)
+        if frame.castTargetText then SetTextIfChanged(frame.castTargetText, "") frame.castTargetText:Hide() end
+        frame:SetScript("OnUpdate", nil)
+        Manager.UnregisterCastbar(frame)
+        if frame.timeText then SetTextIfChanged(frame.timeText, "") end
+        if frame.latencyBar then frame.latencyBar:Hide() end
+        frame:Hide()
+        return
+    end
 
     local ticks = frame.empowerTicks
     if ticks then
@@ -1182,14 +1244,7 @@ local function ClearEmpowerState(frame, hideFrame)
         end
     end
 
-    -- Player-only hide policy. Shared cast/channel clears omit hideFrame.
-    if hideFrame then
-        frame:SetScript("OnUpdate", nil)
-        Manager.UnregisterCastbar(frame)
-        if frame.timeText then SetTextIfChanged(frame.timeText, "") end
-        if frame.latencyBar then frame.latencyBar:Hide() end
-        frame:Hide()
-    end
+    return ClearEmpowerRuntime(frame)
 end
 Utils.ClearEmpowerState = ClearEmpowerState
 

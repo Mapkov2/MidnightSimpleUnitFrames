@@ -368,7 +368,7 @@ local function BuildGFTransparencySection(ctx, b)
     local transparencyCardW = floor((transparencyInnerW - transparencyGap) / 2)
     local transparencyRightX = transparencyLeftX + transparencyCardW + transparencyGap
     local transparencyRightW = transparencyInnerW - transparencyCardW - transparencyGap
-    local transparencyCardH = 180
+    local transparencyCardH = 216
     -- State tab row: base cards edit the general, always-on opacities,
     -- the second tab holds the whole-member-frame out-of-combat fade.
     local _, transparencyBarY = W.NextRow(transparency, 34)
@@ -415,12 +415,16 @@ local function BuildGFTransparencySection(ctx, b)
     end
     AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Foreground", key = "hpBarAlpha", default = 1, y = -54 })
     AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Background", key = "hpBgAlpha", default = 0.85, y = -112 })
-    Schema.Build(ctx, opacityOptionsCard, {
+    local opacityControls = Schema.Build(ctx, opacityOptionsCard, {
+        { "toggle", "fadeInOnShow", false, { "Fade in when shown", 16, -154, transparencyRightW - 32 },
+            domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
         { "toggle", "alphaExcludeTextPortrait", false, { "Keep text + portrait visible", 16, -62, transparencyRightW - 32 },
             domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
         { "toggle", "alphaExcludePredictionBars", false, { "Keep Absorbs + Prediction Visible", 16, -112, transparencyRightW - 32 },
             domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
     }, ROW_OPTIONS)
+
+    M.AddTooltip(opacityControls.fadeInOnShow, "Fade in when shown", "Disabled while Reduce menu motion is enabled.", { hook = true })
 
     -- Out of Combat tab: whole-member-frame fade; min-composed with range and
     -- offline fades at runtime (strongest fade wins). Slider greys while off.

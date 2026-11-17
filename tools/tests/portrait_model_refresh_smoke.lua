@@ -328,6 +328,42 @@ if flavor == "Forever" then
   Fire(target, "UNIT_CLASSIFICATION_CHANGED")
   Check(not dragon:IsShown(), "restricted classification must clear the previous dragon")
 end
+-- RegisterUnitWatch can show a new target before PLAYER_TARGET_CHANGED.
+-- Core seeds MSUF_UF_ONSHOW and can consume the matching lifecycle follower.
+-- Hidden frames receive no portrait event, so no portrait-owned repair flag is set.
+for _, unit in ipairs(flavor == "Vanilla" and { "target" } or { "target", "focus" }) do
+  for _, guidKind in ipairs({ "plain", "secret", "missing" }) do
+    state.identity, state.targetIsPlayer, state.classification = "visible-old", false, "elite"
+    state.guid = guidKind == "plain" and "old-guid" or guidKind == "secret" and Secrets.New("string") or nil
+    local recycled = NewFrame(unit)
+    local p = recycled.MSUFSpec.portrait
+    p.shape, p.blizzardElite = "BLIZZARD", true
+    Fire(recycled, "MSUF_UNIT_IDENTITY_SOFT")
+    local dragon = recycled.MSUFPortraitHolder.blizzElite
+    Check(dragon and dragon:IsShown(), unit .. " missing initial elite dragon")
+    recycled._msufCoreVisible = false
+    recycled:Hide()
+    state.identity, state.classification = "visible-new", "normal"
+    if guidKind == "plain" then state.guid = "new-guid" end
+    Check(recycled._msufPortraitNeedsVisibleRefresh == nil, "hidden fixture set a portrait repair flag")
+    recycled._msufCoreVisible = true
+    recycled:Show()
+    before = state.calls
+    Fire(recycled, "MSUF_UF_ONSHOW")
+    Check(state.calls == before + 1 and recycled.portrait.image == "RTPortrait:visible-new",
+      unit .. " OnShow retained previous portrait with " .. guidKind .. " GUID")
+    Check(not dragon:IsShown(), unit .. " OnShow retained previous elite dragon")
+    Flush()
+    Check(state.calls == before + 1, unit .. " OnShow queued a redundant native refresh")
+    state.classification = "rare"
+    Fire(recycled, "MSUF_UF_ONSHOW")
+    Check(dragon:IsShown() and dragon.atlas == "ui-hud-unitframe-target-portraiton-boss-rare-silver",
+      unit .. " OnShow failed to repaint new rare dragon")
+    local warmed = state.calls
+    for _ = 1, 20 do Fire(recycled, "MSUF_UNIT_IDENTITY_SOFT") end
+    Check(state.calls == warmed, unit .. " soft identity lost its stable-key cache")
+  end
+end
 local violations = stopSecrets()
 Check(#violations == 0, "secret misuse: " .. table.concat(violations, "\n"))
 print("portrait_model_refresh_smoke: ok (" .. flavor .. ", " .. checks .. " checks)")

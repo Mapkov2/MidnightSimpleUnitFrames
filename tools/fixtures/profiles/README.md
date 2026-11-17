@@ -517,3 +517,22 @@ Forever group layer status text. The status is off by default. Its anchor,
 layer, font size and offsets match the group-frame defaults. The settings are
 recorded for the stored party, raid and retained mythic-raid scopes. No other
 expectations changed.
+
+## 7.0.3 opt-in appearance and castbar defaults (2026-11-17)
+
+The reviewed refresh adds only twenty new field paths: `fadeInOnShow=false`
+for nine unit and three retained group scopes; the three disabled castbar
+fade/rank/recipient switches; and the Player recipient layout defaults
+BELOW, 10, RIGHT, 0 and 1. Existing values, references, archive/character data,
+round-trip exceptions and the frozen storage dictionaries are unchanged.
+
+Generation used `lua tools/profile_corpus_golden.lua <root> all --write
+--keep-references`. Adoption kept every unrelated preexisting assertion,
+including redundant layer-status values, and took only eighty additions in
+four golden files belonging to those twenty new paths. The typed defaults
+fixture adds only the three new boolean entries to bars_12 and bars_13.
+
+Current-revision completion and explicit true/false/zero/nonzero choices are
+independently exercised through export, import and reload by
+`profile_unit_override_roundtrip_smoke.lua` on all five clients. Full and
+bounded completion use the same cast-target text defaults owner.

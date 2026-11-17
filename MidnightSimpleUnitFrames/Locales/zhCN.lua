@@ -14,6 +14,7 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhCN")) or (MSUF.L or {})
+L["Hide when resource is missing"] = "没有该资源时隐藏"
 L["Layer Status Text"] = "位面状态文字"
 L["Different layer"] = "不同分层"
 L["Different phase"] = "不同位面"
@@ -3592,6 +3593,8 @@ L["Not ready color (kick on cooldown)"] = "未就绪颜色（打断冷却中）"
 L["PvP Flag (War Mode/PvP)"] = "PvP 标记（战争模式/PvP）"
 L["Faction Symbol Without PvP Flag"] = "无 PvP 标记时显示阵营图标"
 L["Show the faction symbol for unflagged players in the open world."] = "在开放世界中显示未开启 PvP 标记的玩家的阵营图标。"
+L["Show PvP countdown"] = "显示 PvP 倒计时"
+L["Show the remaining time next to your PvP flag."] = "在你的 PvP 标记旁显示剩余时间。"
 L["Abbreviate HP values (K/M)"] = "HP 值缩写 (K/M)"
 L["For specializations that use mana alongside another resource."] = "适用于与其他资源一起使用法力的专精。"
 L["Smooths resource changes. Runes, Essence recharge, and timers keep their own animation."] = "平滑资源变化。符文、精华充能和计时器保持自己的动画。"
@@ -7772,6 +7775,21 @@ L["Bar opacity (%s)"] = "条不透明度（%s）"
 L["Background opacity (%s)"] = "背景不透明度（%s）"
 L["Same value as Foreground under Opacity > Resource Bar on this frame's page. The color itself is shared by every frame."] = "与此框体页面中“透明度 > 资源栏 > 前景”的数值相同。颜色本身由所有框体共享。"
 L["Same value as Background under Opacity > Resource Bar on this frame's page. It multiplies with the opacity of the shared background color."] = "与此框体页面中“透明度 > 资源栏 > 背景”的数值相同。它会与共享背景颜色的不透明度相乘。"
+
+L["Taint Report"] = "污染报告"
+L["Start new recording"] = "开始新的记录"
+L["Stop recording"] = "停止记录"
+L["Copy report"] = "复制报告"
+L["Recording blocked actions."] = "正在记录被阻止的操作。"
+L["Recording is off."] = "记录已关闭。"
+L["Open the Taint Report outside combat."] = "请在脱离战斗后打开污染报告。"
+L["Open the copyable report for blocked addon actions."] = "打开可复制的插件操作阻止报告。"
+L["Show spell rank"] = "显示法术等级"
+L["Fade castbars in and out"] = "施法条淡入淡出"
+L["Latency zone color"] = "延迟区域颜色"
+L["Rank 4"] = "等级 4"
+L["Disabled while Reduce menu motion is enabled."] = "启用减少菜单动画时禁用。"
+L["Fade in when shown"] = "显示时淡入"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

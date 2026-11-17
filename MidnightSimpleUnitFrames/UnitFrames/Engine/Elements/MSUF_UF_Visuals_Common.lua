@@ -2,6 +2,8 @@ local addonName, MSUF = ...
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Visuals_Common.lua")
 
 local UF = MSUF.UF
+local Appearance = {}
+UF.Appearance = Appearance
 local CreateFrame = CreateFrame
 
 -- Shared visual constants/helpers for unitframe elements.
@@ -85,6 +87,10 @@ local function SetFrameAlpha(frame, alpha)
     return
   end
   alpha = Clamp01(alpha, 1)
+  if frame._msufAppearance then
+    Appearance.WriteNumber(frame, alpha, "_msufLastAlpha", true)
+    return
+  end
   if frame._msufLastAlpha == alpha then
     local current = frame.GetAlpha and frame:GetAlpha()
     if not NotSecretValue(current) or current == nil or not AlphaDiffers(current, alpha) then
@@ -247,3 +253,131 @@ MSUF.UFVisuals = {
   ResolveGroupAggroPair = ResolveGroupAggroPair,
   ResolveGroupAggroThreat = ResolveGroupAggroThreat,
 }
+
+-- One finite spring driver for appearance only. Root writers retain their
+-- pre-animation inputs; slider, range and combat updates never reuse a painted
+-- (possibly secret) alpha as the next target.
+do
+  local Motion = Appearance
+  local StepSpring, SpringDecay = MSUF.Util.StepSpring, MSUF.Util.SpringDecay
+  local GeneralDB = MSUF.Require("MSUF_GetGeneralDB", "MSUF_UF_Visuals_Common.lua")
+  local PublicGlobals = MSUF.PublicGlobals
+  local active, driver, reduced = {}, nil, false
+
+  local function Paint(state)
+    local frame, progress = state.frame, state.value
+    if state.mode == 1 then
+      local alpha = state.alpha * progress
+      if state.painted ~= alpha then frame:SetAlpha(alpha) state.painted = alpha end
+    elseif state.mode == 2 then
+      frame:SetAlphaFromBoolean(state.boolean, state.inAlpha * progress, state.outAlpha * progress)
+      state.painted = nil
+    else
+      local selected = Motion.EvaluateBoolean(state.boolean, state.inAlpha * progress, state.outAlpha * progress)
+      frame:SetAlphaFromBoolean(state.checked, selected, state.fallback * progress)
+      state.painted = nil
+    end
+  end
+
+  local function Remove(state)
+    local index = state.index
+    if not index then return end
+    local last, tail = #active, active[#active]
+    active[last] = nil
+    if index ~= last then active[index], tail.index = tail, index end
+    state.index = nil
+    if last == 1 then driver:SetScript("OnUpdate", nil) end
+  end
+
+  local function Finish(state)
+    Remove(state)
+    state.value, state.velocity, state.age = 1, 0, 0
+    Paint(state)
+  end
+
+  local function Update(_, elapsed)
+    local decay = SpringDecay(50, elapsed)
+    for index = #active, 1, -1 do
+      local state = active[index]
+      state.age = state.age + elapsed
+      state.value, state.velocity = StepSpring(state.value, state.velocity, 1, 50, elapsed, decay)
+      if state.age >= 0.25 or (abs(1 - state.value) < 0.002 and abs(state.velocity) < 0.02) then
+        Finish(state)
+      else
+        Paint(state)
+      end
+    end
+  end
+
+  function Motion.UpdateSettings()
+    local general = GeneralDB()
+    reduced = general ~= nil and (general.reduceMotion == true or general.reducedMotion == true)
+    if reduced then
+      for index = #active, 1, -1 do Finish(active[index]) end
+    end
+  end
+
+  function Motion.Cancel(frame)
+    local state = frame._msufAppearance
+    if state then Finish(state) end
+  end
+
+  function Motion.Begin(frame)
+    local state = frame._msufAppearance
+    if not state or state.index or reduced or PublicGlobals.MSUF_UnitEditModeActive == true then return false end
+    if frame._msufDisabledByConfig == true or not frame:IsVisible() then return false end
+    if frame._msufIsGroupFrame and MSUF.GF.IsHeaderLayoutRebindActive(frame) then return false end
+    if not driver then driver = CreateFrame("Frame") end
+    state.value, state.velocity, state.age, state.painted = 0, 0, 0, nil
+    Paint(state)
+    state.index = #active + 1
+    active[state.index] = state
+    if #active == 1 then driver:SetScript("OnUpdate", Update) end
+    return true
+  end
+
+  function Motion.Configure(frame, cfg)
+    Motion.UpdateSettings()
+    local state = frame._msufAppearance
+    if not (cfg and (cfg.fadeIn == true or cfg.fadeInOnShow == true)) then
+      if state then Finish(state) frame._msufAppearance = nil end
+      return
+    end
+    if state then return end
+    state = frame._msufAppearanceCache
+    if not state then
+      state = { frame = frame, mode = 1, alpha = 1, value = 1, velocity = 0, age = 0 }
+      frame._msufAppearanceCache = state
+      frame:HookScript("OnShow", Motion.Begin)
+      frame:HookScript("OnHide", Motion.Cancel)
+    end
+    state.mode = 1
+    state.alpha = (frame._msufIsGroupFrame and frame._msufGFRangeFrameAlpha) or frame._msufLastAlpha or 1
+    state.boolean, state.checked, state.fallback, state.painted = nil, nil, nil, nil
+    frame._msufAppearance = state
+    if frame._msufIsPreview or frame._msufPreviewScope or frame._msufGFIsPreviewFrame then Motion.Begin(frame) end
+  end
+
+  function Motion.WriteNumber(frame, alpha, field, verifyCurrent)
+    local state = frame._msufAppearance
+    if verifyCurrent then
+      if state.index then state.painted = nil
+      elseif state.painted == alpha then
+        local current = frame:GetAlpha()
+        if NotSecretValue(current) and current ~= nil and AlphaDiffers(current, alpha) then state.painted = nil end
+      end
+    end
+    state.mode, state.alpha = 1, alpha
+    frame[field] = alpha
+    Paint(state)
+  end
+
+  function Motion.WriteBoolean(frame, value, inAlpha, outAlpha, checked, fallback, checkedSecret)
+    local state = frame._msufAppearance
+    state.mode = checkedSecret == true and 3 or 2
+    state.boolean, state.inAlpha, state.outAlpha = value, inAlpha, outAlpha
+    state.checked, state.fallback = checked, fallback
+    Paint(state)
+  end
+
+end

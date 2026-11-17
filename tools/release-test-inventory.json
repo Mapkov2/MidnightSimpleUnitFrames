@@ -2,6 +2,76 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/version_patch_order_smoke.lua",
+      "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/unitframe_appearance_menu_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/unitframe_appearance_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_options_menu_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_player_options_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/taint_report_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/group_rezz_class_color_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/pet_hots_smoke.lua",
       "phase": "runtime",
       "clients": [
@@ -49,6 +119,17 @@
     {
       "test": "tools/tests/classpower_combat_visibility_smoke.lua",
       "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/afk_timer_event_order_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/group_layer_status_smoke.lua",
@@ -578,6 +659,14 @@
       ]
     },
     {
+      "test": "tools/tests/portrait_identity_lifecycle_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/castbar_interrupt_ready_geometry.lua",
       "phase": "runtime"
     },
@@ -588,6 +677,14 @@
     {
       "test": "tools/tests/auras3_identity_alpha_world_smoke.lua",
       "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/forever_weakened_soul_spell_icons_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/group_highlights_forever_smoke.lua",
@@ -2813,6 +2910,17 @@
       ]
     },
     {
+      "test": "tools/tests/unit_power_presence_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/detached_power_geometry_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -3025,6 +3133,64 @@
       "phase": "runtime",
       "clients": [
         "Mainline"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_health_text_gradient_colors_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "fonts"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_health_text_gradient_colors_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "quick"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_health_text_gradient_colors_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "fonts",
+        "deDE"
+      ]
+    },
+    {
+      "test": "tools/tests/menu_health_text_gradient_colors_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "quick",
+        "deDE"
       ]
     }
   ],

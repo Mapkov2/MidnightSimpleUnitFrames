@@ -19,6 +19,7 @@ local UI_DEFAULTS = {
         meleeSpellPerClass = false, meleeSpellPerSpec = false, combatStateEnterText = "+Combat", combatStateLeaveText = "-Combat",
     },
     unit = {
+        fadeInOnShow = false,
         hpBarAlpha = 1, hpBgAlpha = 0.85, powerBarAlpha = 1, powerBarBgAlpha = 0.85,
         alphaExcludeTextPortrait = false, alphaExcludePredictionBars = false, oocFadeEnabled = false, oocFadeAlpha = 0.5,
         rangeFadeEnabled = true, rangeFadeAlpha = 0.4, rangeFadeUpdateRate = 0, rangeFadeLayerMode = "frame",
@@ -374,6 +375,9 @@ local function StatusResetTargets(group, scope)
             "threatIndicatorColorCurve", "threatIndicatorBackground" }
     if not group and MSUF.UF.Config.Status.SupportsPVPFactionBadge(roots[1]) then
         names[#names + 1] = "pvpIndicatorShowOpenWorldFaction"
+    end
+    if not group and MSUF.UF.Config.Status.SupportsPVPCountdown(roots[1]) then
+        names[#names + 1] = "pvpIndicatorCountdownEnabled"
     end
     for _, selected in ipairs(specs) do
         for _, field in ipairs(fields) do

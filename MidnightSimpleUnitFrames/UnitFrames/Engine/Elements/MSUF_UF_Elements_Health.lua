@@ -327,7 +327,9 @@ function Health.Layout(frame, spec, powerEnabled)
   if not bar then return end
   spec = spec or frame.MSUFSpec
   local power = spec and spec.power
-  if powerEnabled == nil then powerEnabled = power and power.enabled == true end
+  if powerEnabled == nil then
+    powerEnabled = power and power.enabled == true and frame._msufPowerResourceMissing ~= true
+  end
   local powerInset = 0
   if powerEnabled == true and power and power.embed ~= false and power.detached ~= true then
     powerInset = tonumber(power.height) or 3

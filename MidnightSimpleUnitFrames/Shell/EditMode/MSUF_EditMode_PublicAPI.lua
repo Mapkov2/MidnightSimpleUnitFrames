@@ -154,11 +154,14 @@ local CALLBACKS = {
 }
 
 --- Optional owner-defined quick controls rendered inside the MSUF external
---- popup. Each spec is { id, label, kind = "number"|"toggle", get, set } with
+--- popup. Each spec is { id, label, kind = "number"|"toggle"|"choice", get, set } with
 --- min/max required for numbers. Values flow through get/set only; MSUF never
 --- touches the owner's storage.
 --- Numeric controls may declare positionAxis (x/y); a complete pair supplies
+--- Choice controls provide values() -> { { value = string|number, text } }.
+--- Resolve values at menu open and commit; choiceControls advertises support.
 --- the popup coordinates in place of the generic screen-position fields.
+local CONTROL_CALLBACKS = { default = { "get", "set" }, choice = { "values", "get", "set" } }
 local function PrepareControls(list, owner)
     if list == nil then return nil end
     if type(list) ~= "table" then return nil, "invalid_extraControls" end
@@ -170,9 +173,13 @@ local function PrepareControls(list, owner)
         if type(spec.label) ~= "string" or spec.label == "" or #spec.label > 40 then
             return nil, "invalid_control_label"
         end
-        if spec.kind ~= "number" and spec.kind ~= "toggle" then return nil, "invalid_control_kind" end
-        if type(spec.get) ~= "function" or type(spec.set) ~= "function" then
-            return nil, "invalid_control_callbacks"
+        if spec.kind ~= "number" and spec.kind ~= "toggle" and spec.kind ~= "choice" then
+            return nil, "invalid_control_kind"
+        end
+        for _, name in ipairs(CONTROL_CALLBACKS[spec.kind] or CONTROL_CALLBACKS.default) do
+            if type(spec[name]) ~= "function" then
+                return nil, name == "values" and "invalid_control_values" or "invalid_control_callbacks"
+            end
         end
         local minValue, maxValue
         if spec.kind == "number" then
@@ -185,7 +192,7 @@ local function PrepareControls(list, owner)
         local stepValue = tonumber(spec.step)
         prepared[#prepared + 1] = {
             owner = owner, id = spec.id, label = spec.label, kind = spec.kind,
-            get = spec.get, set = spec.set, min = minValue, max = maxValue,
+            get = spec.get, set = spec.set, min = minValue, max = maxValue, values = spec.values,
             step = (spec.kind == "number" and Finite(stepValue) and stepValue > 0) and stepValue or nil,
             transient = spec.transient == true,
             positionAxis = spec.kind == "number" and (spec.positionAxis == "x" or spec.positionAxis == "y")
@@ -294,7 +301,7 @@ function API.GetCapabilities()
     return { registration = true, drag = true, gridSnap = true, nudge = true,
         undoRedo = true, saveDiscard = true, reset = true, inspector = true,
         settingsLink = true, popup = true, positionFields = true, relativePositionSteps = true,
-        sessionCallbacks = true,
+        sessionCallbacks = true, choiceControls = true,
         resize = false, polling = false }
 end
 
@@ -521,6 +528,33 @@ function External.GetControlValue(key, id)
     if ok then return value end
 end
 
+-- Resolve fresh values when a menu opens or commits; removed targets cannot
+-- be written through an already open list. Secret values never become keys.
+function External.GetControlChoices(key, id)
+    local spec = ControlSpec(records[key], id)
+    if not spec or spec.kind ~= "choice" then return nil end
+    local ok, values = spec._invoke("values", spec.values)
+    if issecretvalue and issecretvalue(values) then return nil end
+    if not ok or type(values) ~= "table" or #values > 512 then return nil end
+    for i = 1, #values do
+        local row = values[i]
+        if issecretvalue and issecretvalue(row) then return nil end
+        if type(row) ~= "table" then return nil end
+        local value, text = row.value, row.text
+        if issecretvalue and (issecretvalue(value) or issecretvalue(text)) then return nil end
+        if (type(value) ~= "string" and not Finite(value)) or type(text) ~= "string" then return nil end
+    end
+    return values
+end
+
+local function AllowedChoice(key, id, value)
+    if issecretvalue and issecretvalue(value) then return false end
+    for _, row in ipairs(External.GetControlChoices(key, id) or {}) do
+        if row.value == value then return true end
+    end
+    return false
+end
+
 --- One undo transaction per committed control change; the element's own
 --- captureState/restoreState carry the before-state, so undo/redo and discard
 --- revert control values exactly like positions.
@@ -534,6 +568,8 @@ function External.ApplyControl(key, id, value)
         if not Finite(value) then return false end
         if spec.min and value < spec.min then value = spec.min end
         if spec.max and value > spec.max then value = spec.max end
+    elseif spec.kind == "choice" then
+        if not AllowedChoice(key, id, value) then return false end
     else
         value = value == true
     end

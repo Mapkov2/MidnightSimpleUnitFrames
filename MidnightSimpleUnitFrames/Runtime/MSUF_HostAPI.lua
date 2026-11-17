@@ -292,6 +292,8 @@ local API = {
     GetNameplateSettings = function() return MSUF.NameplateSettings end,
     GetIconSkins = GetIconSkins,
     GetNameFormatter = GetNameFormatter,
+    -- Optional v1 diagnostic shared by the slash command and Suite Dev Mode.
+    GetTaintReport = function() return MSUF.TaintReport end,
     GetProfileWorkbench = function() return MSUF.ProfileWorkbench end,
     Profiles_BeginImport = function(text, name, legacyRetail)
         return MSUF.ProfileImportReview.BeginImport(text, name, legacyRetail)

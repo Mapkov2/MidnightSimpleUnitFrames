@@ -974,13 +974,51 @@ ApplyLayerVisibility = function(preview)
     end
     ApplyPreviewBorder(preview)
 end
+local LAYER_SETTINGS = {
+    class = "bars.showClassPower", classText = "bars.classPowerShowText",
+    power = "player.powerBarDetached", powerText = "player.detachedPowerBarTextOnBar",
+    hp = "bars.playerHPBarEnabled", hpText = "bars.playerHPBarTextEnabled", mana = "bars.showAltMana",
+}
+
+local function DisabledLayerSetting(key)
+    if not LAYER_SETTINGS[key] then return end
+    if key == "power" or key == "powerText" then
+        local player = Section("player")
+        if not DetachedPowerShown(player) then return LAYER_SETTINGS.power end
+        if key == "powerText" then
+            if not PlayerPowerTextShown(player) then return "player.showPowerText" end
+            if player.detachedPowerBarTextOnBar ~= true then return LAYER_SETTINGS.powerText end
+        end
+        return
+    end
+    local bars = Section("bars")
+    if key == "class" or key == "classText" then
+        if bars.showClassPower == false then return LAYER_SETTINGS.class end
+        if key == "classText" and bars.classPowerShowText ~= true then return LAYER_SETTINGS.classText end
+    elseif key == "hp" or key == "hpText" then
+        if bars.playerHPBarEnabled ~= true then return LAYER_SETTINGS.hp end
+        if key == "hpText" and bars.playerHPBarTextEnabled == false then return LAYER_SETTINGS.hpText end
+    elseif key == "mana" and bars.showAltMana ~= true then
+        return LAYER_SETTINGS.mana
+    end
+end
+
+local function OpenLayerSettings(key, setting)
+    local page = setting == "player.showPowerText" and "uf_player" or "classpower"
+    if setting and M.OpenExactSettingControl(setting, nil, page) then return true end
+    return OpenClassPowerHandleSettings({ _key = key })
+end
+
 local CP_LAYER_BUTTON_OPTS = Helpers.LayerChipButtonOpts(TR, T.colors, Helpers.PreviewChromePalette(T), {
     Tr = TR,
     IsAvailable = LayerAvailable,
     IsOn = LayerOn,
-    disabledLine = "This element is disabled in the current settings.",
+    disabledLine = "Click to open the setting that enables this layer.",
     OnClick = function(self, preview)
-        if not LayerAvailable(preview, self.key) then return end
+        local setting = DisabledLayerSetting(self.key)
+        if setting or not LayerAvailable(preview, self.key) then
+            return OpenLayerSettings(self.key, setting or LAYER_SETTINGS[self.key])
+        end
         preview.layerVisibility[self.key] = preview.layerVisibility[self.key] == false
         if self.key == "guides" then SetPreviewGuidesEnabled(preview.layerVisibility[self.key] ~= false) end
         if preview and preview.Refresh then
@@ -1302,7 +1340,7 @@ function Box.Refresh(box)
         mana = manaAvailable,
         class = classFrame ~= nil,
         classText = classFrame ~= nil and (bars.classPowerShowText == true
-            or (spec and spec.secondaryTimer and spec.secondaryTimer.nativeDurationText == true)),
+            or (spec and spec.secondaryTimer and spec.secondaryTimer.nativeDurationText == true) == true),
         power = powerFrame ~= nil,
         powerText = powerFrame ~= nil and PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true,
         hp = hpFrame ~= nil,

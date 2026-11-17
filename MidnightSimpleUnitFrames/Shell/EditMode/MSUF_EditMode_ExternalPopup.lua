@@ -125,13 +125,71 @@ local function LabelWidth(text)
     return (frame._labelProbe:GetStringWidth() or 0) * 1.08
 end
 
+-- Anchor registries can be long. Clip only these owned menus and scroll
+-- their existing rows; the shared quick-popup menu keeps its old behavior.
+local function ScrollChoices(menu)
+    local rows, width = menu._items or {}, menu:GetWidth()
+    if not menu._choiceScroll then
+        local scroll = CreateFrame("ScrollFrame", nil, menu)
+        scroll:SetPoint("TOPLEFT", 2, -3)
+        scroll:SetPoint("BOTTOMRIGHT", -2, 3)
+        local content = CreateFrame("Frame", nil, scroll)
+        scroll:SetScrollChild(content)
+        menu._choiceScroll, menu._choiceContent = scroll, content
+        menu:EnableMouseWheel(true)
+        menu:SetScript("OnMouseWheel", function(_, delta)
+            local limit = math.max(0, content:GetHeight() - scroll:GetHeight())
+            scroll:SetVerticalScroll(math.max(0, math.min(limit, scroll:GetVerticalScroll() - delta * 48)))
+        end)
+    end
+    local count = 0
+    for i, item in ipairs(rows) do
+        item:SetParent(menu._choiceContent)
+        item:ClearAllPoints()
+        item:SetPoint("TOPLEFT", 0, -(i - 1) * 24)
+        if item:IsShown() then count = i end
+    end
+    menu._choiceContent:SetSize(width - 4, math.max(1, count * 24))
+    menu:SetHeight(math.min(12, count) * 24 + 8)
+    menu._choiceScroll:SetVerticalScroll(0)
+end
+
+local function ChoiceButton(spec, y, set)
+    local openedKey
+    local choice = { id = spec.id, label = spec.label }
+    local function Entries()
+        openedKey = frame._key
+        choice.key = nil
+        local values = External.GetControlChoices(openedKey, spec.id) or {}
+        local rows, current = {}, External.GetControlValue(openedKey, spec.id)
+        if issecretvalue and issecretvalue(current) then return rows end
+        for i, value in ipairs(values) do
+            rows[i] = { label = value.text, value = value.value, highlight = current == value.value }
+        end
+        return rows
+    end
+    local button, menu = Quick.MenuButtonAt(frame, spec.label, 20, y, 380, 32, Entries, function(row)
+        if Blocked() or frame._key ~= openedKey then return end
+        External.ApplyControl(openedKey, spec.id, row.value)
+        Popup.Sync()
+    end, { flashSelection = false })
+    button._label:SetWidth(356)
+    button._label:SetMaxLines(1)
+    menu:HookScript("OnShow", function() ScrollChoices(menu) end)
+    choice.btn = button
+    set.choices[#set.choices + 1] = choice
+    set.rows[#set.rows + 1] = button
+end
+
 local function BuildControlSet(controls, lift)
-    local set = { rows = {}, numbers = {}, toggles = {}, height = 0 }
+    local set = { rows = {}, numbers = {}, toggles = {}, choices = {}, height = 0 }
     local top = CONTROLS_TOP + lift + (OwnerPositionControls(controls) and CONTROL_ROW_H or 0)
-    local numbers, toggles = {}, {}
+    local numbers, toggles, choices = {}, {}, {}
     for i = 1, #controls do
         local spec = controls[i]
-        if spec.kind == "number" then numbers[#numbers + 1] = spec else toggles[#toggles + 1] = spec end
+        if spec.kind == "number" then numbers[#numbers + 1] = spec
+        elseif spec.kind == "choice" then choices[#choices + 1] = spec
+        else toggles[#toggles + 1] = spec end
     end
     local rowIndex = 0
     local index = 1
@@ -183,6 +241,10 @@ local function BuildControlSet(controls, lift)
         end
         index = index + 2
     end
+    for _, spec in ipairs(choices) do
+        rowIndex = rowIndex + 1
+        ChoiceButton(spec, top - (rowIndex - 1) * CONTROL_ROW_H, set)
+    end
     set.height = rowIndex * CONTROL_ROW_H
     return set
 end
@@ -216,6 +278,19 @@ end
 
 local function SyncControlValues(set, key, committedBox)
     if not set then return end
+    for _, choice in ipairs(set.choices) do
+        local value = External.GetControlValue(key, choice.id)
+        if issecretvalue and issecretvalue(value) then value = nil end
+        if choice.key ~= key or choice.value ~= value then
+            local text = "Unavailable"
+            for _, row in ipairs(External.GetControlChoices(key, choice.id) or {}) do
+                if row.value == value then text = row.text break end
+            end
+            local tr = Quick.Tr or tostring
+            SetButtonText(choice.btn, tr("%s: %s"):format(tr(choice.label), tr(text)))
+            choice.key, choice.value = key, value
+        end
+    end
     for i = 1, #set.numbers do
         local value = External.GetControlValue(key, set.numbers[i].id)
         Quick.SetBoxText(set.numbers[i].box, value ~= nil and value or "", set.numbers[i].box == committedBox)

@@ -256,9 +256,9 @@ local function PaintScene(self, kind, unit, width, height, scale, now)
     end
     if unit == "player" then
         if not empowered then sample.latency, sample.latencyMS = 0.12, 50 end
-    else
-        sample.targetName = M.Tr and M.Tr("Cleave Training Dummy") or "Cleave Training Dummy"
+        sample.rank = M.Tr("Rank 4")
     end
+    sample.targetName = M.Tr("Cleave Training Dummy")
     sample.kickReady, sample.kickRecovery = true, KICK_RECOVERY
     sample.interrupted = now < (self.interruptUntil or 0)
     opts.width, opts.height, opts.scale = width, height, scale
@@ -393,6 +393,7 @@ local function BuildCastbarPagePreview(ctx, b)
     box:SetScript("OnUpdate", function(_, elapsed)
         elapsed = tonumber(elapsed) or 0
         local duration = preview.layoutUnit == "timers" and 10 or CastDuration(preview.castType or "normal")
+        if MSUF.Castbars.Config.fadeEnabled then duration = duration + 0.32 end
         preview.progress = (preview.progress or 0) + (elapsed / duration)
         if preview.progress > 1 then preview.progress = preview.progress - floor(preview.progress) end
         local now = GetTime and GetTime() or 0
