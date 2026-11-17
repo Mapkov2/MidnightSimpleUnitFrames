@@ -1,5 +1,24 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.3-beta2 - 2026-11-17
+
+**7.0.3 Beta 2**
+
+### Features and fixes
+
+- **Standalone Quick Setup.** Quick Setup without MSUF Suite lets you continue with your existing Player and Party positions. Moving frames and opening size popups remain optional in this quick flow.
+<!-- msuf-menu-link: none -->
+- **Quick frame scaling.** The standalone Size and position step offers frame scale buttons in 5-percent steps from 25 to 200 percent, plus a button to restore the scale from before your changes.
+<!-- msuf-menu-link: none -->
+- **Dashboard frame-scale shortcut.** Without Suite, the Dashboard keeps the Frames scale badge visible at narrow widths. Clicking it opens the frame-scale control.
+<!-- msuf-menu-link: none -->
+- **Class colors after resurrection.** Party and Raid class health colors can recover after delayed identity or class data, including after the short resurrection window and at full health after leaving combat.
+<!-- msuf-menu-link: none -->
+- **Roster replacement recovery.** Resurrection color recovery checks the current group member after roster changes and retries unresolved class paints on later health updates.
+<!-- msuf-menu-link: none -->
+- **Quick Setup translations.** New quick-placement and scale-reset labels are included in all twelve locale packs.
+<!-- msuf-menu-link: none -->
+
 ## 7.0.3-beta1 - 2026-11-17
 
 **7.0.3 Beta 1**

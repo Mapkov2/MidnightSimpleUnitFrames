@@ -8,334 +8,42 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "8303CDD864917E4379C9C6DFCA3C4DD72DEE767B1820DB1011F099E0350AA7A5",
-    currentVersion = "7.0.3-beta1",
+    sourceSha256 = "ED0B359D3DEAB50037886BEF9CEC93F5F4BEFA4DAE680FAA88988CFBB706608F",
+    currentVersion = "7.0.3-beta2",
     historyFromVersion = "6.02",
-    previousVersion = "7.021",
-    rangeLabel = "7.021 -> 7.0.3-beta1",
+    previousVersion = "7.0.3-beta1",
+    rangeLabel = "7.0.3-beta1 -> 7.0.3-beta2",
     entries = {
         {
-            version = "7.0.3-beta1",
+            version = "7.0.3-beta2",
             date = "2026-11-17",
-            title = "7.0.3 Beta 1",
+            title = "7.0.3 Beta 2",
             sections = {
                 {
-                    title = "Highlights",
+                    title = "Features and fixes",
                     bullets = {
                         {
-                            text = "Player spell ranks. Optionally append the spell rank to the Player castbar on WoW Forever, Classic Era and TBC Anniversary. Live bars and previews use the same setting.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "show spell rank",
-                                label = "Show spell rank",
-                                sectionId = "castbar",
-                                controlId = "menu2.uf_player.unit.castbar.show_spell_rank",
-                                settingKey = "general.castbarPlayerShowSpellRank",
-                                prepareKind = "menuTab",
-                                prepareValue = "spell",
-                            },
-                        },
-                        {
-                            text = "Player cast recipient. Show the recipient of your own cast with independent text placement, size, alignment and color. The name follows the matching spellcast-sent event, including mouseover casts, instead of guessing from your current target.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "target name",
-                                label = "Enable",
-                                sectionId = "castbar",
-                                controlId = "menu2.uf_player.unit.castbar.show_target_name",
-                                settingKey = "general.castbarPlayerShowTargetName",
-                                prepareKind = "menuTab",
-                                prepareValue = "spell",
-                            },
-                        },
-                        {
-                            text = "Castbar fade in and out. Add a smooth spring fade to castbars. A new cast can reverse an outgoing fade, and completed casts keep their final state while fading. The matching previews use the same animation.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "fade castbars in and out",
-                                label = "Fade castbars in and out",
-                                sectionId = "castbar_behavior",
-                                controlId = "menu2.opt.castbar.global.behavior.castbar.fade.enabled",
-                                settingKey = "general.castbarFadeEnabled",
-                            },
-                        },
-                        {
-                            text = "Latency zone color. Choose the Player castbar latency indicator's color and opacity from Colors or the castbar color shortcut. The live bar, global preview and unit preview show the same RGBA values.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "latency zone color",
-                                label = "Latency zone color",
-                                sectionId = "colors_castbar",
-                                controlId = "menu2.opt.colors.advanced.general.castbar.latency",
-                                settingKey = "general.castbarLatencyColor",
-                                prepareKind = "colorsPainterCategory",
-                                prepareValue = "cast",
-                            },
-                        },
-                        {
-                            text = "Unit frame appearance fade. Enable Fade in when shown independently for supported unit frames. The animation preserves configured bar, text, portrait and prediction opacity and works with range and combat fades.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "fade in when shown",
-                                label = "Fade in when shown",
-                                sectionId = "transparency",
-                                controlId = "menu2.uf_target.unit.transparency.fade_in_on_show",
-                                settingKey = "target.fadeInOnShow",
-                                prepareKind = "unitAlphaTab",
-                                prepareValue = "combat",
-                            },
-                        },
-                        {
-                            text = "Party and Raid appearance fade. Group layouts get their own Fade in when shown setting. Supported additional group frames and their previews inherit the same appearance behavior.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "fade in when shown",
-                                label = "Fade in when shown",
-                                sectionId = "transparency",
-                                controlId = "menu2.gf_layout.group.field.fadeinonshow",
-                                settingKey = "",
-                                prepareKind = "groupTransparencyTab",
-                                prepareValue = "combat",
-                            },
-                        },
-                        {
-                            text = "Hide missing resources. Optionally hide a unit's resource bar, background, outline, loss effect and resource text when that resource is absent. A resource at zero remains visible when its maximum is valid, and the display returns when the resource becomes available.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "hide when resource is missing",
-                                label = "Hide when resource is missing",
-                                sectionId = "power_bar",
-                                controlId = "menu2.uf_target.unit.power.powerhidemissingresource",
-                                settingKey = "target.powerHideMissingResource",
-                            },
-                        },
-                        {
-                            text = "Forever PvP countdown. Show the native remaining PvP flag time beside the Player PvP icon, with an independent toggle. Free-for-all PvP hides the countdown. Edit Mode and status test mode include a countdown sample.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "show pvp countdown",
-                                label = "Show PvP countdown",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.pvp.countdown",
-                                settingKey = "player.pvpIndicatorCountdownEnabled",
-                                prepareKind = "unitStatus",
-                                prepareValue = "statusPvp",
-                            },
-                        },
-                        {
-                            text = "Health text gradient shortcut. Edit Low, Mid and High health color stops directly from Fonts and the HP text quick settings. The shortcut follows the current font scope and inherited health color mode.",
-                            link = {
-                                pageKey = "opt_fonts",
-                                query = "health gradient stops",
-                                label = "Health gradient stops",
-                                sectionId = "fonts_name_power_colors",
-                                controlId = "menu2.opt.fonts.global.colors.health.gradient.stops",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "Forever Weakened Soul indicator. Add an opt-in Weakened Soul entry to Party and Raid Spell Icons, including Only mine. It uses the native property-based filter available on Forever; other short, nondispellable player debuffs can also match.",
-                            link = {
-                                pageKey = "gf_auras",
-                                query = "show spell indicators",
-                                label = "Show spell indicators",
-                                sectionId = "si",
-                                controlId = "menu2.gf_auras.group.spell.enabled",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "Copyable Taint Report. Use /msuf taint outside combat to open an optional blocked-action recorder. Start and stop capture yourself, then copy a report with client and addon versions, the protected action, the addon reported by WoW, combat state and a stack. It retains up to 20 entries and groups consecutive repeats.",
-                            linkless = true,
-                        },
-                    },
-                },
-                {
-                    title = "Bug Fixes - Profiles",
-                    bullets = {
-                        {
-                            text = "Complete new defaults before export. Full-profile exports complete the new appearance, spell rank, cast recipient and castbar fade defaults before capture. Current-revision profiles keep identical settings through export, import and reload, including explicit disabled settings and zero offsets.",
-                            link = {
-                                pageKey = "profiles",
-                                query = "export",
-                                label = "Export",
-                                sectionId = "profiles_io",
-                                controlId = "menu2.profiles.advanced.export.generate",
-                                settingKey = "",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Bug Fixes - Frames and status",
-                    bullets = {
-                        {
-                            text = "Portrait refresh on show. Target and Focus portraits refresh when a frame is shown, including unit changes with restricted GUIDs. The previous unit's portrait and classification are no longer reused.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "portrait",
-                                label = "Portrait",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_target.unit.portrait.enabled",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "AFK timer event order. The AFK duration starts correctly even when the status painter receives the event before the timer's start-stamp listener.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "afk timer",
-                                label = "AFK Timer",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.indicator.statusafktimer",
-                                settingKey = "",
-                                prepareKind = "unitStatusIndicator",
-                                prepareValue = "statusAFKTimer",
-                            },
-                        },
-                        {
-                            text = "Class colors after resurrection. Party and Raid health bars recover their class color after an out-of-combat resurrection when unit identity information arrives late. Short retries follow the current roster identity and do not reuse another member's class.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "health color scheme",
-                                label = "Bar Color Mode",
-                                sectionId = "colors_group_frames",
-                                controlId = "menu2.opt.colors.advanced.group.frame.health.mode",
-                                settingKey = "gf_party.gfBarMode",
-                                prepareKind = "colorsPainterCategory",
-                                prepareValue = "group",
-                            },
-                        },
-                        {
-                            text = "Embedded resource layout. When Hide when resource is missing is active, health bars and rounded borders reclaim the embedded resource area. The original layout returns when the resource is available again.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "hide when resource is missing",
-                                label = "Hide when resource is missing",
-                                sectionId = "power_bar",
-                                controlId = "menu2.uf_target.unit.power.powerhidemissingresource",
-                                settingKey = "target.powerHideMissingResource",
-                            },
-                        },
-                        {
-                            text = "Restricted group range values. Group range updates keep restricted boolean values in the native alpha path while appearance fades run. Restricted range values are excluded from Lua comparisons and comparison caches.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "fade in when shown",
-                                label = "Fade in when shown",
-                                sectionId = "transparency",
-                                controlId = "menu2.gf_layout.group.field.fadeinonshow",
-                                settingKey = "",
-                                prepareKind = "groupTransparencyTab",
-                                prepareValue = "combat",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Bug Fixes - Castbars and previews",
-                    bullets = {
-                        {
-                            text = "Forever Penance markers. Penance ranks 1 through 4 use the correct halfway channel marker for the two later bolts after the initial hit.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "channel ticks",
-                                label = "Spell-specific channel tick markers",
-                                sectionId = "castbar_behavior",
-                                controlId = "menu2.opt.castbar.global.behavior.castbar.show.channel.ticks",
-                                settingKey = "general.castbarShowChannelTicks",
-                            },
-                        },
-                        {
-                            text = "Cast and fade transitions. Castbar fades handle casts, channels, Empower spells, interrupts and incoming replacement casts without leaving an outdated bar over the active cast. Live and preview bars retain the completed value during fade-out.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "fade castbars in and out",
-                                label = "Fade castbars in and out",
-                                sectionId = "castbar_behavior",
-                                controlId = "menu2.opt.castbar.global.behavior.castbar.fade.enabled",
-                                settingKey = "general.castbarFadeEnabled",
-                            },
-                        },
-                        {
-                            text = "Class resource preview shortcuts. Clicking an inactive Class Resources preview layer opens the exact setting needed to enable it, including class bars and text, detached resources, Player HP and alternative mana.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "show class power",
-                                label = "Class Resource",
-                                sectionId = "classpower_display",
-                                controlId = "menu2.classpower.advanced.layout.enabled",
-                                settingKey = "bars.showClassPower",
-                                prepareKind = "classPowerWorkspace",
-                                prepareValue = "class",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Bug Fixes - Menus and integrations",
-                    bullets = {
-                        {
-                            text = "Opening Options from macros. Cold /msuf action-bar macros load Options and build the menu on subsequent frames to avoid script-ran-too-long errors inside the action-button click. Core diagnostic commands remain available without opening Options.",
+                            text = "Standalone Quick Setup. Quick Setup without MSUF Suite lets you continue with your existing Player and Party positions. Moving frames and opening size popups remain optional in this quick flow.",
                             linkless = true,
                         },
                         {
-                            text = "External Edit Mode choices. Compatible integrations can provide choice dropdowns in their Edit Mode popup. Long lists scroll, and stale selections are rejected when the owning integration no longer offers them.",
+                            text = "Quick frame scaling. The standalone Size and position step offers frame scale buttons in 5-percent steps from 25 to 200 percent, plus a button to restore the scale from before your changes.",
                             linkless = true,
                         },
                         {
-                            text = "External choice history. Undo, Redo and Discard restore the integration-owned state of external Edit Mode choice controls.",
+                            text = "Dashboard frame-scale shortcut. Without Suite, the Dashboard keeps the Frames scale badge visible at narrow widths. Clicking it opens the frame-scale control.",
                             linkless = true,
                         },
-                    },
-                },
-                {
-                    title = "Performance",
-                    bullets = {
                         {
-                            text = "Less repeated boolean work. Castbar state updates and group event routing reuse their existing boolean results. This reduces redundant Lua work while preserving event membership, native call counts and allocation budgets.",
+                            text = "Class colors after resurrection. Party and Raid class health colors can recover after delayed identity or class data, including after the short resurrection window and at full health after leaving combat.",
                             linkless = true,
                         },
-                    },
-                },
-                {
-                    title = "Settings, accessibility and compatibility",
-                    bullets = {
                         {
-                            text = "Reduced motion. Reduce menu motion also suppresses the new castbar and unit appearance animations. Turning it off restores enabled effects without changing their saved options.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "reduce menu motion",
-                                label = "Reduce menu motion",
-                                sectionId = "misc_menu_behavior",
-                                controlId = "menu2.opt.misc.global.setting.reduce.motion",
-                                settingKey = "general.reduceMotion",
-                            },
+                            text = "Roster replacement recovery. Resurrection color recovery checks the current group member after roster changes and retries unresolved class paints on later health updates.",
+                            linkless = true,
                         },
                         {
-                            text = "Copy, reset and profile transfer. The new frame appearance and missing-resource settings participate in their owning copy and reset scopes. Latency RGBA fields belong to the castbar color profile category.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "hide when resource is missing",
-                                label = "Hide when resource is missing",
-                                sectionId = "power_bar",
-                                controlId = "menu2.uf_target.unit.power.powerhidemissingresource",
-                                settingKey = "target.powerHideMissingResource",
-                            },
-                        },
-                        {
-                            text = "Search and translations. The new settings are included in the Classic and Mainline search indexes. Added labels are present in all 12 locale packs, and supported settings retain their client-specific visibility.",
-                            link = {
-                                pageKey = "opt_fonts",
-                                query = "health gradient stops",
-                                label = "Health gradient stops",
-                                sectionId = "fonts_name_power_colors",
-                                controlId = "menu2.opt.fonts.global.colors.health.gradient.stops",
-                                settingKey = "",
-                            },
-                        },
-                        {
-                            text = "Version reminders after 7.021. The update reminder places the historical 7.021 Classic hotfix before 7.0.3 prereleases. The new Beta no longer recommends updating back to that older hotfix, while validating the original version-message formats.",
+                            text = "Quick Setup translations. New quick-placement and scale-reset labels are included in all twelve locale packs.",
                             linkless = true,
                         },
                     },
