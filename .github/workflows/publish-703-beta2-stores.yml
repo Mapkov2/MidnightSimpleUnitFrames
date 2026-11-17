@@ -1,0 +1,81 @@
+name: Publish MSUF 7.0.3 Beta 2 stores
+run-name: Publish existing MSUF 7.0.3 Beta 2 to CurseForge and Wago
+on:
+  push:
+    branches: ['7.0']
+    paths: ['.github/workflows/publish-703-beta2-stores.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: msuf-703-beta2-store-publication
+jobs:
+  publish:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames' && github.ref == 'refs/heads/7.0'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [CurseForge, Wago]
+    name: Publish to ${{ matrix.store }}
+    steps:
+      - name: Read the exact released client matrix and resolver
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: caf5db3c6e00142c32f3ca4b85fa7b0494cf5757
+          persist-credentials: false
+      # Owner requested these store uploads after the failed automatic gate.
+      # This exception applies only to this immutable, already published Beta.
+      - name: Verify existing Beta and publish identical archive
+        shell: pwsh
+        env:
+          STORE: ${{ matrix.store }}
+          GH_TOKEN: ${{ github.token }}
+          CF_API_KEY: ${{ matrix.store == 'CurseForge' && (secrets.CF_API_KEY || secrets.CURSEFORGE) || '' }}
+          WAGO_API_TOKEN: ${{ matrix.store == 'Wago' && secrets.WAGO_API_TOKEN || '' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = 'Mapkov2/MidnightSimpleUnitFrames'
+          $tag = 'classic-v7.0.3-beta2'
+          $title = 'MSUF 7.0.3 Beta 2'
+          $archive = 'MSUF-7.0.3-beta2-Mainline-Vanilla-Mists-TBC.zip'
+          $expected = 'B8E1733F6D5DBDAE4E44FE18DE11401E22E718DECBFAE9FDBFABCFB1E31E1032'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers $headers
+          if ($release.draft -or !$release.prerelease -or $release.name -cne $title) { throw 'Unexpected GitHub Beta release.' }
+          if ((git rev-parse HEAD).Trim() -cne 'caf5db3c6e00142c32f3ca4b85fa7b0494cf5757') { throw 'Wrong release source.' }
+          $asset = @($release.assets | Where-Object { $_.name -ceq $archive })
+          if ($asset.Count -ne 1) { throw 'Expected exactly one release archive.' }
+          Invoke-WebRequest -Uri $asset[0].browser_download_url -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -cne $expected) { throw 'Beta archive hash mismatch.' }
+          $notes = ([string]$release.body -split '(?m)^## Beta validation results')[0].Trim()
+          if ([string]::IsNullOrWhiteSpace($notes)) { throw 'Empty release notes.' }
+          $notes += "`n`nValidation limits: The full local run reports an outdated health-module clone annotation, group-health predicate and outer-refresh cost budget failures, and 393.2 seconds elapsed above its fixed 300-second limit. This Beta is published at the owner's explicit request with those results documented."
+          if ($env:STORE -ceq 'CurseForge') {
+            if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) { throw 'Missing CurseForge publishing secret.' }
+            $available = Invoke-RestMethod -Uri 'https://wow.curseforge.com/api/game/versions' -Headers @{ 'X-Api-Token' = $env:CF_API_KEY; Accept = 'application/json' }
+            $names = @(foreach ($entry in $available) { [string]$entry.name })
+            $versions = @(& './.github/scripts/resolve_release_game_versions.ps1' -ClientMatrixPath 'tools/classic-client-matrix.tsv' -AvailableNames $names)
+            if ($versions.Count -lt 5) { throw 'Missing supported client versions.' }
+            $metadata = [ordered]@{ changelog = $notes; changelogType = 'markdown'; displayName = $title; gameVersionNames = [string[]]$versions; releaseType = 'beta' }
+            $result = Invoke-RestMethod -Method Post -Uri 'https://wow.curseforge.com/api/projects/1384660/upload-file' -Headers @{ 'X-Api-Token' = $env:CF_API_KEY; Accept = 'application/json' } -Form @{ metadata = ($metadata | ConvertTo-Json -Depth 6 -Compress); file = Get-Item -LiteralPath $archive }
+            if (!$result.id) { throw 'CurseForge returned no file ID.' }
+            Write-Host "CurseForge accepted Beta file $($result.id), versions [$($versions -join ', ')], SHA256 $expected."
+            "https://www.curseforge.com/wow/addons/midnightsimpleunitframes/files/$($result.id)" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            if ([string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) { throw 'Missing Wago publishing secret.' }
+            $game = Invoke-RestMethod -Uri 'https://addons.wago.io/api/data/game'
+            if ($game.stability_values -cnotcontains 'beta') { throw 'Wago Beta channel unavailable.' }
+            $flavors = @($game.patches.PSObject.Properties)
+            $available = @(foreach ($flavor in $flavors) { foreach ($patch in $flavor.Value) { [string]$patch } })
+            $versions = @(& './.github/scripts/resolve_release_game_versions.ps1' -ClientMatrixPath 'tools/classic-client-matrix.tsv' -AvailableNames $available)
+            $metadata = [ordered]@{ label = $title; stability = 'beta'; changelog = $notes }
+            $assigned = @()
+            foreach ($flavor in $flavors) {
+              $patches = @($versions | Where-Object { @($flavor.Value) -ccontains $_ })
+              if ($patches.Count) { $metadata["supported_$($flavor.Name)_patches"] = [string[]]$patches; $assigned += $patches }
+            }
+            if ($versions.Count -lt 5 -or $assigned.Count -ne $versions.Count -or @(Compare-Object $versions $assigned).Count) { throw 'Incomplete Wago client mapping.' }
+            Invoke-RestMethod -Method Post -Uri 'https://addons.wago.io/api/projects/XKq9aoKy/version' -Headers @{ Authorization = "Bearer $env:WAGO_API_TOKEN"; Accept = 'application/json' } -Form @{ metadata = ($metadata | ConvertTo-Json -Depth 6 -Compress); file = Get-Item -LiteralPath $archive } | Out-Null
+            Write-Host "Wago accepted MSUF 7.0.3 Beta 2, versions [$($assigned -join ', ')], SHA256 $expected."
+            'https://addons.wago.io/addons/midnightsimpleunitframes' >> $env:GITHUB_STEP_SUMMARY
+          }
