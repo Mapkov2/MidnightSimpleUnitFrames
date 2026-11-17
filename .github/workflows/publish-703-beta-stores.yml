@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        store: [CurseForge, Wago]
+        store: [CurseForge]
     name: Publish to ${{ matrix.store }}
     steps:
       - name: Read the exact released client matrix and resolver
@@ -52,8 +52,9 @@ jobs:
           $notes += "`n`nValidation limits: Four combined search/page heap budget checks failed on the Linux runner. The local full run exceeded its fixed time budget. This Beta is published at the owner's request with those results documented."
           if ($env:STORE -ceq 'CurseForge') {
             if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) { throw 'Missing CurseForge publishing secret.' }
-            $available = @(Invoke-RestMethod -Uri 'https://wow.curseforge.com/api/game/versions' -Headers @{ 'X-Api-Token' = $env:CF_API_KEY; Accept = 'application/json' })
-            $versions = @(& './.github/scripts/resolve_release_game_versions.ps1' -ClientMatrixPath 'tools/classic-client-matrix.tsv' -AvailableNames @($available | ForEach-Object { [string]$_.name }))
+            $available = Invoke-RestMethod -Uri 'https://wow.curseforge.com/api/game/versions' -Headers @{ 'X-Api-Token' = $env:CF_API_KEY; Accept = 'application/json' }
+            $names = @(foreach ($entry in $available) { [string]$entry.name })
+            $versions = @(& './.github/scripts/resolve_release_game_versions.ps1' -ClientMatrixPath 'tools/classic-client-matrix.tsv' -AvailableNames $names)
             if ($versions.Count -lt 5) { throw 'Missing supported client versions.' }
             $metadata = [ordered]@{ changelog = $notes; changelogType = 'markdown'; displayName = $title; gameVersionNames = [string[]]$versions; releaseType = 'beta' }
             $result = Invoke-RestMethod -Method Post -Uri 'https://wow.curseforge.com/api/projects/1384660/upload-file' -Headers @{ 'X-Api-Token' = $env:CF_API_KEY; Accept = 'application/json' } -Form @{ metadata = ($metadata | ConvertTo-Json -Depth 6 -Compress); file = Get-Item -LiteralPath $archive }
