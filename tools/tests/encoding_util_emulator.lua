@@ -374,12 +374,10 @@ end
 LENGTH_SYMBOL[258] = 29
 
 local function DistanceSymbol(back)
-    local low, high = 1, 30
-    while low < high do
-        local middle = floor((low + high + 1) / 2)
-        if DIST_BASE[middle] <= back then low = middle else high = middle - 1 end
-    end
-    return low
+    if back <= 4 then return back end
+    -- Each successive power-of-two distance range has two equal-width codes.
+    local fraction, exponent = frexp(back - 1)
+    return 2 * exponent - (fraction < 0.75 and 1 or 0)
 end
 
 local WINDOW, MAX_MATCH, CHAIN = 32768, 258, 12
@@ -403,11 +401,6 @@ local function Deflate(data)
     Put(1, 1) -- final block
     Put(1, 2) -- fixed Huffman
     local head, previous = {}, {}
-    local function Insert(at)
-        local key = sub(data, at, at + 2)
-        previous[at] = head[key]
-        head[key] = at
-    end
     local index = 1
     while index <= length do
         local bestLength, bestBack = 0, 0
@@ -416,24 +409,29 @@ local function Deflate(data)
             local candidate = head[key]
             local limit = length - index + 1
             if limit > MAX_MATCH then limit = MAX_MATCH end
-            local steps = 0
+            previous[index], head[key] = candidate, index
+            local steps, nextByte = 0, nil
             while candidate and index - candidate <= WINDOW and steps < CHAIN do
-                local matched = 3
-                while matched + 16 <= limit
-                    and sub(data, candidate + matched, candidate + matched + 15) == sub(data, index + matched, index + matched + 15) do
-                    matched = matched + 16
-                end
-                while matched < limit and byte(data, candidate + matched) == byte(data, index + matched) do
-                    matched = matched + 1
-                end
-                if matched > bestLength then
-                    bestLength, bestBack = matched, index - candidate
-                    if matched == limit then break end
+                -- A candidate must also match the first byte past the current
+                -- best length to replace it. Ties retain the original distance.
+                if not nextByte or byte(data, candidate + bestLength) == nextByte then
+                    local matched = 3
+                    while matched + 16 <= limit
+                        and sub(data, candidate + matched, candidate + matched + 15) == sub(data, index + matched, index + matched + 15) do
+                        matched = matched + 16
+                    end
+                    while matched < limit and byte(data, candidate + matched) == byte(data, index + matched) do
+                        matched = matched + 1
+                    end
+                    if matched > bestLength then
+                        bestLength, bestBack = matched, index - candidate
+                        if matched == limit then break end
+                        nextByte = byte(data, index + matched)
+                    end
                 end
                 candidate = previous[candidate]
                 steps = steps + 1
             end
-            Insert(index)
         end
         if bestLength >= 3 then
             local lengthCode = LENGTH_SYMBOL[bestLength]
@@ -445,8 +443,9 @@ local function Deflate(data)
             Put(ReverseBits(distanceCode - 1, 5), 5)
             local distanceExtra = DIST_EXTRA[distanceCode]
             if distanceExtra > 0 then Put(bestBack - DIST_BASE[distanceCode], distanceExtra) end
-            for at = index + 1, index + bestLength - 1 do
-                if at + 2 <= length then Insert(at) end
+            for at = index + 1, math.min(index + bestLength - 1, length - 2) do
+                local key = sub(data, at, at + 2)
+                previous[at], head[key] = head[key], at
             end
             index = index + bestLength
         else
@@ -641,8 +640,17 @@ local function IsSequence(value)
 end
 
 local function SortedKeys(value)
-    local keys = {}
-    for key in pairs(value) do keys[#keys + 1] = key end
+    local keys, homogeneous = {}, true
+    local keyType
+    for key in pairs(value) do
+        keys[#keys + 1] = key
+        if keyType == nil then keyType = type(key)
+        elseif type(key) ~= keyType then homogeneous = false end
+    end
+    if homogeneous and (keyType == "string" or keyType == "number") then
+        table.sort(keys)
+        return keys
+    end
     table.sort(keys, function(a, b)
         local ta, tb = type(a), type(b)
         if ta ~= tb then return ta < tb end

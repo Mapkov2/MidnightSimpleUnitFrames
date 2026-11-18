@@ -161,6 +161,23 @@ function Harness.New(root, flavor, options)
     root = root:gsub("\\", "/"):gsub("/$", "")
     local World = dofile(root .. "/tools/tests/client_world.lua")
     local world = World.New(root, flavor)
+    if options.compiledChunks then
+        -- A multi-world behavior replay can share bytecode. LoadFile creates
+        -- a fresh closure and environment for every file in every world.
+        local chunks, loadWorldFile = options.compiledChunks, world.LoadFile
+        function world:LoadFile(path, addon, namespace, source)
+            if not source then
+                source = chunks[path]
+                if not source then
+                    local chunk, message = loadfile(path)
+                    if not chunk then return false, "does not compile: " .. tostring(message) end
+                    source = string.dump(chunk)
+                    chunks[path] = source
+                end
+            end
+            return loadWorldFile(self, path, addon, namespace, source)
+        end
+    end
     local env, widgets = world.env, world.widgets
     local M = widgets.Methods
     if options.nativeLayout then InstallNativeGeometry(widgets) end

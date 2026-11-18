@@ -1,9 +1,10 @@
 -- Exercise the group runtime, real addon frames and the secure-header emulator.
 local root, flavor = assert(arg[1]), assert(arg[2])
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
+local compiledChunks = {}
 
 local function World(zone, raid, partyMode)
-  local h = Harness.New(root, flavor, { nativeLayout = true, beforeBoot = function(world)
+  local h = Harness.New(root, flavor, { compiledChunks = compiledChunks, nativeLayout = true, beforeBoot = function(world)
     local env = world.env
     env.IsInInstance = function() return zone ~= "none", zone end
     env.GetInstanceInfo = function() return "Area", zone, zone == "raid" and 14 or 0 end

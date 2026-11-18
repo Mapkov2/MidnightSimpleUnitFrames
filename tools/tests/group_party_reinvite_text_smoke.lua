@@ -1,12 +1,13 @@
 -- Exercise a real secure party button through group leave and later re-use.
 local root, flavor = assert(arg[1]), assert(arg[2])
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
+local compiledChunks = {}
 
 local function CheckGroup(location, joinInCombat, equalShieldAtBind)
   local name, hp, mana, role = "First Member", 999, 717, "DAMAGER"
   local delayed = location == "none" and joinInCombat and (flavor == "Mainline" or flavor == "Forever")
   local ready, leaderLocation = true, location
-  local h = Harness.New(root, flavor, { beforeBoot = function(world)
+  local h = Harness.New(root, flavor, { compiledChunks = compiledChunks, beforeBoot = function(world)
     local env = world.env
     env.IsInInstance = function() return location ~= "none", location end
     env.GetInstanceInfo = function() return "Area", location, location == "none" and 0 or 1 end

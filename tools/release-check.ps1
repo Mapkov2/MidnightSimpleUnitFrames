@@ -76,6 +76,43 @@ function Contract([string]$Name, [object[]]$Runs) {
     $script:summary.Add($line)
     Write-Output $line
 }
+function Invoke-GeneratedChecks([object[]]$Lists, [object[]]$Regressions) {
+    if (-not $ParallelContracts -or $Slot) {
+        Contract 'generated lists' $Lists
+        Contract 'generator regressions' $Regressions
+        return
+    }
+    # All of these validations are read-only or use independent temporary
+    # checkouts. Finish them before allowing projection regeneration.
+    $runs = @($Lists) + @($Regressions)
+    for ($i = 0; $i -lt $runs.Count; $i++) {
+        $runs[$i].Id = $i
+        $runs[$i].Phase = if ($i -lt $Lists.Count) { 'generated lists' } else { 'generator regressions' }
+    }
+    $workers = [Math]::Min(4, (Get-ContractWorkerCount ([Environment]::ProcessorCount)))
+    $previousPowerShell = $env:MSUF_POWERSHELL
+    try {
+        $env:MSUF_POWERSHELL = $PowerShell
+        $receipts = @(Invoke-ContractWorkers $runs "$log.generated.queue" $false $workers | Sort-Object Id)
+    } finally { $env:MSUF_POWERSHELL = $previousPowerShell }
+    if ($receipts.Count -ne $runs.Count) { throw 'Incomplete generated-check receipts' }
+    for ($i = 0; $i -lt $runs.Count; $i++) {
+        $item = $receipts[$i]
+        if ($item.Id -ne $i -or $item.Label -cne $runs[$i].Label) { throw 'Invalid generated-check receipt' }
+        $seconds = ($item.Finished - $item.Started).ToString('F2')
+        [IO.File]::AppendAllText($log, "=== $($item.Phase)/$($item.Label) ($($item.Code), $seconds s)$nl$($item.Text)$nl", $utf8)
+    }
+    foreach ($phase in @('generated lists', 'generator regressions')) {
+        $items = @($receipts | Where-Object Phase -eq $phase)
+        $bad = @($items | Where-Object { -not $_.Ok })
+        $status = if ($bad.Count) { $script:failed++; 'FAIL' } else { 'PASS' }
+        $detail = if ($bad.Count) { '; failed: ' + ($bad.Label -join ', ') } else { '' }
+        $first = ($items | Measure-Object Started -Minimum).Minimum
+        $last = ($items | Measure-Object Finished -Maximum).Maximum
+        $line = '{0} {1}: {2} runs, {3:F1} s{4}' -f $status, $phase, $items.Count, ($last - $first), $detail
+        $script:summary.Add($line); Write-Output $line
+    }
+}
 function Get-MenuControlCounts {
     if (-not $script:MenuControlCounts) {
         # Read the validated projection's five counts once, without turning the
@@ -273,12 +310,12 @@ try {
             @{ Label = "source-audit"; Exe = $PowerShell; Args = @("-NoProfile", "-File", "tools/audit-classic-ui-source.ps1") }
         )
     }
-    Contract "generated lists" @(
+    $generatedLists = @(
         @{ Label = "module-manifest"; Exe = $Python; Args = @("tools/generate_module_manifest.py", "--check") },
         @{ Label = "test-inventory"; Exe = $Python; Args = @("tools/release_test_inventory.py", "--check") },
         @{ Label = "global-keep"; Exe = $Python; Args = @("tools/gen_global_keep.py", "--check") }
     )
-    Contract 'generator regressions' @(Get-InventoryRuns 'generated')
+    Invoke-GeneratedChecks $generatedLists @(Get-InventoryRuns 'generated')
     if ($failed) {
         Write-Output "release-check: $failed failed; generated lists are stale or invalid; log $log"
         exit 1
