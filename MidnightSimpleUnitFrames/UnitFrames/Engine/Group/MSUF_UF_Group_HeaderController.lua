@@ -65,11 +65,19 @@ local function WriteKeys(header, cache, keys, values, ignore)
   return changed
 end
 
-local function ResetChildAnchors(header)
+local function UpdateChildLayout(header, resetAnchors, width, height)
   for index = 1, 40 do
     local child = header:GetAttribute("child" .. index)
     if not child then return end
-    if child.ClearAllPoints then child:ClearAllPoints() end
+    if resetAnchors and child.ClearAllPoints then child:ClearAllPoints() end
+    -- Blizzard runs initialConfigFunction on creation only. Keep parked
+    -- click targets sized for a future secure roster update in lockdown.
+    if width and child.SetSize then
+      child:SetSize(width, height)
+      local visual = child._msufVisualFrame
+      if visual and visual ~= child and visual.SetSize then visual:SetSize(width, height) end
+      child._msufGFWidth, child._msufGFHeight = width, height
+    end
   end
 end
 
@@ -104,14 +112,16 @@ function GF.HeaderController(header, recipe, values, buildInitial)
     if recipe.ignore then return false, false end
     return WritePingBindings(header, cache), false
   end
-  local initChanged = recipe.versionKey and (Different(cache, "initial-width", values["initial-width"])
-    or Different(cache, "initial-height", values["initial-height"])
-    or Different(cache, recipe.versionKey, values[recipe.versionKey]))
+  local sizeChanged = recipe.versionKey and (Different(cache, "initial-width", values["initial-width"])
+    or Different(cache, "initial-height", values["initial-height"]))
+  local initChanged = sizeChanged or (recipe.versionKey and Different(cache, recipe.versionKey, values[recipe.versionKey]))
   local topologyChanged = KeysChanged(cache, recipe.topologyKeys, values)
   local shouldHide = not recipe.ignore and header.IsShown and header:IsShown()
     and (kindChanged or initChanged or topologyChanged or KeysChanged(cache, recipe.hideKeys, values))
   if shouldHide then header:Hide() end
-  if topologyChanged then ResetChildAnchors(header) end
+  if topologyChanged or sizeChanged then
+    UpdateChildLayout(header, topologyChanged, sizeChanged and values["initial-width"], values["initial-height"])
+  end
 
   local changed = kindChanged or false
   for i = 1, #recipe.steps do

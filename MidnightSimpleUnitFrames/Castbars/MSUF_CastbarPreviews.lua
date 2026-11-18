@@ -527,21 +527,9 @@ local function HideBlizzardPlayerCastbar()
     local shouldUseBlizzard = Backend.ShouldUseBlizzardCastbar
     local allowShown = type(shouldUseBlizzard) == "function" and shouldUseBlizzard("player") == true
 
-    if allowShown then return end
+    if allowShown or IsInCombat() then return end
 
-    local frames = { PlayerCastingBarFrame, CastingBarFrame }
-    for index = 1, #frames do
-        local frame = frames[index]
-        if frame then
-            if frame.UnregisterAllEvents then
-                frame:UnregisterAllEvents()
-            end
-            -- Castbars/MSUF_Castbars_Bridge.lua (loads first): a shown managed
-            -- bar is concealed, never hidden from here (its OnHide runs the
-            -- bottom managed-frame layout tainted).
-            MSUF.Castbars.NativeOwner.Conceal(frame)
-        end
-    end
+    MSUF.Castbars.NativeOwner:Apply()
 end
 
 local function UpdatePlayerCastbarPreview()

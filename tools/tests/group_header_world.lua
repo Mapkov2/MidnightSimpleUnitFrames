@@ -264,7 +264,9 @@ function Harness.New(root, flavor, options)
             if env.InCombatLockdown() and not parent.protected then return nil end
             return HandleFor(parent)
         end
-        function handle:GetAttribute(key) return frame.attributes[key] end
+        function handle:GetAttribute(key)
+            if type(key) == "string" and not key:match("^_") then return frame.attributes[key] end
+        end
         function handle:SetAttribute(key, value)
             M.SetAttribute(frame, key, value)
             FireScript(frame, "OnAttributeChanged", key, value)
@@ -302,10 +304,8 @@ function Harness.New(root, flavor, options)
         assert(not env.InCombatLockdown(), "secure wrapper installed in combat")
         local original = frame:GetScript(script)
         local pre = assert(loadstring(prebody, "=SecureHandlerWrapScript.OnShow"))
-        setfenv(pre, { self = HandleFor(frame) })
+        setfenv(pre, { self = HandleFor(frame), control = HandleFor(owner) })
         local wrapper = function(self, ...)
-            -- This exact restricted prebody only reads _ignore. Its restricted
-            -- environment supplies no insecure frame handle or native writes.
             if pre() == false then return end
             -- UpdateHeader owns its secure scope already. The saved native
             -- callback adds no second emulated boundary/result-table allocation.

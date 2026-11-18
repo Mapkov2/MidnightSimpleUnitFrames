@@ -11,10 +11,15 @@ local classReads, guidReads, playerReads, healthPercent = 0, 0, 0, 15
 local opaquePlayer, replacementName = false, nil
 local guidReadable, nameMissing, rejectNativeClass = false, false, false
 local secretClassPaints = 0
+local inInstance, instanceType, locationReads = false, "none", 0
 local colors = { SHAMAN = { r = 0, g = .44, b = .87 }, MAGE = { r = .24, g = .78, b = .9 } }
 local h = Harness.New(root, flavor, { beforeBoot = function(world)
   local env = world.env
   env.type, env.issecretvalue = type, issecretvalue
+  env.IsInInstance = function()
+    locationReads = locationReads + 1
+    return inInstance, instanceType
+  end
   env.GetTime = function() return clock end
   env.UnitIsDeadOrGhost = function(unit) return unit == member and dead end
   env.UnitIsDead = env.UnitIsDeadOrGhost
@@ -294,4 +299,50 @@ for _, scope in ipairs({ "party", "raid" }) do
   CheckColor(frame, green, member .. " replacement NPC reaction")
   CheckSteadyHealth("replacement NPC")
 end
+-- Loading screens and seamless zone changes must select the same health
+-- updater. Count calls on the real registered group frame on both sides.
+local bars = h.core.UFBarTextCommon
+local retry, resume = bars.RetryGroupRezzUnit, bars.ResumeGroupRezzColors
+local retries, resumes = 0, 0
+bars.RetryGroupRezzUnit = function(unit)
+  retries = retries + 1
+  return retry(unit)
+end
+bars.ResumeGroupRezzColors = function()
+  resumes = resumes + 1
+  return resume()
+end
+local function CheckLocation(enabled, label)
+  assert(bars.groupRezzOutOfCombat == enabled, label .. " selected the wrong phase")
+  local frame = assert(h.GF.FrameForUnit(member))
+  local before, reads = retries, locationReads
+  frame.scripts.OnEvent(frame, "UNIT_HEALTH", member)
+  assert(locationReads == reads, label .. " queried location on UNIT_HEALTH")
+  assert(retries == before + (enabled and 1 or 0), label .. " used the wrong health updater")
+end
+local function EnterLocation(inside, kind, event, enabled)
+  inInstance, instanceType = inside, kind
+  h:Event(event)
+  CheckLocation(enabled, kind .. " " .. event)
+end
+CheckLocation(true, "outdoor group")
+for _, kind in ipairs({ "party", "raid", "pvp", "arena", "scenario" }) do
+  EnterLocation(true, kind, "ZONE_CHANGED_NEW_AREA", false)
+  h:EnterCombat()
+  CheckLocation(false, kind .. " pull")
+  local before = resumes
+  h:LeaveCombat()
+  CheckLocation(false, kind .. " combat exit")
+  assert(resumes == before, kind .. " ran the rez-color scan on combat exit")
+  EnterLocation(false, "none", "PLAYER_ENTERING_WORLD", true)
+end
+EnterLocation(true, "none", "ZONE_CHANGED_NEW_AREA", false)
+EnterLocation(false, "party", "ZONE_CHANGED_NEW_AREA", false)
+EnterLocation(false, "none", "ZONE_CHANGED_NEW_AREA", true)
+h:EnterCombat()
+EnterLocation(true, "raid", "ZONE_CHANGED_NEW_AREA", false)
+EnterLocation(false, "none", "ZONE_CHANGED_NEW_AREA", false)
+h:LeaveCombat()
+CheckLocation(true, "outdoor combat exit")
+bars.RetryGroupRezzUnit, bars.ResumeGroupRezzColors = retry, resume
 print("group rez class color " .. flavor .. ": ok")

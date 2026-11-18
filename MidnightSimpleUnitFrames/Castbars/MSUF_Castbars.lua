@@ -327,7 +327,7 @@ Frames.BuildPlayerCastbarElements = BuildPlayerCastbarElements
 local function CreatePlayerCastbarFrame()
     local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent))
     BuildPlayerCastbarElements(frame)
-    SetPlayerCastbarEventsRegistered(frame, true)
+    SetPlayerCastbarEventsRegistered(frame, Bridge.IsCastbarEnabledForUnit("player"))
     local runtime = Castbars.Runtime
     if runtime and runtime.PrewarmNativeTimeText then
         runtime:PrewarmNativeTimeText(frame)

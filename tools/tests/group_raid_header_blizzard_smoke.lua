@@ -144,7 +144,13 @@ local function NewWorld(sghSource, conf, liveKind, mythic)
         Check(not world.combat and script == "OnShow" and postbody == nil, "unexpected secure wrapper")
         local original = frame:GetScript(script)
         local pre = assert(loadstring(prebody, "=SecureHandlerWrapScript.OnShow"))
-        setfenv(pre, { self = frame })
+        -- RestrictedFrames.lua only exposes public attributes to wrapped scripts.
+        local function Handle(widget)
+            return { GetAttribute = function(_, name)
+                if type(name) == "string" and not name:match("^_") then return widget:GetAttribute(name) end
+            end }
+        end
+        setfenv(pre, { self = Handle(frame), control = Handle(owner) })
         local wrapper = function(self, ...)
             if pre() == false then return end
             if original then return original(self, ...) end

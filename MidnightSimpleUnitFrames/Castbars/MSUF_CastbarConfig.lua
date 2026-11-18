@@ -19,6 +19,7 @@ Config.records = {}
 Config.revisions = { style = 1, time = 1, texture = 1 }
 Config.styleRevision, Config.timeRevision, Config.textureRevision = 1, 1, 1
 Config.revision = 1
+Config.playerFrameDisabled = false
 local compiledRevision = 0
 
 for index = 1, #KINDS do
@@ -72,6 +73,17 @@ function Config.Invalidate(kind)
 end
 Config.Refresh = Config.Invalidate
 
+-- Commit the frame preference from a settings apply. A dirty snapshot can be
+-- compiled by a cast event while the settings queue is waiting for combat to end.
+function Config.SyncPlayerFrameSetting()
+    local db = Config.Source()
+    local player = db and db.player
+    local disabled = player and player.enabled == false or false
+    if disabled == Config.playerFrameDisabled then return end
+    Config.playerFrameDisabled = disabled
+    Config.Invalidate()
+end
+
 -- Reuse every table; a shared snapshot compiles all unit records once per revision.
 -- Explicit Compile remains the cold compatibility entry for source-only callers.
 function Config.Compile(kind, current)
@@ -91,7 +103,7 @@ function Config.Compile(kind, current)
         Config.DB[kind] = source and source[kind] and record.unit or nil
         -- Drag/shake geometry must observe live edits between cold revisions.
         record.geometry = source and source.general or general
-        record.backend = Backend.Resolve(kind, general)
+        record.backend = Backend.Resolve(kind, general, Config.playerFrameDisabled)
         record.enabled = record.backend == "MSUF"
         record.timeEnabled = general[TIME_KEYS[kind]] ~= false
         local timeFormat = MSUF.Public and MSUF.Public.GetCastbarTimeFormat

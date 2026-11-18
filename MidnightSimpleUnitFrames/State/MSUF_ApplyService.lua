@@ -928,7 +928,11 @@ FlushApply = function()
     pendingPreview = nil
     local wantAlphaAll = pendingAlphaAll
     pendingAlphaAll = false
-    FlushCastbarSettingsChanged()
+    local castbarSettingsApplied = FlushCastbarSettingsChanged()
+    if (pendingUnits.player or (pendingGeneral and pendingGeneral.applyAll ~= false))
+        and (castbarSettingsApplied or MSUF.Castbars.Bridge.ApplyPlayerFrameChange()) then
+        pendingCastbarUnits.player = true
+    end
     local coordinatedApplyMask = CoordinatedUnitFrameMask()
     -- Walk a snapshot: a failed apply puts its unit back into pendingUnits, and
     -- adding a key to a table during its own pairs() traversal is undefined.

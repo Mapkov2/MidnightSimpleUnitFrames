@@ -126,10 +126,11 @@ function Backend.LegacyEnableKey(unit)
     return LEGACY_ENABLE_KEYS[NormalizeUnit(unit)]
 end
 
---- Pure backend resolution for runtime ownership checks. Profile repair belongs
---- to Get/Sync so ordinary reads never mutate SavedVariables.
-function Backend.Resolve(unit, general)
+--- Resolve the stored preference, with an optional player-frame override for
+--- runtime readers. Get/Sync never pass the override when repairing storage.
+function Backend.Resolve(unit, general, playerFrameDisabled)
     unit = NormalizeUnit(unit)
+    if unit == "player" and playerFrameDisabled then return "BLIZZARD" end
 
     local backendKey = BACKEND_KEYS[unit]
     local legacyEnableKey = LEGACY_ENABLE_KEYS[unit]
@@ -217,15 +218,20 @@ function Backend.Sync(general)
 end
 
 function Backend.IsMSUF(unit, general)
-    return Backend.Resolve(unit, general) == "MSUF"
+    if general and general == Config.DB.general then
+        local key = NormalizeUnit(unit)
+        local record = key and Config.records[key]
+        return record ~= nil and record.enabled
+    end
+    return Backend.Resolve(unit, general, Config.playerFrameDisabled) == "MSUF"
 end
 
 function Backend.IsBlizzard(unit, general)
-    return Backend.Resolve(unit, general) == "BLIZZARD"
+    return Backend.Resolve(unit, general, Config.playerFrameDisabled) == "BLIZZARD"
 end
 
 function Backend.IsHide(unit, general)
-    return Backend.Resolve(unit, general) == "HIDE"
+    return Backend.Resolve(unit, general, Config.playerFrameDisabled) == "HIDE"
 end
 
 Backend.NormalizeCastbarBackend = Backend.Normalize

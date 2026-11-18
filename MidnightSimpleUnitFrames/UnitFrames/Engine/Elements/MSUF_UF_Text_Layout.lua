@@ -217,6 +217,18 @@ local function SetTextSlotShown(fs, show, mode)
   end
 end
 
+local function ApplyValueSlotVisibility(frame, spec, text, powerEbonMight)
+  local showHealth = spec and spec.showHealthText ~= false
+  local showPower = spec and spec.showPowerText ~= false and not powerEbonMight
+  local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
+  SetTextSlotShown(frame.hpTextLeft, showHealth, healthLeft)
+  SetTextSlotShown(frame.hpTextCenter, showHealth, healthCenter)
+  SetTextSlotShown(frame.hpTextRight, showHealth, healthRight)
+  SetTextSlotShown(frame.powerTextLeft, showPower, text.powerLeft)
+  SetTextSlotShown(frame.powerTextCenter, showPower, text.powerCenter)
+  SetTextSlotShown(frame.powerTextRight, showPower, text.powerRight)
+end
+
 local function EnsureDotsFS(frame, key, template, layer)
   local fs = frame and frame[key]
   if fs then
@@ -1403,6 +1415,16 @@ function Text.Apply(frame, spec)
     RefreshAppliedTextColors(frame, spec, text)
     return
   end
+  -- A released group button retains its layout, but its elements hid the
+  -- regions. Clear the previous shield before any slot can become visible.
+  local released = frame._msufTextLayoutRevision == false
+  if released and frame._msufTextRuntime then
+    local rt = frame._msufTextRuntime
+    for i = 1, rt.healthAbsorbSlotCount or 0 do
+      SetTextCached(rt.healthAbsorbSlots[i].fs, "")
+    end
+    rt._lastAbsorbTextValue = nil
+  end
   local signature = TextApplySignature(spec, text)
   if frame._msufGFPreviewDetached ~= true
     and not sinksChanged
@@ -1411,6 +1433,10 @@ function Text.Apply(frame, spec)
     and frame._msufTextPowerEbonMight == powerEbonMight
     and frame._msufTextApplySignature == signature
   then
+    if released then
+      ApplyValueSlotVisibility(frame, spec, text, powerEbonMight)
+      frame._msufTextLayoutRevision = layoutRevision
+    end
     RefreshAppliedTextColors(frame, spec, text)
     return
   end
@@ -1464,15 +1490,7 @@ function Text.Apply(frame, spec)
   if not (inlineEnabled and showName) then
     HideDots(frame._msufInlineDotsFS)
   end
-  local showHealth = spec and spec.showHealthText ~= false
-  local showPower = spec and spec.showPowerText ~= false and not powerEbonMight
-  local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
-  SetTextSlotShown(frame.hpTextLeft, showHealth, healthLeft)
-  SetTextSlotShown(frame.hpTextCenter, showHealth, healthCenter)
-  SetTextSlotShown(frame.hpTextRight, showHealth, healthRight)
-  SetTextSlotShown(frame.powerTextLeft, showPower, text.powerLeft)
-  SetTextSlotShown(frame.powerTextCenter, showPower, text.powerCenter)
-  SetTextSlotShown(frame.powerTextRight, showPower, text.powerRight)
+  ApplyValueSlotVisibility(frame, spec, text, powerEbonMight)
   frame._msufPowerTextColorInitialized = nil
   frame._msufPowerTextColorType = nil
   frame._msufPowerTextColorToken = nil
