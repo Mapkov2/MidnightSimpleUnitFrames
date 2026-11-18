@@ -601,23 +601,35 @@ local function BuildSearchQueryClauses(query)
     return normalized, clauses
 end
 
-local searchTokenSeenScratch = {}
-local searchTokenSeenScratchBusy = false
+local searchTokenScratch = {}
+local searchTokenScratchBusy = false
 local function BuildSearchTokenList(normalized, limit)
     limit = tonumber(limit) or SEARCH_MAX_RECORD_TOKENS
-    local tokens = {}
-    local wasBusy = searchTokenSeenScratchBusy
-    local seen = wasBusy and {} or searchTokenSeenScratch
-    searchTokenSeenScratchBusy = true
+    local wasBusy = searchTokenScratchBusy
+    local scratch = wasBusy and {} or searchTokenScratch
+    searchTokenScratchBusy = true
+    local count = 0
     for token in tostring(normalized or ""):gmatch("%S+") do
-        if #token >= 2 and not SEARCH_STOP_WORDS[token] and not seen[token] then
-            seen[token] = true
-            tokens[#tokens + 1] = token
-            if #tokens >= limit then break end
+        if #token >= 2 and not SEARCH_STOP_WORDS[token] and not scratch[token] then
+            count = count + 1
+            scratch[token], scratch[count] = true, token
+            if count >= limit then break end
         end
     end
-    for i = 1, #tokens do seen[tokens[i]] = nil end
-    searchTokenSeenScratchBusy = wasBusy
+    -- SETLIST sizes this long-lived array to its actual word count. Avoid
+    -- unpack's argument limit if a provider requests an unusually large list.
+    local tokens
+    if count <= 128 then
+        tokens = { unpack(scratch, 1, count) }
+    else
+        tokens = {}
+        for i = 1, count do tokens[i] = scratch[i] end
+    end
+    for i = 1, count do
+        scratch[scratch[i]] = nil
+        scratch[i] = nil
+    end
+    searchTokenScratchBusy = wasBusy
     return tokens
 end
 

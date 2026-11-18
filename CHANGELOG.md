@@ -16,6 +16,8 @@
 <!-- msuf-menu-link: none -->
 - **Resurrection colors.** In the open world outside combat, a health bar with a temporary friendly color retries its class color on the next health update. Ordinary health updates use the existing class data.
 <!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_group_frames","controlId":"menu2.opt.colors.advanced.group.frame.health.mode","settingKey":"gf_party.gfBarMode","prepareKind":"colorsPainterCategory","prepareValue":"group","query":"health color scheme","label":"Bar Color Mode"} -->
+- **Menu search.** Searching across opened settings pages now uses less memory. The index releases its temporary lookups after the build and stores each word list at its actual size.
+<!-- msuf-menu-link: none -->
 - **Player castbar.** Turning off the MSUF Player frame restores Blizzard's player castbar. Turning the frame back on restores your saved castbar choice. Profile switches and changes queued during combat follow the same setting.
 <!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.provider","settingKey":"general.castbarPlayerBackend","prepareKind":"menuTab","prepareValue":"general","query":"castbar provider","label":"Castbar provider"} -->
 

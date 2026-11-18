@@ -183,6 +183,11 @@ local records = assert(M.Search._RenderContext.SEARCH_STATE.records)
 local tokens = 0
 for _, row in ipairs(records) do if row.tokens and #row.tokens > 0 then tokens = tokens + 1 end end
 assert(#pages > 20 and #records > 3000 and tokens > 3000, "combined heap did not warm pages/index/fuzzy together")
+do
+    local warm = M.Search._RenderContext.SEARCH_STATE.indexQueue
+    assert(not warm or (not warm.seenRecords and not warm.covered and not warm.registryPageInfos),
+        "search kept construction tables after publishing the index")
+end
 local recordCount = #records
 assert(M.Search.StaticIndex.IsDecoded(), "combined heap did not retain decoded index")
 collectgarbage("collect")
@@ -209,4 +214,17 @@ print(string.format("combined heap %s/%s: %d pages, %d records, %d tokenized; bu
     flavor, locale, #pages, recordCount, tokens, built, combined, OPEN_KIB, closed, CLOSED_KIB))
 assert(combined <= OPEN_KIB, "combined search/page heap budget exceeded: " .. combined)
 assert(closed <= CLOSED_KIB, "closed page heap budget exceeded: " .. closed)
+-- Retained token lists remain independent, including a long provider list and
+-- a nested conversion while the ordinary token scratch buffer is in use.
+local tokenize = M.Search._RoutingContext.BuildSearchTokenList
+local inside
+local outside = tokenize(setmetatable({}, { __tostring = function()
+    inside = tokenize("12 probeouter 12", 2)
+    return "12 probefinal 12"
+end }), 2)
+assert(table.concat(inside, "|") == "12|probeouter" and table.concat(outside, "|") == "12|probefinal")
+local words = {}
+for i = 1, 260 do words[i] = "providerword" .. i end
+assert(table.concat(tokenize(table.concat(words, " "), #words), "|") == table.concat(words, "|"))
+assert(#tokenize("") == 0 and table.concat(outside, "|") == "12|probefinal")
 print("PASS combined search/page budgets " .. flavor .. "/" .. locale)

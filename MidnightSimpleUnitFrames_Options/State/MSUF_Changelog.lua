@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "CA79DEEA8BD0B2D02DD00A14C42799611A62E102238AD3DBBD3F2BAA29EDCC03",
+    sourceSha256 = "BA3BA3FCDEF683CEE59AA5E36EF09DA4E014310D2EAB56A9FDEC8C0B1A003077",
     currentVersion = "7.0.3-beta3",
     historyFromVersion = "7.0.1",
     previousVersion = "7.0.3-beta2",
@@ -50,6 +50,10 @@ local data = {
                                 prepareKind = "colorsPainterCategory",
                                 prepareValue = "group",
                             },
+                        },
+                        {
+                            text = "Menu search. Searching across opened settings pages now uses less memory. The index releases its temporary lookups after the build and stores each word list at its actual size.",
+                            linkless = true,
                         },
                         {
                             text = "Player castbar. Turning off the MSUF Player frame restores Blizzard's player castbar. Turning the frame back on restores your saved castbar choice. Profile switches and changes queued during combat follow the same setting.",

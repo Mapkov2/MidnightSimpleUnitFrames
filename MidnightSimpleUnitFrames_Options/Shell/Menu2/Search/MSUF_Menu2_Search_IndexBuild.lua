@@ -320,7 +320,11 @@ function SearchIndexBuild.Advance(deadline)
             return false
         end
         SEARCH_STATE.records, SEARCH_STATE.recordsDirty = job.records, false
-    elseif not job or job.records ~= SEARCH_STATE.records then
+        -- All build phases finished. Keep only the cursor used to warm the
+        -- published records, releasing the deduplication and page lookups.
+        job = nil
+    end
+    if not job or job.records ~= SEARCH_STATE.records then
         job = { records = SEARCH_STATE.records, index = 1, phase = #SearchIndexBuild.PHASES + 1 }
         SEARCH_STATE.indexQueue = job
     end
