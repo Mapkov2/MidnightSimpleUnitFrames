@@ -1,5 +1,24 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.3-beta3 - 2026-11-18
+
+**7.0.3 Beta 3**
+
+### Features and fixes
+
+- **Outdoor invitations.** Joining a party in open-world combat now shows the new party members immediately. An existing outdoor raid can also show new members. Invitations update normally outside combat, including when the group leader is already inside a dungeon.
+<!-- msuf-menu-link: none -->
+- **Dungeon and raid combat.** When combat starts inside an instance, Party, Raid and Priority frames keep their positions through joins, departures and role changes. The layout catches up when combat ends. Health and resource values continue to update.
+<!-- msuf-menu-link: none -->
+- **Party and raid texts.** Reused group frames show the new member's configured health and resource text without a reload. Role changes restore the appropriate resource display, and a previous member's absorb value is cleared.
+<!-- msuf-menu-link: none -->
+- **Group frame sizes.** A button reused for the first outdoor party invitation uses the current profile's size and click area, including after a preview.
+<!-- msuf-menu-link: none -->
+- **Resurrection colors.** In the open world outside combat, a health bar with a temporary friendly color retries its class color on the next health update. Ordinary health updates use the existing class data.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_group_frames","controlId":"menu2.opt.colors.advanced.group.frame.health.mode","settingKey":"gf_party.gfBarMode","prepareKind":"colorsPainterCategory","prepareValue":"group","query":"health color scheme","label":"Bar Color Mode"} -->
+- **Player castbar.** Turning off the MSUF Player frame restores Blizzard's player castbar. Turning the frame back on restores your saved castbar choice. Profile switches and changes queued during combat follow the same setting.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.provider","settingKey":"general.castbarPlayerBackend","prepareKind":"menuTab","prepareValue":"general","query":"castbar provider","label":"Castbar provider"} -->
+
 ## 7.0.3-beta2 - 2026-11-17
 
 **7.0.3 Beta 2**

@@ -8,43 +8,61 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "ED0B359D3DEAB50037886BEF9CEC93F5F4BEFA4DAE680FAA88988CFBB706608F",
-    currentVersion = "7.0.3-beta2",
+    sourceSha256 = "CA79DEEA8BD0B2D02DD00A14C42799611A62E102238AD3DBBD3F2BAA29EDCC03",
+    currentVersion = "7.0.3-beta3",
     historyFromVersion = "7.0.1",
-    previousVersion = "7.0.3-beta1",
-    rangeLabel = "7.0.3-beta1 -> 7.0.3-beta2",
+    previousVersion = "7.0.3-beta2",
+    rangeLabel = "7.0.3-beta2 -> 7.0.3-beta3",
     entries = {
         {
-            version = "7.0.3-beta2",
-            date = "2026-11-17",
-            title = "7.0.3 Beta 2",
+            version = "7.0.3-beta3",
+            date = "2026-11-18",
+            title = "7.0.3 Beta 3",
             sections = {
                 {
                     title = "Features and fixes",
                     bullets = {
                         {
-                            text = "Standalone Quick Setup. Quick Setup without MSUF Suite lets you continue with your existing Player and Party positions. Moving frames and opening size popups remain optional in this quick flow.",
+                            text = "Outdoor invitations. Joining a party in open-world combat now shows the new party members immediately. An existing outdoor raid can also show new members. Invitations update normally outside combat, including when the group leader is already inside a dungeon.",
                             linkless = true,
                         },
                         {
-                            text = "Quick frame scaling. The standalone Size and position step offers frame scale buttons in 5-percent steps from 25 to 200 percent, plus a button to restore the scale from before your changes.",
+                            text = "Dungeon and raid combat. When combat starts inside an instance, Party, Raid and Priority frames keep their positions through joins, departures and role changes. The layout catches up when combat ends. Health and resource values continue to update.",
                             linkless = true,
                         },
                         {
-                            text = "Dashboard frame-scale shortcut. Without Suite, the Dashboard keeps the Frames scale badge visible at narrow widths. Clicking it opens the frame-scale control.",
+                            text = "Party and raid texts. Reused group frames show the new member's configured health and resource text without a reload. Role changes restore the appropriate resource display, and a previous member's absorb value is cleared.",
                             linkless = true,
                         },
                         {
-                            text = "Class colors after resurrection. Party and Raid class health colors can recover after delayed identity or class data, including after the short resurrection window and at full health after leaving combat.",
+                            text = "Group frame sizes. A button reused for the first outdoor party invitation uses the current profile's size and click area, including after a preview.",
                             linkless = true,
                         },
                         {
-                            text = "Roster replacement recovery. Resurrection color recovery checks the current group member after roster changes and retries unresolved class paints on later health updates.",
-                            linkless = true,
+                            text = "Resurrection colors. In the open world outside combat, a health bar with a temporary friendly color retries its class color on the next health update. Ordinary health updates use the existing class data.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "health color scheme",
+                                label = "Bar Color Mode",
+                                sectionId = "colors_group_frames",
+                                controlId = "menu2.opt.colors.advanced.group.frame.health.mode",
+                                settingKey = "gf_party.gfBarMode",
+                                prepareKind = "colorsPainterCategory",
+                                prepareValue = "group",
+                            },
                         },
                         {
-                            text = "Quick Setup translations. New quick-placement and scale-reset labels are included in all twelve locale packs.",
-                            linkless = true,
+                            text = "Player castbar. Turning off the MSUF Player frame restores Blizzard's player castbar. Turning the frame back on restores your saved castbar choice. Profile switches and changes queued during combat follow the same setting.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "castbar provider",
+                                label = "Castbar provider",
+                                sectionId = "castbar",
+                                controlId = "menu2.uf_player.unit.castbar.provider",
+                                settingKey = "general.castbarPlayerBackend",
+                                prepareKind = "menuTab",
+                                prepareValue = "general",
+                            },
                         },
                     },
                 },
