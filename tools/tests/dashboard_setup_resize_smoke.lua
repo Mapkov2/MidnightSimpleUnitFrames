@@ -371,4 +371,22 @@ shortcut:Click()
 assert(ok and focused and exact and M.dashboardScalingOpen, "percentage did not focus the exact frame slider")
 assert(general.msufUiScale == 0.87 and general.UIScale.Enabled == ui)
 M.SearchBridge.OpenSearchTarget = open
+
+assert(M.OpenUnitFrameSetup())
+assert(Button("Import a profile")):Click()
+Settle()
+assert(M.activeKey == "profiles" and Button("Back to setup"), "Setup import did not offer a return to Setup")
+assert(M.SelectPage("opt_misc") and M.SelectPage("profiles"))
+Settle()
+assert(Button("Browse Wago Profiles") and not Button("Back to setup"), "ordinary Profiles kept the abandoned Setup route")
+local profileEntry = M.cache.profiles
+assert(M.OpenUnitFrameSetup())
+assert(Button("Import a profile")):Click()
+Settle()
+M.ResumeUnitFrameSetupAfterImport()
+assert(M.activeKey == "home" and Button("Import a profile"), "Setup import could not resume Setup")
+assert(M.SelectPage("profiles"))
+Settle()
+assert(M.cache.profiles == profileEntry and Button("Browse Wago Profiles"), "ordinary Profiles did not retain its cached view")
+
 print("PASS Dashboard resize, Changelog tabs, standalone scale and placement, first-run Skip and Suite Setup (" .. flavor .. ")")

@@ -337,7 +337,7 @@ function M.PromptSkipGuidedSetup(onAccept)
     })
 end
 
-local function OpenProfileImport(firstLoad)
+local function OpenProfileImport(firstLoad, fromUnitFrameSetup)
     -- This scene is a one-time route chooser, not the import workflow itself.
     -- Choosing this route retires the welcome scene; a successful import later
     -- completes the lifecycle, and a cancelled import simply lands on the
@@ -356,6 +356,7 @@ local function OpenProfileImport(firstLoad)
         state = { profileImportCreateNew = true },
         accordion = { ["profiles:profiles_io"] = true },
     }
+    M.resumeUnitFrameSetupOnImport = fromUnitFrameSetup or nil
     local bridge = M.SearchBridge
     local called, opened
     if bridge and type(bridge.OpenSearchTarget) == "function" then
@@ -364,6 +365,7 @@ local function OpenProfileImport(firstLoad)
     if not called or opened == false then
         M.SelectPage("profiles")
     end
+    if M.activeKey ~= "profiles" then M.resumeUnitFrameSetupOnImport = nil end
     return true
 end
 
@@ -511,6 +513,7 @@ local setupRequested, chosenPreset = false, "current"
 function M.OpenUnitFrameSetup()
     if BlockedByCombat() then return false end
     setupRequested = true
+    M.resumeUnitFrameSetupOnImport = nil
     if M.frame and not M.frame:IsShown() then
         return MSUF.OpenOptionsFromLauncher("home", InvalidateHome)
     end
@@ -523,7 +526,7 @@ function M.IsUnitFrameSetupActive()
 end
 
 function M.ResumeUnitFrameSetupAfterImport()
-    if setupRequested then
+    if M.resumeUnitFrameSetupOnImport then
         chosenPreset = "current"
         M.OpenUnitFrameSetup()
     end
@@ -622,7 +625,7 @@ local function BuildUnitFrameSetup(ctx)
     CreateFooterButton(scene, T, "Wago Profiles", "TOPLEFT", 20 - width / 2, y, buttonWidth,
         BrowseSetupProfiles, "setup_wago")
     CreateFooterButton(scene, T, "Import a profile", "TOPLEFT", 30 - width / 2 + buttonWidth, y, buttonWidth,
-        function() OpenProfileImport(Lifecycle()) end, "setup_import")
+        function() OpenProfileImport(Lifecycle(), true) end, "setup_import")
     CreateFooterButton(scene, T, "Guided Setup", "TOPLEFT", 20 - width / 2, y - 36, buttonWidth,
         M.StartSetupWalkthrough, "setup_walkthrough")
     CreateFooterButton(scene, T, "Open full settings", "TOPLEFT", 30 - width / 2 + buttonWidth, y - 36, buttonWidth,

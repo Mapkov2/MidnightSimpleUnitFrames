@@ -1600,7 +1600,7 @@ function ProfilesPage.ImportActions(state)
     local browse = function()
         MSUF.Require("MSUF_ShowCopyLink", FILE)("Wago MSUF Profiles", WAGO_PROFILES_URL)
     end
-    local inSetup = M.IsUnitFrameSetupActive()
+    local inSetup = M.resumeUnitFrameSetupOnImport == true
     local wago = ProfileButton(actionsCard, inSetup and "Back to setup" or "Browse Wago Profiles",
         inSetup and M.OpenUnitFrameSetup or browse, nil, inSetup and "profiles.back_to_setup" or "profiles.browse_wago",
         false, nil, nil, nil, ioButtonW)
@@ -1726,5 +1726,8 @@ local function BuildModules(ctx)
     end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("profiles", { title = "MSUF Profiles", build = ProfilesPage.Build, version = 7, refreshInPlace = true })
+M.RegisterPage("profiles", {
+    title = "MSUF Profiles", build = ProfilesPage.Build, version = 7, refreshInPlace = true,
+    variantKey = function() return M.resumeUnitFrameSetupOnImport and "setup-import" or "regular" end,
+})
 M.RegisterPage("modules", { title = "MSUF Modules", build = BuildModules })
