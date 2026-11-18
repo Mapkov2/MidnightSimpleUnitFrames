@@ -79,6 +79,7 @@ local customControls = {}
 local customMissing = {}
 local sectionPolicies, sectionResetChecks, sectionWatched = {}, 0, false
 local legacy, watching, combat, setterCalls = false, false, false, 0
+local combatGateRead
 local function Rewrite(source, path)
     return (source:gsub("([%w_.]*write)%s*=%s*(%b{})(%s*,?%s*)%-%-%[%[schema setter: ([%w.]+)%]%]",
         function(lhs, policy, separator, id)
@@ -116,7 +117,10 @@ end, beforeOptions = function(world)
         assert(world.core.Specialization.GetSpecialization == nil, "Forever captured a specialization stub")
     end
     world.core.FirstLoad6.deferredThisSession = true
-    world.core.Public.IsConfigCombatLocked = function() return combat end
+    world.core.Public.IsConfigCombatLocked = function()
+        if combat then combatGateRead = true end
+        return combat
+    end
     world.env.__SchemaSetterPolicy = function(policy, setter, id)
         policies[policy] = { setter = setter, id = id }
         return policy
@@ -826,7 +830,7 @@ for _, control in ipairs(controls) do
         Check((frozenReset ~= nil) == (derivedResetObserved == true), spec.id .. ": reset presence changed")
         checks = checks + 1
     end
-    local frozenCombat
+    local frozenCombat, reuseCombatHistory
     for _, old in ipairs({ true, false }) do
         legacy = old
         local profile = M.EnsureDB()
@@ -834,8 +838,8 @@ for _, control in ipairs(controls) do
             if restoreKnown then Restore(profile, baseline, restoreDelta, Replace)
             else Replace(profile, baseline) end
         end
-        M.ClearHistory()
-        combat, setterCalls = true, 0
+        if not reuseCombatHistory then M.ClearHistory() end
+        combat, setterCalls, combatGateRead = true, 0, false
         local ok, why = pcall(Drive, control, candidates[1])
         combat = false
         Check(ok, spec.id .. ": combat " .. tostring(why))
@@ -850,6 +854,13 @@ for _, control in ipairs(controls) do
         if old then
             outcome = Capture(baseline, profile)
             frozenCombat = outcome
+            -- A normal widget refused by combat left the original history
+            -- baseline intact. Direct commands and side effects get a new one.
+            if ok and not control.command and combatGateRead and setterCalls == 0 and outcome == nil then
+                local state = M.GetHistoryState()
+                reuseCombatHistory = state.undoCount == 0 and state.redoCount == 0 and not state.canResetAll
+                    and not M.IsHistoryCapturing()
+            end
         else
             local same = Matches(baseline, frozenCombat, profile)
             Check(same, spec.id .. ": combat refresh changed profile behavior")
