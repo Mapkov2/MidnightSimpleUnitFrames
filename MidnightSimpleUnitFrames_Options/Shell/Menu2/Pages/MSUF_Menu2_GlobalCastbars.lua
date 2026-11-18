@@ -690,7 +690,8 @@ local function BuildCastbars(ctx)
     end
     LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 382,
         build = function(_, secBuilder) return BuildInterruptReadySection(PageState, secBuilder) end })
-    M.BuildTimerBarSections(ctx, b)
+    LazyCastbarSection({ sectionId = "timer_bars", title = "Other timer bars", height = 780,
+        build = M.BuildTimerBarSections })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 6 })

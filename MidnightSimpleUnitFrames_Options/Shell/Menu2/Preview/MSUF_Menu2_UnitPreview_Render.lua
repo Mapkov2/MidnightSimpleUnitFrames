@@ -238,21 +238,7 @@ function Stage.ResolveInputs(st)
     scene.auraSampleCount = 4
     scene.level = (box.canvas:GetFrameLevel() or 0) + 6
     scene:Frame():SetFrameLevel(scene.level)
-    local spec = scene:Compile()
-    if data.live and spec.portrait and spec.portrait.enabled and spec.portrait.render ~= "CLASS" then
-        local snapshot = box._portraitSnapshot
-        if not snapshot then
-            snapshot = PixelLayoutRegion(box.mock:CreateTexture(nil, "ARTWORK"))
-            snapshot:Hide()
-            box._portraitSnapshot = snapshot
-        end
-        if SetPortraitTexture then
-            snapshot:SetTexture(nil)
-            SetPortraitTexture(snapshot, data.liveUnit)
-            local art = snapshot:GetTexture()
-            if issecretvalue(art) ~= true and (type(art) == "number" or type(art) == "string") then sample.portraitTexture = art end
-        end
-    end
+    sample.portraitUnit = data.liveUnit
     scene:SetSample(sample, true)
     scene:Show()
     AliasScene(box.mock, scene:Frame())

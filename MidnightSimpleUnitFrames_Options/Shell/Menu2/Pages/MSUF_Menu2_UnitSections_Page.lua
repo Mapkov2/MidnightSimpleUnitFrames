@@ -481,6 +481,20 @@ function UnitCopy.MakePopup(ctx, copy, unit)
 end
 local function BuildTopActions(ctx, builder, unit, label)
     local pageW = tonumber(builder.width) or 720
+    local copyLabel = "Copy To Settings"
+    local copyInset = 16
+    local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
+    T.ApplySurface(sec, "status")
+    sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
+    sec._msuf2Width = pageW
+    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, sec, "Player frame and Copy To Settings", "unit_scope") end
+
+    local copy = Schema.Build(ctx, sec, {
+        { "roleButton", "copy", nil, { copyLabel, "success", 140, 24 },
+            anchor = { "TOPRIGHT", sec, "TOPRIGHT", -copyInset, -15 } },
+    }).copy
+    T.FitButtonWidth(copy, 82)
+
     local scopeValues = {}
     for i = 1, #UNIT_TAB_ORDER do
         local tabUnit = UNIT_TAB_ORDER[i]
@@ -495,7 +509,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     local scopeOpts = {
         values = scopeValues,
         width = pageW,
-        maxRight = pageW - 112,
+        maxRight = pageW - copy:GetWidth() - copyInset - 14,
         label = "",
         labelWidth = 0,
         startX = 16,
@@ -506,34 +520,23 @@ local function BuildTopActions(ctx, builder, unit, label)
         end,
     }
     local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(scopeValues, scopeOpts)
-    local scopeH = math.max(54, math.abs((scopeMetrics and scopeMetrics.bottomY) or -40) + 14)
-    local sectionH = scopeH
-    local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
-    T.ApplySurface(sec, "status")
-    sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
+    local sectionH = math.max(54, math.abs((scopeMetrics and scopeMetrics.bottomY) or -40) + 14)
     sec:SetSize(pageW, sectionH)
-    sec._msuf2Width = pageW
-    if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, sec, "Player frame and Copy To", "unit_scope") end
     builder.y = builder.y - sectionH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
-    local rowY = -15
     if W.ScopeOverrideBar then Schema.Build(ctx, sec, {
         { "scopebar", "unit_page", nil, { scopeOpts }, scope = unit, domain = "navigation",
             beforeBind = function(widget)
                 RegisterControl(widget, ctx, "navigation.unit_page.selector", "Editing", "segment", "ephemeral")
             end },
     }) end
-    local copy = Schema.Build(ctx, sec, {
-        { "roleButton", "copy", nil, { "Copy To", "success", 82, 24 } },
-    }).copy
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, rowY)
     -- Opening the selector is safe in combat. The actual copy remains guarded
     -- in UnitCopy.Run, where a blocked click can produce visible feedback.
     copy._msuf2AllowCombatClick = true
     copy._msuf2SkipHistoryCheckpoint = true
     local copyPopup = UnitCopy.MakePopup(ctx, copy, unit)
     -- Opening the popup changes nothing, but search should still find where copying lives.
-    RegisterControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral", { searchIndexed = true })
+    RegisterControl(copy, ctx, "copy.open", copyLabel, "button", "ephemeral", { searchIndexed = true })
     copy:SetScript("OnClick", function(self)
         if copyPopup then copyPopup.Show(self) end
     end)

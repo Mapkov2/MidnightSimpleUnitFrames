@@ -965,6 +965,17 @@ ApplyClassPortrait = function(texture, unit, p, class, frame, force)
   ApplyUnitPortrait(texture, unit, frame, p, force)
 end
 
+local function BindUnitPortraitTexture(texture, unit, p)
+  texture._msufTexture = nil
+  texture._msufAtlas = nil
+  -- The native renderer binds its render target to this region. The BLIZZARD
+  -- shape requests the modern bust without the baked mask.
+  SetPortraitTexture(texture, unit, (p and p.shape == "BLIZZARD") or nil)
+  -- The native renderer can reset UVs even when the configured crop is unchanged.
+  texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
+  SetTexCoordCached(texture, Get2DPortraitTexCoords(p))
+end
+
 ApplyUnitPortrait = function(texture, unit, frame, p, force,
     keyPrepared, preparedKey, preparedGuid, preparedExists)
   if frame then
@@ -972,10 +983,9 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
     frame._msufPortraitAppliedRevision = frame._msufPortraitModelRevision
   end
   ClearClassPortraitCache(texture)
-  local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
-    SetTexCoordCached(texture, l, r, t, b)
+    SetTexCoordCached(texture, Get2DPortraitTexCoords(p))
     SetVertexColorCached(texture, 1, 1, 1, 1)
     texture._msufPortraitKey = "BOSS_PREVIEW|" .. PortraitKeyPart(unit)
     return
@@ -997,24 +1007,7 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
     return
   end
 
-  texture._msufTexture = nil
-  texture._msufAtlas = nil
-  -- Blizzard's stock frames pass disablePortraitMask (UnitFrame.lua) so the
-  -- client renders the modern bust: transparent background, no baked-in
-  -- circular vignette, hair free to overflow the ring. The BLIZZARD shape
-  -- needs that exact render; every other shape keeps the legacy call.
-  --
-  -- A changed key always re-runs the native resolver. There is deliberately
-  -- no "remember GetTexture() and replay it" cache here: a live portrait
-  -- resolves to a render-target token ("RTPortrait1") that SetTexture cannot
-  -- re-bind, and a streaming unit can resolve to a transient placeholder
-  -- file -- replaying either paints an empty or stale portrait on revisit.
-  -- GetTexture() is not read back at all; on 12.1 it can also be secret.
-  SetPortraitTexture(texture, unit, (p and p.shape == "BLIZZARD") or nil)
-  -- The native resolver owns the image binding and may reset its UVs. Restore
-  -- the configured crop afterwards, including forced refreshes with identical UVs.
-  texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
-  SetTexCoordCached(texture, l, r, t, b)
+  BindUnitPortraitTexture(texture, unit, p)
   local selectedValue1
   if not (exists) then selectedValue1 = false end
   texture._msufPortraitGUID = guid or (selectedValue1)
@@ -1836,10 +1829,8 @@ function Portrait.Apply(frame, spec)
   end
 end
 
---- Apply for a preview scene frame (UF.ApplySceneSpec), which holds no unit: the layout of Apply with the row's
---- sample class as its identity. The art is the class icon whatever the render mode (a bust needs a unit), the
---- class border takes the sample class and the reaction border the friendly colour. The client's portrait
---- renderer and its class and reaction lookups are never asked; a scene has no cast overlay and no click target.
+--- Apply the runtime portrait layout to a preview scene. The sample provides the
+--- portrait source and border colours while the scene frame itself stays unitless.
 function Portrait.SceneApply(frame, spec)
   frame._msufPortraitQueuedRevision = nil
   local p = spec and spec.portrait
@@ -1863,16 +1854,21 @@ function Portrait.SceneApply(frame, spec)
   LayoutPortraitBorder(holder, p, BorderStyleColor(p.border, class, frame._msufSampleReaction or 5))
   UpdatePortraitClassification(frame, p)
   SetShown(holder, true)
-  SetShown(frame.portrait, true)
+  local texture = frame.portrait
+  SetShown(texture, true)
+  local unit = SetPortraitTexture and frame._msufSamplePortraitUnit
   local art = frame._msufSamplePortraitArt
-  if art and p.render ~= "CLASS" then
-    local l, r, t, b = Get2DPortraitTexCoords(p)
-    ClearClassPortraitCache(frame.portrait)
-    SetTextureCached(frame.portrait, art)
-    SetTexCoordCached(frame.portrait, l, r, t, b)
-    SetVertexColorCached(frame.portrait, 1, 1, 1, 1)
+  if p.render ~= "CLASS" and (unit or art) then
+    ClearClassPortraitCache(texture)
+    if unit then
+      BindUnitPortraitTexture(texture, unit, p)
+    else
+      SetTextureCached(texture, art)
+      SetTexCoordCached(texture, Get2DPortraitTexCoords(p))
+    end
+    SetVertexColorCached(texture, 1, 1, 1, 1)
   elseif type(class) == "string" then
-    ApplyClassPortrait(frame.portrait, nil, p, class, frame)
+    ApplyClassPortrait(texture, nil, p, class, frame)
   end
 end
 

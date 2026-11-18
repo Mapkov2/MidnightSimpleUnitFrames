@@ -70,6 +70,8 @@ local W = Parts.W
 local floor = Parts.floor
 local max = Parts.max
 local min = Parts.min
+local UsesWeakenedSoulFilter = MSUF.GF.SpellIndicatorUsesWeakenedSoulFilter
+local WEAKENED_SOUL_DUPLICATES_REASON = "The debuff filter workaround for Weakened Soul cannot hide duplicate icons."
 
 local function IconScaleLifecycle(iconScale)
     local pendingApply, pendingScope, releaseScheduled
@@ -471,9 +473,14 @@ function SpellSection.BuildSelectedSpell(state, ctx)
             end },
         { "toggle", "autoBlacklist", false, { "Hide duplicate Buff icon", siRightX, -406, siRightW },
             path = "spell.selected.auto_blacklist", uncheckedNil = true, get = function()
-                local cfg = CurrentSpellConfig(CurrentScope(), false)
-                if CurrentSpellIsExternalDefensive(CurrentScope()) and ExternalAutoBlacklistActive(CurrentScope()) then return true end
+                local kind = CurrentScope()
+                local cfg, specKey, auraName = CurrentSpellConfig(kind, false)
+                if UsesWeakenedSoulFilter(specKey, auraName, cfg) then return false end
+                if CurrentSpellIsExternalDefensive(kind) and ExternalAutoBlacklistActive(kind) then return true end
                 return cfg and cfg.autoBlacklist == true or false
+            end, accept = function()
+                local cfg, specKey, auraName = CurrentSpellConfig(CurrentScope(), false)
+                return not UsesWeakenedSoulFilter(specKey, auraName, cfg)
             end },
     }, state.selectedRows)
     local spellEnabled, customSpellIDs, onlyMine, autoBlacklist = rows.enabled, rows.spells, rows.onlyOwn, rows.autoBlacklist
@@ -481,7 +488,8 @@ function SpellSection.BuildSelectedSpell(state, ctx)
         M.AddTooltip(autoBlacklist, "Hide duplicate Buff icon",
             "Hides this aura from the regular Buff icons while this spell indicator is enabled. External-defensive Spell Icons follow the active " ..
                 "External Defensives container's Auto-blacklist from Buffs setting.",
-            { hook = true, titleAsLine = true })
+            { hook = true, titleAsLine = true, labelHit = true,
+                enabled = function(widget) return W.DisabledReasonText(widget) == nil end })
     end
     state.spellEnabled, state.customSpellIDs, state.onlyMine, state.autoBlacklist = spellEnabled, customSpellIDs, onlyMine, autoBlacklist
 end
@@ -719,9 +727,10 @@ function SpellSection.Refresh(state)
     end
     state.allSpecsHint:SetShown(allSpecs == true)
     local placed = PlacedConfig(kind, false)
-    local hasSpell = indicatorsOn and EffectiveSpellSpec(kind) ~= nil and CurrentSpellAura(kind) ~= ""
-    local currentCfg = CurrentSpellConfig(kind, false)
-    local customSpell = hasSpell and IsCustomBuffEntry(CurrentSpellAura(kind), currentCfg)
+    local currentCfg, specKey, auraName = CurrentSpellConfig(kind, false)
+    local hasSpell = indicatorsOn and specKey ~= nil and auraName ~= ""
+    local weakenedSoulFilter = hasSpell and UsesWeakenedSoulFilter(specKey, auraName, currentCfg)
+    local customSpell = hasSpell and IsCustomBuffEntry(auraName, currentCfg)
     local placedEnabled = hasSpell and placed and placed.type and placed.type ~= "none"
     local frame = FrameEffectConfig(kind, false)
     local frameKind = frame and frame.type or "none"
@@ -738,7 +747,8 @@ function SpellSection.Refresh(state)
         and CurrentSpellIsExternalDefensive(kind)
         and ExternalAutoBlacklistActive(kind)
     SetManyEnabled(hasSpell, state.spellEnabled, state.onlyMine, state.placedType)
-    SetOptionEnabled(state.autoBlacklist, hasSpell and not externalBlacklistManaged)
+    W.SetControlDisabledReason(state.autoBlacklist, weakenedSoulFilter and Tr(WEAKENED_SOUL_DUPLICATES_REASON) or nil)
+    SetOptionEnabled(state.autoBlacklist, hasSpell and not externalBlacklistManaged and not weakenedSoulFilter)
     SetOptionEnabled(state.customSpellIDs, customSpell)
     SetManyEnabled(placedEnabled, state.placedAnchor, state.placedSize, state.placedGrowth)
     SetOptionEnabled(state.placedBarWidth, barRelevant)

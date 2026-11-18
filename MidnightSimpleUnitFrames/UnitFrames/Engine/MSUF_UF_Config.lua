@@ -1456,7 +1456,11 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
     ClearDirectTextLayout(text)
     text.directNameWidth = nil
   end
-  text.shortNumbers = general.useShortNumbers ~= false
+  if conf.powerFullValueShort ~= nil then
+    text.shortNumbers = conf.powerFullValueShort == true
+  else
+    text.shortNumbers = general.useShortNumbers ~= false
+  end
   text.hidePercentSymbol = general.hidePercentSymbol == true
 end
 

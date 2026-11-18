@@ -283,8 +283,21 @@ local function GetNameFormatter()
     return nameFormatter
 end
 
+local function OpenUnitFrameSetup(freshOnly)
+    local firstLoad = MSUF.FirstLoad6
+    if freshOnly then
+        local state = firstLoad and firstLoad:GetState()
+        if not state or state.installKind ~= "fresh" or state.status ~= "pending" then return false end
+    end
+    if PlayerInCombat() or not MSUF.OpenOptionsFromLauncher then return false end
+    -- The already loaded menu can open successfully without returning a value.
+    local opened = MSUF.OpenOptionsFromLauncher("home", function() MSUF.MSUF2.OpenUnitFrameSetup() end)
+    return opened ~= false
+end
+
 local API = {
     version = 1,
+    OpenUnitFrameSetup = OpenUnitFrameSetup,
     ApplyUIScaleProfile = ApplyUIScaleProfile,
     SetResourceStack = SetResourceStack,
     GetResourceStack = GetResourceStack,

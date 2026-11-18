@@ -257,7 +257,7 @@ local function CreatePaletteController(parent, searchBox, standalone)
     function controller:Hide()
         if self.busyIndicator then self.busyIndicator:SetPending(false) end
         if self.frame then self.frame:Hide() end
-        self.visibleResults = {}
+        self.query, self.visibleResults = nil, {}
         for _, row in ipairs(self.rows or {}) do row._msuf2PaletteResult = nil end
         self.selectedIndex = 1
         local bridge = SearchBridge()
@@ -278,10 +278,23 @@ local function CreatePaletteController(parent, searchBox, standalone)
         return true
     end
 
-    function controller:OpenSelected(query)
-        if not self:IsShown() then return false end
-        local rec = self.visibleResults[self.selectedIndex]
-        return rec and self:OpenResult(rec, query) or false
+    function controller:Submit(query)
+        local bridge = SearchBridge()
+        local selected = self:IsShown() and self.query == query and self.visibleResults[self.selectedIndex]
+        bridge.ScheduleSearchInputQuery(self.searchBox, query, false, function(latest)
+            self:Refresh(latest, false)
+            if selected then
+                -- A provider may have changed while the Enter press was pending.
+                for _, row in ipairs(self.visibleResults) do
+                    if row == selected then self:OpenResult(row, latest) break end
+                end
+            elseif not self:OpenResult(self.visibleResults[1], latest) then
+                self:Hide()
+                self.searchBox:ClearFocus()
+                bridge.RunSearchQuery(latest)
+            end
+        end, true)
+        if M.searchResultsPending then self:Refresh(query, true) end
     end
 
     function controller:MoveSelection(delta)
@@ -302,6 +315,10 @@ local function CreatePaletteController(parent, searchBox, standalone)
             return false
         end
 
+        if self.query ~= query then
+            self.query = query
+            self.selectedIndex = 1
+        end
         local palette = EnsurePalette(self, parent, searchBox)
         local results = type(M.searchResults) == "table" and M.searchResults or {}
         if M.searchResultsQuery ~= query then results = {} end

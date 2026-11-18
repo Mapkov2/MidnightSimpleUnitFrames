@@ -1141,7 +1141,8 @@ local function BuildSpellIndicatorAuraHashes(conf)
           local safeToBlacklist = not externalDefensive
             or (not externalAutoBlacklistActive
               and (externalLaneActive or entry.onlyOwn == false))
-          if autoBlacklistEnabled and entry.autoBlacklist == true and safeToBlacklist then
+          if autoBlacklistEnabled and entry.autoBlacklist == true and safeToBlacklist
+            and not GF.SpellIndicatorUsesWeakenedSoulFilter(specKey, auraName, entry) then
             autoBlacklistHash = autoBlacklistHash or {}
             autoBlacklistCount = autoBlacklistCount + AddSpellIDsForAura(autoBlacklistHash, si, specKey, auraName, entry)
           end
@@ -1547,7 +1548,7 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     powerRightX = powerX + Num(conf.powerTextRightOffsetX, 0),
     powerRightY = powerY + Num(conf.powerTextRightOffsetY, 0),
     powerColorByType = ResolvePowerTextColorByType(general, conf),
-    shortNumbers = true,
+    shortNumbers = conf.powerFullValueShort ~= false,
   }
 end
 

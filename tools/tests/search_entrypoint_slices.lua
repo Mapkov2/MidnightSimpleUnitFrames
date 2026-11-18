@@ -133,6 +133,110 @@ assert(Signature(M.searchResults) == Signature(api.SearchPages("castbar")), "sco
 M.RegisterSearchProvider("e3-test", nil)
 api.OpenSearchResults("castbar")
 Drain()
+-- Compare the bounded palette to the original sorted scan, including the
+-- six optional dropdown slots, pinned targets, score ties and support floors.
+local function CheckSelection()
+    local finalize
+    for i = 1, 100 do
+        local name, value = debug.getupvalue(api.SearchPages, i)
+        if name == "CurateSearchResults" then finalize = value break end
+        if not name then break end
+    end
+    assert(finalize, "palette finalizer not found")
+    local function Check(rows, support)
+        local ranked, top = {}, 0
+        for i, row in ipairs(rows) do
+            ranked[i] = row
+            if not row.exactQueryHit then top = math.max(top, row.score) end
+        end
+        table.sort(ranked, function(a, b)
+            if a.score ~= b.score then return a.score > b.score end
+            if a.hint ~= b.hint then return a.hint < b.hint end
+            return a.order < b.order
+        end)
+        local floor = math.max(40, top >= 600 and top * (support and .70 or .42) or top >= 300 and top * .30 or 0)
+        local expected = {}
+        for _, r in ipairs(ranked) do
+            if r.exactQueryHit or r.score >= floor or (r.queryClauseCount > 1 and r.missedClauses == 0 and r.kind == "toggle")
+                or (#expected < 6 and r.choiceLabels) then
+                expected[#expected + 1] = r
+                if #expected == 24 then break end
+            end
+        end
+        local actual, job, turns = nil, {}, 0
+        while not actual do
+            actual = finalize(rows, support, "quartz", job, -1)
+            turns = turns + 1
+            assert(turns < 400, "palette finalizer did not advance")
+        end
+        assert(#actual == #expected)
+        for i, r in ipairs(expected) do assert(actual[i] == r, "palette order changed at " .. i) end
+        if #rows > 48 then assert(turns > 2, "large palette was not interrupted") end
+    end
+    for _, count in ipairs({ 3, 6, 24, 48, 49, 127, 1021 }) do
+        local rows = {}
+        for i = 1, count do
+            -- Only two unconditional high scores. A tied group of lower-scored
+            -- choices competes with fully matched controls for the first six.
+            local choice = i % 5 == 0
+            rows[i] = { order = i, hint = tostring(i % 4), label = "row " .. i,
+                score = i <= 2 and 800 or i % 5 * 55 + 1, exactQueryHit = i == 1,
+                kind = choice and "dropdown" or (i % 7 == 0 and "toggle" or "faq"),
+                queryClauseCount = 2, matchedClauses = choice and 1 or 2, missedClauses = choice and 1 or 0,
+                choiceLabels = choice and { "Quartz" } or nil }
+        end
+        Check(rows, false)
+        Check(rows, true)
+    end
+end
+CheckSelection()
+
+-- A cooperative snapshot may yield before producing rows, or produce several
+-- batches. A change visible only through contextChanged must restart a scored
+-- query before its old snapshot reaches the palette.
+local begins, polls, generation, observed = 0, 0, 1, 1
+local function BeginProbe()
+    begins = begins + 1
+    local step, captured = 0, generation
+    return function(due)
+        assert(type(due) == "function")
+        step = step + 1
+        if step == 1 then return nil, false end
+        local key = "cooperative." .. captured .. "." .. step
+        return {{ pageKey = "opt_bars", label = "Quarzprobe " .. captured .. " " .. step,
+            kind = "toggle", settingKey = key }}, step == 3
+    end
+end
+local function PollProbe()
+    polls = polls + 1
+    if generation ~= observed then observed = generation return true end
+end
+M.RegisterSearchProvider("slice-probe", function() error("cooperative provider collected synchronously") end, PollProbe, BeginProbe)
+api.OpenSearchResults("quarzprobe")
+for i = 1, 10000 do
+    mw:RunTimers(1)
+    if state.request and state.request.job and state.request.job.index > 1 then break end
+end
+assert(state.request and state.request.job and state.request.job.index > 1, "probe did not enter scoring")
+generation = 2
+Drain()
+local function CheckBatch(rows, expected)
+    local found = {}
+    for _, row in ipairs(rows) do
+        local key = row.exactTarget and row.exactTarget.settingKey
+        if key and key:find("^cooperative%.") then found[key] = true end
+    end
+    assert(found["cooperative." .. expected .. ".2"] and found["cooperative." .. expected .. ".3"])
+    for key in pairs(found) do assert(key:find("cooperative." .. expected .. ".", 1, true) == 1, "stale batch published") end
+end
+CheckBatch(M.searchResults, 2)
+assert(begins == 2 and polls < 20, "provider polled repeatedly during scoring: " .. polls)
+generation = 3
+assert(#api.SearchPages("quarzprobe") == 0, "cached direct search ignored a provider change")
+Drain()
+CheckBatch(api.SearchPages("quarzprobe"), 3)
+M.RegisterSearchProvider("slice-probe", nil)
+
 -- Readiness callbacks can invalidate controls before the first scoring slice.
 api.MarkSearchIndexDirty()
 api.OpenSearchResults("castbar")

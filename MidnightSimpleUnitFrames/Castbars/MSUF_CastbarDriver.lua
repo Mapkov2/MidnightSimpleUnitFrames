@@ -1146,6 +1146,7 @@ local function OnCastStop(frame)
 end
 
 local function OnChannelStop(frame, _, eventUnit, interruptedBy, castBarID)
+    if NamesOtherCastBar(frame, castBarID) then return end
     frame.MSUF_kickInterruptibleConfirmed = nil
     -- A kicked channel ends with its interrupter on CHANNEL_STOP, not with
     -- UNIT_SPELLCAST_INTERRUPTED (CastingBarFrame.lua: complete =
@@ -1153,8 +1154,7 @@ local function OnChannelStop(frame, _, eventUnit, interruptedBy, castBarID)
     -- so it is tested before the nil comparison.
     local kicked = toPlainIsSecret(interruptedBy) or interruptedBy ~= nil
     if kicked and eventUnit == frame.unit and frame.MSUF_isChanneled == true
-        and frame.MSUF_castActive == true and not frame.interrupted
-        and not NamesOtherCastBar(frame, castBarID) then
+        and frame.MSUF_castActive == true and not frame.interrupted then
         ClearStopExpectation(frame)
         frame:SetInterrupted(interruptedBy)
         -- Subscribers (the focus-kick icon) play one interrupt feedback.

@@ -390,7 +390,7 @@ local COPY_TEXT_FIELDS = WL [[
     hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon
     hpTextReverse hpTextSeparator healthTextDecimals hpFullValueShort hpAbsorbIcon
     powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight
-    powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator
+    powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator powerFullValueShort
     nameTextLayer hpTextLayer powerTextLayer
     hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY
     powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY

@@ -557,7 +557,9 @@ local function StageCue(stage, position, touched)
     if stage.id == "uf_player" then return Tr("PLAYER IS THE MASTER - Change the highlighted frame basics; the Live Preview updates immediately.") end
     if stage.id == "uf_player_auras" then return Tr("AURA WORKSPACE - Choose Buffs, Debuffs, or a Custom lane, then choose Layout, Filters, or Blacklist.") end
     if stage.id:match("^uf_player_") then return Tr("PLAYER CORE - Change the new green setting and watch the same Player Preview update.") end
-    if stage.id:match("^unit_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then apply the Player setup to another Unitframe.") end
+    if stage.id:match("^unit_copy_") then
+        return Tr("COPY FLOW - Open Copy To Settings, select All categories, then apply the Player setup to another Unitframe.")
+    end
     if stage.id == "gf_spell_icons" then
         return Tr("MISSION BRIEF - Build Spell Icons from scope and spec through placement, cooldowns, and frame effects.")
     end

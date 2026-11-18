@@ -729,7 +729,7 @@ local function GFTextNameTab(ctx, s)
         { "card", "namePosition", nil, { "Position", "Move the name directly in Preview.", textLeftX, -178, textCardW, 134 }, scope = "group" },
     }).namePosition
     Schema.Build(ctx, namePosition, {
-        { "dropdown", "nameAnchor", "LEFT", { "Anchor", ANCHORS, textDropW }, { 16, -48, textCardW - 32, "LEFT" }, domain = "font" },
+        { "dropdown", "nameAnchor", "LEFT", { "Anchor", ANCHORS, textDropW }, { 16, -78, textCardW - 32, "LEFT" }, domain = "font" },
     }, ROW_OPTIONS, c)
     local nameAppearance = Schema.Build(ctx, nameTab, {
         { "card", "nameAppearance", nil, { "Appearance", nil, textRightX, -4, textRightW, 150 }, scope = "group" },
@@ -871,7 +871,8 @@ local function ValueTabFormatPosition(ctx, s, kind, tab, cfg, controls, content,
     if cfg.decimalsKey then formattingRows[#formattingRows + 1] =
         { "toggle", cfg.decimalsKey, false, { "Decimal percent", 28 + textHalfDropW, formattingY - 78, textHalfDropW } } end
     if cfg.shortNumbersKey then formattingRows[#formattingRows + 1] =
-        { "toggle", cfg.shortNumbersKey, true, { "Short numbers", 16, formattingY - 78, textHalfDropW }, domain = "font" } end
+        { "toggle", cfg.shortNumbersKey, true, { "Short numbers", 16, formattingY - 78, textHalfDropW }, domain = "font",
+            path = kind == "power" and path .. "full_value_short" or nil } end
     local formatting = Schema.Build(ctx, content, formattingRows, ROW_OPTIONS)
     controls.delimiter, controls.reverse = formatting[cfg.delimiterKey], formatting[cfg.reverseKey]
     controls.decimals, controls.shortNumbers = formatting[cfg.decimalsKey], formatting[cfg.shortNumbersKey]
@@ -943,6 +944,7 @@ local function GFTextValueTabs(ctx, s)
             cfg.reverseKey, cfg.decimalsKey = "hpTextReverse", "healthTextDecimals"
             cfg.shortNumbersKey, cfg.absorbIconKey = "hpFullValueShort", "hpAbsorbIcon"
         else
+            cfg.shortNumbersKey = "powerFullValueShort"
             cfg.showGet = IsPowerTextEnabled
             cfg.showSet = function(v)
                 SetPowerTextEnabled(v)
@@ -995,6 +997,7 @@ local function GFTextRefresh(ctx, s)
         SetOptionsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetOptionsEnabled(powerTextControls, powerOn)
         if powerControls.RefreshPercentToggles then powerControls.RefreshPercentToggles(powerOn) end
+        powerControls.RefreshShortNumbersToggle(powerOn)
         SetOptionsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         SetOptionEnabled(showName, true)
         SetOptionEnabled(hpControls.show, true)
@@ -1016,7 +1019,7 @@ local function GFTextRefresh(ctx, s)
             local delim = Val(kind, "powerTextDelimiter", " / ")
             PaintTextPreview(powerControls.preview,
                 Val(kind, "powerTextLeft", "NONE"), Val(kind, "powerTextCenter", "PERCENT"), Val(kind, "powerTextRight", "NONE"),
-                delim, false, true, false, true,
+                delim, false, true, false, Bool(kind, "powerFullValueShort", true),
                 SlotHidePercentSymbol(kind, "powerTextLeftHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "powerTextCenterHidePercentSymbol"),
                 SlotHidePercentSymbol(kind, "powerTextRightHidePercentSymbol"))

@@ -1,5 +1,44 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.3 - 2026-11-18
+
+### Highlights
+
+- **PvP countdown.** See your remaining PvP flag time next to the Player PvP icon on WoW Forever.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.pvp.countdown","settingKey":"player.pvpIndicatorCountdownEnabled","prepareKind":"unitStatus","prepareValue":"statusPvp","query":"show pvp countdown","label":"Show PvP countdown"} -->
+- **Weakened Soul.** Track it on WoW Forever under Party/Raid Frames > Auras > Spell Indicators > Choose spell. Similar debuffs and duplicate icons can appear.
+<!-- msuf-menu-link: none -->
+- **Player cast recipient.** Show who receives your cast, including mouseover casts.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.show_target_name","settingKey":"general.castbarPlayerShowTargetName","prepareKind":"menuTab","prepareValue":"spell","query":"target name","label":"Enable"} -->
+- **Castbar fades.** Make castbars fade in and out.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.fade.enabled","settingKey":"general.castbarFadeEnabled","prepareKind":"","prepareValue":"","query":"fade castbars in and out","label":"Fade castbars in and out"} -->
+- **Frame fades.** Fade in unit frames as they appear.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"transparency","controlId":"menu2.uf_target.unit.transparency.fade_in_on_show","settingKey":"target.fadeInOnShow","prepareKind":"unitAlphaTab","prepareValue":"combat","query":"fade in when shown","label":"Fade in when shown"} -->
+- **Short numbers for Power Text.** Choose full or abbreviated resource values.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"text","controlId":"menu2.uf_player.unit.text.power.full_value_short","settingKey":"player.powerFullValueShort","prepareKind":"menuTab","prepareValue":"power","query":"power text short numbers","label":"Short numbers"} -->
+
+### General
+
+- Start Setup with your current profile, a preset, or an import.
+- Settings search handles common questions and typos.
+- Show spell ranks on Forever, Classic Era and TBC Anniversary.
+- Set the Player castbar latency color and opacity.
+- Give Party and Raid frames their own appearance fade.
+- Hide the resource bar and text when its resource is unavailable.
+- Edit health text gradient stops from the Fonts shortcut.
+- Copy To Settings makes room for translated labels.
+
+### Fixes
+
+- Fixed blank preview portraits and stale Target and Focus portraits.
+- Party frames update when you accept an invite during outdoor combat.
+- Party, Raid and Priority frames keep their positions during instance combat.
+- Reused group frames refresh their text and clear the old absorb value.
+- Group health bars recover their class color after resurrection.
+- Fixed Blizzard player castbar handoff and late channel-stop events.
+- Fixed the AFK timer and corrected Penance tick markers on WoW Forever.
+- Includes the 7.021 fix for Castbars settings and Timer Bar tabs on Classic.
+
 ## 7.0.3-beta3 - 2026-11-18
 
 **7.0.3 Beta 3**

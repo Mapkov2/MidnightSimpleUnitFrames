@@ -2759,6 +2759,18 @@
       ]
     },
     {
+      "test": "tools/tests/search_semantic_context_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "--other-locales"
+      ]
+    },
+    {
       "test": "tools/tests/search_static_context_smoke.lua",
       "phase": "menu",
       "clients": [

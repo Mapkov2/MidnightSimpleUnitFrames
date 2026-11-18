@@ -87,6 +87,22 @@ function Link.CanOpenInstaller()
     return API() ~= nil or LegacyFunction("Installer", "Open") ~= nil
 end
 
+function Link.CanContinueSetup()
+    local current = API()
+    return current ~= nil and type(current.OpenAfterUnitFrameSetup) == "function"
+end
+
+function Link.ContinueSetup(onBack)
+    local current = API()
+    if current and current.OpenAfterUnitFrameSetup then return current.OpenAfterUnitFrameSetup(onBack) end
+    return false
+end
+
+function Link.SetupFramePresets()
+    local current = API()
+    if current and current.GetSetupFramePresets then return current.GetSetupFramePresets() end
+end
+
 -- -> whatever the installer answers (true when its window opened), nil
 -- without one.
 function Link.OpenInstaller()

@@ -785,8 +785,8 @@ function Shared.PaintTextPreview(value, modes, options)
     options = options or {}
     local text = MSUF.UFText
     local current, maximum, absorb = 630000, 1000000, 125000
-    if options.group then current, maximum, absorb = 12450, 15000, 3750 end
-    if options.isPower then current, maximum, absorb = 100, 100, 0 end
+    if options.isPower then current, maximum, absorb = 12450, 15000, 0
+    elseif options.group then current, maximum, absorb = 12450, 15000, 3750 end
     state.healthMissing, state.healthAbsorb = maximum - current, absorb
     state.percent = current * 100 / maximum
     for i = #state.parts, 1, -1 do state.parts[i] = nil end

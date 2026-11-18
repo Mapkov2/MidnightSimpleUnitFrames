@@ -44,9 +44,19 @@ end
 if isForever then
     local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
     local menu = MenuWorld.Open(root, flavor, { page = "gf_auras", world = h.world })
-    local page = menu.M.GroupPage
+    local M, page = menu.M, menu.M.GroupPage
+    local entry = assert(M.cache.gf_auras)
+    assert(entry.sections.si)._msuf2CollapsibleEntry.SetOpenImmediate(true)
+    menu:RunTimers()
+    local duplicateToggle
+    for _, widget in ipairs(entry.searchWidgets) do
+        local schema = widget._msuf2ControlSchema
+        if schema and schema.id:match("spell%.selected%.auto_blacklist$") then duplicateToggle = widget end
+    end
+    assert(duplicateToggle, "duplicate icon control is missing")
     for _, scope in ipairs({ "party", "raid" }) do
         local conf = page.Conf(scope)
+        conf.enabled = true
         conf.spellIndicators = { enabled = true, spec = specKey, specs = {} }
         local selected
         for _, option in ipairs(page.SpellAuraValues(scope)) do
@@ -57,6 +67,37 @@ if isForever then
         assert(page.CurrentSpellAura(scope) == "WeakenedSoul")
         local saved = assert(page.CurrentSpellConfig(scope, true))
         assert(saved.enabled == false and saved.onlyOwn == false, scope .. " first enable must support other priests")
+        saved.enabled, saved.autoBlacklist = true, true
+        local renew = conf.spellIndicators.specs[specKey].Renew or {}
+        renew.enabled, renew.autoBlacklist = true, true
+        conf.spellIndicators.specs[specKey].Renew = renew
+        conf.spellIndicators.specs[specKey]["6788"] = { enabled = true, autoBlacklist = true, custom = true, spells = "6788" }
+        M.SetMenuStateValue("gfScope", scope)
+        M.Refresh()
+        assert(not duplicateToggle:IsEnabled() and not duplicateToggle:GetChecked(),
+            scope .. " Weakened Soul leaves duplicate suppression available")
+        local reason = M.Widgets.DisabledReasonText(duplicateToggle)
+        local hover = duplicateToggle._msuf2LabelHit or duplicateToggle
+        assert(reason and reason:find("workaround", 1, true) and hover._msuf2MouseEnabledStateApplied,
+            scope .. " disabled duplicate control has no hover explanation")
+        local env, tooltipLine = menu.world.env
+        local previousTip = env.GameTooltip
+        local function Noop() end
+        env.GameTooltip = { SetOwner = Noop, SetText = Noop, Show = Noop, Hide = Noop,
+            AddLine = function(_, line) tooltipLine = line end }
+        hover:GetScript("OnEnter")(hover)
+        hover:GetScript("OnLeave")(hover)
+        env.GameTooltip = previousTip
+        assert(tooltipLine == reason, scope .. " disabled control did not show its explanation")
+
+        GF.InvalidateCompiledSpecs(scope)
+        local blacklist = assert(GF.GetCompiledSpec(scope).auras.buffBlacklistHash)
+        assert(not blacklist[id] and blacklist[139], scope .. " ignored duplicate setting leaked into the buff filter")
+
+        page.SetCurrentSpellAura(scope, "Renew")
+        M.Refresh()
+        assert(duplicateToggle:IsEnabled() and duplicateToggle:GetChecked()
+            and not M.Widgets.DisabledReasonText(duplicateToggle), scope .. " switching spells did not restore duplicate suppression")
     end
     assert(SI.SpellIDs[specKey].WeakenedSoul == id, "Weakened Soul absent from the Forever spell picker registry")
     local found

@@ -3,6 +3,7 @@ local root, flavor, locale = assert(arg[1]), arg[2] or "Mainline", arg[3] or "en
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local mw = MenuWorld.Open(root, flavor, { page = "home", locale = locale })
 local M = mw.M
+assert(mw.core.FinalizeLocale() == locale)
 local function Ready()
     M.Search._CoreAPI.GetSearchRecords()
     for _ = 1, 30 do
@@ -51,4 +52,32 @@ for _, case in ipairs(cases) do
     end
     assert(found, "warming the page lost " .. case[1])
 end
+-- Curated provider phrases bind to one indexed setting, including on a warm
+-- page. Shared phrases remain ambiguous until the provider changes its rows.
+local rows = {}
+local function Row(label, key, phrases)
+    return {pageKey = "uf_player", kind = "toggle", label = label, settingKey = key,
+        keywords = { "ordinary diagnostic keywords" }, queryPhrases = phrases}
+end
+local function Promoted(query)
+    for _, result in ipairs(M.Search._CoreAPI.SearchPages(query)) do
+        if result.exactQueryHit then return result.exactTarget.settingKey end
+    end
+end
+rows[1] = Row("Diagnostic first option", "diag.first", {"my fixture", "muéstrame la primera", "opción compartida", "where is my fixture", "the ambiguous fixture", "shared diagnostic phrase"})
+rows[2] = Row("Diagnostic second option", "diag.second", {"opción compartida", "where is my fixture", "the ambiguous fixture", "shared diagnostic phrase"})
+rows[3] = Row("Diagnostic third option", "diag.first", {"SHARED diagnostic phrase"})
+assert(M.RegisterSearchProvider("phrase-test", function() return rows end))
+Ready()
+assert(Promoted("my fixture") == "diag.first")
+assert(Promoted("¿Muéstrame la primera?") == "diag.first" and not Promoted("¡Opción compartida!"))
+assert(not Promoted("where is my fixture") and not Promoted("please the ambiguous fixture"))
+assert(not Promoted("shared diagnostic phrase") and not Promoted("ordinary diagnostic keywords"))
+rows[1], rows[2], rows[3] = rows[2], nil, nil
+assert(M.InvalidateSearchProvider("phrase-test"))
+Ready()
+assert(Promoted("shared diagnostic phrase") == "diag.second" and Promoted("where is my fixture") == "diag.second")
+assert(M.RegisterSearchProvider("phrase-test", nil))
+Ready()
+assert(not Promoted("shared diagnostic phrase"))
 print("search_cold_metadata_smoke " .. flavor .. ": cold choices, keywords and help found; warm search retained")

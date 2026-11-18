@@ -17,6 +17,7 @@ local min = math.min
 local format = string.format
 
 local Tr = M.Tr
+local FILE = "Shell/Menu2/MSUF_Menu2_FirstLoad.lua"
 
 local function Lifecycle()
     local firstLoad = MSUF.FirstLoad6
@@ -505,10 +506,146 @@ local function CreateFooterButtons(scene, T, contentWidth, footerTop, compact)
     return footerHeight
 end
 
+local setupRequested, chosenPreset = false, "current"
+
+function M.OpenUnitFrameSetup()
+    if BlockedByCombat() then return false end
+    setupRequested = true
+    if M.frame and not M.frame:IsShown() then
+        return MSUF.OpenOptionsFromLauncher("home", InvalidateHome)
+    end
+    InvalidateHome()
+    return true
+end
+
+function M.IsUnitFrameSetupActive()
+    return setupRequested
+end
+
+function M.ResumeUnitFrameSetupAfterImport()
+    if setupRequested then
+        chosenPreset = "current"
+        M.OpenUnitFrameSetup()
+    end
+end
+
+local function SetupChoices()
+    local choices = {
+        { value = "current", label = Tr("Current profile") .. "  ·  " .. ActiveProfileName(), translate = false },
+        { value = "default", label = "MSUF Default", name = "MSUF Default", translate = false },
+    }
+    for _, preset in ipairs(MSUF.SuiteLink.SetupFramePresets() or {}) do
+        if type(preset.compact) == "string" and preset.compact ~= "" then
+            choices[#choices + 1] = { value = preset.name, label = preset.name, name = preset.name,
+                compact = preset.compact, translate = false }
+        end
+    end
+    return choices
+end
+
+local function ApplySetupPreset(preset)
+    local name, index, taken = preset.name, 2, {}
+    for _, existing in ipairs(MSUF.Require("MSUF_GetAllProfiles", FILE)()) do taken[existing] = true end
+    while taken[name] do
+        name, index = preset.name .. " " .. index, index + 1
+    end
+    if preset.compact then return MSUF.Require("MSUF_ImportIntoNewProfile", FILE)(name, preset.compact) end
+    local created = MSUF.Require("MSUF_CreateProfile", FILE)(name)
+    if not created then return false end
+    if MSUF.Require("MSUF_SwitchProfile", FILE)(name) == true then return true end
+    MSUF.Require("MSUF_DeleteProfile", FILE)(name)
+    return false
+end
+
+local function ContinueUnitFrameSetup(choices)
+    if BlockedByCombat() then return end
+    for _, preset in ipairs(choices) do
+        if preset.name and preset.value == chosenPreset and ApplySetupPreset(preset) ~= true then
+            M.ShowStatusFeedback(Tr("Import failed."), "danger", 3)
+            return
+        end
+    end
+    chosenPreset = "current"
+    local firstLoad = Lifecycle()
+    if firstLoad and not firstLoad:IsTerminal() then CallLifecycle(firstLoad, "Complete", "unitframes") end
+    if MSUF.SuiteLink.CanContinueSetup() then
+        if not MSUF.SuiteLink.ContinueSetup(M.OpenUnitFrameSetup) then
+            M.ShowStatusFeedback(Tr("Suite setup unavailable"), "danger", 3)
+            return
+        end
+        setupRequested = false
+        InvalidateHomeCache()
+        CloseMenu()
+        return
+    end
+    setupRequested = false
+    InvalidateHome()
+end
+
+local function LeaveUnitFrameSetup()
+    setupRequested, chosenPreset = false, "current"
+    local firstLoad = Lifecycle()
+    if firstLoad and not firstLoad:IsTerminal() then CallLifecycle(firstLoad, "Dismiss", "full_settings") end
+    InvalidateHome()
+end
+
+local function BrowseSetupProfiles()
+    MSUF.Require("MSUF_ShowCopyLink", FILE)("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf")
+end
+
+local function BuildUnitFrameSetup(ctx)
+    setupRequested = true
+    local T, W = M.Theme, M.Widgets
+    local width = min(700, max(280, (ctx.width or 760) - 24))
+    local scene = T.Panel(ctx.wrapper, nil, T.colors.panel2, T.colors.borderSoft)
+    scene:SetPoint("TOP", ctx.wrapper, "TOP", 0, -18)
+    scene:SetWidth(width)
+    local withSuite = MSUF.SuiteLink.CanContinueSetup()
+    Text(scene, T, "GameFontNormalLarge", "Unitframes", T.colors.text, "TOPLEFT", 20, -18, width - 98, "LEFT")
+    if withSuite then
+        Text(scene, T, "GameFontHighlightSmall", "1 / 2", T.colors.muted, "TOPRIGHT", -20, -23, 58, "RIGHT")
+    end
+    local body = Text(scene, T, "GameFontHighlight", "Choose a unitframe preset or import a community profile from Wago.",
+        T.colors.muted, "TOPLEFT", 20, -54, width - 40, "LEFT")
+    local y = -64 - max(18, body:GetStringHeight() or 18)
+    scene._msuf2ContentX, scene._msuf2CursorY = 20, y
+    local choices = SetupChoices()
+    local picker = W.Dropdown(scene, "Preset", choices, min(360, width - 40))
+    picker:SetValue(chosenPreset)
+    picker:SetOnValueChanged(function(value) chosenPreset = value end)
+
+    y = y - 54
+    local hint = Text(scene, T, "GameFontHighlightSmall", "Presets are saved as new profiles.",
+        T.colors.muted, "TOPLEFT", 20, y, width - 40, "LEFT")
+    y = y - max(22, hint:GetStringHeight() or 22) - 12
+    local buttonWidth = min(225, floor((width - 50) / 2))
+    CreateFooterButton(scene, T, "Wago Profiles", "TOPLEFT", 20 - width / 2, y, buttonWidth,
+        BrowseSetupProfiles, "setup_wago")
+    CreateFooterButton(scene, T, "Import a profile", "TOPLEFT", 30 - width / 2 + buttonWidth, y, buttonWidth,
+        function() OpenProfileImport(Lifecycle()) end, "setup_import")
+    CreateFooterButton(scene, T, "Guided Setup", "TOPLEFT", 20 - width / 2, y - 36, buttonWidth,
+        M.StartSetupWalkthrough, "setup_walkthrough")
+    CreateFooterButton(scene, T, "Open full settings", "TOPLEFT", 30 - width / 2 + buttonWidth, y - 36, buttonWidth,
+        LeaveUnitFrameSetup, "setup_leave")
+    local nextButton = CreateFooterButton(scene, T, withSuite and "Continue to Suite" or "Done",
+        "TOPRIGHT", width / 2 - 20, y - 86, min(270, width - 40),
+        function() ContinueUnitFrameSetup(choices) end, "setup_continue")
+    nextButton:SetHeight(32)
+    if T.ApplyNeonEdge then T.ApplyNeonEdge(nextButton, "ambient", { variant = "card" }) end
+    local height = -y + 136
+    scene:SetHeight(height)
+    ctx:SetContentHeight(height + 36)
+    return true
+end
+
 function M.BuildFirstLoadDashboardScene(ctx)
     RegisterFirstLoadVirtualControls()
     local firstLoad = Lifecycle()
-    if not firstLoad or not ShouldShow(firstLoad) then return false end
+    local pending = firstLoad and ShouldShow(firstLoad)
+    if setupRequested or (pending and InstallKind(firstLoad, FirstLoadState(firstLoad)) == "fresh") then
+        return BuildUnitFrameSetup(ctx)
+    end
+    if not pending then return false end
     local T, W = M.Theme, M.Widgets
     if not (ctx and ctx.wrapper and T and W and type(T.Panel) == "function" and type(T.Font) == "function" and type(T.Button) == "function") then
         return false

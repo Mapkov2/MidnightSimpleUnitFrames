@@ -241,13 +241,7 @@ local function FillChangelog(child, scrollW, entries)
         return fs
     end
     local function AddBullet(value, dotColor, textColor)
-        local text, link
-        if type(value) == "table" then
-            text = tostring(value.text or "")
-            link = type(value.link) == "table" and value.link or nil
-        else
-            text = tostring(value or "")
-        end
+        local text, link = M.GetChangelogBullet(value)
         dotColor = dotColor or T.colors.accent
         textColor = textColor or bodyColor
         local dot = PixelLayoutRegion(child:CreateTexture(nil, "ARTWORK"))
@@ -467,6 +461,14 @@ local function ConfirmGuidedSetupRestart()
     })
     return true
 end
+function M.StartSetupWalkthrough()
+    local tour = MSUF.GuidedTour6
+    local state = tour and tour:GetState()
+    if state and state.status == "active" then return M.ResumeGuidedTour() end
+    if state and state.status == "completed" then return ConfirmGuidedSetupRestart() end
+    return StartGuidedSetupFromDashboard(false)
+end
+
 -- The home page is assembled by Dashboard.Build from one stage per card. Stages
 -- share one per-build `state` table (helpers, geometry, disclosure flags) and run
 -- in the order the cards used to be built inline.
@@ -778,13 +780,13 @@ end
 --- Kicker, title and action label of the setup launcher for the tour status.
 local function LauncherTexts(active, completed)
     if active then return "GUIDED SETUP IN PROGRESS", "Continue your MSUF setup", "Resume setup" end
-    if completed then return "GUIDED SETUP COMPLETE", "Review or run setup again", "Start Quick Setup" end
-    return "GUIDED SETUP", "Get the essentials right in a few minutes", "Start Quick Setup"
+    if completed then return "GUIDED SETUP COMPLETE", "Review or run setup again", "Setup" end
+    return "GUIDED SETUP", "Get the essentials right in a few minutes", "Setup"
 end
 local function OpenSuiteSetup()
     if M.BlockCombatAction and M.BlockCombatAction() then return end
     if MSUF.SuiteLink.OpenInstaller() == true then
-        M.HideSlashMenuAndMinibar(M.frame)
+        if M.frame and M.frame:IsShown() then M.HideSlashMenuAndMinibar(M.frame) end
     elseif M.ShowStatusFeedback then
         M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4, true)
     end
@@ -823,10 +825,8 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
         if M.BlockCombatAction and M.BlockCombatAction() then return end
         if tourActive and type(M.ResumeGuidedTour) == "function" then
             M.ResumeGuidedTour()
-        elseif tourCompleted then
-            ConfirmGuidedSetupRestart()
         else
-            StartGuidedSetupFromDashboard(false)
+            M.OpenUnitFrameSetup()
         end
     end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
     T.AttachNavIcon(action, "home", false, true)
@@ -930,13 +930,7 @@ function Dashboard.BuildSearchInput(hero, x, y, w, h)
             input:SetFocus()
             return
         end
-        bridge.BumpSearchInputSerial()
-        bridge.RunSearchInputQuery(query, false)
-        palette:Refresh(query, false)
-        if palette:OpenSelected(query) then return end
-        palette:Hide()
-        input:ClearFocus()
-        bridge.RunSearchQuery(query)
+        palette:Submit(query)
     end
     input:SetScript("OnTextChanged", function(self, userInput)
         bridge.UpdateSearchPlaceholder(self)

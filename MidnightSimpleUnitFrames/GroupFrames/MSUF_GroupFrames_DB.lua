@@ -552,6 +552,7 @@ local PARTY_DEFAULTS = {
     powerTextCenter       = "PERCENT",
     powerTextRight        = "NONE",
     powerTextDelimiter    = " / ",
+    powerFullValueShort   = true,
     --- Power smooth fill
     powerSmoothFill       = false,
     powerChunkedFill      = false,

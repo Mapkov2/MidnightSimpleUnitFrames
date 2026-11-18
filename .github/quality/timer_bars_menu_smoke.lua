@@ -25,8 +25,8 @@ assert(core.ProfileFields.GeneralKeyInKind("castbarTimers", "castbar"), "timer s
 local g = env.MSUF_DB.general
 local preview = assert(M._msuf2CastbarPreview)
 local function Select(id)
-    preview.timerKind = id
     assert(M.SetCastbarPreviewUnit("timers"))
+    assert(preview.timerButtons[id], "timer preview offers " .. id):Click()
     mw:RunTimers()
     return assert(preview.timerSample)
 end
@@ -47,6 +47,12 @@ local function Find(setting)
     Walk(assert(M.cache.opt_castbar).wrapper)
     return assert(found, "missing timer setting: " .. setting)
 end
+local section = assert(M.cache.opt_castbar.sections.timer_bars)
+local entry = assert(section._msuf2CollapsibleEntry)
+assert(not entry.open, "timer settings start collapsed")
+assert(entry.header._msuf2ControlSchema.action)(nil, "LeftButton")
+mw:RunTimers()
+assert(entry.open, "registered button action opens the timer settings")
 local enable = Find("general.castbarTimers.breath.enabled")
 enable:SetChecked(true)
 enable:Click()
@@ -131,12 +137,6 @@ for _, id in ipairs(Bars.Order) do
         assert(sample.id == id and sample.frame.castText:GetText() == core.Translate(Bars.Labels[id]), "timer chooser displays its own sample")
     end
 end
-local section = assert(M.cache.opt_castbar.sections.timer_bars)
-local entry = assert(section._msuf2CollapsibleEntry)
-assert(not entry.open, "timer settings start collapsed")
-assert(entry.header._msuf2ControlSchema.action)(nil, "LeftButton")
-mw:RunTimers()
-assert(entry.open, "registered button action opens the timer settings")
 local tabs
 for _, child in ipairs(section.children) do
     local schema = child._msuf2ControlSchema

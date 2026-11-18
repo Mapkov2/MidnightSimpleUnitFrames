@@ -372,7 +372,7 @@ end
 -- character longer than four bytes returns nil; the caller then compares the
 -- strings. Edit-distance rows are reused too: every cell is written before
 -- it is read, so nothing is allocated per comparison.
-local EDIT_SCRATCH = { codesA = {}, codesB = {}, rowA = {}, rowB = {}, rowC = {}, asciiA = {}, asciiB = {} }
+local EDIT_SCRATCH = { codesA = {}, codesB = {}, rowA = {}, rowB = {}, rowC = {} }
 local function SearchUTFCodes(text, out)
     local count, i, n = 0, 1, #text
     while i <= n do
@@ -395,28 +395,53 @@ local function SearchUTFCodes(text, out)
     end
     return count
 end
-local function SearchUTFEditDistanceWithin(a, b, distance)
+local function SearchSymbolDistanceWithin(a, b, distance, ascii)
     local first, second = EDIT_SCRATCH.codesA, EDIT_SCRATCH.codesB
-    local la, lb = SearchUTFCodes(a, first), SearchUTFCodes(b, second)
-    if not (la and lb) then
-        first, second = SearchUTFCharacters(a), SearchUTFCharacters(b)
-        la, lb = #first, #second
+    local la, lb
+    if ascii then
+        la, lb = #a, #b
+        for i = 1, la do first[i] = byte(a, i) end
+        for j = 1, lb do second[j] = byte(b, j) end
+    else
+        la, lb = SearchUTFCodes(a, first), SearchUTFCodes(b, second)
+        if not (la and lb) then
+            first, second = SearchUTFCharacters(a), SearchUTFCharacters(b)
+            la, lb = #first, #second
+        end
     end
+    distance = math.floor(distance)
     if math.abs(la - lb) > distance then return false end
+    -- Band of half-width distance around the diagonal. A distance + 1 sentinel
+    -- is written just outside each row's band, so cells left by an earlier,
+    -- larger comparison are never read.
+    local big = distance + 1
     local before, previous, current = EDIT_SCRATCH.rowA, EDIT_SCRATCH.rowB, EDIT_SCRATCH.rowC
-    for j = 0, lb do previous[j] = j end
+    local edge = lb < distance and lb or distance
+    for j = 0, edge do previous[j] = j end
+    if edge < lb then previous[edge + 1] = big end
     for i = 1, la do
-        current[0] = i
-        local rowMin = i
-        for j = 1, lb do
-            local cost = first[i] == second[j] and 0 or 1
-            local value = math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
-            if i > 1 and j > 1 and first[i] == second[j - 1] and first[i - 1] == second[j] then
-                value = math.min(value, before[j - 2] + 1)
+        local lo, hi = i - distance, i + distance
+        if lo < 1 then lo = 1 end
+        if hi > lb then hi = lb end
+        local rowMin = lo == 1 and i or big
+        current[lo - 1] = rowMin
+        local ci = first[i]
+        for j = lo, hi do
+            local cj = second[j]
+            local value = previous[j - 1]
+            if ci ~= cj then value = value + 1 end
+            local other = previous[j] + 1
+            if other < value then value = other end
+            other = current[j - 1] + 1
+            if other < value then value = other end
+            if i > 1 and j > 1 and ci == second[j - 1] and first[i - 1] == cj then
+                other = before[j - 2] + 1
+                if other < value then value = other end
             end
             current[j] = value
             if value < rowMin then rowMin = value end
         end
+        if hi < lb then current[hi + 1] = big end
         if rowMin > distance then return false end
         before, previous, current = previous, current, before
     end
@@ -596,6 +621,13 @@ local function BuildSearchQueryClauses(query)
     -- A label made only of hard stop words ("To", "Not now", "Zu", "Aus") is still a label.
     if #clauses == 0 and normalized ~= "" then clauses = Collect("all") end
 
+    if #clauses == 1 then
+        local clause = clauses[1]
+        clause.onlyClause = true
+        if #normalized <= 3 and normalized == clause.literal and normalized:match("^%a%a%a?$") then
+            clause.shortWord = normalized
+        end
+    end
     SEARCH_STATE.queryClauseCacheNorm = normalized
     SEARCH_STATE.queryClauseCacheClauses = clauses
     return normalized, clauses
@@ -636,8 +668,9 @@ end
 SearchEditDistanceWithin = function(a, b, maxDistance)
     if a == b then return true end
     maxDistance = tonumber(maxDistance) or 1
+    if maxDistance < 1 then return false end
     if a:find("[\128-\255]") or b:find("[\128-\255]") then
-        return SearchUTFEditDistanceWithin(a, b, maxDistance)
+        return SearchSymbolDistanceWithin(a, b, maxDistance)
     end
     local la, lb = #a, #b
     if math.abs(la - lb) > maxDistance then return false end
@@ -675,44 +708,10 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
         return true
     end
 
-    local prev, curr = EDIT_SCRATCH.asciiA, EDIT_SCRATCH.asciiB
-    for j = 0, lb do prev[j] = j end
-    for i = 1, la do
-        curr[0] = i
-        local rowMin = curr[0]
-        local ca = byte(a, i)
-        for j = 1, lb do
-            local cost = (ca == byte(b, j)) and 0 or 1
-            local value = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-            curr[j] = value
-            if value < rowMin then rowMin = value end
-        end
-        if rowMin > maxDistance then return false end
-        prev, curr = curr, prev
-    end
-    return prev[lb] <= maxDistance
+    return SearchSymbolDistanceWithin(a, b, maxDistance, true)
 end
 
--- Runs for every record and clause a keystroke does not match literally. Per
--- query, termCache keeps the term's typo distance [1] and character count [2]
--- beside its token results (string keys); a record's token character counts
--- are computed once with its tokens. Only the length test runs per token.
-local function SearchTokenCharCounts(rec, tokens)
-    local counts = rec.tokenCharCounts
-    if counts and rec.tokenCharCountsFor == tokens then return counts end
-    counts = {}
-    local fitsBytes = true
-    for i = 1, #tokens do
-        local length = SearchCharCount(tokens[i])
-        counts[i] = length
-        if length > 255 then fitsBytes = false end
-    end
-    -- Most records need only one byte per length. Keep exact counts for any
-    -- longer provider token, and retain the same count cache on repeated queries.
-    if fitsBytes then counts = string.char(unpack(counts)) end
-    rec.tokenCharCounts, rec.tokenCharCountsFor = counts, tokens
-    return counts
-end
+-- Memoize both matches and misses per query, since many records repeat the same tokens.
 local function SearchFuzzyTokenMatch(rec, term, distanceCache)
     if not rec then return false end
     local termCache = distanceCache[term]
@@ -729,44 +728,67 @@ local function SearchFuzzyTokenMatch(rec, term, distanceCache)
         tokens = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit)
         rec.tokens, rec.tokensLexicon = tokens, SEARCH_STATE.lexiconGeneration
     end
-    local counts = rec.tokenCharCounts
-    if not counts or rec.tokenCharCountsFor ~= tokens then counts = SearchTokenCharCounts(rec, tokens) end
-    local packed = type(counts) == "string"
     local termLength = termCache[2]
     for i = 1, #tokens do
-        local lengthDelta = (packed and byte(counts, i) or counts[i]) - termLength
-        if lengthDelta <= maxDistance and lengthDelta >= -maxDistance then
-            local token = tokens[i]
-            local matched = termCache[token]
-            if matched == nil then
-                matched = SearchEditDistanceWithin(token, term, maxDistance)
-                termCache[token] = matched
-            end
-            if matched then return true end
+        local token = tokens[i]
+        local matched = termCache[token]
+        if matched == nil then
+            local lengthDelta = SearchCharCount(token) - termLength
+            matched = lengthDelta <= maxDistance and lengthDelta >= -maxDistance
+                and SearchEditDistanceWithin(token, term, maxDistance)
+            termCache[token] = matched
         end
+        if matched then return token end
     end
     return false
 end
 
 local function SearchClauseScore(rec, clause, fuzzyDistanceCache)
     local haystack = rec.haystack or ""
-    local source = rec.sourceLabelNorm or rec.labelNorm
     local best = 0
     for i = 1, #clause.terms do
         local term = clause.terms[i]
         local score = 0
-        if haystack:find(term, 1, true) then
-            if rec.labelNorm == term or source == term or rec.titleNorm == term then score = score + 180 end
-            if rec.labelNorm:find(term, 1, true) == 1 or source:find(term, 1, true) == 1 or rec.titleNorm:find(term, 1, true) == 1 then score = score + 90 end
-            if rec.labelNorm:find(term, 1, true) or source:find(term, 1, true) then score = score + 70 end
-            if rec.titleNorm:find(term, 1, true) then score = score + 55 end
-            if rec.hintNorm and rec.hintNorm:find(term, 1, true) then score = score + 45 end
+        local at = haystack:find(term, 1, true)
+        if at then
+            local label, source, title = rec.labelNorm, rec.sourceLabelNorm, rec.titleNorm
+            local labelAt = label:find(term, 1, true)
+            local sourceAt = source and source:find(term, 1, true)
+            local titleAt = title:find(term, 1, true)
+            if label == term or source == term or title == term then score = score + 180 end
+            if labelAt == 1 or sourceAt == 1 or titleAt == 1 then score = score + 90 end
+            if labelAt or sourceAt then score = score + 70 end
+            if titleAt then score = score + 55 end
+            local hint = rec.hintNorm
+            if hint and hint:find(term, 1, true) then score = score + 45 end
             if rec.groupNorm:find(term, 1, true) then score = score + 35 end
             score = score + 10
-            if term == clause.word or term == clause.literal then score = score + 120
-            else score = math.min(score, 40) end
-        elseif term == clause.word and SearchFuzzyTokenMatch(rec, term, fuzzyDistanceCache) then
-            score = 28
+            if term == clause.word or term == clause.literal then
+                score = score + 120
+                -- For short searches, a complete keyword such as "erz" is
+                -- stronger than an incidental substring such as "fuerzas".
+                if term == clause.shortWord then
+                    while at do
+                        if (at == 1 or haystack:byte(at - 1) == 32)
+                            and (at + #term > #haystack or haystack:byte(at + #term) == 32) then
+                            score = score + 230
+                            break
+                        end
+                        at = haystack:find(term, at + #term, true)
+                    end
+                end
+                -- Aliases cap at 40. With one literal, no later term can win.
+                if clause.word == clause.literal then return true, score end
+            else
+                score = math.min(score, 40)
+            end
+        elseif term == clause.word then
+            local token = SearchFuzzyTokenMatch(rec, term, fuzzyDistanceCache)
+            if token then
+                -- A typo in the whole visible label is stronger than one in help text.
+                -- A literal match always scores at least 130.
+                score = clause.onlyClause and token == rec.labelNorm and 105 or 28
+            end
         end
         if score > best then best = score end
     end
@@ -1011,4 +1033,3 @@ Parts.SearchLooksLikeControlQuestion = SearchLooksLikeControlQuestion
 Parts.SearchLooksLikeSupportQuestion = SearchLooksLikeSupportQuestion
 Parts.SearchResultSpecificityBoost = SearchResultSpecificityBoost
 Parts.SearchSupportQuestionBoost = SearchSupportQuestionBoost
-Parts.SearchTokenCharCounts = SearchTokenCharCounts

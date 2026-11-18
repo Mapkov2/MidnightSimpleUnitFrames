@@ -449,6 +449,7 @@ local function RefreshScene(self)
   frame.configKey = spec.key
   frame._msufPortraitSampleClass = sample.class
   frame._msufSampleReaction = REACTION_VALUE[sample.reaction or "friendly"]
+  frame._msufSamplePortraitUnit = sample.portraitUnit
   frame._msufSamplePortraitArt = sample.portraitTexture or (sample.player ~= true and sample.portrait or nil)
   if frame._msufSceneWidth ~= spec.width or frame._msufSceneHeight ~= spec.height then
     frame:SetSize(spec.width, spec.height)

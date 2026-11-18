@@ -36,6 +36,62 @@ g.castbarPlayerShowSpellRank, g.castbarPlayerShowTargetName, g.castbarFadeEnable
 core.Castbars.Config.Compile("style")
 mw:Select("opt_castbar")
 Settle()
+-- A closed timer editor must not build the controls for every timer on a normal
+-- visit. An exact result still opens its section, selects the tab and reveals
+-- the bound widget before any timer editor has been visited.
+local timerSection = assert(M.cache.opt_castbar.sections.timer_bars)
+local timerKey = "general.castbarTimers.fatigue.width"
+local originalWidth = core.TimerBars.Get("fatigue", "width")
+assert(not Find(timerKey), "closed timer section built its hidden tab controls")
+M.TimerBarPreview.Select("breath")
+assert(not Find(timerKey), "preview selection eagerly built the timer editor")
+local api, ready, exact = M.Search._CoreAPI
+assert(api.WhenIndexReady(function() ready = true end))
+for _ = 1, 1000 do
+    if ready then break end
+    mw:RunTimers(100)
+end
+assert(ready, "timer search index did not finish")
+for _, record in ipairs(api.GetSearchRecords()) do
+    local target = record.key == "opt_castbar" and record.exactTarget
+    if target and target.settingKey == timerKey then exact = target; break end
+end
+assert(exact and exact.sectionId == "timer_bars", "timer width lost its indexed route")
+local selected, anchored, matched = api.OpenSearchTarget("opt_castbar", "Width", "Width", nil, nil, exact)
+assert(selected and anchored and matched, "cold timer search did not reach its control")
+local width = assert(Find(timerKey))
+for _, id in ipairs(core.TimerBars.Order) do
+    assert(id == "fatigue" or not Find("general.castbarTimers." .. id .. ".width"), "opening a timer built another tab: " .. id)
+end
+assert(M.castbarTimerSelection == "fatigue" and width:IsVisible(), "exact timer search did not select the correct tab")
+assert(not core.TimerBars.IsPreview() and core.TimerBars.Get("fatigue", "width") == originalWidth,
+    "search changed the timer preference or enabled the in-world preview")
+M.Widgets.EnsureSectionContent(timerSection)
+assert(width == Find(timerKey), "opening the same timer section rebuilt its controls")
+timerSection._msuf2CollapsibleEntry.SetOpenImmediate(false)
+M.TimerBarPreview.Select("breath")
+assert(not Find("general.castbarTimers.breath.width"), "preview built a tab while the editor was collapsed")
+timerSection._msuf2CollapsibleEntry.SetOpenImmediate(true)
+assert(Find("general.castbarTimers.breath.width"), "reopened editor did not build its selected tab")
+local tabs = assert(M.RuntimeControlCatalog.Get(M.GlobalPage.CastbarControlMeta("timers.selected", "ephemeral").controlId).widget)
+local shown = {}
+for _, button in ipairs(tabs.buttons) do
+    local id = button._msuf2Value
+    MW.FireScript(button, "OnClick", "LeftButton")
+    local widget = assert(Find("general.castbarTimers." .. id .. ".width"), "timer tab did not build: " .. id)
+    assert(M.castbarTimerSelection == id and widget:IsVisible(), "timer click selected another tab")
+    shown[id] = widget
+end
+for _, id in ipairs(core.TimerBars.Order) do
+    assert((shown[id] ~= nil) == (core.TimerBars.IsAvailable(id) == true), "wrong client availability for " .. id)
+end
+core.TimerBars.SetPreview(false)
+timerSection._msuf2CollapsibleEntry.SetOpenImmediate(false)
+timerSection._msuf2CollapsibleEntry.SetOpenImmediate(true)
+for id, widget in pairs(shown) do
+    M.TimerBarPreview.Select(id)
+    assert(widget:IsVisible() and widget == Find("general.castbarTimers." .. id .. ".width"), "reopening rebuilt timer " .. id)
+end
 local preview = assert(M._msuf2CastbarPreview)
 M.SetCastbarPreviewUnit("player")
 M.SetCastbarPreviewType("normal")

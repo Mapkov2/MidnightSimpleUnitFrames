@@ -21,6 +21,7 @@ core.SuiteLink.GetChangelog = function()
     end
 end
 core.SuiteLink.CanOpenInstaller = function() return installed end
+core.SuiteLink.CanContinueSetup = function() return installed end
 core.SuiteLink.OpenInstaller = function()
     installerCalls = installerCalls + 1
     return true
@@ -161,6 +162,10 @@ local function CheckScaling()
 end
 
 core.FirstLoad6:Dismiss("test_dashboard")
+if M.IsUnitFrameSetupActive() then
+    SelectHome(true)
+    assert(Button("Open full settings"), "first-run setup could not exit to Dashboard"):Click()
+end
 M.SetMenuStateValue("dashboardScalingOpen", true)
 M.SetMenuStateValue("dashboardChangelogOpen", true)
 local wide = SelectHome(true)
@@ -179,7 +184,7 @@ local pill = wide.wrapper._msuf2DashboardState.scalePills[3]
 assert(pill:GetText() == M.Format("Frames %d%%", 123), "retained Scaling header shows stale applied scale")
 general.msufUiScale = oldFrameScale
 M.MarkMenuDataDirty("scaling-fixture")
-local _, quickRight, quickY = CheckButton("Start Quick Setup")
+local _, quickRight, quickY = CheckButton("Setup")
 local suiteLeft, _, suiteY = CheckButton("MSUF Suite Setup")
 assert(quickRight + 8 == suiteLeft and quickY == suiteY, "Suite Setup must sit next to Quick Setup")
 CheckButton("Wago Profiles", 16)
@@ -200,7 +205,7 @@ for _, nextWidth in ipairs({ 830, 630, 540, 428, 1040 }) do
     CheckScaling()
     CheckChangelog()
     CheckChangelogTabs()
-    local _, quickEdge, actionY = CheckButton("Start Quick Setup")
+    local _, quickEdge, actionY = CheckButton("Setup")
     local setupLeft, _, setupY = CheckButton("Redo Suite Setup")
     local _, _, wagoY = CheckButton("Wago Profiles")
     assert(quickEdge + 8 == setupLeft and setupY == actionY, "setup buttons lost their row")
@@ -237,7 +242,7 @@ SelectHome(true)
 assert(not Button("MSUF Changelog") and not Button("Suite Changelog"), "changelog tabs appeared without Suite")
 CheckChangelog()
 assert(not Button("MSUF Suite Setup") and not Button("Redo Suite Setup"), "Suite setup appeared without Suite")
-core.FirstLoad6:Reset("fresh")
+core.FirstLoad6:Reset("upgrade")
 SelectHome(true)
 local skip = assert(Button("Skip Guided Setup"), "first-run Skip button missing")
 local prompt
@@ -257,7 +262,8 @@ for attempt = 1, 2 do
         core.FirstLoad6:Reset("fresh")
         SelectHome(true)
     end
-    assert(Button("Start Quick Setup"), "Quick Setup launcher missing"):Click()
+    if not M.IsUnitFrameSetupActive() then assert(Button("Setup"), "Setup launcher missing"):Click() end
+    assert(Button("Guided Setup"), "Walkthrough launcher missing"):Click()
     assert(M.activeKey == "guided_setup" and core.GuidedTour6:IsActive(), "Quick Setup could not restart")
     prompt = nil
     assert(Button("Skip Guided Setup"), "guided route Skip button missing"):Click()
@@ -265,13 +271,14 @@ for attempt = 1, 2 do
     prompt.onAccept()
     assert(M.activeKey == "home" and core.GuidedTour6:GetState().status == "dismissed", "route Skip did not exit")
     assert(core.FirstLoad6:GetState().status == "dismissed", "route Skip did not close first-run onboarding")
-    assert(Button("Start Quick Setup"), "Quick Setup missing after Skip")
+    assert(Button("Setup") or Button("Guided Setup"), "setup could not be opened again after Skip")
 end
 core.GuidedTour6:Complete()
 M.MarkMenuDataDirty("guided-complete")
 SelectHome()
 prompt = nil
-assert(Button("Start Quick Setup"), "Quick Setup missing after completion"):Click()
+if not M.IsUnitFrameSetupActive() then assert(Button("Setup"), "Setup missing after completion"):Click() end
+assert(Button("Guided Setup"), "Walkthrough missing after completion"):Click()
 assert(prompt and not core.GuidedTour6:IsActive(), "completed setup must confirm a restart")
 prompt.onAccept()
 assert(M.activeKey == "guided_setup" and core.GuidedTour6:IsActive(), "completed tour could not restart")
@@ -335,6 +342,10 @@ assert(not M.RunGuidedTourStep("next"))
 tour:Dismiss()
 core.FirstLoad6:Dismiss("scale-check")
 core.UpgradeHighlights.ShouldShow = function() return false end
+if M.IsUnitFrameSetupActive() then
+    SelectHome(true)
+    assert(Button("Open full settings"), "Unit Frame Setup could not return to Dashboard"):Click()
+end
 local function Shortcut()
     M.SetMenuStateValue("dashboardScalingOpen", false)
     SelectHome(true)

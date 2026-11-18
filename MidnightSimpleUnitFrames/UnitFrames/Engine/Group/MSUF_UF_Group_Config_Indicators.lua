@@ -425,9 +425,22 @@ end
 
 local WEAKENED_SOUL_DISPEL_TYPES = { Magic = true, Curse = true, Disease = true, Poison = true, Bleed = true }
 
-local function ResolveSpellIndicatorFilter(si, ids, onlyOwn, externalDefensive)
+local function WeakenedSoulFilterSpellID(si)
   local priestIDs = IS_FOREVER and si.SpellIDs and si.SpellIDs.ClassicPriest
-  if priestIDs and #ids == 1 and ids[1] == priestIDs.WeakenedSoul then
+  return priestIDs and priestIDs.WeakenedSoul
+end
+
+function GF.SpellIndicatorUsesWeakenedSoulFilter(specKey, auraName, entry)
+  if not IS_FOREVER or not specKey or not auraName then return false end
+  local si = SpellIndicatorModule()
+  local spellID = WeakenedSoulFilterSpellID(si)
+  if not spellID then return false end
+  local ids = {}
+  return AddSpellIDsForAura(ids, nil, si, specKey, auraName, entry) == 1 and ids[spellID] == true
+end
+
+local function ResolveSpellIndicatorFilter(si, ids, onlyOwn, externalDefensive)
+  if #ids == 1 and ids[1] == WeakenedSoulFilterSpellID(si) then
     -- Forever refuses exact spell-ID matching for secret debuffs on allies.
     -- Use Blizzard's own candidate fields and display the matched aura's icon
     -- and duration. Other short player-style debuffs may share these fields.

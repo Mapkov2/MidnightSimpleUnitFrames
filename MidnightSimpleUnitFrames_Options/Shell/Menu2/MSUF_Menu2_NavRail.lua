@@ -290,8 +290,9 @@ local function FinalizeNavMotion(parent, list, rows)
         end
     end
 end
+local NAV_ITEM_BUTTON, NAV_HEADER_BUTTON = { nav = "item" }, { nav = "header" }
 local function CreateNavButton(parent, key, label, indent, availability)
-    local btn = T.Button(parent, label, NavItemWidth(indent), NAV_BUTTON_H)
+    local btn = T.Button(parent, label, NavItemWidth(indent), NAV_BUTTON_H, NAV_ITEM_BUTTON)
     if btn._msuf2Label and btn._msuf2Label.SetFontObject and GameFontHighlight then
         btn._msuf2Label:SetFontObject(GameFontHighlight)
     end
@@ -307,7 +308,6 @@ local function CreateNavButton(parent, key, label, indent, availability)
             { navigationKey = ResolveNavClickTarget(key), help = "Opens this MSUF options page." })
     end
     btn._msuf2SkipHistoryCheckpoint = true
-    btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
     btn._msuf2NavPillVisualWidth = NavPillVisualWidth(parent)
     btn._msuf2RawLabel = label
@@ -836,25 +836,8 @@ local function InstallNavSearchScripts(search, searchPalette, HideSearchIntro, S
             self:ClearFocus()
             return
         end
-        BumpSearchInputSerial()
-        RunSearchInputQuery(query, false)
-        local results = M.searchResults or {}
-        if searchPalette then searchPalette:Refresh(query, false) end
-        if searchPalette and searchPalette:OpenSelected(query) then
-            return
-        elseif results[1] then
-            local first = results[1]
-            if first.noOpen then
-                self:ClearFocus()
-            else
-                if searchPalette then searchPalette:Hide() end
-                OpenSearchTarget(first.key, query, first.anchorFallback or first.label or first.title,
-                    first.anchor, first.route, first.exactTarget)
-            end
-        else
-            if searchPalette then searchPalette:Hide() end
-            RunSearchInputQuery(query, true)
-        end
+        if searchPalette then searchPalette:Submit(query)
+        else RunSearchInputQuery(query, true) end
     end)
     search:SetScript("OnEscapePressed", function(self)
         HideSearchIntro()
@@ -1007,8 +990,7 @@ local function CreateNavList(parent)
         elseif item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
-            local btn = T.Button(list, item.header, NavItemWidth(0), NAV_BUTTON_H)
-            btn._msuf2NavHeader = true
+            local btn = T.Button(list, item.header, NavItemWidth(0), NAV_BUTTON_H, NAV_HEADER_BUTTON)
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header
             if btn._msuf2Label and btn._msuf2Label.SetFontObject and GameFontNormal then

@@ -32,8 +32,8 @@ end
 function Bridge.RefreshSearchResultsPage()
     SearchCall("RefreshResultsPage")
 end
-function Bridge.ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
-    SearchCall("ScheduleInputQuery", searchBox, query, openPage, onComplete)
+function Bridge.ScheduleSearchInputQuery(searchBox, query, openPage, onComplete, submitted)
+    SearchCall("ScheduleInputQuery", searchBox, query, openPage, onComplete, submitted)
 end
 function Bridge.RunSearchInputQuery(query, openPage)
     SearchCall("RunInputQuery", query, openPage)

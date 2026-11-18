@@ -42,6 +42,7 @@ local SearchText = Parts.SearchText
 local byte = Parts.byte
 local SearchIndexBuild
 local STATIC_ROW_CLIENT_CAPABILITY = {
+    ["id\031uf_player\031menu2%2Euf_player%2Eunit%2Estatus%2Epvp%2Ecountdown"] = "IsForever",
     -- Unit Frames > Pet > Status: Pet Happiness (MSUF_Menu2_UnitStatusSection*.lua).
     ["id\031uf_pet\031menu2%2Euf_pet%2Eunit%2Estatus%2Eindicator%2Epet_happiness"] = "SupportsPetHappiness",
     -- Unit Frames > Target, Focus and Boss > Status: Threat % (same files).
@@ -149,6 +150,10 @@ local function StaticRowsWithoutClientSupport()
         if not (type(client) == "table" and client[capability] == true) then
             staticRowsWithoutClientSupport[identity] = true
         end
+    end
+    local castbarUtils = MSUF.Castbars and MSUF.Castbars.Utils
+    if castbarUtils and not castbarUtils.PlayerSpellRanksSupported then
+        staticRowsWithoutClientSupport["id\031uf_player\031menu2%2Euf_player%2Eunit%2Ecastbar%2Eshow_spell_rank"] = true
     end
     local supportsScope = M.SupportsFrameScope
     if type(supportsScope) == "function" then
@@ -304,6 +309,96 @@ function SearchProviders.Record(row, info)
     return rec
 end
 
+SearchProviders.QUERY_PHRASE_LIMIT, SearchProviders.QUERY_PHRASE_MIN_LEN, SearchProviders.QUERY_PHRASE_MAX_LEN = 12, 6, 96
+
+--- row.queryPhrases: curated natural wordings that name the row's setting
+--- outright, unlike keywords, which only add haystack text. A phrase needs two
+--- words, or CJK text. The same phrase on different settings promotes neither;
+--- the false entry keeps a third repeat ambiguous as well.
+function SearchProviders.QueryPhrases(cache, phrases, settingKey)
+    if type(phrases) ~= "table" or not settingKey then return end
+    local target
+    for i = 1, math.min(#phrases, SearchProviders.QUERY_PHRASE_LIMIT) do
+        local phrase = phrases[i]
+        local normalized = type(phrase) == "string" and #phrase <= SearchProviders.QUERY_PHRASE_MAX_LEN
+            and NormalizeSearchText(phrase)
+        if normalized and #normalized >= SearchProviders.QUERY_PHRASE_MIN_LEN
+            and (normalized:find(" ", 1, true) or normalized:find("[\227-\237]")) then
+            local targets = cache.queryTargets
+            if not targets then
+                targets = {}
+                cache.queryTargets = targets
+            end
+            local known = targets[normalized]
+            if known == nil then
+                target = target or { settingKey = settingKey }
+                targets[normalized] = target
+            elseif known and known.settingKey ~= settingKey then
+                targets[normalized] = false
+            end
+        end
+    end
+end
+
+-- Optional provider vocabulary for Korean or Chinese queries. Each row requires
+-- every concept in its own list (two or three). All other text must consist of
+-- the supplied particles or question words; an unknown qualifier declines.
+local function CompileQueryConcepts(compact, concepts, settingKey)
+    if type(concepts) ~= "table" or #concepts < 3 or #concepts > 4 then return end
+    local words, lengths = {}, {}
+    for group = 1, #concepts do
+        local list = concepts[group]
+        if type(list) ~= "string" or #list == 0 or #list > 1536 then return end
+        for word in list:gmatch("%S+") do
+            if #word > 48 then return end
+            local known = words[word]
+            if known and known > 1 and known ~= group then return end
+            words[word] = group
+            lengths[#word] = true
+        end
+    end
+    local widths = {}
+    for length in pairs(lengths) do widths[#widths + 1] = length end
+    table.sort(widths, function(a, b) return a > b end)
+    compact[#compact + 1] = { words = words, widths = widths, groups = #concepts,
+        target = { settingKey = settingKey } }
+end
+
+local function MatchesQueryConcepts(rule, text)
+    local pos, second, third, fourth = 1, false, false, rule.groups == 3
+    while pos <= #text do
+        local found
+        for _, width in ipairs(rule.widths) do
+            if pos + width - 1 <= #text then
+                local group = rule.words[text:sub(pos, pos + width - 1)]
+                if group then
+                    if group == 2 then second = true elseif group == 3 then third = true
+                    elseif group == 4 then fourth = true end
+                    pos, found = pos + width, true
+                    break
+                end
+            end
+        end
+        if not found then return false end
+    end
+    return second and third and fourth
+end
+
+function SearchProviders.CompactTarget(cache, normalized)
+    local rules = cache and cache.compact
+    if not rules or #normalized < 6 or #normalized > 240 or not normalized:find("[\227-\237]") then return end
+    local text = normalized:gsub("%s+", "")
+    local match
+    for _, rule in ipairs(rules) do
+        if MatchesQueryConcepts(rule, text) then
+            if match and match.settingKey ~= rule.target.settingKey then return false end
+            match = rule.target
+        end
+    end
+    return match
+end
+
+
 function SearchProviders.AddRow(cache, row, pageInfoByKey)
     if type(row) ~= "table" then return false end
     local pageKey = row.pageKey
@@ -317,6 +412,18 @@ function SearchProviders.AddRow(cache, row, pageInfoByKey)
         if not rec then return false end
         cache.records[#cache.records + 1] = rec
         cache.pageKeys[pageKey] = true
+        if row.queryPhrases and rec.exactTarget then
+            SearchProviders.QueryPhrases(cache, row.queryPhrases, rec.exactTarget.settingKey)
+        end
+        if row.queryConcepts and rec.exactTarget and rec.exactTarget.settingKey and cache.compact ~= false then
+            local rules = cache.compact or {}
+            cache.compact = rules
+            if #rules < 12 then
+                CompileQueryConcepts(rules, row.queryConcepts, rec.exactTarget.settingKey)
+            else
+                cache.compact = false
+            end
+        end
         return true
     end
     local page = cache.pages[pageKey]
@@ -346,22 +453,38 @@ function SearchProviders.Collect(pageInfoByKey, job, deadline)
     local walk = job and job.collect
     if not walk then
         walk = { cache = { pages = {}, records = {}, pageKeys = {}, rows = 0, skipped = 0 }, names = {}, n = 1 }
+        walk.serial = SEARCH_STATE.dirtySerial
+        walk.due = function() return SearchIndexBuild.Due(walk.deadline) end
         for name in pairs(SEARCH_STATE.providers) do walk.names[#walk.names + 1] = name end
         table.sort(walk.names)
         if job then job.collect = walk end
     end
-    cache = walk.cache
+    cache, walk.deadline = walk.cache, deadline
     while walk.n <= #walk.names do
         if not walk.rows then
             local entry = SEARCH_STATE.providers[walk.names[walk.n]]
-            local rows
-            if not entry.failed then
+            local rows, done
+            if entry and not entry.failed then
                 entry.failed = true
-                rows = entry.collect()
+                if entry.begin then
+                    walk.step = walk.step or entry.begin()
+                    if type(walk.step) == "function" then rows, done = walk.step(walk.due)
+                    else done = true end
+                else
+                    rows, done = entry.collect(), true
+                end
                 entry.failed = nil
+            else
+                done = true
             end
+            -- A producer can itself invalidate the provider. Let the outer
+            -- generation restart before any part of that snapshot is published.
+            if walk.serial ~= SEARCH_STATE.dirtySerial then return nil end
             walk.rows = type(rows) == "table" and rows or EMPTY_SEARCH_RECORDS
-            walk.i, walk.last = 1, math.min(#walk.rows, SearchProviders.ROW_LIMIT)
+            local remaining = walk.remaining or SearchProviders.ROW_LIMIT
+            walk.i, walk.last = 1, math.min(#walk.rows, remaining)
+            walk.remaining = remaining - walk.last
+            walk.done = done or walk.remaining == 0
             if deadline and SearchIndexBuild.Due(deadline) then return nil end
         end
         while walk.i <= walk.last do
@@ -373,7 +496,12 @@ function SearchProviders.Collect(pageInfoByKey, job, deadline)
             walk.i = walk.i + 1
             if deadline and SearchIndexBuild.Due(deadline) then return nil end
         end
-        walk.rows, walk.n = nil, walk.n + 1
+        walk.rows = nil
+        if walk.done then
+            walk.step, walk.remaining, walk.n = nil, nil, walk.n + 1
+        elseif deadline and (walk.last == 0 or SearchIndexBuild.Due(deadline)) then
+            return nil
+        end
     end
     if job then job.collect = nil end
     SEARCH_STATE.providerCache = cache
@@ -383,24 +511,29 @@ end
 --- Provider records join after the static rows. A live widget registered for the
 --- exact control ID, same setting, or otherwise same kind and label on the page wins:
 --- it carries the real anchor and exact identity, exactly like static rows.
-function SearchProviders.Append(records, cache)
+function SearchProviders.Append(records, cache, job, deadline)
     local list = cache.records
-    if #list == 0 then return end
-    local live = {}
-    for i = 1, #records do
-        local record = records[i]
-        if record.anchor and cache.pageKeys[record.key] then
-            local target = record.exactTarget
-            if target and target.controlId and target.controlId ~= "" then
-                live[record.key .. "\031id\031" .. target.controlId] = i
+    if #list == 0 then return true end
+    local live = job.providerLive or {}
+    job.providerLive = live
+    if not job.providerAppend then
+        for i = job.index, #records do
+            local record = records[i]
+            if record.anchor and cache.pageKeys[record.key] then
+                local target = record.exactTarget
+                if target and target.controlId and target.controlId ~= "" then
+                    live[record.key .. "\031id\031" .. target.controlId] = i
+                end
+                if target and target.settingKey and target.settingKey ~= "" then
+                    live[record.key .. "\031" .. target.settingKey] = i
+                end
+                live[record.key .. "\031" .. record.kind .. "\031" .. record.labelNorm] = i
             end
-            if target and target.settingKey and target.settingKey ~= "" then
-                live[record.key .. "\031" .. target.settingKey] = i
-            end
-            live[record.key .. "\031" .. record.kind .. "\031" .. record.labelNorm] = i
+            if deadline and i % 16 == 0 and SearchIndexBuild.Due(deadline) then job.index = i + 1 return false end
         end
+        job.providerAppend = 1
     end
-    for i = 1, #list do
+    for i = job.providerAppend, #list do
         local rec = list[i]
         local target = rec.exactTarget
         local liveKey = target and target.controlId and (rec.key .. "\031id\031" .. target.controlId)
@@ -429,16 +562,25 @@ function SearchProviders.Append(records, cache)
             rec.order = #records + 1
             records[#records + 1] = rec
         end
+        if deadline and i % 8 == 0 and SearchIndexBuild.Due(deadline) then job.providerAppend = i + 1 return false end
     end
+    job.providerLive, job.providerAppend = nil, nil
+    return true
+end
+
+-- Third-party registrations can omit optional callbacks or unregister with nil.
+local function OptionalCallback(value)
+    return value == nil or type(value) == "function"
 end
 
 --- Registers, replaces (same name) or with a nil function removes a provider.
---- The function is not called here; see SearchProviders.Collect.
-function M.RegisterSearchProvider(name, collect, contextChanged)
+--- An optional begin() returns step(due), which returns a row batch or nil
+--- and a completion flag. Batches share the original per-provider row cap.
+--- Abandoning a build releases its step; a new build calls begin() again.
+function M.RegisterSearchProvider(name, collect, contextChanged, begin)
     if type(name) ~= "string" or name == "" then return false end
-    if collect ~= nil and type(collect) ~= "function" then return false end
-    if contextChanged ~= nil and type(contextChanged) ~= "function" then return false end
-    SEARCH_STATE.providers[name] = collect and { collect = collect, contextChanged = contextChanged } or nil
+    if not (OptionalCallback(collect) and OptionalCallback(contextChanged) and OptionalCallback(begin)) then return false end
+    SEARCH_STATE.providers[name] = collect and { collect = collect, contextChanged = contextChanged, begin = begin } or nil
     SEARCH_STATE.providerCache = nil
     MarkSearchIndexDirty()
     return true
@@ -450,7 +592,7 @@ end
 --- The record retains providerRow for companion-specific ownership metadata.
 function M.RegisterSearchAvailability(name, isAvailable)
     if type(name) ~= "string" or name == "" then return false end
-    if isAvailable ~= nil and type(isAvailable) ~= "function" then return false end
+    if not OptionalCallback(isAvailable) then return false end
     SEARCH_STATE.availability[name] = isAvailable
     MarkSearchIndexDirty()
     return true

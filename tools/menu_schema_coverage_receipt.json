@@ -1,46 +1,46 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7283,
-      "initialDeclarations": 4949,
-      "profileControls": 3878,
-      "proven": 3878
+      "declarations": 7292,
+      "initialDeclarations": 4868,
+      "profileControls": 3887,
+      "proven": 3887
     },
     "Mainline": {
-      "declarations": 7801,
-      "initialDeclarations": 5166,
-      "profileControls": 4196,
-      "proven": 4196
+      "declarations": 7817,
+      "initialDeclarations": 5091,
+      "profileControls": 4211,
+      "proven": 4211
     },
     "Mists": {
-      "declarations": 7445,
-      "initialDeclarations": 5137,
-      "profileControls": 3914,
-      "proven": 3914
+      "declarations": 7461,
+      "initialDeclarations": 5062,
+      "profileControls": 3929,
+      "proven": 3929
     },
     "TBC": {
-      "declarations": 6829,
-      "initialDeclarations": 4740,
-      "profileControls": 3534,
-      "proven": 3534
+      "declarations": 6844,
+      "initialDeclarations": 4664,
+      "profileControls": 3548,
+      "proven": 3548
     },
     "Vanilla": {
-      "declarations": 5265,
-      "initialDeclarations": 3644,
-      "profileControls": 2589,
-      "proven": 2589
+      "declarations": 5277,
+      "initialDeclarations": 3565,
+      "profileControls": 2600,
+      "proven": 2600
     }
   },
   "generatorVersion": "menu-schema-coverage/4",
   "issueCount": 0,
-  "projectionSha256": "a3b01ca37d82ed1083930310639b84baa4f980ac5037ed4eec68b676ef4636d3",
+  "projectionSha256": "0c421d2cc5d74a125314ee5e8ab1a4e41e4024058936262d13df2f4d42811b7b",
   "projectionVersion": 2,
-  "sourceSha256": "BE5BF5A76EC31E52F18B88FEA01C7E35336DDC80BD568293164EECDFC8FBFC90",
+  "sourceSha256": "197D8FA2FD78B8EE4929CE87FC543ED54B9229E0A2C65E295400FB3D33B34687",
   "totals": {
-    "declarations": 34623,
-    "initialDeclarations": 23636,
-    "profileControls": 18111,
-    "proven": 18111
+    "declarations": 34691,
+    "initialDeclarations": 23250,
+    "profileControls": 18175,
+    "proven": 18175
   },
   "version": 1
 }

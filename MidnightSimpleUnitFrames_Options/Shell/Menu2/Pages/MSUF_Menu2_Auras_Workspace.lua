@@ -167,56 +167,67 @@ local function BuildUnitAuraWorkspace(ctx, builder, unit)
     local normalLane = currentTab == "buff" or currentTab == "debuff"
     local currentTool = CurrentUnitAuraTool(unit, currentTab)
     M.AuraControls.ConfigureSearchView(ctx, "unitAuraWorkspace", currentTab .. "_" .. currentTool)
-    local customContainerContract = UnitCustomContainerContract(unit)
-    local outer = AurasPage.Section(builder, "auras", "Auras", 120, false)
-    local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
-    ctx:TrackPageAreaContentLayout(auraBuilder)
-    local sectionW = auraBuilder.width or 720
-    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS
-        or (currentTab == "custom4"
-            and (unit == "player" and M._unitAuraPlayerDefensiveTools or UNIT_AURA_TARGET_DOT_TOOLS)
-            or UNIT_AURA_CUSTOM_TOOLS)
-    local containerCenterY = -28
-    local containerMetrics = MeasureWorkspaceBar(workspaceTabs, sectionW, containerCenterY)
-    local toolCenterY = min(-62, ((containerMetrics and containerMetrics.bottomY) or -40) - 22)
-    local toolMetrics = MeasureWorkspaceBar(tools, sectionW, toolCenterY)
-    local footerY = ((toolMetrics and toolMetrics.bottomY) or (toolCenterY - 12)) - 2
-    local top = auraBuilder:Section("", max(104, abs(footerY) + 28))
-    if top.title then top.title:Hide() end
-    if W.RegisterGuidedRegion then
-        W.RegisterGuidedRegion(ctx, top, "Aura container and tools", "unit_aura_tools")
+    local auraBuilder, finishLayout
+    local function PrepareShell(outer)
+        M.ControlSchema.Section(outer, "auras")
+        auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
+        finishLayout = ctx:TrackPageAreaContentLayout(auraBuilder, true)
     end
-    local containerBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
-        values = workspaceTabs,
-        width = sectionW,
-        label = "Container:",
-        labelWidth = 72,
-        centerY = containerCenterY,
-        getValue = CurrentTab,
-        setValue = function(value)
-            M.unitAuraTabSelection[unit] = value
-            SelectUnitWorkspaceLanes(CurrentTab())
-            Rebuild(ctx)
-        end,
-    }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
-    if containerBar then AttachUnitWorkspaceExactViews(containerBar, unit) end
-    RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
-        values = tools,
-        width = sectionW,
-        label = "Edit:",
-        labelWidth = 72,
-        centerY = toolCenterY,
-        getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
-        setValue = function(value)
-            SetUnitAuraTool(unit, currentTab, value)
-            SelectUnitWorkspaceLanes(currentTab)
-            Rebuild(ctx)
-        end,
-    }), tools, "unit-workspace.tool-selector")
-    BuildUnitWorkspaceFooter(ctx, top, unit, currentTab, normalLane, footerY, sectionW)
+    local function BuildControls()
+        local customContainerContract = UnitCustomContainerContract(unit)
+        local sectionW = auraBuilder.width or 720
+        local tools = normalLane and UNIT_AURA_NORMAL_TOOLS
+            or (currentTab == "custom4"
+                and (unit == "player" and M._unitAuraPlayerDefensiveTools or UNIT_AURA_TARGET_DOT_TOOLS)
+                or UNIT_AURA_CUSTOM_TOOLS)
+        local containerCenterY = -28
+        local containerMetrics = MeasureWorkspaceBar(workspaceTabs, sectionW, containerCenterY)
+        local toolCenterY = min(-62, ((containerMetrics and containerMetrics.bottomY) or -40) - 22)
+        local toolMetrics = MeasureWorkspaceBar(tools, sectionW, toolCenterY)
+        local footerY = ((toolMetrics and toolMetrics.bottomY) or (toolCenterY - 12)) - 2
+        local top = auraBuilder:Section("", max(104, abs(footerY) + 28))
+        if top.title then top.title:Hide() end
+        if W.RegisterGuidedRegion then
+            W.RegisterGuidedRegion(ctx, top, "Aura container and tools", "unit_aura_tools")
+        end
+        local containerBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
+            values = workspaceTabs,
+            width = sectionW,
+            label = "Container:",
+            labelWidth = 72,
+            centerY = containerCenterY,
+            getValue = CurrentTab,
+            setValue = function(value)
+                M.unitAuraTabSelection[unit] = value
+                SelectUnitWorkspaceLanes(CurrentTab())
+                Rebuild(ctx)
+            end,
+        }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
+        if containerBar then AttachUnitWorkspaceExactViews(containerBar, unit) end
+        RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
+            values = tools,
+            width = sectionW,
+            label = "Edit:",
+            labelWidth = 72,
+            centerY = toolCenterY,
+            getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
+            setValue = function(value)
+                SetUnitAuraTool(unit, currentTab, value)
+                SelectUnitWorkspaceLanes(currentTab)
+                Rebuild(ctx)
+            end,
+        }), tools, "unit-workspace.tool-selector")
+        BuildUnitWorkspaceFooter(ctx, top, unit, currentTab, normalLane, footerY, sectionW)
 
-    BuildUnitWorkspaceTool(ctx, auraBuilder, unit, currentTab, currentTool, normalLane)
-    M.ProfileWorkbenchUI.Aura(ctx, auraBuilder, unit, currentTab)
+        BuildUnitWorkspaceTool(ctx, auraBuilder, unit, currentTab, currentTool, normalLane)
+        M.ProfileWorkbenchUI.Aura(ctx, auraBuilder, unit, currentTab)
+        finishLayout()
+    end
+    -- Keep the area layout and its searchable accordion available immediately.
+    -- The current lane's controls are needed on expand or an exact search.
+    builder:LazyCollapsibleSection("auras", "Auras", 120, false, BuildControls, {
+        shell = PrepareShell, eager = not M.UnitPage.BuildSectionLazy,
+    })
 end
 function M.BuildAuras3UnitSection(ctx, builder, unit, sectionUX)
     if not Model.UnitSupported(unit) then return end

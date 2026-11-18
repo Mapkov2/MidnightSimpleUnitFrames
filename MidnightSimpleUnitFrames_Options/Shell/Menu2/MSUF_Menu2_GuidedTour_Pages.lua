@@ -168,7 +168,7 @@ local function BuildChapterPage(ctx, T, W, stage)
         Header(b, all and "Part 1 of 3 - Unitframes" or "Unitframes", "Build Player once. Copy it when it feels right.")
         InfoCard(b, T, "Move the whole frame", "Edit Mode: drag the Player mover to place the frame on screen.", "uf_player", 76)
         InfoCard(b, T, "Change its size", "Click the mover in Edit Mode: its popup contains Width, Height, and other frame details.", "uf_player", 82)
-        InfoCard(b, T, "Then Copy To", "Tune Player in the Live Preview, select All, and copy the result to another Unitframe.", "uf_target", 82)
+        InfoCard(b, T, "Copy To Settings", "Tune Player in the Live Preview, select All, and copy the result to another Unitframe.", "uf_target", 82)
     elseif stage.id == "group_intro" then
         if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("gfScope", "party") else M.gfScope = "party" end
         Header(b, all and "Part 2 of 3 - Group Frames" or "Group Frames", "Build Party once. Copy it to Raid or Mythic Raid.")
