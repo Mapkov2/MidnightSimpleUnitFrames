@@ -367,15 +367,15 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
-          "source_sha256": "8eccbdf50550ee234d32dbb25370f37220beca006aad1849216ebabd8c9d8e7e"
+          "source_sha256": "653e0aa954889ae2f985415d7ef965e8357ec6e0b30588d83cfc47d96cba9c47"
         },
         {
           "file": "Pages/MSUF_Menu2_GroupBars.lua",
-          "source_sha256": "cba7c3cfd6c714a13ffde3c4310612fa17e6394a9a0bd59cef708eb389304851"
+          "source_sha256": "8741c930400edaa482e800852fad43db7693d7c25eae4c01e3ffb7ec7c5f6cb1"
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "b8cb90d84619a17ce6491f14fcfa1ec361d67084750fd6fd2ec11fe16b916261"
+          "source_sha256": "5f30aab3d9ea705242a174166259de325b961465132806785b040610e2137dfb"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
@@ -532,7 +532,7 @@
           252
         ]
       ],
-      "source_sha256": "0570e9244f3d94a659a92ead4bc8e3a22792f50949c9a9d92c7e290ea50a7332",
+      "source_sha256": "7490cba6a8ff0b2ba35b875c81cd609aa33ca7b52cee057d86401553695ccd15",
       "adapter_exclusions": [
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
@@ -570,7 +570,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua",
-          "source_sha256": "5079fe283f8c359cd3fc81623ab6068cdaee8fe5f2e2fe8346ad92083fc22c81"
+          "source_sha256": "3d2707fd90c03e3d61c3311d72855ef2d4e1c8e5466aa1544b69f7f2cb2976b8"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View_Handles.lua",
@@ -578,7 +578,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_UnitScene.lua",
-          "source_sha256": "98e226dcbb2226da3ba20459b8a7cdf7eb5cee76a84f72d51eb712e03b1de0d8",
+          "source_sha256": "199c9db6c43457d346f1e0b986945234f7d0a1585d8acfbcced36bcf5cd1e061",
           "review_note": "2026-11-17: independently reviewed PvP elapsed input and timer layer region; existing runtime painter retained."
         },
         {
