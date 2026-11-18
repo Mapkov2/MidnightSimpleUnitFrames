@@ -303,7 +303,7 @@ end
 -- updater. Count calls on the real registered group frame on both sides.
 local bars = h.core.UFBarTextCommon
 local retry, resume = bars.RetryGroupRezzUnit, bars.ResumeGroupRezzColors
-local retries, resumes = 0, 0
+local retries, resumes, pending = 0, 0, false
 bars.RetryGroupRezzUnit = function(unit)
   retries = retries + 1
   return retry(unit)
@@ -318,14 +318,29 @@ local function CheckLocation(enabled, label)
   local before, reads = retries, locationReads
   frame.scripts.OnEvent(frame, "UNIT_HEALTH", member)
   assert(locationReads == reads, label .. " queried location on UNIT_HEALTH")
-  assert(retries == before + (enabled and 1 or 0), label .. " used the wrong health updater")
+  assert(retries == before + (enabled and pending and 1 or 0), label .. " used the wrong health updater")
 end
 local function EnterLocation(inside, kind, event, enabled)
   inInstance, instanceType = inside, kind
   h:Event(event)
   CheckLocation(enabled, kind .. " " .. event)
 end
-CheckLocation(true, "outdoor group")
+CheckLocation(true, "outdoor group with no pending resurrection")
+-- Create an unresolved read so changing zone must still switch the real
+-- updater. A recovered group must go back to the native path immediately.
+local watched = assert(h.GF.FrameForUnit(member))
+local function FireWatched(event) watched.scripts.OnEvent(watched, event, member) end
+misread = false
+FireWatched("UNIT_NAME_UPDATE")
+dead = true
+FireWatched("UNIT_FLAGS")
+dead, misread = false, true
+FireWatched("UNIT_FLAGS")
+clock = clock + 2
+FireWatched("UNIT_NAME_UPDATE")
+CheckColor(watched, green, "outdoor pending resurrection")
+pending = true
+CheckLocation(true, "outdoor group with pending resurrection")
 for _, kind in ipairs({ "party", "raid", "pvp", "arena", "scenario" }) do
   EnterLocation(true, kind, "ZONE_CHANGED_NEW_AREA", false)
   h:EnterCombat()
@@ -344,5 +359,10 @@ EnterLocation(true, "raid", "ZONE_CHANGED_NEW_AREA", false)
 EnterLocation(false, "none", "ZONE_CHANGED_NEW_AREA", false)
 h:LeaveCombat()
 CheckLocation(true, "outdoor combat exit")
+misread = false
+CheckLocation(true, "outdoor first valid health event")
+CheckColor(watched, colors[class], "restored class after zone changes")
+pending = false
+CheckLocation(true, "outdoor group after recovery")
 bars.RetryGroupRezzUnit, bars.ResumeGroupRezzColors = retry, resume
 print("group rez class color " .. flavor .. ": ok")

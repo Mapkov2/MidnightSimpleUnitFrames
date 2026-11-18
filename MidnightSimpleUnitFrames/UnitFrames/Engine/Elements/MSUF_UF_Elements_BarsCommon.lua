@@ -1679,12 +1679,14 @@ function Common.RetryGroupRezzUnit(unit)
   if issecretvalue(unit) ~= true and Rezz.pendingUnits[unit] then
     Rezz.pendingUnits[unit] = nil
     MSUF.GF.ForEachFrameForUnit(unit, Rezz.RetryFrame)
+    if not next(Rezz.pendingUnits) then Common.WatchGroupRezzHealth(false) end
   end
 end
 
 function Rezz.MarkPending(state, unit, reason)
   state.rezzHealthPending = reason
   Rezz.pendingUnits[unit] = true
+  Common.WatchGroupRezzHealth(true)
 end
 
 -- Use only readable identity to recognize roster churn after a death. A
@@ -1719,6 +1721,12 @@ function Rezz.ResumeFrame(frame, unit)
 end
 
 function Common.ResumeGroupRezzColors()
+  -- Rebuild from the current bindings. A unit may have left before its next
+  -- health event, or the cold replay may resolve its last pending paint.
+  if next(Rezz.pendingUnits) then
+    wipe(Rezz.pendingUnits)
+    Common.WatchGroupRezzHealth(false)
+  end
   MSUF.GF.ForEachFrame(Rezz.ResumeFrame, false)
 end
 

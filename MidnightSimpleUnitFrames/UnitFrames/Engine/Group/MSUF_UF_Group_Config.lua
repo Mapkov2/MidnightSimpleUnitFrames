@@ -729,38 +729,27 @@ local function CompileTempMaxHealth(kind, conf, texture)
   }
 end
 
-local function CompileDispelVisual(kind, conf)
-  local out = {
-    r = 0.25,
-    g = 0.75,
-    b = 1,
-    a = 1,
-  }
-  return out
-end
-
 --- Dispel-type symbol indicator. Auras3 normalizes/clamps every field, so this
 --- only forwards the raw values; the shape must stay identical to the unit-frame
 --- table in MSUF_UF_Config.lua so one compiler serves both scopes.
-local function CompileDispelSymbol(conf)
+local function CompileDispelSymbol(conf, out)
   conf = conf or {}
-  local out = {
-    enabled = conf.dispelSymbolEnabled == true,
-    style = conf.dispelSymbolStyle or "BLIZZARD",
-    mode = conf.dispelSymbolMode or "ALL",
-    trigger = conf.dispelSymbolTrigger or "BORDER",
-    size = Num(conf.dispelSymbolSize, 12),
-    spacing = Num(conf.dispelSymbolSpacing, 2),
-    growth = conf.dispelSymbolGrowth or "RIGHT",
-    anchor = conf.dispelSymbolAnchor or "TOPRIGHT",
-    x = Num(conf.dispelSymbolX, 0),
-    y = Num(conf.dispelSymbolY, 0),
-    alpha = Clamp01(conf.dispelSymbolAlpha, 1),
-    layer = Layer(conf.dispelSymbolLayer, 8),
-    strata = NormalizeFrameOutlineStrata(conf.dispelSymbolStrata),
-  }
-  -- Auras3 caches its compiled group config against this. ReplaceTableContents
-  -- keeps table identity across a visual-domain refresh, so identity alone
+  out = out or {}
+  out.enabled = conf.dispelSymbolEnabled == true
+  out.style = conf.dispelSymbolStyle or "BLIZZARD"
+  out.mode = conf.dispelSymbolMode or "ALL"
+  out.trigger = conf.dispelSymbolTrigger or "BORDER"
+  out.size = Num(conf.dispelSymbolSize, 12)
+  out.spacing = Num(conf.dispelSymbolSpacing, 2)
+  out.growth = conf.dispelSymbolGrowth or "RIGHT"
+  out.anchor = conf.dispelSymbolAnchor or "TOPRIGHT"
+  out.x = Num(conf.dispelSymbolX, 0)
+  out.y = Num(conf.dispelSymbolY, 0)
+  out.alpha = Clamp01(conf.dispelSymbolAlpha, 1)
+  out.layer = Layer(conf.dispelSymbolLayer, 8)
+  out.strata = NormalizeFrameOutlineStrata(conf.dispelSymbolStrata)
+  -- Auras3 caches its compiled group config against this. The table retains
+  -- its identity across a visual-domain refresh, so identity alone
   -- cannot detect an edit -- and Auras3 resolves per frame per identity event,
   -- which is far too hot to rebuild a 13-part string on. Stamp it once here,
   -- where the settings are actually read.
@@ -1783,7 +1772,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     text = textSpec,
     tempMaxHealth = CompileTempMaxHealth(kind, conf, texture),
     prediction = CompilePrediction(kind, conf, texture),
-    dispel = CompileDispelVisual(kind, conf),
+    dispel = { r = 0.25, g = 0.75, b = 1, a = 1 },
     status = status,
     border = CompileBorderSpec(kind, conf, general),
     alpha = alpha,
@@ -1900,7 +1889,6 @@ local function RefreshColorDomain(kind, base, conf)
 
   base.tempMaxHealth = ReplaceTableContents(base.tempMaxHealth, CompileTempMaxHealth(kind, conf, texture))
   base.prediction = CompilePrediction(kind, conf, texture, base.prediction)
-  base.dispel = ReplaceTableContents(base.dispel, CompileDispelVisual(kind, conf))
   base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, general))
   base.alpha = Shared.CompileAlpha(base.alpha and wipe(base.alpha) or {}, conf, true)
 
@@ -1911,7 +1899,7 @@ local function RefreshColorDomain(kind, base, conf)
   if GF.CompileCornerIndicators then
     base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf, kind))
   end
-  base.dispelSymbol = ReplaceTableContents(base.dispelSymbol, CompileDispelSymbol(conf))
+  base.dispelSymbol = CompileDispelSymbol(conf, base.dispelSymbol)
   BumpSpecDomain(base, "_msufTextColorRevision")
   BumpSpecDomain(base, "_msufPowerVisualRevision")
   BumpSpecDomain(base, "_msufBorderVisualRevision")

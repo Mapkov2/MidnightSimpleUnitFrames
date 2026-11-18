@@ -935,25 +935,35 @@ end
 -- Native API and curve availability are fixed when this module loads. Bind
 -- the supported updater once; a legacy client retains its guarded absolute
 -- route without a capability decision on every update.
-local groupHealthByPhase
+local groupHealthByPhase, retryGroupHealth
 if UnitHealthPercent and SCALE_100 then
   local function ReadGroupHealthOutOfCombat(unit, predicted, curve)
     C.RetryGroupRezzUnit(unit)
     return UnitHealthPercent(unit, predicted, curve)
   end
-  groupHealthByPhase = { [false] = UnitHealthPercent, [true] = ReadGroupHealthOutOfCombat }
+  groupHealthByPhase = { [false] = UnitHealthPercent, [true] = UnitHealthPercent }
+  retryGroupHealth = ReadGroupHealthOutOfCombat
 else
   local function UpdateGroupHealthOutOfCombat(frame, event, unit)
     if event == "UNIT_HEALTH" then C.RetryGroupRezzUnit(unit) end
     return UpdateGroup(frame, event, unit)
   end
   readGroupHealth = UpdateGroup
-  groupHealthByPhase = { [false] = UpdateGroup, [true] = UpdateGroupHealthOutOfCombat }
+  groupHealthByPhase = { [false] = UpdateGroup, [true] = UpdateGroup }
+  retryGroupHealth = UpdateGroupHealthOutOfCombat
   UpdateGroupPercentLean = function(frame, event, unit)
     unit = unit or frame.MSUFUnitKey
     if not (frame and frame.hpBar and unit) then return end
     return readGroupHealth(frame, event, unit)
   end
+end
+
+-- Healthy groups keep the original native health reader until a resurrection
+-- leaves a class color unresolved. Combat always uses the direct reader.
+function C.WatchGroupRezzHealth(watch)
+  local update = watch and retryGroupHealth or groupHealthByPhase[false]
+  groupHealthByPhase[true] = update
+  if C.groupRezzOutOfCombat then readGroupHealth = update end
 end
 
 function C.SetGroupRezzOutOfCombat(outOfCombat)
