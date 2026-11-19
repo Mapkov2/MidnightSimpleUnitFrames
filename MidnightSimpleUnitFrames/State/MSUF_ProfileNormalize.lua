@@ -890,6 +890,8 @@ local function PreserveLegacyUnitAuraBarStyle(shared, source, target, targetLayo
         if show == true or show == false then
             target[prefix .. "ShowAuraBars"] = show
             target[prefix .. "AuraBarFill"] = MSUF.AuraConfig.NormalizeAuraBarFill(Read(prefix .. "AuraBarFill"))
+            local style = Read(prefix .. "AuraBarStyle")
+            if type(style) == "table" then target[prefix .. "AuraBarStyle"] = MSUF.AuraConfig.CopyAuraBarStyle(style) end
         end
         if Read(prefix .. "ShowDurationBar", "showDurationBar") == true then
             target[prefix .. "ShowDurationBar"] = true
@@ -1150,6 +1152,9 @@ local function PreserveLegacyGroupAuraBars(source, target)
             if type(previous.showAuraBars) == "boolean" then
                 current.showAuraBars = previous.showAuraBars
                 current.auraBarFill = MSUF.AuraConfig.NormalizeAuraBarFill(previous.auraBarFill)
+                if type(previous.auraBarStyle) == "table" then
+                    current.auraBarStyle = MSUF.AuraConfig.CopyAuraBarStyle(previous.auraBarStyle)
+                end
             end
             if previous.showDurationBar == true then
                 current.showDurationBar = true

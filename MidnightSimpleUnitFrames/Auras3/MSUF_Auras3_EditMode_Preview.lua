@@ -199,10 +199,16 @@ local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elaps
     for i = 1, shownIcons do
         local icon = icons[i]
         if icon then
-            local auraState = AuraState(icon, kind, i, textCfg, elapsed)
             if barLane then
-                AuraPainter.UpdateAuraBarSample(icon, barLane, auraState or AuraPainter.AuraState(icon, kind, i, textCfg))
+                local firstCount = group._msufA3AnimationFirstBarCount
+                local trailing = firstCount and i > firstCount and group._msufA3AnimationTrailingBarLane
+                local lane, auraKind = trailing or barLane, trailing and "debuff" or kind
+                local slot = trailing and i - firstCount or i
+                local settings = trailing or textCfg
+                local auraState = AuraState(icon, auraKind, slot, settings, elapsed)
+                AuraPainter.UpdateAuraBarSample(icon, lane, auraState or AuraState(icon, auraKind, slot, settings))
             else
+                local auraState = AuraState(icon, kind, i, textCfg, elapsed)
                 if icon.Count then
                     icon.Count:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "")
                 end
@@ -539,7 +545,7 @@ local function ResolveLaneState(unit, kind, spec, cfg, metrics, textCfg, entries
     return lane
 end
 
-local function PaintEditAuraBar(icon, lane, kind)
+local function PaintEditAuraBar(icon, lane, kind, texture, index)
     if icon.Icon then icon.Icon:Hide() end
     if icon.Shade then icon.Shade:Hide() end
     if icon.Swipe then icon.Swipe:Hide() end
@@ -548,10 +554,43 @@ local function PaintEditAuraBar(icon, lane, kind)
     if icon.DispelBorder then icon.DispelBorder:Hide() end
     if icon.DurationBar then icon.DurationBar:Hide() end
     A3.ApplyIconStyleSkinned(icon, nil, lane.size, lane.iconShape, lane.buttonHeight)
-    AuraPainter.PaintAuraBarSample(icon, lane, kind, true)
+    AuraPainter.PaintAuraBarSample(icon, lane, kind, true, texture, index)
 end
 
 --- Sizes, anchors and styles the lane's preview cells and hides the unused ones.
+local function HideUnusedIcons(group, count)
+    for i = count + 1, #(group._icons or {}) do group._icons[i]:Hide() end
+end
+
+local function LayoutJoinedEditSegment(group, lead, bar, kind, texture, count, used, start)
+    local config = MSUF.AuraConfig
+    local anchor = lead.initialAnchor
+    local padX, padY = PaddingInset(anchor, lead.padding or 0)
+    for i = 1, count do
+        local icon = EnsureIcon(group, used + i)
+        local distance = start + config.AuraBarFlowAdvance(lead, bar, i - 1)
+        local x, y = config.AuraBarFlowOffset(lead, distance)
+        icon:SetAlpha(bar.alpha or 1)
+        icon._msufA3JoinedBarAlpha = true
+        icon:SetSize(bar.buttonWidth, bar.buttonHeight)
+        icon:ClearAllPoints()
+        icon:SetPoint(anchor, group.Body or group, anchor, x + padX, y + padY)
+        PaintEditAuraBar(icon, bar, kind, texture, i)
+        icon:Show()
+    end
+end
+
+local function LayoutCombinedEditBars(group, unit, cfg, spec, lane)
+    local lead, tail = lane.auraBar, lane.trailingAuraBar
+    local first = lane.firstBarCount
+    local debuff = ReadGroupConfig(unit, "debuff")
+    LayoutJoinedEditSegment(group, lead, lead, "buff", cfg.texture or spec.texture, first, 0, 0)
+    local start = MSUF.AuraConfig.AuraBarFlowAdvance(lead, lead, first)
+    LayoutJoinedEditSegment(group, lead, tail, "debuff", debuff.texture or GROUPS.debuff.texture,
+        lane.shownIcons - first, first, start)
+    HideUnusedIcons(group, lane.shownIcons)
+end
+
 local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg, entries, lane)
     local size, iconH, perRow, vertical = lane.size, lane.iconH, lane.perRow, lane.vertical
     local initialAnchor, step, stepY = lane.initialAnchor, lane.step, lane.stepY
@@ -560,13 +599,17 @@ local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg
     local padX, padY = PaddingInset(initialAnchor, lane.padding)
     for i = 1, shownIcons do
         local icon = EnsureIcon(group, i)
+        if icon._msufA3JoinedBarAlpha then
+            icon:SetAlpha(1)
+            icon._msufA3JoinedBarAlpha = nil
+        end
         icon:SetSize(lane.auraBar and lane.auraBar.buttonWidth or size, iconH)
         icon:ClearAllPoints()
         local col, row = IconGridCoord(i, perRow, vertical)
         local body = group.Body or group
         icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX + padX, row * stepY * growthY + padY)
         if lane.auraBar then
-            PaintEditAuraBar(icon, lane.auraBar, kind)
+            PaintEditAuraBar(icon, lane.auraBar, kind, cfg.texture or spec.texture, i)
         else
             AuraPainter.HideAuraBarSample(icon)
             if icon.Icon then
@@ -586,12 +629,7 @@ local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg
         icon:Show()
     end
 
-    local icons = group._icons
-    if icons then
-        for i = shownIcons + 1, #icons do
-            if icons[i] then icons[i]:Hide() end
-        end
-    end
+    HideUnusedIcons(group, shownIcons)
 end
 
 --- Repositions the lane's group and rebuilds its icons; runs only when the
@@ -602,7 +640,9 @@ local function ApplyLaneLayout(group, frame, unit, kind, spec, cfg, metrics, tex
     PositionPreviewGroup(group, frame, lane.anchor, lane.x, lane.y, lane.laneW, lane.laneH)
     group:SetSize(lane.laneW, lane.laneH + HEADER_H)
     if group.Body then group.Body:SetSize(lane.laneW, lane.laneH) end
-    if group.Body then group.Body:SetAlpha(Clamp(metrics and metrics.alpha or cfg.alpha, 1, 0, 1)) end
+    if group.Body then
+        group.Body:SetAlpha(lane.trailingAuraBar and 1 or Clamp(metrics and metrics.alpha or cfg.alpha, 1, 0, 1))
+    end
     local layers = MSUF.UF and MSUF.UF.Layers
     local layer = (metrics and metrics.layer) or cfg.layer
     group:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(layer, 5, 0)
@@ -611,17 +651,18 @@ local function ApplyLaneLayout(group, frame, unit, kind, spec, cfg, metrics, tex
         group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
     end
     if group.Label then
-        group.Label:SetText(GroupTitle(unit, kind, spec))
+        group.Label:SetText(lane.trailingAuraBar and MSUF.Translate("Combined Aura Bars") or GroupTitle(unit, kind, spec))
         StyleLabel(group.Label)
     end
     ApplyGroupChrome(group, spec, chrome)
-    LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg, entries, lane)
+    if lane.trailingAuraBar then LayoutCombinedEditBars(group, unit, cfg, spec, lane)
+    else LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg, entries, lane) end
 end
 
 --- Refreshes one aura lane of a unit's preview: hides it when it has nothing to
 --- show, otherwise resolves its layout, repaints on a changed signature and
 --- advances the animation state.
-local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeConfig)
+local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeConfig, trailingBar)
     local cfg = ReadGroupConfig(unit, kind)
     local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
     -- Target DoTs retain their configuration preview while disabled.
@@ -659,12 +700,33 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
     -- not have a compiled lane yet.
     local textCfg = (metrics and metrics.textConfig) or ReadTextConfig(unit, kind)
     local lane = ResolveLaneState(unit, kind, spec, cfg, metrics, textCfg, entries, frame)
+    lane.trailingAuraBar = trailingBar and lane.auraBar and trailingBar or nil
+    lane.firstBarCount = nil
+    if lane.trailingAuraBar then
+        lane.firstBarCount = lane.shownIcons
+        lane.shownIcons = lane.shownIcons + math_min(PREVIEW_ICONS, trailingBar.max)
+        lane.laneW, lane.laneH = MSUF.AuraConfig.CombinedAuraBarBounds(lane.auraBar, trailingBar)
+    end
     local iconStyle = lane.iconStyle
     local signature = RefreshSignature(unit, kind, cfg, metrics, textCfg, lane, frameSig)
         .. "\030" .. CustomPreviewEntriesSignature(entries) .. "\030" .. tostring(chrome)
         .. "\030" .. tostring(lane.padding) .. "\030" .. tostring(lane.iconH)
         .. "\030" .. tostring(lane.auraBar and lane.auraBar.auraBarFill)
         .. "\030" .. tostring(iconStyle and iconStyle.signature)
+    if lane.auraBar then
+        local appearance = lane.auraBar.auraBarAppearance
+        local visualRevision = A3._nativeColorInteraction and A3._nativeVisualInputRev or A3.GetNativeVisualSignature()
+        signature = signature .. "\030" .. tostring(visualRevision)
+        if appearance then
+            signature = signature .. "\030" .. appearance.signature
+            if kind == "debuff" then signature = signature .. "\030" .. A3.GetDispelColorPreviewType() end
+        end
+    end
+
+    if lane.trailingAuraBar then
+        signature = signature .. "\030" .. tostring(lane.firstBarCount) .. "\030" .. trailingBar._msufA3LayoutSignature
+            .. "\030" .. A3.GetDispelColorPreviewType()
+    end
 
     if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
         group._msufA3RefreshSignature = signature
@@ -686,6 +748,8 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
     group._msufA3AnimationShownIcons = shownIcons
     group._msufA3AnimationTextConfig = textCfg
     group._msufA3AnimationBarLane = lane.auraBar
+    group._msufA3AnimationFirstBarCount = lane.firstBarCount
+    group._msufA3AnimationTrailingBarLane = lane.trailingAuraBar
     ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
     if spec.customIndex then ApplyEditModeCustomEffect(group, frame, CustomItem(unit, spec.customIndex, false)) end
     group:Show()
@@ -715,8 +779,15 @@ function EM.RefreshUnit(unit)
 
     local chrome = EditPreviewActive()
     local runtimeConfig = A3.ResolveUnitFrameConfig(unit)
+    local _, trailingBar = MSUF.AuraConfig.CombinedAuraBarLanes(runtimeConfig and runtimeConfig.lanes)
     for kind, spec in pairs(GROUPS) do
-        RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeConfig)
+        if trailingBar and kind == "debuff" then
+            local byUnit = EM.groups and EM.groups[unit]
+            local group = byUnit and byUnit.debuff
+            if group then group:Hide() end
+        else
+            RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeConfig, kind == "buff" and trailingBar or nil)
+        end
     end
 end
 

@@ -348,6 +348,9 @@ local function MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
                 layoutShared[showBarsKey] = MSUF_Defaults_ReadAuraLegacyOwner(
                     oldSharedLayout, sharedLayoutActive, shared, showBarsKey)
                 layoutShared[fillKey] = MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive, shared, fillKey)
+                local styleKey = spec.prefix .. "AuraBarStyle"
+                MSUF_Defaults_WriteAuraOwnedValue(layoutShared, styleKey,
+                    MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive, shared, styleKey))
             end
 
             for j = 1, #MSUF_DEFAULTS_UNIT_AURA_STYLE_LAYOUT do

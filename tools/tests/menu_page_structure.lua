@@ -73,8 +73,8 @@ end
 -- Both current generated indexes retain all 8 relocated action identities below.
 -- 7.0.3: 28 Mainline and 27 Classic additions; all 7.021 identities retained.
 local indexes = {
-    -- Beta 1 adds Party Frames in Raid and the Retail-family Aura Bar controls.
-    { "", 4718, 3394570818 },
+    -- Beta 2 expands the Mainline and Forever aura bar catalog.
+    { "", 4879, 3985897938 },
     { "_Classic", 4255, 4263915646 },
 }
 local moved = {

@@ -323,10 +323,10 @@ A3.DispelSymbol = DS
 --- override is deliberately sparse: an absent entry falls straight through
 --- to AuraUtil, preserving Blizzard's current color without copying it into
 --- SavedVariables.
-function A3.GetDispelTypeColor(dispelType, useOverride)
+function A3.GetDispelTypeColor(dispelType, useOverride, inputs)
     dispelType = DS.defaultColors[dispelType] and dispelType or "Magic"
     if useOverride ~= false then
-        local general = MSUF_DB and MSUF_DB.general
+        local general = inputs and inputs.general or (MSUF_DB and MSUF_DB.general)
         local overrides = general and general.dispelTypeColorOverrides
         local color = type(overrides) == "table" and overrides[dispelType]
         if type(color) == "table" then

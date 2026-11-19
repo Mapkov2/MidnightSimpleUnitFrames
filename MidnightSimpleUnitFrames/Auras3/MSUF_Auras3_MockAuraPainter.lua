@@ -266,26 +266,192 @@ function Painter.AuraState(icon, kind, index, cfg, elapsed, duration, oneShot, p
     return fn(kind, index, scratch, options)
 end
 
--- Both the native button and the mock rows set the visual edge before binding a timer.
-function Painter.LayoutAuraBar(bar, owner, fill)
+local AURA_BAR_OUTLINE_SIDES = { "TOP", "BOTTOM", "LEFT", "RIGHT" }
+
+local function AutomaticAuraBarColor(kind, dispelType, mode, inputs)
+    local r, g, b
+    if dispelType and A3.DispelSymbol.defaultColors[dispelType] then
+        r, g, b = A3.GetDispelTypeColor(dispelType, true, inputs)
+    elseif kind == "debuff" then
+        r, g, b = 0.91, 0.28, 0.23
+    else
+        r, g, b = 0.28, 0.72, 0.49
+    end
+    if mode == "DARK" then return 0.05 + 0.36 * r, 0.05 + 0.36 * g, 0.05 + 0.36 * b, 1 end
+    return r, g, b, 1
+end
+
+function Painter.AuraBarFillColor(lane, dispelType, inputs)
+    local appearance = lane.auraBarAppearance
+    local mode = appearance and appearance.fillColorMode
+    if mode == "CUSTOM" then
+        local rgb = appearance.fillColor
+        return rgb[1], rgb[2], rgb[3], 0.86
+    end
+    if mode == "AUTO" or mode == "DARK" then return AutomaticAuraBarColor(lane.kind, dispelType, mode, inputs) end
+    if inputs then
+        local rgb = inputs.durationColor
+        return rgb[1], rgb[2], rgb[3], Painter.AURA_BAR_FILL_ALPHA
+    end
+    local r, g, b = A3.GetDurationBarColor()
+    return r, g, b, Painter.AURA_BAR_FILL_ALPHA
+end
+
+local function AuraBarOutlineColor(lane, appearance, dispelType, inputs)
+    if appearance.outlineColorMode == "AUTO" then
+        return AutomaticAuraBarColor(lane.kind, dispelType, "AUTO", inputs)
+    end
+    if appearance.outlineColor then
+        local rgb = appearance.outlineColor
+        return rgb[1], rgb[2], rgb[3], 1
+    end
+    if appearance.outlineTexture then return 1, 1, 1, 1 end
+    return 0, 0, 0, 0.9
+end
+
+-- Options are copied by Blizzard at binding. Build at most one palette per
+-- lane kind and mode for the current visual inputs, with no addon aura reads.
+local tintInputs, tintOptions = nil, {}
+local function AuraBarTintOptions(lane, mode)
+    local inputs = lane._msufA3NativeVisualInputs
+    if tintInputs ~= inputs then
+        tintInputs, tintOptions = inputs, {}
+    end
+    local kind = lane.kind
+    local key = kind .. mode
+    local options = tintOptions[key]
+    if options then return options end
+    local fallback = CreateColor(AutomaticAuraBarColor(kind, nil, mode, inputs))
+    local map = { None = fallback, [""] = fallback, Enrage = fallback }
+    local types = A3.DispelSymbol.types
+    for i = 1, #types do
+        local token = types[i]
+        map[token] = CreateColor(AutomaticAuraBarColor(kind, token, mode, inputs))
+    end
+    options = { showAlways = true, style = Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset, customDispelColorMap = map }
+    tintOptions[key] = options
+    return options
+end
+
+function Painter.BindAuraBarTints(button, bar, lane, fillTexture)
+    local appearance = lane.auraBarAppearance
+    if not appearance then return end
+    if fillTexture then button:AddDispelTypeTexture(fillTexture, AuraBarTintOptions(lane, appearance.fillColorMode)) end
+    if appearance.outlineColorMode ~= "AUTO" then return end
+    local pieces = appearance.outlineTexture and bar._msufA3AuraBarEdge or bar._msufA3AuraBarStrips
+    local options = AuraBarTintOptions(lane, "AUTO")
+    for i = 1, #pieces do button:AddDispelTypeTexture(pieces[i], options) end
+end
+
+local function HideOutline(pieces)
+    if not pieces then return end
+    for i = 1, #pieces do pieces[i]:Hide() end
+end
+
+local function LayoutSolidOutline(bar, size, r, g, b, a)
+    local strips = bar._msufA3AuraBarStrips
+    if not strips then
+        strips = {}
+        bar._msufA3AuraBarStrips = strips
+    end
+    for i = 1, #AURA_BAR_OUTLINE_SIDES do
+        local strip = strips[i]
+        if not strip then
+            strip = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY"))
+            strip:SetTexture(WHITE)
+            strips[i] = strip
+        end
+        strip:SetVertexColor(r, g, b, a)
+        strip:ClearAllPoints()
+        MSUF.BorderStyles.LayoutEdgeStrip(strip, bar, AURA_BAR_OUTLINE_SIDES[i], size)
+        strip:Show()
+    end
+end
+
+local function LayoutAuraBarOutline(bar, lane, dispelType, inputs)
+    local appearance = lane and lane.auraBarAppearance
+    local size = appearance and appearance.outlineSize
+    local texture = appearance and appearance.outlineTexture
+    if not texture then HideOutline(bar._msufA3AuraBarEdge) end
+    if not size or texture then HideOutline(bar._msufA3AuraBarStrips) end
+    if not size then return end
+    local r, g, b, a = AuraBarOutlineColor(lane, appearance, dispelType, inputs)
+    if texture then
+        local borders = MSUF.BorderStyles
+        local edge = bar._msufA3AuraBarEdge
+        if not edge then
+            edge = borders.Create(bar, "OVERLAY", 0, texture)
+            bar._msufA3AuraBarEdge = edge
+        elseif bar._msufA3AuraBarEdgeTexture ~= texture then
+            borders.SetTexture(edge, texture)
+        end
+        bar._msufA3AuraBarEdgeTexture = texture
+        borders.Apply(edge, bar, size, appearance.barWidth, appearance.barHeight, r, g, b, a, size * 0.5)
+    else
+        LayoutSolidOutline(bar, size, r, g, b, a)
+    end
+end
+
+-- Configure artwork and the visual edge before the timer binds to the bar.
+function Painter.LayoutAuraBar(bar, owner, lane, dispelType, inputs)
+    local fill, appearance = lane.auraBarFill, lane.auraBarAppearance
     local vertical = fill == "UP" or fill == "DOWN"
     bar:ClearAllPoints()
-    bar:SetAllPoints(owner)
+    if appearance and (appearance.left ~= 0 or appearance.right ~= 0) then
+        bar:SetPoint("TOPLEFT", owner, "TOPLEFT", appearance.left, 0)
+        bar:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", -appearance.right, 0)
+    else
+        bar:SetAllPoints(owner)
+    end
     bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
     bar:SetReverseFill(fill == "LEFT" or fill == "DOWN")
+    local texture = appearance and appearance.texture
+    if bar._msufA3AuraBarTexture ~= texture then
+        bar:SetStatusBarTexture(texture or WHITE)
+        bar._msufA3AuraBarTexture = texture
+    end
+    LayoutAuraBarOutline(bar, lane, dispelType, inputs)
     local background = bar._msufA3AuraBarBackground
     if not background then
         background = bar:CreateTexture(nil, "BACKGROUND")
         background:SetAllPoints(bar)
-        background:SetColorTexture(0.08, 0.08, 0.08, 0.85)
         bar._msufA3AuraBarBackground = background
+    end
+    local dark = appearance ~= nil and appearance.fillColorMode == "DARK"
+    if bar._msufA3DarkBarBackground ~= dark then
+        bar._msufA3DarkBarBackground = dark
+        local shade = dark and 0.025 or 0.08
+        background:SetColorTexture(shade, shade, shade, dark and 0.95 or 0.85)
     end
     background:Show()
 end
 
+function Painter.ClearAuraBarDecoration(bar)
+    local background = bar._msufA3AuraBarBackground
+    if not background then return end
+    background:Hide()
+    bar:SetOrientation("HORIZONTAL")
+    if bar._msufA3AuraBarTexture then
+        bar:SetStatusBarTexture(WHITE)
+        bar._msufA3AuraBarTexture = nil
+    end
+    LayoutAuraBarOutline(bar)
+end
+
+function Painter.LayoutAuraBarIcon(icon, owner, lane)
+    local appearance = lane.auraBarAppearance
+    local anchor, size = appearance.iconAnchor, appearance.iconSize
+    icon:ClearAllPoints()
+    icon:SetPoint(anchor, owner, anchor, appearance.iconX, 0)
+    icon:SetSize(size, size)
+    Painter.IconZoom(icon, lane.iconZoom, size, size)
+    icon:Show()
+end
+
 function Painter.LayoutAuraBarName(text, owner, lane)
     text:ClearAllPoints()
-    text:SetPoint("LEFT", owner, "LEFT", 4, 0)
+    local appearance = lane.auraBarAppearance
+    text:SetPoint("LEFT", owner, "LEFT", appearance and appearance.nameLeft or 4, 0)
     text:SetPoint("RIGHT", owner, "RIGHT", -lane.auraBarNameInset, 0)
     text:SetJustifyH("LEFT")
     text:SetWordWrap(false)
@@ -309,22 +475,37 @@ local function EnsureAuraBarSample(owner)
     return bar
 end
 
-function Painter.PaintAuraBarSample(owner, lane, kind, showText)
+local function PaintAuraBarSampleIcon(bar, owner, lane, texture)
+    local icon = bar._msufA3AuraBarIcon
+    if lane.auraBarAppearance and lane.auraBarAppearance.iconAnchor and texture then
+        if not icon then
+            icon = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY", nil, 2))
+            bar._msufA3AuraBarIcon = icon
+        end
+        icon:SetTexture(texture)
+        Painter.LayoutAuraBarIcon(icon, owner, lane)
+    elseif icon then
+        icon:Hide()
+    end
+end
+
+function Painter.PaintAuraBarSample(owner, lane, kind, showText, texture, index)
     local bar = EnsureAuraBarSample(owner)
-    Painter.LayoutAuraBar(bar, owner, lane.auraBarFill)
-    local r, g, b = A3.GetDurationBarColor()
-    bar:SetStatusBarColor(r, g, b, Painter.AURA_BAR_FILL_ALPHA)
+    local dispelType = kind == "debuff" and A3.PreviewDispelTypeForIndex(index) or nil
+    Painter.LayoutAuraBar(bar, owner, lane, dispelType)
+    PaintAuraBarSampleIcon(bar, owner, lane, texture)
+    bar:SetStatusBarColor(Painter.AuraBarFillColor(lane, dispelType))
     local ApplyFont = A3.ApplyAuraBarFont
     ApplyFont(bar.name, min(12, lane.buttonHeight - 2), lane)
     ApplyFont(bar.time, lane.cooldownSize, lane)
     ApplyFont(bar.stacks, lane.stackSize, lane)
-    Painter.LayoutAuraBarName(bar.name, bar, lane)
+    Painter.LayoutAuraBarName(bar.name, owner, lane)
     bar.name:SetText(Painter.AuraBarSampleName(kind))
     bar.time:ClearAllPoints()
-    bar.time:SetPoint("RIGHT", bar, "RIGHT", lane.cooldownX, 0)
+    bar.time:SetPoint("RIGHT", owner, "RIGHT", lane.cooldownX, 0)
     bar.time:SetShown(showText and lane.showCooldownText == true)
     bar.stacks:ClearAllPoints()
-    bar.stacks:SetPoint("RIGHT", bar, "RIGHT", lane.stackX, 0)
+    bar.stacks:SetPoint("RIGHT", owner, "RIGHT", lane.stackX, 0)
     bar.stacks:SetShown(showText and lane.showStacks == true)
     bar:Show()
 end
@@ -457,7 +638,7 @@ function Workbench:Paint(cfg, count, kind, style, textures)
         lane.showTooltip = false
     elseif cfg.auraBarFill then
         lane.max = cfg.maxIcons
-        MSUF.AuraConfig.ApplyAuraBarGeometry(lane, cfg.auraBarFill, cfg.compactAuraBars)
+        MSUF.AuraConfig.ApplyAuraBarGeometry(lane, cfg.auraBarFill, cfg.compactAuraBars, cfg.auraBarStyle)
     end
     self.config, self.frame = lane, self.canvas
     local native = A3.Runtime and A3.Runtime.ButtonVisuals
@@ -467,7 +648,8 @@ function Workbench:Paint(cfg, count, kind, style, textures)
         self.samples[i] = sample
         sample.index, sample.duration, sample.remaining = i, 20, i % 2 == 0 and 12 or 2.7
         sample.expirationTime, sample.applications = GetTime() + sample.remaining, i % 3 == 1 and 2 or 0
-        sample.auraInstanceID, sample.dispelName = i, A3.PreviewDispelTypeForIndex(i)
+        sample.auraInstanceID = i
+        sample.dispelName = (kind == "debuff" or not lane.auraBarFill) and A3.PreviewDispelTypeForIndex(i) or nil
         sample.icon = textures[((i - 1) % #textures) + 1]
         if lane.auraBarFill then sample.name = Painter.AuraBarSampleName(kind) end
         sample.pandemic = cfg.pandemicEnabled == true and i == 1

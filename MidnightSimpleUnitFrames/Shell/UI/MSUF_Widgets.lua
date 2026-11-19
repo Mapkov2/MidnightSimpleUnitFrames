@@ -85,7 +85,8 @@ function UI.NormalizeFontSize(size)
 end
 function UI.ApplyFontSize(fs, roleOrSize, fontPath, flags)
     if not (fs and fs.SetFont) then return fs end
-    local currentFont, _, currentFlags = fs.GetFont and fs:GetFont()
+    local currentFont, _, currentFlags
+    if fs.GetFont then currentFont, _, currentFlags = fs:GetFont() end
     fs:SetFont(fontPath or currentFont or FONT, UI.FontSize(roleOrSize), flags or currentFlags or "")
     return fs
 end
@@ -120,7 +121,8 @@ end
 function UI.ApplyFontRole(fs, role, fallback, flags)
     if not (fs and fs.SetFont) then return fs end
     role = type(role) == "string" and role or "body"
-    local currentFont, _, currentFlags = fs.GetFont and fs:GetFont()
+    local currentFont, _, currentFlags
+    if fs.GetFont then currentFont, _, currentFlags = fs:GetFont() end
     local size = UI.FontSize(role)
     local fontPath = UI.ResolveConfiguredFontPath(role, fallback or currentFont or FONT, size, flags or currentFlags or "")
     local applied = SetFontChecked(fs, fontPath or fallback or currentFont or FONT, size, flags or currentFlags or "")
@@ -226,7 +228,8 @@ function UI.Font(parent, template, text, color, role)
     local theme = UI.GetMenu2Theme()
     if theme and theme.Font then return theme.Font(parent, template or "GameFontHighlight", text or "", color or UI.Color("text", UI.colors.text), role) end
     local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"))
-    local _, inheritedSize = fs.GetFont and fs:GetFont()
+    local _, inheritedSize
+    if fs.GetFont then _, inheritedSize = fs:GetFont() end
     if role then
         UI.ApplyFontRole(fs, role)
     else

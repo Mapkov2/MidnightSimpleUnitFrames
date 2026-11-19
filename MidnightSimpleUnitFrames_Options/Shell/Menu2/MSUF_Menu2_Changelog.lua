@@ -28,7 +28,8 @@ local function ChangelogData()
     return UsableHistory(MSUF.MSUF_FullChangelog) or UsableHistory(MSUF.MSUF_Changelog)
 end
 
--- The optional Suite owns its release history and exposes it from its core addon.
+-- The optional Suite owns its release history. It loads with MSUF_Suite_Options,
+-- which the Suite attaches as soon as this options addon has loaded.
 local function SuiteChangelogData()
     return UsableHistory(MSUF.SuiteLink.GetChangelog())
 end

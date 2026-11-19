@@ -34,7 +34,7 @@ local EFFECT_ROOT_KEYS = {
     "LaneEffects", "LaneEffectsAssist", "LaneEffectsHostile",
     "TargetDotEffects", "TargetDotEffectsAssist", "TargetDotEffectsHostile",
 }
-local UNIT_OWNER_KEYS = { "DispelSensor", "DispelSensorNeutral", "DispelSensorHostile" }
+local UNIT_OWNER_KEYS = { "DispelSensor", "DispelSensorNeutral", "DispelSensorHostile", "GroupAuraFlow" }
 local GROUP_OWNER_KEYS = { "GroupSlots", "GroupAuraAssist", "GroupAuraHostile", "GroupAuraFlow" }
 
 -- One native owner per identity polarity: the container is the alpha sink of
@@ -108,6 +108,28 @@ local function GetUnitDispelSensorRootConfig(cfg, identityCandidateMode)
     cfg[cacheKey] = cached or false
     return cached
 end
+local function CombinedAuraBarOwner(cfg)
+    local buff, debuff = MSUF.AuraConfig.CombinedAuraBarLanes(cfg.lanes)
+    if not buff then return end
+    local geometry = {}
+    for key, value in pairs(buff) do geometry[key] = value end
+    geometry.combinedAuraBarFlow = true
+    geometry.max = buff.max + debuff.max
+    geometry.width, geometry.height = MSUF.AuraConfig.CombinedAuraBarBounds(buff, debuff)
+    geometry._msufA3LayoutSignature = buff._msufA3LayoutSignature .. "\028" .. debuff._msufA3LayoutSignature
+    return {
+        kind = "combinedAuraBars", rootKey = "GroupAuraFlow", unit = buff.unit,
+        flowLane = buff, trailingFlowLane = debuff, flowGeometry = geometry,
+        ownedLaneKeys = { [buff.rootKey] = true, [debuff.rootKey] = true },
+        _msufA3StructuralSignature = table_concat({ "combinedAuraBars", buff._msufA3StructuralSignature,
+            debuff._msufA3StructuralSignature, tostring(buff.alpha), tostring(debuff.alpha) }, "\028"),
+    }
+end
+
+local function UsesSeparateOwner(lane, buff, debuff)
+    return lane and lane.enabled == true and lane ~= buff and lane ~= debuff
+end
+
 local function BuildGroupAuraOwner(cfg, assistMode, includeFixed, rootKey, spellRootOverride)
     local sensorRoot = assistMode ~= nil and BuildDispelSensorRootConfig(cfg.sensors, assistMode)
         or (includeFixed and assistMode == nil and GetDispelSensorRootConfig(cfg)) or nil
@@ -117,12 +139,13 @@ local function BuildGroupAuraOwner(cfg, assistMode, includeFixed, rootKey, spell
     end
     local slotLanes, flowLane, ownedLaneKeys, signatureParts
     local lanes = cfg.lanes
+    local joinedBuff, joinedDebuff = MSUF.AuraConfig.CombinedAuraBarLanes(lanes)
     local order = A3._normalAuraLaneOrder
     for i = 1, #order do
         local lane = lanes and lanes[order[i]]
         local laneAssistMode = cfg.groupAssistGate == true and lane and lane.groupAccessGate == true
             and lane.identityCandidateMode or nil
-        if lane and lane.enabled == true and laneAssistMode == assistMode then
+        if UsesSeparateOwner(lane, joinedBuff, joinedDebuff) and laneAssistMode == assistMode then
             if lane.max == 1 then
                 slotLanes = slotLanes or {}
                 slotLanes[#slotLanes + 1] = lane
@@ -220,9 +243,10 @@ local function AttachUnitLanes(cfg, sensorRoot)
     local flow, slots, owned
     local parts = { sensorRoot._msufA3StructuralSignature }
     local lanes = cfg.lanes
+    local joinedBuff, joinedDebuff = MSUF.AuraConfig.CombinedAuraBarLanes(lanes)
     for i = 1, #A3._normalAuraLaneOrder do
         local lane = lanes and lanes[A3._normalAuraLaneOrder[i]]
-        if lane and lane.enabled == true and lane.identityCandidateMode == sensorRoot.identityCandidateMode
+        if UsesSeparateOwner(lane, joinedBuff, joinedDebuff) and lane.identityCandidateMode == sensorRoot.identityCandidateMode
             and lane.portraitOverlay ~= true and lane.customPriority ~= true
             and lane.weaponEnchants ~= true and not lane.sourceSpellIDs
             and (lane.max == 1 or not flow) then
@@ -251,6 +275,7 @@ local function GetNativeOwnerPlan(cfg)
     local group = cfg.group == true
     local plan = { keys = group and GROUP_OWNER_KEYS or UNIT_OWNER_KEYS, owners = {}, ownedLaneKeys = {} }
     local owners = plan.owners
+    owners.GroupAuraFlow = CombinedAuraBarOwner(cfg)
     if group then
         local primary = GetGroupSlotsRootConfig(cfg)
         if primary then

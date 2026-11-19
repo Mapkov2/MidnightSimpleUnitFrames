@@ -179,7 +179,7 @@ function Stage.PrepareAuraHandle(st, handle, groupKey, cfg)
     local scene, frame = st.scene, st.scene.mock._cell
     local hosts = frame and frame._msufGFFrameAuraPreviewHosts
     local host = hosts and hosts[groupKey]
-    if not host then handle:Hide() return nil end
+    if not host or (groupKey == "debuff" and frame._msufGFCombinedAuraBars) then handle:Hide() return nil end
     -- Restore engine ownership before measuring the configured layout. A previous
     -- drag may have parented the host to its interaction handle.
     local scale = scene.previewScale
@@ -193,7 +193,7 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg)
     -- Engine aura visuals are pooled on the cell, with anchors in the lane host.
     -- Adopt them into that host once; native parent motion then follows a drag.
     for _, visual in ipairs(frame._msufGFFrameAuraPreviews or {}) do
-        if visual._sceneAuraLane == cfg and visual:GetParent() ~= host then visual:SetParent(host) end
+        if visual._sceneAuraLayoutHost == host and visual:GetParent() ~= host then visual:SetParent(host) end
     end
     M.PreviewHelpers.BindGroupSceneHandle(handle, st.scene.mock, host, scale, cfg.anchor)
     handle._previewWriteScale = scale * ((st.scene.runtimeAuras and st.scene.runtimeAuras.dynamicScaleValue) or 1)

@@ -5,6 +5,7 @@
 -- Its 132px outer card adds 154px to ordinary flow and 140px where the previous
 -- style/first-view layout already retained 14px padding. With the card suppressed,
 -- all original heights still match across the complete release matrix.
+-- In Beta 2 Retail and Forever put both bar controls and the new appearance settings in Bars.
 -- Returns Expected(flavor, unit, contextualVisibility) -> function(lane, tool, slot) -> height.
 return function(flavor, unit, contextualVisibility)
     local classic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists"
@@ -12,6 +13,7 @@ return function(flavor, unit, contextualVisibility)
     local normal = {
         layout = 408, behavior = 356, filters = classic and 318 or 456, blacklist = 820,
         style = classic and 1464 or 1714,
+        bars = not classic and 892 or nil,
     }
     local custom = { setup = 722, layout = 390, behavior = 390, filters = 456, whitelist = player and 968 or 630, style = 1302 }
     local custom4 = {
@@ -21,10 +23,6 @@ return function(flavor, unit, contextualVisibility)
     return function(lane, tool, slot)
         local expected = (lane == "buff" or lane == "debuff") and normal[tool] or (lane == "custom4" and custom4[tool] or custom[tool])
         if lane == "buff" and tool == "layout" and slot == 1 then expected = 422 end
-        -- Retail and Forever add a row for aura bars and their fill direction.
-        if not classic and (lane == "buff" or lane == "debuff") and tool == "layout" then
-            expected = expected + 56
-        end
         if lane == "buff" and tool == "style" and not player then expected = expected + 34 end
         if lane == "debuff" and tool == "blacklist" and player then expected = 646 end
         local diagnostic = player and lane == "custom4" or not player and (lane == "buff" or lane == "debuff")

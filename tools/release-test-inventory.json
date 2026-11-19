@@ -1465,6 +1465,17 @@
       ]
     },
     {
+      "test": "tools/tests/menu_font_flags_colorfield_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/power_text_slot_sync_smoke.lua",
       "phase": "menu",
       "clients": [

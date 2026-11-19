@@ -46,7 +46,9 @@ if mode == "declarations" then
         end
         assert(declaration.sectionUX and declaration.sectionUX.sections, "area lost its section UX declaration")
     end
-    assert(#entry.pageAreas.auras.declaration.values == 34 and #entry.pageAreas.texture.declaration.values == 3)
+    local hasBars = flavor == "Mainline" or flavor == "Forever"
+    assert(#entry.pageAreas.auras.declaration.values == (hasBars and 36 or 34))
+    assert(#entry.pageAreas.texture.declaration.values == 3)
     local control = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.spacing"
     assert(not entry.sections.auras._msuf2CollapsibleEntry.open and not entry.guidedRegions.unit_aura_tools
         and not M.RuntimeControlCatalog.Get(control), "closed aura workspace constructed its controls")

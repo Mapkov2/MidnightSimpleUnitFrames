@@ -1,6 +1,6 @@
 file	start	end	reason
-MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua	375	404	Live aura group/slot identity rebind filter gate; keep fail-closed native filter ordering inline; local function UpdateAuraGroupEffectiveFilters(container, lane)
-MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua	407	433	Live aura group/slot identity rebind filter gate; keep fail-closed native filter ordering inline; local function UpdateAuraSlotEffectiveFilters(container, lane)
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua	382	412	Live aura group/slot identity rebind filter gate; keep fail-closed native filter ordering inline; local function UpdateAuraGroupEffectiveFilters(container, lane, state)
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua	415	441	Live aura group/slot identity rebind filter gate; keep fail-closed native filter ordering inline; local function UpdateAuraSlotEffectiveFilters(container, lane)
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_GroupConfig.lua	119	258	Live aura identity resolver cache-hit/rebuild stamps; preserve per-event call topology; local function ResolveGroupFrameConfig(frame, unit)
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Identity.lua	472	488	One-shot event-triggered aura identity/reveal callback; retain distinct refresh/reveal stages; Identity.FlushGroupAuraAssistReveal = function()
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Identity.lua	504	529	One-shot event-triggered aura identity/reveal callback; retain distinct refresh/reveal stages; Identity.FlushScheduledGroupAuraAssistRefresh = function()

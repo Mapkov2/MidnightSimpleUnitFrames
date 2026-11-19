@@ -293,7 +293,10 @@ end
 local function ColorField(parent, width, height)
     local field = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     field:SetSize(width, height)
-    local fill, edge = T.CreateSuperellipseLayers and T.CreateSuperellipseLayers(field, "_msuf2PickerField", 2, "ARTWORK", "BORDER")
+    local fill, edge
+    if T.CreateSuperellipseLayers then
+        fill, edge = T.CreateSuperellipseLayers(field, "_msuf2PickerField", 2, "ARTWORK", "BORDER")
+    end
     if not (fill and edge) then
         edge = PixelLayoutRegion(field:CreateTexture(nil, "BORDER"))
         edge:SetAllPoints()

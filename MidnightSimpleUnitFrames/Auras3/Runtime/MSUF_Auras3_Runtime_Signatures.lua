@@ -159,6 +159,8 @@ LaneButtonSignature = function(lane, sharedSignatures)
         local field = OPTIONAL_BUTTON_FIELDS[index]
         if lane[field] ~= nil then optional = optional .. "\030" .. field .. ":" .. tostring(lane[field]) end
     end
+    local barAppearance = lane.auraBarAppearance
+    if barAppearance then optional = optional .. "\030" .. barAppearance.signature end
     local signature = FieldsSignature(lane, buttonFields, buttonParts)
         .. "\030" .. tostring(A3.GetNativeVisualSignature and A3.GetNativeVisualSignature() or "0")
         .. optional

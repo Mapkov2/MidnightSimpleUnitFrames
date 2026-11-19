@@ -511,7 +511,7 @@ local function BuildGroupStyleDurationBar(G)
     if iconTimerOnly then
         local path = "group-style.lane." .. AuraCatalogToken(lane) .. ".durationbardisplay"
         M.AuraControls.AddAuraBarLayoutShortcut(ctx, durationBar, path, "groups", durationChoiceWidth, function()
-            GP.OpenAuraLaneLayout(ctx, lane)
+            GP.OpenAuraBarWorkspace(ctx, lane)
         end)
     else
         AddTooltip(BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, durationChoiceWidth,

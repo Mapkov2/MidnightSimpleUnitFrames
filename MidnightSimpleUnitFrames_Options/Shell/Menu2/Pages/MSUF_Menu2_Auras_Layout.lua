@@ -144,15 +144,19 @@ M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debu
     UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_WORKSPACE_TABS_PET = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3",
     UNIT_AURA_CHOICE_WIDTH)
+local HAS_AURA_BARS = MSUF.Client.IsRetail == true
 local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|behavior=Ordering|filters=Filters|blacklist=Blacklist|style=Style",
     UNIT_AURA_CHOICE_WIDTH)
+if HAS_AURA_BARS then
+    UNIT_AURA_NORMAL_TOOLS[#UNIT_AURA_NORMAL_TOOLS + 1] = { value = "bars", text = "Bars", width = UNIT_AURA_CHOICE_WIDTH }
+end
 local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|whitelist=Whitelist|style=Style",
     UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|dots=Dots|style=Style",
     UNIT_AURA_CHOICE_WIDTH)
 M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|defensives=Defensives|style=Style",
     UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = true, style = true }
+local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = true, style = true, bars = HAS_AURA_BARS }
 local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, behavior = true, whitelist = true, filters = true, layout = true, style = true }
 local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, behavior = true, filters = true, dots = true, style = true }
 M._unitAuraPlayerDefensiveToolOK = { setup = true, layout = true, behavior = true, filters = true, defensives = true, style = true }
@@ -235,38 +239,34 @@ function M.UnitAuraWorkspaceView(unit)
     return UNIT_AURA_VIEWS[tab][tool]
 end
 
-local HAS_AURA_BARS = MSUF.Client.IsRetail == true
-
-local function BuildUnitAuraBarRows(ctx, section, unit, kind, width, LaneMeta)
-    if not HAS_AURA_BARS then return end
-    local function Refresh()
-        ApplyUnit(ctx, unit, "AURAS3_BAR_PRESENTATION", true)
-    end
-    local function BarRow(row, suffix, convert)
-        LaneMeta(row, suffix)
-        -- UnitLayoutSetting lists the physical lane key first, followed by
-        -- ownership flags and additional members of the boss or arena family.
-        local path = row.setting.keys[1]
-        row.write = { call = Model.WriteValue, context = unit, resolve = function() return path end,
-            boolean = row.kind == "toggle", convert = convert, after = Refresh }
-        row.set = M.ControlSchema.Setter({
-            id = row.controlId, kind = row.kind, setting = row.setting, write = row.write,
-        })
-        return row
-    end
-    return W.SettingsRows(ctx, section, {
-        x = 24, y = -204, width = width, columns = 2, colGap = 12,
-        rows = {
-            BarRow({
-                kind = "toggle", label = "Show as Bars", id = "showAuraBars", default = false,
-                get = function() return Model.ReadLaneAuraBars(unit, kind) end,
-            }, "show-as-bars"),
-            BarRow({
-                kind = "dropdown", label = "Fill Direction", id = "auraBarFill", default = "RIGHT",
-                values = M.AuraControls.AURA_BAR_FILL_VALUES,
-                get = function() return Model.ReadLaneAuraBarFill(unit, kind) end,
-            }, "aura-bar-fill", MSUF.AuraConfig.NormalizeAuraBarFill),
-        },
+local function BuildUnitAuraBars(ctx, b, unit, kind)
+    local controls = M.AuraControls
+    local savedStyle = MSUF.MSUF_Auras3.LaneKeySchema.LANE_SPECS[kind].auraBarStyleKey
+    controls.BuildAuraBarWorkspace(ctx, b, kind, {
+        scope = "auras", path = "unit-workspace.lane." .. AuraCatalogToken(kind),
+        shown = function() return UnitLaneShown(unit, kind) end,
+        followsBuff = kind == "debuff" and function()
+            local cfg = MSUF.MSUF_Auras3.ResolveUnitFrameConfig(unit)
+            return MSUF.AuraConfig.CombinedAuraBarLanes(cfg and cfg.lanes) ~= nil
+        end,
+        get = function(key)
+            if key == "showAuraBars" then return Model.ReadLaneAuraBars(unit, kind) end
+            if key == "auraBarFill" then return Model.ReadLaneAuraBarFill(unit, kind) end
+            return Model.ReadLaneAuraBarStyle(unit, kind)
+        end,
+        set = function(key, value)
+            if key == "showAuraBars" then Model.WriteLaneAuraBars(unit, kind, value)
+            elseif key == "auraBarFill" then Model.WriteLaneAuraBarFill(unit, kind, value)
+            else Model.WriteLaneAuraBarStyle(unit, kind, value) end
+            ApplyUnit(ctx, unit, "AURAS3_BAR_PRESENTATION", true)
+        end,
+        contract = function(key, field)
+            if key ~= "auraBarStyle" then return end
+            return {
+                setting = controls.UnitLayoutSetting(unit, { savedStyle }),
+                searchSettingKeys = { "auras3." .. unit .. "." .. kind .. ".auraBarStyle." .. field },
+            }
+        end,
     })
 end
 
@@ -276,7 +276,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     -- Stufe-1 pilot: this section renders through the uniform W.SettingsRows
     -- grid (fixed cell metrics, per-value reset) instead of hand-placed
     -- offsets. Control identities, setters and apply reasons are unchanged.
-    local section = b:Section(titleKey, HAS_AURA_BARS and 264 or 208)
+    local section = b:Section(titleKey, 208)
     M.AttachAuraFontsAndColors(section, title, unit)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -385,8 +385,6 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     end
     CollectRows(anchorRows)
     CollectRows(numberRows)
-    local barRows = BuildUnitAuraBarRows(ctx, section, unit, kind, inner, LaneMeta)
-    CollectRows(barRows)
     local perRowControl = numberRows and numberRows.controls and numberRows.controls.perRow
     M.TrackRefresh(ctx, function()
         local shown = UnitLaneShown(unit, kind)
@@ -395,11 +393,10 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         local growth = type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind)
             or Model.ReadLaneGrowth(unit, kind)
         growth = tostring(growth or ""):upper()
-        local asBars = barRows and Model.ReadLaneAuraBars(unit, kind)
+        local asBars = HAS_AURA_BARS and Model.ReadLaneAuraBars(unit, kind)
         if perRowControl then
             W.SetControlEnabled(perRowControl, shown and not asBars and growth ~= "UP" and growth ~= "DOWN")
         end
-        if barRows then W.SetControlEnabled(barRows.controls.auraBarFill, shown and asBars == true) end
     end)
 end
 local function CreateHidePermanentWriter(ctx, unit, lane)
@@ -606,6 +603,7 @@ Parts.BuildAuraStyleLanePage = BuildAuraStyleLanePage
 Parts.BuildAuraStylePage = BuildAuraStylePage
 Parts.BuildCompactUnitAuraFilters = BuildCompactUnitAuraFilters
 Parts.BuildCompactUnitAuraLayout = BuildCompactUnitAuraLayout
+Parts.BuildUnitAuraBars = BuildUnitAuraBars
 Parts.BuildUnitOrdering = BuildUnitOrdering
 Parts.CurrentUnitAuraTab = CurrentUnitAuraTab
 Parts.CurrentUnitAuraTool = CurrentUnitAuraTool

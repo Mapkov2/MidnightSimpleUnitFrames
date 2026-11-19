@@ -73,6 +73,8 @@ local GF_AURA_WORKSPACE_TOOLS = {
     { value = "blacklist", text = "Blacklist" },
     { value = "style", text = "Style" },
 }
+local HAS_AURA_BARS = MSUF.Client.IsRetail == true
+if HAS_AURA_BARS then GF_AURA_WORKSPACE_TOOLS[#GF_AURA_WORKSPACE_TOOLS + 1] = { value = "bars", text = "Bars" } end
 local GF_AURA_EXTERNAL_TOOLS = {
     { value = "layout", text = "Layout" },
     { value = "behavior", text = "Ordering" },
@@ -87,7 +89,9 @@ local GF_AURA_WORKSPACE_LANES = {
 -- Helpful auras on friendly group units were already eligible; NeverSecret
 -- harmful auras such as Sated/Exhaustion are now eligible there as well.
 local GF_AURA_BLACKLIST_AVAILABLE = true
-local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE, style = true }
+local GF_AURA_WORKSPACE_TOOL_OK = {
+    layout = true, behavior = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE, style = true, bars = HAS_AURA_BARS,
+}
 local GF_AURA_EXTERNAL_TOOL_OK = { layout = true, behavior = true, style = true }
 local function AuraWorkspaceTools(lane)
     return lane == "externals" and GF_AURA_EXTERNAL_TOOLS or GF_AURA_WORKSPACE_TOOLS
@@ -137,10 +141,10 @@ end
 local function RebuildGroupAuraPage(ctx)
     M.RebuildPageKeepingScroll((ctx and ctx.key) or M.activeKey or "gf_auras")
 end
-function GP.OpenAuraLaneLayout(ctx, lane)
+function GP.OpenAuraBarWorkspace(ctx, lane)
     local scope = CurrentScope()
     SetAuraWorkspaceLane(scope, lane)
-    SetAuraWorkspaceTool(scope, lane, "layout")
+    SetAuraWorkspaceTool(scope, lane, "bars")
     RebuildGroupAuraPage(ctx)
 end
 local GROUP_AURA_VIEWS = {}
@@ -527,25 +531,45 @@ local function BuildLaneLayoutRow(L, kind, key, fallback, args, place, path, rou
     L.controls[#L.controls + 1] = widget
     return widget
 end
-local function BuildGroupAuraBarSwitch(L, width)
-    local ctx, lane = L.ctx, L.lane
-    local meta = LaneLayoutMeta(ctx, lane, "show-as-bars", {
-        searchSettingKeys = GroupAuraSettingKeys(L.scope, ".auras." .. lane .. ".showAuraBars"),
-    })
-    local widget = Schema.Build(ctx, L.section, {{ "switch", "showAuraBars", false, { "Show as Bars", 24, -218, width },
-        bind = function(control)
-            BindAuraWidget(ctx, control, "toggle", function() return AuraGroup(CurrentScope(), lane).showAuraBars == true end,
-                function(value)
-                    if CombatLocked() then return end
-                    local scope = CurrentScope()
-                    AuraGroup(scope, lane).showAuraBars = value == true
-                    QueueGF(scope, "auras")
-                    RefreshAuraPreviews(scope)
-                    RefreshContext(ctx)
-                end, false, meta)
+local function BuildGroupAuraBars(ctx, b, scope, lane)
+    local A = MSUF.AuraConfig
+    local previewFrame = lane == "debuff" and { _msufGFIsPreviewFrame = true, MSUFUnitKey = "player" }
+    M.AuraControls.BuildAuraBarWorkspace(ctx, b, lane, {
+        scope = "groups", path = "group-workspace.lane." .. AuraCatalogToken(lane),
+        shown = function() return LaneBackendEnabled(CurrentScope(), lane) end,
+        followsBuff = previewFrame and function()
+            local active = CurrentScope()
+            local buffs = AuraGroup(active, "buff")
+            if not (buffs.showAuraBars and A.ReadAuraBarStyle(buffs.auraBarStyle, "combineDebuffs")) then return false end
+            previewFrame._msufGFKind = active
+            previewFrame.MSUFSpec = MSUF.GF.GetCompiledSpec(active)
+            local cfg = MSUF.MSUF_Auras3.ResolveAuraPreviewConfig(previewFrame, "player")
+            return A.CombinedAuraBarLanes(cfg and cfg.lanes) ~= nil
         end,
-    }}, ROW_OPTIONS).showAuraBars
-    L.controls[#L.controls + 1] = widget
+        get = function(key)
+            local group = AuraGroup(CurrentScope(), lane)
+            if key == "showAuraBars" then return group.showAuraBars == true end
+            if key == "auraBarFill" then return A.NormalizeAuraBarFill(group.auraBarFill) end
+            return group.auraBarStyle
+        end,
+        set = function(key, value)
+            if CombatLocked() then return end
+            local active = CurrentScope()
+            AuraGroup(active, lane)[key] = value
+            QueueGF(active, "auras")
+            RefreshAuraPreviews(active)
+            RefreshContext(ctx)
+        end,
+        contract = function(key, field)
+            local base = ".auras." .. lane .. "."
+            local route = { searchSettingKeys = GroupAuraSettingKeys(scope, base .. key) }
+            if key == "auraBarStyle" then
+                route.setting = M.ControlSchema.GroupKeys(base:sub(2) .. key)
+                route.searchSettingKeys = GroupAuraSettingKeys(scope, base .. key .. "." .. field)
+            end
+            return route
+        end,
+    })
 end
 
 local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
@@ -556,8 +580,8 @@ local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
     local defaults = AURA_LAYOUT_DEFAULTS[lane] or AURA_LAYOUT_DEFAULTS.debuff
     local title = lane == "debuff" and "Debuff Layout"
         or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
-    local hasAuraBars = lane ~= "externals" and MSUF.Client.IsRetail == true
-    local section = auraBuilder:Section(title, hasAuraBars and 256 or 202)
+    local hasAuraBars = lane ~= "externals" and HAS_AURA_BARS
+    local section = auraBuilder:Section(title, 202)
     local w = section._msuf2Width or auraBuilder.width or 720
     local inner, gap = w - 48, 10
     local controls = {}
@@ -601,15 +625,6 @@ local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
         { 24 + 2 * (col4 + gap), -146, col4 }, "icon-scale", {
             searchSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
         })
-    local fillControl
-    if hasAuraBars then
-        BuildGroupAuraBarSwitch(L, (inner - gap) / 2)
-        fillControl = BuildLaneLayoutRow(L, "dropdown", "auraBarFill", "RIGHT",
-            { "Fill Direction", M.AuraControls.AURA_BAR_FILL_VALUES, (inner - gap) / 2 },
-            { 24 + (inner + gap) / 2, -204, (inner - gap) / 2, "LEFT" }, "aura-bar-fill", {
-                searchSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. lane .. ".auraBarFill"),
-            })
-    end
     M.TrackRefresh(ctx, function()
         local shown = LaneBackendEnabled(CurrentScope(), lane)
         SetOptionEnabled(enable, true)
@@ -618,7 +633,6 @@ local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
         local growth = tostring(group.growth or defaults.growth):upper()
         local asBars = hasAuraBars and group.showAuraBars == true
         SetOptionEnabled(perRowControl, shown and not asBars and growth ~= "UP" and growth ~= "DOWN")
-        if fillControl then SetOptionEnabled(fillControl, shown and asBars) end
     end)
 end
 local function BuildGroupAuraArea(ctx, b)
@@ -645,6 +659,8 @@ local function BuildGroupAuraArea(ctx, b)
 
     if tool == "layout" then
         BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
+    elseif tool == "bars" then
+        BuildGroupAuraBars(ctx, auraBuilder, scope, lane)
     elseif type(M.BuildAuras3GroupLaneWorkspace) == "function" then
         M.BuildAuras3GroupLaneWorkspace(ctx, auraBuilder, scope, lane, { tool = tool, compact = true })
     end

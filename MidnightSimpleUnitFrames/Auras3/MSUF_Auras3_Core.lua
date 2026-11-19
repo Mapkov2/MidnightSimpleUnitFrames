@@ -322,6 +322,7 @@ local function LaneKeySchemaRows()
         { "durationBarDirectionKey", "DurationBarDirection", "styleLayoutShared", "durationBarDirection", nil, S },
         { "showAuraBarsKey", "ShowAuraBars", "layoutShared" },
         { "auraBarFillKey", "AuraBarFill", "layoutShared" },
+        { "auraBarStyleKey", "AuraBarStyle", "layoutShared" },
         { "tooltipKey", "ShowTooltip", "styleLayoutShared", "showTooltip", nil, SF },
         { "showStackKey", "ShowStackCount", "styleLayoutShared", "showStackCount", nil, S },
         { "stackAnchorKey", "StackCountAnchor", "styleLayoutShared", "stackCountAnchor", nil, S },
@@ -375,16 +376,10 @@ local function BuildLaneKeySchema()
     }
     local seedDefaults, fallbackDefaults, ownerOf = {}, {}, {}
     local function AddKey(key, owner, default, defaults)
-        if ownerOf[key] ~= nil then
-            error("MSUF Auras3 lane key listed twice: " .. key)
-        end
+        assert(ownerOf[key] == nil, "MSUF Auras3 lane key listed twice: " .. tostring(key))
         ownerOf[key] = owner
-        local sets = OWNER_SETS[owner]
-        if sets then
-            for _, set in ipairs(sets) do set[key] = true end
-        elseif owner ~= false then
-            error("MSUF Auras3 lane key has an unknown owner: " .. key)
-        end
+        assert(owner == false or OWNER_SETS[owner], "MSUF Auras3 lane key has an unknown owner: " .. tostring(key))
+        for _, set in ipairs(owner and OWNER_SETS[owner] or {}) do set[key] = true end
         if defaults == SF or defaults == S then seedDefaults[key] = default end
         if defaults == SF or defaults == F then fallbackDefaults[key] = default end
     end

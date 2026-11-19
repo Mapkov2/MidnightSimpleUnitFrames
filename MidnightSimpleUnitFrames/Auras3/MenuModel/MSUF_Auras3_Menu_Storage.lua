@@ -349,6 +349,14 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         end
     end
 
+    function Model.ReadLaneAuraBarStyle(unit, kind)
+        return Model.ReadValue(unit, A3.LaneKeySchema.LANE_SPECS[kind].auraBarStyleKey)
+    end
+
+    function Model.WriteLaneAuraBarStyle(unit, kind, value)
+        Model.WriteValue(unit, A3.LaneKeySchema.LANE_SPECS[kind].auraBarStyleKey, value)
+    end
+
     function Model.WriteNumber(unit, key, value, minValue, maxValue)
         value = ClampNumber(value, 0, minValue, maxValue)
         if math_floor(value) == value then value = Round(value) end

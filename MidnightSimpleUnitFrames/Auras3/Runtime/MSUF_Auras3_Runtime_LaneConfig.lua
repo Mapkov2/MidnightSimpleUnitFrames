@@ -165,7 +165,7 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
     lane.showDurationBar = lane.showDurationBar and lane.durationBarDisplay == "OVERLAY"
     if ReadBool(laneLayout, nil, spec.showAuraBarsKey, false) then
         local fill = ReadRaw(laneLayout, nil, spec.auraBarFillKey)
-        MSUF.AuraConfig.ApplyAuraBarGeometry(lane, fill, false)
+        MSUF.AuraConfig.ApplyAuraBarGeometry(lane, fill, false, ReadRaw(laneLayout, nil, spec.auraBarStyleKey))
     end
     return FinalizeLane(lane)
 end
@@ -288,7 +288,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     if kind == "buff" or kind == "debuff" then
         lane.showDurationBar = lane.showDurationBar and lane.durationBarDisplay == "OVERLAY"
         if source[spec.showAuraBarsKey] == true then
-            MSUF.AuraConfig.ApplyAuraBarGeometry(lane, source[spec.auraBarFillKey], true)
+            MSUF.AuraConfig.ApplyAuraBarGeometry(lane, source[spec.auraBarFillKey], true, source[spec.auraBarStyleKey])
         end
     end
     return FinalizeLane(lane, sharedLane, sharedSignatures)

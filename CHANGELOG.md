@@ -1,5 +1,33 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.4-beta2 - 2026-11-20
+
+**7.0.4 Beta 2**
+
+### Highlights
+
+- **Aura bar growth.** Choose whether new bars appear above, below, to the left, or to the right. The duration fill direction is independent.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.lane.buff.bars.bar-growth","settingKey":"","prepareKind":"unitAuraWorkspace","prepareValue":"buff_bars","query":"growth direction","label":"Growth Direction"} -->
+- **Combined buff and debuff bars.** Optionally show buffs first and debuffs next in one list. Enable bars for both aura types. The combined list uses the buff anchor and growth direction while each type keeps its own filters, sorting and limits.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.lane.buff.bars.combine-debuff-bars","settingKey":"","prepareKind":"unitAuraWorkspace","prepareValue":"buff_bars","query":"combine buff and debuff bars","label":"Combine Buff and Debuff Bars"} -->
+- **Aura bar fill colors.** Use the global timer color, pick a custom fill color, or choose normal or dark colors based on aura type.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.lane.buff.bars.fill-color-mode","settingKey":"","prepareKind":"unitAuraWorkspace","prepareValue":"buff_bars","query":"fill color mode","label":"Fill Color Mode"} -->
+- **Aura bar outlines.** Set the outline style and thickness and choose a default, custom or aura-type outline color.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.lane.buff.bars.outline-color-mode","settingKey":"","prepareKind":"unitAuraWorkspace","prepareValue":"buff_bars","query":"outline color mode","label":"Outline Color Mode"} -->
+
+### Aura bar details
+
+- The new bar controls are available on Retail and WoW Forever. Open Auras, choose Buffs or Debuffs, and select Bars.
+- Aura-type colors use your configured dispel colors when available. Other auras use green for buffs and red for debuffs.
+- Combined bars are off by default. Group layouts keep their lanes separate when their visibility rules require it.
+- The Bars workspace also exposes icon, spacing and opacity options for the bar presentation.
+
+### Fixes and polish
+
+- Options and Edit Mode previews show the configured aura-bar layout and appearance, including combined lanes.
+- Aura-bar appearance settings are preserved when normalizing older unit-frame and group-frame profiles.
+- Options labels retain their inherited font style when resized. The color picker draws its themed input fields again.
+
 ## 7.0.4-beta1 - 2026-11-19
 
 ### Highlights

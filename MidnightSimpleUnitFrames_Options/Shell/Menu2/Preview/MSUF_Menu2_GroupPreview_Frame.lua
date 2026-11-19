@@ -109,23 +109,35 @@ function Stage.LayoutMockFrame(st, env)
         local hasAdditional = (self._additionalPreviewTopology or 0) > 0
         local minX, maxX, minY, maxY
         if hasAdditional then minX, maxX, minY, maxY = additional.minX, additional.maxX, additional.minY, additional.maxY end
+        local auraConfig = st.scene.runtimeAuraConfig
+        local al, ar, ab, at
+        if auraConfig then
+            al, ar, ab, at = gf.PreviewAuraBarBounds(auraConfig.lanes, liveW, liveH, nil,
+                SceneLayerOn(st.scene, "buff"), SceneLayerOn(st.scene, "debuff"))
+        end
+        local hasOverview = hasAdditional or al ~= nil
+        if al then
+            local halfW, halfH = liveW / 2, liveH / 2
+            minX, maxX = min(minX or -halfW, al - halfW), max(maxX or halfW, ar - halfW)
+            minY, maxY = min(minY or -halfH, ab - halfH), max(maxY or halfH, at - halfH)
+        end
         local autoZoom = min(self._msufGFRenderState.GF_PREVIEW_MIN_W / liveW, self._msufGFRenderState.GF_PREVIEW_MIN_H / liveH)
         autoZoom = max(1.4, min(2.8, autoZoom))
-        if hasAdditional then
+        if hasOverview then
             -- Overview can be smaller than the interactive zoom minimum:
             -- silently clipping enabled samples is not a useful initial view.
             -- Expand and deliberate zoom retain their existing controls.
             autoZoom = min(autoZoom, min(max(1, stageW - 24) / (maxX - minX),
                 max(1, stageH - 24) / (maxY - minY)))
         end
-        if not hasAdditional then ResolveDefaultZoomLock(self, autoZoom) end
+        if not hasOverview then ResolveDefaultZoomLock(self, autoZoom) end
         local manualZoom = tonumber(self._manualZoom)
         local frozenZoom = tonumber(self._dragFrozenScale)
         local previewScale = manualZoom and ClampZoom(manualZoom) or (frozenZoom and ClampZoom(frozenZoom) or autoZoom)
         self._mockAutoScale = autoZoom
         self._mockScale = previewScale
         UpdateZoomControls(self)
-        local overview = hasAdditional and not manualZoom and not frozenZoom
+        local overview = hasOverview and not manualZoom and not frozenZoom
         local mockW = max(overview and 1 or 48, Round(liveW * previewScale))
         local mockH = max(overview and 1 or 20, Round(liveH * previewScale))
         local powerH = runtimePower and runtimePower.enabled == true and ScaleValue(runtimePower.height, previewScale, 0) or 0
@@ -148,7 +160,7 @@ function Stage.LayoutMockFrame(st, env)
         local inset = 0
         local startX = Round((stageW - mockW) * 0.5)
         local startY = -Round((stageH - mockH) * 0.5)
-        if hasAdditional then
+        if hasOverview then
             startX = Round(stageW / 2 - (minX + maxX) / 2 * previewScale - mockW / 2)
             startY = Round(-stageH / 2 - (minY + maxY) / 2 * previewScale + mockH / 2)
             -- Deliberate zoom may crop the scene; keep its main sample reachable.

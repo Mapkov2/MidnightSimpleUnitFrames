@@ -127,6 +127,8 @@ local function BuildUnitWorkspaceTool(ctx, auraBuilder, unit, currentTab, curren
         SelectUnitWorkspaceLanes(currentTab)
         if currentTool == "style" then
             BuildUnitStyle(ctx, auraBuilder, unit, { embeddedUnitPreview = true })
+        elseif currentTool == "bars" then
+            Parts.BuildUnitAuraBars(ctx, auraBuilder, unit, currentTab)
         elseif currentTool == "behavior" then
             BuildUnitOrdering(ctx, auraBuilder, unit, currentTab)
         elseif currentTool == "filters" then

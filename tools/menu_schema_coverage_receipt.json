@@ -1,16 +1,16 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7318,
-      "initialDeclarations": 4882,
-      "profileControls": 3900,
-      "proven": 3900
+      "declarations": 7456,
+      "initialDeclarations": 4870,
+      "profileControls": 4038,
+      "proven": 4038
     },
     "Mainline": {
-      "declarations": 7846,
-      "initialDeclarations": 5107,
-      "profileControls": 4226,
-      "proven": 4226
+      "declarations": 8007,
+      "initialDeclarations": 5093,
+      "profileControls": 4387,
+      "proven": 4387
     },
     "Mists": {
       "declarations": 7462,
@@ -33,14 +33,14 @@
   },
   "generatorVersion": "menu-schema-coverage/4",
   "issueCount": 0,
-  "projectionSha256": "07216aff146cf4529ff83e7c6f1bd30bb9f9572a8f14ddfcaa12bca12f1b3fca",
+  "projectionSha256": "fdf6141c5a47241dfaf788d563118d70854269706f3d6f0388cf8fda94baec26",
   "projectionVersion": 2,
-  "sourceSha256": "BB306672819342797A58E7259C341E9823DF8F56D5A49EF54FDB2E3EA50D6F5A",
+  "sourceSha256": "BBF1F95B0F568C079C2A0A4EBB9C6D1DC1D7619904A9ECE86EA135B91BEF6648",
   "totals": {
-    "declarations": 34749,
-    "initialDeclarations": 23286,
-    "profileControls": 18206,
-    "proven": 18206
+    "declarations": 35048,
+    "initialDeclarations": 23260,
+    "profileControls": 18505,
+    "proven": 18505
   },
   "version": 1
 }

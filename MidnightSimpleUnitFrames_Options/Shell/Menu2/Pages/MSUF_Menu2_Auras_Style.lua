@@ -632,7 +632,7 @@ local function BuildUnitStyleDurationBar(StyleState)
     if iconTimerOnly then
         local path = "style.lane." .. AuraCatalogToken(lane) .. ".auras3-duration-bar-display"
         M.AuraControls.AddAuraBarLayoutShortcut(StyleState.ctx, durationBar, path, "auras", durationChoiceWidth, function()
-            Parts.SetUnitAuraTool(StyleState.unit, lane, "layout")
+            Parts.SetUnitAuraTool(StyleState.unit, lane, "bars")
             Parts.Rebuild(StyleState.ctx)
         end)
     else

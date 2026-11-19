@@ -75,7 +75,8 @@ end
 
 local function SetReadableSize(fontObject, size)
     if not (fontObject and fontObject.SetFont) then return fontObject end
-    local path, _, flags = fontObject.GetFont and fontObject:GetFont()
+    local path, _, flags
+    if fontObject.GetFont then path, _, flags = fontObject:GetFont() end
     fontObject:SetFont(path or FONT, tonumber(size) or 13, flags or "")
     return fontObject
 end

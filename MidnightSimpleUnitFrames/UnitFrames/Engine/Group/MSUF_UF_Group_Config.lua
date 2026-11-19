@@ -1041,6 +1041,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   if (prefix == "buff" or prefix == "debuff") and group.showAuraBars == true and MSUF.Client.IsRetail then
     out[prefix .. "ShowAuraBars"] = true
     out[prefix .. "AuraBarFill"] = MSUF.AuraConfig.NormalizeAuraBarFill(group.auraBarFill)
+    out[prefix .. "AuraBarStyle"] = group.auraBarStyle
   end
   out[prefix .. "ShowCooldown"] = group.showCooldown ~= false
   out[prefix .. "ShowStacks"] = defaults[7] ~= false and group.showStacks ~= false or group.showStacks == true

@@ -110,12 +110,14 @@ local function ApplyMiniAuraBarPresentation(cfg, scope, lane, group, runtimePrev
         if group.showAuraBars == true then
             cfg.auraBarFill = MSUF.AuraConfig.NormalizeAuraBarFill(group.auraBarFill)
             cfg.compactAuraBars = true
+            cfg.auraBarStyle = group.auraBarStyle
         end
     else
         local metrics = runtimePreview and runtimePreview[lane .. "Metrics"]
         cfg.auraBar = metrics and metrics.auraBar
         if not cfg.auraBar and Model.ReadLaneAuraBars(scope, lane) then
             cfg.auraBarFill = Model.ReadLaneAuraBarFill(scope, lane)
+            cfg.auraBarStyle = Model.ReadLaneAuraBarStyle(scope, lane)
         end
     end
 end

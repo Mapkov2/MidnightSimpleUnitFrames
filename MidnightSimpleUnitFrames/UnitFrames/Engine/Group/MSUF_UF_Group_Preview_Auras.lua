@@ -100,13 +100,25 @@ local function FrameAuraPreviewOffset(lane, slot)
   return x, y
 end
 
-local function PaintFrameAuraBar(visual, lane, kind, index, scene)
+local function PaintFrameAuraBar(visual, lane, descriptor, index, scene)
   HideFrameAuraPreview(visual)
+  local kind, textures = descriptor.key, descriptor.textures
+  local texture = textures[(index - 1) % #textures + 1]
   visual._sceneAuraLane, visual._sceneAuraKind, visual._sceneAuraIndex = lane, kind, index
-  AuraPainter.PaintAuraBarSample(visual, lane, kind, PreviewLayerOn("auraText", scene))
+  AuraPainter.PaintAuraBarSample(visual, lane, kind, PreviewLayerOn("auraText", scene), texture, index)
   AuraPainter.UpdateAuraBarSample(visual, lane, AuraPainter.AuraState(visual, kind, index, lane))
   visual:Show()
   return true
+end
+
+local function PlaceFrameAuraPreview(visual, lane, host, anchor, x, y, alpha)
+  local size = max(1, tonumber(lane.size) or 18)
+  visual:ClearAllPoints()
+  visual:SetSize(lane.buttonWidth or size, lane.buttonHeight or size)
+  visual:SetPoint(anchor, host, anchor, x, y)
+  visual._sceneAuraLayoutHost = host
+  if visual.SetFrameLevel and host.GetFrameLevel then visual:SetFrameLevel((host:GetFrameLevel() or 0) + 1) end
+  if visual.SetAlpha then visual:SetAlpha(alpha) end
 end
 
 local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host, reminderPlaced, scene, sample)
@@ -124,12 +136,8 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     x, y = x + px, y + py
   end
 
-  visual:ClearAllPoints()
-  visual:SetSize(lane.buttonWidth or size, lane.buttonHeight or size)
-  visual:SetPoint(initialAnchor, host, initialAnchor, x, y)
-  if visual.SetFrameLevel and host.GetFrameLevel then visual:SetFrameLevel((host:GetFrameLevel() or 0) + 1) end
-  if visual.SetAlpha then visual:SetAlpha(1) end
-  if lane.auraBarFill then return PaintFrameAuraBar(visual, lane, descriptor.key, slot + 1, scene) end
+  PlaceFrameAuraPreview(visual, lane, host, initialAnchor, x, y, 1)
+  if lane.auraBarFill then return PaintFrameAuraBar(visual, lane, descriptor, slot + 1, scene) end
   AuraPainter.HideAuraBarSample(visual)
 
   local texture = visual._texture
@@ -237,6 +245,7 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
 end
 
 function GF.HideFrameAuras(frame)
+  if frame then frame._msufGFCombinedAuraBars = nil end
   local pool = frame and frame._msufGFFrameAuraPreviews
   if pool then
     for i = 1, #pool do HideFrameAuraPreview(pool[i]) end
@@ -282,34 +291,91 @@ local function SceneLaneEntries(frame, lane, descriptor)
   return lane._msufSceneEntries
 end
 
+local function PlaceFrameAuraHost(frame, host, lane, width, height, alpha)
+  local anchor = tostring(lane.anchor or "CENTER"):upper()
+  if not VALID_POINTS[anchor] then anchor = "CENTER" end
+  host:ClearAllPoints()
+  local parent = frame
+  if lane.anchorTarget == "portrait" then
+    parent = Auras.ResolvePreviewLaneParent and Auras.ResolvePreviewLaneParent(frame, lane)
+      or frame.MSUFPortraitHolder or frame
+  end
+  host:SetPoint(anchor, parent, anchor, tonumber(lane.x) or 0, tonumber(lane.y) or 0)
+  host:SetSize(max(1, width or lane.size or 1), max(1, height or lane.size or 1))
+  if host.SetFrameLevel and frame.GetFrameLevel then
+    local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
+    host:SetFrameLevel(layers.FrameElementLevel and layers.FrameElementLevel(frame, lane.layer, 1, 0)
+      or ((frame:GetFrameLevel() or 0) + (tonumber(lane.layer) or 1)))
+  end
+  if host.SetAlpha then host:SetAlpha(alpha) end
+  host:Show()
+end
+
+local function PaintAuraBarSegment(frame, host, lead, lane, descriptor, count, used, start, scene)
+  local config = MSUF.AuraConfig
+  local anchor = lead.initialAnchor
+  local padX, padY = Auras.PaddingInset(anchor, lead.padding or 0)
+  for index = 1, count do
+    local visual = EnsureAuraPreview(frame, used + index, "_msufGFFrameAuraPreviews")
+    local distance = start + config.AuraBarFlowAdvance(lead, lane, index - 1)
+    local x, y = config.AuraBarFlowOffset(lead, distance)
+    PlaceFrameAuraPreview(visual, lane, host, anchor, x + padX, y + padY, lane.alpha or 1)
+    PaintFrameAuraBar(visual, lane, descriptor, index, scene)
+  end
+end
+
+local function BarSampleCount(lane, visible, limit)
+  return visible and lane and lane.enabled and lane.auraBarFill and min(limit, lane.max) or 0
+end
+
+function GF.PreviewAuraBarBounds(lanes, width, height, limit, buffVisible, debuffVisible)
+  if not lanes then return end
+  limit = limit or PREVIEW_AURA_SAMPLE_LIMIT
+  local config = MSUF.AuraConfig
+  local buff, debuff = lanes.buff, lanes.debuff
+  local count = BarSampleCount(buff, buffVisible, limit)
+  local tail = BarSampleCount(debuff, debuffVisible, limit)
+  if count + tail == 0 then return end
+  if config.CombinedAuraBarLanes(lanes) then
+    return config.AuraBarPreviewRect(buff, count, debuff, tail, width, height)
+  end
+  local l, r, b, t = config.AuraBarPreviewRect(buff, count, nil, 0, width, height)
+  local dl, dr, db, dt = config.AuraBarPreviewRect(debuff, tail, nil, 0, width, height)
+  if not l then return dl, dr, db, dt end
+  if not dl then return l, r, b, t end
+  return min(l, dl), max(r, dr), min(b, db), max(t, dt)
+end
+
+local function PaintCombinedAuraBarPreviews(frame, lanes, limit, scene)
+  local config = MSUF.AuraConfig
+  local buff, debuff = config.CombinedAuraBarLanes(lanes)
+  if not buff then return 0 end
+  limit = limit or PREVIEW_AURA_SAMPLE_LIMIT
+  local count = BarSampleCount(buff, PreviewLayerOn("buff", scene), limit)
+  local tail = BarSampleCount(debuff, PreviewLayerOn("debuff", scene), limit)
+  if count + tail == 0 then return 0 end
+  local host = EnsureFrameAuraLaneHost(frame, "buff")
+  local width, height = config.CombinedAuraBarBounds(buff, debuff)
+  PlaceFrameAuraHost(frame, host, buff, width, height, 1)
+  PaintAuraBarSegment(frame, host, buff, buff, PREVIEW_AURA_LANES[1], count, 0, 0, scene)
+  PaintAuraBarSegment(frame, host, buff, debuff, PREVIEW_AURA_LANES[3], tail, count,
+    config.AuraBarFlowAdvance(buff, buff, count), scene)
+  return count + tail
+end
+
 --- Lay out and paint the stand-ins of the lanes `descriptors` names that `lanes` enables; true when any icon shows.
 local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex, sampleLimit, scene, sample)
-  local used = 0
+  local used = PaintCombinedAuraBarPreviews(frame, lanes, sampleLimit, scene)
+  local combined = used > 0
+  frame._msufGFCombinedAuraBars = combined or nil
   previewIndex = max(1, floor((tonumber(previewIndex) or 1) + 0.5))
   for laneIndex = 1, #descriptors do
     local descriptor = descriptors[laneIndex]
-    local lane = lanes[descriptor.key]
+    local lane = not (combined and (descriptor.key == "buff" or descriptor.key == "debuff")) and lanes[descriptor.key] or nil
     local maxCount = max(0, floor((tonumber(lane and lane.max) or 0) + 0.5))
     local host = EnsureFrameAuraLaneHost(frame, descriptor.key)
     if lane and lane.enabled == true and maxCount > 0 and PreviewLayerOn(descriptor.key, scene) then
-      local anchor = tostring(lane.anchor or "CENTER"):upper()
-      if not VALID_POINTS[anchor] then anchor = "CENTER" end
-      host:ClearAllPoints()
-      local parent = frame
-      if lane.anchorTarget == "portrait" then
-        parent = Auras.ResolvePreviewLaneParent and Auras.ResolvePreviewLaneParent(frame, lane)
-          or frame.MSUFPortraitHolder or frame
-      end
-      host:SetPoint(anchor, parent, anchor, tonumber(lane.x) or 0, tonumber(lane.y) or 0)
-      host:SetSize(max(1, tonumber(lane.width) or lane.size or 1),
-        max(1, tonumber(lane.height) or lane.size or 1))
-      if host.SetFrameLevel and frame.GetFrameLevel then
-        local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
-        host:SetFrameLevel(layers.FrameElementLevel and layers.FrameElementLevel(frame, lane.layer, 1, 0)
-          or ((frame:GetFrameLevel() or 0) + (tonumber(lane.layer) or 1)))
-      end
-      if host.SetAlpha then host:SetAlpha(tonumber(lane.alpha) or 1) end
-      host:Show()
+      PlaceFrameAuraHost(frame, host, lane, tonumber(lane.width), tonumber(lane.height), tonumber(lane.alpha) or 1)
       local entries = SceneLaneEntries(frame, lane, descriptor)
       local customIndex = kind == "unit" and descriptor.key:match("^custom(%d)$")
       local item = customIndex and Auras.MenuModel.CustomContainerStyleItem(frame._msufSceneUnit, tonumber(customIndex), false)
@@ -320,7 +386,7 @@ local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex
         ApplyFrameAuraPreview(frame, kind, EnsureAuraPreview(frame, used, "_msufGFFrameAuraPreviews"),
           lane, descriptor, sampleIndex - 1, sampleIndex + previewIndex + laneIndex, host, reminderPlaced, scene, sample)
       end
-    else
+    elseif not (combined and descriptor.key == "buff") then
       host:Hide()
     end
   end
