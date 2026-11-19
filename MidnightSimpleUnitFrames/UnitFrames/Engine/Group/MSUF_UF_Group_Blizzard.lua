@@ -134,17 +134,30 @@ local SMALL_RAID_PROXY_VISIBILITY = "[@raid6,exists] show; hide"
 local smallRaidProxy
 local softParked
 
+local function SetSmallRaidProxyReveal(reveal)
+  if not smallRaidProxy or smallRaidProxy:GetAttribute("msufRevealRaid") == reveal then return end
+  smallRaidProxy:SetAttribute("msufRevealRaid", reveal)
+  -- Let the next native driver update make the visibility change.
+  smallRaidProxy:SetAttribute("state-msuf-smallraid", nil)
+end
+
 local function SmallRaidProxy()
   if smallRaidProxy then
     return smallRaidProxy
   end
-  smallRaidProxy = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GF_BlizzardSmallRaidParent", UIParent))
+  smallRaidProxy = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GF_BlizzardSmallRaidParent", UIParent, "SecureHandlerStateTemplate"))
   smallRaidProxy:SetAllPoints()
-  -- Registered while the proxy is still empty: the driver resolves once inside
-  -- this call, which must not show or hide anything of Blizzard's.
+  smallRaidProxy:SetAttribute("_onstate-msuf-smallraid", [[
+    if newstate == "show" or (newstate == "hide" and self:GetAttribute("msufRevealRaid")) then
+      self:Show()
+    elseif newstate == "hide" then
+      self:Hide()
+    end
+  ]])
+  -- Registration resolves once immediately, before the proxy owns the raid container.
   local registerStateDriver = RegisterStateDriver
   if registerStateDriver then
-    registerStateDriver(smallRaidProxy, "visibility", SMALL_RAID_PROXY_VISIBILITY)
+    registerStateDriver(smallRaidProxy, "msuf-smallraid", SMALL_RAID_PROXY_VISIBILITY)
   end
   return smallRaidProxy
 end
@@ -231,23 +244,26 @@ local function HideFrame(frame, soft)
   return frame
 end
 
---- Give a soft-parked frame back to its own parent once the feature that parked
---- it is off. Only while the proxy is visible: then the move changes no
---- visibility and runs no Blizzard script. Otherwise the next pass retries.
-local function ReleaseSoftHiddenFrame(frame)
+--- Return the raid container only after its proxy is visible. When the Party
+--- layout becomes additive, the native state driver can reveal it first.
+local function ReleaseSoftHiddenFrame(frame, revealInSmallRaid)
   frame = ResolveFrame(frame)
   local info = frame and ownedFrames[frame]
   if not (info and info.soft) then
     return false
   end
-  if InCombat() or not (smallRaidProxy and smallRaidProxy:IsVisible()) then
+  if InCombat() then return false end
+  if not (smallRaidProxy and smallRaidProxy:IsVisible()) then
+    if revealInSmallRaid then SetSmallRaidProxyReveal(true) end
     return false
   end
+  local parent = info.original or UIParent
+  local restoreParent = frame:GetParent() == smallRaidProxy
+  if restoreParent and not parent:IsVisible() then return false end
   info.hidden, info.soft = false, nil
   softParked = nil
-  if frame:GetParent() == smallRaidProxy then
-    frame:SetParent(info.original or UIParent)
-  end
+  if restoreParent then frame:SetParent(parent) end
+  SetSmallRaidProxyReveal(nil)
   return true
 end
 
@@ -697,7 +713,7 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   -- Blizzard's raid frames must not show the same raid a second time -- but only
   -- while it is small. Parked on the first small raid; the proxy's driver then
   -- follows the roster for the rest of the session, combat included.
-  local smallRaidWanted = partyUsesMSUF and partyConf.smallRaidAsParty == true
+  local smallRaidWanted = GF.UsesSmallRaidPartyLayout(partyConf)
   local smallRaidPark = smallRaidWanted
     and (softParked ~= nil or (GF.IsSmallRaidPartyContext ~= nil and GF.IsSmallRaidPartyContext() == true))
   local partyActive = PartyScopeActive()
@@ -732,9 +748,10 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   elseif raidMode == "NONE" then
     ApplyDisabledRaidFallback(raidMode)
   elseif smallRaidPark then
+    SetSmallRaidProxyReveal(nil)
     HideFrame(CompactRaidFrameContainer, true)
   else
-    ReleaseSoftHiddenFrame(CompactRaidFrameContainer)
+    ReleaseSoftHiddenFrame(CompactRaidFrameContainer, partyUsesMSUF and partyConf.showPartyInRaid == true)
     ApplyDisabledRaidFallback(raidMode)
   end
 

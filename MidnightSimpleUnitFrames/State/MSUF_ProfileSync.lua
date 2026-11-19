@@ -256,7 +256,23 @@ end
 -- A reset or import replaces the active profile on purpose; it stays in that
 -- profile. Re-basing makes only the edits after it reach the other members.
 function Sync.Rebase() Sync.Activate(true) end
-function Sync.Flush(full)
+local function ApplyMemberChanges(profile, group, source, changes)
+    local target
+    local schema = MSUF.DefaultsSchema
+    local dormant = schema.HasCurrentSparseProfile(profile)
+    for _, field in ipairs(changes) do
+        if group.modules[Sync.Owner(field.path)] then
+            if not target then
+                target = dormant and MSUF.ProfileNormalize.ResolveStoredProfile(profile, true) or profile
+                if schema.IsQuarantinedProfile(target) then target = schema.QuarantineProfile(target) end
+            end
+            if not Excluded(field.path, group, source, target) then Fields.Write(target, field.path, Fields.Copy(field.value)) end
+        end
+    end
+    return dormant and target == profile
+end
+
+function Sync.Flush(full, incoming)
     if Variants.IsRecording and Variants.IsRecording() then return false,"finish editing the variant first" end
     local groups=Groups()
     if #groups==0 then baseline=nil
@@ -269,21 +285,20 @@ function Sync.Flush(full)
     local changes,errorText=Changes(before,source)
     if not changes then return false,errorText end
     local profiles=MSUF_GlobalDB.profiles
+    local restored
     for _,group in ipairs(groups) do
         if group.members[MSUF_ActiveProfile] then
             for name in pairs(group.members) do
-                local target=profiles[name]
-                if MSUF.DefaultsSchema.IsQuarantinedProfile(target) then target=MSUF.DefaultsSchema.QuarantineProfile(target) end
-                if name~=MSUF_ActiveProfile and type(target)=="table" then
-                    for _,field in ipairs(changes) do
-                        if group.modules[Sync.Owner(field.path)] and not Excluded(field.path,group,source,target) then
-                            Fields.Write(target,field.path,Fields.Copy(field.value))
-                        end
-                    end
+                local target = profiles[name]
+                if name ~= MSUF_ActiveProfile and type(target) == "table"
+                    and ApplyMemberChanges(target, group, source, changes) and name ~= incoming then
+                    restored = restored or {}
+                    restored[#restored + 1] = name
                 end
             end
         end
     end
+    if restored then MSUF.DefaultsSchema.CompactInactiveProfiles(MSUF_GlobalDB, restored) end
     baseline,activeName=source,MSUF_ActiveProfile
     return true
 end

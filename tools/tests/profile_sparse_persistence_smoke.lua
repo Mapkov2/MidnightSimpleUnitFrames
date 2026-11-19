@@ -84,16 +84,73 @@ for _, stored in pairs(decoded.profiles) do
     assert(ns.DefaultsSchema.RestorePersistence(stored), "V2 restore refused a saved profile")
 end
 assert(H.Literal(decoded) == H.Literal(reference), "exact pre-migration V2 roundtrip differs")
-local _, reloaded = World({ MSUF_GlobalDB = Serial(env.MSUF_GlobalDB) })
+local _, reloaded, reloadedCore = World({ MSUF_GlobalDB = Serial(env.MSUF_GlobalDB) })
 local _, control = World({ MSUF_GlobalDB = reference })
-assert(H.Literal(reloaded.MSUF_GlobalDB) == H.Literal(control.MSUF_GlobalDB), "serialized current reload differs")
-assert(reloaded.MSUF_DB == reloaded.MSUF_GlobalDB.profiles[reloaded.MSUF_ActiveProfile], "reloaded identity differs")
+local reloadedProfiles = reloaded.MSUF_GlobalDB.profiles
+local activeName = reloaded.MSUF_ActiveProfile
+local schema = reloadedCore.DefaultsSchema
+assert(reloaded.MSUF_DB == reloadedProfiles[activeName], "reloaded identity differs")
+assert(not schema.HasCurrentSparseProfile(reloaded.MSUF_DB), "active profile was left sparse")
+local effective = Serial(reloaded.MSUF_GlobalDB)
+for name, value in pairs(effective.profiles) do
+    if name ~= activeName then
+        assert(schema.IsValidSparseProfile(reloadedProfiles[name]), "inactive profile expanded at login: " .. name)
+        effective.profiles[name] = reloadedCore.ProfileNormalize.ResolveStoredProfile(value)
+    end
+end
+assert(H.Literal(effective) == H.Literal(control.MSUF_GlobalDB), "serialized current reload differs")
+local outgoing = reloaded.MSUF_DB
+local incoming = reloadedProfiles.Override1
+assert(reloaded.MSUF_SwitchProfile("Override1"))
+assert(reloaded.MSUF_DB == incoming and not schema.HasCurrentSparseProfile(incoming), "target was not activated in place")
+assert(reloadedProfiles[activeName] == outgoing and schema.IsValidSparseProfile(outgoing), "outgoing profile stayed expanded")
+assert(schema.IsValidSparseProfile(reloadedProfiles.Override2), "switch expanded an unrelated profile")
+assert(reloaded.MSUF_SwitchProfile(activeName))
+local base = assert(reloadedCore.ProfileVariants.BaseSnapshot(reloaded.MSUF_DB, true))
+assert(reloaded.MSUF_DB == outgoing and base.general.showGameMenuButton == false, "switch back lost the base override")
+assert(schema.IsValidSparseProfile(incoming), "switch back left the inactive profile expanded")
 -- Unknown data and absent leaves survive broader, presence-masked factory elision.
 local factoryStore = { profiles = { Default = Serial(factoryTemplate) } }
 assert(ns.DefaultsSchema.Persist(factoryStore))
 assert(factoryStore.profiles.Default.npcColors ~= nil, "factory pruning forced destination repair")
 local sparseTemplate = Serial(factoryStore.profiles.Default)
 assert(sparseTemplate._msufDefaultsRevision == 17.5 and type(sparseTemplate._msufSparseDefaultsV2) == "string")
+local schema = ns.DefaultsSchema
+local function CheckInactiveCodec()
+    local beforeValidation = H.Literal(sparseTemplate)
+    assert(schema.HasCurrentSparseProfile(sparseTemplate) and schema.IsValidSparseProfile(sparseTemplate))
+    assert(H.Literal(sparseTemplate) == beforeValidation, "validation changed an inactive profile")
+    local malformed = Serial(sparseTemplate)
+    malformed._msufSparseDefaultsV2 = "invalid mask"
+    assert(schema.HasCurrentSparseProfile(malformed) and not schema.IsValidSparseProfile(malformed))
+    assert(malformed._msufSparseDefaultsV2 == "invalid mask", "validation repaired a malformed profile")
+    malformed._msufDefaultsRevision = 18
+    assert(not schema.HasCurrentSparseProfile(malformed) and not schema.IsValidSparseProfile(malformed))
+
+    local outgoing = Serial(factoryTemplate)
+    local outgoingGeneral = outgoing.general
+    outgoing.general.showGameMenuButton = false
+    outgoing.general.fontSize = 0
+    outgoing.general.castbarShowPushback = nil
+    outgoing.unknown = { { [0] = "custom" } }
+    local beforeCompaction = H.Literal(outgoing)
+    local beforeGeneral = H.Literal(outgoingGeneral)
+    local store = { profiles = { Outgoing = outgoing }, _compatSave = "armed" }
+    assert(not schema.CompactInactiveProfile(store, "Outgoing"), "compaction ignored compatibility mode")
+    store._compatSave = nil
+    store.alias = outgoing.unknown[1]
+    assert(not schema.CompactInactiveProfile(store, "Outgoing"), "compaction detached a shared subtree")
+    assert(store.profiles.Outgoing == outgoing and H.Literal(outgoing) == beforeCompaction)
+    store.alias = nil
+    assert(schema.CompactInactiveProfile(store, "Outgoing"), "compaction did not store the outgoing profile")
+    local inactive = store.profiles.Outgoing
+    assert(inactive == outgoing and inactive.general ~= outgoingGeneral and schema.IsValidSparseProfile(inactive),
+        "compaction lost the named root or kept the original children")
+    assert(H.Literal(outgoingGeneral) == beforeGeneral, "compaction mutated the old child reference")
+    assert(schema.RestorePersistence(inactive) and H.Literal(inactive) == beforeCompaction,
+        "inactive compaction changed the exact values")
+end
+CheckInactiveCodec()
 local cold = C.NewWorld(root, flavor, "Tester-Realm")
 assert(cold.core.DefaultsStorageData.sparseV3Owners == nil, "cold codec was already initialized")
 local coldProfile = Serial(sparseTemplate)

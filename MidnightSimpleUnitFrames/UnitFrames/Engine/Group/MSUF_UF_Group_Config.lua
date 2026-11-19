@@ -1038,6 +1038,10 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "DurationBarDisplay"] = AuraDurationBarDisplay(group.durationBarDisplay)
   out[prefix .. "DurationBarPosition"] = AuraDurationBarPosition(group.durationBarPosition)
   out[prefix .. "DurationBarDirection"] = AuraDurationBarDirection(group.durationBarDirection)
+  if (prefix == "buff" or prefix == "debuff") and group.showAuraBars == true and MSUF.Client.IsRetail then
+    out[prefix .. "ShowAuraBars"] = true
+    out[prefix .. "AuraBarFill"] = MSUF.AuraConfig.NormalizeAuraBarFill(group.auraBarFill)
+  end
   out[prefix .. "ShowCooldown"] = group.showCooldown ~= false
   out[prefix .. "ShowStacks"] = defaults[7] ~= false and group.showStacks ~= false or group.showStacks == true
   out[prefix .. "CooldownSize"] = scale(group.cooldownSize, defaults[5], 6)

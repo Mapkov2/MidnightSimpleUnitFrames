@@ -483,6 +483,10 @@ local function CaptureGroupAuraStyle(kind)
             local key = GROUP_AURA_STYLE_LANE_KEYS[i]
             values[key] = DeepCopy(source[key])
         end
+        if MSUF.Client.IsRetail and (lane == "buff" or lane == "debuff")
+            and values.showDurationBar == true and values.durationBarDisplay ~= "OVERLAY" then
+            values.showDurationBar = false
+        end
     end
     return snapshot
 end
@@ -708,7 +712,7 @@ local function AttachGroupSectionUX(ctx)
         dispelSymbol = { prefixes = "dispelSymbol" },
         dstripe = { prefixes = "debuffStripe" },
         layout_advanced = { fields = "growth unitsPerColumn maxColumns preserveRaidGroups collapseEmptyGroups " ..
-            "hideMythicGroupsFiveToEight centerSolo smallRaidAsParty" },
+            "hideMythicGroupsFiveToEight centerSolo smallRaidAsParty showPartyInRaid" },
         party_targets = { prefixes = "targets" },
         group_pets = { prefixes = "pets" },
         friendly_bosses = { prefixes = "friendlyBoss" },

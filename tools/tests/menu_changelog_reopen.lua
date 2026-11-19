@@ -14,6 +14,51 @@ end
 print("changelog reopen frames: " .. table.concat(counts, ","))
 assert(mw:Frames() == frames and M.cache.changelog == entry, "unchanged changelog rebuilt its frame tree")
 
+do
+    local shared = M.UnitSectionsShared
+    local conf = assert(mw.env.MSUF_DB.player)
+    local factory = { player = M.DeepCopy(conf) }
+    factory.player.smoothFill = false
+    conf.smoothFill = true
+    factory.player.unitDispelSymbolSize = 16
+    conf.unitDispelSymbolSize = 18
+    local reads, scans = 0, 0
+    local getFactory, fieldKeys = shared.FactoryProfile, shared.SectionFieldKeys
+    shared.FactoryProfile = function()
+        reads = reads + 1
+        return factory
+    end
+    shared.SectionFieldKeys = function(spec, source, defaults)
+        if source == conf or defaults == conf then scans = scans + 1 end
+        return fieldKeys(spec, source, defaults)
+    end
+    local link = {
+        pageKey = "uf_player", sectionId = "text", controlId = "menu2.uf_player.unit.text.power.full_value_short",
+        settingKey = "player.powerFullValueShort", prepareKind = "menuTab", prepareValue = "power",
+        query = "power text short numbers", label = "Short numbers",
+    }
+    assert(not M.cache.uf_player, "cold changelog test prebuilt Player")
+    assert(M.OpenChangelogMenuLink(link), "cold changelog link did not focus the exact Power Text control")
+    assert(reads == 0 and scans == 0, "cold changelog navigation walked profile fields for section badges")
+    local playerPage = assert(M.cache.uf_player)
+    local basics = playerPage.sections.frame_basics._msuf2CollapsibleEntry
+    M.SelectPage("changelog")
+    mw:RunTimers()
+    assert(reads == 0 and not basics._msuf2CustomBadgeWanted, "a deferred badge ran for a page the reader left")
+    assert(M.OpenChangelogMenuLink(link), "cached changelog link did not focus the exact Power Text control")
+    mw:RunTimers()
+    assert(reads == 1 and scans == 0, "section badges did not reuse factory keys after navigation")
+    assert(basics._msuf2CustomBadgeWanted, "deferred badge missed the changed Player setting")
+    local symbol = playerPage.sections.unit_dispel_symbol._msuf2CollapsibleEntry
+    assert(symbol._msuf2CustomBadgeWanted, "deferred badge missed the changed prefixed setting")
+    conf.smoothFill = false
+    conf.unitDispelSymbolSize = 16
+    M.RunEntryRefreshers(playerPage, { force = true })
+    assert(basics._msuf2CustomBadgeWanted == false, "warm refresh kept a badge after restoring the default setting")
+    assert(symbol._msuf2CustomBadgeWanted == false, "warm refresh kept a badge after restoring a prefixed default")
+    shared.FactoryProfile, shared.SectionFieldKeys = getFactory, fieldKeys
+end
+
 local countdown = {
     text = "PvP countdown",
     link = {

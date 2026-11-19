@@ -73,9 +73,9 @@ end
 -- Both current generated indexes retain all 8 relocated action identities below.
 -- 7.0.3: 28 Mainline and 27 Classic additions; all 7.021 identities retained.
 local indexes = {
-    -- Stable 7.0.3 adds ten Short numbers identities per family and retains all prior identities.
-    { "", 4689, 4072987337 },
-    { "_Classic", 4254, 2490154248 },
+    -- Beta 1 adds Party Frames in Raid and the Retail-family Aura Bar controls.
+    { "", 4718, 3394570818 },
+    { "_Classic", 4255, 4263915646 },
 }
 local moved = {
     { "opt_colors", "workbench_accessibility", "accessibility", "preview review" },

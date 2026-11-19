@@ -151,12 +151,9 @@ Corpus.HARNESS_ERRORS = {
     -- Mainline's UnitPowerMax is not modelled, so the class-power module's
     -- maximum-slot floor sees the generic native-API stub table.
     { "module ClassPower", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)", MIDNIGHT },
-    { "PLAYER_LOGIN", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "timer", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "timer", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "Highlight.Refresh", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ApplyModules", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
-    { "MSUF_GF_RebuildAll", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ClassPower_Apply", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)",
         MIDNIGHT },
     -- Classic profiles authored on Era can resolve an unmodelled native unit
@@ -166,8 +163,6 @@ Corpus.HARNESS_ERRORS = {
     { "MSUF_Castbars_OnSettingsChanged", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ApplyAllCastbarsAndSync", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_Auras3.RefreshAll", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, CLASSIC_CLIENTS },
-    { "GF.Rebuild", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "GF.RefreshVisuals", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
 }
 
 local function ErrorText(caught)

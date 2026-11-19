@@ -195,18 +195,24 @@ local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elaps
     local icons = group and group._icons
     if not icons then return end
     group._msufA3PreviewAnimated = elapsed ~= nil or MSUF.PreviewAnimation.enabled == true
+    local barLane = group._msufA3AnimationBarLane
     for i = 1, shownIcons do
         local icon = icons[i]
         if icon then
             local auraState = AuraState(icon, kind, i, textCfg, elapsed)
-            if icon.Count then icon.Count:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "") end
-            if icon.CooldownText then
-                icon.CooldownText:SetText(textCfg.showCooldownText ~= false
-                    and (auraState and auraState.text or (i == 1 and "1m" or "32")) or "")
+            if barLane then
+                AuraPainter.UpdateAuraBarSample(icon, barLane, auraState or AuraPainter.AuraState(icon, kind, i, textCfg))
+            else
+                if icon.Count then
+                    icon.Count:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "")
+                end
+                if icon.CooldownText then
+                    icon.CooldownText:SetText(textCfg.showCooldownText ~= false
+                        and (auraState and auraState.text or (i == 1 and "1m" or "32")) or "")
+                end
+                LayoutPreviewSwipe(icon, textCfg, auraState and auraState.remainingFrac)
+                if textCfg.showDurationBar == true then ApplyPreviewDurationBarProgress(icon, textCfg, auraState) end
             end
-            LayoutPreviewSwipe(icon, textCfg, auraState and auraState.remainingFrac)
-            -- The lane's bar was hidden by the layout that recorded this config.
-            if textCfg.showDurationBar == true then ApplyPreviewDurationBarProgress(icon, textCfg, auraState) end
         end
     end
 end
@@ -512,6 +518,7 @@ local function ResolveLaneState(unit, kind, spec, cfg, metrics, textCfg, entries
 
     local lane = PREVIEW_LANE
     lane.shownIcons = shownIcons
+    lane.auraBar = metrics and metrics.auraBar
     lane.size = size
     lane.iconH = iconH
     lane.step = step
@@ -532,8 +539,20 @@ local function ResolveLaneState(unit, kind, spec, cfg, metrics, textCfg, entries
     return lane
 end
 
---- Sizes, anchors and styles the lane's icons and hides the unused ones.
-local function LayoutPreviewIcons(group, unit, spec, cfg, metrics, textCfg, entries, lane)
+local function PaintEditAuraBar(icon, lane, kind)
+    if icon.Icon then icon.Icon:Hide() end
+    if icon.Shade then icon.Shade:Hide() end
+    if icon.Swipe then icon.Swipe:Hide() end
+    if icon.Count then icon.Count:Hide() end
+    if icon.CooldownText then icon.CooldownText:Hide() end
+    if icon.DispelBorder then icon.DispelBorder:Hide() end
+    if icon.DurationBar then icon.DurationBar:Hide() end
+    A3.ApplyIconStyleSkinned(icon, nil, lane.size, lane.iconShape, lane.buttonHeight)
+    AuraPainter.PaintAuraBarSample(icon, lane, kind, true)
+end
+
+--- Sizes, anchors and styles the lane's preview cells and hides the unused ones.
+local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg, entries, lane)
     local size, iconH, perRow, vertical = lane.size, lane.iconH, lane.perRow, lane.vertical
     local initialAnchor, step, stepY = lane.initialAnchor, lane.step, lane.stepY
     local growthX, growthY = lane.growthX, lane.growthY
@@ -541,24 +560,29 @@ local function LayoutPreviewIcons(group, unit, spec, cfg, metrics, textCfg, entr
     local padX, padY = PaddingInset(initialAnchor, lane.padding)
     for i = 1, shownIcons do
         local icon = EnsureIcon(group, i)
-        icon:SetSize(size, iconH)
+        icon:SetSize(lane.auraBar and lane.auraBar.buttonWidth or size, iconH)
         icon:ClearAllPoints()
         local col, row = IconGridCoord(i, perRow, vertical)
         local body = group.Body or group
         icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX + padX, row * stepY * growthY + padY)
-        if icon.Icon then
-            local entry = entries and entries[i]
-            icon.Icon:SetTexture((entry and entry.icon) or cfg.texture or spec.texture)
-            ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom, size, iconH)
+        if lane.auraBar then
+            PaintEditAuraBar(icon, lane.auraBar, kind)
+        else
+            AuraPainter.HideAuraBarSample(icon)
+            if icon.Icon then
+                local entry = entries and entries[i]
+                icon.Icon:SetTexture((entry and entry.icon) or cfg.texture or spec.texture)
+                ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom, size, iconH)
+            end
+            if type(A3.ApplyAuraIconShape) == "function" then
+                A3.ApplyAuraIconShape(icon, iconShape, nil, icon.Icon, icon.Shade, icon.Swipe)
+            end
+            if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
+            if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
+            ApplyPreviewIconText(icon, unit, textCfg, i)
+            local skinned = A3.ApplyIconStyleSkinned(icon, iconStyle, size, iconShape, iconH)
+            AuraPainter.SkinLayers(icon.Swipe, skinned)
         end
-        if type(A3.ApplyAuraIconShape) == "function" then
-            A3.ApplyAuraIconShape(icon, iconShape, nil, icon.Icon, icon.Shade, icon.Swipe)
-        end
-        if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
-        if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
-        ApplyPreviewIconText(icon, unit, textCfg, i)
-        local skinned = A3.ApplyIconStyleSkinned(icon, iconStyle, size, iconShape, iconH)
-        A3.MockAuraPainter.SkinLayers(icon.Swipe, skinned)
         icon:Show()
     end
 
@@ -591,7 +615,7 @@ local function ApplyLaneLayout(group, frame, unit, kind, spec, cfg, metrics, tex
         StyleLabel(group.Label)
     end
     ApplyGroupChrome(group, spec, chrome)
-    LayoutPreviewIcons(group, unit, spec, cfg, metrics, textCfg, entries, lane)
+    LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg, entries, lane)
 end
 
 --- Refreshes one aura lane of a unit's preview: hides it when it has nothing to
@@ -639,6 +663,7 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
     local signature = RefreshSignature(unit, kind, cfg, metrics, textCfg, lane, frameSig)
         .. "\030" .. CustomPreviewEntriesSignature(entries) .. "\030" .. tostring(chrome)
         .. "\030" .. tostring(lane.padding) .. "\030" .. tostring(lane.iconH)
+        .. "\030" .. tostring(lane.auraBar and lane.auraBar.auraBarFill)
         .. "\030" .. tostring(iconStyle and iconStyle.signature)
 
     if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
@@ -660,6 +685,7 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
     group._msufA3AnimationKind = kind
     group._msufA3AnimationShownIcons = shownIcons
     group._msufA3AnimationTextConfig = textCfg
+    group._msufA3AnimationBarLane = lane.auraBar
     ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
     if spec.customIndex then ApplyEditModeCustomEffect(group, frame, CustomItem(unit, spec.customIndex, false)) end
     group:Show()

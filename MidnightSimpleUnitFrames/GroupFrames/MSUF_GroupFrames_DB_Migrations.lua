@@ -326,6 +326,10 @@ local function RepairAuraFilters(conf)
                 if g.showDurationBar == nil then g.showDurationBar = false end
                 if g.durationBarHeight == nil then g.durationBarHeight = 2 end
                 if g.durationBarDisplay ~= "OVERLAY" then g.durationBarDisplay = "BAR_ONLY" end
+                if MSUF.Client.IsRetail and (gk == "buff" or gk == "debuff") and g.showAuraBars == nil
+                    and g.showDurationBar == true and g.durationBarDisplay == "BAR_ONLY" then
+                    g.showAuraBars = true
+                end
                 if g.durationBarPosition ~= "TOP" then g.durationBarPosition = "BOTTOM" end
                 if g.durationBarDirection ~= "ELAPSED" then g.durationBarDirection = "REMAINING" end
             end

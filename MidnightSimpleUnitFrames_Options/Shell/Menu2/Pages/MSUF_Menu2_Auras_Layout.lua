@@ -235,13 +235,48 @@ function M.UnitAuraWorkspaceView(unit)
     return UNIT_AURA_VIEWS[tab][tool]
 end
 
+local HAS_AURA_BARS = MSUF.Client.IsRetail == true
+
+local function BuildUnitAuraBarRows(ctx, section, unit, kind, width, LaneMeta)
+    if not HAS_AURA_BARS then return end
+    local function Refresh()
+        ApplyUnit(ctx, unit, "AURAS3_BAR_PRESENTATION", true)
+    end
+    local function BarRow(row, suffix, convert)
+        LaneMeta(row, suffix)
+        -- UnitLayoutSetting lists the physical lane key first, followed by
+        -- ownership flags and additional members of the boss or arena family.
+        local path = row.setting.keys[1]
+        row.write = { call = Model.WriteValue, context = unit, resolve = function() return path end,
+            boolean = row.kind == "toggle", convert = convert, after = Refresh }
+        row.set = M.ControlSchema.Setter({
+            id = row.controlId, kind = row.kind, setting = row.setting, write = row.write,
+        })
+        return row
+    end
+    return W.SettingsRows(ctx, section, {
+        x = 24, y = -204, width = width, columns = 2, colGap = 12,
+        rows = {
+            BarRow({
+                kind = "toggle", label = "Show as Bars", id = "showAuraBars", default = false,
+                get = function() return Model.ReadLaneAuraBars(unit, kind) end,
+            }, "show-as-bars"),
+            BarRow({
+                kind = "dropdown", label = "Fill Direction", id = "auraBarFill", default = "RIGHT",
+                values = M.AuraControls.AURA_BAR_FILL_VALUES,
+                get = function() return Model.ReadLaneAuraBarFill(unit, kind) end,
+            }, "aura-bar-fill", MSUF.AuraConfig.NormalizeAuraBarFill),
+        },
+    })
+end
+
 local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     local titleKey = kind == "debuff" and "Debuff Layout" or "Buff Layout"
     local title = Tr(titleKey)
     -- Stufe-1 pilot: this section renders through the uniform W.SettingsRows
     -- grid (fixed cell metrics, per-value reset) instead of hand-placed
     -- offsets. Control identities, setters and apply reasons are unchanged.
-    local section = b:Section(titleKey, 208)
+    local section = b:Section(titleKey, HAS_AURA_BARS and 264 or 208)
     M.AttachAuraFontsAndColors(section, title, unit)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -350,6 +385,8 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     end
     CollectRows(anchorRows)
     CollectRows(numberRows)
+    local barRows = BuildUnitAuraBarRows(ctx, section, unit, kind, inner, LaneMeta)
+    CollectRows(barRows)
     local perRowControl = numberRows and numberRows.controls and numberRows.controls.perRow
     M.TrackRefresh(ctx, function()
         local shown = UnitLaneShown(unit, kind)
@@ -358,9 +395,11 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
         local growth = type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind)
             or Model.ReadLaneGrowth(unit, kind)
         growth = tostring(growth or ""):upper()
+        local asBars = barRows and Model.ReadLaneAuraBars(unit, kind)
         if perRowControl then
-            W.SetControlEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
+            W.SetControlEnabled(perRowControl, shown and not asBars and growth ~= "UP" and growth ~= "DOWN")
         end
+        if barRows then W.SetControlEnabled(barRows.controls.auraBarFill, shown and asBars == true) end
     end)
 end
 local function CreateHidePermanentWriter(ctx, unit, lane)

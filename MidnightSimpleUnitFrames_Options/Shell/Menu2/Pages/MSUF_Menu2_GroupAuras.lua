@@ -137,6 +137,12 @@ end
 local function RebuildGroupAuraPage(ctx)
     M.RebuildPageKeepingScroll((ctx and ctx.key) or M.activeKey or "gf_auras")
 end
+function GP.OpenAuraLaneLayout(ctx, lane)
+    local scope = CurrentScope()
+    SetAuraWorkspaceLane(scope, lane)
+    SetAuraWorkspaceTool(scope, lane, "layout")
+    RebuildGroupAuraPage(ctx)
+end
 local GROUP_AURA_VIEWS = {}
 local GROUP_AURA_VIEW_STATE = { gfScope = true, gfAuraLaneSelection = true, gfAuraToolSelection = true }
 local function GroupAuraWorkspaceView()
@@ -521,6 +527,27 @@ local function BuildLaneLayoutRow(L, kind, key, fallback, args, place, path, rou
     L.controls[#L.controls + 1] = widget
     return widget
 end
+local function BuildGroupAuraBarSwitch(L, width)
+    local ctx, lane = L.ctx, L.lane
+    local meta = LaneLayoutMeta(ctx, lane, "show-as-bars", {
+        searchSettingKeys = GroupAuraSettingKeys(L.scope, ".auras." .. lane .. ".showAuraBars"),
+    })
+    local widget = Schema.Build(ctx, L.section, {{ "switch", "showAuraBars", false, { "Show as Bars", 24, -218, width },
+        bind = function(control)
+            BindAuraWidget(ctx, control, "toggle", function() return AuraGroup(CurrentScope(), lane).showAuraBars == true end,
+                function(value)
+                    if CombatLocked() then return end
+                    local scope = CurrentScope()
+                    AuraGroup(scope, lane).showAuraBars = value == true
+                    QueueGF(scope, "auras")
+                    RefreshAuraPreviews(scope)
+                    RefreshContext(ctx)
+                end, false, meta)
+        end,
+    }}, ROW_OPTIONS).showAuraBars
+    L.controls[#L.controls + 1] = widget
+end
+
 local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
     local anchors = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
     local growthValues = VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down",
@@ -529,7 +556,8 @@ local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
     local defaults = AURA_LAYOUT_DEFAULTS[lane] or AURA_LAYOUT_DEFAULTS.debuff
     local title = lane == "debuff" and "Debuff Layout"
         or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
-    local section = auraBuilder:Section(title, 202)
+    local hasAuraBars = lane ~= "externals" and MSUF.Client.IsRetail == true
+    local section = auraBuilder:Section(title, hasAuraBars and 256 or 202)
     local w = section._msuf2Width or auraBuilder.width or 720
     local inner, gap = w - 48, 10
     local controls = {}
@@ -573,12 +601,24 @@ local function BuildLaneLayoutSection(ctx, auraBuilder, scope, lane)
         { 24 + 2 * (col4 + gap), -146, col4 }, "icon-scale", {
             searchSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
         })
+    local fillControl
+    if hasAuraBars then
+        BuildGroupAuraBarSwitch(L, (inner - gap) / 2)
+        fillControl = BuildLaneLayoutRow(L, "dropdown", "auraBarFill", "RIGHT",
+            { "Fill Direction", M.AuraControls.AURA_BAR_FILL_VALUES, (inner - gap) / 2 },
+            { 24 + (inner + gap) / 2, -204, (inner - gap) / 2, "LEFT" }, "aura-bar-fill", {
+                searchSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. lane .. ".auraBarFill"),
+            })
+    end
     M.TrackRefresh(ctx, function()
         local shown = LaneBackendEnabled(CurrentScope(), lane)
         SetOptionEnabled(enable, true)
         SetOptionsEnabled(controls, shown)
-        local growth = tostring(AuraGroup(CurrentScope(), lane).growth or defaults.growth):upper()
-        SetOptionEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
+        local group = AuraGroup(CurrentScope(), lane)
+        local growth = tostring(group.growth or defaults.growth):upper()
+        local asBars = hasAuraBars and group.showAuraBars == true
+        SetOptionEnabled(perRowControl, shown and not asBars and growth ~= "UP" and growth ~= "DOWN")
+        if fillControl then SetOptionEnabled(fillControl, shown and asBars) end
     end)
 end
 local function BuildGroupAuraArea(ctx, b)

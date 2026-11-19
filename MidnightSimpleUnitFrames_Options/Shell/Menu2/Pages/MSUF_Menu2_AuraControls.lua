@@ -19,6 +19,7 @@ local Round = M.AuraSettings.Round
 local SetCurrentLane = M.AuraSettings.SetCurrentLane
 
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
+local AURA_BAR_FILL_VALUES = VTP "RIGHT=Left to Right|LEFT=Right to Left|UP=Bottom to Top|DOWN=Top to Bottom"
 
 local AuraCatalogToken = M.AuraCatalogToken
 
@@ -128,6 +129,8 @@ local STYLE_SETTING_FIELDS = {
     ["auras3-duration-bar-display"] = "durationBarDisplay",
     ["auras3-duration-bar-position"] = "durationBarPosition",
     ["auras3-stealable-marker-style"] = "stealableStyle",
+    ["aura-bar-fill"] = "auraBarFill",
+    ["show-as-bars"] = "showAuraBars",
     ["auras3-sort-method"] = "sortMethod", ["auras3-sort-direction"] = "sortReverse",
     ["hide-permanent"] = "blacklist.hidePermanent",
     ["cooldown-swipe-direction"] = "cooldownSwipeReverse",
@@ -252,6 +255,9 @@ local function StyleSetting(page, path)
         else field = (schema.LANE_STYLE_KEYS[lane] or {})[field] or field end
         local unit = page:match("^uf_(.+)$") or "shared"
         if token == "auras3-debuff-type-border-mode" then return UnitLayoutSetting(unit, { field, "useDebuffTypeBorders" }) end
+        if token == "showdurationbar" and MSUF.Client.IsRetail and schema.LANE_SPECS[lane] then
+            return UnitLayoutSetting(unit, { field, schema.LANE_SPECS[lane].durationBarDisplayKey })
+        end
         return UnitLayoutSetting(unit, { field })
     end
     local appearance = path:match("^style%.appearance%.icon%-style%.(.+)$")
@@ -283,7 +289,13 @@ local function ScopedAuraSetting(page, path)
             for _, key in ipairs(M.ControlSchema.GroupKeys("auras." .. lane .. ".showDispelSymbol").keys) do keys[#keys + 1] = key end
             return M.ControlSchema.Family(keys)
         end
-        return M.ControlSchema.GroupKeys("auras." .. lane .. "." .. field)
+        local base = "auras." .. lane .. "."
+        if token == "showdurationbar" and MSUF.Client.IsRetail and (lane == "buff" or lane == "debuff") then
+            local keys = M.ControlSchema.GroupKeys(base .. field).keys
+            for _, key in ipairs(M.ControlSchema.GroupKeys(base .. "durationBarDisplay").keys) do keys[#keys + 1] = key end
+            return M.ControlSchema.Family(keys)
+        end
+        return M.ControlSchema.GroupKeys(base .. field)
     end
     if path == "group-style.root.dynamicscale" then return M.ControlSchema.GroupKeys("auras.dynamicScale") end
     lane, token = path:match("^unit%-workspace%.lane%.([%w]+)%.layout%.(.+)$")
@@ -294,6 +306,7 @@ local function ScopedAuraSetting(page, path)
         if token == "max-duration" then return UnitRuleSetting(unit, lane, "maxDuration", true) end
         local names = { anchor = "anchorKey", growth = "growthKey", ["icon-height"] = "heightPercentKey",
             ["icon-size"] = "sizeKey", layer = "layerKey", ["max-icons"] = "maxKey", ["per-row"] = "perRowKey", spacing = "spacingKey" }
+        names["show-as-bars"], names["aura-bar-fill"] = "showAuraBarsKey", "auraBarFillKey"
         local spec = MSUF.MSUF_Auras3.LaneKeySchema.LANE_SPECS[lane]
         local key = names[token] and spec[names[token]]
         if not key then return nil end
@@ -479,6 +492,15 @@ local function ActionButton(parent, label, width, role)
     local btn = T.Button(parent, label, width or 90, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(btn) end
     return btn
+end
+
+local function AddAuraBarLayoutShortcut(ctx, parent, path, scope, width, openLayout)
+    local label = "Aura Bar Layout"
+    local button = ActionButton(parent, label, width)
+    button:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -184)
+    button:SetScript("OnClick", openLayout)
+    RegisterAuraControl(ctx, button, label, "button", path, "navigation", ctx.key)
+    M.ControlSchema.Owned(button, scope, "navigation")
 end
 
 local Card = W.ThemedControlCard
@@ -825,6 +847,7 @@ end
 
 M.AuraControls = {
     ActionButton = ActionButton,
+    AddAuraBarLayoutShortcut = AddAuraBarLayoutShortcut,
     AddAuraTooltipHelp = AddAuraTooltipHelp,
     AddCasterFilterTooltip = AddCasterFilterTooltip,
     AddTooltip = AddTooltip,
@@ -848,6 +871,7 @@ M.AuraControls = {
     ConfigureAuraSpellPriorityDrag = ConfigureAuraSpellPriorityDrag,
     ConfigureMaxDurationSlider = ConfigureMaxDurationSlider,
     LANE_VALUES = LANE_VALUES,
+    AURA_BAR_FILL_VALUES = AURA_BAR_FILL_VALUES,
     QueueAurasPageRefresh = QueueAurasPageRefresh,
     Rebuild = Rebuild,
     Repaint = Repaint,

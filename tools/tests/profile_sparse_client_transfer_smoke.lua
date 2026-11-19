@@ -3,6 +3,13 @@ local root, source = assert(arg[1]), assert(arg[2])
 local C = assert(loadfile(root .. "/tools/profile_corpus_golden.lua"))()
 local H = assert(loadfile(root .. "/tools/tests/profile_state_harness.lua"))()
 local function Serial(value) return assert(loadstring("return " .. H.Literal(value)))() end
+local function EffectiveAccount(world)
+    local account = C.Copy(world.env.MSUF_GlobalDB)
+    for name, profile in pairs(account.profiles) do
+        account.profiles[name] = world.core.ProfileNormalize.ResolveStoredProfile(profile)
+    end
+    return H.Literal(account)
+end
 local function Saved(world, flavor)
     local suffix = flavor == "Forever" and "Mainline" or flavor
     local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_" .. suffix .. ".toc", "rb"))
@@ -27,6 +34,9 @@ for _, world in ipairs({ original, control }) do
         local profile = C.Copy(world.env.MSUF_DB)
         profile.general[marker] = C.Copy(value)
         profile.general.markerTransferUnknown = { [0] = "zero", false, 0, "" }
+        if i == 2 then
+            profile.bars.manaRegenPause, profile.bars.manaGainPulse = false, false
+        end
         pool["Marker" .. i] = profile
     end
     pool.MarkerAbsent = C.Copy(world.env.MSUF_DB)
@@ -50,13 +60,17 @@ assert(#H.Literal(compact) < #H.Literal(full), "declared SavedVariables did not 
 assert(compact.MSUF_GlobalDB.profiles.Marker2.general[marker] == false, "factory cadence was pruned")
 for _, destination in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local a, b = Load(destination, full), Load(destination, compact)
-    assert(H.Literal(a.env.MSUF_GlobalDB) == H.Literal(b.env.MSUF_GlobalDB),
+    assert(b.core.DefaultsSchema.HasCurrentSparseProfile(b.env.MSUF_GlobalDB.profiles.Marker1),
+        "destination inflated a valid inactive profile")
+    local storedOff = b.core.ProfileNormalize.ResolveStoredProfile(b.env.MSUF_GlobalDB.profiles.Marker2).bars
+    assert(storedOff.manaRegenPause == false and storedOff.manaGainPulse == false, "explicit mana indicator choices changed")
+    assert(EffectiveAccount(a) == EffectiveAccount(b),
         source .. " -> " .. destination .. ": destination opacity, stamps or other values changed")
     assert(b.env.MSUF_DB == b.env.MSUF_GlobalDB.profiles[b.env.MSUF_ActiveProfile], "destination identity changed")
     a:FireEvent("PLAYER_LOGOUT")
     b:FireEvent("PLAYER_LOGOUT")
     local returnedA, returnedB = Load(source, Saved(a, destination)), Load(source, Saved(b, destination))
-    assert(H.Literal(returnedA.env.MSUF_GlobalDB) == H.Literal(returnedB.env.MSUF_GlobalDB),
+    assert(EffectiveAccount(returnedA) == EffectiveAccount(returnedB),
         source .. " -> " .. destination .. ": declared-variable return changed")
     a, b, returnedA, returnedB = nil, nil, nil, nil
     collectgarbage("collect")

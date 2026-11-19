@@ -72,11 +72,13 @@ end
 local function HideFrameAuraPreview(visual)
   if not visual then return end
   visual:Hide()
+  AuraPainter.HideAuraBarSample(visual)
   if visual._texture then visual._texture:Hide() end
   if visual._swipe then visual._swipe:Hide() end
   if visual._timer then visual._timer:Hide() end
   if visual._stack then visual._stack:Hide() end
   if visual._durationBar then visual._durationBar:Hide() end
+  if visual._dispelBorder then visual._dispelBorder:Hide() end
   if visual._stealableMarker then visual._stealableMarker:Hide() end
   local A3 = MSUF and MSUF.MSUF_Auras3
   if A3 and type(A3.ApplyIconStylePreview) == "function" then
@@ -96,6 +98,15 @@ local function FrameAuraPreviewOffset(lane, slot)
   local x = column * step * (tonumber(lane.xSign) or 1)
   local y = row * (lane.stepY or step) * (tonumber(lane.ySign) or -1)
   return x, y
+end
+
+local function PaintFrameAuraBar(visual, lane, kind, index, scene)
+  HideFrameAuraPreview(visual)
+  visual._sceneAuraLane, visual._sceneAuraKind, visual._sceneAuraIndex = lane, kind, index
+  AuraPainter.PaintAuraBarSample(visual, lane, kind, PreviewLayerOn("auraText", scene))
+  AuraPainter.UpdateAuraBarSample(visual, lane, AuraPainter.AuraState(visual, kind, index, lane))
+  visual:Show()
+  return true
 end
 
 local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host, reminderPlaced, scene, sample)
@@ -118,6 +129,8 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   visual:SetPoint(initialAnchor, host, initialAnchor, x, y)
   if visual.SetFrameLevel and host.GetFrameLevel then visual:SetFrameLevel((host:GetFrameLevel() or 0) + 1) end
   if visual.SetAlpha then visual:SetAlpha(1) end
+  if lane.auraBarFill then return PaintFrameAuraBar(visual, lane, descriptor.key, slot + 1, scene) end
+  AuraPainter.HideAuraBarSample(visual)
 
   local texture = visual._texture
   local textures = descriptor.textures
@@ -365,6 +378,7 @@ local function SceneStyleLane(frame, unit, lanes, kind)
     and (unit == "player" and "defensivePortrait" or "targetDotPortrait") or nil
   local source = lanes and lanes[portraitKey or kind]
     or (index and cfg.customMetrics[index] or cfg[kind .. "Metrics"])
+  if source and source.auraBar then source = source.auraBar end
   local lane = {}
   for key, value in pairs(source or {}) do lane[key] = value end
   local raw, placed
@@ -450,6 +464,9 @@ function GF.AnimateUnitFrameAuras(frame, elapsed)
     if lane and visual:IsShown() then
       local state = elapsed ~= nil and AuraPainter.AuraState(visual, visual._sceneAuraKind, visual._sceneAuraIndex, lane, elapsed,
         lane.targetDots and 18 or nil, lane.targetDots, lane.targetDots and 0.30 or nil)
+      if lane.auraBarFill then
+        AuraPainter.UpdateAuraBarSample(visual, lane, state or AuraPainter.AuraState(visual, visual._sceneAuraKind, visual._sceneAuraIndex, lane))
+      end
       if visual._swipe and lane.showCooldownSwipe then
         AuraPainter.Swipe(visual._swipe, visual, visual:GetWidth(), visual:GetHeight(), state and state.remainingFrac or 0.42,
           lane.cooldownSwipeReverse == true)

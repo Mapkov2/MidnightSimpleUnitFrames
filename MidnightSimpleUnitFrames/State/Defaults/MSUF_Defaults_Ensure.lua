@@ -157,9 +157,17 @@ MSUF.ProfileMigrations = (function()
             end
         end
     end
-    function Migrations.ApplyStoredProfiles(profiles)
+    function Migrations.ApplyStoredProfiles(profiles, dormant)
         -- Inactive/donor media names retain their stored value until activation.
-        for _, profile in pairs(profiles) do Migrations.Apply(profile, true) end
+        for _, profile in pairs(profiles) do
+            if dormant and dormant[profile] then
+                -- Forever's mana defaults are stored outside the sparse slots, so
+                -- they can follow the profile without expanding inactive settings.
+                if MSUF.Client.IsForever then SeedManaIndicators(profile) end
+            else
+                Migrations.Apply(profile, true)
+            end
+        end
     end
     return Migrations
 end)()

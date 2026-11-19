@@ -96,9 +96,11 @@ end
 function Shared.SectionIsCustom(spec, conf, defaults, cache)
     if type(conf) ~= "table" or type(defaults) ~= "table" then return false end
     local keys = cache.keys
-    if not keys or cache.conf ~= conf or cache.defaults ~= defaults then
-        keys = Shared.SectionFieldKeys(spec, conf, defaults)
-        cache.keys, cache.conf, cache.defaults = keys, conf, defaults
+    if not keys or cache.defaults ~= defaults then
+        -- Only factory fields can contribute to the badge. Copy and reset
+        -- still use the field union to handle old or profile-only settings.
+        keys = Shared.SectionFieldKeys(spec, defaults)
+        cache.keys, cache.defaults = keys, defaults
     end
     for i = 1, #keys do
         local key = keys[i]
@@ -179,6 +181,29 @@ local function SectionBelongsToRoot(section, root)
     end
     return false
 end
+
+-- Let cold page creation and exact search focus finish before reading factory
+-- defaults and painting badges. One tracked task services the visible page.
+local function QueueSectionBadge(page, refresh)
+    local work = page._msuf2SectionBadgeWork
+    if not work then
+        work = { refreshers = {} }
+        page._msuf2SectionBadgeWork = work
+    end
+    work.refreshers[refresh] = true
+    if work.task and work.task.active then return end
+    work.task = M.MenuTimer.After(0, function()
+        page._msuf2SectionBadgeWork = nil
+        if page._msuf2Invalidated then return end
+        if M.activeKey ~= page.key or M.cache[page.key] ~= page or not page.wrapper:IsVisible() then
+            -- Re-selecting a cached page must retry badges skipped while it was hidden.
+            page._msuf2RefreshRevision = nil
+            return
+        end
+        for callback in pairs(work.refreshers) do callback() end
+    end)
+end
+
 function Shared.AttachSectionUX(ctx, opts, root)
     if not (ctx and ctx.entry) then return end
     for id, spec in pairs(opts.sections) do
@@ -197,13 +222,25 @@ function Shared.AttachSectionUX(ctx, opts, root)
             -- before display, so they skip the defaults snapshot entirely.
             local customCache = (spec.fields or spec.prefixes) and W.SetCollapsibleCustomBadge
                 and not ctx.entry.hiddenBuild and {} or nil
+            local RefreshBadge
+            if customCache then
+                function RefreshBadge(scope)
+                    scope = scope or opts.scope()
+                    W.SetCollapsibleCustomBadge(section, Shared.SectionIsCustom(spec, opts.conf(scope),
+                        Shared.CachedSectionDefaults(opts, scope), customCache))
+                    customCache.scope = scope
+                end
+            end
             local function Refresh()
                 local scope = opts.scope()
                 -- Summaries are composed from translated words and numbers already.
                 T.SetTranslatedText(summary, spec.summary and spec.summary(opts.conf(scope), scope) or "")
-                if customCache then
-                    W.SetCollapsibleCustomBadge(section, Shared.SectionIsCustom(spec, opts.conf(scope),
-                        Shared.CachedSectionDefaults(opts, scope), customCache))
+                if RefreshBadge then
+                    if customCache.scope == scope then
+                        RefreshBadge(scope)
+                    else
+                        QueueSectionBadge(ctx.entry, RefreshBadge)
+                    end
                 end
                 if entry._msuf2SectionActions then
                     W.SetControlEnabled(entry._msuf2SectionActions, not entry.featureSwitch or entry.featureSwitch:IsEnabled())

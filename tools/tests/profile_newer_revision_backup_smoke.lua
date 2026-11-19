@@ -170,11 +170,18 @@ do
         assert(H.Literal(profile.retainedData) == H.Literal(expected.retainedData),
             "revision-18 upgrade changed opaque data")
     end
-    local function CheckLogin(w)
+    local function CheckLogin(w, sparseInactive)
         local saved = w.env.MSUF_GlobalDB
         assert(w.core.Lifecycle.Bound and w.env.MSUF_DB == saved.profiles.Default, "7.0 login did not bind the selected profile")
         assert(saved.char["Tester-Realm"].specProfileMap[1] == "Inactive", "upgrade changed a character's profile mapping")
-        for _, profile in pairs(saved.profiles) do
+        for name, stored in pairs(saved.profiles) do
+            local profile = stored
+            if name == "Inactive" and sparseInactive then
+                local schema = w.core.DefaultsSchema
+                assert(schema.IsValidSparseProfile(stored), "reload expanded an inactive profile")
+                profile = Serial(stored)
+                assert(schema.RestorePersistence(profile), "inactive profile could not be restored")
+            end
             assert(profile._msufDefaultsRevision == 17, "a full revision-18 profile would retry the upgrade")
             CheckUserSettings(profile)
         end
@@ -189,7 +196,7 @@ do
     upgraded:FireEvent("PLAYER_LOGOUT")
     local secondLogin = C.NewWorld(root, flavor, "Tester-Realm")
     C.Login(secondLogin, { MSUF_GlobalDB = Serial(account) }, true)
-    CheckLogin(secondLogin)
+    CheckLogin(secondLogin, true)
 
     local legacyOnly = C.NewWorld(root, flavor, "Tester-Realm")
     C.Login(legacyOnly, { MSUF_DB = FullRevision18() }, true)

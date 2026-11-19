@@ -698,6 +698,7 @@ PARTY_DEFAULTS.portraitBgColorR = 0.05
 PARTY_DEFAULTS.portraitBgColorG = 0.05
 PARTY_DEFAULTS.portraitBgColorB = 0.05
 PARTY_DEFAULTS.portraitBgColorA = 0.85
+PARTY_DEFAULTS.showPartyInRaid = false
 
 --- Threat percentage text (Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua): each
 --- member's threat on the player's current target. Only the clients offering it
@@ -848,12 +849,13 @@ function GF.IsArenaPartyContext()
     return type(isInBrawl) ~= "function" or isInBrawl() ~= true
 end
 
---- A raid of up to five shown with the Party layout. Only while the Party scope
---- itself is on: otherwise the Raid scope keeps the raid, or nothing would show.
+function GF.UsesSmallRaidPartyLayout(conf)
+    return conf.enabled == true and conf.smallRaidAsParty == true and conf.showPartyInRaid ~= true
+end
+
+--- Small raids use the whole raid roster only in the replacement layout.
 function GF.IsSmallRaidPartyContext()
-    if not IsInRaid() then return false end
-    local conf = GF.GetConf("party")
-    if not (conf.enabled == true and conf.smallRaidAsParty == true) then return false end
+    if not IsInRaid() or not GF.UsesSmallRaidPartyLayout(GF.GetConf("party")) then return false end
     local count = GetNumGroupMembers()
     return count > 0 and count <= 5
 end
@@ -870,6 +872,11 @@ function GF.GetLiveGroupKind()
         return "party"
     end
     return nil
+end
+
+--- The Party layout can accompany the primary Raid or Mythic Raid layout.
+function GF.IsPartyGroupContext(kind, conf)
+    return kind == "party" or (conf.showPartyInRaid == true and (kind == "raid" or kind == "mythicraid"))
 end
 
 function GF.GetConfigDBKey(kind)

@@ -109,4 +109,47 @@ for _, key in ipairs({ "MSUF Lucent", "Flat" }) do
         "unchanged global refresh rewrote the HP textures")
     ExpectFill(key)
 end
+-- Core must render the Suite unit-frame art even when Suite is absent.
+local coreAsset = "MidnightSimpleUnitFrames/Media/TextureLayers/UnitFrame.tga"
+local asset = assert(io.open(root .. "/" .. coreAsset, "rb"))
+asset:close()
+local corePath = "Interface\\AddOns\\" .. coreAsset:gsub("/", "\\")
+local suitePath = "MSUF_Suite\\Media\\BlizzardFrames\\UnitFrame.tga"
+local player = db.player
+player.texLayerEnabled, player.texLayerCustomTexturePath = true, "Interface\\AddOns\\" .. suitePath
+player.texLayerSourceMode = "CUSTOM"
+player.texLayer2Enabled, player.texLayer2CustomTexturePath, player.texLayer2SourceMode = true, suitePath, nil
+player.texLayer3Enabled, player.texLayer3CustomTexturePath = true, corePath
+player.texLayer3SourceMode = "CUSTOM"
+
+local TextureLayer = mw.core.TextureLayer
+local frame = frames.player
+local sample = env.CreateFrame("Frame", nil, env.UIParent)
+sample:SetSize(frame:GetSize())
+TextureLayer.ApplyToUnitFrame(frame)
+TextureLayer.PaintSample(sample, "player", 100, 100, "MAGE")
+for slot = 1, 3 do
+    Check(frame._msufTexLayers[slot].tex:GetTexture() == corePath, "unit layer " .. slot .. " did not paint the Core file")
+    Check(sample._msufTexLayers[slot].tex:GetTexture() == corePath, "preview layer " .. slot .. " did not paint the Core file")
+end
+Check(player.texLayerCustomTexturePath == "Interface\\AddOns\\" .. suitePath, "rendering changed the full saved path")
+Check(player.texLayer2CustomTexturePath == suitePath, "rendering changed the short saved path")
+
+player.texLayerSourceMode = "SHAREDMEDIA"
+player.texLayerTexture = "MSUF Lucent"
+player.texLayer3CustomTexturePath = BLIZZARD_FILL
+local function ExpectLayerTextures(first, third)
+    TextureLayer.ApplyToUnitFrame(frame)
+    TextureLayer.PaintSample(sample, "player", 100, 100, "MAGE")
+    for _, painted in ipairs({ frame, sample }) do
+        Check(painted._msufTexLayers[1].tex:GetTexture() == first, "first texture source was not applied")
+        Check(painted._msufTexLayers[3].tex:GetTexture() == third, "third texture source was not applied")
+    end
+end
+ExpectLayerTextures(ResolveTexture("MSUF Lucent"), BLIZZARD_FILL)
+player.texLayerSourceMode = "CUSTOM"
+player.texLayerCustomTexturePath = "interface/addons/msuf_suite/media/blizzardframes/unitframe"
+player.texLayer3CustomTexturePath = coreAsset
+ExpectLayerTextures(corePath, corePath)
+
 print("blizzard_preset_texture_smoke: " .. checks .. " checks passed (" .. flavor .. ")")

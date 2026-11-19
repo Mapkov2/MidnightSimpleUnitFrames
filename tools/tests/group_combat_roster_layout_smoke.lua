@@ -331,8 +331,156 @@ local function ResizedSoloParty(withPreview)
 end
 
 
+local function PartyAlongsideRaid()
+  local h = World("raid", true)
+  local gf = h.GF
+  local party = gf.GetConf("party")
+  assert(party.showPartyInRaid == false and gf.GetDefault("raid", "showPartyInRaid") == nil,
+    "parallel party frames must be opt-in and scoped to Party")
+
+  local function Roster(size, subgroup)
+    h:SetRaid(size, subgroup)
+    h:Event("GROUP_ROSTER_UPDATE")
+    h:RunDeferred()
+  end
+
+  local function RefreshParty()
+    gf.RefreshHeaderLayout("party")
+    h:RunDeferred()
+  end
+
+  Roster(4, {2, 4})
+  assert(gf.headers.raid and not gf.headers.party, "raid should start with only its normal frame")
+  party.smallRaidAsParty = true
+  gf.RefreshHeaderLayout()
+  h:RunDeferred()
+  assert(not gf.headers.raid and Ordered(h, assert(gf.headers.party)) == "raid1,raid2,raid3,raid4",
+    "the existing small-raid setting should use the whole roster")
+
+  party.showPartyInRaid = true
+  party.sortMode, party.playerFirstInRole, party.groupBorderEnabled = "ROLE", true, true
+  RefreshParty()
+  local header = assert(gf.headers.party)
+  local border = assert(gf.anchors.party.MSUFGFGroupBorder)
+  local _, edge = next(border)
+  assert(edge and Visible(edge), "parallel party frames must show their border")
+  assert(Ordered(h, header) == "player,party1,party2" and not header:GetAttribute("showRaid"),
+    "parallel small raid must display only the subgroup via native party tokens")
+  assert(Ordered(h, assert(gf.headers.raid)) == "raid1,raid2,raid3,raid4",
+    "party-scoped refresh must restore the Raid layout for a small raid")
+  assert(header:GetAttribute("nameList"), "Party role/player-first sort must remain available in raid")
+
+  -- The native list is also a filter, so unreadable names must fall back to native membership.
+  h.rosterNames = { party2 = "" }
+  RefreshParty()
+  assert(Ordered(h, header) == "player,party1,party2" and not header:GetAttribute("nameList"),
+    "a partial sort list must not hide a subgroup member")
+  h.rosterNames = nil
+  RefreshParty()
+
+  h:EnterCombat()
+  Roster(6, {5, 6})
+  assert(gf.headers.party == header and not header:GetAttribute("showRaid"),
+    "crossing the small-raid threshold in combat must retain party-token bindings")
+  assert(#h.violations == 0, h.violations[1])
+  h:LeaveCombat()
+  h:RunDeferred()
+  assert(Ordered(h, header) == "player,party1,party2"
+    and h.env.UnitGUID("party1") == h.env.UnitGUID("raid5")
+    and h.env.UnitGUID("party2") == h.env.UnitGUID("raid6"), "subgroup slots must rebind to the new members")
+  assert(Ordered(h, assert(gf.headers.raid)) == "raid1,raid2,raid3,raid4,raid5,raid6",
+    "raid layout must still include every member")
+
+  Roster(6, {})
+  assert(Ordered(h, header) == "player", "a singleton subgroup should show the player")
+  party.showPlayer = false
+  RefreshParty()
+  assert(Ordered(h, header) == "" and gf.headers.raid and not Visible(edge),
+    "an empty subgroup must hide its frames and border")
+
+  party.showPlayer = true
+  Roster(4, {2, 4})
+  h:EnterCombat()
+  party.showPartyInRaid = false
+  RefreshParty()
+  party.spacing = party.spacing + 1
+  RefreshParty()
+  assert(gf.headers.raid and not header:GetAttribute("showRaid"), "a combat refresh must defer protected visibility")
+  h:LeaveCombat()
+  h:RunDeferred()
+  assert(not gf.headers.raid and Ordered(h, assert(gf.headers.party)) == "raid1,raid2,raid3,raid4",
+    "deferred party-scoped refresh must restore the small-raid layout")
+  Roster(6, {5, 6})
+  assert(gf.headers.raid and not gf.headers.party, "turning off the setting must hide Party in a larger raid")
+  assert(#h.violations == 0, h.violations[1])
+end
+
+local function NativeRaidFallbackAlongsideParty()
+  local proxy, driver
+  local function Tick(h)
+    local value = h.env.UnitExists("raid6") and "show" or "hide"
+    local state = "state-" .. driver
+    h.RunSecure(function()
+      if driver == "visibility" then
+        proxy:SetShown(value == "show")
+      elseif proxy:GetAttribute(state) ~= value then
+        proxy:SetAttribute(state, value)
+        local handler = assert(loadstring(proxy:GetAttribute("_onstate-" .. driver)))
+        setfenv(handler, { self = proxy, newstate = value })
+        handler()
+      end
+    end)
+  end
+
+  local h = Harness.New(root, flavor, { compiledChunks = compiledChunks, beforeBoot = function(world)
+    local env = world.env
+    local register = env.RegisterStateDriver
+    env.RegisterStateDriver = function(frame, state, condition)
+      if frame:GetName() ~= "MSUF_GF_BlizzardSmallRaidParent" then return register(frame, state, condition) end
+      assert(condition == "[@raid6,exists] show; hide", "unexpected native raid proxy driver")
+      proxy, driver = frame, state
+      Tick(world)
+    end
+  end })
+  local parent = h.env.CreateFrame("Frame", nil, h.env.UIParent)
+  local container = h.env.CreateFrame("Frame", "CompactRaidFrameContainer", parent)
+  h.env.CompactRaidFrameContainer = container
+  local gf = h.GF
+  local party, raid = gf.GetConf("party"), gf.GetConf("raid")
+  party.enabled, party.smallRaidAsParty = true, true
+  raid.enabled, raid.blizzardFallbackMode = false, "SHOW"
+  h:SetRaid(4, {2, 4})
+  gf.RefreshHeaderLayout()
+  h:RunDeferred()
+  assert(container:GetParent() == proxy and not Visible(container), "legacy small raid must hide the Blizzard raid frames")
+
+  party.showPartyInRaid = true
+  gf.RefreshHeaderLayout("party")
+  h:RunDeferred()
+  assert(not Visible(container), "addon refresh must defer the Blizzard visibility change to the native driver")
+  Tick(h)
+  assert(Visible(container) and Ordered(h, assert(gf.headers.party)) == "player,party1,party2" and not gf.headers.raid,
+    "parallel Party mode must coexist with the configured Blizzard raid frames")
+  parent:Hide()
+  gf.ApplyBlizzardGroupFrameOwnership("addon-loaded:test")
+  assert(Visible(container) and container:GetParent() == proxy, "reparenting must preserve effective visibility")
+  parent:Show()
+  gf.ApplyBlizzardGroupFrameOwnership("addon-loaded:test")
+  assert(Visible(container) and container:GetParent() == parent, "visible native parent should regain the container")
+  Tick(h)
+
+  party.showPartyInRaid = false
+  gf.RefreshHeaderLayout("party")
+  h:RunDeferred()
+  Tick(h)
+  assert(not Visible(container), "legacy behavior must return when the parallel setting is off")
+  assert(#h.violations == 0, h.violations[1])
+end
+
 ResizedSoloParty(false)
 ResizedSoloParty(true)
+PartyAlongsideRaid()
+NativeRaidFallbackAlongsideParty()
 
 FrozenRoster("raid")
 FrozenRoster("party")

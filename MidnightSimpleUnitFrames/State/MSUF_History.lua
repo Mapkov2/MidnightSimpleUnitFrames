@@ -367,7 +367,6 @@ local HUGE = math.huge
 local DIFF_LIMIT_COUNT, DIFF_LIMIT_BYTES, DIFF_LIMIT_DEPTH = 131072, 8388608, 32
 local type, pairs, getmetatable = type, pairs, getmetatable
 local diffOut, diffSeen, diffStrictProfile
-local diffCount, diffBytes = 0, 0
 local diffPath = {}
 local function DiffEmit(depth, key, before, after)
     local path = {}
@@ -375,49 +374,52 @@ local function DiffEmit(depth, key, before, after)
     path[depth + 1] = key
     diffOut[#diffOut + 1] = { path = path, before = before, after = after }
 end
-local function DiffCopy(value, depth, strict)
-    if not strict then return DeepCopy(value), true end
-    local budget = { count = diffCount, limit = DIFF_LIMIT_COUNT, maxDepth = DIFF_LIMIT_DEPTH - depth,
-        bytes = diffBytes, maxBytes = DIFF_LIMIT_BYTES }
+local function DiffCopy(value, depth, strict, entriesLeft, bytesLeft)
+    if not strict then return DeepCopy(value), entriesLeft, bytesLeft end
+    local budget = { count = 0, limit = entriesLeft, maxDepth = DIFF_LIMIT_DEPTH - depth, bytes = 0, maxBytes = bytesLeft }
     local copy, valid = MSUF.ProfileFields.CopySnapshot(value, budget)
-    diffCount, diffBytes = budget.count, budget.bytes
-    return copy, valid
+    if not valid then return end
+    return copy, entriesLeft - budget.count, bytesLeft - budget.bytes
 end
-local function DiffTable(a, b, depth, strict)
-    if diffSeen[b] then return false end
+-- Keep the remaining budgets in Lua locals through each table's field loop.
+local function DiffTable(a, b, depth, strict, entriesLeft, bytesLeft)
+    if diffSeen[b] then return end
     diffSeen[b] = true
     local deeper = depth + 1
+    local lower, upper = -HUGE, HUGE
     for key, value in pairs(b) do
         local kind = type(value)
         if strict then
             local keyKind = type(key)
             if keyKind == "string" then
-                diffBytes = diffBytes + #key
+                bytesLeft = bytesLeft - #key
             elseif keyKind == "number" then
-                if key ~= key or key == HUGE or key == -HUGE then return false end
+                if not (key > lower and key < upper) then return end
             elseif keyKind ~= "boolean" then
-                return false
+                return
             end
             if kind == "string" then
-                diffBytes = diffBytes + #value
+                bytesLeft = bytesLeft - #value
             elseif kind == "number" then
-                if value ~= value or value == HUGE or value == -HUGE then return false end
+                if not (value > lower and value < upper) then return end
             elseif kind ~= "boolean" and kind ~= "table" then
-                return false
+                return
             end
-            diffCount = diffCount + 1
-            if diffCount > DIFF_LIMIT_COUNT or diffBytes > DIFF_LIMIT_BYTES then return false end
+            entriesLeft = entriesLeft - 1
+            if entriesLeft < 0 or bytesLeft < 0 then return end
         end
         local old = a[key]
         if kind == "table" then
             local inner = strict or (diffStrictProfile and depth == 0 and key == "profileDB")
-            if inner and (getmetatable(value) ~= nil or depth >= DIFF_LIMIT_DEPTH) then return false end
+            if inner and (getmetatable(value) ~= nil or depth >= DIFF_LIMIT_DEPTH) then return end
             if type(old) == "table" then
                 diffPath[deeper] = key
-                if not DiffTable(old, value, deeper, inner) then return false end
+                entriesLeft, bytesLeft = DiffTable(old, value, deeper, inner, entriesLeft, bytesLeft)
+                if not entriesLeft then return end
             else
-                local copy, valid = DiffCopy(value, depth, inner)
-                if not valid then return false end
+                local copy
+                copy, entriesLeft, bytesLeft = DiffCopy(value, depth, inner, entriesLeft, bytesLeft)
+                if not entriesLeft then return end
                 DiffEmit(depth, key, old, copy)
             end
         elseif old ~= value then
@@ -428,13 +430,13 @@ local function DiffTable(a, b, depth, strict)
         if b[key] == nil then DiffEmit(depth, key, old, nil) end
     end
     diffSeen[b] = nil
-    return true
+    return entriesLeft, bytesLeft
 end
 local function ProfileDiff(before, after)
     if type(before) ~= "table" or type(after) ~= "table" then return nil end
-    diffOut, diffSeen, diffCount, diffBytes = {}, {}, 0, 0
+    diffOut, diffSeen = {}, {}
     diffStrictProfile = MSUF.ProfileVariants ~= nil and MSUF.ProfileFields ~= nil
-    local ok = DiffTable(before, after, 0, false)
+    local ok = DiffTable(before, after, 0, false, DIFF_LIMIT_COUNT, DIFF_LIMIT_BYTES)
     local changes = ok and diffOut or nil
     diffOut, diffSeen = nil, nil
     for i = #diffPath, 1, -1 do diffPath[i] = nil end
@@ -709,10 +711,10 @@ local function ScopedHistoryRoot(before, scope)
     return root
 end
 local function PushScopedHistory(label, source, before, root)
-    diffOut, diffSeen, diffCount, diffBytes = {}, {}, 0, 0
+    diffOut, diffSeen = {}, {}
     diffStrictProfile = MSUF.ProfileVariants ~= nil and MSUF.ProfileFields ~= nil
     diffPath[1], diffPath[2] = "profileDB", root
-    local ok = DiffTable(before.profileDB[root], M.EnsureDB()[root], 2, diffStrictProfile)
+    local ok = DiffTable(before.profileDB[root], M.EnsureDB()[root], 2, diffStrictProfile, DIFF_LIMIT_COUNT, DIFF_LIMIT_BYTES)
     local diff = ok and diffOut or nil
     diffOut, diffSeen = nil, nil
     for i = #diffPath, 1, -1 do diffPath[i] = nil end

@@ -167,6 +167,36 @@ function AuraConfig.LanePreviewFields(lane)
 end
 
 -- Configuration rebuild helpers; unchanged cache-hit event routes do not call these.
+function AuraConfig.NormalizeAuraBarFill(direction)
+    if direction == "LEFT" or direction == "UP" or direction == "DOWN" then return direction end
+    return "RIGHT"
+end
+
+function AuraConfig.ApplyAuraBarGeometry(lane, direction, compact)
+    local spacing, padding = lane.spacing or 0, lane.padding or 0
+    local height = math.max(10, math.min(28, math.floor((lane.buttonHeight or lane.size) * 0.65 + 0.5)))
+    local width = math.floor(lane.size * (compact and 3.5 or 5) + 0.5)
+    width = math.max(compact and 66 or 96, math.min(compact and 136 or 220, width))
+    lane.auraBarFill = AuraConfig.NormalizeAuraBarFill(direction)
+    lane.showDurationBar, lane.durationBarDisplay = true, "BAR_ONLY"
+    lane.showCooldownSwipe = false
+    lane.verticalGrowth, lane.perRow = true, 1
+    lane.cols, lane.rows = 1, lane.max
+    lane.buttonWidth, lane.buttonHeight = width, height
+    lane.stepX, lane.stepY = width + spacing, height + spacing
+    lane.step = lane.stepX
+    lane.width = width + 2 * padding
+    lane.height = height + math.max(lane.max - 1, 0) * lane.stepY + 2 * padding
+    local fontLimit = math.min(14, height - 2)
+    lane.cooldownSize = math.min(lane.cooldownSize or fontLimit, fontLimit)
+    lane.stackSize = math.min(lane.stackSize or fontLimit, fontLimit)
+    lane.cooldownAnchor, lane.cooldownX, lane.cooldownY = "RIGHT", -4, 0
+    local timerSpace = lane.showCooldownText and math.ceil(lane.cooldownSize * 2.4) or 0
+    lane.stackAnchor, lane.stackX, lane.stackY = "RIGHT", -4 - timerSpace, 0
+    local stackSpace = lane.showStacks and math.ceil(lane.stackSize * 1.4) or 0
+    lane.auraBarNameInset = math.min(math.floor(width * 0.64), 8 + timerSpace + stackSpace)
+end
+
 function AuraConfig.StampSlot(placed, anchor, x, y, size)
     placed.type, placed.anchor = "icon", anchor
     placed.x, placed.y, placed.size = x, y, size

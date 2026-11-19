@@ -33,7 +33,13 @@ for _, entry in ipairs(C.Manifest(root)) do
         pool.Inactive = C.Copy(env.MSUF_DB)
         pool.Inactive.general.rollbackUnknown = { false, 0, "", [12345] = "spell" }
         pool.Inactive.general.castbarShowPushback = nil
-        local full = H.Literal(pool)
+        -- The previously visited profiles may have been compacted when the
+        -- next profile was selected. Decode a copy for the native comparison.
+        local expected = Serial(pool)
+        for _, profile in pairs(expected) do
+            if profile._msufSparseDefaultsV2 then assert(ns.DefaultsSchema.RestorePersistence(profile)) end
+        end
+        local full = H.Literal(expected)
         w:FireEvent("PLAYER_LOGOUT")
         assert(type(pool.Inactive._msufSparseDefaultsV3) == "string", "source was not V3 sparse")
         local sparse = Serial(env.MSUF_GlobalDB)

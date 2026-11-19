@@ -719,7 +719,9 @@ local resets, scopeChecks = 0, 0
 for _, control in ipairs(controls) do
     local spec = control.spec
     local scopes = { "party" }
-    if spec.scope == "group" then
+    -- This fixed Party control is only built for Party. Every other group
+    -- control still replays in all client-supported scopes.
+    if spec.scope == "group" and spec.id ~= "menu2.gf_layout.group.field.showpartyinraid" then
         for _, scope in ipairs({ "raid", "mythicraid" }) do
             if mw.core.Client.SupportsGroupKind(scope) then scopes[#scopes + 1] = scope end
         end

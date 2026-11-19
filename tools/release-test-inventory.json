@@ -1302,6 +1302,15 @@
       "phase": "menu"
     },
     {
+      "test": "tools/tests/aura_bar_presentation_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla"
+      ]
+    },
+    {
       "test": "tools/tests/preview_group_sample_contract_smoke.lua",
       "phase": "group preview",
       "clients": [

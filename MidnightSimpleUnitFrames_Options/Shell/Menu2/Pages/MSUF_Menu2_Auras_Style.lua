@@ -47,6 +47,7 @@ local type = Parts.type
 local function AddUnitStyleScopeAccessors(S)
     local unit, lane, appearanceKind, appearanceGlobalsOnly = S.unit, S.lane, S.appearanceKind, S.appearanceGlobalsOnly
     local function ReadScopeBool(key, defaultValue)
+        if key == "showDurationBar" and S.iconTimerOnly and S.ReadScopeDurationBarDisplay() ~= "OVERLAY" then return false end
         if appearanceGlobalsOnly and type(Model.ReadSharedAppearanceBool) == "function" then
             return Model.ReadSharedAppearanceBool(appearanceKind, key, defaultValue)
         end
@@ -55,6 +56,7 @@ local function AddUnitStyleScopeAccessors(S)
         return Model.ReadSharedBool(key, defaultValue)
     end
     local function WriteScopeBool(key, value)
+        if key == "showDurationBar" and value and S.iconTimerOnly then S.WriteScopeDurationBarDisplay("OVERLAY") end
         if appearanceGlobalsOnly and type(Model.WriteSharedAppearanceBool) == "function" then
             Model.WriteSharedAppearanceBool(appearanceKind, key, value)
         elseif type(Model.WriteLaneStyleBool) == "function" then
@@ -220,6 +222,7 @@ local function CreateUnitStyleState(ctx, b, scope, options)
         ctx = ctx, b = b, scope = scope,
         embeddedUnitPreview = embeddedUnitPreview, appearanceGlobalsOnly = appearanceGlobalsOnly, previewContainer = previewContainer,
         appearanceKind = appearanceKind, unit = unit, lane = lane,
+        iconTimerOnly = MSUF.Client.IsRetail and not appearanceGlobalsOnly,
         styleCatalogLane = appearanceGlobalsOnly and appearanceKind or lane, styleControls = {},
         baseId = "aura_style_" .. tostring(scope or "unit") .. "_" .. lane,
         RefreshStylePreview = RefreshStylePreview, FlushStyleApply = FlushApplyService, BodyWidth = BodyWidth,
@@ -599,38 +602,55 @@ local function BuildUnitStyleDurationBar(StyleState)
         StyleState.BindStyleSlider, StyleState.BodyWidth
     local refreshDurationBarSummary
     local durationInline = (b.width or 720) >= 520
-    -- Dropdown buttons sit 24 px below their labels and carry a soft edge/glow.
-    -- Keep a real footer inside the body so that art cannot bleed into the next
-    -- accordion header in either the inline or narrow stacked layout.
+    local iconTimerOnly = StyleState.iconTimerOnly
     local durationBar = AurasPage.Section(b, baseId .. "_duration_bar", "Duration Bar", durationInline and 220 or 332, false)
     AurasPage.AttachDurationBarColor(durationBar, lane)
     local dbw = BodyWidth(durationBar)
     local durationChoiceWidth = durationInline and floor(((dbw - 48) - 20) / 3) or (dbw - 48)
+    local iconTimer, height, position, fillMode
     refreshDurationBarSummary = function()
-        if not W.SetCollapsibleBadges then return end
         local enabled = ReadScopeBool("showDurationBar", false)
+        local asBars = iconTimerOnly and Model.ReadLaneAuraBars(StyleState.unit, lane)
+        if iconTimerOnly and fillMode then
+            W.SetControlEnabled(iconTimer, not asBars)
+            W.SetControlEnabled(height, enabled and not asBars)
+            W.SetControlEnabled(position, enabled and not asBars)
+            W.SetControlEnabled(fillMode, enabled or asBars)
+        end
+        if not W.SetCollapsibleBadges then return end
+        local label = enabled and (tostring(Round(ReadScopeNumber("durationBarHeight", 2, 1, 16))) .. "px / "
+            .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, ReadScopeDurationBarDisplay(), "Bar Only") .. " / "
+            .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, ReadScopeDurationBarPosition(), "Bottom")) or "Off"
         W.SetCollapsibleBadges(durationBar, {{
-            text = enabled and (tostring(Round(ReadScopeNumber("durationBarHeight", 2, 1, 16))) .. "px / "
-                .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, ReadScopeDurationBarDisplay(), "Bar Only") .. " / "
-                .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, ReadScopeDurationBarPosition(), "Bottom")) or "Off",
-            kind = enabled and "accent" or "muted", showWhenClosed = true,
+            text = asBars and "Bars" or label, kind = (enabled or asBars) and "accent" or "muted", showWhenClosed = true,
         }})
     end
-    BindStyleSwitch(durationBar, "Show Duration Bar", 24, -48, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR", refreshDurationBarSummary)
-    BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT",
-        refreshDurationBarSummary)
-    AddTooltip(BindStyleDropdown(durationBar, "Display", 24, -162,
-        type(Model.DurationBarDisplayValues) == "function" and Model.DurationBarDisplayValues() or DURATION_BAR_DISPLAY_VALUES,
-        durationChoiceWidth, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, "AURAS3_DURATION_BAR_DISPLAY", refreshDurationBarSummary),
-        "Duration bar display", "Bar Only hides the aura icon. Icon + Bar keeps the icon and draws the duration bar on it.")
-    AddTooltip(BindStyleDropdown(durationBar, "Position", durationInline and (34 + durationChoiceWidth) or 24, durationInline and -162 or -220,
-        type(Model.DurationBarPositionValues) == "function" and Model.DurationBarPositionValues() or DURATION_BAR_POSITION_VALUES,
-        durationChoiceWidth, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, "AURAS3_DURATION_BAR_POSITION", refreshDurationBarSummary),
-        "Duration bar position", "Places the duration bar at the top or bottom edge of the aura slot.")
-    AddTooltip(BindStyleDropdown(durationBar, "Fill Mode", durationInline and (44 + (durationChoiceWidth * 2)) or 24, durationInline and -162 or -278,
-        type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
-        durationChoiceWidth, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION", refreshDurationBarSummary),
-        "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
+    iconTimer = BindStyleSwitch(durationBar, iconTimerOnly and "Show Timer on Icon" or "Show Duration Bar", 24, -48, dbw - 48,
+        "showDurationBar", false, "AURAS3_DURATION_BAR", refreshDurationBarSummary)
+    height = BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48,
+        "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT", refreshDurationBarSummary)
+    if iconTimerOnly then
+        local path = "style.lane." .. AuraCatalogToken(lane) .. ".auras3-duration-bar-display"
+        M.AuraControls.AddAuraBarLayoutShortcut(StyleState.ctx, durationBar, path, "auras", durationChoiceWidth, function()
+            Parts.SetUnitAuraTool(StyleState.unit, lane, "layout")
+            Parts.Rebuild(StyleState.ctx)
+        end)
+    else
+        AddTooltip(BindStyleDropdown(durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES,
+            durationChoiceWidth, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, "AURAS3_DURATION_BAR_DISPLAY", refreshDurationBarSummary),
+            "Duration bar display", "Bar Only hides the aura icon. Icon + Bar keeps the icon and draws the duration bar on it.")
+    end
+    local positionX = durationInline and (34 + durationChoiceWidth) or 24
+    local fillX = durationInline and (44 + 2 * durationChoiceWidth) or 24
+    position = BindStyleDropdown(durationBar, "Position", positionX, durationInline and -162 or -220,
+        DURATION_BAR_POSITION_VALUES, durationChoiceWidth, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition,
+        "AURAS3_DURATION_BAR_POSITION", refreshDurationBarSummary)
+    AddTooltip(position, "Duration bar position", "Places the duration bar at the top or bottom edge of the aura slot.")
+    fillMode = BindStyleDropdown(durationBar, "Fill Mode", fillX, durationInline and -162 or -278,
+        DURATION_BAR_DIRECTION_VALUES, durationChoiceWidth, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection,
+        "AURAS3_DURATION_BAR_DIRECTION", refreshDurationBarSummary)
+    AddTooltip(fillMode, "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
+    refreshDurationBarSummary()
     StyleState.durationBar, StyleState.refreshDurationBarSummary = durationBar, refreshDurationBarSummary
 end
 local function BuildUnitStyleFrameEffect(StyleState)

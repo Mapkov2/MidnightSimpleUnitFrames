@@ -28,7 +28,7 @@ end
 
 do
     local rejected, working = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
-    local function Literal(value, path)
+    local function Literal(value, path, remember)
         if MSUF.Util.IsSecret(value) then return nil end
         local kind = type(value)
         if kind == "string" then return string.format("%q", value) end
@@ -48,12 +48,14 @@ do
             return a < b
         end)
         for _, key in ipairs(keys) do
-            local name, child = Literal(key, path), Literal(value[key], path)
+            local name, child = Literal(key, path), Literal(value[key], path, remember)
             if not name or not child then return nil end
             parts[#parts + 1] = "[" .. name .. "]=" .. child
         end
         path[value] = nil
-        return "{" .. table.concat(parts, ",") .. "}"
+        local serialized = "{" .. table.concat(parts, ",") .. "}"
+        if remember and remember[value] ~= nil then remember[value] = serialized end
+        return serialized
     end
     local function ContentHash(text)
         local a, b = 5381, 0
@@ -81,7 +83,22 @@ do
         if value ~= value or value < 0 or value == math.huge then return 0 end
         return value
     end
-    local function RecoveryRows(store)
+    local function RememberLatestAlias(bucket, aliases)
+        if not Plain(bucket.order) or not Plain(bucket.entries) then return end
+        local key = bucket.order[#bucket.order]
+        if MSUF.Util.IsSecret(key) or key == nil then return end
+        local entry = bucket.entries[key]
+        if not Plain(entry) then return end
+        local data, latest = bucket.data, entry.data
+        if not Plain(data) or not Plain(latest) or data == latest then return end
+        local revision, latestRevision = bucket.revision, entry.revision
+        if MSUF.Util.IsSecret(revision) or MSUF.Util.IsSecret(latestRevision) then return end
+        local kind = type(revision)
+        if (kind == "number" or kind == "string" or kind == "nil") and revision == latestRevision then
+            aliases[bucket] = latest
+        end
+    end
+    local function RecoveryRows(store, aliases)
         local rows = {}
         local function Add(owner, name, field, archived)
             if type(owner) ~= "table" then return end
@@ -93,6 +110,7 @@ do
                     entry = { data = type(bucket) == "table" and bucket.data or bucket } }
                 return
             end
+            if aliases and Plain(bucket) then RememberLatestAlias(bucket, aliases) end
             for index, key in ipairs(bucket.order) do
                 rows[#rows + 1] = { owner = owner, name = name, bucket = bucket, key = key,
                     entry = bucket.entries[key], field = field, archived = archived, index = index }
@@ -122,11 +140,28 @@ do
         end)
         return rows
     end
-    local function RecoveryBytes(store)
+    local function RecoveryBytes(store, aliases)
         local view = {}
         for _, field in ipairs(recoveryFields) do view[field] = store[field] end
         view._profileRecoveryArchive = store._profileRecoveryArchive
-        local literal = Literal(view, {})
+        local remember
+        if aliases and next(aliases) then
+            remember = {}
+            for bucket, latest in pairs(aliases) do
+                remember[bucket.data], remember[latest] = false, false
+            end
+        end
+        local literal = Literal(view, {}, remember)
+        if literal and remember then
+            -- SavedVariables round-trips the compatibility view and entry as
+            -- separate trees. Reuse the exact serialized text from the byte
+            -- census to restore their shared reference without changing the
+            -- serialized shape or which recovery entries fit in the budget.
+            for bucket, latest in pairs(aliases) do
+                local serialized = remember[bucket.data]
+                if serialized and serialized == remember[latest] then bucket.data = latest end
+            end
+        end
         return literal and #literal or math.huge
     end
     local function RemoveRecovery(row)
@@ -140,9 +175,10 @@ do
         if latest then bucket.revision, bucket.data = latest.revision, latest.data
         else row.owner[row.name] = nil end
     end
-    local function BoundRecovery(store)
-        local rows = RecoveryRows(store)
-        local bytes = RecoveryBytes(store)
+    local function BoundRecovery(store, relinkLatest)
+        local aliases = relinkLatest and {} or nil
+        local rows = RecoveryRows(store, aliases)
+        local bytes = RecoveryBytes(store, aliases)
         for _, row in ipairs(rows) do
             if bytes <= recoveryLimit then break end
             RemoveRecovery(row)
@@ -372,7 +408,7 @@ do
         })
     end
     function Schema.BoundProfileRecovery(store)
-        return BoundRecovery(store)
+        return BoundRecovery(store, true)
     end
     -- Restore is explicit and does not bind or normalize the recovered bytes.
     function Schema.RestoreProfileBackup(name, key, kind)

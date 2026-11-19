@@ -204,7 +204,8 @@ local function Profile(name)
     if type(name) ~= "string" then return nil end
     local root = _G.MSUF_GlobalDB
     local profiles = type(root) == "table" and root.profiles
-    return type(profiles) == "table" and profiles[name] or nil
+    if type(profiles) ~= "table" then return end
+    return MSUF.ProfileNormalize.ResolveStoredProfile(profiles[name])
 end
 
 function Settings.SharedAggroBorderEnabled()

@@ -14,7 +14,10 @@ local function PaintDurationBarColor(A3, Clamp01, bar, lane)
     else
         r, g, b = A3.GetDurationBarColor()
     end
-    if bar.SetStatusBarColor then bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95) end
+    if bar.SetStatusBarColor then
+        local alpha = lane and lane.auraBarFill and A3.MockAuraPainter.AURA_BAR_FILL_ALPHA or 0.95
+        bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), alpha)
+    end
 end
 
 MSUF.Auras3RuntimeFactories.ButtonVisuals = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
@@ -28,6 +31,7 @@ local tonumber = tonumber
 local type = type
 local ApplyAuraIconZoom = dependencies.ConfigValues.ApplyAuraIconZoom
 local ApplyFont = dependencies.DurationText.ApplyFont
+A3.ApplyAuraBarFont = ApplyFont
 local BuildAuraDurationStyle = dependencies.DurationText.BuildAuraDurationStyle
 local Clamp01 = dependencies.Platform.Clamp01
 local ClampNumber = dependencies.Platform.ClampNumber
@@ -481,7 +485,10 @@ function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicat
             bar:SetFrameLevel((visualOwner:GetFrameLevel() or 0)
                 + (FrameLayers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
         end
-        if spellIndicatorBar then
+        if lane.auraBarFill then
+            A3.MockAuraPainter.LayoutAuraBar(bar, visualOwner, lane.auraBarFill)
+            ApplyDurationBarColor(bar, lane)
+        elseif spellIndicatorBar then
             -- Same proven path as the native Ebon Might bar: the StatusBar is
             -- a descendant of the CustomAuraButton and fills the complete
             -- configured Spell Indicator rectangle. Blizzard's
@@ -495,10 +502,14 @@ function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicat
                 Clamp01(color[3], 0.88),
                 Clamp01(color[4], 1))
         else
+            if bar._msufA3AuraBarBackground then
+                bar._msufA3AuraBarBackground:Hide()
+                bar:SetOrientation("HORIZONTAL")
+            end
             LayoutDurationBar(visualOwner, bar, lane)
             ApplyDurationBarColor(bar, lane)
         end
-        if type(bar.SetReverseFill) == "function" then
+        if not lane.auraBarFill and type(bar.SetReverseFill) == "function" then
             bar:SetReverseFill(spellIndicatorBar and lane.durationBarReverseFill == true or false)
         end
         -- Finish every script-side mutation before handing the StatusBar to
@@ -514,10 +525,27 @@ end
 -- Cooldown text and stack text share one overlay above the swipe; it exists
 -- only while at least one text element is on.
 function PrepareStage.ResolveTextOverlay(button, lane)
-    if lane.showCooldownText == true or lane.showStacks == true then
+    if lane.showCooldownText == true or lane.showStacks == true or lane.auraBarFill then
         return EnsureAuraTextOverlay(button, lane) or button
     end
     return nil
+end
+
+function PrepareStage.PrepareAuraBarName(button, lane, overlay)
+    local name = button._msufA3AuraBarName
+    if lane.auraBarFill then
+        if not name then
+            name = PixelLayoutRegion(overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+            button._msufA3AuraBarName = name
+        end
+        ApplyFont(name, math_min(12, lane.buttonHeight - 2), lane)
+        A3.MockAuraPainter.LayoutAuraBarName(name, overlay, lane)
+        name:Show()
+        button:SetSpellName(name)
+    elseif name then
+        button:ClearSpellName()
+        name:Hide()
+    end
 end
 
 function PrepareStage.PrepareCooldownText(button, lane, textOverlay)
@@ -727,6 +755,7 @@ local function PrepareAuraButton(button, lane, index)
     local iconShape = PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
     PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
     local textOverlay = PrepareStage.ResolveTextOverlay(button, lane)
+    if lane.auraBarFill then PrepareStage.PrepareAuraBarName(button, lane, textOverlay) end
     PrepareStage.PrepareCooldownText(button, lane, textOverlay)
     PrepareStage.PrepareStackText(button, lane, textOverlay)
     local auraBorderBound = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, iconShape)
@@ -747,6 +776,7 @@ function ButtonVisuals.PaintSample(button, lane, index, sample)
     sample.shape = shape
     PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellBar)
     local overlay = PrepareStage.ResolveTextOverlay(button, lane)
+    PrepareStage.PrepareAuraBarName(button, lane, overlay)
     PrepareStage.PrepareCooldownText(button, lane, overlay)
     PrepareStage.PrepareStackText(button, lane, overlay)
     local border = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, shape)

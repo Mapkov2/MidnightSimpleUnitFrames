@@ -375,7 +375,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "5f30aab3d9ea705242a174166259de325b961465132806785b040610e2137dfb"
+          "source_sha256": "030b273d4b8a93d0ba7a144cb8277806c9a3241e9d00eadfc5dd0ab462d15f6a"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
@@ -489,7 +489,7 @@
           607
         ]
       ],
-      "source_sha256": "e4ce9f8ec67ced73e4b22e0c9d6429237c817222d5a8a59cdff4b07813270f11",
+      "source_sha256": "2288e974eea134123e72682ef4a1425f17e7ef1862d2b0597b9c0d7655fa9d9f",
       "adapter_exclusions": [
         {
           "name": "WorkbenchRefresh",
@@ -587,7 +587,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",
-          "source_sha256": "f2cc70486adcd0a69b3d77b9841d0e457f8a4bd47d0fa6bb18e786e84f07ce3a"
+          "source_sha256": "b172572911319ea2531c9fb26ecc8f012c377a44aa0a77271185aa77a0803fbd"
         },
         {
           "file": "MSUF_Menu2_PreviewContracts.lua",

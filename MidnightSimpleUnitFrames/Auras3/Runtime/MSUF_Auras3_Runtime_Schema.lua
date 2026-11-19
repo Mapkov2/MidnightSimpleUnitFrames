@@ -58,6 +58,7 @@ local function GroupLaneSpec(prefix, rootKey, filter, defaultSize, defaultMax, d
         durationBarDisplayKey = prefix .. "DurationBarDisplay",
         durationBarPositionKey = prefix .. "DurationBarPosition",
         durationBarDirectionKey = prefix .. "DurationBarDirection",
+        showAuraBarsKey = prefix .. "ShowAuraBars", auraBarFillKey = prefix .. "AuraBarFill",
         cooldownSizeKey = prefix .. "CooldownSize", stackSizeKey = prefix .. "StackSize",
         cooldownAnchorKey = prefix .. "CooldownAnchor", cooldownXKey = prefix .. "CooldownX",
         cooldownYKey = prefix .. "CooldownY", stackAnchorKey = prefix .. "StackAnchor",

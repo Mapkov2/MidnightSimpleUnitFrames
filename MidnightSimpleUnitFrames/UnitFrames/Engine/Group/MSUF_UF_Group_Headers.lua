@@ -296,6 +296,13 @@ local function UnknownRaidLayoutCount(kind)
   return UNKNOWN_RAID_LAYOUT_COUNT
 end
 
+local function PartyCompanionCount()
+  if not GetNumSubgroupMembers then return nil end
+  local count = GetNumSubgroupMembers()
+  if issecretvalue(count) == true or type(count) ~= "number" then return nil end
+  return count
+end
+
 --- Header size estimates use live roster counts when available, otherwise the
 --- last known count. This keeps preview/mover geometry stable during login.
 local function ConfiguredCount(kind, conf)
@@ -306,11 +313,14 @@ local function ConfiguredCount(kind, conf)
   end
   if kind == "party" then
     if GetNumSubgroupMembers then
-      local n = GetNumSubgroupMembers() or 0
+      local n = PartyCompanionCount() or 0
       if n > 0 and conf.showPlayer ~= false then
         n = n + 1
-      elseif n == 0 and conf.showSolo == true and conf.showPlayer ~= false then
-        n = 1
+      elseif n == 0 then
+        if conf.showPartyInRaid == true and IsInRaid() then
+          return RememberLayoutCount(kind, conf.showPlayer ~= false and 1 or 0)
+        end
+        if conf.showSolo == true and conf.showPlayer ~= false then n = 1 end
       end
       if n > 0 then return RememberLayoutCount(kind, n) end
     end
@@ -766,8 +776,8 @@ local function ArenaPartyExpectedCompanionCount()
   end
 
   local known = false
-  local count = GetNumSubgroupMembers and GetNumSubgroupMembers() or nil
-  if issecretvalue(count) ~= true and type(count) == "number" then
+  local count = PartyCompanionCount()
+  if count ~= nil then
     count = floor(count + 0.5)
     if count < 0 then count = 0 elseif count > 4 then count = 4 end
     -- A transient subgroup count can itself be partial during a Shuffle swap;
@@ -827,25 +837,28 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
   local entries = {}
   if kind == "party" then
     local liveKind = LiveGroupKind()
-    if liveKind == "party" then
+    if GF.IsPartyGroupContext(liveKind, conf) then
       local expectedCompanions = ArenaPartyExpectedCompanionCount()
+      if IsRaidLikeKind(liveKind) then
+        local count = PartyCompanionCount()
+        if count == nil then return nil end
+        expectedCompanions = ClampInt(count, 0, 0, 4)
+      end
       if expectedCompanions == false then return nil end
-      local arenaRosterComplete = true
+      local rosterComplete = true
       if conf.showPlayer ~= false then
         if AddNameListEntry(entries, "player", 0, conf) ~= true then
-          arenaRosterComplete = false
+          rosterComplete = false
         end
       end
       local companionLimit = expectedCompanions ~= nil and expectedCompanions or 4
       for i = 1, companionLimit do
         if AddNameListEntry(entries, "party" .. i, i, conf) ~= true then
-          arenaRosterComplete = false
+          rosterComplete = false
         end
       end
-      -- In Arena only, never publish a partial list: Blizzard treats nameList
-      -- as a hard filter and would hide the newly assigned Shuffle teammate.
-      -- PvE keeps its established four-token scan byte-for-byte in behavior.
-      if expectedCompanions ~= nil and arenaRosterComplete ~= true then return nil end
+      -- A partial name list would hide members while Arena or raid subgroup tokens settle.
+      if expectedCompanions ~= nil and rosterComplete ~= true then return nil end
     elseif liveKind == nil and conf.showSolo == true and conf.showPlayer ~= false then
       AddNameListEntry(entries, "player", 0, conf)
     end
@@ -1354,7 +1367,9 @@ local function GroupBorderScopeActive(anchorKind, conf)
   if hiddenInHousing and hiddenInHousing(anchorKind) then return false end
   local liveKind = LiveGroupKind()
   if anchorKind == "party" then
-    if liveKind == "party" then return true end
+    if GF.IsPartyGroupContext(liveKind, conf) then
+      return liveKind == "party" or conf.showPlayer ~= false or (PartyCompanionCount() or 0) > 0
+    end
     return liveKind == nil and conf.showSolo == true
   end
   if anchorKind == "raid" or anchorKind == "mythicraid" then

@@ -189,18 +189,27 @@ function Harness.New(root, flavor, options)
     h.roundLayoutSupported = not world.client.isClassic
 
     -- Group roster -------------------------------------------------------
-    local function HasUnit(unit)
-        for index = 1, #h.units do if h.units[index] == unit then return true end end
-        return false
+    local function RosterUnit(unit)
+        unit = h.raidAliases and h.raidAliases[unit] or unit
+        for index = 1, #h.units do if h.units[index] == unit then return unit end end
     end
-    env.IsInGroup = function() return #h.units > 1 end
+    env.IsInGroup = function() return h.raid == true or #h.units > 1 end
     env.IsInRaid = function() return h.raid == true end
-    env.GetNumGroupMembers = function() return #h.units > 1 and #h.units or 0 end
-    env.GetNumSubgroupMembers = function() return h.raid and 0 or math.max(0, #h.units - 1) end
-    env.UnitExists = function(unit) return HasUnit(unit) end
-    env.UnitIsConnected = function(unit) return HasUnit(unit) end
-    env.UnitGUID = function(unit) return HasUnit(unit) and ("Player-" .. unit) or nil end
-    env.UnitName = function(unit) return HasUnit(unit) and ("Name-" .. unit) or nil, nil end
+    env.GetNumGroupMembers = function() return env.IsInGroup() and #h.units or 0 end
+    env.GetNumSubgroupMembers = function()
+        if h.raid then return h.raidParty and #h.raidParty - 1 or 0 end
+        return math.max(0, #h.units - 1)
+    end
+    env.UnitExists = function(unit) return RosterUnit(unit) ~= nil end
+    env.UnitIsConnected = env.UnitExists
+    env.UnitGUID = function(unit)
+        local token = RosterUnit(unit)
+        return token and "Player-" .. token
+    end
+    env.UnitName = function(unit)
+        local token = RosterUnit(unit)
+        return token and "Name-" .. token, nil
+    end
     env.UnitClass = function() return "Warrior", "WARRIOR", 1 end
     env.UnitGroupRolesAssigned = function() return "DAMAGER" end
     env.GetRaidRosterInfo = function(index)
@@ -395,18 +404,21 @@ function Harness.New(root, flavor, options)
     local function HeaderUnits(header)
         local attributes, out = header.attributes, {}
         local listed = NameListFilter(attributes)
-        if h.raid then
-            if not attributes.showRaid then return out end
+        if h.raid and attributes.showRaid then
             for index = 1, #h.units do
                 if not listed or listed[env.GetRaidRosterInfo(index) or ""] then out[#out + 1] = h.units[index] end
             end
             return out
         end
-        local grouped = #h.units > 1
+        local grouped = env.IsInGroup()
         if grouped and not attributes.showParty then return out end
         if not grouped and not attributes.showSolo then return out end
-        for index = 1, #h.units do
-            local unit = h.units[index]
+        -- Native PARTY fallback uses party tokens even in a raid. Only fixtures
+        -- that describe a raid subgroup supply those aliases to this harness.
+        local units = h.raid and h.raidParty or h.units
+        if h.raid and not h.raidParty then return out end
+        for index = 1, #units do
+            local unit = units[index]
             if (unit ~= "player" or attributes.showPlayer or attributes.showSolo) and (not listed or listed[PartyRosterName(unit)]) then
                 out[#out + 1] = unit
             end
@@ -640,13 +652,23 @@ end
 function Methods:SetRoster(units)
     self.raid = false
     self.units = units
+    self.raidParty, self.raidAliases = nil, nil
 end
 
-function Methods:SetRaid(count)
+-- Raid slot 1 is the player. Subgroup peers are provided by their raid indexes.
+function Methods:SetRaid(count, subgroupPeers)
     self.raid = true
     local units = {}
     for index = 1, count do units[index] = "raid" .. index end
     self.units = units
+    self.raidParty, self.raidAliases = nil, nil
+    if not subgroupPeers then return end
+    local party, aliases = { "player" }, { player = units[1] }
+    for i, index in ipairs(subgroupPeers) do
+        local unit = "party" .. i
+        party[i + 1], aliases[unit] = unit, assert(units[index])
+    end
+    self.raidParty, self.raidAliases = party, aliases
 end
 
 -- PLAYER_REGEN_DISABLED fires before InCombatLockdown() turns true.

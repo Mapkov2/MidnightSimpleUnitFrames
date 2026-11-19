@@ -1,5 +1,23 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.4-beta1 - 2026-11-19
+
+### Highlights
+
+- **Party frames in raids.** Keep your own subgroup visible alongside the raid frames, including small raids. The option is off by default.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"layout_advanced","controlId":"menu2.gf_layout.group.field.showpartyinraid","settingKey":"gf_party.showPartyInRaid","prepareKind":"groupScope","prepareValue":"party","query":"Show Party Frames in Raid","label":"Show Party Frames in Raid"} -->
+- **Aura layouts on Retail.** Choose icons or bars for buff and debuff lanes. Icon layouts can show a duration timer over the icon.
+<!-- msuf-menu-link: none -->
+- **Blizzard frame texture.** The Blizzard-style unit-frame texture now ships with MSUF Core.
+<!-- msuf-menu-link: none -->
+- **Profiles and restore points.** Keep inactive profiles compact and share matching settings between restore points to reduce memory use.
+<!-- msuf-menu-link: none -->
+
+### Fixes
+
+- Changelog links open their settings without waiting for section badges to update.
+- Profile operations can read settings from compact profiles.
+
 ## 7.0.3 - 2026-11-18
 
 ### Highlights

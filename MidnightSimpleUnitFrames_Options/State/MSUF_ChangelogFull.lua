@@ -8,12 +8,55 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6E84B7A74F4101B1A9E14DAEB6253112609CD968AF86CEFDC3AAAD9C2E619751",
-    currentVersion = "7.0.3",
+    sourceSha256 = "23F6160CBD768C22FB6DEDEBE7B9D6D316F8D80F1D9BC6066BBBA6B211366ECA",
+    currentVersion = "7.0.4-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "7.0.2",
-    rangeLabel = "7.0.2 -> 7.0.3",
+    previousVersion = "7.0.3",
+    rangeLabel = "7.0.3 -> 7.0.4-beta1",
     entries = {
+        {
+            version = "7.0.4-beta1",
+            date = "2026-11-19",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Party frames in raids. Keep your own subgroup visible alongside the raid frames, including small raids. The option is off by default.",
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "Show Party Frames in Raid",
+                                label = "Show Party Frames in Raid",
+                                sectionId = "layout_advanced",
+                                controlId = "menu2.gf_layout.group.field.showpartyinraid",
+                                settingKey = "gf_party.showPartyInRaid",
+                                prepareKind = "groupScope",
+                                prepareValue = "party",
+                            },
+                        },
+                        {
+                            text = "Aura layouts on Retail. Choose icons or bars for buff and debuff lanes. Icon layouts can show a duration timer over the icon.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Blizzard frame texture. The Blizzard-style unit-frame texture now ships with MSUF Core.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Profiles and restore points. Keep inactive profiles compact and share matching settings between restore points to reduce memory use.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Changelog links open their settings without waiting for section badges to update.",
+                        "Profile operations can read settings from compact profiles.",
+                    },
+                },
+            },
+        },
         {
             version = "7.0.3",
             date = "2026-11-18",

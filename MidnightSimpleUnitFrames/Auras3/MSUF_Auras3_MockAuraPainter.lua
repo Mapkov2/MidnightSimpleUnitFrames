@@ -14,7 +14,7 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 local IGNORE_ATLAS_SIZE = TextureKitConstants and TextureKitConstants.IgnoreAtlasSize
 local type, tonumber, tostring = type, tonumber, tostring
 local floor, max, min = math.floor, math.max, math.min
-local Painter = {}
+local Painter = { AURA_BAR_FILL_ALPHA = 0.42 }
 A3.MockAuraPainter = Painter
 
 --- Regions stay private to the caller's icon. Reusing their constructors
@@ -266,12 +266,91 @@ function Painter.AuraState(icon, kind, index, cfg, elapsed, duration, oneShot, p
     return fn(kind, index, scratch, options)
 end
 
+-- Both the native button and the mock rows set the visual edge before binding a timer.
+function Painter.LayoutAuraBar(bar, owner, fill)
+    local vertical = fill == "UP" or fill == "DOWN"
+    bar:ClearAllPoints()
+    bar:SetAllPoints(owner)
+    bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
+    bar:SetReverseFill(fill == "LEFT" or fill == "DOWN")
+    local background = bar._msufA3AuraBarBackground
+    if not background then
+        background = bar:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints(bar)
+        background:SetColorTexture(0.08, 0.08, 0.08, 0.85)
+        bar._msufA3AuraBarBackground = background
+    end
+    background:Show()
+end
+
+function Painter.LayoutAuraBarName(text, owner, lane)
+    text:ClearAllPoints()
+    text:SetPoint("LEFT", owner, "LEFT", 4, 0)
+    text:SetPoint("RIGHT", owner, "RIGHT", -lane.auraBarNameInset, 0)
+    text:SetJustifyH("LEFT")
+    text:SetWordWrap(false)
+end
+
+function Painter.AuraBarSampleName(kind)
+    local key = kind == "debuff" and "Debuff" or "Buff"
+    return MSUF.L and MSUF.L[key] or key
+end
+
+local function EnsureAuraBarSample(owner)
+    local bar = owner._msufA3AuraBarSample
+    if bar then return bar end
+    bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, owner))
+    bar:SetStatusBarTexture(WHITE)
+    bar:SetMinMaxValues(0, 1)
+    bar.name = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+    bar.time = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+    bar.stacks = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+    owner._msufA3AuraBarSample = bar
+    return bar
+end
+
+function Painter.PaintAuraBarSample(owner, lane, kind, showText)
+    local bar = EnsureAuraBarSample(owner)
+    Painter.LayoutAuraBar(bar, owner, lane.auraBarFill)
+    local r, g, b = A3.GetDurationBarColor()
+    bar:SetStatusBarColor(r, g, b, Painter.AURA_BAR_FILL_ALPHA)
+    local ApplyFont = A3.ApplyAuraBarFont
+    ApplyFont(bar.name, min(12, lane.buttonHeight - 2), lane)
+    ApplyFont(bar.time, lane.cooldownSize, lane)
+    ApplyFont(bar.stacks, lane.stackSize, lane)
+    Painter.LayoutAuraBarName(bar.name, bar, lane)
+    bar.name:SetText(Painter.AuraBarSampleName(kind))
+    bar.time:ClearAllPoints()
+    bar.time:SetPoint("RIGHT", bar, "RIGHT", lane.cooldownX, 0)
+    bar.time:SetShown(showText and lane.showCooldownText == true)
+    bar.stacks:ClearAllPoints()
+    bar.stacks:SetPoint("RIGHT", bar, "RIGHT", lane.stackX, 0)
+    bar.stacks:SetShown(showText and lane.showStacks == true)
+    bar:Show()
+end
+
+function Painter.UpdateAuraBarSample(owner, lane, state)
+    local bar = owner._msufA3AuraBarSample
+    if not (bar and state) then return end
+    local share = lane.durationBarDirection == "ELAPSED" and state.elapsedFrac or state.remainingFrac
+    bar:SetValue(share)
+    if bar.time:IsShown() then bar.time:SetText(state.text) end
+    if bar.stacks:IsShown() then bar.stacks:SetText(state.stacks) end
+end
+
+function Painter.HideAuraBarSample(owner)
+    local bar = owner._msufA3AuraBarSample
+    if bar then bar:Hide() end
+end
+
 local SampleButton = {}
 local SAMPLE_BINDING_DEFAULTS = {}
 local function EmptySampleBinding() end
 function SampleButton:CanBeAccessedInContext() return true end
 function SampleButton:SetIcon(texture) texture:SetTexture(self.sample.icon) end
 function SampleButton:ClearIcon() if self.Icon then self.Icon:Hide() end end
+function SampleButton:SetSpellName(fontString) fontString:SetText(self.sample.name) end
+SampleButton.ClearSpellName = EmptySampleBinding
 function SampleButton:SetDurationBar(bar, options)
     options = options or SAMPLE_BINDING_DEFAULTS
     self.sampleBar, self.sampleBarOptions = bar, options
@@ -373,6 +452,13 @@ function Workbench:Paint(cfg, count, kind, style, textures)
     lane.showAuraSymbol = lane.showAuraBorder and cfg.debuffBorderMode == "SYMBOL"
     lane.showDispelTypeBorder, lane.showDispelTypeSymbol = lane.showAuraBorder, lane.showAuraSymbol
     lane.showTooltip, lane.iconStyle = false, style
+    if cfg.auraBar then
+        for key, value in pairs(cfg.auraBar) do lane[key] = value end
+        lane.showTooltip = false
+    elseif cfg.auraBarFill then
+        lane.max = cfg.maxIcons
+        MSUF.AuraConfig.ApplyAuraBarGeometry(lane, cfg.auraBarFill, cfg.compactAuraBars)
+    end
     self.config, self.frame = lane, self.canvas
     local native = A3.Runtime and A3.Runtime.ButtonVisuals
     local classic = not native and A3._ClassicBackend.Buttons
@@ -383,6 +469,7 @@ function Workbench:Paint(cfg, count, kind, style, textures)
         sample.expirationTime, sample.applications = GetTime() + sample.remaining, i % 3 == 1 and 2 or 0
         sample.auraInstanceID, sample.dispelName = i, A3.PreviewDispelTypeForIndex(i)
         sample.icon = textures[((i - 1) % #textures) + 1]
+        if lane.auraBarFill then sample.name = Painter.AuraBarSampleName(kind) end
         sample.pandemic = cfg.pandemicEnabled == true and i == 1
         local button = self.buttons[i]
         if native then

@@ -362,10 +362,7 @@ local function WantParty()
   local conf = Conf("party")
   if not (conf and conf.enabled == true) then return false end
   local kind = LiveGroupKind()
-  if kind == "party" then return true end
-  -- "Show while solo" means solo only: a live raid scope must never surface
-  -- the party header next to the raid frames.
-  return kind == nil and conf.showSolo == true
+  return GF.IsPartyGroupContext(kind, conf) or (kind == nil and conf.showSolo == true)
 end
 
 local function WantRaid()
@@ -462,7 +459,7 @@ local function SetupWantedHeaders(kind)
   -- pass decided per block: a plot boundary, or the option changing inside
   -- (RefreshVisuals), runs the visibility pass only when that changes.
   if scope ~= "raid" and scope ~= "priority" then housingHidden.party = HiddenByEnvironment("party") end
-  if scope ~= "party" and scope ~= "priority" then housingHidden.raid = HiddenByEnvironment(raidKind) end
+  if scope ~= "priority" then housingHidden.raid = HiddenByEnvironment(raidKind) end
   if not AnyGroupFrameEnabled() then
     if not scope or scope == "party" then RetireHeader("party") end
     if not scope or scope == "raid" then RetireHeader("raid") end
@@ -473,6 +470,11 @@ local function SetupWantedHeaders(kind)
   local success = true
   local wantParty = WantParty() and not PreviewSuppressesHeader("party") and not housingHidden.party
   local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid") and not housingHidden.raid
+  local updateRaid = scope ~= "party" and scope ~= "priority"
+  -- Party visibility settings can add or remove the Raid layout in small raids.
+  if scope == "party" and (wantRaid == true) ~= (GF.headers.raid ~= nil) then
+    updateRaid = true
+  end
 
   if scope ~= "raid" and scope ~= "priority" and wantParty then
     local header, scanHandled, scanned
@@ -489,7 +491,7 @@ local function SetupWantedHeaders(kind)
     RetireHeader("party")
   end
 
-  if scope ~= "party" and scope ~= "priority" and wantRaid then
+  if updateRaid and wantRaid then
     local header, scanHandled, scanned
     header, scanHandled, scanned = SetupLiveHeader("raid", raidKind)
     GF.ShowHeaders("raid")
@@ -500,7 +502,7 @@ local function SetupWantedHeaders(kind)
       did, scanned = GF.ScanHeader("raid", raidKind)
       if scanned == false then success = false end
     end
-  elseif scope ~= "party" and scope ~= "priority" then
+  elseif updateRaid then
     RetireHeader("raid")
   end
 
@@ -1062,7 +1064,8 @@ local function PrepareOpenWorldCombatRoster(key, kind)
   if header then
     -- Keep filters that a native raid header cannot reproduce, and keep the
     -- existing preserved block assignments when they are roster-dependent.
-    if IsInRaid() and (conf.showPlayer == false or type(conf.groupFilter) == "string") then return end
+    if IsInRaid() and header:GetAttribute("showRaid")
+      and (conf.showPlayer == false or type(conf.groupFilter) == "string") then return end
     if header._msufRaidGroupIndex and (conf.sortRolesAcrossRaid == true or conf.collapseEmptyGroups == true
       or tonumber(conf.maxColumns) ~= 8 or conf.hideMythicGroupsFiveToEight == true) then return end
   end
